@@ -1,0 +1,72 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Consultor Fiscal Inteligente</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Habilita o modo escuro baseado em classe com o Tailwind Play CDN
+      // Este script DEVE vir DEPOIS do script principal do Tailwind
+      tailwind.config = {
+        darkMode: 'class',
+      }
+    </script>
+    <style>
+      body {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      
+      /* --- Animações e Feedback Visual Otimizados --- */
+
+      /* Animação de Fade-in */
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.4s ease-out forwards;
+        will-change: transform, opacity; /* Promove para camada da GPU */
+      }
+
+      /* Feedback de clique para botões */
+      .btn-press {
+        transition: transform 0.1s ease-out;
+        will-change: transform;
+      }
+      .btn-press:active {
+        transform: scale(0.96);
+      }
+
+      /* Animação "Pop" para ícones */
+      @keyframes popIn {
+        0% { transform: scale(0.8); opacity: 0; }
+        60% { transform: scale(1.1); opacity: 1; }
+        100% { transform: scale(1); }
+      }
+      .animate-pop-in {
+        animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        will-change: transform, opacity;
+      }
+
+      /* Animação de Desenho (Stroke) */
+      @keyframes drawCheck {
+        0% { stroke-dasharray: 20; stroke-dashoffset: 20; }
+        100% { stroke-dashoffset: 0; }
+      }
+      .animate-draw-check {
+        stroke-dasharray: 20;
+        stroke-dashoffset: 20;
+        animation: drawCheck 0.5s ease-out forwards;
+        /* will-change não é ideal para stroke-dashoffset, mas ok para pequenas animações */
+      }
+    </style>
+</head>
+  <body class="bg-slate-50 dark:bg-slate-900 text-slate-900 font-bold dark:font-normal dark:text-slate-300">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "name": "Consultor Fiscal Inteligente",
+  "description": "Uma ferramenta de consulta de CFOP e NCM com IA para escritórios de contabilidade. Obtenha informações atualizadas sobre códigos fiscais, sua aplicabilidade e incidência de impostos, tudo com a ajuda da IA do Gemini com dados da busca Google.",
+  "requestFramePermissions": []
+}
