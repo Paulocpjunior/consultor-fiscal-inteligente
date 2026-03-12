@@ -9,6 +9,14 @@ export default defineConfig({
     server: {
         host: '0.0.0.0',
         port: parseInt(process.env.PORT || '3000'),
+        proxy: {
+            '/api/gemini': {
+                target: 'https://generativelanguage.googleapis.com',
+                changeOrigin: true,
+                rewrite: (path: string) => path.replace(/^\/api\/gemini/, ''),
+                secure: true,
+            },
+        },
     },
     preview: {
         host: '0.0.0.0',

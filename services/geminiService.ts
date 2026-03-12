@@ -3,7 +3,8 @@ import { SearchType, type SearchResult, type GroundingSource, type ComparisonRes
 
 const MODEL_NAME = 'gemini-2.0-flash';
 const MODEL_FALLBACK = 'gemini-1.5-flash';
-const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+// Use nginx reverse proxy to avoid Safari/WebKit fetch() SyntaxError on cross-origin requests
+const API_BASE = '/api/gemini/v1beta/models';
 
 const getApiKey = (): string => {
     // Vite replaces import.meta.env.VITE_* at build time
