@@ -7,7 +7,7 @@ export enum SearchType {
     SIMPLES_NACIONAL = 'Simples Nacional',
     LUCRO_PRESUMIDO_REAL = 'Lucro Presumido/Real',
     OBRIGACOES_FISCAIS = 'Obrigações Fiscais',
-    CONSULTOR_IA = 'Consultor IA'
+    IMPORTA_XML = 'Importa XML'
 }
 
 export interface GroundingSource {

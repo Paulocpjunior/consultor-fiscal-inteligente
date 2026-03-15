@@ -21,7 +21,7 @@ import { SearchType, type SearchResult, type ComparisonResult, type FavoriteItem
 import { fetchFiscalData, fetchComparison, fetchSimilarServices, fetchCnaeSuggestions } from './services/geminiService';
 import * as simplesService from './services/simplesNacionalService';
 import * as authService from './services/authService';
-import { BuildingIcon, CalculatorIcon, ChevronDownIcon, DocumentTextIcon, LocationIcon, SearchIcon, TagIcon, UserIcon, InfoIcon, CalendarIcon, ChatBubbleIcon } from './components/Icons';
+import { BuildingIcon, CalculatorIcon, ChevronDownIcon, DocumentTextIcon, LocationIcon, SearchIcon, TagIcon, UserIcon, InfoIcon, CalendarIcon, ChatBubbleIcon, DownloadIcon } from './components/Icons';
 import FiscalObligationsDashboard from './components/FiscalObligationsDashboard';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
 // ✅ REMOVIDO: import { onAuthStateChanged } from 'firebase/auth';
@@ -33,7 +33,7 @@ const ResultsDisplay = lazy(() => import('./components/ResultsDisplay'));
 const ComparisonDisplay = lazy(() => import('./components/ComparisonDisplay'));
 const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDisplay'));
 const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumidoRealDashboard'));
-const ConsultorFiscalIA = lazy(() => import('./components/ConsultorFiscalIA'));
+const ImportaXML = lazy(() => import('./components/ImportaXML'));
 
 const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
@@ -43,7 +43,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.SIMPLES_NACIONAL]: "Gestão de empresas do Simples, cálculo de DAS e Fator R.",
     [SearchType.LUCRO_PRESUMIDO_REAL]: "Ficha Financeira e Cadastro para Lucro Presumido/Real.",
     [SearchType.OBRIGACOES_FISCAIS]: "Acompanhamento de obrigações, vencimentos e alertas fiscais.",
-    [SearchType.CONSULTOR_IA]: "Chat interativo com IA para dúvidas tributárias e fiscais.",
+    [SearchType.IMPORTA_XML]: "Importe XMLs de NFe/NFSe para visualizar dados fiscais e impostos.",
 };
 
 const App: React.FC = () => {
@@ -643,7 +643,7 @@ const App: React.FC = () => {
                                         {type === SearchType.SIMPLES_NACIONAL && <CalculatorIcon className="w-5 h-5" />}
                                         {type === SearchType.LUCRO_PRESUMIDO_REAL && <BuildingIcon className="w-5 h-5" />}
                                         {type === SearchType.OBRIGACOES_FISCAIS && <CalendarIcon className="w-5 h-5" />}
-                                        {type === SearchType.CONSULTOR_IA && <ChatBubbleIcon className="w-5 h-5" />}
+                                        {type === SearchType.IMPORTA_XML && <DownloadIcon className="w-5 h-5" />}
                                     </div>
                                     <span className="text-xs font-bold text-center leading-tight">{type}</span>
                                 </button>
@@ -654,9 +654,9 @@ const App: React.FC = () => {
                         <ReformaTributariaNewsBanner />
 
                         {/* Standard Search Views (CFOP, NCM, Serviço, Simples, Lucro, Obrigações) */}
-                        {[SearchType.CFOP, SearchType.NCM, SearchType.SERVICO, SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.CONSULTOR_IA].includes(searchType) && (
+                        {[SearchType.CFOP, SearchType.NCM, SearchType.SERVICO, SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) && (
                             <>
-                                <div className={`bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm mb-6 animate-fade-in ${[SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.CONSULTOR_IA].includes(searchType) ? 'hidden' : ''}`}>
+                                <div className={`bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm mb-6 animate-fade-in ${[SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) ? 'hidden' : ''}`}>
                                     <div className="flex items-center gap-4 mb-4">
                                         <button
                                             onClick={() => setMode('single')}
@@ -917,10 +917,10 @@ const App: React.FC = () => {
                             <FiscalObligationsDashboard />
                         )}
 
-                        {/* Consultor Fiscal IA View */}
-                        {searchType === SearchType.CONSULTOR_IA && (
+                        {/* Importa XML View */}
+                        {searchType === SearchType.IMPORTA_XML && (
                             <Suspense fallback={<LoadingSpinner />}>
-                                <ConsultorFiscalIA
+                                <ImportaXML
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
@@ -929,7 +929,7 @@ const App: React.FC = () => {
 
                         {/* Results Display */}
                         <Suspense fallback={<LoadingSpinner />}>
-                            {!result && !comparisonResult && ![SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.CONSULTOR_IA].includes(searchType) && (
+                            {!result && !comparisonResult && ![SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) && (
                                 <InitialStateDisplay searchType={searchType} mode={mode} />
                             )}
 
@@ -974,7 +974,7 @@ const App: React.FC = () => {
                             }} />
                         )}
 
-                        {![SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.CONSULTOR_IA].includes(searchType) && (
+                        {![SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) && (
                             searchType === SearchType.REFORMA_TRIBUTARIA ? <ReformaNews /> : <NewsAlerts />
                         )}
 
