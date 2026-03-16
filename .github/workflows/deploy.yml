@@ -3,7 +3,7 @@ name: Deploy to Cloud Run
 on:
   push:
     branches:
-      - claude/fix-api-communication-error-EfR6w
+      - main
 
 env:
   PROJECT_ID: gen-lang-client-0569062468
