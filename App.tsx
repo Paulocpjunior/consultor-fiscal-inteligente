@@ -34,6 +34,7 @@ const ComparisonDisplay = lazy(() => import('./components/ComparisonDisplay'));
 const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDisplay'));
 const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumidoRealDashboard'));
 const ImportaXML = lazy(() => import('./components/ImportaXML'));
+const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
 
 const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
@@ -961,6 +962,13 @@ const App: React.FC = () => {
                                 />
                             </Suspense>
                         )}
+
+                {\/* Analisador de Regime Tributario *\/}
+                {searchType === SearchType.ANALISADOR_REGIME && (
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <AnalisadorRegime />
+                  </Suspense>
+                )}
 
                         {/* Results Display */}
                         <Suspense fallback={<LoadingSpinner />}>
