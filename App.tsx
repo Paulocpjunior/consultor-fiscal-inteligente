@@ -963,7 +963,7 @@ const App: React.FC = () => {
                             </Suspense>
                         )}
 
-                {\/* Analisador de Regime Tributario *\/}
+                {/* Analisador de Regime Tributario */}
                 {searchType === SearchType.ANALISADOR_REGIME && (
                   <Suspense fallback={<LoadingSpinner />}>
                     <AnalisadorRegime />
