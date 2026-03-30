@@ -8,7 +8,8 @@ export enum SearchType {
     LUCRO_PRESUMIDO_REAL = 'Lucro Presumido/Real',
     OBRIGACOES_FISCAIS = 'Obrigações Fiscais',
     IMPORTA_XML = 'Importa XML',
-  ANALISADOR_REGIME = 'Regime Tributário'
+  ANALISADOR_REGIME = 'Regime Tributário',
+  ANALISE_CREDITOS = 'Análise de Créditos'
 }
 
 export interface GroundingSource {
@@ -405,6 +406,8 @@ export interface LucroResult {
     cargaTributaria: number;
     lucroLiquidoEstimado: number;
     alertaLc224?: boolean;
+    saldoResidualPis?: number;
+    saldoResidualCofins?: number;
 }
 
 export interface LucroInput {
@@ -456,6 +459,8 @@ export interface LucroInput {
     ajustesLucroRealExclusoes?: number;
     saldoCredorIcms?: number;
     saldoCredorIpi?: number;
+    saldoCredorPis?: number;
+    saldoCredorCofins?: number;
 }
 
 // Fiscal Obligations Types
