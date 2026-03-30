@@ -33,6 +33,7 @@ const ResultsDisplay = lazy(() => import('./components/ResultsDisplay'));
 const ComparisonDisplay = lazy(() => import('./components/ComparisonDisplay'));
 const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDisplay'));
 const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumidoRealDashboard'));
+const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
 const ImportaXML = lazy(() => import('./components/ImportaXML'));
 const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
 
@@ -969,6 +970,13 @@ const App: React.FC = () => {
                     <AnalisadorRegime />
                   </Suspense>
                 )}
+
+                        {/* Análise de Créditos Fiscais */}
+                        {searchType === SearchType.ANALISE_CREDITOS && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <AnaliseCreditos />
+                            </Suspense>
+                        )}
 
                         {/* Results Display */}
                         <Suspense fallback={<LoadingSpinner />}>
