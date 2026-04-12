@@ -12,28 +12,119 @@ const ADICIONAL_IRPJ = 0.10; // 10%
 const ALIQ_CSLL = 0.09; // 9%
 
 // Alíquotas Especiais
-const ALIQ_PIS_APLICACAO = 0.0065; 
-const ALIQ_COFINS_APLICACAO = 0.04; 
-const ALIQ_PIS_IMPORTACAO = 0.021; 
-const ALIQ_COFINS_IMPORTACAO = 0.0965; 
+const ALIQ_PIS_APLICACAO = 0.0065;
+const ALIQ_COFINS_APLICACAO = 0.04;
+const ALIQ_PIS_IMPORTACAO = 0.021;
+const ALIQ_COFINS_IMPORTACAO = 0.0965;
 
 // Limites Adicional IRPJ (Conforme Legislação)
 const LIMITE_ADICIONAL_MENSAL = 20000;
 const LIMITE_ADICIONAL_TRIMESTRAL = 60000;
 
 // Presunção Lucro Presumido
-const PRESUNCAO_IRPJ_COMERCIO = 0.08; 
-const PRESUNCAO_IRPJ_INDUSTRIA = 0.08; 
-const PRESUNCAO_IRPJ_SERVICO_PADRAO = 0.32; 
+const PRESUNCAO_IRPJ_COMERCIO = 0.08;
+const PRESUNCAO_IRPJ_INDUSTRIA = 0.08;
+const PRESUNCAO_IRPJ_SERVICO_PADRAO = 0.32;
 const PRESUNCAO_IRPJ_SERVICO_REDUZIDA = 0.16; // IN RFB 1.700/17 (Receita <= 120k)
 
-const PRESUNCAO_CSLL_COMERCIO = 0.12; 
-const PRESUNCAO_CSLL_INDUSTRIA = 0.12; 
-const PRESUNCAO_CSLL_SERVICO = 0.32; 
+const PRESUNCAO_CSLL_COMERCIO = 0.12;
+const PRESUNCAO_CSLL_INDUSTRIA = 0.12;
+const PRESUNCAO_CSLL_SERVICO = 0.32;
 
 // Presunção Equiparação Hospitalar
-const PRESUNCAO_IRPJ_HOSPITALAR = 0.08; 
-const PRESUNCAO_CSLL_HOSPITALAR = 0.12; 
+const PRESUNCAO_IRPJ_HOSPITALAR = 0.08;
+const PRESUNCAO_CSLL_HOSPITALAR = 0.12;
+
+// ============================================================================
+// MAJORAÇÃO LC 224/2025 + IN RFB 2.305/2025 + IN RFB 2.306/2026
+// ----------------------------------------------------------------------------
+// Acréscimo de 10% nos percentuais de presunção de IRPJ e CSLL,
+// incidente APENAS sobre a parcela da receita bruta que exceder R$ 5.000.000
+// no ano-calendário (R$ 1.250.000 proporcional por trimestre).
+//
+// VIGÊNCIA ASSIMÉTRICA EM 2026:
+//   - IRPJ: desde 01/01/2026 (1T) → limite anual R$ 5.000.000
+//   - CSLL: desde 01/04/2026 (2T) → limite anual R$ 3.750.000 (3/4 do padrão)
+// ============================================================================
+const FATOR_AUMENTO_PRESUNCAO_LC224 = 1.10;
+const LIMITE_ANUAL_LC224_PADRAO = 5_000_000;
+const LIMITE_ANUAL_LC224_CSLL_2026 = 3_750_000;
+
+type TributoLC224 = 'IRPJ' | 'CSLL';
+
+/**
+ * Determina se a majoração da LC 224/2025 está vigente para o tributo na competência.
+ * Respeita a anterioridade nonagesimal da CSLL em 2026.
+ */
+const majoracaoLc224Vigente = (tributo: TributoLC224, ano: number, trimestre: number): boolean => {
+    if (ano < 2026) return false;
+    if (ano === 2026) {
+        if (tributo === 'IRPJ') return true;           // vigente desde 1T/2026
+        if (tributo === 'CSLL') return trimestre >= 2;  // vigente desde 2T/2026
+    }
+    return true; // 2027+ ambos vigentes
+};
+
+const obterLimiteAnualLc224 = (tributo: TributoLC224, ano: number): number => {
+    if (tributo === 'CSLL' && ano === 2026) return LIMITE_ANUAL_LC224_CSLL_2026;
+    return LIMITE_ANUAL_LC224_PADRAO;
+};
+
+/**
+ * Calcula a proporção da receita do período atual que deve sofrer majoração.
+ * Retorna um número entre 0 e 1 que representa a fração do faturamento do período
+ * que excede o limite anual (considerando o que já foi acumulado em períodos anteriores).
+ *
+ * Ex.: acumuladoAnterior = R$ 4.500.000, receitaPeriodo = R$ 1.000.000, limite = R$ 5.000.000
+ *      → excedente do período = R$ 500.000 → proporção = 0,5 (50% da receita majorada)
+ */
+const calcularProporcaoMajorada = (
+    receitaPeriodoAtual: number,
+    acumuladoAnterior: number,
+    limiteAnual: number
+): number => {
+    if (receitaPeriodoAtual <= 0) return 0;
+    const acumuladoAtual = acumuladoAnterior + receitaPeriodoAtual;
+    if (acumuladoAtual <= limiteAnual) return 0;
+
+    const excedenteAnterior = Math.max(0, acumuladoAnterior - limiteAnual);
+    const excedenteAtual = acumuladoAtual - limiteAnual;
+    const excedentePeriodo = excedenteAtual - excedenteAnterior;
+
+    return Math.min(1, Math.max(0, excedentePeriodo / receitaPeriodoAtual));
+};
+
+/**
+ * Aplica a majoração proporcional a uma base presumida.
+ * Se proporcaoMajorada = 0 → retorna base * presunção normal.
+ * Se proporcaoMajorada = 1 → retorna base * presunção majorada (presunção * 1,10).
+ * Caso intermediário → rateia proporcionalmente.
+ */
+const aplicarMajoracaoProporcional = (
+    base: number,
+    presuncaoNormal: number,
+    proporcaoMajorada: number
+): number => {
+    if (base <= 0) return 0;
+    const presuncaoMajorada = presuncaoNormal * FATOR_AUMENTO_PRESUNCAO_LC224;
+    const parcelaNormal = base * (1 - proporcaoMajorada) * presuncaoNormal;
+    const parcelaMajorada = base * proporcaoMajorada * presuncaoMajorada;
+    return parcelaNormal + parcelaMajorada;
+};
+
+/**
+ * Extrai ano e trimestre de uma string no formato "YYYY-MM".
+ * Retorna { ano: 0, trimestre: 0 } se inválido.
+ */
+const extrairAnoTrimestre = (mesReferencia?: string): { ano: number; trimestre: number } => {
+    if (!mesReferencia) return { ano: 0, trimestre: 0 };
+    const parts = mesReferencia.split('-');
+    const ano = parseInt(parts[0] || '0');
+    const mes = parseInt(parts[1] || '0');
+    if (!ano || !mes) return { ano, trimestre: 0 };
+    const trimestre = Math.ceil(mes / 3);
+    return { ano, trimestre };
+};
 
 const fmt = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -43,13 +134,12 @@ const fmt = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency',
  * Regra Legal Mínima: Parcela > R$ 1.000,00
  */
 export const calcularCotasDisponiveis = (valorImposto: number, periodo: 'Mensal' | 'Trimestral'): PlanoCotas | undefined => {
-    const limiteDisponibilidade = periodo === 'Trimestral' ? 5000 : 1000; // Ajustado para ser mais flexível, regra oficial é valor > 2000 para parcelar. Vamos permitir visualização.
+    const limiteDisponibilidade = periodo === 'Trimestral' ? 5000 : 1000;
 
     if (valorImposto > limiteDisponibilidade) {
         const numCotas = 3;
         const valorCota = valorImposto / numCotas;
 
-        // Lei exige parcela mínima de 1000 reais
         if (valorCota < 1000) return undefined;
 
         return {
@@ -72,7 +162,7 @@ const calcularISS = (input: LucroInput): DetalheImposto | null => {
         const qtde = input.issConfig.qtdeSocios || 0;
         const valorPorSocio = input.issConfig.valorPorSocio || 0;
         const valorTotal = qtde * valorPorSocio;
-        
+
         if (valorTotal <= 0) return null;
 
         return {
@@ -84,12 +174,10 @@ const calcularISS = (input: LucroInput): DetalheImposto | null => {
         };
     } else {
         const aliquota = input.issConfig.aliquota || 0;
-        
-        // Base de ISS APENAS sobre serviços com ISS Devido e Hospitalar
-        // Serviços com retenção na fonte ou Locação (não incide ISS) são excluídos aqui.
+
         const baseIss = input.faturamentoServico + (input.faturamentoServicoHospitalar || 0) +
                         (input.faturamentoFiliais?.servicoHospitalar || 0);
-        
+
         if (baseIss <= 0 || aliquota <= 0) return null;
 
         return {
@@ -128,67 +216,69 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
     // 1. Consolidar Faturamento Global do Mês (Matriz + Filiais) - VALOR DA NOTA (INCLUINDO IPI)
     const fatComercioMes = input.faturamentoComercio + (input.faturamentoFiliais?.comercio || 0);
     const fatIndustriaMes = input.faturamentoIndustria + (input.faturamentoFiliais?.industria || 0);
-    
+
     // Serviços: Consolida todas as vertentes para cálculo federal
     const fatServicoProprio = input.faturamentoServico + (input.faturamentoFiliais?.servico || 0);
     const fatServicoRetido = (input.faturamentoServicoRetido || 0) + (input.faturamentoFiliais?.servicoRetido || 0);
     const fatLocacao = (input.faturamentoLocacao || 0) + (input.faturamentoFiliais?.locacao || 0);
-    
+
     const fatServicoMesTotal = fatServicoProprio + fatServicoRetido + fatLocacao;
-    
+
     const fatServicoHospMes = (input.faturamentoServicoHospitalar || 0) + (input.faturamentoFiliais?.servicoHospitalar || 0);
-    
+
     // Total Faturado Bruto (Antes de Deduções)
     const totalFaturadoInputs = fatComercioMes + fatIndustriaMes + fatServicoMesTotal + fatServicoHospMes;
 
     // 2. Aplicação de Deduções da Receita Bruta (IPI e Devoluções)
-    // OBS: ICMS sobre Vendas NÃO é deduzido aqui, pois afeta apenas PIS/COFINS (Tese do Século).
     const valorIpi = input.valorIpi || 0;
     const valorDevolucoes = input.valorDevolucoes || 0;
 
-    // Calcular Bases Ajustadas (Líquidas de IPI e Devoluções) para Presunção (IRPJ/CSLL)
-    // Lógica: 
-    // - IPI é deduzido prioritariamente da Indústria (Natureza do imposto).
-    // - Devoluções são deduzidas proporcionalmente de todas as receitas.
-    
     let fatIndustriaDeduzidoIpi = Math.max(0, fatIndustriaMes - valorIpi);
-    // Se o IPI for maior que a receita de indústria (Raro, mas possível em devolução massiva), abatemos do restante apenas para consistência matemática do total
     let restoDeducaoIpi = Math.max(0, valorIpi - fatIndustriaMes);
 
-    // Total após dedução de IPI (Base Provisória)
     const totalSemIpi = totalFaturadoInputs - valorIpi;
-    
-    // Cálculo de Proporção para Devoluções (Rateio)
-    // Se totalSemIpi for 0, evita divisão por zero
+
     const ratioComercio = totalSemIpi > 0 ? fatComercioMes / totalSemIpi : 0;
     const ratioIndustria = totalSemIpi > 0 ? fatIndustriaDeduzidoIpi / totalSemIpi : 0;
     const ratioServico = totalSemIpi > 0 ? fatServicoMesTotal / totalSemIpi : 0;
     const ratioServicoHosp = totalSemIpi > 0 ? fatServicoHospMes / totalSemIpi : 0;
 
     // Bases Finais para Presunção (Líquidas de IPI e Devoluções, mas COM ICMS) -> Base IRPJ/CSLL
-    const baseComercioFinal = Math.max(0, fatComercioMes - (valorDevolucoes * ratioComercio) - (restoDeducaoIpi > 0 ? restoDeducaoIpi : 0)); // Simplificação: joga resto do IPI no comércio se houver
+    const baseComercioFinal = Math.max(0, fatComercioMes - (valorDevolucoes * ratioComercio) - (restoDeducaoIpi > 0 ? restoDeducaoIpi : 0));
     const baseIndustriaFinal = Math.max(0, fatIndustriaDeduzidoIpi - (valorDevolucoes * ratioIndustria));
     const baseServicoFinal = Math.max(0, fatServicoMesTotal - (valorDevolucoes * ratioServico));
     const baseServicoHospFinal = Math.max(0, fatServicoHospMes - (valorDevolucoes * ratioServicoHosp));
 
-    // Receita Bruta Efetiva (Base de Cálculo IRPJ/CSLL)
-    // Fórmula: Vendas Brutas - Devoluções - IPI
-    // Monofásicos: Estão incluídos nas bases finais acima (Comércio/Indústria). Não deduzimos.
     const receitaBrutaEfetiva = baseComercioFinal + baseIndustriaFinal + baseServicoFinal + baseServicoHospFinal;
     const receitaTotalMes = receitaBrutaEfetiva + (input.receitaFinanceira || 0);
-    
-    const detalhamento: DetalheImposto[] = [];
-    
-    // Análise da Lei Complementar 224/2025
-    const ano = parseInt(input.mesReferencia?.split('-')[0] || '0');
-    const receitaTotalAno = (input.acumuladoAno || 0) + receitaTotalMes;
-    let fatorAumentoPresuncao = 1.0;
-    let aplicouLc224 = false;
 
-    if (ano >= 2026 && receitaTotalAno > 5000000) {
-        fatorAumentoPresuncao = 1.10;
-        aplicouLc224 = true;
-    }
+    const detalhamento: DetalheImposto[] = [];
+
+    // ========================================================================
+    // ANÁLISE DA MAJORAÇÃO LC 224/2025 (separada para IRPJ e CSLL)
+    // ========================================================================
+    const { ano, trimestre } = extrairAnoTrimestre(input.mesReferencia);
+    const acumuladoAnterior = input.acumuladoAno || 0;
+
+    // A "receita do período" para fins de majoração = receita bruta efetiva
+    // (não inclui receita financeira, que entra sem presunção)
+    const receitaPeriodoParaLc224 = receitaBrutaEfetiva;
+
+    // IRPJ
+    const irpjVigente = majoracaoLc224Vigente('IRPJ', ano, trimestre);
+    const limiteIrpj = obterLimiteAnualLc224('IRPJ', ano);
+    const proporcaoMajoradaIrpj = irpjVigente
+        ? calcularProporcaoMajorada(receitaPeriodoParaLc224, acumuladoAnterior, limiteIrpj)
+        : 0;
+
+    // CSLL
+    const csllVigente = majoracaoLc224Vigente('CSLL', ano, trimestre);
+    const limiteCsll = obterLimiteAnualLc224('CSLL', ano);
+    const proporcaoMajoradaCsll = csllVigente
+        ? calcularProporcaoMajorada(receitaPeriodoParaLc224, acumuladoAnterior, limiteCsll)
+        : 0;
+
+    const aplicouLc224 = proporcaoMajoradaIrpj > 0 || proporcaoMajoradaCsll > 0;
 
     // ISS
     const issItem = calcularISS(input);
@@ -199,14 +289,11 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
     const retencaoIrpj = input.retencaoIrpj || 0;
     const retencaoCsll = input.retencaoCsll || 0;
 
-    // PIS/COFINS
-    // Base: Receita Bruta Efetiva - ICMS sobre Vendas (Exclusão do ICMS da base de PIS/COFINS) - Monofásico
-    // CORREÇÃO: Deduz faturamento monofásico da base de PIS/COFINS (mesmo tratamento do Lucro Real)
+    // PIS/COFINS (inalterados pela LC 224)
     const icmsVendas = input.icmsVendas || 0;
     const valorMonofasico = input.faturamentoMonofasico || 0;
     const basePisCofins = Math.max(0, receitaBrutaEfetiva - icmsVendas - valorMonofasico);
-    
-    // Monta observação dinâmica para PIS/COFINS
+
     const obsPisCofinsBase = icmsVendas > 0 ? `Base Deduzida de ICMS (${fmt(icmsVendas)}). ` : `Base: Receita Bruta Efetiva. `;
     const obsPisCofinsMonofasico = valorMonofasico > 0 ? `Deduzido Monofásico (${fmt(valorMonofasico)}). ` : '';
 
@@ -229,11 +316,9 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
 
     processarItensEspeciais(input.itensAvulsos, detalhamento);
 
-    // IRPJ - Base de Presunção
-    // IMPORTANTE: Aqui usamos as bases finais (já líquidas de IPI/Devoluções).
-    // REGRA: Produtos Monofásicos e ICMS compõem a Receita Bruta para fins de IRPJ/CSLL no Presumido/Trimestral.
-    // Portanto, NÃO subtraímos o Monofásico nem o ICMS sobre Vendas desta base.
-    
+    // ========================================================================
+    // IRPJ / CSLL — Base de Presunção com majoração LC 224 proporcional
+    // ========================================================================
     let baseCalculoIrpjComercio = baseComercioFinal;
     let baseCalculoIrpjIndustria = baseIndustriaFinal;
     let baseCalculoIrpjServico = baseServicoFinal;
@@ -243,69 +328,71 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
     let obsTrimestre = "";
 
     if (input.periodoApuracao === 'Trimestral' && input.acumuladoTrimestre) {
-        // Se houver acumulado manual, soma-se. 
         baseCalculoIrpjComercio += input.acumuladoTrimestre.comercio;
         baseCalculoIrpjIndustria += input.acumuladoTrimestre.industria;
         baseCalculoIrpjServico += input.acumuladoTrimestre.servico;
-        baseCalculoIrpjServicoHosp += (input.acumuladoTrimestre.servicoHospitalar || 0); 
+        baseCalculoIrpjServicoHosp += (input.acumuladoTrimestre.servicoHospitalar || 0);
         baseCalculoReceitaFinanceira += input.acumuladoTrimestre.financeira;
         obsTrimestre = ` (Inclui Out/Nov/Dez)`;
     }
 
-    // Definição da alíquota de presunção para serviços gerais
-    const presuncaoServicoUsada = input.isPresuncaoReduzida16 
-        ? PRESUNCAO_IRPJ_SERVICO_REDUZIDA 
+    const presuncaoServicoUsada = input.isPresuncaoReduzida16
+        ? PRESUNCAO_IRPJ_SERVICO_REDUZIDA
         : PRESUNCAO_IRPJ_SERVICO_PADRAO;
 
-    // Cálculo das Bases Presumidas IRPJ
-    const baseIrpjComercio = baseCalculoIrpjComercio * PRESUNCAO_IRPJ_COMERCIO * fatorAumentoPresuncao;
-    const baseIrpjIndustria = baseCalculoIrpjIndustria * PRESUNCAO_IRPJ_INDUSTRIA * fatorAumentoPresuncao;
-    const baseIrpjServico = baseCalculoIrpjServico * presuncaoServicoUsada * fatorAumentoPresuncao;
-    const baseIrpjServicoHosp = baseCalculoIrpjServicoHosp * PRESUNCAO_IRPJ_HOSPITALAR * fatorAumentoPresuncao;
-    
-    // Receita financeira entra 100%
+    // --- IRPJ: aplica majoração apenas sobre a proporção excedente ---
+    const baseIrpjComercio = aplicarMajoracaoProporcional(baseCalculoIrpjComercio, PRESUNCAO_IRPJ_COMERCIO, proporcaoMajoradaIrpj);
+    const baseIrpjIndustria = aplicarMajoracaoProporcional(baseCalculoIrpjIndustria, PRESUNCAO_IRPJ_INDUSTRIA, proporcaoMajoradaIrpj);
+    const baseIrpjServico = aplicarMajoracaoProporcional(baseCalculoIrpjServico, presuncaoServicoUsada, proporcaoMajoradaIrpj);
+    const baseIrpjServicoHosp = aplicarMajoracaoProporcional(baseCalculoIrpjServicoHosp, PRESUNCAO_IRPJ_HOSPITALAR, proporcaoMajoradaIrpj);
+
     const baseIrpjTotal = baseIrpjComercio + baseIrpjIndustria + baseIrpjServico + baseIrpjServicoHosp + baseCalculoReceitaFinanceira;
 
     if (baseIrpjTotal > 0) {
         let valorIrpj = baseIrpjTotal * ALIQ_IRPJ;
         const limiteAdicional = input.periodoApuracao === 'Trimestral' ? LIMITE_ADICIONAL_TRIMESTRAL : LIMITE_ADICIONAL_MENSAL;
-        
+
         if (baseIrpjTotal > limiteAdicional) {
             valorIrpj += (baseIrpjTotal - limiteAdicional) * ADICIONAL_IRPJ;
         }
 
         const obsHosp = baseIrpjServicoHosp > 0 ? " + Hosp. 8%" : "";
         const obsReduzida = input.isPresuncaoReduzida16 ? " (Reduzida 16% R$120k)" : "";
+        const obsLc224Irpj = proporcaoMajoradaIrpj > 0
+            ? ` LC 224/25: ${(proporcaoMajoradaIrpj * 100).toFixed(1)}% da receita com presunção majorada (+10%).`
+            : '';
 
         detalhamento.push({
             imposto: `IRPJ (${input.periodoApuracao})`,
             baseCalculo: baseIrpjTotal,
             aliquota: ALIQ_IRPJ * 100,
             valor: Math.max(0, valorIrpj - retencaoIrpj),
-            observacao: (aplicouLc224 
-                ? `LC 224/25. Base Bruta${obsHosp}${obsReduzida}.${obsTrimestre}` 
-                : `Base Bruta (Inclui Monofásicos)${obsHosp}${obsReduzida}.${obsTrimestre}`) + ` Isenção: ${fmt(limiteAdicional)}` + (retencaoIrpj > 0 ? `. Retenção abatida: ${fmt(retencaoIrpj)}` : '')
+            observacao: `Base Bruta${obsHosp}${obsReduzida}.${obsTrimestre}${obsLc224Irpj} Isenção: ${fmt(limiteAdicional)}` + (retencaoIrpj > 0 ? `. Retenção abatida: ${fmt(retencaoIrpj)}` : '')
         });
     }
 
-    // CSLL - Base de Presunção
-    const baseCsllComercio = baseCalculoIrpjComercio * PRESUNCAO_CSLL_COMERCIO * fatorAumentoPresuncao;
-    const baseCsllIndustria = baseCalculoIrpjIndustria * PRESUNCAO_CSLL_INDUSTRIA * fatorAumentoPresuncao;
-    const baseCsllServico = baseCalculoIrpjServico * PRESUNCAO_CSLL_SERVICO * fatorAumentoPresuncao; // 32% padrão
-    const baseCsllServicoHosp = baseCalculoIrpjServicoHosp * PRESUNCAO_CSLL_HOSPITALAR * fatorAumentoPresuncao; // 12% reduzida
+    // --- CSLL: aplica majoração apenas sobre a proporção excedente (com limite próprio em 2026) ---
+    const baseCsllComercio = aplicarMajoracaoProporcional(baseCalculoIrpjComercio, PRESUNCAO_CSLL_COMERCIO, proporcaoMajoradaCsll);
+    const baseCsllIndustria = aplicarMajoracaoProporcional(baseCalculoIrpjIndustria, PRESUNCAO_CSLL_INDUSTRIA, proporcaoMajoradaCsll);
+    const baseCsllServico = aplicarMajoracaoProporcional(baseCalculoIrpjServico, PRESUNCAO_CSLL_SERVICO, proporcaoMajoradaCsll);
+    const baseCsllServicoHosp = aplicarMajoracaoProporcional(baseCalculoIrpjServicoHosp, PRESUNCAO_CSLL_HOSPITALAR, proporcaoMajoradaCsll);
 
     const baseCsllTotal = baseCsllComercio + baseCsllIndustria + baseCsllServico + baseCsllServicoHosp + baseCalculoReceitaFinanceira;
 
     if (baseCsllTotal > 0) {
         const obsHosp = baseCsllServicoHosp > 0 ? " + Hosp. 12%" : "";
+        const obsLc224Csll = proporcaoMajoradaCsll > 0
+            ? ` LC 224/25: ${(proporcaoMajoradaCsll * 100).toFixed(1)}% da receita com presunção majorada (+10%).`
+            : (ano === 2026 && trimestre === 1 && receitaPeriodoParaLc224 + acumuladoAnterior > limiteCsll
+                ? ' LC 224/25 não aplicada à CSLL no 1T/2026 (anterioridade nonagesimal).'
+                : '');
+
         detalhamento.push({
             imposto: `CSLL (${input.periodoApuracao})`,
             baseCalculo: baseCsllTotal,
             aliquota: ALIQ_CSLL * 100,
             valor: Math.max(0, (baseCsllTotal * ALIQ_CSLL) - retencaoCsll),
-            observacao: (aplicouLc224
-                ? `LC 224/25.${obsHosp}.${obsTrimestre}`
-                : `Base Bruta (Inclui Monofásicos)${obsHosp}.${obsTrimestre}`) + (retencaoCsll > 0 ? `. Retenção abatida: ${fmt(retencaoCsll)}` : '')
+            observacao: `Base Bruta${obsHosp}.${obsTrimestre}${obsLc224Csll}` + (retencaoCsll > 0 ? `. Retenção abatida: ${fmt(retencaoCsll)}` : '')
         });
     }
 
@@ -345,8 +432,7 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
     const totalImpostos = detalhamento.reduce((acc, item) => acc + item.valor, 0);
     const extraReceitas = (input.itensAvulsos || []).filter(i => i.tipo === 'receita').reduce((acc, i) => acc + i.valor, 0);
     const extraDespesas = (input.itensAvulsos || []).filter(i => i.tipo === 'despesa').reduce((acc, i) => acc + i.valor, 0);
-    
-    // Lucro Líquido
+
     const lucroLiquido = (receitaTotalMes + extraReceitas) - input.custoMercadoriaVendida - input.despesasOperacionais - input.folhaPagamento - extraDespesas - totalImpostos;
 
     return {
@@ -361,27 +447,21 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
 };
 
 const calcularLucroReal = (input: LucroInput): LucroResult => {
-    // Nota: Lucro Real geralmente requer apuração contábil mais complexa.
-    // Aqui aplicamos a lógica básica sobre os inputs fornecidos + Filiais.
-    
     const fatComercio = input.faturamentoComercio + (input.faturamentoFiliais?.comercio || 0);
     const fatIndustria = input.faturamentoIndustria + (input.faturamentoFiliais?.industria || 0);
-    
-    // Consolidação de Serviços (Próprio, Retido, Locação)
-    const fatServicoTotal = input.faturamentoServico + (input.faturamentoFiliais?.servico || 0) + 
+
+    const fatServicoTotal = input.faturamentoServico + (input.faturamentoFiliais?.servico || 0) +
                             (input.faturamentoServicoRetido || 0) + (input.faturamentoFiliais?.servicoRetido || 0) +
                             (input.faturamentoLocacao || 0) + (input.faturamentoFiliais?.locacao || 0);
 
     const fatServicoHosp = (input.faturamentoServicoHospitalar || 0) + (input.faturamentoFiliais?.servicoHospitalar || 0);
-    
+
     const faturamentoBrutoInput = fatComercio + fatIndustria + fatServicoTotal + fatServicoHosp;
-    
-    // Aplica deduções também no Real para chegar à Receita Líquida Operacional (base de partida)
+
     const receitaLiquida = Math.max(0, faturamentoBrutoInput - (input.valorIpi || 0) - (input.valorDevolucoes || 0));
 
     const detalhamento: DetalheImposto[] = [];
-    
-    // ISS (Apenas sobre serviços próprios/hospitalares, excluindo retenção e locação)
+
     const issItem = calcularISS(input);
     if (issItem) detalhamento.push(issItem);
 
@@ -395,13 +475,10 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
 
     const totalReceitas = receitaLiquida + (input.receitaFinanceira || 0) + (input.itensAvulsos || []).filter(i => i.tipo === 'receita').reduce((acc, i) => acc + i.valor, 0);
 
-    // PIS/COFINS (Não Cumulativo - Mensal - Consolidado)
-    // Base PIS/COFINS Real: Receita Líquida - ICMS sobre Vendas (Tese do Século) - Monofásico
-    // Monofásico é deduzido aqui pois no Regime Não-Cumulativo a receita é segregada.
     const icmsVendas = input.icmsVendas || 0;
     const basePisCofins = Math.max(0, receitaLiquida - icmsVendas - (input.faturamentoMonofasico || 0));
-    const baseCredito = input.despesasDedutiveis + extraBaseCredito; 
-    
+    const baseCredito = input.despesasDedutiveis + extraBaseCredito;
+
     detalhamento.push({
         imposto: 'PIS (Lucro Real)',
         baseCalculo: basePisCofins,
@@ -418,36 +495,32 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
         observacao: `Mensal - Crédito sobre despesas. Deduzido ICMS.` + (input.retencaoCofins ? ` Retenção abatida: ${fmt(input.retencaoCofins)}` : '')
     });
 
-    // PIS/COFINS sobre Receita Financeira (Regime Não-Cumulativo)
-    // Alíquotas: PIS 0,65% e COFINS 4,00% (Dec. 8.426/2015)
     if (input.receitaFinanceira && input.receitaFinanceira > 0) {
         detalhamento.push({
             imposto: 'PIS (Rec. Financeira)',
             baseCalculo: input.receitaFinanceira,
-            aliquota: ALIQ_PIS_APLICACAO * 100, // 0.65%
+            aliquota: ALIQ_PIS_APLICACAO * 100,
             valor: input.receitaFinanceira * ALIQ_PIS_APLICACAO
         });
         detalhamento.push({
             imposto: 'COFINS (Rec. Financeira)',
             baseCalculo: input.receitaFinanceira,
-            aliquota: ALIQ_COFINS_APLICACAO * 100, // 4.00%
+            aliquota: ALIQ_COFINS_APLICACAO * 100,
             valor: input.receitaFinanceira * ALIQ_COFINS_APLICACAO
         });
     }
 
     processarItensEspeciais(input.itensAvulsos, detalhamento);
 
-    // IRPJ / CSLL (Lucro Real - Ajustado por Período)
-    
     const despesasTotaisDedutiveis = input.despesasOperacionais + input.despesasDedutiveis + extraDespesasDedutiveis;
     const lucroContabil = totalReceitas - input.custoMercadoriaVendida - input.folhaPagamento - despesasTotaisDedutiveis;
     const lucroReal = lucroContabil + (input.ajustesLucroRealAdicoes || 0) - (input.ajustesLucroRealExclusoes || 0);
-    
+
     if (lucroReal > 0) {
         let valorIrpj = lucroReal * ALIQ_IRPJ;
         const limiteAdicional = input.periodoApuracao === 'Trimestral' ? LIMITE_ADICIONAL_TRIMESTRAL : LIMITE_ADICIONAL_MENSAL;
         if (lucroReal > limiteAdicional) valorIrpj += (lucroReal - limiteAdicional) * ADICIONAL_IRPJ;
-        
+
         detalhamento.push({
             imposto: `IRPJ (Lucro Real ${input.periodoApuracao})`,
             baseCalculo: lucroReal,
@@ -473,7 +546,6 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
         });
     }
 
-    // ADICIONAR IMPOSTOS INFORMATIVOS (MANUAIS) AO RESULTADO FINAL
     if (input.icmsProprioRecolher && input.icmsProprioRecolher > 0) {
         const saldoIcms = input.saldoCredorIcms || 0;
         const icmsPagar = Math.max(0, input.icmsProprioRecolher - saldoIcms);
