@@ -258,10 +258,25 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
     // ANÁLISE DA MAJORAÇÃO LC 224/2025 (separada para IRPJ e CSLL)
     // ========================================================================
     const { ano, trimestre } = extrairAnoTrimestre(input.mesReferencia);
-    const acumuladoAnterior = input.acumuladoAno || 0;
 
-    // A "receita do período" para fins de majoração = receita bruta efetiva
-    // (não inclui receita financeira, que entra sem presunção)
+    // Acumulado de períodos anteriores do mesmo ano-calendário (para a majoração).
+    // Pega o maior entre acumuladoAno (informado manualmente na UI) e a soma
+    // do acumulado trimestral — no encerramento trimestral, o usuário preenche
+    // acumuladoTrimestre (meses anteriores DESTE trimestre) mas pode deixar
+    // acumuladoAno zerado, e precisamos considerar isso como acumulado do ano
+    // para fins de verificação do limite de R$ 5 mi.
+    const somaAcumuladoTrimestre = input.acumuladoTrimestre
+        ? (input.acumuladoTrimestre.comercio || 0)
+          + (input.acumuladoTrimestre.industria || 0)
+          + (input.acumuladoTrimestre.servico || 0)
+          + (input.acumuladoTrimestre.servicoHospitalar || 0)
+        : 0;
+    const acumuladoAnterior = Math.max(input.acumuladoAno || 0, somaAcumuladoTrimestre);
+
+    // A "receita do período" para fins de majoração inclui o mês atual + acumulado
+    // trimestral (que já está somado às bases na seção Trimestral abaixo).
+    // Mas para a proporção, usamos a receita do MÊS atual apenas, e o acumulado
+    // trimestral entra em acumuladoAnterior acima.
     const receitaPeriodoParaLc224 = receitaBrutaEfetiva;
 
     // IRPJ
