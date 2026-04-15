@@ -49,6 +49,7 @@ const PRESUNCAO_CSLL_HOSPITALAR = 0.12;
 const FATOR_AUMENTO_PRESUNCAO_LC224 = 1.10;
 const LIMITE_ANUAL_LC224_PADRAO = 5_000_000;
 const LIMITE_ANUAL_LC224_CSLL_2026 = 3_750_000;
+const SUBLIMITE_TRIMESTRAL_LC224 = 1_250_000; // IN RFB 2.305/2025, art. 15 §2º
 
 type TributoLC224 = 'IRPJ' | 'CSLL';
 
@@ -71,27 +72,69 @@ const obterLimiteAnualLc224 = (tributo: TributoLC224, ano: number): number => {
 };
 
 /**
- * Calcula a proporção da receita do período atual que deve sofrer majoração.
- * Retorna um número entre 0 e 1 que representa a fração do faturamento do período
- * que excede o limite anual (considerando o que já foi acumulado em períodos anteriores).
+ * Calcula a proporção da receita do TRIMESTRE atual que deve sofrer presunção majorada,
+ * conforme IN RFB 2.305/2025 art. 15 §§ 1º a 4º (com redação da IN 2.306/2026):
  *
- * Ex.: acumuladoAnterior = R$ 4.500.000, receitaPeriodo = R$ 1.000.000, limite = R$ 5.000.000
- *      → excedente do período = R$ 500.000 → proporção = 0,5 (50% da receita majorada)
+ * - § 2º: sublimite trimestral de R$ 1.250.000.
+ * - § 3º: receita superior ao sublimite → majora APENAS o excedente.
+ * - § 4º: receita inferior ao sublimite → diferença vira carry-forward para os
+ *         trimestres seguintes do mesmo ano-calendário.
+ * - Regra dos trimestres subsequentes (consolidada pela RFB): uma vez ultrapassado
+ *   o limite anual, 100% da receita dos trimestres seguintes é majorada.
+ *
+ * Para apuração mensal: aplicamos sublimite proporcional ao mês (1/3 do trimestral).
+ *
+ * @param receitaPeriodoAtual receita bruta do trimestre (ou mês) que sofre presunção
+ * @param receitaAnoAcumuladaAnterior receita bruta acumulada nos períodos ANTERIORES do mesmo ano
+ * @param tributo IRPJ ou CSLL (define o limite anual aplicável)
+ * @param ano ano-calendário
+ * @param trimestre 1 a 4
+ * @param periodoApuracao 'Mensal' ou 'Trimestral'
  */
-const calcularProporcaoMajorada = (
+const calcularProporcaoMajoradaLc224 = (
     receitaPeriodoAtual: number,
-    acumuladoAnterior: number,
-    limiteAnual: number
+    receitaAnoAcumuladaAnterior: number,
+    tributo: TributoLC224,
+    ano: number,
+    trimestre: number,
+    periodoApuracao: 'Mensal' | 'Trimestral'
 ): number => {
     if (receitaPeriodoAtual <= 0) return 0;
-    const acumuladoAtual = acumuladoAnterior + receitaPeriodoAtual;
-    if (acumuladoAtual <= limiteAnual) return 0;
+    if (!majoracaoLc224Vigente(tributo, ano, trimestre)) return 0;
 
-    const excedenteAnterior = Math.max(0, acumuladoAnterior - limiteAnual);
-    const excedenteAtual = acumuladoAtual - limiteAnual;
-    const excedentePeriodo = excedenteAtual - excedenteAnterior;
+    const limiteAnual = obterLimiteAnualLc224(tributo, ano);
 
-    return Math.min(1, Math.max(0, excedentePeriodo / receitaPeriodoAtual));
+    // Regra dos trimestres subsequentes: limite anual já estourado em períodos anteriores
+    // → 100% da receita do período atual é majorada (independente do sublimite).
+    if (receitaAnoAcumuladaAnterior >= limiteAnual) {
+        return 1;
+    }
+
+    // Sublimite acumulado proporcional para verificação trimestral (art. 15 §§ 1º-2º).
+    // Para o IRPJ: 1.250.000 × N (onde N = trimestre atual).
+    // Para a CSLL em 2026: o limite anual reduzido (3,75 mi) é distribuído nos 3 trimestres
+    //   em que a majoração vigora (2T, 3T, 4T) → mantém-se o sublimite de 1,25 mi/trimestre.
+    const sublimiteAcumuladoAteAgora = SUBLIMITE_TRIMESTRAL_LC224 * trimestre;
+    let sublimiteDisponivelPeriodo = sublimiteAcumuladoAteAgora - receitaAnoAcumuladaAnterior;
+
+    // Para apuração mensal, o sublimite do período é proporcional (1/3 do trimestre).
+    // Mantém-se o sublimite acumulado mas o "período" é menor.
+    if (periodoApuracao === 'Mensal') {
+        // Acumulado total do ano (anterior + período atual)
+        const acumuladoAteAgora = receitaAnoAcumuladaAnterior + receitaPeriodoAtual;
+        // Sublimite acumulado considerando que é um mês dentro do trimestre
+        // Uso aproximação: sublimite mensal = trimestral / 3
+        const sublimiteMensalAcumulado = SUBLIMITE_TRIMESTRAL_LC224 / 3 *
+            (trimestre - 1) * 3 + // meses dos trimestres anteriores
+            (SUBLIMITE_TRIMESTRAL_LC224); // sublimite cheio do trimestre atual
+        sublimiteDisponivelPeriodo = sublimiteMensalAcumulado - receitaAnoAcumuladaAnterior;
+    }
+
+    if (receitaPeriodoAtual <= sublimiteDisponivelPeriodo) return 0;
+    if (sublimiteDisponivelPeriodo < 0) return 1; // já estourou todo o sublimite acumulado
+
+    const excedente = receitaPeriodoAtual - sublimiteDisponivelPeriodo;
+    return Math.min(1, Math.max(0, excedente / receitaPeriodoAtual));
 };
 
 /**
@@ -256,42 +299,52 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
 
     // ========================================================================
     // ANÁLISE DA MAJORAÇÃO LC 224/2025 (separada para IRPJ e CSLL)
+    // Conforme IN RFB 2.305/2025 art. 15 §§ 1º-4º (com redação da IN 2.306/2026):
+    //   - Sublimite trimestral de R$ 1.250.000 (§2º)
+    //   - Majora apenas o EXCEDENTE do sublimite trimestral (§3º)
+    //   - Diferença não usada vira carry-forward (§4º)
     // ========================================================================
     const { ano, trimestre } = extrairAnoTrimestre(input.mesReferencia);
 
-    // Acumulado de períodos anteriores do mesmo ano-calendário (para a majoração).
-    // Pega o maior entre acumuladoAno (informado manualmente na UI) e a soma
-    // do acumulado trimestral — no encerramento trimestral, o usuário preenche
-    // acumuladoTrimestre (meses anteriores DESTE trimestre) mas pode deixar
-    // acumuladoAno zerado, e precisamos considerar isso como acumulado do ano
-    // para fins de verificação do limite de R$ 5 mi.
+    // Soma do acumulado trimestral informado pela UI (meses anteriores DESTE trimestre).
     const somaAcumuladoTrimestre = input.acumuladoTrimestre
         ? (input.acumuladoTrimestre.comercio || 0)
           + (input.acumuladoTrimestre.industria || 0)
           + (input.acumuladoTrimestre.servico || 0)
           + (input.acumuladoTrimestre.servicoHospitalar || 0)
         : 0;
-    const acumuladoAnterior = Math.max(input.acumuladoAno || 0, somaAcumuladoTrimestre);
 
-    // A "receita do período" para fins de majoração inclui o mês atual + acumulado
-    // trimestral (que já está somado às bases na seção Trimestral abaixo).
-    // Mas para a proporção, usamos a receita do MÊS atual apenas, e o acumulado
-    // trimestral entra em acumuladoAnterior acima.
-    const receitaPeriodoParaLc224 = receitaBrutaEfetiva;
+    // Receita BRUTA do período de apuração para fins da majoração:
+    //   - Se Trimestral: receita do mês + acumulado trimestral (= receita bruta do trimestre)
+    //   - Se Mensal: receita do mês apenas
+    // Não inclui receita financeira (não sofre presunção, vide art. 15 caput LC 224/25).
+    const receitaPeriodoParaLc224 = input.periodoApuracao === 'Trimestral'
+        ? receitaBrutaEfetiva + somaAcumuladoTrimestre
+        : receitaBrutaEfetiva;
 
-    // IRPJ
-    const irpjVigente = majoracaoLc224Vigente('IRPJ', ano, trimestre);
-    const limiteIrpj = obterLimiteAnualLc224('IRPJ', ano);
-    const proporcaoMajoradaIrpj = irpjVigente
-        ? calcularProporcaoMajorada(receitaPeriodoParaLc224, acumuladoAnterior, limiteIrpj)
-        : 0;
+    // Receita acumulada do ANO nos períodos ANTERIORES (do mesmo ano-calendário).
+    // - Em apuração trimestral, isso é o faturamento dos trimestres anteriores.
+    // - Em apuração mensal, é o faturamento dos meses anteriores do ano.
+    // O usuário informa via campo "acumuladoAno" no dashboard.
+    const receitaAnoAcumuladaAnterior = input.acumuladoAno || 0;
 
-    // CSLL
-    const csllVigente = majoracaoLc224Vigente('CSLL', ano, trimestre);
-    const limiteCsll = obterLimiteAnualLc224('CSLL', ano);
-    const proporcaoMajoradaCsll = csllVigente
-        ? calcularProporcaoMajorada(receitaPeriodoParaLc224, acumuladoAnterior, limiteCsll)
-        : 0;
+    const proporcaoMajoradaIrpj = calcularProporcaoMajoradaLc224(
+        receitaPeriodoParaLc224,
+        receitaAnoAcumuladaAnterior,
+        'IRPJ',
+        ano,
+        trimestre,
+        input.periodoApuracao
+    );
+
+    const proporcaoMajoradaCsll = calcularProporcaoMajoradaLc224(
+        receitaPeriodoParaLc224,
+        receitaAnoAcumuladaAnterior,
+        'CSLL',
+        ano,
+        trimestre,
+        input.periodoApuracao
+    );
 
     const aplicouLc224 = proporcaoMajoradaIrpj > 0 || proporcaoMajoradaCsll > 0;
 
@@ -398,7 +451,7 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
         const obsHosp = baseCsllServicoHosp > 0 ? " + Hosp. 12%" : "";
         const obsLc224Csll = proporcaoMajoradaCsll > 0
             ? ` LC 224/25: ${(proporcaoMajoradaCsll * 100).toFixed(1)}% da receita com presunção majorada (+10%).`
-            : (ano === 2026 && trimestre === 1 && receitaPeriodoParaLc224 + acumuladoAnterior > limiteCsll
+            : (ano === 2026 && trimestre === 1
                 ? ' LC 224/25 não aplicada à CSLL no 1T/2026 (anterioridade nonagesimal).'
                 : '');
 
