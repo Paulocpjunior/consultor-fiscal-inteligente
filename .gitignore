@@ -4,3 +4,9 @@ node_modules/
 *.log
 dist/
 dist/
+
+# Backups de patches (não versionar)
+*.bak
+*.bak[0-9]
+*.backup_*
+patch_*.py
