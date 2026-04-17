@@ -1466,12 +1466,6 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                             <span className="font-bold text-slate-700">{selectedFicha.dadosTrimestrais.financeira.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span>
                                         </div>
                                     )}
-                                    {selectedFicha.dadosTrimestrais.aluguel > 0 && (
-                                        <div>
-                                            <span className="block text-slate-500 text-[10px] uppercase font-bold">Rec. Fin. Ant.</span>
-                                            <span className="font-bold text-slate-700">{selectedFicha.dadosTrimestrais.aluguel.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span>
-                                        </div>
-                                    )}
                                 </div>
                                 <p className="text-[10px] text-slate-500 italic">
                                     * Estes valores foram somados à receita do mês atual para o cálculo da base trimestral do IRPJ e CSLL (Adicional de 10% sobre excedente de R$ 60.000,00).

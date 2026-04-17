@@ -564,7 +564,6 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                     servico: acumuladoServico,
                     servicoHospitalar: acumuladoServicoHospitalar,
                     financeira: acumuladoFinanceira,
-                    aluguel: acumuladoAluguel,
                     mesesConsiderados: []
                 } : undefined,
 
@@ -1464,12 +1463,6 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                         <div>
                                             <span className="block text-slate-500 text-[10px] uppercase font-bold">Rec. Fin. Ant.</span>
                                             <span className="font-bold text-slate-700">{selectedFicha.dadosTrimestrais.financeira.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span>
-                                        </div>
-                                    )}
-                                    {selectedFicha.dadosTrimestrais.aluguel > 0 && (
-                                        <div>
-                                            <span className="block text-slate-500 text-[10px] uppercase font-bold">Rec. Fin. Ant.</span>
-                                            <span className="font-bold text-slate-700">{selectedFicha.dadosTrimestrais.aluguel.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span>
                                         </div>
                                     )}
                                 </div>

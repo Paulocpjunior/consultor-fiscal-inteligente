@@ -1,5 +1,4 @@
 import React, { useState, useCallback } from 'react';
-import AnaliseCreditoExtrato from './AnaliseCreditoExtrato';
 
 type Regime = 'LUCRO_REAL_INDUSTRIA' | 'LUCRO_REAL_SERVICOS' | 'LUCRO_REAL_COMERCIO' | 'LUCRO_PRESUMIDO' | 'SIMPLES';
 type TipoNota = 'PRODUTO' | 'SERVICO';
@@ -51,7 +50,7 @@ const CardTotal: React.FC<{label:string; valor:number; cor:string}> = ({ label, 
 );
 
 const AnaliseCreditos: React.FC = () => {
-  const [aba, setAba] = useState<'manual'|'upload'|'extrato'>('manual');
+  const [aba, setAba] = useState<'manual'|'upload'>('manual');
   const [perfil, setPerfil] = useState<PerfilCliente>({ regime:'LUCRO_REAL_SERVICOS', uf:'SP' });
   const [notas, setNotas] = useState<NotaManual[]>([{...NOTA_VAZIA}]);
   const [arquivo, setArquivo] = useState<File|null>(null);
@@ -227,9 +226,9 @@ const AnaliseCreditos: React.FC = () => {
       </div>
 
       <div className="flex gap-2">
-        {(['manual','upload','extrato'] as const).map(a=>(
+        {(['manual','upload'] as const).map(a=>(
           <button key={a} onClick={()=>setAba(a)} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${aba===a?'bg-teal-600 text-white shadow':'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600'}`}>
-            {a==='manual'?'✏️ Digitação Manual':a==='upload'?'📂 Upload Excel/XML':'🏦 Extrato de Conciliação'}
+            {a==='manual'?'✏️ Digitação Manual':'📂 Upload Excel/XML'}
           </button>
         ))}
       </div>
@@ -271,11 +270,6 @@ const AnaliseCreditos: React.FC = () => {
           <input id="input-arquivo" type="file" accept=".xlsx,.xls,.csv,.xml" className="hidden" onChange={e=>setArquivo(e.target.files?.[0]||null)}/>
           <button onClick={analisarUpload} disabled={!arquivo||loading} className="px-6 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm disabled:opacity-50">{loading?'Processando...':'🔍 Analisar Arquivo'}</button>
         </div>
-      )}
-
-
-      {aba==='extrato' && (
-        <AnaliseCreditoExtrato />
       )}
 
       {erro && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">⚠️ {erro}</div>}
