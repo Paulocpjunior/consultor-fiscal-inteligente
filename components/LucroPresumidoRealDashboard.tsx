@@ -191,6 +191,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const [despesasAvulsas, setDespesasAvulsas] = useState<ItemFinanceiroAvulso[]>([]);
     const [saldoCredorIcms, setSaldoCredorIcms] = useState(0);
     const [saldoCredorIpi, setSaldoCredorIpi] = useState(0);
+    const [saldoCredorPis, setSaldoCredorPis] = useState(0);
+    const [saldoCredorCofins, setSaldoCredorCofins] = useState(0);
 
     // Configurações Fiscais (Tempo Real)
     const [isEquiparacaoHospitalar, setIsEquiparacaoHospitalar] = useState(false);
@@ -315,6 +317,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 setAjustesLucroRealExclusoes(ficha.ajustesLucroRealExclusoes || 0);
                 setSaldoCredorIcms(ficha.saldoCredorIcms || 0);
                 setSaldoCredorIpi(ficha.saldoCredorIpi || 0);
+                setSaldoCredorPis(ficha.saldoCredorPis || 0);
+                setSaldoCredorCofins(ficha.saldoCredorCofins || 0);
                 
                 const extraReceitas = (ficha.itensAvulsos || []).filter(i => i.tipo === 'receita' && i.descricao === 'Itens Adicionais - (Extra Operacionais)').reduce((a, b) => a + b.valor, 0);
                 setItensAdicionaisExtra(extraReceitas);
@@ -348,7 +352,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         setFichaMonofasico(0); setIsMonofasicoOption(false);
         setFichaIpiRecolher(0); setFichaIcmsProprio(0); setFichaIcmsSt(0);
         setAjustesLucroRealAdicoes(0); setAjustesLucroRealExclusoes(0);
-        setSaldoCredorIcms(0); setSaldoCredorIpi(0);
+        setSaldoCredorIcms(0); setSaldoCredorIpi(0); setSaldoCredorPis(0); setSaldoCredorCofins(0);
         setAcumuladoComercio(0); setAcumuladoIndustria(0); setAcumuladoServico(0); setAcumuladoServicoHospitalar(0); setAcumuladoFinanceira(0);
         setAcumuladoComercio(0); setAcumuladoIndustria(0); setAcumuladoServico(0); setAcumuladoServicoHospitalar(0); setAcumuladoAluguel(0);
         setIsEquiparacaoHospitalar(false); setIsPresuncaoReduzida(false);
@@ -450,6 +454,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             ajustesLucroRealExclusoes: ajustesLucroRealExclusoes,
             saldoCredorIcms: saldoCredorIcms,
             saldoCredorIpi: saldoCredorIpi,
+                saldoCredorPis: saldoCredorPis,
+                saldoCredorCofins: saldoCredorCofins,
             itensAvulsos: [
                 ...(itensAdicionaisExtra > 0 ? [{
                     id: 'extra',
@@ -473,7 +479,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         fichaRetPis, fichaRetCofins, fichaRetIrpj, fichaRetCsll,
         isEquiparacaoHospitalar, isPresuncaoReduzida,
         fichaIpiRecolher, fichaIcmsProprio, fichaIcmsSt,
-        ajustesLucroRealAdicoes, ajustesLucroRealExclusoes, saldoCredorIcms, saldoCredorIpi, itensAdicionaisExtra,
+        ajustesLucroRealAdicoes, ajustesLucroRealExclusoes, saldoCredorIcms, saldoCredorIpi, saldoCredorPis, saldoCredorCofins, itensAdicionaisExtra,
         retencoesAcumuladas
     ]);
 
@@ -607,6 +613,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 ajustesLucroRealExclusoes: ajustesLucroRealExclusoes,
                 saldoCredorIcms: saldoCredorIcms,
                 saldoCredorIpi: saldoCredorIpi,
+                saldoCredorPis: saldoCredorPis,
+                saldoCredorCofins: saldoCredorCofins,
                 itensAvulsos: [
                     ...(itensAdicionaisExtra > 0 ? [{
                         id: 'extra',
@@ -619,6 +627,41 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             };
 
             const savedFicha = await lucroPresumidoService.addFichaFinanceira(selectedEmpresa.id, tempFicha);
+
+            // Transferência automática do saldo residual PIS/COFINS pro próximo mês (Lucro Real)
+            const residualPis = (liveResults as any)?.saldoResidualPis || 0;
+            const residualCofins = (liveResults as any)?.saldoResidualCofins || 0;
+            if ((selectedEmpresa.regimePadrao === 'Real') && (residualPis > 0 || residualCofins > 0)) {
+                try {
+                    const [anoN, mesN] = fichaMes.split('-').map(n => parseInt(n, 10));
+                    const proxMes = mesN === 12 ? `${anoN + 1}-01` : `${anoN}-${String(mesN + 1).padStart(2, '0')}`;
+                    const fichaProxExiste = savedFicha?.fichaFinanceira?.find(f => f.mesReferencia === proxMes);
+                    const fichaBase: FichaFinanceiraRegistro = fichaProxExiste
+                        ? { ...fichaProxExiste }
+                        : {
+                            id: Date.now().toString(),
+                            dataRegistro: Date.now(),
+                            mesReferencia: proxMes,
+                            regime: 'Real',
+                            periodoApuracao: periodoApuracao,
+                            acumuladoAno: 0,
+                            faturamentoMesComercio: 0, faturamentoMesIndustria: 0, faturamentoMesServico: 0,
+                            faturamentoMesServicoRetido: 0, faturamentoMesLocacao: 0, faturamentoMesServicoHospitalar: 0,
+                            faturamentoFiliaisComercio: 0, faturamentoFiliaisIndustria: 0, faturamentoFiliaisServico: 0, faturamentoFiliaisServicoHospitalar: 0,
+                            faturamentoMonofasico: 0, valorIpi: 0, valorDevolucoes: 0, icmsVendas: 0,
+                            receitaFinanceira: 0, faturamentoMesTotal: 0, totalGeral: 0,
+                            despesas: 0, despesasDedutiveis: 0, folha: 0, cmv: 0,
+                            retencaoPis: 0, retencaoCofins: 0, retencaoIrpj: 0, retencaoCsll: 0,
+                            totalImpostos: 0, cargaTributaria: 0,
+                        } as any;
+                    fichaBase.saldoCredorPis = residualPis;
+                    fichaBase.saldoCredorCofins = residualCofins;
+                    await lucroPresumidoService.addFichaFinanceira(selectedEmpresa.id, fichaBase);
+                } catch (err) {
+                    console.warn('Falha ao transferir saldo residual pro próximo mês:', err);
+                }
+            }
+
             await loadEmpresas();
             
             if (savedFicha) {
@@ -1036,6 +1079,22 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                 onChange={setSaldoCredorIpi} 
                                 className="bg-slate-50 dark:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-600"
                             />
+                            {selectedEmpresa?.regimePadrao === 'Real' && (
+                                <>
+                                    <CurrencyInput 
+                                        label="Saldo Credor PIS (Mês Anterior)" 
+                                        value={saldoCredorPis} 
+                                        onChange={setSaldoCredorPis} 
+                                        className="bg-sky-50 dark:bg-sky-900/10 p-2 rounded border border-sky-200 dark:border-sky-800"
+                                    />
+                                    <CurrencyInput 
+                                        label="Saldo Credor COFINS (Mês Anterior)" 
+                                        value={saldoCredorCofins} 
+                                        onChange={setSaldoCredorCofins} 
+                                        className="bg-sky-50 dark:bg-sky-900/10 p-2 rounded border border-sky-200 dark:border-sky-800"
+                                    />
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1466,10 +1525,10 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                             <span className="font-bold text-slate-700">{selectedFicha.dadosTrimestrais.financeira.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span>
                                         </div>
                                     )}
-                                    {selectedFicha.dadosTrimestrais.aluguel > 0 && (
+                                    {(selectedFicha.dadosTrimestrais.aluguel ?? 0) > 0 && (
                                         <div>
                                             <span className="block text-slate-500 text-[10px] uppercase font-bold">Rec. Fin. Ant.</span>
-                                            <span className="font-bold text-slate-700">{selectedFicha.dadosTrimestrais.aluguel.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span>
+                                            <span className="font-bold text-slate-700">{(selectedFicha.dadosTrimestrais.aluguel ?? 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span>
                                         </div>
                                     )}
                                 </div>

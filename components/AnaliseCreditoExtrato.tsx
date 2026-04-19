@@ -50,6 +50,7 @@ const AnaliseCreditoExtrato: React.FC = () => {
   const [lancamentos, setLancamentos] = useState<LancamentoExtrato[]>([]);
   const [erro, setErro]             = useState<string | null>(null);
   const [filtro, setFiltro]         = useState<'todos' | 'com_credito' | 'sem_credito' | 'revisar'>('todos');
+  const [exportandoPDF, setExportandoPDF] = useState(false);
 
   const processar = useCallback(async (file: File) => {
     setErro(null);
@@ -103,6 +104,112 @@ const AnaliseCreditoExtrato: React.FC = () => {
       default:             return lancamentos;
     }
   }, [lancamentos, filtro]);
+
+  const exportarPDF = async () => {
+    if (lancamentos.length === 0) return;
+    setExportandoPDF(true);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const W = pdf.internal.pageSize.getWidth();
+      const H = pdf.internal.pageSize.getHeight();
+      const m = 12;
+      const now = new Date().toLocaleDateString('pt-BR');
+
+      const drawHeader = () => {
+        pdf.setFillColor(2, 0, 38); pdf.rect(0, 0, W, 16, 'F');
+        pdf.setTextColor(255, 255, 255); pdf.setFontSize(11); pdf.setFont('helvetica', 'bold');
+        pdf.text('SP Contabil - Credito PIS/COFINS (Extrato de Conciliacao)', m, 10);
+        pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+        pdf.text('Gerado em: ' + now, W - m - 40, 10);
+      };
+      drawHeader();
+      let y = 24;
+      const checkPage = (h: number) => { if (y + h > H - 12) { pdf.addPage(); drawHeader(); y = 24; } };
+
+      pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
+      pdf.text('RESUMO DE CREDITOS PIS/COFINS', m, y); y += 6;
+      const kpis = [
+        ['Base de Credito', 'R$ ' + brl(baseCreditos)],
+        ['Credito PIS (1,65%)', 'R$ ' + brl(creditoPis)],
+        ['Credito COFINS (7,60%)', 'R$ ' + brl(creditoCofins)],
+        ['Credito Total', 'R$ ' + brl(creditoTotal)],
+      ];
+      const kW = (W - m * 2) / 4;
+      kpis.forEach((k, i) => {
+        const x = m + i * kW;
+        pdf.setFillColor(240, 245, 255); pdf.rect(x, y - 4, kW - 2, 14, 'F');
+        pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(80, 80, 80);
+        pdf.text(k[0], x + 2, y + 1);
+        pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
+        pdf.text(k[1], x + 2, y + 7);
+      });
+      y += 20;
+
+      checkPage(10);
+      pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
+      pdf.text('DETALHAMENTO POR CATEGORIA E FORNECEDOR', m, y); y += 2;
+      pdf.setDrawColor(200, 200, 200); pdf.line(m, y, W - m, y); y += 5;
+
+      const porCategoria: Record<string, LancamentoExtrato[]> = {};
+      for (const l of lancamentos) {
+        if (l.categoriaSugerida === null) continue;
+        (porCategoria[l.categoriaSugerida] ??= []).push(l);
+      }
+
+      for (const cat of CATEGORIAS_CREDITO) {
+        const itens = porCategoria[cat];
+        if (!itens || itens.length === 0) continue;
+        const subtotal = itens.reduce((s, i) => s + i.valor, 0);
+
+        checkPage(16);
+        pdf.setFillColor(225, 235, 255); pdf.rect(m, y - 4, W - m * 2, 12, 'F');
+        pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
+        pdf.text(cat, m + 2, y + 1);
+        pdf.setTextColor(60, 60, 60);
+        pdf.text('Total: R$ ' + brl(subtotal) + '  (' + itens.length + ' lanc.)', W - m - 60, y + 1);
+        y += 14;
+
+        checkPage(8);
+        pdf.setFillColor(245, 245, 245); pdf.rect(m + 2, y - 3, W - m * 2 - 4, 6, 'F');
+        pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(80, 80, 80);
+        pdf.text('DATA', m + 4, y + 1);
+        pdf.text('FORNECEDOR', m + 22, y + 1);
+        pdf.text('DESCRICAO', m + 80, y + 1);
+        pdf.text('VALOR', W - m - 22, y + 1);
+        y += 6;
+
+        for (const it of itens) {
+          checkPage(6);
+          pdf.setFont('helvetica', 'normal'); pdf.setTextColor(50, 50, 50); pdf.setFontSize(7);
+          pdf.text(String(it.data || '-').substring(0, 10), m + 4, y);
+          pdf.text(String(it.favorecido || '-').substring(0, 35), m + 22, y);
+          pdf.text(String(it.descricao || '-').substring(0, 42), m + 80, y);
+          pdf.text('R$ ' + brl(it.valor), W - m - 22, y);
+          y += 5;
+        }
+        y += 3;
+        pdf.setDrawColor(230, 230, 230); pdf.line(m, y, W - m, y); y += 4;
+      }
+
+      checkPage(14);
+      pdf.setFillColor(2, 0, 38); pdf.rect(m, y - 3, W - m * 2, 10, 'F');
+      pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
+      pdf.text('TOTAL GERAL - BASE DE CREDITO', m + 2, y + 3);
+      pdf.text('R$ ' + brl(baseCreditos), W - m - 40, y + 3);
+      y += 14;
+
+      pdf.setFontSize(6); pdf.setTextColor(150, 150, 150);
+      pdf.text('Classificacao automatica com base em regras. Revise antes de enviar ao cliente.', m, H - 4);
+
+      const blob = pdf.output('blob');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'relatorio_creditos_pis_cofins_' + new Date().toISOString().slice(0, 10) + '.pdf';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    } catch (e) { console.error(e); setErro('Erro ao gerar PDF: ' + (e instanceof Error ? e.message : 'desconhecido')); }
+    finally { setExportandoPDF(false); }
+  };
 
   const exportarRelatorio = async () => {
     const linhas = consolidarRelatorio(lancamentos);
@@ -228,10 +335,16 @@ const AnaliseCreditoExtrato: React.FC = () => {
                 </button>
               ))}
             </div>
-            <button onClick={exportarRelatorio}
-              className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm">
-              📥 Exportar Relatório .xlsx
-            </button>
+            <div className="flex gap-2">
+              <button onClick={exportarRelatorio}
+                className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm">
+                📥 Exportar .xlsx
+              </button>
+              <button onClick={exportarPDF} disabled={exportandoPDF}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-sm disabled:opacity-60">
+                {exportandoPDF ? 'Gerando...' : '📄 Exportar PDF'}
+              </button>
+            </div>
           </div>
 
           {/* ─── Tabela ─────────────────────────────────────────────────── */}

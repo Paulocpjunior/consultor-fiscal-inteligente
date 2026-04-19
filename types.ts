@@ -280,6 +280,7 @@ export interface AcumuladoTrimestre {
     servico: number;
     servicoHospitalar: number;
     financeira: number;
+    aluguel?: number;
     mesesConsiderados: string[];
 }
 
@@ -336,6 +337,8 @@ export interface FichaFinanceiraRegistro {
     ajustesLucroRealExclusoes?: number;
     saldoCredorIcms?: number;
     saldoCredorIpi?: number;
+    saldoCredorPis?: number;
+    saldoCredorCofins?: number;
 
     isEquiparacaoHospitalar?: boolean;
     isPresuncaoReduzida16?: boolean;

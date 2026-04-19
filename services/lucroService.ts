@@ -547,20 +547,43 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
     const basePisCofins = Math.max(0, receitaLiquida - icmsVendas - (input.faturamentoMonofasico || 0));
     const baseCredito = input.despesasDedutiveis + extraBaseCredito;
 
+    // Saldos credores do mês anterior (abate débito atual)
+    const saldoAbatidoPis = input.saldoCredorPis || 0;
+    const saldoAbatidoCofins = input.saldoCredorCofins || 0;
+
+    // Bruto = débito - crédito - retenção - saldo credor anterior
+    const pisBruto = (basePisCofins * ALIQ_PIS_NAO_CUMULATIVO)
+                   - (baseCredito * ALIQ_PIS_NAO_CUMULATIVO)
+                   - (input.retencaoPis || 0)
+                   - saldoAbatidoPis;
+    const cofinsBruto = (basePisCofins * ALIQ_COFINS_NAO_CUMULATIVO)
+                      - (baseCredito * ALIQ_COFINS_NAO_CUMULATIVO)
+                      - (input.retencaoCofins || 0)
+                      - saldoAbatidoCofins;
+
+    // Se o bruto ficou negativo, vira saldo residual pro próximo mês
+    const residualPis = pisBruto < 0 ? Math.abs(pisBruto) : 0;
+    const residualCofins = cofinsBruto < 0 ? Math.abs(cofinsBruto) : 0;
+
+    const obsSaldoPis = saldoAbatidoPis > 0 ? ` Saldo credor anterior abatido: ${fmt(saldoAbatidoPis)}.` : '';
+    const obsResidPis = residualPis > 0 ? ` Saldo credor p/ próx. mês: ${fmt(residualPis)}.` : '';
+    const obsSaldoCofins = saldoAbatidoCofins > 0 ? ` Saldo credor anterior abatido: ${fmt(saldoAbatidoCofins)}.` : '';
+    const obsResidCofins = residualCofins > 0 ? ` Saldo credor p/ próx. mês: ${fmt(residualCofins)}.` : '';
+
     detalhamento.push({
         imposto: 'PIS (Lucro Real)',
         baseCalculo: basePisCofins,
         aliquota: ALIQ_PIS_NAO_CUMULATIVO * 100,
-        valor: Math.max(0, (basePisCofins * ALIQ_PIS_NAO_CUMULATIVO) - (baseCredito * ALIQ_PIS_NAO_CUMULATIVO) - (input.retencaoPis || 0)),
-        observacao: `Mensal - Crédito sobre despesas. Deduzido ICMS.` + (input.retencaoPis ? ` Retenção abatida: ${fmt(input.retencaoPis)}` : '')
+        valor: Math.max(0, pisBruto),
+        observacao: `Mensal - Crédito sobre despesas. Deduzido ICMS.` + obsSaldoPis + obsResidPis + (input.retencaoPis ? ` Retenção abatida: ${fmt(input.retencaoPis)}` : '')
     });
 
     detalhamento.push({
         imposto: 'COFINS (Lucro Real)',
         baseCalculo: basePisCofins,
         aliquota: ALIQ_COFINS_NAO_CUMULATIVO * 100,
-        valor: Math.max(0, (basePisCofins * ALIQ_COFINS_NAO_CUMULATIVO) - (baseCredito * ALIQ_COFINS_NAO_CUMULATIVO) - (input.retencaoCofins || 0)),
-        observacao: `Mensal - Crédito sobre despesas. Deduzido ICMS.` + (input.retencaoCofins ? ` Retenção abatida: ${fmt(input.retencaoCofins)}` : '')
+        valor: Math.max(0, cofinsBruto),
+        observacao: `Mensal - Crédito sobre despesas. Deduzido ICMS.` + obsSaldoCofins + obsResidCofins + (input.retencaoCofins ? ` Retenção abatida: ${fmt(input.retencaoCofins)}` : '')
     });
 
     if (input.receitaFinanceira && input.receitaFinanceira > 0) {
@@ -639,6 +662,9 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
         totalImpostos,
         cargaTributaria: totalReceitas > 0 ? (totalImpostos / totalReceitas) * 100 : 0,
         lucroLiquidoEstimado: lucroFinal
+    ,
+        saldoResidualPis: residualPis,
+        saldoResidualCofins: residualCofins,
     };
 };
 

@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { APP_VERSION, APP_BUILD_DATE } from '../version';
 
 const Footer: React.FC = () => {
   return (
@@ -8,6 +9,8 @@ const Footer: React.FC = () => {
         Direitos Reservados - Uso Exclusivo by SP Assessoria Contábil
         <br />
         As informações são geradas por IA e devem ser usadas como referência. Confirme com as fontes oficiais.
+        <br />
+        <span className="text-[10px] text-slate-400 dark:text-slate-500 opacity-60" title={`Build ${APP_BUILD_DATE}`}>v{APP_VERSION}</span>
       </p>
     </footer>
   );
