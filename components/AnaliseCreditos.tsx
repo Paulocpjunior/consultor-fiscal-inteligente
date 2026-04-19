@@ -92,7 +92,7 @@ const AnaliseCreditos: React.FC = () => {
       const drawHeader = () => {
         pdf.setFillColor(2, 0, 38); pdf.rect(0, 0, W, 16, 'F');
         pdf.setTextColor(255, 255, 255); pdf.setFontSize(11); pdf.setFont('helvetica', 'bold');
-        pdf.text('SP Contabil - Analise de Creditos Fiscais', m, 10);
+        pdf.text('SP Contabil - Analise de Creditos Fiscais (PIS/COFINS/ICMS)', m, 10);
         pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
         pdf.text('Gerado em: ' + now, W - m - 40, 10);
       };
@@ -163,7 +163,7 @@ const AnaliseCreditos: React.FC = () => {
         pdf.setDrawColor(230, 230, 230); pdf.line(m, y, W - m, y); y += 4;
       });
       pdf.setFontSize(6); pdf.setTextColor(150, 150, 150);
-      pdf.text('As informacoes sao geradas por IA. Confirme com as fontes oficiais.', m, H - 4);
+      pdf.text('Classificacao baseada em CFOP e CST. Revise antes de enviar ao cliente.', m, H - 4);
       const blob = pdf.output('blob');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
