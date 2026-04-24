@@ -10,3 +10,7 @@ dist/
 *.bak[0-9]
 *.backup_*
 patch_*.py
+credentials_json
+.env
+.env.local
+serviceAccountKey*.json
