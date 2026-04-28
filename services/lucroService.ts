@@ -177,27 +177,28 @@ const fmt = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency',
  * Regra Legal Mínima: Parcela > R$ 1.000,00
  */
 export const calcularCotasDisponiveis = (valorImposto: number, periodo: 'Mensal' | 'Trimestral'): PlanoCotas | undefined => {
-    const limiteDisponibilidade = periodo === 'Trimestral' ? 5000 : 1000;
+    // Cotas só fazem sentido para apuração TRIMESTRAL de IRPJ/CSLL.
+    if (periodo !== 'Trimestral') return undefined;
 
-    if (valorImposto > limiteDisponibilidade) {
-        const numCotas = 3;
-        const valorCota = valorImposto / numCotas;
+    const numCotas = 3;
+    const valorCota = valorImposto / numCotas;
 
-        if (valorCota < 1000) return undefined;
+    // Receita Federal: cada cota deve ser >= R$ 1.000,00.
+    // Permite parcelar sempre que o valor trimestral total for >= R$ 3.000,00,
+    // garantindo que CSLL apareça com a mesma opção do IRPJ quando aplicável.
+    if (valorCota < 1000) return undefined;
 
-        return {
-            disponivel: true,
-            numeroCotas: numCotas,
-            valorPrimeiraCota: valorCota,
-            valorDemaisCotas: valorCota,
-            vencimentos: [
-                'Quota Única ou 1ª Quota (Sem Juros)',
-                '2ª Quota (Juros 1%)',
-                '3ª Quota (Juros 1% + SELIC)'
-            ]
-        };
-    }
-    return undefined;
+    return {
+        disponivel: true,
+        numeroCotas: numCotas,
+        valorPrimeiraCota: valorCota,
+        valorDemaisCotas: valorCota,
+        vencimentos: [
+            'Quota Única ou 1ª Quota (Sem Juros)',
+            '2ª Quota (Juros 1%)',
+            '3ª Quota (Juros 1% + SELIC)'
+        ]
+    };
 };
 
 const calcularISS = (input: LucroInput): DetalheImposto | null => {

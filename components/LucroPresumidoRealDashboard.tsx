@@ -65,6 +65,42 @@ const convertFichaToInput = (ficha: FichaFinanceiraRegistro, empresa: LucroPresu
     };
 };
 
+// Helper: calcula retencoes acumuladas do trimestre (meses anteriores ao mes de referencia).
+// Usado tanto no card live (Resultado da Apuracao) quanto no Relatorio Final,
+// para que IRPJ/CSLL trimestrais apareçam liquidos das retencoes na fonte.
+const getRetencoesAcumuladasTrimestre = (
+    empresa: LucroPresumidoEmpresa | null | undefined,
+    mesReferencia: string,
+    periodo: 'Mensal' | 'Trimestral'
+): { irpj: number; csll: number } => {
+    if (!empresa || periodo !== 'Trimestral' || !mesReferencia) return { irpj: 0, csll: 0 };
+
+    const [anoStr, mesStr] = mesReferencia.split('-');
+    const ano = parseInt(anoStr);
+    const mes = parseInt(mesStr);
+    if (isNaN(ano) || isNaN(mes)) return { irpj: 0, csll: 0 };
+
+    const quarterStart = Math.floor((mes - 1) / 3) * 3 + 1;
+
+    let accIrpj = 0;
+    let accCsll = 0;
+
+    if (empresa.fichaFinanceira) {
+        empresa.fichaFinanceira.forEach(f => {
+            const parts = f.mesReferencia.split('-');
+            const fAnoNum = parseInt(parts[0]);
+            const fMesNum = parseInt(parts[1]);
+            if (fAnoNum === ano && fMesNum >= quarterStart && fMesNum < mes) {
+                accIrpj += (f.retencaoIrpj || 0);
+                accCsll += (f.retencaoCsll || 0);
+            }
+        });
+    }
+
+    return { irpj: accIrpj, csll: accCsll };
+};
+
+
 // Helper component for Currency Input
 const CurrencyInput: React.FC<{ label?: string; value: number; onChange: (val: number) => void; className?: string; disabled?: boolean; placeholder?: string; highlight?: boolean; subtitle?: string; noLabel?: boolean }> = ({ label, value, onChange, className, disabled, placeholder, highlight, subtitle, noLabel }) => {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,35 +240,10 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const selectedEmpresa = useMemo(() => empresas.find(e => e.id === selectedEmpresaId), [empresas, selectedEmpresaId]);
 
     // CÁLCULO DE RETENÇÕES DE MESES ANTERIORES NO TRIMESTRE
-    const retencoesAcumuladas = useMemo(() => {
-        if (!selectedEmpresa || periodoApuracao !== 'Trimestral') return { irpj: 0, csll: 0 };
-        
-        const [anoStr, mesStr] = fichaMes.split('-');
-        const ano = parseInt(anoStr);
-        const mes = parseInt(mesStr);
-        
-        // Define início do trimestre (1=Jan/Feb/Mar, 4=Apr/May/Jun, etc)
-        const quarterStart = Math.floor((mes - 1) / 3) * 3 + 1;
-        
-        let accIrpj = 0;
-        let accCsll = 0;
-
-        if (selectedEmpresa.fichaFinanceira) {
-            selectedEmpresa.fichaFinanceira.forEach(f => {
-                const [fAno, fMes] = f.mesReferencia.split('-');
-                const fMesNum = parseInt(fMes);
-                const fAnoNum = parseInt(fAno);
-                
-                // Soma se for do mesmo ano, mesmo trimestre, e estritamente ANTERIOR ao mês atual
-                if (fAnoNum === ano && fMesNum >= quarterStart && fMesNum < mes) {
-                    accIrpj += (f.retencaoIrpj || 0);
-                    accCsll += (f.retencaoCsll || 0);
-                }
-            });
-        }
-        
-        return { irpj: accIrpj, csll: accCsll };
-    }, [selectedEmpresa, fichaMes, periodoApuracao]);
+    const retencoesAcumuladas = useMemo(
+        () => getRetencoesAcumuladasTrimestre(selectedEmpresa, fichaMes, periodoApuracao),
+        [selectedEmpresa, fichaMes, periodoApuracao]
+    );
 
     useEffect(() => {
         loadEmpresas();
@@ -1302,7 +1313,20 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             despesas: (selectedFicha.despesas || 0) + (selectedFicha.despesasDedutiveis || 0),
         };
         const itensAvulsos = selectedFicha.itensAvulsos || [];
-        const resultadoCalculado = calcularLucro(convertFichaToInput(selectedFicha, selectedEmpresa));
+        // Aplica retencoes acumuladas do trimestre (meses anteriores) ao input do calculo,
+        // para o relatorio final mostrar IRPJ/CSLL liquidos -- igual ao card live.
+        const _baseInputRel = convertFichaToInput(selectedFicha, selectedEmpresa);
+        const _retAcumRel = getRetencoesAcumuladasTrimestre(
+            selectedEmpresa,
+            selectedFicha.mesReferencia,
+            selectedFicha.periodoApuracao
+        );
+        const _inputRelatorio: LucroInput = {
+            ..._baseInputRel,
+            retencaoIrpj: (_baseInputRel.retencaoIrpj || 0) + _retAcumRel.irpj,
+            retencaoCsll: (_baseInputRel.retencaoCsll || 0) + _retAcumRel.csll,
+        };
+        const resultadoCalculado = calcularLucro(_inputRelatorio);
         const [ano, mes] = selectedFicha.mesReferencia.split('-');
         const dateObj = new Date(parseInt(ano), parseInt(mes) - 1, 1);
         const mesExtenso = dateObj.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
