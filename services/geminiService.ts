@@ -24,13 +24,20 @@ const callProxy = async (prompt: string | any[], options?: { temperature?: numbe
     return await response.json();
 };
 
-const withRetry = async <T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> => {
+const withRetry = async <T>(fn: () => Promise<T>, maxRetries = 5): Promise<T> => {
     let lastError: any;
     for (let i = 0; i < maxRetries; i++) {
         try { return await fn(); } catch (error: any) {
-            lastError = error; const msg = error?.message || '';
-            if (msg.includes('503') || msg.includes('429') || msg.includes('500')) {
-                await new Promise(r => setTimeout(r, Math.pow(2, i) * 1500 + Math.random() * 1000)); continue;
+            lastError = error;
+            const msg = error?.message || '';
+            const isRetryable = msg.includes('503') || msg.includes('429') || msg.includes('500')
+                || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('Quota');
+            if (isRetryable && i < maxRetries - 1) {
+                const baseMs = Math.min(Math.pow(2, i) * 4000, 30000);
+                const waitMs = baseMs + Math.random() * 1000;
+                console.warn('[Gemini retry] ' + (i+1) + '/' + maxRetries + ' em ' + Math.round(waitMs/1000) + 's');
+                await new Promise(r => setTimeout(r, waitMs));
+                continue;
             }
             throw error;
         }
