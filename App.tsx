@@ -36,6 +36,7 @@ const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDispla
 const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumidoRealDashboard'));
 const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
 const ImportaXML = lazy(() => import('./components/ImportaXML'));
+const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
 const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
 
 const searchDescriptions: Record<SearchType, string> = {
@@ -47,6 +48,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.LUCRO_PRESUMIDO_REAL]: "Ficha Financeira e Cadastro para Lucro Presumido/Real.",
     [SearchType.OBRIGACOES_FISCAIS]: "Acompanhamento de obrigações, vencimentos e alertas fiscais.",
     [SearchType.IMPORTA_XML]: "Importe XMLs de NFe/NFSe para visualizar dados fiscais e impostos.",
+    [SearchType.ANALISE_RELATORIO_SAGE]: "Analise relatórios SAGE (XLSX/XML) e identifique gaps, canceladas, denegadas e segregação E/S.",
 };
 
 const App: React.FC = () => {
@@ -611,7 +613,7 @@ const App: React.FC = () => {
                     <main className="flex-grow min-w-0">
                         {/* Search Type Selection Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
-                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML).map((type) => (
+                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE).map((type) => (
                                 <button
                                     key={type}
                                     onClick={() => {
@@ -686,6 +688,30 @@ const App: React.FC = () => {
                                     <DownloadIcon className="w-5 h-5" />
                                 </div>
                                 <span className="text-xs font-bold text-center leading-tight">Importa XML</span>
+                            </button>
+                            {/* Análise Relatório SAGE */}
+                            <button
+                                onClick={() => {
+                                    setSearchType(SearchType.ANALISE_RELATORIO_SAGE);
+                                    setResult(null);
+                                    setQuery1('');
+                                    setQuery2('');
+                                    setError(null);
+                                    setValidationErrors({});
+                                    setUserNotes('');
+                                }}
+                                className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
+                                style={{
+                                    background: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'rgba(20,0,255,0.2)' : 'rgba(8,0,122,0.08)',
+                                    border: searchType === SearchType.ANALISE_RELATORIO_SAGE ? '1px solid rgba(20,0,255,0.45)' : '1px solid rgba(200,208,255,0.1)',
+                                    color: searchType === SearchType.ANALISE_RELATORIO_SAGE ? '#F5F6FF' : 'rgba(200,208,255,0.5)',
+                                    transform: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'scale(1.05)' : 'scale(1)'
+                                }}
+                            >
+                                <div className="mb-2">
+                                    <DocumentTextIcon className="w-5 h-5" />
+                                </div>
+                                <span className="text-xs font-bold text-center leading-tight">Análise SAGE</span>
                             </button>
                         </div>
 
@@ -961,6 +987,15 @@ const App: React.FC = () => {
                             <Suspense fallback={<LoadingSpinner />}>
                                 <ImportaXML
                                     currentUser={currentUser}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                        )}
+
+                        {/* Análise Relatório SAGE View */}
+                        {searchType === SearchType.ANALISE_RELATORIO_SAGE && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <AnaliseRelatorioSAGE
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>

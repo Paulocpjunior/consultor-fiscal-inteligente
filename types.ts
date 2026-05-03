@@ -8,6 +8,7 @@ export enum SearchType {
     LUCRO_PRESUMIDO_REAL = 'Lucro Presumido/Real',
     OBRIGACOES_FISCAIS = 'Obrigações Fiscais',
     IMPORTA_XML = 'Importa XML',
+    ANALISE_RELATORIO_SAGE = 'Análise Relatório SAGE',
   ANALISADOR_REGIME = 'Regime Tributário',
   ANALISE_CREDITOS = 'Análise de Créditos'
 }
