@@ -132,6 +132,8 @@ export interface CnpjData {
     municipio: string;
     uf: string;
     cep: string;
+    /** Data de abertura/início de atividade no formato ISO YYYY-MM-DD. */
+    dataAbertura?: string;
 }
 
 // Simples Nacional Types
@@ -168,6 +170,13 @@ export interface SimplesNacionalEmpresa {
     nomeFantasia?: string;
     createdBy?: string;
     createdByEmail?: string;
+    /**
+     * Data de abertura/início de atividade no formato ISO YYYY-MM-DD.
+     * Quando preenchida e a empresa tiver menos de 12 meses de atividade,
+     * o cálculo do DAS aplica RBT12 proporcionalizado conforme
+     * Resolução CGSN 140/2018, art. 21.
+     */
+    dataAbertura?: string;
 }
 
 export interface SimplesNacionalNota {
@@ -224,6 +233,16 @@ export interface SimplesNacionalResumo {
     detalhamento_anexos?: DetalhamentoAnexo[];
     totalMercadoInterno: number;
     totalMercadoExterno: number;
+    /**
+     * Indica se o cálculo aplicou a RBT12 proporcionalizada por se tratar
+     * de empresa em início de atividade (<12 meses).
+     */
+    inicioAtividade?: boolean;
+    /** Quantidade de meses transcorridos desde a abertura até o mês anterior ao PA. */
+    mesesAtividade?: number;
+    /** RBT12 proporcionalizada efetivamente usada para enquadramento. */
+    rbt12pInterno?: number;
+    rbt12pExterno?: number;
 }
 
 export interface SimplesNacionalImportResult {

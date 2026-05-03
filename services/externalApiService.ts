@@ -17,7 +17,8 @@ const parseBrasilAPIResponse = (data: any): CnpjData => ({
     bairro: data.bairro,
     municipio: data.municipio,
     uf: data.uf,
-    cep: data.cep
+    cep: data.cep,
+    dataAbertura: data.data_inicio_atividade || undefined
 });
 
 const parseCnpjWsResponse = (data: any): CnpjData => ({
@@ -36,7 +37,8 @@ const parseCnpjWsResponse = (data: any): CnpjData => ({
     bairro: data.estabelecimento?.bairro || '',
     municipio: data.estabelecimento?.cidade?.nome || '',
     uf: data.estabelecimento?.estado?.sigla || '',
-    cep: data.estabelecimento?.cep || ''
+    cep: data.estabelecimento?.cep || '',
+    dataAbertura: data.estabelecimento?.data_inicio_atividade || undefined
 });
 
 const fetchFromBrasilAPI = async (cleanCnpj: string): Promise<CnpjData> => {

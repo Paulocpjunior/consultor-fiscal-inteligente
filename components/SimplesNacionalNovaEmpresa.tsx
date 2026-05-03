@@ -9,7 +9,14 @@ import LoadingSpinner from './LoadingSpinner';
 import { FormattedText } from './FormattedText';
 
 interface SimplesNacionalNovaEmpresaProps {
-    onSave: (nome: string, cnpj: string, cnae: string, anexo: SimplesNacionalAnexo | 'auto', atividadesSecundarias?: SimplesNacionalAtividade[]) => void;
+    onSave: (
+        nome: string,
+        cnpj: string,
+        cnae: string,
+        anexo: SimplesNacionalAnexo | 'auto',
+        atividadesSecundarias?: SimplesNacionalAtividade[],
+        dataAbertura?: string
+    ) => void;
     onCancel: () => void;
     onShowToast?: (message: string) => void;
     initialData?: SimplesNacionalEmpresa | null;
@@ -29,6 +36,7 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
     const [cnpj, setCnpj] = useState('');
     const [cnae, setCnae] = useState('');
     const [anexo, setAnexo] = useState<'auto' | SimplesNacionalAnexo>('auto');
+    const [dataAbertura, setDataAbertura] = useState('');
     const [error, setError] = useState('');
 
     const [isCnpjLoading, setIsCnpjLoading] = useState(false);
@@ -60,6 +68,7 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
             setAnexo(initialData.anexo);
             setAtividadesSecundarias(initialData.atividadesSecundarias || []);
             setNomeFantasia(initialData.nomeFantasia || '');
+            setDataAbertura(initialData.dataAbertura || '');
         }
     }, [initialData]);
 
@@ -159,8 +168,8 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
             });
         }
 
-        onSave(nome, cnpj, cnae, anexo, atividadesParaSalvar);
-        
+        onSave(nome, cnpj, cnae, anexo, atividadesParaSalvar, dataAbertura || undefined);
+
         if (onShowToast && !initialData) onShowToast("Empresa salva com sucesso!");
     };
 
@@ -182,6 +191,9 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
                 }
                 if (data.cnaePrincipal) {
                     setCnae(data.cnaePrincipal.codigo);
+                }
+                if (data.dataAbertura && !dataAbertura) {
+                    setDataAbertura(data.dataAbertura);
                 }
             }
         } catch (e: any) {
@@ -282,7 +294,24 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
                         />
                          {nomeFantasia && <p className="mt-1 text-xs text-green-600 dark:text-green-400">Nome Fantasia: {nomeFantasia}</p>}
                     </div>
-                    
+
+                    <div>
+                        <label htmlFor="dataAbertura" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Data de Abertura / Início de Atividade
+                        </label>
+                        <input
+                            type="date"
+                            id="dataAbertura"
+                            value={dataAbertura}
+                            onChange={(e) => setDataAbertura(e.target.value)}
+                            className="mt-1 w-full pl-4 pr-4 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        />
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Necessário para empresas com menos de 12 meses — usa RBT12 proporcionalizada
+                            (Resolução CGSN 140/2018, art. 21).
+                        </p>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="relative">
                             <label htmlFor="cnae" className="block text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-1">

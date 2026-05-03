@@ -632,6 +632,40 @@ if (filialServico > 0) {
                             </div>
                             <p className="text-[9px] text-slate-400 mt-2 italic text-center">* Base de cálculo segregada para faixa</p>
                         </div>
+
+                        {/* RBT12 proporcionalizada — empresa em início de atividade */}
+                        {resumo.inicioAtividade && (
+                            <div className="p-3 rounded-lg mb-1 border" style={{
+                                background: 'rgba(245,166,35,0.08)',
+                                borderColor: 'rgba(245,166,35,0.35)'
+                            }}>
+                                <p className="text-[10px] font-bold uppercase mb-1" style={{ color: '#F5A623' }}>
+                                    RBT12 Proporcionalizada (Início de Atividade)
+                                </p>
+                                <p className="text-[10px] mb-2" style={{ color: 'rgba(245,166,35,0.9)' }}>
+                                    Empresa com {resumo.mesesAtividade ?? 0} {((resumo.mesesAtividade ?? 0) === 1) ? 'mês' : 'meses'} de atividade.
+                                    Por força da Resolução CGSN 140/2018 art. 21, o RBT12 é proporcionalizado:
+                                    <span className="font-mono"> RBT12 / {resumo.mesesAtividade || 1} × 12</span>.
+                                </p>
+                                <div className="flex justify-between text-[10px] font-bold">
+                                    <div>
+                                        <span className="block uppercase text-[9px]" style={{ color: 'rgba(245,166,35,0.6)' }}>Interno (p)</span>
+                                        <span style={{ color: '#F5F6FF' }}>
+                                            R$ {(resumo.rbt12pInterno ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                        </span>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="block uppercase text-[9px]" style={{ color: 'rgba(245,166,35,0.6)' }}>Externo (p)</span>
+                                        <span style={{ color: '#F5F6FF' }}>
+                                            R$ {(resumo.rbt12pExterno ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                        </span>
+                                    </div>
+                                </div>
+                                <p className="text-[9px] mt-2" style={{ color: 'rgba(245,166,35,0.7)' }}>
+                                    Esse é o valor usado para enquadramento na faixa do Anexo (não o RBT12 acima).
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     {/* Folha Card */}

@@ -120,7 +120,7 @@ export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEm
 
 export const saveEmpresa = async (
     nome: string, cnpj: string, cnae: string, anexo: string,
-    atividadesSecundarias: any[], userId: string
+    atividadesSecundarias: any[], userId: string, dataAbertura?: string
 ): Promise<SimplesNacionalEmpresa> => {
     const finalAnexo = anexo === 'auto' ? sugerirAnexoPorCnae(cnae) : anexo;
 
@@ -129,7 +129,8 @@ export const saveEmpresa = async (
         atividadesSecundarias: atividadesSecundarias || [],
         folha12: 0, faturamentoManual: {}, faturamentoMensalDetalhado: {},
         historicoCalculos: [], createdBy: userId,
-        createdByEmail: auth?.currentUser?.email || undefined
+        createdByEmail: auth?.currentUser?.email || undefined,
+        dataAbertura: dataAbertura || undefined
     };
 
     // ── Cloud-first ──
@@ -413,6 +414,43 @@ export const calcularResumoEmpresa = (
         });
     }
 
+    // ─── RBT12 proporcionalizado para empresa em início de atividade ─────────
+    // LC 123/06 art. 18 §2º + Resolução CGSN 140/2018 art. 21:
+    //   • 1º mês de atividade: RBT12 = receita do próprio PA × 12
+    //   • 2º ao 11º mês:       RBT12 = (Σ receitas anteriores / nº meses) × 12
+    //   • A partir do 12º mês: RBT12 normal (12 meses anteriores).
+    let inicioAtividade = false;
+    let mesesAtividade = 12;
+    let rbt12pInterno = rbt12Interno;
+    let rbt12pExterno = rbt12Externo;
+    let rbt12pGlobal = rbt12Global;
+
+    if (empresa.dataAbertura) {
+        const ab = new Date(empresa.dataAbertura + 'T00:00:00');
+        if (!isNaN(ab.getTime())) {
+            const mesAb = new Date(ab.getFullYear(), ab.getMonth(), 1);
+            const mesAntPA = new Date(mesReferencia.getFullYear(), mesReferencia.getMonth() - 1, 1);
+            const diff =
+                (mesAntPA.getFullYear() - mesAb.getFullYear()) * 12 +
+                (mesAntPA.getMonth() - mesAb.getMonth()) + 1;
+            if (diff < 12) {
+                inicioAtividade = true;
+                mesesAtividade = Math.max(diff, 0);
+                if (mesesAtividade === 0) {
+                    // Primeiro mês: usa receita do próprio PA × 12.
+                    const receitaPA = mensal[mesChave] || 0;
+                    rbt12pGlobal = receitaPA * 12;
+                    rbt12pInterno = receitaPA * 12; // simplificação: assume mercado interno
+                    rbt12pExterno = 0;
+                } else {
+                    rbt12pInterno = (rbt12Interno / mesesAtividade) * 12;
+                    rbt12pExterno = (rbt12Externo / mesesAtividade) * 12;
+                    rbt12pGlobal = (rbt12Global / mesesAtividade) * 12;
+                }
+            }
+        }
+    }
+
     let fator_r = rbt12Global > 0 ? empresa.folha12 / rbt12Global : 0;
     if (options?.fatorRManual != null && !isNaN(options.fatorRManual))
         fator_r = options.fatorRManual;
@@ -477,7 +515,10 @@ export const calcularResumoEmpresa = (
         const tabela = ANEXOS_TABELAS[anexoAplicado];
         if (!tabela) return;
 
-        const rbtParaEnquadramento = item.isExterior ? rbt12Externo : rbt12Interno;
+        // Em início de atividade, usa RBT12 proporcionalizado para enquadramento e alíquota.
+        const rbtParaEnquadramento = item.isExterior
+            ? (inicioAtividade ? rbt12pExterno : rbt12Externo)
+            : (inicioAtividade ? rbt12pInterno : rbt12Interno);
         let faixaIndex = tabela.findIndex((f: any) => rbtParaEnquadramento <= f.limite);
         if (faixaIndex === -1 && rbtParaEnquadramento > 0) faixaIndex = tabela.length - 1;
         if (rbtParaEnquadramento === 0) faixaIndex = 0;
@@ -528,14 +569,18 @@ export const calcularResumoEmpresa = (
 
     const tabelaPrincipal = ANEXOS_TABELAS[
         empresa.anexo === 'III_V' ? (fator_r >= 0.28 ? 'III' : 'V') : empresa.anexo];
+    const rbtPrincipalParaEnquadramento = inicioAtividade ? rbt12pGlobal : rbt12Global;
     let faixaIndexPrincipal = 0;
     if (tabelaPrincipal) {
-        faixaIndexPrincipal = tabelaPrincipal.findIndex((f: any) => rbt12Global <= f.limite);
-        if (faixaIndexPrincipal === -1 && rbt12Global > 0) faixaIndexPrincipal = 5;
+        faixaIndexPrincipal = tabelaPrincipal.findIndex((f: any) => rbtPrincipalParaEnquadramento <= f.limite);
+        if (faixaIndexPrincipal === -1 && rbtPrincipalParaEnquadramento > 0) faixaIndexPrincipal = 5;
     }
 
     return {
         rbt12: rbt12Global, rbt12Interno, rbt12Externo,
+        inicioAtividade, mesesAtividade,
+        rbt12pInterno: inicioAtividade ? rbt12pInterno : undefined,
+        rbt12pExterno: inicioAtividade ? rbt12pExterno : undefined,
         aliq_nom: tabelaPrincipal ? tabelaPrincipal[faixaIndexPrincipal].aliquota : 0,
         aliq_eff: aliq_eff_global, das: dasTotal * 12, das_mensal: dasTotal, mensal,
         historico_simulado, anexo_efetivo: empresa.anexo, fator_r,

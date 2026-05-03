@@ -490,20 +490,21 @@ const App: React.FC = () => {
     };
 
     // Simples Nacional Handlers
-    const handleSaveSimplesEmpresa = async (nome: string, cnpj: string, cnae: string, anexo: any, atividadesSecundarias?: any[]) => {
+    const handleSaveSimplesEmpresa = async (nome: string, cnpj: string, cnae: string, anexo: any, atividadesSecundarias?: any[], dataAbertura?: string) => {
         if (!currentUser) return;
 
         if (simplesEmpresaToEdit) {
             const finalAnexo = anexo === 'auto' ? simplesService.sugerirAnexoPorCnae(cnae) : anexo;
             const dataToUpdate: Partial<SimplesNacionalEmpresa> = {
-                nome, cnpj, cnae, anexo: finalAnexo, atividadesSecundarias: atividadesSecundarias || []
+                nome, cnpj, cnae, anexo: finalAnexo, atividadesSecundarias: atividadesSecundarias || [],
+                dataAbertura: dataAbertura || undefined,
             };
 
             await simplesService.updateEmpresa(simplesEmpresaToEdit.id, dataToUpdate);
             setSimplesEmpresas(prev => prev.map(e => e.id === simplesEmpresaToEdit.id ? { ...e, ...dataToUpdate } : e));
             setToastMessage("Empresa atualizada com sucesso!");
         } else {
-            const newEmpresa = await simplesService.saveEmpresa(nome, cnpj, cnae, anexo, atividadesSecundarias || [], currentUser.id);
+            const newEmpresa = await simplesService.saveEmpresa(nome, cnpj, cnae, anexo, atividadesSecundarias || [], currentUser.id, dataAbertura);
             setSimplesEmpresas(prev => [...prev, newEmpresa]);
             if (currentUser) authService.logAction(currentUser.id, currentUser.name, 'create_empresa', nome);
             setToastMessage("Empresa cadastrada com sucesso!");
