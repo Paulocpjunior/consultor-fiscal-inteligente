@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { analisar, analisarArquivos, type SageAnalise, type SageNota, type DocSentido, type DocStatus } from '../services/sageReportService';
+import {
+    analisar,
+    analisarArquivos,
+    exportarAnalise,
+    type SageAnalise,
+    type SageNota,
+    type DocSentido,
+    type DocStatus,
+} from '../services/sageReportService';
 
 interface AnaliseRelatorioSAGEProps {
     onShowToast?: (msg: string) => void;
@@ -33,15 +41,16 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
     const [filtroSentido, setFiltroSentido] = useState<'todos' | DocSentido>('todos');
     const [busca, setBusca] = useState('');
     const [dragOver, setDragOver] = useState(false);
-    const [maxGapEntrada, setMaxGapEntrada] = useState<number>(20);
-    const [incluirGapsGrandes, setIncluirGapsGrandes] = useState<boolean>(false);
+    const [maxGapEntrada, setMaxGapEntrada] = useState<number>(3);
+    const [maxGapSaida, setMaxGapSaida] = useState<number>(50);
+    const [semLimite, setSemLimite] = useState<boolean>(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
     // Re-roda a analise (sem re-parsear arquivos) quando o usuario muda thresholds.
     useEffect(() => {
         if (!notasBrutas) return;
-        setAnalise(analisar(notasBrutas, { maxGapEntrada, incluirGapsGrandesEntrada: incluirGapsGrandes }));
-    }, [notasBrutas, maxGapEntrada, incluirGapsGrandes]);
+        setAnalise(analisar(notasBrutas, { maxGapEntrada, maxGapSaida, semLimite }));
+    }, [notasBrutas, maxGapEntrada, maxGapSaida, semLimite]);
 
     const processFiles = useCallback(
         async (files: FileList | File[]) => {
@@ -54,7 +63,7 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                     setError('Selecione arquivos .xlsx, .xls ou .xml.');
                     return;
                 }
-                const result = await analisarArquivos(ok, { maxGapEntrada, incluirGapsGrandesEntrada: incluirGapsGrandes });
+                const result = await analisarArquivos(ok, { maxGapEntrada, maxGapSaida, semLimite });
                 setAnalise(result);
                 // guarda as notas brutas para permitir re-analise rapida ao mudar thresholds
                 setNotasBrutas(
@@ -67,7 +76,7 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                 setLoading(false);
             }
         },
-        [onShowToast, maxGapEntrada, incluirGapsGrandes]
+        [onShowToast, maxGapEntrada, maxGapSaida, semLimite]
     );
 
     const handleDrop = useCallback(
@@ -284,39 +293,100 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
 
                     {/* Configuração de detecção de gaps */}
                     <div
-                        className="p-3 rounded-lg flex flex-col md:flex-row md:items-center gap-3 text-xs"
+                        className="p-4 rounded-lg space-y-3 text-xs"
                         style={{ background: 'rgba(8,0,122,0.06)', border: '1px solid rgba(200,208,255,0.08)' }}
                     >
                         <div style={{ color: 'rgba(200,208,255,0.7)' }}>
-                            <b style={{ color: '#F5F6FF' }}>Detecção de gaps em ENTRADAS:</b> só conta como "nota faltante"
-                            quando o fornecedor tem ≥3 notas e o gap é pequeno (a numeração de fornecedores não é
-                            sequencial entre clientes). Saídas reportam todos os gaps.
+                            <b style={{ color: '#F5F6FF' }}>Como o sistema decide o que é "nota faltante":</b> uma nota
+                            só é considerada faltante se o número estiver ausente <i>entre</i> notas presentes no relatório,
+                            e o tamanho do salto for pequeno o suficiente para parecer real (caso contrário é só uma
+                            nota fora do recorte do relatório, não algo perdido).
                         </div>
-                        <div className="flex items-center gap-2 ml-auto">
-                            <label style={{ color: 'rgba(200,208,255,0.7)' }}>Tamanho máx. de gap em entradas:</label>
-                            <input
-                                type="number"
-                                min={1}
-                                max={1000}
-                                value={maxGapEntrada}
-                                disabled={incluirGapsGrandes}
-                                onChange={(e) => setMaxGapEntrada(Math.max(1, parseInt(e.target.value || '20', 10)))}
-                                className="w-20 px-2 py-1 rounded"
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                            <label className="flex flex-col gap-1">
+                                <span style={{ color: 'rgba(200,208,255,0.7)' }}>
+                                    Salto máx. em <b>ENTRADAS</b> (notas de fornecedores)
+                                </span>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={10000}
+                                    value={maxGapEntrada}
+                                    disabled={semLimite}
+                                    onChange={(e) => setMaxGapEntrada(Math.max(1, parseInt(e.target.value || '3', 10)))}
+                                    className="w-full px-2 py-1.5 rounded"
+                                    style={{
+                                        background: 'rgba(255,255,255,0.04)',
+                                        border: '1px solid rgba(200,208,255,0.1)',
+                                        color: semLimite ? 'rgba(200,208,255,0.3)' : '#F5F6FF',
+                                    }}
+                                />
+                                <span className="text-[10px]" style={{ color: 'rgba(200,208,255,0.4)' }}>
+                                    Recomendado: 3. Fornecedores numeram para vários clientes — saltos grandes não são
+                                    seus.
+                                </span>
+                            </label>
+                            <label className="flex flex-col gap-1">
+                                <span style={{ color: 'rgba(200,208,255,0.7)' }}>
+                                    Salto máx. em <b>SAÍDAS</b> (suas notas)
+                                </span>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={10000}
+                                    value={maxGapSaida}
+                                    disabled={semLimite}
+                                    onChange={(e) => setMaxGapSaida(Math.max(1, parseInt(e.target.value || '50', 10)))}
+                                    className="w-full px-2 py-1.5 rounded"
+                                    style={{
+                                        background: 'rgba(255,255,255,0.04)',
+                                        border: '1px solid rgba(200,208,255,0.1)',
+                                        color: semLimite ? 'rgba(200,208,255,0.3)' : '#F5F6FF',
+                                    }}
+                                />
+                                <span className="text-[10px]" style={{ color: 'rgba(200,208,255,0.4)' }}>
+                                    Recomendado: 50. Saltos maiores costumam indicar relatório parcial/multi-série.
+                                </span>
+                            </label>
+                            <label
+                                className="flex items-start gap-2 cursor-pointer p-2 rounded"
                                 style={{
-                                    background: 'rgba(255,255,255,0.04)',
-                                    border: '1px solid rgba(200,208,255,0.1)',
-                                    color: incluirGapsGrandes ? 'rgba(200,208,255,0.3)' : '#F5F6FF',
+                                    color: 'rgba(200,208,255,0.7)',
+                                    background: semLimite ? 'rgba(255,138,76,0.08)' : 'transparent',
+                                    border: semLimite ? '1px solid rgba(255,138,76,0.3)' : '1px solid transparent',
                                 }}
-                            />
-                            <label className="flex items-center gap-1 cursor-pointer" style={{ color: 'rgba(200,208,255,0.7)' }}>
+                            >
                                 <input
                                     type="checkbox"
-                                    checked={incluirGapsGrandes}
-                                    onChange={(e) => setIncluirGapsGrandes(e.target.checked)}
+                                    checked={semLimite}
+                                    onChange={(e) => setSemLimite(e.target.checked)}
+                                    className="mt-0.5"
                                 />
-                                Reportar tudo (modo avançado)
+                                <span>
+                                    <span style={{ color: '#F5F6FF', fontWeight: 600 }}>Ignorar limites</span>
+                                    <br />
+                                    <span className="text-[10px]" style={{ color: 'rgba(200,208,255,0.5)' }}>
+                                        Reporta todo e qualquer pulo na numeração. Útil só pra investigação detalhada —
+                                        produz números muito altos com relatórios parciais.
+                                    </span>
+                                </span>
                             </label>
                         </div>
+                    </div>
+
+                    {/* Botão de exportação */}
+                    <div className="flex justify-end">
+                        <button
+                            onClick={() => exportarAnalise(analise)}
+                            className="px-4 py-2 rounded-lg text-xs font-bold transition-colors"
+                            style={{
+                                background: 'rgba(91,127,255,0.15)',
+                                border: '1px solid rgba(91,127,255,0.4)',
+                                color: '#5B7FFF',
+                            }}
+                        >
+                            ⬇ Exportar análise (XLSX)
+                        </button>
                     </div>
 
                     {analise.avisos.length > 0 && (

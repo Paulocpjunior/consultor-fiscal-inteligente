@@ -356,28 +356,33 @@ export async function parseSageXmls(files: File[]): Promise<SageNota[]> {
 // ─── Detecção de gaps ────────────────────────────────────────────────────────
 //
 // Regra:
-// • SAÍDAS — somos o emitente, então a numeração é sequencial e qualquer gap
-//   é uma nota faltante real. Reporta tudo.
+// • SAÍDAS — somos o emitente, então a numeração é sequencial e gaps tendem
+//   a ser reais. Mas se o relatório for parcial (recorte de período / multiplas
+//   séries / estabelecimentos), o intervalo total pode conter pulos enormes
+//   que NÃO são notas faltantes — só notas fora do recorte. Por isso aplica
+//   também um teto, configurável.
 // • ENTRADAS — cada fornecedor numera suas próprias notas e emite para vários
 //   clientes. Uma "gap" só é nota faltante real se for pequena (esperaríamos
 //   receber notas próximas em sequência). Aplica:
 //     - mínimo de 3 notas do mesmo fornecedor/série para considerar
-//     - gap máximo padrão de 20 (configurável)
-//     - ignora gaps acima do limite (ruído entre fornecedor e outros clientes)
+//     - gap máximo padrão muito conservador (3) — só flag suspeitos reais
 
-const MAX_GAP_ENTRADA_DEFAULT = 20;
+const MAX_GAP_ENTRADA_DEFAULT = 3;
+const MAX_GAP_SAIDA_DEFAULT = 50;
 const MIN_NOTAS_POR_FORNECEDOR = 3;
 
 export interface DetectarGapsOptions {
     maxGapEntrada?: number;       // teto de notas faltantes por gap em entradas
+    maxGapSaida?: number;         // teto em saidas
     minNotasFornecedor?: number;  // mínimo de notas do mesmo fornecedor/série
-    incluirGapsGrandesEntrada?: boolean; // se true, reporta tudo (modo avançado)
+    semLimite?: boolean;          // desliga todos os limites (mostra tudo)
 }
 
 function detectarGaps(notas: SageNota[], opts: DetectarGapsOptions = {}): GapNumeracao[] {
     const maxGapEntrada = opts.maxGapEntrada ?? MAX_GAP_ENTRADA_DEFAULT;
+    const maxGapSaida = opts.maxGapSaida ?? MAX_GAP_SAIDA_DEFAULT;
     const minNotas = opts.minNotasFornecedor ?? MIN_NOTAS_POR_FORNECEDOR;
-    const incluirGrandes = opts.incluirGapsGrandesEntrada ?? false;
+    const semLimite = opts.semLimite ?? false;
 
     // Para saídas, agrupa por (serie) — todas as saídas são nossas, então o
     // emitente sempre é o mesmo. Agrupar por CNPJ aqui pode dividir indevidamente
@@ -404,14 +409,16 @@ function detectarGaps(notas: SageNota[], opts: DetectarGapsOptions = {}): GapNum
         // Para entradas: exige número mínimo de notas do mesmo fornecedor.
         if (sentido === 'entrada' && nums.length < minNotas) return;
 
+        const tetoSentido = sentido === 'entrada' ? maxGapEntrada : maxGapSaida;
+
         for (let i = 1; i < nums.length; i++) {
             const prev = nums[i - 1];
             const cur = nums[i];
             const tamanho = cur - prev - 1;
             if (tamanho <= 0) continue;
 
-            // Filtra gaps absurdos em entradas (ruído entre fornecedor e outros clientes)
-            if (sentido === 'entrada' && !incluirGrandes && tamanho > maxGapEntrada) continue;
+            // Aplica teto por sentido (a menos que modo "sem limite")
+            if (!semLimite && tamanho > tetoSentido) continue;
 
             gaps.push({
                 sentido: sentido as DocSentido,
@@ -496,4 +503,119 @@ export async function analisarArquivos(
     }
 
     return analisar(notas, opts);
+}
+
+// ─── Export XLSX ─────────────────────────────────────────────────────────────
+
+export function exportarAnalise(analise: SageAnalise): void {
+    const wb = XLSX.utils.book_new();
+
+    // Aba Resumo
+    const resumo = [
+        ['Análise Relatório SAGE'],
+        ['Gerado em', new Date().toLocaleString('pt-BR')],
+        [],
+        ['Total de notas', analise.totalNotas],
+        ['Entradas', analise.porSentido.entrada.length],
+        ['Saídas', analise.porSentido.saida.length],
+        ['Sem identificação E/S', analise.porSentido.desconhecido.length],
+        [],
+        ['Regulares', analise.resumo.regulares],
+        ['Canceladas', analise.resumo.canceladas],
+        ['Denegadas', analise.resumo.denegadas],
+        ['Inutilizadas', analise.resumo.inutilizadas],
+        [],
+        ['Faixas com gap detectadas', analise.resumo.gapsTotal],
+        ['Total de notas faltantes', analise.resumo.notasFaltantes],
+        [],
+        ['Tabs/arquivos lidos', analise.tabsLidas.join(', ')],
+    ];
+    if (analise.avisos.length > 0) {
+        resumo.push([], ['Avisos']);
+        analise.avisos.forEach((a) => resumo.push([a]));
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumo), 'Resumo');
+
+    // Aba Gaps
+    const gapsHeader = ['Sentido', 'CNPJ', 'Razão Social', 'Série', 'De', 'Até', 'Quantidade'];
+    const gapsRows = analise.gaps.map((g) => [
+        g.sentido,
+        g.cnpj,
+        g.razaoSocial,
+        g.serie,
+        g.de,
+        g.ate,
+        g.quantidade,
+    ]);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([gapsHeader, ...gapsRows]), 'Gaps');
+
+    // Abas por status (canceladas, denegadas, inutilizadas)
+    const notasHeader = [
+        'Sentido',
+        'Status',
+        'Cód. Sit.',
+        'Status original',
+        'Nº NF',
+        'Série',
+        'Espécie',
+        'Emissão',
+        'Entrada/Saída',
+        'CNPJ',
+        'Razão Social',
+        'Cidade',
+        'UF',
+        'CFOP',
+        'Valor',
+        'Chave NF-e',
+        'Origem',
+    ];
+    const mapNotaRow = (n: SageNota) => [
+        n.sentido,
+        n.status,
+        n.statusCodigo,
+        n.statusOriginal,
+        n.numeroRaw,
+        n.serie,
+        n.especie,
+        n.dataEmissao,
+        n.dataEntradaSaida,
+        n.cnpj,
+        n.razaoSocial,
+        n.cidade,
+        n.uf,
+        n.cfop,
+        n.valor,
+        n.chave,
+        n.sourceTab,
+    ];
+
+    const grupos: Array<[string, SageNota[]]> = [
+        ['Canceladas', analise.porStatus.cancelada],
+        ['Denegadas', analise.porStatus.denegada],
+        ['Inutilizadas', analise.porStatus.inutilizada],
+        ['Status desconhecido', analise.porStatus.desconhecido],
+    ];
+    grupos.forEach(([nome, lista]) => {
+        if (lista.length === 0) return;
+        XLSX.utils.book_append_sheet(
+            wb,
+            XLSX.utils.aoa_to_sheet([notasHeader, ...lista.map(mapNotaRow)]),
+            nome
+        );
+    });
+
+    // Aba completa
+    const todas = [
+        ...analise.porSentido.entrada,
+        ...analise.porSentido.saida,
+        ...analise.porSentido.desconhecido,
+    ];
+    XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet([notasHeader, ...todas.map(mapNotaRow)]),
+        'Todas'
+    );
+
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    XLSX.writeFile(wb, `analise-sage-${stamp}.xlsx`);
 }
