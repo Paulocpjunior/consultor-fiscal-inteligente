@@ -1,5 +1,5 @@
-
 import React from 'react';
+import { APP_VERSION, APP_RELEASE, APP_BUILD_TIME, formatBuildDate } from '../version';
 
 const Footer: React.FC = () => {
   return (
@@ -8,6 +8,12 @@ const Footer: React.FC = () => {
         Direitos Reservados - Uso Exclusivo by SP Assessoria Contábil
         <br />
         As informações são geradas por IA e devem ser usadas como referência. Confirme com as fontes oficiais.
+      </p>
+      <p
+        className="mt-2 text-[10px] text-slate-400 dark:text-slate-500 font-mono"
+        title={`Build: ${formatBuildDate(APP_BUILD_TIME)}`}
+      >
+        Versão {APP_VERSION} · Release {APP_RELEASE}
       </p>
     </footer>
   );

@@ -4,6 +4,7 @@ import { User } from '../types';
 import * as authService from '../services/authService';
 import { isFirebaseConfigured } from '../services/firebaseConfig';
 import { GlobeIcon, ShieldIcon } from './Icons';
+import { APP_VERSION, APP_RELEASE, APP_BUILD_TIME, formatBuildDate } from '../version';
 
 interface LoginScreenProps {
     onLoginSuccess: (user: User) => void;
@@ -53,12 +54,27 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden animate-fade-in">
-                <div className="bg-gradient-to-r from-sky-700 to-blue-900 p-8 text-center">
+                <div className="bg-gradient-to-r from-sky-700 to-blue-900 p-8 text-center relative">
                     <div className="flex justify-center mb-4">
-                        <Logo className="h-20 w-auto text-white" />
+                        <Logo variant="light" className="h-20 w-auto" />
                     </div>
                     <h1 className="text-2xl font-bold text-white">Consultor Fiscal Inteligente</h1>
                     <p className="text-sky-200 text-sm mt-2">Acesso Exclusivo SP Assessoria Contábil</p>
+
+                    <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+                        <span
+                            className="inline-flex items-center gap-1 bg-white/15 text-white text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full backdrop-blur-sm border border-white/20"
+                            title={`Build: ${formatBuildDate(APP_BUILD_TIME)}`}
+                        >
+                            Versão {APP_VERSION}
+                        </span>
+                        <span
+                            className="inline-flex items-center gap-1 bg-sky-900/40 text-sky-100 text-[10px] font-mono px-2.5 py-1 rounded-full border border-sky-300/20"
+                            title={`Release técnico — gerado em ${formatBuildDate(APP_BUILD_TIME)}`}
+                        >
+                            Release {APP_RELEASE}
+                        </span>
+                    </div>
                 </div>
                 
                 <div className="p-8">

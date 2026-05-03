@@ -3,6 +3,7 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import LoadingSpinner from './components/LoadingSpinner';
 import LoginScreen from './components/LoginScreen';
+import UpdateBanner from './components/UpdateBanner';
 import TaxAlerts from './components/TaxAlerts';
 import NewsAlerts from './components/NewsAlerts';
 import ReformaNews from './components/ReformaNews';
@@ -583,6 +584,7 @@ const App: React.FC = () => {
                         {theme === 'light' ? '🌙' : '☀️'}
                     </button>
                 </div>
+                <UpdateBanner />
             </>
         );
     }
@@ -1009,6 +1011,9 @@ const App: React.FC = () => {
                 onClose={() => setIsUsersModalOpen(false)}
                 currentUserEmail={currentUser.email}
             />
+
+            {/* Aviso global de nova versão / hard refresh */}
+            <UpdateBanner />
         </div>
     );
 };

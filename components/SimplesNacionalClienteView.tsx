@@ -258,8 +258,8 @@ const SimplesNacionalClienteView: React.FC<SimplesNacionalClienteViewProps> = ({
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                         <div>
                             <div className="flex items-center gap-3 mb-2">
-                                {/* Logo em Branco para contraste */}
-                                <Logo className="h-14 w-auto text-white" />
+                                {/* Logo em variante clara para contraste sobre o gradiente azul */}
+                                <Logo variant="light" className="h-14 w-auto" />
                                 <div className="pl-3 border-l border-sky-500/50">
                                     <h1 className="text-2xl font-bold leading-tight">Relatório Gerencial</h1>
                                     <p className="text-sky-200 text-sm tracking-wider font-medium">SIMPLES NACIONAL</p>
