@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { analisarArquivos, type SageAnalise, type SageNota, type DocSentido, type DocStatus } from '../services/sageReportService';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { analisar, analisarArquivos, type SageAnalise, type SageNota, type DocSentido, type DocStatus } from '../services/sageReportService';
 
 interface AnaliseRelatorioSAGEProps {
     onShowToast?: (msg: string) => void;
@@ -25,6 +25,7 @@ const formatBRL = (n: number) =>
     n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
 
 const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast }) => {
+    const [notasBrutas, setNotasBrutas] = useState<SageNota[] | null>(null);
     const [analise, setAnalise] = useState<SageAnalise | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,15 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
     const [filtroSentido, setFiltroSentido] = useState<'todos' | DocSentido>('todos');
     const [busca, setBusca] = useState('');
     const [dragOver, setDragOver] = useState(false);
+    const [maxGapEntrada, setMaxGapEntrada] = useState<number>(20);
+    const [incluirGapsGrandes, setIncluirGapsGrandes] = useState<boolean>(false);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // Re-roda a analise (sem re-parsear arquivos) quando o usuario muda thresholds.
+    useEffect(() => {
+        if (!notasBrutas) return;
+        setAnalise(analisar(notasBrutas, { maxGapEntrada, incluirGapsGrandesEntrada: incluirGapsGrandes }));
+    }, [notasBrutas, maxGapEntrada, incluirGapsGrandes]);
 
     const processFiles = useCallback(
         async (files: FileList | File[]) => {
@@ -45,8 +54,12 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                     setError('Selecione arquivos .xlsx, .xls ou .xml.');
                     return;
                 }
-                const result = await analisarArquivos(ok);
+                const result = await analisarArquivos(ok, { maxGapEntrada, incluirGapsGrandesEntrada: incluirGapsGrandes });
                 setAnalise(result);
+                // guarda as notas brutas para permitir re-analise rapida ao mudar thresholds
+                setNotasBrutas(
+                    [...result.porSentido.entrada, ...result.porSentido.saida, ...result.porSentido.desconhecido]
+                );
                 onShowToast?.(`Análise concluída: ${result.totalNotas} nota(s) processada(s).`);
             } catch (err: any) {
                 setError(err?.message || 'Falha ao processar arquivos.');
@@ -54,7 +67,7 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                 setLoading(false);
             }
         },
-        [onShowToast]
+        [onShowToast, maxGapEntrada, incluirGapsGrandes]
     );
 
     const handleDrop = useCallback(
@@ -68,6 +81,7 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
 
     const handleClear = () => {
         setAnalise(null);
+        setNotasBrutas(null);
         setError(null);
         setBusca('');
         setFiltroSentido('todos');
@@ -267,6 +281,43 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                             Origem: {analise.tabsLidas.map((t) => `"${t}"`).join(', ')}
                         </div>
                     )}
+
+                    {/* Configuração de detecção de gaps */}
+                    <div
+                        className="p-3 rounded-lg flex flex-col md:flex-row md:items-center gap-3 text-xs"
+                        style={{ background: 'rgba(8,0,122,0.06)', border: '1px solid rgba(200,208,255,0.08)' }}
+                    >
+                        <div style={{ color: 'rgba(200,208,255,0.7)' }}>
+                            <b style={{ color: '#F5F6FF' }}>Detecção de gaps em ENTRADAS:</b> só conta como "nota faltante"
+                            quando o fornecedor tem ≥3 notas e o gap é pequeno (a numeração de fornecedores não é
+                            sequencial entre clientes). Saídas reportam todos os gaps.
+                        </div>
+                        <div className="flex items-center gap-2 ml-auto">
+                            <label style={{ color: 'rgba(200,208,255,0.7)' }}>Tamanho máx. de gap em entradas:</label>
+                            <input
+                                type="number"
+                                min={1}
+                                max={1000}
+                                value={maxGapEntrada}
+                                disabled={incluirGapsGrandes}
+                                onChange={(e) => setMaxGapEntrada(Math.max(1, parseInt(e.target.value || '20', 10)))}
+                                className="w-20 px-2 py-1 rounded"
+                                style={{
+                                    background: 'rgba(255,255,255,0.04)',
+                                    border: '1px solid rgba(200,208,255,0.1)',
+                                    color: incluirGapsGrandes ? 'rgba(200,208,255,0.3)' : '#F5F6FF',
+                                }}
+                            />
+                            <label className="flex items-center gap-1 cursor-pointer" style={{ color: 'rgba(200,208,255,0.7)' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={incluirGapsGrandes}
+                                    onChange={(e) => setIncluirGapsGrandes(e.target.checked)}
+                                />
+                                Reportar tudo (modo avançado)
+                            </label>
+                        </div>
+                    </div>
 
                     {analise.avisos.length > 0 && (
                         <div

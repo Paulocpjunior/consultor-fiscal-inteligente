@@ -354,14 +354,43 @@ export async function parseSageXmls(files: File[]): Promise<SageNota[]> {
 }
 
 // ─── Detecção de gaps ────────────────────────────────────────────────────────
+//
+// Regra:
+// • SAÍDAS — somos o emitente, então a numeração é sequencial e qualquer gap
+//   é uma nota faltante real. Reporta tudo.
+// • ENTRADAS — cada fornecedor numera suas próprias notas e emite para vários
+//   clientes. Uma "gap" só é nota faltante real se for pequena (esperaríamos
+//   receber notas próximas em sequência). Aplica:
+//     - mínimo de 3 notas do mesmo fornecedor/série para considerar
+//     - gap máximo padrão de 20 (configurável)
+//     - ignora gaps acima do limite (ruído entre fornecedor e outros clientes)
 
-function detectarGaps(notas: SageNota[]): GapNumeracao[] {
-    // Agrupa por (sentido, cnpj, serie)
+const MAX_GAP_ENTRADA_DEFAULT = 20;
+const MIN_NOTAS_POR_FORNECEDOR = 3;
+
+export interface DetectarGapsOptions {
+    maxGapEntrada?: number;       // teto de notas faltantes por gap em entradas
+    minNotasFornecedor?: number;  // mínimo de notas do mesmo fornecedor/série
+    incluirGapsGrandesEntrada?: boolean; // se true, reporta tudo (modo avançado)
+}
+
+function detectarGaps(notas: SageNota[], opts: DetectarGapsOptions = {}): GapNumeracao[] {
+    const maxGapEntrada = opts.maxGapEntrada ?? MAX_GAP_ENTRADA_DEFAULT;
+    const minNotas = opts.minNotasFornecedor ?? MIN_NOTAS_POR_FORNECEDOR;
+    const incluirGrandes = opts.incluirGapsGrandesEntrada ?? false;
+
+    // Para saídas, agrupa por (serie) — todas as saídas são nossas, então o
+    // emitente sempre é o mesmo. Agrupar por CNPJ aqui pode dividir indevidamente
+    // se a coluna "CNPJ" do SAGE em saídas for o destinatário.
+    // Para entradas, agrupa por (cnpj, serie) — numeração é do fornecedor.
     const grupos = new Map<string, SageNota[]>();
     notas.forEach((n) => {
         if (n.numero === null) return;
-        if (n.status === 'inutilizada') return; // inutilizada não é gap
-        const key = `${n.sentido}::${n.cnpj || '?'}::${n.serie || '0'}`;
+        if (n.status === 'inutilizada') return;
+        const key =
+            n.sentido === 'saida'
+                ? `saida::ALL::${n.serie || '0'}`
+                : `${n.sentido}::${n.cnpj || '?'}::${n.serie || '0'}`;
         if (!grupos.has(key)) grupos.set(key, []);
         grupos.get(key)!.push(n);
     });
@@ -371,20 +400,28 @@ function detectarGaps(notas: SageNota[]): GapNumeracao[] {
         const [sentido, cnpj, serie] = key.split('::');
         const nums = Array.from(new Set(arr.map((n) => n.numero!).filter((n) => n > 0))).sort((a, b) => a - b);
         if (nums.length < 2) return;
+
+        // Para entradas: exige número mínimo de notas do mesmo fornecedor.
+        if (sentido === 'entrada' && nums.length < minNotas) return;
+
         for (let i = 1; i < nums.length; i++) {
             const prev = nums[i - 1];
             const cur = nums[i];
-            if (cur - prev > 1) {
-                gaps.push({
-                    sentido: sentido as DocSentido,
-                    cnpj,
-                    razaoSocial: arr[0].razaoSocial || '',
-                    serie,
-                    de: prev + 1,
-                    ate: cur - 1,
-                    quantidade: cur - prev - 1,
-                });
-            }
+            const tamanho = cur - prev - 1;
+            if (tamanho <= 0) continue;
+
+            // Filtra gaps absurdos em entradas (ruído entre fornecedor e outros clientes)
+            if (sentido === 'entrada' && !incluirGrandes && tamanho > maxGapEntrada) continue;
+
+            gaps.push({
+                sentido: sentido as DocSentido,
+                cnpj: cnpj === 'ALL' ? '' : cnpj,
+                razaoSocial: arr[0].razaoSocial || '',
+                serie,
+                de: prev + 1,
+                ate: cur - 1,
+                quantidade: tamanho,
+            });
         }
     });
 
@@ -393,7 +430,7 @@ function detectarGaps(notas: SageNota[]): GapNumeracao[] {
 
 // ─── API pública ─────────────────────────────────────────────────────────────
 
-export function analisar(notas: SageNota[]): SageAnalise {
+export function analisar(notas: SageNota[], opts: DetectarGapsOptions = {}): SageAnalise {
     const porSentido = {
         entrada: [] as SageNota[],
         saida: [] as SageNota[],
@@ -414,7 +451,7 @@ export function analisar(notas: SageNota[]): SageAnalise {
         if (n.sourceTab) tabsSet.add(n.sourceTab);
     });
 
-    const gaps = detectarGaps(notas);
+    const gaps = detectarGaps(notas, opts);
     const notasFaltantes = gaps.reduce((acc, g) => acc + g.quantidade, 0);
 
     const avisos: string[] = [];
@@ -441,7 +478,10 @@ export function analisar(notas: SageNota[]): SageAnalise {
     };
 }
 
-export async function analisarArquivos(files: File[]): Promise<SageAnalise> {
+export async function analisarArquivos(
+    files: File[],
+    opts: DetectarGapsOptions = {}
+): Promise<SageAnalise> {
     const xlsxFiles = files.filter((f) => /\.(xlsx|xls)$/i.test(f.name));
     const xmlFiles = files.filter((f) => /\.xml$/i.test(f.name));
 
@@ -455,5 +495,5 @@ export async function analisarArquivos(files: File[]): Promise<SageAnalise> {
         notas.push(...part);
     }
 
-    return analisar(notas);
+    return analisar(notas, opts);
 }
