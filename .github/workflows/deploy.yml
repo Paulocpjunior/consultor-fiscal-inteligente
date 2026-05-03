@@ -3,8 +3,7 @@ name: Deploy to Cloud Run
 on:
   push:
     branches:
-      - claude/fix-api-communication-error-EfR6w
-      - claude/standardize-login-branding-HRnRx
+      - main
       - claude/update-claude-code-cli-nmlTI
 
 env:

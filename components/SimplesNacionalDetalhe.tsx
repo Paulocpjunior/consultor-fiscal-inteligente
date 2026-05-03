@@ -70,6 +70,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
+    const [showCnaeSelector, setShowCnaeSelector] = useState(false);
 
     // Manual RBT12 editing state
     const [manualRbtHistory, setManualRbtHistory] = useState<Record<string, number>>(empresa.faturamentoManual || {});
@@ -222,14 +223,21 @@ if (filialServico > 0) {
         }));
     };
 
-    const handleAddRevenueItem = () => {
+    const cnaesDisponiveis = [
+        { cnae: empresa.cnae, anexo: empresa.anexo, label: 'Atividade Principal' },
+        ...( empresa.atividadesSecundarias?.map((a, i) => ({
+            cnae: a.cnae, anexo: a.anexo, label: `Atividade Secundária ${i + 1}`
+        })) || [] )
+    ];
+
+    const handleAddRevenueItem = (cnae: string, anexo: string, tipo: string) => {
         const id = Date.now();
-        const key = `extra::${id}::${empresa.cnae}::${empresa.anexo}`;
-        
+        const key = `extra::${id}::${cnae}::${anexo}`;
         setFaturamentoPorCnae(prev => ({
             ...prev,
-            [key]: { valor: '0,00', issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false }
+            [key]: { valor: '0,00', issRetido: tipo === 'ISS Retido', icmsSt: tipo === 'ST', isSup: false, isMonofasico: tipo === 'Monofasico', isImune: false, isExterior: false }
         }));
+        setShowCnaeSelector(false);
     };
 
     const handleRemoveRevenueItem = (key: string) => {
@@ -479,13 +487,43 @@ if (filialServico > 0) {
                                 );
                             })}
 
-                            <button 
-                                onClick={handleAddRevenueItem}
-                                className="w-full py-3 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg text-slate-500 dark:text-slate-400 hover:border-sky-500 hover:text-sky-600 dark:hover:text-sky-400 transition-colors flex items-center justify-center gap-2 font-bold text-sm"
-                            >
-                                <PlusIcon className="w-4 h-4" />
-                                Adicionar Receita / Segregar (ST/Normal)
-                            </button>
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowCnaeSelector(prev => !prev)}
+                                    className="w-full py-3 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg text-slate-500 dark:text-slate-400 hover:border-sky-500 hover:text-sky-600 dark:hover:text-sky-400 transition-colors flex items-center justify-center gap-2 font-bold text-sm"
+                                >
+                                    <PlusIcon className="w-4 h-4" />
+                                    Adicionar Receita / Segregar (ST/Normal)
+                                </button>
+                                {showCnaeSelector && (
+                                    <div className="absolute bottom-full mb-2 left-0 right-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl z-10 overflow-hidden">
+                                        <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-600">
+                                            <p className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase">Selecione o CNAE desta receita</p>
+                                        </div>
+                                        {cnaesDisponiveis.map((item) => {
+                                            const isServico = ['III','IV','V'].includes(item.anexo);
+                                            const tipos = isServico ? ['Normal','ISS Retido'] : ['Normal','ST','Monofasico'];
+                                            return (
+                                                <div key={item.cnae + item.label} className="border-b border-slate-100 dark:border-slate-700 last:border-0">
+                                                    <div className="px-4 py-2 bg-slate-50 dark:bg-slate-800">
+                                                        <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{item.cnae}</span>
+                                                        <span className="ml-2 text-xs text-slate-500">Anexo {item.anexo}</span>
+                                                        <span className="ml-1 text-xs text-slate-400"> — {item.label}</span>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2 px-4 py-2">
+                                                        {tipos.map(tipo => (
+                                                            <button key={tipo} onClick={() => handleAddRevenueItem(item.cnae, item.anexo, tipo)}
+                                                                className="px-3 py-1 rounded-full text-xs font-bold border border-sky-400 text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors">
+                                                                + {tipo}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
 
                             <div className="pt-4 mt-6 border-t border-slate-100 dark:border-slate-700">
                                 <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase mb-4 flex items-center gap-2">

@@ -7,7 +7,9 @@ export enum SearchType {
     SIMPLES_NACIONAL = 'Simples Nacional',
     LUCRO_PRESUMIDO_REAL = 'Lucro Presumido/Real',
     OBRIGACOES_FISCAIS = 'Obrigações Fiscais',
-    IMPORTA_XML = 'Importa XML'
+    IMPORTA_XML = 'Importa XML',
+  ANALISADOR_REGIME = 'Regime Tributário',
+  ANALISE_CREDITOS = 'Análise de Créditos'
 }
 
 export interface GroundingSource {
@@ -278,6 +280,7 @@ export interface AcumuladoTrimestre {
     servico: number;
     servicoHospitalar: number;
     financeira: number;
+    aluguel?: number;
     mesesConsiderados: string[];
 }
 
@@ -334,6 +337,8 @@ export interface FichaFinanceiraRegistro {
     ajustesLucroRealExclusoes?: number;
     saldoCredorIcms?: number;
     saldoCredorIpi?: number;
+    saldoCredorPis?: number;
+    saldoCredorCofins?: number;
 
     isEquiparacaoHospitalar?: boolean;
     isPresuncaoReduzida16?: boolean;
@@ -404,6 +409,8 @@ export interface LucroResult {
     cargaTributaria: number;
     lucroLiquidoEstimado: number;
     alertaLc224?: boolean;
+    saldoResidualPis?: number;
+    saldoResidualCofins?: number;
 }
 
 export interface LucroInput {
@@ -455,6 +462,8 @@ export interface LucroInput {
     ajustesLucroRealExclusoes?: number;
     saldoCredorIcms?: number;
     saldoCredorIpi?: number;
+    saldoCredorPis?: number;
+    saldoCredorCofins?: number;
 }
 
 // Fiscal Obligations Types

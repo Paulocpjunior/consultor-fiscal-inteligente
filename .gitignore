@@ -2,3 +2,16 @@ node_modules/
 .env
 .env.local
 *.log
+dist/
+dist/
+
+# Backups de patches (não versionar)
+*.bak
+*.bak[0-9]
+*.backup_*
+patch_*.py
+credentials_json
+.env
+.env.local
+serviceAccountKey*.json
+.firebase/

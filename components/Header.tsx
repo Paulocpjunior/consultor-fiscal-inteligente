@@ -19,7 +19,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, description, user, onLogout, onShowLogs, onShowUsers }) => {
   return (
-    <header className="w-full py-6 md:py-8">
+    <header className="w-full py-6 md:py-8" style={{borderBottom:"1px solid rgba(200,208,255,0.07)"}}>
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         {/* Left side: Logo & Title */}
         <div className="flex items-center gap-4 w-full md:w-auto justify-start">
@@ -27,10 +27,10 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
             <Logo />
           </Tooltip>
           <div>
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-800 dark:text-slate-100 leading-tight">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl leading-tight" style={{color:"#F5F6FF",fontFamily:"Cormorant Garamond,serif",fontWeight:"300"}}>
               Consultor Fiscal
             </h1>
-            <p className="text-xs sm:text-sm font-semibold text-sky-600 dark:text-sky-400 tracking-wider uppercase">
+            <p className="text-xs sm:text-sm font-medium tracking-wider uppercase" style={{color:"#5B7FFF"}}>
               Inteligente
             </p>
           </div>
@@ -39,13 +39,13 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
         {/* Right side: User Info & Actions */}
         <div className="flex items-center gap-3 self-end md:self-center">
           {user && (
-              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 mr-2">
-                  <div className={`p-1 rounded-full ${user.role === 'admin' ? 'bg-amber-100 text-amber-600' : 'bg-sky-100 text-sky-600'}`}>
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full mr-2" style={{background:"rgba(8,0,122,0.2)",border:"1px solid rgba(200,208,255,0.1)"}}>
+                  <div className="p-1 rounded-full" style={{background:user.role==='admin'?'rgba(245,166,35,0.15)':'rgba(20,0,255,0.15)',color:user.role==='admin'?'#F5A623':'#5B7FFF'}}>
                       <UserIcon className="w-4 h-4" />
                   </div>
                   <div className="flex flex-col">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-none">{user.name.split(' ')[0]}</span>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-none capitalize">{user.role}</span>
+                      <span className="text-xs font-medium leading-none" style={{color:"#F5F6FF"}}>{user.name.split(' ')[0]}</span>
+                      <span className="text-[10px] leading-none capitalize" style={{color:"rgba(200,208,255,0.4)"}}>{user.role}</span>
                   </div>
               </div>
           )}
@@ -55,7 +55,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
                 {onShowUsers && (
                     <button
                         onClick={onShowUsers}
-                        className="btn-press p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                        className="btn-press p-2 rounded-full transition-colors" style={{color:"rgba(200,208,255,0.5)"}}
                         title="Gerenciar Usuários"
                     >
                         <UserGroupIcon className="w-6 h-6" />
@@ -64,7 +64,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
                 {onShowLogs && (
                     <button
                         onClick={onShowLogs}
-                        className="btn-press p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-amber-50 dark:hover:bg-slate-800 hover:text-amber-600 dark:hover:text-amber-500 transition-colors"
+                        className="btn-press p-2 rounded-full transition-colors" style={{color:"rgba(200,208,255,0.5)"}}
                         title="Logs de Acesso"
                     >
                         <ShieldIcon className="w-6 h-6" />
@@ -78,7 +78,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
           {onLogout && (
               <button
                   onClick={onLogout}
-                  className="btn-press text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-2 rounded-lg transition-colors"
+                  className="btn-press text-xs font-medium px-3 py-2 rounded-lg transition-colors" style={{color:"#FF4466"}}
               >
                   Sair
               </button>
@@ -86,7 +86,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
 
           <button
               onClick={onMenuClick}
-              className="btn-press md:hidden p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 dark:focus:ring-offset-slate-900 transition-colors"
+              className="btn-press md:hidden p-2 rounded-full focus:outline-none transition-colors" style={{color:"rgba(200,208,255,0.6)"}}
               aria-label="Abrir menu"
           >
               <MenuIcon className="w-6 h-6" />
@@ -94,7 +94,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
         </div>
       </div>
 
-      <p className="mt-4 text-center text-md text-slate-600 dark:text-slate-400 animate-fade-in hidden md:block">
+      <p className="mt-4 text-center text-md animate-fade-in hidden md:block" style={{color:"rgba(200,208,255,0.4)"}}>
         {description || "Seu assistente de IA para consultas fiscais inteligentes"}
       </p>
     </header>

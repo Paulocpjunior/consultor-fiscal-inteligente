@@ -65,6 +65,42 @@ const convertFichaToInput = (ficha: FichaFinanceiraRegistro, empresa: LucroPresu
     };
 };
 
+// Helper: calcula retencoes acumuladas do trimestre (meses anteriores ao mes de referencia).
+// Usado tanto no card live (Resultado da Apuracao) quanto no Relatorio Final,
+// para que IRPJ/CSLL trimestrais apareçam liquidos das retencoes na fonte.
+const getRetencoesAcumuladasTrimestre = (
+    empresa: LucroPresumidoEmpresa | null | undefined,
+    mesReferencia: string,
+    periodo: 'Mensal' | 'Trimestral'
+): { irpj: number; csll: number } => {
+    if (!empresa || periodo !== 'Trimestral' || !mesReferencia) return { irpj: 0, csll: 0 };
+
+    const [anoStr, mesStr] = mesReferencia.split('-');
+    const ano = parseInt(anoStr);
+    const mes = parseInt(mesStr);
+    if (isNaN(ano) || isNaN(mes)) return { irpj: 0, csll: 0 };
+
+    const quarterStart = Math.floor((mes - 1) / 3) * 3 + 1;
+
+    let accIrpj = 0;
+    let accCsll = 0;
+
+    if (empresa.fichaFinanceira) {
+        empresa.fichaFinanceira.forEach(f => {
+            const parts = f.mesReferencia.split('-');
+            const fAnoNum = parseInt(parts[0]);
+            const fMesNum = parseInt(parts[1]);
+            if (fAnoNum === ano && fMesNum >= quarterStart && fMesNum < mes) {
+                accIrpj += (f.retencaoIrpj || 0);
+                accCsll += (f.retencaoCsll || 0);
+            }
+        });
+    }
+
+    return { irpj: accIrpj, csll: accCsll };
+};
+
+
 // Helper component for Currency Input
 const CurrencyInput: React.FC<{ label?: string; value: number; onChange: (val: number) => void; className?: string; disabled?: boolean; placeholder?: string; highlight?: boolean; subtitle?: string; noLabel?: boolean }> = ({ label, value, onChange, className, disabled, placeholder, highlight, subtitle, noLabel }) => {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,6 +188,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const [acumuladoServico, setAcumuladoServico] = useState(0);
     const [acumuladoServicoHospitalar, setAcumuladoServicoHospitalar] = useState(0);
     const [acumuladoFinanceira, setAcumuladoFinanceira] = useState(0);
+    const [acumuladoAluguel, setAcumuladoAluguel] = useState(0);
 
     // Filiais (Consolidação)
     const [fichaFilialComercio, setFichaFilialComercio] = useState(0);
@@ -190,6 +227,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const [despesasAvulsas, setDespesasAvulsas] = useState<ItemFinanceiroAvulso[]>([]);
     const [saldoCredorIcms, setSaldoCredorIcms] = useState(0);
     const [saldoCredorIpi, setSaldoCredorIpi] = useState(0);
+    const [saldoCredorPis, setSaldoCredorPis] = useState(0);
+    const [saldoCredorCofins, setSaldoCredorCofins] = useState(0);
 
     // Configurações Fiscais (Tempo Real)
     const [isEquiparacaoHospitalar, setIsEquiparacaoHospitalar] = useState(false);
@@ -201,35 +240,10 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const selectedEmpresa = useMemo(() => empresas.find(e => e.id === selectedEmpresaId), [empresas, selectedEmpresaId]);
 
     // CÁLCULO DE RETENÇÕES DE MESES ANTERIORES NO TRIMESTRE
-    const retencoesAcumuladas = useMemo(() => {
-        if (!selectedEmpresa || periodoApuracao !== 'Trimestral') return { irpj: 0, csll: 0 };
-        
-        const [anoStr, mesStr] = fichaMes.split('-');
-        const ano = parseInt(anoStr);
-        const mes = parseInt(mesStr);
-        
-        // Define início do trimestre (1=Jan/Feb/Mar, 4=Apr/May/Jun, etc)
-        const quarterStart = Math.floor((mes - 1) / 3) * 3 + 1;
-        
-        let accIrpj = 0;
-        let accCsll = 0;
-
-        if (selectedEmpresa.fichaFinanceira) {
-            selectedEmpresa.fichaFinanceira.forEach(f => {
-                const [fAno, fMes] = f.mesReferencia.split('-');
-                const fMesNum = parseInt(fMes);
-                const fAnoNum = parseInt(fAno);
-                
-                // Soma se for do mesmo ano, mesmo trimestre, e estritamente ANTERIOR ao mês atual
-                if (fAnoNum === ano && fMesNum >= quarterStart && fMesNum < mes) {
-                    accIrpj += (f.retencaoIrpj || 0);
-                    accCsll += (f.retencaoCsll || 0);
-                }
-            });
-        }
-        
-        return { irpj: accIrpj, csll: accCsll };
-    }, [selectedEmpresa, fichaMes, periodoApuracao]);
+    const retencoesAcumuladas = useMemo(
+        () => getRetencoesAcumuladasTrimestre(selectedEmpresa, fichaMes, periodoApuracao),
+        [selectedEmpresa, fichaMes, periodoApuracao]
+    );
 
     useEffect(() => {
         loadEmpresas();
@@ -276,6 +290,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                     setAcumuladoServico(ficha.dadosTrimestrais.servico || 0);
                     setAcumuladoServicoHospitalar(ficha.dadosTrimestrais.servicoHospitalar || 0);
                     setAcumuladoFinanceira(ficha.dadosTrimestrais.financeira || 0);
+                    setAcumuladoAluguel(ficha.dadosTrimestrais.aluguel || 0);
                 }
 
                 // Ajustes e Deduções
@@ -313,6 +328,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 setAjustesLucroRealExclusoes(ficha.ajustesLucroRealExclusoes || 0);
                 setSaldoCredorIcms(ficha.saldoCredorIcms || 0);
                 setSaldoCredorIpi(ficha.saldoCredorIpi || 0);
+                setSaldoCredorPis(ficha.saldoCredorPis || 0);
+                setSaldoCredorCofins(ficha.saldoCredorCofins || 0);
                 
                 const extraReceitas = (ficha.itensAvulsos || []).filter(i => i.tipo === 'receita' && i.descricao === 'Itens Adicionais - (Extra Operacionais)').reduce((a, b) => a + b.valor, 0);
                 setItensAdicionaisExtra(extraReceitas);
@@ -346,8 +363,9 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         setFichaMonofasico(0); setIsMonofasicoOption(false);
         setFichaIpiRecolher(0); setFichaIcmsProprio(0); setFichaIcmsSt(0);
         setAjustesLucroRealAdicoes(0); setAjustesLucroRealExclusoes(0);
-        setSaldoCredorIcms(0); setSaldoCredorIpi(0);
+        setSaldoCredorIcms(0); setSaldoCredorIpi(0); setSaldoCredorPis(0); setSaldoCredorCofins(0);
         setAcumuladoComercio(0); setAcumuladoIndustria(0); setAcumuladoServico(0); setAcumuladoServicoHospitalar(0); setAcumuladoFinanceira(0);
+        setAcumuladoComercio(0); setAcumuladoIndustria(0); setAcumuladoServico(0); setAcumuladoServicoHospitalar(0); setAcumuladoAluguel(0);
         setIsEquiparacaoHospitalar(false); setIsPresuncaoReduzida(false);
         setFichaRecFinanceira(0);
         setItensAdicionaisExtra(0);
@@ -409,6 +427,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 servico: acumuladoServico,
                 servicoHospitalar: acumuladoServicoHospitalar,
                 financeira: acumuladoFinanceira,
+                aluguel: acumuladoAluguel,
                 mesesConsiderados: []
             } : undefined,
 
@@ -446,6 +465,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             ajustesLucroRealExclusoes: ajustesLucroRealExclusoes,
             saldoCredorIcms: saldoCredorIcms,
             saldoCredorIpi: saldoCredorIpi,
+                saldoCredorPis: saldoCredorPis,
+                saldoCredorCofins: saldoCredorCofins,
             itensAvulsos: [
                 ...(itensAdicionaisExtra > 0 ? [{
                     id: 'extra',
@@ -461,7 +482,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     }, [
         selectedEmpresa, fichaMes, periodoApuracao, 
         fichaComercio, fichaIndustria, fichaServico, fichaServicoRetido, fichaLocacao, fichaRecFinanceira, fichaServicoHospitalar,
-        acumuladoComercio, acumuladoIndustria, acumuladoServico, acumuladoServicoHospitalar, acumuladoFinanceira,
+        acumuladoComercio, acumuladoIndustria, acumuladoServico, acumuladoServicoHospitalar, acumuladoFinanceira, acumuladoAluguel,
         fichaFilialComercio, fichaFilialIndustria, fichaFilialServico, fichaFilialServicoHospitalar,
         isMonofasicoOption, fichaMonofasico, fichaIpi, fichaDevolucoes, fichaIcmsVendas,
         fichaCmv, fichaFolha, fichaDespesas, fichaDespesasDedutiveis,
@@ -469,7 +490,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         fichaRetPis, fichaRetCofins, fichaRetIrpj, fichaRetCsll,
         isEquiparacaoHospitalar, isPresuncaoReduzida,
         fichaIpiRecolher, fichaIcmsProprio, fichaIcmsSt,
-        ajustesLucroRealAdicoes, ajustesLucroRealExclusoes, saldoCredorIcms, saldoCredorIpi, itensAdicionaisExtra,
+        ajustesLucroRealAdicoes, ajustesLucroRealExclusoes, saldoCredorIcms, saldoCredorIpi, saldoCredorPis, saldoCredorCofins, itensAdicionaisExtra,
         retencoesAcumuladas
     ]);
 
@@ -560,6 +581,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                     servico: acumuladoServico,
                     servicoHospitalar: acumuladoServicoHospitalar,
                     financeira: acumuladoFinanceira,
+                    aluguel: acumuladoAluguel,
                     mesesConsiderados: []
                 } : undefined,
 
@@ -602,6 +624,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 ajustesLucroRealExclusoes: ajustesLucroRealExclusoes,
                 saldoCredorIcms: saldoCredorIcms,
                 saldoCredorIpi: saldoCredorIpi,
+                saldoCredorPis: saldoCredorPis,
+                saldoCredorCofins: saldoCredorCofins,
                 itensAvulsos: [
                     ...(itensAdicionaisExtra > 0 ? [{
                         id: 'extra',
@@ -614,6 +638,41 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             };
 
             const savedFicha = await lucroPresumidoService.addFichaFinanceira(selectedEmpresa.id, tempFicha);
+
+            // Transferência automática do saldo residual PIS/COFINS pro próximo mês (Lucro Real)
+            const residualPis = (liveResults as any)?.saldoResidualPis || 0;
+            const residualCofins = (liveResults as any)?.saldoResidualCofins || 0;
+            if ((selectedEmpresa.regimePadrao === 'Real') && (residualPis > 0 || residualCofins > 0)) {
+                try {
+                    const [anoN, mesN] = fichaMes.split('-').map(n => parseInt(n, 10));
+                    const proxMes = mesN === 12 ? `${anoN + 1}-01` : `${anoN}-${String(mesN + 1).padStart(2, '0')}`;
+                    const fichaProxExiste = savedFicha?.fichaFinanceira?.find(f => f.mesReferencia === proxMes);
+                    const fichaBase: FichaFinanceiraRegistro = fichaProxExiste
+                        ? { ...fichaProxExiste }
+                        : {
+                            id: Date.now().toString(),
+                            dataRegistro: Date.now(),
+                            mesReferencia: proxMes,
+                            regime: 'Real',
+                            periodoApuracao: periodoApuracao,
+                            acumuladoAno: 0,
+                            faturamentoMesComercio: 0, faturamentoMesIndustria: 0, faturamentoMesServico: 0,
+                            faturamentoMesServicoRetido: 0, faturamentoMesLocacao: 0, faturamentoMesServicoHospitalar: 0,
+                            faturamentoFiliaisComercio: 0, faturamentoFiliaisIndustria: 0, faturamentoFiliaisServico: 0, faturamentoFiliaisServicoHospitalar: 0,
+                            faturamentoMonofasico: 0, valorIpi: 0, valorDevolucoes: 0, icmsVendas: 0,
+                            receitaFinanceira: 0, faturamentoMesTotal: 0, totalGeral: 0,
+                            despesas: 0, despesasDedutiveis: 0, folha: 0, cmv: 0,
+                            retencaoPis: 0, retencaoCofins: 0, retencaoIrpj: 0, retencaoCsll: 0,
+                            totalImpostos: 0, cargaTributaria: 0,
+                        } as any;
+                    fichaBase.saldoCredorPis = residualPis;
+                    fichaBase.saldoCredorCofins = residualCofins;
+                    await lucroPresumidoService.addFichaFinanceira(selectedEmpresa.id, fichaBase);
+                } catch (err) {
+                    console.warn('Falha ao transferir saldo residual pro próximo mês:', err);
+                }
+            }
+
             await loadEmpresas();
             
             if (savedFicha) {
@@ -870,6 +929,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                             <CurrencyInput label="Acumulado Hosp. (8%)" value={acumuladoServicoHospitalar} onChange={setAcumuladoServicoHospitalar} className="bg-purple-50 dark:bg-purple-900/10 p-2 rounded border border-purple-200 dark:border-purple-800" />
                                         )}
                                         <CurrencyInput label="Acumulado Financeira" value={acumuladoFinanceira} onChange={setAcumuladoFinanceira} className="bg-white dark:bg-slate-800 p-2 rounded border border-sky-100 dark:border-sky-900" />
+                                        <CurrencyInput label="Acumulado Aluguel" value={acumuladoAluguel} onChange={setAcumuladoAluguel} className="bg-white dark:bg-slate-800 p-2 rounded border border-sky-100 dark:border-sky-900" />
                                     </div>
                                 </div>
                             )}
@@ -1030,6 +1090,22 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                 onChange={setSaldoCredorIpi} 
                                 className="bg-slate-50 dark:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-600"
                             />
+                            {selectedEmpresa?.regimePadrao === 'Real' && (
+                                <>
+                                    <CurrencyInput 
+                                        label="Saldo Credor PIS (Mês Anterior)" 
+                                        value={saldoCredorPis} 
+                                        onChange={setSaldoCredorPis} 
+                                        className="bg-sky-50 dark:bg-sky-900/10 p-2 rounded border border-sky-200 dark:border-sky-800"
+                                    />
+                                    <CurrencyInput 
+                                        label="Saldo Credor COFINS (Mês Anterior)" 
+                                        value={saldoCredorCofins} 
+                                        onChange={setSaldoCredorCofins} 
+                                        className="bg-sky-50 dark:bg-sky-900/10 p-2 rounded border border-sky-200 dark:border-sky-800"
+                                    />
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1237,7 +1313,20 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             despesas: (selectedFicha.despesas || 0) + (selectedFicha.despesasDedutiveis || 0),
         };
         const itensAvulsos = selectedFicha.itensAvulsos || [];
-        const resultadoCalculado = calcularLucro(convertFichaToInput(selectedFicha, selectedEmpresa));
+        // Aplica retencoes acumuladas do trimestre (meses anteriores) ao input do calculo,
+        // para o relatorio final mostrar IRPJ/CSLL liquidos -- igual ao card live.
+        const _baseInputRel = convertFichaToInput(selectedFicha, selectedEmpresa);
+        const _retAcumRel = getRetencoesAcumuladasTrimestre(
+            selectedEmpresa,
+            selectedFicha.mesReferencia,
+            selectedFicha.periodoApuracao
+        );
+        const _inputRelatorio: LucroInput = {
+            ..._baseInputRel,
+            retencaoIrpj: (_baseInputRel.retencaoIrpj || 0) + _retAcumRel.irpj,
+            retencaoCsll: (_baseInputRel.retencaoCsll || 0) + _retAcumRel.csll,
+        };
+        const resultadoCalculado = calcularLucro(_inputRelatorio);
         const [ano, mes] = selectedFicha.mesReferencia.split('-');
         const dateObj = new Date(parseInt(ano), parseInt(mes) - 1, 1);
         const mesExtenso = dateObj.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
@@ -1458,6 +1547,12 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                         <div>
                                             <span className="block text-slate-500 text-[10px] uppercase font-bold">Rec. Fin. Ant.</span>
                                             <span className="font-bold text-slate-700">{selectedFicha.dadosTrimestrais.financeira.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span>
+                                        </div>
+                                    )}
+                                    {(selectedFicha.dadosTrimestrais.aluguel ?? 0) > 0 && (
+                                        <div>
+                                            <span className="block text-slate-500 text-[10px] uppercase font-bold">Rec. Fin. Ant.</span>
+                                            <span className="font-bold text-slate-700">{(selectedFicha.dadosTrimestrais.aluguel ?? 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span>
                                         </div>
                                     )}
                                 </div>
