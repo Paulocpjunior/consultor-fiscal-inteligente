@@ -31,13 +31,6 @@ jobs:
         with:
           project_id: consultorfiscalapp
 
-      - name: DEBUG who am I
-        run: |
-          echo "=== Active account ==="
-          gcloud auth list
-          echo "=== Project ==="
-          gcloud config get-value project
-
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
