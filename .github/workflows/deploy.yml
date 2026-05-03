@@ -10,7 +10,7 @@ on:
 env:
   PROJECT_ID: gen-lang-client-0569062468
   SERVICE_NAME: consultor-fiscal-inteligente
-  REGION: us-west1
+  REGION: us-central1
 
 jobs:
   deploy:
@@ -64,7 +64,7 @@ jobs:
           gcloud run deploy consultor-fiscal-inteligente \
             --image gcr.io/gen-lang-client-0569062468/consultor-fiscal-inteligente:${{ github.sha }} \
             --platform managed \
-            --region us-west1 \
+            --region us-central1 \
             --allow-unauthenticated \
             --port 8080 \
             --memory 512Mi \
@@ -76,5 +76,5 @@ jobs:
         run: |
           gcloud run services describe consultor-fiscal-inteligente \
             --platform managed \
-            --region us-west1 \
+            --region us-central1 \
             --format 'value(status.url)'
