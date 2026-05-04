@@ -544,3 +544,73 @@ export function summarize(docs: DocumentoFiscal[]): DashboardSummary {
 }
 
 export const xmlCollections = COLLECTIONS;
+
+// ─── Adaptador para o módulo SPED ──────────────────────────────────────────
+// O SPED Fiscal Dashboard espera DocumentoFiscalMeta (schema com campos
+// achatados: cnpjEmitente, valorTotal, dhEmi como epoch ms). Convertemos
+// nosso DocumentoFiscal para esse formato.
+
+import type { DocumentoFiscalMeta, DocumentoFiscalTipo, DocumentoFiscalDirecao, DocumentoFiscalStatus, DocumentoFiscalOrigem } from '../types';
+
+function toMeta(d: DocumentoFiscal): DocumentoFiscalMeta {
+    const dhMs = (() => {
+        if (!d.dhEmi) return Date.now();
+        const t = new Date(d.dhEmi).getTime();
+        return Number.isFinite(t) ? t : Date.now();
+    })();
+    const tipo: DocumentoFiscalTipo =
+        d.tipo === 'NFe' || d.tipo === 'NFCe' || d.tipo === 'NFSe' || d.tipo === 'CTe'
+            ? d.tipo
+            : 'NFe';
+    const origem: DocumentoFiscalOrigem =
+        d.origem === 'manual' ? 'upload_manual'
+        : d.origem === 'sefaz' ? 'sefaz'
+        : d.origem === 'sharepoint' ? 'sharepoint'
+        : d.origem === 'email' ? 'email'
+        : 'upload_manual';
+    return {
+        id: d.id,
+        chave: d.chave,
+        tipo,
+        modelo: d.modelo,
+        serie: d.serie,
+        numero: d.numero,
+        dhEmi: dhMs,
+        cnpjEmitente: d.emitente.cnpjCpf,
+        nomeEmitente: d.emitente.nome,
+        ufEmitente: d.emitente.uf || '',
+        cnpjDestinatario: d.destinatario.cnpjCpf,
+        nomeDestinatario: d.destinatario.nome,
+        ufDestinatario: d.destinatario.uf || '',
+        valorTotal: d.totais?.vNF || 0,
+        valorIcms: d.totais?.vICMS || 0,
+        valorIpi: d.totais?.vIPI || 0,
+        valorPis: d.totais?.vPIS || 0,
+        valorCofins: d.totais?.vCOFINS || 0,
+        direcao: d.direcao as DocumentoFiscalDirecao,
+        status: d.status as DocumentoFiscalStatus,
+        empresaId: d.empresaId,
+        empresaCnpj: d.empresaCnpj,
+        storagePath: d.storagePath || '',
+        storageUrl: d.storageUrl,
+        hashConteudo: d.xmlHash,
+        tamanhoBytes: d.tamanhoBytes || 0,
+        origem,
+        createdBy: d.createdBy || d.importadoPor,
+        createdByEmail: d.createdByEmail || d.importadoPorEmail,
+        createdAt: d.importadoEm,
+        updatedAt: d.importadoEm,
+    };
+}
+
+/**
+ * Alias com schema DocumentoFiscalMeta (usado pelo módulo SPED).
+ * Aceita os mesmos filtros que listDocumentos.
+ */
+export async function listarDocumentos(
+    user: User | null,
+    filters: ListDocumentosFilters = {},
+): Promise<DocumentoFiscalMeta[]> {
+    const docs = await listDocumentos(user, filters);
+    return docs.map(toMeta);
+}

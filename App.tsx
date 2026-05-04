@@ -37,6 +37,7 @@ const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumi
 const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
 const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocumentosFiscais'));
 const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
+const SpedFiscalDashboard = lazy(() => import('./components/sped/SpedFiscalDashboard'));
 const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
 
 const searchDescriptions: Record<SearchType, string> = {
@@ -49,6 +50,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.OBRIGACOES_FISCAIS]: "Acompanhamento de obrigações, vencimentos e alertas fiscais.",
     [SearchType.IMPORTA_XML]: "Central de Documentos Fiscais — importação, captura, dashboard e relatórios de XMLs.",
     [SearchType.ANALISE_RELATORIO_SAGE]: "Analise relatórios SAGE (XLSX/XML) e identifique gaps, canceladas, denegadas e segregação E/S.",
+    [SearchType.SPED_FISCAL]: "SPED Fiscal — importa EFD ICMS/IPI, gera dashboard e cruza com XMLs para detectar inconsistências.",
 };
 
 const App: React.FC = () => {
@@ -997,6 +999,16 @@ const App: React.FC = () => {
                         {searchType === SearchType.ANALISE_RELATORIO_SAGE && (
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnaliseRelatorioSAGE
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                        )}
+
+                        {/* SPED Fiscal Dashboard */}
+                        {searchType === SearchType.SPED_FISCAL && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <SpedFiscalDashboard
+                                    currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>

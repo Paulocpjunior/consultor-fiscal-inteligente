@@ -116,6 +116,7 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                             currentUser={currentUser}
                             onSelect={setSelectedDoc}
                             refreshKey={refreshKey}
+                            onShowToast={onShowToast}
                         />
                         {selectedDoc && (
                             <div className="mt-4">

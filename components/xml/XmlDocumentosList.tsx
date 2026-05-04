@@ -2,19 +2,25 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { User, DocumentoFiscal } from '../../types';
 import { listDocumentos, type ListDocumentosFilters } from '../../services/xmlFiscalService';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
+import { captureFromSefaz, isSefazCaptureAvailable } from '../../services/dfeCaptureService';
+import { db } from '../../services/firebaseConfig';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 interface Props {
     currentUser: User;
     onSelect: (doc: DocumentoFiscal) => void;
     /** Quando muda, força recarregar a lista. */
     refreshKey?: number;
+    onShowToast?: (msg: string) => void;
 }
 
-const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey }) => {
+const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey, onShowToast }) => {
     const [docs, setDocs] = useState<DocumentoFiscal[]>([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<ListDocumentosFilters>({});
     const [busca, setBusca] = useState('');
+    const [validando, setValidando] = useState(false);
+    const sefazAvailable = isSefazCaptureAvailable();
 
     useEffect(() => {
         let alive = true;
@@ -29,6 +35,63 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         docs.forEach(d => d.competencia && set.add(d.competencia));
         return Array.from(set).sort().reverse();
     }, [docs]);
+
+    const validarSefaz = async () => {
+        if (!sefazAvailable || validando || docs.length === 0 || !db) return;
+        setValidando(true);
+        try {
+            // Agrupa documentos por CNPJ da empresa cadastrada (titular do cert).
+            const porEmpresa = new Map<string, DocumentoFiscal[]>();
+            docs.forEach(d => {
+                if (!d.empresaCnpj) return;
+                const arr = porEmpresa.get(d.empresaCnpj) || [];
+                arr.push(d);
+                porEmpresa.set(d.empresaCnpj, arr);
+            });
+
+            let atualizados = 0;
+            let errosTotais = 0;
+            for (const [cnpj, lista] of porEmpresa.entries()) {
+                // Backend aceita até 50 chaves por chamada.
+                for (let i = 0; i < lista.length; i += 50) {
+                    const batch = lista.slice(i, i + 50);
+                    const result = await captureFromSefaz({
+                        cnpjTitular: cnpj,
+                        chaves: batch.map(d => d.chave).filter(Boolean),
+                        user: currentUser,
+                    });
+                    if (!result.sucesso) {
+                        errosTotais++;
+                        continue;
+                    }
+                    // Atualiza cada documento que voltou.
+                    for (const item of result.itens) {
+                        const docOriginal = batch.find(d => d.chave === item.chave);
+                        if (!docOriginal) continue;
+                        try {
+                            await updateDoc(doc(db, 'documentos_fiscais', docOriginal.id), {
+                                status: item.status,
+                                statusOriginal: item.xMotivo,
+                                cStat: item.cStat,
+                                consultadoEm: serverTimestamp(),
+                                canceladaEm: item.canceladaEm || null,
+                            });
+                            atualizados++;
+                        } catch (err) {
+                            errosTotais++;
+                        }
+                    }
+                }
+            }
+
+            onShowToast?.(`Validacao SEFAZ concluida: ${atualizados} atualizados, ${errosTotais} erro(s).`);
+            // Recarrega a lista
+            const fresh = await listDocumentos(currentUser, { ...filters, busca });
+            setDocs(fresh);
+        } finally {
+            setValidando(false);
+        }
+    };
 
     return (
         <div className="space-y-3">
@@ -89,6 +152,16 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                     <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
                         XMLs Capturados ({docs.length})
                     </h3>
+                    <button
+                        onClick={validarSefaz}
+                        disabled={!sefazAvailable || validando || docs.length === 0}
+                        title={!sefazAvailable
+                            ? 'Backend SEFAZ não configurado neste ambiente (defina VITE_SEFAZ_BACKEND_URL).'
+                            : 'Consulta status atual de cada chave na SEFAZ e atualiza os documentos.'}
+                        className="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        {validando ? 'Validando...' : 'Validar SEFAZ'}
+                    </button>
                 </div>
                 {loading ? (
                     <p className="text-center text-xs text-slate-400 py-6">Carregando...</p>

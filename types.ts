@@ -9,8 +9,9 @@ export enum SearchType {
     OBRIGACOES_FISCAIS = 'Obrigações Fiscais',
     IMPORTA_XML = 'Importa XML',
     ANALISE_RELATORIO_SAGE = 'Análise Relatório SAGE',
-  ANALISADOR_REGIME = 'Regime Tributário',
-  ANALISE_CREDITOS = 'Análise de Créditos'
+    SPED_FISCAL = 'SPED Fiscal',
+    ANALISADOR_REGIME = 'Regime Tributário',
+    ANALISE_CREDITOS = 'Análise de Créditos'
 }
 
 export interface GroundingSource {
@@ -706,3 +707,323 @@ export interface CertificadoDigitalInfo {
     fingerprint?: string;
     cadastradoEm?: number;
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Central de Documentos Fiscais (XML)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type DocumentoFiscalTipo = 'NFe' | 'NFCe' | 'NFSe' | 'CTe';
+
+export type DocumentoFiscalDirecao = 'entrada' | 'saida' | 'desconhecida';
+
+export type DocumentoFiscalOrigem = 'upload_manual' | 'sefaz' | 'sharepoint' | 'email';
+
+export type DocumentoFiscalStatus = 'autorizado' | 'cancelado' | 'denegado' | 'inutilizado' | 'desconhecido';
+
+export interface DocumentoFiscalMeta {
+    id: string;
+    chave: string;                       // chNFe (44 dígitos) ou identificador NFSe/CTe
+    tipo: DocumentoFiscalTipo;
+    modelo: string;                      // 55, 65, 57, etc.
+    serie: string;
+    numero: string;
+    dhEmi: number;                       // epoch ms
+
+    cnpjEmitente: string;
+    nomeEmitente: string;
+    ufEmitente: string;
+    cnpjDestinatario: string;
+    nomeDestinatario: string;
+    ufDestinatario: string;
+
+    valorTotal: number;
+    valorIcms: number;
+    valorIpi: number;
+    valorPis: number;
+    valorCofins: number;
+
+    direcao: DocumentoFiscalDirecao;
+    status: DocumentoFiscalStatus;
+
+    empresaId?: string;                  // vínculo com empresa cadastrada (Simples ou Lucro)
+    empresaCnpj?: string;
+    empresaRegime?: 'Simples Nacional' | 'Lucro Presumido' | 'Lucro Real' | 'MEI';
+
+    storagePath: string;                 // caminho do XML cru no Firebase Storage
+    storageUrl?: string;                 // download URL (cacheável)
+    hashConteudo: string;                // sha-1 ou sha-256 do XML cru, dedup secundária
+    tamanhoBytes: number;
+
+    origem: DocumentoFiscalOrigem;
+    createdBy: string;
+    createdByEmail?: string;
+    createdAt: number;
+    updatedAt: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPED Fiscal (EFD ICMS/IPI) — schema canônico (camelCase, números reais,
+// C100 com itens e resumos aninhados, status de arquivo, gravidade de
+// inconsistência). Este é o modelo de domínio usado pelo parser, pelo
+// conferencer XML × SPED e pelo dashboard.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SpedRegistroTipo =
+    | '0000'
+    | '0150'
+    | '0200'
+    | 'C100'
+    | 'C170'
+    | 'C190'
+    | 'D100'
+    | 'E110'
+    | 'E520'
+    | 'OUTRO';
+
+export type SpedFiscalStatus =
+    | 'IMPORTADO'
+    | 'PROCESSADO'
+    | 'COM_ERROS'
+    | 'CONFERIDO';
+
+export type SpedInconsistenciaTipo =
+    | 'XML_NAO_ESCRITURADO'
+    | 'SPED_SEM_XML'
+    | 'VALOR_DIVERGENTE'
+    | 'ICMS_DIVERGENTE'
+    | 'CFOP_DIVERGENTE'
+    | 'CST_DIVERGENTE'
+    | 'NOTA_CANCELADA_ESCRITURADA'
+    | 'CHAVE_INVALIDA'
+    | 'DOCUMENTO_DUPLICADO'
+    | 'REGISTRO_INCOMPLETO';
+
+export type SpedInconsistenciaGravidade =
+    | 'BAIXA'
+    | 'MEDIA'
+    | 'ALTA'
+    | 'CRITICA';
+
+export interface SpedFiscalArquivo {
+    id: string;
+    empresaId?: string;
+    cnpj?: string;
+    razaoSocial?: string;
+    competencia?: string;          // mmYYYY (derivado do registro 0000)
+    periodoInicial?: string;       // ddmmYYYY
+    periodoFinal?: string;         // ddmmYYYY
+    nomeArquivo: string;
+    tamanhoBytes: number;
+    importadoPorUid?: string;
+    importadoPorNome?: string;
+    importadoEm: number;           // epoch ms
+    status: SpedFiscalStatus;
+    totalLinhas: number;
+    totalRegistros: number;
+    /** opcional — preenchido se o TXT também for guardado no Firebase Storage */
+    storagePath?: string;
+    storageUrl?: string;
+    hashArquivo?: string;          // sha-256 do TXT
+}
+
+export interface SpedRegistro0000 {
+    tipo: '0000';
+    codVer?: string;
+    codFin?: string;
+    dtIni?: string;
+    dtFin?: string;
+    nome?: string;
+    cnpj?: string;
+    cpf?: string;
+    uf?: string;
+    ie?: string;
+    codMun?: string;
+    im?: string;
+    suframa?: string;
+    indPerfil?: string;
+    indAtiv?: string;
+}
+
+export interface SpedParticipante0150 {
+    tipo: '0150';
+    codPart: string;
+    nome?: string;
+    codPais?: string;
+    cnpj?: string;
+    cpf?: string;
+    ie?: string;
+    codMun?: string;
+    suframa?: string;
+    endereco?: string;
+    numero?: string;
+    complemento?: string;
+    bairro?: string;
+}
+
+export interface SpedProduto0200 {
+    tipo: '0200';
+    codItem: string;
+    descrItem?: string;
+    codBarra?: string;
+    codAntItem?: string;
+    unidInv?: string;
+    tipoItem?: string;
+    codNcm?: string;
+    exIpi?: string;
+    codGen?: string;
+    codLst?: string;
+    aliqIcms?: number;
+    cest?: string;
+}
+
+export interface SpedDocumentoC100 {
+    tipo: 'C100';
+    indOper?: string;          // 0=entrada, 1=saída
+    indEmit?: string;          // 0=própria, 1=terceiros
+    codPart?: string;
+    codMod?: string;
+    codSit?: string;           // 00=regular, 02=cancelado, 04=denegado, 05=inutilizado, 06=complementar, 07=substituto, 08=regular extemporâneo
+    serie?: string;
+    numDoc?: string;
+    chave?: string;            // chNFe (44 dígitos)
+    dataDoc?: string;          // ddmmYYYY
+    dataES?: string;
+    valorDocumento: number;
+    valorDesconto?: number;
+    valorMercadoria?: number;
+    valorIcms?: number;
+    valorIpi?: number;
+    valorPis?: number;
+    valorCofins?: number;
+    itens: SpedItemC170[];
+    resumos: SpedResumoC190[];
+}
+
+export interface SpedItemC170 {
+    tipo: 'C170';
+    numItem?: string;
+    codItem?: string;
+    descricaoComplementar?: string;
+    quantidade?: number;
+    unidade?: string;
+    valorItem?: number;
+    valorDesconto?: number;
+    cstIcms?: string;
+    cfop?: string;
+    natBcCred?: string;
+    valorBcIcms?: number;
+    aliquotaIcms?: number;
+    valorIcms?: number;
+    valorBcIcmsSt?: number;
+    aliquotaSt?: number;
+    valorIcmsSt?: number;
+    indApur?: string;
+    cstIpi?: string;
+    codEnq?: string;
+    valorBcIpi?: number;
+    aliquotaIpi?: number;
+    valorIpi?: number;
+    cstPis?: string;
+    valorBcPis?: number;
+    aliquotaPis?: number;
+    valorPis?: number;
+    cstCofins?: string;
+    valorBcCofins?: number;
+    aliquotaCofins?: number;
+    valorCofins?: number;
+}
+
+export interface SpedResumoC190 {
+    tipo: 'C190';
+    cstIcms?: string;
+    cfop?: string;
+    aliquotaIcms?: number;
+    valorOperacao?: number;
+    valorBcIcms?: number;
+    valorIcms?: number;
+    valorBcIcmsSt?: number;
+    valorIcmsSt?: number;
+    valorReducaoBc?: number;
+    valorIpi?: number;
+    codObs?: string;
+}
+
+export interface SpedDocumentoD100 {
+    tipo: 'D100';
+    indOper?: string;
+    indEmit?: string;
+    codPart?: string;
+    codMod?: string;
+    codSit?: string;
+    serie?: string;
+    subSerie?: string;
+    numDoc?: string;
+    chave?: string;
+    dataDoc?: string;
+    dataAP?: string;
+    tpCtE?: string;
+    chaveCteRef?: string;
+    valorDocumento: number;
+    valorDesconto?: number;
+    valorServico?: number;
+    valorBcIcms?: number;
+    valorIcms?: number;
+}
+
+export interface SpedApuracaoE110 {
+    tipo: 'E110';
+    valorTotalDebitos?: number;
+    valorAjustesDebitos?: number;
+    valorTotalAjustesDebitos?: number;
+    valorEstornosCreditos?: number;
+    valorTotalCreditos?: number;
+    valorAjustesCreditos?: number;
+    valorTotalAjustesCreditos?: number;
+    valorEstornosDebitos?: number;
+    saldoCredorAnterior?: number;
+    valorSaldoDevedor?: number;
+    valorDeducoes?: number;
+    valorIcmsRecolher?: number;
+    valorSaldoCredorTransportar?: number;
+}
+
+export interface SpedApuracaoE520 {
+    tipo: 'E520';
+    valorSaldoDevedorIpi?: number;
+    valorDeducoesIpi?: number;
+    valorIpiRecolher?: number;
+    valorSaldoCredorIpi?: number;
+}
+
+export interface SpedFiscalParseResult {
+    arquivo: SpedFiscalArquivo;
+    registro0000?: SpedRegistro0000;
+    participantes: SpedParticipante0150[];
+    produtos: SpedProduto0200[];
+    documentosC100: SpedDocumentoC100[];
+    documentosD100: SpedDocumentoD100[];
+    apuracaoIcms?: SpedApuracaoE110;
+    apuracaoIpi?: SpedApuracaoE520;
+    erros: string[];
+    avisos: string[];
+}
+
+export interface SpedFiscalInconsistencia {
+    id: string;
+    tipo: SpedInconsistenciaTipo;
+    gravidade: SpedInconsistenciaGravidade;
+    chave?: string;
+    documento?: string;
+    descricao: string;
+    valorXml?: number;
+    valorSped?: number;
+    status: 'ABERTA' | 'EM_ANALISE' | 'CORRIGIDA' | 'JUSTIFICADA';
+}
+
+export interface SpedFiscalConferenceResult {
+    totalXmls: number;
+    totalDocumentosSped: number;
+    documentosConferidos: number;
+    inconsistencias: SpedFiscalInconsistencia[];
+}
+
+
