@@ -1,0 +1,83 @@
+name: Deploy SEFAZ Backend
+
+on:
+  push:
+    branches:
+      - main
+      - claude/update-claude-code-cli-nmlTI
+    paths:
+      - 'backend/sefaz/**'
+      - '.github/workflows/deploy-sefaz.yml'
+  workflow_dispatch:
+    inputs:
+      use_mocks:
+        description: 'USE_MOCKS env (true|false)'
+        required: true
+        default: 'true'
+
+env:
+  PROJECT_ID: consultorfiscalapp
+  SERVICE_NAME: cfi-sefaz-proxy
+  REGION: us-central1
+  AR_HOSTNAME: us-central1-docker.pkg.dev
+  AR_REPOSITORY: cloud-run-deploy
+  RUNTIME_SA: cfi-sefaz-runtime@consultorfiscalapp.iam.gserviceaccount.com
+  FRONTEND_ORIGIN: https://consultor-fiscal-inteligente-631239634290.us-central1.run.app
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/sefaz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.AR_HOSTNAME }} --quiet
+
+      - name: Build image
+        run: |
+          docker build \
+            -t ${{ env.AR_HOSTNAME }}/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            .
+
+      - name: Push image
+        run: |
+          docker push ${{ env.AR_HOSTNAME }}/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          USE_MOCKS_VAL="${{ github.event.inputs.use_mocks || 'true' }}"
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image ${{ env.AR_HOSTNAME }}/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 5 \
+            --service-account ${{ env.RUNTIME_SA }} \
+            --set-env-vars "USE_MOCKS=$USE_MOCKS_VAL,GCP_PROJECT_ID=${{ env.PROJECT_ID }},ALLOWED_ORIGINS=${{ env.FRONTEND_ORIGIN }}"
+
+      - name: Show Service URL
+        run: |
+          gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --format='value(status.url)'
