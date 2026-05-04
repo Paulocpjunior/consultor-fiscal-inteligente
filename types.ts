@@ -513,3 +513,196 @@ export interface ManagerAlert {
     obligationId?: string;
     timestamp: number;
 }
+
+// ─── Central de Documentos Fiscais (XML) ─────────────────────────────────────
+
+export type XmlOrigem =
+    | 'manual'
+    | 'sefaz'
+    | 'sharepoint'
+    | 'email'
+    | 'api'
+    | 'outro';
+
+export type XmlStatusDocumento =
+    | 'autorizado'
+    | 'cancelado'
+    | 'denegado'
+    | 'inutilizado'
+    | 'rejeitado'
+    | 'pendente'
+    | 'desconhecido';
+
+export type XmlDirecao = 'entrada' | 'saida' | 'desconhecida';
+
+export type XmlTipoDocumento = 'NFe' | 'NFCe' | 'NFSe' | 'CTe' | 'MDFe' | 'desconhecido';
+
+export interface DocumentoFiscalItem {
+    nItem: string;
+    cProd: string;
+    xProd: string;
+    ncm: string;
+    cest?: string;
+    cfop: string;
+    uCom: string;
+    qCom: number;
+    vUnCom: number;
+    vProd: number;
+    vDesc?: number;
+    vICMS: number;
+    vIPI: number;
+    vPIS: number;
+    vCOFINS: number;
+    cst: string;
+    orig: string;
+}
+
+export interface DocumentoFiscalTotais {
+    vBC: number;
+    vICMS: number;
+    vICMSDeson: number;
+    vFCP: number;
+    vBCST: number;
+    vST: number;
+    vFCPST: number;
+    vProd: number;
+    vFrete: number;
+    vSeg: number;
+    vDesc: number;
+    vII: number;
+    vIPI: number;
+    vIPIDevol: number;
+    vPIS: number;
+    vCOFINS: number;
+    vOutro: number;
+    vNF: number;
+}
+
+export interface DocumentoFiscalParticipante {
+    cnpjCpf: string;
+    nome: string;
+    fantasia?: string;
+    ie?: string;
+    uf?: string;
+    municipio?: string;
+}
+
+/**
+ * Metadados do documento fiscal salvos no Firestore.
+ * O XML original fica no Firebase Storage (campo storagePath).
+ */
+export interface DocumentoFiscal {
+    id: string;
+    /** Chave de acesso (44 dígitos) — usada para evitar duplicidade. */
+    chave: string;
+    /** Hash SHA-256 do XML original (detecção adicional de duplicidade). */
+    xmlHash: string;
+    tipo: XmlTipoDocumento;
+    modelo: string;
+    serie: string;
+    numero: string;
+    /** Natureza da operação. */
+    natOp: string;
+    /** Data/hora de emissão (ISO). */
+    dhEmi: string;
+    /** Competência calculada a partir da emissão (YYYY-MM). */
+    competencia: string;
+    direcao: XmlDirecao;
+    status: XmlStatusDocumento;
+
+    /** Empresa cadastrada no app à qual este documento pertence. */
+    empresaId: string;
+    empresaCnpj: string;
+    empresaNome: string;
+
+    emitente: DocumentoFiscalParticipante;
+    destinatario: DocumentoFiscalParticipante;
+    totais: DocumentoFiscalTotais;
+    itens: DocumentoFiscalItem[];
+    infAdic?: string;
+
+    /** Caminho do XML original no Firebase Storage. */
+    storagePath?: string;
+    storageUrl?: string;
+    /** Tamanho original do arquivo XML em bytes. */
+    tamanhoBytes?: number;
+    fileName?: string;
+
+    origem: XmlOrigem;
+    importadoPor: string;
+    importadoPorEmail?: string;
+    importadoEm: number;
+    createdBy?: string;
+    createdByEmail?: string;
+}
+
+/**
+ * Log de captura/importação para auditoria.
+ */
+export interface XmlCaptura {
+    id: string;
+    documentoId?: string;
+    chave?: string;
+    empresaId?: string;
+    origem: XmlOrigem;
+    status: 'sucesso' | 'duplicado' | 'erro';
+    mensagem?: string;
+    fileName?: string;
+    tamanhoBytes?: number;
+    usuarioId: string;
+    usuarioNome?: string;
+    usuarioEmail?: string;
+    timestamp: number;
+}
+
+/**
+ * Erro de importação registrado para análise.
+ */
+export interface XmlErro {
+    id: string;
+    fileName?: string;
+    chave?: string;
+    empresaId?: string;
+    origem: XmlOrigem;
+    mensagem: string;
+    detalhe?: string;
+    usuarioId: string;
+    usuarioEmail?: string;
+    timestamp: number;
+    resolvido?: boolean;
+}
+
+/**
+ * Configuração específica de uma empresa para o módulo XML.
+ * Não armazenamos certificado digital — apenas referência.
+ */
+export interface EmpresaXmlConfig {
+    id: string;
+    empresaId: string;
+    empresaCnpj: string;
+    empresaNome: string;
+    monitorada: boolean;
+    capturaSefazAtiva: boolean;
+    capturaSharePointAtiva: boolean;
+    sharePointFolderUrl?: string;
+    /** Referência ao certificado armazenado no backend seguro. NUNCA o conteúdo. */
+    certificadoRef?: CertificadoDigitalInfo;
+    ultimaCaptura?: number;
+    proximaCaptura?: number;
+    createdBy?: string;
+    updatedAt?: number;
+}
+
+/**
+ * Apenas metadados do certificado digital. O arquivo .pfx/.p12 NUNCA trafega
+ * pelo front-end nesta fase — o backend seguro é o responsável.
+ */
+export interface CertificadoDigitalInfo {
+    /** ID lógico no backend seguro (placeholder enquanto não há captura real). */
+    backendRef?: string;
+    nomeTitular?: string;
+    cnpjTitular?: string;
+    validoAte?: string;
+    fingerprint?: string;
+    cadastradoEm?: number;
+}

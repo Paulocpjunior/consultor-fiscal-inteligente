@@ -1,0 +1,130 @@
+rules_version = '2';
+
+// =============================================================================
+// Firestore Security Rules — Consultor Fiscal Inteligente
+//
+// Sugestão de regras cobrindo o módulo Central de Documentos Fiscais (XML).
+// REVISE antes de colar no Firebase Console — o app já possui outras coleções
+// (users, simples_empresas, simples_notas, empresas_lucro, access_logs,
+// obrigacoes) que precisam continuar funcionando. Junte com as regras
+// existentes do projeto antes de publicar.
+//
+// Modelo de permissão:
+//   - Master admin: junior@spassessoriacontabil.com.br
+//   - Demais admins: documento em users/{uid} com role == 'admin'
+//   - Colaboradores: enxergam apenas o que criaram (createdBy == uid)
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helpers ──────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isMasterEmail() {
+      return isSignedIn()
+        && request.auth.token.email == 'junior@spassessoriacontabil.com.br';
+    }
+
+    function isAdmin() {
+      return isMasterEmail()
+        || (isSignedIn()
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    function isOwnerOnCreate(field) {
+      return isSignedIn() && request.resource.data[field] == request.auth.uid;
+    }
+
+    function isOwner(field) {
+      return isSignedIn() && resource.data[field] == request.auth.uid;
+    }
+
+    // ─── users (perfil) ───────────────────────────────────────────────────
+    // Mantém o que já existe: cada usuário lê/escreve seu próprio perfil;
+    // admin vê/edita todos.
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ─── access_logs ──────────────────────────────────────────────────────
+    match /access_logs/{logId} {
+      allow read: if isAdmin() || isOwner('userId');
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── simples_empresas / simples_notas / empresas_lucro ────────────────
+    // Mantenha as regras já configuradas no console. Padrão típico:
+    match /simples_empresas/{id} {
+      allow read: if isAdmin() || isOwner('createdBy');
+      allow create: if isOwnerOnCreate('createdBy');
+      allow update: if isAdmin() || isOwner('createdBy');
+      allow delete: if isAdmin();
+    }
+
+    match /simples_notas/{id} {
+      allow read: if isAdmin() || isOwner('createdBy');
+      allow create: if isOwnerOnCreate('createdBy');
+      allow update: if isAdmin() || isOwner('createdBy');
+      allow delete: if isAdmin();
+    }
+
+    match /empresas_lucro/{id} {
+      allow read: if isAdmin() || isOwner('createdBy');
+      allow create: if isOwnerOnCreate('createdBy');
+      allow update: if isAdmin() || isOwner('createdBy');
+      allow delete: if isAdmin();
+    }
+
+    match /obrigacoes/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── NOVAS coleções da Central de Documentos Fiscais ──────────────────
+
+    // Metadados dos XMLs (o blob fica no Storage).
+    match /documentos_fiscais/{docId} {
+      allow read: if isAdmin() || isOwner('createdBy');
+      // No create exigimos que createdBy seja o próprio uid.
+      allow create: if isOwnerOnCreate('createdBy');
+      // Update só do próprio dono ou admin; não permite alterar createdBy.
+      allow update: if (isAdmin() || isOwner('createdBy'))
+                    && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if isAdmin();
+    }
+
+    // Log de capturas — append-only para usuários comuns.
+    match /xml_capturas/{logId} {
+      allow read: if isAdmin() || isOwner('usuarioId');
+      allow create: if isOwnerOnCreate('usuarioId');
+      allow update, delete: if isAdmin();
+    }
+
+    // Erros de importação — usuário pode marcar como resolvido o seu próprio.
+    match /xml_erros/{errId} {
+      allow read: if isAdmin() || isOwner('usuarioId');
+      allow create: if isOwnerOnCreate('usuarioId');
+      allow update: if isAdmin()
+                    || (isOwner('usuarioId')
+                        && request.resource.data.usuarioId == resource.data.usuarioId);
+      allow delete: if isAdmin();
+    }
+
+    // Configurações XML por empresa (monitoramento, agendamento).
+    match /empresas_xml_config/{configId} {
+      allow read: if isAdmin() || isOwner('createdBy');
+      allow create: if isOwnerOnCreate('createdBy');
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── Default deny ─────────────────────────────────────────────────────
+    // Qualquer coleção não listada acima é negada por padrão.
+  }
+}
