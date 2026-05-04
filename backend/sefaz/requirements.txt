@@ -1,0 +1,17 @@
+# Runtime
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+python-multipart==0.0.9
+
+# Auth (Firebase ID token verification — usado quando USE_MOCKS=false)
+firebase-admin==6.5.0
+
+# SEFAZ / certificado digital (TODO: ativar quando sair de mocks)
+cryptography==43.0.1
+lxml==5.3.0
+signxml==4.0.0
+httpx==0.27.2
+
+# GCP — Secret Manager
+google-cloud-secret-manager==2.20.2

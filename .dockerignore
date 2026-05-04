@@ -6,3 +6,7 @@ dist
 *.log
 coverage
 proxy-backend
+backend/
+firebase/
+__tests__/
+*.md

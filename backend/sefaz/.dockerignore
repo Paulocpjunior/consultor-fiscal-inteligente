@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.venv
+venv
+env
+.env
+.env.*
+*.pfx
+*.p12
+README.md
