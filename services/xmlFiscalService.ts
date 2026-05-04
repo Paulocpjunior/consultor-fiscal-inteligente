@@ -94,34 +94,73 @@ function dedupEmpresas(list: EmpresaXmlOption[]): EmpresaXmlOption[] {
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
 }
 
+/** Fallback para empresas em localStorage (modo offline dos modulos Simples/Lucro). */
+function getEmpresasFromLocalStorage(user: User): EmpresaXmlOption[] {
+    const isMaster = isMasterUser(user);
+    const out: EmpresaXmlOption[] = [];
+    try {
+        const simples: SimplesNacionalEmpresa[] = JSON.parse(localStorage.getItem('simples_nacional_empresas') || '[]');
+        simples.forEach(e => {
+            if (isMaster || !e.createdBy || e.createdBy === user.id) {
+                out.push({ id: e.id, nome: e.nome, cnpj: e.cnpj, fonte: 'simples', createdBy: e.createdBy });
+            }
+        });
+    } catch { /* silent */ }
+    try {
+        const lucro: LucroPresumidoEmpresa[] = JSON.parse(localStorage.getItem('lucro_presumido_empresas') || '[]');
+        lucro.forEach(e => {
+            if (isMaster || !e.createdBy || e.createdBy === user.id) {
+                out.push({ id: e.id, nome: e.nome, cnpj: e.cnpj, fonte: 'lucro', createdBy: e.createdBy });
+            }
+        });
+    } catch { /* silent */ }
+    return out;
+}
+
 export async function getEmpresasDisponiveis(user: User | null): Promise<EmpresaXmlOption[]> {
-    if (!user || !isFirebaseConfigured || !db) return [];
+    if (!user) return [];
     const isMaster = isMasterUser(user);
     const uid = auth?.currentUser?.uid;
 
-    const buildQuery = (col: string): QueryConstraint[] =>
-        (isMaster || !uid) ? [] : [where('createdBy', '==', uid)];
+    const cloudResults: EmpresaXmlOption[] = [];
 
-    try {
-        const [simplesSnap, lucroSnap] = await Promise.all([
-            getDocs(query(collection(db, 'simples_empresas'), ...buildQuery('simples_empresas'))),
-            getDocs(query(collection(db, 'empresas_lucro'), ...buildQuery('empresas_lucro'))),
-        ]);
+    if (isFirebaseConfigured && db) {
+        const buildQuery = (): QueryConstraint[] =>
+            (isMaster || !uid) ? [] : [where('createdBy', '==', uid)];
 
-        const simples: EmpresaXmlOption[] = simplesSnap.docs.map(d => {
-            const data = d.data() as SimplesNacionalEmpresa;
-            return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples', createdBy: data.createdBy };
-        });
-        const lucro: EmpresaXmlOption[] = lucroSnap.docs.map(d => {
-            const data = d.data() as LucroPresumidoEmpresa;
-            return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro', createdBy: data.createdBy };
-        });
+        // Cada coleção tem seu try/catch separado: se uma falhar (sem
+        // permissão nas Rules atuais, por exemplo), a outra ainda pode ser lida.
+        try {
+            const simplesSnap = await getDocs(query(collection(db, 'simples_empresas'), ...buildQuery()));
+            simplesSnap.docs.forEach(d => {
+                const data = d.data() as SimplesNacionalEmpresa;
+                cloudResults.push({ id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples', createdBy: data.createdBy });
+            });
+        } catch (err: any) {
+            if (err?.code !== 'permission-denied') {
+                console.warn('getEmpresasDisponiveis simples:', err?.message);
+            }
+        }
 
-        return dedupEmpresas([...simples, ...lucro]);
-    } catch (err: any) {
-        console.warn('getEmpresasDisponiveis:', err?.message);
-        return [];
+        try {
+            const lucroSnap = await getDocs(query(collection(db, 'lucro_empresas'), ...buildQuery()));
+            lucroSnap.docs.forEach(d => {
+                const data = d.data() as LucroPresumidoEmpresa;
+                cloudResults.push({ id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro', createdBy: data.createdBy });
+            });
+        } catch (err: any) {
+            if (err?.code !== 'permission-denied') {
+                console.warn('getEmpresasDisponiveis lucro:', err?.message);
+            }
+        }
     }
+
+    // Fallback localStorage: indispensavel enquanto as rules nao cobrirem
+    // simples_empresas e lucro_empresas. dedupEmpresas remove repeticoes
+    // por CNPJ entre cloud e local.
+    const localResults = getEmpresasFromLocalStorage(user);
+
+    return dedupEmpresas([...cloudResults, ...localResults]);
 }
 
 // ─── Importação manual (entry point principal) ──────────────────────────────
