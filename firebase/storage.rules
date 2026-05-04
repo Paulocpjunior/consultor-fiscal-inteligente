@@ -1,0 +1,36 @@
+rules_version = '2';
+
+// =============================================================================
+// Cloud Storage Security Rules — Consultor Fiscal Inteligente
+//
+// Cobre o caminho /xmls/{empresaId}/{file} usado pelo xmlStorageService.
+// Bloqueia o restante do bucket por padrão.
+// =============================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // XMLs originais da Central de Documentos Fiscais.
+    // - Leitura: usuários autenticados (necessário para baixar pela UI).
+    // - Escrita: usuários autenticados, limitada a 10 MB e content-type XML.
+    match /xmls/{empresaId}/{file} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 10 * 1024 * 1024
+                   && (request.resource.contentType == 'application/xml'
+                       || request.resource.contentType == 'text/xml');
+      allow delete: if request.auth != null
+                    && (
+                      // Master admin
+                      request.auth.token.email == 'junior@spassessoriacontabil.com.br'
+                      // ou perfil admin no Firestore
+                      || firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin'
+                    );
+    }
+
+    // Default deny — nenhum outro caminho é acessível.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
