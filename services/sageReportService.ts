@@ -5,6 +5,13 @@ import * as XLSX from 'xlsx';
 export type DocStatus = 'regular' | 'cancelada' | 'denegada' | 'inutilizada' | 'desconhecido';
 export type DocSentido = 'entrada' | 'saida' | 'desconhecido';
 
+interface EventoCancelamento {
+    tipo: 'cancelamento';
+    chNFe: string;
+    cStat: string;
+    xMotivo: string;
+}
+
 export interface SageNota {
     sentido: DocSentido;
     status: DocStatus;
@@ -278,9 +285,33 @@ function getText(el: Element | Document, tag: string): string {
     return found[0].textContent?.trim() || '';
 }
 
-function parseSingleXml(xmlText: string, fileName: string): SageNota | null {
+function parseSingleXml(xmlText: string, fileName: string): SageNota | EventoCancelamento | null {
     const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
     if (doc.querySelector('parsererror')) return null;
+
+    // ── Evento (cancelamento) ───────────────────────────────────────────
+    // Estrutura: <procEventoNFe><evento><infEvento>... E <retEvento><infEvento>...
+    // tpEvento 110111 = cancelamento; cStat 135 ou 155 indicam aceite.
+    const procEvento =
+        doc.getElementsByTagName('procEventoNFe')[0] ||
+        doc.getElementsByTagName('eventoNFe')[0];
+    const allInfEventos = doc.getElementsByTagName('infEvento');
+    if (procEvento || allInfEventos.length > 0) {
+        const infEvento = (procEvento
+            ? procEvento.getElementsByTagName('infEvento')[0]
+            : allInfEventos[0]) as Element | undefined;
+        const tpEvento = infEvento ? getText(infEvento, 'tpEvento') : '';
+        if (tpEvento === '110111') {
+            const chNFe = infEvento ? getText(infEvento, 'chNFe') : '';
+            const retEvento = doc.getElementsByTagName('retEvento')[0];
+            const retInf = retEvento ? (retEvento.getElementsByTagName('infEvento')[0] as Element) : undefined;
+            const cStat = retInf ? getText(retInf, 'cStat') : '';
+            const xMotivo = retInf ? getText(retInf, 'xMotivo') : '';
+            return { tipo: 'cancelamento', chNFe, cStat, xMotivo };
+        }
+        // Outros eventos (CC-e, manifestação, etc.) — ignorados aqui.
+        return null;
+    }
 
     const ide = doc.getElementsByTagName('ide')[0];
     const emit = doc.getElementsByTagName('emit')[0];
@@ -340,17 +371,39 @@ function parseSingleXml(xmlText: string, fileName: string): SageNota | null {
 }
 
 export async function parseSageXmls(files: File[]): Promise<SageNota[]> {
-    const out: SageNota[] = [];
+    const notas: SageNota[] = [];
+    const cancelamentosAceitos = new Map<string, EventoCancelamento>();
+
     for (const f of files) {
         try {
             const txt = await f.text();
-            const nota = parseSingleXml(txt, f.name);
-            if (nota) out.push(nota);
+            const result = parseSingleXml(txt, f.name);
+            if (!result) continue;
+            if ('tipo' in result && result.tipo === 'cancelamento') {
+                // 135 = Evento registrado e vinculado a NFe
+                // 155 = Cancelamento extemporaneo registrado
+                if (result.cStat === '135' || result.cStat === '155') {
+                    if (result.chNFe) cancelamentosAceitos.set(result.chNFe, result);
+                }
+            } else {
+                notas.push(result);
+            }
         } catch {
-            // ignora arquivo inválido
+            // ignora arquivo invalido
         }
     }
-    return out;
+
+    // Aplica eventos de cancelamento sobre as notas correspondentes pela chave.
+    notas.forEach((n) => {
+        if (n.chave && cancelamentosAceitos.has(n.chave)) {
+            const ev = cancelamentosAceitos.get(n.chave)!;
+            n.status = 'cancelada';
+            n.statusCodigo = '02';
+            n.statusOriginal = ev.xMotivo || `Cancelamento (cStat ${ev.cStat})`;
+        }
+    });
+
+    return notas;
 }
 
 // ─── Detecção de gaps ────────────────────────────────────────────────────────
