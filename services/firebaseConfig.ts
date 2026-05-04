@@ -1,6 +1,7 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDIqWgUuLjkrrg1vQe5FuN1TY22WHoPQQs",
@@ -13,15 +14,24 @@ const firebaseConfig = {
 
 export const isFirebaseConfigured = true;
 
+export const isFirebaseStorageConfigured =
+  isFirebaseConfigured && !!firebaseConfig.storageBucket;
+
 let app: FirebaseApp | undefined;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
+let storage: FirebaseStorage | null = null;
 
 app = getApps().length === 0
   ? initializeApp(firebaseConfig)
   : getApps()[0];
 auth = getAuth(app);
 db = getFirestore(app);
+if (isFirebaseStorageConfigured) {
+  storage = getStorage(app);
+} else {
+  console.warn('⚠️ Firebase Storage bucket não configurado. Upload de XMLs ficará indisponível.');
+}
 
-export { auth, db };
+export { auth, db, storage };
 export default app;

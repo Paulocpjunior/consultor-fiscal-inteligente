@@ -35,7 +35,7 @@ const ComparisonDisplay = lazy(() => import('./components/ComparisonDisplay'));
 const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDisplay'));
 const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumidoRealDashboard'));
 const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
-const ImportaXML = lazy(() => import('./components/ImportaXML'));
+const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocumentosFiscais'));
 const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
 const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
 
@@ -47,7 +47,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.SIMPLES_NACIONAL]: "Gestão de empresas do Simples, cálculo de DAS e Fator R.",
     [SearchType.LUCRO_PRESUMIDO_REAL]: "Ficha Financeira e Cadastro para Lucro Presumido/Real.",
     [SearchType.OBRIGACOES_FISCAIS]: "Acompanhamento de obrigações, vencimentos e alertas fiscais.",
-    [SearchType.IMPORTA_XML]: "Importe XMLs de NFe/NFSe para visualizar dados fiscais e impostos.",
+    [SearchType.IMPORTA_XML]: "Central de Documentos Fiscais — importação, captura, dashboard e relatórios de XMLs.",
     [SearchType.ANALISE_RELATORIO_SAGE]: "Analise relatórios SAGE (XLSX/XML) e identifique gaps, canceladas, denegadas e segregação E/S.",
 };
 
@@ -983,10 +983,10 @@ const App: React.FC = () => {
                             <FiscalObligationsDashboard />
                         )}
 
-                        {/* Importa XML View */}
+                        {/* Central de Documentos Fiscais (XML) */}
                         {searchType === SearchType.IMPORTA_XML && (
                             <Suspense fallback={<LoadingSpinner />}>
-                                <ImportaXML
+                                <CentralDocumentosFiscais
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />

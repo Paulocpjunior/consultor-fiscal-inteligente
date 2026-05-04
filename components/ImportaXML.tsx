@@ -1,3 +1,8 @@
+/**
+ * @deprecated Substituído por components/xml/CentralDocumentosFiscais.tsx.
+ * O parser e formatadores foram extraídos para services/xmlParserService.ts.
+ * Mantido temporariamente para referência; não é mais importado por App.tsx.
+ */
 import React, { useState, useRef, useCallback } from 'react';
 import type { User } from '../types';
 
