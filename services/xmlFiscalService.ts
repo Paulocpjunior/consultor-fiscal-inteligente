@@ -184,8 +184,21 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
 
         // Duplicidade — id determinístico pela chave.
         const docId = chave || xmlHash;
-        const existing = await getDoc(doc(db, COLLECTIONS.DOCUMENTOS, docId));
-        if (existing.exists()) {
+
+        // Para colaboradores nao-admin, regras Firestore retornam permission-denied
+        // ao ler doc inexistente (comportamento padrao do Firestore para evitar
+        // enumeracao). Tratamos esse caso como 'doc nao existe' e seguimos o
+        // fluxo de criacao. Se for de fato uma duplicacao de OUTRO usuario,
+        // o setDoc abaixo vai falhar tambem e o rollback de storage cuida do lixo.
+        let existing: Awaited<ReturnType<typeof getDoc>> | null = null;
+        try {
+            existing = await getDoc(doc(db, COLLECTIONS.DOCUMENTOS, docId));
+        } catch (err: any) {
+            if (err?.code !== 'permission-denied') throw err;
+            // permission-denied: doc nao existe OU pertence a outro usuario.
+            // Continua como se fosse novo.
+        }
+        if (existing && existing.exists()) {
             await registrarCaptura({
                 chave,
                 empresaId: empresa.id,
