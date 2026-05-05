@@ -3,6 +3,7 @@ import type { User, DocumentoFiscal } from '../../types';
 import { isFirebaseConfigured, isFirebaseStorageConfigured } from '../../services/firebaseConfig';
 import XmlDashboard from './XmlDashboard';
 import XmlImportacaoManual from './XmlImportacaoManual';
+import NfsePdfImportacao from './NfsePdfImportacao';
 import XmlDocumentosList from './XmlDocumentosList';
 import XmlDocumentoDetalhe from './XmlDocumentoDetalhe';
 import XmlEmpresasMonitoradas from './XmlEmpresasMonitoradas';
@@ -19,7 +20,8 @@ type TabId =
     | 'sharepoint'
     | 'erros'
     | 'relatorios'
-    | 'config';
+    | 'config'
+    | 'nfse_pdf';
 
 const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'dashboard', label: 'Dashboard' },
@@ -29,6 +31,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'sharepoint', label: 'SharePoint' },
     { id: 'erros', label: 'Erros & Logs' },
     { id: 'relatorios', label: 'Relatórios' },
+    { id: 'nfse_pdf', label: 'Importar NFSe (PDF)' },
     { id: 'config', label: 'Configurações' },
 ];
 
@@ -142,6 +145,13 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 )}
                 {tab === 'relatorios' && (
                     <XmlRelatorios currentUser={currentUser} refreshKey={refreshKey} onShowToast={onShowToast} />
+                )}
+                {tab === 'nfse_pdf' && (
+                    <NfsePdfImportacao
+                        currentUser={currentUser}
+                        onShowToast={onShowToast}
+                        onImported={() => setRefreshKey(k => k + 1)}
+                    />
                 )}
                 {tab === 'config' && (
                     <XmlConfiguracoes currentUser={currentUser} />

@@ -48,7 +48,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.SIMPLES_NACIONAL]: "Gestão de empresas do Simples, cálculo de DAS e Fator R.",
     [SearchType.LUCRO_PRESUMIDO_REAL]: "Ficha Financeira e Cadastro para Lucro Presumido/Real.",
     [SearchType.OBRIGACOES_FISCAIS]: "Acompanhamento de obrigações, vencimentos e alertas fiscais.",
-    [SearchType.IMPORTA_XML]: "Central de Documentos Fiscais — importação, captura, dashboard e relatórios de XMLs.",
+    [SearchType.IMPORTA_XML]: "Central de Documentos Fiscais — importação de XMLs/PDFs (NFSe), captura, dashboards e relatórios.",
     [SearchType.ANALISE_RELATORIO_SAGE]: "Analise relatórios SAGE (XLSX/XML) e identifique gaps, canceladas, denegadas e segregação E/S.",
 };
 
@@ -692,7 +692,7 @@ const App: React.FC = () => {
                                 <div className="mb-2">
                                     <DownloadIcon className="w-5 h-5" />
                                 </div>
-                                <span className="text-xs font-bold text-center leading-tight">Importa XML</span>
+                                <span className="text-xs font-bold text-center leading-tight">Importa XML/PDF</span>
                             </button>
                             {/* Análise Relatório SAGE */}
                             <button
