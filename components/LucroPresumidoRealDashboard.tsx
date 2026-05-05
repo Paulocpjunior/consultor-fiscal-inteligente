@@ -1090,22 +1090,18 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                 onChange={setSaldoCredorIpi} 
                                 className="bg-slate-50 dark:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-600"
                             />
-                            {selectedEmpresa?.regimePadrao === 'Real' && (
-                                <>
-                                    <CurrencyInput 
-                                        label="Saldo Credor PIS (Mês Anterior)" 
-                                        value={saldoCredorPis} 
-                                        onChange={setSaldoCredorPis} 
-                                        className="bg-sky-50 dark:bg-sky-900/10 p-2 rounded border border-sky-200 dark:border-sky-800"
-                                    />
-                                    <CurrencyInput 
-                                        label="Saldo Credor COFINS (Mês Anterior)" 
-                                        value={saldoCredorCofins} 
-                                        onChange={setSaldoCredorCofins} 
-                                        className="bg-sky-50 dark:bg-sky-900/10 p-2 rounded border border-sky-200 dark:border-sky-800"
-                                    />
-                                </>
-                            )}
+                            <CurrencyInput 
+                                label="Saldo Credor PIS (Mês Anterior)" 
+                                value={saldoCredorPis} 
+                                onChange={setSaldoCredorPis} 
+                                className="bg-sky-50 dark:bg-sky-900/10 p-2 rounded border border-sky-200 dark:border-sky-800"
+                            />
+                            <CurrencyInput 
+                                label="Saldo Credor COFINS (Mês Anterior)" 
+                                value={saldoCredorCofins} 
+                                onChange={setSaldoCredorCofins} 
+                                className="bg-sky-50 dark:bg-sky-900/10 p-2 rounded border border-sky-200 dark:border-sky-800"
+                            />
                         </div>
                     </div>
                 </div>
