@@ -198,7 +198,7 @@ export const COLLECTIONS = {
   USERS:              'users',
   EMPRESAS_SIMPLES:   'empresas_simples',
   NOTAS_SIMPLES:      'notas_simples',
-  EMPRESAS_LUCRO:     'empresas_lucro',
+  EMPRESAS_LUCRO:     'lucro_empresas',
   ACCESS_LOGS:        'access_logs',
   OBRIGACOES:         'obrigacoes',
 } as const;

@@ -24,6 +24,7 @@ import * as simplesService from './services/simplesNacionalService';
 import * as authService from './services/authService';
 import { BuildingIcon, CalculatorIcon, ChevronDownIcon, DocumentTextIcon, LocationIcon, SearchIcon, TagIcon, UserIcon, InfoIcon, CalendarIcon, ChatBubbleIcon, DownloadIcon } from './components/Icons';
 import FiscalObligationsDashboard from './components/FiscalObligationsDashboard';
+import { runInitialSync } from './services/cloudSyncService';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
 // ✅ REMOVIDO: import { onAuthStateChanged } from 'firebase/auth';
 // Ambos encapsulados em authService.subscribeAuthState
@@ -143,7 +144,10 @@ const App: React.FC = () => {
 
             const unsubscribe = authService.subscribeAuthState((user) => {
                 setCurrentUser(user);
-                if (user) loadSimplesData(user);
+                if (user) {
+                    loadSimplesData(user);
+                    runInitialSync(user); // fire-and-forget: sync localStorage -> Firestore
+                }
             });
 
             return () => unsubscribe();

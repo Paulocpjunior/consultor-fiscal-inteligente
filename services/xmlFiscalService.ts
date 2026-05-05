@@ -105,7 +105,7 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
     try {
         const [simplesSnap, lucroSnap] = await Promise.all([
             getDocs(query(collection(db, 'simples_empresas'), ...buildQuery('simples_empresas'))),
-            getDocs(query(collection(db, 'empresas_lucro'), ...buildQuery('empresas_lucro'))),
+            getDocs(query(collection(db, 'lucro_empresas'), ...buildQuery('lucro_empresas'))),
         ]);
 
         const simples: EmpresaXmlOption[] = simplesSnap.docs.map(d => {
