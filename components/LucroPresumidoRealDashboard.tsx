@@ -1189,30 +1189,52 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                     
                                     <div className="space-y-2 mb-4">
                                         {despesasAvulsas.map((despesa) => (
-                                            <div key={despesa.id} className="flex gap-2 items-center bg-slate-50 dark:bg-slate-700/30 p-2 rounded-lg border border-slate-100 dark:border-slate-600 group">
-                                                <div className="flex-1">
-                                                    <input 
-                                                        type="text"
-                                                        placeholder="Descrição (ex: Frete, Aluguel)"
-                                                        className="w-full text-xs bg-transparent border-none focus:ring-0 p-1 text-slate-700 dark:text-slate-200 font-medium"
-                                                        value={despesa.descricao}
-                                                        onChange={(e) => handleUpdateDespesa(despesa.id, 'descricao', e.target.value)}
-                                                    />
+                                            <div key={despesa.id} className="bg-slate-50 dark:bg-slate-700/30 p-2 rounded-lg border border-slate-100 dark:border-slate-600 group space-y-2">
+                                                <div className="flex gap-2 items-center">
+                                                    <div className="flex-1">
+                                                        <input 
+                                                            type="text"
+                                                            placeholder="Descrição (ex: Frete, Aluguel)"
+                                                            className="w-full text-xs bg-transparent border-none focus:ring-0 p-1 text-slate-700 dark:text-slate-200 font-medium"
+                                                            value={despesa.descricao}
+                                                            onChange={(e) => handleUpdateDespesa(despesa.id, 'descricao', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div className="w-28">
+                                                        <CurrencyInput 
+                                                            value={despesa.valor} 
+                                                            onChange={(val) => handleUpdateDespesa(despesa.id, 'valor', val)}
+                                                            noLabel
+                                                            className="text-xs"
+                                                        />
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleRemoveDespesa(despesa.id)}
+                                                        className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                                                    >
+                                                        <TrashIcon className="w-4 h-4" />
+                                                    </button>
                                                 </div>
-                                                <div className="w-28">
-                                                    <CurrencyInput 
-                                                        value={despesa.valor} 
-                                                        onChange={(val) => handleUpdateDespesa(despesa.id, 'valor', val)}
-                                                        noLabel
-                                                        className="text-xs"
-                                                    />
+                                                <div className="flex flex-wrap gap-x-4 gap-y-1 items-center pl-1 pt-1 border-t border-slate-200 dark:border-slate-600">
+                                                    <label className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-300 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
+                                                        <input 
+                                                            type="checkbox"
+                                                            checked={!!despesa.geraCreditoPisCofins}
+                                                            onChange={(e) => handleUpdateDespesa(despesa.id, 'geraCreditoPisCofins', e.target.checked)}
+                                                            className="rounded border-slate-300 dark:border-slate-500 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-0 w-3 h-3"
+                                                        />
+                                                        <span className="font-medium">Crédito PIS/COFINS</span>
+                                                    </label>
+                                                    <label className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-300 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
+                                                        <input 
+                                                            type="checkbox"
+                                                            checked={!!despesa.dedutivelIrpj}
+                                                            onChange={(e) => handleUpdateDespesa(despesa.id, 'dedutivelIrpj', e.target.checked)}
+                                                            className="rounded border-slate-300 dark:border-slate-500 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-0 w-3 h-3"
+                                                        />
+                                                        <span className="font-medium">Dedutível IRPJ/CSLL</span>
+                                                    </label>
                                                 </div>
-                                                <button 
-                                                    onClick={() => handleRemoveDespesa(despesa.id)}
-                                                    className="p-1 text-slate-400 hover:text-red-500 transition-colors"
-                                                >
-                                                    <TrashIcon className="w-4 h-4" />
-                                                </button>
                                             </div>
                                         ))}
                                         {despesasAvulsas.length === 0 && (
