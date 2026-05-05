@@ -10,6 +10,7 @@ import XmlErros from './XmlErros';
 import XmlRelatorios from './XmlRelatorios';
 import XmlSharePoint from './XmlSharePoint';
 import XmlConfiguracoes from './XmlConfiguracoes';
+import XmlExportarIobSage from './XmlExportarIobSage';
 
 type TabId =
     | 'dashboard'
@@ -17,6 +18,7 @@ type TabId =
     | 'importacao'
     | 'empresas'
     | 'sharepoint'
+    | 'exportar-iob'
     | 'erros'
     | 'relatorios'
     | 'config';
@@ -27,6 +29,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'importacao', label: 'Importação Manual' },
     { id: 'empresas', label: 'Empresas Monitoradas' },
     { id: 'sharepoint', label: 'SharePoint' },
+    { id: 'exportar-iob', label: 'Exportar IOB SAGE' },
     { id: 'erros', label: 'Erros & Logs' },
     { id: 'relatorios', label: 'Relatórios' },
     { id: 'config', label: 'Configurações' },
@@ -137,6 +140,9 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 )}
                 {tab === 'sharepoint' && (
                     <XmlSharePoint />
+                )}
+                {tab === 'exportar-iob' && (
+                    <XmlExportarIobSage currentUser={currentUser} onShowToast={onShowToast} />
                 )}
                 {tab === 'erros' && (
                     <XmlErros currentUser={currentUser} refreshKey={refreshKey} />
