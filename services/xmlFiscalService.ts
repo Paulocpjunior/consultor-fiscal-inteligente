@@ -211,7 +211,7 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             empresaCnpj: empresa.cnpj,
             empresaNome: empresa.nome,
             origem,
-            importadoPor: user.id,
+            importadoPor: auth?.currentUser?.uid ?? user.id,
             importadoPorEmail: user.email,
             fileName,
             tamanhoBytes: file.size,
@@ -278,7 +278,7 @@ export async function registrarCaptura(input: CapturaInput): Promise<void> {
         mensagem: input.mensagem,
         fileName: input.fileName,
         tamanhoBytes: input.tamanhoBytes,
-        usuarioId: input.user.id,
+        usuarioId: auth?.currentUser?.uid ?? input.user.id,
         usuarioNome: input.user.name,
         usuarioEmail: input.user.email,
         timestamp: Date.now(),
@@ -307,7 +307,7 @@ export async function registrarErro(input: ErroInput): Promise<void> {
         chave: input.chave,
         empresaId: input.empresaId,
         origem: input.origem,
-        usuarioId: input.user.id,
+        usuarioId: auth?.currentUser?.uid ?? input.user.id,
         usuarioEmail: input.user.email,
         mensagem: input.mensagem,
         detalhe: input.detalhe,
@@ -393,7 +393,7 @@ export async function listCapturas(user: User | null, max = 200): Promise<XmlCap
     const isMaster = isMasterUser(user);
     const uid = auth?.currentUser?.uid;
     const constraints: QueryConstraint[] = [];
-    if (!isMaster && uid) constraints.push(where('usuarioId', '==', user.id));
+    if (!isMaster && uid) constraints.push(where('usuarioId', '==', auth?.currentUser?.uid ?? user.id));
     constraints.push(orderBy('timestamp', 'desc'));
     constraints.push(fbLimit(max));
     try {
@@ -409,7 +409,7 @@ export async function listErros(user: User | null, max = 200): Promise<XmlErro[]
     if (!user || !isFirebaseConfigured || !db) return [];
     const isMaster = isMasterUser(user);
     const constraints: QueryConstraint[] = [];
-    if (!isMaster) constraints.push(where('usuarioId', '==', user.id));
+    if (!isMaster) constraints.push(where('usuarioId', '==', auth?.currentUser?.uid ?? user.id));
     constraints.push(orderBy('timestamp', 'desc'));
     constraints.push(fbLimit(max));
     try {
