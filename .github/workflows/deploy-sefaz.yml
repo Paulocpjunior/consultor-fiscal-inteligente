@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       use_mocks:
-        description: 'USE_MOCKS env (true|false)'
-        required: true
-        default: 'true'
+        description: 'USE_MOCKS env (vazio = preservar atual; true/false = alterar)'
+        required: false
+        default: ''
 
 env:
   PROJECT_ID: consultorfiscalapp
@@ -61,7 +61,16 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
-          USE_MOCKS_VAL="${{ github.event.inputs.use_mocks || 'true' }}"
+          # Preserva env vars existentes do servico em pushes automaticos
+          # (NAO sobrescreve USE_MOCKS, GCP_PROJECT_ID, ALLOWED_ORIGINS).
+          # Apenas troca os valores quando workflow_dispatch passar use_mocks
+          # explicitamente. Isso evita que cada push reverta para mock e
+          # quebre o backend em producao.
+          ENV_FLAG=""
+          if [ -n "${{ github.event.inputs.use_mocks }}" ]; then
+            ENV_FLAG="--update-env-vars USE_MOCKS=${{ github.event.inputs.use_mocks }}"
+          fi
+
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image ${{ env.AR_HOSTNAME }}/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             --platform managed \
@@ -73,7 +82,7 @@ jobs:
             --min-instances 0 \
             --max-instances 5 \
             --service-account ${{ env.RUNTIME_SA }} \
-            --set-env-vars "USE_MOCKS=$USE_MOCKS_VAL,GCP_PROJECT_ID=${{ env.PROJECT_ID }},ALLOWED_ORIGINS=${{ env.FRONTEND_ORIGIN }}"
+            $ENV_FLAG
 
       - name: Show Service URL
         run: |
