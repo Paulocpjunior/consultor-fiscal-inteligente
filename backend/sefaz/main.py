@@ -95,27 +95,58 @@ def verify_firebase_token(authorization: Optional[str] = Header(default=None)) -
     except Exception as exc:
         raise HTTPException(status_code=401, detail=f"Token inválido: {exc}") from exc
 
-    uid = decoded.get("uid")
-    email = (decoded.get("email") or "").lower()
+    uid = decoded.get("uid", "")
+    email = (decoded.get("email") or "").strip().lower()
 
-    # Master admin por email + role no Firestore.
-    is_master = email == "junior@spassessoriacontabil.com.br"
-    is_admin = is_master
-    if not is_master:
-        try:
-            db = fb_firestore.client()
-            user_doc = db.collection("users").document(uid).get()
-            if user_doc.exists:
-                is_admin = (user_doc.to_dict() or {}).get("role") == "admin"
-        except Exception as exc:
-            logger.warning("Falha ao ler users/%s para checar role: %s", uid, exc)
+    # 1) Tenta sempre ler o doc do Firestore — fonte da verdade.
+    role_from_firestore: Optional[str] = None
+    firestore_error: Optional[str] = None
+    try:
+        db = fb_firestore.client()
+        user_doc = db.collection("users").document(uid).get()
+        if user_doc.exists:
+            role_from_firestore = (user_doc.to_dict() or {}).get("role")
+    except Exception as exc:
+        firestore_error = f"{type(exc).__name__}: {exc}"
 
-    return {"uid": uid, "email": email, "admin": is_admin}
+    # 2) Master email (case-insensitive, com e sem espaços) é admin sempre.
+    MASTER_EMAILS = {
+        "junior@spassessoriacontabil.com.br",
+    }
+    is_master = email in MASTER_EMAILS
+
+    # 3) is_admin = master OR role=admin no Firestore.
+    is_admin = is_master or (role_from_firestore == "admin")
+
+    logger.info(
+        "auth: uid=%s email=%s role=%s firestore_err=%s is_master=%s is_admin=%s",
+        uid[:8] + "..." if uid else "?",
+        email or "(no email in token)",
+        role_from_firestore,
+        firestore_error,
+        is_master,
+        is_admin,
+    )
+
+    return {
+        "uid": uid,
+        "email": email,
+        "admin": is_admin,
+        "role": role_from_firestore,
+        "firestore_err": firestore_error,
+    }
 
 
 def require_admin(user: dict = Depends(verify_firebase_token)) -> dict:
     if not user.get("admin"):
-        raise HTTPException(status_code=403, detail="Apenas administradores.")
+        # Mensagem detalhada para facilitar diagnóstico em produção.
+        msg = (
+            f"Usuário sem permissão admin. "
+            f"email={user.get('email') or '(no email in token)'}, "
+            f"role_no_firestore={user.get('role')}, "
+            f"firestore_err={user.get('firestore_err')}"
+        )
+        raise HTTPException(status_code=403, detail=msg)
     return user
 
 
@@ -327,6 +358,18 @@ async def consulta_status(
         resultados = list(pool.map(_consulta_uma, payload.chaves))
 
     return ConsultaStatusResponse(ok=True, resultados=resultados)
+
+
+@app.get("/api/whoami")
+def whoami(user: dict = Depends(verify_firebase_token)) -> dict:
+    """Diagnóstico: retorna o que o backend enxerga sobre o user autenticado."""
+    return {
+        "uid": user.get("uid"),
+        "email": user.get("email"),
+        "admin": user.get("admin"),
+        "role_no_firestore": user.get("role"),
+        "firestore_err": user.get("firestore_err"),
+    }
 
 
 @app.get("/")
