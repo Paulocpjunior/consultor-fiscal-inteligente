@@ -113,10 +113,40 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
             const uploadResult = await uploadBytes(sref, file, { contentType: 'application/pdf' });
             const url = await getDownloadURL(uploadResult.ref);
 
+            // Campos compativeis com o schema XML (emitente/destinatario/totais.vNF/dhEmi)
+            // para que XmlDocumentosList consiga renderizar NFSe lado a lado com NF-e.
+            const emitenteCompat = {
+                cnpjCpf: parsed.prestador.cnpj || '',
+                nome: parsed.prestador.nome || '',
+                ie: parsed.prestador.inscricaoMunicipal || '',
+                uf: parsed.prestador.uf || '',
+                municipio: parsed.prestador.municipio || '',
+            };
+            const destinatarioCompat = {
+                cnpjCpf: parsed.tomador.cnpj || '',
+                nome: parsed.tomador.nome || '',
+                uf: parsed.tomador.uf || '',
+                municipio: parsed.tomador.municipio || '',
+            };
+            const totaisCompat = {
+                vBC: 0, vICMS: 0, vICMSDeson: 0, vFCP: 0, vBCST: 0, vST: 0,
+                vFCPST: 0, vProd: parsed.valorServicos || 0, vFrete: 0, vSeg: 0,
+                vDesc: (parsed.valorDescIncondicional || 0) + (parsed.valorDescCondicional || 0),
+                vII: 0, vIPI: 0, vIPIDevol: 0, vPIS: parsed.valorPis || 0,
+                vCOFINS: parsed.valorCofins || 0, vOutro: 0, vNF: parsed.valorLiquido || 0,
+            };
+
             const payload = {
                 tipo: 'nfse',
                 origem: 'manual',
                 direcao,
+                modelo: '',
+                status: 'autorizado',
+                dhEmi: parsed.dataEmissao || new Date().toISOString(),
+                emitente: emitenteCompat,
+                destinatario: destinatarioCompat,
+                totais: totaisCompat,
+                itens: [],
                 numero: parsed.numero,
                 serie: parsed.serie,
                 chave: parsed.chaveAcesso,

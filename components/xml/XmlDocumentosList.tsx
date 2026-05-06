@@ -129,11 +129,15 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                                                 {d.direcao}
                                             </span>
                                         </td>
-                                        <td className="px-3 py-1.5 max-w-[200px] truncate text-slate-600 dark:text-slate-300" title={`${d.emitente.nome} → ${d.destinatario.nome}`}>
-                                            {d.direcao === 'entrada' ? d.emitente.nome : d.destinatario.nome}
-                                            <span className="text-[10px] text-slate-400 ml-1">{formatCnpjCpf(d.direcao === 'entrada' ? d.emitente.cnpjCpf : d.destinatario.cnpjCpf)}</span>
+                                        <td className="px-3 py-1.5 max-w-[200px] truncate text-slate-600 dark:text-slate-300" title={`${(d as any).emitente?.nome || (d as any).prestador?.nome || '—'} → ${(d as any).destinatario?.nome || (d as any).tomador?.nome || '—'}`}>
+                                            {d.direcao === 'entrada'
+                                                ? ((d as any).emitente?.nome || (d as any).prestador?.nome || '—')
+                                                : ((d as any).destinatario?.nome || (d as any).tomador?.nome || '—')}
+                                            <span className="text-[10px] text-slate-400 ml-1">{formatCnpjCpf(d.direcao === 'entrada'
+                                                ? ((d as any).emitente?.cnpjCpf || (d as any).prestador?.cnpj || '')
+                                                : ((d as any).destinatario?.cnpjCpf || (d as any).tomador?.cnpj || ''))}</span>
                                         </td>
-                                        <td className="px-3 py-1.5 text-right font-bold text-slate-700 dark:text-slate-200">{formatCurrency(d.totais.vNF)}</td>
+                                        <td className="px-3 py-1.5 text-right font-bold text-slate-700 dark:text-slate-200">{formatCurrency((d as any).totais?.vNF ?? (d as any).valores?.liquido ?? 0)}</td>
                                         <td className="px-3 py-1.5 text-slate-500">{d.status}</td>
                                     </tr>
                                 ))}
