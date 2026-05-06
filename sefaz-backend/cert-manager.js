@@ -37,8 +37,12 @@ const upload = multer({
 });
 
 // Garantir firebase-admin inicializado (defensivo — server.js raiz pode não ter)
-if (!admin.apps.length) {
-  admin.initializeApp({ credential: admin.credential.applicationDefault() });
+// Lazy init — só inicializa quando uma requisição chega
+function getFirebaseAdmin() {
+  if (!admin.apps.length) {
+    admin.initializeApp({ credential: admin.credential.applicationDefault() });
+  }
+  return admin;
 }
 
 // ---------------------------------------------------------------------------
@@ -50,10 +54,10 @@ async function requireAdmin(req, res, next) {
     const m = auth.match(/^Bearer\s+(.+)$/i);
     if (!m) return res.status(401).json({ error: 'Token ausente' });
 
-    const decoded = await admin.auth().verifyIdToken(m[1]);
+    const decoded = await getFirebaseAdmin().auth().verifyIdToken(m[1]);
     const uid = decoded.uid;
 
-    const userDoc = await admin.firestore().collection('users').doc(uid).get();
+    const userDoc = await getFirebaseAdmin().firestore().collection('users').doc(uid).get();
     if (!userDoc.exists) return res.status(403).json({ error: 'Usuário não encontrado no Firestore' });
 
     const role = userDoc.data().role;
@@ -196,12 +200,12 @@ router.post('/cert', requireAdmin, upload.single('cert'), async (req, res) => {
     // Firestore: metadados + auditoria (NUNCA o .pfx ou a senha)
     const meta = {
       ...info,
-      uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
+      uploadedAt: getFirebaseAdmin().firestore.FieldValue.serverTimestamp(),
       uploadedBy: { uid: req.user.uid, email: req.user.email },
       secretVersions: { cert: certVersion.name, pass: passVersion.name },
     };
-    await admin.firestore().collection('sefaz_certificados').doc('atual').set(meta, { merge: true });
-    await admin.firestore().collection('sefaz_certificados_historico').add(meta);
+    await getFirebaseAdmin().firestore().collection('sefaz_certificados').doc('atual').set(meta, { merge: true });
+    await getFirebaseAdmin().firestore().collection('sefaz_certificados_historico').add(meta);
 
     console.log(`[sefaz/cert] upload OK por ${req.user.email} — ${info.tipo} ${info.cnpj || info.cpfTitular} val até ${info.validade.fim}`);
 
@@ -217,7 +221,7 @@ router.post('/cert', requireAdmin, upload.single('cert'), async (req, res) => {
 // ---------------------------------------------------------------------------
 router.get('/cert/status', requireAdmin, async (req, res) => {
   try {
-    const doc = await admin.firestore().collection('sefaz_certificados').doc('atual').get();
+    const doc = await getFirebaseAdmin().firestore().collection('sefaz_certificados').doc('atual').get();
     if (!doc.exists) return res.json({ configured: false });
 
     const data = doc.data();
@@ -242,7 +246,7 @@ router.get('/cert/status', requireAdmin, async (req, res) => {
 // ---------------------------------------------------------------------------
 router.delete('/cert', requireAdmin, async (req, res) => {
   try {
-    await admin.firestore().collection('sefaz_certificados').doc('atual').delete();
+    await getFirebaseAdmin().firestore().collection('sefaz_certificados').doc('atual').delete();
     console.log(`[sefaz/cert] desabilitado por ${req.user.email}`);
     return res.json({ ok: true });
   } catch (e) {
