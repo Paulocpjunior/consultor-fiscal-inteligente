@@ -1,4 +1,3 @@
-const sefazCertRouter = require('./sefaz-backend/cert-manager');
 import express from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
@@ -7,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import multer from 'multer';
 import * as XLSX from 'xlsx';
+import sefazCertRouter from './sefaz-backend/cert-manager.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const __filename = fileURLToPath(import.meta.url);
