@@ -133,3 +133,20 @@ export async function getSefazWindow(): Promise<SefazWindow | null> {
         return null;
     }
 }
+
+export async function toggleSefazCapture(cnpj: string, ativo: boolean): Promise<{ ok: boolean; motivo?: string; ativo?: boolean }> {
+    try {
+        const token = await getToken();
+        const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
+        const res = await fetch(`/api/admin/sefaz/toggle/${encodeURIComponent(cnpjLimpo)}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ativo }),
+        });
+        const data = await res.json();
+        if (!res.ok) return { ok: false, motivo: data.error || `Falha HTTP ${res.status}` };
+        return { ok: true, ativo: data.ativo };
+    } catch (err: any) {
+        return { ok: false, motivo: err.message || 'Erro de rede' };
+    }
+}

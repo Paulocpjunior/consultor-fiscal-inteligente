@@ -189,4 +189,40 @@ router.get('/window', requireAuth, (req, res) => {
   return res.json(statusJanelaOperacional());
 });
 
+router.post('/toggle/:cnpj', requireAuth, express.json(), async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Apenas administradores podem alterar este status.' });
+    }
+    const cnpj = String(req.params.cnpj).replace(/\D/g, '');
+    if (cnpj.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });
+    const { ativo } = req.body || {};
+    if (typeof ativo !== 'boolean') return res.status(400).json({ error: 'Campo "ativo" (boolean) obrigatório' });
+
+    const db = fa().firestore();
+    const colNames = ['simples_empresas', 'lucro_empresas'];
+    let updated = 0;
+    for (const colName of colNames) {
+      const snap = await db.collection(colName).where('cnpj', '>=', '').get();
+      for (const doc of snap.docs) {
+        const docCnpj = (doc.data().cnpj || '').replace(/\D/g, '');
+        if (docCnpj === cnpj) {
+          await doc.ref.update({
+            capturarSefaz: ativo,
+            capturarSefazAlteradoEm: fa().firestore.FieldValue.serverTimestamp(),
+            capturarSefazAlteradoPor: req.user.email,
+          });
+          updated++;
+        }
+      }
+    }
+    if (updated === 0) return res.status(404).json({ error: 'Empresa não encontrada' });
+    console.log(`[toggle] cnpj=${cnpj} ativo=${ativo} por=${req.user.email} (${updated} doc${updated > 1 ? 's' : ''})`);
+    return res.json({ ok: true, cnpj, ativo, updated, alteradoPor: req.user.email });
+  } catch (e) {
+    console.error('[POST /toggle] erro:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;
