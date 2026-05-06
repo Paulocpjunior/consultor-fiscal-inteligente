@@ -8,6 +8,8 @@ RUN npm install
 
 COPY . .
 
+# ARGs necessarios para o Vite injetar nas envs do bundle no build-time.
+# Os valores vem do gcloud run deploy --build-env-vars-file ou Cloud Build.
 ARG VITE_GEMINI_API_KEY
 ARG VITE_FIREBASE_API_KEY
 ARG VITE_FIREBASE_AUTH_DOMAIN
@@ -26,13 +28,18 @@ ENV VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
 
 RUN npm run build
 
-# ─── Stage 2: Serve com Nginx na porta 8080 ───────────────────────────────────
-FROM nginx:alpine
+# ─── Stage 2: Servidor Express (API /api/fiscal/* + SPA estatico) ────────────
+FROM node:20-slim
 
-COPY --from=builder /app/dist /usr/share/nginx/html
+WORKDIR /app
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY package*.json ./
+RUN npm install --omit=dev
+
+COPY --from=builder /app/dist ./dist
+COPY server.js ./
 
 EXPOSE 8080
 
-CMD ["nginx", "-g", "daemon off;"]
+# server.js da raiz: serve /api/fiscal/* (Gemini) + dist/ (frontend) + SPA fallback
+CMD ["node", "server.js"]
