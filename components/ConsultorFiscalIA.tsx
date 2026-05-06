@@ -36,7 +36,7 @@ const CATEGORIAS = [
     { label: 'Obrigacoes', emoji: '📅', desc: 'DCTF, EFD, SPED, prazos' },
 ];
 
-const MODEL_NAME = 'gemini-2.0-flash';
+const MODEL_NAME = 'gemini-2.5-pro';
 const API_BASE = '/api/gemini/v1beta/models';
 
 async function callGeminiChat(messages: ChatMessage[], categoria: string): Promise<string> {

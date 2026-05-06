@@ -85,7 +85,7 @@ app.get('/health', (_req, res) => {
 
 // ─── Proxy endpoint: Consulta Fiscal ─────────────────────────────────────────
 app.post('/api/fiscal/query', async (req, res) => {
-    const { prompt, model = 'gemini-2.0-flash' } = req.body;
+    const { prompt, model = 'gemini-2.5-pro' } = req.body;
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
         return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });
@@ -115,7 +115,7 @@ app.post('/api/fiscal/query', async (req, res) => {
 
 // ─── Proxy endpoint: Comparação ───────────────────────────────────────────────
 app.post('/api/fiscal/compare', async (req, res) => {
-    const { prompt, model = 'gemini-2.0-flash' } = req.body;
+    const { prompt, model = 'gemini-2.5-pro' } = req.body;
 
     if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });
@@ -136,7 +136,7 @@ app.post('/api/fiscal/compare', async (req, res) => {
 
 // ─── Proxy endpoint: Serviços similares ──────────────────────────────────────
 app.post('/api/fiscal/similar', async (req, res) => {
-    const { prompt, model = 'gemini-2.0-flash' } = req.body;
+    const { prompt, model = 'gemini-2.5-pro' } = req.body;
 
     if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });

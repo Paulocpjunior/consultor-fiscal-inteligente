@@ -39,7 +39,7 @@ app.post('/api/fiscal/query', requireAI, async (req, res) => {
     const { prompt, model, temperature, googleSearch } = req.body;
     if (!prompt) return res.status(400).json({ error: 'prompt obrigatorio' });
     try {
-        const requestBody = { model: model || 'gemini-2.0-flash', contents: prompt };
+        const requestBody = { model: model || 'gemini-2.5-pro', contents: prompt };
         if (temperature !== undefined) requestBody.config = { temperature };
         if (googleSearch) {
             requestBody.config = requestBody.config || {};
@@ -58,7 +58,7 @@ app.post('/api/fiscal/multimodal', requireAI, async (req, res) => {
     if (!prompt || !base64Data || !mimeType) return res.status(400).json({ error: 'campos obrigatorios' });
     try {
         const response = await ai.models.generateContent({
-            model: model || 'gemini-2.0-flash',
+            model: model || 'gemini-2.5-pro',
             contents: [{ inlineData: { mimeType, data: base64Data } }, { text: prompt }],
         });
         return res.json({ text: response.text ?? '', candidates: response.candidates || [] });
