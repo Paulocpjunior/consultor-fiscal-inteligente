@@ -82,7 +82,7 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
 
                 <div>
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-                        Itens ({d.itens.length})
+                        Itens ({(d as any).itens?.length || 0})
                     </p>
                     <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 max-h-[360px]">
                         <table className="w-full text-xs">
@@ -103,7 +103,7 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {d.itens.map((p, i) => (
+                                {((d as any).itens || []).map((p: any, i: number) => (
                                     <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
                                         <td className="px-2 py-1.5 text-slate-400">{p.nItem}</td>
                                         <td className="px-2 py-1.5 max-w-[200px] truncate" title={p.xProd}>{p.xProd}</td>
