@@ -331,6 +331,19 @@ export const logAction = (
 
     // ── Cloud (async, sem bloquear) ──
     if (isFirebaseConfigured && db) {
-        addDoc(collection(db, 'access_logs'), newLog).catch(() => {});
+        // Firestore SDK rejeita objetos com campos `undefined` antes de virar Promise.
+        // Sanitiza removendo chaves com undefined (especialmente `details`, opcional).
+        const cloudPayload: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(newLog)) {
+            if (v !== undefined) cloudPayload[k] = v;
+        }
+        try {
+            addDoc(collection(db, 'access_logs'), cloudPayload).catch((err) => {
+                console.debug('logAction: falha silenciosa ao gravar em access_logs:', err?.message);
+            });
+        } catch (err: any) {
+            // Erro síncrono de validação (ex.: payload com undefined que escapou)
+            console.debug('logAction: payload inválido para Firestore:', err?.message);
+        }
     }
 };
