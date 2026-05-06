@@ -4,6 +4,7 @@ import { isFirebaseConfigured, isFirebaseStorageConfigured } from '../../service
 import { isSefazCaptureAvailable } from '../../services/dfeCaptureService';
 import { isSharePointAvailable } from '../../services/sharePointXmlService';
 
+import CertificadoDigitalUpload from '../CertificadoDigitalUpload';
 interface Props {
     currentUser: User;
 }
@@ -18,6 +19,7 @@ const Row: React.FC<{ label: string; value: string; ok: boolean }> = ({ label, v
 const XmlConfiguracoes: React.FC<Props> = ({ currentUser }) => {
     return (
         <div className="space-y-3">
+            <CertificadoDigitalUpload />
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                 <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Status do módulo</h3>
                 <Row label="Firebase Auth & Firestore" value={isFirebaseConfigured ? 'Configurado' : 'Não configurado'} ok={isFirebaseConfigured} />
