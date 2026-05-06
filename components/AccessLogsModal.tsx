@@ -14,7 +14,14 @@ const AccessLogsModal: React.FC<AccessLogsModalProps> = ({ isOpen, onClose }) =>
 
     useEffect(() => {
         if (isOpen) {
-            setLogs(getAccessLogs());
+            (async () => {
+                try {
+                    const logs = await getAccessLogs();
+                    setLogs(logs);
+                } catch (e) {
+                    console.error('[AccessLogsModal] erro ao carregar logs:', e);
+                }
+            })();
         }
     }, [isOpen]);
 

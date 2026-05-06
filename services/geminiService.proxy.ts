@@ -116,12 +116,17 @@ export async function fetchComparison(
     const prompt = `Você é um consultor fiscal brasileiro. Compare detalhadamente os seguintes termos fiscais no contexto de ${searchType}:\n\nTermo 1: "${query1}"\nTermo 2: "${query2}"\n\nEstruture a resposta em Markdown com: 1) Resumo executivo, 2) Tabela comparativa, 3) Quando usar cada um, 4) Riscos e cuidados.`;
 
     const text = await callProxy('/api/fiscal/compare', prompt);
+    const summary = text.split('\n')[0] || 'Comparação realizada';
 
     return {
+        summary,
+        // Wrapper esperado pelo ComparisonDisplay (compatibilidade retroativa).
+        result1: { query: query1, text, searchType },
+        result2: { query: query2, text, searchType },
+        // Campos flat opcionais (consumo direto pelo proxy).
         query1,
         query2,
         searchType,
-        summary: text.split('\n')[0] || 'Comparação realizada',
         text,
     };
 }

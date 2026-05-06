@@ -323,8 +323,9 @@ export const parseAndSaveNotas = async (
 
     // ── Cloud-first ──
     if (isFirebaseConfigured && db && uid) {
+        const dbRef = db;  // narrow Firestore (não-null) escapa pra dentro da arrow
         await Promise.allSettled(newNotes.map(note =>
-            setDoc(doc(db, 'simples_notas', note.id), { ...note, createdBy: uid })));
+            setDoc(doc(dbRef, 'simples_notas', note.id), { ...note, createdBy: uid })));
     }
 
     // ── Local cache ──

@@ -50,6 +50,8 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.OBRIGACOES_FISCAIS]: "Acompanhamento de obrigações, vencimentos e alertas fiscais.",
     [SearchType.IMPORTA_XML]: "Central de Documentos Fiscais — importação de XMLs/PDFs (NFSe), captura, dashboards e relatórios.",
     [SearchType.ANALISE_RELATORIO_SAGE]: "Analise relatórios SAGE (XLSX/XML) e identifique gaps, canceladas, denegadas e segregação E/S.",
+    [SearchType.ANALISADOR_REGIME]: "Compare cenários de tributação (Simples, Lucro Presumido, Lucro Real) e identifique o regime mais vantajoso.",
+    [SearchType.ANALISE_CREDITOS]: "Análise de créditos PIS/COFINS, conciliação bancária e mapeamento por categoria fiscal.",
 };
 
 const App: React.FC = () => {

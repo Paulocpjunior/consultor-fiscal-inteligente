@@ -448,7 +448,7 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
 
     const conteudo = buildFile(linhas, /* appendEOF */ true);
     const bytes = encodeWindows1252(conteudo);
-    const blob = new Blob([bytes], { type: 'application/octet-stream' });
+    const blob = new Blob([bytes as BlobPart], { type: 'application/octet-stream' });
 
     const competencia = documentos[0]?.competencia?.replace(/[^0-9]/g, '') || 'sem-comp';
     const empresa = (documentos[0]?.empresaCnpj || '').replace(/[^0-9]/g, '').slice(0, 14) || 'empresa';

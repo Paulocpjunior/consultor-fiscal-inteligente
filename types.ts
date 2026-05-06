@@ -29,8 +29,10 @@ export interface IbptRates {
 
 export interface SearchResult {
     text: string;
-    sources: GroundingSource[];
+    sources?: GroundingSource[];
     query: string;
+    /** Tipo da busca (Reforma, Simples, etc) — quando aplicável. */
+    searchType?: SearchType;
     timestamp?: number;
     context?: {
         aliquotaIcms?: string;
@@ -45,6 +47,11 @@ export interface ComparisonResult {
     summary: string;
     result1: SearchResult;
     result2: SearchResult;
+    /** Campos flat usados opcionalmente por geminiService.proxy. */
+    query1?: string;
+    query2?: string;
+    searchType?: SearchType;
+    text?: string;
 }
 
 export interface NewsAlert {
