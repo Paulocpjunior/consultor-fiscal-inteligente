@@ -134,16 +134,21 @@ async function listarEmpresasParaCron() {
   const db = fa().firestore();
   const limite = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const empresas = [];
+  // Collections REAIS:
+  //   simples_empresas (services/simplesNacionalService.ts)
+  //   lucro_empresas   (services/lucroPresumidoService.ts)
   const colNames = [
-    process.env.SIMPLES_COLLECTION || 'simples_nacional',
-    process.env.LUCRO_COLLECTION || 'lucro_presumido_real',
-    process.env.LUCRO_COLLECTION_ALT || 'lucro_empresas',
+    process.env.SIMPLES_COLLECTION || 'simples_empresas',
+    process.env.LUCRO_COLLECTION || 'lucro_empresas',
   ];
   for (const colName of colNames) {
     try {
-      const snap = await db.collection(colName).where('capturarSefaz', '==', true).get();
+      // Default = ATIVO. Não filtramos por capturarSefaz no Firestore para incluir
+      // docs antigos que não têm o campo (interpretado como ativo).
+      const snap = await db.collection(colName).get();
       snap.forEach(doc => {
         const d = doc.data();
+        if (d.capturarSefaz === false) return; // só pula se admin desativou explicitamente
         const cnpj = (d.cnpj || '').replace(/\D/g, '');
         if (cnpj.length !== 14) return;
         if (d.ultimoAcessoXml) {
@@ -152,6 +157,7 @@ async function listarEmpresasParaCron() {
         }
         empresas.push({ id: doc.id, cnpj, nome: d.nome || d.razaoSocial || '', fonte: colName });
       });
+      console.log(`[sync-cron] collection ${colName}: ${snap.size} docs`);
     } catch (e) {
       console.warn(`[sync-cron] collection ${colName} indisponível:`, e.message);
     }

@@ -68,7 +68,7 @@ export async function captureFromSefaz(req: DfeCaptureRequest): Promise<DfeCaptu
         const res = await fetch('/api/admin/sefaz/sync-one', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ empresaId: req.empresa.id, empresaCnpj: req.empresa.cnpj }),
+            body: JSON.stringify({ empresaId: req.empresa.id, empresaCnpj: String(req.empresa.cnpj || '').replace(/\D/g, '') }),
         });
         const data = await res.json();
         if (res.status === 403) {

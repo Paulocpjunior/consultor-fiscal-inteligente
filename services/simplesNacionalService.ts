@@ -130,7 +130,8 @@ export const saveEmpresa = async (
         folha12: 0, faturamentoManual: {}, faturamentoMensalDetalhado: {},
         historicoCalculos: [], createdBy: userId,
         createdByEmail: auth?.currentUser?.email || undefined,
-        dataAbertura: dataAbertura || undefined
+        dataAbertura: dataAbertura || undefined,
+        capturarSefaz: true  // Default: nova empresa ativa pra cron SEFAZ
     };
 
     // ── Cloud-first ──

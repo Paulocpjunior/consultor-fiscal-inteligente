@@ -177,6 +177,8 @@ export interface SimplesNacionalEmpresa {
      * Resolução CGSN 140/2018, art. 21.
      */
     dataAbertura?: string;
+    /** Captura automática SEFAZ (cron noturno). Default = true. Admin pode desativar. */
+    capturarSefaz?: boolean;
 }
 
 export interface SimplesNacionalNota {
@@ -402,6 +404,8 @@ export interface LucroPresumidoEmpresa {
     fichaFinanceira: FichaFinanceiraRegistro[];
     createdBy?: string;
     createdByEmail?: string;
+    /** Captura automática SEFAZ (cron noturno). Default = true. Admin pode desativar. */
+    capturarSefaz?: boolean;
 }
 
 export interface PlanoCotas {
