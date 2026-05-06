@@ -1,3 +1,4 @@
+const sefazCertRouter = require('./sefaz-backend/cert-manager');
 import express from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
@@ -11,6 +12,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const app = express();
+app.use('/api/admin/sefaz', sefazCertRouter);
 const PORT = process.env.PORT || 8080;
 
 app.use(helmet({ contentSecurityPolicy: false }));
