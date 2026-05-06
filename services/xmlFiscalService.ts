@@ -387,7 +387,7 @@ export async function listDocumentos(
         if (filters.competenciaFim && d.competencia > filters.competenciaFim) return false;
         if (filters.busca) {
             const term = filters.busca.toLowerCase();
-            const blob = `${d.numero} ${d.chave} ${d.emitente.nome} ${d.destinatario.nome} ${d.empresaNome}`.toLowerCase();
+            const blob = `${d.numero || ''} ${d.chave || ''} ${(d as any).emitente?.nome || (d as any).prestador?.nome || ''} ${(d as any).destinatario?.nome || (d as any).tomador?.nome || ''} ${d.empresaNome || ''}`.toLowerCase();
             if (!blob.includes(term)) return false;
         }
         return true;

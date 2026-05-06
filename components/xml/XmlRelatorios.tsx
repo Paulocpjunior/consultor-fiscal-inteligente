@@ -195,8 +195,8 @@ function renderRelatorio(id: RelatorioId, docs: DocumentoFiscal[], summary: Retu
                     <td className="py-1">{new Date(d.dhEmi).toLocaleDateString('pt-BR')}</td>
                     <td>{d.empresaNome}</td>
                     <td className="font-mono">{d.numero}</td>
-                    <td>{id === 'entradas' ? d.emitente.nome : d.destinatario.nome}</td>
-                    <td className="text-right font-bold">{formatCurrency(d.totais.vNF)}</td>
+                    <td>{id === 'entradas' ? ((d as any).emitente?.nome || (d as any).prestador?.nome || '—') : ((d as any).destinatario?.nome || (d as any).tomador?.nome || '—')}</td>
+                    <td className="text-right font-bold">{formatCurrency((d as any).totais?.vNF ?? (d as any).valores?.liquido ?? 0)}</td>
                 </tr>))}
             </tbody></table>
         );

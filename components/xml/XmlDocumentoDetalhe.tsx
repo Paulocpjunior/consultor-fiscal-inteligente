@@ -40,18 +40,18 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Emitente</p>
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{d.emitente.nome}</p>
-                        {d.emitente.fantasia && <p className="text-xs text-slate-500">{d.emitente.fantasia}</p>}
-                        <p className="text-xs text-slate-500 mt-1">CNPJ: {formatCnpjCpf(d.emitente.cnpjCpf)}</p>
-                        <p className="text-xs text-slate-500">IE: {d.emitente.ie || '-'}</p>
-                        <p className="text-xs text-slate-500">{d.emitente.municipio}/{d.emitente.uf}</p>
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{(d as any).emitente?.nome || (d as any).prestador?.nome || '—'}</p>
+                        {(d as any).emitente?.fantasia && <p className="text-xs text-slate-500">{(d as any).emitente.fantasia}</p>}
+                        <p className="text-xs text-slate-500 mt-1">CNPJ: {formatCnpjCpf((d as any).emitente?.cnpjCpf || (d as any).prestador?.cnpj || '')}</p>
+                        <p className="text-xs text-slate-500">IE: {(d as any).emitente?.ie || '-'}</p>
+                        <p className="text-xs text-slate-500">{(d as any).emitente?.municipio || (d as any).prestador?.municipio || '—'}/{(d as any).emitente?.uf || (d as any).prestador?.uf || ''}</p>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Destinatário</p>
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{d.destinatario.nome}</p>
-                        <p className="text-xs text-slate-500 mt-1">CNPJ/CPF: {formatCnpjCpf(d.destinatario.cnpjCpf)}</p>
-                        <p className="text-xs text-slate-500">IE: {d.destinatario.ie || '-'}</p>
-                        <p className="text-xs text-slate-500">{d.destinatario.municipio}/{d.destinatario.uf}</p>
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{(d as any).destinatario?.nome || (d as any).tomador?.nome || '—'}</p>
+                        <p className="text-xs text-slate-500 mt-1">CNPJ/CPF: {formatCnpjCpf((d as any).destinatario?.cnpjCpf || (d as any).tomador?.cnpj || '')}</p>
+                        <p className="text-xs text-slate-500">IE: {(d as any).destinatario?.ie || '-'}</p>
+                        <p className="text-xs text-slate-500">{(d as any).destinatario?.municipio || (d as any).tomador?.municipio || '—'}/{(d as any).destinatario?.uf || (d as any).tomador?.uf || ''}</p>
                     </div>
                 </div>
 
@@ -59,18 +59,18 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Resumo de Impostos</p>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {[
-                            { label: 'Valor Produtos', value: d.totais.vProd },
-                            { label: 'Valor NF', value: d.totais.vNF },
-                            { label: 'BC ICMS', value: d.totais.vBC },
-                            { label: 'ICMS', value: d.totais.vICMS },
-                            { label: 'BC ICMS ST', value: d.totais.vBCST },
-                            { label: 'ICMS ST', value: d.totais.vST },
-                            { label: 'IPI', value: d.totais.vIPI },
-                            { label: 'PIS', value: d.totais.vPIS },
-                            { label: 'COFINS', value: d.totais.vCOFINS },
-                            { label: 'Frete', value: d.totais.vFrete },
-                            { label: 'Desconto', value: d.totais.vDesc },
-                            { label: 'Outros', value: d.totais.vOutro },
+                            { label: 'Valor Produtos', value: (d as any).totais?.vProd ?? 0 },
+                            { label: 'Valor NF', value: (d as any).totais?.vNF ?? (d as any).valores?.liquido ?? 0 },
+                            { label: 'BC ICMS', value: (d as any).totais?.vBC ?? 0 },
+                            { label: 'ICMS', value: (d as any).totais?.vICMS ?? 0 },
+                            { label: 'BC ICMS ST', value: (d as any).totais?.vBCST ?? 0 },
+                            { label: 'ICMS ST', value: (d as any).totais?.vST ?? 0 },
+                            { label: 'IPI', value: (d as any).totais?.vIPI ?? 0 },
+                            { label: 'PIS', value: (d as any).totais?.vPIS ?? (d as any).valores?.pis ?? 0 },
+                            { label: 'COFINS', value: (d as any).totais?.vCOFINS ?? (d as any).valores?.cofins ?? 0 },
+                            { label: 'Frete', value: (d as any).totais?.vFrete ?? 0 },
+                            { label: 'Desconto', value: (d as any).totais?.vDesc ?? 0 },
+                            { label: 'Outros', value: (d as any).totais?.vOutro ?? 0 },
                         ].map(item => (
                             <div key={item.label} className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-2 text-center">
                                 <p className="text-[10px] text-slate-500 dark:text-slate-400">{item.label}</p>
