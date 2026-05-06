@@ -23,11 +23,11 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
 
     return (
         <div className="space-y-3">
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-                <p className="text-xs text-amber-800 dark:text-amber-300">
-                    A captura automática SEFAZ {isSefazCaptureAvailable() ? 'está habilitada' : 'ainda não está habilitada'}.
-                    Nesta fase, somente importação manual ou via SharePoint (quando liberado) está disponível.
-                    O certificado digital nunca trafega pelo navegador.
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3">
+                <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                    <strong>Captura SEFAZ ativa.</strong> Cron noturno automático às 02:00 BRT seg-sex.
+                    Captura manual disponível das 07:00 às 20:00 BRT (botão verde abaixo).
+                    O certificado digital fica protegido no servidor — nunca trafega pelo navegador.
                 </p>
             </div>
 
