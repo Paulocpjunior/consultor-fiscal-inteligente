@@ -4,6 +4,7 @@ import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xm
 import { isSefazCaptureAvailable } from '../../services/dfeCaptureService';
 import { formatCnpjCpf } from '../../services/xmlParserService';
 
+import SefazSyncButton from '../SefazSyncButton';
 interface Props {
     currentUser: User;
 }
@@ -54,7 +55,7 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
                                     <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{e.nome}</td>
                                     <td className="px-3 py-2 text-slate-500 font-mono">{formatCnpjCpf(e.cnpj)}</td>
                                     <td className="px-3 py-2 text-slate-500 capitalize">{e.fonte}</td>
-                                    <td className="px-3 py-2 text-slate-400">Pendente backend</td>
+                                    <td className="px-3 py-2"><SefazSyncButton empresa={e} currentUser={currentUser} /></td>
                                     <td className="px-3 py-2 text-slate-400">Pendente backend</td>
                                 </tr>
                             ))}
