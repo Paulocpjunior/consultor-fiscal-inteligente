@@ -38,6 +38,7 @@ RUN npm install --omit=dev
 
 COPY --from=builder /app/dist ./dist
 COPY server.js ./
+COPY sefaz-backend ./sefaz-backend
 
 EXPOSE 8080
 
