@@ -366,7 +366,8 @@ export async function listDocumentos(
     const constraints: QueryConstraint[] = [];
     if (!isMaster && uid) constraints.push(where('createdBy', '==', uid));
     if (filters.empresaId) constraints.push(where('empresaId', '==', filters.empresaId));
-    constraints.push(orderBy('importadoEm', 'desc'));
+    // NÃO usamos orderBy aqui: Firestore exclui docs que não têm o campo.
+    // Ordenação fica em memória com fallbacks (ver abaixo).
     constraints.push(fbLimit(500));
 
     let docs: DocumentoFiscal[] = [];
@@ -377,6 +378,20 @@ export async function listDocumentos(
         console.warn('listDocumentos:', err?.message);
         return [];
     }
+
+    // Ordena em memória com cascata de fallbacks (importadoEm → createdAt → dhEmi → competencia → numero)
+    const tsOf = (d: any): number => {
+        const candidates = [d.importadoEm, d.createdAt, d.dhEmi, d.dataImportacao];
+        for (const c of candidates) {
+            if (!c) continue;
+            if (typeof c === 'number') return c;
+            if (typeof c === 'string') { const t = new Date(c).getTime(); if (!isNaN(t)) return t; }
+            if (c?.seconds) return c.seconds * 1000;
+            if (c?.toMillis) return c.toMillis();
+        }
+        return 0;
+    };
+    docs.sort((a, b) => tsOf(b) - tsOf(a));
 
     return docs.filter(d => {
         if (filters.direcao && d.direcao !== filters.direcao) return false;
