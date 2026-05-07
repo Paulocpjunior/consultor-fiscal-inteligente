@@ -14,6 +14,17 @@ const formatBR = (s: string | undefined): string => {
     } catch { return s; }
 };
 
+const iconePorTipoDoc = (tipoDoc: string | undefined, tipo: string | undefined): string => {
+    // Prioriza tipoDoc (do backend SEFAZ); fallback pra tipo (importação manual).
+    const t = (tipoDoc || tipo || '').toLowerCase();
+    if (t === 'cte' || t.startsWith('cte') || t === 'rescte') return '📦';
+    if (t === 'mdfe' || t.startsWith('mdfe') || t === 'resmdfe') return '🚛';
+    if (t === 'epec') return '⚠️';
+    if (t === 'nfse' || t === 'nfs-e') return '🧾';
+    if (t === 'nfce' || t === 'nfc-e') return '🛒';
+    return '📄';  // default NFe
+};
+
 const eventoBadgeColor = (tipo: string): string => {
     switch (tipo) {
         case 'cancelamento': return 'bg-red-500/15 text-red-700 border-red-300 dark:text-red-300 dark:border-red-800';
@@ -69,10 +80,11 @@ const NFeStatusCell: React.FC<Props> = ({ doc }) => {
                 type="button"
                 onClick={handleBadgeClick}
                 disabled={!temEventos}
-                className={`inline-block px-2 py-0.5 rounded border text-[10px] font-bold transition ${badgeClass} ${temEventos ? 'cursor-pointer hover:scale-105' : 'cursor-default'}`}
-                title={temEventos ? 'Clique para ver os eventos' : ''}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold transition ${badgeClass} ${temEventos ? 'cursor-pointer hover:scale-105' : 'cursor-default'}`}
+                title={temEventos ? 'Clique para ver os eventos' : (`${(doc as any).tipoDoc || doc.tipo || 'documento fiscal'}`)}
             >
-                {badgeContent}
+                <span aria-hidden="true">{iconePorTipoDoc((doc as any).tipoDoc, doc.tipo)}</span>
+                <span>{badgeContent}</span>
             </button>
 
             {openModal && (

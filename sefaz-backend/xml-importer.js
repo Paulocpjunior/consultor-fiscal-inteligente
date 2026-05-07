@@ -67,14 +67,22 @@ function extrairMetadados(xml, schema) {
   const tpNF = pickTag(xml, 'tpNF') || null;
 
   let tipoDoc = 'desconhecido';
-  if (schema?.startsWith('procNFe')) tipoDoc = 'NFe';
-  else if (schema?.startsWith('resNFe')) tipoDoc = 'resNFe';
-  else if (schema?.startsWith('procEventoNFe')) tipoDoc = 'eventoNFe';
-  else if (schema?.startsWith('resEvento')) tipoDoc = 'resEvento';
+  let tipoNormalizado = 'desconhecido';  // alinha com XmlTipoDocumento do frontend (NFe/NFCe/CTe/MDFe/...)
+  if (schema?.startsWith('procNFe'))        { tipoDoc = 'NFe';        tipoNormalizado = 'NFe'; }
+  else if (schema?.startsWith('resNFe'))    { tipoDoc = 'resNFe';     tipoNormalizado = 'NFe'; }
+  else if (schema?.startsWith('procCTe'))   { tipoDoc = 'CTe';        tipoNormalizado = 'CTe'; }
+  else if (schema?.startsWith('resCTe'))    { tipoDoc = 'resCTe';     tipoNormalizado = 'CTe'; }
+  else if (schema?.startsWith('procMDFe'))  { tipoDoc = 'MDFe';       tipoNormalizado = 'MDFe'; }
+  else if (schema?.startsWith('resMDFe'))   { tipoDoc = 'resMDFe';    tipoNormalizado = 'MDFe'; }
+  else if (schema?.startsWith('procEPEC'))  { tipoDoc = 'EPEC';       tipoNormalizado = 'NFe'; }
+  else if (schema?.startsWith('procEventoNFe'))   { tipoDoc = 'eventoNFe';   tipoNormalizado = 'NFe'; }
+  else if (schema?.startsWith('procEventoCTe'))   { tipoDoc = 'eventoCTe';   tipoNormalizado = 'CTe'; }
+  else if (schema?.startsWith('procEventoMDFe'))  { tipoDoc = 'eventoMDFe';  tipoNormalizado = 'MDFe'; }
+  else if (schema?.startsWith('resEvento'))       { tipoDoc = 'resEvento';   tipoNormalizado = 'NFe'; }
 
   // Para eventos, extrai metadados específicos
   let evento = null;
-  if (tipoDoc === 'eventoNFe' || tipoDoc === 'resEvento') {
+  if (tipoDoc === 'eventoNFe' || tipoDoc === 'eventoCTe' || tipoDoc === 'eventoMDFe' || tipoDoc === 'resEvento') {
     const tpEvento = pickTag(xml, 'tpEvento');
     const nSeqEvento = pickTag(xml, 'nSeqEvento');
     const dhEventoTag = pickTag(xml, 'dhEvento');
@@ -105,7 +113,7 @@ function extrairMetadados(xml, schema) {
   return {
     chave, cnpjEmit, cnpjDest, xNome, dhEmi,
     vNF: vNF ? Number(vNF) : null,
-    tpNF, tipoDoc, schema, evento,
+    tpNF, tipoDoc, tipoNormalizado, schema, evento,
   };
 }
 
@@ -291,6 +299,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     valorTotal: meta.vNF,
     tpNF: meta.tpNF,
     tipoDoc: meta.tipoDoc,
+    tipo: meta.tipoNormalizado,  // alinhado ao XmlTipoDocumento do frontend
     schema: meta.schema,
     nsu,
     storagePath,
