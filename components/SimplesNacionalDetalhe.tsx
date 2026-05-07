@@ -3,6 +3,7 @@ import { SimplesNacionalEmpresa, SimplesNacionalNota, SimplesNacionalImportResul
 import * as simplesService from '../services/simplesNacionalService';
 import { ArrowLeftIcon, SaveIcon, UserIcon, HistoryIcon, EyeIcon, DownloadIcon, CalculatorIcon, GlobeIcon, DocumentTextIcon, ShieldIcon, AnimatedCheckIcon, PlusIcon, TrashIcon, TagIcon, BuildingIcon } from './Icons';
 import LoadingSpinner from './LoadingSpinner';
+import NfseSpAdminPanel from './NfseSpAdminPanel';
 
 interface SimplesNacionalDetalheProps {
     empresa: SimplesNacionalEmpresa;
@@ -362,6 +363,19 @@ if (filialServico > 0) {
                 
                 {/* Right Column (Main): Inputs & Calculation */}
                 <div className="lg:col-span-2 space-y-6 order-1 lg:order-2">
+                    
+                    {currentUser?.role === 'admin' && (
+                        <NfseSpAdminPanel
+                            empresaId={empresa.id}
+                            colecao="simples_empresas"
+                            ccmSpAtual={empresa.ccmSp}
+                            nfseSpAutorizadoEmAtual={empresa.nfseSpAutorizadoEm}
+                            onSalvarConfig={async ({ ccmSp, nfseSpAutorizadoEm }) => {
+                                await onUpdateEmpresa(empresa.id, { ccmSp, nfseSpAutorizadoEm });
+                            }}
+                            onShowToast={onShowToast}
+                        />
+                    )}
                     
                     {/* Month Selection & Summary */}
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
