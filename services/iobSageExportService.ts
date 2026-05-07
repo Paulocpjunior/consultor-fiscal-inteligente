@@ -283,6 +283,20 @@ function calcQtdCfops(d: DocumentoFiscal): number {
     return new Set((d.itens || []).map(i => i.cfop).filter(Boolean)).size || 1;
 }
 
+/**
+ * Verifica se o CFOP eh de venda para entrega futura (faturamento sem
+ * remessa fisica imediata) ou simbolica vinculada.
+ * CFOPs especificos: 5922/6922 (venda pra entrega futura),
+ *                    5117/6117/5118/6118 (vendas vinculadas a entrega futura).
+ * Regra IOB: campo "VENDA P/ ENTREGA FUTURA" eh 'N' SE for venda futura
+ *           (sera apurada na entrega real), 'S' caso contrario (apurar agora).
+ * Confuso? E. Mas e o que o IOB espera.
+ */
+function isVendaFutura(cfop: string | undefined): boolean {
+    const c = (cfop || '').replace(/\D/g, '');
+    return ['5922', '6922', '5117', '6117', '5118', '6118'].includes(c);
+}
+
 function buildE201sFromDoc(d: DocumentoFiscal): string[] {
     const c = commonNF(d);
     const linhas: string[] = [];
@@ -332,7 +346,7 @@ function buildE201sFromDoc(d: DocumentoFiscal): string[] {
             // Campos S/N abaixo: IOB exige preenchimento explicito (default 'N').
             // Sem eles, formatField enche com espaco e IOB rejeita o E201,
             // o que faz E342 reportar "NF nao cadastrada" em cascata.
-            'VENDA P/ ENTREGA FUTURA': 'N',
+            'VENDA P/ ENTREGA FUTURA': isVendaFutura(cfop) ? 'N' : 'S',
             'OPERAÇÕES SUBST TRIB SAÍDAS': 'N',
             'CIAP SAÍDA TRIBUTADA': 'N',
             'CONTROLE DO SISTEMA': 0,
