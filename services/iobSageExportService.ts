@@ -71,6 +71,22 @@ function dateAAAAMMDD(d: Date): string {
     return `${y}${m}${d}`.length === 8 ? `${y}${m}${day}` : `${y}${m}${day}`;
 }
 
+/**
+ * Formata NCM no padrao IOB/SAGE: "9999.99.99" (8 digitos com pontos).
+ * Aceita NCM cru ('78030000'), com pontos ('7803.00.00'), com tamanho irregular.
+ * Retorna string vazia se NCM nao tem pelo menos 8 digitos.
+ *
+ * IOB Folhamatic Fiscal exige formato '9999.99.99' ou '9999.99.99EX99' no E020 campo 12.
+ * NCM crua do XML SEFAZ vem como 8 digitos sem pontos -> precisa formatar.
+ */
+function formatNcm(ncm: string | undefined): string {
+    if (!ncm) return '';
+    const digits = ncm.replace(/\D/g, '');
+    if (digits.length < 8) return ''; // NCM invalido, deixa vazio (campo nao obrigatorio)
+    const base = digits.slice(0, 8);
+    return `${base.slice(0, 4)}.${base.slice(4, 6)}.${base.slice(6, 8)}`;
+}
+
 /** Codigo da empresa para o campo CODIGO DO CLIENTE/FORNECEDOR (max 20 chars). */
 function codigoParticipante(cnpjCpf: string): string {
     const digits = onlyDigits(cnpjCpf);
@@ -151,6 +167,11 @@ function buildE010(d: DocumentoFiscal): string {
         'FORNECEDOR SUBSTITUTO TRIBUTÁRIO': 'N',
         'SIMPLES NACIONAL': 'N',
         'INSCRITO NO MUNICÍPIO': 'N',
+        // Campos S/N abaixo: IOB exige preenchimento explicito (default 'N').
+        // Sem eles, formatField enche com espaco em branco e IOB rejeita.
+        'HOSPEDAGEM DE SITES E BANCO DE DADOS': 'N',
+        'GATEWAY DE PAGAMENTOS': 'N',
+        'PROVIMENTOS DE SOLUÇÕES': 'N',
         'CONTROLE DO SISTEMA': 0,
     });
 }
@@ -165,7 +186,7 @@ function buildE020(item: DocumentoFiscalItem, dataInclusao: Date): string {
         'GÊNERO DO ITEM': '',
         'TIPO DO PRODUTO': '01', // Mercadoria de Revenda (default)
         'TIPO PARA O INVENTÁRIO': 1,
-        'NBM/SH': sanitizeTexto(item.ncm || '').slice(0, 15),
+        'NBM/SH': formatNcm(item.ncm),
         'CÓDIGO DE BARRA': '',
         'COMBUSTÍVEL/SOLVENTE': 'N',
         'CÓD.UNID.COMERCIAL': uCom,
