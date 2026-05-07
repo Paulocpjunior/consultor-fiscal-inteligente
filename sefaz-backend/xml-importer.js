@@ -35,8 +35,8 @@ function classificarEvento(tpEvento) {
   const map = {
     '110110': { tipo: 'cce', descricao: 'Carta de Correção Eletrônica' },
     '110111': { tipo: 'cancelamento', descricao: 'Cancelamento de NF-e' },
-    '210200': { tipo: 'manifestacao_ciencia', descricao: 'Ciência da Operação' },
-    '210210': { tipo: 'manifestacao_confirmacao', descricao: 'Confirmação da Operação' },
+    '210200': { tipo: 'manifestacao_confirmacao', descricao: 'Confirmação da Operação' },
+    '210210': { tipo: 'manifestacao_ciencia', descricao: 'Ciência da Operação' },
     '210220': { tipo: 'manifestacao_desconhecimento', descricao: 'Desconhecimento da Operação' },
     '210240': { tipo: 'manifestacao_nao_realizada', descricao: 'Operação não Realizada' },
     '110140': { tipo: 'epec', descricao: 'EPEC (emergência)' },

@@ -37,6 +37,7 @@
   "dependencies": {
     "@google-cloud/secret-manager": "^6.1.2",
     "@google/genai": "^1.29.0",
+    "@xmldom/xmldom": "^0.8.13",
     "chart.js": "^4.5.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
@@ -55,6 +56,7 @@
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "xlsx": "^0.18.5",
+    "xml-crypto": "^6.1.2",
     "zod": "^4.3.6"
   }
 }

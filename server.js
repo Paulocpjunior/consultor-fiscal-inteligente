@@ -8,6 +8,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import sefazCertRouter from './sefaz-backend/cert-manager.js';
 import sefazSyncRouter from './sefaz-backend/sync-routes.js';
+import sefazManifestoRouter from './sefaz-backend/manifesto-routes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,6 +16,7 @@ const __dirname = dirname(__filename);
 const app = express();
 app.use('/api/admin/sefaz', sefazCertRouter);
 app.use('/api/admin/sefaz', sefazSyncRouter);
+app.use('/api/admin/sefaz', sefazManifestoRouter);
 const PORT = process.env.PORT || 8080;
 
 app.use(helmet({ contentSecurityPolicy: false }));
