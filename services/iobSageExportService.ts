@@ -229,6 +229,23 @@ function commonNF(d: DocumentoFiscal) {
     };
 }
 
+/**
+ * Mapeia tpFrete SEFAZ -> codigo IOB Folhamatic.
+ * SEFAZ:  0=Emitente, 1=Destinatario, 2=Terceiros, 9=Sem frete
+ * IOB:    1=Emitente, 2=Destinatario, 3=Terceiros, 9=Sem frete
+ * Se valor invalido ou ausente, retorna 9 (sem frete) - seguro pro IOB nao reclamar.
+ */
+function mapTipoFrete(tpFrete: unknown): number {
+    const v = String(tpFrete ?? '').trim();
+    switch (v) {
+        case '0': return 1; // SEFAZ "Emitente" -> IOB "1"
+        case '1': return 2; // SEFAZ "Destinatario" -> IOB "2"
+        case '2': return 3; // SEFAZ "Terceiros" -> IOB "3"
+        case '9': return 9;
+        default:  return 9; // ausente/invalido -> sem frete
+    }
+}
+
 function buildE200(d: DocumentoFiscal): string {
     const c = commonNF(d);
     const situacao =
@@ -251,7 +268,10 @@ function buildE200(d: DocumentoFiscal): string {
         'MODELO DA N.F.': c.modelo,
         'EMITENTE DA N.F.': c.es === 'S' ? 'P' : 'T',
         'SITUAÇÃO DA N.F.': situacao,
-        'TIPO DO FRETE': 0,
+        // SEFAZ aceita: 0=Emitente, 1=Destinatario, 2=Terceiros, 9=Sem frete.
+        // IOB Folhamatic exige 1/2/3/9 (mapeamento DIFERENTE: 1=Emi, 2=Dest, 3=3os, 9=Sem).
+        // Se tpFrete vier do XML SEFAZ, mapeia. Senao, default 9 (sem frete) que e seguro.
+        'TIPO DO FRETE': mapTipoFrete((d as any).tpFrete),
         'VALOR CONTÁBIL': d.totais?.vNF || 0,
         'Nº LINHAS DE LANÇAMENTO': calcQtdCfops(d),
         'DATA DE LANÇAMENTO NO SISTEMA': c.dEmi,
@@ -309,6 +329,12 @@ function buildE201sFromDoc(d: DocumentoFiscal): string[] {
             'CONTRIBUINTE DO ICMS': 'S',
             'OBSERVAÇÃO DA LINHA DE LANÇAMENTO': '',
             'Nº SEQUENCIAL DO LANÇAMENTO': seq,
+            // Campos S/N abaixo: IOB exige preenchimento explicito (default 'N').
+            // Sem eles, formatField enche com espaco e IOB rejeita o E201,
+            // o que faz E342 reportar "NF nao cadastrada" em cascata.
+            'VENDA P/ ENTREGA FUTURA': 'N',
+            'OPERAÇÕES SUBST TRIB SAÍDAS': 'N',
+            'CIAP SAÍDA TRIBUTADA': 'N',
             'CONTROLE DO SISTEMA': 0,
         }));
     }
