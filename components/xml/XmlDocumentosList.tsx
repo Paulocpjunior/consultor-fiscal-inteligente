@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { User, DocumentoFiscal } from '../../types';
 import { listDocumentos, type ListDocumentosFilters } from '../../services/xmlFiscalService';
+import NFeStatusCell from './NFeStatusCell';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
 
 interface Props {
@@ -138,7 +139,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                                                 : ((d as any).destinatario?.cnpjCpf || (d as any).tomador?.cnpj || ''))}</span>
                                         </td>
                                         <td className="px-3 py-1.5 text-right font-bold text-slate-700 dark:text-slate-200">{formatCurrency((d as any).totais?.vNF ?? (d as any).valores?.liquido ?? 0)}</td>
-                                        <td className="px-3 py-1.5 text-slate-500">{d.status}</td>
+                                        <td className="px-3 py-1.5"><NFeStatusCell doc={d} /></td>
                                     </tr>
                                 ))}
                             </tbody>

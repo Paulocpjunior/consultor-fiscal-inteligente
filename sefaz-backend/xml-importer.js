@@ -1,7 +1,8 @@
 // ============================================================================
-// sefaz-backend/xml-importer.js  (ESM)
-// Pipeline server-side: parse XML, sha256, upload Storage, set Firestore.
-// Path determinístico = `xmls/{empresaId}/{chave}.xml` (mesmo do frontend).
+// sefaz-backend/xml-importer.js  (ESM) — v2 com suporte a eventos NFe
+// Pipeline: parse XML, sha256, upload Storage, set/update Firestore.
+// Diferencial v2: eventos (cancelamento, CC-e) são ANEXADOS à NFe original
+// em vez de criados como docs órfãos.
 // ============================================================================
 
 import crypto from 'crypto';
@@ -27,6 +28,20 @@ function pickTag(xml, tag) {
 function pickAttr(xml, tag, attr) {
   const m = xml.match(new RegExp(`<${tag}\\s+[^>]*${attr}="([^"]+)"`, 'i'));
   return m ? m[1] : null;
+}
+
+// Mapeamento de tpEvento (Manual NFe v2.0)
+function classificarEvento(tpEvento) {
+  const map = {
+    '110110': { tipo: 'cce', descricao: 'Carta de Correção Eletrônica' },
+    '110111': { tipo: 'cancelamento', descricao: 'Cancelamento de NF-e' },
+    '210200': { tipo: 'manifestacao_ciencia', descricao: 'Ciência da Operação' },
+    '210210': { tipo: 'manifestacao_confirmacao', descricao: 'Confirmação da Operação' },
+    '210220': { tipo: 'manifestacao_desconhecimento', descricao: 'Desconhecimento da Operação' },
+    '210240': { tipo: 'manifestacao_nao_realizada', descricao: 'Operação não Realizada' },
+    '110140': { tipo: 'epec', descricao: 'EPEC (emergência)' },
+  };
+  return map[tpEvento] || { tipo: 'outro', descricao: `Evento ${tpEvento}` };
 }
 
 function extrairMetadados(xml, schema) {
@@ -57,10 +72,40 @@ function extrairMetadados(xml, schema) {
   else if (schema?.startsWith('procEventoNFe')) tipoDoc = 'eventoNFe';
   else if (schema?.startsWith('resEvento')) tipoDoc = 'resEvento';
 
+  // Para eventos, extrai metadados específicos
+  let evento = null;
+  if (tipoDoc === 'eventoNFe' || tipoDoc === 'resEvento') {
+    const tpEvento = pickTag(xml, 'tpEvento');
+    const nSeqEvento = pickTag(xml, 'nSeqEvento');
+    const dhEventoTag = pickTag(xml, 'dhEvento');
+    const xCorrecao = pickTag(xml, 'xCorrecao');
+    const xJust = pickTag(xml, 'xJust');
+    const nProt = pickTag(xml, 'nProt');
+    const cStat = pickTag(xml, 'cStat');
+    const xMotivo = pickTag(xml, 'xMotivo');
+    // chNFe pode estar em <chNFe> ou no Id do infEvento (formato ID + tpEvento + chave + nSeq)
+    let chNFeRef = pickTag(xml, 'chNFe');
+    if (!chNFeRef) {
+      const idEvento = pickAttr(xml, 'infEvento', 'Id');
+      // Formato: ID110111<44 dígitos><2 dígitos seq>
+      if (idEvento && idEvento.length >= 50) {
+        const limpo = idEvento.replace(/^ID/i, '');
+        if (limpo.length >= 50) chNFeRef = limpo.substring(6, 50);
+      }
+    }
+    const classif = tpEvento ? classificarEvento(tpEvento) : { tipo: 'desconhecido', descricao: 'Evento sem tpEvento' };
+    evento = {
+      tpEvento, nSeqEvento, dhEvento: dhEventoTag,
+      xCorrecao, xJust, nProt, cStat, xMotivo,
+      chNFeRef: chNFeRef ? chNFeRef.replace(/\D/g, '') : null,
+      tipo: classif.tipo, descricao: classif.descricao,
+    };
+  }
+
   return {
     chave, cnpjEmit, cnpjDest, xNome, dhEmi,
     vNF: vNF ? Number(vNF) : null,
-    tpNF, tipoDoc, schema,
+    tpNF, tipoDoc, schema, evento,
   };
 }
 
@@ -77,23 +122,144 @@ function sha256(text) {
   return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
+async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath, xmlHash, schema, nsu, capturadoPor }) {
+  // Persiste evento como subdoc/array dentro da NFe original.
+  // Se a NFe original não existir ainda, cria um "stub" com status pendente.
+  const docRef = db.collection('documentos_fiscais').doc(chaveNFe);
+  const eventoData = {
+    tpEvento: evento.tpEvento,
+    tipo: evento.tipo,
+    descricao: evento.descricao,
+    nSeqEvento: evento.nSeqEvento,
+    dhEvento: evento.dhEvento,
+    nProt: evento.nProt,
+    cStat: evento.cStat,
+    xMotivo: evento.xMotivo,
+    xCorrecao: evento.xCorrecao,
+    xJust: evento.xJust,
+    storagePath,
+    xmlHash,
+    schema,
+    nsu,
+    importadoEm: fa().firestore.FieldValue.serverTimestamp(),
+    importadoPor: capturadoPor?.email || 'system',
+  };
+
+  const snap = await docRef.get();
+  if (snap.exists) {
+    // Anexa ao array de eventos (sem duplicar pelo nProt)
+    const data = snap.data();
+    const eventosExistentes = data.eventos || [];
+    if (eventoData.nProt && eventosExistentes.some(e => e.nProt === eventoData.nProt)) {
+      return { status: 'duplicado_evento', chave: chaveNFe, tipo: evento.tipo };
+    }
+    const updates = {
+      eventos: [...eventosExistentes, eventoData],
+    };
+    // Se cancelamento, atualiza status da NFe
+    if (evento.tipo === 'cancelamento' && evento.cStat === '135') {
+      updates.status = 'cancelado';
+      updates.canceladoEm = evento.dhEvento;
+      updates.canceladoProtocolo = evento.nProt;
+    }
+    await docRef.update(updates);
+    return { status: 'evento_anexado', chave: chaveNFe, tipo: evento.tipo };
+  } else {
+    // Stub: cria um doc parcial pra quando a NFe chegar, ela faz merge
+    await docRef.set({
+      id: chaveNFe,
+      chave: chaveNFe,
+      empresaId,
+      empresaCnpj: capturadoPor?.empresaCnpj?.replace(/\D/g, '') || null,
+      tipoDoc: 'NFe',
+      status: evento.tipo === 'cancelamento' && evento.cStat === '135' ? 'cancelado' : 'pendente',
+      eventos: [eventoData],
+      origem: 'sefaz',
+      eventosBeforeNFe: true,
+      createdAt: fa().firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { status: 'evento_stub_criado', chave: chaveNFe, tipo: evento.tipo };
+  }
+}
+
 export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, nsu, capturadoPor }) {
   if (!xml) return { status: 'erro', motivo: 'XML vazio' };
 
   const meta = extrairMetadados(xml, schema);
   if (!meta.chave) return { status: 'erro', motivo: 'Chave da NFe não encontrada no XML' };
 
-  const docId = meta.chave;
-  const xmlHash = sha256(xml);
-  const storagePath = buildStoragePath(empresaId, meta.chave, meta.tipoDoc);
   const db = fa().firestore();
+  const xmlHash = sha256(xml);
+
+  // ── EVENTOS: caminho separado (anexa à NFe original) ────────────────
+  if ((meta.tipoDoc === 'eventoNFe' || meta.tipoDoc === 'resEvento') && meta.evento?.chNFeRef) {
+    // Upload do XML do evento no Storage (path próprio sob "eventos/")
+    const storagePathEvento = `xmls/${empresaId || 'sem-empresa'}/eventos/${meta.evento.chNFeRef}-${meta.evento.nProt || meta.evento.tpEvento || Date.now()}.xml`;
+    const bucket = storage.bucket(STORAGE_BUCKET);
+    await bucket.file(storagePathEvento).save(xml, {
+      contentType: 'application/xml',
+      metadata: {
+        cacheControl: 'private, max-age=3600',
+        metadata: {
+          chaveNFe: meta.evento.chNFeRef,
+          tpEvento: meta.evento.tpEvento || '',
+          empresaId,
+          schema: schema || 'unknown',
+          nsu: nsu || '',
+          capturadoPor: capturadoPor?.email || 'system',
+        },
+      },
+      resumable: false,
+    });
+
+    const result = await anexarEventoNaNFe({
+      db,
+      chaveNFe: meta.evento.chNFeRef,
+      empresaId,
+      evento: meta.evento,
+      storagePath: storagePathEvento,
+      xmlHash,
+      schema,
+      nsu,
+      capturadoPor: { ...capturadoPor, empresaCnpj },
+    });
+
+    // Auditoria
+    try {
+      await db.collection('xml_capturas').add({
+        chave: meta.evento.chNFeRef,
+        empresaId,
+        empresaCnpj: empresaCnpj?.replace(/\D/g, '') || null,
+        origem: 'sefaz',
+        schema: meta.schema,
+        nsu,
+        tipoDoc: meta.tipoDoc,
+        eventoTipo: meta.evento.tipo,
+        eventoTpEvento: meta.evento.tpEvento,
+        capturadoPor: capturadoPor || null,
+        createdAt: fa().firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn('[xml-importer] falha auditoria evento:', e.message);
+    }
+    return result;
+  }
+
+  // ── NFE / RESNFE: caminho original ──────────────────────────────────
+  const docId = meta.chave;
+  const storagePath = buildStoragePath(empresaId, meta.chave, meta.tipoDoc);
   const docRef = db.collection('documentos_fiscais').doc(docId);
 
+  let existing = null;
   try {
-    const existing = await docRef.get();
-    if (existing.exists) return { status: 'duplicado', chave: meta.chave };
+    existing = await docRef.get();
   } catch (e) {
     console.warn('[xml-importer] erro lendo doc existente:', e.message);
+  }
+
+  // Se já existe E não é stub-de-evento, é duplicidade
+  if (existing?.exists && !existing.data().eventosBeforeNFe) {
+    return { status: 'duplicado', chave: meta.chave };
   }
 
   const bucket = storage.bucket(STORAGE_BUCKET);
@@ -133,8 +299,15 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     createdAt: fa().firestore.FieldValue.serverTimestamp(),
     createdBy: capturadoPor?.uid || null,
     capturadoPor: capturadoPor || null,
+    // Reseta o flag eventosBeforeNFe se era stub
+    eventosBeforeNFe: false,
   };
-  await docRef.set(docData);
+  // Se já existia stub com eventos, faz merge (preserva array)
+  if (existing?.exists && existing.data().eventosBeforeNFe) {
+    await docRef.set(docData, { merge: true });
+  } else {
+    await docRef.set(docData);
+  }
 
   try {
     await db.collection('xml_capturas').add({

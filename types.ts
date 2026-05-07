@@ -544,6 +544,39 @@ export type XmlStatusDocumento =
     | 'pendente'
     | 'desconhecido';
 
+/** Tipo de evento NFe (Manual NFe v2.0) */
+export type NFeEventoTipo =
+    | 'cce'                          // tpEvento 110110 — Carta de Correção
+    | 'cancelamento'                 // tpEvento 110111
+    | 'epec'                         // tpEvento 110140 — EPEC
+    | 'manifestacao_ciencia'         // tpEvento 210200
+    | 'manifestacao_confirmacao'     // tpEvento 210210
+    | 'manifestacao_desconhecimento' // tpEvento 210220
+    | 'manifestacao_nao_realizada'   // tpEvento 210240
+    | 'outro';
+
+/** Evento associado a uma NFe (cancelamento, CC-e, manifestação). */
+export interface NFeEvento {
+    tpEvento?: string;
+    tipo: NFeEventoTipo;
+    descricao: string;
+    nSeqEvento?: string;
+    dhEvento?: string;
+    nProt?: string;
+    cStat?: string;
+    xMotivo?: string;
+    /** Texto da Carta de Correção (apenas tpEvento 110110). */
+    xCorrecao?: string;
+    /** Justificativa de cancelamento (apenas tpEvento 110111). */
+    xJust?: string;
+    storagePath?: string;
+    xmlHash?: string;
+    schema?: string;
+    nsu?: string;
+    importadoEm?: any;
+    importadoPor?: string;
+}
+
 export type XmlDirecao = 'entrada' | 'saida' | 'desconhecida';
 
 export type XmlTipoDocumento = 'NFe' | 'NFCe' | 'NFSe' | 'CTe' | 'MDFe' | 'desconhecido';
@@ -645,6 +678,13 @@ export interface DocumentoFiscal {
     importadoEm: number;
     createdBy?: string;
     createdByEmail?: string;
+    /** Eventos NFe associados (cancelamento, CC-e, manifestação, etc). */
+    eventos?: NFeEvento[];
+    /** Quando o cancelamento foi homologado (preenchido se status = 'cancelado'). */
+    canceladoEm?: string;
+    canceladoProtocolo?: string;
+    /** Stub temporário: doc criado com eventos antes da NFe original chegar. */
+    eventosBeforeNFe?: boolean;
 }
 
 /**
