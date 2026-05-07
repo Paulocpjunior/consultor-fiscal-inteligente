@@ -37,6 +37,7 @@ const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDispla
 const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumidoRealDashboard'));
 const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
 const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocumentosFiscais'));
+const SpedFiscal = lazy(() => import('./components/SpedFiscal'));
 const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
 const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
 
@@ -52,6 +53,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.ANALISE_RELATORIO_SAGE]: "Analise relatórios SAGE (XLSX/XML) e identifique gaps, canceladas, denegadas e segregação E/S.",
     [SearchType.ANALISADOR_REGIME]: "Compare cenários de tributação (Simples, Lucro Presumido, Lucro Real) e identifique o regime mais vantajoso.",
     [SearchType.ANALISE_CREDITOS]: "Análise de créditos PIS/COFINS, conciliação bancária e mapeamento por categoria fiscal.",
+    [SearchType.SPED_FISCAL]: "Geração do arquivo SPED Fiscal (EFD ICMS/IPI) — escrituração digital mensal.",
 };
 
 const App: React.FC = () => {
@@ -620,7 +622,7 @@ const App: React.FC = () => {
                     <main className="flex-grow min-w-0">
                         {/* Search Type Selection Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
-                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE).map((type) => (
+                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL).map((type) => (
                                 <button
                                     key={type}
                                     onClick={() => {
@@ -719,6 +721,30 @@ const App: React.FC = () => {
                                     <DocumentTextIcon className="w-5 h-5" />
                                 </div>
                                 <span className="text-xs font-bold text-center leading-tight">Análise SAGE</span>
+                            </button>
+                            {/* SPED Fiscal */}
+                            <button
+                                onClick={() => {
+                                    setSearchType(SearchType.SPED_FISCAL);
+                                    setResult(null);
+                                    setQuery1('');
+                                    setQuery2('');
+                                    setError(null);
+                                    setValidationErrors({});
+                                    setUserNotes('');
+                                }}
+                                className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
+                                style={{
+                                    background: searchType === SearchType.SPED_FISCAL ? 'rgba(20,0,255,0.2)' : 'rgba(8,0,122,0.08)',
+                                    border: searchType === SearchType.SPED_FISCAL ? '1px solid rgba(20,0,255,0.45)' : '1px solid rgba(200,208,255,0.1)',
+                                    color: searchType === SearchType.SPED_FISCAL ? '#F5F6FF' : 'rgba(200,208,255,0.5)',
+                                    transform: searchType === SearchType.SPED_FISCAL ? 'scale(1.05)' : 'scale(1)'
+                                }}
+                            >
+                                <div className="mb-2">
+                                    <DocumentTextIcon className="w-5 h-5" />
+                                </div>
+                                <span className="text-xs font-bold text-center leading-tight">SPED Fiscal</span>
                             </button>
                         </div>
 
@@ -1003,6 +1029,16 @@ const App: React.FC = () => {
                         {searchType === SearchType.ANALISE_RELATORIO_SAGE && (
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnaliseRelatorioSAGE
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                        )}
+
+                        {/* SPED Fiscal (EFD ICMS/IPI) View */}
+                        {searchType === SearchType.SPED_FISCAL && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <SpedFiscal
+                                    currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>

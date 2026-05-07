@@ -10,7 +10,8 @@ export enum SearchType {
     IMPORTA_XML = 'Importa XML',
     ANALISE_RELATORIO_SAGE = 'Análise Relatório SAGE',
   ANALISADOR_REGIME = 'Regime Tributário',
-  ANALISE_CREDITOS = 'Análise de Créditos'
+  ANALISE_CREDITOS = 'Análise de Créditos',
+  SPED_FISCAL = 'SPED Fiscal'
 }
 
 export interface GroundingSource {
