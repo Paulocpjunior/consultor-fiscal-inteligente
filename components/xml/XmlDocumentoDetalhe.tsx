@@ -1,4 +1,5 @@
 import React from 'react';
+import { getView } from '../../services/xmlDocumentoView';
 import type { DocumentoFiscal } from '../../types';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
 
@@ -40,18 +41,18 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Emitente</p>
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{(d as any).emitente?.nome || (d as any).prestador?.nome || '—'}</p>
-                        {(d as any).emitente?.fantasia && <p className="text-xs text-slate-500">{(d as any).emitente.fantasia}</p>}
-                        <p className="text-xs text-slate-500 mt-1">CNPJ: {formatCnpjCpf((d as any).emitente?.cnpjCpf || (d as any).prestador?.cnpj || '')}</p>
-                        <p className="text-xs text-slate-500">IE: {(d as any).emitente?.ie || '-'}</p>
-                        <p className="text-xs text-slate-500">{(d as any).emitente?.municipio || (d as any).prestador?.municipio || '—'}/{(d as any).emitente?.uf || (d as any).prestador?.uf || ''}</p>
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{getView(d).emitente.nome || '—'}</p>
+                        {getView(d).emitente.fantasia && <p className="text-xs text-slate-500">{getView(d).emitente.fantasia}</p>}
+                        <p className="text-xs text-slate-500 mt-1">CNPJ: {formatCnpjCpf(getView(d).emitente.cnpj)}</p>
+                        <p className="text-xs text-slate-500">IE: {getView(d).emitente.ie || '-'}</p>
+                        <p className="text-xs text-slate-500">{getView(d).emitente.municipio || '—'}/{getView(d).emitente.uf}</p>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Destinatário</p>
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{(d as any).destinatario?.nome || (d as any).tomador?.nome || '—'}</p>
-                        <p className="text-xs text-slate-500 mt-1">CNPJ/CPF: {formatCnpjCpf((d as any).destinatario?.cnpjCpf || (d as any).tomador?.cnpj || '')}</p>
-                        <p className="text-xs text-slate-500">IE: {(d as any).destinatario?.ie || '-'}</p>
-                        <p className="text-xs text-slate-500">{(d as any).destinatario?.municipio || (d as any).tomador?.municipio || '—'}/{(d as any).destinatario?.uf || (d as any).tomador?.uf || ''}</p>
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{getView(d).destinatario.nome || '—'}</p>
+                        <p className="text-xs text-slate-500 mt-1">CNPJ/CPF: {formatCnpjCpf(getView(d).destinatario.cnpj)}</p>
+                        <p className="text-xs text-slate-500">IE: {getView(d).destinatario.ie || '-'}</p>
+                        <p className="text-xs text-slate-500">{getView(d).destinatario.municipio || '—'}/{getView(d).destinatario.uf}</p>
                     </div>
                 </div>
 
@@ -59,18 +60,18 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Resumo de Impostos</p>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {[
-                            { label: 'Valor Produtos', value: (d as any).totais?.vProd ?? 0 },
-                            { label: 'Valor NF', value: (d as any).totais?.vNF ?? (d as any).valores?.liquido ?? 0 },
-                            { label: 'BC ICMS', value: (d as any).totais?.vBC ?? 0 },
-                            { label: 'ICMS', value: (d as any).totais?.vICMS ?? 0 },
-                            { label: 'BC ICMS ST', value: (d as any).totais?.vBCST ?? 0 },
-                            { label: 'ICMS ST', value: (d as any).totais?.vST ?? 0 },
-                            { label: 'IPI', value: (d as any).totais?.vIPI ?? 0 },
-                            { label: 'PIS', value: (d as any).totais?.vPIS ?? (d as any).valores?.pis ?? 0 },
-                            { label: 'COFINS', value: (d as any).totais?.vCOFINS ?? (d as any).valores?.cofins ?? 0 },
-                            { label: 'Frete', value: (d as any).totais?.vFrete ?? 0 },
-                            { label: 'Desconto', value: (d as any).totais?.vDesc ?? 0 },
-                            { label: 'Outros', value: (d as any).totais?.vOutro ?? 0 },
+                            { label: 'Valor Produtos', value: getView(d).valores.produtos },
+                            { label: 'Valor NF', value: getView(d).valores.total },
+                            { label: 'BC ICMS', value: getView(d).valores.bc },
+                            { label: 'ICMS', value: getView(d).valores.icms },
+                            { label: 'BC ICMS ST', value: getView(d).valores.bcST },
+                            { label: 'ICMS ST', value: getView(d).valores.icmsST },
+                            { label: 'IPI', value: getView(d).valores.ipi },
+                            { label: 'PIS', value: getView(d).valores.pis },
+                            { label: 'COFINS', value: getView(d).valores.cofins },
+                            { label: 'Frete', value: getView(d).valores.frete },
+                            { label: 'Desconto', value: getView(d).valores.desconto },
+                            { label: 'Outros', value: getView(d).valores.outros },
                         ].map(item => (
                             <div key={item.label} className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-2 text-center">
                                 <p className="text-[10px] text-slate-500 dark:text-slate-400">{item.label}</p>

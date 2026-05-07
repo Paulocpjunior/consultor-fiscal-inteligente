@@ -113,7 +113,15 @@ function buildE001(numeroEmpresa: number): string {
 
 function buildE010(d: DocumentoFiscal): string {
     // Participante a cadastrar = quem NAO e a empresa monitorada.
+    // Guard: IOB/SAGE so aceita NFe/NFCe (modelo 55/65). NFSe nao deveria chegar aqui
+    // por conta do filtro em XmlExportarIobSage, mas falhamos cedo se vazar.
+    if (d.tipo === 'NFSe') {
+        throw new Error(`buildE010: documento ${d.id} e NFSe, nao suportado em IOB/SAGE Folhamatic Fiscal.`);
+    }
     const part = d.direcao === 'entrada' ? d.emitente : d.destinatario;
+    if (!part) {
+        throw new Error(`buildE010: documento ${d.id} sem ${d.direcao === 'entrada' ? 'emitente' : 'destinatario'} (esperado em NFe).`);
+    }
     const isCliente = d.direcao === 'saida';
     const isFornecedor = d.direcao === 'entrada';
 
@@ -177,7 +185,14 @@ function buildE020(item: DocumentoFiscalItem, dataInclusao: Date): string {
 }
 
 function commonNF(d: DocumentoFiscal) {
+    // Guard: mesmo motivo do buildE010.
+    if (d.tipo === 'NFSe') {
+        throw new Error(`commonNF: documento ${d.id} e NFSe, nao suportado em IOB/SAGE.`);
+    }
     const part = d.direcao === 'entrada' ? d.emitente : d.destinatario;
+    if (!part) {
+        throw new Error(`commonNF: documento ${d.id} sem ${d.direcao === 'entrada' ? 'emitente' : 'destinatario'}.`);
+    }
     const especie = d.tipo === 'NFCe' ? 'NFCE' : d.tipo === 'NFe' ? 'NFE' : 'NF';
     const dEmi = parseIsoDate(d.dhEmi) || new Date();
     return {
@@ -387,7 +402,9 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
     const e010Set = new Map<string, string>();
     for (const d of documentos) {
         try {
-            const cnpj = onlyDigits((d.direcao === 'entrada' ? d.emitente : d.destinatario).cnpjCpf);
+            const part = d.direcao === 'entrada' ? d.emitente : d.destinatario;
+            if (!part) continue;
+            const cnpj = onlyDigits(part.cnpjCpf);
             if (!cnpj || e010Set.has(cnpj)) continue;
             e010Set.set(cnpj, buildE010(d));
         } catch (err) {

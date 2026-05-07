@@ -667,9 +667,15 @@ export interface DocumentoFiscal {
     empresaCnpj: string;
     empresaNome: string;
 
-    emitente: DocumentoFiscalParticipante;
-    destinatario: DocumentoFiscalParticipante;
-    totais: DocumentoFiscalTotais;
+    emitente?: DocumentoFiscalParticipante;
+    /** Prestador (NFSe). Mutuamente exclusivo com emitente. */
+    prestador?: DocumentoFiscalParticipante;
+    destinatario?: DocumentoFiscalParticipante;
+    /** Tomador (NFSe). Mutuamente exclusivo com destinatario. */
+    tomador?: DocumentoFiscalParticipante;
+    totais?: DocumentoFiscalTotais;
+    /** Valores NFSe (liquido, pis, cofins, iss). */
+    valores?: { liquido?: number; pis?: number; cofins?: number; iss?: number; baseCalculo?: number; deducoes?: number };
     itens: DocumentoFiscalItem[];
     infAdic?: string;
 

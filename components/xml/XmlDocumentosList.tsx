@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getView } from '../../services/xmlDocumentoView';
 import type { User, DocumentoFiscal } from '../../types';
 import { listDocumentos, type ListDocumentosFilters } from '../../services/xmlFiscalService';
 import NFeStatusCell from './NFeStatusCell';
@@ -130,15 +131,15 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                                                 {d.direcao}
                                             </span>
                                         </td>
-                                        <td className="px-3 py-1.5 max-w-[200px] truncate text-slate-600 dark:text-slate-300" title={`${(d as any).emitente?.nome || (d as any).prestador?.nome || '—'} → ${(d as any).destinatario?.nome || (d as any).tomador?.nome || '—'}`}>
+                                        <td className="px-3 py-1.5 max-w-[200px] truncate text-slate-600 dark:text-slate-300" title={`${getView(d).emitente.nome || '—'} → ${getView(d).destinatario.nome || '—'}`}>
                                             {d.direcao === 'entrada'
-                                                ? ((d as any).emitente?.nome || (d as any).prestador?.nome || '—')
-                                                : ((d as any).destinatario?.nome || (d as any).tomador?.nome || '—')}
+                                                ? (getView(d).emitente.nome || '—')
+                                                : (getView(d).destinatario.nome || '—')}
                                             <span className="text-[10px] text-slate-400 ml-1">{formatCnpjCpf(d.direcao === 'entrada'
-                                                ? ((d as any).emitente?.cnpjCpf || (d as any).prestador?.cnpj || '')
-                                                : ((d as any).destinatario?.cnpjCpf || (d as any).tomador?.cnpj || ''))}</span>
+                                                ? getView(d).emitente.cnpj
+                                                : getView(d).destinatario.cnpj)}</span>
                                         </td>
-                                        <td className="px-3 py-1.5 text-right font-bold text-slate-700 dark:text-slate-200">{formatCurrency((d as any).totais?.vNF ?? (d as any).valores?.liquido ?? 0)}</td>
+                                        <td className="px-3 py-1.5 text-right font-bold text-slate-700 dark:text-slate-200">{formatCurrency(getView(d).valores.total)}</td>
                                         <td className="px-3 py-1.5"><NFeStatusCell doc={d} /></td>
                                     </tr>
                                 ))}
