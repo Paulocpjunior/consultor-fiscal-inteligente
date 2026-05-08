@@ -290,6 +290,7 @@ function buildC170(item, nItem, nota) {
         '',   // ALIQ_COFINS_REAIS
         fmt.formatValue(item.vCOFINS, 2),
         '',   // COD_CTA
+        '',   // VL_ABAT_NT (campo 38, leiaute 020)
     ]);
 }
 
@@ -364,7 +365,7 @@ function buildC190sFromNota(nota) {
             fmt.formatValue(g.vlIcms, 2),
             fmt.formatValue(g.vlBcIcmsSt, 2),
             fmt.formatValue(g.vlIcmsSt, 2),
-            '0.00',  // VL_RED_BC
+            '0,00',  // VL_RED_BC
             fmt.formatValue(g.vlIpi, 2),
             '',  // COD_OBS
         ]));

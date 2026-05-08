@@ -10,6 +10,10 @@ import admin from 'firebase-admin';
 import { buildBloco0 } from './sped-fiscal-bloco0.js';
 import { buildBlocoC } from './sped-fiscal-blocoC.js';
 import { buildBloco9 } from './sped-fiscal-bloco9.js';
+import {
+    buildBlocoB, buildBlocoD, buildBlocoE,
+    buildBlocoG, buildBlocoH, buildBlocoK, buildBloco1,
+} from './sped-fiscal-blocos-vazios.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -187,10 +191,28 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
  */
 export async function montarBlocos({ dados }) {
     const linhasBloco0 = buildBloco0(dados);
+    const linhasBlocoB = buildBlocoB();   // vazio
     const linhasBlocoC = buildBlocoC(dados);
+    const linhasBlocoD = buildBlocoD();   // vazio
+    const linhasBlocoE = buildBlocoE();   // vazio (Fase 3: apuracao real)
+    const linhasBlocoG = buildBlocoG();   // vazio
+    const linhasBlocoH = buildBlocoH();   // vazio
+    const linhasBlocoK = buildBlocoK();   // vazio
+    const linhasBloco1 = buildBloco1();   // vazio
 
-    // Bloco 9 precisa contar registros de TODOS os blocos anteriores
-    const linhasAteAqui = [...linhasBloco0, ...linhasBlocoC];
+    // Bloco 9 precisa contar registros de TODOS os blocos anteriores.
+    // Ordem oficial: 0 -> B -> C -> D -> E -> G -> H -> K -> 1 -> 9
+    const linhasAteAqui = [
+        ...linhasBloco0,
+        ...linhasBlocoB,
+        ...linhasBlocoC,
+        ...linhasBlocoD,
+        ...linhasBlocoE,
+        ...linhasBlocoG,
+        ...linhasBlocoH,
+        ...linhasBlocoK,
+        ...linhasBloco1,
+    ];
     const linhasBloco9 = buildBloco9(linhasAteAqui);
 
     const todas = [...linhasAteAqui, ...linhasBloco9];

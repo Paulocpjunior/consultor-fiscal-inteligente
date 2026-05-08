@@ -4,7 +4,7 @@
 //
 // Regras Guia Pratico 3.2.2:
 // - Datas: DDMMAAAA (sem separadores)
-// - Valores: ponto como separador decimal, sem pontos de milhar.
+// - Valores: VIRGULA como separador decimal (NT 2024.001), sem milhar.
 //   Vazio fica como '' (NAO zero).
 // - Strings: limitadas ao tamanho maximo, sem pipes (|), sem espacos
 //   nas pontas. Acentos preservados (a SPED aceita Windows-1252).
@@ -60,7 +60,8 @@ function formatValue(value, decimals = 2) {
     if (value === null || value === undefined || value === '') return '';
     const n = parseFloat(value);
     if (isNaN(n)) return '';
-    return n.toFixed(decimals);
+    // SPED Fiscal exige virgula como separador decimal (NT 2024.001 item a)
+    return n.toFixed(decimals).replace('.', ',');
 }
 
 /**

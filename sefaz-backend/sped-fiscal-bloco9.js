@@ -35,14 +35,12 @@ function buildBloco9(linhasAnteriores) {
     // Inclui as proprias linhas 9900, 9990, 9999 que ainda vamos gerar
     const contagem = contarRegistros(linhasAnteriores);
 
-    // Vamos gerar (n+3) registros 9900: n = registros distintos ate aqui
-    // + 9900 (sera contado abaixo)
-    // + 9990 (sera contado abaixo)
-    // + 9999 (sera contado abaixo)
-    // Vamos pre-incluir os 3 antes de calcular o numero total de 9900s.
+    // Tipos novos que vao aparecer no Bloco 9 mas nao estao em linhasAnteriores:
+    // 9001 (abertura), 9900 (totalizacoes), 9990 (encerramento), 9999 (fim).
+    // Os 4 sao tipos novos -> num9900 = tiposDistintos + 4.
     const tiposDistintos = Object.keys(contagem).sort();
-    // Numero de 9900s = tiposDistintos.length + 3 (9900, 9990, 9999)
-    const num9900 = tiposDistintos.length + 3;
+    const num9900 = tiposDistintos.length + 4;
+    contagem['9001'] = 1;
     contagem['9900'] = num9900;
     contagem['9990'] = 1;
     contagem['9999'] = 1;
