@@ -99,15 +99,18 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
             ? (nota.destinatario || nota.tomador)
             : (nota.emitente || nota.prestador);
 
-        if (!participanteRaw || !participanteRaw.cnpj) continue;
+        if (!participanteRaw) continue;
+        const cnpjBruto = participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '';
+        if (!cnpjBruto) continue;
 
-        const cnpjLimpo = String(participanteRaw.cnpj).replace(/\D/g, '');
+        const cnpjLimpo = String(cnpjBruto).replace(/\D/g, '');
+        if (!cnpjLimpo) continue;
         if (participantesMap.has(cnpjLimpo)) continue;
 
         // codPart = primeiros 14 digitos do CNPJ (suficiente como identificador unico)
         participantesMap.set(cnpjLimpo, {
             codPart: cnpjLimpo,
-            nome: participanteRaw.nome || participanteRaw.razaoSocial || 'SEM NOME',
+            nome: participanteRaw.nome || participanteRaw.razaoSocial || participanteRaw.xNome || 'SEM NOME',
             cnpj: cnpjLimpo,
             ie: participanteRaw.ie || participanteRaw.inscricaoEstadual || '',
             codMunIBGE: participanteRaw.codMunIBGE || '',

@@ -364,7 +364,7 @@ function buildC190sFromNota(nota) {
             fmt.formatValue(g.vlIcms, 2),
             fmt.formatValue(g.vlBcIcmsSt, 2),
             fmt.formatValue(g.vlIcmsSt, 2),
-            '0,00',  // VL_RED_BC
+            '0.00',  // VL_RED_BC
             fmt.formatValue(g.vlIpi, 2),
             '',  // COD_OBS
         ]));
