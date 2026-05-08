@@ -347,7 +347,7 @@ function buildE201sFromDoc(d: DocumentoFiscal): string[] {
             // Sem eles, formatField enche com espaco e IOB rejeita o E201,
             // o que faz E342 reportar "NF nao cadastrada" em cascata.
             'VENDA P/ ENTREGA FUTURA': isVendaFutura(cfop) ? 'N' : 'S',
-            'OPERAÇÕES SUBST TRIB SAÍDAS': 'N',
+            'OPERAÇÕES SUBST TRIB SAÍDAS': ' ',  // IOB rejeita 'N' aqui — quer espaco em branco quando nao ha ST
             'CIAP SAÍDA TRIBUTADA': 'N',
             'CONTROLE DO SISTEMA': 0,
         }));
