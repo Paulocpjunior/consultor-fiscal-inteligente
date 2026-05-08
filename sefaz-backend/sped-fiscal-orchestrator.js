@@ -8,6 +8,7 @@
 
 import admin from 'firebase-admin';
 import { buildBloco0 } from './sped-fiscal-bloco0.js';
+import { buildBlocoC } from './sped-fiscal-blocoC.js';
 import { buildBloco9 } from './sped-fiscal-bloco9.js';
 
 function fa() {
@@ -183,9 +184,13 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
  */
 export async function montarBlocos({ dados }) {
     const linhasBloco0 = buildBloco0(dados);
-    const linhasBloco9 = buildBloco9(linhasBloco0);
+    const linhasBlocoC = buildBlocoC(dados);
 
-    const todas = [...linhasBloco0, ...linhasBloco9];
+    // Bloco 9 precisa contar registros de TODOS os blocos anteriores
+    const linhasAteAqui = [...linhasBloco0, ...linhasBlocoC];
+    const linhasBloco9 = buildBloco9(linhasAteAqui);
+
+    const todas = [...linhasAteAqui, ...linhasBloco9];
     return todas.join('');
 }
 
