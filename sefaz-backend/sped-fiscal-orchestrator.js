@@ -7,11 +7,8 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-const { buildBloco0 } = require('./sped-fiscal-bloco0.js');
-const { buildBloco9 } = require('./sped-fiscal-bloco9.js');
+import { buildBloco0 } from './sped-fiscal-bloco0.js';
+import { buildBloco9 } from './sped-fiscal-bloco9.js';
 
 function fa() {
     if (!admin.apps.length) {

@@ -104,7 +104,7 @@ function buildLine(campos) {
     return '|' + campos.map(c => c === null || c === undefined ? '' : String(c)).join('|') + '|\r\n';
 }
 
-module.exports = {
+export {
     formatDate,
     formatCompetenciaInicio,
     formatCompetenciaFim,

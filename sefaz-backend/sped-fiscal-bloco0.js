@@ -15,7 +15,7 @@
 // Layout: Guia Pratico 3.2.2, Leiaute 020 (vigente 01/01/2026).
 // ============================================================================
 
-const fmt = require('./sped-fiscal-format.js');
+import * as fmt from './sped-fiscal-format.js';
 
 const VERSAO_LEIAUTE = '020';  // Leiaute 020 vigente desde 01/01/2026
 
@@ -277,4 +277,4 @@ function build0200(item) {
     ]);
 }
 
-module.exports = { buildBloco0 };
+export { buildBloco0 };

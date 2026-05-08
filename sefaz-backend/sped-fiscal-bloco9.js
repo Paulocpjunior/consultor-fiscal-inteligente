@@ -15,8 +15,8 @@
 // Layout: Guia Pratico 3.2.2.
 // ============================================================================
 
-const fmt = require('./sped-fiscal-format.js');
-const crypto = require('crypto');
+import * as fmt from './sped-fiscal-format.js';
+import crypto from 'crypto';
 
 /**
  * Constroi o Bloco 9 a partir das linhas dos blocos anteriores.
@@ -97,4 +97,4 @@ function calcularHashMD5(conteudo) {
     return crypto.createHash('md5').update(buf).digest('hex').toUpperCase();
 }
 
-module.exports = { buildBloco9, calcularHashMD5 };
+export { buildBloco9, calcularHashMD5 };
