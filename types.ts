@@ -191,6 +191,8 @@ export interface SimplesNacionalEmpresa {
     /** Data ISO em que o cliente autorizou SP Contábil como contador no portal nfe.prefeitura.sp.gov.br. */
     nfseSpAutorizadoEm?: string;
     capturarSefaz?: boolean;
+    /** Dados fiscais para geracao de SPED Fiscal etc. */
+    dadosFiscais?: EmpresaDadosFiscais;
 }
 
 export interface SimplesNacionalNota {
@@ -393,11 +395,11 @@ export interface LucroPresumidoEmpresa {
     cnaePrincipal?: {
         codigo: string;
         descricao: string;
+    };
     /** Inscrição Municipal SP capital (CCM). */
     ccmSp?: string;
     /** Data ISO em que o cliente autorizou SP Contábil como contador. */
     nfseSpAutorizadoEm?: string;
-};
     cnaesSecundarios?: {
         codigo: string;
         descricao: string;
@@ -418,6 +420,8 @@ export interface LucroPresumidoEmpresa {
         csll: number;
     };
     fichaFinanceira: FichaFinanceiraRegistro[];
+    /** Dados fiscais para geracao de SPED Fiscal etc. */
+    dadosFiscais?: EmpresaDadosFiscais;
     createdBy?: string;
     createdByEmail?: string;
     /** Captura automática SEFAZ (cron noturno). Default = true. Admin pode desativar. */
@@ -590,6 +594,48 @@ export type XmlDirecao = 'entrada' | 'saida' | 'desconhecida';
 
 export type XmlTipoDocumento = 'NFe' | 'NFCe' | 'NFSe' | 'CTe' | 'MDFe' | 'desconhecido';
 
+/**
+ * Dados fiscais complementares de uma empresa, necessarios pra geracao
+ * de SPED Fiscal (EFD ICMS/IPI), DCTFWeb, etc.
+ *
+ * Comum a SimplesNacionalEmpresa e LucroPresumidoEmpresa.
+ */
+export interface EmpresaDadosFiscais {
+    /** Inscrição Estadual (numero ou 'ISENTO'). */
+    inscricaoEstadual?: string;
+    /** UF (sigla 2 letras, ex: 'SP'). */
+    uf?: string;
+    /** Codigo do municipio IBGE (7 digitos, ex: '3550308' = Sao Paulo). */
+    codMunIBGE?: string;
+    /** Endereço sede da empresa. */
+    logradouro?: string;
+    numero?: string;
+    complemento?: string;
+    bairro?: string;
+    cep?: string;
+    /** Contato. */
+    email?: string;
+    telefone?: string;
+    /**
+     * Perfil EFD ICMS/IPI (registro 0000 campo 14):
+     *   A = Detalhamento completo (notas item-a-item, ICMS-Difal, FCP)
+     *   B = Detalhamento resumido (totalizadores diarios)
+     *   C = Anual (especifico pra empresas inscritas como microprodutor)
+     * Padrao: 'A' (mais completo, atende todos os casos).
+     */
+    perfilEFD?: 'A' | 'B' | 'C';
+    /**
+     * Indicador de atividade (registro 0000 campo 15):
+     *   'industrial' = 0 (industria, equiparada)
+     *   'outras'     = 1 (comercio, servicos, transporte)
+     */
+    indAtividade?: 'industrial' | 'outras';
+    /** Inscrição Estadual no Substituto Tributario (opcional). */
+    inscEstSubstTrib?: string;
+    /** Codigo Suframa (opcional, so se zona franca). */
+    codSuframa?: string;
+}
+
 export interface DocumentoFiscalItem {
     nItem: string;
     cProd: string;
@@ -608,6 +654,48 @@ export interface DocumentoFiscalItem {
     vCOFINS: number;
     cst: string;
     orig: string;
+}
+
+/**
+ * Dados fiscais complementares de uma empresa, necessarios pra geracao
+ * de SPED Fiscal (EFD ICMS/IPI), DCTFWeb, etc.
+ *
+ * Comum a SimplesNacionalEmpresa e LucroPresumidoEmpresa.
+ */
+export interface EmpresaDadosFiscais {
+    /** Inscrição Estadual (numero ou 'ISENTO'). */
+    inscricaoEstadual?: string;
+    /** UF (sigla 2 letras, ex: 'SP'). */
+    uf?: string;
+    /** Codigo do municipio IBGE (7 digitos, ex: '3550308' = Sao Paulo). */
+    codMunIBGE?: string;
+    /** Endereço sede da empresa. */
+    logradouro?: string;
+    numero?: string;
+    complemento?: string;
+    bairro?: string;
+    cep?: string;
+    /** Contato. */
+    email?: string;
+    telefone?: string;
+    /**
+     * Perfil EFD ICMS/IPI (registro 0000 campo 14):
+     *   A = Detalhamento completo (notas item-a-item, ICMS-Difal, FCP)
+     *   B = Detalhamento resumido (totalizadores diarios)
+     *   C = Anual (especifico pra empresas inscritas como microprodutor)
+     * Padrao: 'A' (mais completo, atende todos os casos).
+     */
+    perfilEFD?: 'A' | 'B' | 'C';
+    /**
+     * Indicador de atividade (registro 0000 campo 15):
+     *   'industrial' = 0 (industria, equiparada)
+     *   'outras'     = 1 (comercio, servicos, transporte)
+     */
+    indAtividade?: 'industrial' | 'outras';
+    /** Inscrição Estadual no Substituto Tributario (opcional). */
+    inscEstSubstTrib?: string;
+    /** Codigo Suframa (opcional, so se zona franca). */
+    codSuframa?: string;
 }
 
 export interface DocumentoFiscalTotais {
@@ -631,6 +719,48 @@ export interface DocumentoFiscalTotais {
     vNF: number;
 }
 
+/**
+ * Dados fiscais complementares de uma empresa, necessarios pra geracao
+ * de SPED Fiscal (EFD ICMS/IPI), DCTFWeb, etc.
+ *
+ * Comum a SimplesNacionalEmpresa e LucroPresumidoEmpresa.
+ */
+export interface EmpresaDadosFiscais {
+    /** Inscrição Estadual (numero ou 'ISENTO'). */
+    inscricaoEstadual?: string;
+    /** UF (sigla 2 letras, ex: 'SP'). */
+    uf?: string;
+    /** Codigo do municipio IBGE (7 digitos, ex: '3550308' = Sao Paulo). */
+    codMunIBGE?: string;
+    /** Endereço sede da empresa. */
+    logradouro?: string;
+    numero?: string;
+    complemento?: string;
+    bairro?: string;
+    cep?: string;
+    /** Contato. */
+    email?: string;
+    telefone?: string;
+    /**
+     * Perfil EFD ICMS/IPI (registro 0000 campo 14):
+     *   A = Detalhamento completo (notas item-a-item, ICMS-Difal, FCP)
+     *   B = Detalhamento resumido (totalizadores diarios)
+     *   C = Anual (especifico pra empresas inscritas como microprodutor)
+     * Padrao: 'A' (mais completo, atende todos os casos).
+     */
+    perfilEFD?: 'A' | 'B' | 'C';
+    /**
+     * Indicador de atividade (registro 0000 campo 15):
+     *   'industrial' = 0 (industria, equiparada)
+     *   'outras'     = 1 (comercio, servicos, transporte)
+     */
+    indAtividade?: 'industrial' | 'outras';
+    /** Inscrição Estadual no Substituto Tributario (opcional). */
+    inscEstSubstTrib?: string;
+    /** Codigo Suframa (opcional, so se zona franca). */
+    codSuframa?: string;
+}
+
 export interface DocumentoFiscalParticipante {
     cnpjCpf: string;
     nome: string;
@@ -644,6 +774,48 @@ export interface DocumentoFiscalParticipante {
  * Metadados do documento fiscal salvos no Firestore.
  * O XML original fica no Firebase Storage (campo storagePath).
  */
+/**
+ * Dados fiscais complementares de uma empresa, necessarios pra geracao
+ * de SPED Fiscal (EFD ICMS/IPI), DCTFWeb, etc.
+ *
+ * Comum a SimplesNacionalEmpresa e LucroPresumidoEmpresa.
+ */
+export interface EmpresaDadosFiscais {
+    /** Inscrição Estadual (numero ou 'ISENTO'). */
+    inscricaoEstadual?: string;
+    /** UF (sigla 2 letras, ex: 'SP'). */
+    uf?: string;
+    /** Codigo do municipio IBGE (7 digitos, ex: '3550308' = Sao Paulo). */
+    codMunIBGE?: string;
+    /** Endereço sede da empresa. */
+    logradouro?: string;
+    numero?: string;
+    complemento?: string;
+    bairro?: string;
+    cep?: string;
+    /** Contato. */
+    email?: string;
+    telefone?: string;
+    /**
+     * Perfil EFD ICMS/IPI (registro 0000 campo 14):
+     *   A = Detalhamento completo (notas item-a-item, ICMS-Difal, FCP)
+     *   B = Detalhamento resumido (totalizadores diarios)
+     *   C = Anual (especifico pra empresas inscritas como microprodutor)
+     * Padrao: 'A' (mais completo, atende todos os casos).
+     */
+    perfilEFD?: 'A' | 'B' | 'C';
+    /**
+     * Indicador de atividade (registro 0000 campo 15):
+     *   'industrial' = 0 (industria, equiparada)
+     *   'outras'     = 1 (comercio, servicos, transporte)
+     */
+    indAtividade?: 'industrial' | 'outras';
+    /** Inscrição Estadual no Substituto Tributario (opcional). */
+    inscEstSubstTrib?: string;
+    /** Codigo Suframa (opcional, so se zona franca). */
+    codSuframa?: string;
+}
+
 export interface DocumentoFiscal {
     id: string;
     /** Chave de acesso (44 dígitos) — usada para evitar duplicidade. */

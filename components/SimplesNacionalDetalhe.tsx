@@ -4,6 +4,7 @@ import * as simplesService from '../services/simplesNacionalService';
 import { ArrowLeftIcon, SaveIcon, UserIcon, HistoryIcon, EyeIcon, DownloadIcon, CalculatorIcon, GlobeIcon, DocumentTextIcon, ShieldIcon, AnimatedCheckIcon, PlusIcon, TrashIcon, TagIcon, BuildingIcon } from './Icons';
 import LoadingSpinner from './LoadingSpinner';
 import NfseSpAdminPanel from './NfseSpAdminPanel';
+import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 
 interface SimplesNacionalDetalheProps {
     empresa: SimplesNacionalEmpresa;
@@ -56,6 +57,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     empresa, notas, onBack, onImport, onUpdateFolha12, onSaveFaturamentoManual, onUpdateEmpresa, onShowClienteView, onShowToast, currentUser 
 }) => {
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
     const [folha12Input, setFolha12Input] = useState(empresa.folha12);
     
     // Estados de Apuração Mensal
@@ -350,6 +352,10 @@ if (filialServico > 0) {
                     <button onClick={onShowClienteView} className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-100 text-sky-700 font-bold rounded-lg hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-300 dark:hover:bg-sky-900/50">
                         <EyeIcon className="w-5 h-5" />
                         Visão Cliente
+                    </button>
+                    <button onClick={() => setIsDadosFiscaisModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Dados fiscais para SPED, DCTFWeb e outras obrigacoes">
+                        <BuildingIcon className="w-5 h-5" />
+                        Dados Fiscais
                     </button>
                     <label className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 cursor-pointer">
                         <DownloadIcon className="w-5 h-5" />
@@ -773,7 +779,18 @@ if (filialServico > 0) {
                     </div>
                 </div>
             )}
-        </div>
+        
+            <EmpresaDadosFiscaisModal
+                isOpen={isDadosFiscaisModalOpen}
+                onClose={() => setIsDadosFiscaisModalOpen(false)}
+                empresaNome={empresa.nome}
+                valoresAtuais={empresa.dadosFiscais}
+                onSave={async (dados) => {
+                    await onUpdateEmpresa(empresa.id, { dadosFiscais: dados });
+                    onShowToast('Dados fiscais salvos com sucesso!');
+                }}
+            />
+</div>
     );
 };
 

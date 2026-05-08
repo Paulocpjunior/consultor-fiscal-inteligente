@@ -5,6 +5,7 @@ import { fetchCnpjFromBrasilAPI } from '../services/externalApiService';
 import { calcularLucro } from '../services/lucroService';
 import { PlusIcon, CalculatorIcon, DownloadIcon, TrashIcon, ArrowLeftIcon, SaveIcon, UserIcon, BuildingIcon, PencilIcon, CloseIcon, TagIcon, BriefcaseIcon, ShieldIcon, InfoIcon } from './Icons';
 import LoadingSpinner from './LoadingSpinner';
+import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 
 // Helper to convert Ficha to Input for Calculation Service
 const convertFichaToInput = (ficha: FichaFinanceiraRegistro, empresa: LucroPresumidoEmpresa): LucroInput => {
@@ -158,6 +159,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const [selectedFichaId, setSelectedFichaId] = useState<string | null>(null);
     const [view, setView] = useState<'list' | 'details' | 'report' | 'new_company' | 'new_ficha'>('list');
     const [loading, setLoading] = useState(false);
+    const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
 
     // New Company Form State
     const [newName, setNewName] = useState('');
@@ -1277,12 +1279,18 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         if (!selectedEmpresa) return null;
         return (
             <div className="space-y-6 animate-fade-in">
-                <div className="flex items-center gap-4">
-                    <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><ArrowLeftIcon className="w-5 h-5" /></button>
-                    <div>
-                        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{selectedEmpresa.nome}</h2>
-                        <p className="text-slate-500 dark:text-slate-400 font-mono text-sm">{selectedEmpresa.cnpj}</p>
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><ArrowLeftIcon className="w-5 h-5" /></button>
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{selectedEmpresa.nome}</h2>
+                            <p className="text-slate-500 dark:text-slate-400 font-mono text-sm">{selectedEmpresa.cnpj}</p>
+                        </div>
                     </div>
+                    <button onClick={() => setIsDadosFiscaisModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Dados fiscais para SPED, DCTFWeb e outras obrigacoes">
+                        <BuildingIcon className="w-5 h-5" />
+                        Dados Fiscais
+                    </button>
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
@@ -1594,6 +1602,21 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             {view === 'details' && renderDetails()}
             {view === 'new_ficha' && renderNewFicha()}
             {view === 'report' && renderReport()}
+
+            {selectedEmpresa && (
+                <EmpresaDadosFiscaisModal
+                    isOpen={isDadosFiscaisModalOpen}
+                    onClose={() => setIsDadosFiscaisModalOpen(false)}
+                    empresaNome={selectedEmpresa.nome}
+                    valoresAtuais={selectedEmpresa.dadosFiscais}
+                    onSave={async (dados) => {
+                        await lucroPresumidoService.updateEmpresa(selectedEmpresa.id, { dadosFiscais: dados });
+                        // Refresh lista pra refletir mudanca
+                        const empresasAtualizadas = await lucroPresumidoService.getEmpresas(currentUser);
+                        setEmpresas(empresasAtualizadas);
+                    }}
+                />
+            )}
         </div>
     );
 };
