@@ -31,8 +31,31 @@ function buildBlocoVazio(sigla) {
 
 export const buildBlocoB = () => buildBlocoVazio('B');
 export const buildBlocoD = () => buildBlocoVazio('D');
-export const buildBlocoE = () => buildBlocoVazio('E');
+// buildBlocoE foi pra ./sped-fiscal-blocoE.js (com E100/E110 zerada).
 export const buildBlocoG = () => buildBlocoVazio('G');
 export const buildBlocoH = () => buildBlocoVazio('H');
 export const buildBlocoK = () => buildBlocoVazio('K');
-export const buildBloco1 = () => buildBlocoVazio('1');
+/**
+ * Bloco 1 — gera 1001|0| + 1010|N|x14| + 1990|3|.
+ *
+ * Registro 1010 (Obrigatoriedade de Registros do Bloco 1) eh exigido pelo
+ * PVA mesmo quando a empresa nao tem operacoes especiais. 14 campos S/N,
+ * todos 'N' indicando que nada se aplica.
+ *
+ * Layout do 1010 (NT 2024.001):
+ *  REG | IND_EXP | IND_CCRF | IND_COMB | IND_USINA | IND_VA |
+ *      | IND_EE  | IND_CART | IND_FORM | IND_AER  | IND_GIAF1 |
+ *      | IND_GIAF3 | IND_GIAF4 | IND_REST_RESSARC_COMPL_ICMS
+ */
+export function buildBloco1() {
+    return [
+        fmt.buildLine(['1001', '0']),  // 0 = Bloco COM dados (tem o 1010)
+        fmt.buildLine([
+            '1010',
+            'N', 'N', 'N', 'N', 'N',  // EXP, CCRF, COMB, USINA, VA
+            'N', 'N', 'N', 'N', 'N',  // EE, CART, FORM, AER, GIAF1
+            'N', 'N', 'N',            // GIAF3, GIAF4, REST_RESSARC
+        ]),
+        fmt.buildLine(['1990', '3']),  // 3 linhas no bloco
+    ];
+}

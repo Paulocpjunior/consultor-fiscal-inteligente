@@ -11,9 +11,10 @@ import { buildBloco0 } from './sped-fiscal-bloco0.js';
 import { buildBlocoC } from './sped-fiscal-blocoC.js';
 import { buildBloco9 } from './sped-fiscal-bloco9.js';
 import {
-    buildBlocoB, buildBlocoD, buildBlocoE,
+    buildBlocoB, buildBlocoD,
     buildBlocoG, buildBlocoH, buildBlocoK, buildBloco1,
 } from './sped-fiscal-blocos-vazios.js';
+import { buildBlocoE } from './sped-fiscal-blocoE.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -158,10 +159,10 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     const itens = Array.from(itensMap.values());
     const unidades = Array.from(unidadesMap.values());
 
-    // Garante que UN seja sempre incluido (regra prudente do Guia Pratico)
-    if (!unidadesMap.has('UN')) {
-        unidades.unshift({ codigo: 'UN', descricao: 'UNIDADE' });
-    }
+    // 0190 deve listar APENAS unidades efetivamente referenciadas em algum
+    // 0200 ou C170. Forcar 'UN' quando ninguem usa gera erro no PVA:
+    // "Codigo invalido. Informar codigo da unidade de medida (UNID) se
+    //  referenciado em pelo menos um dos blocos ou no Registro 0200 ou 0220."
 
     // ─── 6. Warnings ───
     const warnings = [];
@@ -194,7 +195,7 @@ export async function montarBlocos({ dados }) {
     const linhasBlocoB = buildBlocoB();   // vazio
     const linhasBlocoC = buildBlocoC(dados);
     const linhasBlocoD = buildBlocoD();   // vazio
-    const linhasBlocoE = buildBlocoE();   // vazio (Fase 3: apuracao real)
+    const linhasBlocoE = buildBlocoE(dados);  // E001+E100+E110 zerada+E990
     const linhasBlocoG = buildBlocoG();   // vazio
     const linhasBlocoH = buildBlocoH();   // vazio
     const linhasBlocoK = buildBlocoK();   // vazio

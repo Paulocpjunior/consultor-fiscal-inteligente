@@ -58,6 +58,27 @@ function getCstIcms(item) {
 }
 
 /**
+ * Converte CFOP do emitente pra perspectiva do destinatario quando a
+ * operacao eh de entrada.
+ *
+ * Regra: quando a empresa eh DESTINATARIA (nota recebida), o CFOP do XML
+ * vem do EMITENTE (5xxx/6xxx/7xxx) e precisa ser convertido pra entrada:
+ *   5xxx (saida estadual)         -> 1xxx (entrada estadual)
+ *   6xxx (saida interestadual)    -> 2xxx (entrada interestadual)
+ *   7xxx (saida exterior)         -> 3xxx (entrada exterior/importacao)
+ *
+ * Os 3 ultimos digitos ficam iguais (mantem o tipo da operacao).
+ */
+function convertCfopParaEntrada(rawCfop, direcao) {
+    const c = String(rawCfop || '0000');
+    if (direcao !== 'entrada') return c;
+    if (c.length !== 4) return c;
+    const map = { '5': '1', '6': '2', '7': '3' };
+    const novo = map[c[0]];
+    return novo ? novo + c.slice(1) : c;
+}
+
+/**
  * Filtra notas que entram no Bloco C.
  */
 function filtrarNotasBlocoC(notas) {
@@ -94,13 +115,19 @@ export function buildBlocoC(dados) {
             // C170s — apenas se a nota nao for cancelada/denegada/inutilizada
             // (Guia Pratico: notas canceladas vao apenas com C100, sem C170)
             if (nota.status === 'autorizado') {
-                let nItem = 1;
-                for (const item of (nota.itens || [])) {
-                    linhas.push(buildC170(item, nItem, nota));
-                    nItem++;
+                // Regra Guia Pratico: NF-e de emissao propria (IND_EMIT=0)
+                // NAO leva C170 — basta C100+C190. So gera C170 quando a
+                // nota foi emitida por terceiros (entrada).
+                const ehEmissaoPropria = nota.direcao === 'saida';
+                if (!ehEmissaoPropria) {
+                    let nItem = 1;
+                    for (const item of (nota.itens || [])) {
+                        linhas.push(buildC170(item, nItem, nota));
+                        nItem++;
+                    }
                 }
 
-                // C190s — agregacao por CST+CFOP+aliquota
+                // C190s — agregacao por CST+CFOP+aliquota (sempre)
                 const c190s = buildC190sFromNota(nota);
                 for (const linha of c190s) {
                     linhas.push(linha);
@@ -263,7 +290,7 @@ function buildC170(item, nItem, nota) {
         fmt.formatValue(item.vDesc, 2),
         '0',  // IND_MOV: 0=Sim (movimentacao fisica)
         cstFmt,
-        fmt.sanitizeString(String(item.cfop || item.CFOP || '0000'), 4),
+        fmt.sanitizeString(convertCfopParaEntrada(item.cfop || item.CFOP || '0000', nota.direcao), 4),
         '',  // COD_NAT
         fmt.formatValue(item.vBC, 2),
         fmt.formatValue(aliqIcms, 2),
@@ -320,7 +347,8 @@ function buildC190sFromNota(nota) {
     for (const item of (nota.itens || [])) {
         const cst = getCstIcms(item);
         const cstFmt = cst.length === 2 ? '0' + cst : cst.padStart(3, '0').slice(-3);
-        const cfop = String(item.cfop || item.CFOP || '0000');
+        const cfopRaw = String(item.cfop || item.CFOP || '0000');
+        const cfop = convertCfopParaEntrada(cfopRaw, nota.direcao);
 
         const aliqIcms = item.aliqIcms || (
             item.vICMS && item.vBC ? (item.vICMS / item.vBC * 100) : 0
