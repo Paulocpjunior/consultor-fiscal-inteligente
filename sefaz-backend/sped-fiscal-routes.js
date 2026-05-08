@@ -1,11 +1,8 @@
 // ============================================================================
 // sefaz-backend/sped-fiscal-routes.js  (ESM)
-// Endpoints: /sped-fiscal/preview, /sped-fiscal/gerar, /sped-fiscal/listar
+// Endpoints: /sped-fiscal/preview, /sped-fiscal/gerar, /sped-fiscal/historico
 //
-// Status atual: ESQUELETO — todas as rotas retornam 501 Not Implemented
-// com mensagem clara. Logica fiscal sera implementada em Fase 1 (Bloco 0+9).
-//
-// Layout alvo: EFD ICMS/IPI Guia Pratico 3.2.2, Leiaute 020 (vigente 01/01/2026).
+// Layout alvo: EFD ICMS/IPI Guia Pratico 3.2.2, Leiaute 020.
 // ============================================================================
 
 import express from 'express';
@@ -39,17 +36,13 @@ async function requireAuth(req, res, next) {
 }
 
 /**
- * GET /preview?empresaId=X&competencia=2026-03&escopo=mensal
- * Retorna preview: numero de notas, itens, participantes elegiveis pro periodo.
- * STUB: retorna 501 ate Fase 1 implementar.
+ * GET /preview?empresaId=X&competencia=YYYY-MM
+ * Retorna estatisticas: notas, itens, participantes elegiveis pro periodo.
  */
 router.get('/preview', requireAuth, async (req, res) => {
     try {
         const { empresaId, competencia, competenciaInicio, competenciaFim } = req.query;
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
-        if (!competencia && !competenciaInicio) {
-            return res.status(400).json({ error: 'competencia ou competenciaInicio+Fim obrigatorios' });
-        }
 
         const dados = await coletarDadosEmpresa({
             empresaId,
@@ -60,36 +53,29 @@ router.get('/preview', requireAuth, async (req, res) => {
 
         return res.json({
             empresaId,
-            periodo: competencia || `${competenciaInicio} ate ${competenciaFim}`,
+            empresaNome: dados.empresa.nome,
+            periodo: `${dados.competenciaInicio} ate ${dados.competenciaFim}`,
             totais: {
                 notas: dados.notas.length,
                 itens: dados.itens.length,
                 participantes: dados.participantes.length,
+                unidades: dados.unidades.length,
             },
             warnings: dados.warnings,
         });
     } catch (e) {
-        if (e.code === 'FASE1_PENDENTE') {
-            return res.status(501).json({
-                error: 'Fase 1 em desenvolvimento',
-                message: 'A logica de preview sera implementada na proxima sessao. ' +
-                         'Por enquanto, esta rota retorna 501 Not Implemented.',
-            });
-        }
-        console.error('[sped-fiscal /preview]', e);
-        return res.status(500).json({ error: e.message });
+        return tratarErro(e, res);
     }
 });
 
 /**
  * POST /gerar
- * Body: { empresaId, competencia, escopo, dadosContador? }
- * Retorna o .txt do SPED Fiscal montado.
- * STUB: retorna 501 ate Fase 1 implementar.
+ * Body: { empresaId, competencia | (competenciaInicio + competenciaFim) }
+ * Retorna o .txt do SPED Fiscal montado, com Content-Disposition pra download.
  */
 router.post('/gerar', requireAuth, express.json(), async (req, res) => {
     try {
-        const { empresaId, competencia, competenciaInicio, competenciaFim, dadosContador } = req.body || {};
+        const { empresaId, competencia, competenciaInicio, competenciaFim } = req.body || {};
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
 
         const dados = await coletarDadosEmpresa({
@@ -99,38 +85,61 @@ router.post('/gerar', requireAuth, express.json(), async (req, res) => {
             competenciaFim,
         });
 
-        const txt = await montarBlocos({ dados, dadosContador });
+        const txt = await montarBlocos({ dados });
 
-        // Quando Fase 1 estiver pronta, retorna o .txt como anexo:
-        // res.setHeader('Content-Type', 'text/plain; charset=windows-1252');
-        // res.setHeader('Content-Disposition', `attachment; filename="SPED_${empresaId}_${competencia}.txt"`);
-        // return res.send(txt);
+        // Encoding Windows-1252 (legado SPED)
+        const buffer = Buffer.from(txt, 'latin1');
 
-        return res.json({ ok: true, txt });
-    } catch (e) {
-        if (e.code === 'FASE1_PENDENTE') {
-            return res.status(501).json({
-                error: 'Fase 1 em desenvolvimento',
-                message: 'A geracao do SPED sera implementada na proxima sessao. ' +
-                         'A UI esta pronta e os endpoints existem, mas a logica fiscal ' +
-                         '(Blocos 0 e 9) ainda nao foi finalizada.',
-                fase: 1,
-                blocosImplementados: [],
-                blocosPendentes: ['0', '9'],
-            });
+        // Nome do arquivo: SPED_<cnpj>_<periodo>.txt
+        const cnpj = (dados.empresa.cnpj || '').replace(/\D/g, '');
+        const periodo = competencia
+            ? competencia.replace('-', '')
+            : `${competenciaInicio.replace('-', '')}_${competenciaFim.replace('-', '')}`;
+        const filename = `SPED_${cnpj}_${periodo}.txt`;
+
+        res.setHeader('Content-Type', 'text/plain; charset=windows-1252');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        // Headers customizados pra UI mostrar warnings/totais
+        if (dados.warnings.length) {
+            res.setHeader('X-SPED-Warnings', encodeURIComponent(JSON.stringify(dados.warnings)));
         }
-        console.error('[sped-fiscal /gerar]', e);
-        return res.status(500).json({ error: e.message });
+        res.setHeader('X-SPED-Stats', encodeURIComponent(JSON.stringify({
+            notas: dados.notas.length,
+            itens: dados.itens.length,
+            participantes: dados.participantes.length,
+            linhas: txt.split('\r\n').length - 1,
+        })));
+        return res.send(buffer);
+    } catch (e) {
+        return tratarErro(e, res);
     }
 });
 
-/**
- * GET /historico?empresaId=X
- * Lista SPEDs ja gerados (Firestore: spedfiscal_geracoes).
- * STUB: retorna lista vazia ate implementar persistencia.
- */
 router.get('/historico', requireAuth, async (_req, res) => {
     return res.json({ entries: [], message: 'Historico sera implementado na Fase 4.' });
 });
+
+function tratarErro(e, res) {
+    if (e.code === 'DADOS_FISCAIS_INCOMPLETOS') {
+        return res.status(400).json({
+            error: 'DADOS_FISCAIS_INCOMPLETOS',
+            message: e.message,
+        });
+    }
+    if (e.code === 'EMPRESA_NAO_ENCONTRADA') {
+        return res.status(404).json({
+            error: 'EMPRESA_NAO_ENCONTRADA',
+            message: e.message,
+        });
+    }
+    if (e.code === 'FASE1_PENDENTE') {
+        return res.status(501).json({
+            error: 'Fase 1 em desenvolvimento',
+            message: e.message,
+        });
+    }
+    console.error('[sped-fiscal]', e);
+    return res.status(500).json({ error: e.message });
+}
 
 export default router;

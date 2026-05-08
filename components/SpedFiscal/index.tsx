@@ -1,11 +1,11 @@
 /**
  * SpedFiscal — Aba de geração SPED Fiscal (EFD ICMS/IPI).
  *
- * Fase atual: ESQUELETO (UI funcional + backend stub que retorna 501).
+ * Fase 1: Bloco 0 + Bloco 9 implementados, faz download do .txt.
  *
  * Roadmap:
- *   Fase 0 (entregue): UI placeholder com roadmap visual
- *   Fase 1 (em desenvolvimento): Bloco 0 + Bloco 9 + UI de seleção/geração
+ *   Fase 0: UI placeholder (entregue 07/05)
+ *   Fase 1: Backend stub + UI funcional (07/05) + LOGICA REAL (08/05) ← AQUI
  *   Fase 2: Bloco C (mercadorias)
  *   Fase 3: Bloco E (apuração ICMS/IPI)
  *   Fase 4: Validação na PVA + histórico Firestore
@@ -29,6 +29,7 @@ interface MensagemRetorno {
     tipo: 'info' | 'warning' | 'error' | 'success';
     titulo: string;
     detalhes?: string;
+    extras?: { label: string; value: string }[];
 }
 
 function getCompetenciaAtual(): string {
@@ -54,7 +55,6 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [gerando, setGerando] = useState(false);
     const [mensagem, setMensagem] = useState<MensagemRetorno | null>(null);
 
-    // Carrega lista de empresas elegíveis
     useEffect(() => {
         let alive = true;
         if (!currentUser) { setLoadingEmpresas(false); return; }
@@ -107,28 +107,82 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 body: JSON.stringify(body),
             });
 
-            const data = await resp.json();
-
-            if (resp.status === 501) {
-                // Esperado nesta fase
-                setMensagem({
-                    tipo: 'info',
-                    titulo: data.error || 'Fase 1 em desenvolvimento',
-                    detalhes: data.message,
-                });
-            } else if (!resp.ok) {
+            if (resp.status === 400) {
+                const data = await resp.json();
+                if (data.error === 'DADOS_FISCAIS_INCOMPLETOS') {
+                    setMensagem({
+                        tipo: 'warning',
+                        titulo: 'Dados Fiscais incompletos',
+                        detalhes: data.message,
+                    });
+                    return;
+                }
                 setMensagem({
                     tipo: 'error',
-                    titulo: 'Erro ao gerar SPED',
-                    detalhes: data.error || `HTTP ${resp.status}`,
+                    titulo: 'Erro de validação',
+                    detalhes: data.message || data.error,
                 });
-            } else {
-                // Quando a Fase 1 estiver pronta, baixar o txt aqui.
-                setMensagem({
-                    tipo: 'success',
-                    titulo: 'SPED gerado com sucesso',
-                    detalhes: `${(data.txt || '').length} caracteres no arquivo.`,
-                });
+                return;
+            }
+
+            if (!resp.ok) {
+                let msg = `HTTP ${resp.status}`;
+                try {
+                    const data = await resp.json();
+                    msg = data.message || data.error || msg;
+                } catch {
+                    /* nao eh JSON, mantem HTTP */
+                }
+                setMensagem({ tipo: 'error', titulo: 'Erro ao gerar SPED', detalhes: msg });
+                return;
+            }
+
+            // ─── Download do arquivo ───
+            const blob = await resp.blob();
+            const filename = (() => {
+                const cd = resp.headers.get('Content-Disposition') || '';
+                const m = cd.match(/filename="([^"]+)"/);
+                return m ? m[1] : 'SPED_Fiscal.txt';
+            })();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            // Stats e warnings (se vieram nos headers)
+            let stats = null as null | { notas: number; itens: number; participantes: number; linhas: number };
+            try {
+                const raw = resp.headers.get('X-SPED-Stats');
+                if (raw) stats = JSON.parse(decodeURIComponent(raw));
+            } catch { /* ignora */ }
+
+            let warnings: string[] = [];
+            try {
+                const raw = resp.headers.get('X-SPED-Warnings');
+                if (raw) warnings = JSON.parse(decodeURIComponent(raw));
+            } catch { /* ignora */ }
+
+            const extras = stats ? [
+                { label: 'Notas processadas', value: String(stats.notas) },
+                { label: 'Itens únicos', value: String(stats.itens) },
+                { label: 'Participantes', value: String(stats.participantes) },
+                { label: 'Linhas no arquivo', value: String(stats.linhas) },
+            ] : undefined;
+
+            setMensagem({
+                tipo: warnings.length ? 'warning' : 'success',
+                titulo: warnings.length
+                    ? `SPED gerado com avisos: ${filename}`
+                    : `SPED gerado: ${filename}`,
+                detalhes: warnings.length ? warnings.join(' — ') : 'Download concluído.',
+                extras,
+            });
+            if (onShowToast && !warnings.length) {
+                onShowToast(`SPED Fiscal "${filename}" gerado com sucesso!`);
             }
         } catch (err: any) {
             setMensagem({
@@ -162,9 +216,9 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </div>
                     <span
                         className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full"
-                        style={{ background: 'rgba(201,161,74,0.18)', color: '#C9A14A' }}
+                        style={{ background: 'rgba(91,127,255,0.18)', color: '#5B7FFF' }}
                     >
-                        BETA — Fase 1 em desenvolvimento
+                        Fase 1 — Bloco 0 + 9
                     </span>
                 </div>
             </div>
@@ -200,7 +254,6 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </select>
                 )}
 
-                {/* Aviso pra Simples Nacional */}
                 {isSimples && (
                     <div
                         className="mt-3 p-3 rounded-lg flex items-start gap-3"
@@ -344,6 +397,20 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 {mensagem.detalhes}
                             </p>
                         )}
+                        {mensagem.extras && (
+                            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+                                {mensagem.extras.map(e => (
+                                    <div key={e.label} className="p-2 rounded" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                                        <p className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(200,208,255,0.5)' }}>
+                                            {e.label}
+                                        </p>
+                                        <p className="text-sm font-bold" style={{ color: '#F5F6FF' }}>
+                                            {e.value}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -352,24 +419,22 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             <div
                 className="p-4 rounded-xl"
                 style={{
-                    background: 'rgba(201,161,74,0.06)',
-                    border: '1px solid rgba(201,161,74,0.2)',
-                    borderLeft: '4px solid #C9A14A',
+                    background: 'rgba(91,127,255,0.06)',
+                    border: '1px solid rgba(91,127,255,0.2)',
+                    borderLeft: '4px solid #5B7FFF',
                 }}
             >
-                <p className="text-xs font-bold" style={{ color: '#C9A14A' }}>
-                    🛠️ Fase 1 em construção
+                <p className="text-xs font-bold" style={{ color: '#5B7FFF' }}>
+                    🛠️ Fase 1 — Bloco 0 e 9 implementados
                 </p>
                 <p className="text-xs mt-1" style={{ color: 'rgba(200,208,255,0.7)' }}>
-                    A interface está pronta. A geração do arquivo .txt (Blocos 0 e 9) será implementada
-                    na próxima sessão. Hoje, ao clicar "Gerar SPED Fiscal", o backend retorna a mensagem
-                    "Fase 1 em desenvolvimento" — comportamento esperado.
+                    A geração inclui dados da empresa (registro 0000), endereço (0005),
+                    contador (0100), participantes (0150), unidades (0190),
+                    itens (0200) e bloco de controle (9001-9999).
+                    <strong className="block mt-2">Pendente Fase 2:</strong>
+                    Bloco C (mercadorias - notas item-a-item) e Bloco E (apuração ICMS/IPI).
+                    Por enquanto, o SPED gerado <strong>NÃO</strong> deve ser entregue à PVA — use para validação visual.
                 </p>
-                {currentUser?.email && (
-                    <p className="text-[11px] mt-2 italic" style={{ color: 'rgba(200,208,255,0.4)' }}>
-                        Logado como {currentUser.email}
-                    </p>
-                )}
             </div>
         </div>
     );
