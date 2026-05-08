@@ -15,6 +15,7 @@ import {
     buildBlocoG, buildBlocoH, buildBlocoK, buildBloco1,
 } from './sped-fiscal-blocos-vazios.js';
 import { buildBlocoE } from './sped-fiscal-blocoE.js';
+import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -127,10 +128,23 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     }
     const participantes = Array.from(participantesMap.values());
 
+    // ─── 4b. Enriquece participantes legados via BrasilAPI ───
+    // Notas processadas pelo parser antigo nao tem codMunIBGE/endereco.
+    // BrasilAPI preenche por CNPJ. Parser novo ja extrai do XML.
+    try {
+        const stats = await enrichParticipantesViaBrasilApi(participantes);
+        console.log(`[sped-fiscal] BrasilAPI enrich: ${JSON.stringify(stats)}`);
+    } catch (err) {
+        console.warn(`[sped-fiscal] BrasilAPI falhou: ${err.message}`);
+    }
+
     // ─── 5. Extrai itens unicos (produtos/servicos) e unidades ───
+    // Importante: itens de notas de saida propria (IND_EMIT=0) NAO geram
+    // C170 — entao nao podem aparecer no 0200 (PVA reclama de item orfao).
     const itensMap = new Map();
     const unidadesMap = new Map();
     for (const nota of notas) {
+        if (nota.direcao === 'saida') continue;  // itens de saida propria nao geram C170 nem 0200
         for (const item of (nota.itens || [])) {
             const codItem = item.cProd || item.codigo || item.cFiscal || `ITEM-${item.nItem || '?'}`;
             if (!itensMap.has(codItem)) {
@@ -246,19 +260,20 @@ function descreverUnidade(codigo) {
 }
 
 function getContadorPadrao() {
-    // Placeholder. No futuro pode ser parametro do admin no app.
+    // Dados reais SP Assessoria Contabil. Futuramente pode virar cadastro
+    // editavel pelo admin no app, mas hoje eh fixo no codigo.
     return {
-        nome: 'CONTADOR SP CONTABIL',
-        cpf: '',
-        crc: '1SP123456/O-7',
-        cnpj: '',
-        cep: '',
-        logradouro: '',
-        numero: '',
-        complemento: '',
-        bairro: '',
-        telefone: '',
-        email: '',
-        codMunIBGE: '',
+        nome: 'PAULO CESAR PEREIRA JUNIOR',
+        cpf: '26819016859',
+        crc: '1SP238285/O-5',
+        cnpj: '44388152000189',
+        cep: '01042001',
+        logradouro: 'RUA BARAO DE ITAPETININGA',
+        numero: '221',
+        complemento: '3 ANDAR',
+        bairro: 'REPUBLICA',
+        telefone: '31551554',
+        email: 'spcontabil@spassessoriacontabil.com.br',
+        codMunIBGE: '3550308',
     };
 }

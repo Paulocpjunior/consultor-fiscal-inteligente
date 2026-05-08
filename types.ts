@@ -767,7 +767,20 @@ export interface DocumentoFiscalParticipante {
     fantasia?: string;
     ie?: string;
     uf?: string;
+    /** Nome do municipio (texto). */
     municipio?: string;
+    /** Codigo IBGE de 7 digitos (cMun no XML NFe). */
+    codMunIBGE?: string;
+    /** Endereco — extraido de enderEmit/enderDest do XML quando disponivel. */
+    logradouro?: string;
+    numero?: string;
+    complemento?: string;
+    bairro?: string;
+    /** CEP (apenas digitos). */
+    cep?: string;
+    /** Codigo do pais (cPais no XML). */
+    codPais?: string;
+    pais?: string;
 }
 
 /**

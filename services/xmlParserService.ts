@@ -198,6 +198,14 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         ie: getTextContent(emit, 'IE') || undefined,
         uf: getTextContent(emitEnder, 'UF') || undefined,
         municipio: getTextContent(emitEnder, 'xMun') || undefined,
+        codMunIBGE: getTextContent(emitEnder, 'cMun') || undefined,
+        logradouro: getTextContent(emitEnder, 'xLgr') || undefined,
+        numero: getTextContent(emitEnder, 'nro') || undefined,
+        complemento: getTextContent(emitEnder, 'xCpl') || undefined,
+        bairro: getTextContent(emitEnder, 'xBairro') || undefined,
+        cep: onlyDigits(getTextContent(emitEnder, 'CEP')) || undefined,
+        codPais: getTextContent(emitEnder, 'cPais') || undefined,
+        pais: getTextContent(emitEnder, 'xPais') || undefined,
     };
 
     const destinatario: DocumentoFiscalParticipante = {
@@ -206,6 +214,14 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         ie: getTextContent(dest, 'IE') || undefined,
         uf: getTextContent(destEnder, 'UF') || undefined,
         municipio: getTextContent(destEnder, 'xMun') || undefined,
+        codMunIBGE: getTextContent(destEnder, 'cMun') || undefined,
+        logradouro: getTextContent(destEnder, 'xLgr') || undefined,
+        numero: getTextContent(destEnder, 'nro') || undefined,
+        complemento: getTextContent(destEnder, 'xCpl') || undefined,
+        bairro: getTextContent(destEnder, 'xBairro') || undefined,
+        cep: onlyDigits(getTextContent(destEnder, 'CEP')) || undefined,
+        codPais: getTextContent(destEnder, 'cPais') || undefined,
+        pais: getTextContent(destEnder, 'xPais') || undefined,
     };
 
     const totais: DocumentoFiscalTotais = {
