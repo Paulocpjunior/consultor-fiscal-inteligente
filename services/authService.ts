@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth';
 import {
     doc, setDoc, getDoc, collection, addDoc,
-    getDocs, deleteDoc, query, orderBy, limit, where
+    getDocs, deleteDoc, query, orderBy, limit as fbLimit, where
 } from 'firebase/firestore';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -253,10 +253,73 @@ export const getAllUsers = async (): Promise<User[]> => {
             const snapshot = await getDocs(collection(db, 'users'));
             return snapshot.docs.map(d => d.data() as User);
         } catch (e: any) {
-            if (e.code !== 'permission-denied') console.warn('getAllUsers:', e.message);
+            if (e.code === 'permission-denied') {
+                // Propaga erro pra UI mostrar mensagem clara
+                throw new Error('PERMISSION_DENIED: Apenas administradores podem listar usuarios. Solicite a um admin que te promova.');
+            }
+            console.warn('getAllUsers:', e.message);
+            throw e;
         }
     }
     return getLocalUsers().map(({ passwordHash, ...u }) => u);
+};
+
+/**
+ * Atualiza role do usuario (apenas admin pode chamar — Firestore rules garantem).
+ * @param userId UID do usuario alvo
+ * @param role 'admin' | 'colaborador'
+ */
+export const setUserRole = async (userId: string, role: 'admin' | 'colaborador'): Promise<boolean> => {
+    if (!isFirebaseConfigured || !db) {
+        // Modo local: atualiza no localStorage
+        const users = getLocalUsers();
+        const idx = users.findIndex(u => u.id === userId);
+        if (idx === -1) return false;
+        users[idx].role = role;
+        saveLocalUsers(users);
+        return true;
+    }
+    try {
+        await setDoc(doc(db, 'users', userId), { role }, { merge: true });
+        return true;
+    } catch (e: any) {
+        console.warn('setUserRole:', e.message);
+        if (e.code === 'permission-denied') {
+            throw new Error('PERMISSION_DENIED: Apenas administradores podem alterar roles.');
+        }
+        return false;
+    }
+};
+
+/**
+ * Le os ultimos N logs do access_logs.
+ * @param limit numero maximo de logs (default 50)
+ */
+export const getRecentLogs = async (limit: number = 50): Promise<AccessLog[]> => {
+    if (!isFirebaseConfigured || !db) {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_LOGS);
+            const logs = raw ? JSON.parse(raw) : [];
+            return Array.isArray(logs) ? logs.slice(0, limit) : [];
+        } catch {
+            return [];
+        }
+    }
+    try {
+        const q = query(
+            collection(db, 'access_logs'),
+            orderBy('timestamp', 'desc'),
+            fbLimit(limit),
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map(d => d.data() as AccessLog);
+    } catch (e: any) {
+        if (e.code === 'permission-denied') {
+            throw new Error('PERMISSION_DENIED: Apenas administradores podem ler logs.');
+        }
+        console.warn('getRecentLogs:', e.message);
+        throw e;
+    }
 };
 
 export const deleteUser = async (userId: string): Promise<boolean> => {
@@ -290,13 +353,13 @@ export const getAccessLogs = async (userIdFilter?: string): Promise<AccessLog[]>
                     collection(db, 'access_logs'),
                     where('userId', '==', userIdFilter),
                     orderBy('timestamp', 'desc'),
-                    limit(100)
+                    fbLimit(100)
                 );
             } else {
                 q = query(
                     collection(db, 'access_logs'),
                     orderBy('timestamp', 'desc'),
-                    limit(100)
+                    fbLimit(100)
                 );
             }
             const snapshot = await getDocs(q);

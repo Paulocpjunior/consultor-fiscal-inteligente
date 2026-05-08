@@ -1139,6 +1139,7 @@ const App: React.FC = () => {
                 isOpen={isUsersModalOpen}
                 onClose={() => setIsUsersModalOpen(false)}
                 currentUserEmail={currentUser.email}
+                currentUserRole={currentUser.role}
             />
 
             {/* Aviso global de nova versão / hard refresh */}

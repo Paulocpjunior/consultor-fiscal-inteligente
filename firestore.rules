@@ -1,0 +1,132 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ───────────────────────────────────────────────────────────────
+    // Helpers de role
+    // ───────────────────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwnerOrAdmin(userId) {
+      return isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // users: admin le todos, user comum le so o proprio
+    //        SO admin pode atualizar role de outros (anti-self-promotion)
+    // ───────────────────────────────────────────────────────────────
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId;
+
+      // User pode atualizar proprio doc, MAS nao pode mudar a propria role
+      allow update: if (
+        // Admin pode mudar qualquer coisa
+        isAdmin()
+      ) || (
+        // User pode atualizar proprio doc, sem mudar a propria role
+        request.auth.uid == userId
+        && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)
+      );
+
+      // Apenas admin pode deletar usuarios
+      allow delete: if isAdmin();
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // access_logs: admin le todos, user le so os proprios
+    //              qualquer signed-in pode CRIAR (gravacao do proprio log)
+    // ───────────────────────────────────────────────────────────────
+
+    match /access_logs/{logId} {
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        (resource.data.userId == request.auth.uid)
+      );
+      // Qualquer user logado pode gravar log do PROPRIO acesso
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      // Logs sao imutaveis
+      allow update, delete: if isAdmin();
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // simples_empresas, lucro_empresas, documentos_fiscais
+    // Padrao: criador (createdBy) + admin
+    // ───────────────────────────────────────────────────────────────
+
+    match /simples_empresas/{empId} {
+      allow read, update, delete: if isOwnerOrAdmin(resource.data.createdBy);
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    match /lucro_empresas/{empId} {
+      allow read, update, delete: if isOwnerOrAdmin(resource.data.createdBy);
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    match /documentos_fiscais/{docId} {
+      allow read, update, delete: if isOwnerOrAdmin(resource.data.createdBy);
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // Subcoleções comuns (notas, faturamento, etc) — herdam regras
+    // do parent. Acesso por createdBy do parent ou admin.
+    // ───────────────────────────────────────────────────────────────
+
+    match /simples_empresas/{empId}/{subcoll}/{docId} {
+      allow read, write: if isSignedIn() &&
+        (isAdmin() ||
+         get(/databases/$(database)/documents/simples_empresas/$(empId)).data.createdBy == request.auth.uid);
+    }
+
+    match /lucro_empresas/{empId}/{subcoll}/{docId} {
+      allow read, write: if isSignedIn() &&
+        (isAdmin() ||
+         get(/databases/$(database)/documents/lucro_empresas/$(empId)).data.createdBy == request.auth.uid);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // Demais coleções operacionais (sefaz_*, manifestacoes_*, etc)
+    // Apenas signed-in lê, apenas admin/backend escreve
+    // ───────────────────────────────────────────────────────────────
+
+    match /sefaz_certificados/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /sefaz_certificados_historico/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /manifestacoes_log/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /manifestacoes_cron_logs/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // Default deny: qualquer coleção não listada acima é negada.
+    // ───────────────────────────────────────────────────────────────
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
