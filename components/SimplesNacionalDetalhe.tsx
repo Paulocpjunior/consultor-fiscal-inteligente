@@ -6,6 +6,7 @@ import LoadingSpinner from './LoadingSpinner';
 import NfseSpAdminPanel from './NfseSpAdminPanel';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
+import { emitirDasRegular } from '../services/dasService';
 
 interface SimplesNacionalDetalheProps {
     empresa: SimplesNacionalEmpresa;
@@ -60,6 +61,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
     const [isCfopCorrelacaoModalOpen, setIsCfopCorrelacaoModalOpen] = useState(false);
+    const [emitindoDas, setEmitindoDas] = useState(false);
     const [folha12Input, setFolha12Input] = useState(empresa.folha12);
     
     // Estados de Apuração Mensal
@@ -253,6 +255,36 @@ if (filialServico > 0) {
         });
     };
 
+    const handleEmitirDasRegular = async () => {
+        if (!resumo?.das_mensal || resumo.das_mensal < 10) {
+            onShowToast('DAS calculado é menor que R\$ 10,00 — verifique a apuração antes de emitir.');
+            return;
+        }
+        const competencia = `${mesApuracao.getFullYear()}-${String(mesApuracao.getMonth() + 1).padStart(2, '0')}`;
+        const ok = window.confirm(
+            `Emitir DAS Regular para ${empresa.nome}?\n\n` +
+            `Competência: ${competencia}\n` +
+            `Valor: R\$ ${resumo.das_mensal.toFixed(2).replace('.', ',')}`
+        );
+        if (!ok) return;
+
+        setEmitindoDas(true);
+        try {
+            await emitirDasRegular(currentUser ?? null, {
+                empresaId: empresa.id,
+                empresaCnpj: empresa.cnpj,
+                empresaNome: empresa.nome,
+                competencia,
+                valor: resumo.das_mensal,
+            });
+            onShowToast('DAS Regular emitido com sucesso! Veja em Central de DAS.');
+        } catch (err: any) {
+            onShowToast(`Erro ao emitir: ${err.message}`);
+        } finally {
+            setEmitindoDas(false);
+        }
+    };
+
     const handleSaveMesVigente = async () => {
         setIsSaving(true);
         try {
@@ -361,6 +393,14 @@ if (filialServico > 0) {
                     </button>
                     <button onClick={() => setIsCfopCorrelacaoModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Correlacao automatica/manual de CFOPs no SPED Fiscal">
                         🔄 Correlacao CFOP
+                    </button>
+                    <button
+                        onClick={handleEmitirDasRegular}
+                        disabled={emitindoDas}
+                        className="btn-press flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                        title="Emitir DAS Regular do mes em apuracao"
+                    >
+                        {emitindoDas ? '⏳ Emitindo...' : '📤 Emitir DAS'}
                     </button>
                     <label className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 cursor-pointer">
                         <DownloadIcon className="w-5 h-5" />
