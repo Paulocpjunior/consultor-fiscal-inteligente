@@ -204,26 +204,6 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         }
     }
 
-    // ─── 7. Saldo credor ICMS do mes anterior (so pra Lucro) ───
-    // Leitura da ficha mensal anterior em lucro_fichas.
-    let saldoCredorIcmsAnterior = 0;
-    if (regime === 'lucro') {
-        try {
-            const competenciaAnterior = computarCompetenciaAnterior(periodoInicio);
-            const fichaSnap = await db.collection('lucro_fichas')
-                .where('empresaId', '==', empresaId)
-                .where('competencia', '==', competenciaAnterior)
-                .limit(1)
-                .get();
-            if (!fichaSnap.empty) {
-                const ficha = fichaSnap.docs[0].data();
-                saldoCredorIcmsAnterior = parseFloat(ficha.saldoCredorIcms || 0);
-            }
-        } catch (err) {
-            console.warn(`[sped-fiscal] saldoCredorIcmsAnterior falhou: ${err.message}`);
-        }
-    }
-
     return {
         empresa,
         contador: getContadorPadrao(),
@@ -233,7 +213,6 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         itens,
         participantes,
         unidades,
-        saldoCredorIcmsAnterior,
         saldoCredorIcmsAnterior,
         warnings,
     };
