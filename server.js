@@ -12,6 +12,7 @@ import sefazManifestoRouter from './sefaz-backend/manifesto-routes.js';
 import sefazNfseSpRouter from './sefaz-backend/nfse-sp-routes.js';
 import spedFiscalRouter from './sefaz-backend/sped-fiscal-routes.js';
 import caixaPostalRouter from './sefaz-backend/caixa-postal-routes.js';
+import dasRouter from './sefaz-backend/das-routes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +24,7 @@ app.use('/api/admin/sefaz', sefazManifestoRouter);
 app.use('/api/admin/sefaz', sefazNfseSpRouter);
 app.use('/api/admin/sped-fiscal', spedFiscalRouter);
 app.use('/api/admin/caixa-postal', caixaPostalRouter);
+app.use('/api/admin/das', dasRouter);
 const PORT = process.env.PORT || 8080;
 
 app.use(helmet({ contentSecurityPolicy: false }));

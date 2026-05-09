@@ -42,6 +42,7 @@ const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAG
 const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
 const CaixaPostalDashboard = lazy(() => import('./components/CaixaPostal'));
 const CaixaPostalAlerta = lazy(() => import('./components/CaixaPostal/AlertaPopup'));
+const DasDashboard = lazy(() => import('./components/Das'));
 
 const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
@@ -57,6 +58,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.ANALISE_CREDITOS]: "Análise de créditos PIS/COFINS, conciliação bancária e mapeamento por categoria fiscal.",
     [SearchType.SPED_FISCAL]: "Geração do arquivo SPED Fiscal (EFD ICMS/IPI) — escrituração digital mensal.",
     [SearchType.CAIXA_POSTAL]: "Caixa Postal e-CAC — mensagens da Receita Federal por empresa (intimações, malha fiscal, comunicados).",
+    [SearchType.DAS_SIMPLES]: "DAS Simples Nacional — emissão regular (com PGDAS-D) e avulso, controle de pagamentos por empresa.",
 };
 
 const App: React.FC = () => {
@@ -1056,6 +1058,15 @@ const App: React.FC = () => {
                         {searchType === SearchType.CAIXA_POSTAL && (
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CaixaPostalDashboard
+                                    currentUser={currentUser}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                        )}
+
+                        {searchType === SearchType.DAS_SIMPLES && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <DasDashboard
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />

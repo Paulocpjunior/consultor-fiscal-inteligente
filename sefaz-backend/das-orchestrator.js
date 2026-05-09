@@ -1,0 +1,154 @@
+// ============================================================================
+// sefaz-backend/das-orchestrator.js
+// Orquestra emissao + persistencia de DAS no Firestore.
+// ============================================================================
+
+import admin from 'firebase-admin';
+import { getDasProvider, getDasMode } from './das-provider.js';
+
+const COLLECTION = 'das_emitidos';
+
+function fa() {
+    if (!admin.apps.length) {
+        admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    }
+    return admin;
+}
+
+/**
+ * Emite DAS regular (com PGDAS-D transmitido antes).
+ *
+ * @param {object} req { empresaId, empresaCnpj, empresaNome, competencia, valor, opts? }
+ * @returns {object} doc DAS persistido
+ */
+export async function emitirDasRegular(req) {
+    const { empresaId, empresaCnpj, empresaNome, competencia, valor } = req;
+    if (!empresaId || !empresaCnpj || !competencia || !valor) {
+        throw new Error('Campos obrigatorios: empresaId, empresaCnpj, competencia, valor');
+    }
+
+    const provider = getDasProvider();
+    const mode = getDasMode();
+
+    // 1. Transmite PGDAS-D
+    const pgdas = await provider.transmitirPgdasD({ empresaCnpj, competencia, valor });
+
+    // 2. Gera o DAS
+    const das = await provider.gerarDas({ empresaCnpj, competencia, valor, tipo: 'regular' });
+
+    // 3. Persiste no Firestore
+    const db = fa().firestore();
+    const docId = `${empresaCnpj}_${competencia}_regular`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const payload = {
+        empresaId,
+        empresaCnpj,
+        empresaNome: empresaNome || '',
+        competencia,
+        tipo: 'regular',
+        valor,
+        ...das,
+        pgdasRecibo: pgdas.recibo,
+        pgdasTransmitidoEm: pgdas.transmitidoEm,
+        emitidoEm: new Date().toISOString(),
+        modeUsado: mode,
+        statusPagamento: 'pendente',  // pago | pendente | vencido
+        dataPagamento: null,
+    };
+    await db.collection(COLLECTION).doc(docId).set(payload, { merge: true });
+    return { id: docId, ...payload };
+}
+
+/**
+ * Emite DAS avulso (sem PGDAS-D — caso de complementar, atrasado, etc).
+ */
+export async function emitirDasAvulso(req) {
+    const { empresaId, empresaCnpj, empresaNome, competencia, valor, descricao } = req;
+    if (!empresaId || !empresaCnpj || !competencia || !valor) {
+        throw new Error('Campos obrigatorios: empresaId, empresaCnpj, competencia, valor');
+    }
+
+    const provider = getDasProvider();
+    const mode = getDasMode();
+    const das = await provider.gerarDas({ empresaCnpj, competencia, valor, tipo: 'avulso' });
+
+    const db = fa().firestore();
+    const docId = `${empresaCnpj}_${competencia}_avulso_${Date.now()}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const payload = {
+        empresaId,
+        empresaCnpj,
+        empresaNome: empresaNome || '',
+        competencia,
+        tipo: 'avulso',
+        descricao: descricao || '',
+        valor,
+        ...das,
+        emitidoEm: new Date().toISOString(),
+        modeUsado: mode,
+        statusPagamento: 'pendente',
+        dataPagamento: null,
+    };
+    await db.collection(COLLECTION).doc(docId).set(payload, { merge: true });
+    return { id: docId, ...payload };
+}
+
+/**
+ * Lista DAS emitidos com filtros opcionais.
+ */
+export async function listarDas({ empresaId, competencia, status } = {}) {
+    const db = fa().firestore();
+    let q = db.collection(COLLECTION);
+    if (empresaId) q = q.where('empresaId', '==', empresaId);
+    if (competencia) q = q.where('competencia', '==', competencia);
+    if (status) q = q.where('statusPagamento', '==', status);
+
+    const snap = await q.limit(500).get();
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    docs.sort((a, b) => (b.emitidoEm || '').localeCompare(a.emitidoEm || ''));
+    return docs;
+}
+
+/**
+ * Resumo agregado pra dashboard "Central de DAS".
+ */
+export async function getResumoDas() {
+    const db = fa().firestore();
+    const snap = await db.collection(COLLECTION).limit(1000).get();
+    const docs = snap.docs.map(d => d.data());
+
+    const hoje = new Date().toISOString().slice(0, 10);
+    let pendentes = 0, vencidos = 0, pagos = 0;
+    let valorPendente = 0, valorVencido = 0, valorPago = 0;
+
+    for (const d of docs) {
+        const status = d.statusPagamento || 'pendente';
+        const venc = d.vencimento || '';
+        if (status === 'pago') {
+            pagos++;
+            valorPago += d.valor || 0;
+        } else if (venc && venc < hoje) {
+            vencidos++;
+            valorVencido += d.valor || 0;
+        } else {
+            pendentes++;
+            valorPendente += d.valor || 0;
+        }
+    }
+    return {
+        totalDas: docs.length,
+        pendentes, vencidos, pagos,
+        valorPendente, valorVencido, valorPago,
+        mode: getDasMode(),
+    };
+}
+
+/**
+ * Marca DAS como pago.
+ */
+export async function marcarPago(docId, dataPagamento) {
+    const db = fa().firestore();
+    await db.collection(COLLECTION).doc(docId).update({
+        statusPagamento: 'pago',
+        dataPagamento: dataPagamento || new Date().toISOString().slice(0, 10),
+    });
+    return { ok: true };
+}

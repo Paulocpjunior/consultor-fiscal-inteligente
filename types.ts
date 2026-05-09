@@ -12,7 +12,8 @@ export enum SearchType {
   ANALISADOR_REGIME = 'Regime Tributário',
   ANALISE_CREDITOS = 'Análise de Créditos',
   SPED_FISCAL = 'SPED Fiscal',
-  CAIXA_POSTAL = 'Caixa Postal'
+  CAIXA_POSTAL = 'Caixa Postal',
+  DAS_SIMPLES = 'DAS Simples Nacional'
 }
 
 export interface GroundingSource {
@@ -544,6 +545,46 @@ export interface CaixaPostalSyncStats {
     total: number;
     novas: number;
     atualizadas: number;
+}
+
+
+// ─── DAS Simples Nacional ────────────────────────────────────────────────
+
+export type DasTipo = 'regular' | 'avulso';
+export type DasStatusPagamento = 'pendente' | 'pago' | 'vencido';
+
+export interface DasEmitido {
+    id: string;
+    empresaId: string;
+    empresaCnpj: string;
+    empresaNome: string;
+    competencia: string;          // YYYY-MM
+    tipo: DasTipo;
+    valor: number;
+    numeroDocumento: string;
+    codigoBarras: string;
+    vencimento: string;           // YYYY-MM-DD
+    pdfUrl?: string | null;
+    descricao?: string;            // só pra avulso
+    pgdasRecibo?: string;
+    pgdasTransmitidoEm?: string;
+    emitidoEm: string;
+    modeUsado: 'mock' | 'serpro';
+    statusPagamento: DasStatusPagamento;
+    dataPagamento?: string | null;
+    fonte?: string;
+    mensagem?: string;
+}
+
+export interface DasResumo {
+    totalDas: number;
+    pendentes: number;
+    vencidos: number;
+    pagos: number;
+    valorPendente: number;
+    valorVencido: number;
+    valorPago: number;
+    mode: 'mock' | 'serpro';
 }
 
 // Fiscal Obligations Types

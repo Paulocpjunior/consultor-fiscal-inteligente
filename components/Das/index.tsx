@@ -1,0 +1,365 @@
+/**
+ * components/Das/index.tsx
+ * Dashboard "Central de DAS" — gestao global de DAS Simples Nacional.
+ */
+import React, { useEffect, useMemo, useState } from 'react';
+import type { User, DasEmitido, DasResumo, DasStatusPagamento, SimplesNacionalEmpresa } from '../../types';
+import {
+    getResumoDas, listarDas, marcarDasPago, emitirDasAvulso,
+    formatBRL, formatBarras, statusBadgeClass, statusLabel,
+} from '../../services/dasService';
+import { getEmpresas as getEmpresasSimples } from '../../services/simplesNacionalService';
+
+interface Props {
+    currentUser: User | null;
+    onShowToast?: (msg: string) => void;
+}
+
+const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
+    const [resumo, setResumo] = useState<DasResumo | null>(null);
+    const [docs, setDocs] = useState<DasEmitido[]>([]);
+    const [empresas, setEmpresas] = useState<SimplesNacionalEmpresa[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [filtroStatus, setFiltroStatus] = useState<DasStatusPagamento | ''>('');
+    const [filtroEmpresa, setFiltroEmpresa] = useState('');
+    const [selecionado, setSelecionado] = useState<DasEmitido | null>(null);
+    const [mostrarFormAvulso, setMostrarFormAvulso] = useState(false);
+
+    // Form avulso
+    const [novoEmpresaId, setNovoEmpresaId] = useState('');
+    const [novoCompetencia, setNovoCompetencia] = useState(() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    });
+    const [novoValor, setNovoValor] = useState<string>('');
+    const [novoDescricao, setNovoDescricao] = useState('');
+    const [emitindo, setEmitindo] = useState(false);
+
+    const carregar = async () => {
+        setLoading(true);
+        try {
+            const [r, d, e] = await Promise.all([
+                getResumoDas(currentUser),
+                listarDas(currentUser, {
+                    status: filtroStatus || undefined,
+                    empresaId: filtroEmpresa || undefined,
+                }),
+                getEmpresasSimples(currentUser),
+            ]);
+            setResumo(r);
+            setDocs(d);
+            setEmpresas(e);
+        } catch (err: any) {
+            onShowToast?.(`Erro: ${err.message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { carregar(); }, [filtroStatus, filtroEmpresa]);
+
+    const handleMarcarPago = async (doc: DasEmitido) => {
+        try {
+            await marcarDasPago(currentUser, doc.id);
+            await carregar();
+            setSelecionado(null);
+            onShowToast?.('DAS marcado como pago');
+        } catch (e: any) {
+            onShowToast?.(`Erro: ${e.message}`);
+        }
+    };
+
+    const handleEmitirAvulso = async () => {
+        const empresa = empresas.find(e => e.id === novoEmpresaId);
+        if (!empresa) return onShowToast?.('Selecione uma empresa');
+        const valor = parseFloat(novoValor.replace(',', '.'));
+        if (!valor || valor < 10) return onShowToast?.('Valor minimo R$ 10,00');
+
+        setEmitindo(true);
+        try {
+            await emitirDasAvulso(currentUser, {
+                empresaId: empresa.id,
+                empresaCnpj: empresa.cnpj,
+                empresaNome: empresa.nome,
+                competencia: novoCompetencia,
+                valor,
+                descricao: novoDescricao,
+            });
+            setMostrarFormAvulso(false);
+            setNovoEmpresaId('');
+            setNovoValor('');
+            setNovoDescricao('');
+            await carregar();
+            onShowToast?.('DAS Avulso emitido com sucesso');
+        } catch (e: any) {
+            onShowToast?.(`Erro: ${e.message}`);
+        } finally {
+            setEmitindo(false);
+        }
+    };
+
+    const cards = useMemo(() => {
+        if (!resumo) return [];
+        return [
+            { label: 'Total', valor: resumo.totalDas, cor: 'bg-slate-100 dark:bg-slate-700', clave: '' },
+            { label: 'Pendentes', valor: resumo.pendentes, valorBRL: resumo.valorPendente, cor: 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300', clave: 'pendente' as DasStatusPagamento },
+            { label: 'Vencidos', valor: resumo.vencidos, valorBRL: resumo.valorVencido, cor: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300', clave: 'vencido' as DasStatusPagamento },
+            { label: 'Pagos', valor: resumo.pagos, valorBRL: resumo.valorPago, cor: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300', clave: 'pago' as DasStatusPagamento },
+        ];
+    }, [resumo]);
+
+    const copiarBarras = (b: string) => {
+        navigator.clipboard?.writeText(b).then(
+            () => onShowToast?.('Codigo de barras copiado'),
+            () => onShowToast?.('Falha ao copiar')
+        );
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">💸 Central de DAS</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                        DAS Simples Nacional — emissão regular e avulso, controle de pagamentos
+                        {resumo && (
+                            <span className={`ml-2 px-2 py-0.5 rounded text-xs font-bold ${resumo.mode === 'mock' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {resumo.mode === 'mock' ? 'MODO TESTE' : 'PRODUÇÃO'}
+                            </span>
+                        )}
+                    </p>
+                </div>
+                <button
+                    onClick={() => setMostrarFormAvulso(!mostrarFormAvulso)}
+                    className="btn-press px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700"
+                >
+                    {mostrarFormAvulso ? '✕ Cancelar' : '+ Emitir DAS Avulso'}
+                </button>
+            </div>
+
+            {/* Form de emissao avulsa */}
+            {mostrarFormAvulso && (
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4 space-y-3">
+                    <h3 className="font-bold text-emerald-800 dark:text-emerald-200">Emitir DAS Avulso</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <select
+                            value={novoEmpresaId}
+                            onChange={e => setNovoEmpresaId(e.target.value)}
+                            className="px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                        >
+                            <option value="">— Selecione a empresa —</option>
+                            {empresas.map(e => (
+                                <option key={e.id} value={e.id}>{e.nome} ({e.cnpj})</option>
+                            ))}
+                        </select>
+                        <input
+                            type="month"
+                            value={novoCompetencia}
+                            onChange={e => setNovoCompetencia(e.target.value)}
+                            className="px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                        />
+                        <input
+                            type="text"
+                            placeholder="Valor (ex: 1234,56)"
+                            value={novoValor}
+                            onChange={e => setNovoValor(e.target.value)}
+                            className="px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                        />
+                        <input
+                            type="text"
+                            placeholder="Descricao (opcional)"
+                            value={novoDescricao}
+                            onChange={e => setNovoDescricao(e.target.value)}
+                            className="px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                        />
+                    </div>
+                    <button
+                        onClick={handleEmitirAvulso}
+                        disabled={emitindo || !novoEmpresaId || !novoValor}
+                        className="btn-press px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                        {emitindo ? '⏳ Emitindo...' : 'Emitir agora'}
+                    </button>
+                </div>
+            )}
+
+            {/* Cards de resumo */}
+            {resumo && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {cards.map(c => (
+                        <button
+                            key={c.label}
+                            onClick={() => setFiltroStatus(filtroStatus === c.clave ? '' : (c.clave as DasStatusPagamento))}
+                            className={`text-left p-4 rounded-lg border-2 transition-all ${
+                                c.clave && filtroStatus === c.clave
+                                    ? 'border-sky-500 ' + c.cor
+                                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-sky-300'
+                            }`}
+                        >
+                            <div className="text-3xl font-bold">{c.valor}</div>
+                            <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">{c.label}</div>
+                            {c.valorBRL !== undefined && (
+                                <div className="text-xs text-slate-500 mt-0.5">{formatBRL(c.valorBRL)}</div>
+                            )}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* Filtros */}
+            <div className="flex flex-wrap items-center gap-3">
+                <select
+                    value={filtroEmpresa}
+                    onChange={e => setFiltroEmpresa(e.target.value)}
+                    className="px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                >
+                    <option value="">Todas as empresas</option>
+                    {empresas.map(e => (
+                        <option key={e.id} value={e.id}>{e.nome}</option>
+                    ))}
+                </select>
+                {(filtroStatus || filtroEmpresa) && (
+                    <button
+                        onClick={() => { setFiltroStatus(''); setFiltroEmpresa(''); }}
+                        className="text-xs text-slate-500 hover:text-slate-700 underline"
+                    >
+                        Limpar filtros ✕
+                    </button>
+                )}
+            </div>
+
+            {/* Tabela */}
+            {loading ? (
+                <div className="text-center py-12 text-slate-500">Carregando...</div>
+            ) : docs.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">Nenhum DAS encontrado.</div>
+            ) : (
+                <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead className="bg-slate-50 dark:bg-slate-900/50 text-left">
+                            <tr>
+                                <th className="px-4 py-2 font-medium">Empresa</th>
+                                <th className="px-4 py-2 font-medium">Competência</th>
+                                <th className="px-4 py-2 font-medium">Tipo</th>
+                                <th className="px-4 py-2 font-medium text-right">Valor</th>
+                                <th className="px-4 py-2 font-medium">Vencimento</th>
+                                <th className="px-4 py-2 font-medium">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {docs.map(d => (
+                                <tr
+                                    key={d.id}
+                                    onClick={() => setSelecionado(d)}
+                                    className="border-t border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                                >
+                                    <td className="px-4 py-2">{d.empresaNome}</td>
+                                    <td className="px-4 py-2 font-mono text-xs">{d.competencia}</td>
+                                    <td className="px-4 py-2 capitalize">{d.tipo}</td>
+                                    <td className="px-4 py-2 text-right font-mono">{formatBRL(d.valor)}</td>
+                                    <td className="px-4 py-2 font-mono text-xs">{d.vencimento}</td>
+                                    <td className="px-4 py-2">
+                                        <span className={`px-2 py-0.5 rounded text-xs ${statusBadgeClass(d.statusPagamento)}`}>
+                                            {statusLabel(d.statusPagamento)}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {/* Modal detalhe */}
+            {selecionado && (
+                <div
+                    className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70]"
+                    onClick={() => setSelecionado(null)}
+                >
+                    <div
+                        className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${statusBadgeClass(selecionado.statusPagamento)}`}>
+                                    {statusLabel(selecionado.statusPagamento)}
+                                </span>
+                                <span className="text-xs text-slate-500 capitalize">{selecionado.tipo}</span>
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                                {selecionado.empresaNome}
+                            </h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                                CNPJ {selecionado.empresaCnpj} | Competência {selecionado.competencia}
+                            </p>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <div className="text-xs text-slate-500">Valor</div>
+                                    <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{formatBRL(selecionado.valor)}</div>
+                                </div>
+                                <div>
+                                    <div className="text-xs text-slate-500">Vencimento</div>
+                                    <div className="text-lg font-bold text-slate-800 dark:text-slate-100">{selecionado.vencimento}</div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className="text-xs text-slate-500 mb-1">Número do documento</div>
+                                <div className="font-mono text-sm bg-slate-50 dark:bg-slate-900/40 px-3 py-2 rounded">
+                                    {selecionado.numeroDocumento}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className="text-xs text-slate-500 mb-1">Código de barras (clique pra copiar)</div>
+                                <button
+                                    onClick={() => copiarBarras(selecionado.codigoBarras)}
+                                    className="w-full font-mono text-sm bg-slate-50 dark:bg-slate-900/40 px-3 py-2 rounded text-left hover:bg-slate-100 dark:hover:bg-slate-700"
+                                >
+                                    {formatBarras(selecionado.codigoBarras)}
+                                </button>
+                            </div>
+
+                            {selecionado.descricao && (
+                                <div>
+                                    <div className="text-xs text-slate-500 mb-1">Descrição</div>
+                                    <div className="text-sm">{selecionado.descricao}</div>
+                                </div>
+                            )}
+
+                            {selecionado.modeUsado === 'mock' && (
+                                <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
+                                    ⓘ DAS gerado em modo TESTE — código de barras fictício, não pague no banco.
+                                    Pra produção real, ative DAS_MODE=serpro após contratar Integra Contador.
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
+                            <button
+                                onClick={() => setSelecionado(null)}
+                                className="btn-press px-4 py-2 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+                            >
+                                Fechar
+                            </button>
+                            {selecionado.statusPagamento !== 'pago' && (
+                                <button
+                                    onClick={() => handleMarcarPago(selecionado)}
+                                    className="btn-press px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700"
+                                >
+                                    ✓ Marcar como pago
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default DasDashboard;
