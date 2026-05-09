@@ -5,6 +5,7 @@
 // ============================================================================
 
 import express from 'express';
+import admin from 'firebase-admin';
 import {
     sincronizarEmpresa,
     sincronizarTodasEmpresas,
@@ -12,6 +13,8 @@ import {
     getResumoGlobal,
     marcarComoLida,
 } from './caixa-postal-orchestrator.js';
+
+const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 import { getProviderMode } from './caixa-postal-provider.js';
 
 const router = express.Router();
@@ -85,6 +88,37 @@ router.post('/marcar-lida', requireAdmin, express.json(), async (req, res) => {
         res.json(r);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// Cron noturno (Cloud Scheduler)
+router.post('/cron', async (req, res) => {
+    const headerSecret = req.header('X-Cron-Secret') || '';
+    if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
+        return res.status(403).json({ erro: 'cron secret invalido' });
+    }
+    const t0 = Date.now();
+    try {
+        const stats = await sincronizarTodasEmpresas();
+        const duracaoMs = Date.now() - t0;
+        try {
+            if (admin.apps.length === 0) {
+                admin.initializeApp({ credential: admin.credential.applicationDefault() });
+            }
+            await admin.firestore().collection('caixa_postal_cron_logs').add({
+                executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                iniciadoEm: new Date(t0).toISOString(),
+                duracaoMs,
+                ...stats,
+            });
+        } catch (logErr) {
+            console.warn('[caixa-postal-cron] log falhou:', logErr.message);
+        }
+        console.log(`[caixa-postal-cron] OK em ${duracaoMs}ms - totalEmpresas=${stats.totalEmpresas} sucesso=${stats.sucesso} falha=${stats.falha}`);
+        return res.json({ ok: true, duracaoMs, ...stats });
+    } catch (err) {
+        console.error('[caixa-postal-cron] erro:', err.message);
+        return res.status(500).json({ ok: false, erro: err.message });
     }
 });
 
