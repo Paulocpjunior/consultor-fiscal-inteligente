@@ -13,7 +13,8 @@ export enum SearchType {
   ANALISE_CREDITOS = 'Análise de Créditos',
   SPED_FISCAL = 'SPED Fiscal',
   CAIXA_POSTAL = 'Caixa Postal',
-  DAS_SIMPLES = 'DAS Simples Nacional'
+  DAS_SIMPLES = 'DAS Simples Nacional',
+  NFSE_NACIONAL = 'NFS-e Nacional'
 }
 
 export interface GroundingSource {
@@ -585,6 +586,67 @@ export interface DasResumo {
     valorVencido: number;
     valorPago: number;
     mode: 'mock' | 'serpro';
+}
+
+
+// ─── NFS-e Nacional (Resolucao CGSN 189/2026 — vigencia 1° set/2026) ──────
+
+export type NfseNacStatus = 'autorizada' | 'cancelada';
+
+export interface NfseNacionalEmitida {
+    id: string;
+    empresaId: string;
+    numero: string;
+    chave: string;                        // 50 chars
+    dpsRecibo?: string;
+    dataEmissao: string;
+    emitidaEm: string;
+    status: NfseNacStatus;
+    canceladaEm?: string | null;
+    motivoCancelamento?: string;
+    prestador: {
+        cnpj: string;
+        im?: string;
+        nome?: string;
+    };
+    tomador: {
+        cnpj?: string | null;
+        cpf?: string | null;
+        nome: string;
+        endereco?: any;
+    };
+    servico: {
+        codigoNbs: string;
+        descricao: string;
+        valor: number;
+        aliquotaIss: number;
+        issValor: number;
+        issRetido: number;
+        municipioPrestacao?: string;
+    };
+    valores: {
+        bruto: number;
+        deducoes: number;
+        issRetido: number;
+        liquido: number;
+    };
+    fonte?: string;
+    modeUsado: 'mock' | 'serpro';
+    mensagem?: string;
+}
+
+export interface NfseNacResumo {
+    total: number;
+    autorizadas: number;
+    canceladas: number;
+    valorBrutoTotal: number;
+    valorIssTotal: number;
+    mode: 'mock' | 'serpro';
+}
+
+export interface NbsCodigo {
+    codigo: string;
+    descricao: string;
 }
 
 // Fiscal Obligations Types

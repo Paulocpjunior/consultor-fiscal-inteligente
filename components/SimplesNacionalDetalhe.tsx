@@ -7,6 +7,7 @@ import NfseSpAdminPanel from './NfseSpAdminPanel';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 import { emitirDasRegular } from '../services/dasService';
+import EmitirNfseModal from './NfseNacional/EmitirModal';
 
 interface SimplesNacionalDetalheProps {
     empresa: SimplesNacionalEmpresa;
@@ -62,6 +63,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
     const [isCfopCorrelacaoModalOpen, setIsCfopCorrelacaoModalOpen] = useState(false);
     const [emitindoDas, setEmitindoDas] = useState(false);
+    const [isEmitirNfseOpen, setIsEmitirNfseOpen] = useState(false);
     const [folha12Input, setFolha12Input] = useState(empresa.folha12);
     
     // Estados de Apuração Mensal
@@ -401,6 +403,13 @@ if (filialServico > 0) {
                         title="Emitir DAS Regular do mes em apuracao"
                     >
                         {emitindoDas ? '⏳ Emitindo...' : '📤 Emitir DAS'}
+                    </button>
+                    <button
+                        onClick={() => setIsEmitirNfseOpen(true)}
+                        className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700"
+                        title="Emitir NFS-e Nacional (CGSN 189/2026)"
+                    >
+                        📑 Emitir NFSe
                     </button>
                     <label className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 cursor-pointer">
                         <DownloadIcon className="w-5 h-5" />
@@ -849,6 +858,15 @@ if (filialServico > 0) {
                     onShowToast('Correlacao de CFOP salva com sucesso!');
                 }}
             />
+
+            {isEmitirNfseOpen && (
+                <EmitirNfseModal
+                    empresa={empresa}
+                    currentUser={currentUser ?? null}
+                    onClose={() => setIsEmitirNfseOpen(false)}
+                    onShowToast={onShowToast}
+                />
+            )}
 </div>
     );
 };
