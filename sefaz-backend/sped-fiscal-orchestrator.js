@@ -184,6 +184,46 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo. Arquivo sera gerado com estrutura minima (apenas registros 0000-0100 + Bloco 9).`);
     }
 
+    // ─── 7. Saldo credor ICMS do mes anterior (so pra Lucro) ───
+    // Leitura da ficha mensal anterior em lucro_fichas.
+    let saldoCredorIcmsAnterior = 0;
+    if (regime === 'lucro') {
+        try {
+            const competenciaAnterior = computarCompetenciaAnterior(periodoInicio);
+            const fichaSnap = await db.collection('lucro_fichas')
+                .where('empresaId', '==', empresaId)
+                .where('competencia', '==', competenciaAnterior)
+                .limit(1)
+                .get();
+            if (!fichaSnap.empty) {
+                const ficha = fichaSnap.docs[0].data();
+                saldoCredorIcmsAnterior = parseFloat(ficha.saldoCredorIcms || 0);
+            }
+        } catch (err) {
+            console.warn(`[sped-fiscal] saldoCredorIcmsAnterior falhou: ${err.message}`);
+        }
+    }
+
+    // ─── 7. Saldo credor ICMS do mes anterior (so pra Lucro) ───
+    // Leitura da ficha mensal anterior em lucro_fichas.
+    let saldoCredorIcmsAnterior = 0;
+    if (regime === 'lucro') {
+        try {
+            const competenciaAnterior = computarCompetenciaAnterior(periodoInicio);
+            const fichaSnap = await db.collection('lucro_fichas')
+                .where('empresaId', '==', empresaId)
+                .where('competencia', '==', competenciaAnterior)
+                .limit(1)
+                .get();
+            if (!fichaSnap.empty) {
+                const ficha = fichaSnap.docs[0].data();
+                saldoCredorIcmsAnterior = parseFloat(ficha.saldoCredorIcms || 0);
+            }
+        } catch (err) {
+            console.warn(`[sped-fiscal] saldoCredorIcmsAnterior falhou: ${err.message}`);
+        }
+    }
+
     return {
         empresa,
         contador: getContadorPadrao(),
@@ -193,6 +233,8 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         itens,
         participantes,
         unidades,
+        saldoCredorIcmsAnterior,
+        saldoCredorIcmsAnterior,
         warnings,
     };
 }
@@ -257,6 +299,21 @@ const UNIDADES_PADRAO = {
 
 function descreverUnidade(codigo) {
     return UNIDADES_PADRAO[codigo.toUpperCase()] || codigo.toUpperCase();
+}
+
+
+/**
+ * Computa competencia YYYY-MM do mes anterior.
+ * Ex: '2026-01' -> '2025-12'. Ex: '2026-04' -> '2026-03'.
+ */
+function computarCompetenciaAnterior(competenciaYYYYMM) {
+    const m = (competenciaYYYYMM || '').match(/^(\d{4})-(\d{2})$/);
+    if (!m) return '';
+    let ano = parseInt(m[1], 10);
+    let mes = parseInt(m[2], 10);
+    mes -= 1;
+    if (mes === 0) { mes = 12; ano -= 1; }
+    return `${ano}-${String(mes).padStart(2, '0')}`;
 }
 
 function getContadorPadrao() {
