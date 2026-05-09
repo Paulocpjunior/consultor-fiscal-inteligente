@@ -21,7 +21,15 @@ async function fetchCnpjData(cnpj) {
     try {
         const res = await fetch(
             `https://brasilapi.com.br/api/cnpj/v1/${cnpj}`,
-            { signal: ctrl.signal, headers: { 'Accept': 'application/json' } },
+            {
+                signal: ctrl.signal,
+                headers: {
+                    'Accept': 'application/json',
+                    // BrasilAPI bloqueia User-Agent bot-like do Node.
+                    // Sem isso, retorna HTTP 403 silenciosamente.
+                    'User-Agent': 'Mozilla/5.0 (consultor-fiscal-inteligente)',
+                },
+            },
         );
         clearTimeout(timer);
         if (!res.ok) {
