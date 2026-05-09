@@ -6,6 +6,7 @@ import { calcularLucro } from '../services/lucroService';
 import { PlusIcon, CalculatorIcon, DownloadIcon, TrashIcon, ArrowLeftIcon, SaveIcon, UserIcon, BuildingIcon, PencilIcon, CloseIcon, TagIcon, BriefcaseIcon, ShieldIcon, InfoIcon } from './Icons';
 import LoadingSpinner from './LoadingSpinner';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
+import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 
 // Helper to convert Ficha to Input for Calculation Service
 const convertFichaToInput = (ficha: FichaFinanceiraRegistro, empresa: LucroPresumidoEmpresa): LucroInput => {
@@ -160,6 +161,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const [view, setView] = useState<'list' | 'details' | 'report' | 'new_company' | 'new_ficha'>('list');
     const [loading, setLoading] = useState(false);
     const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
+    const [isCfopCorrelacaoModalOpen, setIsCfopCorrelacaoModalOpen] = useState(false);
 
     // New Company Form State
     const [newName, setNewName] = useState('');
@@ -1291,6 +1293,9 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                         <BuildingIcon className="w-5 h-5" />
                         Dados Fiscais
                     </button>
+                    <button onClick={() => setIsCfopCorrelacaoModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Correlacao automatica/manual de CFOPs no SPED Fiscal">
+                        🔄 Correlacao CFOP
+                    </button>
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
@@ -1604,6 +1609,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             {view === 'report' && renderReport()}
 
             {selectedEmpresa && (
+                <>
                 <EmpresaDadosFiscaisModal
                     isOpen={isDadosFiscaisModalOpen}
                     onClose={() => setIsDadosFiscaisModalOpen(false)}
@@ -1616,6 +1622,22 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                         setEmpresas(empresasAtualizadas);
                     }}
                 />
+
+                <CfopCorrelacaoModal
+                    isOpen={isCfopCorrelacaoModalOpen}
+                    onClose={() => setIsCfopCorrelacaoModalOpen(false)}
+                    empresaId={selectedEmpresa.id}
+                    empresaNome={selectedEmpresa.nome}
+                    empresaCnpj={selectedEmpresa.cnpj}
+                    user={currentUser}
+                    valoresAtuais={selectedEmpresa.dadosFiscais}
+                    onSave={async (dados) => {
+                        await lucroPresumidoService.updateEmpresa(selectedEmpresa.id, { dadosFiscais: dados });
+                        const empresasAtualizadas = await lucroPresumidoService.getEmpresas(currentUser);
+                        setEmpresas(empresasAtualizadas);
+                    }}
+                />
+                </>
             )}
         </div>
     );

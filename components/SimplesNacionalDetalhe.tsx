@@ -5,6 +5,7 @@ import { ArrowLeftIcon, SaveIcon, UserIcon, HistoryIcon, EyeIcon, DownloadIcon, 
 import LoadingSpinner from './LoadingSpinner';
 import NfseSpAdminPanel from './NfseSpAdminPanel';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
+import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 
 interface SimplesNacionalDetalheProps {
     empresa: SimplesNacionalEmpresa;
@@ -58,6 +59,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
 }) => {
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
+    const [isCfopCorrelacaoModalOpen, setIsCfopCorrelacaoModalOpen] = useState(false);
     const [folha12Input, setFolha12Input] = useState(empresa.folha12);
     
     // Estados de Apuração Mensal
@@ -356,6 +358,9 @@ if (filialServico > 0) {
                     <button onClick={() => setIsDadosFiscaisModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Dados fiscais para SPED, DCTFWeb e outras obrigacoes">
                         <BuildingIcon className="w-5 h-5" />
                         Dados Fiscais
+                    </button>
+                    <button onClick={() => setIsCfopCorrelacaoModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Correlacao automatica/manual de CFOPs no SPED Fiscal">
+                        🔄 Correlacao CFOP
                     </button>
                     <label className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 cursor-pointer">
                         <DownloadIcon className="w-5 h-5" />
@@ -788,6 +793,20 @@ if (filialServico > 0) {
                 onSave={async (dados) => {
                     await onUpdateEmpresa(empresa.id, { dadosFiscais: dados });
                     onShowToast('Dados fiscais salvos com sucesso!');
+                }}
+            />
+
+            <CfopCorrelacaoModal
+                isOpen={isCfopCorrelacaoModalOpen}
+                onClose={() => setIsCfopCorrelacaoModalOpen(false)}
+                empresaId={empresa.id}
+                empresaNome={empresa.nome}
+                empresaCnpj={empresa.cnpj}
+                user={currentUser ?? null}
+                valoresAtuais={empresa.dadosFiscais}
+                onSave={async (dados) => {
+                    await onUpdateEmpresa(empresa.id, { dadosFiscais: dados });
+                    onShowToast('Correlacao de CFOP salva com sucesso!');
                 }}
             />
 </div>

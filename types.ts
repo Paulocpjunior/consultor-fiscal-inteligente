@@ -630,6 +630,28 @@ export interface EmpresaDadosFiscais {
      *   'outras'     = 1 (comercio, servicos, transporte)
      */
     indAtividade?: 'industrial' | 'outras';
+    /**
+     * Natureza da atividade da empresa, mais granular que indAtividade.
+     * Usada pra correlacionar CFOPs de entrada (sufixo correto):
+     *   'comercio'  -> compra pra comercializacao (sufixo 102)
+     *   'industria' -> compra pra industrializacao (sufixo 101)
+     *   'servicos'  -> uso e consumo (sufixo 556)
+     *   'misto'     -> mantem conversao mecanica (5->1, 6->2, 7->3)
+     *
+     * Quando ausente, deriva-se de indAtividade:
+     *   industrial -> industria
+     *   outras     -> comercio
+     */
+    naturezaAtividade?: 'comercio' | 'industria' | 'servicos' | 'misto';
+    /**
+     * Mapa de override manual de CFOP de entrada.
+     *   { '6101': '2102', '6102': '2102', ... }
+     *
+     * Vence sobre a heuristica de naturezaAtividade. Usado quando alguma
+     * entrada precisa de CFOP fora do padrao (ex: ativo imobilizado, uso
+     * proprio, demonstracao, etc).
+     */
+    cfopOverrides?: Record<string, string>;
     /** Inscrição Estadual no Substituto Tributario (opcional). */
     inscEstSubstTrib?: string;
     /** Codigo Suframa (opcional, so se zona franca). */
@@ -656,47 +678,6 @@ export interface DocumentoFiscalItem {
     orig: string;
 }
 
-/**
- * Dados fiscais complementares de uma empresa, necessarios pra geracao
- * de SPED Fiscal (EFD ICMS/IPI), DCTFWeb, etc.
- *
- * Comum a SimplesNacionalEmpresa e LucroPresumidoEmpresa.
- */
-export interface EmpresaDadosFiscais {
-    /** Inscrição Estadual (numero ou 'ISENTO'). */
-    inscricaoEstadual?: string;
-    /** UF (sigla 2 letras, ex: 'SP'). */
-    uf?: string;
-    /** Codigo do municipio IBGE (7 digitos, ex: '3550308' = Sao Paulo). */
-    codMunIBGE?: string;
-    /** Endereço sede da empresa. */
-    logradouro?: string;
-    numero?: string;
-    complemento?: string;
-    bairro?: string;
-    cep?: string;
-    /** Contato. */
-    email?: string;
-    telefone?: string;
-    /**
-     * Perfil EFD ICMS/IPI (registro 0000 campo 14):
-     *   A = Detalhamento completo (notas item-a-item, ICMS-Difal, FCP)
-     *   B = Detalhamento resumido (totalizadores diarios)
-     *   C = Anual (especifico pra empresas inscritas como microprodutor)
-     * Padrao: 'A' (mais completo, atende todos os casos).
-     */
-    perfilEFD?: 'A' | 'B' | 'C';
-    /**
-     * Indicador de atividade (registro 0000 campo 15):
-     *   'industrial' = 0 (industria, equiparada)
-     *   'outras'     = 1 (comercio, servicos, transporte)
-     */
-    indAtividade?: 'industrial' | 'outras';
-    /** Inscrição Estadual no Substituto Tributario (opcional). */
-    inscEstSubstTrib?: string;
-    /** Codigo Suframa (opcional, so se zona franca). */
-    codSuframa?: string;
-}
 
 export interface DocumentoFiscalTotais {
     vBC: number;
@@ -719,47 +700,6 @@ export interface DocumentoFiscalTotais {
     vNF: number;
 }
 
-/**
- * Dados fiscais complementares de uma empresa, necessarios pra geracao
- * de SPED Fiscal (EFD ICMS/IPI), DCTFWeb, etc.
- *
- * Comum a SimplesNacionalEmpresa e LucroPresumidoEmpresa.
- */
-export interface EmpresaDadosFiscais {
-    /** Inscrição Estadual (numero ou 'ISENTO'). */
-    inscricaoEstadual?: string;
-    /** UF (sigla 2 letras, ex: 'SP'). */
-    uf?: string;
-    /** Codigo do municipio IBGE (7 digitos, ex: '3550308' = Sao Paulo). */
-    codMunIBGE?: string;
-    /** Endereço sede da empresa. */
-    logradouro?: string;
-    numero?: string;
-    complemento?: string;
-    bairro?: string;
-    cep?: string;
-    /** Contato. */
-    email?: string;
-    telefone?: string;
-    /**
-     * Perfil EFD ICMS/IPI (registro 0000 campo 14):
-     *   A = Detalhamento completo (notas item-a-item, ICMS-Difal, FCP)
-     *   B = Detalhamento resumido (totalizadores diarios)
-     *   C = Anual (especifico pra empresas inscritas como microprodutor)
-     * Padrao: 'A' (mais completo, atende todos os casos).
-     */
-    perfilEFD?: 'A' | 'B' | 'C';
-    /**
-     * Indicador de atividade (registro 0000 campo 15):
-     *   'industrial' = 0 (industria, equiparada)
-     *   'outras'     = 1 (comercio, servicos, transporte)
-     */
-    indAtividade?: 'industrial' | 'outras';
-    /** Inscrição Estadual no Substituto Tributario (opcional). */
-    inscEstSubstTrib?: string;
-    /** Codigo Suframa (opcional, so se zona franca). */
-    codSuframa?: string;
-}
 
 export interface DocumentoFiscalParticipante {
     cnpjCpf: string;
@@ -787,47 +727,6 @@ export interface DocumentoFiscalParticipante {
  * Metadados do documento fiscal salvos no Firestore.
  * O XML original fica no Firebase Storage (campo storagePath).
  */
-/**
- * Dados fiscais complementares de uma empresa, necessarios pra geracao
- * de SPED Fiscal (EFD ICMS/IPI), DCTFWeb, etc.
- *
- * Comum a SimplesNacionalEmpresa e LucroPresumidoEmpresa.
- */
-export interface EmpresaDadosFiscais {
-    /** Inscrição Estadual (numero ou 'ISENTO'). */
-    inscricaoEstadual?: string;
-    /** UF (sigla 2 letras, ex: 'SP'). */
-    uf?: string;
-    /** Codigo do municipio IBGE (7 digitos, ex: '3550308' = Sao Paulo). */
-    codMunIBGE?: string;
-    /** Endereço sede da empresa. */
-    logradouro?: string;
-    numero?: string;
-    complemento?: string;
-    bairro?: string;
-    cep?: string;
-    /** Contato. */
-    email?: string;
-    telefone?: string;
-    /**
-     * Perfil EFD ICMS/IPI (registro 0000 campo 14):
-     *   A = Detalhamento completo (notas item-a-item, ICMS-Difal, FCP)
-     *   B = Detalhamento resumido (totalizadores diarios)
-     *   C = Anual (especifico pra empresas inscritas como microprodutor)
-     * Padrao: 'A' (mais completo, atende todos os casos).
-     */
-    perfilEFD?: 'A' | 'B' | 'C';
-    /**
-     * Indicador de atividade (registro 0000 campo 15):
-     *   'industrial' = 0 (industria, equiparada)
-     *   'outras'     = 1 (comercio, servicos, transporte)
-     */
-    indAtividade?: 'industrial' | 'outras';
-    /** Inscrição Estadual no Substituto Tributario (opcional). */
-    inscEstSubstTrib?: string;
-    /** Codigo Suframa (opcional, so se zona franca). */
-    codSuframa?: string;
-}
 
 export interface DocumentoFiscal {
     id: string;

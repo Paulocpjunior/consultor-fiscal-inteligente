@@ -228,6 +228,18 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                     { value: 'industrial', label: 'Industrial / equiparada' },
                                 ]}
                             />
+                            <SelectField
+                                label="Natureza da Atividade (correlacao CFOP)"
+                                value={dados.naturezaAtividade || ''}
+                                onChange={v => handleField('naturezaAtividade', v as any)}
+                                options={[
+                                    { value: '', label: '— Derivar de Ind. Atividade —' },
+                                    { value: 'comercio', label: 'Comercio (revenda)' },
+                                    { value: 'industria', label: 'Industria' },
+                                    { value: 'servicos', label: 'Servicos' },
+                                    { value: 'misto', label: 'Misto (sem heuristica)' },
+                                ]}
+                            />
                         </div>
                     </Section>
                 </div>

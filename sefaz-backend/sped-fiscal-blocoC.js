@@ -19,6 +19,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { correlacionarCfop, derivarNaturezaAtividade } from './cfop-correlacao.js';
 
 const MODELOS_BLOCO_C = ['55', '65'];
 
@@ -58,24 +59,19 @@ function getCstIcms(item) {
 }
 
 /**
- * Converte CFOP do emitente pra perspectiva do destinatario quando a
- * operacao eh de entrada.
+ * Wrapper local: converte CFOP do emitente pra destinatario usando a
+ * funcao correlacionarCfop (que considera naturezaAtividade + overrides
+ * da empresa).
  *
- * Regra: quando a empresa eh DESTINATARIA (nota recebida), o CFOP do XML
- * vem do EMITENTE (5xxx/6xxx/7xxx) e precisa ser convertido pra entrada:
- *   5xxx (saida estadual)         -> 1xxx (entrada estadual)
- *   6xxx (saida interestadual)    -> 2xxx (entrada interestadual)
- *   7xxx (saida exterior)         -> 3xxx (entrada exterior/importacao)
- *
- * Os 3 ultimos digitos ficam iguais (mantem o tipo da operacao).
+ * O contexto eh extraido de `dados.empresa.dadosFiscais` quando disponivel.
  */
-function convertCfopParaEntrada(rawCfop, direcao) {
-    const c = String(rawCfop || '0000');
-    if (direcao !== 'entrada') return c;
-    if (c.length !== 4) return c;
-    const map = { '5': '1', '6': '2', '7': '3' };
-    const novo = map[c[0]];
-    return novo ? novo + c.slice(1) : c;
+function convertCfopParaEntrada(rawCfop, direcao, dados) {
+    const empresa = dados?.empresa;
+    const df = empresa?.dadosFiscais || {};
+    return correlacionarCfop(rawCfop, direcao, {
+        naturezaAtividade: derivarNaturezaAtividade(empresa),
+        cfopOverrides: df.cfopOverrides,
+    });
 }
 
 /**
@@ -105,6 +101,11 @@ export function buildBlocoC(dados) {
     // Indicador de movimento: 0 = Bloco com dados, 1 = Bloco sem dados
     const indMovimento = notas.length > 0 ? '0' : '1';
     linhas.push(fmt.buildLine(['C001', indMovimento]));
+
+    // Anexa referencia ao objeto dados em cada nota pra que helpers de CFOP
+    // possam acessar empresa.dadosFiscais (naturezaAtividade + overrides).
+    // Usa _ no nome pra deixar claro que eh metadata interno.
+    for (const nota of notas) { nota._dados = dados; }
 
     // C100 + C170s + C190s pra cada nota
     for (const nota of notas) {
@@ -290,7 +291,7 @@ function buildC170(item, nItem, nota) {
         fmt.formatValue(item.vDesc, 2),
         '0',  // IND_MOV: 0=Sim (movimentacao fisica)
         cstFmt,
-        fmt.sanitizeString(convertCfopParaEntrada(item.cfop || item.CFOP || '0000', nota.direcao), 4),
+        fmt.sanitizeString(convertCfopParaEntrada(item.cfop || item.CFOP || '0000', nota.direcao, nota._dados), 4),
         '',  // COD_NAT
         fmt.formatValue(item.vBC, 2),
         fmt.formatValue(aliqIcms, 2),
@@ -348,7 +349,7 @@ function buildC190sFromNota(nota) {
         const cst = getCstIcms(item);
         const cstFmt = cst.length === 2 ? '0' + cst : cst.padStart(3, '0').slice(-3);
         const cfopRaw = String(item.cfop || item.CFOP || '0000');
-        const cfop = convertCfopParaEntrada(cfopRaw, nota.direcao);
+        const cfop = convertCfopParaEntrada(cfopRaw, nota.direcao, nota._dados);
 
         const aliqIcms = item.aliqIcms || (
             item.vICMS && item.vBC ? (item.vICMS / item.vBC * 100) : 0
