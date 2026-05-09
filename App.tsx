@@ -40,6 +40,8 @@ const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocu
 const SpedFiscal = lazy(() => import('./components/SpedFiscal'));
 const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
 const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
+const CaixaPostalDashboard = lazy(() => import('./components/CaixaPostal'));
+const CaixaPostalAlerta = lazy(() => import('./components/CaixaPostal/AlertaPopup'));
 
 const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
@@ -54,6 +56,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.ANALISADOR_REGIME]: "Compare cenários de tributação (Simples, Lucro Presumido, Lucro Real) e identifique o regime mais vantajoso.",
     [SearchType.ANALISE_CREDITOS]: "Análise de créditos PIS/COFINS, conciliação bancária e mapeamento por categoria fiscal.",
     [SearchType.SPED_FISCAL]: "Geração do arquivo SPED Fiscal (EFD ICMS/IPI) — escrituração digital mensal.",
+    [SearchType.CAIXA_POSTAL]: "Caixa Postal e-CAC — mensagens da Receita Federal por empresa (intimações, malha fiscal, comunicados).",
 };
 
 const App: React.FC = () => {
@@ -620,6 +623,12 @@ const App: React.FC = () => {
 
                 <div className="flex flex-col md:flex-row gap-6">
                     <main className="flex-grow min-w-0">
+                        <Suspense fallback={null}>
+                            <CaixaPostalAlerta
+                                currentUser={currentUser}
+                                onIrParaCaixaPostal={() => setSearchType(SearchType.CAIXA_POSTAL)}
+                            />
+                        </Suspense>
                         {/* Search Type Selection Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
                             {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL).map((type) => (
@@ -1038,6 +1047,15 @@ const App: React.FC = () => {
                         {searchType === SearchType.SPED_FISCAL && (
                             <Suspense fallback={<LoadingSpinner />}>
                                 <SpedFiscal
+                                    currentUser={currentUser}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                        )}
+
+                        {searchType === SearchType.CAIXA_POSTAL && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <CaixaPostalDashboard
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />

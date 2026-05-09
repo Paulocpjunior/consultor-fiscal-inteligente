@@ -11,7 +11,8 @@ export enum SearchType {
     ANALISE_RELATORIO_SAGE = 'Análise Relatório SAGE',
   ANALISADOR_REGIME = 'Regime Tributário',
   ANALISE_CREDITOS = 'Análise de Créditos',
-  SPED_FISCAL = 'SPED Fiscal'
+  SPED_FISCAL = 'SPED Fiscal',
+  CAIXA_POSTAL = 'Caixa Postal'
 }
 
 export interface GroundingSource {
@@ -508,6 +509,41 @@ export interface LucroInput {
     saldoCredorIpi?: number;
     saldoCredorPis?: number;
     saldoCredorCofins?: number;
+}
+
+
+// ─── Caixa Postal e-CAC ───────────────────────────────────────────────────
+
+export type CaixaPostalCategoria = 'intimacao' | 'malha' | 'exclusao' | 'informativo';
+
+export interface CaixaPostalMensagem {
+    id: string;                  // doc id no Firestore
+    empresaId: string;
+    empresaCnpj: string;
+    mensagemId: string;          // id na Receita
+    assunto: string;
+    remetente: string;
+    categoria: CaixaPostalCategoria;
+    corpo: string;
+    dataEnvio: string;           // ISO
+    dataLeitura?: string | null; // null = não lida
+    fonte: 'mock' | 'serpro';
+    ultimaSincronizacao?: string;
+}
+
+export interface CaixaPostalResumo {
+    totalMensagens: number;
+    naoLidasTotal: number;
+    naoLidasPorCategoria: Record<CaixaPostalCategoria, number>;
+    empresasComCriticas: number;
+    mode: 'mock' | 'serpro';
+}
+
+export interface CaixaPostalSyncStats {
+    mode: 'mock' | 'serpro';
+    total: number;
+    novas: number;
+    atualizadas: number;
 }
 
 // Fiscal Obligations Types
