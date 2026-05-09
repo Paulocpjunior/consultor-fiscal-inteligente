@@ -84,8 +84,41 @@ app.get('/health', (_req, res) => {
 });
 
 // ─── Proxy endpoint: Consulta Fiscal ─────────────────────────────────────────
+// ─── Roteamento Gemini Pro vs Flash ────────────────────────────────────────
+// Pro custa ~8x mais que Flash. Heuristica: usa Pro so quando faz diferenca
+// (anexo, prompt longo, ou consulta analitica). Flash atende ~70% dos casos
+// (perguntas factuais, classificacoes curtas, parsings simples) sem perda
+// perceptivel de qualidade.
+const GEMINI_KEYWORDS_ANALITICAS = /\b(analise|analisar|comparar|comparacao|relatorio|detalhad|consultoria|aprofundad|complexo|elabor|justifica|fundamenta|parecer|tese)/i;
+
+function pickGeminiModel({ explicitModel, prompt, hasAttachment }) {
+    // 1. Override explicito do cliente vence
+    if (explicitModel && typeof explicitModel === 'string' && explicitModel.startsWith('gemini-')) {
+        return explicitModel;
+    }
+    // 2. Anexo -> Pro (Flash multimodal eh menos confiavel pra docs/imagens longas)
+    if (hasAttachment) return 'gemini-2.5-pro';
+    // 3. Prompt longo -> Pro
+    const len = typeof prompt === 'string' ? prompt.length : (prompt ? JSON.stringify(prompt).length : 0);
+    if (len > 4000) return 'gemini-2.5-pro';
+    // 4. Keywords analiticas -> Pro
+    if (typeof prompt === 'string' && GEMINI_KEYWORDS_ANALITICAS.test(prompt)) {
+        return 'gemini-2.5-pro';
+    }
+    // 5. Default: Flash (barato)
+    return 'gemini-2.5-flash';
+}
+
+function logGeminiRoute(modelo, contexto) {
+    const tag = modelo === 'gemini-2.5-flash' ? 'FLASH' : 'PRO  ';
+    console.log(`[gemini-router] ${tag} ${JSON.stringify(contexto)}`);
+}
+
 app.post('/api/fiscal/query', async (req, res) => {
-    const { prompt, model = 'gemini-2.5-pro' } = req.body;
+    const { prompt, model: explicitModel } = req.body;
+    const hasAttachment = !!(req.body.base64Data || req.body.inlineData);
+    const model = pickGeminiModel({ explicitModel, prompt, hasAttachment });
+    logGeminiRoute(model, { rota: 'gemini', chars: typeof prompt === 'string' ? prompt.length : '?' });
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
         return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });
@@ -115,7 +148,10 @@ app.post('/api/fiscal/query', async (req, res) => {
 
 // ─── Proxy endpoint: Comparação ───────────────────────────────────────────────
 app.post('/api/fiscal/compare', async (req, res) => {
-    const { prompt, model = 'gemini-2.5-pro' } = req.body;
+    const { prompt, model: explicitModel } = req.body;
+    const hasAttachment = !!(req.body.base64Data || req.body.inlineData);
+    const model = pickGeminiModel({ explicitModel, prompt, hasAttachment });
+    logGeminiRoute(model, { rota: 'gemini', chars: typeof prompt === 'string' ? prompt.length : '?' });
 
     if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });
@@ -136,7 +172,10 @@ app.post('/api/fiscal/compare', async (req, res) => {
 
 // ─── Proxy endpoint: Serviços similares ──────────────────────────────────────
 app.post('/api/fiscal/similar', async (req, res) => {
-    const { prompt, model = 'gemini-2.5-pro' } = req.body;
+    const { prompt, model: explicitModel } = req.body;
+    const hasAttachment = !!(req.body.base64Data || req.body.inlineData);
+    const model = pickGeminiModel({ explicitModel, prompt, hasAttachment });
+    logGeminiRoute(model, { rota: 'gemini', chars: typeof prompt === 'string' ? prompt.length : '?' });
 
     if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });
