@@ -11,6 +11,7 @@ import {
     getResumoNfse, listarNfse, cancelarNfse,
     formatBRL, formatChave, statusBadgeClass,
 } from '../../services/nfseNacionalService';
+import { baixarDanfse } from '../../services/danfseGenerator';
 
 interface Props {
     currentUser: User | null;
@@ -215,12 +216,19 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
                             )}
                         </div>
 
-                        <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
+                        <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2 flex-wrap">
                             <button
                                 onClick={() => setSelecionada(null)}
                                 className="btn-press px-4 py-2 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-100"
                             >
                                 Fechar
+                            </button>
+                            <button
+                                onClick={() => baixarDanfse(selecionada, true)}
+                                className="btn-press px-4 py-2 bg-slate-700 text-white font-bold rounded-lg hover:bg-slate-800 flex items-center gap-2"
+                                title="Baixar DANFSe (PDF representação simplificada da NFSe)"
+                            >
+                                📄 Baixar DANFSe
                             </button>
                             {selecionada.status === 'autorizada' && (
                                 <button

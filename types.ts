@@ -624,6 +624,8 @@ export interface NfseNacionalEmitida {
         issValor: number;
         issRetido: number;
         municipioPrestacao?: string;
+        cIndOp?: string;
+        cClassTrib?: string;
     };
     valores: {
         bruto: number;

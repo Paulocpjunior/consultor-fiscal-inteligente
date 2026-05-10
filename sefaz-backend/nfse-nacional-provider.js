@@ -98,6 +98,8 @@ class MockProvider {
                 issValor,
                 issRetido,
                 municipioPrestacao: servico.municipioPrestacao || '3550308',
+                cIndOp: servico.cIndOp || '',
+                cClassTrib: servico.cClassTrib || '',
             },
             valores: {
                 bruto: servico.valor,
