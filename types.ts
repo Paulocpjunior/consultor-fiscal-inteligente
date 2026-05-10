@@ -14,7 +14,8 @@ export enum SearchType {
   SPED_FISCAL = 'SPED Fiscal',
   CAIXA_POSTAL = 'Caixa Postal',
   DAS_SIMPLES = 'DAS Simples Nacional',
-  NFSE_NACIONAL = 'NFS-e Nacional'
+  NFSE_NACIONAL = 'NFS-e Nacional',
+  DASHBOARD_CEO = 'Dashboard CEO'
 }
 
 export interface GroundingSource {
@@ -647,6 +648,37 @@ export interface NfseNacResumo {
 export interface NbsCodigo {
     codigo: string;
     descricao: string;
+}
+
+
+// ─── Dashboard CEO ────────────────────────────────────────────────────────
+
+export interface DashboardCeoKpis {
+    timestamp: string;
+    totalEmpresas: number;
+    caixaPostal: {
+        naoLidasCriticas: number;
+        empresasComCriticas: number;
+    };
+    das: {
+        pendentes: number;
+        vencidos: number;
+        valorVencido: number;
+        empresasComVencido: number;
+    };
+    nfse: {
+        mesAtual: number;
+        issTotal: number;
+    };
+    apuracoes: {
+        pendentes: number;
+    };
+}
+
+export interface DashboardCeoInsights {
+    insights: string;
+    geradoEm: string;
+    modelo: string;
 }
 
 // Fiscal Obligations Types

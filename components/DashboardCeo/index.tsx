@@ -1,0 +1,221 @@
+/**
+ * components/DashboardCeo/index.tsx
+ * Dashboard CEO — visao executiva unificada.
+ *
+ * KPIs vindos de Caixa Postal, DAS, NFSe, Apuracoes.
+ * Insights IA via Gemini (rota backend).
+ */
+import React, { useEffect, useState } from 'react';
+import type { User, DashboardCeoKpis, DashboardCeoInsights, SearchType } from '../../types';
+import { getKpis, getInsights, formatBRL } from '../../services/dashboardCeoService';
+
+interface Props {
+    currentUser: User | null;
+    onShowToast?: (msg: string) => void;
+    onNavigateTo?: (target: 'caixa-postal' | 'das' | 'nfse' | 'apuracoes') => void;
+}
+
+const DashboardCeo: React.FC<Props> = ({ currentUser, onShowToast, onNavigateTo }) => {
+    const [kpis, setKpis] = useState<DashboardCeoKpis | null>(null);
+    const [insights, setInsights] = useState<DashboardCeoInsights | null>(null);
+    const [loadingKpis, setLoadingKpis] = useState(false);
+    const [loadingInsights, setLoadingInsights] = useState(false);
+    const [erro, setErro] = useState<string | null>(null);
+
+    const carregarKpis = async () => {
+        setLoadingKpis(true);
+        setErro(null);
+        try {
+            const r = await getKpis(currentUser);
+            setKpis(r);
+        } catch (e: any) {
+            setErro(e?.message || 'Erro ao carregar KPIs');
+        } finally {
+            setLoadingKpis(false);
+        }
+    };
+
+    const gerarInsights = async () => {
+        if (!kpis) return;
+        setLoadingInsights(true);
+        try {
+            const r = await getInsights(currentUser, kpis);
+            setInsights(r);
+        } catch (e: any) {
+            onShowToast?.(`Erro IA: ${e.message}`);
+        } finally {
+            setLoadingInsights(false);
+        }
+    };
+
+    useEffect(() => { carregarKpis(); }, []);
+
+    // Auto-gera insights quando KPIs carregam pela primeira vez
+    useEffect(() => {
+        if (kpis && !insights && !loadingInsights) {
+            gerarInsights();
+        }
+    }, [kpis]);
+
+    // ─── Render insights formatados (parse markdown simples) ──────────────
+    const renderInsights = (text: string) => {
+        // Quebra por linhas, transforma **negrito** em <strong>
+        const blocks = text.split(/\n\n+/);
+        return blocks.map((b, i) => {
+            const html = b
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br/>');
+            return <p key={i} className="mb-3 last:mb-0 text-slate-700 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: html }} />;
+        });
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">📊 Dashboard CEO</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                        Visão executiva unificada — empresas, obrigações pendentes, riscos fiscais
+                    </p>
+                </div>
+                <button
+                    onClick={() => { carregarKpis(); setInsights(null); }}
+                    disabled={loadingKpis}
+                    className="btn-press px-4 py-2 bg-slate-700 text-white font-bold rounded-lg hover:bg-slate-800 disabled:opacity-50"
+                >
+                    {loadingKpis ? '⏳ Atualizando...' : '🔄 Atualizar'}
+                </button>
+            </div>
+
+            {erro && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">{erro}</div>
+            )}
+
+            {loadingKpis && !kpis && (
+                <div className="text-center py-12 text-slate-500">Carregando KPIs...</div>
+            )}
+
+            {kpis && (
+                <>
+                    {/* Faixa de KPI principal */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <button
+                            onClick={() => onNavigateTo?.('caixa-postal')}
+                            className={`text-left p-4 rounded-lg border-2 transition-all ${
+                                kpis.caixaPostal.empresasComCriticas > 0
+                                    ? 'border-red-300 bg-red-50 dark:bg-red-900/20'
+                                    : 'border-slate-200 bg-white dark:bg-slate-800'
+                            } hover:border-red-400`}
+                        >
+                            <div className="text-xs text-slate-500 mb-1">📬 CAIXA POSTAL</div>
+                            <div className="text-3xl font-bold text-red-700 dark:text-red-400">
+                                {kpis.caixaPostal.naoLidasCriticas}
+                            </div>
+                            <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                                mensagens críticas em <strong>{kpis.caixaPostal.empresasComCriticas}</strong> empresas
+                            </div>
+                        </button>
+
+                        <button
+                            onClick={() => onNavigateTo?.('das')}
+                            className={`text-left p-4 rounded-lg border-2 transition-all ${
+                                kpis.das.vencidos > 0
+                                    ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20'
+                                    : 'border-slate-200 bg-white dark:bg-slate-800'
+                            } hover:border-amber-400`}
+                        >
+                            <div className="text-xs text-slate-500 mb-1">💸 DAS VENCIDOS</div>
+                            <div className="text-3xl font-bold text-amber-700 dark:text-amber-400">
+                                {kpis.das.vencidos}
+                            </div>
+                            <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                                {formatBRL(kpis.das.valorVencido)} em <strong>{kpis.das.empresasComVencido}</strong> empresas
+                            </div>
+                        </button>
+
+                        <button
+                            onClick={() => onNavigateTo?.('nfse')}
+                            className="text-left p-4 rounded-lg border-2 border-slate-200 bg-white dark:bg-slate-800 hover:border-sky-400 transition-all"
+                        >
+                            <div className="text-xs text-slate-500 mb-1">📑 NFS-e MÊS</div>
+                            <div className="text-3xl font-bold text-sky-700 dark:text-sky-400">
+                                {kpis.nfse.mesAtual}
+                            </div>
+                            <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                                ISS {formatBRL(kpis.nfse.issTotal)}
+                            </div>
+                        </button>
+
+                        <button
+                            onClick={() => onNavigateTo?.('apuracoes')}
+                            className={`text-left p-4 rounded-lg border-2 transition-all ${
+                                kpis.apuracoes.pendentes > 0
+                                    ? 'border-purple-300 bg-purple-50 dark:bg-purple-900/20'
+                                    : 'border-slate-200 bg-white dark:bg-slate-800'
+                            } hover:border-purple-400`}
+                        >
+                            <div className="text-xs text-slate-500 mb-1">📊 APURAÇÕES</div>
+                            <div className="text-3xl font-bold text-purple-700 dark:text-purple-400">
+                                {kpis.apuracoes.pendentes}
+                            </div>
+                            <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                                empresas sem cálculo do mês
+                            </div>
+                        </button>
+                    </div>
+
+                    {/* Empresas atendidas */}
+                    <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-slate-500">🏢 Total de empresas atendidas</span>
+                            <span className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                                {kpis.totalEmpresas}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Insights IA */}
+                    <div className="bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20 border border-sky-200 dark:border-sky-800 rounded-lg p-5">
+                        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                                🤖 Análise da semana — Recomendações IA
+                            </h3>
+                            <button
+                                onClick={gerarInsights}
+                                disabled={loadingInsights}
+                                className="btn-press text-xs px-3 py-1.5 bg-sky-600 text-white font-bold rounded hover:bg-sky-700 disabled:opacity-50"
+                            >
+                                {loadingInsights ? '⏳ Pensando...' : insights ? '🔄 Regenerar' : '✨ Gerar'}
+                            </button>
+                        </div>
+
+                        {loadingInsights && !insights && (
+                            <div className="text-sm text-slate-500 italic">
+                                Gemini analisando seus KPIs...
+                            </div>
+                        )}
+
+                        {insights && (
+                            <>
+                                <div className="text-sm prose prose-sm max-w-none">
+                                    {renderInsights(insights.insights)}
+                                </div>
+                                <div className="text-xs text-slate-400 mt-3 italic">
+                                    Gerado em {new Date(insights.geradoEm).toLocaleString('pt-BR')} • modelo {insights.modelo}
+                                </div>
+                            </>
+                        )}
+
+                        {!loadingInsights && !insights && !erro && (
+                            <p className="text-sm text-slate-500 italic">
+                                Clique em "Gerar" pra IA analisar os KPIs e dar recomendações priorizadas.
+                            </p>
+                        )}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
+export default DashboardCeo;

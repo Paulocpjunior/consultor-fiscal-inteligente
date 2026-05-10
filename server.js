@@ -27,6 +27,7 @@ app.use('/api/admin/sped-fiscal', spedFiscalRouter);
 app.use('/api/admin/caixa-postal', caixaPostalRouter);
 app.use('/api/admin/das', dasRouter);
 app.use('/api/admin/nfse-nacional', nfseNacRouter);
+
 const PORT = process.env.PORT || 8080;
 
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -116,6 +117,171 @@ app.post('/api/fiscal/multimodal', requireAI, async (req, res) => {
         return res.status(500).json({ error: err?.message || 'Erro' });
     }
 });
+
+// ─── Dashboard CEO — endpoint de KPIs + insights IA ─────────────────────────
+app.get('/api/admin/dashboard-ceo/kpis', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const admin = (await import('firebase-admin')).default;
+        if (!admin.apps.length) {
+            admin.initializeApp({ credential: admin.credential.applicationDefault() });
+        }
+        const db = admin.firestore();
+
+        const hoje = new Date().toISOString().slice(0, 10);
+        const mesAtual = hoje.slice(0, 7); // YYYY-MM
+
+        // ── Empresas (Simples + Lucro)
+        const [simplesSnap, lucroSnap] = await Promise.all([
+            db.collection('simples_empresas').get(),
+            db.collection('lucro_empresas').get(),
+        ]);
+        const totalEmpresas = simplesSnap.size + lucroSnap.size;
+
+        // ── Caixa Postal
+        const cxSnap = await db.collection('caixa_postal_mensagens').limit(2000).get();
+        let cxNaoLidasCriticas = 0;
+        const cnpjsCriticos = new Set();
+        cxSnap.forEach(d => {
+            const m = d.data();
+            if (!m.dataLeitura && ['intimacao', 'malha', 'exclusao'].includes(m.categoria)) {
+                cxNaoLidasCriticas++;
+                cnpjsCriticos.add(m.empresaCnpj);
+            }
+        });
+
+        // ── DAS
+        const dasSnap = await db.collection('das_emitidos').limit(2000).get();
+        let dasPendentes = 0, dasVencidos = 0, valorVencido = 0;
+        const cnpjsDasVencido = new Set();
+        dasSnap.forEach(d => {
+            const m = d.data();
+            const status = m.statusPagamento || 'pendente';
+            if (status === 'pago') return;
+            const venc = m.vencimento || '';
+            if (venc && venc < hoje) {
+                dasVencidos++;
+                valorVencido += m.valor || 0;
+                cnpjsDasVencido.add(m.empresaCnpj);
+            } else {
+                dasPendentes++;
+            }
+        });
+
+        // ── NFSe
+        const nfseSnap = await db.collection('nfse_nacional_emitidas').limit(2000).get();
+        let nfseMes = 0, nfseIssMes = 0;
+        nfseSnap.forEach(d => {
+            const m = d.data();
+            if (m.status !== 'autorizada') return;
+            const dataEmis = (m.emitidaEm || '').slice(0, 7);
+            if (dataEmis === mesAtual) {
+                nfseMes++;
+                nfseIssMes += m.servico?.issValor || 0;
+            }
+        });
+
+        // ── Apurações Simples pendentes (empresas sem cálculo no mês corrente)
+        let apuracoesPendentes = 0;
+        simplesSnap.forEach(d => {
+            const e = d.data();
+            const histor = e.historicoCalculos || [];
+            const tem = histor.some(h => (h.mesReferencia || '').toLowerCase().includes(getMesNome(mesAtual)));
+            if (!tem) apuracoesPendentes++;
+        });
+
+        return res.json({
+            timestamp: new Date().toISOString(),
+            totalEmpresas,
+            caixaPostal: {
+                naoLidasCriticas: cxNaoLidasCriticas,
+                empresasComCriticas: cnpjsCriticos.size,
+            },
+            das: {
+                pendentes: dasPendentes,
+                vencidos: dasVencidos,
+                valorVencido: +valorVencido.toFixed(2),
+                empresasComVencido: cnpjsDasVencido.size,
+            },
+            nfse: {
+                mesAtual: nfseMes,
+                issTotal: +nfseIssMes.toFixed(2),
+            },
+            apuracoes: {
+                pendentes: apuracoesPendentes,
+            },
+        });
+    } catch (err) {
+        console.error('[dashboard-ceo/kpis]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+function getMesNome(yyyymm) {
+    const [_, m] = yyyymm.split('-');
+    const meses = { '01':'janeiro','02':'fevereiro','03':'marco','04':'abril','05':'maio','06':'junho','07':'julho','08':'agosto','09':'setembro','10':'outubro','11':'novembro','12':'dezembro' };
+    return meses[m] || '';
+}
+
+app.post('/api/admin/dashboard-ceo/insights', requireAI, async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { kpis } = req.body;
+        if (!kpis) return res.status(400).json({ error: 'kpis obrigatorio' });
+
+        const prompt = `Voce eh um consultor fiscal senior assessorando o CEO de um escritorio
+contabil (SP Assessoria Contabil). Com base nos KPIs operacionais abaixo,
+forneca 3 a 5 recomendacoes praticas e priorizadas em ordem de urgencia,
+em portugues brasileiro, no tom direto e profissional.
+
+Foque em:
+- Itens criticos (intimacoes, malha fiscal, DAS vencido)
+- Riscos fiscais detectados
+- Oportunidades operacionais
+
+KPIs (data ${new Date().toISOString().slice(0,10)}):
+- Total de empresas atendidas: ${kpis.totalEmpresas}
+- Caixa Postal e-CAC: ${kpis.caixaPostal.naoLidasCriticas} mensagens criticas nao lidas em ${kpis.caixaPostal.empresasComCriticas} empresas
+- DAS Simples Nacional: ${kpis.das.vencidos} vencidos (R\$ ${kpis.das.valorVencido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) em ${kpis.das.empresasComVencido} empresas, ${kpis.das.pendentes} pendentes no prazo
+- NFS-e Nacional: ${kpis.nfse.mesAtual} emitidas neste mes (ISS R\$ ${kpis.nfse.issTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+- Apuracoes Simples sem calculo no mes corrente: ${kpis.apuracoes.pendentes}
+
+Responda em formato:
+
+**1. [Acao priorizada]**
+[Justificativa em 1-2 frases]
+
+**2. [Acao]**
+[Justificativa]
+
+(...)
+
+Maximo 5 itens. Seja direto, sem rodeios. Nao repita os numeros literais
+dos KPIs — assuma que o CEO ja viu.`;
+
+        const escolhido = pickGeminiModel({ prompt, hasAttachment: false });
+        logGeminiRoute(escolhido, { rota: 'dashboard-ceo-insights', chars: prompt.length });
+        const response = await ai.models.generateContent({
+            model: escolhido,
+            contents: prompt,
+        });
+        return res.json({
+            insights: response.text ?? '',
+            geradoEm: new Date().toISOString(),
+            modelo: escolhido,
+        });
+    } catch (err) {
+        console.error('[dashboard-ceo/insights]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+
+
 
 
 // ─── Análise de Créditos Fiscais ────────────────────────────────────────────
