@@ -644,6 +644,219 @@ ${canal === 'whatsapp' ? 'Comece direto sem assunto.' : 'Comece com ASSUNTO: ...
     }
 });
 
+// ─── Conferencia PGDAS-D ───────────────────────────────────────────────────
+// POST /api/admin/pgdas/conferir
+// Recebe { empresaId, base64Pdf } e retorna comparacao PGDAS vs calculo proprio.
+app.post('/api/admin/pgdas/conferir', requireAI, async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { empresaId, base64Pdf } = req.body || {};
+        if (!empresaId || !base64Pdf) return res.status(400).json({ error: 'empresaId e base64Pdf obrigatorios' });
+
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) {
+            adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        }
+        const db = adminMod.firestore();
+
+        // 1. Carrega empresa + historico
+        const snap = await db.collection('simples_empresas').doc(empresaId).get();
+        if (!snap.exists) return res.status(404).json({ error: 'empresa nao encontrada' });
+        const emp = snap.data();
+        const historico = emp.historicoCalculos || [];
+
+        // 2. Extrai dados ricos do PGDAS via Gemini
+        const promptExtrator = `Extraia TODOS os dados deste PGDAS-D em JSON estruturado.
+
+Estrutura esperada (preencha o que conseguir, omita o que nao houver):
+{
+  "cnpj": "00.000.000/0001-00",
+  "competencia": "MM/AAAA",
+  "anexoAplicado": "I" | "II" | "III" | "IV" | "V",
+  "rbt12": number,
+  "rbt12Proporcional": number,
+  "faturamentoMes": number,
+  "fatorR": number,
+  "aliqEfetiva": number,
+  "valorDas": number,
+  "receitas": {
+    "mercadoInternoComercio": number,
+    "mercadoInternoIndustria": number,
+    "mercadoInternoServicos": number,
+    "exportacao": number,
+    "comST": number,
+    "monofasica": number,
+    "retidoNaFonte": number,
+    "imunidade": number
+  },
+  "deducoes": {
+    "icmsRetidoST": number,
+    "issRetidoFonte": number,
+    "outrasRetencoes": number
+  },
+  "tributosDiscriminados": {
+    "irpj": number,
+    "csll": number,
+    "pis": number,
+    "cofins": number,
+    "cpp": number,
+    "icms": number,
+    "iss": number
+  }
+}
+
+Responda APENAS o JSON, sem markdown, sem comentarios.`;
+
+        let extraido = {};
+        try {
+            const respExt = await ai.models.generateContent({
+                model: 'gemini-2.5-pro',
+                contents: [
+                    { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
+                    { text: promptExtrator },
+                ],
+            });
+            const txtExt = (respExt.text || '').trim().replace(/^```json|```$/g, '').trim();
+            extraido = JSON.parse(txtExt);
+        } catch (e) {
+            return res.status(500).json({ error: 'Falha ao extrair PGDAS: ' + e.message });
+        }
+
+        // 3. Localiza o calculo correspondente do app pela competencia
+        const comp = (extraido.competencia || '').replace('/', '-');  // MM/AAAA -> MM-AAAA
+        let calculoAppCorrespondente = null;
+        if (historico.length > 0) {
+            // Busca por mesReferencia que case com a competencia
+            // mesReferencia eh tipo 'maio de 2026'; precisamos converter MM/AAAA pra essa forma
+            const meses = ['', 'janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
+                           'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+            const m = (extraido.competencia || '').match(/(\d{2})\/(\d{4})/);
+            if (m) {
+                const mesNum = parseInt(m[1]);
+                const ano = m[2];
+                const mesRefBuscado = `${meses[mesNum]} de ${ano}`;
+                calculoAppCorrespondente = historico.find(h =>
+                    (h.mesReferencia || '').toLowerCase().includes(meses[mesNum]) &&
+                    (h.mesReferencia || '').includes(ano)
+                );
+            }
+        }
+
+        // 4. Compara campo a campo
+        const divergencias = [];
+        const tolerancia = (campo, valPgdas, valApp, pctTol) => {
+            if (valPgdas === undefined || valApp === undefined || valApp === 0) return;
+            const dif = Math.abs(valPgdas - valApp);
+            const pct = (dif / Math.max(valApp, 0.01)) * 100;
+            if (pct > pctTol) {
+                divergencias.push({
+                    campo,
+                    valorPgdas: +valPgdas.toFixed(2),
+                    valorApp: +valApp.toFixed(2),
+                    diferenca: +dif.toFixed(2),
+                    diferencaPct: +pct.toFixed(2),
+                    severidade: pct > 10 ? 'alta' : pct > 5 ? 'media' : 'baixa',
+                });
+            }
+        };
+
+        if (calculoAppCorrespondente) {
+            tolerancia('valorDas', extraido.valorDas, calculoAppCorrespondente.das_mensal, 5);
+            tolerancia('aliquotaEfetiva', extraido.aliqEfetiva, calculoAppCorrespondente.aliq_eff, 2);
+            tolerancia('rbt12', extraido.rbt12, calculoAppCorrespondente.rbt12, 2);
+            tolerancia('fatorR', extraido.fatorR, calculoAppCorrespondente.fator_r, 5);
+
+            // Anexo aplicado: igualdade exata
+            if (extraido.anexoAplicado &&
+                calculoAppCorrespondente.anexo_efetivo &&
+                extraido.anexoAplicado !== calculoAppCorrespondente.anexo_efetivo) {
+                divergencias.push({
+                    campo: 'anexoAplicado',
+                    valorPgdas: extraido.anexoAplicado,
+                    valorApp: calculoAppCorrespondente.anexo_efetivo,
+                    diferenca: 'ANEXO DIFERENTE',
+                    diferencaPct: null,
+                    severidade: 'alta',
+                });
+            }
+        }
+
+        // 5. Validacoes que nao precisam de comparacao com o app
+        const validacoes = [];
+        if (extraido.cnpj && emp.cnpj) {
+            const cnpjPgdas = (extraido.cnpj || '').replace(/\D/g, '');
+            const cnpjEmp = (emp.cnpj || '').replace(/\D/g, '');
+            if (cnpjPgdas && cnpjEmp && cnpjPgdas !== cnpjEmp) {
+                validacoes.push({
+                    tipo: 'cnpj_divergente',
+                    severidade: 'alta',
+                    descricao: `CNPJ do PGDAS (${extraido.cnpj}) nao bate com CNPJ da empresa (${emp.cnpj}). PDF errado?`,
+                });
+            }
+        }
+
+        return res.json({
+            empresa: { id: emp.id, nome: emp.nome, cnpj: emp.cnpj, anexo: emp.anexo },
+            extraido,
+            calculoAppCorrespondente,
+            divergencias,
+            validacoes,
+            temCalculoNoApp: !!calculoAppCorrespondente,
+            geradoEm: new Date().toISOString(),
+        });
+    } catch (err) {
+        console.error('[pgdas/conferir]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/admin/pgdas/conferir-explicar — IA contextualiza divergencias
+app.post('/api/admin/pgdas/conferir-explicar', requireAI, async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { empresaNome, divergencia, contextoExtraido } = req.body || {};
+        if (!divergencia) return res.status(400).json({ error: 'divergencia obrigatoria' });
+
+        const prompt = `Voce eh consultor fiscal senior. Esta divergencia foi detectada na conferencia PGDAS-D vs calculo proprio:
+
+Empresa: ${empresaNome || 'N/I'}
+Campo: ${divergencia.campo}
+Valor no PGDAS: ${divergencia.valorPgdas}
+Valor no app: ${divergencia.valorApp}
+Diferenca: ${divergencia.diferenca} (${divergencia.diferencaPct ?? '-'}%)
+Severidade: ${divergencia.severidade}
+
+Contexto adicional do PGDAS extraido:
+${JSON.stringify(contextoExtraido || {}, null, 2)}
+
+Em portugues brasileiro, em 2 paragrafos curtos:
+1. **Causa provavel:** o que pode ter gerado essa divergencia (3-4 hipoteses concretas baseadas nos dados)
+2. **Acao recomendada:** o que conferir/corrigir antes de transmitir
+
+Use **negrito** nos pontos-chave. Sem rodeios.`;
+
+        const escolhido = pickGeminiModel({ prompt, hasAttachment: false });
+        logGeminiRoute(escolhido, { rota: 'pgdas-conferir-explicar', campo: divergencia.campo });
+        const response = await ai.models.generateContent({
+            model: escolhido,
+            contents: prompt,
+        });
+
+        return res.json({
+            analise: response.text ?? '',
+            modelo: escolhido,
+            geradoEm: new Date().toISOString(),
+        });
+    } catch (err) {
+        console.error('[pgdas/conferir-explicar]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Calendario de Obrigacoes Fiscais ──────────────────────────────────────
 // GET /api/admin/calendario/:ano/:mes
 // Agrega obrigacoes de Simples + Lucro pro mes solicitado.

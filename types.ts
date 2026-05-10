@@ -809,6 +809,76 @@ export interface AnomaliaIaResponse {
     geradoEm: string;
 }
 
+
+// ─── Conferência PGDAS-D ───────────────────────────────────────────────────
+
+export interface PgdasExtraido {
+    cnpj?: string;
+    competencia?: string;
+    anexoAplicado?: string;
+    rbt12?: number;
+    rbt12Proporcional?: number;
+    faturamentoMes?: number;
+    fatorR?: number;
+    aliqEfetiva?: number;
+    valorDas?: number;
+    receitas?: {
+        mercadoInternoComercio?: number;
+        mercadoInternoIndustria?: number;
+        mercadoInternoServicos?: number;
+        exportacao?: number;
+        comST?: number;
+        monofasica?: number;
+        retidoNaFonte?: number;
+        imunidade?: number;
+    };
+    deducoes?: {
+        icmsRetidoST?: number;
+        issRetidoFonte?: number;
+        outrasRetencoes?: number;
+    };
+    tributosDiscriminados?: {
+        irpj?: number;
+        csll?: number;
+        pis?: number;
+        cofins?: number;
+        cpp?: number;
+        icms?: number;
+        iss?: number;
+    };
+}
+
+export interface PgdasDivergencia {
+    campo: string;
+    valorPgdas: any;
+    valorApp: any;
+    diferenca: any;
+    diferencaPct: number | null;
+    severidade: 'alta' | 'media' | 'baixa';
+}
+
+export interface PgdasValidacao {
+    tipo: string;
+    severidade: 'alta' | 'media' | 'baixa';
+    descricao: string;
+}
+
+export interface PgdasConferirResponse {
+    empresa: { id: string; nome: string; cnpj: string; anexo: string };
+    extraido: PgdasExtraido;
+    calculoAppCorrespondente: any | null;
+    divergencias: PgdasDivergencia[];
+    validacoes: PgdasValidacao[];
+    temCalculoNoApp: boolean;
+    geradoEm: string;
+}
+
+export interface PgdasExplicarResponse {
+    analise: string;
+    modelo: string;
+    geradoEm: string;
+}
+
 // Fiscal Obligations Types
 
 export type FiscalStatus = 'pending' | 'completed' | 'overdue' | 'warning';

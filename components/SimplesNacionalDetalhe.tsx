@@ -9,6 +9,7 @@ import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 import { emitirDasRegular } from '../services/dasService';
 import EmitirNfseModal from './NfseNacional/EmitirModal';
 import PrevisaoDasModal from './Das/PrevisaoModal';
+import PgdasConferirModal from './Pgdas/ConferirModal';
 
 interface SimplesNacionalDetalheProps {
     empresa: SimplesNacionalEmpresa;
@@ -66,6 +67,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     const [emitindoDas, setEmitindoDas] = useState(false);
     const [isEmitirNfseOpen, setIsEmitirNfseOpen] = useState(false);
     const [isPrevisaoOpen, setIsPrevisaoOpen] = useState(false);
+    const [isConferirPgdasOpen, setIsConferirPgdasOpen] = useState(false);
     const [folha12Input, setFolha12Input] = useState(empresa.folha12);
     
     // Estados de Apuração Mensal
@@ -419,6 +421,13 @@ if (filialServico > 0) {
                         title="Previsão DAS dos próximos 3 meses (estatística + IA)"
                     >
                         📈 Prever DAS
+                    </button>
+                    <button
+                        onClick={() => setIsConferirPgdasOpen(true)}
+                        className="btn-press flex items-center gap-2 px-4 py-2 bg-cyan-100 text-cyan-700 font-bold rounded-lg hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300 dark:hover:bg-cyan-900/50"
+                        title="Conferir PGDAS-D vs nossa apuração (IA detecta divergências)"
+                    >
+                        🔍 Conferir PGDAS
                     </button>
                     <label className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 cursor-pointer">
                         <DownloadIcon className="w-5 h-5" />
@@ -882,6 +891,15 @@ if (filialServico > 0) {
                     empresaNome={empresa.nome}
                     currentUser={currentUser ?? null}
                     onClose={() => setIsPrevisaoOpen(false)}
+                    onShowToast={onShowToast}
+                />
+            )}
+            {isConferirPgdasOpen && (
+                <PgdasConferirModal
+                    empresaId={empresa.id}
+                    empresaNome={empresa.nome}
+                    currentUser={currentUser ?? null}
+                    onClose={() => setIsConferirPgdasOpen(false)}
                     onShowToast={onShowToast}
                 />
             )}
