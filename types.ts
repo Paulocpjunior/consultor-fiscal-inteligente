@@ -648,6 +648,8 @@ export interface NfseNacResumo {
 export interface NbsCodigo {
     codigo: string;
     descricao: string;
+    cIndOpSugerido?: string;       // Indicador de Operação (sugerido)
+    cClassTribSugerido?: string;   // Classificação Tributária (sugerido — '00000000' = placeholder)
 }
 
 

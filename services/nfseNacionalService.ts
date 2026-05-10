@@ -51,6 +51,8 @@ export interface EmitirNfseRequest {
         aliquotaIss: number;
         issRetido?: boolean;
         municipioPrestacao?: string;
+        cIndOp?: string;
+        cClassTrib?: string;
     };
     dataEmissao?: string;
 }

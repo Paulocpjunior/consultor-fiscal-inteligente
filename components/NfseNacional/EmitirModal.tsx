@@ -26,10 +26,21 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
     const [valor, setValor] = useState('');
     const [aliquotaIss, setAliquotaIss] = useState('5');
     const [issRetido, setIssRetido] = useState(false);
+    const [cIndOp, setCIndOp] = useState('050201');
+    const [cClassTrib, setCClassTrib] = useState('00000000');
 
     useEffect(() => {
         getNbsCodigos().then(setNbsCodigos).catch(() => {});
     }, []);
+
+    useEffect(() => {
+        // Quando troca o NBS, sugere cIndOp + cClassTrib
+        const nbs = nbsCodigos.find(n => n.codigo === codigoNbs);
+        if (nbs) {
+            if (nbs.cIndOpSugerido) setCIndOp(nbs.cIndOpSugerido);
+            if (nbs.cClassTribSugerido) setCClassTrib(nbs.cClassTribSugerido);
+        }
+    }, [codigoNbs, nbsCodigos]);
 
     const valorNum = parseFloat(valor.replace(',', '.')) || 0;
     const aliquotaNum = parseFloat(aliquotaIss.replace(',', '.')) || 0;
@@ -56,6 +67,8 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                     valor: valorNum,
                     aliquotaIss: aliquotaNum,
                     issRetido,
+                    cIndOp,
+                    cClassTrib,
                 },
             });
             onShowToast(`NFSe Nº ${r.numero} emitida com sucesso!`);
@@ -124,6 +137,38 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                             rows={3}
                             className="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm resize-none"
                         />
+
+                        <div className="grid grid-cols-2 gap-3 mt-3">
+                            <div>
+                                <label className="text-xs text-slate-500 block mb-1">cIndOp <span className="text-amber-600">(Reforma Tributária)</span></label>
+                                <input
+                                    value={cIndOp}
+                                    onChange={e => setCIndOp(e.target.value)}
+                                    placeholder="050201"
+                                    maxLength={6}
+                                    className="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-mono"
+                                />
+                                <div className="text-[10px] text-slate-400 mt-0.5">Indicador de Operação (DPS)</div>
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-500 block mb-1">cClassTrib <span className="text-amber-600">(IBS/CBS)</span></label>
+                                <input
+                                    value={cClassTrib}
+                                    onChange={e => setCClassTrib(e.target.value)}
+                                    placeholder="00000000"
+                                    maxLength={8}
+                                    className={`w-full px-3 py-2 rounded border bg-white dark:bg-slate-800 text-sm font-mono ${cClassTrib === '00000000' ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'border-slate-300 dark:border-slate-600'}`}
+                                />
+                                <div className="text-[10px] text-slate-400 mt-0.5">Classificação Tributária IBS/CBS</div>
+                            </div>
+                        </div>
+
+                        {cClassTrib === '00000000' && (
+                            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
+                                ⚠️ <strong>cClassTrib em modo placeholder.</strong> A tabela oficial Anexo VIII RFB tem códigos específicos por serviço.
+                                Antes de emitir em produção, importe a tabela via <code>POST /api/admin/nfse-nacional/import-nbs-csv</code> ou ajuste manualmente.
+                            </div>
+                        )}
                     </div>
 
                     {/* Valores */}

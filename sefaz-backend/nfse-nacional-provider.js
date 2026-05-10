@@ -154,24 +154,170 @@ export function getNfseNacionalMode() { return MODE; }
 // das prestacoes dos clientes tipicos do escritorio.
 
 export const NBS_CODIGOS_COMUNS = [
-    { codigo: '101010100', descricao: 'Servicos de contabilidade — Escrituracao' },
-    { codigo: '101010200', descricao: 'Servicos de auditoria contabil' },
-    { codigo: '101010300', descricao: 'Servicos de consultoria contabil' },
-    { codigo: '101020100', descricao: 'Servicos juridicos — consultoria' },
-    { codigo: '101020200', descricao: 'Servicos advocaticios — defesa em juizo' },
-    { codigo: '101030100', descricao: 'Servicos de engenharia consultiva' },
-    { codigo: '101040100', descricao: 'Servicos de TI — desenvolvimento de software' },
-    { codigo: '101040200', descricao: 'Servicos de TI — manutencao de software' },
-    { codigo: '101040300', descricao: 'Servicos de TI — hospedagem (cloud)' },
-    { codigo: '101050100', descricao: 'Servicos de marketing e publicidade' },
-    { codigo: '101060100', descricao: 'Servicos de saude — clinicas medicas' },
-    { codigo: '101060200', descricao: 'Servicos de saude — odontologia' },
-    { codigo: '101070100', descricao: 'Servicos de educacao — cursos livres' },
-    { codigo: '101080100', descricao: 'Servicos de transporte de cargas' },
-    { codigo: '101080200', descricao: 'Servicos de transporte de passageiros' },
-    { codigo: '101090100', descricao: 'Servicos de limpeza e conservacao' },
-    { codigo: '101090200', descricao: 'Servicos de seguranca' },
-    { codigo: '101100100', descricao: 'Servicos de manutencao mecanica em veiculos' },
-    { codigo: '101110100', descricao: 'Servicos de comissaria/representacao comercial' },
-    { codigo: '101120100', descricao: 'Outros servicos profissionais' },
+    // ─── 1. Servicos contabeis e fiscais (LC 116 item 17) ───────────────
+    { codigo: '101010100', descricao: 'Contabilidade — Escrituracao contabil regular', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101010200', descricao: 'Contabilidade — Auditoria independente', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101010300', descricao: 'Contabilidade — Consultoria contabil', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101010400', descricao: 'Contabilidade — Pericia contabil', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101010500', descricao: 'Contabilidade — Departamento pessoal e folha', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101010600', descricao: 'Assessoria fiscal e tributaria', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101010700', descricao: 'Planejamento tributario', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101010800', descricao: 'Recuperacao de creditos tributarios', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101010900', descricao: 'Atualizacao cadastral fiscal', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+
+    // ─── 2. Servicos juridicos (LC 116 item 17.13) ──────────────────────
+    { codigo: '101020100', descricao: 'Servicos juridicos — Consultoria', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101020200', descricao: 'Advocacia — Defesa em juizo civel', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101020300', descricao: 'Advocacia — Defesa criminal', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101020400', descricao: 'Advocacia tributaria', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101020500', descricao: 'Advocacia trabalhista', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101020600', descricao: 'Advocacia empresarial e societaria', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101020700', descricao: 'Mediacao e arbitragem', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101020800', descricao: 'Servicos de cartorio', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+
+    // ─── 3. Engenharia e arquitetura (LC 116 item 7) ────────────────────
+    { codigo: '101030100', descricao: 'Engenharia consultiva', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101030200', descricao: 'Engenharia civil — Projetos', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101030300', descricao: 'Engenharia civil — Execucao de obra', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101030400', descricao: 'Arquitetura', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101030500', descricao: 'Engenharia de seguranca do trabalho', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101030600', descricao: 'Agrimensura e topografia', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101030700', descricao: 'Geologia e geotecnia', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+
+    // ─── 4. Tecnologia da Informacao (LC 116 item 1) ────────────────────
+    { codigo: '101040100', descricao: 'TI — Desenvolvimento de software sob encomenda', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101040200', descricao: 'TI — Manutencao e suporte de software', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101040300', descricao: 'TI — Hospedagem em nuvem (cloud)', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101040400', descricao: 'TI — Provedor de internet', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101040500', descricao: 'TI — Suporte tecnico em hardware', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101040600', descricao: 'TI — Licenciamento de software pronto (SaaS)', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101040700', descricao: 'TI — Consultoria em TI', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101040800', descricao: 'TI — Treinamento em TI', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101040900', descricao: 'TI — Backup e recuperacao de dados', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101041000', descricao: 'TI — Seguranca da informacao (cibersec)', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101041100', descricao: 'TI — Streaming de audio/video', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+
+    // ─── 5. Marketing e Publicidade (LC 116 item 17.06, 17.10) ──────────
+    { codigo: '101050100', descricao: 'Marketing e publicidade — Criacao', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101050200', descricao: 'Marketing e publicidade — Veiculacao', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101050300', descricao: 'Marketing digital e SEO', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101050400', descricao: 'Producao de conteudo audiovisual', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101050500', descricao: 'Producao grafica e design', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101050600', descricao: 'Pesquisa de mercado', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101050700', descricao: 'Assessoria de imprensa e relacoes publicas', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+
+    // ─── 6. Saude (LC 116 item 4) ────────────────────────────────────────
+    { codigo: '101060100', descricao: 'Saude — Clinica medica', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101060200', descricao: 'Saude — Odontologia', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101060300', descricao: 'Saude — Psicologia e psicanalise', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101060400', descricao: 'Saude — Fisioterapia', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101060500', descricao: 'Saude — Fonoaudiologia', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101060600', descricao: 'Saude — Nutricao', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101060700', descricao: 'Saude — Laboratorio de analises clinicas', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101060800', descricao: 'Saude — Diagnostico por imagem', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101060900', descricao: 'Saude — Internacao hospitalar', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101061000', descricao: 'Saude — Medicina veterinaria', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+
+    // ─── 7. Educacao (LC 116 item 8) ────────────────────────────────────
+    { codigo: '101070100', descricao: 'Educacao — Cursos livres', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101070200', descricao: 'Educacao — Ensino fundamental', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101070300', descricao: 'Educacao — Ensino medio', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101070400', descricao: 'Educacao — Ensino superior e pos', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101070500', descricao: 'Educacao — Cursos de idiomas', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101070600', descricao: 'Educacao — Cursos profissionalizantes', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101070700', descricao: 'Educacao — Treinamento corporativo', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101070800', descricao: 'Educacao — Coaching e mentoria', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+
+    // ─── 8. Transporte (LC 116 item 16) ─────────────────────────────────
+    { codigo: '101080100', descricao: 'Transporte de cargas — Rodoviario', cIndOpSugerido: '050102', cClassTribSugerido: '00000000' },
+    { codigo: '101080200', descricao: 'Transporte de passageiros — Rodoviario', cIndOpSugerido: '050102', cClassTribSugerido: '00000000' },
+    { codigo: '101080300', descricao: 'Transporte de cargas — Aereo', cIndOpSugerido: '050102', cClassTribSugerido: '00000000' },
+    { codigo: '101080400', descricao: 'Transporte de cargas — Aquaviario', cIndOpSugerido: '050102', cClassTribSugerido: '00000000' },
+    { codigo: '101080500', descricao: 'Transporte de bagagem e mudancas', cIndOpSugerido: '050102', cClassTribSugerido: '00000000' },
+    { codigo: '101080600', descricao: 'Servicos de moto-frete', cIndOpSugerido: '050102', cClassTribSugerido: '00000000' },
+    { codigo: '101080700', descricao: 'Transporte por aplicativo', cIndOpSugerido: '050102', cClassTribSugerido: '00000000' },
+
+    // ─── 9. Limpeza, Seguranca, Vigilancia (LC 116 item 7.10, 11) ───────
+    { codigo: '101090100', descricao: 'Limpeza e conservacao predial', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101090200', descricao: 'Vigilancia armada e desarmada', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101090300', descricao: 'Portaria e recepcao', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101090400', descricao: 'Dedetizacao e controle de pragas', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101090500', descricao: 'Lavanderia industrial e domestica', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101090600', descricao: 'Coleta de residuos e lixo', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101090700', descricao: 'Jardinagem e paisagismo', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+
+    // ─── 10. Manutencao mecanica e eletrica (LC 116 item 14) ────────────
+    { codigo: '101100100', descricao: 'Manutencao mecanica de veiculos', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101100200', descricao: 'Manutencao eletrica de veiculos', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101100300', descricao: 'Lanternagem e funilaria', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101100400', descricao: 'Pintura automotiva', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101100500', descricao: 'Manutencao de eletrodomesticos', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101100600', descricao: 'Manutencao de computadores e perifericos', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101100700', descricao: 'Manutencao de elevadores', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101100800', descricao: 'Manutencao de ar-condicionado e refrigeracao', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+
+    // ─── 11. Comissaria e representacao (LC 116 item 10) ────────────────
+    { codigo: '101110100', descricao: 'Representacao comercial', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101110200', descricao: 'Comissaria e despachos aduaneiros', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101110300', descricao: 'Agenciamento e corretagem em geral', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101110400', descricao: 'Corretagem de imoveis', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101110500', descricao: 'Corretagem de seguros', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+
+    // ─── 12. Beleza e estetica (LC 116 item 6) ──────────────────────────
+    { codigo: '101120100', descricao: 'Cabeleireiro e barbearia', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101120200', descricao: 'Manicure e pedicure', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101120300', descricao: 'Estetica facial e corporal', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101120400', descricao: 'Massoterapia', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101120500', descricao: 'Tatuagem e body piercing', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+
+    // ─── 13. Hotelaria, alimentacao, turismo (LC 116 item 9) ────────────
+    { codigo: '101130100', descricao: 'Hotelaria — Hospedagem', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101130200', descricao: 'Pousada e hostel', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101130300', descricao: 'Bar e restaurante (servico de mesa)', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101130400', descricao: 'Bufe e eventos', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101130500', descricao: 'Agencia de viagens e turismo', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101130600', descricao: 'Servicos de guia turistico', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+
+    // ─── 14. Construcao civil (LC 116 item 7) ───────────────────────────
+    { codigo: '101140100', descricao: 'Construcao civil — Reforma', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101140200', descricao: 'Construcao civil — Empreitada total', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101140300', descricao: 'Pintura predial', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101140400', descricao: 'Hidraulica e instalacoes', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101140500', descricao: 'Eletrica e instalacoes', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101140600', descricao: 'Marcenaria e serralheria sob encomenda', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+
+    // ─── 15. Eventos e producao (LC 116 item 12) ────────────────────────
+    { codigo: '101150100', descricao: 'Organizacao de eventos', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101150200', descricao: 'Locacao de equipamentos para eventos', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101150300', descricao: 'Servicos de fotografia e filmagem', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101150400', descricao: 'Producao de espetaculos artisticos', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101150500', descricao: 'Servicos de DJ e som', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+
+    // ─── 16. Locacao de bens moveis (LC 116 item 3) ─────────────────────
+    { codigo: '101160100', descricao: 'Locacao de veiculos', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101160200', descricao: 'Locacao de maquinas e equipamentos', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101160300', descricao: 'Locacao de roupas e fantasias', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101160400', descricao: 'Locacao de espacos para eventos', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+
+    // ─── 17. Servicos financeiros e administrativos ─────────────────────
+    { codigo: '101170100', descricao: 'Cobranca em geral', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101170200', descricao: 'Servicos de factoring (fomento mercantil)', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101170300', descricao: 'Administracao de imoveis e condominios', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101170400', descricao: 'Despachante administrativo', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101170500', descricao: 'Servicos de RH — Recrutamento e selecao', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+
+    // ─── 18. Imprensa e editorial (LC 116 item 13) ──────────────────────
+    { codigo: '101180100', descricao: 'Edicao e producao editorial', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101180200', descricao: 'Servicos de impressao grafica', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101180300', descricao: 'Encadernacao e acabamento grafico', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+
+    // ─── 19. Esporte e lazer ────────────────────────────────────────────
+    { codigo: '101190100', descricao: 'Academias e personal trainer', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101190200', descricao: 'Escolinhas esportivas', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101190300', descricao: 'Locacao de quadras e campos', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+
+    // ─── 20. Outros servicos ────────────────────────────────────────────
+    { codigo: '101900100', descricao: 'Outros servicos profissionais', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
+    { codigo: '101900200', descricao: 'Outros servicos pessoais', cIndOpSugerido: '050101', cClassTribSugerido: '00000000' },
+    { codigo: '101900300', descricao: 'Servicos diversos nao classificados', cIndOpSugerido: '050201', cClassTribSugerido: '00000000' },
 ];
