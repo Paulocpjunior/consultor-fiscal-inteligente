@@ -708,6 +708,32 @@ export interface DasPrevisaoIaResponse {
     modelo: string;
 }
 
+
+// ─── Painel de Ação (D4b) ──────────────────────────────────────────────────
+
+export type AcaoUrgencia = 'alta' | 'media' | 'baixa';
+export type AcaoTipo = 'caixa-postal' | 'das-vencido' | 'apuracao-pendente';
+export type AcaoModulo = 'caixa-postal' | 'das' | 'simples' | 'nfse';
+
+export interface AcaoPendente {
+    tipo: AcaoTipo;
+    urgencia: AcaoUrgencia;
+    empresaCnpj: string;
+    empresaId: string;
+    empresaNome?: string;
+    titulo: string;
+    descricao: string;
+    acao: string;
+    modulo: AcaoModulo;
+}
+
+export interface AcoesResponse {
+    timestamp: string;
+    totalAcoes: number;
+    porUrgencia: { alta: number; media: number; baixa: number };
+    acoes: AcaoPendente[];
+}
+
 // Fiscal Obligations Types
 
 export type FiscalStatus = 'pending' | 'completed' | 'overdue' | 'warning';

@@ -429,6 +429,126 @@ function getMesNome(yyyymm) {
     return meses[m] || '';
 }
 
+app.get('/api/admin/dashboard-ceo/acoes', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) {
+            adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        }
+        const db = adminMod.firestore();
+
+        const acoes = [];
+        const hoje = new Date().toISOString().slice(0, 10);
+        const mesAtual = hoje.slice(0, 7);
+
+        // ── 1. Mensagens criticas Caixa Postal (urgencia ALTA)
+        const cxSnap = await db.collection('caixa_postal_mensagens').limit(2000).get();
+        const empresasCxCriticas = new Map();
+        cxSnap.forEach(d => {
+            const m = d.data();
+            if (m.dataLeitura) return;
+            if (!['intimacao', 'malha', 'exclusao'].includes(m.categoria)) return;
+            const key = m.empresaCnpj;
+            if (!empresasCxCriticas.has(key)) {
+                empresasCxCriticas.set(key, { cnpj: key, count: 0, categorias: new Set(), empresaId: m.empresaId });
+            }
+            const e = empresasCxCriticas.get(key);
+            e.count++;
+            e.categorias.add(m.categoria);
+        });
+        for (const e of empresasCxCriticas.values()) {
+            acoes.push({
+                tipo: 'caixa-postal',
+                urgencia: e.categorias.has('intimacao') ? 'alta' : (e.categorias.has('exclusao') ? 'alta' : 'media'),
+                empresaCnpj: e.cnpj,
+                empresaId: e.empresaId,
+                titulo: `${e.count} mensagem(ns) crítica(s) no e-CAC`,
+                descricao: `Categorias: ${[...e.categorias].join(', ')}`,
+                acao: 'Ver Caixa Postal',
+                modulo: 'caixa-postal',
+            });
+        }
+
+        // ── 2. DAS vencidos (urgencia ALTA)
+        const dasSnap = await db.collection('das_emitidos').limit(2000).get();
+        const empresasDasVencido = new Map();
+        dasSnap.forEach(d => {
+            const m = d.data();
+            if (m.statusPagamento === 'pago') return;
+            const venc = m.vencimento || '';
+            if (!venc || venc >= hoje) return;
+            const key = m.empresaCnpj;
+            if (!empresasDasVencido.has(key)) {
+                empresasDasVencido.set(key, { cnpj: key, count: 0, valor: 0, empresaId: m.empresaId, nome: m.empresaNome });
+            }
+            const e = empresasDasVencido.get(key);
+            e.count++;
+            e.valor += m.valor || 0;
+        });
+        for (const e of empresasDasVencido.values()) {
+            const diasAtraso = (() => {
+                const venc = new Date(hoje);
+                return 0; // simplificado por ora
+            })();
+            acoes.push({
+                tipo: 'das-vencido',
+                urgencia: e.valor > 5000 ? 'alta' : 'media',
+                empresaCnpj: e.cnpj,
+                empresaId: e.empresaId,
+                empresaNome: e.nome,
+                titulo: `${e.count} DAS vencido(s) — R\$ ${e.valor.toFixed(2)}`,
+                descricao: 'Marcar como pago se já regularizou, ou cobrar do cliente.',
+                acao: 'Ver DAS',
+                modulo: 'das',
+            });
+        }
+
+        // ── 3. Apuracoes Simples sem calculo do mes (urgencia MEDIA)
+        const empSnap = await db.collection('simples_empresas').get();
+        const meses = { '01':'janeiro','02':'fevereiro','03':'marco','04':'abril','05':'maio','06':'junho','07':'julho','08':'agosto','09':'setembro','10':'outubro','11':'novembro','12':'dezembro' };
+        const mesNome = meses[mesAtual.slice(5, 7)] || '';
+        empSnap.forEach(d => {
+            const e = d.data();
+            const histor = e.historicoCalculos || [];
+            const tem = histor.some(h => (h.mesReferencia || '').toLowerCase().includes(mesNome));
+            if (!tem) {
+                acoes.push({
+                    tipo: 'apuracao-pendente',
+                    urgencia: 'media',
+                    empresaCnpj: e.cnpj,
+                    empresaId: d.id,
+                    empresaNome: e.nome,
+                    titulo: `Sem apuração de ${mesNome}`,
+                    descricao: 'Fechar mês para emitir DAS.',
+                    acao: 'Apurar',
+                    modulo: 'simples',
+                });
+            }
+        });
+
+        // Ordena: alta antes, depois media, depois baixa
+        const peso = { alta: 0, media: 1, baixa: 2 };
+        acoes.sort((a, b) => peso[a.urgencia] - peso[b.urgencia]);
+
+        return res.json({
+            timestamp: new Date().toISOString(),
+            totalAcoes: acoes.length,
+            porUrgencia: {
+                alta: acoes.filter(a => a.urgencia === 'alta').length,
+                media: acoes.filter(a => a.urgencia === 'media').length,
+                baixa: acoes.filter(a => a.urgencia === 'baixa').length,
+            },
+            acoes: acoes.slice(0, 50),  // limita pra nao explodir UI
+        });
+    } catch (err) {
+        console.error('[dashboard-ceo/acoes]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/admin/dashboard-ceo/insights', requireAI, async (req, res) => {
     try {
         const role = req.headers['x-user-role'] || 'colaborador';

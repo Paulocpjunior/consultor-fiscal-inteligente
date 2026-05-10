@@ -6,8 +6,8 @@
  * Insights IA via Gemini (rota backend).
  */
 import React, { useEffect, useState } from 'react';
-import type { User, DashboardCeoKpis, DashboardCeoInsights, SearchType } from '../../types';
-import { getKpis, getInsights, formatBRL } from '../../services/dashboardCeoService';
+import type { User, DashboardCeoKpis, DashboardCeoInsights, AcoesResponse, AcaoPendente, SearchType } from '../../types';
+import { getKpis, getInsights, getAcoes, urgenciaBadgeClass, urgenciaIcon, tipoIcon, formatBRL } from '../../services/dashboardCeoService';
 
 interface Props {
     currentUser: User | null;
@@ -20,7 +20,22 @@ const DashboardCeo: React.FC<Props> = ({ currentUser, onShowToast, onNavigateTo 
     const [insights, setInsights] = useState<DashboardCeoInsights | null>(null);
     const [loadingKpis, setLoadingKpis] = useState(false);
     const [loadingInsights, setLoadingInsights] = useState(false);
+    const [acoes, setAcoes] = useState<AcoesResponse | null>(null);
+    const [loadingAcoes, setLoadingAcoes] = useState(false);
+    const [filtroAcao, setFiltroAcao] = useState<'all' | 'alta' | 'media' | 'baixa'>('all');
     const [erro, setErro] = useState<string | null>(null);
+
+    const carregarAcoes = async () => {
+        setLoadingAcoes(true);
+        try {
+            const r = await getAcoes(currentUser);
+            setAcoes(r);
+        } catch (e: any) {
+            console.warn('Falha ao carregar acoes:', e?.message);
+        } finally {
+            setLoadingAcoes(false);
+        }
+    };
 
     const carregarKpis = async () => {
         setLoadingKpis(true);
@@ -48,7 +63,7 @@ const DashboardCeo: React.FC<Props> = ({ currentUser, onShowToast, onNavigateTo 
         }
     };
 
-    useEffect(() => { carregarKpis(); }, []);
+    useEffect(() => { carregarKpis(); carregarAcoes(); }, []);
 
     // Auto-gera insights quando KPIs carregam pela primeira vez
     useEffect(() => {
@@ -79,7 +94,7 @@ const DashboardCeo: React.FC<Props> = ({ currentUser, onShowToast, onNavigateTo 
                     </p>
                 </div>
                 <button
-                    onClick={() => { carregarKpis(); setInsights(null); }}
+                    onClick={() => { carregarKpis(); carregarAcoes(); setInsights(null); }}
                     disabled={loadingKpis}
                     className="btn-press px-4 py-2 bg-slate-700 text-white font-bold rounded-lg hover:bg-slate-800 disabled:opacity-50"
                 >
@@ -171,6 +186,94 @@ const DashboardCeo: React.FC<Props> = ({ currentUser, onShowToast, onNavigateTo 
                             <span className="text-2xl font-bold text-slate-800 dark:text-slate-100">
                                 {kpis.totalEmpresas}
                             </span>
+                        </div>
+                    </div>
+
+                    {/* Painel de Acao */}
+                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                                    🎯 Painel de Ação
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    O que precisa ser feito hoje, priorizado por urgência
+                                </p>
+                            </div>
+                            {acoes && (
+                                <div className="flex gap-1 text-xs">
+                                    <button
+                                        onClick={() => setFiltroAcao('all')}
+                                        className={`px-2.5 py-1 rounded ${filtroAcao === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}
+                                    >
+                                        Todas ({acoes.totalAcoes})
+                                    </button>
+                                    <button
+                                        onClick={() => setFiltroAcao('alta')}
+                                        className={`px-2.5 py-1 rounded ${filtroAcao === 'alta' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700'}`}
+                                    >
+                                        🔴 Alta ({acoes.porUrgencia.alta})
+                                    </button>
+                                    <button
+                                        onClick={() => setFiltroAcao('media')}
+                                        className={`px-2.5 py-1 rounded ${filtroAcao === 'media' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-700'}`}
+                                    >
+                                        🟡 Média ({acoes.porUrgencia.media})
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="max-h-96 overflow-y-auto">
+                            {loadingAcoes && !acoes && (
+                                <div className="p-6 text-center text-slate-500 text-sm">Carregando ações...</div>
+                            )}
+
+                            {acoes && acoes.acoes.length === 0 && (
+                                <div className="p-6 text-center text-slate-500 text-sm">
+                                    ✨ Nenhuma ação pendente. Tudo em dia!
+                                </div>
+                            )}
+
+                            {acoes && acoes.acoes
+                                .filter(a => filtroAcao === 'all' || a.urgencia === filtroAcao)
+                                .map((a, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => {
+                                        if (a.modulo === 'caixa-postal') onNavigateTo?.('caixa-postal');
+                                        else if (a.modulo === 'das') onNavigateTo?.('das');
+                                        else if (a.modulo === 'simples') onNavigateTo?.('apuracoes');
+                                        else if (a.modulo === 'nfse') onNavigateTo?.('nfse');
+                                    }}
+                                    className="w-full text-left p-3 border-b border-slate-100 dark:border-slate-700 last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                                >
+                                    <div className="flex items-start gap-3">
+                                        <div className="flex-shrink-0 text-xl">
+                                            {tipoIcon(a.tipo)}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${urgenciaBadgeClass(a.urgencia)}`}>
+                                                    {urgenciaIcon(a.urgencia)} {a.urgencia.toUpperCase()}
+                                                </span>
+                                                <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                                                    {a.empresaNome || a.empresaCnpj}
+                                                </span>
+                                            </div>
+                                            <div className="text-sm text-slate-700 dark:text-slate-300 mt-1">
+                                                {a.titulo}
+                                            </div>
+                                            <div className="text-xs text-slate-500 mt-0.5">
+                                                {a.descricao}
+                                            </div>
+                                        </div>
+                                        <div className="flex-shrink-0 text-xs text-sky-600 font-bold">
+                                            {a.acao} →
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
                         </div>
                     </div>
 
