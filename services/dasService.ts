@@ -120,3 +120,37 @@ export async function getPrevisaoIa(user: User | null, dadosPrevisao: DasPrevisa
     }
     return res.json();
 }
+
+
+// ─── Cobrança DAS via IA ───────────────────────────────────────────────────
+
+export interface CobrancaIaRequest {
+    empresaNome: string;
+    valor: number;
+    competencia?: string;
+    vencimento?: string;
+    diasAtraso?: number;
+    tom: 'firme' | 'amigavel';
+    canal: 'email' | 'whatsapp';
+    assinante: string;
+}
+
+export interface CobrancaIaResponse {
+    assunto: string;
+    mensagem: string;
+    modelo: string;
+    geradoEm: string;
+}
+
+export async function getCobrancaIa(user: User | null, req: CobrancaIaRequest): Promise<CobrancaIaResponse> {
+    const res = await fetch('/api/admin/das/cobranca-ia', {
+        method: 'POST',
+        headers: authHeaders(user),
+        body: JSON.stringify(req),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `getCobrancaIa: ${res.status}`);
+    }
+    return res.json();
+}

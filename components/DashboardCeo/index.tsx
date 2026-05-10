@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import type { User, DashboardCeoKpis, DashboardCeoInsights, AcoesResponse, AcaoPendente, SearchType } from '../../types';
 import { getKpis, getInsights, getAcoes, urgenciaBadgeClass, urgenciaIcon, tipoIcon, formatBRL } from '../../services/dashboardCeoService';
+import CobrancaModal from '../Das/CobrancaModal';
 
 interface Props {
     currentUser: User | null;
@@ -23,6 +24,7 @@ const DashboardCeo: React.FC<Props> = ({ currentUser, onShowToast, onNavigateTo 
     const [acoes, setAcoes] = useState<AcoesResponse | null>(null);
     const [loadingAcoes, setLoadingAcoes] = useState(false);
     const [filtroAcao, setFiltroAcao] = useState<'all' | 'alta' | 'media' | 'baixa'>('all');
+    const [cobrancaAlvo, setCobrancaAlvo] = useState<{ empresaCnpj: string; empresaNome: string; valor: number } | null>(null);
     const [erro, setErro] = useState<string | null>(null);
 
     const carregarAcoes = async () => {
@@ -238,15 +240,18 @@ const DashboardCeo: React.FC<Props> = ({ currentUser, onShowToast, onNavigateTo 
                             {acoes && acoes.acoes
                                 .filter(a => filtroAcao === 'all' || a.urgencia === filtroAcao)
                                 .map((a, idx) => (
-                                <button
+                                <div
                                     key={idx}
+                                    className="w-full p-3 border-b border-slate-100 dark:border-slate-700 last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex items-stretch"
+                                >
+                                <button
                                     onClick={() => {
                                         if (a.modulo === 'caixa-postal') onNavigateTo?.('caixa-postal');
                                         else if (a.modulo === 'das') onNavigateTo?.('das');
                                         else if (a.modulo === 'simples') onNavigateTo?.('apuracoes');
                                         else if (a.modulo === 'nfse') onNavigateTo?.('nfse');
                                     }}
-                                    className="w-full text-left p-3 border-b border-slate-100 dark:border-slate-700 last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                                    className="flex-1 text-left"
                                 >
                                     <div className="flex items-start gap-3">
                                         <div className="flex-shrink-0 text-xl">
@@ -273,6 +278,16 @@ const DashboardCeo: React.FC<Props> = ({ currentUser, onShowToast, onNavigateTo 
                                         </div>
                                     </div>
                                 </button>
+                                {a.tipo === 'das-vencido' && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setCobrancaAlvo({ empresaCnpj: a.empresaCnpj, empresaNome: a.empresaNome || a.empresaCnpj, valor: 0 }); }}
+                                        className="ml-2 px-3 py-1 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded text-xs font-bold flex-shrink-0 self-center"
+                                        title="Gerar cobrança com IA"
+                                    >
+                                        📨 Cobrar
+                                    </button>
+                                )}
+                                </div>
                             ))}
                         </div>
                     </div>
@@ -316,6 +331,15 @@ const DashboardCeo: React.FC<Props> = ({ currentUser, onShowToast, onNavigateTo 
                         )}
                     </div>
                 </>
+            )}
+
+            {cobrancaAlvo && (
+                <CobrancaModal
+                    dasInfo={cobrancaAlvo}
+                    currentUser={currentUser}
+                    onClose={() => setCobrancaAlvo(null)}
+                    onShowToast={(m) => onShowToast?.(m)}
+                />
             )}
         </div>
     );

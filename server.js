@@ -322,6 +322,122 @@ Use **negrito** nos pontos-chave. Direto, sem rodeios.`;
     }
 });
 
+// ─── Empresa: contato (email + telefone) ──────────────────────────────────
+app.get('/api/admin/empresa-contato/:cnpj', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const cnpjLimpo = (req.params.cnpj || '').replace(/\D/g, '');
+        if (!cnpjLimpo) return res.json({ email: '', telefone: '' });
+
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) {
+            adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        }
+        const db = adminMod.firestore();
+
+        // Busca em simples + lucro
+        let dadosFiscais = null;
+        for (const col of ['simples_empresas', 'lucro_empresas']) {
+            const snap = await db.collection(col).get();
+            for (const d of snap.docs) {
+                const e = d.data();
+                if ((e.cnpj || '').replace(/\D/g, '') === cnpjLimpo) {
+                    dadosFiscais = e.dadosFiscais || {};
+                    break;
+                }
+            }
+            if (dadosFiscais) break;
+        }
+
+        return res.json({
+            email: dadosFiscais?.email || '',
+            telefone: dadosFiscais?.telefone || '',
+        });
+    } catch (err) {
+        console.error('[empresa-contato]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Cobranca DAS via IA ───────────────────────────────────────────────────
+// POST /api/admin/das/cobranca-ia
+// Gera draft de email/whatsapp pro cliente. NUNCA envia automaticamente.
+app.post('/api/admin/das/cobranca-ia', requireAI, async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { empresaNome, valor, competencia, vencimento, diasAtraso, tom, assinante, canal } = req.body;
+        if (!empresaNome || !valor) {
+            return res.status(400).json({ error: 'empresaNome e valor obrigatorios' });
+        }
+
+        const tomMsg = tom === 'firme'
+            ? 'tom profissional, direto e firme. Sem rodeios. Mencione consequencias do atraso (juros 0,33% ao dia + multa 20% conforme legislacao).'
+            : 'tom cordial, profissional e empatico. Reconheca que pode ter havido motivo. Convide a regularizacao sem ameacar.';
+
+        const canalMsg = canal === 'whatsapp'
+            ? 'mensagem de WhatsApp curta (200-400 caracteres). Use quebras de linha. Sem cumprimento formal de email. Sem assunto.'
+            : 'corpo de email profissional (5-8 linhas). Comece com saudacao curta. Termine com a assinatura.';
+
+        const valorBR = `R$ ${(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
+        const prompt = `Voce eh o assistente fiscal de uma contabilidade brasileira (SP Assessoria Contabil).
+Gere uma cobranca pro cliente cuja empresa esta com DAS Simples Nacional vencido.
+
+Dados:
+- Empresa: ${empresaNome}
+- Valor: ${valorBR}
+- Competencia (mes referencia): ${competencia || 'N/I'}
+- Vencimento original: ${vencimento || 'N/I'}
+- Dias em atraso: ${diasAtraso || 'N/I'} dias
+- Assinante: ${assinante || 'Equipe SP Contabil'}
+
+Tom: ${tomMsg}
+
+Formato: ${canalMsg}
+
+REGRAS IMPORTANTES:
+- NAO invente prazos, multas ou juros especificos alem dos padroes legais (0,33% dia + 20%).
+- NAO mencione bloqueios bancarios nem ameacas vagas.
+- NAO use emojis (mensagem profissional).
+- Se for email: monte um assunto curto e direto na PRIMEIRA linha, prefixado com 'ASSUNTO:' e o corpo nas linhas seguintes apos uma linha em branco.
+- Mencione o nome do cliente/empresa no corpo.
+- Seja claro sobre o que precisa ser feito (regularizar pagamento).
+
+${canal === 'whatsapp' ? 'Comece direto sem assunto.' : 'Comece com ASSUNTO: ...'}`;
+
+        const escolhido = pickGeminiModel({ prompt, hasAttachment: false });
+        logGeminiRoute(escolhido, { rota: 'das-cobranca-ia', tom, canal, chars: prompt.length });
+        const response = await ai.models.generateContent({
+            model: escolhido,
+            contents: prompt,
+        });
+
+        const texto = (response.text ?? '').trim();
+        let assunto = '', mensagem = texto;
+        if (canal !== 'whatsapp') {
+            const m = texto.match(/^ASSUNTO:\s*(.+?)$/im);
+            if (m) {
+                assunto = m[1].trim();
+                mensagem = texto.replace(m[0], '').trim();
+            }
+        }
+
+        return res.json({
+            assunto,
+            mensagem,
+            modelo: escolhido,
+            geradoEm: new Date().toISOString(),
+        });
+    } catch (err) {
+        console.error('[das/cobranca-ia]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Calendario de Obrigacoes Fiscais ──────────────────────────────────────
 // GET /api/admin/calendario/:ano/:mes
 // Agrega obrigacoes de Simples + Lucro pro mes solicitado.
