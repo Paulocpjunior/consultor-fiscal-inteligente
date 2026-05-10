@@ -644,6 +644,228 @@ ${canal === 'whatsapp' ? 'Comece direto sem assunto.' : 'Comece com ASSUNTO: ...
     }
 });
 
+// ─── Simulador IBS/CBS Reforma Tributaria 2026-2033 ────────────────────────
+// Calcula carga tributaria projetada por ano segundo LC 214/2025.
+// Aliquotas estimativas: CBS 8,8%, IBS 17,7%, total IVA Dual 26,5%.
+
+const REFORMA_CRONOGRAMA = {
+    2026: { cbsTeste: 0.009, ibsTeste: 0.001, regimeAtivo: true,  ibsPct: 0,    icmsIssPct: 1.0 },
+    2027: { cbsTeste: 0,     ibsTeste: 0.001, regimeAtivo: true,  ibsPct: 0,    icmsIssPct: 1.0, cbsCheia: 0.088 },
+    2028: { cbsTeste: 0,     ibsTeste: 0.001, regimeAtivo: false, ibsPct: 0,    icmsIssPct: 1.0, cbsCheia: 0.088 },
+    2029: { cbsTeste: 0,     ibsTeste: 0,     regimeAtivo: false, ibsPct: 0.10, icmsIssPct: 0.90, cbsCheia: 0.088, ibsCheia: 0.177 },
+    2030: { cbsTeste: 0,     ibsTeste: 0,     regimeAtivo: false, ibsPct: 0.20, icmsIssPct: 0.80, cbsCheia: 0.088, ibsCheia: 0.177 },
+    2031: { cbsTeste: 0,     ibsTeste: 0,     regimeAtivo: false, ibsPct: 0.30, icmsIssPct: 0.70, cbsCheia: 0.088, ibsCheia: 0.177 },
+    2032: { cbsTeste: 0,     ibsTeste: 0,     regimeAtivo: false, ibsPct: 0.40, icmsIssPct: 0.60, cbsCheia: 0.088, ibsCheia: 0.177 },
+    2033: { cbsTeste: 0,     ibsTeste: 0,     regimeAtivo: false, ibsPct: 1.00, icmsIssPct: 0,    cbsCheia: 0.088, ibsCheia: 0.177 },
+};
+
+function simularAnoSimples(ano, faturamentoAnual, dasAtual) {
+    // Simples Nacional MANTEM o regime unico (DAS) ate 2033.
+    // Empresas Simples NAO destacam CBS/IBS na nota em 2026.
+    // A partir de 2027, podem optar por regime hibrido (manter Simples ou ir pro
+    // regime regular pra dar credito de IBS/CBS pros clientes B2B).
+    return {
+        ano,
+        regimeMantido: 'Simples Nacional',
+        dasAnual: dasAtual,
+        cargaTotal: dasAtual,
+        observacao: ano >= 2027 ? 'Em 2027, avaliar migracao pra regime regular se cliente B2B exige credito de IBS/CBS' : null,
+    };
+}
+
+function simularAnoLucroPresumido(ano, faturamentoAnual, regime) {
+    const cron = REFORMA_CRONOGRAMA[ano];
+    if (!cron) return null;
+
+    // Lucro Presumido tipico: PIS 0,65% + COFINS 3% + IRPJ + CSLL + ICMS/ISS
+    // Aqui isolamos APENAS PIS/COFINS/CBS/IBS (impacto direto da reforma)
+    // IRPJ/CSLL nao mudam com a reforma.
+
+    const pisAtual = ano <= 2026 ? faturamentoAnual * 0.0065 : 0;
+    const cofinsAtual = ano <= 2026 ? faturamentoAnual * 0.03 : 0;
+
+    // CBS
+    let cbs = 0;
+    if (cron.cbsTeste) {
+        cbs = faturamentoAnual * cron.cbsTeste;  // teste, compensavel
+    } else if (cron.cbsCheia) {
+        cbs = faturamentoAnual * cron.cbsCheia;  // cheia desde 2027
+    }
+
+    // IBS
+    let ibs = 0;
+    if (cron.ibsTeste) {
+        ibs = faturamentoAnual * cron.ibsTeste;
+    } else if (cron.ibsCheia && cron.ibsPct) {
+        ibs = faturamentoAnual * cron.ibsCheia * cron.ibsPct;
+    }
+
+    // ICMS/ISS proporcional (assumindo carga combinada media de 18% sobre faturamento -
+    // muito variavel, depende UF/atividade. Vamos pedir input do usuario.)
+    // Por enquanto: deixa 0 e exige input do regime atual.
+
+    // Compensacao em 2026 (cbs+ibs teste sao compensaveis com pis+cofins)
+    let compensacao = 0;
+    if (cron.cbsTeste && cron.regimeAtivo) {
+        compensacao = Math.min(pisAtual + cofinsAtual, cbs + ibs);
+    }
+
+    const cargaPisCofins = pisAtual + cofinsAtual - compensacao;
+    const cargaIvaDual = cbs + ibs;
+    const cargaTotal = cargaPisCofins + cargaIvaDual;
+
+    return {
+        ano,
+        regime: 'Lucro Presumido',
+        pisAtual: +pisAtual.toFixed(2),
+        cofinsAtual: +cofinsAtual.toFixed(2),
+        cbs: +cbs.toFixed(2),
+        ibs: +ibs.toFixed(2),
+        compensacao: +compensacao.toFixed(2),
+        cargaPisCofinsLiquida: +cargaPisCofins.toFixed(2),
+        cargaIvaDualLiquida: +cargaIvaDual.toFixed(2),
+        cargaTotal: +cargaTotal.toFixed(2),
+        cargaPctFaturamento: faturamentoAnual > 0 ? +(cargaTotal / faturamentoAnual * 100).toFixed(2) : 0,
+    };
+}
+
+function simularAnoLucroReal(ano, faturamentoAnual, regime) {
+    const cron = REFORMA_CRONOGRAMA[ano];
+    if (!cron) return null;
+
+    // Lucro Real nao-cumulativo: PIS 1,65% + COFINS 7,6% sobre faturamento bruto.
+    // Mas tem direito a credito sobre insumos. Simplificacao: assumimos credito de
+    // 60% (carga liquida ~3,7% PIS+COFINS, valor empirico pra empresas medias).
+
+    const pisCofinsBruto = ano <= 2026 ? faturamentoAnual * (0.0165 + 0.076) : 0;
+    const pisCofinsLiquido = pisCofinsBruto * 0.4;  // 60% de credito assumido
+
+    let cbs = 0;
+    if (cron.cbsTeste) cbs = faturamentoAnual * cron.cbsTeste;
+    else if (cron.cbsCheia) cbs = faturamentoAnual * cron.cbsCheia * 0.4;  // CBS tem credito amplo
+
+    let ibs = 0;
+    if (cron.ibsTeste) ibs = faturamentoAnual * cron.ibsTeste;
+    else if (cron.ibsCheia && cron.ibsPct) ibs = faturamentoAnual * cron.ibsCheia * cron.ibsPct * 0.4;
+
+    let compensacao = 0;
+    if (cron.cbsTeste && cron.regimeAtivo) {
+        compensacao = Math.min(pisCofinsLiquido, cbs + ibs);
+    }
+
+    const cargaTotal = (pisCofinsLiquido - compensacao) + cbs + ibs;
+
+    return {
+        ano,
+        regime: 'Lucro Real',
+        pisCofinsLiquido: +pisCofinsLiquido.toFixed(2),
+        cbs: +cbs.toFixed(2),
+        ibs: +ibs.toFixed(2),
+        compensacao: +compensacao.toFixed(2),
+        cargaTotal: +cargaTotal.toFixed(2),
+        cargaPctFaturamento: faturamentoAnual > 0 ? +(cargaTotal / faturamentoAnual * 100).toFixed(2) : 0,
+    };
+}
+
+app.post('/api/admin/simulador-ibs-cbs', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { faturamentoAnual, regime, dasAtualAnual } = req.body || {};
+        if (!faturamentoAnual || faturamentoAnual <= 0) {
+            return res.status(400).json({ error: 'faturamentoAnual obrigatorio (>0)' });
+        }
+        if (!['Simples', 'Presumido', 'Real'].includes(regime)) {
+            return res.status(400).json({ error: 'regime deve ser Simples, Presumido ou Real' });
+        }
+
+        const projecoes = [];
+        for (const ano of [2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033]) {
+            let p;
+            if (regime === 'Simples') {
+                p = simularAnoSimples(ano, faturamentoAnual, dasAtualAnual || 0);
+            } else if (regime === 'Presumido') {
+                p = simularAnoLucroPresumido(ano, faturamentoAnual, regime);
+            } else {
+                p = simularAnoLucroReal(ano, faturamentoAnual, regime);
+            }
+            if (p) projecoes.push(p);
+        }
+
+        return res.json({
+            faturamentoAnual,
+            regime,
+            projecoes,
+            cronograma: REFORMA_CRONOGRAMA,
+            premissas: {
+                cbsCheia: '8,8% (estimativa Tax Group/Fiscoplan)',
+                ibsCheia: '17,7% (estimativa)',
+                ivaDualTotal: '~26,5%',
+                creditoLucroReal: '60% assumido (varia por setor)',
+                fonte: 'LC 214/2025',
+            },
+            observacoes: [
+                'Aliquotas cheias sao ESTIMATIVAS — Senado fixa valores reais em 2026/2028.',
+                'Calculo nao inclui IRPJ/CSLL (nao mudam com a reforma).',
+                'ICMS/ISS atual nao esta na simulacao (varia muito por UF/atividade).',
+                'Simples Nacional mantem DAS unico ate 2033, com opcao em 2027 de migrar pra regime hibrido.',
+            ],
+            geradoEm: new Date().toISOString(),
+        });
+    } catch (err) {
+        console.error('[simulador-ibs-cbs]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/simulador-ibs-cbs-explicar', requireAI, async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { simulacao, empresaNome } = req.body || {};
+        if (!simulacao) return res.status(400).json({ error: 'simulacao obrigatoria' });
+
+        const resumoProjecoes = (simulacao.projecoes || []).map(p =>
+            `  ${p.ano}: carga total R\$ ${(p.cargaTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` +
+            (p.cargaPctFaturamento !== undefined ? ` (${p.cargaPctFaturamento}% do faturamento)` : '')
+        ).join('\n');
+
+        const prompt = `Voce eh consultor tributario senior. Analise esta projecao de impacto da Reforma Tributaria (LC 214/2025) para a empresa abaixo:
+
+Empresa: ${empresaNome || 'N/I'}
+Regime atual: ${simulacao.regime}
+Faturamento anual: R\$ ${(simulacao.faturamentoAnual || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+
+Projecao de carga tributaria (PIS+COFINS+CBS+IBS, sem IRPJ/CSLL/ICMS/ISS):
+${resumoProjecoes}
+
+Em portugues brasileiro, em 3 paragrafos curtos:
+1. **Impacto financeiro:** o que essa empresa pode esperar nos proximos 7 anos? Carga sobe, cai ou estabiliza?
+2. **Riscos:** quais cuidados especificos pra esse regime? (ex: Simples deveria considerar migrar em 2027? Lucro Real precisa rever cadeia de creditos?)
+3. **Acoes estrategicas:** 2-3 medidas concretas pra 2026-2027 (sistemas, classificacao, opcao de regime)
+
+Use **negrito** nos pontos-chave. Seja direto, sem rodeios. Nao invente numeros que nao estao na projecao.`;
+
+        const escolhido = pickGeminiModel({ prompt, hasAttachment: false });
+        logGeminiRoute(escolhido, { rota: 'simulador-ibs-cbs-ia', regime: simulacao.regime });
+        const response = await ai.models.generateContent({
+            model: escolhido,
+            contents: prompt,
+        });
+
+        return res.json({
+            analise: response.text ?? '',
+            modelo: escolhido,
+            geradoEm: new Date().toISOString(),
+        });
+    } catch (err) {
+        console.error('[simulador-ibs-cbs-explicar]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Conferencia PGDAS-D ───────────────────────────────────────────────────
 // POST /api/admin/pgdas/conferir
 // Recebe { empresaId, base64Pdf } e retorna comparacao PGDAS vs calculo proprio.

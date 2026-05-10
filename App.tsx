@@ -47,6 +47,7 @@ const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
 const CalendarioFiscal = lazy(() => import('./components/CalendarioFiscal'));
 const AnomaliasView = lazy(() => import('./components/Anomalias'));
+const SimuladorReforma = lazy(() => import('./components/SimuladorReforma'));
 
 const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
@@ -67,6 +68,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.DASHBOARD_CEO]: "Dashboard CEO — visão executiva unificada com KPIs e recomendações da IA.",
     [SearchType.CALENDARIO]: "Calendário Fiscal — vencimentos de obrigações por empresa (DAS, DARF, DCTF, eSocial, etc).",
     [SearchType.ANOMALIAS]: "Detector de Anomalias — análise estatística + IA detecta irregularidades no DAS de cada empresa.",
+    [SearchType.SIMULADOR_IBS_CBS]: "Simulador IBS/CBS — projeção da carga tributária 2026-2033 sob a Reforma Tributária (LC 214/2025).",
 };
 
 const App: React.FC = () => {
@@ -1117,6 +1119,15 @@ const App: React.FC = () => {
                         {searchType === SearchType.ANOMALIAS && (
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnomaliasView
+                                    currentUser={currentUser ?? null}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                        )}
+
+                        {searchType === SearchType.SIMULADOR_IBS_CBS && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <SimuladorReforma
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />

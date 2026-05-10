@@ -17,7 +17,8 @@ export enum SearchType {
   NFSE_NACIONAL = 'NFS-e Nacional',
   DASHBOARD_CEO = 'Dashboard CEO',
   CALENDARIO = 'Calendário Fiscal',
-  ANOMALIAS = 'Detector de Anomalias'
+  ANOMALIAS = 'Detector de Anomalias',
+  SIMULADOR_IBS_CBS = 'Simulador IBS/CBS'
 }
 
 export interface GroundingSource {
@@ -874,6 +875,45 @@ export interface PgdasConferirResponse {
 }
 
 export interface PgdasExplicarResponse {
+    analise: string;
+    modelo: string;
+    geradoEm: string;
+}
+
+
+// ─── Simulador IBS/CBS Reforma Tributária ──────────────────────────────────
+
+export type RegimeReforma = 'Simples' | 'Presumido' | 'Real';
+
+export interface ProjecaoAno {
+    ano: number;
+    regime?: string;
+    regimeMantido?: string;
+    pisAtual?: number;
+    cofinsAtual?: number;
+    pisCofinsLiquido?: number;
+    cbs?: number;
+    ibs?: number;
+    compensacao?: number;
+    cargaPisCofinsLiquida?: number;
+    cargaIvaDualLiquida?: number;
+    cargaTotal: number;
+    cargaPctFaturamento?: number;
+    dasAnual?: number;
+    observacao?: string | null;
+}
+
+export interface SimulacaoReforma {
+    faturamentoAnual: number;
+    regime: RegimeReforma;
+    projecoes: ProjecaoAno[];
+    cronograma: Record<string, any>;
+    premissas: Record<string, string>;
+    observacoes: string[];
+    geradoEm: string;
+}
+
+export interface SimuladorIaResponse {
     analise: string;
     modelo: string;
     geradoEm: string;
