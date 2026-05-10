@@ -11,9 +11,10 @@ import { buildBloco0 } from './sped-fiscal-bloco0.js';
 import { buildBlocoC } from './sped-fiscal-blocoC.js';
 import { buildBloco9 } from './sped-fiscal-bloco9.js';
 import {
-    buildBlocoB, buildBlocoD,
+    buildBlocoB,
     buildBlocoG, buildBlocoH, buildBlocoK, buildBloco1,
 } from './sped-fiscal-blocos-vazios.js';
+import { buildBlocoD } from './sped-fiscal-blocoD.js';
 import { buildBlocoE } from './sped-fiscal-blocoE.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 
@@ -229,7 +230,7 @@ export async function montarBlocos({ dados }) {
     const linhasBloco0 = buildBloco0(dados);
     const linhasBlocoB = buildBlocoB();   // vazio
     const linhasBlocoC = buildBlocoC(dados);
-    const linhasBlocoD = buildBlocoD();   // vazio
+    const linhasBlocoD = buildBlocoD(dados);  // CTe modelo 57
     const linhasBlocoE = buildBlocoE(dados);  // E001+E100+E110 zerada+E990
     const linhasBlocoG = buildBlocoG();   // vazio
     const linhasBlocoH = buildBlocoH();   // vazio

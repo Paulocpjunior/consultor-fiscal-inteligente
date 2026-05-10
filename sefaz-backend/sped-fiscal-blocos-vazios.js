@@ -30,7 +30,7 @@ function buildBlocoVazio(sigla) {
 }
 
 export const buildBlocoB = () => buildBlocoVazio('B');
-export const buildBlocoD = () => buildBlocoVazio('D');
+// buildBlocoD foi pra ./sped-fiscal-blocoD.js (com D100/D190 reais).
 // buildBlocoE foi pra ./sped-fiscal-blocoE.js (com E100/E110 zerada).
 export const buildBlocoG = () => buildBlocoVazio('G');
 export const buildBlocoH = () => buildBlocoVazio('H');
