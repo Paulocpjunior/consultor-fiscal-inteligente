@@ -46,6 +46,7 @@ const DasDashboard = lazy(() => import('./components/Das'));
 const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
 const CalendarioFiscal = lazy(() => import('./components/CalendarioFiscal'));
+const AnomaliasView = lazy(() => import('./components/Anomalias'));
 
 const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
@@ -65,6 +66,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.NFSE_NACIONAL]: "NFS-e Nacional (CGSN 189/2026) — emissão e gestão de notas de serviço no padrão nacional, obrigatório set/2026.",
     [SearchType.DASHBOARD_CEO]: "Dashboard CEO — visão executiva unificada com KPIs e recomendações da IA.",
     [SearchType.CALENDARIO]: "Calendário Fiscal — vencimentos de obrigações por empresa (DAS, DARF, DCTF, eSocial, etc).",
+    [SearchType.ANOMALIAS]: "Detector de Anomalias — análise estatística + IA detecta irregularidades no DAS de cada empresa.",
 };
 
 const App: React.FC = () => {
@@ -1106,6 +1108,15 @@ const App: React.FC = () => {
                         {searchType === SearchType.CALENDARIO && (
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CalendarioFiscal
+                                    currentUser={currentUser ?? null}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                        )}
+
+                        {searchType === SearchType.ANOMALIAS && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <AnomaliasView
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />

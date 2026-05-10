@@ -16,7 +16,8 @@ export enum SearchType {
   DAS_SIMPLES = 'DAS Simples Nacional',
   NFSE_NACIONAL = 'NFS-e Nacional',
   DASHBOARD_CEO = 'Dashboard CEO',
-  CALENDARIO = 'Calendário Fiscal'
+  CALENDARIO = 'Calendário Fiscal',
+  ANOMALIAS = 'Detector de Anomalias'
 }
 
 export interface GroundingSource {
@@ -770,6 +771,42 @@ export interface CalendarioResponse {
     };
     obrigacoes: ObrigacaoFiscal[];
     limitacoes: string;
+}
+
+
+// ─── Detector de Anomalias DAS ─────────────────────────────────────────────
+
+export type AnomaliaTipo = 'salto_faturamento' | 'mudanca_anexo' | 'das_abaixo_esperado';
+export type AnomaliaSeveridade = 'alta' | 'media' | 'baixa';
+
+export interface AnomaliaDetectada {
+    tipo: AnomaliaTipo;
+    severidade: AnomaliaSeveridade;
+    competencia: string;
+    descricao: string;
+    dados: Record<string, any>;
+}
+
+export interface AnomaliasEmpresa {
+    empresaId: string;
+    empresaNome: string;
+    empresaCnpj: string;
+    qtdAnomalias: number;
+    severidadeMax: AnomaliaSeveridade;
+    anomalias: AnomaliaDetectada[];
+}
+
+export interface AnomaliasGlobalResponse {
+    geradoEm: string;
+    totalEmpresas: number;
+    empresasComAnomalia: number;
+    resultados: AnomaliasEmpresa[];
+}
+
+export interface AnomaliaIaResponse {
+    analise: string;
+    modelo: string;
+    geradoEm: string;
 }
 
 // Fiscal Obligations Types

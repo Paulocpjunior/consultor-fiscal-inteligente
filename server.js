@@ -361,6 +361,212 @@ app.get('/api/admin/empresa-contato/:cnpj', async (req, res) => {
     }
 });
 
+// ─── Detector de Anomalias DAS ─────────────────────────────────────────────
+function mediaArr(arr) { return arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0; }
+function desvioArr(arr) {
+    if (arr.length < 2) return 0;
+    const m = mediaArr(arr);
+    const v = arr.reduce((s, x) => s + Math.pow(x - m, 2), 0) / arr.length;
+    return Math.sqrt(v);
+}
+
+function detectarAnomalias(empresa) {
+    const anomalias = [];
+    const historico = (empresa.historicoCalculos || [])
+        .slice()
+        .sort((a, b) => (a.dataCalculo || 0) - (b.dataCalculo || 0));
+
+    if (historico.length < 4) {
+        return { anomalias: [], aviso: 'Historico insuficiente (precisa 4+ meses).' };
+    }
+
+    // 1. Salto de faturamento (proxy: das_mensal/aliq_eff = faturamento aproximado)
+    const faturamentos = historico.map(h => {
+        const aliq = h.aliq_eff || 0;
+        return aliq > 0 ? (h.das_mensal || 0) / (aliq / 100) : 0;
+    });
+    const ultimoFat = faturamentos[faturamentos.length - 1];
+    const fatsAnteriores = faturamentos.slice(0, -1);
+    const mediaFat = mediaArr(fatsAnteriores);
+    const desvioFat = desvioArr(fatsAnteriores);
+    if (mediaFat > 0 && desvioFat > 0) {
+        const z = (ultimoFat - mediaFat) / desvioFat;
+        if (Math.abs(z) >= 2) {
+            const direcao = z > 0 ? 'pico' : 'queda';
+            const pctMudanca = ((ultimoFat - mediaFat) / mediaFat * 100).toFixed(1);
+            anomalias.push({
+                tipo: 'salto_faturamento',
+                severidade: Math.abs(z) >= 3 ? 'alta' : 'media',
+                competencia: historico[historico.length - 1].mesReferencia,
+                descricao: `Faturamento estimado teve ${direcao} de ${pctMudanca}% vs media dos ultimos meses (z-score=${z.toFixed(2)})`,
+                dados: {
+                    valorAtual: +ultimoFat.toFixed(2),
+                    mediaHistorica: +mediaFat.toFixed(2),
+                    desvioPadrao: +desvioFat.toFixed(2),
+                    zScore: +z.toFixed(2),
+                },
+            });
+        }
+    }
+
+    // 2. Mudanca de anexo efetivo (provavel oscilacao Fator R)
+    for (let i = 1; i < historico.length; i++) {
+        if (historico[i].anexo_efetivo !== historico[i - 1].anexo_efetivo) {
+            anomalias.push({
+                tipo: 'mudanca_anexo',
+                severidade: 'media',
+                competencia: historico[i].mesReferencia,
+                descricao: `Anexo efetivo mudou de ${historico[i - 1].anexo_efetivo} para ${historico[i].anexo_efetivo}. Provavel oscilacao do Fator R.`,
+                dados: {
+                    anexoAnterior: historico[i - 1].anexo_efetivo,
+                    anexoAtual: historico[i].anexo_efetivo,
+                    fatorR: historico[i].fator_r,
+                },
+            });
+        }
+    }
+
+    // 3. Aliquota efetiva caiu mais de 20% sem queda proporcional do RBT12
+    if (historico.length >= 2) {
+        const ult = historico[historico.length - 1];
+        const ant = historico[historico.length - 2];
+        if (ant.aliq_eff > 0 && ult.aliq_eff > 0) {
+            const quedaAliq = (ant.aliq_eff - ult.aliq_eff) / ant.aliq_eff;
+            const quedaRbt = ant.rbt12 > 0 ? (ant.rbt12 - ult.rbt12) / ant.rbt12 : 0;
+            if (quedaAliq > 0.2 && quedaRbt < 0.10) {
+                anomalias.push({
+                    tipo: 'das_abaixo_esperado',
+                    severidade: 'alta',
+                    competencia: ult.mesReferencia,
+                    descricao: `Aliquota caiu ${(quedaAliq * 100).toFixed(1)}% mas RBT12 so caiu ${(quedaRbt * 100).toFixed(1)}%. Possivel erro de classificacao CNAE ou anexo.`,
+                    dados: {
+                        aliqAnterior: +ant.aliq_eff.toFixed(2),
+                        aliqAtual: +ult.aliq_eff.toFixed(2),
+                        rbt12Anterior: +ant.rbt12.toFixed(2),
+                        rbt12Atual: +ult.rbt12.toFixed(2),
+                    },
+                });
+            }
+        }
+    }
+
+    return { anomalias };
+}
+
+app.get('/api/admin/das/anomalias/:empresaId', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) {
+            adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        }
+        const db = adminMod.firestore();
+
+        const snap = await db.collection('simples_empresas').doc(req.params.empresaId).get();
+        if (!snap.exists) return res.status(404).json({ error: 'empresa nao encontrada' });
+
+        const emp = { id: snap.id, ...snap.data() };
+        const result = detectarAnomalias(emp);
+
+        return res.json({
+            empresa: { id: emp.id, nome: emp.nome, cnpj: emp.cnpj, anexo: emp.anexo },
+            ...result,
+            geradoEm: new Date().toISOString(),
+        });
+    } catch (err) {
+        console.error('[das/anomalias]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+// Endpoint global: scaneia todas as empresas e retorna as que tem anomalias
+app.get('/api/admin/das/anomalias-todas', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) {
+            adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        }
+        const db = adminMod.firestore();
+
+        const snap = await db.collection('simples_empresas').get();
+        const resultados = [];
+        snap.forEach(d => {
+            const emp = { id: d.id, ...d.data() };
+            const r = detectarAnomalias(emp);
+            if (r.anomalias && r.anomalias.length > 0) {
+                resultados.push({
+                    empresaId: emp.id,
+                    empresaNome: emp.nome,
+                    empresaCnpj: emp.cnpj,
+                    qtdAnomalias: r.anomalias.length,
+                    severidadeMax: r.anomalias.some(a => a.severidade === 'alta') ? 'alta' : 'media',
+                    anomalias: r.anomalias,
+                });
+            }
+        });
+        resultados.sort((a, b) => {
+            if (a.severidadeMax !== b.severidadeMax) return a.severidadeMax === 'alta' ? -1 : 1;
+            return b.qtdAnomalias - a.qtdAnomalias;
+        });
+
+        return res.json({
+            geradoEm: new Date().toISOString(),
+            totalEmpresas: snap.size,
+            empresasComAnomalia: resultados.length,
+            resultados,
+        });
+    } catch (err) {
+        console.error('[das/anomalias-todas]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/das/anomalia-explicar', requireAI, async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { empresaNome, empresaAnexo, anomalia } = req.body;
+        if (!anomalia) return res.status(400).json({ error: 'anomalia obrigatoria' });
+
+        const prompt = `Voce eh um consultor fiscal senior. Analise esta anomalia detectada na apuracao DAS Simples Nacional:
+
+Empresa: ${empresaNome} (Anexo ${empresaAnexo || 'I-V'})
+Anomalia tipo: ${anomalia.tipo}
+Competencia: ${anomalia.competencia || 'N/I'}
+Descricao: ${anomalia.descricao}
+Dados: ${JSON.stringify(anomalia.dados, null, 2)}
+
+Em portugues brasileiro, em 2-3 paragrafos curtos:
+1. **Causas provaveis:** o que pode ter gerado essa anomalia (3-4 hipoteses concretas)
+2. **Impacto fiscal:** o que pode acontecer se isso passar despercebido (multa? autuacao? perda do regime?)
+3. **Acao recomendada:** o que o contador deve fazer agora (verificar PGDAS, conferir CNAE, conversar com cliente, etc).
+
+Use **negrito** nos pontos-chave. Seja direto, sem rodeios.`;
+
+        const escolhido = pickGeminiModel({ prompt, hasAttachment: false });
+        logGeminiRoute(escolhido, { rota: 'das-anomalia-ia', tipo: anomalia.tipo });
+        const response = await ai.models.generateContent({
+            model: escolhido,
+            contents: prompt,
+        });
+
+        return res.json({
+            analise: response.text ?? '',
+            modelo: escolhido,
+            geradoEm: new Date().toISOString(),
+        });
+    } catch (err) {
+        console.error('[das/anomalia-explicar]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Cobranca DAS via IA ───────────────────────────────────────────────────
 // POST /api/admin/das/cobranca-ia
 // Gera draft de email/whatsapp pro cliente. NUNCA envia automaticamente.
