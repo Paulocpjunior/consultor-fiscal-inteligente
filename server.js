@@ -459,12 +459,33 @@ app.get('/api/admin/dashboard-ceo/acoes', async (req, res) => {
             e.count++;
             e.categorias.add(m.categoria);
         });
+        // Lookup de nomes das empresas (Simples + Lucro) pra enriquecer
+        const cnpjsCx = [...empresasCxCriticas.keys()].map(k => k.replace(/\D/g, ''));
+        const nomePorCnpj = new Map();
+        try {
+            const [simAll, lucAll] = await Promise.all([
+                db.collection('simples_empresas').get(),
+                db.collection('lucro_empresas').get(),
+            ]);
+            simAll.forEach(d => {
+                const e = d.data();
+                if (e.cnpj) nomePorCnpj.set(e.cnpj.replace(/\D/g, ''), e.nome);
+            });
+            lucAll.forEach(d => {
+                const e = d.data();
+                if (e.cnpj) nomePorCnpj.set(e.cnpj.replace(/\D/g, ''), e.nome);
+            });
+        } catch (e) { /* segue sem nomes */ }
+
         for (const e of empresasCxCriticas.values()) {
+            const cnpjLimpo = (e.cnpj || '').replace(/\D/g, '');
+            const nome = nomePorCnpj.get(cnpjLimpo);
             acoes.push({
                 tipo: 'caixa-postal',
                 urgencia: e.categorias.has('intimacao') ? 'alta' : (e.categorias.has('exclusao') ? 'alta' : 'media'),
                 empresaCnpj: e.cnpj,
                 empresaId: e.empresaId,
+                empresaNome: nome || null,
                 titulo: `${e.count} mensagem(ns) crítica(s) no e-CAC`,
                 descricao: `Categorias: ${[...e.categorias].join(', ')}`,
                 acao: 'Ver Caixa Postal',
