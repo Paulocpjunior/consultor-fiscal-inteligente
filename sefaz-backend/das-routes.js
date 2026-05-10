@@ -5,11 +5,15 @@
 // ============================================================================
 
 import express from 'express';
+import admin from 'firebase-admin';
 import {
     emitirDasRegular, emitirDasAvulso,
     listarDas, getResumoDas, marcarPago,
+    processarCronDas,
 } from './das-orchestrator.js';
 import { getDasMode } from './das-provider.js';
+
+const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 
 const router = express.Router();
 
@@ -54,6 +58,40 @@ router.post('/marcar-pago', requireAdmin, express.json(), async (req, res) => {
         if (!docId) return res.status(400).json({ error: 'docId obrigatorio' });
         res.json(await marcarPago(docId, dataPagamento));
     } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Cron noturno (Cloud Scheduler) ─────────────────────────────────────
+// Disparado pelo job 'das-cron-noturno' as 03:30 BRT.
+router.post('/cron', async (req, res) => {
+    const headerSecret = req.header('X-Cron-Secret') || '';
+    if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
+        return res.status(403).json({ erro: 'cron secret invalido' });
+    }
+    const t0 = Date.now();
+    try {
+        const stats = await processarCronDas();
+        const duracaoMs = Date.now() - t0;
+
+        try {
+            if (admin.apps.length === 0) {
+                admin.initializeApp({ credential: admin.credential.applicationDefault() });
+            }
+            await admin.firestore().collection('das_cron_logs').add({
+                executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                iniciadoEm: new Date(t0).toISOString(),
+                duracaoMs,
+                ...stats,
+            });
+        } catch (logErr) {
+            console.warn('[das-cron] log falhou:', logErr.message);
+        }
+
+        console.log(`[das-cron] OK em ${duracaoMs}ms - totalDas=${stats.totalDas} vencidos=${stats.vencidos} aVencer=${stats.aVencer} atualizados=${stats.atualizadosParaVencido}`);
+        return res.json({ ok: true, duracaoMs, ...stats });
+    } catch (err) {
+        console.error('[das-cron] erro:', err.message);
+        return res.status(500).json({ ok: false, erro: err.message });
+    }
 });
 
 export default router;

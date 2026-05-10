@@ -142,6 +142,97 @@ export async function getResumoDas() {
 }
 
 /**
+ * Processamento noturno: atualiza status, identifica vencimentos proximos.
+ *
+ * Comportamento:
+ * - DAS pendente com vencimento < hoje -> status 'vencido'
+ * - DAS pendente com vencimento entre hoje e hoje+5d -> mantido 'pendente'
+ *   mas listado em 'aVencerEm5Dias'
+ * - DAS pago: ignorado
+ *
+ * Logs salvos em 'das_cron_logs' (Firestore) pra auditoria.
+ */
+export async function processarCronDas() {
+    const db = fa().firestore();
+    const hoje = new Date().toISOString().slice(0, 10);
+    const cincoDiasFrente = (() => {
+        const d = new Date(); d.setDate(d.getDate() + 5);
+        return d.toISOString().slice(0, 10);
+    })();
+
+    const snap = await db.collection(COLLECTION).limit(2000).get();
+    const stats = {
+        totalDas: snap.size,
+        vencidos: 0,
+        aVencer: 0,
+        pagos: 0,
+        atualizadosParaVencido: 0,
+        empresasComVencido: new Set(),
+        empresasComProximoVencimento: new Set(),
+        valorVencidoTotal: 0,
+    };
+    const aVencerLista = [];
+    const vencidosLista = [];
+
+    const batch = db.batch();
+    let comOps = false;
+
+    for (const doc of snap.docs) {
+        const d = doc.data();
+        const status = d.statusPagamento || 'pendente';
+        if (status === 'pago') {
+            stats.pagos++;
+            continue;
+        }
+        const venc = d.vencimento || '';
+        if (!venc) continue;
+
+        if (venc < hoje) {
+            // Esta vencido: atualiza status se ainda nao foi
+            stats.vencidos++;
+            stats.valorVencidoTotal += d.valor || 0;
+            stats.empresasComVencido.add(d.empresaCnpj);
+            vencidosLista.push({
+                empresaCnpj: d.empresaCnpj,
+                empresaNome: d.empresaNome || '',
+                competencia: d.competencia,
+                valor: d.valor,
+                vencimento: venc,
+                diasAtraso: Math.floor((new Date(hoje) - new Date(venc)) / 86400000),
+            });
+            if (status !== 'vencido') {
+                batch.update(doc.ref, { statusPagamento: 'vencido', atualizadoEm: new Date().toISOString() });
+                stats.atualizadosParaVencido++;
+                comOps = true;
+            }
+        } else if (venc <= cincoDiasFrente) {
+            // Proximo vencimento
+            stats.aVencer++;
+            stats.empresasComProximoVencimento.add(d.empresaCnpj);
+            aVencerLista.push({
+                empresaCnpj: d.empresaCnpj,
+                empresaNome: d.empresaNome || '',
+                competencia: d.competencia,
+                valor: d.valor,
+                vencimento: venc,
+                diasRestantes: Math.floor((new Date(venc) - new Date(hoje)) / 86400000),
+            });
+        }
+    }
+
+    if (comOps) await batch.commit();
+
+    return {
+        ...stats,
+        empresasComVencido: stats.empresasComVencido.size,
+        empresasComProximoVencimento: stats.empresasComProximoVencimento.size,
+        valorVencidoTotal: +stats.valorVencidoTotal.toFixed(2),
+        aVencerLista: aVencerLista.slice(0, 30),  // top 30 pra log nao explodir
+        vencidosLista: vencidosLista.slice(0, 30),
+    };
+}
+
+/**
  * Marca DAS como pago.
  */
 export async function marcarPago(docId, dataPagamento) {
