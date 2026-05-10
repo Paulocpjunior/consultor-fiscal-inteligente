@@ -681,6 +681,33 @@ export interface DashboardCeoInsights {
     modelo: string;
 }
 
+
+// ─── Previsão DAS (D4a) ────────────────────────────────────────────────────
+
+export interface DasPrevisaoMes {
+    competencia: string;
+    dasProvavel: number;
+    dasMin: number;
+    dasMax: number;
+    rbt12Projetado: number;
+    mudancaFaixa: { limite: number; mensagem: string } | null;
+    confianca: number;
+}
+
+export interface DasPrevisaoResponse {
+    empresa: { id: string; nome: string; anexo: string; cnpj: string };
+    historico: { competencia: string; das: number; aliquotaEfetiva: number; rbt12: number }[];
+    estatistica: { slope: number; r2: number; qtdMesesAnalisados: number };
+    previsao: DasPrevisaoMes[];
+    aviso?: string;
+}
+
+export interface DasPrevisaoIaResponse {
+    analise: string;
+    geradoEm: string;
+    modelo: string;
+}
+
 // Fiscal Obligations Types
 
 export type FiscalStatus = 'pending' | 'completed' | 'overdue' | 'warning';

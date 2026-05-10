@@ -8,6 +8,7 @@ import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 import { emitirDasRegular } from '../services/dasService';
 import EmitirNfseModal from './NfseNacional/EmitirModal';
+import PrevisaoDasModal from './Das/PrevisaoModal';
 
 interface SimplesNacionalDetalheProps {
     empresa: SimplesNacionalEmpresa;
@@ -64,6 +65,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     const [isCfopCorrelacaoModalOpen, setIsCfopCorrelacaoModalOpen] = useState(false);
     const [emitindoDas, setEmitindoDas] = useState(false);
     const [isEmitirNfseOpen, setIsEmitirNfseOpen] = useState(false);
+    const [isPrevisaoOpen, setIsPrevisaoOpen] = useState(false);
     const [folha12Input, setFolha12Input] = useState(empresa.folha12);
     
     // Estados de Apuração Mensal
@@ -410,6 +412,13 @@ if (filialServico > 0) {
                         title="Emitir NFS-e Nacional (CGSN 189/2026)"
                     >
                         📑 Emitir NFSe
+                    </button>
+                    <button
+                        onClick={() => setIsPrevisaoOpen(true)}
+                        className="btn-press flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 font-bold rounded-lg hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:hover:bg-purple-900/50"
+                        title="Previsão DAS dos próximos 3 meses (estatística + IA)"
+                    >
+                        📈 Prever DAS
                     </button>
                     <label className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 cursor-pointer">
                         <DownloadIcon className="w-5 h-5" />
@@ -864,6 +873,15 @@ if (filialServico > 0) {
                     empresa={empresa}
                     currentUser={currentUser ?? null}
                     onClose={() => setIsEmitirNfseOpen(false)}
+                    onShowToast={onShowToast}
+                />
+            )}
+            {isPrevisaoOpen && (
+                <PrevisaoDasModal
+                    empresaId={empresa.id}
+                    empresaNome={empresa.nome}
+                    currentUser={currentUser ?? null}
+                    onClose={() => setIsPrevisaoOpen(false)}
                     onShowToast={onShowToast}
                 />
             )}

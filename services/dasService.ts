@@ -2,7 +2,7 @@
  * services/dasService.ts
  * Cliente HTTP pra /api/admin/das.
  */
-import type { User, DasEmitido, DasResumo, DasStatusPagamento } from '../types';
+import type { User, DasEmitido, DasResumo, DasStatusPagamento, DasPrevisaoResponse, DasPrevisaoIaResponse } from '../types';
 
 const BASE = '/api/admin/das';
 
@@ -97,4 +97,26 @@ export function statusBadgeClass(status: string): string {
 export function statusLabel(status: string): string {
     const map: Record<string, string> = { pago: 'Pago', pendente: 'Pendente', vencido: 'Vencido' };
     return map[status] || status;
+}
+
+
+// ─── Previsão DAS (D4a) ────────────────────────────────────────────────────
+
+export async function getPrevisaoDas(user: User | null, empresaId: string): Promise<DasPrevisaoResponse> {
+    const res = await fetch(`/api/admin/das/previsao/${empresaId}`, { headers: authHeaders(user) });
+    if (!res.ok) throw new Error(`getPrevisaoDas: ${res.status}`);
+    return res.json();
+}
+
+export async function getPrevisaoIa(user: User | null, dadosPrevisao: DasPrevisaoResponse): Promise<DasPrevisaoIaResponse> {
+    const res = await fetch('/api/admin/das/previsao-ia', {
+        method: 'POST',
+        headers: authHeaders(user),
+        body: JSON.stringify({ dadosPrevisao }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `getPrevisaoIa: ${res.status}`);
+    }
+    return res.json();
 }

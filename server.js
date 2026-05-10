@@ -118,6 +118,210 @@ app.post('/api/fiscal/multimodal', requireAI, async (req, res) => {
     }
 });
 
+// ─── Previsao DAS (D4a) ─────────────────────────────────────────────────────
+// Estatistica simples (regressao linear) + IA opcional pra contextualizar.
+// Tabela de faixas Simples (limite anual em R\$).
+const ANEXOS_LIMITES = {
+    'I':   [180000, 360000, 720000, 1800000, 3600000, 4800000],
+    'II':  [180000, 360000, 720000, 1800000, 3600000, 4800000],
+    'III': [180000, 360000, 720000, 1800000, 3600000, 4800000],
+    'IV':  [180000, 360000, 720000, 1800000, 3600000, 4800000],
+    'V':   [180000, 360000, 720000, 1800000, 3600000, 4800000],
+};
+
+function regressaoLinear(pontos) {
+    // pontos: [{x, y}], retorna { slope, intercept, r2 }
+    const n = pontos.length;
+    if (n < 2) return { slope: 0, intercept: pontos[0]?.y || 0, r2: 0 };
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+    for (const p of pontos) {
+        sumX += p.x; sumY += p.y;
+        sumXY += p.x * p.y; sumX2 += p.x * p.x; sumY2 += p.y * p.y;
+    }
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX || 1);
+    const intercept = (sumY - slope * sumX) / n;
+    const yMean = sumY / n;
+    let ssRes = 0, ssTot = 0;
+    for (const p of pontos) {
+        const yPred = slope * p.x + intercept;
+        ssRes += Math.pow(p.y - yPred, 2);
+        ssTot += Math.pow(p.y - yMean, 2);
+    }
+    const r2 = ssTot === 0 ? 0 : Math.max(0, 1 - ssRes / ssTot);
+    return { slope, intercept, r2 };
+}
+
+function competenciaSeguinte(yyyymm, offset = 1) {
+    const m = (yyyymm || '').match(/(\d{4})-(\d{2})/);
+    if (!m) return '';
+    let ano = parseInt(m[1]), mes = parseInt(m[2]);
+    mes += offset;
+    while (mes > 12) { mes -= 12; ano++; }
+    return `${ano}-${String(mes).padStart(2, '0')}`;
+}
+
+function mesReferenciaParaYYYYMM(mesRef) {
+    // 'maio de 2026' -> '2026-05', 'abril de 2026' -> '2026-04'
+    const meses = { janeiro:1, fevereiro:2, março:3, marco:3, abril:4, maio:5, junho:6,
+                    julho:7, agosto:8, setembro:9, outubro:10, novembro:11, dezembro:12 };
+    const m = (mesRef || '').toLowerCase().match(/([a-zç]+)\s+de\s+(\d{4})/);
+    if (!m) return '';
+    const mes = meses[m[1]];
+    const ano = m[2];
+    if (!mes) return '';
+    return `${ano}-${String(mes).padStart(2, '0')}`;
+}
+
+app.get('/api/admin/das/previsao/:empresaId', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) {
+            adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        }
+        const db = adminMod.firestore();
+
+        const empresaId = req.params.empresaId;
+        const empSnap = await db.collection('simples_empresas').doc(empresaId).get();
+        if (!empSnap.exists) return res.status(404).json({ error: 'empresa nao encontrada' });
+        const emp = empSnap.data();
+        const historico = (emp.historicoCalculos || [])
+            .map(h => ({ ...h, yyyymm: mesReferenciaParaYYYYMM(h.mesReferencia) }))
+            .filter(h => h.yyyymm)
+            .sort((a, b) => a.yyyymm.localeCompare(b.yyyymm));
+
+        if (historico.length < 2) {
+            return res.json({
+                empresa: { id: empresaId, nome: emp.nome, anexo: emp.anexo, cnpj: emp.cnpj },
+                historico,
+                previsao: [],
+                aviso: 'Histórico insuficiente (precisa ≥ 2 meses).',
+            });
+        }
+
+        // Regressao no DAS
+        const pontosDas = historico.map((h, i) => ({ x: i, y: h.das_mensal || 0 }));
+        const regDas = regressaoLinear(pontosDas);
+
+        // Regressao no faturamento mensal (rbt12 deslocado)
+        // rbt12 muda devagar; melhor olhar faturamento via diff
+        const faturamentos = historico.map(h => h.rbt12 / 12);  // proxy
+        const ultimoRbt12 = historico[historico.length - 1].rbt12;
+        const ultimoMesYYYYMM = historico[historico.length - 1].yyyymm;
+
+        // Projeta os proximos 3 meses
+        const previsao = [];
+        const tabelaLimites = ANEXOS_LIMITES[historico[historico.length - 1].anexo_efetivo] || ANEXOS_LIMITES['I'];
+
+        for (let offset = 1; offset <= 3; offset++) {
+            const x = historico.length - 1 + offset;
+            const dasProvavel = Math.max(0, regDas.slope * x + regDas.intercept);
+
+            // Margem de erro depende do R²
+            const margem = (1 - regDas.r2) * 0.30 + 0.05;  // entre 5% e 35%
+            const dasMin = dasProvavel * (1 - margem);
+            const dasMax = dasProvavel * (1 + margem);
+
+            // Projeta RBT12 com base na tendencia do ultimo trimestre
+            const ultTres = historico.slice(-3);
+            const fatMedio = ultTres.reduce((s, h) => s + (h.das_mensal / Math.max(0.01, h.aliq_eff / 100)), 0) / ultTres.length;
+            const rbt12Projetado = ultimoRbt12 + fatMedio * offset;
+
+            // Detecta mudanca de faixa
+            let mudancaFaixa = null;
+            for (const limite of tabelaLimites) {
+                if (ultimoRbt12 < limite && rbt12Projetado >= limite) {
+                    mudancaFaixa = { limite, mensagem: `Pode ultrapassar R\$ ${limite.toLocaleString('pt-BR')} de RBT12` };
+                    break;
+                }
+            }
+
+            previsao.push({
+                competencia: competenciaSeguinte(ultimoMesYYYYMM, offset),
+                dasProvavel: +dasProvavel.toFixed(2),
+                dasMin: +dasMin.toFixed(2),
+                dasMax: +dasMax.toFixed(2),
+                rbt12Projetado: +rbt12Projetado.toFixed(2),
+                mudancaFaixa,
+                confianca: regDas.r2,
+            });
+        }
+
+        return res.json({
+            empresa: { id: empresaId, nome: emp.nome, anexo: emp.anexo, cnpj: emp.cnpj },
+            historico: historico.map(h => ({
+                competencia: h.yyyymm,
+                das: h.das_mensal,
+                aliquotaEfetiva: h.aliq_eff,
+                rbt12: h.rbt12,
+            })),
+            estatistica: {
+                slope: +regDas.slope.toFixed(2),
+                r2: +regDas.r2.toFixed(3),
+                qtdMesesAnalisados: historico.length,
+            },
+            previsao,
+        });
+    } catch (err) {
+        console.error('[das/previsao]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/das/previsao-ia', requireAI, async (req, res) => {
+    try {
+        const role = req.headers['x-user-res'] || req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { dadosPrevisao } = req.body;
+        if (!dadosPrevisao) return res.status(400).json({ error: 'dadosPrevisao obrigatorio' });
+
+        const histResumo = (dadosPrevisao.historico || []).map(h =>
+            `  ${h.competencia}: DAS R\$ ${h.das.toFixed(2)} | aliq ${h.aliquotaEfetiva.toFixed(2)}% | RBT12 R\$ ${h.rbt12.toFixed(0)}`
+        ).join('\n');
+
+        const prevResumo = (dadosPrevisao.previsao || []).map(p =>
+            `  ${p.competencia}: DAS provável R\$ ${p.dasProvavel.toFixed(2)} (entre ${p.dasMin.toFixed(2)} e ${p.dasMax.toFixed(2)}) | RBT12 projetado R\$ ${p.rbt12Projetado.toFixed(0)}${p.mudancaFaixa ? ' ⚠ ' + p.mudancaFaixa.mensagem : ''}`
+        ).join('\n');
+
+        const prompt = `Voce eh um consultor fiscal senior. Analise a previsao de DAS Simples Nacional desta empresa em portugues brasileiro:
+
+Empresa: ${dadosPrevisao.empresa.nome} (Anexo ${dadosPrevisao.empresa.anexo})
+
+Histórico recente:
+${histResumo}
+
+Previsão (próximos 3 meses):
+${prevResumo}
+
+Estatística: tendência mensal R\$ ${dadosPrevisao.estatistica.slope}/mês, R²=${dadosPrevisao.estatistica.r2} (${dadosPrevisao.estatistica.qtdMesesAnalisados} meses analisados).
+
+Em 3 paragrafos curtos:
+1. **Tendencia:** explica se DAS esta subindo, caindo ou estavel, e por que (volume de faturamento, troca de faixa, fator R)
+2. **Riscos:** alerta sobre mudanca de faixa, perda do Simples, sazonalidade
+3. **Recomendacao:** acao especifica (estoque, planejamento, conversa com cliente)
+
+Use **negrito** nos pontos-chave. Direto, sem rodeios.`;
+
+        const escolhido = pickGeminiModel({ prompt, hasAttachment: false });
+        logGeminiRoute(escolhido, { rota: 'das-previsao-ia', chars: prompt.length });
+        const response = await ai.models.generateContent({
+            model: escolhido,
+            contents: prompt,
+        });
+        return res.json({
+            analise: response.text ?? '',
+            geradoEm: new Date().toISOString(),
+            modelo: escolhido,
+        });
+    } catch (err) {
+        console.error('[das/previsao-ia]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Dashboard CEO — endpoint de KPIs + insights IA ─────────────────────────
 app.get('/api/admin/dashboard-ceo/kpis', async (req, res) => {
     try {
