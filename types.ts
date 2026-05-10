@@ -15,7 +15,8 @@ export enum SearchType {
   CAIXA_POSTAL = 'Caixa Postal',
   DAS_SIMPLES = 'DAS Simples Nacional',
   NFSE_NACIONAL = 'NFS-e Nacional',
-  DASHBOARD_CEO = 'Dashboard CEO'
+  DASHBOARD_CEO = 'Dashboard CEO',
+  CALENDARIO = 'Calendário Fiscal'
 }
 
 export interface GroundingSource {
@@ -736,6 +737,39 @@ export interface AcoesResponse {
     totalAcoes: number;
     porUrgencia: { alta: number; media: number; baixa: number };
     acoes: AcaoPendente[];
+}
+
+
+// ─── Calendário Fiscal ─────────────────────────────────────────────────────
+
+export type ObrigacaoTipo =
+    | 'DAS' | 'DEFIS' | 'DARF-IRPJ' | 'DARF-CSLL'
+    | 'PIS-COFINS' | 'DCTF' | 'DCTFWEB' | 'ESOCIAL';
+
+export interface ObrigacaoFiscal {
+    tipo: ObrigacaoTipo;
+    descricao: string;
+    empresaId: string;
+    empresaNome: string;
+    empresaCnpj: string;
+    anexo?: string;
+    vencimento: string;          // YYYY-MM-DD
+    regime: string;
+    urgencia: 'mensal' | 'trimestral' | 'anual';
+}
+
+export interface CalendarioResponse {
+    ano: number;
+    mes: number;
+    geradoEm: string;
+    stats: {
+        total: number;
+        vencidas: number;
+        proximas7Dias: number;
+        porTipo: Record<string, number>;
+    };
+    obrigacoes: ObrigacaoFiscal[];
+    limitacoes: string;
 }
 
 // Fiscal Obligations Types

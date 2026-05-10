@@ -45,6 +45,7 @@ const CaixaPostalAlerta = lazy(() => import('./components/CaixaPostal/AlertaPopu
 const DasDashboard = lazy(() => import('./components/Das'));
 const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
+const CalendarioFiscal = lazy(() => import('./components/CalendarioFiscal'));
 
 const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
@@ -63,6 +64,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.DAS_SIMPLES]: "DAS Simples Nacional — emissão regular (com PGDAS-D) e avulso, controle de pagamentos por empresa.",
     [SearchType.NFSE_NACIONAL]: "NFS-e Nacional (CGSN 189/2026) — emissão e gestão de notas de serviço no padrão nacional, obrigatório set/2026.",
     [SearchType.DASHBOARD_CEO]: "Dashboard CEO — visão executiva unificada com KPIs e recomendações da IA.",
+    [SearchType.CALENDARIO]: "Calendário Fiscal — vencimentos de obrigações por empresa (DAS, DARF, DCTF, eSocial, etc).",
 };
 
 const App: React.FC = () => {
@@ -1097,6 +1099,15 @@ const App: React.FC = () => {
                                         else if (target === 'nfse') setSearchType(SearchType.NFSE_NACIONAL);
                                         else if (target === 'apuracoes') setSearchType(SearchType.SIMPLES_NACIONAL);
                                     }}
+                                />
+                            </Suspense>
+                        )}
+
+                        {searchType === SearchType.CALENDARIO && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <CalendarioFiscal
+                                    currentUser={currentUser ?? null}
+                                    onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
                         )}

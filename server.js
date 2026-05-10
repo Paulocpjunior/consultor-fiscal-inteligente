@@ -322,6 +322,229 @@ Use **negrito** nos pontos-chave. Direto, sem rodeios.`;
     }
 });
 
+// ─── Calendario de Obrigacoes Fiscais ──────────────────────────────────────
+// GET /api/admin/calendario/:ano/:mes
+// Agrega obrigacoes de Simples + Lucro pro mes solicitado.
+
+function ultimoDiaMes(ano, mes) {
+    return new Date(ano, mes, 0).getDate();
+}
+
+function ajustarDiaUtil(ano, mes0, dia) {
+    // mes0 = 0-indexed
+    let d = new Date(ano, mes0, dia);
+    while (d.getDay() === 0 || d.getDay() === 6) {
+        d.setDate(d.getDate() + 1);
+    }
+    return d.toISOString().slice(0, 10);
+}
+
+function calcularObrigacoesEmpresa(empresa, regimeKind, ano, mes) {
+    // ano: 4 digits; mes: 1-12
+    // Retorna lista de obrigacoes pra essa empresa nesse mes
+    const obrs = [];
+    const mes0 = mes - 1;  // pro construtor Date
+
+    if (regimeKind === 'simples') {
+        // 1. DAS Simples - dia 20 do mes seguinte (referencia ao mes anterior)
+        // Ex: DAS de janeiro vence em 20 de fevereiro.
+        // Quando o usuario pede 'mes=2', mostramos DAS referente a janeiro.
+        // Logo: o DAS daquele mes solicitado vence no dia 20 desse mes
+        // (referencia eh o mes anterior).
+        const venc = ajustarDiaUtil(ano, mes0, 20);
+        const refMes = mes0 === 0 ? 12 : mes - 1;
+        const refAno = mes0 === 0 ? ano - 1 : ano;
+        obrs.push({
+            tipo: 'DAS',
+            descricao: `DAS Simples Nacional - ref. ${String(refMes).padStart(2,'0')}/${refAno}`,
+            empresaId: empresa.id,
+            empresaNome: empresa.nome,
+            empresaCnpj: empresa.cnpj,
+            anexo: empresa.anexo,
+            vencimento: venc,
+            regime: 'Simples',
+            urgencia: 'mensal',
+        });
+
+        // 2. DEFIS - 31 de marco (anual)
+        if (mes === 3) {
+            obrs.push({
+                tipo: 'DEFIS',
+                descricao: `DEFIS - Declaracao anual ano-base ${ano - 1}`,
+                empresaId: empresa.id,
+                empresaNome: empresa.nome,
+                empresaCnpj: empresa.cnpj,
+                anexo: empresa.anexo,
+                vencimento: ajustarDiaUtil(ano, mes0, 31),
+                regime: 'Simples',
+                urgencia: 'anual',
+            });
+        }
+    }
+
+    if (regimeKind === 'lucro') {
+        const regime = empresa.regime || 'Presumido';
+
+        // 3. DARF IRPJ + CSLL Lucro Presumido - ultimo dia util do mes
+        //    seguinte ao trimestre (jan/abr/jul/out -> abril/julho/out/jan)
+        if (regime === 'Presumido') {
+            // Trimestres terminam em mar/jun/set/dez
+            // DARF vence no ultimo dia util de abr/jul/out/jan
+            const mesesDarf = { 4: 1, 7: 2, 10: 3, 1: 4 };  // mes -> trimestre encerrado
+            if (mesesDarf[mes]) {
+                const trimestre = mesesDarf[mes];
+                const anoRef = mes === 1 ? ano - 1 : ano;
+                const venc = ajustarDiaUtil(ano, mes0, ultimoDiaMes(ano, mes));
+                obrs.push({
+                    tipo: 'DARF-IRPJ',
+                    descricao: `DARF IRPJ Lucro Presumido - T${trimestre}/${anoRef}`,
+                    empresaId: empresa.id,
+                    empresaNome: empresa.nome,
+                    empresaCnpj: empresa.cnpj,
+                    vencimento: venc,
+                    regime: 'Lucro Presumido',
+                    urgencia: 'trimestral',
+                });
+                obrs.push({
+                    tipo: 'DARF-CSLL',
+                    descricao: `DARF CSLL Lucro Presumido - T${trimestre}/${anoRef}`,
+                    empresaId: empresa.id,
+                    empresaNome: empresa.nome,
+                    empresaCnpj: empresa.cnpj,
+                    vencimento: venc,
+                    regime: 'Lucro Presumido',
+                    urgencia: 'trimestral',
+                });
+            }
+        }
+
+        // 4. PIS/COFINS - dia 25 do mes seguinte (Lucro)
+        const refPisMes = mes0 === 0 ? 12 : mes - 1;
+        const refPisAno = mes0 === 0 ? ano - 1 : ano;
+        obrs.push({
+            tipo: 'PIS-COFINS',
+            descricao: `DARF PIS/COFINS - ref. ${String(refPisMes).padStart(2,'0')}/${refPisAno}`,
+            empresaId: empresa.id,
+            empresaNome: empresa.nome,
+            empresaCnpj: empresa.cnpj,
+            vencimento: ajustarDiaUtil(ano, mes0, 25),
+            regime: regime === 'Real' ? 'Lucro Real' : 'Lucro Presumido',
+            urgencia: 'mensal',
+        });
+
+        // 5. DCTF Mensal - dia 15 do 2o mes seguinte
+        // DCTF de janeiro entrega ate 15 de marco. Logo, no mes solicitado,
+        // mostramos a DCTF referente ao mes anterior ao anterior.
+        const refDctfMes = mes0 <= 1 ? 12 + mes0 - 1 : mes - 2;
+        const refDctfAno = mes0 <= 1 ? ano - 1 : ano;
+        obrs.push({
+            tipo: 'DCTF',
+            descricao: `DCTF Mensal - ref. ${String(refDctfMes).padStart(2,'0')}/${refDctfAno}`,
+            empresaId: empresa.id,
+            empresaNome: empresa.nome,
+            empresaCnpj: empresa.cnpj,
+            vencimento: ajustarDiaUtil(ano, mes0, 15),
+            regime: regime === 'Real' ? 'Lucro Real' : 'Lucro Presumido',
+            urgencia: 'mensal',
+        });
+    }
+
+    // 6. eSocial + GFIP/DCTFWeb - empresas com folha (folha12 > 0)
+    const folha = empresa.folha12 || empresa.folha_12 || 0;
+    if (folha > 0) {
+        const refMes = mes0 === 0 ? 12 : mes - 1;
+        const refAno = mes0 === 0 ? ano - 1 : ano;
+        obrs.push({
+            tipo: 'ESOCIAL',
+            descricao: `eSocial / FGTS - ref. ${String(refMes).padStart(2,'0')}/${refAno}`,
+            empresaId: empresa.id,
+            empresaNome: empresa.nome,
+            empresaCnpj: empresa.cnpj,
+            vencimento: ajustarDiaUtil(ano, mes0, 7),
+            regime: regimeKind === 'simples' ? 'Simples' : (empresa.regime === 'Real' ? 'Lucro Real' : 'Lucro Presumido'),
+            urgencia: 'mensal',
+        });
+        obrs.push({
+            tipo: 'DCTFWEB',
+            descricao: `DCTFWeb - ref. ${String(refMes).padStart(2,'0')}/${refAno}`,
+            empresaId: empresa.id,
+            empresaNome: empresa.nome,
+            empresaCnpj: empresa.cnpj,
+            vencimento: ajustarDiaUtil(ano, mes0, 15),
+            regime: regimeKind === 'simples' ? 'Simples' : (empresa.regime === 'Real' ? 'Lucro Real' : 'Lucro Presumido'),
+            urgencia: 'mensal',
+        });
+    }
+
+    return obrs;
+}
+
+app.get('/api/admin/calendario/:ano/:mes', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const ano = parseInt(req.params.ano);
+        const mes = parseInt(req.params.mes);
+        if (!ano || !mes || mes < 1 || mes > 12) {
+            return res.status(400).json({ error: 'ano e mes (1-12) obrigatorios' });
+        }
+
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) {
+            adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        }
+        const db = adminMod.firestore();
+
+        const [simplesSnap, lucroSnap] = await Promise.all([
+            db.collection('simples_empresas').get(),
+            db.collection('lucro_empresas').get(),
+        ]);
+
+        const obrigacoes = [];
+        simplesSnap.forEach(d => {
+            const e = { id: d.id, ...d.data() };
+            obrigacoes.push(...calcularObrigacoesEmpresa(e, 'simples', ano, mes));
+        });
+        lucroSnap.forEach(d => {
+            const e = { id: d.id, ...d.data() };
+            obrigacoes.push(...calcularObrigacoesEmpresa(e, 'lucro', ano, mes));
+        });
+
+        // Ordena por vencimento ascendente
+        obrigacoes.sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+
+        // Estatisticas
+        const hoje = new Date().toISOString().slice(0, 10);
+        const stats = {
+            total: obrigacoes.length,
+            vencidas: obrigacoes.filter(o => o.vencimento < hoje).length,
+            proximas7Dias: obrigacoes.filter(o => {
+                if (o.vencimento < hoje) return false;
+                const venc = new Date(o.vencimento);
+                const limite = new Date(hoje);
+                limite.setDate(limite.getDate() + 7);
+                return venc <= limite;
+            }).length,
+            porTipo: obrigacoes.reduce((acc, o) => {
+                acc[o.tipo] = (acc[o.tipo] || 0) + 1;
+                return acc;
+            }, {}),
+        };
+
+        return res.json({
+            ano, mes,
+            geradoEm: new Date().toISOString(),
+            stats,
+            obrigacoes,
+            limitacoes: 'Datas calculadas excluem apenas fins de semana. Feriados nacionais e municipais NAO sao considerados — verificar no calendario oficial.',
+        });
+    } catch (err) {
+        console.error('[calendario]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Dashboard CEO — endpoint de KPIs + insights IA ─────────────────────────
 app.get('/api/admin/dashboard-ceo/kpis', async (req, res) => {
     try {
