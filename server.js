@@ -15,6 +15,7 @@ import caixaPostalRouter from './sefaz-backend/caixa-postal-routes.js';
 import dasRouter from './sefaz-backend/das-routes.js';
 import nfseNacRouter from './sefaz-backend/nfse-nacional-routes.js';
 import * as sharepoint from './sefaz-backend/sharepoint-provider.js';
+import * as sharepointSync from './sefaz-backend/sharepoint-sync-orchestrator.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -848,6 +849,112 @@ app.post('/api/admin/sharepoint/upload-relatorio', async (req, res) => {
         return res.json({ ok: true, ...result, sizeBytes: buf.length });
     } catch (err) {
         console.error('[sharepoint/upload-relatorio]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// GET /api/admin/sharepoint/sync-dry-run?cnpj=&periodo=2026-05
+//   Pre-visualizacao: lista o que SERIA sincronizado, sem subir nada.
+app.get('/api/admin/sharepoint/sync-dry-run', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { cnpj, periodo } = req.query;
+        if (!cnpj || !periodo) {
+            return res.status(400).json({ error: 'cnpj e periodo obrigatorios' });
+        }
+
+        const stats = await sharepointSync.syncEmpresaPeriodo({
+            cnpj, periodo, dryRun: true,
+        });
+        return res.json({ ok: true, ...stats });
+    } catch (err) {
+        console.error('[sharepoint/sync-dry-run]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// POST /api/admin/sharepoint/sync-empresa
+//   Body: { cnpj, periodo: 'YYYY-MM', force: bool }
+//   Sincroniza uma empresa+periodo. Idempotente (skipa o que ja foi).
+//   force=true re-uploada tudo.
+app.post('/api/admin/sharepoint/sync-empresa', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { cnpj, periodo, force = false } = req.body || {};
+        if (!cnpj || !periodo) {
+            return res.status(400).json({ error: 'cnpj e periodo obrigatorios' });
+        }
+
+        const stats = await sharepointSync.syncEmpresaPeriodo({
+            cnpj, periodo, force,
+        });
+        return res.json({ ok: true, ...stats });
+    } catch (err) {
+        console.error('[sharepoint/sync-empresa]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// POST /api/admin/sharepoint/sync-all
+//   Body: { periodo: 'YYYY-MM', force: bool, maxEmpresas: int }
+//   Sincroniza TODAS as empresas (simples + lucro) pro periodo.
+//   Usado pelo cron noturno + botao admin.
+app.post('/api/admin/sharepoint/sync-all', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { periodo, force = false, maxEmpresas = null } = req.body || {};
+        if (!periodo) return res.status(400).json({ error: 'periodo obrigatorio' });
+
+        const stats = await sharepointSync.syncAllEmpresas({
+            periodo, force, maxEmpresas,
+        });
+        return res.json({ ok: true, ...stats });
+    } catch (err) {
+        console.error('[sharepoint/sync-all]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// GET /api/admin/sharepoint/sync-log?limit=10
+//   Retorna as N ultimas execucoes do cron (ou manual via sync-all).
+app.get('/api/admin/sharepoint/sync-log', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const limit = parseInt(req.query.limit) || 10;
+        const snap = await db.collection('sharepoint_sync_log')
+            .orderBy('createdAt', 'desc')
+            .limit(limit)
+            .get();
+
+        const logs = [];
+        snap.forEach(s => {
+            const d = s.data();
+            logs.push({
+                id: s.id,
+                periodo: d.periodo,
+                empresasProcessadas: d.empresasProcessadas,
+                empresasComErro: d.empresasComErro,
+                totalDocsSincronizados: d.totalDocsSincronizados,
+                totalDocsJaSincronizados: d.totalDocsJaSincronizados,
+                totalDocsSemXml: d.totalDocsSemXml,
+                totalDocsErros: d.totalDocsErros,
+                startedAt: d.startedAt,
+                finishedAt: d.finishedAt,
+                empresasCount: (d.empresas || []).length,
+            });
+        });
+
+        return res.json({ ok: true, logs });
+    } catch (err) {
+        console.error('[sharepoint/sync-log]', err);
         return res.status(500).json({ ok: false, error: err.message });
     }
 });
