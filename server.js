@@ -14,6 +14,7 @@ import spedFiscalRouter from './sefaz-backend/sped-fiscal-routes.js';
 import caixaPostalRouter from './sefaz-backend/caixa-postal-routes.js';
 import dasRouter from './sefaz-backend/das-routes.js';
 import nfseNacRouter from './sefaz-backend/nfse-nacional-routes.js';
+import * as sharepoint from './sefaz-backend/sharepoint-provider.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -641,6 +642,69 @@ ${canal === 'whatsapp' ? 'Comece direto sem assunto.' : 'Comece com ASSUNTO: ...
     } catch (err) {
         console.error('[das/cobranca-ia]', err);
         return res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── SharePoint (Microsoft Graph API) ─────────────────────────────────────
+// Rotas administrativas pra configurar/testar acesso ao SharePoint.
+// Permissao: apenas admin.
+
+// GET /api/admin/sharepoint/test-auth
+//   Valida credenciais OAuth2 + resolve site ID. Nao expoe secret.
+app.get('/api/admin/sharepoint/test-auth', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const info = await sharepoint.testAuth();
+        return res.json({ ok: true, info });
+    } catch (err) {
+        console.error('[sharepoint/test-auth]', err);
+        return res.status(500).json({
+            ok: false,
+            error: err.message,
+            hint: 'Se erro for "invalid_client", o CLIENT_SECRET no Secret Manager pode estar incorreto ou expirado.',
+        });
+    }
+});
+
+// POST /api/admin/sharepoint/grant-site
+//   Autoriza este app a ler o site especifico. Roda 1 vez apos
+//   configurar permissoes Sites.Selected no Azure.
+//   Idempotente — chamar 2x cria 2 permissoes identicas, sem dano.
+app.post('/api/admin/sharepoint/grant-site', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const permission = await sharepoint.grantAppPermissionOnSite();
+        return res.json({
+            ok: true,
+            permission,
+            message: 'App autorizado a ler o site. Daqui pra frente, list-files/list-folders devem funcionar.',
+        });
+    } catch (err) {
+        console.error('[sharepoint/grant-site]', err);
+        return res.status(500).json({
+            ok: false,
+            error: err.message,
+            hint: 'Se 403 Insufficient privileges, o app precisa de Sites.FullControl.All temporariamente OU um admin SharePoint precisa autorizar via portal.',
+        });
+    }
+});
+
+// GET /api/admin/sharepoint/list-permissions
+//   Lista permissoes ativas do app no site (debug do grant-site).
+app.get('/api/admin/sharepoint/list-permissions', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const perms = await sharepoint.listSitePermissions();
+        return res.json({ ok: true, perms });
+    } catch (err) {
+        console.error('[sharepoint/list-permissions]', err);
+        return res.status(500).json({ ok: false, error: err.message });
     }
 });
 
