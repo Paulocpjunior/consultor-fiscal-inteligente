@@ -721,6 +721,56 @@ app.get('/api/admin/sharepoint/list-root', async (req, res) => {
     }
 });
 
+// POST /api/admin/sharepoint/test-write
+//   Cria pasta /Empresas/_test/ + arquivo dentro pra validar escrita.
+app.post('/api/admin/sharepoint/test-write', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const testPath = 'Empresas/_test_cfi';
+        const fileName = `test_${Date.now()}.txt`;
+        const fullPath = `${testPath}/${fileName}`;
+        const conteudo = `Teste de escrita CFI - ${new Date().toISOString()}\n` +
+                         `Se voce esta lendo isso, o app conseguiu escrever no SharePoint.`;
+
+        // 1. Garante pasta
+        const folder = await sharepoint.ensureFolder(testPath);
+        // 2. Upload arquivo
+        const file = await sharepoint.uploadSmallFile(fullPath, conteudo, 'text/plain');
+
+        return res.json({
+            ok: true,
+            message: 'Escrita funcionou!',
+            folderCreated: { id: folder.id, name: folder.name, webUrl: folder.webUrl },
+            fileCreated: { id: file.id, name: file.name, webUrl: file.webUrl, size: file.size },
+            verification: `Acesse ${folder.webUrl} pra ver`,
+        });
+    } catch (err) {
+        console.error('[sharepoint/test-write]', err);
+        return res.status(500).json({
+            ok: false,
+            error: err.message,
+            hint: 'Se 403 accessDenied, precisa Files.ReadWrite.All no Azure + role write na permissao do site.',
+        });
+    }
+});
+
+// DELETE /api/admin/sharepoint/cleanup-test
+//   Remove pasta de teste apos validacao.
+app.delete('/api/admin/sharepoint/cleanup-test', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const result = await sharepoint.deleteItem('Empresas/_test_cfi');
+        return res.json({ ok: true, ...result });
+    } catch (err) {
+        console.error('[sharepoint/cleanup-test]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // GET /api/admin/sharepoint/list-folder?path=Pasta1/Subpasta
 //   Lista items de pasta especifica.
 app.get('/api/admin/sharepoint/list-folder', async (req, res) => {

@@ -251,3 +251,88 @@ export async function listFolderItems(folderPath) {
     const resp = await graphFetch(path);
     return resp.json();
 }
+
+// ── Escrita (Files.ReadWrite.All) ──────────────────────────────────────────
+
+/**
+ * Garante que uma pasta exista no SharePoint (cria recursivamente se faltar).
+ * @param {string} folderPath caminho relativo a raiz do drive (ex: "Empresas/12345/XMLs/2026-05")
+ * @returns {object} metadata da pasta final
+ */
+export async function ensureFolder(folderPath) {
+    const site = await getSiteId();
+    const clean = (folderPath || '').replace(/^\/+/, '').replace(/\/+$/, '');
+    if (!clean) throw new Error('folderPath vazio');
+
+    const segments = clean.split('/').filter(Boolean);
+    let parentPath = '';
+
+    for (const seg of segments) {
+        const currentPath = parentPath ? `${parentPath}/${seg}` : seg;
+
+        // Tenta GET no caminho
+        try {
+            const r = await graphFetch(`/sites/${site.id}/drive/root:/${encodeURIComponent(currentPath)}`);
+            const data = await r.json();
+            if (data.id) {
+                parentPath = currentPath;
+                continue;
+            }
+        } catch (e) {
+            // Nao existe — cria
+        }
+
+        // Cria filho da pasta pai
+        const createUrl = parentPath
+            ? `/sites/${site.id}/drive/root:/${encodeURIComponent(parentPath)}:/children`
+            : `/sites/${site.id}/drive/root/children`;
+
+        const r = await graphFetch(createUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: seg,
+                folder: {},
+                '@microsoft.graph.conflictBehavior': 'replace',
+            }),
+        });
+        await r.json();
+        parentPath = currentPath;
+    }
+
+    // Retorna metadata final
+    const final = await graphFetch(`/sites/${site.id}/drive/root:/${encodeURIComponent(clean)}`);
+    return final.json();
+}
+
+/**
+ * Upload de arquivo pequeno (<4MB) via PUT.
+ * @param {string} filePath caminho completo (ex: "Empresas/12345/XMLs/2026-05/nota.xml")
+ * @param {Buffer|string} content
+ * @param {string} mimeType
+ */
+export async function uploadSmallFile(filePath, content, mimeType = 'application/octet-stream') {
+    const site = await getSiteId();
+    const clean = filePath.replace(/^\/+/, '');
+    const url = `/sites/${site.id}/drive/root:/${encodeURIComponent(clean)}:/content`;
+
+    const buf = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf-8');
+
+    const resp = await graphFetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': mimeType },
+        body: buf,
+    });
+    return resp.json();
+}
+
+/**
+ * Remove arquivo ou pasta vazia.
+ */
+export async function deleteItem(itemPath) {
+    const site = await getSiteId();
+    const clean = itemPath.replace(/^\/+/, '');
+    const url = `/sites/${site.id}/drive/root:/${encodeURIComponent(clean)}`;
+    await graphFetch(url, { method: 'DELETE' });
+    return { deleted: true, path: clean };
+}
