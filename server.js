@@ -756,6 +756,102 @@ app.post('/api/admin/sharepoint/test-write', async (req, res) => {
     }
 });
 
+// GET /api/admin/sharepoint/check-folder?cnpj=...&tipo=XMLs&periodo=2026-05
+//   Verifica se uma pasta de empresa existe (idempotencia).
+app.get('/api/admin/sharepoint/check-folder', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { cnpj, tipo = 'XMLs', periodo } = req.query;
+        if (!cnpj) return res.status(400).json({ error: 'cnpj obrigatorio' });
+
+        const folderPath = sharepoint.buildEmpresaPath(cnpj, tipo, periodo);
+        const meta = await sharepoint.itemExists(folderPath);
+        return res.json({
+            ok: true,
+            exists: !!meta,
+            folderPath,
+            metadata: meta ? { id: meta.id, name: meta.name, webUrl: meta.webUrl } : null,
+        });
+    } catch (err) {
+        console.error('[sharepoint/check-folder]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// GET /api/admin/sharepoint/empresa-folder?cnpj=...
+//   Retorna URL clicavel pra pasta da empresa (pra UI).
+app.get('/api/admin/sharepoint/empresa-folder', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { cnpj } = req.query;
+        if (!cnpj) return res.status(400).json({ error: 'cnpj obrigatorio' });
+
+        const url = await sharepoint.getEmpresaFolderUrl(cnpj);
+        return res.json({
+            ok: true,
+            exists: !!url,
+            webUrl: url,
+        });
+    } catch (err) {
+        console.error('[sharepoint/empresa-folder]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// POST /api/admin/sharepoint/upload-xml
+//   Body: { cnpj, periodo: 'YYYY-MM', fileName: 'NFe123.xml', xmlContent: '<xml>...</xml>' }
+//   Upload manual de XML pra empresa (usado depois pelo cron).
+app.post('/api/admin/sharepoint/upload-xml', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { cnpj, periodo, fileName, xmlContent } = req.body || {};
+        if (!cnpj || !periodo || !fileName || !xmlContent) {
+            return res.status(400).json({
+                error: 'campos obrigatorios: cnpj, periodo (YYYY-MM), fileName, xmlContent',
+            });
+        }
+
+        const result = await sharepoint.uploadXmlParaEmpresa(cnpj, periodo, fileName, xmlContent);
+        return res.json({ ok: true, ...result });
+    } catch (err) {
+        console.error('[sharepoint/upload-xml]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// POST /api/admin/sharepoint/upload-relatorio
+//   Body: { cnpj, subPath: 'PGDAS/2026-05.pdf', content: base64, mimeType: 'application/pdf' }
+//   Upload de relatorio pra empresa.
+app.post('/api/admin/sharepoint/upload-relatorio', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+
+        const { cnpj, subPath, content, mimeType = 'application/pdf', encoding = 'base64' } = req.body || {};
+        if (!cnpj || !subPath || !content) {
+            return res.status(400).json({
+                error: 'campos obrigatorios: cnpj, subPath, content (base64 ou utf-8)',
+            });
+        }
+
+        const buf = encoding === 'base64'
+            ? Buffer.from(content, 'base64')
+            : Buffer.from(content, 'utf-8');
+
+        const result = await sharepoint.uploadRelatorioParaEmpresa(cnpj, subPath, buf, mimeType);
+        return res.json({ ok: true, ...result, sizeBytes: buf.length });
+    } catch (err) {
+        console.error('[sharepoint/upload-relatorio]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // DELETE /api/admin/sharepoint/cleanup-test
 //   Remove pasta de teste apos validacao.
 app.delete('/api/admin/sharepoint/cleanup-test', async (req, res) => {

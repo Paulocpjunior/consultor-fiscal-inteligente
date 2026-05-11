@@ -336,3 +336,190 @@ export async function deleteItem(itemPath) {
     await graphFetch(url, { method: 'DELETE' });
     return { deleted: true, path: clean };
 }
+
+// ── Helpers de caminho ─────────────────────────────────────────────────────
+
+/**
+ * Normaliza CNPJ: remove pontuacao, garante 14 digitos.
+ * Retorna formato '12.345.678/0001-99' (com pontuacao) pra path mais legivel.
+ */
+export function sanitizeCnpj(cnpj) {
+    if (!cnpj) throw new Error('CNPJ vazio');
+    const num = String(cnpj).replace(/\D/g, '');
+    if (num.length !== 14) throw new Error(`CNPJ invalido (${num.length} digitos): ${cnpj}`);
+    return `${num.slice(0,2)}.${num.slice(2,5)}.${num.slice(5,8)}/${num.slice(8,12)}-${num.slice(12)}`;
+}
+
+/**
+ * Constroi caminho padronizado pra documentos de uma empresa.
+ * @param {string} cnpj CNPJ (com ou sem pontuacao)
+ * @param {string} tipo 'XMLs' | 'PDFs' | 'Relatorios' | 'Planilhas'
+ * @param {string} periodo 'YYYY-MM' (opcional)
+ * @returns {string} ex: 'Empresas/12.345.678-0001-99/XMLs/2026-05'
+ */
+export function buildEmpresaPath(cnpj, tipo, periodo = null) {
+    const TIPOS_VALIDOS = ['XMLs', 'PDFs', 'Relatorios', 'Planilhas'];
+    if (!TIPOS_VALIDOS.includes(tipo)) {
+        throw new Error(`Tipo invalido: ${tipo}. Use um de: ${TIPOS_VALIDOS.join(', ')}`);
+    }
+    const cnpjLimpo = sanitizeCnpj(cnpj).replace(/\//g, '-');
+    let path = `Empresas/${cnpjLimpo}/${tipo}`;
+    if (periodo) {
+        if (!/^\d{4}-\d{2}$/.test(periodo)) {
+            throw new Error(`Periodo invalido: ${periodo}. Use YYYY-MM`);
+        }
+        path += `/${periodo}`;
+    }
+    return path;
+}
+
+// ── Checagem idempotente ───────────────────────────────────────────────────
+
+/**
+ * Verifica se um item (pasta ou arquivo) existe.
+ * @returns {object|null} metadata se existir, null se nao
+ */
+export async function itemExists(itemPath) {
+    const site = await getSiteId();
+    const clean = itemPath.replace(/^\/+/, '');
+    const url = `/sites/${site.id}/drive/root:/${encodeURIComponent(clean)}`;
+    try {
+        const resp = await graphFetch(url);
+        return resp.json();
+    } catch (err) {
+        if (err.message && err.message.includes('404')) return null;
+        throw err;
+    }
+}
+
+export async function getItemMetadata(itemPath) {
+    return itemExists(itemPath);
+}
+
+// ── Upload de arquivo grande (>4MB) via upload session ─────────────────────
+
+/**
+ * Upload de arquivo grande em chunks de 5MB.
+ */
+export async function uploadLargeFile(filePath, buffer, mimeType = 'application/octet-stream') {
+    const site = await getSiteId();
+    const clean = filePath.replace(/^\/+/, '');
+
+    const sessionUrl = `/sites/${site.id}/drive/root:/${encodeURIComponent(clean)}:/createUploadSession`;
+    const sessionResp = await graphFetch(sessionUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            item: { '@microsoft.graph.conflictBehavior': 'replace' },
+        }),
+    });
+    const session = await sessionResp.json();
+    if (!session.uploadUrl) throw new Error('Falha ao criar upload session');
+
+    const CHUNK_SIZE = 5 * 1024 * 1024;
+    const total = buffer.length;
+    let offset = 0;
+    let lastResp = null;
+
+    while (offset < total) {
+        const end = Math.min(offset + CHUNK_SIZE, total);
+        const chunk = buffer.slice(offset, end);
+
+        const r = await fetch(session.uploadUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Length': String(chunk.length),
+                'Content-Range': `bytes ${offset}-${end - 1}/${total}`,
+            },
+            body: chunk,
+        });
+
+        if (!r.ok) {
+            const txt = await r.text().catch(() => '');
+            throw new Error(`Chunk upload failed at offset ${offset}: ${r.status} ${txt.slice(0, 200)}`);
+        }
+
+        lastResp = await r.json().catch(() => ({}));
+        offset = end;
+    }
+
+    return lastResp;
+}
+
+/**
+ * Upload inteligente: escolhe automaticamente entre small (<4MB) e large (>=4MB).
+ */
+export async function uploadFile(filePath, content, mimeType = 'application/octet-stream') {
+    const buf = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf-8');
+    const THRESHOLD = 4 * 1024 * 1024;
+    if (buf.length < THRESHOLD) {
+        return uploadSmallFile(filePath, buf, mimeType);
+    }
+    return uploadLargeFile(filePath, buf, mimeType);
+}
+
+// ── Atalhos de alto nivel ──────────────────────────────────────────────────
+
+/**
+ * Upload de XML pra empresa+periodo. Cria pastas automaticamente.
+ * Idempotente.
+ */
+export async function uploadXmlParaEmpresa(cnpj, periodo, fileName, xmlContent) {
+    const folderPath = buildEmpresaPath(cnpj, 'XMLs', periodo);
+    const filePath = `${folderPath}/${fileName}`;
+
+    const existing = await itemExists(filePath);
+    if (existing && existing.id) {
+        return { url: existing.webUrl, alreadyExisted: true, metadata: existing };
+    }
+
+    await ensureFolder(folderPath);
+    const result = await uploadFile(filePath, xmlContent, 'application/xml');
+    return { url: result.webUrl, alreadyExisted: false, metadata: result };
+}
+
+/**
+ * Upload de PDF pra empresa+periodo (DANFe, NFSe PDF, etc).
+ */
+export async function uploadPdfParaEmpresa(cnpj, periodo, fileName, pdfBuffer) {
+    const folderPath = buildEmpresaPath(cnpj, 'PDFs', periodo);
+    const filePath = `${folderPath}/${fileName}`;
+
+    const existing = await itemExists(filePath);
+    if (existing && existing.id) {
+        return { url: existing.webUrl, alreadyExisted: true, metadata: existing };
+    }
+
+    await ensureFolder(folderPath);
+    const result = await uploadFile(filePath, pdfBuffer, 'application/pdf');
+    return { url: result.webUrl, alreadyExisted: false, metadata: result };
+}
+
+/**
+ * Upload de relatorio pra empresa (organizado por subpath dentro de Relatorios/).
+ */
+export async function uploadRelatorioParaEmpresa(cnpj, subPath, content, mimeType) {
+    const folderPath = buildEmpresaPath(cnpj, 'Relatorios');
+    const filePath = `${folderPath}/${subPath}`;
+
+    const parts = subPath.split('/');
+    if (parts.length > 1) {
+        const subFolder = parts.slice(0, -1).join('/');
+        await ensureFolder(`${folderPath}/${subFolder}`);
+    } else {
+        await ensureFolder(folderPath);
+    }
+
+    const result = await uploadFile(filePath, content, mimeType);
+    return { url: result.webUrl, metadata: result };
+}
+
+/**
+ * URL clicavel pra pasta principal da empresa no SharePoint.
+ */
+export async function getEmpresaFolderUrl(cnpj) {
+    const folderPath = `Empresas/${sanitizeCnpj(cnpj).replace(/\//g, '-')}`;
+    const existing = await itemExists(folderPath);
+    if (!existing) return null;
+    return existing.webUrl;
+}
