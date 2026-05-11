@@ -10,10 +10,12 @@
 import admin from 'firebase-admin';
 import * as sharepoint from './sharepoint-provider.js';
 
-const db = admin.firestore();
-const storage = admin.storage();
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.appspot.com`;
+
+// Lazy init — admin.initializeApp() roda em server.js antes deste modulo ser usado
+function getDb() { return admin.firestore(); }
+function getStorage() { return admin.storage(); }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -57,7 +59,7 @@ function buildFileName(doc) {
 async function baixarXmlDoStorage(storagePath) {
     if (!storagePath) return null;
     try {
-        const bucket = storage.bucket(STORAGE_BUCKET);
+        const bucket = getStorage().bucket(STORAGE_BUCKET);
         const file = bucket.file(storagePath);
         const [exists] = await file.exists();
         if (!exists) return null;
@@ -98,7 +100,7 @@ export async function syncEmpresaPeriodo({ cnpj, periodo, force = false, dryRun 
 
     // 1. Busca documentos_fiscais filtrados por empresa
     // (Firestore nao suporta startsWith, entao filtra por mes inteiro depois)
-    const snap = await db.collection('documentos_fiscais')
+    const snap = await getDb().collection('documentos_fiscais')
         .where('empresaCnpj', '==', cnpjLimpo)
         .get();
 
@@ -215,7 +217,7 @@ export async function syncAllEmpresas({ periodo, maxEmpresas = null, force = fal
     const empresasInfo = new Map();  // cnpj -> { id, nome, regime }
 
     for (const colecao of ['simples_empresas', 'lucro_empresas']) {
-        const snap = await db.collection(colecao).get();
+        const snap = await getDb().collection(colecao).get();
         snap.forEach(s => {
             const d = s.data();
             const cnpj = (d.cnpj || '').replace(/\D/g, '');
@@ -267,7 +269,7 @@ export async function syncAllEmpresas({ periodo, maxEmpresas = null, force = fal
     // 3. Persiste log de execucao (pra UI mostrar)
     if (!dryRun) {
         try {
-            await db.collection('sharepoint_sync_log').add({
+            await getDb().collection('sharepoint_sync_log').add({
                 ...runStats,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
