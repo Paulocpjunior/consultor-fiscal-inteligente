@@ -693,6 +693,49 @@ app.post('/api/admin/sharepoint/grant-site', async (req, res) => {
     }
 });
 
+// GET /api/admin/sharepoint/list-drives
+//   Lista bibliotecas de documentos do site.
+app.get('/api/admin/sharepoint/list-drives', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+        const drives = await sharepoint.listDrives();
+        return res.json({ ok: true, drives });
+    } catch (err) {
+        console.error('[sharepoint/list-drives]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// GET /api/admin/sharepoint/list-root
+//   Lista raiz do drive default (pastas e arquivos no nivel raiz).
+app.get('/api/admin/sharepoint/list-root', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+        const items = await sharepoint.listRootItems();
+        return res.json({ ok: true, items });
+    } catch (err) {
+        console.error('[sharepoint/list-root]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// GET /api/admin/sharepoint/list-folder?path=Pasta1/Subpasta
+//   Lista items de pasta especifica.
+app.get('/api/admin/sharepoint/list-folder', async (req, res) => {
+    try {
+        const role = req.headers['x-user-role'] || 'colaborador';
+        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+        const path = req.query.path || '/';
+        const items = await sharepoint.listFolderItems(path);
+        return res.json({ ok: true, path, items });
+    } catch (err) {
+        console.error('[sharepoint/list-folder]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // GET /api/admin/sharepoint/list-permissions
 //   Lista permissoes ativas do app no site (debug do grant-site).
 app.get('/api/admin/sharepoint/list-permissions', async (req, res) => {

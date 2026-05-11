@@ -215,3 +215,39 @@ export async function testAuth() {
     info.elapsedMs = Date.now() - start;
     return info;
 }
+
+// ── Drives + Arquivos (teste de funcionalidade real) ─────────────────────
+
+/**
+ * Lista os drives (bibliotecas de documentos) do site.
+ * Em SharePoint, cada site tem 1+ drive (geralmente 'Documents' por padrao).
+ */
+export async function listDrives() {
+    const site = await getSiteId();
+    const resp = await graphFetch(`/sites/${site.id}/drives`);
+    const data = await resp.json();
+    return data;
+}
+
+/**
+ * Lista o conteudo (pastas + arquivos) da raiz do drive default.
+ */
+export async function listRootItems() {
+    const site = await getSiteId();
+    const resp = await graphFetch(`/sites/${site.id}/drive/root/children`);
+    return resp.json();
+}
+
+/**
+ * Lista items de uma pasta especifica (path estilo /Pasta1/Subpasta).
+ */
+export async function listFolderItems(folderPath) {
+    const site = await getSiteId();
+    // path eh relativo a raiz do drive default. URL-encoded.
+    const clean = (folderPath || '/').replace(/^\/+/, '').replace(/\/+$/, '');
+    const path = clean
+        ? `/sites/${site.id}/drive/root:/${encodeURIComponent(clean)}:/children`
+        : `/sites/${site.id}/drive/root/children`;
+    const resp = await graphFetch(path);
+    return resp.json();
+}
