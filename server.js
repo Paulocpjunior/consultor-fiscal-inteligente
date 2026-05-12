@@ -16,6 +16,7 @@ import dasRouter from './sefaz-backend/das-routes.js';
 import nfseNacRouter from './sefaz-backend/nfse-nacional-routes.js';
 import * as sharepoint from './sefaz-backend/sharepoint-provider.js';
 import * as sharepointSync from './sefaz-backend/sharepoint-sync-orchestrator.js';
+import certEmpresaRouter from './sefaz-backend/cert-empresa-routes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const __filename = fileURLToPath(import.meta.url);
