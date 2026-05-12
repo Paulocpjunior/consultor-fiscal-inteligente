@@ -29,13 +29,22 @@ function getStorage() { ensureAdmin(); return admin.storage(); }
  * Tenta competencia (NFSe), depois dhEmi (NFe).
  */
 function extrairPeriodo(doc) {
+    // 1. competencia ISO: '2026-04' ou '2026-04-...'
     if (doc.competencia && /^\d{4}-\d{2}/.test(doc.competencia)) {
         return doc.competencia.slice(0, 7);
     }
+    // 2. competencia BR curta: '3/2026' ou '03/2026'
+    if (doc.competencia) {
+        const mc = String(doc.competencia).match(/^(\d{1,2})\/(\d{4})$/);
+        if (mc) return `${mc[2]}-${mc[1].padStart(2, '0')}`;
+    }
+    // 3. dhEmi ISO: '2026-04-15T10:30:00-03:00'
     if (doc.dhEmi) {
-        // dhEmi formato: 2026-04-15T10:30:00-03:00
-        const m = String(doc.dhEmi).match(/^(\d{4})-(\d{2})/);
-        if (m) return `${m[1]}-${m[2]}`;
+        const m1 = String(doc.dhEmi).match(/^(\d{4})-(\d{2})/);
+        if (m1) return `${m1[1]}-${m1[2]}`;
+        // 4. dhEmi BR: '30/03/2026 12:58:14'
+        const m2 = String(doc.dhEmi).match(/^\d{1,2}\/(\d{1,2})\/(\d{4})/);
+        if (m2) return `${m2[2]}-${m2[1].padStart(2, '0')}`;
     }
     return null;
 }
