@@ -19,23 +19,24 @@ const HTTP_TIMEOUT_MS = 60_000;
 function montaEnvelope({ cnpj, ultNSU = '0' }) {
   const cnpjNum = String(cnpj).replace(/\D/g, '').padStart(14, '0');
   const nsu15 = String(ultNSU).replace(/\D/g, '').padStart(15, '0');
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
-  <soap12:Body>
-    <nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
-      <nfeDadosMsg>
-        <distDFeInt versao="${VERSAO}" xmlns="http://www.portalfiscal.inf.br/nfe">
-          <tpAmb>${TP_AMB}</tpAmb>
-          <cUFAutor>${C_UF_AUTOR}</cUFAutor>
-          <CNPJ>${cnpjNum}</CNPJ>
-          <distNSU>
-            <ultNSU>${nsu15}</ultNSU>
-          </distNSU>
-        </distDFeInt>
-      </nfeDadosMsg>
-    </nfeDistDFeInteresse>
-  </soap12:Body>
-</soap12:Envelope>`;
+  // IMPORTANTE: XML minificado em uma linha. SEFAZ rejeita whitespace
+  // entre elementos complexos com cStat 215 (Falha no esquema xml).
+  // Tambem usamos xmlns explicito em nfeDadosMsg por precaucao.
+  return '<?xml version="1.0" encoding="UTF-8"?>'
+    + '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
+    + '<soap12:Body>'
+    + '<nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">'
+    + '<nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">'
+    + `<distDFeInt versao="${VERSAO}" xmlns="http://www.portalfiscal.inf.br/nfe">`
+    + `<tpAmb>${TP_AMB}</tpAmb>`
+    + `<cUFAutor>${C_UF_AUTOR}</cUFAutor>`
+    + `<CNPJ>${cnpjNum}</CNPJ>`
+    + `<distNSU><ultNSU>${nsu15}</ultNSU></distNSU>`
+    + '</distDFeInt>'
+    + '</nfeDadosMsg>'
+    + '</nfeDistDFeInteresse>'
+    + '</soap12:Body>'
+    + '</soap12:Envelope>';
 }
 
 function postSefaz(envelope, pfxBuffer, password) {
