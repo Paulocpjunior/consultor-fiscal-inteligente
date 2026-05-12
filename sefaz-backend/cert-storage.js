@@ -99,9 +99,17 @@ function extrairMetadadosCert(pfxBuffer, password) {
         .map(a => `${a.shortName || a.name}=${a.value}`)
         .join(', ');
 
-    // CNPJ extraido do CN ou subjectAltName
-    const cnpjMatch = subjectStr.match(/\b(\d{14})\b/);
-    const cnpj = cnpjMatch ? cnpjMatch[1] : null;
+    // CNPJ extraido especificamente do CN (Common Name).
+    // Em certs PJ ICP-Brasil, o CN tem formato 'RAZAO SOCIAL:CNPJ'.
+    // Outros campos (OU, etc) podem ter CNPJ do responsavel - nao confundir.
+    const cnAttr = cert.subject.attributes.find(a => (a.shortName === 'CN' || a.name === 'commonName'));
+    const cnValue = cnAttr?.value || '';
+    const cnpjFromCN = cnValue.match(/:(\d{14})\b/);
+    let cnpj = cnpjFromCN ? cnpjFromCN[1] : null;
+    if (!cnpj) {
+        const fallback = cnValue.match(/\b(\d{14})\b/);
+        cnpj = fallback ? fallback[1] : null;
+    }
 
     // Fingerprint SHA-256
     const md = forge.md.sha256.create();
