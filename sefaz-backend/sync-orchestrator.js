@@ -84,10 +84,21 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
   let xMotivoFinal = null;
   let rateLimited = false;
 
+  // Tenta carregar cert especifico da empresa; fallback pro cert do escritorio
+  let certOverride = null;
+  let fonteCert = 'escritorio';
+  try {
+    certOverride = await loadCertEmpresa(empresaId);
+    if (certOverride) fonteCert = 'empresa';
+  } catch (e) {
+    console.warn(`[sync-orchestrator] erro carregando cert empresa ${empresaId}:`, e.message);
+  }
+  console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} cert=${fonteCert}`);
+
   try {
     while (pagina < MAX_PAGINAS) {
       pagina++;
-      const result = await consultaDistDFe({ cnpj: cnpjNum, ultNSU });
+      const result = await consultaDistDFeComCert({ cnpj: cnpjNum, ultNSU, certOverride });
       cStatFinal = result.cStat;
       xMotivoFinal = result.xMotivo;
 
