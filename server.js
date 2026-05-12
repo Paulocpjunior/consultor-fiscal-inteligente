@@ -2241,9 +2241,26 @@ const conteudo = req.file.buffer.toString('utf-8');
     } catch(err) { return res.status(500).json({ erro: err.message||'Erro ao processar arquivo' }); }
 });
 // ────────────────────────────────────────────────────────────────────────────
-app.use(express.static(join(__dirname, 'dist'), { maxAge: '1y', index: 'index.html' }));
+app.use(express.static(join(__dirname, 'dist'), {
+    index: 'index.html',
+    maxAge: '1y',
+    setHeaders: (res, filePath) => {
+        // index.html e version.json NUNCA cacheam — UpdateBanner depende disso
+        if (filePath.endsWith('index.html') || filePath.endsWith('version.json')) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+        } else {
+            // Assets versionados (com hash no filename) podem cachear 1 ano
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+    },
+}));
 app.get('/{*splat}', (req, res) => {
     if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not found' });
+    // SPA fallback: NUNCA cachear (cada request precisa pegar o index.html freshly)
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
     res.sendFile(join(__dirname, 'dist', 'index.html'));
 });
 
