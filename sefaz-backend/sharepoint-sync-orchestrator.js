@@ -13,9 +13,14 @@ import * as sharepoint from './sharepoint-provider.js';
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.appspot.com`;
 
-// Lazy init — admin.initializeApp() roda em server.js antes deste modulo ser usado
-function getDb() { return admin.firestore(); }
-function getStorage() { return admin.storage(); }
+// Lazy init — segue padrao dos outros orchestrators do projeto.
+function ensureAdmin() {
+    if (!admin.apps.length) {
+        admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    }
+}
+function getDb() { ensureAdmin(); return admin.firestore(); }
+function getStorage() { ensureAdmin(); return admin.storage(); }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 

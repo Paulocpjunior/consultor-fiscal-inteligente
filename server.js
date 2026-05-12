@@ -929,6 +929,11 @@ app.get('/api/admin/sharepoint/sync-log', async (req, res) => {
         if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
 
         const limit = parseInt(req.query.limit) || 10;
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) {
+            adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        }
+        const db = adminMod.firestore();
         const snap = await db.collection('sharepoint_sync_log')
             .orderBy('createdAt', 'desc')
             .limit(limit)
