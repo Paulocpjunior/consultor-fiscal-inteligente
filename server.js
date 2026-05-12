@@ -30,6 +30,7 @@ app.use('/api/admin/sped-fiscal', spedFiscalRouter);
 app.use('/api/admin/caixa-postal', caixaPostalRouter);
 app.use('/api/admin/das', dasRouter);
 app.use('/api/admin/nfse-nacional', nfseNacRouter);
+app.use('/api/admin/cert-empresa', certEmpresaRouter);
 
 const PORT = process.env.PORT || 8080;
 
