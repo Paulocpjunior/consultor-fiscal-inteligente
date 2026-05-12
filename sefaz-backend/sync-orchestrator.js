@@ -4,7 +4,8 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
-import { consultaDistDFe } from './sefaz-client.js';
+import { consultaDistDFe, consultaDistDFeComCert } from './sefaz-client.js';
+import { loadCertEmpresa } from './cert-storage.js';
 import { importarXmlSefaz, registrarErroSefaz } from './xml-importer.js';
 
 const LOCK_TTL_MS = 60 * 60 * 1000; // 1 hora

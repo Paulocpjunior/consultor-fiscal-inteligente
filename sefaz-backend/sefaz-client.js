@@ -89,8 +89,12 @@ export function descomprimirDocZip(base64) {
   return zlib.gunzipSync(buf).toString('utf-8');
 }
 
-export async function consultaDistDFe({ cnpj, ultNSU = '0' }) {
-  let cert = await loadCertificate();
+/**
+ * Variante que aceita um certificado especifico (da empresa).
+ * Se certOverride for null, usa loadCertificate() (cert do escritorio).
+ */
+export async function consultaDistDFeComCert({ cnpj, ultNSU = '0', certOverride = null }) {
+  let cert = certOverride || await loadCertificate();
   const envelope = montaEnvelope({ cnpj, ultNSU });
 
   // DEBUG TEMPORARIO — investigar cStat 215
@@ -131,4 +135,9 @@ export async function consultaDistDFe({ cnpj, ultNSU = '0' }) {
     ultNSU: parsed.ultNSU, maxNSU: parsed.maxNSU, dhResp: parsed.dhResp,
     xmls, rateLimited: parsed.cStat === '656',
   };
+}
+
+// Wrapper retrocompativel — usa cert do escritorio (legado)
+export async function consultaDistDFe({ cnpj, ultNSU = '0' }) {
+    return consultaDistDFeComCert({ cnpj, ultNSU, certOverride: null });
 }
