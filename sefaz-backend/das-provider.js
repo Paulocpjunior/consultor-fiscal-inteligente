@@ -13,6 +13,8 @@
 
 const MODE = process.env.DAS_MODE || 'mock';
 
+import { invokeIntegraContador } from './serpro-client.js';
+
 // Helpers ─────────────────────────────────────────────────────────────────
 function calcularDigitoBarras(c44) {
     // Calculo simplificado de DV — modulo 10 do FEBRABAN
@@ -90,18 +92,95 @@ class MockProvider {
     }
 }
 
-// ── SERPRO Provider (skeleton) ──────────────────────────────────────────────
+// ── SERPRO Provider ────────────────────────────────────────────────────────
+// Chama Integra Contador via serpro-client.js. Pré-requisitos:
+//   - SERPRO_CONSUMER_KEY, SERPRO_CONSUMER_SECRET, SERPRO_CONTRATANTE_CNPJ env vars
+//   - Contrato Integra Contador ativo na Loja SERPRO (PGDASD)
+//   - Procuração eletrônica e-CAC da empresa cliente para a SP Contábil
+//
+// Para validar sem credenciais: SERPRO_DRY_RUN=1 (resposta simulada).
 
 class SerproProvider {
     constructor() {
-        throw new Error(
-            'SerproProvider DAS ainda nao implementado. ' +
-            'Pre-requisitos: contrato Integra Contador na Loja SERPRO + e-CNPJ A1 SP Contabil. ' +
-            'Quando ativar, defina DAS_MODE=serpro.'
-        );
+        // Construtor não chama nada — valida lazy no primeiro uso.
+        // Permite que o factory funcione mesmo sem credenciais (importante pra
+        // load de módulo em ambiente de teste/build).
     }
-    async gerarDas() { throw new Error('nao implementado'); }
-    async transmitirPgdasD() { throw new Error('nao implementado'); }
+
+    /**
+     * Transmite PGDAS-D (declaração do Simples Nacional) antes do DAS regular.
+     * idSistema=PGDASD idServico=ENTREGARDECLARACAO11
+     *
+     * TODO[SERPRO_REAL]: validar payload exato contra documentação após
+     * primeira chamada real. Os campos abaixo são baseados na referência
+     * pública do Integra Contador; pode precisar ajustar nomes/formatos.
+     */
+    async transmitirPgdasD(req) {
+        const { empresaCnpj, competencia, valor } = req;
+        if (!empresaCnpj || !competencia) throw new Error('empresaCnpj e competencia obrigatórios');
+
+        // SERPRO espera período como YYYYMM (sem separador)
+        const periodoApuracao = String(competencia).replace(/\D/g, '').slice(0, 6);
+
+        const result = await invokeIntegraContador({
+            idSistema: 'PGDASD',
+            idServico: 'ENTREGARDECLARACAO11',
+            contribuinteCnpj: empresaCnpj,
+            dados: {
+                periodoApuracao,
+                valorDeclaracao: valor,
+                // TODO[SERPRO_REAL]: adicionar receita bruta por atividade,
+                // folha de pagamento, etc — depende do detalhamento da PGDASD.
+            },
+        });
+
+        const d = result.dados || {};
+        return {
+            ok: true,
+            recibo: d.numeroRecibo || d.recibo || d.numeroDeclaracao || '',
+            transmitidoEm: d.dataTransmissao || new Date().toISOString(),
+            valorDeclarado: valor,
+            fonte: 'serpro',
+            _raw: d,
+        };
+    }
+
+    /**
+     * Gera o DAS de uma competência.
+     * idSistema=PGDASD idServico=GERARDAS21
+     * Custo: R$ 0,80/DAS (a partir 01/2025).
+     */
+    async gerarDas(req) {
+        const { empresaCnpj, competencia, valor, tipo = 'regular' } = req;
+        if (!empresaCnpj || !competencia || !valor) {
+            throw new Error('empresaCnpj, competencia e valor obrigatórios');
+        }
+        if (valor < 10) throw new Error('Valor mínimo R$ 10,00');
+
+        const periodoApuracao = String(competencia).replace(/\D/g, '').slice(0, 6);
+
+        const result = await invokeIntegraContador({
+            idSistema: 'PGDASD',
+            idServico: 'GERARDAS21',
+            contribuinteCnpj: empresaCnpj,
+            dados: { periodoApuracao },
+        });
+
+        const d = result.dados || {};
+        // TODO[SERPRO_REAL]: confirmar campos exatos do response na primeira
+        // chamada real. Os nomes abaixo são esperados mas podem variar.
+        return {
+            numeroDocumento: d.numeroDocumento || d.numeroDarf || '',
+            codigoBarras: d.codigoBarras || d.linhaDigitavel || '',
+            vencimento: d.dataVencimento || d.vencimento || '',
+            valor: d.valorTotal || valor,
+            pdfUrl: null,  // PDF vem como base64 no campo docArrecadacaoPdfB64
+            pdfBase64: d.docArrecadacaoPdfB64 || d.pdfBase64 || null,
+            fonte: 'serpro',
+            tipo,
+            _raw: d,
+        };
+    }
 }
 
 // ── Factory ─────────────────────────────────────────────────────────────────
