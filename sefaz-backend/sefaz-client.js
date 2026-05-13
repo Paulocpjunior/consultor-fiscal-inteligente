@@ -12,16 +12,35 @@ const SEFAZ_PATH = '/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx';
 const SOAP_ACTION = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse';
 
 const TP_AMB = 1;
-const C_UF_AUTOR = 91;
 const VERSAO = '1.01';
 const HTTP_TIMEOUT_MS = 60_000;
 
-function montaEnvelope({ cnpj, ultNSU = '0' }) {
+// Mapa UF → código IBGE para o campo cUFAutor do envelope.
+// cUFAutor exige o código IBGE da UF do autor (empresa), NUNCA 91 (Ambiente Nacional).
+const UF_IBGE_MAP = {
+  AC: '12', AL: '27', AP: '16', AM: '13', BA: '29', CE: '23', DF: '53',
+  ES: '32', GO: '52', MA: '21', MT: '51', MS: '50', MG: '31', PA: '15',
+  PB: '25', PR: '41', PE: '26', PI: '22', RJ: '33', RN: '24', RS: '43',
+  RO: '11', RR: '14', SC: '42', SP: '35', SE: '28', TO: '17',
+};
+
+function ufParaCodigoIBGE(uf) {
+  const sigla = String(uf || '').trim().toUpperCase();
+  const cod = UF_IBGE_MAP[sigla];
+  if (!cod) throw new Error(`UF inválida ou não cadastrada: ${uf || '(vazio)'}`);
+  return cod;
+}
+
+// Flag de dry-run: loga o envelope montado mas não chama SEFAZ.
+// Útil pra validar o cUFAutor em prod sem risco antes de virar real.
+const DRY_RUN = process.env.SEFAZ_DEBUG_DRY_RUN === '1';
+
+export function montaEnvelope({ cnpj, ultNSU = '0', uf }) {
   const cnpjNum = String(cnpj).replace(/\D/g, '').padStart(14, '0');
   const nsu15 = String(ultNSU).replace(/\D/g, '').padStart(15, '0');
+  const cUFAutor = ufParaCodigoIBGE(uf);
   // IMPORTANTE: XML minificado em uma linha. SEFAZ rejeita whitespace
   // entre elementos complexos com cStat 215 (Falha no esquema xml).
-  // Tambem usamos xmlns explicito em nfeDadosMsg por precaucao.
   return '<?xml version="1.0" encoding="UTF-8"?>'
     + '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
     + '<soap12:Body>'
@@ -29,7 +48,7 @@ function montaEnvelope({ cnpj, ultNSU = '0' }) {
     + '<nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">'
     + `<distDFeInt versao="${VERSAO}" xmlns="http://www.portalfiscal.inf.br/nfe">`
     + `<tpAmb>${TP_AMB}</tpAmb>`
-    + `<cUFAutor>${C_UF_AUTOR}</cUFAutor>`
+    + `<cUFAutor>${cUFAutor}</cUFAutor>`
     + `<CNPJ>${cnpjNum}</CNPJ>`
     + `<distNSU><ultNSU>${nsu15}</ultNSU></distNSU>`
     + '</distDFeInt>'
@@ -93,9 +112,20 @@ export function descomprimirDocZip(base64) {
  * Variante que aceita um certificado especifico (da empresa).
  * Se certOverride for null, usa loadCertificate() (cert do escritorio).
  */
-export async function consultaDistDFeComCert({ cnpj, ultNSU = '0', certOverride = null }) {
+export async function consultaDistDFeComCert({ cnpj, ultNSU = '0', certOverride = null, uf }) {
+  // DRY-RUN: loga o envelope que seria enviado e retorna mock sem chamar SEFAZ.
+  if (DRY_RUN) {
+    const envelopeDry = montaEnvelope({ cnpj, ultNSU, uf });
+    console.log('[sefaz-client DRY-RUN] envelope que SERIA enviado:');
+    console.log(envelopeDry);
+    return {
+      ok: true, cStat: 'DRY-RUN', xMotivo: 'Envelope logado, SEFAZ não chamada',
+      ultNSU, maxNSU: ultNSU, dhResp: new Date().toISOString(),
+      xmls: [], rateLimited: false,
+    };
+  }
   let cert = certOverride || await loadCertificate();
-  const envelope = montaEnvelope({ cnpj, ultNSU });
+  const envelope = montaEnvelope({ cnpj, ultNSU, uf });
 
   // DEBUG TEMPORARIO — investigar cStat 215
   console.log('[sefaz-client DEBUG] ENVELOPE ENVIADO:');
@@ -138,6 +168,6 @@ export async function consultaDistDFeComCert({ cnpj, ultNSU = '0', certOverride 
 }
 
 // Wrapper retrocompativel — usa cert do escritorio (legado)
-export async function consultaDistDFe({ cnpj, ultNSU = '0' }) {
-    return consultaDistDFeComCert({ cnpj, ultNSU, certOverride: null });
+export async function consultaDistDFe({ cnpj, ultNSU = '0', uf }) {
+    return consultaDistDFeComCert({ cnpj, ultNSU, certOverride: null, uf });
 }

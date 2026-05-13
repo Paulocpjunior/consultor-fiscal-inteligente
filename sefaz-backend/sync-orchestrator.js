@@ -68,9 +68,37 @@ async function persisteUltNSU(cnpj, ultNSU, info = {}) {
   }, { merge: true });
 }
 
+// Carrega UF da empresa (de dadosFiscais.uf) consultando coleções
+// simples_empresas e lucro_empresas (tenta as duas).
+async function carregarUfEmpresa(empresaId) {
+  if (!empresaId) return null;
+  const db = fa().firestore();
+  for (const col of ['simples_empresas', 'lucro_empresas']) {
+    try {
+      const snap = await db.collection(col).doc(empresaId).get();
+      if (snap.exists) {
+        const uf = snap.data()?.dadosFiscais?.uf;
+        if (uf) return String(uf).trim().toUpperCase();
+      }
+    } catch (e) {
+      console.warn(`[sync-orchestrator] erro lendo ${col}/${empresaId}:`, e.message);
+    }
+  }
+  return null;
+}
+
 export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor }) {
   const cnpjNum = String(empresaCnpj).replace(/\D/g, '');
   if (cnpjNum.length !== 14) return { ok: false, motivo: `CNPJ inválido: ${empresaCnpj}` };
+
+  // Carrega UF da empresa — necessária pro envelope cUFAutor.
+  const uf = await carregarUfEmpresa(empresaId);
+  if (!uf) {
+    return {
+      ok: false,
+      motivo: `UF não cadastrada para a empresa. Acesse a tela de configuração e preencha dadosFiscais.uf (ex: SP).`,
+    };
+  }
 
   const lockResult = await acquireLock(cnpjNum, capturadoPor?.email || capturadoPor?.uid || 'system');
   if (!lockResult.ok) return { ok: false, motivo: lockResult.motivo, locked: true };
@@ -98,7 +126,7 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
   try {
     while (pagina < MAX_PAGINAS) {
       pagina++;
-      const result = await consultaDistDFeComCert({ cnpj: cnpjNum, ultNSU, certOverride });
+      const result = await consultaDistDFeComCert({ cnpj: cnpjNum, ultNSU, certOverride, uf });
       cStatFinal = result.cStat;
       xMotivoFinal = result.xMotivo;
 
