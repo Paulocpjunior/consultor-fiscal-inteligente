@@ -22,6 +22,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const app = express();
+// Cloud Run roda atrás de 1 proxy (Google Front End)
+// Necessário pra express-rate-limit ler X-Forwarded-For correto
+app.set('trust proxy', 1);
 app.use('/api/admin/sefaz', sefazCertRouter);
 app.use('/api/admin/sefaz', sefazSyncRouter);
 app.use('/api/admin/sefaz', sefazManifestoRouter);
