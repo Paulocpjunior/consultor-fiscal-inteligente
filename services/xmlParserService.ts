@@ -137,34 +137,58 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         const pis = det.getElementsByTagName('PIS')[0];
         const cofins = det.getElementsByTagName('COFINS')[0];
 
+        // ICMS — extrai TODOS os campos do bloco interno (ICMS00/10/20/30/etc).
+        // Cada CST tem subset diferente de campos; num('') retorna 0 quando ausente.
         let cst = '';
         let vICMS = 0;
+        let vBC = 0;
+        let aliqIcms = 0;
+        let vBCST = 0;
+        let aliqST = 0;
+        let vICMSST = 0;
         let orig = '';
         if (icms) {
             const icmsInner = icms.children[0];
             if (icmsInner) {
                 cst = getTextContent(icmsInner, 'CST') || getTextContent(icmsInner, 'CSOSN');
                 vICMS = num(getTextContent(icmsInner, 'vICMS'));
+                vBC = num(getTextContent(icmsInner, 'vBC'));
+                aliqIcms = num(getTextContent(icmsInner, 'pICMS'));
+                vBCST = num(getTextContent(icmsInner, 'vBCST'));
+                aliqST = num(getTextContent(icmsInner, 'pICMSST'));
+                vICMSST = num(getTextContent(icmsInner, 'vICMSST'));
                 orig = getTextContent(icmsInner, 'orig');
             }
         }
 
         let vIPI = 0;
+        let aliqIPI = 0;
         if (ipi) {
             const ipiTrib = ipi.getElementsByTagName('IPITrib')[0];
-            if (ipiTrib) vIPI = num(getTextContent(ipiTrib, 'vIPI'));
+            if (ipiTrib) {
+                vIPI = num(getTextContent(ipiTrib, 'vIPI'));
+                aliqIPI = num(getTextContent(ipiTrib, 'pIPI'));
+            }
         }
 
         let vPIS = 0;
+        let aliqPIS = 0;
         if (pis) {
             const pisInner = pis.children[0];
-            if (pisInner) vPIS = num(getTextContent(pisInner, 'vPIS'));
+            if (pisInner) {
+                vPIS = num(getTextContent(pisInner, 'vPIS'));
+                aliqPIS = num(getTextContent(pisInner, 'pPIS'));
+            }
         }
 
         let vCOFINS = 0;
+        let aliqCOFINS = 0;
         if (cofins) {
             const cofinsInner = cofins.children[0];
-            if (cofinsInner) vCOFINS = num(getTextContent(cofinsInner, 'vCOFINS'));
+            if (cofinsInner) {
+                vCOFINS = num(getTextContent(cofinsInner, 'vCOFINS'));
+                aliqCOFINS = num(getTextContent(cofinsInner, 'pCOFINS'));
+            }
         }
 
         itens.push({
@@ -179,10 +203,18 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             vUnCom: num(getTextContent(prod, 'vUnCom')),
             vProd: num(getTextContent(prod, 'vProd')),
             vDesc: num(getTextContent(prod, 'vDesc')) || undefined,
+            vBC,
+            aliqIcms,
             vICMS,
+            vBCST,
+            aliqST,
+            vICMSST,
             vIPI,
+            aliqIPI,
             vPIS,
+            aliqPIS,
             vCOFINS,
+            aliqCOFINS,
             cst,
             orig,
         });

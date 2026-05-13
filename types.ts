@@ -1079,10 +1079,26 @@ export interface DocumentoFiscalItem {
     vUnCom: number;
     vProd: number;
     vDesc?: number;
+    /** Base de cálculo do ICMS do item (extraído de <vBC> do bloco ICMS interno). */
+    vBC?: number;
+    /** Alíquota do ICMS em % (extraído de <pICMS>). */
+    aliqIcms?: number;
     vICMS: number;
+    /** Base de cálculo do ICMS-ST. */
+    vBCST?: number;
+    /** Alíquota do ICMS-ST em %. */
+    aliqST?: number;
+    /** Valor do ICMS-ST. */
+    vICMSST?: number;
     vIPI: number;
+    /** Alíquota do IPI em %. */
+    aliqIPI?: number;
     vPIS: number;
+    /** Alíquota do PIS em %. */
+    aliqPIS?: number;
     vCOFINS: number;
+    /** Alíquota do COFINS em %. */
+    aliqCOFINS?: number;
     cst: string;
     orig: string;
 }
