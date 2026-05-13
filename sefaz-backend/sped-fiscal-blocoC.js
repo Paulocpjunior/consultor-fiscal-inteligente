@@ -21,6 +21,30 @@
 import * as fmt from './sped-fiscal-format.js';
 import { correlacionarCfop, derivarNaturezaAtividade } from './cfop-correlacao.js';
 
+
+/**
+ * Soma os campos fiscais dos itens da nota.
+ * Usado como fonte única de verdade pra VL_BC_ICMS/VL_ICMS/etc no C100,
+ * garantindo que C100 = Σ C190 sempre (PVA valida essa igualdade).
+ * Necessário porque algumas notas têm itens preenchidos mas totalizadores
+ * (nota.totais.vBC, vICMS) vazios após parsing do XML.
+ */
+function somarTotaisDosItens(nota) {
+    let vProd = 0, vBC = 0, vICMS = 0, vBCST = 0, vICMSST = 0;
+    let vIPI = 0, vPIS = 0, vCOFINS = 0;
+    for (const item of (nota && nota.itens) || []) {
+        vProd += parseFloat(item.vProd || item.valor || 0);
+        vBC += parseFloat(item.vBC || 0);
+        vICMS += parseFloat(item.vICMS || 0);
+        vBCST += parseFloat(item.vBCST || 0);
+        vICMSST += parseFloat(item.vICMSST || 0);
+        vIPI += parseFloat(item.vIPI || 0);
+        vPIS += parseFloat(item.vPIS || 0);
+        vCOFINS += parseFloat(item.vCOFINS || 0);
+    }
+    return { vProd, vBC, vICMS, vBCST, vICMSST, vIPI, vPIS, vCOFINS };
+}
+
 const MODELOS_BLOCO_C = ['55', '65'];
 
 /**
@@ -185,6 +209,17 @@ function buildC100(nota, dados) {
     const t = nota.totais || {};
     const codSit = statusParaCodSit(nota.status);
 
+    // Soma dos itens — fonte primária pros campos que precisam bater com C190.
+    // Fallback pra nota.totais.X apenas se os itens não tiverem (nota sem itens).
+    const i = somarTotaisDosItens(nota);
+    const pick = (itemSum, totalKey) => {
+        const fromItens = parseFloat(itemSum || 0);
+        const fromTotal = parseFloat(t[totalKey] || 0);
+        // Se itens somam alguma coisa, sempre confia neles (faz C100=ΣC190).
+        // Senão, usa o total da nota.
+        return fromItens > 0 ? fromItens : fromTotal;
+    };
+
     // Identifica participante e direcao
     const indOper = nota.direcao === 'saida' ? '1' : '0';
     const participante = nota.direcao === 'saida' ? nota.destinatario : nota.emitente;
@@ -211,18 +246,18 @@ function buildC100(nota, dados) {
         '0',  // IND_PGTO: assume A vista (default conservador)
         fmt.formatValue(t.vDesc, 2),
         '',   // VL_ABAT_NT
-        fmt.formatValue(t.vProd, 2),
+        fmt.formatValue(pick(i.vProd, 'vProd'), 2),
         '9',  // IND_FRT: 9=Sem cobranca frete (default conservador)
         fmt.formatValue(t.vFrete, 2),
         fmt.formatValue(t.vSeg, 2),
         fmt.formatValue(t.vOutro, 2),
-        fmt.formatValue(t.vBC, 2),
-        fmt.formatValue(t.vICMS, 2),
-        fmt.formatValue(t.vBCST, 2),
-        fmt.formatValue(t.vST, 2),
-        fmt.formatValue(t.vIPI, 2),
-        fmt.formatValue(t.vPIS, 2),
-        fmt.formatValue(t.vCOFINS, 2),
+        fmt.formatValue(pick(i.vBC, 'vBC'), 2),       // VL_BC_ICMS — bate com ΣC190
+        fmt.formatValue(pick(i.vICMS, 'vICMS'), 2),   // VL_ICMS
+        fmt.formatValue(pick(i.vBCST, 'vBCST'), 2),
+        fmt.formatValue(pick(i.vICMSST, 'vST'), 2),
+        fmt.formatValue(pick(i.vIPI, 'vIPI'), 2),
+        fmt.formatValue(pick(i.vPIS, 'vPIS'), 2),
+        fmt.formatValue(pick(i.vCOFINS, 'vCOFINS'), 2),
         '',   // VL_PIS_ST
         '',   // VL_COFINS_ST
     ]);

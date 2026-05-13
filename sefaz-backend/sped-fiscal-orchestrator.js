@@ -323,7 +323,7 @@ function getContadorPadrao() {
         numero: '221',
         complemento: '3 ANDAR',
         bairro: 'REPUBLICA',
-        telefone: '31551554',
+        telefone: '1131551554',
         email: 'spcontabil@spassessoriacontabil.com.br',
         codMunIBGE: '3550308',
     };

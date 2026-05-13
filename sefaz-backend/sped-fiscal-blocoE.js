@@ -32,13 +32,25 @@ const COD_REC_PADRAO_POR_UF = {
 const DIA_VENCIMENTO_PADRAO = 20;
 
 function somarIcmsPorDirecao(notas, direcao) {
+    // Soma dos ITENS (mesma fonte do C190). Garante que E110 fica
+    // consistente com o que o PVA vê nos analíticos. Se totais.vICMS
+    // estiver zerado (parser legado), os itens ainda têm os valores.
     let total = 0;
     for (const nota of notas || []) {
         if (nota.direcao !== direcao) continue;
         if (nota.status !== 'autorizado') continue;
         if (!['55', '65'].includes(String(nota.modelo))) continue;
-        const t = nota.totais || {};
-        total += parseFloat(t.vICMS || 0);
+        let fromItens = 0;
+        for (const item of (nota.itens || [])) {
+            fromItens += parseFloat(item.vICMS || 0);
+        }
+        if (fromItens > 0) {
+            total += fromItens;
+        } else {
+            // Fallback: notas sem itens carregados (raro) — usa totais.
+            const t = nota.totais || {};
+            total += parseFloat(t.vICMS || 0);
+        }
     }
     return total;
 }
