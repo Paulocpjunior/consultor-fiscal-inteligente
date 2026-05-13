@@ -110,15 +110,29 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         const cnpjBruto = participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '';
         if (!cnpjBruto) continue;
 
-        const cnpjLimpo = String(cnpjBruto).replace(/\D/g, '');
-        if (!cnpjLimpo) continue;
-        if (participantesMap.has(cnpjLimpo)) continue;
+        const docLimpo = String(cnpjBruto).replace(/\D/g, '');
+        if (!docLimpo) continue;
+        if (participantesMap.has(docLimpo)) continue;
 
-        // codPart = primeiros 14 digitos do CNPJ (suficiente como identificador unico)
-        participantesMap.set(cnpjLimpo, {
-            codPart: cnpjLimpo,
+        // Detecta PF (CPF 11 digitos) vs PJ (CNPJ 14 digitos) pelo tamanho.
+        // Documentos com outros tamanhos sao invalidos — loga e pula.
+        let cnpjFinal = '';
+        let cpfFinal = '';
+        if (docLimpo.length === 14) {
+            cnpjFinal = docLimpo;
+        } else if (docLimpo.length === 11) {
+            cpfFinal = docLimpo;
+        } else {
+            console.warn(`[sped-fiscal] participante com documento invalido (${docLimpo.length} digitos): ${docLimpo} — pulado`);
+            continue;
+        }
+
+        // codPart = documento limpo (suficiente como identificador unico)
+        participantesMap.set(docLimpo, {
+            codPart: docLimpo,
             nome: participanteRaw.nome || participanteRaw.razaoSocial || participanteRaw.xNome || 'SEM NOME',
-            cnpj: cnpjLimpo,
+            cnpj: cnpjFinal,
+            cpf: cpfFinal,
             ie: participanteRaw.ie || participanteRaw.inscricaoEstadual || '',
             codMunIBGE: participanteRaw.codMunIBGE || '',
             logradouro: participanteRaw.logradouro || participanteRaw.endereco || '',

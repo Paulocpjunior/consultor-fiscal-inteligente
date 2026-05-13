@@ -206,14 +206,18 @@ function build0100(dados) {
  *  13 BAIRRO       Bairro                         max 60
  */
 function build0150(p) {
+    // PF tem cpf preenchido e cnpj vazio (e vice-versa). IE so se aplica a PJ.
+    const cnpjStr = fmt.sanitizeCnpjCpf(p.cnpj || '');
+    const cpfStr = fmt.sanitizeCnpjCpf(p.cpf || '');
+    const ieStr = cpfStr ? '' : fmt.sanitizeString(p.ie || '', 14);
     return fmt.buildLine([
         '0150',
         fmt.sanitizeString(p.codPart, 60),
         fmt.sanitizeString(p.nome, 100),
         '1058',  // Brasil
-        fmt.sanitizeCnpjCpf(p.cnpj),
-        '',  // CPF (vazio - particularidades de PF cobrem na Fase 2)
-        fmt.sanitizeString(p.ie || '', 14),
+        cnpjStr,
+        cpfStr,
+        ieStr,
         fmt.sanitizeString(p.codMunIBGE || '', 7),
         '',  // SUFRAMA
         fmt.sanitizeString(p.logradouro || '', 60),
