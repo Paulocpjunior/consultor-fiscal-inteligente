@@ -1,38 +1,36 @@
 // ============================================================================
 // sefaz-backend/sped-fiscal-blocoE.js
-// Bloco E — Apuracao do ICMS e do IPI.
+// Bloco E — Apuracao do ICMS.
+//
+// Registros gerados:
+//   E001 — Abertura do Bloco E
+//   E100 — Periodo da apuracao do ICMS
+//   E110 — Apuracao do ICMS - Operacoes Proprias
+//   E116 — Obrigacao do ICMS a Recolher (gerado SE vl_icms_recolher > 0)
+//   E990 — Encerramento do Bloco E
 //
 // Comportamento:
-//   - Simples Nacional: E110 zerada (Simples nao apura ICMS individual,
-//     paga DAS unificado). Sem apuracao a declarar.
-//   - Lucro Presumido / Lucro Real: calcula apuracao real:
-//       * Debitos = somatorio vICMS de notas de SAIDA do periodo
-//       * Creditos = somatorio vICMS de notas de ENTRADA do periodo
-//       * Saldo apurado = debitos - creditos - saldo credor anterior
-//       * Se positivo -> VL_ICMS_RECOLHER
-//       * Se negativo -> VL_SLD_CREDOR_TRANSPORTAR (carry-forward)
+//   - Simples Nacional: E110 zerada, SEM E116 (paga DAS, nao GARE).
+//   - Lucro: calcula apuracao real. Se saldo devedor > 0, gera E116
+//     com vencimento e codigo de receita derivados da UF da empresa.
 //
-// VL_SLD_CREDOR_ANT vem de dados.saldoCredorIcmsAnterior (lido pelo
-// orchestrator da ficha do mes anterior).
-//
-// Nao implementado nesta versao (zerado):
-//   - VL_AJ_DEBITOS / VL_AJ_CREDITOS (ajustes E111 — nao geramos E111)
-//   - VL_ESTORNOS_CRED / VL_ESTORNOS_DEB
-//   - VL_TOT_DED (deducoes)
-//   - DEB_ESP (debitos especiais)
-//   - E200/E210 (apuracao ICMS-ST — geramos E001|0|+E990|2| via blocos-vazios)
-//
-// Layout: Guia Pratico 3.2.0 / Leiaute 020.
+// Layout: Guia Pratico 3.2.2 / Leiaute 020.
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
 
 const ZERO = '0,00';
 
-/**
- * Soma o vICMS de todas as notas filtradas pela direcao.
- * Considera apenas notas modelo 55/65 (Bloco C) com status autorizado.
- */
+// COD_REC padrao por UF — sobrescritivel via empresa.dadosFiscais.icmsCodRec.
+const COD_REC_PADRAO_POR_UF = {
+    'SP': '046-2',
+    'RJ': '021-3',
+    'MG': '220-2',
+};
+
+// Dia de vencimento padrao do ICMS — sobrescritivel via icmsDiaVencimento.
+const DIA_VENCIMENTO_PADRAO = 20;
+
 function somarIcmsPorDirecao(notas, direcao) {
     let total = 0;
     for (const nota of notas || []) {
@@ -45,30 +43,55 @@ function somarIcmsPorDirecao(notas, direcao) {
     return total;
 }
 
-/**
- * @param {object} dados
- * @param {string} dados.competenciaInicio
- * @param {string} dados.competenciaFim
- * @param {object[]} dados.notas
- * @param {object} dados.empresa - empresa com _regime ('simples' | 'lucro')
- * @param {number} [dados.saldoCredorIcmsAnterior] - lido da ficha mes anterior (Lucro)
- * @returns {string[]}
- */
+function calcularDataVencimento(competenciaFim, diaVencimento) {
+    const m = (competenciaFim || '').match(/^(\d{4})-(\d{2})$/);
+    if (!m) return new Date();
+    let ano = parseInt(m[1], 10);
+    let mes = parseInt(m[2], 10) + 1;
+    if (mes > 12) { mes = 1; ano += 1; }
+    const dia = Math.min(Math.max(diaVencimento || DIA_VENCIMENTO_PADRAO, 1), 28);
+    return new Date(Date.UTC(ano, mes - 1, dia));
+}
+
+function formatMesRef(competenciaFim) {
+    const m = (competenciaFim || '').match(/^(\d{4})-(\d{2})$/);
+    if (!m) return '';
+    return `${m[2]}${m[1]}`;
+}
+
+function buildE116(dados, vlIcmsRecolher) {
+    const df = dados?.empresa?.dadosFiscais || {};
+    const uf = (df.uf || '').toUpperCase();
+    const codRec = df.icmsCodRec || COD_REC_PADRAO_POR_UF[uf] || '';
+    const diaVcto = parseInt(df.icmsDiaVencimento || DIA_VENCIMENTO_PADRAO, 10);
+    const dtVcto = calcularDataVencimento(dados.competenciaFim, diaVcto);
+
+    return fmt.buildLine([
+        'E116',
+        '000',
+        fmt.formatValue(vlIcmsRecolher, 2),
+        fmt.formatDate(dtVcto),
+        fmt.sanitizeString(codRec, 100),
+        '',
+        '',
+        '',
+        '',
+        formatMesRef(dados.competenciaFim),
+    ]);
+}
+
 export function buildBlocoE(dados) {
     const linhas = [];
     const regime = dados?.empresa?._regime;
 
-    // E001 — Abertura. 0 = Bloco com dados (sempre geramos E100/E110)
     linhas.push(fmt.buildLine(['E001', '0']));
 
-    // E100 — Periodo da apuracao do ICMS
     linhas.push(fmt.buildLine([
         'E100',
         fmt.formatCompetenciaInicio(dados.competenciaInicio),
         fmt.formatCompetenciaFim(dados.competenciaFim),
     ]));
 
-    // E110 — Apuracao do ICMS — Operacoes Proprias
     let vl_tot_debitos = 0;
     let vl_tot_creditos = 0;
     let vl_sld_credor_ant = 0;
@@ -77,46 +100,44 @@ export function buildBlocoE(dados) {
     let vl_sld_credor_transportar = 0;
 
     if (regime === 'lucro') {
-        // Calcula a partir das notas
         vl_tot_debitos = somarIcmsPorDirecao(dados.notas, 'saida');
         vl_tot_creditos = somarIcmsPorDirecao(dados.notas, 'entrada');
         vl_sld_credor_ant = parseFloat(dados.saldoCredorIcmsAnterior || 0);
 
-        // Saldo apurado = debitos - (creditos + saldo credor anterior)
         const saldo = vl_tot_debitos - vl_tot_creditos - vl_sld_credor_ant;
         vl_sld_apurado = Math.abs(saldo);
 
         if (saldo >= 0) {
-            // Saldo devedor: empresa paga
             vl_icms_recolher = saldo;
             vl_sld_credor_transportar = 0;
         } else {
-            // Saldo credor: carrega pro proximo mes
             vl_icms_recolher = 0;
             vl_sld_credor_transportar = -saldo;
         }
     }
-    // Simples Nacional: tudo permanece 0 (correto)
 
     linhas.push(fmt.buildLine([
         'E110',
-        fmt.formatValue(vl_tot_debitos, 2),       // VL_TOT_DEBITOS
-        ZERO,                                       // VL_AJ_DEBITOS
-        fmt.formatValue(vl_tot_debitos, 2),       // VL_TOT_AJ_DEBITOS (= debitos qd sem ajuste)
-        ZERO,                                       // VL_ESTORNOS_CRED
-        fmt.formatValue(vl_tot_creditos, 2),      // VL_TOT_CREDITOS
-        ZERO,                                       // VL_AJ_CREDITOS
-        fmt.formatValue(vl_tot_creditos, 2),      // VL_TOT_AJ_CREDITOS
-        ZERO,                                       // VL_ESTORNOS_DEB
-        fmt.formatValue(vl_sld_credor_ant, 2),    // VL_SLD_CREDOR_ANT
-        fmt.formatValue(vl_sld_apurado, 2),       // VL_SLD_APURADO
-        ZERO,                                       // VL_TOT_DED
-        fmt.formatValue(vl_icms_recolher, 2),     // VL_ICMS_RECOLHER
-        fmt.formatValue(vl_sld_credor_transportar, 2),  // VL_SLD_CREDOR_TRANSPORTAR
-        ZERO,                                       // DEB_ESP
+        fmt.formatValue(vl_tot_debitos, 2),
+        ZERO,
+        fmt.formatValue(vl_tot_debitos, 2),
+        ZERO,
+        fmt.formatValue(vl_tot_creditos, 2),
+        ZERO,
+        fmt.formatValue(vl_tot_creditos, 2),
+        ZERO,
+        fmt.formatValue(vl_sld_credor_ant, 2),
+        fmt.formatValue(vl_sld_apurado, 2),
+        ZERO,
+        fmt.formatValue(vl_icms_recolher, 2),
+        fmt.formatValue(vl_sld_credor_transportar, 2),
+        ZERO,
     ]));
 
-    // E990 — Encerramento
+    if (regime === 'lucro' && vl_icms_recolher > 0) {
+        linhas.push(buildE116(dados, vl_icms_recolher));
+    }
+
     const total = linhas.length + 1;
     linhas.push(fmt.buildLine(['E990', total]));
 
