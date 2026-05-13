@@ -404,6 +404,7 @@ function buildC190sFromNota(nota) {
                 vlIcms: 0,
                 vlBcIcmsSt: 0,
                 vlIcmsSt: 0,
+                vlRedBc: 0,
                 vlIpi: 0,
             });
         }
@@ -415,6 +416,20 @@ function buildC190sFromNota(nota) {
         g.vlBcIcmsSt += parseFloat(item.vBCST || 0);
         g.vlIcmsSt += parseFloat(item.vICMSST || 0);
         g.vlIpi += parseFloat(item.vIPI || 0);
+
+        // Valor da redução de BC (obrigatório quando CST 20 ou 70).
+        // Fórmula correta: vBC × pRedBC / (100 - pRedBC).
+        // Fallback (parser legado sem pRedBC): max(0, vProd - vBC).
+        const vBcItem = parseFloat(item.vBC || 0);
+        const vProdItem = parseFloat(item.vProd || item.valor || 0);
+        const pRedBC = parseFloat(item.pRedBC || 0);
+        let itemRedBc = 0;
+        if (pRedBC > 0 && pRedBC < 100 && vBcItem > 0) {
+            itemRedBc = (vBcItem * pRedBC) / (100 - pRedBC);
+        } else if (vProdItem > vBcItem && vBcItem > 0) {
+            itemRedBc = vProdItem - vBcItem;
+        }
+        g.vlRedBc += itemRedBc;
     }
 
     const linhas = [];
@@ -429,7 +444,7 @@ function buildC190sFromNota(nota) {
             fmt.formatValue(g.vlIcms, 2),
             fmt.formatValue(g.vlBcIcmsSt, 2),
             fmt.formatValue(g.vlIcmsSt, 2),
-            '0,00',  // VL_RED_BC
+            fmt.formatValue(g.vlRedBc, 2),  // VL_RED_BC — calculado dos itens
             fmt.formatValue(g.vlIpi, 2),
             '',  // COD_OBS
         ]));

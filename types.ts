@@ -1083,6 +1083,10 @@ export interface DocumentoFiscalItem {
     vBC?: number;
     /** Alíquota do ICMS em % (extraído de <pICMS>). */
     aliqIcms?: number;
+    /** Modalidade de determinação da BC do ICMS (CST 20/70). */
+    modBC?: string;
+    /** Percentual de redução da BC do ICMS em % (CST 20/70). */
+    pRedBC?: number;
     vICMS: number;
     /** Base de cálculo do ICMS-ST. */
     vBCST?: number;

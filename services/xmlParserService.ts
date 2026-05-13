@@ -146,6 +146,8 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         let vBCST = 0;
         let aliqST = 0;
         let vICMSST = 0;
+        let pRedBC = 0;
+        let modBC = '';
         let orig = '';
         if (icms) {
             const icmsInner = icms.children[0];
@@ -157,6 +159,8 @@ export function parseNFeXml(xmlText: string): ParsedXml {
                 vBCST = num(getTextContent(icmsInner, 'vBCST'));
                 aliqST = num(getTextContent(icmsInner, 'pICMSST'));
                 vICMSST = num(getTextContent(icmsInner, 'vICMSST'));
+                pRedBC = num(getTextContent(icmsInner, 'pRedBC'));
+                modBC = getTextContent(icmsInner, 'modBC');
                 orig = getTextContent(icmsInner, 'orig');
             }
         }
@@ -209,6 +213,8 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             vBCST,
             aliqST,
             vICMSST,
+            modBC,
+            pRedBC,
             vIPI,
             aliqIPI,
             vPIS,
