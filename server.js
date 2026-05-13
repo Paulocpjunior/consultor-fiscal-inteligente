@@ -1606,10 +1606,34 @@ function calcularObrigacoesEmpresa(empresa, regimeKind, ano, mes) {
     return obrs;
 }
 
-app.get('/api/admin/calendario/:ano/:mes', async (req, res) => {
+// Middleware: aceita admin OU colaborador autenticados via Firebase Bearer token.
+async function requireAuthOrColab(req, res, next) {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
+        const auth = req.headers.authorization || '';
+        const m = auth.match(/^Bearer\s+(.+)$/i);
+        if (!m) return res.status(401).json({ error: 'Token ausente' });
+
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) {
+            adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        }
+        const decoded = await adminMod.auth().verifyIdToken(m[1]);
+        const userDoc = await adminMod.firestore().collection('users').doc(decoded.uid).get();
+        if (!userDoc.exists) return res.status(403).json({ error: 'Usuario nao encontrado' });
+        const role = userDoc.data().role;
+        if (role !== 'admin' && role !== 'colaborador') {
+            return res.status(403).json({ error: 'Sem permissao' });
+        }
+        req.user = { uid: decoded.uid, email: decoded.email || userDoc.data().email, role };
+        next();
+    } catch (e) {
+        console.error('[requireAuthOrColab] erro:', e.message);
+        return res.status(401).json({ error: 'Token invalido ou expirado' });
+    }
+}
+
+app.get('/api/admin/calendario/:ano/:mes', requireAuthOrColab, async (req, res) => {
+    try {
 
         const ano = parseInt(req.params.ano);
         const mes = parseInt(req.params.mes);

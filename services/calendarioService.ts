@@ -2,17 +2,20 @@
  * services/calendarioService.ts
  * Cliente HTTP do Calendario Fiscal.
  */
+import { getAuth } from 'firebase/auth';
 import type { User, CalendarioResponse } from '../types';
 
-function authHeaders(user: User | null): Record<string, string> {
-    return {
-        'Content-Type': 'application/json',
-        'X-User-Role': user?.role || 'colaborador',
-    };
+async function getIdToken(): Promise<string> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Usuário não autenticado');
+    return u.getIdToken();
 }
 
-export async function getCalendario(user: User | null, ano: number, mes: number): Promise<CalendarioResponse> {
-    const res = await fetch(`/api/admin/calendario/${ano}/${mes}`, { headers: authHeaders(user) });
+export async function getCalendario(_user: User | null, ano: number, mes: number): Promise<CalendarioResponse> {
+    const token = await getIdToken();
+    const res = await fetch(`/api/admin/calendario/${ano}/${mes}`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
     if (!res.ok) throw new Error(`getCalendario: ${res.status}`);
     return res.json();
 }
