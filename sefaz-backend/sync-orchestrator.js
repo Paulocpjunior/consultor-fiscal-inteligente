@@ -112,16 +112,42 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
   let xMotivoFinal = null;
   let rateLimited = false;
 
-  // Tenta carregar cert especifico da empresa; fallback pro cert do escritorio
+  // Tenta carregar cert especifico da empresa.
+  // Se não houver, ABORTA antes de chamar SEFAZ (evita cStat=593 garantido +
+  // protege quota do IP do escritório).
   let certOverride = null;
-  let fonteCert = 'escritorio';
   try {
     certOverride = await loadCertEmpresa(empresaId);
-    if (certOverride) fonteCert = 'empresa';
   } catch (e) {
     console.warn(`[sync-orchestrator] erro carregando cert empresa ${empresaId}:`, e.message);
   }
-  console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} cert=${fonteCert}`);
+  if (!certOverride) {
+    console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} SEM cert próprio — aguardando upload`);
+    // Libera o lock pra não ficar reservado por 1h
+    try {
+      await fa().firestore().collection('sefaz_locks').doc(cnpjNum).delete();
+    } catch (e) { /* lock já foi liberado ou erro: ignora */ }
+    return {
+      ok: false,
+      motivo: 'Empresa aguardando cert A1 próprio. Suba o certificado pela tela Empresas Monitoradas → coluna Certificado.',
+      semCert: true,
+    };
+  }
+  // Sanity check: CNPJ-Base do cert tem que bater com o CNPJ consultado.
+  const certCnpjBase = String(certOverride.cnpj || '').replace(/\D/g, '').slice(0, 8);
+  const empresaCnpjBase = cnpjNum.slice(0, 8);
+  if (certCnpjBase && empresaCnpjBase !== certCnpjBase) {
+    console.warn(`[sync-orchestrator] empresa=${empresaId} cert tem CNPJ-Base ${certCnpjBase}, esperado ${empresaCnpjBase}`);
+    try {
+      await fa().firestore().collection('sefaz_locks').doc(cnpjNum).delete();
+    } catch (e) {}
+    return {
+      ok: false,
+      motivo: `CNPJ-Base do cert (${certCnpjBase}) difere do CNPJ da empresa (${empresaCnpjBase}). Suba o cert A1 correto dessa empresa.`,
+      certInvalido: true,
+    };
+  }
+  console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} cert=empresa`);
 
   try {
     while (pagina < MAX_PAGINAS) {
