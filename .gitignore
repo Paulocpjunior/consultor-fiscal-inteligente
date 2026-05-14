@@ -15,3 +15,13 @@ credentials_json
 .env.local
 serviceAccountKey*.json
 .firebase/
+
+# Scripts de backfill UF / cert (rodados em prod, podem virar artefatos)
+apply_cert_cnpj_check.sh
+backfill_uf_empresas.mjs
+empresas_sem_cert.csv
+lista_empresas_sem_cert.mjs
+
+# Backups de patch local
+server.js.bak.*
+
