@@ -124,6 +124,97 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
     }
 }
 
+// ─── Perfil do Cliente (Análise de Créditos) ──────────────────────────────
+
+export type RegimeSugerido =
+    | 'LUCRO_REAL_INDUSTRIA'
+    | 'LUCRO_REAL_SERVICOS'
+    | 'LUCRO_REAL_COMERCIO'
+    | 'LUCRO_PRESUMIDO'
+    | 'SIMPLES';
+
+export interface EmpresaPerfilOption {
+    id: string;
+    nome: string;
+    cnpj: string;
+    fonte: 'simples' | 'lucro';
+    regimeSugerido: RegimeSugerido;
+    uf?: string;
+    inscricaoEstadual?: string;
+    ccmSp?: string;
+    createdBy?: string;
+}
+
+function inferirRegimeLucro(data: LucroPresumidoEmpresa): RegimeSugerido {
+    if (data.regimePadrao === 'Real') {
+        const t = data.tiposAtividade;
+        if (t?.industria) return 'LUCRO_REAL_INDUSTRIA';
+        if (t?.servico)   return 'LUCRO_REAL_SERVICOS';
+        if (t?.comercio)  return 'LUCRO_REAL_COMERCIO';
+        return 'LUCRO_REAL_SERVICOS';
+    }
+    return 'LUCRO_PRESUMIDO';
+}
+
+function dedupPerfilOptions(list: EmpresaPerfilOption[]): EmpresaPerfilOption[] {
+    const map = new Map<string, EmpresaPerfilOption>();
+    list.forEach(e => {
+        const key = (e.cnpj || '').replace(/\D/g, '') || e.id;
+        if (!map.has(key)) map.set(key, e);
+    });
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+export async function getEmpresasParaPerfilCliente(user: User | null): Promise<EmpresaPerfilOption[]> {
+    if (!user || !isFirebaseConfigured || !db) return [];
+    const isMaster = isMasterUser(user);
+    const uid = auth?.currentUser?.uid;
+
+    const buildQuery = (col: string): QueryConstraint[] =>
+        (isMaster || !uid) ? [] : [where('createdBy', '==', uid)];
+
+    try {
+        const [simplesSnap, lucroSnap] = await Promise.all([
+            getDocs(query(collection(db, 'simples_empresas'), ...buildQuery('simples_empresas'))),
+            getDocs(query(collection(db, 'lucro_empresas'), ...buildQuery('lucro_empresas'))),
+        ]);
+
+        const simples: EmpresaPerfilOption[] = simplesSnap.docs.map(d => {
+            const data = d.data() as SimplesNacionalEmpresa;
+            return {
+                id: d.id,
+                nome: data.nome,
+                cnpj: data.cnpj,
+                fonte: 'simples' as const,
+                regimeSugerido: 'SIMPLES' as RegimeSugerido,
+                uf: data.dadosFiscais?.uf,
+                inscricaoEstadual: data.dadosFiscais?.inscricaoEstadual,
+                ccmSp: data.ccmSp,
+                createdBy: data.createdBy,
+            };
+        });
+        const lucro: EmpresaPerfilOption[] = lucroSnap.docs.map(d => {
+            const data = d.data() as LucroPresumidoEmpresa;
+            return {
+                id: d.id,
+                nome: data.nome,
+                cnpj: data.cnpj,
+                fonte: 'lucro' as const,
+                regimeSugerido: inferirRegimeLucro(data),
+                uf: data.dadosFiscais?.uf,
+                inscricaoEstadual: data.dadosFiscais?.inscricaoEstadual,
+                ccmSp: data.ccmSp,
+                createdBy: data.createdBy,
+            };
+        });
+
+        return dedupPerfilOptions([...simples, ...lucro]);
+    } catch (err: any) {
+        console.warn('getEmpresasParaPerfilCliente:', err?.message);
+        return [];
+    }
+}
+
 // ─── Importação manual (entry point principal) ──────────────────────────────
 
 export interface ImportXmlInput {

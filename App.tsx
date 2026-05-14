@@ -1144,7 +1144,7 @@ const App: React.FC = () => {
                         {/* Análise de Créditos Fiscais */}
                         {searchType === SearchType.ANALISE_CREDITOS && (
                             <Suspense fallback={<LoadingSpinner />}>
-                                <AnaliseCreditos />
+                                <AnaliseCreditos currentUser={currentUser ?? null} />
                             </Suspense>
                         )}
 

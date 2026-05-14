@@ -1,5 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import AnaliseCreditoExtrato from './AnaliseCreditoExtrato';
+import type { User } from '../types';
+import { getEmpresasParaPerfilCliente, type EmpresaPerfilOption } from '../services/xmlFiscalService';
 
 type Regime = 'LUCRO_REAL_INDUSTRIA' | 'LUCRO_REAL_SERVICOS' | 'LUCRO_REAL_COMERCIO' | 'LUCRO_PRESUMIDO' | 'SIMPLES';
 type TipoNota = 'PRODUTO' | 'SERVICO';
@@ -50,9 +52,16 @@ const CardTotal: React.FC<{label:string; valor:number; cor:string}> = ({ label, 
   </div>
 );
 
-const AnaliseCreditos: React.FC = () => {
+interface AnaliseCreditosProps {
+  currentUser: User | null;
+}
+
+const AnaliseCreditos: React.FC<AnaliseCreditosProps> = ({ currentUser }) => {
   const [aba, setAba] = useState<'manual'|'upload'|'extrato'>('manual');
   const [perfil, setPerfil] = useState<PerfilCliente>({ regime:'LUCRO_REAL_SERVICOS', uf:'SP' });
+  const [empresas, setEmpresas] = useState<EmpresaPerfilOption[]>([]);
+  const [empresaVinculadaId, setEmpresaVinculadaId] = useState<string>('');
+  const [carregandoEmpresas, setCarregandoEmpresas] = useState(false);
   const [notas, setNotas] = useState<NotaManual[]>([{...NOTA_VAZIA}]);
   const [arquivo, setArquivo] = useState<File|null>(null);
   const [loading, setLoading] = useState(false);
@@ -60,6 +69,33 @@ const AnaliseCreditos: React.FC = () => {
   const [resultado, setResultado] = useState<ResultadoAnalise|null>(null);
 
   const setPerfilField = (f: keyof PerfilCliente, v: string|number) => setPerfil(p => ({...p,[f]:v}));
+
+  useEffect(() => {
+    if (!currentUser) { setEmpresas([]); return; }
+    let alive = true;
+    setCarregandoEmpresas(true);
+    getEmpresasParaPerfilCliente(currentUser)
+      .then(list => { if (alive) setEmpresas(list); })
+      .finally(() => { if (alive) setCarregandoEmpresas(false); });
+    return () => { alive = false; };
+  }, [currentUser]);
+
+  const empresaVinculada = empresas.find(e => e.id === empresaVinculadaId);
+
+  const vincularEmpresa = (id: string) => {
+    setEmpresaVinculadaId(id);
+    const emp = empresas.find(e => e.id === id);
+    if (!emp) return;
+    setPerfil(prev => ({
+      ...prev,
+      regime: emp.regimeSugerido as Regime,
+      uf: emp.uf || prev.uf,
+    }));
+  };
+
+  const limparVinculo = () => {
+    setEmpresaVinculadaId('');
+  };
 
   const [exportandoPDF, setExportandoPDF] = useState(false);
   const resultadoRef = React.useRef<HTMLDivElement>(null);
@@ -212,6 +248,53 @@ const AnaliseCreditos: React.FC = () => {
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
         <h3 className="font-semibold text-gray-700 dark:text-gray-200 mb-4">📋 Perfil do Cliente</h3>
+
+        <div className="mb-4">
+          <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
+            Vincular empresa cadastrada <span className="text-gray-400">(opcional — preenche Regime e UF)</span>
+          </label>
+          <div className="flex gap-2">
+            <select
+              value={empresaVinculadaId}
+              onChange={e => vincularEmpresa(e.target.value)}
+              disabled={carregandoEmpresas || empresas.length === 0}
+              className={`${inp} flex-1`}
+            >
+              <option value="">
+                {carregandoEmpresas
+                  ? 'Carregando empresas...'
+                  : empresas.length === 0
+                    ? 'Nenhuma empresa cadastrada'
+                    : '— Selecione uma empresa cadastrada —'}
+              </option>
+              {empresas.map(e => (
+                <option key={e.id} value={e.id}>
+                  {e.nome} — {e.cnpj} ({e.fonte === 'simples' ? 'Simples' : 'Lucro'})
+                </option>
+              ))}
+            </select>
+            {empresaVinculadaId && (
+              <button
+                onClick={limparVinculo}
+                type="button"
+                className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          {empresaVinculada && (
+            <div className="mt-2 text-xs text-teal-700 dark:text-teal-300 flex items-center gap-1">
+              🔗 Vinculado a: <strong>{empresaVinculada.nome}</strong>
+              {!empresaVinculada.uf && (
+                <span className="text-amber-600 dark:text-amber-400 ml-2">
+                  (sem UF cadastrada — preencha manualmente)
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div><label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Regime *</label>
             <select value={perfil.regime} onChange={e=>setPerfilField('regime',e.target.value)} className={inp}>
