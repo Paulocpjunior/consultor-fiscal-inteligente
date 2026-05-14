@@ -2080,6 +2080,77 @@ const KEYWORDS={LUCRO_REAL_SERVICOS:['energia','aluguel','telefon','internet','l
 function hasCredito(tipo,regime){const kws=KEYWORDS[regime]||KEYWORDS.LUCRO_REAL_SERVICOS;const t=tipo.toLowerCase();return kws.some(k=>t.includes(k));}
 function parseBRL(v){const s=String(v||'').trim().replace(/[^0-9,.]/g,'');if(!s)return 0;if(s.includes(',')){return parseFloat(s.replace(/\./g,'').replace(',','.'))||0;}if((s.match(/\./g)||[]).length>1){return parseFloat(s.replace(/\.(?=.*\.)/g,''))||0;}return parseFloat(s)||0;}
 function parseXlsxExpense(buf){try{const wb=XLSX.read(buf,{type:'buffer'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});let hr=-1,ti=-1,vi=-1,fi=-1,ni=-1;for(let i=0;i<Math.min(rows.length,10);i++){const r=rows[i].map(x=>String(x).toLowerCase().trim());if(r.some(x=>x.includes('tipo'))||r.some(x=>x.includes('despesa'))){hr=i;ti=r.findIndex(h=>h.includes('tipo'));vi=r.findIndex(h=>h.includes('valor'));fi=r.findIndex(h=>h.includes('fornec'));ni=r.findIndex(h=>h.includes('nota'));break;}}if(hr<0||ti<0||vi<0)return null;const g={};for(let i=hr+1;i<rows.length;i++){const row=rows[i];const tipo=String(row[ti]||'').trim();if(!tipo||/^[\d.,]/.test(tipo)||tipo.toLowerCase().includes('total')||tipo.toLowerCase().includes('custo'))continue;const val=parseBRL(row[vi]);if(!val)continue;const forn=fi>=0?String(row[fi]||'').trim():'';const nota=ni>=0?String(row[ni]||'').trim():'';if(!g[tipo])g[tipo]={tipo,valor:0,count:0,entradas:[]};g[tipo].valor=+(g[tipo].valor+val).toFixed(2);g[tipo].count++;g[tipo].entradas.push({nota,forn,valor:val});}return Object.keys(g).length?g:null;}catch(e){console.error('XLSX parse error:',e.message);return null;}}
+function classificarFaturaCartao(desc){
+  const up = String(desc||'').toUpperCase();
+  const RULES = [
+    [/\b(AZUL|GOL|LATAM|TAM|AVIANCA)\b/, 'PASSAGEM AEREA'],
+    [/\bUBER\b|\b99 ?TAX|\bCABIFY\b/, 'TRANSPORTE URBANO PESSOAL'],
+    [/\b(HOTEL|ROYAL PALM|ATLANTE|IBIS|ACCOR|POUSADA|RESORT)\b/, 'HOTELARIA'],
+    [/\b(KOPENHAGEN|CACAU SHOW|PALACIO DAS SACOLA)/, 'BRINDES E CORTESIA'],
+    [/\b(G4 EDUCACAO|MET HUB)\b|\bCURSO\b|\bTREINAMENTO\b/, 'CURSO TREINAMENTO PESSOA FISICA'],
+    [/\bIOF\b/, 'IOF TARIFA BANCARIA'],
+    [/\bANUIDADE\b/, 'ANUIDADE CARTAO'],
+    [/\bESTORNO\b/, 'ESTORNO'],
+    [/\b(PORTO SEGURO|SEGUROS|SEGURADORA|BRADESCO SEGURO)\b/, 'SEGURO BEM NAO OPERACIONAL'],
+    [/\bCANVA\b|EBN.*CANVA/, 'LICENCA TI'],
+    [/\b(CLICKUP|MONDAY|ASANA|NOTION|PIPEFY|ATLASSIAN|TRELLO|JIRA)/, 'LICENCA TI'],
+    [/\bSLACK\b/, 'LICENCA TI'],
+    [/\b(PIPEDRIVE|HUBSPOT|SALESFORCE|ZOHO|RD STATION)/, 'LICENCA TI'],
+    [/\b(GOOGLE WORKSPACE|MICROSOFT|MIRO|LUCID|FIGMA|OFFICE 365|ADOBE)/, 'LICENCA TI'],
+    [/\b(HOSTGATOR|AWS|AZURE|GCP|TURBO CLOUD|CLOUDFLARE|GODADDY)/, 'LICENCA TI'],
+    [/\b(CLICKSIGN|DOCUSIGN)/, 'LICENCA TI'],
+    [/\b(STRACT|SHUTTERSTOCK|FREEPIK|ENVATO|GETTY|ZAPIER)\b|STK\*SHUTTERSTOCK/, 'LICENCA TI'],
+    [/\b(QR\.?IO|QRGEN)\b/, 'LICENCA TI'],
+    [/\b(SALVY|ZUPPER)\b|IG\*SALVY/, 'TELEFONIA'],
+    [/\b(KABUM|COMPULIN|TERABYTE|PICHAU)\b/, 'MATERIAL INFORMATICA REVER ATIVO'],
+    [/\b(GOOGLE ADS|FACEBOOK ADS|META ADS|LINKEDIN ADS)\b/, 'MARKETING DIGITAL'],
+  ];
+  for (const [rgx, tipo] of RULES) { if (rgx.test(up)) return tipo; }
+  return 'A CLASSIFICAR CARTAO';
+}
+function parseXlsxFaturaItauEmpresas(buf){
+  try{
+    const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+    const flat = rows.slice(0, 30).flat().map(v => String(v == null ? '' : v));
+    const hasItau = flat.some(s => /Logotipo Ita|ITAU EMPRESAS MASTERCARD/i.test(s));
+    const hasFatura = flat.some(s => /Total da fatura/i.test(s));
+    if (!hasItau || !hasFatura) return null;
+    let state = null;
+    const lancamentos = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const a = row[0]; const c = row[2]; const k = row[10];
+      const sa = String(a == null ? '' : a).trim();
+      if (/^Lan\u00e7amentos nacionais$/i.test(sa)) { state = 'NAC'; continue; }
+      if (/^Lan\u00e7amentos internacionais$/i.test(sa)) { state = 'INT'; continue; }
+      if (/^Total de lan\u00e7amentos/i.test(sa)) { state = null; continue; }
+      if (/^Produtos, servi\u00e7os/i.test(sa)) { state = null; continue; }
+      if (sa === 'data' || sa === 'descri\u00e7\u00e3o' || sa === 'Lan\u00e7amentos') continue;
+      if (!state) continue;
+      const isDate = (a instanceof Date) || (typeof a === 'string' && /^\d{4}-\d{2}-\d{2}/.test(a)) || (typeof a === 'number' && a > 40000 && a < 60000);
+      const valor = typeof k === 'number' ? k : parseBRL(k);
+      if (isDate && c && valor) {
+        lancamentos.push({ desc: String(c).trim(), valor: valor, origem: state });
+      }
+    }
+    if (!lancamentos.length) return null;
+    const grupos = {};
+    for (const l of lancamentos) {
+      const tipo = classificarFaturaCartao(l.desc);
+      if (!grupos[tipo]) grupos[tipo] = { tipo, valor: 0, count: 0, entradas: [] };
+      grupos[tipo].valor = +(grupos[tipo].valor + l.valor).toFixed(2);
+      grupos[tipo].count++;
+      grupos[tipo].entradas.push({ nota: 'FATURA CARTAO ' + l.origem, forn: l.desc, valor: l.valor });
+    }
+    return Object.keys(grupos).length ? grupos : null;
+  } catch (e) {
+    console.error('XLSX Itau parse error:', e.message);
+    return null;
+  }
+}
+
 function calcularCreditoExpense(grupos,regime){const P=0.0165,CF=0.076;const det=Object.values(grupos).map(g=>{const ok=hasCredito(g.tipo,regime);const cP=ok?+(g.valor*P).toFixed(2):0;const cC=ok?+(g.valor*CF).toFixed(2):0;return{nota:{numero:g.tipo,emitente:g.count+' nota(s)',entradas:g.entradas||[],cfop:'N/A',cst:'N/A',natureza:g.tipo,valorTotal:g.valor,baseCalculo:g.valor,valorIcms:0,aliquotaIcms:0,tipo:'SERVICO'},pisCofins:{tipo:ok?'APROVADO':'NEGADO',creditoPIS:cP,creditoCOFINS:cC,observacao:ok?g.tipo+': base R$ '+g.valor.toLocaleString('pt-BR',{minimumFractionDigits:2})+' | PIS 1,65% + COFINS 7,6%':g.tipo+': sem credito neste regime.',fundamentoLegal:ok?'Lei 10.637/2002 e 10.833/2003, art. 3':'IN RFB 2.121/2022',avisos:[]},icms:{tipo:'NEGADO',creditoIcms:0,observacao:'Relatorio de despesas: ICMS nao aplicavel.',fundamentoLegal:'N/A',avisos:[]}};});const tot=det.reduce((a,d)=>{a.creditoPIS+=d.pisCofins.creditoPIS||0;a.creditoCOFINS+=d.pisCofins.creditoCOFINS||0;a.notasAnalisadas++;const tp=d.pisCofins.tipo,k='total'+tp[0]+tp.slice(1).toLowerCase();if(a.resumo.pisCofins[k]!==undefined)a.resumo.pisCofins[k]++;return a;},{creditoPIS:0,creditoCOFINS:0,creditoIcms:0,notasAnalisadas:0,resumo:{pisCofins:{totalAprovado:0,totalParcial:0,totalNegado:0,totalRevisar:0},icms:{totalAprovado:0,totalParcial:0,totalNegado:0,totalRevisar:0}}});tot.creditoTotal=+(tot.creditoPIS+tot.creditoCOFINS).toFixed(2);const base=det.filter(d=>d.pisCofins.tipo==='APROVADO').reduce((s,d)=>s+d.nota.valorTotal,0);return{resultado:{totais:tot,detalhes:det,alertas:[{nivel:'info',mensagem:det.length+' categorias de despesa analisadas.'},{nivel:'info',mensagem:'Base aprovada: R$ '+base.toLocaleString('pt-BR',{minimumFractionDigits:2})+' | PIS: R$ '+tot.creditoPIS.toFixed(2)+' | COFINS: R$ '+tot.creditoCOFINS.toFixed(2)}]}};}
 // ---------------------------------------------------------------------------
 
@@ -2246,6 +2317,9 @@ app.post('/api/analise-creditos/upload', upload.single('arquivo'), async (req, r
         if (!req.file) return res.status(400).json({ erro:'Arquivo não enviado' });
         const perfil = JSON.parse(req.body.perfil||'{}');
         const nome2=req.file.originalname.toLowerCase();const regime=perfil.regime||'LUCRO_REAL_SERVICOS';if(nome2.endsWith('.xlsx')||nome2.endsWith('.xls')){
+            // Detector especifico: fatura Itau Empresas Mastercard (cabecalho longo, valor em col K)
+            const gItau = parseXlsxFaturaItauEmpresas(req.file.buffer);
+            if (gItau) return res.json(calcularCreditoExpense(gItau, regime));
             const g = parseXlsxExpense(req.file.buffer);
             if (g) return res.json(calcularCreditoExpense(g, regime));
             // fallback: tenta como planilha de notas fiscais (CFOP/CST/Valor)
@@ -2253,7 +2327,7 @@ app.post('/api/analise-creditos/upload', upload.single('arquivo'), async (req, r
             if (notasXlsx && notasXlsx.length > 0) {
                 return res.json({ resultado: calcularResultado(notasXlsx, regime) });
             }
-            return res.status(400).json({ erro: 'Planilha sem dados reconhecidos. Use colunas TIPO DE DESPESA/VALOR ou CFOP/CST/Valor Total.' });
+            return res.status(400).json({ erro: 'Planilha sem dados reconhecidos. Aceitamos: (1) TIPO DE DESPESA/VALOR, (2) CFOP/CST/Valor Total, (3) Fatura Itau Empresas Mastercard (.xlsx do internet banking).' });
         }
 const conteudo = req.file.buffer.toString('utf-8');
         const nome = req.file.originalname.toLowerCase();
