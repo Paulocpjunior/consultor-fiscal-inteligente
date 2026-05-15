@@ -29,8 +29,8 @@
 // ============================================================================
 
 const BASE_URL = process.env.SERPRO_BASE_URL || 'https://gateway.apiserpro.serpro.gov.br';
-const OAUTH_URL = process.env.SERPRO_OAUTH_URL || `${BASE_URL}/oauth2/v1/token`;
-const BASE_INVOKE = `${BASE_URL}/integra-contador/v1`;
+const OAUTH_URL = process.env.SERPRO_OAUTH_URL || `${BASE_URL}/token`;
+const BASE_INVOKE = process.env.SERPRO_BASE_INVOKE || `${BASE_URL}/integra-contador/v1`;
 const INVOKE_URL = `${BASE_INVOKE}/Consultar`;  // legacy default
 
 function urlPorAcao(acao) {
