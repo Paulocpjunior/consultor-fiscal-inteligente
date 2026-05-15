@@ -38,6 +38,12 @@ export interface XmlDocumentoView {
         municipio: string;
         uf: string;
     };
+    chave: string;
+    numero: string;
+    serie: string;
+    modelo: string;
+    direcao: string;
+    resumoOnly: boolean;
     valores: {
         total: number;        // vNF (NFe) | valores.liquido (NFSe)
         produtos: number;     // vProd  (só NFe)
@@ -76,6 +82,16 @@ const n = (...vals: any[]): number => {
  * se houver `emitente` ou `totais.vNF` é NFe. Quando ambos coexistem (raro,
  * defensivo), prevalece NFe.
  */
+function extractChaveMeta(chave: string): { modelo: string; serie: string; numero: string } {
+    const c = String(chave || '').replace(/\D/g, '');
+    if (c.length !== 44) return { modelo: '', serie: '', numero: '' };
+    return {
+        modelo: c.substring(20, 22),
+        serie: String(parseInt(c.substring(22, 25), 10) || ''),
+        numero: String(parseInt(c.substring(25, 34), 10) || ''),
+    };
+}
+
 function detectTipo(d: any): DocumentoTipo {
     if (d?.tipo === 'NFe' || d?.tipo === 'NFSe') return d.tipo;
     if (d?.emitente || d?.totais?.vNF !== undefined) return 'NFe';
@@ -93,25 +109,44 @@ export function getView(d: any): XmlDocumentoView {
     const tot = d?.totais ?? {};
     const val = d?.valores ?? {};
 
+    const chaveRaw = s(d?.chave);
+    const chaveMeta = extractChaveMeta(chaveRaw);
+
+    const schemaStr = s(d?.schema);
+    const resumoOnly = d?.tipoDoc === 'resNFe' || schemaStr.startsWith('resNFe');
+
+    const cnpjEmpresa = s(d?.empresaCnpj).replace(/\D/g, '');
+    const cnpjEmitFlat = s(d?.cnpjEmit, emit.cnpjCpf, emit.cnpj).replace(/\D/g, '');
+    let direcaoFallback = '';
+    if (cnpjEmpresa && cnpjEmitFlat) {
+        direcaoFallback = (cnpjEmitFlat === cnpjEmpresa) ? 'saida' : 'entrada';
+    }
+
     return {
         tipo,
+        chave:   chaveRaw,
+        numero:  s(d?.numero, chaveMeta.numero),
+        serie:   s(d?.serie, chaveMeta.serie),
+        modelo:  s(d?.modelo, chaveMeta.modelo),
+        direcao: s(d?.direcao, direcaoFallback),
+        resumoOnly,
         emitente: {
-            nome:      s(emit.nome, prest.nome),
-            cnpj:      s(emit.cnpjCpf, emit.cnpj, prest.cnpj),
+            nome:      s(emit.nome, prest.nome, d?.xNomeEmit, d?.xNome),
+            cnpj:      s(emit.cnpjCpf, emit.cnpj, prest.cnpj, d?.cnpjEmit),
             ie:        s(emit.ie, prest.ie),
             municipio: s(emit.municipio, prest.municipio),
             uf:        s(emit.uf, prest.uf),
             fantasia:  s(emit.fantasia, prest.fantasia),
         },
         destinatario: {
-            nome:      s(dest.nome, tom.nome),
-            cnpj:      s(dest.cnpjCpf, dest.cnpj, tom.cnpj),
+            nome:      s(dest.nome, tom.nome, d?.xNomeDest),
+            cnpj:      s(dest.cnpjCpf, dest.cnpj, tom.cnpj, d?.cnpjDest),
             ie:        s(dest.ie, tom.ie),
             municipio: s(dest.municipio, tom.municipio),
             uf:        s(dest.uf, tom.uf),
         },
         valores: {
-            total:    n(tot.vNF, val.liquido),
+            total:    n(tot.vNF, val.liquido, d?.valorTotal, d?.vNF),
             produtos: n(tot.vProd),
             bc:       n(tot.vBC),
             icms:     n(tot.vICMS),

@@ -56,6 +56,14 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
                     </div>
                 </div>
 
+                {getView(d).resumoOnly ? (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-3">
+                        <p className="text-xs font-bold text-amber-700 dark:text-amber-300">Resumo SEFAZ</p>
+                        <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 mt-1">
+                            Este documento veio como resumo (resNFe) da SEFAZ. O XML completo (procNFe) ainda não foi baixado, então itens e detalhes de impostos não estão disponíveis.
+                        </p>
+                    </div>
+                ) : (
                 <div>
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Resumo de Impostos</p>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -80,6 +88,7 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
                         ))}
                     </div>
                 </div>
+                )}
 
                 <div>
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
