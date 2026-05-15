@@ -190,7 +190,10 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                                     <td className="px-4 py-2 font-mono text-xs">
                                         {m.dataEnvio ? m.dataEnvio.slice(0, 10) : '-'}
                                     </td>
-                                    <td className="px-4 py-2 font-mono text-xs">{m.empresaCnpj}</td>
+                                    <td className="px-4 py-2">
+                                        <div className="text-sm">{m.empresaNome || '—'}</div>
+                                        <div className="font-mono text-xs text-slate-500">{m.empresaCnpj}</div>
+                                    </td>
                                     <td className="px-4 py-2">
                                         <span className={`px-2 py-0.5 rounded text-xs ${categoriaColor(m.categoria)}`}>
                                             {categoriaLabel(m.categoria)}
@@ -227,7 +230,7 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                                 {selecionada.assunto}
                             </h3>
                             <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-                                {selecionada.remetente} | {selecionada.dataEnvio?.slice(0, 10)} | CNPJ {selecionada.empresaCnpj}
+                                {selecionada.remetente} | {selecionada.dataEnvio?.slice(0, 10)} | {selecionada.empresaNome ? `${selecionada.empresaNome} (${selecionada.empresaCnpj})` : `CNPJ ${selecionada.empresaCnpj}`}
                             </p>
                         </div>
                         <div className="flex-1 overflow-y-auto p-6 text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
