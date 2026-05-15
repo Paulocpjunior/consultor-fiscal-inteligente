@@ -24,6 +24,19 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
     const provider = getCaixaPostalProvider();
     const mode = getProviderMode();
 
+    // Em SERPRO: pergunta primeiro se tem msg nova (chamada barata INNOVAMSG63).
+    // Economiza chamada paginada se a empresa nao tem nada novo.
+    if (mode === 'serpro' && typeof provider.temNovasMensagens === 'function') {
+        try {
+            const r = await provider.temNovasMensagens(empresaCnpj);
+            if (!r.temNovas) {
+                return { mode, total: 0, novas: 0, atualizadas: 0, skipped: true, reason: 'INNOVAMSG63=sem novas' };
+            }
+        } catch (err) {
+            console.warn(`[caixa-postal] INNOVAMSG63 falhou pra ${empresaCnpj}: ${err.message}, tentando lista direto`);
+        }
+    }
+
     const mensagensRemotas = await provider.listarMensagens(empresaCnpj);
 
     // Lê estado de leitura atual do Firestore pra preservar
@@ -80,12 +93,13 @@ export async function sincronizarTodasEmpresas() {
     const lucroSnap = await db.collection('lucro_empresas').get();
     lucroSnap.forEach(d => empresas.push({ id: d.id, ...d.data() }));
 
-    const stats = { totalEmpresas: empresas.length, sucesso: 0, falha: 0, detalhes: [] };
+    const stats = { totalEmpresas: empresas.length, sucesso: 0, falha: 0, skipped: 0, detalhes: [] };
     for (const emp of empresas) {
         if (!emp.cnpj) continue;
         try {
             const r = await sincronizarEmpresa(emp.id, emp.cnpj);
             stats.sucesso++;
+            if (r.skipped) stats.skipped++;
             stats.detalhes.push({ empresa: emp.nome, ...r });
         } catch (err) {
             stats.falha++;

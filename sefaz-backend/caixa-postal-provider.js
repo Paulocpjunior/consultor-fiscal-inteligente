@@ -15,6 +15,8 @@
 //   idServicos: MSGCONTRIBUINTE51, OBTERINDICADORNOVASMSGS52, OBTERLISTAMSGS53
 // ============================================================================
 
+import { invokeIntegraContador } from './serpro-client.js';
+
 const MODE = process.env.CAIXA_POSTAL_MODE || 'mock';
 
 // ── Mock Provider ──────────────────────────────────────────────────────────
@@ -100,28 +102,118 @@ class MockProvider {
     }
 }
 
-// ── SERPRO Provider (skeleton — implementação futura) ───────────────────────
+// ── SERPRO Provider (Integra-CaixaPostal ATIVO) ─────────────────────────────
+// idServicos (idSistema=CAIXAPOSTAL):
+//   - INNOVAMSG63        (/Consultar) -> indicador rapido tem msg nova
+//   - MSGCONTRIBUINTE61  (/Consultar) -> lista paginada
+//   - MSGCONTRIBUINTE62  (/Consultar) -> detalhe por isn
+
+function safeJsonParse(s) {
+    if (typeof s !== 'string') return s;
+    try { return JSON.parse(s); } catch { return s; }
+}
 
 class SerproProvider {
-    constructor() {
-        throw new Error(
-            'SerproProvider ainda não implementado. ' +
-            'Pré-requisitos: contrato Integra Contador na Loja SERPRO + e-CNPJ A1 SP Contábil. ' +
-            'Quando ativar, defina CAIXA_POSTAL_MODE=serpro.'
-        );
+    constructor() {}
+
+    async temNovasMensagens(empresaCnpj) {
+        const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        const r = await invokeIntegraContador({
+            idSistema: 'CAIXAPOSTAL',
+            idServico: 'INNOVAMSG63',
+            contribuinteCnpj: cnpj,
+            acao: 'Consultar',
+            dados: {},
+        });
+        const d = safeJsonParse(r.dados) || {};
+        const ind = d.indicadorNovasMensagens || d.indicador || d.temNovas || '';
+        return { temNovas: /^[ST1]/i.test(String(ind)), _raw: d };
     }
 
-    async listarMensagens(empresaCnpj, opts) {
-        // Roteiro futuro:
-        // 1. POST /Consultar com idSistema=CAIXAPOSTAL idServico=OBTERLISTAMSGS53
-        // 2. Headers: Authorization: Bearer <jwt-com-e-cnpj-a1>
-        // 3. Body: { contratante, autorPedidoDados, contribuinte, pedidoDados }
-        // 4. Parsear response.dados (string JSON com lista)
-        throw new Error('SerproProvider.listarMensagens não implementado');
+    async listarMensagens(empresaCnpj, opts = {}) {
+        const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        const todas = [];
+        let ponteiro = '00000000000000';
+        let p = 0;
+        const MAX = 10;
+        while (p < MAX) {
+            const r = await invokeIntegraContador({
+                idSistema: 'CAIXAPOSTAL',
+                idServico: 'MSGCONTRIBUINTE61',
+                contribuinteCnpj: cnpj,
+                acao: 'Consultar',
+                dados: {
+                    categoria: '0',
+                    statusLeitura: '0',
+                    indicadorPagina: p === 0 ? '0' : '1',
+                    ponteiroPagina: ponteiro,
+                },
+            });
+            const d = safeJsonParse(r.dados) || {};
+            const conteudo = (d.conteudo && d.conteudo[0]) || d;
+            const lista = conteudo.listaMensagens || [];
+            for (const m of lista) todas.push(this._mapMensagem(m, cnpj));
+            const ultima = String(conteudo.indicadorUltimaPagina || 'S');
+            const prox = conteudo.ponteiroProximaPagina;
+            if (/^S/i.test(ultima) || !prox || prox === ponteiro) break;
+            ponteiro = prox;
+            p++;
+        }
+        return todas;
+    }
+
+    async obterDetalhe(empresaCnpj, isn) {
+        const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        const r = await invokeIntegraContador({
+            idSistema: 'CAIXAPOSTAL',
+            idServico: 'MSGCONTRIBUINTE62',
+            contribuinteCnpj: cnpj,
+            acao: 'Consultar',
+            dados: { isn: String(isn) },
+        });
+        return safeJsonParse(r.dados) || {};
     }
 
     async marcarComoLida(mensagemId) {
-        throw new Error('SerproProvider.marcarComoLida não implementado');
+        return { ok: true, mode: 'serpro', message: 'SERPRO nao expoe marcar-lida. Persistencia local.' };
+    }
+
+    _mapMensagem(m, cnpj) {
+        const isn = m.isn || m.numeroControle || '';
+        const data = m.dataEnvio || '';
+        const hora = m.horaEnvio || '';
+        let dataIso = new Date().toISOString();
+        if (/^\d{8}$/.test(data)) {
+            const y = data.slice(0,4), mo = data.slice(4,6), dd = data.slice(6,8);
+            const hh = /^\d{6}$/.test(hora) ? hora.slice(0,2) : '00';
+            const mm = /^\d{6}$/.test(hora) ? hora.slice(2,4) : '00';
+            const ss = /^\d{6}$/.test(hora) ? hora.slice(4,6) : '00';
+            dataIso = `${y}-${mo}-${dd}T${hh}:${mm}:${ss}-03:00`;
+        }
+        let leituraIso = null;
+        if (/^\d{8}$/.test(m.dataLeitura || '')) {
+            const y = m.dataLeitura.slice(0,4), mo = m.dataLeitura.slice(4,6), dd = m.dataLeitura.slice(6,8);
+            leituraIso = `${y}-${mo}-${dd}T00:00:00-03:00`;
+        }
+        const assunto = String(m.assuntoModelo || m.assunto || '').toLowerCase();
+        let categoria = 'informativo';
+        if (/intima|notifica/.test(assunto)) categoria = 'intimacao';
+        else if (/malha|divergencia|inconsistencia/.test(assunto)) categoria = 'malha';
+        else if (/exclus|exclud/.test(assunto)) categoria = 'exclusao';
+        return {
+            mensagemId: String(isn),
+            empresaCnpj: cnpj,
+            assunto: m.assuntoModelo || m.assunto || '(sem assunto)',
+            remetente: m.remetente || 'Receita Federal do Brasil',
+            categoria,
+            corpo: m.corpo || '',
+            dataEnvio: dataIso,
+            dataLeitura: leituraIso,
+            dataCiencia: /^\d{8}$/.test(m.dataCiencia || '') ? m.dataCiencia : null,
+            indicadorLeitura: m.indicadorLeitura || '0',
+            numeroControle: m.numeroControle || '',
+            fonte: 'serpro',
+        };
     }
 }
 
