@@ -1287,3 +1287,110 @@ export interface CertificadoDigitalInfo {
     fingerprint?: string;
     cadastradoEm?: number;
 }
+
+
+/* ==========================================================================
+ * DCTFWeb — Integra Contador SERPRO
+ * ========================================================================== */
+
+export type DctfwebCategoria =
+    | 'GERAL_MENSAL' | 'GERAL_13' | 'AFERICAO' | 'ESPETACULO'
+    | 'RECLAMATORIA' | 'MIT';
+
+export type DctfwebSituacao = 'EM_ANDAMENTO' | 'ATIVA' | 'ENCERRADA' | 'DESCONHECIDA';
+
+export interface DctfwebDeclaracao {
+    id: string;
+    empresaId?: string;
+    empresaCnpj: string;
+    categoria: DctfwebCategoria;
+    categoriaCodigo?: number;
+    anoPA: number;
+    mesPA: number;
+    situacao: DctfwebSituacao;
+    valorTotal?: number;
+    inssRetido?: number;
+    cprbDevido?: number;
+    dataVencimento?: string;
+    numeroRecibo?: string;
+    transmitidoEm?: string | null;
+    fonte?: 'mock' | 'serpro';
+    ultimaSincronizacao?: string;
+    _erro?: string | null;
+}
+
+export interface DctfwebResumo {
+    totalDeclaracoes: number;
+    pendentes: number;
+    transmitidas: number;
+    empresasComPendente: number;
+    mode: 'mock' | 'serpro';
+}
+
+export interface DctfwebSyncStats {
+    mode: 'mock' | 'serpro';
+    total: number;
+    novas: number;
+    atualizadas: number;
+    anoPA: number;
+    mesPA: number;
+}
+
+export interface DctfwebTransmissaoResult {
+    ok: boolean;
+    categoria: DctfwebCategoria;
+    numeroRecibo: string;
+    transmitidoEm: string;
+    situacao: DctfwebSituacao;
+    fonte: 'mock' | 'serpro';
+    _raw?: any;
+}
+
+export interface DctfwebDarfResult {
+    valor: number;
+    numeroDocumento: string;
+    codigoBarras: string;
+    vencimento: string;
+    pdfBase64: string;
+    fonte: 'mock' | 'serpro';
+    _raw?: any;
+}
+
+export interface DctfwebPdfResult {
+    pdfBase64: string;
+    categoria?: DctfwebCategoria | number;
+    anoPA: number;
+    mesPA: number;
+    fonte: 'mock' | 'serpro';
+}
+
+export type DctfwebMitStatus =
+    | 'PROCESSANDO' | 'ENCERRADA' | 'ERRO' | 'DESCONHECIDO';
+
+export interface DctfwebMitApuracao {
+    apuracaoMit: any;
+    fonte: 'mock' | 'serpro';
+}
+
+export interface DctfwebMitEncerramentoResult {
+    ok: boolean;
+    statusEncerramento: DctfwebMitStatus;
+    protocolo: string;
+    fonte: 'mock' | 'serpro';
+    _raw?: any;
+}
+
+export interface DctfwebMitHistorico {
+    ano: number;
+    apuracoes: any[];
+    fonte: 'mock' | 'serpro';
+}
+
+export const DCTFWEB_CATEGORIA_LABELS: Record<DctfwebCategoria, string> = {
+    GERAL_MENSAL: 'Mensal',
+    GERAL_13: '13º Salário',
+    AFERICAO: 'Aferição de Obra',
+    ESPETACULO: 'Espetáculo Desportivo',
+    RECLAMATORIA: 'Reclamatória Trabalhista',
+    MIT: 'MIT - Módulo Inclusão de Tributos',
+};
