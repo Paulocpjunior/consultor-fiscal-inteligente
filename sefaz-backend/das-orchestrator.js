@@ -22,7 +22,7 @@ function fa() {
  * @returns {object} doc DAS persistido
  */
 export async function emitirDasRegular(req) {
-    const { empresaId, empresaCnpj, empresaNome, competencia, valor } = req;
+    const { empresaId, empresaCnpj, empresaNome, competencia, valor, dadosPgdas } = req;
     if (!empresaId || !empresaCnpj || !competencia || !valor) {
         throw new Error('Campos obrigatorios: empresaId, empresaCnpj, competencia, valor');
     }
@@ -30,8 +30,8 @@ export async function emitirDasRegular(req) {
     const provider = getDasProvider();
     const mode = getDasMode();
 
-    // 1. Transmite PGDAS-D
-    const pgdas = await provider.transmitirPgdasD({ empresaCnpj, competencia, valor });
+    // 1. Transmite PGDAS-D (com payload detalhado se vier do frontend)
+    const pgdas = await provider.transmitirPgdasD({ empresaCnpj, competencia, valor, dadosPgdas });
 
     // 2. Gera o DAS
     const das = await provider.gerarDas({ empresaCnpj, competencia, valor, tipo: 'regular' });
@@ -48,6 +48,8 @@ export async function emitirDasRegular(req) {
         valor,
         ...das,
         pgdasRecibo: pgdas.recibo,
+        pgdasNumeroDeclaracao: pgdas.numeroDeclaracao || '',
+        pgdasTipoDeclaracao: pgdas.tipoDeclaracao || 1,
         pgdasTransmitidoEm: pgdas.transmitidoEm,
         emitidoEm: new Date().toISOString(),
         modeUsado: mode,

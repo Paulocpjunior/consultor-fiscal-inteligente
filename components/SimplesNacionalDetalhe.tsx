@@ -7,6 +7,7 @@ import NfseSpAdminPanel from './NfseSpAdminPanel';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 import { emitirDasRegular } from '../services/dasService';
+import { mapPgdasPayload } from '../services/pgdasMapper';
 import EmitirNfseModal from './NfseNacional/EmitirModal';
 import PrevisaoDasModal from './Das/PrevisaoModal';
 import PgdasConferirModal from './Pgdas/ConferirModal';
@@ -276,12 +277,23 @@ if (filialServico > 0) {
 
         setEmitindoDas(true);
         try {
+            const dadosPgdas = mapPgdasPayload({
+                empresa,
+                resumo,
+                mesApuracao,
+                faturamentoPorCnae,
+                filialComercio,
+                filialIndustria,
+                filialServico,
+                icmsVendas,
+            });
             await emitirDasRegular(currentUser ?? null, {
                 empresaId: empresa.id,
                 empresaCnpj: empresa.cnpj,
                 empresaNome: empresa.nome,
                 competencia,
                 valor: resumo.das_mensal,
+                dadosPgdas,
             });
             onShowToast('DAS Regular emitido com sucesso! Veja em Central de DAS.');
         } catch (err: any) {

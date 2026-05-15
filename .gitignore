@@ -25,3 +25,5 @@ lista_empresas_sem_cert.mjs
 # Backups de patch local
 server.js.bak.*
 
+diag-*.mjs
+*.bak.*

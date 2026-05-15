@@ -36,6 +36,7 @@ export async function listarDas(
 export async function emitirDasRegular(user: User | null, payload: {
     empresaId: string; empresaCnpj: string; empresaNome: string;
     competencia: string; valor: number;
+    dadosPgdas?: any;  // payload PGDAS-D montado pelo pgdasMapper
 }): Promise<DasEmitido> {
     const res = await fetch(`${BASE}/emitir-regular`, {
         method: 'POST',

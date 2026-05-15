@@ -108,36 +108,100 @@ class SerproProvider {
     }
 
     /**
-     * Transmite PGDAS-D (declaração do Simples Nacional) antes do DAS regular.
-     * idSistema=PGDASD idServico=ENTREGARDECLARACAO11
+     * Consulta se ja existe declaracao transmitida pra esse PA.
+     * idSistema=PGDASD idServico=CONSULTIMADECREC14  acao=Consultar
+     * Custo: 1 chamada SERPRO (faixa baixa, ~R$ 0,06-0,40).
      *
-     * TODO[SERPRO_REAL]: validar payload exato contra documentação após
-     * primeira chamada real. Os campos abaixo são baseados na referência
-     * pública do Integra Contador; pode precisar ajustar nomes/formatos.
+     * Retorna { existe: true, numeroDeclaracao } ou { existe: false }
+     */
+    async consultarDeclaracaoPa(req) {
+        const { empresaCnpj, competencia } = req;
+        const pa = String(competencia).replace(/\D/g, '').slice(0, 6);
+
+        try {
+            const result = await invokeIntegraContador({
+                idSistema: 'PGDASD',
+                idServico: 'CONSULTIMADECREC14',
+                contribuinteCnpj: empresaCnpj,
+                acao: 'Consultar',
+                dados: { periodoApuracao: pa },
+            });
+            const d = result.dados || {};
+            const dec = d.declaracao || d;
+            if (dec.numeroDeclaracao) return { existe: true, numeroDeclaracao: dec.numeroDeclaracao };
+            return { existe: false };
+        } catch (err) {
+            // Se SERPRO retornar erro de negocio (404, nao encontrado, etc),
+            // tratamos como "nao existe" — declaracao Original
+            if (/n[aã]o.*encontrad|404|sem.*declarac/i.test(err.message || '')) {
+                return { existe: false };
+            }
+            // Outros erros sao propagados
+            throw err;
+        }
+    }
+
+    /**
+     * Transmite PGDAS-D via TRANSDECLARACAO11 / acao=Declarar.
+     * Detecta Retificadora automaticamente via consultarDeclaracaoPa.
+     *
+     * Espera req.dadosPgdas com payload mapeado pelo pgdasMapper.ts (frontend).
+     * Se dadosPgdas nao vier, monta payload minimo com receita total agregada.
      */
     async transmitirPgdasD(req) {
-        const { empresaCnpj, competencia, valor } = req;
-        if (!empresaCnpj || !competencia) throw new Error('empresaCnpj e competencia obrigatórios');
+        const { empresaCnpj, competencia, valor, dadosPgdas } = req;
+        if (!empresaCnpj || !competencia) throw new Error('empresaCnpj e competencia obrigatorios');
 
-        // SERPRO espera período como YYYYMM (sem separador)
-        const periodoApuracao = String(competencia).replace(/\D/g, '').slice(0, 6);
+        const pa = Number(String(competencia).replace(/\D/g, '').slice(0, 6));
+        const cnpjLimpo = String(empresaCnpj).replace(/\D/g, '');
+
+        // Detecta se ja existe declaracao -> Retificadora
+        const consulta = await this.consultarDeclaracaoPa({ empresaCnpj: cnpjLimpo, competencia: pa });
+        const tipoDeclaracao = consulta.existe ? 2 : 1;
+
+        // Monta payload completo (com dadosPgdas) ou minimo (fallback)
+        let declaracao;
+        if (dadosPgdas && dadosPgdas.declaracao) {
+            // Frontend ja mandou payload mapeado
+            declaracao = { ...dadosPgdas.declaracao, tipoDeclaracao };
+        } else {
+            // Fallback minimo — provavelmente vai falhar no SERPRO, mas evita crash
+            declaracao = {
+                tipoDeclaracao,
+                receitaPaCompetenciaInterno: valor || 0,
+                receitaPaCompetenciaExterno: 0,
+                receitaPaCaixaInterno: null,
+                receitaPaCaixaExterno: null,
+                valorFixoIcms: null,
+                valorFixoIss: null,
+                receitasBrutasAnteriores: [],
+                estabelecimentos: [{ cnpjCompleto: cnpjLimpo, atividades: [] }],
+                folhaSalario12m: null,
+            };
+        }
+
+        const dados = {
+            cnpjCompleto: cnpjLimpo,
+            pa,
+            indicadorTransmissao: true,
+            indicadorComparacao: true,
+            declaracao,
+        };
 
         const result = await invokeIntegraContador({
             idSistema: 'PGDASD',
-            idServico: 'ENTREGARDECLARACAO11',
-            contribuinteCnpj: empresaCnpj,
-            dados: {
-                periodoApuracao,
-                valorDeclaracao: valor,
-                // TODO[SERPRO_REAL]: adicionar receita bruta por atividade,
-                // folha de pagamento, etc — depende do detalhamento da PGDASD.
-            },
+            idServico: 'TRANSDECLARACAO11',
+            contribuinteCnpj: cnpjLimpo,
+            acao: 'Declarar',
+            dados,
         });
 
         const d = result.dados || {};
         return {
             ok: true,
             recibo: d.numeroRecibo || d.recibo || d.numeroDeclaracao || '',
+            numeroDeclaracao: d.numeroDeclaracao || '',
+            tipoDeclaracao,
             transmitidoEm: d.dataTransmissao || new Date().toISOString(),
             valorDeclarado: valor,
             fonte: 'serpro',
@@ -146,23 +210,24 @@ class SerproProvider {
     }
 
     /**
-     * Gera o DAS de uma competência.
-     * idSistema=PGDASD idServico=GERARDAS21
+     * Gera o DAS de uma competencia (declaracao ja transmitida).
+     * idSistema=PGDASD idServico=GERARDAS12  acao=Emitir
      * Custo: R$ 0,80/DAS (a partir 01/2025).
      */
     async gerarDas(req) {
         const { empresaCnpj, competencia, valor, tipo = 'regular' } = req;
         if (!empresaCnpj || !competencia || !valor) {
-            throw new Error('empresaCnpj, competencia e valor obrigatórios');
+            throw new Error('empresaCnpj, competencia e valor obrigatorios');
         }
-        if (valor < 10) throw new Error('Valor mínimo R$ 10,00');
+        if (valor < 10) throw new Error('Valor minimo R$ 10,00');
 
         const periodoApuracao = String(competencia).replace(/\D/g, '').slice(0, 6);
 
         const result = await invokeIntegraContador({
             idSistema: 'PGDASD',
-            idServico: 'GERARDAS21',
+            idServico: 'GERARDAS12',
             contribuinteCnpj: empresaCnpj,
+            acao: 'Emitir',
             dados: { periodoApuracao },
         });
 

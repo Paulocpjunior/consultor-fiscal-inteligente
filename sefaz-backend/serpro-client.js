@@ -30,7 +30,14 @@
 
 const BASE_URL = process.env.SERPRO_BASE_URL || 'https://gateway.apiserpro.serpro.gov.br';
 const OAUTH_URL = process.env.SERPRO_OAUTH_URL || `${BASE_URL}/oauth2/v1/token`;
-const INVOKE_URL = `${BASE_URL}/integra-contador/v1/Consultar`;
+const BASE_INVOKE = `${BASE_URL}/integra-contador/v1`;
+const INVOKE_URL = `${BASE_INVOKE}/Consultar`;  // legacy default
+
+function urlPorAcao(acao) {
+    const acoesValidas = ['Consultar', 'Declarar', 'Emitir', 'Apoiar', 'Monitorar'];
+    if (!acoesValidas.includes(acao)) throw new Error(`Acao invalida: ${acao}`);
+    return `${BASE_INVOKE}/${acao}`;
+}
 
 const CONSUMER_KEY = process.env.SERPRO_CONSUMER_KEY || '';
 const CONSUMER_SECRET = process.env.SERPRO_CONSUMER_SECRET || '';
@@ -122,7 +129,7 @@ export async function getAccessToken() {
  * @returns {Promise<object>} { status, dados (objeto JSON parseado), mensagens }
  */
 export async function invokeIntegraContador(req) {
-    const { idSistema, idServico, contribuinteCnpj, dados, versaoSistema = '1.0' } = req;
+    const { idSistema, idServico, contribuinteCnpj, dados, versaoSistema = '1.0', acao = 'Consultar' } = req;
     if (!idSistema || !idServico) throw new Error('idSistema e idServico obrigatórios');
     if (!contribuinteCnpj) throw new Error('contribuinteCnpj obrigatório');
 
@@ -163,7 +170,7 @@ export async function invokeIntegraContador(req) {
         }
         try {
             const token = await getAccessToken();
-            const res = await fetch(INVOKE_URL, {
+            const res = await fetch(urlPorAcao(acao), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,

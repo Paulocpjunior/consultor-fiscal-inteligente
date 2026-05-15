@@ -180,6 +180,8 @@ export interface SimplesNacionalEmpresa {
     atividadesSecundarias?: SimplesNacionalAtividade[];
     folha12: number;
     faturamentoManual?: Record<string, number>;
+    /** Regime de apuracao Simples Nacional. Default 'competencia'. */
+    regimeApuracao?: 'competencia' | 'caixa';
     faturamentoMensalDetalhado?: Record<string, any>; // Key: MM-YYYY, Value: Record<string (cnae_anexo), number | SimplesDetalheItem>
     historicoCalculos?: SimplesHistoricoCalculo[];
     nomeFantasia?: string;
