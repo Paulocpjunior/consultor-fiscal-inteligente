@@ -43,6 +43,7 @@ const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
 const CaixaPostalDashboard = lazy(() => import('./components/CaixaPostal'));
 const CaixaPostalAlerta = lazy(() => import('./components/CaixaPostal/AlertaPopup'));
 const DasDashboard = lazy(() => import('./components/Das'));
+const DCTFWebDashboard = lazy(() => import('./components/DCTFWeb'));
 const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
 const CalendarioFiscal = lazy(() => import('./components/CalendarioFiscal'));
@@ -64,6 +65,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.SPED_FISCAL]: "Geração do arquivo SPED Fiscal (EFD ICMS/IPI) — escrituração digital mensal.",
     [SearchType.CAIXA_POSTAL]: "Caixa Postal e-CAC — mensagens da Receita Federal por empresa (intimações, malha fiscal, comunicados).",
     [SearchType.DAS_SIMPLES]: "DAS Simples Nacional — emissão regular (com PGDAS-D) e avulso, controle de pagamentos por empresa.",
+    [SearchType.DCTFWEB]: "DCTFWeb — Declaração de Débitos e Créditos Tributários Federais Previdenciários (empresas Lucro Presumido/Real), com transmissão, DARF e MIT.",
     [SearchType.NFSE_NACIONAL]: "NFS-e Nacional (CGSN 189/2026) — emissão e gestão de notas de serviço no padrão nacional, obrigatório set/2026.",
     [SearchType.DASHBOARD_CEO]: "Dashboard CEO — visão executiva unificada com KPIs e recomendações da IA.",
     [SearchType.CALENDARIO]: "Calendário Fiscal — vencimentos de obrigações por empresa (DAS, DARF, DCTF, eSocial, etc).",
@@ -1079,6 +1081,15 @@ const App: React.FC = () => {
                                 <DasDashboard
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                        )}
+
+                        {searchType === SearchType.DCTFWEB && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <DCTFWebDashboard
+                                    currentUser={currentUser}
+                                    onShowToast={setToastMessage}
                                 />
                             </Suspense>
                         )}

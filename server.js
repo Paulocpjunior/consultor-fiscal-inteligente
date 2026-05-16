@@ -13,6 +13,7 @@ import sefazNfseSpRouter from './sefaz-backend/nfse-sp-routes.js';
 import spedFiscalRouter from './sefaz-backend/sped-fiscal-routes.js';
 import caixaPostalRouter from './sefaz-backend/caixa-postal-routes.js';
 import dasRouter from './sefaz-backend/das-routes.js';
+import dctfwebRouter from './sefaz-backend/dctfweb-routes.js';
 import nfseNacRouter from './sefaz-backend/nfse-nacional-routes.js';
 import * as sharepoint from './sefaz-backend/sharepoint-provider.js';
 import * as sharepointSync from './sefaz-backend/sharepoint-sync-orchestrator.js';
@@ -32,6 +33,7 @@ app.use('/api/admin/sefaz', sefazNfseSpRouter);
 app.use('/api/admin/sped-fiscal', spedFiscalRouter);
 app.use('/api/admin/caixa-postal', caixaPostalRouter);
 app.use('/api/admin/das', dasRouter);
+app.use('/api/admin/dctfweb', dctfwebRouter);
 app.use('/api/admin/nfse-nacional', nfseNacRouter);
 app.use('/api/admin/cert-empresa', certEmpresaRouter);
 
