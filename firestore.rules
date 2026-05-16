@@ -66,17 +66,25 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /simples_empresas/{empId} {
-      allow read, update, delete: if isOwnerOrAdmin(resource.data.createdBy);
+      // get (1 doc): so dono ou admin. list (query): qualquer logado —
+      // o filtro por carteira do colaborador e garantido pelo codigo do app.
+      allow get: if isOwnerOrAdmin(resource.data.createdBy);
+      allow list: if isSignedIn();
+      allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
 
     match /lucro_empresas/{empId} {
-      allow read, update, delete: if isOwnerOrAdmin(resource.data.createdBy);
+      allow get: if isOwnerOrAdmin(resource.data.createdBy);
+      allow list: if isSignedIn();
+      allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
 
     match /documentos_fiscais/{docId} {
-      allow read, update, delete: if isOwnerOrAdmin(resource.data.createdBy);
+      allow get: if isOwnerOrAdmin(resource.data.createdBy);
+      allow list: if isSignedIn();
+      allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
 
