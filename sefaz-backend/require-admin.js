@@ -46,4 +46,28 @@ export async function requireAdmin(req, res, next) {
     }
 }
 
+/**
+* Express middleware. Exige apenas:
+*   - header Authorization: Bearer <firebase-id-token> valido
+* NAO exige role admin. Use em rotas de leitura liberadas a qualquer
+* usuario autenticado (ex.: /resumo da Caixa Postal pro popup geral).
+*/
+export async function requireAuth(req, res, next) {
+    try {
+        const auth = req.headers.authorization || '';
+        const m = auth.match(/^Bearer\s+(.+)$/i);
+        if (!m) return res.status(401).json({ error: 'Token ausente' });
+
+        const decoded = await fa().auth().verifyIdToken(m[1]);
+        const userDoc = await fa().firestore()
+            .collection('users').doc(decoded.uid).get();
+        const role = userDoc.exists ? userDoc.data().role : null;
+        req.user = { uid: decoded.uid, role, email: decoded.email || null };
+        next();
+    } catch (e) {
+        console.error('[require-auth] erro:', e.message);
+        return res.status(401).json({ error: 'Token invalido ou expirado' });
+    }
+}
+
 export default requireAdmin;

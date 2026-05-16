@@ -18,8 +18,9 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
     const [dispensado, setDispensado] = useState(false);
 
     useEffect(() => {
-        // Só admin recebe alerta
-        if (!currentUser || currentUser.role !== 'admin') return;
+        // Liberado a qualquer usuario autenticado (colaboradores cobrem
+        // empresas uns dos outros). Filtro por carteira virá depois.
+        if (!currentUser) return;
 
         const hoje = new Date().toISOString().slice(0, 10);
         try {

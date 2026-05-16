@@ -5,7 +5,7 @@
 // ============================================================================
 
 import express from 'express';
-import { requireAdmin } from './require-admin.js';
+import { requireAdmin, requireAuth } from './require-admin.js';
 import admin from 'firebase-admin';
 import {
     sincronizarEmpresa,
@@ -28,7 +28,7 @@ router.get('/status', (_req, res) => {
 });
 
 // Resumo global pra dashboard
-router.get('/resumo', requireAdmin, async (_req, res) => {
+router.get('/resumo', requireAuth, async (_req, res) => {
     try {
         const r = await getResumoGlobal();
         res.json(r);
