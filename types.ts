@@ -19,8 +19,7 @@ export enum SearchType {
   DASHBOARD_CEO = 'Dashboard CEO',
   CALENDARIO = 'Calendário Fiscal',
   ANOMALIAS = 'Detector de Anomalias',
-  SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
-  PRONTIDAO = 'Prontidão SERPRO'
+  SIMULADOR_IBS_CBS = 'Simulador IBS/CBS'
 }
 
 export interface GroundingSource {

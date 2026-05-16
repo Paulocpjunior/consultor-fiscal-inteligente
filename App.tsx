@@ -44,7 +44,6 @@ const CaixaPostalDashboard = lazy(() => import('./components/CaixaPostal'));
 const CaixaPostalAlerta = lazy(() => import('./components/CaixaPostal/AlertaPopup'));
 const DasDashboard = lazy(() => import('./components/Das'));
 const DCTFWebDashboard = lazy(() => import('./components/DCTFWeb'));
-const ProntidaoDashboard = lazy(() => import('./components/Prontidao'));
 const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
 const CalendarioFiscal = lazy(() => import('./components/CalendarioFiscal'));
@@ -72,7 +71,6 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CALENDARIO]: "Calendário Fiscal — vencimentos de obrigações por empresa (DAS, DARF, DCTF, eSocial, etc).",
     [SearchType.ANOMALIAS]: "Detector de Anomalias — análise estatística + IA detecta irregularidades no DAS de cada empresa.",
     [SearchType.SIMULADOR_IBS_CBS]: "Simulador IBS/CBS — projeção da carga tributária 2026-2033 sob a Reforma Tributária (LC 214/2025).",
-    [SearchType.PRONTIDAO]: "Prontidão SERPRO — visão consolidada de certificado digital e procuração e-CAC por empresa (DCTFWeb, Caixa Postal, DAS).",
 };
 
 const App: React.FC = () => {
@@ -1096,14 +1094,6 @@ const App: React.FC = () => {
                             </Suspense>
                         )}
 
-                        {searchType === SearchType.PRONTIDAO && (
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <ProntidaoDashboard
-                                    currentUser={currentUser}
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                        )}
 
                         {searchType === SearchType.NFSE_NACIONAL && (
                             <Suspense fallback={<LoadingSpinner />}>

@@ -18,7 +18,6 @@ import nfseNacRouter from './sefaz-backend/nfse-nacional-routes.js';
 import * as sharepoint from './sefaz-backend/sharepoint-provider.js';
 import * as sharepointSync from './sefaz-backend/sharepoint-sync-orchestrator.js';
 import certEmpresaRouter from './sefaz-backend/cert-empresa-routes.js';
-import prontidaoRouter from './sefaz-backend/prontidao-routes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -37,7 +36,6 @@ app.use('/api/admin/das', dasRouter);
 app.use('/api/admin/dctfweb', dctfwebRouter);
 app.use('/api/admin/nfse-nacional', nfseNacRouter);
 app.use('/api/admin/cert-empresa', certEmpresaRouter);
-app.use('/api/admin/prontidao', prontidaoRouter);
 
 const PORT = process.env.PORT || 8080;
 
