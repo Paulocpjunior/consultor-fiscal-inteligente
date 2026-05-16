@@ -47,6 +47,7 @@ const ProntidaoDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         const q = filtro.trim().toLowerCase();
         if (!q) return empresas;
         return empresas.filter(e =>
+            (e.nome || '').toLowerCase().includes(q) ||
             (e.cnpj || '').toLowerCase().includes(q) ||
             (e.empresaId || '').toLowerCase().includes(q)
         );
@@ -98,7 +99,7 @@ const ProntidaoDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     type="text"
                     value={filtro}
                     onChange={e => setFiltro(e.target.value)}
-                    placeholder="Filtrar por CNPJ ou ID da empresa..."
+                    placeholder="Filtrar por nome ou CNPJ..."
                     className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-white"
                 />
                 <button
@@ -121,7 +122,8 @@ const ProntidaoDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <table className="w-full text-sm">
                     <thead className="bg-slate-800/80 text-slate-400">
                         <tr>
-                            <th className="text-left px-4 py-3">Empresa / CNPJ</th>
+                            <th className="text-left px-4 py-3">Empresa</th>
+                            <th className="text-left px-4 py-3">CNPJ</th>
                             <th className="text-left px-4 py-3">Certificado</th>
                             <th className="text-left px-4 py-3">Validade</th>
                             <th className="text-left px-4 py-3">Procuracao e-CAC</th>
@@ -130,7 +132,7 @@ const ProntidaoDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     <tbody>
                         {listaFiltrada.length === 0 && !loading && (
                             <tr>
-                                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                                     Nenhuma empresa com certificado cadastrado.
                                 </td>
                             </tr>
@@ -141,6 +143,9 @@ const ProntidaoDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             return (
                                 <tr key={emp.empresaId} className="border-t border-slate-800">
                                     <td className="px-4 py-3 text-white">
+                                        {emp.nome || <span className="text-slate-500">Sem nome</span>}
+                                    </td>
+                                    <td className="px-4 py-3 text-slate-400 text-xs">
                                         {emp.cnpj || emp.empresaId}
                                     </td>
                                     <td className="px-4 py-3">

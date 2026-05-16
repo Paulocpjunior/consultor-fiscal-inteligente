@@ -55,10 +55,23 @@ function classificarCert(notAfter) {
 router.get('/', requireAdmin, async (_req, res) => {
     try {
         const certs = await listCertsEmpresas();
+
+        // Cruza com simples_empresas + lucro_empresas pra obter o nome.
+        // empresaId do cert == id do doc de empresa (confirmado).
+        const db = fa().firestore();
+        const [simSnap, lucSnap] = await Promise.all([
+            db.collection('simples_empresas').get(),
+            db.collection('lucro_empresas').get(),
+        ]);
+        const nomesPorId = {};
+        simSnap.forEach(d => { nomesPorId[d.id] = d.data().nome || null; });
+        lucSnap.forEach(d => { nomesPorId[d.id] = d.data().nome || null; });
+
         const empresas = certs.map(c => {
             const cls = classificarCert(c.notAfter);
             return {
                 empresaId: c.empresaId,
+                nome: nomesPorId[c.empresaId] || null,
                 cnpj: c.cnpj || null,
                 cert: {
                     status: cls.status,            // valido | vencendo | vencido | ausente

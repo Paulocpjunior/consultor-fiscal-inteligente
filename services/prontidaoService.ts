@@ -11,6 +11,7 @@ export type ProcuracaoStatus = 'ok' | 'sem_procuracao' | 'erro' | 'nao_testado';
 
 export interface ProntidaoEmpresa {
     empresaId: string;
+    nome: string | null;
     cnpj: string | null;
     cert: {
         status: CertStatus;
