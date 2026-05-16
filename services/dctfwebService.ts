@@ -24,23 +24,28 @@ import type {
     DctfwebMitHistorico,
 } from '../types';
 
+import { getAuth } from 'firebase/auth';
+
 const BASE = '/api/admin/dctfweb';
 
-function authHeaders(user: User | null): Record<string, string> {
+async function authHeaders(_user: User | null): Promise<Record<string, string>> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Usuario nao autenticado');
+    const token = await u.getIdToken();
     return {
         'Content-Type': 'application/json',
-        'X-User-Role': user?.role || 'colaborador',
+        'Authorization': `Bearer ${token}`,
     };
 }
 
 export async function getStatus(user: User | null): Promise<{ mode: 'mock' | 'serpro'; ok: boolean }> {
-    const res = await fetch(`${BASE}/status`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/status`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`getStatus: ${res.status}`);
     return res.json();
 }
 
 export async function getResumo(user: User | null): Promise<DctfwebResumo> {
-    const res = await fetch(`${BASE}/resumo`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/resumo`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`getResumo: ${res.status}`);
     return res.json();
 }
@@ -59,7 +64,7 @@ export async function listarDeclaracoes(user: User | null, filters: ListarFilter
     if (filters.anoPA) qs.set('anoPA', String(filters.anoPA));
     if (filters.mesPA) qs.set('mesPA', String(filters.mesPA));
 
-    const res = await fetch(`${BASE}/declaracoes?${qs}`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/declaracoes?${qs}`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`listarDeclaracoes: ${res.status}`);
     return res.json();
 }
@@ -70,7 +75,7 @@ export async function sincronizarEmpresa(user: User | null, payload: {
 }): Promise<DctfwebSyncStats> {
     const res = await fetch(`${BASE}/sincronizar`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -86,7 +91,7 @@ export async function transmitirDeclaracao(user: User | null, payload: {
 }): Promise<DctfwebTransmissaoResult> {
     const res = await fetch(`${BASE}/transmitir`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -104,7 +109,7 @@ export async function gerarDarf(user: User | null, payload: {
 }): Promise<DctfwebDarfResult> {
     const res = await fetch(`${BASE}/gerar-darf`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -123,7 +128,7 @@ export async function consultarDeclaracaoCompleta(user: User | null, params: {
         mesPA: String(params.mesPA),
     });
     if (params.categoria) qs.set('categoria', params.categoria);
-    const res = await fetch(`${BASE}/declaracao-completa?${qs}`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/declaracao-completa?${qs}`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`consultarDeclaracaoCompleta: ${res.status}`);
     return res.json();
 }
@@ -137,7 +142,7 @@ export async function consultarRecibo(user: User | null, params: {
         mesPA: String(params.mesPA),
     });
     if (params.categoria !== undefined) qs.set('categoria', String(params.categoria));
-    const res = await fetch(`${BASE}/recibo?${qs}`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/recibo?${qs}`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`consultarRecibo: ${res.status}`);
     return res.json();
 }
@@ -150,7 +155,7 @@ export async function encerrarApuracaoMit(user: User | null, payload: {
 }): Promise<DctfwebMitEncerramentoResult> {
     const res = await fetch(`${BASE}/mit/encerrar`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -167,7 +172,7 @@ export async function consultarStatusEncerramentoMit(user: User | null, params: 
     if (params.protocolo) qs.set('protocolo', params.protocolo);
     if (params.anoPA) qs.set('anoPA', String(params.anoPA));
     if (params.mesPA) qs.set('mesPA', String(params.mesPA));
-    const res = await fetch(`${BASE}/mit/status?${qs}`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/mit/status?${qs}`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`consultarStatusEncerramentoMit: ${res.status}`);
     return res.json();
 }
@@ -180,7 +185,7 @@ export async function consultarApuracaoMit(user: User | null, params: {
         anoPA: String(params.anoPA),
         mesPA: String(params.mesPA),
     });
-    const res = await fetch(`${BASE}/mit/apuracao?${qs}`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/mit/apuracao?${qs}`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`consultarApuracaoMit: ${res.status}`);
     return res.json();
 }
@@ -192,7 +197,7 @@ export async function consultarApuracoesAno(user: User | null, params: {
         empresaCnpj: params.empresaCnpj,
         anoPA: String(params.anoPA),
     });
-    const res = await fetch(`${BASE}/mit/historico?${qs}`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/mit/historico?${qs}`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`consultarApuracoesAno: ${res.status}`);
     return res.json();
 }
