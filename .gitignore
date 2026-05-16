@@ -27,3 +27,7 @@ server.js.bak.*
 
 diag-*.mjs
 *.bak.*
+delete-mocks-caixa.mjs
+listar-3-empresas.mjs
+smoke-procuracoes.mjs
+sped-fiscal-TESTE-*.txt

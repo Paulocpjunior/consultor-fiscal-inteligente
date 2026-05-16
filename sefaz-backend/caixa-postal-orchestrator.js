@@ -8,6 +8,30 @@ import { getCaixaPostalProvider, getProviderMode } from './caixa-postal-provider
 
 const COLLECTION = 'caixa_postal_mensagens';
 
+// Cache de nomes de empresa por CNPJ — populado no primeiro lookup de cada sync.
+// Reset a cada sincronizarTodas pra pegar mudancas.
+let _nomeCache = new Map();
+
+function _normCnpj(c) { return String(c || '').replace(/\D/g, ''); }
+
+async function _carregarNomes() {
+    if (_nomeCache.size > 0) return;
+    const db = fa().firestore();
+    const colecoes = ['simples_empresas', 'lucro_empresas'];
+    for (const col of colecoes) {
+        const snap = await db.collection(col).get();
+        snap.forEach(d => {
+            const x = d.data();
+            if (x.cnpj && x.nome) {
+                _nomeCache.set(_normCnpj(x.cnpj), x.nome);
+            }
+        });
+    }
+}
+
+function _resetCache() { _nomeCache = new Map(); }
+
+
 function fa() {
     if (!admin.apps.length) {
         admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -23,6 +47,8 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
     const db = fa().firestore();
     const provider = getCaixaPostalProvider();
     const mode = getProviderMode();
+
+    await _carregarNomes();
 
     // Em SERPRO: pergunta primeiro se tem msg nova (chamada barata INNOVAMSG63).
     // Economiza chamada paginada se a empresa nao tem nada novo.
@@ -58,9 +84,11 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
         const ref = db.collection(COLLECTION).doc(docId);
         const dataLeituraLocal = lidasLocais.get(msg.mensagemId) || msg.dataLeitura || null;
 
+        const empresaNome = _nomeCache.get(_normCnpj(empresaCnpj)) || '';
         const payload = {
             empresaId,
             empresaCnpj,
+            empresaNome,
             mensagemId: msg.mensagemId,
             assunto: msg.assunto || '',
             remetente: msg.remetente || '',
@@ -84,6 +112,7 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
  * Sincroniza TODAS as empresas (Simples + Lucro Presumido/Real).
  */
 export async function sincronizarTodasEmpresas() {
+    _resetCache();
     const db = fa().firestore();
     const empresas = [];
 

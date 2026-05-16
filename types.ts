@@ -529,6 +529,7 @@ export interface CaixaPostalMensagem {
     id: string;                  // doc id no Firestore
     empresaId: string;
     empresaCnpj: string;
+    empresaNome?: string;
     mensagemId: string;          // id na Receita
     assunto: string;
     remetente: string;

@@ -28,10 +28,47 @@
 //   });
 // ============================================================================
 
+import { Agent } from 'undici';
+import { loadCertificate } from './secret-loader.js';
+
 const BASE_URL = process.env.SERPRO_BASE_URL || 'https://gateway.apiserpro.serpro.gov.br';
-const OAUTH_URL = process.env.SERPRO_OAUTH_URL || `${BASE_URL}/oauth2/v1/token`;
-const BASE_INVOKE = `${BASE_URL}/integra-contador/v1`;
+const OAUTH_URL = process.env.SERPRO_OAUTH_URL || `${BASE_URL}/token`;
+const BASE_INVOKE = process.env.SERPRO_BASE_INVOKE || `${BASE_URL}/integra-contador/v1`;
 const INVOKE_URL = `${BASE_INVOKE}/Consultar`;  // legacy default
+
+// ─── Modo OAuth ───────────────────────────────────────────────────────────
+// 'mtls': /authenticate com cert digital do escritorio (PROD real)
+// 'basic': /token sem cert (TRIAL only)
+const OAUTH_MODE = process.env.SERPRO_OAUTH_MODE || 'mtls';
+const OAUTH_URL_MTLS = process.env.SERPRO_OAUTH_URL_MTLS
+    || 'https://autenticacao.sapi.serpro.gov.br/authenticate';
+
+// undici Dispatcher reutilizado por chamadas mTLS (recreate quando cert muda)
+let mtlsDispatcherCache = { dispatcher: null, certVersion: null };
+
+async function getMtlsDispatcher() {
+    const cert = await loadCertificate();
+    if (mtlsDispatcherCache.dispatcher && mtlsDispatcherCache.certVersion === cert.version) {
+        return mtlsDispatcherCache.dispatcher;
+    }
+    if (!cert.pemKey || !cert.pemCert) {
+        throw new Error(
+            'Cert digital ICP-Brasil do escritorio precisa estar configurado em ' +
+            'Configuracoes > Certificado Digital pra autenticacao SERPRO mTLS.'
+        );
+    }
+    const dispatcher = new Agent({
+        connect: {
+            key: cert.pemKey,
+            cert: cert.pemCert,
+            rejectUnauthorized: true,
+        },
+    });
+    mtlsDispatcherCache = { dispatcher, certVersion: cert.version };
+    log('info', 'mtls_dispatcher_created', { certVersion: cert.version });
+    return dispatcher;
+}
+
 
 function urlPorAcao(acao) {
     const acoesValidas = ['Consultar', 'Declarar', 'Emitir', 'Apoiar', 'Monitorar'];
@@ -88,6 +125,41 @@ export async function getAccessToken() {
     assertCredentialsConfigured();
 
     const basic = Buffer.from(`${CONSUMER_KEY}:${CONSUMER_SECRET}`).toString('base64');
+
+    // ─── Modo mTLS: /authenticate com cert digital ICP-Brasil (PROD real) ───
+    if (OAUTH_MODE === 'mtls') {
+        const dispatcher = await getMtlsDispatcher();
+        log('info', 'requesting_oauth_token_mtls', { url: OAUTH_URL_MTLS });
+        const resMtls = await fetch(OAUTH_URL_MTLS, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${basic}`,
+                'role-type': 'TERCEIROS',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'grant_type=client_credentials',
+            dispatcher,
+        });
+
+        if (!resMtls.ok) {
+            const txtMtls = await resMtls.text().catch(() => '');
+            log('error', 'oauth_mtls_failed', { status: resMtls.status, body: txtMtls.slice(0, 500) });
+            throw new Error(`SERPRO OAuth mTLS falhou ${resMtls.status}: ${txtMtls.slice(0, 200)}`);
+        }
+        const dataMtls = await resMtls.json();
+        tokenCache = {
+            token: dataMtls.access_token,
+            jwtToken: dataMtls.jwt_token || null,
+            expiresAt: now + (dataMtls.expires_in * 1000),
+        };
+        log('info', 'oauth_token_cached_mtls', {
+            expires_in: dataMtls.expires_in,
+            hasJwtToken: !!dataMtls.jwt_token,
+        });
+        return tokenCache.token;
+    }
+
+    // ─── Modo basic: /token sem cert (TRIAL only) ───────────────────────────
     log('info', 'requesting_oauth_token', { url: OAUTH_URL });
 
     const res = await fetch(OAUTH_URL, {
@@ -128,6 +200,16 @@ export async function getAccessToken() {
  *
  * @returns {Promise<object>} { status, dados (objeto JSON parseado), mensagens }
  */
+// Retorna o jwt_token do cache (capturado durante getAccessToken em modo mTLS).
+// Se cache esta vazio ou em DRY_RUN, chama getAccessToken pra popular.
+export async function getJwtToken() {
+    if (DRY_RUN) return 'dry-run-jwt';
+    if (!tokenCache.jwtToken) {
+        await getAccessToken();  // popula cache, incluindo jwtToken
+    }
+    return tokenCache.jwtToken || null;
+}
+
 export async function invokeIntegraContador(req) {
     const { idSistema, idServico, contribuinteCnpj, dados, versaoSistema = '1.0', acao = 'Consultar' } = req;
     if (!idSistema || !idServico) throw new Error('idSistema e idServico obrigatórios');
@@ -175,7 +257,7 @@ export async function invokeIntegraContador(req) {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
-                    'jwt_token': token,  // SERPRO exige duplicado em header próprio
+                    'jwt_token': tokenCache.jwtToken || token,  // jwt_token retornado pela SAPI (mTLS) ou fallback ao Bearer
                 },
                 body: JSON.stringify(payload),
             });
