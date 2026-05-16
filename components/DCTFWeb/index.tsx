@@ -18,6 +18,7 @@ import {
 } from '../../services/dctfwebService';
 import DetalheDeclaracao from './DetalheDeclaracao';
 import MitApuracao from './MitApuracao';
+import { getEmpresasParaPerfilCliente, type EmpresaPerfilOption } from '../../services/xmlFiscalService';
 
 interface Props {
     currentUser: User | null;
@@ -44,6 +45,43 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // sync individual em andamento
     const [syncingEmpresa, setSyncingEmpresa] = useState<string | null>(null);
     const [transmitindo, setTransmitindo] = useState<string | null>(null);
+
+    // empresas cadastradas (fonte canonica unica: getEmpresasParaPerfilCliente)
+    const [empresas, setEmpresas] = useState<EmpresaPerfilOption[]>([]);
+    const [empresaNovaSyncId, setEmpresaNovaSyncId] = useState<string>('');
+
+    useEffect(() => {
+        let alivo = true;
+        if (!currentUser) { setEmpresas([]); return; }
+        getEmpresasParaPerfilCliente(currentUser)
+            .then(list => { if (alivo) setEmpresas(list); })
+            .catch(() => { if (alivo) setEmpresas([]); });
+        return () => { alivo = false; };
+    }, [currentUser]);
+
+    // sincroniza uma empresa escolhida no dropdown, usando ano/mes dos filtros
+    const handleSincronizarNova = async () => {
+        if (!currentUser) return;
+        const emp = empresas.find(e => e.id === empresaNovaSyncId);
+        if (!emp) { onShowToast?.('Selecione uma empresa.'); return; }
+        if (!mesFiltro) { onShowToast?.('Selecione o mes nos filtros para sincronizar.'); return; }
+        const cnpjLimpo = (emp.cnpj || '').replace(/\D/g, '');
+        setSyncingEmpresa(cnpjLimpo);
+        try {
+            await apiSincronizar(currentUser, {
+                empresaId: emp.id,
+                empresaCnpj: cnpjLimpo,
+                anoPA: anoFiltro,
+                mesPA: mesFiltro,
+            });
+            onShowToast?.(`DCTFWeb de ${emp.nome} sincronizada.`);
+            await carregar();
+        } catch (err: any) {
+            onShowToast?.(`Erro: ${err.message}`);
+        } finally {
+            setSyncingEmpresa(null);
+        }
+    };
 
     const carregar = useCallback(async () => {
         if (!currentUser) return;
@@ -191,15 +229,20 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         <option value="ATIVA">Transmitida</option>
                     </select>
                 </div>
-                <div className="flex-1 min-w-[200px]">
-                    <label className="block text-xs text-slate-500 mb-1">CNPJ</label>
-                    <input
-                        type="text"
-                        placeholder="Filtrar por CNPJ"
+                <div className="flex-1 min-w-[220px]">
+                    <label className="block text-xs text-slate-500 mb-1">Empresa</label>
+                    <select
                         value={empresaCnpjFiltro}
                         onChange={e => setEmpresaCnpjFiltro(e.target.value)}
                         className="w-full border rounded px-2 py-1 text-sm"
-                    />
+                    >
+                        <option value="">Todas as empresas</option>
+                        {empresas.map(emp => (
+                            <option key={emp.id} value={(emp.cnpj || '').replace(/\D/g, '')}>
+                                {emp.nome}
+                            </option>
+                        ))}
+                    </select>
                 </div>
                 <button
                     onClick={carregar}
@@ -208,6 +251,35 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 >
                     {loading ? 'Carregando...' : 'Recarregar'}
                 </button>
+            </div>
+
+            {/* Sincronizar DCTFWeb de uma empresa cadastrada (usa Ano/Mes dos filtros) */}
+            <div className="bg-white border rounded-lg p-4 flex flex-wrap gap-3 items-end">
+                <div className="flex-1 min-w-[260px]">
+                    <label className="block text-xs text-slate-500 mb-1">
+                        Sincronizar DCTFWeb de uma empresa
+                    </label>
+                    <select
+                        value={empresaNovaSyncId}
+                        onChange={e => setEmpresaNovaSyncId(e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                    >
+                        <option value="">Selecione a empresa...</option>
+                        {empresas.map(emp => (
+                            <option key={emp.id} value={emp.id}>{emp.nome}</option>
+                        ))}
+                    </select>
+                </div>
+                <button
+                    onClick={handleSincronizarNova}
+                    disabled={!empresaNovaSyncId || !!syncingEmpresa}
+                    className="px-4 py-1.5 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700 disabled:opacity-50"
+                >
+                    {syncingEmpresa ? 'Sincronizando...' : 'Sincronizar DCTFWeb'}
+                </button>
+                <p className="text-xs text-slate-400 w-full">
+                    Usa o Ano e o Mes selecionados nos filtros acima.
+                </p>
             </div>
 
             {error && (
