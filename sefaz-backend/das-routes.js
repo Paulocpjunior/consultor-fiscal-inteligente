@@ -5,6 +5,7 @@
 // ============================================================================
 
 import express from 'express';
+import { requireAdmin } from './require-admin.js';
 import admin from 'firebase-admin';
 import {
     emitirDasRegular, emitirDasAvulso,
@@ -17,11 +18,7 @@ const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 
 const router = express.Router();
 
-function requireAdmin(req, res, next) {
-    const role = req.headers['x-user-role'] || 'colaborador';
-    if (role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
-    next();
-}
+// requireAdmin agora vem do middleware compartilhado (verifyIdToken)
 
 router.get('/status', (_req, res) => {
     res.json({ mode: getDasMode(), ok: true });

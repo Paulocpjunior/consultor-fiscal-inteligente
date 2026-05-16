@@ -11,17 +11,22 @@
  */
 import type { User, CaixaPostalMensagem, CaixaPostalResumo, CaixaPostalSyncStats, CaixaPostalCategoria } from '../types';
 
+import { getAuth } from 'firebase/auth';
+
 const BASE = '/api/admin/caixa-postal';
 
-function authHeaders(user: User | null): Record<string, string> {
+async function authHeaders(_user: User | null): Promise<Record<string, string>> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Usuario nao autenticado');
+    const token = await u.getIdToken();
     return {
         'Content-Type': 'application/json',
-        'X-User-Role': user?.role || 'colaborador',
+        'Authorization': `Bearer ${token}`,
     };
 }
 
 export async function getResumo(user: User | null): Promise<CaixaPostalResumo> {
-    const res = await fetch(`${BASE}/resumo`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/resumo`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`getResumo: ${res.status}`);
     return res.json();
 }
@@ -38,7 +43,7 @@ export async function listarMensagens(user: User | null, filters: ListarFilters 
     if (filters.categoria) qs.set('categoria', filters.categoria);
     if (filters.naoLidas) qs.set('naoLidas', 'true');
 
-    const res = await fetch(`${BASE}/mensagens?${qs}`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/mensagens?${qs}`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`listarMensagens: ${res.status}`);
     return res.json();
 }
@@ -46,7 +51,7 @@ export async function listarMensagens(user: User | null, filters: ListarFilters 
 export async function sincronizarEmpresa(user: User | null, empresaId: string, empresaCnpj: string): Promise<CaixaPostalSyncStats> {
     const res = await fetch(`${BASE}/sincronizar`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify({ empresaId, empresaCnpj }),
     });
     if (!res.ok) throw new Error(`sincronizarEmpresa: ${res.status}`);
@@ -56,7 +61,7 @@ export async function sincronizarEmpresa(user: User | null, empresaId: string, e
 export async function sincronizarTodas(user: User | null): Promise<{ totalEmpresas: number; sucesso: number; falha: number }> {
     const res = await fetch(`${BASE}/sincronizar-todas`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
     });
     if (!res.ok) throw new Error(`sincronizarTodas: ${res.status}`);
     return res.json();
@@ -65,7 +70,7 @@ export async function sincronizarTodas(user: User | null): Promise<{ totalEmpres
 export async function marcarComoLida(user: User | null, docId: string): Promise<{ ok: boolean }> {
     const res = await fetch(`${BASE}/marcar-lida`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify({ docId }),
     });
     if (!res.ok) throw new Error(`marcarComoLida: ${res.status}`);

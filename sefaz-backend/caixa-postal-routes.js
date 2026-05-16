@@ -5,6 +5,7 @@
 // ============================================================================
 
 import express from 'express';
+import { requireAdmin } from './require-admin.js';
 import admin from 'firebase-admin';
 import {
     sincronizarEmpresa,
@@ -20,11 +21,7 @@ import { getProviderMode } from './caixa-postal-provider.js';
 const router = express.Router();
 
 // Auth básica — só admin
-function requireAdmin(req, res, next) {
-    const role = req.headers['x-user-role'] || 'colaborador';
-    if (role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
-    next();
-}
+// requireAdmin agora vem do middleware compartilhado (verifyIdToken)
 
 router.get('/status', (_req, res) => {
     res.json({ mode: getProviderMode(), ok: true });

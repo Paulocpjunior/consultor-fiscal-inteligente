@@ -4,17 +4,22 @@
  */
 import type { User, NfseNacionalEmitida, NfseNacResumo, NfseNacStatus, NbsCodigo } from '../types';
 
+import { getAuth } from 'firebase/auth';
+
 const BASE = '/api/admin/nfse-nacional';
 
-function authHeaders(user: User | null): Record<string, string> {
+async function authHeaders(_user: User | null): Promise<Record<string, string>> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Usuario nao autenticado');
+    const token = await u.getIdToken();
     return {
         'Content-Type': 'application/json',
-        'X-User-Role': user?.role || 'colaborador',
+        'Authorization': `Bearer ${token}`,
     };
 }
 
 export async function getResumoNfse(user: User | null): Promise<NfseNacResumo> {
-    const res = await fetch(`${BASE}/resumo`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/resumo`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`getResumoNfse: ${res.status}`);
     return res.json();
 }
@@ -29,7 +34,7 @@ export async function listarNfse(
     if (filters.dataInicio) qs.set('dataInicio', filters.dataInicio);
     if (filters.dataFim) qs.set('dataFim', filters.dataFim);
 
-    const res = await fetch(`${BASE}/listar?${qs}`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/listar?${qs}`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`listarNfse: ${res.status}`);
     return res.json();
 }
@@ -60,7 +65,7 @@ export interface EmitirNfseRequest {
 export async function emitirNfse(user: User | null, payload: EmitirNfseRequest): Promise<NfseNacionalEmitida> {
     const res = await fetch(`${BASE}/emitir`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -73,7 +78,7 @@ export async function emitirNfse(user: User | null, payload: EmitirNfseRequest):
 export async function cancelarNfse(user: User | null, chave: string, motivo?: string): Promise<{ ok: boolean }> {
     const res = await fetch(`${BASE}/cancelar`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify({ chave, motivo }),
     });
     if (!res.ok) throw new Error(`cancelarNfse: ${res.status}`);

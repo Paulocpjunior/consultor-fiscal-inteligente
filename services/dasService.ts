@@ -4,17 +4,22 @@
  */
 import type { User, DasEmitido, DasResumo, DasStatusPagamento, DasPrevisaoResponse, DasPrevisaoIaResponse } from '../types';
 
+import { getAuth } from 'firebase/auth';
+
 const BASE = '/api/admin/das';
 
-function authHeaders(user: User | null): Record<string, string> {
+async function authHeaders(_user: User | null): Promise<Record<string, string>> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Usuario nao autenticado');
+    const token = await u.getIdToken();
     return {
         'Content-Type': 'application/json',
-        'X-User-Role': user?.role || 'colaborador',
+        'Authorization': `Bearer ${token}`,
     };
 }
 
 export async function getResumoDas(user: User | null): Promise<DasResumo> {
-    const res = await fetch(`${BASE}/resumo`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/resumo`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`getResumoDas: ${res.status}`);
     return res.json();
 }
@@ -28,7 +33,7 @@ export async function listarDas(
     if (filters.competencia) qs.set('competencia', filters.competencia);
     if (filters.status) qs.set('status', filters.status);
 
-    const res = await fetch(`${BASE}/listar?${qs}`, { headers: authHeaders(user) });
+    const res = await fetch(`${BASE}/listar?${qs}`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`listarDas: ${res.status}`);
     return res.json();
 }
@@ -40,7 +45,7 @@ export async function emitirDasRegular(user: User | null, payload: {
 }): Promise<DasEmitido> {
     const res = await fetch(`${BASE}/emitir-regular`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -56,7 +61,7 @@ export async function emitirDasAvulso(user: User | null, payload: {
 }): Promise<DasEmitido> {
     const res = await fetch(`${BASE}/emitir-avulso`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -69,7 +74,7 @@ export async function emitirDasAvulso(user: User | null, payload: {
 export async function marcarDasPago(user: User | null, docId: string, dataPagamento?: string): Promise<{ ok: boolean }> {
     const res = await fetch(`${BASE}/marcar-pago`, {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify({ docId, dataPagamento }),
     });
     if (!res.ok) throw new Error(`marcarDasPago: ${res.status}`);
@@ -104,7 +109,7 @@ export function statusLabel(status: string): string {
 // ─── Previsão DAS (D4a) ────────────────────────────────────────────────────
 
 export async function getPrevisaoDas(user: User | null, empresaId: string): Promise<DasPrevisaoResponse> {
-    const res = await fetch(`/api/admin/das/previsao/${empresaId}`, { headers: authHeaders(user) });
+    const res = await fetch(`/api/admin/das/previsao/${empresaId}`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`getPrevisaoDas: ${res.status}`);
     return res.json();
 }
@@ -112,7 +117,7 @@ export async function getPrevisaoDas(user: User | null, empresaId: string): Prom
 export async function getPrevisaoIa(user: User | null, dadosPrevisao: DasPrevisaoResponse): Promise<DasPrevisaoIaResponse> {
     const res = await fetch('/api/admin/das/previsao-ia', {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify({ dadosPrevisao }),
     });
     if (!res.ok) {
@@ -146,7 +151,7 @@ export interface CobrancaIaResponse {
 export async function getCobrancaIa(user: User | null, req: CobrancaIaRequest): Promise<CobrancaIaResponse> {
     const res = await fetch('/api/admin/das/cobranca-ia', {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify(req),
     });
     if (!res.ok) {
