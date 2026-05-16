@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== CSS migrado do <style> inline do index.html ===== */
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- Animacoes e Feedback Visual --- */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+.btn-press {
+  transition: transform 0.1s ease-out;
+  will-change: transform;
+}
+.btn-press:active {
+  transform: scale(0.96);
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.8); opacity: 0; }
+  60% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.animate-pop-in {
+  animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes drawCheck {
+  0% { stroke-dasharray: 20; stroke-dashoffset: 20; }
+  100% { stroke-dashoffset: 0; }
+}
+.animate-draw-check {
+  stroke-dasharray: 20;
+  stroke-dashoffset: 20;
+  animation: drawCheck 0.5s ease-out forwards;
+}
+
+/* --- Variaveis de marca SP --- */
+:root {
+  --sp-bg: #020026;
+  --sp-navy: #08007A;
+  --sp-blue: #1400FF;
+  --sp-text: #F5F6FF;
+  --sp-muted: rgba(200,208,255,0.45);
+  --sp-border: rgba(200,208,255,0.1);
+  --sp-success: #00C896;
+  --sp-danger: #FF4466;
+  --sp-alert: #F5A623;
+}
+body {
+  background: #020026 !important;
+  font-family: 'DM Sans', sans-serif;
+}
