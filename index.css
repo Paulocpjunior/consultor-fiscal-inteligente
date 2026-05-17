@@ -61,6 +61,10 @@ body {
   --sp-alert: #F5A623;
 }
 body {
-  background: #020026 !important;
   font-family: 'DM Sans', sans-serif;
+  background: #f8fafc;
+  transition: background-color 0.2s ease;
+}
+html.dark body {
+  background: #020026;
 }
