@@ -27,10 +27,22 @@ router.get('/status', (_req, res) => {
     res.json({ mode: getProviderMode(), ok: true });
 });
 
-// Resumo global pra dashboard
-router.get('/resumo', requireAuth, async (_req, res) => {
+// Resumo pra dashboard / popup.
+// Admin: resumo global. Colaborador: filtrado pela carteira dele.
+router.get('/resumo', requireAuth, async (req, res) => {
     try {
-        const r = await getResumoGlobal();
+        let cnpjsPermitidos = null; // null = sem filtro (admin ve tudo)
+
+        if (req.user && req.user.role !== 'admin') {
+            // Colaborador: busca os CNPJs das empresas da carteira dele.
+            const snap = await admin.firestore()
+                .collection('carteiras')
+                .where('colaboradorUid', '==', req.user.uid)
+                .get();
+            cnpjsPermitidos = snap.docs.map(d => d.data().empresaCnpj || '');
+        }
+
+        const r = await getResumoGlobal(cnpjsPermitidos);
         res.json(r);
     } catch (err) {
         console.error('[caixa-postal] /resumo:', err.message);

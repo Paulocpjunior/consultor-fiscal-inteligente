@@ -157,10 +157,18 @@ export async function listarMensagensLocais({ empresaCnpj, naoLidas, categoria }
 /**
  * Resumo agregado pra dashboard global.
  */
-export async function getResumoGlobal() {
+export async function getResumoGlobal(cnpjsPermitidos = null) {
     const db = fa().firestore();
     const snap = await db.collection(COLLECTION).limit(1000).get();
-    const docs = snap.docs.map(d => d.data());
+    let docs = snap.docs.map(d => d.data());
+
+    // Filtro opcional por carteira: se vier uma lista de CNPJs, conta so
+    // mensagens dessas empresas. null = sem filtro (resumo global, admin).
+    if (Array.isArray(cnpjsPermitidos)) {
+        const permitidos = new Set(cnpjsPermitidos.map(_normCnpj));
+        docs = docs.filter(d => permitidos.has(_normCnpj(d.empresaCnpj)));
+    }
+
     const naoLidas = docs.filter(d => !d.dataLeitura);
 
     const porCategoria = {};
