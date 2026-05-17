@@ -14,7 +14,7 @@ import {
     type VinculoCarteira,
     type PapelCarteira,
 } from '../../services/carteiraService';
-import { testarEmailGraph } from '../../services/notificacoesService';
+import { testarResumoDiario } from '../../services/notificacoesService';
 
 interface Props {
     currentUser: User;
@@ -114,12 +114,12 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [testandoEmail, setTestandoEmail] = useState(false);
     const handleTestarEmail = async () => {
         setTestandoEmail(true);
-        const r = await testarEmailGraph();
+        const r = await testarResumoDiario();
         setTestandoEmail(false);
         if (r.ok) {
-            onShowToast?.(`E-mail de teste enviado para ${r.para || 'sua caixa'}. Verifique a caixa de entrada.`);
+            onShowToast?.(`Resumo enviado: ${r.resumo?.totalCapturas ?? 0} captura(s) nas últimas 24h. Verifique seu e-mail.`);
         } else {
-            onShowToast?.('Falha no teste de e-mail: ' + (r.error || 'erro'));
+            onShowToast?.('Falha no resumo: ' + (r.error || 'erro'));
         }
     };
 
@@ -144,9 +144,9 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     disabled={testandoEmail}
                     className="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 disabled:opacity-50"
                 >
-                    {testandoEmail ? 'Enviando...' : 'Testar e-mail (Graph)'}
+                    {testandoEmail ? 'Enviando...' : 'Testar resumo diário'}
                 </button>
-                <span className="ml-2 text-xs text-slate-400">Diagnóstico — envia um e-mail de teste para sua caixa.</span>
+                <span className="ml-2 text-xs text-slate-400">Diagnóstico — envia o resumo de capturas das últimas 24h para sua caixa.</span>
             </div>
 
             <div className="flex flex-wrap gap-3 mb-4 items-center">

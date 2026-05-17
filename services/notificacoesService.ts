@@ -33,3 +33,21 @@ export async function testarEmailGraph(): Promise<{ ok: boolean; error?: string;
         return { ok: false, error: err?.message || 'Falha na chamada' };
     }
 }
+
+/** Dispara o resumo diário de capturas (coleta + envia e-mail). Backend usa o e-mail do admin logado. */
+export async function testarResumoDiario(): Promise<{ ok: boolean; error?: string; resumo?: any }> {
+    try {
+        const res = await fetch(`${BASE}/teste-resumo`, {
+            method: 'POST',
+            headers: await authHeaders(),
+            body: JSON.stringify({}),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+            return { ok: true, resumo: data.resumo };
+        }
+        return { ok: false, error: data.error || `HTTP ${res.status}` };
+    } catch (err: any) {
+        return { ok: false, error: err?.message || 'Falha na chamada' };
+    }
+}
