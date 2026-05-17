@@ -193,7 +193,8 @@ export async function consultarNfseRecebidas({
     const { statusCode, body } = await postSoap(soap, certs.pfxBuffer, certs.password);
 
     if (statusCode >= 500) {
-        throw new Error(`NFS-e SP: HTTP ${statusCode} (servidor indisponível)`);
+        console.error(`[nfse-sp-client] HTTP ${statusCode} — corpo da resposta:`, (body || '').slice(0, 2000));
+        throw new Error(`NFS-e SP: HTTP ${statusCode} — ${(body || '').replace(/\s+/g, ' ').slice(0, 300) || 'sem corpo'}`);
     }
     if (statusCode === 401 || statusCode === 403) {
         return {
