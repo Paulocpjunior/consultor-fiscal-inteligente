@@ -98,9 +98,9 @@ function postSoap(body, pfxBuffer, password) {
                 minVersion: 'TLSv1.2',
                 rejectUnauthorized: true,
                 headers: {
-                    'Content-Type': 'application/soap+xml; charset=utf-8',
+                    // SOAP 1.2: o action vai DENTRO do Content-Type, nao como header separado
+                    'Content-Type': `application/soap+xml; charset=utf-8; action="${SOAP_ACTION_RECEBIDAS}"`,
                     'Content-Length': Buffer.byteLength(body, 'utf8'),
-                    SOAPAction: SOAP_ACTION_RECEBIDAS,
                 },
                 timeout: 60000,
             },
