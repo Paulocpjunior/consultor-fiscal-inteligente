@@ -89,6 +89,19 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // carteiras: vinculo empresa <-> colaborador.
+    // Leitura: qualquer logado (o filtro por colaborador e feito no
+    //          codigo do app — admin ve tudo, colaborador so os seus).
+    // Escrita: SO admin (so o admin atribui empresas a colaboradores).
+    // ───────────────────────────────────────────────────────────────
+
+    match /carteiras/{vinculoId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // Subcoleções comuns (notas, faturamento, etc) — herdam regras
     // do parent. Acesso por createdBy do parent ou admin.
     // ───────────────────────────────────────────────────────────────
