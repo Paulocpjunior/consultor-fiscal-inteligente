@@ -14,6 +14,7 @@ import {
     type VinculoCarteira,
     type PapelCarteira,
 } from '../../services/carteiraService';
+import { testarEmailGraph } from '../../services/notificacoesService';
 
 interface Props {
     currentUser: User;
@@ -110,6 +111,18 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
     };
 
+    const [testandoEmail, setTestandoEmail] = useState(false);
+    const handleTestarEmail = async () => {
+        setTestandoEmail(true);
+        const r = await testarEmailGraph();
+        setTestandoEmail(false);
+        if (r.ok) {
+            onShowToast?.(`E-mail de teste enviado para ${r.para || 'sua caixa'}. Verifique a caixa de entrada.`);
+        } else {
+            onShowToast?.('Falha no teste de e-mail: ' + (r.error || 'erro'));
+        }
+    };
+
     if (!isAdmin) {
         return (
             <div className="p-6 text-center text-slate-600 dark:text-slate-400">
@@ -124,6 +137,17 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 mb-4">
                 Atribua cada empresa a um ou mais colaboradores responsáveis.
             </p>
+
+            <div className="mb-4">
+                <button
+                    onClick={handleTestarEmail}
+                    disabled={testandoEmail}
+                    className="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 disabled:opacity-50"
+                >
+                    {testandoEmail ? 'Enviando...' : 'Testar e-mail (Graph)'}
+                </button>
+                <span className="ml-2 text-xs text-slate-400">Diagnóstico — envia um e-mail de teste para sua caixa.</span>
+            </div>
 
             <div className="flex flex-wrap gap-3 mb-4 items-center">
                 <input
