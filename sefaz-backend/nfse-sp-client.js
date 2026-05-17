@@ -191,6 +191,10 @@ export async function consultarNfseRecebidas({
     const xmlAssinado = assinarXmlSp(xmlInterno, certs.pemCert, certs.pemKey);
     const soap = envelopeSoap(xmlAssinado);
 
+    console.error('[nfse-sp-DIAG] xmlInterno len=' + (xmlInterno||'').length + ' :: ' + (xmlInterno||'').slice(0, 600));
+    console.error('[nfse-sp-DIAG] xmlAssinado len=' + (xmlAssinado||'').length + ' :: ' + (xmlAssinado||'').slice(0, 600));
+    console.error('[nfse-sp-DIAG] soap len=' + (soap||'').length + ' :: ' + (soap||'').slice(0, 1200));
+
     const { statusCode, body } = await postSoap(soap, certs.pfxBuffer, certs.password);
 
     if (statusCode >= 500) {
