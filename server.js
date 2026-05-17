@@ -15,6 +15,7 @@ import caixaPostalRouter from './sefaz-backend/caixa-postal-routes.js';
 import dasRouter from './sefaz-backend/das-routes.js';
 import dctfwebRouter from './sefaz-backend/dctfweb-routes.js';
 import nfseNacRouter from './sefaz-backend/nfse-nacional-routes.js';
+import planoContasBridgeRouter from './sefaz-backend/plano-contas-bridge-routes.js';
 import * as sharepoint from './sefaz-backend/sharepoint-provider.js';
 import * as sharepointSync from './sefaz-backend/sharepoint-sync-orchestrator.js';
 import certEmpresaRouter from './sefaz-backend/cert-empresa-routes.js';
@@ -38,6 +39,7 @@ app.use('/api/admin/dctfweb', dctfwebRouter);
 app.use('/api/admin/nfse-nacional', nfseNacRouter);
 app.use('/api/admin/cert-empresa', certEmpresaRouter);
 app.use('/api/admin/notificacoes', notificacoesRouter);
+app.use('/api/internal/plano-contas', planoContasBridgeRouter);
 
 const PORT = process.env.PORT || 8080;
 
