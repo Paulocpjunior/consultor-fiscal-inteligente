@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { SimplesNacionalEmpresa, SimplesNacionalNota, User } from '../types';
 import * as simplesService from '../services/simplesNacionalService';
 import { PlusIcon, InfoIcon, ShieldIcon, PencilIcon } from './Icons';
@@ -25,6 +25,18 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
     }, [empresas, notas]);
 
     const isAdminView = currentUser?.role === 'admin' || currentUser?.email === 'junior@spassessoriacontabil.com.br';
+
+    const [busca, setBusca] = useState('');
+    const empresasFiltradas = useMemo(() => {
+        const termo = busca.trim().toLowerCase();
+        if (!termo) return empresasComResumo;
+        const termoCnpj = termo.replace(/\D/g, '');
+        return empresasComResumo.filter(e => {
+            const nome = (e.nome || '').toLowerCase();
+            const cnpj = (e.cnpj || '').replace(/\D/g, '');
+            return nome.includes(termo) || (termoCnpj && cnpj.includes(termoCnpj));
+        });
+    }, [empresasComResumo, busca]);
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -53,6 +65,18 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                 </button>
             </div>
             
+            {empresas.length > 0 && (
+                <div className="relative">
+                    <input
+                        type="text"
+                        value={busca}
+                        onChange={(ev) => setBusca(ev.target.value)}
+                        placeholder="Buscar empresa por nome ou CNPJ..."
+                        className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                </div>
+            )}
+
             {empresasComResumo.length > 0 ? (
                 <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden">
                     <div className="overflow-x-auto">
@@ -70,7 +94,7 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                 </tr>
                             </thead>
                             <tbody>
-                                {empresasComResumo.map(e => (
+                                {empresasFiltradas.map(e => (
                                     <tr key={e.id} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600/20">
                                         <td className="px-6 py-4 font-medium text-slate-900 dark:text-white whitespace-nowrap">
                                             {e.nome}
