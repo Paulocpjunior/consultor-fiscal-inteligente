@@ -625,7 +625,7 @@ const App: React.FC = () => {
 
     return (
         <div className="min-h-screen transition-colors bg-slate-50 dark:bg-[#020026]" style={{fontFamily:"'DM Sans',sans-serif"}}>
-            <div className="container mx-auto px-4 max-w-7xl">
+            <div className="container mx-auto px-4 max-w-screen-2xl">
                 <Header
                     theme={theme}
                     toggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
