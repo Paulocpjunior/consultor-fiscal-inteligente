@@ -127,6 +127,7 @@ function extrairRetornoXml(soapResposta) {
         /<ConsultaNFeRecebidasResult>([\s\S]*?)<\/ConsultaNFeRecebidasResult>/
     );
     if (!resultMatch) {
+        console.error('[nfse-sp-client] resposta sem ConsultaNFeRecebidasResult — corpo recebido:', (soapResposta || '').slice(0, 3000));
         throw new Error('NFS-e SP: ConsultaNFeRecebidasResult não localizado no SOAP de resposta.');
     }
     return resultMatch[1]
