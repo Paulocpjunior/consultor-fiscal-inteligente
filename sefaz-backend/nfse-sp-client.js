@@ -31,18 +31,19 @@ function montarPedidoXml({ cnpjRemetente, inscricaoMunicipalTomador, dtInicio, d
     const ultimoDia = new Date(Date.UTC(dtFim.ano, dtFim.mes, 0)).getUTCDate();
     const fim = `${dtFim.ano}-${String(dtFim.mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
 
+    // Layout confirmado contra PyTrustNFe (biblioteca testada): o elemento raiz
+    // do metodo ConsultaNFeRecebidas e <PedidoConsultaNFePeriodo>; a inscricao
+    // municipal e <Inscricao>; NumeroPagina vai DENTRO do Cabecalho, apos dtFim.
     return stripFormat(`
-<PedidoConsultaNFeRecebidas xmlns="${NS_NFE}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <Cabecalho xmlns="" Versao="1">
+<PedidoConsultaNFePeriodo xmlns="${NS_NFE}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Cabecalho Versao="1" xmlns="">
     <CPFCNPJRemetente><CNPJ>${cnpjRemetente}</CNPJ></CPFCNPJRemetente>
-    <InscricaoMunicipalTomador>${inscricaoMunicipalTomador}</InscricaoMunicipalTomador>
+    <Inscricao>${inscricaoMunicipalTomador}</Inscricao>
     <dtInicio>${inicio}</dtInicio>
     <dtFim>${fim}</dtFim>
-  </Cabecalho>
-  <Detalhe xmlns="">
     <NumeroPagina>1</NumeroPagina>
-  </Detalhe>
-</PedidoConsultaNFeRecebidas>
+  </Cabecalho>
+</PedidoConsultaNFePeriodo>
     `);
 }
 
