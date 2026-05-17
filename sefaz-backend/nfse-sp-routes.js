@@ -45,7 +45,7 @@ router.get('/nfsesp-elegiveis', authUser, async (_req, res) => {
     }
 });
 
-router.post('/nfsesp-consultar-uma', authUser, async (req, res) => {
+router.post('/nfsesp-consultar-uma', authUser, json(), async (req, res) => {
     try {
         const { empresaId, colecao, periodo } = req.body || {};
         if (!empresaId) return res.status(400).json({ erro: 'empresaId é obrigatório' });
@@ -80,7 +80,7 @@ router.post('/nfsesp-consultar-uma', authUser, async (req, res) => {
     }
 });
 
-router.post('/nfsesp-consultar-todas', authUser, async (req, res) => {
+router.post('/nfsesp-consultar-todas', authUser, json(), async (req, res) => {
     try {
         const db = fa().firestore();
         const dryRun = req.body?.dryRun === true;
