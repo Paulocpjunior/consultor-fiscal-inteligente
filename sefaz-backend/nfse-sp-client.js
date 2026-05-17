@@ -39,6 +39,9 @@ function montarPedidoXml({ cnpjRemetente, inscricaoMunicipalTomador, dtInicio, d
     <dtInicio>${inicio}</dtInicio>
     <dtFim>${fim}</dtFim>
   </Cabecalho>
+  <Detalhe xmlns="">
+    <NumeroPagina>1</NumeroPagina>
+  </Detalhe>
 </PedidoConsultaNFeRecebidas>
     `);
 }
