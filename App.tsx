@@ -50,6 +50,7 @@ const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
 const CalendarioFiscal = lazy(() => import('./components/CalendarioFiscal'));
 const AnomaliasView = lazy(() => import('./components/Anomalias'));
 const SimuladorReforma = lazy(() => import('./components/SimuladorReforma'));
+const TaxEmissionDashboard = lazy(() => import('./components/TaxEmission'));
 
 const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
@@ -73,6 +74,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CALENDARIO]: "Calendário Fiscal — vencimentos de obrigações por empresa (DAS, DARF, DCTF, eSocial, etc).",
     [SearchType.ANOMALIAS]: "Detector de Anomalias — análise estatística + IA detecta irregularidades no DAS de cada empresa.",
     [SearchType.SIMULADOR_IBS_CBS]: "Simulador IBS/CBS — projeção da carga tributária 2026-2033 sob a Reforma Tributária (LC 214/2025).",
+    [SearchType.EMISSAO_TRIBUTOS]: "Central de Emissões — emissão unificada de DAS (Simples) e DARF (IRPJ/CSLL/PIS/COFINS para Presumido e Real) com controle de pagamento.",
 };
 
 const App: React.FC = () => {
@@ -1151,6 +1153,15 @@ const App: React.FC = () => {
                         {searchType === SearchType.SIMULADOR_IBS_CBS && (
                             <Suspense fallback={<LoadingSpinner />}>
                                 <SimuladorReforma
+                                    currentUser={currentUser ?? null}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                        )}
+
+                        {searchType === SearchType.EMISSAO_TRIBUTOS && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <TaxEmissionDashboard
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
