@@ -70,17 +70,15 @@ function assinarXmlSp(xmlString, certPem, keyPem) {
 }
 
 function envelopeSoap(xmlAssinado) {
-    const escaped = xmlAssinado
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-
+    // O webservice de SP espera o XML do pedido dentro de CDATA — nao escapado
+    // com entidades. Conteudo escapado dispara erro 1102 ("MensagemXML sem
+    // conteudo"). extrairRetornoXml tambem le a resposta a partir de CDATA.
     return `<?xml version="1.0" encoding="utf-8"?>
 <soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
   <soap12:Body>
     <ConsultaNFeRecebidas xmlns="${NS_NFE}">
       <VersaoSchema>1</VersaoSchema>
-      <MensagemXML>${escaped}</MensagemXML>
+      <MensagemXML><![CDATA[${xmlAssinado}]]></MensagemXML>
     </ConsultaNFeRecebidas>
   </soap12:Body>
 </soap12:Envelope>`;
