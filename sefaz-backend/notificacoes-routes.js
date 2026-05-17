@@ -7,6 +7,7 @@
 import express from 'express';
 import { requireAdmin } from './require-admin.js';
 import { isGraphConfigured, enviarEmail } from './graph-provider.js';
+import { coletarResumoCapturas, enviarResumoDiario } from './notificacoes-orchestrator.js';
 
 const router = express.Router();
 
@@ -49,6 +50,37 @@ router.post('/teste-email', requireAdmin, express.json(), async (req, res) => {
     } catch (err) {
         console.error('[notificacoes] /teste-email:', err.message);
         res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// Teste do resumo diario. So admin. Coleta as capturas das ultimas 24h e
+// envia o e-mail de resumo pra caixa do admin logado (ou destinatario do body).
+router.post('/teste-resumo', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const remetente = req.body?.remetente || req.user?.email;
+        const destinatarios = req.body?.para || req.user?.email;
+        if (!remetente || !destinatarios) {
+            return res.status(400).json({ ok: false, error: 'Informe remetente e para.' });
+        }
+        const r = await enviarResumoDiario({ remetente, destinatarios, horas: 24 });
+        if (r.ok) {
+            res.json({ ok: true, resumo: r.resumo });
+        } else {
+            res.status(502).json({ ok: false, error: r.error, resumo: r.resumo });
+        }
+    } catch (err) {
+        console.error('[notificacoes] /teste-resumo:', err.message);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// Previa do resumo (so coleta, NAO envia e-mail). Util pra conferir os numeros.
+router.get('/previa-resumo', requireAdmin, async (_req, res) => {
+    try {
+        const resumo = await coletarResumoCapturas(24);
+        res.json(resumo);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
