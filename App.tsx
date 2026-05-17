@@ -624,7 +624,7 @@ const App: React.FC = () => {
     const selectedEmpresa = simplesEmpresas.find(e => e.id === selectedSimplesEmpresaId);
 
     return (
-        <div className="min-h-screen transition-colors" style={{background:"#020026",fontFamily:"'DM Sans',sans-serif"}}>
+        <div className="min-h-screen transition-colors bg-slate-50 dark:bg-[#020026]" style={{fontFamily:"'DM Sans',sans-serif"}}>
             <div className="container mx-auto px-4 max-w-7xl">
                 <Header
                     theme={theme}
