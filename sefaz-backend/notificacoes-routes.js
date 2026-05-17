@@ -6,6 +6,7 @@
 
 import express from 'express';
 import { requireAdmin } from './require-admin.js';
+import admin from 'firebase-admin';
 import { isGraphConfigured, enviarEmail } from './graph-provider.js';
 import { coletarResumoCapturas, enviarResumoDiario } from './notificacoes-orchestrator.js';
 
@@ -81,6 +82,47 @@ router.get('/previa-resumo', requireAdmin, async (_req, res) => {
         res.json(resumo);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// Cron do resumo diario. Autenticado por NOTIF_CRON_SECRET (header) ou OIDC.
+// Dispara o resumo global para todos os usuarios com e-mail cadastrado.
+router.post('/cron-resumo', async (req, res) => {
+    // auth do cron
+    const cronSecret = req.headers['x-notif-cron-secret'];
+    const expected = process.env.NOTIF_CRON_SECRET;
+    const authHeader = req.headers.authorization || '';
+    const okSecret = expected && cronSecret === expected;
+    const okOidc = /^Bearer\s+/i.test(authHeader);
+    if (!okSecret && !okOidc) {
+        return res.status(401).json({ error: 'Cron nao autorizado' });
+    }
+
+    try {
+        // destinatarios: todos os users com e-mail
+        const snap = await admin.firestore().collection('users').get();
+        const destinatarios = snap.docs
+            .map(d => d.data().email)
+            .filter(e => typeof e === 'string' && e.includes('@'));
+
+        if (destinatarios.length === 0) {
+            return res.json({ ok: true, aviso: 'nenhum destinatario com e-mail', enviados: 0 });
+        }
+
+        const r = await enviarResumoDiario({
+            remetente: 'junior@spassessoriacontabil.com.br',
+            destinatarios,
+            horas: 24,
+        });
+
+        if (r.ok) {
+            res.json({ ok: true, enviados: destinatarios.length, resumo: r.resumo });
+        } else {
+            res.status(502).json({ ok: false, error: r.error });
+        }
+    } catch (err) {
+        console.error('[notificacoes] /cron-resumo:', err.message);
+        res.status(500).json({ ok: false, error: err.message });
     }
 });
 
