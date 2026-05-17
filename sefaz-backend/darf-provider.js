@@ -145,17 +145,22 @@ class MockProvider {
 }
 
 // ── SERPRO Provider ────────────────────────────────────────────────────────
-// Stub — produto PAGAMENTOWEB / DARF do Integra Contador.
+// Produto PAGTOWEB do Integra Contador (Pagamento e Arrecadação Web).
+// Ref: https://apicenter.estaleiro.serpro.gov.br/documentacao/api-integra-contador
 //
-// Pré-requisitos pra ativar (Phase 1):
-//   - Contratar o produto na Loja SERPRO
+// Pré-requisitos pra ativar:
+//   - Contratar o produto PAGTOWEB na Loja SERPRO (separado do PGDASD)
 //   - SERPRO_CONSUMER_KEY/SECRET válidos (já configurados pra DAS)
 //   - Procuração eletrônica e-CAC ativa entre escritório e empresa cliente
 //
-// Custo estimado: ~R$ 0,80/emissão (similar ao DAS).
-//
-// TODO[SERPRO_REAL]: confirmar nomes de idSistema/idServico no catálogo
-// SERPRO antes de ativar em produção (podem ter mudado).
+// TODO[SERPRO_REAL]: confirmar o nome exato do idServico de EMISSÃO de DARF
+// no portal autenticado SERPRO. Serviços conhecidos do PAGTOWEB incluem
+// COMPARRECADACAO72 (comprovante). O serviço de emissão real (ex:
+// EMITEDARF / EMITEGUIADARF) precisa ser confirmado pelo cliente que tem
+// acesso ao catálogo da sua conta. Override via env SERPRO_DARF_SERVICO.
+
+const DARF_ID_SISTEMA = process.env.SERPRO_DARF_SISTEMA || 'PAGTOWEB';
+const DARF_ID_SERVICO = process.env.SERPRO_DARF_SERVICO || 'EMITEDARF61';  // CONFIRMAR
 
 class SerproProvider {
     async gerarDarf(req) {
@@ -167,8 +172,8 @@ class SerproProvider {
         const periodoAAAAMM = String(competencia).replace(/\D/g, '').slice(0, 6);
 
         const result = await invokeIntegraContador({
-            idSistema: 'PAGAMENTOWEB',
-            idServico: 'EMITEGUIADARF',
+            idSistema: DARF_ID_SISTEMA,
+            idServico: DARF_ID_SERVICO,
             contribuinteCnpj: empresaCnpj,
             acao: 'Emitir',
             dados: {
