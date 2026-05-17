@@ -5,7 +5,7 @@
 // Mesmo padrão self-contained do manifesto-routes.js.
 // ============================================================================
 
-import { Router } from 'express';
+import { Router, json } from 'express';
 import admin from 'firebase-admin';
 import {
     listarEmpresasElegiveis,
@@ -96,7 +96,7 @@ router.post('/nfsesp-consultar-todas', authUser, async (req, res) => {
     }
 });
 
-router.post('/nfsesp-cron', async (req, res) => {
+router.post('/nfsesp-cron', json(), async (req, res) => {
     const headerSecret = req.header('X-Sefaz-Cron-Secret') || '';
     if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
         return res.status(403).json({ erro: 'cron secret inválido' });
