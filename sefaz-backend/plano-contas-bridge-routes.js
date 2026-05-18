@@ -7,7 +7,7 @@ import { getDctfwebMode } from './dctfweb-provider.js';
 import { getProviderMode as getCaixaPostalMode } from './caixa-postal-provider.js';
 
 const router = express.Router();
-const BRIDGE_TOKEN = process.env.FISCAL_GATEWAY_TOKEN || process.env.PLANO_CONTAS_INTERNAL_TOKEN || '';
+const BRIDGE_TOKEN = String(process.env.FISCAL_GATEWAY_TOKEN || process.env.PLANO_CONTAS_INTERNAL_TOKEN || '').trim();
 
 function tokenDaRequisicao(req) {
     const auth = req.header('authorization') || '';
