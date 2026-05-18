@@ -20,7 +20,8 @@ export enum SearchType {
   CALENDARIO = 'Calendário Fiscal',
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
-  CARTEIRA = 'Carteira de Clientes'
+  CARTEIRA = 'Carteira de Clientes',
+  EMISSAO_TRIBUTOS = 'Central de Emissões'
 }
 
 export interface GroundingSource {
@@ -1396,4 +1397,131 @@ export const DCTFWEB_CATEGORIA_LABELS: Record<DctfwebCategoria, string> = {
     ESPETACULO: 'Espetáculo Desportivo',
     RECLAMATORIA: 'Reclamatória Trabalhista',
     MIT: 'MIT - Módulo Inclusão de Tributos',
+};
+
+
+/* ==========================================================================
+ * DARF — Documento de Arrecadação de Receitas Federais
+ * Lucro Presumido e Lucro Real (IRPJ, CSLL, PIS, COFINS, IRRF).
+ * ========================================================================== */
+
+export type DarfRegime = 'Presumido' | 'Real';
+export type DarfTributo = 'IRPJ' | 'CSLL' | 'PIS' | 'COFINS' | 'IRRF';
+export type DarfPeriodicidade = 'mensal' | 'trimestral';
+export type DarfStatusPagamento = 'pendente' | 'pago' | 'vencido';
+
+export interface DarfCodigoReceita {
+    key?: string;
+    codigo: string;       // 4 dígitos (ex: '2089')
+    descricao: string;
+}
+
+export interface DarfEmitido {
+    id: string;
+    empresaId: string;
+    empresaCnpj: string;
+    empresaNome: string;
+    regime: DarfRegime;
+    tributo: DarfTributo;
+    competencia: string;            // YYYY-MM
+    periodicidade: DarfPeriodicidade;
+    codigoReceita: string;
+    numeroDocumento: string;
+    codigoBarras: string;
+    linhaDigitavel?: string;
+    vencimento: string;             // YYYY-MM-DD
+    valorPrincipal: number;
+    multa: number;
+    juros: number;
+    valor: number;                  // total (principal + multa + juros)
+    pdfBase64?: string | null;
+    descricao?: string;
+    observacao?: string;
+    emitidoEm: string;
+    modeUsado: 'mock' | 'serpro';
+    statusPagamento: DarfStatusPagamento;
+    dataPagamento?: string | null;
+    fonte?: string;
+    mensagem?: string;
+}
+
+export interface DarfResumo {
+    totalDarfs: number;
+    pendentes: number;
+    vencidos: number;
+    pagos: number;
+    valorPendente: number;
+    valorVencido: number;
+    valorPago: number;
+    porTributo: Record<string, { qtd: number; valor: number }>;
+    mode: 'mock' | 'serpro';
+}
+
+export interface DarfEmissaoInput {
+    empresaId: string;
+    empresaCnpj: string;
+    empresaNome: string;
+    regime: DarfRegime;
+    tributo: DarfTributo;
+    competencia: string;            // YYYY-MM
+    valor: number;                  // principal
+    periodicidade?: DarfPeriodicidade;
+    codigoReceita?: string;         // override (default = sugerido pelo backend)
+    vencimento?: string;            // YYYY-MM-DD (override)
+    dataPagamento?: string;         // se atrasado, calcula multa+juros
+    descricao?: string;
+    observacao?: string;
+}
+
+
+/* ==========================================================================
+ * Central de Emissões — fachada unificada (DAS + DARF + DCTFWeb + NFSe).
+ * ========================================================================== */
+
+export type TipoGuia = 'DAS_REGULAR' | 'DAS_AVULSO' | 'DARF';
+
+export interface CatalogoEmissaoItem {
+    tipoGuia: TipoGuia;
+    label: string;
+    tributos: string[];
+    periodicidade?: DarfPeriodicidade;
+}
+
+export interface EmissaoResumoConsolidado {
+    totalGuias: number;
+    pendentes: number;
+    vencidos: number;
+    pagos: number;
+    valorPendente: number;
+    valorVencido: number;
+    valorPago: number;
+    breakdown: {
+        das: {
+            total: number;
+            pendentes: number;
+            vencidos: number;
+            pagos: number;
+            valorTotal: number;
+        };
+        darf: {
+            total: number;
+            pendentes: number;
+            vencidos: number;
+            pagos: number;
+            valorTotal: number;
+            porTributo: Record<string, { qtd: number; valor: number }>;
+        };
+    };
+    modes: {
+        das: 'mock' | 'serpro';
+        darf: 'mock' | 'serpro';
+    };
+}
+
+export const DARF_TRIBUTO_LABELS: Record<DarfTributo, string> = {
+    IRPJ:   'IRPJ',
+    CSLL:   'CSLL',
+    PIS:    'PIS/PASEP',
+    COFINS: 'COFINS',
+    IRRF:   'IRRF',
 };
