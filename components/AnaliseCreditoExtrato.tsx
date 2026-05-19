@@ -3,7 +3,7 @@
 // (layout SP Contábil — extrato Itaú pós-conciliação, separador ';' em CSV).
 // Reaproveita as 11 categorias do Relatório de Créditos já usado pela Eunice.
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   parseExtratoConciliacao,
   classificar,
@@ -22,6 +22,10 @@ import {
   regimeParaCalculo,
   type CreditoEfiscal,
 } from '../services/efiscalCreditoService';
+import {
+  carregarRegras,
+  salvarRegra,
+} from '../services/categoriaFornecedorService';
 import type { EmpresaPerfilOption } from '../services/xmlFiscalService';
 import type { User } from '../types';
 
@@ -83,12 +87,51 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     [empresas, empresaSelId],
   );
 
+  // Regras manuais CNPJ->categoria da empresa selecionada (tabela Firestore).
+  // Sobrepoem a classificacao automatica. Recarregadas quando a empresa muda.
+  const [overrides, setOverrides] = useState<Map<string, TipoDespesaCredito>>(new Map());
+  const [overridesVersao, setOverridesVersao] = useState(0);
+
+  useEffect(() => {
+    let ativo = true;
+    if (!empresaSel?.id) { setOverrides(new Map()); return; }
+    carregarRegras(empresaSel.id).then(mapa => {
+      if (ativo) setOverrides(mapa);
+    });
+    return () => { ativo = false; };
+  }, [empresaSel?.id, overridesVersao]);
+
+  // Salva (ou troca) a categoria de um fornecedor na tabela CNPJ->categoria
+  // da empresa. Apos salvar, recarrega os overrides -> credito recalcula.
+  const [salvandoCnpj, setSalvandoCnpj] = useState<string | null>(null);
+
+  const salvarCategoriaFornecedor = useCallback(async (
+    cnpjFornecedor: string,
+    razaoSocial: string,
+    categoria: TipoDespesaCredito,
+  ) => {
+    if (!empresaSel?.id) return;
+    setSalvandoCnpj(cnpjFornecedor);
+    const r = await salvarRegra({
+      empresaId: empresaSel.id,
+      cnpjFornecedor,
+      razaoSocial,
+      categoria,
+    });
+    setSalvandoCnpj(null);
+    if (r.ok) {
+      setOverridesVersao(v => v + 1);  // dispara reload das regras
+    } else {
+      setErro('Erro ao salvar categoria: ' + (r.error || 'desconhecido'));
+    }
+  }, [empresaSel?.id]);
+
   // Credito recalcula sempre que o PDF parseado OU a empresa mudam.
   const credito = useMemo<CreditoEfiscal | null>(() => {
     if (!efiscal || !empresaSel) return null;
     const regCalc = regimeParaCalculo(empresaSel.regimeSugerido);
-    return calcularCreditoEfiscal(efiscal.fornecedores, regCalc, efiscal.notas);
-  }, [efiscal, empresaSel]);
+    return calcularCreditoEfiscal(efiscal.fornecedores, regCalc, efiscal.notas, overrides);
+  }, [efiscal, empresaSel, overrides]);
 
   // Aviso de divergencia de CNPJ — tambem reativo.
   const avisoCnpj = useMemo<string | null>(() => {
@@ -823,7 +866,26 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                     <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                       <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap font-mono">{f.cnpjCpf}</td>
                       <td className="px-3 py-2 text-gray-800 dark:text-gray-200 font-medium">{f.razaoSocial}</td>
-                      <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{f.categoria ?? '—'}</td>
+                      <td className="px-3 py-2">
+                        <select
+                          value={f.categoria ?? ''}
+                          disabled={!empresaSel?.id || salvandoCnpj === f.cnpjCpf}
+                          onChange={e => {
+                            const v = e.target.value;
+                            if (v) salvarCategoriaFornecedor(f.cnpjCpf, f.razaoSocial, v as TipoDespesaCredito);
+                          }}
+                          className="text-xs bg-transparent border border-gray-200 dark:border-gray-600 rounded px-1.5 py-0.5 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+                          title={empresaSel?.id ? 'Definir categoria — salva como regra para esta empresa' : 'Selecione a empresa primeiro'}
+                        >
+                          <option value="">— sem categoria —</option>
+                          {CATEGORIAS_CREDITO.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                        {salvandoCnpj === f.cnpjCpf && (
+                          <span className="ml-1 text-[10px] text-gray-400">salvando…</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{f.qtdNotas}</td>
                       <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">R$ {brl(f.somaValorNf)}</td>
                       <td className="px-3 py-2 text-right text-gray-800 dark:text-gray-200 whitespace-nowrap font-semibold">R$ {brl(f.somaBaseCalculo)}</td>

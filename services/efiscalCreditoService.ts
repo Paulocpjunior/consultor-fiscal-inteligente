@@ -70,6 +70,7 @@ export function calcularCreditoEfiscal(
     fornecedores: EfiscalFornecedorAgrupado[],
     regime: RegimeCalculo,
     notas: EfiscalNf[] = [],
+    overridesCategoria: Map<string, TipoDespesaCredito> = new Map(),
 ): CreditoEfiscal {
     const aliquota = ALIQUOTAS[regime];
     const geraCredito = regime !== 'SIMPLES';
@@ -78,7 +79,14 @@ export function calcularCreditoEfiscal(
     // classificar() pode devolver 'SEM_CREDITO' — normalizo para null
     // (no contexto E-Fiscal todas as categorias geram credito; 'SEM_CREDITO'
     //  aqui significa apenas "nao casou com nenhuma categoria conhecida").
+    const soDigCls = (s: string) => (s || '').replace(/\D+/g, '');
     const fornecedoresClassificados: FornecedorClassificado[] = fornecedores.map(f => {
+        // 1o: regra manual cadastrada (tabela CNPJ->categoria da empresa)
+        const override = overridesCategoria.get(soDigCls(f.cnpjCpf));
+        if (override) {
+            return { ...f, categoria: override };
+        }
+        // 2o: classificacao automatica pela razao social
         const cls = classificar(f.razaoSocial, '');
         const cat = (cls.categoria && cls.categoria !== 'SEM_CREDITO')
             ? cls.categoria
