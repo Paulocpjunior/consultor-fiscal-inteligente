@@ -87,7 +87,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
   const credito = useMemo<CreditoEfiscal | null>(() => {
     if (!efiscal || !empresaSel) return null;
     const regCalc = regimeParaCalculo(empresaSel.regimeSugerido);
-    return calcularCreditoEfiscal(efiscal.fornecedores, regCalc);
+    return calcularCreditoEfiscal(efiscal.fornecedores, regCalc, efiscal.notas);
   }, [efiscal, empresaSel]);
 
   // Aviso de divergencia de CNPJ — tambem reativo.
@@ -103,6 +103,9 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     }
     return null;
   }, [efiscal, empresaSel]);
+
+  // Categoria expandida na tabela de distribuicao (mostra as NFs do grupo)
+  const [catExpandida, setCatExpandida] = useState<string | null>(null);
 
   const processar = useCallback(async (file: File) => {
     setErro(null);
@@ -530,16 +533,18 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
             </div>
           )}
 
-          {/* Tabela de categorias agrupadas */}
+          {/* Tabela de categorias agrupadas — expansivel */}
           {credito && credito.categorias.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
                 <h3 className="font-semibold text-gray-700 dark:text-gray-200 text-sm">Distribuição por Categoria</h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">Clique numa categoria para ver as notas fiscais do grupo.</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-xs">
                   <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 uppercase">
                     <tr>
+                      <th className="px-3 py-2 text-left font-medium w-8"></th>
                       <th className="px-3 py-2 text-left font-medium">Categoria</th>
                       <th className="px-3 py-2 text-right font-medium">Fornecedores</th>
                       <th className="px-3 py-2 text-right font-medium">NFs</th>
@@ -547,16 +552,68 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {credito.categorias.map((cat, i) => (
-                      <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                        <td className="px-3 py-2 text-gray-800 dark:text-gray-200 font-medium">
-                          {cat.categoria === 'SEM_CATEGORIA' ? '— Sem categoria —' : cat.categoria}
-                        </td>
-                        <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{cat.qtdFornecedores}</td>
-                        <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{cat.qtdNotas}</td>
-                        <td className="px-3 py-2 text-right text-gray-800 dark:text-gray-200 whitespace-nowrap font-semibold">R$ {brl(cat.somaBaseCalculo)}</td>
-                      </tr>
-                    ))}
+                    {credito.categorias.map((cat) => {
+                      const chave = String(cat.categoria);
+                      const aberta = catExpandida === chave;
+                      const label = cat.categoria === 'SEM_CATEGORIA' ? '— Sem categoria —' : cat.categoria;
+                      return (
+                        <React.Fragment key={chave}>
+                          <tr
+                            onClick={() => setCatExpandida(aberta ? null : chave)}
+                            className="hover:bg-gray-50 dark:hover:bg-gray-700/30 cursor-pointer"
+                          >
+                            <td className="px-3 py-2 text-gray-400 select-none">{aberta ? '▾' : '▸'}</td>
+                            <td className="px-3 py-2 text-gray-800 dark:text-gray-200 font-medium">{label}</td>
+                            <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{cat.qtdFornecedores}</td>
+                            <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{cat.qtdNotas}</td>
+                            <td className="px-3 py-2 text-right text-gray-800 dark:text-gray-200 whitespace-nowrap font-semibold">R$ {brl(cat.somaBaseCalculo)}</td>
+                          </tr>
+                          {aberta && (
+                            <tr>
+                              <td colSpan={5} className="bg-gray-50 dark:bg-gray-900/40 px-3 py-3">
+                                <div className="overflow-x-auto">
+                                  <table className="min-w-full text-[11px]">
+                                    <thead className="text-gray-500 dark:text-gray-400 uppercase">
+                                      <tr>
+                                        <th className="px-2 py-1 text-left font-medium">Emissão</th>
+                                        <th className="px-2 py-1 text-left font-medium">Número</th>
+                                        <th className="px-2 py-1 text-left font-medium">Série</th>
+                                        <th className="px-2 py-1 text-left font-medium">CNPJ/CPF</th>
+                                        <th className="px-2 py-1 text-left font-medium">Razão Social</th>
+                                        <th className="px-2 py-1 text-right font-medium">Valor NF</th>
+                                        <th className="px-2 py-1 text-right font-medium">Base Cálculo</th>
+                                        <th className="px-2 py-1 text-right font-medium">Alíq.</th>
+                                        <th className="px-2 py-1 text-right font-medium">Valor ISS</th>
+                                        <th className="px-2 py-1 text-right font-medium">Iss Retido</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                      {cat.notas.map((nf, j) => (
+                                        <tr key={j}>
+                                          <td className="px-2 py-1 text-gray-600 dark:text-gray-400 whitespace-nowrap">{nf.emissao}</td>
+                                          <td className="px-2 py-1 text-gray-600 dark:text-gray-400">{nf.numero}</td>
+                                          <td className="px-2 py-1 text-gray-600 dark:text-gray-400">{nf.serie || '—'}</td>
+                                          <td className="px-2 py-1 text-gray-600 dark:text-gray-400 font-mono whitespace-nowrap">{nf.cnpjCpf}</td>
+                                          <td className="px-2 py-1 text-gray-700 dark:text-gray-300">{nf.razaoSocial}</td>
+                                          <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(nf.valorNf)}</td>
+                                          <td className="px-2 py-1 text-right text-gray-800 dark:text-gray-200 whitespace-nowrap font-semibold">R$ {brl(nf.baseCalculo)}</td>
+                                          <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400">{nf.aliquota ? nf.aliquota.toFixed(2) : '—'}</td>
+                                          <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(nf.valorIss)}</td>
+                                          <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(nf.issRetido)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                  {cat.notas.length === 0 && (
+                                    <p className="text-gray-400 py-2">Nenhuma NF neste grupo.</p>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -605,6 +662,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                   <tr>
                     <th className="px-3 py-2 text-left font-medium">CNPJ/CPF</th>
                     <th className="px-3 py-2 text-left font-medium">Razão Social</th>
+                    <th className="px-3 py-2 text-left font-medium">Categoria</th>
                     <th className="px-3 py-2 text-right font-medium">Qtd NFs</th>
                     <th className="px-3 py-2 text-right font-medium">Valor das NFs</th>
                     <th className="px-3 py-2 text-right font-medium">Base de Cálculo</th>
@@ -612,10 +670,11 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {efiscal.fornecedores.map((f, i) => (
+                  {(credito ? credito.fornecedoresClassificados : efiscal.fornecedores).map((f: any, i: number) => (
                     <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                       <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap font-mono">{f.cnpjCpf}</td>
                       <td className="px-3 py-2 text-gray-800 dark:text-gray-200 font-medium">{f.razaoSocial}</td>
+                      <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{f.categoria ?? '—'}</td>
                       <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{f.qtdNotas}</td>
                       <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">R$ {brl(f.somaValorNf)}</td>
                       <td className="px-3 py-2 text-right text-gray-800 dark:text-gray-200 whitespace-nowrap font-semibold">R$ {brl(f.somaBaseCalculo)}</td>

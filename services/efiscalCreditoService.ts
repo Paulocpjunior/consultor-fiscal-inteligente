@@ -14,7 +14,7 @@
 
 import { classificar, type TipoDespesaCredito } from './analiseCreditoExtratoService';
 import type { RegimeSugerido } from './xmlFiscalService';
-import type { EfiscalFornecedorAgrupado } from './efiscalPdfParserService';
+import type { EfiscalFornecedorAgrupado, EfiscalNf } from './efiscalPdfParserService';
 
 export type RegimeCalculo = 'SIMPLES' | 'PRESUMIDO' | 'REAL';
 
@@ -47,6 +47,7 @@ export interface CategoriaAgrupada {
     qtdFornecedores: number;
     qtdNotas: number;
     somaBaseCalculo: number;
+    notas: EfiscalNf[];   // NFs individuais que compoem este grupo
 }
 
 export interface CreditoEfiscal {
@@ -68,6 +69,7 @@ export interface CreditoEfiscal {
 export function calcularCreditoEfiscal(
     fornecedores: EfiscalFornecedorAgrupado[],
     regime: RegimeCalculo,
+    notas: EfiscalNf[] = [],
 ): CreditoEfiscal {
     const aliquota = ALIQUOTAS[regime];
     const geraCredito = regime !== 'SIMPLES';
@@ -84,20 +86,34 @@ export function calcularCreditoEfiscal(
         return { ...f, categoria: cat };
     });
 
-    // 2. agrupa por categoria
-    const mapaCat = new Map<string, CategoriaAgrupada>();
+    // 2. mapa CNPJ (so digitos) -> categoria do fornecedor
+    const soDig = (s: string) => (s || '').replace(/\D+/g, '');
+    const catPorCnpj = new Map<string, TipoDespesaCredito | null>();
     for (const f of fornecedoresClassificados) {
-        const chave = f.categoria ?? 'SEM_CATEGORIA';
+        catPorCnpj.set(soDig(f.cnpjCpf), f.categoria);
+    }
+
+    // 3. agrupa por categoria (resumo + notas individuais)
+    const mapaCat = new Map<string, CategoriaAgrupada>();
+    const ensureCat = (chave: string): CategoriaAgrupada => {
         if (!mapaCat.has(chave)) {
             mapaCat.set(chave, {
                 categoria: chave as CategoriaAgrupada['categoria'],
-                qtdFornecedores: 0, qtdNotas: 0, somaBaseCalculo: 0,
+                qtdFornecedores: 0, qtdNotas: 0, somaBaseCalculo: 0, notas: [],
             });
         }
-        const c = mapaCat.get(chave)!;
-        c.qtdFornecedores++;
-        c.qtdNotas += f.qtdNotas;
-        c.somaBaseCalculo += f.somaBaseCalculo;
+        return mapaCat.get(chave)!;
+    };
+    for (const f of fornecedoresClassificados) {
+        const cat = ensureCat(f.categoria ?? 'SEM_CATEGORIA');
+        cat.qtdFornecedores++;
+        cat.qtdNotas += f.qtdNotas;
+        cat.somaBaseCalculo += f.somaBaseCalculo;
+    }
+    // distribui as NFs individuais nos grupos, pela categoria do fornecedor
+    for (const nf of notas) {
+        const categoria = catPorCnpj.get(soDig(nf.cnpjCpf)) ?? 'SEM_CATEGORIA';
+        ensureCat(categoria as string).notas.push(nf);
     }
     const categorias = Array.from(mapaCat.values())
         .sort((a, b) => b.somaBaseCalculo - a.somaBaseCalculo);
