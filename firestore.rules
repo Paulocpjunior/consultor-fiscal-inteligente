@@ -143,6 +143,16 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // categorias_fornecedor: tabela CNPJ -> categoria por empresa.
+    // Leitura e escrita para QUALQUER usuario logado — todos os
+    // colaboradores podem corrigir/cadastrar a categoria de um fornecedor.
+    // ───────────────────────────────────────────────────────────────
+
+    match /categorias_fornecedor/{regraId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // Default deny: qualquer coleção não listada acima é negada.
     // ───────────────────────────────────────────────────────────────
 
