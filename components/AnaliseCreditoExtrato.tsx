@@ -17,6 +17,13 @@ import {
   parseEfiscalPdf,
   type EfiscalPdfParsed,
 } from '../services/efiscalPdfParserService';
+import {
+  calcularCreditoEfiscal,
+  regimeParaCalculo,
+  type CreditoEfiscal,
+} from '../services/efiscalCreditoService';
+import type { EmpresaPerfilOption } from '../services/xmlFiscalService';
+import type { User } from '../types';
 
 // Alíquotas PIS/COFINS não-cumulativo (Lucro Real)
 const ALIQ_PIS    = 0.0165;
@@ -49,7 +56,15 @@ const CardTotal: React.FC<{ label: string; valor: number; cor: string; qtde?: nu
   </div>
 );
 
-const AnaliseCreditoExtrato: React.FC = () => {
+interface AnaliseCreditoExtratoProps {
+  currentUser?: User | null;
+  empresas?: EmpresaPerfilOption[];
+}
+
+const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
+  currentUser = null,
+  empresas = [],
+}) => {
   const [arquivo, setArquivo]       = useState<File | null>(null);
   const [lancamentos, setLancamentos] = useState<LancamentoExtrato[]>([]);
   const [erro, setErro]             = useState<string | null>(null);
@@ -60,6 +75,9 @@ const AnaliseCreditoExtrato: React.FC = () => {
   const [modo, setModo] = useState<'csv' | 'efiscal'>('csv');
   const [efiscal, setEfiscal] = useState<EfiscalPdfParsed | null>(null);
   const [efiscalCarregando, setEfiscalCarregando] = useState(false);
+  const [empresaSelId, setEmpresaSelId] = useState<string>('');
+  const [credito, setCredito] = useState<CreditoEfiscal | null>(null);
+  const [avisoCnpj, setAvisoCnpj] = useState<string | null>(null);
 
   const processar = useCallback(async (file: File) => {
     setErro(null);
@@ -102,6 +120,27 @@ const AnaliseCreditoExtrato: React.FC = () => {
     try {
       const parsed = await parseEfiscalPdf(file);
       setEfiscal(parsed);
+
+      // Resolve regime da empresa selecionada e calcula o credito
+      const emp = empresas.find(e => e.id === empresaSelId);
+      if (emp) {
+        const regCalc = regimeParaCalculo(emp.regimeSugerido);
+        setCredito(calcularCreditoEfiscal(parsed.fornecedores, regCalc));
+        // Confere CNPJ da empresa selecionada x cabecalho do PDF
+        const soDigitos = (s: string) => (s || '').replace(/\D+/g, '');
+        if (soDigitos(emp.cnpj) !== soDigitos(parsed.empresaCnpj)) {
+          setAvisoCnpj(
+            `Atencao: a empresa selecionada (${emp.cnpj}) e diferente do CNPJ ` +
+            `no cabecalho do PDF (${parsed.empresaCnpj}). Confirme se o relatorio ` +
+            `e da empresa certa.`,
+          );
+        } else {
+          setAvisoCnpj(null);
+        }
+      } else {
+        setCredito(null);
+        setAvisoCnpj(null);
+      }
       if (!parsed.validacao.ok) {
         setErro(
           'Atencao: os totais extraidos nao bateram 100% com o rodape do PDF. ' +
@@ -372,8 +411,33 @@ const AnaliseCreditoExtrato: React.FC = () => {
       {/* ─── Upload PDF E-Fiscal ──────────────────────────────────────── */}
       {modo === 'efiscal' && (
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
+        {/* Seletor de empresa tomadora */}
+        <div>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">
+            Empresa tomadora dos servicos
+          </label>
+          <select
+            value={empresaSelId}
+            onChange={e => { setEmpresaSelId(e.target.value); setEfiscal(null); setCredito(null); setArquivo(null); setAvisoCnpj(null); }}
+            className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+          >
+            <option value="">— Selecione a empresa antes de subir o PDF —</option>
+            {[...empresas].sort((a,b) => a.nome.localeCompare(b.nome)).map(e => (
+              <option key={e.id} value={e.id}>
+                {e.nome} ({e.cnpj}) · {e.regimeSugerido === 'SIMPLES' ? 'Simples'
+                  : e.regimeSugerido === 'LUCRO_PRESUMIDO' ? 'Presumido' : 'Lucro Real'}
+              </option>
+            ))}
+          </select>
+          {empresas.length === 0 && (
+            <p className="text-[11px] text-orange-500 mt-1">
+              Nenhuma empresa cadastrada encontrada. Cadastre a empresa primeiro.
+            </p>
+          )}
+        </div>
         <div
-          onClick={() => document.getElementById('input-efiscal')?.click()}
+          className={empresaSelId ? '' : 'opacity-40 pointer-events-none'}
+          onClick={() => empresaSelId && document.getElementById('input-efiscal')?.click()}
           onDragOver={e => e.preventDefault()}
           onDrop={e => { e.preventDefault(); onFileEfiscal(e.dataTransfer.files?.[0] ?? null); }}
           className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center cursor-pointer hover:border-teal-400 transition-all"
@@ -411,6 +475,87 @@ const AnaliseCreditoExtrato: React.FC = () => {
               CNPJ {efiscal.empresaCnpj} · Período {efiscal.periodo} · {efiscal.notas.length} NFs · {efiscal.fornecedores.length} fornecedores
             </p>
           </div>
+
+          {/* Aviso de divergencia de CNPJ */}
+          {avisoCnpj && (
+            <div className="rounded-xl p-4 text-sm border bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300">
+              ⚠️ {avisoCnpj}
+            </div>
+          )}
+
+          {/* Card de regime + credito */}
+          {credito && (
+            <div className={`rounded-2xl p-5 shadow-sm border ${
+              credito.geraCredito
+                ? 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700'
+                : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-800'
+            }`}>
+              {credito.geraCredito ? (
+                <>
+                  <h3 className="font-semibold text-gray-700 dark:text-gray-200 text-sm mb-1">
+                    Crédito PIS/COFINS — {credito.aliquota.label}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Alíquotas: PIS {(credito.aliquota.pis*100).toFixed(2)}% · COFINS {(credito.aliquota.cofins*100).toFixed(2)}%
+                    · base = soma da Base de Cálculo das NFs
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <CardTotal label="Base de Cálculo" valor={credito.baseTotal}   cor="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-100" />
+                    <CardTotal label="Crédito PIS"      valor={credito.creditoPis}    cor="bg-purple-50 dark:bg-purple-900/30 text-purple-800 dark:text-purple-100" />
+                    <CardTotal label="Crédito COFINS"   valor={credito.creditoCofins} cor="bg-orange-50 dark:bg-orange-900/30 text-orange-800 dark:text-orange-100" />
+                    <CardTotal label="Crédito Total"    valor={credito.creditoTotal}  cor="bg-teal-50 dark:bg-teal-900/30 text-teal-800 dark:text-teal-100" />
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">⚠️</span>
+                  <div>
+                    <h3 className="font-semibold text-yellow-800 dark:text-yellow-200 text-sm">
+                      Empresa optante pelo Simples Nacional
+                    </h3>
+                    <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                      Empresas do Simples Nacional não geram crédito de PIS/COFINS sobre
+                      serviços tomados — o recolhimento já ocorre dentro do DAS.
+                      O relatório abaixo é exibido apenas para conferência.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tabela de categorias agrupadas */}
+          {credito && credito.categorias.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                <h3 className="font-semibold text-gray-700 dark:text-gray-200 text-sm">Distribuição por Categoria</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 uppercase">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Categoria</th>
+                      <th className="px-3 py-2 text-right font-medium">Fornecedores</th>
+                      <th className="px-3 py-2 text-right font-medium">NFs</th>
+                      <th className="px-3 py-2 text-right font-medium">Base de Cálculo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {credito.categorias.map((cat, i) => (
+                      <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                        <td className="px-3 py-2 text-gray-800 dark:text-gray-200 font-medium">
+                          {cat.categoria === 'SEM_CATEGORIA' ? '— Sem categoria —' : cat.categoria}
+                        </td>
+                        <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{cat.qtdFornecedores}</td>
+                        <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{cat.qtdNotas}</td>
+                        <td className="px-3 py-2 text-right text-gray-800 dark:text-gray-200 whitespace-nowrap font-semibold">R$ {brl(cat.somaBaseCalculo)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Card de validacao */}
           <div className={`rounded-xl p-4 text-sm border ${
