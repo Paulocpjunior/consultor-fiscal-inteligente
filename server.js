@@ -20,6 +20,7 @@ import nfseNacRouter from './sefaz-backend/nfse-nacional-routes.js';
 import planoContasBridgeRouter from './sefaz-backend/plano-contas-bridge-routes.js';
 import * as sharepoint from './sefaz-backend/sharepoint-provider.js';
 import * as sharepointSync from './sefaz-backend/sharepoint-sync-orchestrator.js';
+import { processarAlertasSharePoint } from './sefaz-backend/sharepoint-alertas-orchestrator.js';
 import certEmpresaRouter from './sefaz-backend/cert-empresa-routes.js';
 import notificacoesRouter from './sefaz-backend/notificacoes-routes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -2373,6 +2374,24 @@ app.get('/{*splat}', (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
     res.sendFile(join(__dirname, 'dist', 'index.html'));
+});
+
+// POST /api/admin/sharepoint/cron-alertas
+//   Frente 3 — varre Empresas, detecta docs novos, alerta admins por e-mail.
+//   Protegida por X-Cron-Secret (header). Sem login — chamada pelo Cloud Scheduler.
+app.post('/api/admin/sharepoint/cron-alertas', express.json(), async (req, res) => {
+    const cronSecret = req.headers['x-cron-secret'];
+    const expected = process.env.SEFAZ_CRON_SECRET;
+    if (!expected || cronSecret !== expected) {
+        return res.status(401).json({ ok: false, error: 'Cron nao autorizado' });
+    }
+    try {
+        const r = await processarAlertasSharePoint();
+        return res.json(r);
+    } catch (err) {
+        console.error('[sharepoint/cron-alertas]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
 });
 
 app.listen(PORT, () => console.log('Servidor rodando na porta ' + PORT));
