@@ -101,6 +101,25 @@ router.post('/marcar-lida', requireAdmin, express.json(), async (req, res) => {
 });
 
 // Cron noturno (Cloud Scheduler)
+// Smoke test: sincroniza 1 empresa, protegido por X-Cron-Secret (sem ID token).
+// Uso interno de diagnostico — mira UMA empresa, nao dispara as 213.
+router.post('/sincronizar-uma', express.json(), async (req, res) => {
+    const headerSecret = req.headers['x-cron-secret'] || '';
+    if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
+        return res.status(403).json({ erro: 'cron secret invalido' });
+    }
+    try {
+        const { empresaId, empresaCnpj } = req.body || {};
+        if (!empresaId || !empresaCnpj) {
+            return res.status(400).json({ erro: 'empresaId e empresaCnpj obrigatorios' });
+        }
+        const r = await sincronizarEmpresa(empresaId, empresaCnpj);
+        res.json(r);
+    } catch (e) {
+        res.status(500).json({ erro: e.message });
+    }
+});
+
 router.post('/cron', async (req, res) => {
     const headerSecret = req.header('X-Cron-Secret') || '';
     if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
