@@ -85,6 +85,17 @@ const DRY_RUN = process.env.SERPRO_DRY_RUN === '1';
 // ─── Token cache em memória ───────────────────────────────────────────────
 let tokenCache = { token: null, expiresAt: 0 };
 
+// Erro de negocio do SERPRO (4xx que nao seja 401/429): retry NAO resolve.
+// Sinaliza ao loop de retry que deve abortar imediatamente.
+class SerproBusinessError extends Error {
+    constructor(status, body) {
+        super(`SERPRO ${status}: ${String(body).slice(0, 500)}`);
+        this.name = 'SerproBusinessError';
+        this.status = status;
+        this.serproBody = body;
+    }
+}
+
 function log(level, msg, extra = {}) {
     // Logging estruturado JSON pra Cloud Logging parsear bem.
     console.log(JSON.stringify({
@@ -274,9 +285,10 @@ export async function invokeIntegraContador(req) {
                 throw new Error(`${res.status}: ${bodyTxt.slice(0, 200)}`);
             }
             if (!res.ok) {
-                // Erro de negócio (400, 403, etc): não vale retry, joga pra cima
+                // Erro de negócio (400, 403, etc): retry NÃO resolve.
+                // Lança SerproBusinessError — o catch abaixo aborta o loop.
                 log('error', 'business_error', { status: res.status, body: bodyTxt.slice(0, 500) });
-                throw new Error(`SERPRO ${res.status}: ${bodyTxt.slice(0, 500)}`);
+                throw new SerproBusinessError(res.status, bodyTxt.slice(0, 500));
             }
 
             const body = JSON.parse(bodyTxt);
@@ -294,6 +306,11 @@ export async function invokeIntegraContador(req) {
             };
         } catch (err) {
             lastError = err;
+            // Erro de negocio (403/400 etc): retry nao muda o resultado — aborta ja.
+            if (err instanceof SerproBusinessError) {
+                log('warn', 'invoke_business_abort', { status: err.status });
+                throw err;
+            }
             log('warn', 'invoke_attempt_failed', { attempt, error: err.message });
         }
     }
