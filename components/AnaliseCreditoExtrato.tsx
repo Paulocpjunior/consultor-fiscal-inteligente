@@ -76,8 +76,33 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
   const [efiscal, setEfiscal] = useState<EfiscalPdfParsed | null>(null);
   const [efiscalCarregando, setEfiscalCarregando] = useState(false);
   const [empresaSelId, setEmpresaSelId] = useState<string>('');
-  const [credito, setCredito] = useState<CreditoEfiscal | null>(null);
-  const [avisoCnpj, setAvisoCnpj] = useState<string | null>(null);
+
+  // Empresa tomadora selecionada (objeto completo)
+  const empresaSel = useMemo(
+    () => empresas.find(e => e.id === empresaSelId) ?? null,
+    [empresas, empresaSelId],
+  );
+
+  // Credito recalcula sempre que o PDF parseado OU a empresa mudam.
+  const credito = useMemo<CreditoEfiscal | null>(() => {
+    if (!efiscal || !empresaSel) return null;
+    const regCalc = regimeParaCalculo(empresaSel.regimeSugerido);
+    return calcularCreditoEfiscal(efiscal.fornecedores, regCalc);
+  }, [efiscal, empresaSel]);
+
+  // Aviso de divergencia de CNPJ — tambem reativo.
+  const avisoCnpj = useMemo<string | null>(() => {
+    if (!efiscal || !empresaSel) return null;
+    const soDigitos = (s: string) => (s || '').replace(/\D+/g, '');
+    if (soDigitos(empresaSel.cnpj) !== soDigitos(efiscal.empresaCnpj)) {
+      return (
+        `Atencao: a empresa selecionada (${empresaSel.cnpj}) e diferente do CNPJ ` +
+        `no cabecalho do PDF (${efiscal.empresaCnpj}). Confirme se o relatorio ` +
+        `e da empresa certa.`
+      );
+    }
+    return null;
+  }, [efiscal, empresaSel]);
 
   const processar = useCallback(async (file: File) => {
     setErro(null);
@@ -120,27 +145,8 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     try {
       const parsed = await parseEfiscalPdf(file);
       setEfiscal(parsed);
-
-      // Resolve regime da empresa selecionada e calcula o credito
-      const emp = empresas.find(e => e.id === empresaSelId);
-      if (emp) {
-        const regCalc = regimeParaCalculo(emp.regimeSugerido);
-        setCredito(calcularCreditoEfiscal(parsed.fornecedores, regCalc));
-        // Confere CNPJ da empresa selecionada x cabecalho do PDF
-        const soDigitos = (s: string) => (s || '').replace(/\D+/g, '');
-        if (soDigitos(emp.cnpj) !== soDigitos(parsed.empresaCnpj)) {
-          setAvisoCnpj(
-            `Atencao: a empresa selecionada (${emp.cnpj}) e diferente do CNPJ ` +
-            `no cabecalho do PDF (${parsed.empresaCnpj}). Confirme se o relatorio ` +
-            `e da empresa certa.`,
-          );
-        } else {
-          setAvisoCnpj(null);
-        }
-      } else {
-        setCredito(null);
-        setAvisoCnpj(null);
-      }
+      // O credito e o aviso de CNPJ sao calculados reativamente
+      // (useMemo abaixo) — recalculam quando o PDF OU a empresa mudam.
       if (!parsed.validacao.ok) {
         setErro(
           'Atencao: os totais extraidos nao bateram 100% com o rodape do PDF. ' +
@@ -418,7 +424,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
           </label>
           <select
             value={empresaSelId}
-            onChange={e => { setEmpresaSelId(e.target.value); setEfiscal(null); setCredito(null); setArquivo(null); setAvisoCnpj(null); }}
+            onChange={e => setEmpresaSelId(e.target.value)}
             className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
           >
             <option value="">— Selecione a empresa antes de subir o PDF —</option>
