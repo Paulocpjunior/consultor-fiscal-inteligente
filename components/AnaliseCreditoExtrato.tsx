@@ -13,6 +13,10 @@ import {
   type LancamentoExtrato,
   type TipoDespesaCredito,
 } from '../services/analiseCreditoExtratoService';
+import {
+  parseEfiscalPdf,
+  type EfiscalPdfParsed,
+} from '../services/efiscalPdfParserService';
 
 // Alíquotas PIS/COFINS não-cumulativo (Lucro Real)
 const ALIQ_PIS    = 0.0165;
@@ -52,6 +56,11 @@ const AnaliseCreditoExtrato: React.FC = () => {
   const [filtro, setFiltro]         = useState<'todos' | 'com_credito' | 'sem_credito' | 'revisar'>('todos');
   const [exportandoPDF, setExportandoPDF] = useState(false);
 
+  // Modo de entrada: 'csv' (extrato Itau) ou 'efiscal' (PDF Servicos Tomados)
+  const [modo, setModo] = useState<'csv' | 'efiscal'>('csv');
+  const [efiscal, setEfiscal] = useState<EfiscalPdfParsed | null>(null);
+  const [efiscalCarregando, setEfiscalCarregando] = useState(false);
+
   const processar = useCallback(async (file: File) => {
     setErro(null);
     try {
@@ -85,6 +94,63 @@ const AnaliseCreditoExtrato: React.FC = () => {
         motivo: novaCat === '' ? 'Marcado como sem crédito pelo usuário' : 'Ajustado manualmente',
       };
     }));
+  };
+
+  const processarEfiscal = useCallback(async (file: File) => {
+    setErro(null);
+    setEfiscalCarregando(true);
+    try {
+      const parsed = await parseEfiscalPdf(file);
+      setEfiscal(parsed);
+      if (!parsed.validacao.ok) {
+        setErro(
+          'Atencao: os totais extraidos nao bateram 100% com o rodape do PDF. ' +
+          'Revise antes de usar. Divergencias: ' + parsed.validacao.divergencias.join('; '),
+        );
+      }
+    } catch (e: unknown) {
+      setErro(e instanceof Error ? e.message : 'Erro ao processar o PDF E-Fiscal');
+      setEfiscal(null);
+    } finally {
+      setEfiscalCarregando(false);
+    }
+  }, []);
+
+  const onFileEfiscal = (f: File | null) => {
+    setArquivo(f);
+    if (f) processarEfiscal(f);
+  };
+
+  const exportarEfiscalXlsx = async () => {
+    if (!efiscal) return;
+    const XLSX = await import('xlsx');
+    const linhas: (string | number)[][] = [];
+    linhas.push(['RELACAO DE NFs DE SERVICOS TOMADOS - AGRUPADO POR FORNECEDOR']);
+    linhas.push([`Empresa: ${efiscal.empresaCodigo} - ${efiscal.empresaNome}`]);
+    linhas.push([`CNPJ: ${efiscal.empresaCnpj}   Periodo: ${efiscal.periodo}`]);
+    linhas.push([]);
+    linhas.push(['CNPJ/CPF', 'RAZAO SOCIAL', 'QTD NOTAS', 'VALOR DA NF', 'BASE DE CALCULO', 'VALOR ISS', 'ISS RETIDO']);
+    for (const f of efiscal.fornecedores) {
+      linhas.push([
+        f.cnpjCpf, f.razaoSocial, f.qtdNotas,
+        f.somaValorNf.toFixed(2).replace('.', ','),
+        f.somaBaseCalculo.toFixed(2).replace('.', ','),
+        f.somaValorIss.toFixed(2).replace('.', ','),
+        f.somaIssRetido.toFixed(2).replace('.', ','),
+      ]);
+    }
+    linhas.push([]);
+    linhas.push([
+      '', 'TOTAL', efiscal.notas.length,
+      efiscal.totalCalculado.valorNf.toFixed(2).replace('.', ','),
+      efiscal.totalCalculado.baseCalculo.toFixed(2).replace('.', ','),
+      efiscal.totalCalculado.valorIss.toFixed(2).replace('.', ','),
+      efiscal.totalCalculado.issRetido.toFixed(2).replace('.', ','),
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet(linhas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Servicos Tomados');
+    XLSX.writeFile(wb, `ServicosTomados_${efiscal.empresaCodigo}_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
   const totais = useMemo(() => totalizarPorCategoria(lancamentos), [lancamentos]);
@@ -260,7 +326,24 @@ const AnaliseCreditoExtrato: React.FC = () => {
         </p>
       </div>
 
-      {/* ─── Upload ───────────────────────────────────────────────────────── */}
+      {/* ─── Toggle de modo ─────────────────────────────────────────────── */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => { setModo('csv'); setErro(null); }}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold ${modo==='csv'?'bg-teal-600 text-white':'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600'}`}
+        >
+          🏦 CSV Itaú (conciliação)
+        </button>
+        <button
+          onClick={() => { setModo('efiscal'); setErro(null); }}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold ${modo==='efiscal'?'bg-teal-600 text-white':'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600'}`}
+        >
+          📄 PDF E-Fiscal (Serviços Tomados)
+        </button>
+      </div>
+
+      {/* ─── Upload CSV ───────────────────────────────────────────────── */}
+      {modo === 'csv' && (
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
         <div
           onClick={() => document.getElementById('input-extrato')?.click()}
@@ -284,6 +367,116 @@ const AnaliseCreditoExtrato: React.FC = () => {
           onChange={e => onFile(e.target.files?.[0] ?? null)}
         />
       </div>
+      )}
+
+      {/* ─── Upload PDF E-Fiscal ──────────────────────────────────────── */}
+      {modo === 'efiscal' && (
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
+        <div
+          onClick={() => document.getElementById('input-efiscal')?.click()}
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); onFileEfiscal(e.dataTransfer.files?.[0] ?? null); }}
+          className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center cursor-pointer hover:border-teal-400 transition-all"
+        >
+          <div className="text-3xl mb-1">📄</div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {arquivo ? arquivo.name : 'Clique ou arraste o PDF "Relação de NFs de Serviços Tomados" (Sistema E-Fiscal)'}
+          </p>
+          <p className="text-[11px] text-gray-400 mt-1">
+            Layout fixo do E-Fiscal — extração por coordenada, validada contra o total do relatório.
+          </p>
+        </div>
+        <input
+          id="input-efiscal"
+          type="file"
+          accept=".pdf,application/pdf"
+          className="hidden"
+          onChange={e => onFileEfiscal(e.target.files?.[0] ?? null)}
+        />
+        {efiscalCarregando && (
+          <p className="text-xs text-teal-600 dark:text-teal-400">Processando PDF…</p>
+        )}
+      </div>
+      )}
+
+      {/* ─── Resultado E-Fiscal ───────────────────────────────────────── */}
+      {modo === 'efiscal' && efiscal && (
+        <>
+          {/* Cabecalho do relatorio */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+            <h3 className="font-semibold text-gray-700 dark:text-gray-200 text-sm mb-1">
+              {efiscal.empresaCodigo} — {efiscal.empresaNome}
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              CNPJ {efiscal.empresaCnpj} · Período {efiscal.periodo} · {efiscal.notas.length} NFs · {efiscal.fornecedores.length} fornecedores
+            </p>
+          </div>
+
+          {/* Card de validacao */}
+          <div className={`rounded-xl p-4 text-sm border ${
+            efiscal.validacao.ok
+              ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
+              : 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300'
+          }`}>
+            {efiscal.validacao.ok ? (
+              <span>✓ Extração validada — os totais batem 100% com o rodapé do PDF.</span>
+            ) : (
+              <div>
+                <p className="font-semibold mb-1">⚠️ Divergência na extração:</p>
+                <ul className="list-disc list-inside text-xs">
+                  {efiscal.validacao.divergencias.map((d, i) => <li key={i}>{d}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Totais */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <CardTotal label="Total Valor das NFs"  valor={efiscal.totalCalculado.valorNf}     cor="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-100" qtde={efiscal.notas.length} />
+            <CardTotal label="Total Base de Cálculo" valor={efiscal.totalCalculado.baseCalculo} cor="bg-purple-50 dark:bg-purple-900/30 text-purple-800 dark:text-purple-100" />
+            <CardTotal label="Total Valor ISS"       valor={efiscal.totalCalculado.valorIss}    cor="bg-orange-50 dark:bg-orange-900/30 text-orange-800 dark:text-orange-100" />
+            <CardTotal label="Total ISS Retido"      valor={efiscal.totalCalculado.issRetido}   cor="bg-teal-50 dark:bg-teal-900/30 text-teal-800 dark:text-teal-100" />
+          </div>
+
+          {/* Exportar */}
+          <div className="flex justify-end">
+            <button onClick={exportarEfiscalXlsx}
+              className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm">
+              📥 Exportar fornecedores .xlsx
+            </button>
+          </div>
+
+          {/* Tabela de fornecedores agrupados */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 uppercase">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">CNPJ/CPF</th>
+                    <th className="px-3 py-2 text-left font-medium">Razão Social</th>
+                    <th className="px-3 py-2 text-right font-medium">Qtd NFs</th>
+                    <th className="px-3 py-2 text-right font-medium">Valor das NFs</th>
+                    <th className="px-3 py-2 text-right font-medium">Base de Cálculo</th>
+                    <th className="px-3 py-2 text-right font-medium">ISS Retido</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {efiscal.fornecedores.map((f, i) => (
+                    <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                      <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap font-mono">{f.cnpjCpf}</td>
+                      <td className="px-3 py-2 text-gray-800 dark:text-gray-200 font-medium">{f.razaoSocial}</td>
+                      <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{f.qtdNotas}</td>
+                      <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">R$ {brl(f.somaValorNf)}</td>
+                      <td className="px-3 py-2 text-right text-gray-800 dark:text-gray-200 whitespace-nowrap font-semibold">R$ {brl(f.somaBaseCalculo)}</td>
+                      <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(f.somaIssRetido)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {erro && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">
@@ -291,7 +484,7 @@ const AnaliseCreditoExtrato: React.FC = () => {
         </div>
       )}
 
-      {lancamentos.length > 0 && (
+      {modo === 'csv' && lancamentos.length > 0 && (
         <>
           {/* ─── Totais ─────────────────────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
