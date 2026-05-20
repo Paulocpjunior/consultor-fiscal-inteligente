@@ -2394,4 +2394,46 @@ app.post('/api/admin/sharepoint/cron-alertas', express.json(), async (req, res) 
     }
 });
 
+// POST /api/tarefas/cron-mensal
+//   Cron mensal — cria tarefas automaticas pra todas as empresas.
+//   Protegida por X-Cron-Secret (header). Chamada pelo Cloud Scheduler dia 1, 03h BRT.
+//   Body opcional: { competencia: "MM/AAAA" }  (default: mes corrente)
+app.post('/api/tarefas/cron-mensal', express.json(), async (req, res) => {
+    const cronSecret = req.headers['x-cron-secret'];
+    const expected = process.env.SEFAZ_CRON_SECRET;
+    if (!expected || cronSecret !== expected) {
+        return res.status(401).json({ ok: false, error: 'Cron nao autorizado' });
+    }
+    try {
+        const { executarCronMensal } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const competencia = (req.body && req.body.competencia) || null;
+        const r = await executarCronMensal(competencia);
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/cron-mensal]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// POST /api/tarefas/gerar-empresa
+//   Smoke / sob demanda — gera tarefas pra 1 empresa especifica.
+//   Protegida por X-Cron-Secret. Body: { empresaId, competencia? }
+app.post('/api/tarefas/gerar-empresa', express.json(), async (req, res) => {
+    const cronSecret = req.headers['x-cron-secret'];
+    const expected = process.env.SEFAZ_CRON_SECRET;
+    if (!expected || cronSecret !== expected) {
+        return res.status(401).json({ ok: false, error: 'Cron nao autorizado' });
+    }
+    const { empresaId, competencia } = req.body || {};
+    if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatorio' });
+    try {
+        const { gerarTarefasDeUmaEmpresa } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const r = await gerarTarefasDeUmaEmpresa(empresaId, competencia || null);
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/gerar-empresa]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 app.listen(PORT, () => console.log('Servidor rodando na porta ' + PORT));

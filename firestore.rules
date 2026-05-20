@@ -171,6 +171,24 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // tarefas: gestao de tarefas/prazos.
+    // Leitura, criacao e update para QUALQUER signed-in (colaborador
+    // marca concluida, etc). Delete apenas admin.
+    // ───────────────────────────────────────────────────────────────
+
+    match /tarefas/{tarefaId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Logs do cron: leitura admin, escrita soh backend (regra firme)
+    match /tarefas_cron_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // Default deny: qualquer coleção não listada acima é negada.
     // ───────────────────────────────────────────────────────────────
 
