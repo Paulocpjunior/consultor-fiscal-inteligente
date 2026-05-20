@@ -2415,6 +2415,25 @@ app.post('/api/tarefas/cron-mensal', express.json(), async (req, res) => {
     }
 });
 
+// POST /api/tarefas/aplicar-carteira
+//   Atribui retroativamente as tarefas sem dono ao titular da Carteira.
+//   Idempotente. Protegida por X-Cron-Secret.
+app.post('/api/tarefas/aplicar-carteira', express.json(), async (req, res) => {
+    const cronSecret = req.headers['x-cron-secret'];
+    const expected = process.env.SEFAZ_CRON_SECRET;
+    if (!expected || cronSecret !== expected) {
+        return res.status(401).json({ ok: false, error: 'Cron nao autorizado' });
+    }
+    try {
+        const { aplicarCarteiraRetroativo } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const r = await aplicarCarteiraRetroativo();
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/aplicar-carteira]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // POST /api/tarefas/gerar-empresa
 //   Smoke / sob demanda — gera tarefas pra 1 empresa especifica.
 //   Protegida por X-Cron-Secret. Body: { empresaId, competencia? }

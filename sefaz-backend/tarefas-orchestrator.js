@@ -213,3 +213,99 @@ export async function executarCronMensal(competencia, opts = {}) {
 export async function gerarTarefasDeUmaEmpresa(empresaId, competencia) {
     return executarCronMensal(competencia, { empresaIdEspecifica: empresaId });
 }
+
+/**
+ * Atribui retroativamente as tarefas sem dono ao titular da Carteira.
+ *
+ * Para cada tarefa com responsavel=null E status!=concluida:
+ *   - busca o titular (papel=principal) da empresa na carteira
+ *   - se achar, atribui (responsavel + responsavelNome)
+ *   - se nao achar, deixa sem dono
+ *
+ * Idempotente: se tarefa ja tem responsavel, pula. Se carteira nao tem
+ * titular, pula. Rodar 10x nao muda nada apos a 1a.
+ *
+ * @returns log da execucao
+ */
+export async function aplicarCarteiraRetroativo() {
+    fa();
+    const db = admin.firestore();
+
+    const inicio = new Date();
+    const log = {
+        iniciadoEm: inicio.toISOString(),
+        tarefasAvaliadas: 0,
+        tarefasAtribuidas: 0,
+        tarefasSemTitular: 0,
+        tarefasJaAtribuidas: 0,
+        erros: [],
+    };
+
+    // Cache de titulares por empresa (evita re-query)
+    const cacheTitular = new Map(); // empresaId -> {uid, nome} | null
+
+    async function getTitularCacheado(empresaId) {
+        if (cacheTitular.has(empresaId)) return cacheTitular.get(empresaId);
+        try {
+            const snap = await db.collection('carteiras')
+                .where('empresaId', '==', empresaId)
+                .where('papel', '==', 'principal')
+                .get();
+            const titular = snap.empty
+                ? null
+                : { uid: snap.docs[0].data().colaboradorUid, nome: snap.docs[0].data().colaboradorNome || '' };
+            cacheTitular.set(empresaId, titular);
+            return titular;
+        } catch (e) {
+            cacheTitular.set(empresaId, null);
+            return null;
+        }
+    }
+
+    try {
+        const snap = await db.collection('tarefas')
+            .where('responsavel', '==', null)
+            .get();
+
+        for (const d of snap.docs) {
+            log.tarefasAvaliadas++;
+            const data = d.data();
+            if (data.status === 'concluida' || data.status === 'cancelada') {
+                log.tarefasJaAtribuidas++;
+                continue;
+            }
+            try {
+                const titular = await getTitularCacheado(data.empresaId);
+                if (titular) {
+                    await d.ref.update({
+                        responsavel: titular.uid,
+                        responsavelNome: titular.nome,
+                    });
+                    log.tarefasAtribuidas++;
+                } else {
+                    log.tarefasSemTitular++;
+                }
+            } catch (e) {
+                log.erros.push(`Tarefa ${d.id}: ${e.message}`);
+            }
+        }
+    } catch (e) {
+        log.erros.push(`Falha geral: ${e.message}`);
+    }
+
+    const fim = new Date();
+    log.finalizadoEm = fim.toISOString();
+    log.duracaoMs = fim.getTime() - inicio.getTime();
+
+    try {
+        await db.collection('tarefas_cron_logs').add({
+            ...log,
+            tipo: 'aplicarCarteiraRetroativo',
+            criadoEm: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    } catch (e) {
+        console.warn('[tarefas-retro] falha ao gravar log:', e.message);
+    }
+
+    return log;
+}
