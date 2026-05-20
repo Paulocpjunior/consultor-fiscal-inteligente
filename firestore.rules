@@ -162,6 +162,15 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // categorias_credito_custom: categorias customizadas (alem das 11 da IA).
+    // Leitura e escrita para QUALQUER usuario logado.
+    // ───────────────────────────────────────────────────────────────
+
+    match /categorias_credito_custom/{catId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // Default deny: qualquer coleção não listada acima é negada.
     // ───────────────────────────────────────────────────────────────
 

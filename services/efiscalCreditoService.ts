@@ -39,11 +39,11 @@ export function regimeParaCalculo(regime: RegimeSugerido): RegimeCalculo {
 }
 
 export interface FornecedorClassificado extends EfiscalFornecedorAgrupado {
-    categoria: TipoDespesaCredito | null;
+    categoria: string | null;  // pode ser TipoDespesaCredito ou custom
 }
 
 export interface CategoriaAgrupada {
-    categoria: TipoDespesaCredito | 'SEM_CATEGORIA';
+    categoria: string;  // TipoDespesaCredito, custom, ou 'SEM_CATEGORIA'
     qtdFornecedores: number;
     qtdNotas: number;
     somaBaseCalculo: number;
@@ -70,7 +70,7 @@ export function calcularCreditoEfiscal(
     fornecedores: EfiscalFornecedorAgrupado[],
     regime: RegimeCalculo,
     notas: EfiscalNf[] = [],
-    overridesCategoria: Map<string, TipoDespesaCredito> = new Map(),
+    overridesCategoria: Map<string, string> = new Map(),
 ): CreditoEfiscal {
     const aliquota = ALIQUOTAS[regime];
     const geraCredito = regime !== 'SIMPLES';
@@ -96,7 +96,7 @@ export function calcularCreditoEfiscal(
 
     // 2. mapa CNPJ (so digitos) -> categoria do fornecedor
     const soDig = (s: string) => (s || '').replace(/\D+/g, '');
-    const catPorCnpj = new Map<string, TipoDespesaCredito | null>();
+    const catPorCnpj = new Map<string, string | null>();
     for (const f of fornecedoresClassificados) {
         catPorCnpj.set(soDig(f.cnpjCpf), f.categoria);
     }

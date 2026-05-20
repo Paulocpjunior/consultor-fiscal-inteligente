@@ -30,7 +30,7 @@ export interface RegraCategoria {
     empresaId: string;
     cnpjFornecedor: string; // so digitos
     razaoSocial: string;    // ultima razao vista (referencia humana)
-    categoria: TipoDespesaCredito;
+    categoria: string;  // pode ser custom
     atualizadoPor: string | null;
 }
 
@@ -45,9 +45,9 @@ function regraId(empresaId: string, cnpj: string): string {
  * Carrega todas as regras de uma empresa como Map<cnpjDigitos, categoria>.
  * Esse Map e passado ao calcularCreditoEfiscal como override.
  */
-export async function carregarRegras(empresaId: string): Promise<Map<string, TipoDespesaCredito>> {
-    const mapa = new Map<string, TipoDespesaCredito>();
-    if (!isFirebaseConfigured() || !empresaId) return mapa;
+export async function carregarRegras(empresaId: string): Promise<Map<string, string>> {
+    const mapa = new Map<string, string>();
+    if (!isFirebaseConfigured || !empresaId) return mapa;
     try {
         const snap = await getDocs(query(
             collection(db, COLLECTION),
@@ -73,9 +73,9 @@ export async function salvarRegra(params: {
     empresaId: string;
     cnpjFornecedor: string;
     razaoSocial: string;
-    categoria: TipoDespesaCredito;
+    categoria: string;
 }): Promise<{ ok: boolean; error?: string }> {
-    if (!isFirebaseConfigured()) {
+    if (!isFirebaseConfigured) {
         return { ok: false, error: 'Firebase nao configurado' };
     }
     const cnpj = soDigitos(params.cnpjFornecedor);
