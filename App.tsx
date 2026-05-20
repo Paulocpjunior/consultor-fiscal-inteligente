@@ -36,6 +36,7 @@ const ComparisonDisplay = lazy(() => import('./components/ComparisonDisplay'));
 const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDisplay'));
 const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumidoRealDashboard'));
 const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
+const Tarefas = lazy(() => import('./components/Tarefas'));
 const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocumentosFiscais'));
 const SpedFiscal = lazy(() => import('./components/SpedFiscal'));
 const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
@@ -64,6 +65,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.ANALISE_RELATORIO_SAGE]: "Analise relatórios SAGE (XLSX/XML) e identifique gaps, canceladas, denegadas e segregação E/S.",
     [SearchType.ANALISADOR_REGIME]: "Compare cenários de tributação (Simples, Lucro Presumido, Lucro Real) e identifique o regime mais vantajoso.",
     [SearchType.ANALISE_CREDITOS]: "Análise de créditos PIS/COFINS, conciliação bancária e mapeamento por categoria fiscal.",
+    [SearchType.TAREFAS]: "Gestão de tarefas e prazos das obrigações acessórias (DAS, DCTFWeb, FGTS, SPED) por empresa.",
     [SearchType.SPED_FISCAL]: "Geração do arquivo SPED Fiscal (EFD ICMS/IPI) — escrituração digital mensal.",
     [SearchType.CAIXA_POSTAL]: "Caixa Postal e-CAC — mensagens da Receita Federal por empresa (intimações, malha fiscal, comunicados).",
     [SearchType.DAS_SIMPLES]: "DAS Simples Nacional — emissão regular (com PGDAS-D) e avulso, controle de pagamentos por empresa.",
@@ -1179,6 +1181,13 @@ const App: React.FC = () => {
                         {searchType === SearchType.ANALISE_CREDITOS && (
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnaliseCreditos currentUser={currentUser ?? null} />
+                            </Suspense>
+                        )}
+
+                        {/* Tarefas */}
+                        {searchType === SearchType.TAREFAS && (
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <Tarefas currentUser={currentUser ?? null} />
                             </Suspense>
                         )}
 
