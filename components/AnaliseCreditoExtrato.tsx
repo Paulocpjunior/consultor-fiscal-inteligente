@@ -26,6 +26,14 @@ import {
   carregarRegras,
   salvarRegra,
 } from '../services/categoriaFornecedorService';
+import {
+  listarInvoicesManuais,
+  adicionarInvoice,
+  removerInvoice,
+  normalizarPeriodo,
+  type InvoiceManual,
+  type NovaInvoice,
+} from '../services/invoicesManuaisService';
 import type { EmpresaPerfilOption } from '../services/xmlFiscalService';
 import type { User } from '../types';
 
@@ -35,6 +43,177 @@ const ALIQ_COFINS = 0.0760;
 
 const brl = (n: number) =>
   n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+
+// ════════════════════════════════════════════════════════════════════
+// Modal: Cadastrar invoice manual (E-Fiscal)
+// ════════════════════════════════════════════════════════════════════
+interface ModalInvoiceManualProps {
+  empresaId: string;
+  periodoNormalizado: string;
+  onFechar: () => void;
+  onSalvo: () => void;
+}
+
+function ModalInvoiceManual({
+  empresaId, periodoNormalizado, onFechar, onSalvo,
+}: ModalInvoiceManualProps): React.ReactElement {
+  const [emissao, setEmissao] = useState('');
+  const [numero, setNumero] = useState('');
+  const [serie, setSerie] = useState('');
+  const [cnpjCpf, setCnpjCpf] = useState('');
+  const [razaoSocial, setRazaoSocial] = useState('');
+  const [valorNf, setValorNf] = useState('');
+  const [baseCalculo, setBaseCalculo] = useState('');
+  const [aliquota, setAliquota] = useState('');
+  const [valorIss, setValorIss] = useState('');
+  const [issRetido, setIssRetido] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErroLocal] = useState<string | null>(null);
+
+  // "1.234,56" -> 1234.56 (vazio -> 0)
+  const parseBR = (s: string): number => {
+    if (!s) return 0;
+    const limpo = s.trim().replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(limpo);
+    return isNaN(n) ? 0 : n;
+  };
+
+  const podeSalvar = cnpjCpf.trim() && razaoSocial.trim() && baseCalculo.trim();
+
+  const salvar = async () => {
+    setErroLocal(null);
+    if (!podeSalvar) {
+      setErroLocal('CNPJ, Razão Social e Base de Cálculo são obrigatórios.');
+      return;
+    }
+    setSalvando(true);
+    const r = await adicionarInvoice({
+      empresaId,
+      periodo: periodoNormalizado,
+      emissao: emissao.trim(),
+      numero: numero.trim(),
+      serie: serie.trim(),
+      cnpjCpf: cnpjCpf.trim(),
+      razaoSocial: razaoSocial.trim(),
+      valorNf: parseBR(valorNf) || parseBR(baseCalculo),
+      baseCalculo: parseBR(baseCalculo),
+      aliquota: parseBR(aliquota),
+      valorIss: parseBR(valorIss),
+      issRetido: parseBR(issRetido),
+    });
+    setSalvando(false);
+    if (r.ok) {
+      onSalvo();
+      onFechar();
+    } else {
+      setErroLocal('Erro ao salvar: ' + (r.error || 'desconhecido'));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onFechar}>
+      <div
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-800 dark:text-gray-100">Adicionar invoice manual</h3>
+          <button onClick={onFechar} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+
+        <div className="px-5 py-4 space-y-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Período: <strong>{periodoNormalizado}</strong>. A invoice manual entra no cálculo do crédito como uma NF normal.
+          </p>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300">Emissão</label>
+              <input value={emissao} onChange={e => setEmissao(e.target.value)} placeholder="dd/mm/aaaa"
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300">Número</label>
+              <input value={numero} onChange={e => setNumero(e.target.value)}
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300">Série</label>
+              <input value={serie} onChange={e => setSerie(e.target.value)}
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300">CNPJ/CPF *</label>
+              <input value={cnpjCpf} onChange={e => setCnpjCpf(e.target.value)} placeholder="00.000.000/0000-00"
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 font-mono bg-white dark:bg-gray-700" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs text-gray-600 dark:text-gray-300">Razão Social *</label>
+              <input value={razaoSocial} onChange={e => setRazaoSocial(e.target.value)}
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300">Valor NF (R$)</label>
+              <input value={valorNf} onChange={e => setValorNf(e.target.value)} placeholder="0,00"
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-right bg-white dark:bg-gray-700" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300">Base de Cálculo (R$) *</label>
+              <input value={baseCalculo} onChange={e => setBaseCalculo(e.target.value)} placeholder="0,00"
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-right bg-white dark:bg-gray-700 font-semibold" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300">Alíquota (%)</label>
+              <input value={aliquota} onChange={e => setAliquota(e.target.value)} placeholder="0,00"
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-right bg-white dark:bg-gray-700" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300">Valor ISS (R$)</label>
+              <input value={valorIss} onChange={e => setValorIss(e.target.value)} placeholder="0,00"
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-right bg-white dark:bg-gray-700" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300">ISS Retido (R$)</label>
+              <input value={issRetido} onChange={e => setIssRetido(e.target.value)} placeholder="0,00"
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-right bg-white dark:bg-gray-700" />
+            </div>
+          </div>
+
+          {erro && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded p-2 text-xs text-red-700 dark:text-red-300">
+              {erro}
+            </div>
+          )}
+
+          <p className="text-[11px] text-gray-400">
+            * obrigatorio. Use vírgula como separador decimal (ex: 1.234,56).
+          </p>
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+          <button onClick={onFechar}
+            className="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
+            Cancelar
+          </button>
+          <button onClick={salvar} disabled={!podeSalvar || salvando}
+            className="px-3 py-1.5 text-sm rounded bg-amber-600 hover:bg-amber-700 text-white font-semibold disabled:opacity-50">
+            {salvando ? 'Salvando...' : 'Adicionar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const BadgeConfianca: React.FC<{ c: LancamentoExtrato['confianca'] }> = ({ c }) => {
   const cfg: Record<LancamentoExtrato['confianca'], { bg: string; label: string }> = {
@@ -101,6 +280,26 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     return () => { ativo = false; };
   }, [empresaSel?.id, overridesVersao]);
 
+  // Invoices lancadas manualmente (Firestore: invoices_manuais).
+  // Filtradas por empresa + periodo normalizado (MM/AAAA) do PDF.
+  const [invoicesManuais, setInvoicesManuais] = useState<InvoiceManual[]>([]);
+  const [invoicesVersao, setInvoicesVersao] = useState(0);
+  const [modalInvoiceAberto, setModalInvoiceAberto] = useState(false);
+
+  const periodoNormalizado = useMemo(
+    () => efiscal ? normalizarPeriodo(efiscal.periodo) : '',
+    [efiscal],
+  );
+
+  useEffect(() => {
+    let ativo = true;
+    if (!empresaSel?.id || !periodoNormalizado) { setInvoicesManuais([]); return; }
+    listarInvoicesManuais(empresaSel.id, periodoNormalizado).then(list => {
+      if (ativo) setInvoicesManuais(list);
+    });
+    return () => { ativo = false; };
+  }, [empresaSel?.id, periodoNormalizado, invoicesVersao]);
+
   // Salva (ou troca) a categoria de um fornecedor na tabela CNPJ->categoria
   // da empresa. Apos salvar, recarrega os overrides -> credito recalcula.
   const [salvandoCnpj, setSalvandoCnpj] = useState<string | null>(null);
@@ -130,8 +329,55 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
   const credito = useMemo<CreditoEfiscal | null>(() => {
     if (!efiscal || !empresaSel) return null;
     const regCalc = regimeParaCalculo(empresaSel.regimeSugerido);
-    return calcularCreditoEfiscal(efiscal.fornecedores, regCalc, efiscal.notas, overrides);
-  }, [efiscal, empresaSel, overrides]);
+
+    // 1. converte invoices manuais em EfiscalNf
+    const notasManuais = invoicesManuais.map(im => ({
+      emissao: im.emissao || '',
+      numero: im.numero || '',
+      serie: im.serie || '',
+      cnpjCpf: im.cnpjCpf,
+      razaoSocial: im.razaoSocial,
+      valorNf: Number(im.valorNf) || 0,
+      baseCalculo: Number(im.baseCalculo) || 0,
+      aliquota: Number(im.aliquota) || 0,
+      valorIss: Number(im.valorIss) || 0,
+      issRetido: Number(im.issRetido) || 0,
+      pagina: 0,
+    }));
+    const notasMescladas = [...efiscal.notas, ...notasManuais];
+
+    // 2. reagrupa fornecedores incluindo manuais
+    //    Comeca com os do PDF e soma as manuais (1 CNPJ = 1 linha)
+    const fornMap = new Map<string, typeof efiscal.fornecedores[number]>();
+    const soDigF = (s: string) => (s || '').replace(/\D+/g, '');
+    for (const f of efiscal.fornecedores) {
+      fornMap.set(soDigF(f.cnpjCpf), { ...f });
+    }
+    for (const im of invoicesManuais) {
+      const k = soDigF(im.cnpjCpf);
+      const existente = fornMap.get(k);
+      if (existente) {
+        existente.qtdNotas += 1;
+        existente.somaValorNf += Number(im.valorNf) || 0;
+        existente.somaBaseCalculo += Number(im.baseCalculo) || 0;
+        existente.somaValorIss += Number(im.valorIss) || 0;
+        existente.somaIssRetido += Number(im.issRetido) || 0;
+      } else {
+        fornMap.set(k, {
+          cnpjCpf: im.cnpjCpf,
+          razaoSocial: im.razaoSocial,
+          qtdNotas: 1,
+          somaValorNf: Number(im.valorNf) || 0,
+          somaBaseCalculo: Number(im.baseCalculo) || 0,
+          somaValorIss: Number(im.valorIss) || 0,
+          somaIssRetido: Number(im.issRetido) || 0,
+        });
+      }
+    }
+    const fornMesclados = Array.from(fornMap.values());
+
+    return calcularCreditoEfiscal(fornMesclados, regCalc, notasMescladas, overrides);
+  }, [efiscal, empresaSel, overrides, invoicesManuais]);
 
   // Aviso de divergencia de CNPJ — tambem reativo.
   const avisoCnpj = useMemo<string | null>(() => {
@@ -834,8 +1080,64 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
             <CardTotal label="Total ISS Retido"      valor={efiscal.totalCalculado.issRetido}   cor="bg-teal-50 dark:bg-teal-900/30 text-teal-800 dark:text-teal-100" />
           </div>
 
-          {/* Exportar */}
-          <div className="flex justify-end gap-2">
+          {/* Listagem das invoices manuais cadastradas (se houver) */}
+          {invoicesManuais.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-3">
+              <h4 className="font-semibold text-amber-800 dark:text-amber-200 text-xs uppercase mb-2">
+                Invoices manuais cadastradas ({invoicesManuais.length})
+              </h4>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs">
+                  <thead className="text-amber-700 dark:text-amber-300">
+                    <tr>
+                      <th className="px-2 py-1 text-left">Emissão</th>
+                      <th className="px-2 py-1 text-left">Número</th>
+                      <th className="px-2 py-1 text-left">CNPJ</th>
+                      <th className="px-2 py-1 text-left">Razão Social</th>
+                      <th className="px-2 py-1 text-right">Valor NF</th>
+                      <th className="px-2 py-1 text-right">Base Cálc.</th>
+                      <th className="px-2 py-1"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoicesManuais.map(im => (
+                      <tr key={im.id} className="border-t border-amber-200/40">
+                        <td className="px-2 py-1">{im.emissao || '—'}</td>
+                        <td className="px-2 py-1">{im.numero || '—'}</td>
+                        <td className="px-2 py-1 font-mono">{im.cnpjCpf}</td>
+                        <td className="px-2 py-1">{im.razaoSocial}</td>
+                        <td className="px-2 py-1 text-right">R$ {brl(Number(im.valorNf) || 0)}</td>
+                        <td className="px-2 py-1 text-right font-semibold">R$ {brl(Number(im.baseCalculo) || 0)}</td>
+                        <td className="px-2 py-1 text-right">
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Remover esta invoice manual?')) return;
+                              const r = await removerInvoice(im.id);
+                              if (r.ok) setInvoicesVersao(v => v + 1);
+                              else setErro('Erro ao remover: ' + (r.error || ''));
+                            }}
+                            className="text-red-600 hover:text-red-800 text-xs"
+                            title="Remover invoice manual"
+                          >🗑️</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Exportar / Adicionar */}
+          <div className="flex justify-end gap-2 flex-wrap">
+            <button
+              onClick={() => setModalInvoiceAberto(true)}
+              disabled={!empresaSel?.id || !efiscal}
+              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title={empresaSel?.id && efiscal ? 'Adicionar uma invoice manual a este período' : 'Selecione empresa e suba o PDF primeiro'}
+            >
+              ➕ Adicionar invoice
+            </button>
             <button onClick={exportarEfiscalXlsx}
               className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm">
               📥 Exportar fornecedores .xlsx
@@ -845,6 +1147,16 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
               📄 Exportar relatório PDF
             </button>
           </div>
+
+          {/* Modal: cadastrar invoice manual */}
+          {modalInvoiceAberto && empresaSel?.id && periodoNormalizado && (
+            <ModalInvoiceManual
+              empresaId={empresaSel.id}
+              periodoNormalizado={periodoNormalizado}
+              onFechar={() => setModalInvoiceAberto(false)}
+              onSalvo={() => setInvoicesVersao(v => v + 1)}
+            />
+          )}
 
           {/* Tabela de fornecedores agrupados */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">

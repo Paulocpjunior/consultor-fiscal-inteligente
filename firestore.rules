@@ -153,6 +153,15 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // invoices_manuais: invoices lancadas manualmente, por empresa+periodo.
+    // Leitura e escrita para QUALQUER usuario logado.
+    // ───────────────────────────────────────────────────────────────
+
+    match /invoices_manuais/{invoiceId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // Default deny: qualquer coleção não listada acima é negada.
     // ───────────────────────────────────────────────────────────────
 
