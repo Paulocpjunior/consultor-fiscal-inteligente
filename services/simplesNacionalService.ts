@@ -131,7 +131,8 @@ export const saveEmpresa = async (
         historicoCalculos: [], createdBy: userId,
         createdByEmail: auth?.currentUser?.email || undefined,
         dataAbertura: dataAbertura || undefined,
-        capturarSefaz: true  // Default: nova empresa ativa pra cron SEFAZ
+        capturarSefaz: true,  // Default: nova empresa ativa pra cron SEFAZ
+        capturarNfseTomada: true  // Default: nova empresa ativa pra cron NFSe Tomada
     };
 
     // ── Cloud-first ──

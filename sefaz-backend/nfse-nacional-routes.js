@@ -9,6 +9,13 @@ import {
     emitirNfse, cancelarNfse, listarNfse, getResumoNfse,
 } from './nfse-nacional-orchestrator.js';
 import { getNfseNacionalMode, NBS_CODIGOS_COMUNS } from './nfse-nacional-provider.js';
+import {
+    capturarTomadasUmaEmpresa,
+    cronCapturarTomadasTodas,
+    listarNfseTomadas,
+    resumoNfseTomadas,
+} from './nfse-tomada-orchestrator.js';
+import { getNfseTomadaMode } from './nfse-tomada-provider.js';
 
 const router = express.Router();
 
@@ -125,6 +132,75 @@ router.post('/import-nbs-csv', requireAdmin, express.text({ type: 'text/csv', li
     } catch (err) {
         console.error('[nfse-nacional/import-nbs-csv]', err);
         return res.status(500).json({ error: err.message });
+    }
+});
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NFSe TOMADAS — captura via API Sefin Nacional / ADN
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.get('/tomadas/status', (_req, res) => {
+    res.json({ mode: getNfseTomadaMode(), ok: true });
+});
+
+// GET /tomadas/listar?empresaId=...&periodo=YYYY-MM&limit=100
+router.get('/tomadas/listar', requireAdmin, async (req, res) => {
+    try {
+        const docs = await listarNfseTomadas({
+            empresaId: req.query.empresaId,
+            periodo: req.query.periodo,
+            limit: parseInt(req.query.limit || '100', 10),
+        });
+        res.json(docs);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /tomadas/resumo?empresaId=...&periodo=YYYY-MM
+router.get('/tomadas/resumo', requireAdmin, async (req, res) => {
+    try {
+        const r = await resumoNfseTomadas({
+            empresaId: req.query.empresaId,
+            periodo: req.query.periodo,
+        });
+        res.json(r);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /tomadas/sincronizar/:empresaId
+// Body: { cnpjTomador: '...' }  (opcional, se nao passar le do Firestore)
+router.post('/tomadas/sincronizar/:empresaId', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { empresaId } = req.params;
+        const cnpjTomador = (req.body?.cnpjTomador || '').replace(/\D/g, '');
+        if (!cnpjTomador) {
+            return res.status(400).json({ error: 'cnpjTomador obrigatório no body' });
+        }
+        const r = await capturarTomadasUmaEmpresa({ empresaId, cnpjTomador });
+        res.json(r);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /tomadas/cron
+// Header obrigatorio: X-Cron-Secret
+router.post('/tomadas/cron', async (req, res) => {
+    const headerSecret = req.header('X-Cron-Secret') || '';
+    const expected = process.env.SEFAZ_CRON_SECRET || '';
+    if (!expected || headerSecret !== expected) {
+        return res.status(403).json({ erro: 'cron secret invalido' });
+    }
+    try {
+        const r = await cronCapturarTomadasTodas();
+        res.json(r);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

@@ -7,7 +7,10 @@
 //   - Simples Nacional ............ NAO gera credito (recolhe no DAS)
 //   - Lucro Presumido ............. credito 0,65% PIS + 3,00% COFINS
 //   - Lucro Real .................. credito 1,65% PIS + 7,60% COFINS
-//   - Todas as categorias de servico geram credito (sem distincao).
+//   - Categorias podem ser marcadas como NAO-CREDITAVEIS por empresa.
+//     Itens em categorias nao-creditaveis tem base 0 SEMPRE (item, categoria
+//     e baseTotal) — nao geram credito independente de ISS ou regime.
+//     SEM_CATEGORIA (sem classificacao) tambem nao gera credito por default.
 //
 // A classificacao por categoria reaproveita as regras de keyword do
 // analiseCreditoExtratoService (as 11 categorias da Eunice).
@@ -46,7 +49,9 @@ export interface CategoriaAgrupada {
     categoria: string;  // TipoDespesaCredito, custom, ou 'SEM_CATEGORIA'
     qtdFornecedores: number;
     qtdNotas: number;
-    somaBaseCalculo: number;
+    somaBaseCalculo: number;          // ZERADO se !creditavel
+    somaBaseCalculoOriginal: number;  // valor real (antes de zerar) — pra debug/exibicao opcional
+    creditavel: boolean;              // false p/ categorias marcadas como nao-creditavel + SEM_CATEGORIA
     notas: EfiscalNf[];   // NFs individuais que compoem este grupo
 }
 
@@ -65,15 +70,24 @@ export interface CreditoEfiscal {
 /**
  * Classifica cada fornecedor numa das 11 categorias (via keyword na razao
  * social), agrupa por categoria e calcula o credito conforme o regime.
+ *
+ * categoriasNaoCreditaveis: nomes de categorias que NAO geram credito pra
+ * essa empresa. Itens nessas categorias mantem o agrupamento (aparecem na
+ * tabela), mas a base de calculo eh forcada a 0 e NAO entra no baseTotal.
  */
 export function calcularCreditoEfiscal(
     fornecedores: EfiscalFornecedorAgrupado[],
     regime: RegimeCalculo,
     notas: EfiscalNf[] = [],
     overridesCategoria: Map<string, string> = new Map(),
+    categoriasNaoCreditaveis: Set<string> = new Set(),
 ): CreditoEfiscal {
     const aliquota = ALIQUOTAS[regime];
     const geraCredito = regime !== 'SIMPLES';
+
+    // categoria nao-creditavel: ou esta na lista da empresa, ou eh SEM_CATEGORIA
+    const isCreditavel = (chave: string): boolean =>
+        chave !== 'SEM_CATEGORIA' && !categoriasNaoCreditaveis.has(chave);
 
     // 1. classifica cada fornecedor pela razao social
     // classificar() pode devolver 'SEM_CREDITO' — normalizo para null
@@ -107,7 +121,11 @@ export function calcularCreditoEfiscal(
         if (!mapaCat.has(chave)) {
             mapaCat.set(chave, {
                 categoria: chave as CategoriaAgrupada['categoria'],
-                qtdFornecedores: 0, qtdNotas: 0, somaBaseCalculo: 0, notas: [],
+                qtdFornecedores: 0, qtdNotas: 0,
+                somaBaseCalculo: 0,
+                somaBaseCalculoOriginal: 0,
+                creditavel: isCreditavel(chave),
+                notas: [],
             });
         }
         return mapaCat.get(chave)!;
@@ -116,7 +134,10 @@ export function calcularCreditoEfiscal(
         const cat = ensureCat(f.categoria ?? 'SEM_CATEGORIA');
         cat.qtdFornecedores++;
         cat.qtdNotas += f.qtdNotas;
-        cat.somaBaseCalculo += f.somaBaseCalculo;
+        cat.somaBaseCalculoOriginal += f.somaBaseCalculo;
+        if (cat.creditavel) {
+            cat.somaBaseCalculo += f.somaBaseCalculo;
+        }
     }
     // distribui as NFs individuais nos grupos, pela categoria do fornecedor
     for (const nf of notas) {
@@ -126,8 +147,12 @@ export function calcularCreditoEfiscal(
     const categorias = Array.from(mapaCat.values())
         .sort((a, b) => b.somaBaseCalculo - a.somaBaseCalculo);
 
-    // 3. base = soma da Base de Calculo de todos os fornecedores
-    const baseTotal = fornecedores.reduce((s, f) => s + f.somaBaseCalculo, 0);
+    // 4. base total = soma SO das categorias creditaveis (somaBaseCalculo ja
+    //    foi zerada pras nao-creditaveis acima, mas filtramos por garantia)
+    const baseTotal = categorias.reduce(
+        (s, c) => s + (c.creditavel ? c.somaBaseCalculo : 0),
+        0,
+    );
 
     const creditoPis    = geraCredito ? baseTotal * aliquota.pis    : 0;
     const creditoCofins = geraCredito ? baseTotal * aliquota.cofins : 0;

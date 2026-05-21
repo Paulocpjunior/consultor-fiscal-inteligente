@@ -1526,3 +1526,79 @@ export const DARF_TRIBUTO_LABELS: Record<DarfTributo, string> = {
     COFINS: 'COFINS',
     IRRF:   'IRRF',
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NFSe TOMADAS (Sprint NFSe Tomada — captura via Sefin Nacional)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface NfseTomada {
+    id: string;                          // = chaveAcesso (50 chars)
+    empresaId: string;
+    cnpjTomador: string;
+    chaveAcesso: string;                 // 50 chars Sefin Nacional
+    nsu: number;
+    dataEmissao: string;                 // ISO
+    prestador: {
+        cnpj?: string;
+        cpf?: string;
+        nome?: string;
+        im?: string;
+        municipio?: string;
+    };
+    tomador: {
+        cnpj?: string;
+        cpf?: string;
+        nome?: string;
+    };
+    servico: {
+        codigoNbs?: string;
+        descricao?: string;
+        valor?: number;
+        aliquotaIss?: number;
+        issValor?: number;
+        issRetido?: number;
+        municipioPrestacao?: string;
+    };
+    retencoes: {
+        irrf?: number;
+        csll?: number;
+        pis?: number;
+        cofins?: number;
+        inss?: number;
+    };
+    valorBruto: number;
+    valorLiquido: number;
+    manifestacao: 'pendente' | 'ciencia' | 'aceite' | 'rejeicao';
+    fingerprintXml?: string | null;
+    sharepointUrl?: string | null;
+    sharepointAlreadyExisted?: boolean;
+    tipoDocumento?: 'NFSe' | 'Evento';
+    modoCaptura: 'mock' | 'restrita' | 'producao';
+    capturadoEm: string;
+    atualizadoEm: string;
+}
+
+export interface NfseTomadaResumo {
+    total: number;
+    valorBruto: number;
+    valorLiquido: number;
+    comRetencao: number;
+    manifestadas: number;
+    pendentesManifestacao: number;
+    modo: 'mock' | 'restrita' | 'producao';
+}
+
+export interface NfseTomadaSincSumario {
+    empresaId: string;
+    cnpjTomador: string;
+    totalNovas: number;
+    totalDuplicadas: number;
+    totalErros: number;
+    lotesProcessados: number;
+    proximoNSU: number;
+    ultimoErro: string | null;
+    duracaoMs: number;
+    modo: 'mock' | 'restrita' | 'producao';
+    nome?: string;
+}
+

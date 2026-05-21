@@ -91,7 +91,8 @@ export const saveEmpresa = async (empresa: any, userId: string): Promise<LucroPr
         createdBy: userId,
         createdByEmail: auth?.currentUser?.email || undefined,
         // Default: nova empresa ativa pra cron SEFAZ. Preserva valor se já vier no objeto.
-        capturarSefaz: empresa.capturarSefaz !== false
+        capturarSefaz: empresa.capturarSefaz !== false,
+        capturarNfseTomada: empresa.capturarNfseTomada !== false
     };
 
     // 1. Tenta salvar na Nuvem (Fonte da Verdade)
