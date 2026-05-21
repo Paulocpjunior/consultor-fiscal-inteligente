@@ -43,6 +43,13 @@ export function regimeParaCalculo(regime: RegimeSugerido): RegimeCalculo {
 
 export interface FornecedorClassificado extends EfiscalFornecedorAgrupado {
     categoria: string | null;  // pode ser TipoDespesaCredito ou custom
+    // Base efetiva para credito PIS/COFINS (Lei 10.833/03 art. 3 e 10.637/02 art. 3):
+    //   - Se categoria gera credito (creditavel=true): usa somaValorNf
+    //     (o credito incide sobre o valor da operacao, NAO sobre a base ISS).
+    //   - Se nao gera credito (DESPESA, SEM_CATEGORIA, ou marcada nao-creditavel): 0.
+    // Esse campo eh o que a UI/export/totalizador deve consumir.
+    // somaBaseCalculo (da base) eh a base do ISS — mantida para referencia.
+    somaBaseEfetiva: number;
 }
 
 export interface CategoriaAgrupada {
@@ -94,7 +101,7 @@ export function calcularCreditoEfiscal(
     // (no contexto E-Fiscal todas as categorias geram credito; 'SEM_CREDITO'
     //  aqui significa apenas "nao casou com nenhuma categoria conhecida").
     const soDigCls = (s: string) => (s || '').replace(/\D+/g, '');
-    const fornecedoresClassificados: FornecedorClassificado[] = fornecedores.map(f => {
+    const fornecedoresPreClass = fornecedores.map(f => {
         // 1o: regra manual cadastrada (tabela CNPJ->categoria da empresa)
         const override = overridesCategoria.get(soDigCls(f.cnpjCpf));
         if (override) {
@@ -106,6 +113,19 @@ export function calcularCreditoEfiscal(
             ? cls.categoria
             : null;
         return { ...f, categoria: cat };
+    });
+
+    // Depois de classificar, calcula somaBaseEfetiva por fornecedor.
+    // Regra: se categoria gera credito -> somaValorNf (valor da operacao).
+    //        Se nao gera -> 0. (Por que valor NF: PIS/COFINS na sistematica
+    //        nao-cumulativa incide sobre o valor da operacao — Lei 10.833/03
+    //        art. 3, Lei 10.637/02 art. 3 — nao sobre a base do ISS.)
+    const fornecedoresClassificados: FornecedorClassificado[] = fornecedoresPreClass.map(f => {
+        const creditavel = f.categoria !== null && !categoriasNaoCreditaveis.has(f.categoria);
+        return {
+            ...f,
+            somaBaseEfetiva: creditavel ? f.somaValorNf : 0,
+        };
     });
 
     // 2. mapa CNPJ (so digitos) -> categoria do fornecedor
@@ -136,7 +156,9 @@ export function calcularCreditoEfiscal(
         cat.qtdNotas += f.qtdNotas;
         cat.somaBaseCalculoOriginal += f.somaBaseCalculo;
         if (cat.creditavel) {
-            cat.somaBaseCalculo += f.somaBaseCalculo;
+            // Agora soma a BASE EFETIVA (valor NF) — nao a base ISS.
+            // PIS/COFINS nao-cumulativa incide sobre o valor da operacao.
+            cat.somaBaseCalculo += f.somaBaseEfetiva;
         }
     }
     // distribui as NFs individuais nos grupos, pela categoria do fornecedor

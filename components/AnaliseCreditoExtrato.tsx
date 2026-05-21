@@ -490,6 +490,21 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
   // Items nessas categorias tem base 0 (no agrupamento e no baseTotal).
   // Persistido em empresa_credito_config/{empresaId}.
   const [categoriasNaoCreditaveis, setCategoriasNaoCreditaveis] = useState<Set<string>>(new Set());
+
+  // ── Exclusao local de fornecedores (some so nessa sessao) ───────────────
+  // Versao 1 (local, nao persistido): o usuario clica lixeira -> modal ->
+  // confirma -> CNPJ vai pra Set -> fornecedor some da listagem E do calculo
+  // de credito. Ao recarregar o PDF, fornecedor volta a aparecer.
+  //
+  // Evolucao possivel (versao 2): persistir como regra na empresa via
+  // collection `fornecedores_ocultos` no Firestore. Ai a regra dura entre
+  // sessoes. Nao implementado nesta versao.
+  const [fornecedoresOcultos, setFornecedoresOcultos] = useState<Set<string>>(new Set());
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState<
+    { cnpj: string; razaoSocial: string; qtdNotas: number; somaValorNf: number } | null
+  >(null);
+  // Normaliza CNPJ (so digitos) para chave consistente no Set
+  const cnpjKey = (c: string) => (c || '').replace(/\D+/g, '');
   const [salvandoCategoriaCredito, setSalvandoCategoriaCredito] = useState<string | null>(null);
 
   useEffect(() => {
@@ -614,8 +629,14 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     }
     const fornMesclados = Array.from(fornMap.values());
 
-    return calcularCreditoEfiscal(fornMesclados, regCalc, notasMescladas, overrides, categoriasNaoCreditaveis);
-  }, [efiscal, empresaSel, overrides, invoicesManuais, categoriasNaoCreditaveis]);
+    // Aplica filtro de ocultos (versao local): fornecedor excluido pelo usuario
+    // some do calculo de credito. Mesmo filtro deve ser aplicado nas NFs (pra
+    // o aninhamento de notas por categoria nao contar as do fornecedor oculto).
+    const fornFiltrados = fornMesclados.filter(f => !fornecedoresOcultos.has(cnpjKey(f.cnpjCpf)));
+    const notasFiltradas = notasMescladas.filter(n => !fornecedoresOcultos.has(cnpjKey(n.cnpjCpf)));
+
+    return calcularCreditoEfiscal(fornFiltrados, regCalc, notasFiltradas, overrides, categoriasNaoCreditaveis);
+  }, [efiscal, empresaSel, overrides, invoicesManuais, categoriasNaoCreditaveis, fornecedoresOcultos]);
 
   // Aviso de divergencia de CNPJ — tambem reativo.
   const avisoCnpj = useMemo<string | null>(() => {
@@ -1443,11 +1464,18 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                     <th className="px-3 py-2 text-right font-medium">Valor das NFs</th>
                     <th className="px-3 py-2 text-right font-medium">Base de Cálculo</th>
                     <th className="px-3 py-2 text-right font-medium">ISS Retido</th>
+                    <th className="px-3 py-2 text-center font-medium">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {(credito ? credito.fornecedoresClassificados : efiscal.fornecedores).map((f: any, i: number) => {
                     const naoCreditavel = !f.categoria || categoriasNaoCreditaveis.has(f.categoria);
+                    // Base de Calculo agora reflete a BASE EFETIVA (valor NF se gera credito,
+                    // 0 se nao gera). Fallback `somaBaseCalculo` cobre o caso pre-credito
+                    // (modo CSV ou variante sem classificacao).
+                    const baseExibir = naoCreditavel
+                      ? 0
+                      : (typeof f.somaBaseEfetiva === 'number' ? f.somaBaseEfetiva : f.somaBaseCalculo);
                     return (
                     <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                       <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap font-mono">{f.cnpjCpf}</td>
@@ -1481,17 +1509,95 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                       <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{f.qtdNotas}</td>
                       <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">R$ {brl(f.somaValorNf)}</td>
                       <td className={`px-3 py-2 text-right whitespace-nowrap font-semibold ${naoCreditavel ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-800 dark:text-gray-200'}`}>
-                        R$ {brl(naoCreditavel ? 0 : f.somaBaseCalculo)}
+                        R$ {brl(baseExibir)}
                       </td>
                       <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(f.somaIssRetido)}</td>
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmandoExclusao({
+                            cnpj: f.cnpjCpf,
+                            razaoSocial: f.razaoSocial,
+                            qtdNotas: f.qtdNotas,
+                            somaValorNf: f.somaValorNf,
+                          })}
+                          className="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                          title="Excluir este fornecedor da analise (some desta sessao)"
+                        >
+                          🗑️
+                        </button>
+                      </td>
                     </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
+            {/* Banner de restaurar — aparece quando ha fornecedores ocultos */}
+            {fornecedoresOcultos.size > 0 && (
+              <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-200 flex items-center justify-between">
+                <span>
+                  {fornecedoresOcultos.size} fornecedor{fornecedoresOcultos.size > 1 ? 'es' : ''} oculto{fornecedoresOcultos.size > 1 ? 's' : ''} desta analise.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFornecedoresOcultos(new Set())}
+                  className="ml-3 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-800/40 font-medium"
+                >
+                  Restaurar todos
+                </button>
+              </div>
+            )}
           </div>
         </>
+      )}
+
+      {/* Modal de confirmacao de exclusao de fornecedor (versao local) */}
+      {confirmandoExclusao && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80] animate-fade-in"
+          onClick={() => setConfirmandoExclusao(null)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-2">
+              Excluir fornecedor desta analise?
+            </h3>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-4 space-y-1">
+              <div><span className="font-medium text-gray-800 dark:text-gray-200">{confirmandoExclusao.razaoSocial}</span></div>
+              <div className="font-mono text-xs">CNPJ {confirmandoExclusao.cnpj}</div>
+              <div className="text-xs">{confirmandoExclusao.qtdNotas} NF{confirmandoExclusao.qtdNotas > 1 ? 's' : ''} no valor total de R$ {brl(confirmandoExclusao.somaValorNf)}</div>
+            </div>
+            <div className="text-xs text-amber-700 dark:text-amber-400 mb-4 p-2 bg-amber-50 dark:bg-amber-900/20 rounded">
+              ⓘ Exclusao LOCAL — vale so nesta sessao. Ao recarregar o PDF, o fornecedor volta a aparecer.
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmandoExclusao(null)}
+                className="px-4 py-2 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFornecedoresOcultos(prev => {
+                    const next = new Set(prev);
+                    next.add(cnpjKey(confirmandoExclusao.cnpj));
+                    return next;
+                  });
+                  setConfirmandoExclusao(null);
+                }}
+                className="px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {erro && (
