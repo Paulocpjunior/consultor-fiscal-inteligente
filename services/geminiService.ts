@@ -140,8 +140,26 @@ export const extractDocumentData = async (base64Data: string, mimeType: string =
 export const extractInvoiceDataFromPdf = async (base64Pdf: string): Promise<any[]> => extractDocumentData(base64Pdf, 'application/pdf');
 
 export const extractPgdasDataFromPdf = async (base64Pdf: string): Promise<any> => {
+    // FALLBACK: usado apenas quando o parser deterministico (pgdasPdfParser)
+    // nao consegue extrair. Prompt corrigido (anterior pedia "RBT12" e o
+    // Gemini retornava o acumulado de 12m em vez do faturamento mensal).
     try {
-        const r = await withRetry(() => callProxy([{ inlineData: { mimeType: 'application/pdf', data: base64Pdf } }, { text: 'Extraia histórico RBT12 deste PGDAS-D. JSON: [{"periodo":"MM/AAAA","valor":number}]' }]));
+        const prompt = (
+            'Voce e um extrator de dados estruturados do extrato PGDAS-D 2018 da Receita Federal.\n'
+            + 'Localize a secao "2.2) Receitas Brutas Anteriores (R$)" e extraia o FATURAMENTO MENSAL\n'
+            + 'INDIVIDUAL de cada mes (NAO o RBT12 acumulado, NAO a receita do ano-calendario).\n'
+            + 'Some Mercado Interno (2.2.1) + Mercado Externo (2.2.2) por mes.\n'
+            + 'Cada item da tabela tem o formato "MM/AAAA  VALOR" — sao os 13-14 meses anteriores.\n'
+            + 'Valores esperados: faturamento mensal individual, geralmente entre R$ 0 e R$ 500.000\n'
+            + 'pra empresa do Simples (limite anual R$ 4,8M). Se voce ver valores acima de R$ 1M\n'
+            + 'em um unico mes, provavelmente esta lendo o RBT12 acumulado — refaca a extracao.\n\n'
+            + 'Responda APENAS JSON valido no formato:\n'
+            + '[{"periodo":"MM/AAAA","valor":number}, ...]'
+        );
+        const r = await withRetry(() => callProxy([
+            { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
+            { text: prompt },
+        ]));
         return safeJsonParse(r.text || '[]');
     } catch { return []; }
 };

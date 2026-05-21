@@ -5,6 +5,7 @@ import {
     SimplesItemCalculo, User, SimplesDetalheItem
 } from '../types';
 import { extractDocumentData, extractPgdasDataFromPdf } from './geminiService';
+import { parsePgdasExtrato } from './pgdasPdfParser';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import {
@@ -275,9 +276,31 @@ export const parseAndSaveNotas = async (
 
     try {
         if (fileType.endsWith('.pdf')) {
-            const base64 = btoa(new Uint8Array(buffer)
-                .reduce((d, b) => d + String.fromCharCode(b), ''));
-            const pgdasHistory = await extractPgdasDataFromPdf(base64);
+            // ── Fluxo PGDAS-D: parser deterministico primeiro, Gemini fallback ──
+            //
+            // O parser le o PDF via pdfjs e extrai a secao "2.2 Receitas Brutas
+            // Anteriores" com regex. Soma Mercado Interno + Externo por mes.
+            // Validacao: soma dos 12 meses bate (+/- R$1) com o RBT12 declarado
+            // no cabecalho 2.1. Se bater, usa parsed.
+            //
+            // Se NAO bater (PDF formato diferente, layout antigo), cai pra Gemini
+            // com prompt corrigido. O Gemini ANTERIORMENTE pedia "RBT12" e
+            // retornava o ACUMULADO 12m em cada mes (bug que motivou esse fix).
+            let pgdasHistory: { periodo: string; valor: number }[] = [];
+
+            const parsed = await parsePgdasExtrato(file).catch(() => null);
+            if (parsed && parsed.bate && parsed.historico.length > 0) {
+                console.info('[pgdas-import] parser deterministico ok:',
+                    parsed.historico.length, 'meses, RBT12',
+                    parsed.rbt12Calculado.toFixed(2), '~', parsed.rbt12Declarado?.toFixed(2));
+                pgdasHistory = parsed.historico;
+            } else {
+                console.warn('[pgdas-import] parser nao validou — fallback Gemini.',
+                    parsed ? `RBT12 declarado=${parsed.rbt12Declarado} calculado=${parsed.rbt12Calculado.toFixed(2)}` : '(falha)');
+                const base64 = btoa(new Uint8Array(buffer)
+                    .reduce((d, b) => d + String.fromCharCode(b), ''));
+                pgdasHistory = await extractPgdasDataFromPdf(base64) || [];
+            }
 
             if (pgdasHistory?.length > 0) {
                 const empresas = await getEmpresas(
@@ -300,6 +323,8 @@ export const parseAndSaveNotas = async (
                     }
                 }
             }
+            const base64 = btoa(new Uint8Array(buffer)
+                .reduce((d, b) => d + String.fromCharCode(b), ''));
             extractedData = await extractDocumentData(base64, 'application/pdf');
 
         } else if (fileType.endsWith('.xml')) {
