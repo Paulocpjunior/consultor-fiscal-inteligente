@@ -32,6 +32,12 @@ import {
   restaurarTodos as restaurarTodosOcultos,
 } from '../services/fornecedoresOcultosService';
 import {
+  listarNotasOcultas,
+  ocultarNota,
+  restaurarTodasNotas as restaurarTodasNotasOcultas,
+  nfChave,
+} from '../services/notasOcultasService';
+import {
   listarInvoicesManuais,
   adicionarInvoice,
   removerInvoice,
@@ -538,6 +544,39 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     for (const k of fornecedoresOcultosPersistidos) s.add(k);
     return s;
   }, [fornecedoresOcultos, fornecedoresOcultosPersistidos]);
+
+  // ── Exclusao por NF INDIVIDUAL (granularidade fina) ─────────────────────
+  // Diferente da exclusao por FORNECEDOR (acima, que zera TODAS as NFs do
+  // CNPJ): aqui o usuario clica lixeira numa NF especifica dentro da tabela
+  // aninhada de Categoria. Chave: nfChave(cnpj, numero, serie).
+  //
+  // Caso de uso: prestador legitimo, mas UMA NF nao deve entrar (cancelada,
+  // duplicada, reembolsada). Adicionar nova NF do mesmo CNPJ via
+  // "Adicionar invoice manual" funciona — a nova tem chave diferente.
+  const [notasOcultas, setNotasOcultas] = useState<Set<string>>(new Set());
+  const [notasOcultasPersistidas, setNotasOcultasPersistidas] = useState<Set<string>>(new Set());
+  const [confirmandoExclusaoNf, setConfirmandoExclusaoNf] = useState<
+    { cnpj: string; razaoSocial: string; numero: string; serie: string; emissao: string; valorNf: number } | null
+  >(null);
+  const [salvandoExclusaoNfPersistida, setSalvandoExclusaoNfPersistida] = useState(false);
+
+  useEffect(() => {
+    if (!empresaSel?.id) {
+      setNotasOcultasPersistidas(new Set());
+      return;
+    }
+    let alive = true;
+    listarNotasOcultas(empresaSel.id)
+      .then(s => { if (alive) setNotasOcultasPersistidas(s); })
+      .catch(e => console.error('[AnaliseCredito] listarNotasOcultas:', e));
+    return () => { alive = false; };
+  }, [empresaSel?.id]);
+
+  const notasOcultasEfetivas = useMemo(() => {
+    const s = new Set<string>(notasOcultas);
+    for (const k of notasOcultasPersistidas) s.add(k);
+    return s;
+  }, [notasOcultas, notasOcultasPersistidas]);
   const [salvandoCategoriaCredito, setSalvandoCategoriaCredito] = useState<string | null>(null);
 
   useEffect(() => {
@@ -662,15 +701,18 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     }
     const fornMesclados = Array.from(fornMap.values());
 
-    // Aplica filtro de ocultos (LOCAL + PERSISTIDO unidos): fornecedor
-    // excluido pelo usuario some do calculo de credito. Mesmo filtro deve
-    // ser aplicado nas NFs (pra o aninhamento de notas por categoria nao
-    // contar as do fornecedor oculto).
+    // Aplica filtro de ocultos. Dois sistemas combinados:
+    //   1. FORNECEDOR oculto (CNPJ inteiro): some todas NFs desse CNPJ.
+    //   2. NF INDIVIDUAL oculta (cnpj+numero+serie): some so essa NF.
+    // Ambos sistemas: UNIAO de local + persistido (Firestore).
     const fornFiltrados = fornMesclados.filter(f => !fornecedoresOcultosEfetivos.has(cnpjKey(f.cnpjCpf)));
-    const notasFiltradas = notasMescladas.filter(n => !fornecedoresOcultosEfetivos.has(cnpjKey(n.cnpjCpf)));
+    const notasFiltradas = notasMescladas.filter(n =>
+      !fornecedoresOcultosEfetivos.has(cnpjKey(n.cnpjCpf)) &&
+      !notasOcultasEfetivas.has(nfChave(n.cnpjCpf, n.numero, n.serie || ''))
+    );
 
     return calcularCreditoEfiscal(fornFiltrados, regCalc, notasFiltradas, overrides, categoriasNaoCreditaveis);
-  }, [efiscal, empresaSel, overrides, invoicesManuais, categoriasNaoCreditaveis, fornecedoresOcultosEfetivos]);
+  }, [efiscal, empresaSel, overrides, invoicesManuais, categoriasNaoCreditaveis, fornecedoresOcultosEfetivos, notasOcultasEfetivas]);
 
   // Aviso de divergencia de CNPJ — tambem reativo.
   const avisoCnpj = useMemo<string | null>(() => {
@@ -1336,6 +1378,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                                         <th className="px-2 py-1 text-right font-medium">Alíq.</th>
                                         <th className="px-2 py-1 text-right font-medium">Valor ISS</th>
                                         <th className="px-2 py-1 text-right font-medium">Iss Retido</th>
+                                        <th className="px-2 py-1 text-center font-medium">Ações</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -1353,6 +1396,23 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                                           <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400">{nf.aliquota ? nf.aliquota.toFixed(2) : '—'}</td>
                                           <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(nf.valorIss)}</td>
                                           <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(nf.issRetido)}</td>
+                                          <td className="px-2 py-1 text-center">
+                                            <button
+                                              type="button"
+                                              onClick={() => setConfirmandoExclusaoNf({
+                                                cnpj: nf.cnpjCpf,
+                                                razaoSocial: nf.razaoSocial,
+                                                numero: nf.numero,
+                                                serie: nf.serie || '',
+                                                emissao: nf.emissao,
+                                                valorNf: nf.valorNf,
+                                              })}
+                                              className="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                                              title="Excluir somente esta NF (mantem outras NFs do mesmo prestador)"
+                                            >
+                                              🗑️
+                                            </button>
+                                          </td>
                                         </tr>
                                       ))}
                                     </tbody>
@@ -1567,33 +1627,54 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                 </tbody>
               </table>
             </div>
-            {/* Banner de restaurar — aparece quando ha fornecedores ocultos */}
-            {fornecedoresOcultosEfetivos.size > 0 && (
+            {/* Banner de restaurar — aparece quando ha fornecedores OU notas ocultas */}
+            {(fornecedoresOcultosEfetivos.size > 0 || notasOcultasEfetivas.size > 0) && (
               <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-200 flex items-center justify-between gap-3">
                 <span>
-                  {fornecedoresOcultosEfetivos.size} fornecedor{fornecedoresOcultosEfetivos.size > 1 ? 'es' : ''} oculto{fornecedoresOcultosEfetivos.size > 1 ? 's' : ''} desta analise
-                  {fornecedoresOcultosPersistidos.size > 0 && (
-                    <span className="text-amber-700 dark:text-amber-300 ml-1">
-                      ({fornecedoresOcultosPersistidos.size} 🔒 persistente{fornecedoresOcultosPersistidos.size > 1 ? 's' : ''})
-                    </span>
-                  )}.
+                  {fornecedoresOcultosEfetivos.size > 0 && (
+                    <>
+                      {fornecedoresOcultosEfetivos.size} fornecedor{fornecedoresOcultosEfetivos.size > 1 ? 'es' : ''} oculto{fornecedoresOcultosEfetivos.size > 1 ? 's' : ''}
+                      {fornecedoresOcultosPersistidos.size > 0 && (
+                        <span className="text-amber-700 dark:text-amber-300 ml-1">
+                          ({fornecedoresOcultosPersistidos.size} 🔒)
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {fornecedoresOcultosEfetivos.size > 0 && notasOcultasEfetivas.size > 0 && ' e '}
+                  {notasOcultasEfetivas.size > 0 && (
+                    <>
+                      {notasOcultasEfetivas.size} NF{notasOcultasEfetivas.size > 1 ? 's' : ''} oculta{notasOcultasEfetivas.size > 1 ? 's' : ''}
+                      {notasOcultasPersistidas.size > 0 && (
+                        <span className="text-amber-700 dark:text-amber-300 ml-1">
+                          ({notasOcultasPersistidas.size} 🔒)
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {' '}desta analise.
                 </span>
                 <button
                   type="button"
                   onClick={async () => {
-                    // Limpa local imediatamente; persistidos requerem batch delete.
                     setFornecedoresOcultos(new Set());
-                    if (fornecedoresOcultosPersistidos.size > 0 && empresaSel?.id) {
+                    setNotasOcultas(new Set());
+                    const totalPersistidos = fornecedoresOcultosPersistidos.size + notasOcultasPersistidas.size;
+                    if (totalPersistidos > 0 && empresaSel?.id) {
                       const ok = window.confirm(
-                        `Tambem restaurar ${fornecedoresOcultosPersistidos.size} regra(s) persistente(s)?\n` +
+                        `Tambem restaurar ${totalPersistidos} regra(s) persistente(s)?\n` +
                         `(isso apaga as regras do Firestore — sera reversivel apenas excluindo de novo).`
                       );
                       if (ok) {
-                        const r = await restaurarTodosOcultos(empresaSel.id);
-                        if (r.ok) {
-                          setFornecedoresOcultosPersistidos(new Set());
-                        } else {
-                          alert('Erro ao restaurar persistentes: ' + (r.error || 'desconhecido'));
+                        if (fornecedoresOcultosPersistidos.size > 0) {
+                          const r = await restaurarTodosOcultos(empresaSel.id);
+                          if (r.ok) setFornecedoresOcultosPersistidos(new Set());
+                          else alert('Erro ao restaurar fornecedores persistentes: ' + (r.error || 'desconhecido'));
+                        }
+                        if (notasOcultasPersistidas.size > 0) {
+                          const r = await restaurarTodasNotasOcultas(empresaSel.id);
+                          if (r.ok) setNotasOcultasPersistidas(new Set());
+                          else alert('Erro ao restaurar NFs persistentes: ' + (r.error || 'desconhecido'));
                         }
                       }
                     }
@@ -1691,6 +1772,104 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                 type="button"
                 disabled={salvandoExclusaoPersistida}
                 onClick={() => setConfirmandoExclusao(null)}
+                className="px-4 py-2 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmacao de exclusao de UMA NF (HIBRIDO local/persistido) */}
+      {confirmandoExclusaoNf && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80] animate-fade-in"
+          onClick={() => !salvandoExclusaoNfPersistida && setConfirmandoExclusaoNf(null)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-2">
+              Excluir esta NF da analise?
+            </h3>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-4 space-y-1">
+              <div><span className="font-medium text-gray-800 dark:text-gray-200">{confirmandoExclusaoNf.razaoSocial}</span></div>
+              <div className="font-mono text-xs">CNPJ {confirmandoExclusaoNf.cnpj}</div>
+              <div className="text-xs">
+                NF nº {confirmandoExclusaoNf.numero}
+                {confirmandoExclusaoNf.serie && ` série ${confirmandoExclusaoNf.serie}`}
+                {' '}— emitida em {confirmandoExclusaoNf.emissao}
+              </div>
+              <div className="text-xs">Valor: R$ {brl(confirmandoExclusaoNf.valorNf)}</div>
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-3 italic">
+              Apenas esta NF — outras NFs deste mesmo prestador continuam na analise.
+            </div>
+
+            <div className="space-y-2 mb-4">
+              <button
+                type="button"
+                disabled={salvandoExclusaoNfPersistida}
+                onClick={() => {
+                  setNotasOcultas(prev => {
+                    const next = new Set(prev);
+                    next.add(nfChave(confirmandoExclusaoNf.cnpj, confirmandoExclusaoNf.numero, confirmandoExclusaoNf.serie));
+                    return next;
+                  });
+                  setConfirmandoExclusaoNf(null);
+                }}
+                className="w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
+              >
+                <div className="font-medium text-gray-800 dark:text-gray-200 text-sm">📋 So desta vez</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Some apenas nesta sessao. Ao recarregar o PDF, volta a aparecer.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={salvandoExclusaoNfPersistida || !empresaSel?.id}
+                onClick={async () => {
+                  if (!empresaSel?.id) return;
+                  setSalvandoExclusaoNfPersistida(true);
+                  const r = await ocultarNota({
+                    empresaId: empresaSel.id,
+                    cnpjFornecedor: confirmandoExclusaoNf.cnpj,
+                    numero: confirmandoExclusaoNf.numero,
+                    serie: confirmandoExclusaoNf.serie,
+                    razaoSocial: confirmandoExclusaoNf.razaoSocial,
+                  });
+                  setSalvandoExclusaoNfPersistida(false);
+                  if (r.ok) {
+                    setNotasOcultasPersistidas(prev => {
+                      const next = new Set(prev);
+                      next.add(nfChave(confirmandoExclusaoNf.cnpj, confirmandoExclusaoNf.numero, confirmandoExclusaoNf.serie));
+                      return next;
+                    });
+                    setConfirmandoExclusaoNf(null);
+                  } else {
+                    alert('Erro ao salvar regra: ' + (r.error || 'desconhecido'));
+                  }
+                }}
+                className="w-full text-left p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50/40 dark:bg-red-900/10 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                title={empresaSel?.id ? '' : 'Selecione uma empresa para criar regra persistente'}
+              >
+                <div className="font-medium text-red-700 dark:text-red-300 text-sm">
+                  🔒 Sempre nessa empresa {salvandoExclusaoNfPersistida && '(salvando...)'}
+                </div>
+                <div className="text-xs text-red-600/80 dark:text-red-400/80 mt-0.5">
+                  Cadastra regra: esta NF especifica (numero+serie) sera ignorada sempre que reimportar PDFs desta empresa.
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                disabled={salvandoExclusaoNfPersistida}
+                onClick={() => setConfirmandoExclusaoNf(null)}
                 className="px-4 py-2 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50"
               >
                 Cancelar

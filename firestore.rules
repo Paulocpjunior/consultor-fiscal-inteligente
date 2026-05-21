@@ -177,6 +177,17 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // notas_ocultas: granularidade FINA — oculta UMA NF especifica
+    // por (CNPJ, numero, serie). Diferente de fornecedores_ocultos
+    // (que oculta todas NFs do CNPJ).
+    // Doc ID = `${empresaId}__${chaveNfSanitizada}`.
+    // ───────────────────────────────────────────────────────────────
+
+    match /notas_ocultas/{regraId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // invoices_manuais: invoices lancadas manualmente, por empresa+periodo.
     // Leitura e escrita para QUALQUER usuario logado.
     // ───────────────────────────────────────────────────────────────
