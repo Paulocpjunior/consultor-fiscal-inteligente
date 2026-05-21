@@ -1,6 +1,7 @@
 
 import { LucroPresumidoEmpresa, FichaFinanceiraRegistro, User } from '../types';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
+import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, deleteDoc } from 'firebase/firestore';
 
 const STORAGE_KEY_LUCRO_EMPRESAS = 'lucro_presumido_empresas';
@@ -81,6 +82,15 @@ export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresu
 };
 
 export const saveEmpresa = async (empresa: any, userId: string): Promise<LucroPresumidoEmpresa> => {
+    // Trava de unicidade — SO em cadastro novo (sem id). Preserva re-saves
+    // de empresas ja existentes (fluxo atual usa saveEmpresa pra update tambem).
+    if (!empresa.id) {
+        const check = await verificarCnpjDuplicado(empresa.cnpj || '');
+        if (check.duplicado) {
+            throw new Error(mensagemCnpjDuplicado(empresa.cnpj || '', check));
+        }
+    }
+
     // Garante ID
     const id = empresa.id || generateUUID();
     

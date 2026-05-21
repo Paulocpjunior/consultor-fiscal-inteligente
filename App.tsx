@@ -535,17 +535,23 @@ const App: React.FC = () => {
             setSimplesEmpresas(prev => prev.map(e => e.id === simplesEmpresaToEdit.id ? { ...e, ...dataToUpdate } : e));
             setToastMessage("Empresa atualizada com sucesso!");
         } else {
-            const newEmpresa = await simplesService.saveEmpresa(nome, cnpj, cnae, anexo, atividadesSecundarias || [], currentUser.id, dataAbertura);
-            setSimplesEmpresas(prev => [...prev, newEmpresa]);
-            if (currentUser) authService.logAction(currentUser.id, currentUser.name, 'create_empresa', nome);
-            setToastMessage("Empresa cadastrada com sucesso!");
+            try {
+                const newEmpresa = await simplesService.saveEmpresa(nome, cnpj, cnae, anexo, atividadesSecundarias || [], currentUser.id, dataAbertura);
+                setSimplesEmpresas(prev => [...prev, newEmpresa]);
+                if (currentUser) authService.logAction(currentUser.id, currentUser.name, 'create_empresa', nome);
+                setToastMessage("Empresa cadastrada com sucesso!");
 
-            addHistory({
-                queries: [nome],
-                type: SearchType.SIMPLES_NACIONAL,
-                mode: 'single',
-                entityId: newEmpresa.id
-            });
+                addHistory({
+                    queries: [nome],
+                    type: SearchType.SIMPLES_NACIONAL,
+                    mode: 'single',
+                    entityId: newEmpresa.id
+                });
+            } catch (err: any) {
+                // Erro de CNPJ duplicado ou outra falha de save
+                setToastMessage(err?.message || 'Erro ao cadastrar empresa.');
+                return;  // nao fecha o form — usuario pode corrigir
+            }
         }
         setSimplesView('dashboard');
         setSimplesEmpresaToEdit(null);

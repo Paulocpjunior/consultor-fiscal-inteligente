@@ -6,6 +6,7 @@ import {
 } from '../types';
 import { extractDocumentData, extractPgdasDataFromPdf } from './geminiService';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
+import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import {
     collection, getDocs, doc, setDoc, getDoc,
     query, where, deleteDoc
@@ -122,6 +123,13 @@ export const saveEmpresa = async (
     nome: string, cnpj: string, cnae: string, anexo: string,
     atividadesSecundarias: any[], userId: string, dataAbertura?: string
 ): Promise<SimplesNacionalEmpresa> => {
+    // Trava de unicidade — bloqueia cadastro de CNPJ ja existente em
+    // simples_empresas OU lucro_empresas (regra: unicidade global entre regimes).
+    const check = await verificarCnpjDuplicado(cnpj);
+    if (check.duplicado) {
+        throw new Error(mensagemCnpjDuplicado(cnpj, check));
+    }
+
     const finalAnexo = anexo === 'auto' ? sugerirAnexoPorCnae(cnae) : anexo;
 
     const newEmpresa: any = {
