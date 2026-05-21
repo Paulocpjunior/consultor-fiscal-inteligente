@@ -153,6 +153,18 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // empresa_credito_config: config de credito PIS/COFINS por empresa.
+    // Armazena lista de categorias marcadas como "nao gera credito" pra
+    // aquela empresa-cliente. Doc ID = empresaId.
+    // Leitura e escrita para QUALQUER usuario logado (mesmo padrao das
+    // categorias — todos os colaboradores podem ajustar).
+    // ───────────────────────────────────────────────────────────────
+
+    match /empresa_credito_config/{empresaId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // invoices_manuais: invoices lancadas manualmente, por empresa+periodo.
     // Leitura e escrita para QUALQUER usuario logado.
     // ───────────────────────────────────────────────────────────────

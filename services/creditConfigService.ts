@@ -10,7 +10,7 @@
  *   - atualizadoPor: string | null
  *   - atualizadoEm: serverTimestamp
  *
- * Regras Firestore: leitura para qualquer logado, escrita so admin
+ * Regras Firestore: leitura e escrita para qualquer logado
  * (mesmo padrao de categorias_fornecedor).
  */
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
