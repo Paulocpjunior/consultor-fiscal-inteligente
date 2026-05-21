@@ -51,7 +51,7 @@ router.get('/resumo', requireAuth, async (req, res) => {
 });
 
 // Lista mensagens (com filtros opcionais)
-router.get('/mensagens', requireAdmin, async (req, res) => {
+router.get('/mensagens', requireAuth, async (req, res) => {
     try {
         const r = await listarMensagensLocais({
             empresaCnpj: req.query.empresaCnpj,

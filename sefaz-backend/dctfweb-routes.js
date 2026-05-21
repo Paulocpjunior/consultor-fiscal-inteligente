@@ -14,7 +14,7 @@ import {
     getResumoGlobal,
 } from './dctfweb-orchestrator.js';
 import { getDctfwebMode } from './dctfweb-provider.js';
-import { requireAdmin } from './require-admin.js';
+import { requireAdmin, requireAuth } from './require-admin.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 const router = express.Router();
@@ -23,12 +23,12 @@ const router = express.Router();
 
 router.get('/status', (_req, res) => res.json({ mode: getDctfwebMode(), ok: true }));
 
-router.get('/resumo', requireAdmin, async (_req, res) => {
+router.get('/resumo', requireAuth, async (_req, res) => {
     try { res.json(await getResumoGlobal()); }
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/declaracoes', requireAdmin, async (req, res) => {
+router.get('/declaracoes', requireAuth, async (req, res) => {
     try {
         res.json(await listarDeclaracoes({
             empresaCnpj: req.query.empresaCnpj,
@@ -63,14 +63,14 @@ router.post('/gerar-darf', requireAdmin, express.json(), async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/declaracao-completa', requireAdmin, async (req, res) => {
+router.get('/declaracao-completa', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, anoPA, mesPA, categoria } = req.query;
         res.json(await consultarDeclaracaoCompleta({ empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA), categoria }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/recibo', requireAdmin, async (req, res) => {
+router.get('/recibo', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, anoPA, mesPA, categoria } = req.query;
         res.json(await consultarRecibo({ empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA), categoria }));
@@ -85,7 +85,7 @@ router.post('/mit/encerrar', requireAdmin, express.json(), async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/mit/status', requireAdmin, async (req, res) => {
+router.get('/mit/status', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, protocolo, anoPA, mesPA } = req.query;
         res.json(await consultarStatusEncerramentoMit({
@@ -96,14 +96,14 @@ router.get('/mit/status', requireAdmin, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/mit/apuracao', requireAdmin, async (req, res) => {
+router.get('/mit/apuracao', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, anoPA, mesPA } = req.query;
         res.json(await consultarApuracaoMit({ empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA) }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/mit/historico', requireAdmin, async (req, res) => {
+router.get('/mit/historico', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, anoPA } = req.query;
         res.json(await consultarApuracoesAno({ empresaCnpj, anoPA: Number(anoPA) }));

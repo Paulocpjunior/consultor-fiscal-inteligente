@@ -5,7 +5,7 @@
 // ============================================================================
 
 import express from 'express';
-import { requireAdmin } from './require-admin.js';
+import { requireAdmin, requireAuth } from './require-admin.js';
 import admin from 'firebase-admin';
 import {
     emitirDasRegular, emitirDasAvulso,
@@ -24,12 +24,12 @@ router.get('/status', (_req, res) => {
     res.json({ mode: getDasMode(), ok: true });
 });
 
-router.get('/resumo', requireAdmin, async (_req, res) => {
+router.get('/resumo', requireAuth, async (_req, res) => {
     try { res.json(await getResumoDas()); }
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/listar', requireAdmin, async (req, res) => {
+router.get('/listar', requireAuth, async (req, res) => {
     try {
         res.json(await listarDas({
             empresaId: req.query.empresaId,
