@@ -543,10 +543,17 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     };
 
     const handleDeleteCompany = async (id: string) => {
-        if (window.confirm('Tem certeza que deseja excluir esta empresa?')) {
+        if (!window.confirm('Tem certeza que deseja excluir esta empresa?')) return;
+        try {
             await lucroPresumidoService.deleteEmpresa(id);
             loadEmpresas();
             if (selectedEmpresaId === id) { setSelectedEmpresaId(null); setView('list'); }
+        } catch (err: any) {
+            const msg = err?.code === 'permission-denied'
+                ? 'Sem permissão para deletar esta empresa (só admin ou dono).'
+                : (err?.message || 'Erro ao deletar empresa.');
+            alert(msg);
+            console.error('[deleteEmpresa Lucro]', err);
         }
     };
 
@@ -737,7 +744,9 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                 </td>
                                 <td className="px-6 py-4 text-right flex justify-end gap-2">
                                     <button onClick={() => { setSelectedEmpresaId(emp.id); setView('details'); }} className="text-sky-600 hover:text-sky-800 font-medium">Abrir</button>
-                                    <button onClick={() => handleDeleteCompany(emp.id)} className="text-red-500 hover:text-red-700"><TrashIcon className="w-4 h-4" /></button>
+                                    {currentUser?.role === 'admin' && (
+                                        <button onClick={() => handleDeleteCompany(emp.id)} className="text-red-500 hover:text-red-700" title="Excluir empresa (admin)"><TrashIcon className="w-4 h-4" /></button>
+                                    )}
                                 </td>
                             </tr>
                         ))}

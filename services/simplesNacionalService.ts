@@ -185,6 +185,28 @@ export const updateEmpresa = async (
     return null;
 };
 
+/**
+ * Deleta uma empresa do Simples. Firestore eh fonte da verdade — se a
+ * delecao na nuvem falhar (permission-denied, network, etc), o erro
+ * propaga e o cache local NAO eh modificado. Isso evita o anti-pattern
+ * antigo de "some da tela mas volta no proximo refresh".
+ *
+ * Regra Firestore (firestore.rules):
+ *   allow delete: if isOwnerOrAdmin(resource.data.createdBy);
+ * Ou seja: o dono OU qualquer admin pode deletar.
+ */
+export const deleteEmpresa = async (id: string): Promise<void> => {
+    if (!isFirebaseConfigured || !db) {
+        throw new Error('Firebase nao configurado — nao foi possivel deletar a empresa.');
+    }
+    // 1. Deleta da nuvem (fonte da verdade). Se falhar, throw — nao toca no local.
+    await deleteDoc(doc(db, 'simples_empresas', id));
+
+    // 2. Atualiza local cache so depois do sucesso na nuvem
+    const local = getLocalEmpresas();
+    saveLocalEmpresas(local.filter(e => e.id !== id));
+};
+
 // ─── NOTAS ────────────────────────────────────────────────────────────────────
 export const getAllNotas = async (
     user?: User | null

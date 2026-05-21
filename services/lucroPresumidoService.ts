@@ -161,18 +161,28 @@ export const updateEmpresa = async (id: string, data: Partial<LucroPresumidoEmpr
     return null;
 };
 
+/**
+ * Deleta uma empresa do Lucro Presumido/Real. Firestore eh fonte da
+ * verdade — se a delecao na nuvem falhar (permission-denied, network,
+ * etc), o erro propaga e o cache local NAO eh modificado.
+ *
+ * Antes (bug): silent catch + sempre apaga local => empresa "sumia da
+ * tela mas voltava no proximo refresh". Sintoma classico de admin que
+ * "nao consegue deletar". Conserto: throw em vez de silenciar.
+ *
+ * Regra Firestore (firestore.rules):
+ *   allow delete: if isOwnerOrAdmin(resource.data.createdBy);
+ */
 export const deleteEmpresa = async (id: string): Promise<boolean> => {
-    if (isFirebaseConfigured && db) {
-        try {
-            await deleteDoc(doc(db, 'lucro_empresas', id));
-        } catch(e) {
-            console.error("Erro ao deletar da nuvem", e);
-        }
+    if (!isFirebaseConfigured || !db) {
+        throw new Error('Firebase nao configurado — nao foi possivel deletar a empresa.');
     }
-    
+    // 1. Deleta da nuvem (fonte da verdade). Se falhar, throw — nao toca no local.
+    await deleteDoc(doc(db, 'lucro_empresas', id));
+
+    // 2. Atualiza local cache so depois do sucesso na nuvem
     const localEmpresas = getLocalEmpresas();
-    const filtered = localEmpresas.filter(e => e.id !== id);
-    saveLocalEmpresas(filtered);
+    saveLocalEmpresas(localEmpresas.filter(e => e.id !== id));
 
     return true;
 };

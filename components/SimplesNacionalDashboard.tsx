@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { SimplesNacionalEmpresa, SimplesNacionalNota, User } from '../types';
 import * as simplesService from '../services/simplesNacionalService';
-import { PlusIcon, InfoIcon, ShieldIcon, PencilIcon } from './Icons';
+import { PlusIcon, InfoIcon, ShieldIcon, PencilIcon, TrashIcon } from './Icons';
 
 interface SimplesNacionalDashboardProps {
     empresas: SimplesNacionalEmpresa[];
@@ -10,11 +10,12 @@ interface SimplesNacionalDashboardProps {
     onSelectEmpresa: (id: string, view: 'detalhe' | 'cliente') => void;
     onAddNew: () => void;
     onEdit: (empresa: SimplesNacionalEmpresa) => void;
+    onDelete?: (empresa: SimplesNacionalEmpresa) => void;
     currentUser?: User | null;
     onShowToast?: (msg: string) => void;
 }
 
-const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ empresas, notas, onSelectEmpresa, onAddNew, onEdit, currentUser, onShowToast }) => {
+const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ empresas, notas, onSelectEmpresa, onAddNew, onEdit, onDelete, currentUser, onShowToast }) => {
     
     const empresasComResumo = useMemo(() => {
         return empresas.map(empresa => {
@@ -143,6 +144,14 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                             <button onClick={() => onEdit(e)} className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800" title="Editar Empresa">
                                                 <PencilIcon className="w-4 h-4 inline" />
                                             </button>
+                                            {isAdminView && onDelete && (
+                                                <>
+                                                    <span className="text-slate-300 dark:text-slate-600">|</span>
+                                                    <button onClick={() => onDelete(e)} className="font-medium text-red-500 hover:text-red-700" title="Excluir empresa (admin)">
+                                                        <TrashIcon className="w-4 h-4 inline" />
+                                                    </button>
+                                                </>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

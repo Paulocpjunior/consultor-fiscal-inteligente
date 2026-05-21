@@ -998,6 +998,21 @@ const App: React.FC = () => {
                                         onSelectEmpresa={(id, view) => { setSelectedSimplesEmpresaId(id); setSimplesView(view); }}
                                         onAddNew={() => { setSimplesEmpresaToEdit(null); setSimplesView('nova'); }}
                                         onEdit={(empresa) => { setSimplesEmpresaToEdit(empresa); setSimplesView('nova'); }}
+                                        onDelete={async (empresa) => {
+                                            if (!window.confirm(`Excluir empresa "${empresa.nome}" (CNPJ ${empresa.cnpj})?\n\nEssa ação não pode ser desfeita.`)) return;
+                                            try {
+                                                await simplesService.deleteEmpresa(empresa.id);
+                                                setSimplesEmpresas(prev => prev.filter(e => e.id !== empresa.id));
+                                                if (currentUser) authService.logAction(currentUser.id, currentUser.name, 'delete_empresa', empresa.nome);
+                                                setToastMessage(`Empresa "${empresa.nome}" excluída.`);
+                                            } catch (err: any) {
+                                                const msg = err?.code === 'permission-denied'
+                                                    ? 'Sem permissão para excluir esta empresa (só admin ou criador).'
+                                                    : (err?.message || 'Erro ao excluir empresa.');
+                                                setToastMessage(msg);
+                                                console.error('[deleteEmpresa Simples]', err);
+                                            }
+                                        }}
                                         onShowToast={(msg) => setToastMessage(msg)}
                                         currentUser={currentUser}
                                     />
