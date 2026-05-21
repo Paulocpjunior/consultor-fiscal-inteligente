@@ -42,6 +42,10 @@ import {
   contarFornecedoresNaCategoria,
   type CategoriaCustom,
 } from '../services/categoriasCreditoService';
+import {
+  carregarCreditConfig,
+  salvarCreditConfig,
+} from '../services/creditConfigService';
 import type { EmpresaPerfilOption } from '../services/xmlFiscalService';
 import type { User } from '../types';
 
@@ -482,6 +486,38 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     return () => { ativo = false; };
   }, [categoriasVersao]);
 
+  // Categorias marcadas como nao-creditaveis para a empresa selecionada.
+  // Items nessas categorias tem base 0 (no agrupamento e no baseTotal).
+  // Persistido em empresa_credito_config/{empresaId}.
+  const [categoriasNaoCreditaveis, setCategoriasNaoCreditaveis] = useState<Set<string>>(new Set());
+  const [salvandoCategoriaCredito, setSalvandoCategoriaCredito] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ativo = true;
+    if (!empresaSel?.id) { setCategoriasNaoCreditaveis(new Set()); return; }
+    carregarCreditConfig(empresaSel.id).then(cfg => {
+      if (ativo) setCategoriasNaoCreditaveis(new Set(cfg.categoriasNaoCreditaveis));
+    });
+    return () => { ativo = false; };
+  }, [empresaSel?.id]);
+
+  const toggleCategoriaCredito = useCallback(async (categoria: string) => {
+    if (!empresaSel?.id) return;
+    if (categoria === 'SEM_CATEGORIA') return;  // sempre nao-creditavel, nao da pra mexer
+    const novo = new Set(categoriasNaoCreditaveis);
+    if (novo.has(categoria)) novo.delete(categoria);
+    else novo.add(categoria);
+    setCategoriasNaoCreditaveis(novo);  // otimista
+    setSalvandoCategoriaCredito(categoria);
+    const r = await salvarCreditConfig(empresaSel.id, Array.from(novo));
+    setSalvandoCategoriaCredito(null);
+    if (!r.ok) {
+      // rollback em caso de falha
+      setCategoriasNaoCreditaveis(categoriasNaoCreditaveis);
+      setErro('Erro ao salvar config de crédito: ' + (r.error || 'desconhecido'));
+    }
+  }, [empresaSel?.id, categoriasNaoCreditaveis]);
+
   // Todas as opcoes de categoria do dropdown (11 fixas + custom, ordenadas A-Z).
   const todasCategorias = useMemo(() => {
     const customNomes = categoriasCustom.map(c => c.nome);
@@ -578,8 +614,8 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     }
     const fornMesclados = Array.from(fornMap.values());
 
-    return calcularCreditoEfiscal(fornMesclados, regCalc, notasMescladas, overrides);
-  }, [efiscal, empresaSel, overrides, invoicesManuais]);
+    return calcularCreditoEfiscal(fornMesclados, regCalc, notasMescladas, overrides, categoriasNaoCreditaveis);
+  }, [efiscal, empresaSel, overrides, invoicesManuais, categoriasNaoCreditaveis]);
 
   // Aviso de divergencia de CNPJ — tambem reativo.
   const avisoCnpj = useMemo<string | null>(() => {
@@ -1185,6 +1221,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                       <th className="px-3 py-2 text-right font-medium">Fornecedores</th>
                       <th className="px-3 py-2 text-right font-medium">NFs</th>
                       <th className="px-3 py-2 text-right font-medium">Base de Cálculo</th>
+                      <th className="px-3 py-2 text-center font-medium">Crédito</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -1202,11 +1239,34 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                             <td className="px-3 py-2 text-gray-800 dark:text-gray-200 font-medium">{label}</td>
                             <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{cat.qtdFornecedores}</td>
                             <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{cat.qtdNotas}</td>
-                            <td className="px-3 py-2 text-right text-gray-800 dark:text-gray-200 whitespace-nowrap font-semibold">R$ {brl(cat.somaBaseCalculo)}</td>
+                            <td className={`px-3 py-2 text-right whitespace-nowrap font-semibold ${cat.creditavel ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500 line-through'}`}>
+                              R$ {brl(cat.creditavel ? cat.somaBaseCalculo : 0)}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              {cat.categoria === 'SEM_CATEGORIA' ? (
+                                <span className="text-[10px] text-gray-400 italic">não gera crédito</span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); toggleCategoriaCredito(cat.categoria); }}
+                                  disabled={!empresaSel?.id || salvandoCategoriaCredito === cat.categoria}
+                                  className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors disabled:opacity-50 ${
+                                    cat.creditavel
+                                      ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300 hover:bg-green-100'
+                                      : 'bg-gray-100 border-gray-300 text-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400 hover:bg-gray-200'
+                                  }`}
+                                  title={empresaSel?.id ? 'Alternar: gera / não gera crédito PIS/COFINS' : 'Selecione a empresa primeiro'}
+                                >
+                                  {salvandoCategoriaCredito === cat.categoria
+                                    ? 'salvando…'
+                                    : cat.creditavel ? '✓ gera crédito' : '✗ não gera crédito'}
+                                </button>
+                              )}
+                            </td>
                           </tr>
                           {aberta && (
                             <tr>
-                              <td colSpan={5} className="bg-gray-50 dark:bg-gray-900/40 px-3 py-3">
+                              <td colSpan={6} className="bg-gray-50 dark:bg-gray-900/40 px-3 py-3">
                                 <div className="overflow-x-auto">
                                   <table className="min-w-full text-[11px]">
                                     <thead className="text-gray-500 dark:text-gray-400 uppercase">
@@ -1232,7 +1292,9 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                                           <td className="px-2 py-1 text-gray-600 dark:text-gray-400 font-mono whitespace-nowrap">{nf.cnpjCpf}</td>
                                           <td className="px-2 py-1 text-gray-700 dark:text-gray-300">{nf.razaoSocial}</td>
                                           <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(nf.valorNf)}</td>
-                                          <td className="px-2 py-1 text-right text-gray-800 dark:text-gray-200 whitespace-nowrap font-semibold">R$ {brl(nf.baseCalculo)}</td>
+                                          <td className={`px-2 py-1 text-right whitespace-nowrap font-semibold ${cat.creditavel ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500 line-through'}`}>
+                                            R$ {brl(cat.creditavel ? nf.baseCalculo : 0)}
+                                          </td>
                                           <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400">{nf.aliquota ? nf.aliquota.toFixed(2) : '—'}</td>
                                           <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(nf.valorIss)}</td>
                                           <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(nf.issRetido)}</td>
@@ -1384,7 +1446,9 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {(credito ? credito.fornecedoresClassificados : efiscal.fornecedores).map((f: any, i: number) => (
+                  {(credito ? credito.fornecedoresClassificados : efiscal.fornecedores).map((f: any, i: number) => {
+                    const naoCreditavel = !f.categoria || categoriasNaoCreditaveis.has(f.categoria);
+                    return (
                     <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                       <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap font-mono">{f.cnpjCpf}</td>
                       <td className="px-3 py-2 text-gray-800 dark:text-gray-200 font-medium">{f.razaoSocial}</td>
@@ -1398,7 +1462,8 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                               setModalCategoriasAberto(true);
                               return;
                             }
-                            if (v) salvarCategoriaFornecedor(f.cnpjCpf, f.razaoSocial, v);
+                            // "" (sem categoria) salva como string vazia — permite desclassificar
+                            salvarCategoriaFornecedor(f.cnpjCpf, f.razaoSocial, v);
                           }}
                           className="text-xs bg-transparent border border-gray-200 dark:border-gray-600 rounded px-1.5 py-0.5 text-gray-700 dark:text-gray-200 disabled:opacity-50"
                           title={empresaSel?.id ? 'Definir categoria — salva como regra para esta empresa' : 'Selecione a empresa primeiro'}
@@ -1415,10 +1480,13 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                       </td>
                       <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{f.qtdNotas}</td>
                       <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">R$ {brl(f.somaValorNf)}</td>
-                      <td className="px-3 py-2 text-right text-gray-800 dark:text-gray-200 whitespace-nowrap font-semibold">R$ {brl(f.somaBaseCalculo)}</td>
+                      <td className={`px-3 py-2 text-right whitespace-nowrap font-semibold ${naoCreditavel ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-800 dark:text-gray-200'}`}>
+                        R$ {brl(naoCreditavel ? 0 : f.somaBaseCalculo)}
+                      </td>
                       <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(f.somaIssRetido)}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
