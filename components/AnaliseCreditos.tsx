@@ -8,6 +8,31 @@ type TipoNota = 'PRODUTO' | 'SERVICO';
 type TipoResultado = 'APROVADO' | 'PARCIAL' | 'NEGADO' | 'REVISAR';
 
 interface PerfilCliente { regime: Regime; uf: string; aliqInternaIcms?: number; }
+
+// ─── Tabela de aliquotas internas ICMS 2026 ────────────────────────────────
+// Aliquota geral por UF (RICMS). Atencao: cada estado tem excecoes por NCM
+// (essenciais como arroz/feijao em SP = 7%, suntuarios = 25-30%, etc).
+// Usar como SUGESTAO de partida — contador deve revisar conforme produto.
+//
+// Fonte: simplifique.contmatic.com.br/blogs/tabela-icms-2026 (10/04/2026)
+// e cruzamento com tabelas Conta Azul/SimTax. Inclui FECP/FECOEP quando
+// incorporado na aliquota modal divulgada.
+//
+// IMPORTANTE: revisar anualmente (RJ subiu de 20→22% em 2024; AL 19→20,5%
+// em 04/2026; varios estados ajustaram em 2025). Em 2029 o ICMS comeca a
+// ser substituido pelo IBS — esta tabela vai precisar de revisao gradual.
+const ALIQUOTAS_INTERNAS_ICMS_2026: Record<string, number> = {
+  AC: 0.19, AL: 0.205, AM: 0.20, AP: 0.18, BA: 0.205, CE: 0.20,
+  DF: 0.20, ES: 0.17, GO: 0.19, MA: 0.23, MG: 0.18, MS: 0.17,
+  MT: 0.17, PA: 0.19, PB: 0.20, PE: 0.205, PI: 0.225, PR: 0.195,
+  RJ: 0.22, RN: 0.20, RO: 0.195, RR: 0.20, RS: 0.17, SC: 0.17,
+  SE: 0.19, SP: 0.18, TO: 0.20,
+};
+
+const aliquotaInternaPorUf = (uf?: string): number | undefined => {
+  if (!uf) return undefined;
+  return ALIQUOTAS_INTERNAS_ICMS_2026[uf.toUpperCase().trim()];
+};
 interface NotaManual {
   numero: string; emitente: string; cfop: string; cst: string; natureza: string;
   valorTotal: string; baseCalculo: string; valorIcms: string; aliquotaIcms: string; tipo: TipoNota;
@@ -62,6 +87,9 @@ const AnaliseCreditos: React.FC<AnaliseCreditosProps> = ({ currentUser }) => {
   const [empresas, setEmpresas] = useState<EmpresaPerfilOption[]>([]);
   const [empresaVinculadaId, setEmpresaVinculadaId] = useState<string>('');
   const [carregandoEmpresas, setCarregandoEmpresas] = useState(false);
+  // Rastrea se o usuario digitou a aliq ICMS manualmente — se sim, vincular
+  // empresa ou trocar UF NAO sobrescreve. Apagar o campo libera auto de novo.
+  const [aliqIcmsManual, setAliqIcmsManual] = useState(false);
   const [notas, setNotas] = useState<NotaManual[]>([{...NOTA_VAZIA}]);
   const [arquivo, setArquivo] = useState<File|null>(null);
   const [loading, setLoading] = useState(false);
@@ -86,11 +114,40 @@ const AnaliseCreditos: React.FC<AnaliseCreditosProps> = ({ currentUser }) => {
     setEmpresaVinculadaId(id);
     const emp = empresas.find(e => e.id === id);
     if (!emp) return;
+    const novaUf = emp.uf || '';
+    const aliqAuto = aliquotaInternaPorUf(novaUf);
     setPerfil(prev => ({
       ...prev,
       regime: emp.regimeSugerido as Regime,
-      uf: emp.uf || prev.uf,
+      uf: novaUf || prev.uf,
+      // Preserva valor manual se contador ja digitou. Senao, auto-preenche
+      // com a aliquota geral da UF da empresa (RICMS 2026).
+      aliqInternaIcms: aliqIcmsManual ? prev.aliqInternaIcms : (aliqAuto ?? prev.aliqInternaIcms),
     }));
+  };
+
+  // Trocar UF manualmente (sem vincular empresa) sincroniza a aliquota
+  // sugerida, respeitando a regra "manual prevalece".
+  const trocarUf = (novaUf: string) => {
+    const aliqAuto = aliquotaInternaPorUf(novaUf);
+    setPerfil(prev => ({
+      ...prev,
+      uf: novaUf,
+      aliqInternaIcms: aliqIcmsManual ? prev.aliqInternaIcms : (aliqAuto ?? prev.aliqInternaIcms),
+    }));
+  };
+
+  // Quando o usuario digita no input de aliquota: marca como manual.
+  // Se apagar o campo (string vazia), libera o auto-preenchimento de novo.
+  const setAliqIcmsManualUser = (raw: string) => {
+    if (raw === '' || raw === '0') {
+      setAliqIcmsManual(false);
+      setPerfil(p => ({...p, aliqInternaIcms: undefined}));
+      return;
+    }
+    setAliqIcmsManual(true);
+    const parsed = parseFloat(raw.replace(',', '.'));
+    if (!isNaN(parsed)) setPerfil(p => ({...p, aliqInternaIcms: parsed / 100}));
   };
 
   const limparVinculo = () => {
@@ -301,11 +358,32 @@ const AnaliseCreditos: React.FC<AnaliseCreditosProps> = ({ currentUser }) => {
               {REGIMES.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
             </select></div>
           <div><label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">UF *</label>
-            <select value={perfil.uf} onChange={e=>setPerfilField('uf',e.target.value)} className={inp}>
+            <select value={perfil.uf} onChange={e=>trocarUf(e.target.value)} className={inp}>
               {UFS.map(uf=><option key={uf} value={uf}>{uf}</option>)}
             </select></div>
-          <div><label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Alíq. ICMS (%)</label>
-            <input type="number" placeholder="Ex: 18" onChange={e=>setPerfilField('aliqInternaIcms',parseFloat(e.target.value)/100)} className={inp}/></div>
+          <div>
+            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block flex items-center gap-1">
+              Alíq. ICMS (%)
+              {perfil.aliqInternaIcms !== undefined && !aliqIcmsManual && (
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded-full"
+                  style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+                  title={`Alíquota geral da UF ${perfil.uf} (RICMS 2026). Atencao: pode haver exceções por NCM/produto.`}
+                >
+                  auto
+                </span>
+              )}
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              placeholder={perfil.uf ? `Padrao ${perfil.uf}: ${((aliquotaInternaPorUf(perfil.uf) ?? 0.18) * 100).toFixed(1)}%` : 'Ex: 18'}
+              value={perfil.aliqInternaIcms !== undefined ? (perfil.aliqInternaIcms * 100).toFixed(2).replace(/\.?0+$/, '') : ''}
+              onChange={e => setAliqIcmsManualUser(e.target.value)}
+              className={inp}
+              title="Alíquota interna do ICMS para crédito. Auto-preenchida a partir da UF da empresa (RICMS 2026). Exceções por produto (essenciais 7-12%, supérfluos 25-30%) devem ser ajustadas manualmente."
+            />
+          </div>
         </div>
       </div>
 
