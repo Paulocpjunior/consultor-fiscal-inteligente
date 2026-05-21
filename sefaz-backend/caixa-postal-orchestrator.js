@@ -50,9 +50,15 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
 
     await _carregarNomes();
 
-    // Em SERPRO: pergunta primeiro se tem msg nova (chamada barata INNOVAMSG63).
-    // Economiza chamada paginada se a empresa nao tem nada novo.
-    if (mode === 'serpro' && typeof provider.temNovasMensagens === 'function') {
+    // Em SERPRO: tentava primeiro INNOVAMSG63 (chamada barata pra checar se tem msg nova).
+    // Mas o SERPRO retorna AcessoNegado-ICGERENCIADOR-017 (403) consistentemente — esse
+    // idServico nao funciona pra contratante/autor=SP Assessoria. Cada tentativa gasta 1
+    // chamada SERPRO cobrada + polui logs com business_error que nao eh erro de verdade.
+    //
+    // Estrategia atual: pula direto pro MSGCONTRIBUINTE61. Quando o SERPRO corrigir o
+    // INNOVAMSG63, setar env SERPRO_CAIXA_POSTAL_USE_INNOVAMSG63=true reativa sem deploy.
+    const useInnovamsg63 = process.env.SERPRO_CAIXA_POSTAL_USE_INNOVAMSG63 === 'true';
+    if (useInnovamsg63 && mode === 'serpro' && typeof provider.temNovasMensagens === 'function') {
         try {
             const r = await provider.temNovasMensagens(empresaCnpj);
             if (!r.temNovas) {
