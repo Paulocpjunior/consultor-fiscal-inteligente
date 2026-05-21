@@ -40,10 +40,10 @@ const AnalisadorRegime:React.FC = () => {
 
   const inp = (label:string,k:keyof EntradaCalculo,hint?:string) => (
     <div style={{display:'flex',flexDirection:'column',gap:3}}>
-      <label style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:.4}}>{label}</label>
+      <label style={{fontSize:11,fontWeight:600,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.4}}>{label}</label>
       <input type="number" value={ent[k] as number} min={0} step={100}
         onChange={e=>set(k,e.target.value)}
-        style={{background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.12)',borderRadius:8,padding:'9px 12px',color:'#f1f5f9',fontSize:14,outline:'none'}}/>
+        style={{background:'var(--bg-elevated)',border:'1px solid rgba(255,255,255,.12)',borderRadius:8,padding:'9px 12px',color:'#f1f5f9',fontSize:14,outline:'none'}}/>
       {hint&&<span style={{fontSize:10,color:'#64748b'}}>{hint}</span>}
     </div>
   );
@@ -54,15 +54,15 @@ const AnalisadorRegime:React.FC = () => {
         <div style={{fontSize:32,width:52,height:52,borderRadius:14,background:'rgba(139,92,246,.2)',display:'flex',alignItems:'center',justifyContent:'center'}}>⚖️</div>
         <div>
           <h2 style={{margin:0,fontSize:20,fontWeight:700,color:'#f1f5f9'}}>Analisador de Regime Tributario</h2>
-          <p style={{margin:'3px 0 0',fontSize:13,color:'#94a3b8'}}>Compare Simples Nacional, Lucro Presumido e Lucro Real com IA</p>
+          <p style={{margin:'3px 0 0',fontSize:13,color:'var(--text-muted)'}}>Compare Simples Nacional, Lucro Presumido e Lucro Real com IA</p>
         </div>
       </div>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:14,marginBottom:18}}>
         <div style={{gridColumn:'1/-1',display:'flex',flexDirection:'column',gap:3}}>
-          <label style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:.4}}>Tipo de Atividade</label>
+          <label style={{fontSize:11,fontWeight:600,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.4}}>Tipo de Atividade</label>
           <select value={ent.atividade} onChange={e=>set('atividade',e.target.value as AtividadeTipo)}
-            style={{background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.12)',borderRadius:8,padding:'9px 12px',color:'#f1f5f9',fontSize:13,outline:'none'}}>
+            style={{background:'var(--bg-elevated)',border:'1px solid rgba(255,255,255,.12)',borderRadius:8,padding:'9px 12px',color:'#f1f5f9',fontSize:13,outline:'none'}}>
             {Object.entries(ATIV_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
           </select>
         </div>
@@ -90,17 +90,17 @@ const AnalisadorRegime:React.FC = () => {
           {res.resultados.map(r=>(
             <div key={r.regime} style={{background:`${CORES[r.regime]}10`,border:`${r.recomendado?'2px':'1px'} solid ${r.recomendado?CORES[r.regime]:'rgba(255,255,255,.1)'}`,borderRadius:12,padding:'16px 15px',position:'relative',boxShadow:r.recomendado?`0 0 18px ${CORES[r.regime]}40`:'none'}}>
               {r.recomendado&&<div style={{position:'absolute',top:-10,right:10,background:CORES[r.regime],color:'#fff',borderRadius:20,fontSize:10,fontWeight:700,padding:'3px 10px'}}>MENOR CARGA</div>}
-              <div style={{fontSize:11,color:'#94a3b8',textTransform:'uppercase',letterSpacing:.4,marginBottom:5}}>{r.label}</div>
+              <div style={{fontSize:11,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.4,marginBottom:5}}>{r.label}</div>
               <div style={{fontSize:26,fontWeight:800,color:'#f1f5f9',lineHeight:1}}>{fmt(r.impostoMensal)}<span style={{fontSize:13,fontWeight:400,color:'#64748b'}}>/mes</span></div>
-              <div style={{fontSize:12,color:'#94a3b8',marginTop:4,marginBottom:10}}>Aliquota efetiva: <strong>{fmtP(r.aliquotaEfetiva)}</strong></div>
-              <button onClick={()=>setExp(exp===r.regime?null:r.regime)} style={{width:'100%',padding:'5px 10px',background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.1)',borderRadius:6,color:'#94a3b8',fontSize:11,cursor:'pointer'}}>
+              <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4,marginBottom:10}}>Aliquota efetiva: <strong>{fmtP(r.aliquotaEfetiva)}</strong></div>
+              <button onClick={()=>setExp(exp===r.regime?null:r.regime)} style={{width:'100%',padding:'5px 10px',background:'var(--bg-elevated)',border:'1px solid rgba(255,255,255,.1)',borderRadius:6,color:'var(--text-muted)',fontSize:11,cursor:'pointer'}}>
                 {exp===r.regime?'Ocultar detalhes':'Ver detalhamento'}
               </button>
-              {exp===r.regime&&<div style={{marginTop:10,borderTop:'1px solid rgba(255,255,255,.06)',paddingTop:10}}>
+              {exp===r.regime&&<div style={{marginTop:10,borderTop:'1px solid var(--bg-elevated)',paddingTop:10}}>
                 {Object.entries(r.detalhamento).map(([k,v])=>(
                   <div key={k} style={{display:'flex',justifyContent:'space-between',fontSize:12,color:'#cbd5e1',padding:'2px 0'}}><span>{k}</span><span>{fmt(v as number)}</span></div>
                 ))}
-                {r.observacoes.map((o,i)=><p key={i} style={{fontSize:11,color:'#94a3b8',margin:'4px 0 0',lineHeight:1.5}}>{o}</p>)}
+                {r.observacoes.map((o,i)=><p key={i} style={{fontSize:11,color:'var(--text-muted)',margin:'4px 0 0',lineHeight:1.5}}>{o}</p>)}
               </div>}
             </div>
           ))}
@@ -111,11 +111,11 @@ const AnalisadorRegime:React.FC = () => {
           {res.alertas.map((a,i)=><p key={i} style={{margin:'5px 0 0',color:'#fde68a',fontSize:12}}>{a}</p>)}
         </div>}
 
-        <div style={{background:'rgba(255,255,255,.03)',borderRadius:12,padding:'16px 18px',border:'1px solid rgba(255,255,255,.06)',marginBottom:16}}>
-          <div style={{fontSize:12,color:'#94a3b8',marginBottom:12}}>Comparativo visual</div>
+        <div style={{background:'rgba(255,255,255,.03)',borderRadius:12,padding:'16px 18px',border:'1px solid var(--bg-elevated)',marginBottom:16}}>
+          <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:12}}>Comparativo visual</div>
           {res.resultados.map(r=>{const mx=Math.max(...res.resultados.map(x=>x.impostoMensal));return(
             <div key={r.regime} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-              <span style={{width:130,fontSize:12,color:'#94a3b8'}}>{r.label}</span>
+              <span style={{width:130,fontSize:12,color:'var(--text-muted)'}}>{r.label}</span>
               <div style={{flex:1,height:6,background:'rgba(255,255,255,.08)',borderRadius:3,overflow:'hidden'}}>
                 <div style={{width:`${mx>0?(r.impostoMensal/mx)*100:0}%`,height:'100%',background:CORES[r.regime],borderRadius:3,transition:'width .6s ease'}}/>
               </div>

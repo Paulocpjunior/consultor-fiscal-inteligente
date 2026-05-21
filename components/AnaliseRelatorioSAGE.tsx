@@ -159,7 +159,7 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
             {/* Header */}
             <div
                 className="p-5 rounded-xl"
-                style={{ background: 'linear-gradient(135deg,#08007A,#1400FF)', color: '#F5F6FF' }}
+                style={{ background: 'linear-gradient(135deg,var(--accent-hover),var(--accent))', color: 'var(--text-primary)' }}
             >
                 <div className="flex items-center gap-3">
                     <div className="bg-white/15 p-2.5 rounded-lg">
@@ -181,7 +181,7 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                         <h2 className="text-lg font-bold" style={{ fontFamily: 'Cormorant Garamond,serif' }}>
                             Análise Relatório SAGE
                         </h2>
-                        <p className="text-sm" style={{ color: 'rgba(200,208,255,0.7)' }}>
+                        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                             Identifica numeração faltante, notas canceladas, denegadas, inutilizadas e separa entradas/saídas a partir de XLSX SAGE ou XMLs.
                         </p>
                     </div>
@@ -200,9 +200,9 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                     onClick={() => inputRef.current?.click()}
                     className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all`}
                     style={{
-                        borderColor: dragOver ? '#5B7FFF' : 'rgba(200,208,255,0.25)',
-                        background: dragOver ? 'rgba(20,0,255,0.08)' : 'rgba(8,0,122,0.04)',
-                        color: '#F5F6FF',
+                        borderColor: dragOver ? 'var(--accent)' : 'var(--text-muted)',
+                        background: dragOver ? 'var(--accent-soft)' : 'var(--bg-subtle)',
+                        color: 'var(--text-primary)',
                     }}
                 >
                     <input
@@ -222,7 +222,7 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                         viewBox="0 0 24 24"
                         stroke="currentColor"
                         strokeWidth={1.5}
-                        style={{ color: dragOver ? '#5B7FFF' : 'rgba(200,208,255,0.6)' }}
+                        style={{ color: dragOver ? 'var(--accent)' : 'var(--text-secondary)' }}
                     >
                         <path
                             strokeLinecap="round"
@@ -231,13 +231,13 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                         />
                     </svg>
                     {loading ? (
-                        <p className="text-sm font-bold" style={{ color: '#5B7FFF' }}>
+                        <p className="text-sm font-bold" style={{ color: 'var(--accent)' }}>
                             Analisando arquivos...
                         </p>
                     ) : (
                         <>
                             <p className="text-sm font-bold">Arraste o relatório SAGE aqui ou clique para selecionar</p>
-                            <p className="text-xs mt-1" style={{ color: 'rgba(200,208,255,0.5)' }}>
+                            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                                 Aceita .xlsx, .xls e múltiplos .xml
                             </p>
                         </>
@@ -250,9 +250,9 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                 <div
                     className="p-4 rounded-lg text-sm"
                     style={{
-                        background: 'rgba(255,68,102,0.08)',
-                        border: '1px solid rgba(255,68,102,0.2)',
-                        color: '#FF4466',
+                        background: 'var(--danger-soft)',
+                        border: '1px solid var(--danger)',
+                        color: 'var(--danger)',
                     }}
                 >
                     {error}
@@ -264,10 +264,10 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                 <>
                     {/* Resumo cards */}
                     <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                        <CardResumo titulo="Total" valor={analise.totalNotas} cor="#5B7FFF" />
-                        <CardResumo titulo="Regulares" valor={analise.resumo.regulares} cor="#00C896" />
-                        <CardResumo titulo="Canceladas" valor={analise.resumo.canceladas} cor="#FF4466" onClick={() => setAba('canceladas')} />
-                        <CardResumo titulo="Denegadas" valor={analise.resumo.denegadas} cor="#F5A623" onClick={() => setAba('denegadas')} />
+                        <CardResumo titulo="Total" valor={analise.totalNotas} cor="var(--accent)" />
+                        <CardResumo titulo="Regulares" valor={analise.resumo.regulares} cor="var(--success)" />
+                        <CardResumo titulo="Canceladas" valor={analise.resumo.canceladas} cor="var(--danger)" onClick={() => setAba('canceladas')} />
+                        <CardResumo titulo="Denegadas" valor={analise.resumo.denegadas} cor="var(--warning)" onClick={() => setAba('denegadas')} />
                         <CardResumo titulo="Inutilizadas" valor={analise.resumo.inutilizadas} cor="#8E5BFF" onClick={() => setAba('inutilizadas')} />
                         <CardResumo
                             titulo="Notas faltantes"
@@ -280,13 +280,13 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
 
                     {/* Resumo Entrada/Saída */}
                     <div className="grid grid-cols-3 gap-3">
-                        <CardResumo titulo="Entradas" valor={analise.porSentido.entrada.length} cor="#5B7FFF" />
-                        <CardResumo titulo="Saídas" valor={analise.porSentido.saida.length} cor="#1400FF" />
+                        <CardResumo titulo="Entradas" valor={analise.porSentido.entrada.length} cor="var(--accent)" />
+                        <CardResumo titulo="Saídas" valor={analise.porSentido.saida.length} cor="var(--accent)" />
                         <CardResumo titulo="Sem identif. E/S" valor={analise.porSentido.desconhecido.length} cor="#888EAA" onClick={() => setAba('desconhecidas')} />
                     </div>
 
                     {analise.tabsLidas.length > 0 && (
-                        <div className="text-xs" style={{ color: 'rgba(200,208,255,0.5)' }}>
+                        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
                             Origem: {analise.tabsLidas.map((t) => `"${t}"`).join(', ')}
                         </div>
                     )}
@@ -294,17 +294,17 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                     {/* Configuração de detecção de gaps */}
                     <div
                         className="p-4 rounded-lg space-y-3 text-xs"
-                        style={{ background: 'rgba(8,0,122,0.06)', border: '1px solid rgba(200,208,255,0.08)' }}
+                        style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}
                     >
-                        <div style={{ color: 'rgba(200,208,255,0.7)' }}>
-                            <b style={{ color: '#F5F6FF' }}>Como o sistema decide o que é "nota faltante":</b> uma nota
+                        <div style={{ color: 'var(--text-secondary)' }}>
+                            <b style={{ color: 'var(--text-primary)' }}>Como o sistema decide o que é "nota faltante":</b> uma nota
                             só é considerada faltante se o número estiver ausente <i>entre</i> notas presentes no relatório,
                             e o tamanho do salto for pequeno o suficiente para parecer real (caso contrário é só uma
                             nota fora do recorte do relatório, não algo perdido).
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                             <label className="flex flex-col gap-1">
-                                <span style={{ color: 'rgba(200,208,255,0.7)' }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>
                                     Salto máx. em <b>ENTRADAS</b> (notas de fornecedores)
                                 </span>
                                 <input
@@ -316,18 +316,18 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                                     onChange={(e) => setMaxGapEntrada(Math.max(1, parseInt(e.target.value || '3', 10)))}
                                     className="w-full px-2 py-1.5 rounded"
                                     style={{
-                                        background: 'rgba(255,255,255,0.04)',
-                                        border: '1px solid rgba(200,208,255,0.1)',
-                                        color: semLimite ? 'rgba(200,208,255,0.3)' : '#F5F6FF',
+                                        background: 'var(--bg-card)',
+                                        border: '1px solid var(--border-default)',
+                                        color: semLimite ? 'var(--text-muted)' : 'var(--text-primary)',
                                     }}
                                 />
-                                <span className="text-[10px]" style={{ color: 'rgba(200,208,255,0.4)' }}>
+                                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
                                     Recomendado: 3. Fornecedores numeram para vários clientes — saltos grandes não são
                                     seus.
                                 </span>
                             </label>
                             <label className="flex flex-col gap-1">
-                                <span style={{ color: 'rgba(200,208,255,0.7)' }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>
                                     Salto máx. em <b>SAÍDAS</b> (suas notas)
                                 </span>
                                 <input
@@ -339,19 +339,19 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                                     onChange={(e) => setMaxGapSaida(Math.max(1, parseInt(e.target.value || '50', 10)))}
                                     className="w-full px-2 py-1.5 rounded"
                                     style={{
-                                        background: 'rgba(255,255,255,0.04)',
-                                        border: '1px solid rgba(200,208,255,0.1)',
-                                        color: semLimite ? 'rgba(200,208,255,0.3)' : '#F5F6FF',
+                                        background: 'var(--bg-card)',
+                                        border: '1px solid var(--border-default)',
+                                        color: semLimite ? 'var(--text-muted)' : 'var(--text-primary)',
                                     }}
                                 />
-                                <span className="text-[10px]" style={{ color: 'rgba(200,208,255,0.4)' }}>
+                                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
                                     Recomendado: 50. Saltos maiores costumam indicar relatório parcial/multi-série.
                                 </span>
                             </label>
                             <label
                                 className="flex items-start gap-2 cursor-pointer p-2 rounded"
                                 style={{
-                                    color: 'rgba(200,208,255,0.7)',
+                                    color: 'var(--text-secondary)',
                                     background: semLimite ? 'rgba(255,138,76,0.08)' : 'transparent',
                                     border: semLimite ? '1px solid rgba(255,138,76,0.3)' : '1px solid transparent',
                                 }}
@@ -363,9 +363,9 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                                     className="mt-0.5"
                                 />
                                 <span>
-                                    <span style={{ color: '#F5F6FF', fontWeight: 600 }}>Ignorar limites</span>
+                                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Ignorar limites</span>
                                     <br />
-                                    <span className="text-[10px]" style={{ color: 'rgba(200,208,255,0.5)' }}>
+                                    <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
                                         Reporta todo e qualquer pulo na numeração. Útil só pra investigação detalhada —
                                         produz números muito altos com relatórios parciais.
                                     </span>
@@ -380,9 +380,9 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                             onClick={() => exportarAnalise(analise)}
                             className="px-4 py-2 rounded-lg text-xs font-bold transition-colors"
                             style={{
-                                background: 'rgba(91,127,255,0.15)',
-                                border: '1px solid rgba(91,127,255,0.4)',
-                                color: '#5B7FFF',
+                                background: 'var(--accent-soft)',
+                                border: '1px solid var(--accent-soft-border)',
+                                color: 'var(--accent)',
                             }}
                         >
                             ⬇ Exportar análise (XLSX)
@@ -393,9 +393,9 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                         <div
                             className="p-3 rounded-lg text-xs"
                             style={{
-                                background: 'rgba(245,166,35,0.08)',
-                                border: '1px solid rgba(245,166,35,0.25)',
-                                color: '#F5A623',
+                                background: 'var(--warning-soft)',
+                                border: '1px solid var(--warning-soft-border)',
+                                color: 'var(--warning)',
                             }}
                         >
                             {analise.avisos.map((a, i) => (
@@ -435,9 +435,9 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                                 placeholder="Buscar (nº NF, CNPJ, razão social, chave)"
                                 className="flex-grow p-2.5 rounded-lg text-sm"
                                 style={{
-                                    background: 'rgba(255,255,255,0.04)',
-                                    border: '1px solid rgba(200,208,255,0.1)',
-                                    color: '#F5F6FF',
+                                    background: 'var(--bg-card)',
+                                    border: '1px solid var(--border-default)',
+                                    color: 'var(--text-primary)',
                                 }}
                             />
                             <select
@@ -445,9 +445,9 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                                 onChange={(e) => setFiltroSentido(e.target.value as any)}
                                 className="p-2.5 rounded-lg text-sm"
                                 style={{
-                                    background: 'rgba(255,255,255,0.04)',
-                                    border: '1px solid rgba(200,208,255,0.1)',
-                                    color: '#F5F6FF',
+                                    background: 'var(--bg-card)',
+                                    border: '1px solid var(--border-default)',
+                                    color: 'var(--text-primary)',
                                 }}
                             >
                                 <option value="todos">Entrada e Saída</option>
@@ -459,9 +459,9 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                                 onClick={handleClear}
                                 className="px-4 py-2.5 rounded-lg text-sm font-medium"
                                 style={{
-                                    background: 'rgba(255,68,102,0.12)',
-                                    border: '1px solid rgba(255,68,102,0.3)',
-                                    color: '#FF4466',
+                                    background: 'var(--danger-soft)',
+                                    border: '1px solid var(--danger)',
+                                    color: 'var(--danger)',
                                 }}
                             >
                                 Nova análise
@@ -473,20 +473,20 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                     {aba === 'resumo' && (
                         <div
                             className="p-5 rounded-xl text-sm"
-                            style={{ background: 'rgba(8,0,122,0.06)', color: 'rgba(200,208,255,0.85)', border: '1px solid rgba(200,208,255,0.08)' }}
+                            style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
                         >
                             <p className="mb-2">
-                                Foram processadas <b style={{ color: '#F5F6FF' }}>{analise.totalNotas}</b> notas no total.
+                                Foram processadas <b style={{ color: 'var(--text-primary)' }}>{analise.totalNotas}</b> notas no total.
                             </p>
                             <ul className="space-y-1 list-disc list-inside">
                                 <li>
-                                    Entradas: <b style={{ color: '#F5F6FF' }}>{analise.porSentido.entrada.length}</b> · Saídas:{' '}
-                                    <b style={{ color: '#F5F6FF' }}>{analise.porSentido.saida.length}</b>
+                                    Entradas: <b style={{ color: 'var(--text-primary)' }}>{analise.porSentido.entrada.length}</b> · Saídas:{' '}
+                                    <b style={{ color: 'var(--text-primary)' }}>{analise.porSentido.saida.length}</b>
                                 </li>
                                 <li>
                                     Status — Regulares: {analise.resumo.regulares}, Canceladas:{' '}
-                                    <span style={{ color: '#FF4466' }}>{analise.resumo.canceladas}</span>, Denegadas:{' '}
-                                    <span style={{ color: '#F5A623' }}>{analise.resumo.denegadas}</span>, Inutilizadas:{' '}
+                                    <span style={{ color: 'var(--danger)' }}>{analise.resumo.canceladas}</span>, Denegadas:{' '}
+                                    <span style={{ color: 'var(--warning)' }}>{analise.resumo.denegadas}</span>, Inutilizadas:{' '}
                                     <span style={{ color: '#8E5BFF' }}>{analise.resumo.inutilizadas}</span>
                                 </li>
                                 <li>
@@ -494,7 +494,7 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                                     {analise.resumo.gapsTotal} faixa(s).
                                 </li>
                             </ul>
-                            <p className="mt-3 text-xs" style={{ color: 'rgba(200,208,255,0.5)' }}>
+                            <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
                                 Clique em qualquer card acima ou em uma das abas para ver o detalhamento.
                             </p>
                         </div>
@@ -539,18 +539,18 @@ const CardResumo: React.FC<{ titulo: string; valor: number; cor: string; sub?: s
         onClick={onClick}
         className={`p-3 rounded-xl ${onClick ? 'cursor-pointer hover:scale-[1.02] transition-transform' : ''}`}
         style={{
-            background: 'rgba(8,0,122,0.08)',
-            border: '1px solid rgba(200,208,255,0.1)',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-default)',
         }}
     >
-        <div className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(200,208,255,0.5)' }}>
+        <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
             {titulo}
         </div>
         <div className="text-2xl font-bold mt-1" style={{ color: cor }}>
             {valor.toLocaleString('pt-BR')}
         </div>
         {sub && (
-            <div className="text-[10px] mt-0.5" style={{ color: 'rgba(200,208,255,0.4)' }}>
+            <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
                 {sub}
             </div>
         )}
@@ -566,9 +566,9 @@ const BotaoAba: React.FC<{ ativo: boolean; onClick: () => void; children: React.
         onClick={onClick}
         className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
         style={{
-            background: ativo ? 'rgba(20,0,255,0.2)' : 'rgba(8,0,122,0.06)',
-            border: ativo ? '1px solid rgba(91,127,255,0.5)' : '1px solid rgba(200,208,255,0.1)',
-            color: ativo ? '#F5F6FF' : 'rgba(200,208,255,0.6)',
+            background: ativo ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
+            border: ativo ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
+            color: ativo ? 'var(--text-primary)' : 'var(--text-secondary)',
         }}
     >
         {children}
@@ -580,17 +580,17 @@ const TabelaGaps: React.FC<{ gaps: ReturnType<typeof Object>; totalDetectado: nu
         return (
             <div
                 className="p-6 text-center text-sm rounded-lg"
-                style={{ background: 'rgba(8,0,122,0.06)', color: 'rgba(200,208,255,0.5)', border: '1px solid rgba(200,208,255,0.08)' }}
+                style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border-subtle)' }}
             >
                 Nenhum gap de numeração detectado.
             </div>
         );
     }
     return (
-        <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid rgba(200,208,255,0.1)' }}>
+        <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--border-default)' }}>
             <table className="w-full text-xs">
-                <thead style={{ background: 'rgba(8,0,122,0.18)' }}>
-                    <tr style={{ color: 'rgba(200,208,255,0.6)' }}>
+                <thead style={{ background: 'var(--accent-soft)' }}>
+                    <tr style={{ color: 'var(--text-secondary)' }}>
                         <Th>Sentido</Th>
                         <Th>CNPJ</Th>
                         <Th>Razão Social</Th>
@@ -601,7 +601,7 @@ const TabelaGaps: React.FC<{ gaps: ReturnType<typeof Object>; totalDetectado: nu
                 </thead>
                 <tbody>
                     {(gaps as any[]).map((g, i) => (
-                        <tr key={i} style={{ borderTop: '1px solid rgba(200,208,255,0.06)', color: '#F5F6FF' }}>
+                        <tr key={i} style={{ borderTop: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>
                             <Td>{SENTIDO_LABEL[g.sentido as DocSentido]}</Td>
                             <Td>{g.cnpj || '-'}</Td>
                             <Td>{g.razaoSocial || '-'}</Td>
@@ -620,7 +620,7 @@ const TabelaGaps: React.FC<{ gaps: ReturnType<typeof Object>; totalDetectado: nu
                 </tbody>
             </table>
             {gaps.length < totalDetectado && (
-                <div className="p-2 text-center text-[10px]" style={{ color: 'rgba(200,208,255,0.4)' }}>
+                <div className="p-2 text-center text-[10px]" style={{ color: 'var(--text-muted)' }}>
                     Mostrando {gaps.length} de {totalDetectado}. Use a busca/filtro para refinar.
                 </div>
             )}
@@ -633,17 +633,17 @@ const TabelaNotas: React.FC<{ notas: SageNota[]; totalDetectado: number }> = ({ 
         return (
             <div
                 className="p-6 text-center text-sm rounded-lg"
-                style={{ background: 'rgba(8,0,122,0.06)', color: 'rgba(200,208,255,0.5)', border: '1px solid rgba(200,208,255,0.08)' }}
+                style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border-subtle)' }}
             >
                 Nenhuma nota nesta categoria.
             </div>
         );
     }
     return (
-        <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid rgba(200,208,255,0.1)' }}>
+        <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--border-default)' }}>
             <table className="w-full text-xs">
-                <thead style={{ background: 'rgba(8,0,122,0.18)' }}>
-                    <tr style={{ color: 'rgba(200,208,255,0.6)' }}>
+                <thead style={{ background: 'var(--accent-soft)' }}>
+                    <tr style={{ color: 'var(--text-secondary)' }}>
                         <Th>E/S</Th>
                         <Th>Status</Th>
                         <Th>Nº NF</Th>
@@ -658,7 +658,7 @@ const TabelaNotas: React.FC<{ notas: SageNota[]; totalDetectado: number }> = ({ 
                 </thead>
                 <tbody>
                     {notas.map((n, i) => (
-                        <tr key={i} style={{ borderTop: '1px solid rgba(200,208,255,0.06)', color: '#F5F6FF' }}>
+                        <tr key={i} style={{ borderTop: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>
                             <Td>{SENTIDO_LABEL[n.sentido]}</Td>
                             <Td>
                                 <span style={{ color: corStatus(n.status), fontWeight: 600 }}>{STATUS_LABEL[n.status]}</span>
@@ -676,7 +676,7 @@ const TabelaNotas: React.FC<{ notas: SageNota[]; totalDetectado: number }> = ({ 
                 </tbody>
             </table>
             {notas.length < totalDetectado && (
-                <div className="p-2 text-center text-[10px]" style={{ color: 'rgba(200,208,255,0.4)' }}>
+                <div className="p-2 text-center text-[10px]" style={{ color: 'var(--text-muted)' }}>
                     Mostrando {notas.length} de {totalDetectado}. Use a busca/filtro para refinar.
                 </div>
             )}
@@ -699,15 +699,15 @@ const Td: React.FC<{ children: React.ReactNode; align?: 'left' | 'right' }> = ({
 function corStatus(s: DocStatus): string {
     switch (s) {
         case 'cancelada':
-            return '#FF4466';
+            return 'var(--danger)';
         case 'denegada':
-            return '#F5A623';
+            return 'var(--warning)';
         case 'inutilizada':
             return '#8E5BFF';
         case 'regular':
-            return '#00C896';
+            return 'var(--success)';
         default:
-            return 'rgba(200,208,255,0.5)';
+            return 'var(--text-muted)';
     }
 }
 

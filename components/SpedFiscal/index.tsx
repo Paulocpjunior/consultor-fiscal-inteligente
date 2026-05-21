@@ -201,22 +201,22 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             <div
                 className="p-6 rounded-xl"
                 style={{
-                    background: 'linear-gradient(135deg, rgba(20,0,255,0.12), rgba(8,0,122,0.08))',
-                    border: '1px solid rgba(200,208,255,0.12)',
+                    background: 'linear-gradient(135deg, var(--accent-soft), var(--bg-elevated))',
+                    border: '1px solid var(--border-default)',
                 }}
             >
                 <div className="flex items-start justify-between flex-wrap gap-4">
                     <div>
-                        <h2 className="text-2xl font-bold" style={{ color: '#F5F6FF' }}>
+                        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
                             SPED Fiscal
                         </h2>
-                        <p className="text-sm mt-1" style={{ color: 'rgba(200,208,255,0.6)' }}>
+                        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
                             EFD ICMS/IPI — Guia Prático 3.2.2 / Leiaute 020
                         </p>
                     </div>
                     <span
                         className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full"
-                        style={{ background: 'rgba(91,127,255,0.18)', color: '#5B7FFF' }}
+                        style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
                     >
                         Fase 1 — Bloco 0 + 9
                     </span>
@@ -226,24 +226,24 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {/* Lista de empresas elegíveis */}
             <div
                 className="p-5 rounded-xl"
-                style={{ background: 'rgba(8,0,122,0.08)', border: '1px solid rgba(200,208,255,0.08)' }}
+                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}
             >
-                <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: 'rgba(200,208,255,0.6)' }}>
+                <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--text-secondary)' }}>
                     1. Empresa
                 </h3>
                 {loadingEmpresas ? (
-                    <p className="text-xs" style={{ color: 'rgba(200,208,255,0.4)' }}>Carregando empresas...</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Carregando empresas...</p>
                 ) : empresas.length === 0 ? (
-                    <p className="text-xs" style={{ color: 'rgba(200,208,255,0.4)' }}>Nenhuma empresa cadastrada.</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nenhuma empresa cadastrada.</p>
                 ) : (
                     <select
                         value={empresaId}
                         onChange={e => { setEmpresaId(e.target.value); setMensagem(null); }}
                         className="w-full p-3 text-sm rounded-lg outline-none"
                         style={{
-                            background: 'rgba(255,255,255,0.04)',
-                            border: '1px solid rgba(200,208,255,0.1)',
-                            color: '#F5F6FF',
+                            background: 'var(--bg-card)',
+                            border: '1px solid var(--border-default)',
+                            color: 'var(--text-primary)',
                         }}
                     >
                         {empresas.map(e => (
@@ -258,16 +258,16 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     <div
                         className="mt-3 p-3 rounded-lg flex items-start gap-3"
                         style={{
-                            background: 'rgba(201,161,74,0.1)',
-                            border: '1px solid rgba(201,161,74,0.3)',
-                            borderLeft: '4px solid #C9A14A',
+                            background: 'var(--warning-soft)',
+                            border: '1px solid var(--warning-soft-border)',
+                            borderLeft: '4px solid var(--warning)',
                         }}
                     >
                         <div className="flex-1">
-                            <p className="text-xs font-bold" style={{ color: '#C9A14A' }}>
+                            <p className="text-xs font-bold" style={{ color: 'var(--warning)' }}>
                                 ⚠ Verificar obrigatoriedade
                             </p>
-                            <p className="text-xs mt-1" style={{ color: 'rgba(200,208,255,0.7)' }}>
+                            <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
                                 Empresas do Simples Nacional geralmente <strong>não entregam SPED Fiscal</strong>.
                                 Casos específicos exigem entrega (substituição tributária, ICMS-ST, importação,
                                 ME/EPP impedida do Simples). Confirme com o contador antes de gerar.
@@ -280,14 +280,14 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {/* Período */}
             <div
                 className="p-5 rounded-xl"
-                style={{ background: 'rgba(8,0,122,0.08)', border: '1px solid rgba(200,208,255,0.08)' }}
+                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}
             >
-                <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: 'rgba(200,208,255,0.6)' }}>
+                <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--text-secondary)' }}>
                     2. Período
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'rgba(200,208,255,0.5)' }}>
+                        <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>
                             Escopo
                         </label>
                         <div className="flex gap-2">
@@ -295,9 +295,9 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 onClick={() => setEscopo('mensal')}
                                 className="flex-1 py-2 text-sm rounded-lg transition-colors"
                                 style={{
-                                    background: escopo === 'mensal' ? 'rgba(20,0,255,0.2)' : 'rgba(255,255,255,0.04)',
-                                    border: `1px solid ${escopo === 'mensal' ? 'rgba(20,0,255,0.45)' : 'rgba(200,208,255,0.1)'}`,
-                                    color: escopo === 'mensal' ? '#F5F6FF' : 'rgba(200,208,255,0.5)',
+                                    background: escopo === 'mensal' ? 'var(--accent-soft-border)' : 'var(--bg-card)',
+                                    border: `1px solid ${escopo === 'mensal' ? 'var(--accent-soft-border)' : 'var(--border-default)'}`,
+                                    color: escopo === 'mensal' ? 'var(--text-primary)' : 'var(--text-muted)',
                                 }}
                             >
                                 Mensal
@@ -306,9 +306,9 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 onClick={() => setEscopo('trimestral')}
                                 className="flex-1 py-2 text-sm rounded-lg transition-colors"
                                 style={{
-                                    background: escopo === 'trimestral' ? 'rgba(20,0,255,0.2)' : 'rgba(255,255,255,0.04)',
-                                    border: `1px solid ${escopo === 'trimestral' ? 'rgba(20,0,255,0.45)' : 'rgba(200,208,255,0.1)'}`,
-                                    color: escopo === 'trimestral' ? '#F5F6FF' : 'rgba(200,208,255,0.5)',
+                                    background: escopo === 'trimestral' ? 'var(--accent-soft-border)' : 'var(--bg-card)',
+                                    border: `1px solid ${escopo === 'trimestral' ? 'var(--accent-soft-border)' : 'var(--border-default)'}`,
+                                    color: escopo === 'trimestral' ? 'var(--text-primary)' : 'var(--text-muted)',
                                 }}
                             >
                                 Trimestral
@@ -316,7 +316,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         </div>
                     </div>
                     <div>
-                        <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'rgba(200,208,255,0.5)' }}>
+                        <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>
                             Competência {escopo === 'trimestral' ? '(qualquer mês do trimestre)' : ''}
                         </label>
                         <input
@@ -325,13 +325,13 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             onChange={e => { setCompetencia(e.target.value); setMensagem(null); }}
                             className="w-full p-2.5 text-sm rounded-lg outline-none"
                             style={{
-                                background: 'rgba(255,255,255,0.04)',
-                                border: '1px solid rgba(200,208,255,0.1)',
-                                color: '#F5F6FF',
+                                background: 'var(--bg-card)',
+                                border: '1px solid var(--border-default)',
+                                color: 'var(--text-primary)',
                             }}
                         />
                         {escopo === 'trimestral' && (
-                            <p className="text-[11px] mt-1.5" style={{ color: 'rgba(200,208,255,0.4)' }}>
+                            <p className="text-[11px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
                                 {(() => {
                                     const { inicio, fim } = getTrimestreFromCompetencia(competencia);
                                     return `Trimestre selecionado: ${inicio} a ${fim}`;
@@ -348,7 +348,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     onClick={handleGerar}
                     disabled={gerando || !empresaId}
                     className="btn-press px-8 py-4 text-white font-bold text-base rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ background: '#1400FF', minWidth: '280px' }}
+                    style={{ background: 'var(--accent)', minWidth: '280px' }}
                 >
                     {gerando ? (
                         <span className="flex items-center justify-center gap-3">
@@ -367,44 +367,44 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         background:
                             mensagem.tipo === 'success' ? 'rgba(34,197,94,0.1)' :
                             mensagem.tipo === 'error' ? 'rgba(239,68,68,0.1)' :
-                            mensagem.tipo === 'warning' ? 'rgba(201,161,74,0.1)' :
+                            mensagem.tipo === 'warning' ? 'var(--warning-soft)' :
                             'rgba(91,127,255,0.1)',
                         border: `1px solid ${
                             mensagem.tipo === 'success' ? 'rgba(34,197,94,0.3)' :
                             mensagem.tipo === 'error' ? 'rgba(239,68,68,0.3)' :
-                            mensagem.tipo === 'warning' ? 'rgba(201,161,74,0.3)' :
+                            mensagem.tipo === 'warning' ? 'var(--warning-soft-border)' :
                             'rgba(91,127,255,0.3)'
                         }`,
                         borderLeft: `4px solid ${
-                            mensagem.tipo === 'success' ? '#22C55E' :
-                            mensagem.tipo === 'error' ? '#EF4444' :
-                            mensagem.tipo === 'warning' ? '#C9A14A' :
-                            '#5B7FFF'
+                            mensagem.tipo === 'success' ? 'var(--success)' :
+                            mensagem.tipo === 'error' ? 'var(--danger)' :
+                            mensagem.tipo === 'warning' ? 'var(--warning)' :
+                            'var(--accent)'
                         }`,
                     }}
                 >
                     <div className="flex-1">
                         <p className="text-sm font-bold" style={{
-                            color: mensagem.tipo === 'success' ? '#22C55E' :
-                                   mensagem.tipo === 'error' ? '#EF4444' :
-                                   mensagem.tipo === 'warning' ? '#C9A14A' :
-                                   '#5B7FFF',
+                            color: mensagem.tipo === 'success' ? 'var(--success)' :
+                                   mensagem.tipo === 'error' ? 'var(--danger)' :
+                                   mensagem.tipo === 'warning' ? 'var(--warning)' :
+                                   'var(--accent)',
                         }}>
                             {mensagem.titulo}
                         </p>
                         {mensagem.detalhes && (
-                            <p className="text-xs mt-1.5" style={{ color: 'rgba(200,208,255,0.7)' }}>
+                            <p className="text-xs mt-1.5" style={{ color: 'var(--text-secondary)' }}>
                                 {mensagem.detalhes}
                             </p>
                         )}
                         {mensagem.extras && (
                             <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
                                 {mensagem.extras.map(e => (
-                                    <div key={e.label} className="p-2 rounded" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                                        <p className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(200,208,255,0.5)' }}>
+                                    <div key={e.label} className="p-2 rounded" style={{ background: 'var(--bg-card)' }}>
+                                        <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
                                             {e.label}
                                         </p>
-                                        <p className="text-sm font-bold" style={{ color: '#F5F6FF' }}>
+                                        <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
                                             {e.value}
                                         </p>
                                     </div>
@@ -419,15 +419,15 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             <div
                 className="p-4 rounded-xl"
                 style={{
-                    background: 'rgba(91,127,255,0.06)',
-                    border: '1px solid rgba(91,127,255,0.2)',
-                    borderLeft: '4px solid #5B7FFF',
+                    background: 'var(--accent-soft)',
+                    border: '1px solid var(--accent-soft)',
+                    borderLeft: '4px solid var(--accent)',
                 }}
             >
-                <p className="text-xs font-bold" style={{ color: '#5B7FFF' }}>
+                <p className="text-xs font-bold" style={{ color: 'var(--accent)' }}>
                     🛠️ Fase 1 — Bloco 0 e 9 implementados
                 </p>
-                <p className="text-xs mt-1" style={{ color: 'rgba(200,208,255,0.7)' }}>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
                     A geração inclui dados da empresa (registro 0000), endereço (0005),
                     contador (0100), participantes (0150), unidades (0190),
                     itens (0200) e bloco de controle (9001-9999).

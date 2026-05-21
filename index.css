@@ -48,23 +48,103 @@ body {
   animation: drawCheck 0.5s ease-out forwards;
 }
 
-/* --- Variaveis de marca SP --- */
+/* ─── Design tokens — SP Assessoria ────────────────────────────────────────
+ *
+ * Variaveis CSS aplicadas conforme tema (light/dark via classe .dark no <html>).
+ * Substituir hex hardcoded por var(--token) em components/*.tsx.
+ *
+ * Filosofia:
+ *  - LIGHT: contabilidade classica — branco/cinza/azul corporativo SP
+ *  - DARK: herdado do AI Studio mas suavizado (menos saturacao no fundo,
+ *    transparencias mais neutras pra reduzir cansaco visual)
+ * ──────────────────────────────────────────────────────────────────────── */
+
 :root {
-  --sp-bg: #020026;
-  --sp-navy: #08007A;
-  --sp-blue: #1400FF;
-  --sp-text: #F5F6FF;
-  --sp-muted: rgba(200,208,255,0.45);
-  --sp-border: rgba(200,208,255,0.1);
-  --sp-success: #00C896;
-  --sp-danger: #FF4466;
-  --sp-alert: #F5A623;
+  /* Fundos */
+  --bg-page:       #F8FAFC;
+  --bg-card:       #FFFFFF;
+  --bg-elevated:   #F1F5F9;
+  --bg-subtle:     rgba(15,23,42,0.04);
+
+  /* Texto */
+  --text-primary:    #0F172A;
+  --text-secondary:  #475569;
+  --text-muted:      #94A3B8;
+  --text-on-accent:  #FFFFFF;
+
+  /* Bordas */
+  --border-default:  #E2E8F0;
+  --border-subtle:   rgba(15,23,42,0.06);
+
+  /* Cores semanticas */
+  --accent:        #1E40AF;
+  --accent-hover:  #1E3A8A;
+  --danger:        #DC2626;
+  --success:       #059669;
+  --warning:       #D97706;
+
+  /* Soft backgrounds — pra badges, pills, hover states */
+  --accent-soft:   rgba(30,64,175,0.10);
+  --accent-soft-border: rgba(30,64,175,0.25);
+  --danger-soft:   rgba(220,38,38,0.10);
+  --warning-soft:  rgba(217,119,6,0.10);
+  --warning-soft-border: rgba(217,119,6,0.25);
+
+  /* Legacy (mantidos pra compatibilidade com codigo antigo) */
+  --sp-bg:     var(--bg-page);
+  --sp-navy:   #08007A;
+  --sp-blue:   var(--accent);
+  --sp-text:   var(--text-primary);
+  --sp-muted:  var(--text-muted);
+  --sp-border: var(--border-default);
+  --sp-success: var(--success);
+  --sp-danger:  var(--danger);
+  --sp-alert:   var(--warning);
 }
+
+html.dark {
+  /* Fundos — suavizados (era #020026, agora mais confortavel visualmente) */
+  --bg-page:       #0B1020;
+  --bg-card:       rgba(255,255,255,0.04);
+  --bg-elevated:   rgba(255,255,255,0.06);
+  --bg-subtle:     rgba(220,225,240,0.04);
+
+  /* Texto — transparencias menos azuladas, mais neutras */
+  --text-primary:    #E8EAF7;
+  --text-secondary:  rgba(220,225,240,0.70);
+  --text-muted:      rgba(220,225,240,0.45);
+  --text-on-accent:  #FFFFFF;
+
+  /* Bordas */
+  --border-default:  rgba(220,225,240,0.10);
+  --border-subtle:   rgba(220,225,240,0.06);
+
+  /* Cores semanticas — accent azul mais brilhante pra contrastar com fundo escuro */
+  --accent:        #5B7FFF;
+  --accent-hover:  #7B9BFF;
+  --danger:        #FF4466;
+  --success:       #00C896;
+  --warning:       #F5A623;
+
+  /* Soft backgrounds — pra badges, pills, hover states */
+  --accent-soft:   rgba(91,127,255,0.15);
+  --accent-soft-border: rgba(91,127,255,0.25);
+  --danger-soft:   rgba(255,68,102,0.10);
+  --warning-soft:  rgba(245,166,35,0.10);
+  --warning-soft-border: rgba(245,166,35,0.25);
+
+  /* Legacy */
+  --sp-bg:     var(--bg-page);
+  --sp-navy:   #08007A;
+  --sp-blue:   var(--accent);
+  --sp-text:   var(--text-primary);
+  --sp-muted:  var(--text-muted);
+  --sp-border: var(--border-default);
+}
+
 body {
   font-family: 'DM Sans', sans-serif;
-  background: #f8fafc;
-  transition: background-color 0.2s ease;
-}
-html.dark body {
-  background: #020026;
+  background: var(--bg-page);
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }

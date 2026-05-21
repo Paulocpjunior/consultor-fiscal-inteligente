@@ -52,25 +52,25 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{background:"#020026"}}>
-            <div className="w-full max-w-md rounded-2xl overflow-hidden animate-fade-in" style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(200,208,255,0.12)"}}>
-                <div className="p-8 text-center" style={{background:"#08007A"}}>
+        <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{background:"var(--bg-page)"}}>
+            <div className="w-full max-w-md rounded-2xl overflow-hidden animate-fade-in" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)"}}>
+                <div className="p-8 text-center" style={{background:"var(--accent-hover)"}}>
                     <div className="flex justify-center mb-4">
                         <Logo variant="light" className="h-20 w-auto" />
                     </div>
-                    <h1 className="text-2xl font-bold text-[#F5F6FF]" style={{fontFamily:"Cormorant Garamond,serif"}}>Consultor Fiscal Inteligente</h1>
-                    <p className="text-sm mt-2" style={{color:"rgba(200,208,255,0.5)"}}>Acesso Exclusivo SP Assessoria Contábil</p>
+                    <h1 className="text-2xl font-bold text-[var(--text-primary)]" style={{fontFamily:"Cormorant Garamond,serif"}}>Consultor Fiscal Inteligente</h1>
+                    <p className="text-sm mt-2" style={{color:"var(--text-muted)"}}>Acesso Exclusivo SP Assessoria Contábil</p>
 
                     <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
                         <span
-                            className="inline-flex items-center gap-1 bg-white/15 text-[#F5F6FF] text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full backdrop-blur-sm border border-white/20"
+                            className="inline-flex items-center gap-1 bg-white/15 text-[var(--text-primary)] text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full backdrop-blur-sm border border-white/20"
                             title={`Build: ${formatBuildDate(APP_BUILD_TIME)}`}
                         >
                             Versão {APP_VERSION}
                         </span>
                         <span
                             className="inline-flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full border"
-                            style={{background:"rgba(20,0,255,0.18)",borderColor:"rgba(91,127,255,0.25)",color:"rgba(200,208,255,0.85)"}}
+                            style={{background:"var(--accent-soft-border)",borderColor:"var(--accent-soft-border)",color:"var(--text-primary)"}}
                             title={`Release técnico — gerado em ${formatBuildDate(APP_BUILD_TIME)}`}
                         >
                             Release {APP_RELEASE}
@@ -78,20 +78,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     </div>
                 </div>
                 
-                <div className="p-8" style={{background:"rgba(8,0,122,0.06)"}}>
-                    <h2 className="text-xl font-bold mb-6 text-center" style={{color:"#F5F6FF",fontFamily:"Cormorant Garamond,serif"}}>
+                <div className="p-8" style={{background:"var(--bg-elevated)"}}>
+                    <h2 className="text-xl font-bold mb-6 text-center" style={{color:"var(--text-primary)",fontFamily:"Cormorant Garamond,serif"}}>
                         {isRegistering ? 'Criar Nova Conta Online' : 'Acesso ao Sistema'}
                     </h2>
                     
                     <form onSubmit={handleRegisterOrLogin} className="space-y-4">
                         {isRegistering && (
                             <div className="animate-fade-in">
-                                <label className="block text-sm font-medium mb-1" style={{color:"rgba(200,208,255,0.5)"}}>Nome do Colaborador</label>
+                                <label className="block text-sm font-medium mb-1" style={{color:"var(--text-muted)"}}>Nome do Colaborador</label>
                                 <input 
                                     type="text" 
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    className="w-full p-3 rounded-lg focus:outline-none font-normal" style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(200,208,255,0.1)",color:"#F5F6FF"}}
+                                    className="w-full p-3 rounded-lg focus:outline-none font-normal" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}
                                     placeholder="Seu nome completo"
                                     required={isRegistering}
                                 />
@@ -99,31 +99,31 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         )}
                         
                         <div>
-                            <label className="block text-sm font-medium mb-1" style={{color:"rgba(200,208,255,0.5)"}}>E-mail Corporativo</label>
+                            <label className="block text-sm font-medium mb-1" style={{color:"var(--text-muted)"}}>E-mail Corporativo</label>
                             <input 
                                 type="email" 
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="w-full p-3 rounded-lg focus:outline-none font-normal" style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(200,208,255,0.1)",color:"#F5F6FF"}}
+                                className="w-full p-3 rounded-lg focus:outline-none font-normal" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}
                                 placeholder="nome@spassessoriacontabil.com.br"
                                 required
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium mb-1" style={{color:"rgba(200,208,255,0.5)"}}>Senha</label>
+                            <label className="block text-sm font-medium mb-1" style={{color:"var(--text-muted)"}}>Senha</label>
                             <input 
                                 type="password" 
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full p-3 rounded-lg focus:outline-none font-normal" style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(200,208,255,0.1)",color:"#F5F6FF"}}
+                                className="w-full p-3 rounded-lg focus:outline-none font-normal" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}
                                 placeholder="••••••••"
                                 required
                             />
                         </div>
 
                         {error && (
-                            <div className="p-3 rounded-lg text-sm font-medium text-center" style={{background:"rgba(255,68,102,0.08)",border:"1px solid rgba(255,68,102,0.2)",color:"#FF4466"}}>
+                            <div className="p-3 rounded-lg text-sm font-medium text-center" style={{background:"var(--danger-soft)",border:"1px solid var(--danger)",color:"var(--danger)"}}>
                                 {error}
                             </div>
                         )}
@@ -131,7 +131,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         <button 
                             type="submit" 
                             disabled={isLoading}
-                            className="w-full py-3 text-white font-medium rounded-lg transition-colors disabled:opacity-50 flex justify-center items-center gap-2" style={{background:"#1400FF"}}
+                            className="w-full py-3 text-white font-medium rounded-lg transition-colors disabled:opacity-50 flex justify-center items-center gap-2" style={{background:"var(--accent)"}}
                         >
                             {isLoading ? (
                                 <>
@@ -147,15 +147,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     <div className="mt-6 text-center">
                         <button 
                             onClick={() => { setIsRegistering(!isRegistering); setError(''); }}
-                            className="text-sm font-medium hover:underline" style={{color:"#5B7FFF"}}
+                            className="text-sm font-medium hover:underline" style={{color:"var(--accent)"}}
                         >
                             {isRegistering ? 'Já tem uma conta? Faça login' : 'Primeiro acesso? Cadastre-se aqui'}
                         </button>
                     </div>
                 </div>
                 
-                <div className="p-4 flex flex-col items-center gap-2" style={{background:"rgba(8,0,122,0.15)",borderTop:"1px solid rgba(200,208,255,0.08)"}}>
-                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${isFirebaseConfigured ? 'text-[#00C896]' : 'text-[#F5A623]'}`}>
+                <div className="p-4 flex flex-col items-center gap-2" style={{background:"var(--accent-soft)",borderTop:"1px solid var(--border-subtle)"}}>
+                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${isFirebaseConfigured ? 'text-[var(--success)]' : 'text-[var(--warning)]'}`}>
                         {isFirebaseConfigured ? (
                             <>
                                 <GlobeIcon className="w-3 h-3" />
@@ -169,7 +169,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         )}
                     </div>
                     {isFirebaseConfigured && (
-                        <p className="text-[10px] text-center max-w-xs" style={{color:"rgba(200,208,255,0.3)"}}>
+                        <p className="text-[10px] text-center max-w-xs" style={{color:"var(--text-muted)"}}>
                             Acesso seguro ao Banco de Dados da SP Assessoria.
                         </p>
                     )}

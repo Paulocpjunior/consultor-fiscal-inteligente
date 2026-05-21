@@ -634,7 +634,7 @@ const App: React.FC = () => {
     const selectedEmpresa = simplesEmpresas.find(e => e.id === selectedSimplesEmpresaId);
 
     return (
-        <div className="min-h-screen transition-colors bg-slate-50 dark:bg-[#020026]" style={{fontFamily:"'DM Sans',sans-serif"}}>
+        <div className="min-h-screen transition-colors bg-slate-50 dark:bg-[var(--bg-page)]" style={{fontFamily:"'DM Sans',sans-serif"}}>
             <div className="container mx-auto px-4 max-w-screen-2xl">
                 <Header
                     theme={theme}
@@ -679,9 +679,9 @@ const App: React.FC = () => {
                                     }}
                                     className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
                                     style={{
-                                        background: searchType === type ? 'rgba(20,0,255,0.2)' : 'rgba(8,0,122,0.08)',
-                                        border: searchType === type ? '1px solid rgba(20,0,255,0.45)' : '1px solid rgba(200,208,255,0.1)',
-                                        color: searchType === type ? '#F5F6FF' : 'rgba(200,208,255,0.5)',
+                                        background: searchType === type ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
+                                        border: searchType === type ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
+                                        color: searchType === type ? 'var(--text-primary)' : 'var(--text-muted)',
                                         transform: searchType === type ? 'scale(1.05)' : 'scale(1)'
                                     }}
                                 >
@@ -702,7 +702,7 @@ const App: React.FC = () => {
                                 href="https://consulta-sp.web.app"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200" style={{background:"rgba(8,0,122,0.08)",border:"1px solid rgba(200,208,255,0.1)",color:"rgba(200,208,255,0.6)"}}
+                                className="flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200" style={{background:"var(--bg-elevated)",border:"1px solid var(--border-default)",color:"var(--text-secondary)"}}
                             >
                                 <div className="mb-2">
                                     <DocumentTextIcon className="w-5 h-5" />
@@ -722,9 +722,9 @@ const App: React.FC = () => {
                                 }}
                                 className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
                                 style={{
-                                    background: searchType === SearchType.IMPORTA_XML ? 'rgba(20,0,255,0.2)' : 'rgba(8,0,122,0.08)',
-                                    border: searchType === SearchType.IMPORTA_XML ? '1px solid rgba(20,0,255,0.45)' : '1px solid rgba(200,208,255,0.1)',
-                                    color: searchType === SearchType.IMPORTA_XML ? '#F5F6FF' : 'rgba(200,208,255,0.5)',
+                                    background: searchType === SearchType.IMPORTA_XML ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
+                                    border: searchType === SearchType.IMPORTA_XML ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
+                                    color: searchType === SearchType.IMPORTA_XML ? 'var(--text-primary)' : 'var(--text-muted)',
                                     transform: searchType === SearchType.IMPORTA_XML ? 'scale(1.05)' : 'scale(1)'
                                 }}
                             >
@@ -746,9 +746,9 @@ const App: React.FC = () => {
                                 }}
                                 className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
                                 style={{
-                                    background: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'rgba(20,0,255,0.2)' : 'rgba(8,0,122,0.08)',
-                                    border: searchType === SearchType.ANALISE_RELATORIO_SAGE ? '1px solid rgba(20,0,255,0.45)' : '1px solid rgba(200,208,255,0.1)',
-                                    color: searchType === SearchType.ANALISE_RELATORIO_SAGE ? '#F5F6FF' : 'rgba(200,208,255,0.5)',
+                                    background: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
+                                    border: searchType === SearchType.ANALISE_RELATORIO_SAGE ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
+                                    color: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'var(--text-primary)' : 'var(--text-muted)',
                                     transform: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'scale(1.05)' : 'scale(1)'
                                 }}
                             >
@@ -770,9 +770,9 @@ const App: React.FC = () => {
                                 }}
                                 className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
                                 style={{
-                                    background: searchType === SearchType.SPED_FISCAL ? 'rgba(20,0,255,0.2)' : 'rgba(8,0,122,0.08)',
-                                    border: searchType === SearchType.SPED_FISCAL ? '1px solid rgba(20,0,255,0.45)' : '1px solid rgba(200,208,255,0.1)',
-                                    color: searchType === SearchType.SPED_FISCAL ? '#F5F6FF' : 'rgba(200,208,255,0.5)',
+                                    background: searchType === SearchType.SPED_FISCAL ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
+                                    border: searchType === SearchType.SPED_FISCAL ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
+                                    color: searchType === SearchType.SPED_FISCAL ? 'var(--text-primary)' : 'var(--text-muted)',
                                     transform: searchType === SearchType.SPED_FISCAL ? 'scale(1.05)' : 'scale(1)'
                                 }}
                             >
@@ -789,17 +789,17 @@ const App: React.FC = () => {
                         {/* Standard Search Views (CFOP, NCM, Serviço, Simples, Lucro, Obrigações) */}
                         {[SearchType.CFOP, SearchType.NCM, SearchType.SERVICO, SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) && (
                             <>
-                                <div className={`p-6 rounded-xl mb-6 animate-fade-in ${[SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) ? 'hidden' : ''}`} style={{background:"rgba(8,0,122,0.08)",border:"1px solid rgba(200,208,255,0.08)"}}>
+                                <div className={`p-6 rounded-xl mb-6 animate-fade-in ${[SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) ? 'hidden' : ''}`} style={{background:"var(--bg-elevated)",border:"1px solid var(--border-subtle)"}}>
                                     <div className="flex items-center gap-4 mb-4">
                                         <button
                                             onClick={() => setMode('single')}
-                                            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors`} style={{background:mode==='single'?'rgba(20,0,255,0.15)':'transparent',color:mode==='single'?'#5B7FFF':'rgba(200,208,255,0.4)'}}
+                                            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors`} style={{background:mode==='single'?'var(--accent-soft)':'transparent',color:mode==='single'?'var(--accent)':'var(--text-muted)'}}
                                         >
                                             Consulta Individual
                                         </button>
                                         <button
                                             onClick={() => setMode('compare')}
-                                            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors`} style={{background:mode==='compare'?'rgba(20,0,255,0.15)':'transparent',color:mode==='compare'?'#5B7FFF':'rgba(200,208,255,0.4)'}}
+                                            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors`} style={{background:mode==='compare'?'var(--accent-soft)':'transparent',color:mode==='compare'?'var(--accent)':'var(--text-muted)'}}
                                         >
                                             Comparar Tópicos
                                         </button>
@@ -816,7 +816,7 @@ const App: React.FC = () => {
                                                 onChange={(e) => { setQuery1(e.target.value); if (validationErrors.query1) setValidationErrors({ ...validationErrors, query1: '' }); }}
                                                 onKeyDown={(e) => e.key === 'Enter' && handleSearch(query1, query2)}
                                                 placeholder={mode === 'single' ? `Digite o termo ou dúvida sobre ${searchType}` : `Primeiro termo ${searchType}`}
-                                                className='w-full pl-10 pr-4 py-3 rounded-lg outline-none transition-all font-normal' style={{background:'rgba(255,255,255,0.04)',border:validationErrors.query1?'1px solid #FF4466':'1px solid rgba(200,208,255,0.1)',color:'#F5F6FF'}}
+                                                className='w-full pl-10 pr-4 py-3 rounded-lg outline-none transition-all font-normal' style={{background:'var(--bg-card)',border:validationErrors.query1?'1px solid var(--danger)':'1px solid var(--border-default)',color:'var(--text-primary)'}}
                                                 aria-label="Campo de busca principal"
                                                 aria-invalid={!!validationErrors.query1}
                                                 aria-describedby="query1-error"
@@ -835,7 +835,7 @@ const App: React.FC = () => {
                                                     onChange={(e) => { setQuery2(e.target.value); if (validationErrors.query2) setValidationErrors({ ...validationErrors, query2: '' }); }}
                                                     onKeyDown={(e) => e.key === 'Enter' && handleSearch(query1, query2)}
                                                     placeholder={`Segundo termo ${searchType}`}
-                                                    className='w-full pl-10 pr-4 py-3 rounded-lg outline-none transition-all font-normal' style={{background:'rgba(255,255,255,0.04)',border:validationErrors.query2?'1px solid #FF4466':'1px solid rgba(200,208,255,0.1)',color:'#F5F6FF'}}
+                                                    className='w-full pl-10 pr-4 py-3 rounded-lg outline-none transition-all font-normal' style={{background:'var(--bg-card)',border:validationErrors.query2?'1px solid var(--danger)':'1px solid var(--border-default)',color:'var(--text-primary)'}}
                                                     aria-label="Segundo campo de busca para comparação"
                                                 />
                                                 {validationErrors.query2 && <p className="text-xs text-red-500 mt-1">{validationErrors.query2}</p>}
@@ -845,7 +845,7 @@ const App: React.FC = () => {
                                         <button
                                             onClick={() => handleSearch(query1, query2)}
                                             disabled={isLoading}
-                                            className="btn-press px-6 py-3 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 min-w-[120px]" style={{background:"#1400FF"}}
+                                            className="btn-press px-6 py-3 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 min-w-[120px]" style={{background:"var(--accent)"}}
                                         >
                                             {isLoading ? (
                                                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -857,18 +857,18 @@ const App: React.FC = () => {
 
                                     {/* Advanced Context Options */}
                                     {[SearchType.CFOP, SearchType.NCM, SearchType.SERVICO].includes(searchType) && (
-                                        <div className="mt-6 pt-6" style={{borderTop:"1px solid rgba(200,208,255,0.08)"}}>
+                                        <div className="mt-6 pt-6" style={{borderTop:"1px solid var(--border-subtle)"}}>
                                             <div className="flex items-center justify-between mb-4">
-                                                <h3 className="text-sm font-medium uppercase tracking-wider flex items-center gap-2" style={{color:"rgba(200,208,255,0.6)"}}>
+                                                <h3 className="text-sm font-medium uppercase tracking-wider flex items-center gap-2" style={{color:"var(--text-secondary)"}}>
                                                     <CalculatorIcon className="w-4 h-4 text-sky-500" />
                                                     Contexto Adicional para IA
                                                 </h3>
-                                                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium uppercase" style={{background:"rgba(20,0,255,0.1)",color:"#5B7FFF"}}>Opcional</span>
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium uppercase" style={{background:"var(--accent-soft)",color:"var(--accent)"}}>Opcional</span>
                                             </div>
 
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                                 <div className="md:col-span-2">
-                                                    <label className="text-xs font-medium uppercase flex items-center gap-1 mb-2" style={{color:"rgba(200,208,255,0.4)"}}>
+                                                    <label className="text-xs font-medium uppercase flex items-center gap-1 mb-2" style={{color:"var(--text-muted)"}}>
                                                         Notas / Observações da Operação
                                                         <Tooltip content="Adicione contexto específico para a análise da IA.">
                                                             <InfoIcon className="w-3 h-3 text-slate-400 cursor-help" />
@@ -877,14 +877,14 @@ const App: React.FC = () => {
                                                     <textarea
                                                         value={userNotes}
                                                         onChange={(e) => setUserNotes(e.target.value)}
-                                                        className="w-full p-3 text-sm rounded-xl font-normal resize-none h-[108px] outline-none transition-all" style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(200,208,255,0.1)",color:"#F5F6FF"}}
+                                                        className="w-full p-3 text-sm rounded-xl font-normal resize-none h-[108px] outline-none transition-all" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}
                                                         placeholder="Ex: Operação com mercadoria sujeita a ST no destino, venda para consumidor final não contribuinte..."
                                                     />
                                                 </div>
 
                                                 <div className="space-y-4">
                                                     <div>
-                                                        <label className="text-xs font-medium uppercase flex items-center gap-1 mb-1.5" style={{color:"rgba(200,208,255,0.4)"}}>
+                                                        <label className="text-xs font-medium uppercase flex items-center gap-1 mb-1.5" style={{color:"var(--text-muted)"}}>
                                                             ICMS (%)
                                                             <Tooltip content="Alíquota do ICMS.">
                                                                 <InfoIcon className="w-3 h-3 text-slate-400 cursor-help" />
@@ -894,13 +894,13 @@ const App: React.FC = () => {
                                                             type="number" min="0" max="100"
                                                             value={aliquotaIcms}
                                                             onChange={e => { setAliquotaIcms(e.target.value); if (validationErrors.aliquotaIcms) setValidationErrors({ ...validationErrors, aliquotaIcms: '' }); }}
-                                                            className='w-full p-2 text-sm rounded-lg font-normal outline-none' style={{background:'rgba(255,255,255,0.04)',border:validationErrors.aliquotaIcms?'1px solid #FF4466':'1px solid rgba(200,208,255,0.1)',color:'#F5F6FF'}}
+                                                            className='w-full p-2 text-sm rounded-lg font-normal outline-none' style={{background:'var(--bg-card)',border:validationErrors.aliquotaIcms?'1px solid var(--danger)':'1px solid var(--border-default)',color:'var(--text-primary)'}}
                                                             placeholder="0.00"
                                                         />
                                                         {validationErrors.aliquotaIcms && <p className="text-[10px] text-red-500 mt-1">{validationErrors.aliquotaIcms}</p>}
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs font-medium uppercase flex items-center gap-1 mb-1.5" style={{color:"rgba(200,208,255,0.4)"}}>
+                                                        <label className="text-xs font-medium uppercase flex items-center gap-1 mb-1.5" style={{color:"var(--text-muted)"}}>
                                                             PIS/COFINS (%)
                                                             <Tooltip content="Alíquota combinada.">
                                                                 <InfoIcon className="w-3 h-3 text-slate-400 cursor-help" />
@@ -910,13 +910,13 @@ const App: React.FC = () => {
                                                             type="number" min="0" max="100"
                                                             value={aliquotaPisCofins}
                                                             onChange={e => { setAliquotaPisCofins(e.target.value); if (validationErrors.aliquotaPisCofins) setValidationErrors({ ...validationErrors, aliquotaPisCofins: '' }); }}
-                                                            className='w-full p-2 text-sm rounded-lg font-normal outline-none' style={{background:'rgba(255,255,255,0.04)',border:validationErrors.aliquotaPisCofins?'1px solid #FF4466':'1px solid rgba(200,208,255,0.1)',color:'#F5F6FF'}}
+                                                            className='w-full p-2 text-sm rounded-lg font-normal outline-none' style={{background:'var(--bg-card)',border:validationErrors.aliquotaPisCofins?'1px solid var(--danger)':'1px solid var(--border-default)',color:'var(--text-primary)'}}
                                                             placeholder="0.00"
                                                         />
                                                         {validationErrors.aliquotaPisCofins && <p className="text-[10px] text-red-500 mt-1">{validationErrors.aliquotaPisCofins}</p>}
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs font-medium uppercase flex items-center gap-1 mb-1.5" style={{color:"rgba(200,208,255,0.4)"}}>
+                                                        <label className="text-xs font-medium uppercase flex items-center gap-1 mb-1.5" style={{color:"var(--text-muted)"}}>
                                                             ISS (%)
                                                             <Tooltip content="Alíquota do ISS.">
                                                                 <InfoIcon className="w-3 h-3 text-slate-400 cursor-help" />
@@ -926,7 +926,7 @@ const App: React.FC = () => {
                                                             type="number" min="0" max="100"
                                                             value={aliquotaIss}
                                                             onChange={e => { setAliquotaIss(e.target.value); if (validationErrors.aliquotaIss) setValidationErrors({ ...validationErrors, aliquotaIss: '' }); }}
-                                                            className='w-full p-2 text-sm rounded-lg font-normal outline-none' style={{background:'rgba(255,255,255,0.04)',border:validationErrors.aliquotaIss?'1px solid #FF4466':'1px solid rgba(200,208,255,0.1)',color:'#F5F6FF'}}
+                                                            className='w-full p-2 text-sm rounded-lg font-normal outline-none' style={{background:'var(--bg-card)',border:validationErrors.aliquotaIss?'1px solid var(--danger)':'1px solid var(--border-default)',color:'var(--text-primary)'}}
                                                             placeholder="0.00"
                                                         />
                                                         {validationErrors.aliquotaIss && <p className="text-[10px] text-red-500 mt-1">{validationErrors.aliquotaIss}</p>}
@@ -935,18 +935,18 @@ const App: React.FC = () => {
                                             </div>
 
                                             {searchType === SearchType.SERVICO && (
-                                                <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl" style={{background:"rgba(8,0,122,0.06)",border:"1px solid rgba(200,208,255,0.07)"}}>
+                                                <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl" style={{background:"var(--bg-elevated)",border:"1px solid var(--border-subtle)"}}>
                                                     <div>
-                                                        <label className="text-xs font-medium uppercase" style={{color:"rgba(200,208,255,0.4)"}}>Município Prestador</label>
-                                                        <input type="text" value={municipio} onChange={e => setMunicipio(e.target.value)} className="w-full mt-1 p-2 text-sm rounded-lg font-normal" style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(200,208,255,0.1)",color:"#F5F6FF"}} placeholder="Ex: São Paulo" />
+                                                        <label className="text-xs font-medium uppercase" style={{color:"var(--text-muted)"}}>Município Prestador</label>
+                                                        <input type="text" value={municipio} onChange={e => setMunicipio(e.target.value)} className="w-full mt-1 p-2 text-sm rounded-lg font-normal" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}} placeholder="Ex: São Paulo" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs font-medium uppercase" style={{color:"rgba(200,208,255,0.4)"}}>Tomador (Opcional)</label>
-                                                        <input type="text" value={alias} onChange={e => setAlias(e.target.value)} className="w-full mt-1 p-2 text-sm rounded-lg font-normal" style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(200,208,255,0.1)",color:"#F5F6FF"}} placeholder="Ex: Empresa X" />
+                                                        <label className="text-xs font-medium uppercase" style={{color:"var(--text-muted)"}}>Tomador (Opcional)</label>
+                                                        <input type="text" value={alias} onChange={e => setAlias(e.target.value)} className="w-full mt-1 p-2 text-sm rounded-lg font-normal" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}} placeholder="Ex: Empresa X" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs font-medium uppercase" style={{color:"rgba(200,208,255,0.4)"}}>Regime (Opcional)</label>
-                                                        <select value={regimeTributario} onChange={e => setRegimeTributario(e.target.value)} className="w-full mt-1 p-2 text-sm rounded-lg font-normal" style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(200,208,255,0.1)",color:"#F5F6FF"}}>
+                                                        <label className="text-xs font-medium uppercase" style={{color:"var(--text-muted)"}}>Regime (Opcional)</label>
+                                                        <select value={regimeTributario} onChange={e => setRegimeTributario(e.target.value)} className="w-full mt-1 p-2 text-sm rounded-lg font-normal" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}>
                                                             <option value="">Selecione</option>
                                                             <option value="simples">Simples Nacional</option>
                                                             <option value="lucro_presumido">Lucro Presumido</option>
@@ -963,7 +963,7 @@ const App: React.FC = () => {
 
                         {/* Reforma Tributária View */}
                         {searchType === SearchType.REFORMA_TRIBUTARIA && (
-                            <div className="p-6 rounded-xl mb-6 animate-fade-in" style={{background:"rgba(8,0,122,0.08)",border:"1px solid rgba(200,208,255,0.08)"}}>
+                            <div className="p-6 rounded-xl mb-6 animate-fade-in" style={{background:"var(--bg-elevated)",border:"1px solid var(--border-subtle)"}}>
                                 <div className="flex flex-col md:flex-row gap-4">
                                     <div className="flex-grow">
                                         <input
@@ -972,7 +972,7 @@ const App: React.FC = () => {
                                             onChange={(e) => setReformaQuery(e.target.value)}
                                             onKeyDown={(e) => e.key === 'Enter' && handleReformaSearch(reformaQuery)}
                                             placeholder="Digite o CNAE ou descrição da atividade..."
-                                            className='w-full pl-4 pr-4 py-3 rounded-lg outline-none font-normal' style={{background:'rgba(255,255,255,0.04)',border:validationErrors.reformaQuery?'1px solid #FF4466':'1px solid rgba(200,208,255,0.1)',color:'#F5F6FF'}}
+                                            className='w-full pl-4 pr-4 py-3 rounded-lg outline-none font-normal' style={{background:'var(--bg-card)',border:validationErrors.reformaQuery?'1px solid var(--danger)':'1px solid var(--border-default)',color:'var(--text-primary)'}}
                                             aria-label="Busca Reforma Tributária"
                                         />
                                         {validationErrors.reformaQuery && <p className="text-xs text-red-500 mt-1">{validationErrors.reformaQuery}</p>}
@@ -980,7 +980,7 @@ const App: React.FC = () => {
                                     <button
                                         onClick={() => handleReformaSearch(reformaQuery)}
                                         disabled={isLoading}
-                                        className="btn-press px-6 py-3 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-w-[120px]" style={{background:"#1400FF"}}
+                                        className="btn-press px-6 py-3 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-w-[120px]" style={{background:"var(--accent)"}}
                                     >
                                         {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <span>Analisar Impacto</span>}
                                     </button>
