@@ -27,6 +27,11 @@ import {
   salvarRegra,
 } from '../services/categoriaFornecedorService';
 import {
+  listarOcultos,
+  ocultarFornecedor,
+  restaurarTodos as restaurarTodosOcultos,
+} from '../services/fornecedoresOcultosService';
+import {
   listarInvoicesManuais,
   adicionarInvoice,
   removerInvoice,
@@ -505,6 +510,34 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
   >(null);
   // Normaliza CNPJ (so digitos) para chave consistente no Set
   const cnpjKey = (c: string) => (c || '').replace(/\D+/g, '');
+
+  // ── Exclusao PERSISTIDA (regra "sempre nessa empresa") ──────────────────
+  // Carregado do Firestore (collection `fornecedores_ocultos`) quando a
+  // empresa muda. Modal oferece DOIS botoes:
+  //   - "So desta vez" -> vai pro Set local (fornecedoresOcultos acima)
+  //   - "Sempre nessa empresa" -> grava no Firestore E aparece aqui
+  // O calculo de credito (useMemo abaixo) usa a UNIAO dos dois Sets.
+  const [fornecedoresOcultosPersistidos, setFornecedoresOcultosPersistidos] = useState<Set<string>>(new Set());
+  const [salvandoExclusaoPersistida, setSalvandoExclusaoPersistida] = useState(false);
+
+  useEffect(() => {
+    if (!empresaSel?.id) {
+      setFornecedoresOcultosPersistidos(new Set());
+      return;
+    }
+    let alive = true;
+    listarOcultos(empresaSel.id)
+      .then(set => { if (alive) setFornecedoresOcultosPersistidos(set); })
+      .catch(e => console.error('[AnaliseCredito] listarOcultos:', e));
+    return () => { alive = false; };
+  }, [empresaSel?.id]);
+
+  // Uniao Local + Persistido — eh isso que o calculo de credito usa.
+  const fornecedoresOcultosEfetivos = useMemo(() => {
+    const s = new Set<string>(fornecedoresOcultos);
+    for (const k of fornecedoresOcultosPersistidos) s.add(k);
+    return s;
+  }, [fornecedoresOcultos, fornecedoresOcultosPersistidos]);
   const [salvandoCategoriaCredito, setSalvandoCategoriaCredito] = useState<string | null>(null);
 
   useEffect(() => {
@@ -629,14 +662,15 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     }
     const fornMesclados = Array.from(fornMap.values());
 
-    // Aplica filtro de ocultos (versao local): fornecedor excluido pelo usuario
-    // some do calculo de credito. Mesmo filtro deve ser aplicado nas NFs (pra
-    // o aninhamento de notas por categoria nao contar as do fornecedor oculto).
-    const fornFiltrados = fornMesclados.filter(f => !fornecedoresOcultos.has(cnpjKey(f.cnpjCpf)));
-    const notasFiltradas = notasMescladas.filter(n => !fornecedoresOcultos.has(cnpjKey(n.cnpjCpf)));
+    // Aplica filtro de ocultos (LOCAL + PERSISTIDO unidos): fornecedor
+    // excluido pelo usuario some do calculo de credito. Mesmo filtro deve
+    // ser aplicado nas NFs (pra o aninhamento de notas por categoria nao
+    // contar as do fornecedor oculto).
+    const fornFiltrados = fornMesclados.filter(f => !fornecedoresOcultosEfetivos.has(cnpjKey(f.cnpjCpf)));
+    const notasFiltradas = notasMescladas.filter(n => !fornecedoresOcultosEfetivos.has(cnpjKey(n.cnpjCpf)));
 
     return calcularCreditoEfiscal(fornFiltrados, regCalc, notasFiltradas, overrides, categoriasNaoCreditaveis);
-  }, [efiscal, empresaSel, overrides, invoicesManuais, categoriasNaoCreditaveis, fornecedoresOcultos]);
+  }, [efiscal, empresaSel, overrides, invoicesManuais, categoriasNaoCreditaveis, fornecedoresOcultosEfetivos]);
 
   // Aviso de divergencia de CNPJ — tambem reativo.
   const avisoCnpj = useMemo<string | null>(() => {
@@ -1534,17 +1568,39 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
               </table>
             </div>
             {/* Banner de restaurar — aparece quando ha fornecedores ocultos */}
-            {fornecedoresOcultos.size > 0 && (
-              <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-200 flex items-center justify-between">
+            {fornecedoresOcultosEfetivos.size > 0 && (
+              <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-200 flex items-center justify-between gap-3">
                 <span>
-                  {fornecedoresOcultos.size} fornecedor{fornecedoresOcultos.size > 1 ? 'es' : ''} oculto{fornecedoresOcultos.size > 1 ? 's' : ''} desta analise.
+                  {fornecedoresOcultosEfetivos.size} fornecedor{fornecedoresOcultosEfetivos.size > 1 ? 'es' : ''} oculto{fornecedoresOcultosEfetivos.size > 1 ? 's' : ''} desta analise
+                  {fornecedoresOcultosPersistidos.size > 0 && (
+                    <span className="text-amber-700 dark:text-amber-300 ml-1">
+                      ({fornecedoresOcultosPersistidos.size} 🔒 persistente{fornecedoresOcultosPersistidos.size > 1 ? 's' : ''})
+                    </span>
+                  )}.
                 </span>
                 <button
                   type="button"
-                  onClick={() => setFornecedoresOcultos(new Set())}
-                  className="ml-3 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-800/40 font-medium"
+                  onClick={async () => {
+                    // Limpa local imediatamente; persistidos requerem batch delete.
+                    setFornecedoresOcultos(new Set());
+                    if (fornecedoresOcultosPersistidos.size > 0 && empresaSel?.id) {
+                      const ok = window.confirm(
+                        `Tambem restaurar ${fornecedoresOcultosPersistidos.size} regra(s) persistente(s)?\n` +
+                        `(isso apaga as regras do Firestore — sera reversivel apenas excluindo de novo).`
+                      );
+                      if (ok) {
+                        const r = await restaurarTodosOcultos(empresaSel.id);
+                        if (r.ok) {
+                          setFornecedoresOcultosPersistidos(new Set());
+                        } else {
+                          alert('Erro ao restaurar persistentes: ' + (r.error || 'desconhecido'));
+                        }
+                      }
+                    }
+                  }}
+                  className="px-2 py-0.5 rounded border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-800/40 font-medium whitespace-nowrap"
                 >
-                  Restaurar todos
+                  Restaurar
                 </button>
               </div>
             )}
@@ -1552,11 +1608,11 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
         </>
       )}
 
-      {/* Modal de confirmacao de exclusao de fornecedor (versao local) */}
+      {/* Modal de confirmacao de exclusao de fornecedor (HIBRIDO: local OR persistido) */}
       {confirmandoExclusao && (
         <div
           className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80] animate-fade-in"
-          onClick={() => setConfirmandoExclusao(null)}
+          onClick={() => !salvandoExclusaoPersistida && setConfirmandoExclusao(null)}
         >
           <div
             className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6"
@@ -1570,19 +1626,12 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
               <div className="font-mono text-xs">CNPJ {confirmandoExclusao.cnpj}</div>
               <div className="text-xs">{confirmandoExclusao.qtdNotas} NF{confirmandoExclusao.qtdNotas > 1 ? 's' : ''} no valor total de R$ {brl(confirmandoExclusao.somaValorNf)}</div>
             </div>
-            <div className="text-xs text-amber-700 dark:text-amber-400 mb-4 p-2 bg-amber-50 dark:bg-amber-900/20 rounded">
-              ⓘ Exclusao LOCAL — vale so nesta sessao. Ao recarregar o PDF, o fornecedor volta a aparecer.
-            </div>
-            <div className="flex gap-2 justify-end">
+
+            <div className="space-y-2 mb-4">
+              {/* Opcao 1: SO DESTA VEZ (local) */}
               <button
                 type="button"
-                onClick={() => setConfirmandoExclusao(null)}
-                className="px-4 py-2 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
+                disabled={salvandoExclusaoPersistida}
                 onClick={() => {
                   setFornecedoresOcultos(prev => {
                     const next = new Set(prev);
@@ -1591,9 +1640,60 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                   });
                   setConfirmandoExclusao(null);
                 }}
-                className="px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700"
+                className="w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
               >
-                Excluir
+                <div className="font-medium text-gray-800 dark:text-gray-200 text-sm">
+                  📋 So desta vez
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Some apenas nesta sessao. Ao recarregar o PDF, fornecedor volta a aparecer.
+                </div>
+              </button>
+
+              {/* Opcao 2: SEMPRE NESSA EMPRESA (persistido) */}
+              <button
+                type="button"
+                disabled={salvandoExclusaoPersistida || !empresaSel?.id}
+                onClick={async () => {
+                  if (!empresaSel?.id) return;
+                  setSalvandoExclusaoPersistida(true);
+                  const r = await ocultarFornecedor({
+                    empresaId: empresaSel.id,
+                    cnpjFornecedor: confirmandoExclusao.cnpj,
+                    razaoSocial: confirmandoExclusao.razaoSocial,
+                  });
+                  setSalvandoExclusaoPersistida(false);
+                  if (r.ok) {
+                    setFornecedoresOcultosPersistidos(prev => {
+                      const next = new Set(prev);
+                      next.add(cnpjKey(confirmandoExclusao.cnpj));
+                      return next;
+                    });
+                    setConfirmandoExclusao(null);
+                  } else {
+                    alert('Erro ao salvar regra: ' + (r.error || 'desconhecido'));
+                  }
+                }}
+                className="w-full text-left p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50/40 dark:bg-red-900/10 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                title={empresaSel?.id ? '' : 'Selecione uma empresa para criar regra persistente'}
+              >
+                <div className="font-medium text-red-700 dark:text-red-300 text-sm">
+                  🔒 Sempre nessa empresa {salvandoExclusaoPersistida && '(salvando...)'}
+                </div>
+                <div className="text-xs text-red-600/80 dark:text-red-400/80 mt-0.5">
+                  Cadastra regra no sistema: esse fornecedor sera ignorado em toda analise futura desta empresa. Reversivel.
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                disabled={salvandoExclusaoPersistida}
+                onClick={() => setConfirmandoExclusao(null)}
+                className="px-4 py-2 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50"
+              >
+                Cancelar
               </button>
             </div>
           </div>

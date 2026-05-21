@@ -165,6 +165,18 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // fornecedores_ocultos: regras "ignorar esse fornecedor pra essa
+    // empresa para sempre" no calculo de credito PIS/COFINS.
+    // Doc ID = `${empresaId}__${cnpjDigitos}`.
+    // Leitura e escrita para qualquer usuario logado (mesmo padrao das
+    // outras regras de classificacao).
+    // ───────────────────────────────────────────────────────────────
+
+    match /fornecedores_ocultos/{regraId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // invoices_manuais: invoices lancadas manualmente, por empresa+periodo.
     // Leitura e escrita para QUALQUER usuario logado.
     // ───────────────────────────────────────────────────────────────
