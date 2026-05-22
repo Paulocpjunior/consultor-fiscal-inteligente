@@ -23,6 +23,8 @@ import * as sharepointSync from './sefaz-backend/sharepoint-sync-orchestrator.js
 import { processarAlertasSharePoint } from './sefaz-backend/sharepoint-alertas-orchestrator.js';
 import certEmpresaRouter from './sefaz-backend/cert-empresa-routes.js';
 import notificacoesRouter from './sefaz-backend/notificacoes-routes.js';
+import agentRouter from './sefaz-backend/agent-routes.js';
+import agentAdminRouter from './sefaz-backend/agent-admin-routes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +46,8 @@ app.use('/api/admin/emission', emissionRouter);
 app.use('/api/admin/nfse-nacional', nfseNacRouter);
 app.use('/api/admin/cert-empresa', certEmpresaRouter);
 app.use('/api/admin/notificacoes', notificacoesRouter);
+app.use('/api/admin/agent', agentAdminRouter);
+app.use('/api/agent', agentRouter);
 app.use('/api/internal/plano-contas', planoContasBridgeRouter);
 
 const PORT = process.env.PORT || 8080;

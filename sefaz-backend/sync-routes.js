@@ -164,7 +164,19 @@ async function listarEmpresasParaCron() {
   }
   const map = new Map();
   empresas.forEach(e => { if (!map.has(e.cnpj)) map.set(e.cnpj, e); });
-  return Array.from(map.values());
+  // Filtra empresas com tipoCert='A3' — elas só são capturadas pelo agente local cfi-a3
+  try {
+    const a3Snap = await db.collection('empresas_certificados').where('tipoCert', '==', 'A3').get();
+    const a3Ids = new Set(a3Snap.docs.map(d => d.id));
+    if (a3Ids.size > 0) {
+      console.log(`[sync-cron] pulando ${a3Ids.size} empresa(s) tipoCert=A3 (capturadas pelo agente local)`);
+    }
+    const filtradas = Array.from(map.values()).filter(e => !a3Ids.has(e.id));
+    return filtradas;
+  } catch (e) {
+    console.warn('[sync-cron] erro filtrando A3:', e.message);
+    return Array.from(map.values());
+  }
 }
 
 router.get('/state/:cnpj', requireAuth, async (req, res) => {
