@@ -8,7 +8,7 @@ import express from 'express';
 import { requireAdmin } from './require-admin.js';
 import admin from 'firebase-admin';
 import { isGraphConfigured, enviarEmail } from './graph-provider.js';
-import { coletarResumoCapturas, enviarResumoDiario } from './notificacoes-orchestrator.js';
+import { coletarResumoCapturas, enviarResumoDiario, enviarResumoIndividualizado } from './notificacoes-orchestrator.js';
 
 const router = express.Router();
 
@@ -99,24 +99,29 @@ router.post('/cron-resumo', async (req, res) => {
     }
 
     try {
-        // destinatarios: todos os users com e-mail
+        // destinatarios: todos os users com e-mail (cada um recebe resumo da sua carteira)
         const snap = await admin.firestore().collection('users').get();
-        const destinatarios = snap.docs
-            .map(d => d.data().email)
-            .filter(e => typeof e === 'string' && e.includes('@'));
+        const usuarios = snap.docs
+            .map(d => ({
+                uid: d.id,
+                email: d.data().email,
+                role: d.data().role || 'colaborador',
+                nome: d.data().nome || d.data().displayName || '',
+            }))
+            .filter(u => typeof u.email === 'string' && u.email.includes('@'));
 
-        if (destinatarios.length === 0) {
-            return res.json({ ok: true, aviso: 'nenhum destinatario com e-mail', enviados: 0 });
+        if (usuarios.length === 0) {
+            return res.json({ ok: true, aviso: 'nenhum usuario com e-mail', enviados: 0 });
         }
 
-        const r = await enviarResumoDiario({
+        const r = await enviarResumoIndividualizado({
             remetente: 'junior@spassessoriacontabil.com.br',
-            destinatarios,
+            usuarios,
             horas: 24,
         });
 
         if (r.ok) {
-            res.json({ ok: true, enviados: destinatarios.length, resumo: r.resumo });
+            res.json({ ok: true, enviados: r.enviados, falhas: r.falhas, total: usuarios.length, detalhes: r.detalhes });
         } else {
             res.status(502).json({ ok: false, error: r.error });
         }
