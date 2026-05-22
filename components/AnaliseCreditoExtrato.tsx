@@ -705,7 +705,42 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     //   1. FORNECEDOR oculto (CNPJ inteiro): some todas NFs desse CNPJ.
     //   2. NF INDIVIDUAL oculta (cnpj+numero+serie): some so essa NF.
     // Ambos sistemas: UNIAO de local + persistido (Firestore).
-    const fornFiltrados = fornMesclados.filter(f => !fornecedoresOcultosEfetivos.has(cnpjKey(f.cnpjCpf)));
+    //
+    // IMPORTANTE: calcularCreditoEfiscal soma a base por FORNECEDOR
+    // (f.somaValorNf agregado), nao iterando NFs. Entao quando excluimos
+    // UMA NF individual, precisamos DESCONTAR seus valores dos totais
+    // agregados do fornecedor afetado — senao a base nao muda (so o
+    // contador de NFs muda visualmente, dando a impressao de bug).
+    const fornFiltrados = fornMesclados
+      .filter(f => !fornecedoresOcultosEfetivos.has(cnpjKey(f.cnpjCpf)))
+      .map(f => {
+        if (notasOcultasEfetivas.size === 0) return f;
+        // Quais NFs deste fornecedor estao ocultas?
+        const ocultasDoForn = notasMescladas.filter(n =>
+          cnpjKey(n.cnpjCpf) === cnpjKey(f.cnpjCpf) &&
+          notasOcultasEfetivas.has(nfChave(n.cnpjCpf, n.numero, n.serie || ''))
+        );
+        if (ocultasDoForn.length === 0) return f;
+        // Desconta os valores das NFs ocultas dos totais agregados.
+        let dValorNf = 0, dBaseCalc = 0, dValorIss = 0, dIssRet = 0;
+        for (const n of ocultasDoForn) {
+          dValorNf  += Number(n.valorNf)    || 0;
+          dBaseCalc += Number(n.baseCalculo)|| 0;
+          dValorIss += Number(n.valorIss)   || 0;
+          dIssRet   += Number(n.issRetido)  || 0;
+        }
+        return {
+          ...f,
+          qtdNotas:        Math.max(0, f.qtdNotas        - ocultasDoForn.length),
+          somaValorNf:     Math.max(0, f.somaValorNf     - dValorNf),
+          somaBaseCalculo: Math.max(0, f.somaBaseCalculo - dBaseCalc),
+          somaValorIss:    Math.max(0, f.somaValorIss    - dValorIss),
+          somaIssRetido:   Math.max(0, f.somaIssRetido   - dIssRet),
+        };
+      })
+      // Se sobrou fornecedor sem nenhuma NF (todas excluidas individualmente),
+      // remove pra nao poluir a tabela.
+      .filter(f => f.qtdNotas > 0);
     const notasFiltradas = notasMescladas.filter(n =>
       !fornecedoresOcultosEfetivos.has(cnpjKey(n.cnpjCpf)) &&
       !notasOcultasEfetivas.has(nfChave(n.cnpjCpf, n.numero, n.serie || ''))
