@@ -22,6 +22,7 @@ export enum SearchType {
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
   CARTEIRA = 'Carteira de Clientes',
+  AGENTES_A3 = 'Agentes A3',
   EMISSAO_TRIBUTOS = 'Central de Emissões'
 }
 
