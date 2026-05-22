@@ -71,6 +71,18 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
     // Modal de reatribuir
     const [tarefaParaReatribuir, setTarefaParaReatribuir] = useState<Tarefa | null>(null);
 
+    // ── Kanban ─────────────────────────────────────────────────────────────
+    // 'lista' = tabela original (default — nao muda nada pra usuarios atuais)
+    // 'kanban' = 3 colunas drag-and-drop. Cancelada nao aparece no Kanban
+    //           (raras; gerencie pela Lista filtrando status=Cancelada).
+    const [vista, setVista] = useState<'lista' | 'kanban'>('lista');
+    // Card sendo arrastado (HTML5 drag) — null quando nao ha drag em curso.
+    const [arrastando, setArrastando] = useState<Tarefa | null>(null);
+    // Modal "Mover para" — fallback mobile quando drag-and-drop nao funciona.
+    const [tarefaParaMover, setTarefaParaMover] = useState<Tarefa | null>(null);
+    // Atualizando status (loading state pra evitar double-click)
+    const [atualizandoStatus, setAtualizandoStatus] = useState<string | null>(null);
+
     // Carrega empresas + carteira no mount
     useEffect(() => {
         if (!currentUser) return;
@@ -136,6 +148,34 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
         else setErro(r.error || 'Erro ao atualizar status');
     };
 
+    // Re-utilizada por DROP (drag-and-drop) e pelo modal "Mover" (mobile).
+    // Optimistic NAO — espera commit do Firestore antes de recarregar
+    // (assim se a regra de permissao bloquear, o usuario ve o erro).
+    const moverPara = async (t: Tarefa, novoStatus: StatusTarefa) => {
+        if (t.status === novoStatus) return;
+        setAtualizandoStatus(t.id);
+        const r = await atualizarStatus(t.id, novoStatus);
+        setAtualizandoStatus(null);
+        if (r.ok) {
+            setVersao(v => v + 1);
+            setTarefaParaMover(null);
+        } else {
+            setErro(r.error || 'Erro ao mover tarefa');
+        }
+    };
+
+    // Agrupa tarefas por status pra renderizar as 3 colunas do Kanban.
+    // Cancelada nao entra (gerenciamento pela Lista).
+    const colunas = useMemo<Record<'a_fazer' | 'em_andamento' | 'concluida', Tarefa[]>>(() => {
+        const c = { a_fazer: [] as Tarefa[], em_andamento: [] as Tarefa[], concluida: [] as Tarefa[] };
+        for (const t of tarefas) {
+            if (t.status === 'a_fazer' || t.status === 'em_andamento' || t.status === 'concluida') {
+                c[t.status].push(t);
+            }
+        }
+        return c;
+    }, [tarefas]);
+
     const handleExcluir = async (t: Tarefa) => {
         if (!isAdmin) { setErro('Apenas admin pode excluir'); return; }
         if (!confirm(`Excluir definitivamente "${t.titulo}"?`)) return;
@@ -184,12 +224,39 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
                             Gestão de prazos por empresa, obrigação e responsável.
                         </p>
                     </div>
-                    <button
-                        onClick={() => setModalCriarAberto(true)}
-                        className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm"
-                    >
-                        ➕ Nova tarefa
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {/* Toggle de vista: Lista vs Kanban */}
+                        <div className="inline-flex rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden text-xs">
+                            <button
+                                onClick={() => setVista('lista')}
+                                className={`px-3 py-2 font-medium transition-colors ${
+                                    vista === 'lista'
+                                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100'
+                                        : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                                }`}
+                                title="Vista em lista (tabela)"
+                            >
+                                📋 Lista
+                            </button>
+                            <button
+                                onClick={() => setVista('kanban')}
+                                className={`px-3 py-2 font-medium transition-colors border-l border-gray-200 dark:border-gray-700 ${
+                                    vista === 'kanban'
+                                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100'
+                                        : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                                }`}
+                                title="Vista em kanban (3 colunas)"
+                            >
+                                📊 Kanban
+                            </button>
+                        </div>
+                        <button
+                            onClick={() => setModalCriarAberto(true)}
+                            className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm"
+                        >
+                            ➕ Nova tarefa
+                        </button>
+                    </div>
                 </div>
 
                 {/* Resumo */}
@@ -279,6 +346,7 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
             )}
 
             {/* Lista */}
+            {vista === 'lista' && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 {carregando ? (
                     <div className="p-8 text-center text-gray-400">Carregando…</div>
@@ -354,6 +422,50 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
                     </div>
                 )}
             </div>
+            )}
+
+            {/* Kanban */}
+            {vista === 'kanban' && (
+                <div>
+                    {carregando ? (
+                        <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 text-center text-gray-400 shadow-sm border border-gray-100 dark:border-gray-700">Carregando…</div>
+                    ) : tarefas.length === 0 ? (
+                        <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 text-center text-gray-400 shadow-sm border border-gray-100 dark:border-gray-700">Nenhuma tarefa encontrada com esses filtros.</div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {(['a_fazer', 'em_andamento', 'concluida'] as const).map(coluna => (
+                                <ColunaKanban
+                                    key={coluna}
+                                    coluna={coluna}
+                                    tarefas={colunas[coluna]}
+                                    arrastando={arrastando}
+                                    atualizandoStatus={atualizandoStatus}
+                                    formataData={formataData}
+                                    tarefaAtrasada={tarefaAtrasada}
+                                    onDragStart={(t) => setArrastando(t)}
+                                    onDragEnd={() => setArrastando(null)}
+                                    onDrop={(t) => moverPara(t, coluna)}
+                                    onMover={(t) => setTarefaParaMover(t)}
+                                    onReatribuir={(t) => setTarefaParaReatribuir(t)}
+                                    onPegarPraMim={pegarPraMim}
+                                    onExcluir={handleExcluir}
+                                    myUid={myUid}
+                                    isAdmin={isAdmin}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Modal: mover tarefa entre colunas (fallback mobile p/ drag-and-drop) */}
+            {tarefaParaMover && (
+                <ModalMover
+                    tarefa={tarefaParaMover}
+                    onFechar={() => setTarefaParaMover(null)}
+                    onMover={(novoStatus) => moverPara(tarefaParaMover, novoStatus)}
+                />
+            )}
 
             {/* Modal: criar tarefa manual */}
             {modalCriarAberto && currentUser && (
@@ -517,6 +629,281 @@ const ModalReatribuir: React.FC<ModalReatribuirProps> = ({ tarefa, colaboradores
                             👤 {c.nome}
                         </button>
                     ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ════════════════════════════════════════════════════════════════════
+// Kanban: Coluna (3 colunas: A Fazer / Em Andamento / Concluida)
+// ════════════════════════════════════════════════════════════════════
+
+interface ColunaKanbanProps {
+    coluna: 'a_fazer' | 'em_andamento' | 'concluida';
+    tarefas: Tarefa[];
+    arrastando: Tarefa | null;
+    atualizandoStatus: string | null;
+    formataData: (d: Date | undefined) => string;
+    tarefaAtrasada: (t: Tarefa) => boolean;
+    onDragStart: (t: Tarefa) => void;
+    onDragEnd: () => void;
+    onDrop: (t: Tarefa) => void;
+    onMover: (t: Tarefa) => void;
+    onReatribuir: (t: Tarefa) => void;
+    onPegarPraMim: (t: Tarefa) => void;
+    onExcluir: (t: Tarefa) => void;
+    myUid: string | null;
+    isAdmin: boolean;
+}
+
+// Cor/icone do header de cada coluna
+const COLUNA_VISUAL: Record<'a_fazer' | 'em_andamento' | 'concluida', { titulo: string; icone: string; cor: string }> = {
+    a_fazer:      { titulo: 'A Fazer',       icone: '⚪', cor: 'border-gray-300 dark:border-gray-600' },
+    em_andamento: { titulo: 'Em Andamento',  icone: '🔵', cor: 'border-blue-300 dark:border-blue-700' },
+    concluida:    { titulo: 'Concluída',     icone: '✅', cor: 'border-green-300 dark:border-green-700' },
+};
+
+const ColunaKanban: React.FC<ColunaKanbanProps> = ({
+    coluna, tarefas, arrastando, atualizandoStatus,
+    formataData, tarefaAtrasada,
+    onDragStart, onDragEnd, onDrop, onMover, onReatribuir, onPegarPraMim, onExcluir,
+    myUid, isAdmin,
+}) => {
+    const [dragOver, setDragOver] = useState(false);
+    const visual = COLUNA_VISUAL[coluna];
+    // Drop area aceita drag de outras colunas. Se o card ja eh dessa coluna,
+    // dropar nao faz nada (moverPara faz early return).
+    const podeDropar = arrastando && arrastando.status !== coluna;
+
+    return (
+        <div
+            onDragOver={(e) => { if (podeDropar) { e.preventDefault(); setDragOver(true); } }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                if (arrastando && arrastando.status !== coluna) onDrop(arrastando);
+            }}
+            className={`bg-gray-50 dark:bg-gray-900/40 rounded-2xl border-2 ${
+                dragOver ? 'border-teal-400 dark:border-teal-500 bg-teal-50/40 dark:bg-teal-900/10' : visual.cor
+            } transition-colors flex flex-col min-h-[300px] max-h-[80vh]`}
+        >
+            <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-gray-50 dark:bg-gray-900/60 rounded-t-2xl z-10">
+                <div className="flex items-center gap-2 font-semibold text-sm text-gray-800 dark:text-gray-100">
+                    <span>{visual.icone}</span>
+                    <span>{visual.titulo}</span>
+                </div>
+                <span className="text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 px-2 py-0.5 rounded-full font-mono">
+                    {tarefas.length}
+                </span>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                {tarefas.length === 0 ? (
+                    <div className="text-center text-xs text-gray-400 dark:text-gray-500 py-8 italic">
+                        {dragOver ? 'Solte aqui' : 'Sem tarefas'}
+                    </div>
+                ) : (
+                    tarefas.map(t => (
+                        <CardKanban
+                            key={t.id}
+                            tarefa={t}
+                            atualizando={atualizandoStatus === t.id}
+                            formataData={formataData}
+                            atrasada={tarefaAtrasada(t)}
+                            onDragStart={() => onDragStart(t)}
+                            onDragEnd={onDragEnd}
+                            onMover={() => onMover(t)}
+                            onReatribuir={() => onReatribuir(t)}
+                            onPegarPraMim={() => onPegarPraMim(t)}
+                            onExcluir={() => onExcluir(t)}
+                            myUid={myUid}
+                            isAdmin={isAdmin}
+                        />
+                    ))
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ════════════════════════════════════════════════════════════════════
+// Kanban: Card (uma tarefa)
+// ════════════════════════════════════════════════════════════════════
+
+interface CardKanbanProps {
+    tarefa: Tarefa;
+    atualizando: boolean;
+    atrasada: boolean;
+    formataData: (d: Date | undefined) => string;
+    onDragStart: () => void;
+    onDragEnd: () => void;
+    onMover: () => void;
+    onReatribuir: () => void;
+    onPegarPraMim: () => void;
+    onExcluir: () => void;
+    myUid: string | null;
+    isAdmin: boolean;
+}
+
+const OBRIGACAO_COR: Record<string, string> = {
+    DAS: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200',
+    DCTFWEB: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
+    FGTS: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+    SPED: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200',
+    OUTRA: 'bg-gray-100 text-gray-700 dark:bg-gray-700/40 dark:text-gray-300',
+};
+
+const CardKanban: React.FC<CardKanbanProps> = ({
+    tarefa, atualizando, atrasada, formataData,
+    onDragStart, onDragEnd, onMover, onReatribuir, onPegarPraMim, onExcluir,
+    myUid, isAdmin,
+}) => {
+    const semDono = !tarefa.responsavel;
+    const minhaTarefa = tarefa.responsavel === myUid;
+    return (
+        <div
+            draggable
+            onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move';
+                onDragStart();
+            }}
+            onDragEnd={onDragEnd}
+            className={`bg-white dark:bg-gray-800 rounded-lg p-2.5 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md cursor-grab active:cursor-grabbing transition-all ${
+                atualizando ? 'opacity-50' : ''
+            } ${atrasada ? 'border-l-4 border-l-red-500 dark:border-l-red-400' : ''}`}
+        >
+            {/* Linha 1: badge obrigacao + empresa */}
+            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                {tarefa.obrigacao && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${OBRIGACAO_COR[tarefa.obrigacao] || OBRIGACAO_COR.OUTRA}`}>
+                        {OBRIGACAO_LABEL[tarefa.obrigacao] || tarefa.obrigacao}
+                    </span>
+                )}
+                {tarefa.competencia && (
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono">
+                        {tarefa.competencia}
+                    </span>
+                )}
+            </div>
+
+            {/* Empresa */}
+            <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 truncate" title={tarefa.empresaNome}>
+                {tarefa.empresaNome || '—'}
+            </div>
+
+            {/* Titulo */}
+            <div className="text-sm font-medium text-gray-800 dark:text-gray-100 mb-2 line-clamp-2" title={tarefa.titulo}>
+                {tarefa.titulo}
+            </div>
+
+            {/* Vencimento (vermelho se atrasada) */}
+            <div className="flex items-center justify-between gap-2 mb-2">
+                <div className={`text-[11px] ${atrasada ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>
+                    📅 {formataData(tarefa.vencimento)}
+                    {atrasada && ' (atrasada)'}
+                </div>
+            </div>
+
+            {/* Responsavel */}
+            <div className="flex items-center justify-between gap-2">
+                <div className="text-[11px] text-gray-600 dark:text-gray-400 truncate" title={tarefa.responsavelNome || ''}>
+                    {semDono ? (
+                        <span className="text-amber-700 dark:text-amber-400 italic">sem dono</span>
+                    ) : (
+                        <>👤 {tarefa.responsavelNome || tarefa.responsavel}</>
+                    )}
+                </div>
+
+                {/* Acoes (compactas) */}
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={onMover}
+                        className="text-[11px] text-gray-500 hover:text-teal-600 dark:hover:text-teal-400 p-0.5"
+                        title="Mover para outra coluna"
+                    >
+                        ➡️
+                    </button>
+                    {semDono && myUid && (
+                        <button
+                            onClick={onPegarPraMim}
+                            className="text-[11px] text-amber-600 hover:text-amber-800 dark:hover:text-amber-400 p-0.5"
+                            title="Pegar pra mim"
+                        >
+                            ✋
+                        </button>
+                    )}
+                    {(isAdmin || minhaTarefa) && (
+                        <button
+                            onClick={onReatribuir}
+                            className="text-[11px] text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 p-0.5"
+                            title="Reatribuir"
+                        >
+                            🔄
+                        </button>
+                    )}
+                    {isAdmin && (
+                        <button
+                            onClick={onExcluir}
+                            className="text-[11px] text-gray-500 hover:text-red-600 dark:hover:text-red-400 p-0.5"
+                            title="Excluir"
+                        >
+                            🗑️
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ════════════════════════════════════════════════════════════════════
+// Modal: Mover tarefa (fallback mobile p/ drag-and-drop)
+// ════════════════════════════════════════════════════════════════════
+
+interface ModalMoverProps {
+    tarefa: Tarefa;
+    onFechar: () => void;
+    onMover: (novoStatus: StatusTarefa) => void;
+}
+
+const ModalMover: React.FC<ModalMoverProps> = ({ tarefa, onFechar, onMover }) => {
+    return (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onFechar}>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+                <h3 className="text-base font-bold text-gray-800 dark:text-gray-100 mb-1">Mover tarefa</h3>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-3 truncate" title={tarefa.titulo}>
+                    {tarefa.titulo}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    De <span className="font-semibold">{STATUS_LABEL[tarefa.status]}</span> para:
+                </div>
+                <div className="space-y-2">
+                    {(['a_fazer', 'em_andamento', 'concluida', 'cancelada'] as StatusTarefa[]).map(s => {
+                        const eAtual = s === tarefa.status;
+                        return (
+                            <button
+                                key={s}
+                                disabled={eAtual}
+                                onClick={() => onMover(s)}
+                                className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                                    eAtual
+                                        ? 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                                        : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200'
+                                }`}
+                            >
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COR[s]} mr-2`}>
+                                    {STATUS_LABEL[s]}
+                                </span>
+                                {eAtual && <span className="text-[10px] text-gray-400">(atual)</span>}
+                            </button>
+                        );
+                    })}
+                </div>
+                <div className="mt-4 flex justify-end">
+                    <button onClick={onFechar} className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                        Cancelar
+                    </button>
                 </div>
             </div>
         </div>
