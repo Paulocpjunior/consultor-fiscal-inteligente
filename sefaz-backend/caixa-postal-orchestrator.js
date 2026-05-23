@@ -182,27 +182,67 @@ export async function listarMensagensLocais({ empresaCnpj, naoLidas, categoria }
  */
 export async function getResumoGlobal(cnpjsPermitidos = null) {
     const db = fa().firestore();
-    // FIX 23/05: removido .limit(1000) que cortava a contagem em 1000 de 4091 docs.
-    // .select() reduz payload: traz so os 4 campos que importam pra agregacao.
+
+    // 23/05 Patch B: usa aggregation queries (.count()) em vez de baixar todos
+    // os docs. 4091 reads -> ~6 reads por chamada. Latencia ~50ms vs ~2s.
+    //
+    // Caminho rapido: admin (sem filtro de carteira) — usa count().
+    if (cnpjsPermitidos === null) {
+        const col = db.collection(COLLECTION);
+        const CATS = ['intimacao', 'malha', 'exclusao', 'informativo'];
+
+        // 5 counts em paralelo: total geral + 4 nao-lidas por categoria
+        const [totalAgg, ...porCatAgg] = await Promise.all([
+            col.count().get(),
+            ...CATS.map(c =>
+                col.where('categoria', '==', c)
+                   .where('dataLeitura', '==', null)
+                   .count().get()
+            ),
+        ]);
+
+        const porCategoria = {};
+        CATS.forEach((c, i) => {
+            const n = porCatAgg[i].data().count;
+            if (n > 0) porCategoria[c] = n;
+        });
+
+        const naoLidasTotal = Object.values(porCategoria).reduce((a, b) => a + b, 0);
+
+        // Empresas com criticas: precisa fetch (~48 docs hoje, bem menor que 4091).
+        const criticasSnap = await col
+            .where('categoria', 'in', ['intimacao', 'malha', 'exclusao'])
+            .where('dataLeitura', '==', null)
+            .select('empresaCnpj')
+            .get();
+        const empresasComCriticas = new Set(
+            criticasSnap.docs.map(d => d.data().empresaCnpj)
+        );
+
+        return {
+            totalMensagens: totalAgg.data().count,
+            naoLidasTotal,
+            naoLidasPorCategoria: porCategoria,
+            empresasComCriticas: empresasComCriticas.size,
+            mode: getProviderMode(),
+        };
+    }
+
+    // Caminho carteira (colaborador): mantem agregacao em memoria.
+    // Firestore 'where in' tem limite 30 valores e colaborador pode ter 50+ empresas.
     const snap = await db.collection(COLLECTION)
         .select('empresaCnpj', 'categoria', 'dataLeitura')
         .get();
     let docs = snap.docs.map(d => d.data());
 
-    // Filtro opcional por carteira: se vier uma lista de CNPJs, conta so
-    // mensagens dessas empresas. null = sem filtro (resumo global, admin).
-    if (Array.isArray(cnpjsPermitidos)) {
-        const permitidos = new Set(cnpjsPermitidos.map(_normCnpj));
-        docs = docs.filter(d => permitidos.has(_normCnpj(d.empresaCnpj)));
-    }
+    const permitidos = new Set(cnpjsPermitidos.map(_normCnpj));
+    docs = docs.filter(d => permitidos.has(_normCnpj(d.empresaCnpj)));
 
     const naoLidas = docs.filter(d => !d.dataLeitura);
-
     const porCategoria = {};
     for (const d of naoLidas) {
         porCategoria[d.categoria] = (porCategoria[d.categoria] || 0) + 1;
     }
-
     const empresasComCriticas = new Set();
     for (const d of naoLidas) {
         if (d.categoria === 'intimacao' || d.categoria === 'malha' || d.categoria === 'exclusao') {
