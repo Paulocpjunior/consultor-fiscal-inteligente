@@ -25,7 +25,7 @@ function fa() {
 const PASTA_RAIZ = 'Empresas';
 const STATE_COLLECTION = 'sharepoint_alertas_state';
 const STATE_DOC = 'empresas';
-const REMETENTE = 'junior@spassessoriacontabil.com.br';
+const REMETENTE = process.env.NOTIF_REMETENTE_EMAIL || '';
 const MAX_DEPTH = 6;  // profundidade maxima da recursao (trava de seguranca)
 
 /**

@@ -19,7 +19,7 @@
 import { consultarNfseRecebidas } from './nfse-sp-client.js';
 import { salvarNfseSpRecebida } from './nfse-sp-importer.js';
 
-const CNPJ_SP_CONTABIL = process.env.NFSE_SP_REMETENTE_CNPJ || '44388152000189';
+const CNPJ_SP_CONTABIL = process.env.NFSE_SP_REMETENTE_CNPJ || '';
 const THROTTLE_MS = 2000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

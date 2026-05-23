@@ -311,20 +311,17 @@ function computarCompetenciaAnterior(competenciaYYYYMM) {
 }
 
 function getContadorPadrao() {
-    // Dados reais SP Assessoria Contabil. Futuramente pode virar cadastro
-    // editavel pelo admin no app, mas hoje eh fixo no codigo.
     return {
-        nome: 'PAULO CESAR PEREIRA JUNIOR',
-        cpf: '26819016859',
-        crc: '1SP238285/O-5',
-        cnpj: '44388152000189',
-        cep: '01042001',
-        logradouro: 'RUA BARAO DE ITAPETININGA',
-        numero: '221',
-        complemento: '3 ANDAR',
-        bairro: 'REPUBLICA',
-        telefone: '1131551554',
-        email: 'spcontabil@spassessoriacontabil.com.br',
-        codMunIBGE: '3550308',
+        nome: process.env.CONTADOR_NOME || '',
+        cpf: process.env.CONTADOR_CPF || '',
+        cnpj: process.env.CONTADOR_CNPJ || '',
+        crc: process.env.CONTADOR_CRC || '',
+        endereco: process.env.CONTADOR_ENDERECO || '',
+        bairro: process.env.CONTADOR_BAIRRO || '',
+        cidade: process.env.CONTADOR_CIDADE || '',
+        uf: process.env.CONTADOR_UF || '',
+        cep: process.env.CONTADOR_CEP || '',
+        telefone: process.env.CONTADOR_TELEFONE || '',
+        email: process.env.CONTADOR_EMAIL || '',
     };
 }
