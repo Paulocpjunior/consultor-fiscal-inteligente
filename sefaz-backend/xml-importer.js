@@ -44,6 +44,154 @@ function classificarEvento(tpEvento) {
   return map[tpEvento] || { tipo: 'outro', descricao: `Evento ${tpEvento}` };
 }
 
+// ============================================================================
+// 23/05 — Helpers de extracao detalhada (itens, totais, direcao, status)
+// Espelham services/xmlParserService.ts (parser manual) em regex puro.
+// ============================================================================
+
+function pickAllBlocks(xml, openTag) {
+  const re = new RegExp(`<${openTag}\\b[^>]*>([\\s\\S]*?)<\\/${openTag}>`, 'gi');
+  const out = [];
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    out.push({ inner: m[1], attrs: m[0].slice(0, m[0].indexOf('>')) });
+  }
+  return out;
+}
+
+function pickFirstBlock(xml, openTag) {
+  const all = pickAllBlocks(xml, openTag);
+  return all.length ? all[0].inner : '';
+}
+
+function num(v) {
+  if (v == null || v === '') return 0;
+  const n = parseFloat(String(v).replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+
+/**
+ * Extrai todos os itens (<det>) de uma NFe completa.
+ * Retorna [] se o XML for resumo (resNFe) ou nao tiver <det>.
+ */
+function extrairItens(xml) {
+  const dets = pickAllBlocks(xml, 'det');
+  const itens = [];
+
+  for (let i = 0; i < dets.length; i++) {
+    const det = dets[i];
+    const nItem = (det.attrs.match(/nItem="([^"]+)"/) || [])[1] || String(i + 1);
+    const prod = pickFirstBlock(det.inner, 'prod');
+    const icms = pickFirstBlock(det.inner, 'ICMS');
+    const ipi = pickFirstBlock(det.inner, 'IPI');
+    const pis = pickFirstBlock(det.inner, 'PIS');
+    const cofins = pickFirstBlock(det.inner, 'COFINS');
+
+    // Bloco interno do ICMS (ICMS00, ICMS10, ..., ICMSSN102, etc.)
+    const icmsInnerMatch = icms.match(/<(ICMS\w+)\b[^>]*>([\s\S]*?)<\/\1>/);
+    const icmsInner = icmsInnerMatch ? icmsInnerMatch[2] : '';
+    const cst = pickTag(icmsInner, 'CST') || pickTag(icmsInner, 'CSOSN');
+    const orig = pickTag(icmsInner, 'orig');
+
+    // IPI tem IPITrib aninhado
+    const ipiTribInner = pickFirstBlock(ipi, 'IPITrib');
+
+    // PIS: primeiro filho (PISAliq, PISNT, PISOutr, etc.)
+    const pisInnerMatch = pis.match(/<(PIS\w+)\b[^>]*>([\s\S]*?)<\/\1>/);
+    const pisInner = pisInnerMatch ? pisInnerMatch[2] : '';
+
+    const cofinsInnerMatch = cofins.match(/<(COFINS\w+)\b[^>]*>([\s\S]*?)<\/\1>/);
+    const cofinsInner = cofinsInnerMatch ? cofinsInnerMatch[2] : '';
+
+    itens.push({
+      nItem,
+      cProd: pickTag(prod, 'cProd'),
+      xProd: pickTag(prod, 'xProd'),
+      ncm: pickTag(prod, 'NCM'),
+      cest: pickTag(prod, 'CEST') || null,
+      cfop: pickTag(prod, 'CFOP'),
+      uCom: pickTag(prod, 'uCom'),
+      qCom: num(pickTag(prod, 'qCom')),
+      vUnCom: num(pickTag(prod, 'vUnCom')),
+      vProd: num(pickTag(prod, 'vProd')),
+      vDesc: num(pickTag(prod, 'vDesc')) || null,
+      vBC: num(pickTag(icmsInner, 'vBC')),
+      aliqIcms: num(pickTag(icmsInner, 'pICMS')),
+      vICMS: num(pickTag(icmsInner, 'vICMS')),
+      vBCST: num(pickTag(icmsInner, 'vBCST')),
+      aliqST: num(pickTag(icmsInner, 'pICMSST')),
+      vICMSST: num(pickTag(icmsInner, 'vICMSST')),
+      modBC: pickTag(icmsInner, 'modBC'),
+      pRedBC: num(pickTag(icmsInner, 'pRedBC')),
+      vIPI: num(pickTag(ipiTribInner, 'vIPI')),
+      aliqIPI: num(pickTag(ipiTribInner, 'pIPI')),
+      vPIS: num(pickTag(pisInner, 'vPIS')),
+      aliqPIS: num(pickTag(pisInner, 'pPIS')),
+      vCOFINS: num(pickTag(cofinsInner, 'vCOFINS')),
+      aliqCOFINS: num(pickTag(cofinsInner, 'pCOFINS')),
+      cst,
+      orig,
+    });
+  }
+  return itens;
+}
+
+/**
+ * Extrai totais do bloco <total>/<ICMSTot>. Retorna null se nao tiver.
+ */
+function extrairTotais(xml) {
+  const icmsTot = pickFirstBlock(xml, 'ICMSTot');
+  if (!icmsTot) return null;
+  return {
+    vBC: num(pickTag(icmsTot, 'vBC')),
+    vICMS: num(pickTag(icmsTot, 'vICMS')),
+    vICMSDeson: num(pickTag(icmsTot, 'vICMSDeson')),
+    vFCP: num(pickTag(icmsTot, 'vFCP')),
+    vBCST: num(pickTag(icmsTot, 'vBCST')),
+    vST: num(pickTag(icmsTot, 'vST')),
+    vFCPST: num(pickTag(icmsTot, 'vFCPST')),
+    vProd: num(pickTag(icmsTot, 'vProd')),
+    vFrete: num(pickTag(icmsTot, 'vFrete')),
+    vSeg: num(pickTag(icmsTot, 'vSeg')),
+    vDesc: num(pickTag(icmsTot, 'vDesc')),
+    vII: num(pickTag(icmsTot, 'vII')),
+    vIPI: num(pickTag(icmsTot, 'vIPI')),
+    vIPIDevol: num(pickTag(icmsTot, 'vIPIDevol')),
+    vPIS: num(pickTag(icmsTot, 'vPIS')),
+    vCOFINS: num(pickTag(icmsTot, 'vCOFINS')),
+    vOutro: num(pickTag(icmsTot, 'vOutro')),
+    vNF: num(pickTag(icmsTot, 'vNF')),
+  };
+}
+
+/**
+ * Mapeia cStat do infProt para status do XmlStatusDocumento do frontend.
+ */
+function statusFromCStat(xml) {
+  const infProt = pickFirstBlock(xml, 'infProt');
+  const cStat = pickTag(infProt, 'cStat');
+  if (cStat === '100') return 'autorizado';
+  if (cStat === '101') return 'cancelado';
+  if (cStat === '110') return 'denegado';
+  if (cStat === '102') return 'inutilizado';
+  if (!cStat) return 'desconhecido';
+  return 'rejeitado';
+}
+
+/**
+ * Decide direcao=entrada|saida comparando emit/dest com empresa-cliente.
+ */
+function decidirDirecao(cnpjEmit, cnpjDest, empresaCnpj) {
+  const norm = c => String(c || '').replace(/\D/g, '');
+  const emi = norm(cnpjEmit);
+  const dest = norm(cnpjDest);
+  const emp = norm(empresaCnpj);
+  if (!emp) return 'desconhecida';
+  if (emi === emp) return 'saida';
+  if (dest === emp) return 'entrada';
+  return 'desconhecida';
+}
+
 function extrairMetadados(xml, schema) {
   let chave = pickAttr(xml, 'infNFe', 'Id') ||
               pickAttr(xml, 'infEvento', 'Id') ||
@@ -110,10 +258,19 @@ function extrairMetadados(xml, schema) {
     };
   }
 
+  // 23/05 — extracao expandida pra Frente 1 (NCM/CFOP/CST)
+  const ide = pickFirstBlock(xml, 'ide');
+  const numero = pickTag(ide, 'nNF') || null;
+  const serie = pickTag(ide, 'serie') || null;
+  const natOp = pickTag(ide, 'natOp') || null;
+  const infProt = pickFirstBlock(xml, 'infProt');
+  const cStat = pickTag(infProt, 'cStat') || null;
+
   return {
     chave, cnpjEmit, cnpjDest, xNome, dhEmi,
     vNF: vNF ? Number(vNF) : null,
     tpNF, tipoDoc, tipoNormalizado, schema, evento,
+    numero, serie, natOp, cStat,
   };
 }
 
@@ -172,6 +329,18 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
       updates.status = 'cancelado';
       updates.canceladoEm = evento.dhEvento;
       updates.canceladoProtocolo = evento.nProt;
+    }
+    // 23/05 — defesa contra Update() requires...:
+    // garante que todos os valores do updates sao definidos antes de chamar.
+    for (const [k, v] of Object.entries(updates)) {
+      if (v === undefined) {
+        console.warn(`[xml-importer] anexarEventoNaNFe: campo ${k} undefined em updates, removendo`);
+        delete updates[k];
+      }
+    }
+    if (Object.keys(updates).length === 0) {
+      console.warn('[xml-importer] anexarEventoNaNFe: updates vazio, pulando .update()');
+      return { status: 'evento_skip_vazio', chave: chaveNFe };
     }
     await docRef.update(updates);
     return { status: 'evento_anexado', chave: chaveNFe, tipo: evento.tipo };
@@ -290,6 +459,19 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     resumable: false,
   });
 
+  // 23/05 — extrai itens/totais/direcao/status para docData completo
+  const itens = extrairItens(xml);
+  const totais = extrairTotais(xml);
+  const direcao = decidirDirecao(meta.cnpjEmit, meta.cnpjDest, empresaCnpj);
+  const status = statusFromCStat(xml);
+  const temItens = itens.length > 0;
+
+  // Para o frontend e manifestacao, tipoDoc='NFe' tanto para procNFe quanto resNFe
+  // (a distincao fica em temItens/schema). Resumos viram 'NFe' tambem para o
+  // manifesto-orchestrator encontra-los (filtra tipoDoc==='NFe').
+  let tipoDocFinal = meta.tipoDoc;
+  if (meta.tipoDoc === 'resNFe' || meta.tipoDoc === 'NFe') tipoDocFinal = 'NFe';
+
   const docData = {
     id: docId,
     chave: meta.chave,
@@ -301,17 +483,26 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     dhEmi: meta.dhEmi,
     valorTotal: meta.vNF,
     tpNF: meta.tpNF,
-    tipoDoc: meta.tipoDoc,
-    tipo: meta.tipoNormalizado,  // alinhado ao XmlTipoDocumento do frontend
+    tipoDoc: tipoDocFinal,
+    tipo: meta.tipoNormalizado,
     schema: meta.schema,
     nsu,
     storagePath,
     xmlHash,
     origem: 'sefaz',
+    // 23/05 campos novos:
+    numero: meta.numero,
+    serie: meta.serie,
+    natOp: meta.natOp,
+    status,
+    direcao,
+    itens,
+    totais,
+    temItens,
+    cStat: meta.cStat,
     createdAt: fa().firestore.FieldValue.serverTimestamp(),
     createdBy: capturadoPor?.uid || null,
     capturadoPor: capturadoPor || null,
-    // Reseta o flag eventosBeforeNFe se era stub
     eventosBeforeNFe: false,
   };
   // Se já existia stub com eventos, faz merge (preserva array)
