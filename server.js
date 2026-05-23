@@ -27,6 +27,7 @@ import notificacoesRouter from './sefaz-backend/notificacoes-routes.js';
 import agentRouter from './sefaz-backend/agent-routes.js';
 import agentAdminRouter from './sefaz-backend/agent-admin-routes.js';
 import nfseNacionalDfeRouter from './sefaz-backend/nfse-nacional-dfe-routes.js';
+import recuperacaoRouter from './sefaz-backend/recuperacao-tributaria-routes.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -53,6 +54,7 @@ app.use('/api/admin/agent', agentAdminRouter);
 app.use('/api/agent', agentRouter);
 app.use('/api/admin/nfse-nacional-dfe', nfseNacionalDfeRouter);
 app.use('/api/internal/plano-contas', planoContasBridgeRouter);
+app.use('/api/admin/recuperacao', recuperacaoRouter);
 
 const PORT = process.env.PORT || 8080;
 
@@ -94,6 +96,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 let ai = null;
 if (GEMINI_API_KEY) {
     ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    app.set('ai', ai);
     console.log('Gemini API configurada');
 } else {
     console.warn('GEMINI_API_KEY nao configurada');

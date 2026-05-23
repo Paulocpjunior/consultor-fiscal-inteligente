@@ -1528,3 +1528,68 @@ export const DARF_TRIBUTO_LABELS: Record<DarfTributo, string> = {
     COFINS: 'COFINS',
     IRRF:   'IRRF',
 };
+
+
+// ─── Recuperação Tributária ──────────────────────────────────────────────
+
+export type RecuperacaoTeseId =
+    | 'pis_cofins_monofasico'
+    | 'icms_base_pis_cofins'
+    | 'icms_st_mva_excedente'
+    | 'das_segregacao_incorreta'
+    | 'iss_local_incorreto'
+    | 'inss_verbas_indenizatorias';
+
+export type RecuperacaoStatus = 'nao_analisada' | 'em_analise' | 'oportunidade' | 'sem_oportunidade' | 'em_execucao' | 'recuperado';
+
+export interface RecuperacaoTese {
+    id: RecuperacaoTeseId;
+    nome: string;
+    descricao: string;
+    regimesAplicaveis: string[];
+    prazoDecadencial: number; // anos
+    fundamentoLegal: string;
+}
+
+export interface RecuperacaoAnaliseItem {
+    competencia: string;
+    descricao: string;
+    valorOriginal: number;
+    valorRecuperavel: number;
+    detalhes?: Record<string, any>;
+}
+
+export interface RecuperacaoEmpresaTese {
+    teseId: RecuperacaoTeseId;
+    status: RecuperacaoStatus;
+    valorEstimado: number;
+    periodoAnalisado: { inicio: string; fim: string };
+    itens: RecuperacaoAnaliseItem[];
+    analisadoEm?: string;
+    observacoes?: string;
+}
+
+export interface RecuperacaoEmpresaResumo {
+    empresaId: string;
+    empresaNome: string;
+    empresaCnpj: string;
+    regime: string;
+    totalRecuperavel: number;
+    teses: RecuperacaoEmpresaTese[];
+    ultimaAnalise?: string;
+}
+
+export interface RecuperacaoGlobalResumo {
+    geradoEm: string;
+    totalEmpresas: number;
+    empresasComOportunidade: number;
+    totalRecuperavel: number;
+    porTese: Record<RecuperacaoTeseId, { empresas: number; valor: number }>;
+    resultados: RecuperacaoEmpresaResumo[];
+}
+
+export interface RecuperacaoParecerIa {
+    analise: string;
+    modelo: string;
+    geradoEm: string;
+}
