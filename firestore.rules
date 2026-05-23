@@ -288,27 +288,32 @@ service cloud.firestore {
     }
 
     match /das_emitidos/{docId} {
-      allow read: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
       allow write: if false;
     }
 
     match /nfse_nacional_emitidas/{docId} {
-      allow read: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
       allow write: if false;
     }
 
     match /dctfweb_declaracoes/{docId} {
-      allow read: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
       allow write: if false;
     }
 
     match /darf_emitidos/{docId} {
-      allow read: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
       allow write: if false;
     }
 
     match /notificacoes/{docId} {
-      allow read: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
       allow write: if false;
     }
 
