@@ -130,6 +130,86 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
   });
 });
 
+// ============================================================================
+// /sync-targeted — disparo cirurgico pra lista especifica de CNPJs
+// Ordena ASC por NSU pendente, sleep 90s entre empresas, para em cStat=656.
+// Responde sincrono (cliente espera).
+// ============================================================================
+router.post('/sync-targeted', requireCronAuth, express.json(), async (req, res) => {
+  const cnpjs = (req.body?.cnpjs || []).map(c => String(c).replace(/\D/g, ''));
+  if (!cnpjs.length) return res.status(400).json({ error: 'cnpjs array vazio' });
+
+  const SLEEP_MS = parseInt(req.body?.sleepMs || '90000', 10);
+  const PARAR_EM_656 = req.body?.pararEm656 !== false; // default true
+
+  console.log(`[sync-targeted] init — ${cnpjs.length} cnpjs, sleep=${SLEEP_MS}ms, pararEm656=${PARAR_EM_656}`);
+
+  // Resolve empresaId pra cada cnpj
+  const db = fa().firestore();
+  const alvos = [];
+  for (const cnpj of cnpjs) {
+    let found = null;
+    for (const col of ['simples_empresas', 'lucro_empresas']) {
+      const snap = await db.collection(col)
+        .where('cnpj', '==', cnpj).limit(1).get();
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        found = { id: d.id, cnpj, nome: d.data().nome || d.data().razaoSocial || '', fonte: col };
+        break;
+      }
+    }
+    if (found) alvos.push(found);
+    else console.warn(`[sync-targeted] CNPJ ${cnpj} nao encontrado em simples/lucro_empresas`);
+  }
+
+  console.log(`[sync-targeted] ${alvos.length}/${cnpjs.length} CNPJs resolvidos`);
+
+  const resultados = [];
+  let totalNovos = 0;
+  let parouEm656 = false;
+  let idx = 0;
+
+  for (const emp of alvos) {
+    idx++;
+    console.log(`[sync-targeted] (${idx}/${alvos.length}) ${emp.cnpj} ${emp.nome}`);
+    try {
+      const r = await sincronizarEmpresa({
+        empresaId: emp.id, empresaCnpj: emp.cnpj,
+        capturadoPor: { uid: 'sync-targeted', email: 'cron@spassessoriacontabil', fonte: 'manual' },
+      });
+      resultados.push({ cnpj: emp.cnpj, nome: emp.nome, ...r });
+      if (r.ok) {
+        totalNovos += (r.novosXmls || 0);
+        console.log(`[sync-targeted]   OK novos=${r.novosXmls} dup=${r.duplicados} err=${r.erros}`);
+      } else {
+        console.warn(`[sync-targeted]   FALHA: ${r.motivo}`);
+        if (PARAR_EM_656 && /656|Consumo Indevido/i.test(r.motivo || '')) {
+          console.warn('[sync-targeted] ABORT — cStat=656 detectado, parando');
+          parouEm656 = true;
+          break;
+        }
+      }
+    } catch (e) {
+      console.error(`[sync-targeted]   EXCECAO: ${e.message}`);
+      resultados.push({ cnpj: emp.cnpj, nome: emp.nome, ok: false, motivo: e.message });
+    }
+
+    if (idx < alvos.length && !parouEm656) {
+      console.log(`[sync-targeted]   sleep ${SLEEP_MS}ms...`);
+      await new Promise(r => setTimeout(r, SLEEP_MS));
+    }
+  }
+
+  return res.json({
+    ok: !parouEm656,
+    parouEm656,
+    processadas: resultados.length,
+    totalSolicitadas: alvos.length,
+    totalNovosXmls: totalNovos,
+    resultados,
+  });
+});
+
 async function listarEmpresasParaCron() {
   const db = fa().firestore();
   const limite = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
