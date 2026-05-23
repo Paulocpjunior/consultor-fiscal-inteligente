@@ -100,7 +100,7 @@ router.post('/import-nbs-csv', requireAdmin, express.text({ type: 'text/csv', li
         const db = admin.firestore();
 
         let inseridos = 0, ignorados = 0;
-        const batch = db.batch();
+        let batch = db.batch();
         for (let i = 1; i < linhas.length; i++) {
             const cols = linhas[i].split(',');
             const codigo = (cols[idxCodigo] || '').trim();
@@ -118,6 +118,7 @@ router.post('/import-nbs-csv', requireAdmin, express.text({ type: 'text/csv', li
             inseridos++;
             if (inseridos % 400 === 0) {
                 await batch.commit();
+                batch = db.batch();
             }
         }
         await batch.commit();

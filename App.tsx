@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo, Suspense, laz
 import Header from './components/Header';
 import Footer from './components/Footer';
 import LoadingSpinner from './components/LoadingSpinner';
+import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
 import UpdateBanner from './components/UpdateBanner';
 import TaxAlerts from './components/TaxAlerts';
@@ -273,9 +274,11 @@ const App: React.FC = () => {
             id: Date.now().toString(),
             timestamp: Date.now(),
         };
-        const updatedHistory = [newHistoryItem, ...history].slice(0, 50);
-        setHistory(updatedHistory);
-        localStorage.setItem('fiscal-consultant-history', JSON.stringify(updatedHistory));
+        setHistory(prev => {
+            const updatedHistory = [newHistoryItem, ...prev].slice(0, 50);
+            localStorage.setItem('fiscal-consultant-history', JSON.stringify(updatedHistory));
+            return updatedHistory;
+        });
     };
 
     const handleSelectFavorite = (item: FavoriteItem) => {
@@ -651,12 +654,14 @@ const App: React.FC = () => {
 
                 <div className="flex flex-col md:flex-row gap-6">
                     <main className="flex-grow min-w-0">
-                        <Suspense fallback={null}>
-                            <CaixaPostalAlerta
-                                currentUser={currentUser}
-                                onIrParaCaixaPostal={() => setSearchType(SearchType.CAIXA_POSTAL)}
-                            />
-                        </Suspense>
+                        <ErrorBoundary>
+                            <Suspense fallback={null}>
+                                <CaixaPostalAlerta
+                                    currentUser={currentUser}
+                                    onIrParaCaixaPostal={() => setSearchType(SearchType.CAIXA_POSTAL)}
+                                />
+                            </Suspense>
+                        </ErrorBoundary>
                         {/* Search Type Selection Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
                             {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL).map((type) => (
@@ -992,6 +997,7 @@ const App: React.FC = () => {
 
                         {/* Simples Nacional Views */}
                         {searchType === SearchType.SIMPLES_NACIONAL && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 {simplesView === 'dashboard' && (
                                     <SimplesNacionalDashboard
@@ -1049,10 +1055,12 @@ const App: React.FC = () => {
                                     />
                                 )}
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Lucro Presumido View */}
                         {searchType === SearchType.LUCRO_PRESUMIDO_REAL && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <LucroPresumidoRealDashboard
                                     currentUser={currentUser}
@@ -1060,6 +1068,7 @@ const App: React.FC = () => {
                                     onAddToHistory={addHistory}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Fiscal Obligations View */}
@@ -1069,89 +1078,108 @@ const App: React.FC = () => {
 
                         {/* Central de Documentos Fiscais (XML) */}
                         {searchType === SearchType.IMPORTA_XML && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CentralDocumentosFiscais
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Análise Relatório SAGE View */}
                         {searchType === SearchType.ANALISE_RELATORIO_SAGE && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnaliseRelatorioSAGE
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* SPED Fiscal (EFD ICMS/IPI) View */}
                         {searchType === SearchType.SPED_FISCAL && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <SpedFiscal
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.CAIXA_POSTAL && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CaixaPostalDashboard
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.DAS_SIMPLES && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DasDashboard
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.DCTFWEB && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DCTFWebDashboard
                                     currentUser={currentUser}
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.CARTEIRA && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CarteiraDashboard
                                     currentUser={currentUser}
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.AGENTES_A3 && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AgentesA3Dashboard
                                     currentUser={currentUser}
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
 
                         {searchType === SearchType.NFSE_NACIONAL && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <NfseNacionalDashboard
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.DASHBOARD_CEO && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DashboardCeo
                                     currentUser={currentUser ?? null}
@@ -1164,66 +1192,82 @@ const App: React.FC = () => {
                                     }}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.CALENDARIO && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CalendarioFiscal
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.ANOMALIAS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnomaliasView
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.SIMULADOR_IBS_CBS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <SimuladorReforma
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.EMISSAO_TRIBUTOS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <TaxEmissionDashboard
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                 {/* Analisador de Regime Tributario */}
                 {searchType === SearchType.ANALISADOR_REGIME && (
+                  <ErrorBoundary>
                   <Suspense fallback={<LoadingSpinner />}>
                     <AnalisadorRegime />
                   </Suspense>
+                  </ErrorBoundary>
                 )}
 
                         {/* Análise de Créditos Fiscais */}
                         {searchType === SearchType.ANALISE_CREDITOS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnaliseCreditos currentUser={currentUser ?? null} />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Tarefas */}
                         {searchType === SearchType.TAREFAS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <Tarefas currentUser={currentUser ?? null} />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Results Display */}
+                        <ErrorBoundary>
                         <Suspense fallback={<LoadingSpinner />}>
                             {!result && !comparisonResult && ![SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) && (
                                 <InitialStateDisplay searchType={searchType} mode={mode} />
@@ -1255,6 +1299,7 @@ const App: React.FC = () => {
                                 />
                             )}
                         </Suspense>
+                        </ErrorBoundary>
 
                         <SimilarServicesDisplay
                             services={similarServices}

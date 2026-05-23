@@ -224,6 +224,78 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // xml_capturas: log de capturas XML — append-only para usuarios
+    // comuns, admin le/escreve tudo.
+    // ───────────────────────────────────────────────────────────────
+
+    match /xml_capturas/{logId} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.usuarioId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.usuarioId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // xml_erros: erros de importacao XML — usuario pode marcar como
+    // resolvido o seu proprio, admin gerencia todos.
+    // ───────────────────────────────────────────────────────────────
+
+    match /xml_erros/{errId} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.usuarioId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.usuarioId == request.auth.uid;
+      allow update: if isAdmin() || (isSignedIn() && resource.data.usuarioId == request.auth.uid && request.resource.data.usuarioId == resource.data.usuarioId);
+      allow delete: if isAdmin();
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // empresas_xml_config: configuracoes XML por empresa
+    // (monitoramento, agendamento).
+    // ───────────────────────────────────────────────────────────────
+
+    match /empresas_xml_config/{configId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── Coleções operacionais (escritas pelo backend via admin SDK,
+    //     leitura no frontend por qualquer signed-in) ─────────────────
+
+    match /caixa_postal_mensagens/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /das_emitidos/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /nfse_nacional_emitidas/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /dctfweb_declaracoes/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /darf_emitidos/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /notificacoes/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /sharepoint_sync_log/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // Default deny: qualquer coleção não listada acima é negada.
     // ───────────────────────────────────────────────────────────────
 

@@ -22,7 +22,7 @@ const MASTER_ADMIN_EMAIL   = 'junior@spassessoriacontabil.com.br';
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const normalizeEmail  = (email: string) => email.trim().toLowerCase();
 const preparePassword = (pwd: string)   => pwd.trim();
-const hashPassword    = (pwd: string)   => { try { return btoa(pwd); } catch { return pwd; } };
+const encodePasswordForLocalStorage = (pwd: string) => { try { return btoa(pwd); } catch { return pwd; } };
 
 /** Cache local só para suporte offline */
 const cacheSession = (user: User) =>
@@ -182,7 +182,7 @@ export const register = async (
     const newUser: any = {
         id: crypto.randomUUID(), name: name.trim(), email: cleanEmail,
         role: isMaster ? 'admin' : 'colaborador',
-        passwordHash: hashPassword(cleanPassword), isVerified: true
+        passwordHash: encodePasswordForLocalStorage(cleanPassword), isVerified: true
     };
     users.push(newUser);
     saveLocalUsers(users);
@@ -228,7 +228,7 @@ export const login = async (
         !users.find(u => normalizeEmail(u.email) === cleanEmail)) {
         const master: any = {
             id: crypto.randomUUID(), name: 'Administrador Master', email: cleanEmail,
-            role: 'admin', passwordHash: hashPassword('123456'), isVerified: true
+            role: 'admin', passwordHash: encodePasswordForLocalStorage('123456'), isVerified: true
         };
         users.push(master);
         saveLocalUsers(users);
@@ -237,7 +237,7 @@ export const login = async (
     const user = users.find(u => normalizeEmail(u.email) === cleanEmail);
     if (!user) throw new Error('Usuário não encontrado.');
 
-    const isValid = user.passwordHash === hashPassword(cleanPassword) ||
+    const isValid = user.passwordHash === encodePasswordForLocalStorage(cleanPassword) ||
                     user.passwordHash === cleanPassword;
     if (!isValid) throw new Error('Senha incorreta.');
 
@@ -335,7 +335,7 @@ export const resetUserPassword = async (userId: string): Promise<boolean> => {
     if (isFirebaseConfigured) return true; // requer backend/email p/ outro usuário
     const users = getLocalUsers();
     const idx = users.findIndex(u => u.id === userId);
-    if (idx !== -1) { users[idx].passwordHash = hashPassword('123456'); saveLocalUsers(users); }
+    if (idx !== -1) { users[idx].passwordHash = encodePasswordForLocalStorage('123456'); saveLocalUsers(users); }
     return idx !== -1;
 };
 

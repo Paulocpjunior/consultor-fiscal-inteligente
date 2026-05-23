@@ -40,6 +40,10 @@ COPY --from=builder /app/dist ./dist
 COPY server.js ./
 COPY sefaz-backend ./sefaz-backend
 
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nodeuser
+USER nodeuser
+
 EXPOSE 8080
 
 # server.js da raiz: serve /api/fiscal/* (Gemini) + dist/ (frontend) + SPA fallback
