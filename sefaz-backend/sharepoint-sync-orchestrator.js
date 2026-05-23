@@ -11,7 +11,7 @@ import admin from 'firebase-admin';
 import * as sharepoint from './sharepoint-provider.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
-const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.appspot.com`;
+const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
 
 // Lazy init — segue padrao dos outros orchestrators do projeto.
 function ensureAdmin() {

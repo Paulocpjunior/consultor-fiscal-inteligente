@@ -10,7 +10,7 @@ import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
-const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.appspot.com`;
+const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
 const storage = new Storage();
 
 function fa() {
@@ -149,9 +149,12 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
     xmlHash,
     schema,
     nsu,
-    importadoEm: fa().firestore.FieldValue.serverTimestamp(),
+    importadoEm: new Date().toISOString(),
     importadoPor: capturadoPor?.email || 'system',
   };
+  // 23/05 FIX: serverTimestamp() nao funciona dentro de array do Firestore.
+  // eventoData eh empurrado pro array 'eventos' abaixo, entao usamos ISO string.
+  // Bug original causou 3630 NSUs perdidos em xml_erros.
 
   const snap = await docRef.get();
   if (snap.exists) {
