@@ -23,7 +23,7 @@ import { SearchType, type SearchResult, type ComparisonResult, type FavoriteItem
 import { fetchFiscalData, fetchComparison, fetchSimilarServices } from './services/geminiService';
 import * as simplesService from './services/simplesNacionalService';
 import * as authService from './services/authService';
-import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon } from './components/Icons';
+import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon, ScaleIcon } from './components/Icons';
 import FiscalObligationsDashboard from './components/FiscalObligationsDashboard';
 import { runInitialSync } from './services/cloudSyncService';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
@@ -54,6 +54,7 @@ const CalendarioFiscal = lazy(() => import('./components/CalendarioFiscal'));
 const AnomaliasView = lazy(() => import('./components/Anomalias'));
 const SimuladorReforma = lazy(() => import('./components/SimuladorReforma'));
 const TaxEmissionDashboard = lazy(() => import('./components/TaxEmission'));
+const RecuperacaoTributaria = lazy(() => import('./components/RecuperacaoTributaria'));
 
 const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
@@ -80,6 +81,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.ANOMALIAS]: "Detector de Anomalias — análise estatística + IA detecta irregularidades no DAS de cada empresa.",
     [SearchType.SIMULADOR_IBS_CBS]: "Simulador IBS/CBS — projeção da carga tributária 2026-2033 sob a Reforma Tributária (LC 214/2025).",
     [SearchType.EMISSAO_TRIBUTOS]: "Central de Emissões — emissão unificada de DAS (Simples) e DARF (IRPJ/CSLL/PIS/COFINS para Presumido e Real) com controle de pagamento.",
+    [SearchType.RECUPERACAO_TRIBUTARIA]: "Recuperação Tributária — identifica impostos pagos a maior e oportunidades de restituição/compensação.",
 };
 
 const App: React.FC = () => {
@@ -694,6 +696,7 @@ const App: React.FC = () => {
                                         {type === SearchType.SIMPLES_NACIONAL && <CalculatorIcon className="w-5 h-5" />}
                                         {type === SearchType.LUCRO_PRESUMIDO_REAL && <BuildingIcon className="w-5 h-5" />}
                                         {type === SearchType.OBRIGACOES_FISCAIS && <CalendarIcon className="w-5 h-5" />}
+                                        {type === SearchType.RECUPERACAO_TRIBUTARIA && <ScaleIcon className="w-5 h-5" />}
                                     </div>
                                     <span className="text-xs font-bold text-center leading-tight">{type}</span>
                                 </button>
@@ -1227,6 +1230,17 @@ const App: React.FC = () => {
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <TaxEmissionDashboard
+                                    currentUser={currentUser ?? null}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.RECUPERACAO_TRIBUTARIA && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <RecuperacaoTributaria
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
