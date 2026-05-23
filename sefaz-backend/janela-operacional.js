@@ -20,10 +20,9 @@ export function statusJanelaOperacional(now = new Date()) {
   const wdMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
   const diaSemana = wdMap[parts.weekday];
   const agoraBRT = `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
-  if (diaSemana === 0 || diaSemana === 6) {
-    return { dentro: false, agoraBRT, diaSemana,
-      motivo: 'Captura manual disponível apenas em dias úteis (seg-sex). O cron noturno automatiza fora desse horário.' };
-  }
+  // 23/05: removida restricao seg-sex. SEFAZ aceita 24/7. Restricao
+  // diaria 07h-20h mantida pra evitar abuso. Sandra/Alex podem disparar
+  // manual em fim de semana se precisar.
   if (hora < HORA_INICIO || hora >= HORA_FIM) {
     return { dentro: false, agoraBRT, diaSemana,
       motivo: `Captura manual disponível apenas das ${String(HORA_INICIO).padStart(2, '0')}:00 às ${String(HORA_FIM).padStart(2, '0')}:00 BRT. Agora são ${parts.hour}:${parts.minute}. O cron noturno (02:00) cuida das empresas ativas fora desse horário.` };
