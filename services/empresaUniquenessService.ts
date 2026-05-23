@@ -46,7 +46,8 @@ export async function verificarCnpjDuplicado(cnpj: string): Promise<ResultadoCnp
     try {
         const snap = await getDocs(collection(db, 'simples_empresas'));
         for (const d of snap.docs) {
-            const data = d.data() as { cnpj?: string; nome?: string };
+            const data = d.data() as { cnpj?: string; nome?: string; _merged_into?: string };
+            if (data._merged_into) continue; // 23/05: ignora perdedores do merge
             if (soDigitos(data.cnpj || '') === cnpjDig) {
                 return {
                     duplicado: true,
@@ -64,7 +65,8 @@ export async function verificarCnpjDuplicado(cnpj: string): Promise<ResultadoCnp
     try {
         const snap = await getDocs(collection(db, 'lucro_empresas'));
         for (const d of snap.docs) {
-            const data = d.data() as { cnpj?: string; nome?: string };
+            const data = d.data() as { cnpj?: string; nome?: string; _merged_into?: string };
+            if (data._merged_into) continue; // 23/05: ignora perdedores do merge
             if (soDigitos(data.cnpj || '') === cnpjDig) {
                 return {
                     duplicado: true,

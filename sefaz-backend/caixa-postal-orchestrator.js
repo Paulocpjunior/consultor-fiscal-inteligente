@@ -123,10 +123,18 @@ export async function sincronizarTodasEmpresas() {
     const empresas = [];
 
     const simplesSnap = await db.collection('simples_empresas').get();
-    simplesSnap.forEach(d => empresas.push({ id: d.id, ...d.data() }));
+    simplesSnap.forEach(d => {
+        const x = d.data();
+        if (x._merged_into) return; // 23/05: ignora perdedores do merge
+        empresas.push({ id: d.id, ...x });
+    });
 
     const lucroSnap = await db.collection('lucro_empresas').get();
-    lucroSnap.forEach(d => empresas.push({ id: d.id, ...d.data() }));
+    lucroSnap.forEach(d => {
+        const x = d.data();
+        if (x._merged_into) return; // 23/05: ignora perdedores do merge
+        empresas.push({ id: d.id, ...x });
+    });
 
     const stats = { totalEmpresas: empresas.length, sucesso: 0, falha: 0, skipped: 0, detalhes: [] };
     for (const emp of empresas) {

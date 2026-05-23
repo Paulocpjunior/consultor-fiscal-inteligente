@@ -99,8 +99,10 @@ export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEm
                 : query(collection(db, 'simples_empresas'), where('createdBy', '==', uid));
 
             const snapshot = await getDocs(q);
-            const cloudEmpresas = snapshot.docs.map(d =>
-                ({ id: d.id, ...d.data() } as SimplesNacionalEmpresa));
+            // 23/05: filtra perdedores do merge de duplicatas
+            const cloudEmpresas = snapshot.docs
+                .filter(d => !(d.data() as any)._merged_into)
+                .map(d => ({ id: d.id, ...d.data() } as SimplesNacionalEmpresa));
 
             // Atualiza cache local
             const local = getLocalEmpresas();

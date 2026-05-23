@@ -108,11 +108,16 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
             getDocs(query(collection(db, 'lucro_empresas'), ...buildQuery('lucro_empresas'))),
         ]);
 
-        const simples: EmpresaXmlOption[] = simplesSnap.docs.map(d => {
+        // 23/05: filtra perdedores do merge de duplicatas
+        const simples: EmpresaXmlOption[] = simplesSnap.docs
+            .filter(d => !(d.data() as any)._merged_into)
+            .map(d => {
             const data = d.data() as SimplesNacionalEmpresa;
             return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples', createdBy: data.createdBy };
         });
-        const lucro: EmpresaXmlOption[] = lucroSnap.docs.map(d => {
+        const lucro: EmpresaXmlOption[] = lucroSnap.docs
+            .filter(d => !(d.data() as any)._merged_into)
+            .map(d => {
             const data = d.data() as LucroPresumidoEmpresa;
             return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro', createdBy: data.createdBy };
         });
@@ -179,7 +184,10 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
             getDocs(query(collection(db, 'lucro_empresas'), ...buildQuery('lucro_empresas'))),
         ]);
 
-        const simples: EmpresaPerfilOption[] = simplesSnap.docs.map(d => {
+        // 23/05: filtra perdedores do merge de duplicatas
+        const simples: EmpresaPerfilOption[] = simplesSnap.docs
+            .filter(d => !(d.data() as any)._merged_into)
+            .map(d => {
             const data = d.data() as SimplesNacionalEmpresa;
             return {
                 id: d.id,
@@ -193,7 +201,9 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 createdBy: data.createdBy,
             };
         });
-        const lucro: EmpresaPerfilOption[] = lucroSnap.docs.map(d => {
+        const lucro: EmpresaPerfilOption[] = lucroSnap.docs
+            .filter(d => !(d.data() as any)._merged_into)
+            .map(d => {
             const data = d.data() as LucroPresumidoEmpresa;
             return {
                 id: d.id,

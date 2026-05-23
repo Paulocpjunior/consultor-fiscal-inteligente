@@ -76,8 +76,10 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj, opts = {}) {
 export async function sincronizarTodasLucro() {
     const db = fa().firestore();
     const snap = await db.collection('lucro_empresas').get();
-    const stats = { totalEmpresas: snap.size, sucesso: 0, falha: 0, detalhes: [] };
-    for (const d of snap.docs) {
+    // 23/05: filtra perdedores do merge de duplicatas
+    const ativos = snap.docs.filter(d => !d.data()._merged_into);
+    const stats = { totalEmpresas: ativos.length, sucesso: 0, falha: 0, detalhes: [] };
+    for (const d of ativos) {
         const emp = d.data();
         if (!emp.cnpj) continue;
         try {

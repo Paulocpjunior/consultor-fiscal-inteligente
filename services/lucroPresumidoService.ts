@@ -50,7 +50,10 @@ export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresu
             
             try {
                 const snapshot = await getDocs(q);
-                const cloudEmpresas = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LucroPresumidoEmpresa));
+                // 23/05: filtra perdedores do merge de duplicatas
+                const cloudEmpresas = snapshot.docs
+                    .filter(doc => !(doc.data() as any)._merged_into)
+                    .map(doc => ({ id: doc.id, ...doc.data() } as LucroPresumidoEmpresa));
                 
                 // Se conseguiu buscar da nuvem, atualiza o cache local (apenas para modo offline)
                 if (cloudEmpresas.length > 0) {

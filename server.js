@@ -211,6 +211,8 @@ app.get('/api/admin/das/previsao/:empresaId', async (req, res) => {
         const empSnap = await db.collection('simples_empresas').doc(empresaId).get();
         if (!empSnap.exists) return res.status(404).json({ error: 'empresa nao encontrada' });
         const emp = empSnap.data();
+        // 23/05: bloqueia perdedores do merge de duplicatas
+        if (emp._merged_into) return res.status(410).json({ error: 'empresa consolidada', mergedInto: emp._merged_into });
         const historico = (emp.historicoCalculos || [])
             .map(h => ({ ...h, yyyymm: mesReferenciaParaYYYYMM(h.mesReferencia) }))
             .filter(h => h.yyyymm)
@@ -492,6 +494,8 @@ app.get('/api/admin/das/anomalias/:empresaId', async (req, res) => {
         if (!snap.exists) return res.status(404).json({ error: 'empresa nao encontrada' });
 
         const emp = { id: snap.id, ...snap.data() };
+        // 23/05: bloqueia perdedores do merge de duplicatas
+        if (emp._merged_into) return res.status(410).json({ error: 'empresa consolidada', mergedInto: emp._merged_into });
         const result = detectarAnomalias(emp);
 
         return res.json({
@@ -521,6 +525,7 @@ app.get('/api/admin/das/anomalias-todas', async (req, res) => {
         const resultados = [];
         snap.forEach(d => {
             const emp = { id: d.id, ...d.data() };
+            if (emp._merged_into) return; // 23/05: ignora perdedores do merge
             const r = detectarAnomalias(emp);
             if (r.anomalias && r.anomalias.length > 0) {
                 resultados.push({
@@ -1274,6 +1279,8 @@ app.post('/api/admin/pgdas/conferir', requireAI, async (req, res) => {
         const snap = await db.collection('simples_empresas').doc(empresaId).get();
         if (!snap.exists) return res.status(404).json({ error: 'empresa nao encontrada' });
         const emp = snap.data();
+        // 23/05: bloqueia perdedores do merge de duplicatas
+        if (emp._merged_into) return res.status(410).json({ error: 'empresa consolidada', mergedInto: emp._merged_into });
         const historico = emp.historicoCalculos || [];
 
         // 2. Extrai dados ricos do PGDAS via Gemini
@@ -1672,10 +1679,12 @@ app.get('/api/admin/calendario/:ano/:mes', requireAuthOrColab, async (req, res) 
         const obrigacoes = [];
         simplesSnap.forEach(d => {
             const e = { id: d.id, ...d.data() };
+            if (e._merged_into) return; // 23/05: ignora perdedores do merge
             obrigacoes.push(...calcularObrigacoesEmpresa(e, 'simples', ano, mes));
         });
         lucroSnap.forEach(d => {
             const e = { id: d.id, ...d.data() };
+            if (e._merged_into) return; // 23/05: ignora perdedores do merge
             obrigacoes.push(...calcularObrigacoesEmpresa(e, 'lucro', ano, mes));
         });
 
@@ -1733,7 +1742,10 @@ app.get('/api/admin/dashboard-ceo/kpis', async (req, res) => {
             db.collection('simples_empresas').get(),
             db.collection('lucro_empresas').get(),
         ]);
-        const totalEmpresas = simplesSnap.size + lucroSnap.size;
+        // 23/05: filtra perdedores do merge de duplicatas
+        const simplesAtivos = simplesSnap.docs.filter(d => !d.data()._merged_into);
+        const lucroAtivos   = lucroSnap.docs.filter(d => !d.data()._merged_into);
+        const totalEmpresas = simplesAtivos.length + lucroAtivos.length;
 
         // ── Caixa Postal
         const cxSnap = await db.collection('caixa_postal_mensagens').limit(2000).get();
@@ -1860,10 +1872,12 @@ app.get('/api/admin/dashboard-ceo/acoes', async (req, res) => {
             ]);
             simAll.forEach(d => {
                 const e = d.data();
+                if (e._merged_into) return; // 23/05: ignora perdedores do merge
                 if (e.cnpj) nomePorCnpj.set(e.cnpj.replace(/\D/g, ''), e.nome);
             });
             lucAll.forEach(d => {
                 const e = d.data();
+                if (e._merged_into) return; // 23/05: ignora perdedores do merge
                 if (e.cnpj) nomePorCnpj.set(e.cnpj.replace(/\D/g, ''), e.nome);
             });
         } catch (e) { /* segue sem nomes */ }
@@ -1924,6 +1938,7 @@ app.get('/api/admin/dashboard-ceo/acoes', async (req, res) => {
         const mesNome = meses[mesAtual.slice(5, 7)] || '';
         empSnap.forEach(d => {
             const e = d.data();
+            if (e._merged_into) return; // 23/05: ignora perdedores do merge
             const histor = e.historicoCalculos || [];
             const tem = histor.some(h => (h.mesReferencia || '').toLowerCase().includes(mesNome));
             if (!tem) {
