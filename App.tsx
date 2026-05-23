@@ -19,11 +19,11 @@ import UserManagementModal from './components/UserManagementModal';
 import { PopularSuggestions } from './components/PopularSuggestions';
 import Tooltip from './components/Tooltip';
 import Toast from './components/Toast';
-import { SearchType, type SearchResult, type ComparisonResult, type FavoriteItem, type HistoryItem, type SimilarService, type CnaeSuggestion, SimplesNacionalEmpresa, SimplesNacionalNota, SimplesNacionalAnexo, SimplesNacionalImportResult, SimplesNacionalAtividade, User } from './types';
-import { fetchFiscalData, fetchComparison, fetchSimilarServices, fetchCnaeSuggestions } from './services/geminiService';
+import { SearchType, type SearchResult, type ComparisonResult, type FavoriteItem, type HistoryItem, type SimilarService, SimplesNacionalEmpresa, SimplesNacionalNota, SimplesNacionalAnexo, SimplesNacionalImportResult, SimplesNacionalAtividade, User } from './types';
+import { fetchFiscalData, fetchComparison, fetchSimilarServices } from './services/geminiService';
 import * as simplesService from './services/simplesNacionalService';
 import * as authService from './services/authService';
-import { BuildingIcon, CalculatorIcon, ChevronDownIcon, DocumentTextIcon, LocationIcon, SearchIcon, TagIcon, UserIcon, InfoIcon, CalendarIcon, ChatBubbleIcon, DownloadIcon } from './components/Icons';
+import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon } from './components/Icons';
 import FiscalObligationsDashboard from './components/FiscalObligationsDashboard';
 import { runInitialSync } from './services/cloudSyncService';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
@@ -131,12 +131,6 @@ const App: React.FC = () => {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-    const [cnaeSuggestions, setCnaeSuggestions] = useState<CnaeSuggestion[]>([]);
-    const [isLoadingCnaeSuggestions, setIsLoadingCnaeSuggestions] = useState(false);
-    const [errorCnaeSuggestions, setErrorCnaeSuggestions] = useState<string | null>(null);
-    const cnaeDebounceTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const suggestionsContainerRef = useRef<HTMLDivElement>(null);
 
     // Simples Nacional State
     const [simplesView, setSimplesView] = useState<'dashboard' | 'detalhe' | 'nova' | 'cliente'>('dashboard');
@@ -627,7 +621,7 @@ const App: React.FC = () => {
             <>
                 <LoginScreen onLoginSuccess={handleLoginSuccess} />
                 <div className="fixed bottom-4 right-4 flex gap-2">
-                    <button onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} className="p-2 bg-white dark:bg-slate-800 rounded-full shadow-lg">
+                    <button onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} className="p-2 bg-white dark:bg-slate-800 rounded-full shadow-lg" aria-label="Alternar tema claro/escuro">
                         {theme === 'light' ? '🌙' : '☀️'}
                     </button>
                 </div>
@@ -709,6 +703,7 @@ const App: React.FC = () => {
                                 href="https://consulta-sp.web.app"
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                aria-label="NFP Pro Cloud (abre em nova aba)"
                                 className="flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200" style={{background:"var(--bg-elevated)",border:"1px solid var(--border-default)",color:"var(--text-secondary)"}}
                             >
                                 <div className="mb-2">

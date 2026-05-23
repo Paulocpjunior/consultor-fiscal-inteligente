@@ -57,6 +57,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
                         onClick={onShowUsers}
                         className="btn-press p-2 rounded-full transition-colors" style={{color:"var(--text-muted)"}}
                         title="Gerenciar Usuários"
+                        aria-label="Gerenciar Usuários"
                     >
                         <UserGroupIcon className="w-6 h-6" />
                     </button>
@@ -66,6 +67,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
                         onClick={onShowLogs}
                         className="btn-press p-2 rounded-full transition-colors" style={{color:"var(--text-muted)"}}
                         title="Logs de Acesso"
+                        aria-label="Logs de Acesso"
                     >
                         <ShieldIcon className="w-6 h-6" />
                     </button>

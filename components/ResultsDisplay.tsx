@@ -131,18 +131,20 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ result, error, onStartC
                             </p>
                         </div>
                         <div className="flex gap-2 no-print">
-                            <button 
+                            <button
                                 onClick={handleToggleFavoriteClick}
                                 className={`p-2 rounded-lg border transition-all ${isFavorite ? 'bg-amber-50 border-amber-200 text-amber-500' : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-400 hover:text-slate-600'}`}
                                 title={isFavorite ? "Remover dos Favoritos" : "Adicionar aos Favoritos"}
+                                aria-label={isFavorite ? "Remover dos Favoritos" : "Adicionar aos Favoritos"}
                             >
                                 <StarIcon className={`w-5 h-5 ${animateFavorite ? 'animate-ping' : ''}`} solid={isFavorite} />
                             </button>
-                            <button 
+                            <button
                                 onClick={handleExportPDF}
                                 disabled={isExporting}
                                 className="p-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600 transition-all disabled:opacity-50"
                                 title="Exportar PDF"
+                                aria-label="Exportar PDF"
                             >
                                 {isExporting ? <div className="w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" /> : <DownloadIcon className="w-5 h-5" />}
                             </button>

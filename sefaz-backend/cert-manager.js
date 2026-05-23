@@ -10,6 +10,7 @@ import multer from 'multer';
 import forge from 'node-forge';
 import admin from 'firebase-admin';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+import { requireAdmin } from './require-admin.js';
 
 const router = express.Router();
 
@@ -29,29 +30,6 @@ function fa() {
     admin.initializeApp({ credential: admin.credential.applicationDefault() });
   }
   return admin;
-}
-
-// --- Middleware: admin only ---
-async function requireAdmin(req, res, next) {
-  try {
-    const auth = req.headers.authorization || '';
-    const m = auth.match(/^Bearer\s+(.+)$/i);
-    if (!m) return res.status(401).json({ error: 'Token ausente' });
-
-    const decoded = await fa().auth().verifyIdToken(m[1]);
-    const uid = decoded.uid;
-
-    const userDoc = await fa().firestore().collection('users').doc(uid).get();
-    if (!userDoc.exists) return res.status(403).json({ error: 'Usuário não encontrado' });
-    const role = userDoc.data().role;
-    if (role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
-
-    req.user = { uid, email: decoded.email || userDoc.data().email, role };
-    next();
-  } catch (e) {
-    console.error('[requireAdmin] erro:', e.message);
-    return res.status(401).json({ error: 'Token inválido ou expirado' });
-  }
 }
 
 // --- Parse PKCS#12 (A1) ---

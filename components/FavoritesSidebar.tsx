@@ -88,10 +88,11 @@ const FavoritesSidebar: React.FC<FavoritesSidebarProps> = ({
                                 <p className="font-semibold text-slate-700 dark:text-slate-200 truncate">{item.code}</p>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{item.description}</p>
                             </button>
-                            <button 
-                                onClick={() => handleRemoveFavorite(item)} 
+                            <button
+                                onClick={() => handleRemoveFavorite(item)}
                                 className="btn-press ml-2 p-1 text-slate-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                                 title="Remover favorito"
+                                aria-label={`Remover ${item.code} dos favoritos`}
                             >
                                 <TrashIcon className="w-4 h-4" />
                             </button>
@@ -174,10 +175,11 @@ const FavoritesSidebar: React.FC<FavoritesSidebarProps> = ({
                                     )}
                                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{formatTimestamp(item.timestamp)}</p>
                                 </button>
-                                <button 
-                                    onClick={() => onHistoryRemove(item.id)} 
+                                <button
+                                    onClick={() => onHistoryRemove(item.id)}
                                     className="btn-press ml-2 p-1 text-slate-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                                     title="Remover do histórico"
+                                    aria-label="Remover do histórico"
                                 >
                                     <TrashIcon className="w-4 h-4" />
                                 </button>
@@ -210,10 +212,11 @@ const FavoritesSidebar: React.FC<FavoritesSidebarProps> = ({
             `}>
                 <div className={`flex ${isCollapsed ? 'flex-col gap-4' : 'justify-between'} items-center mb-4 border-b border-slate-200 dark:border-slate-700 pb-2`}>
                     {/* Desktop Collapse Toggle */}
-                    <button 
+                    <button
                         onClick={() => setIsCollapsed(!isCollapsed)}
                         className="hidden md:flex p-1.5 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                         title={isCollapsed ? "Expandir Sidebar" : "Minimizar Sidebar"}
+                        aria-label={isCollapsed ? "Expandir painel lateral" : "Minimizar painel lateral"}
                     >
                          <ChevronDownIcon className={`w-5 h-5 transform transition-transform ${isCollapsed ? '-rotate-90' : 'rotate-90'}`} />
                     </button>
@@ -236,7 +239,7 @@ const FavoritesSidebar: React.FC<FavoritesSidebarProps> = ({
                     </div>
                     
                     {!isCollapsed && (
-                        <button onClick={onClose} className="p-1 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 md:hidden">
+                        <button onClick={onClose} className="p-1 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 md:hidden" aria-label="Fechar painel lateral">
                             <CloseIcon className="w-5 h-5" />
                         </button>
                     )}

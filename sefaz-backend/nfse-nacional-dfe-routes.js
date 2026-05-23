@@ -16,6 +16,7 @@ import express from 'express';
 import admin from 'firebase-admin';
 import { sincronizarEmpresaNfseNacionalDfe } from './nfse-nacional-dfe-orchestrator.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
+import { requireAuth } from './require-admin.js';
 
 const router = express.Router();
 
@@ -26,39 +27,17 @@ function fa() {
     return admin;
 }
 
-async function requireAuth(req, res, next) {
-    try {
-        const auth = req.headers.authorization || '';
-        const m = auth.match(/^Bearer\s+(.+)$/i);
-        if (!m) return res.status(401).json({ error: 'Token ausente' });
-        const decoded = await fa().auth().verifyIdToken(m[1]);
-        const userDoc = await fa().firestore().collection('users').doc(decoded.uid).get();
-        if (!userDoc.exists) return res.status(403).json({ error: 'Usuário não encontrado' });
-        req.user = {
-            uid: decoded.uid,
-            email: decoded.email || userDoc.data().email,
-            role: userDoc.data().role || 'colaborador',
-        };
-        next();
-    } catch (e) {
-        console.error('[nfse-nac-dfe requireAuth]', e.message);
-        return res.status(401).json({ error: 'Token inválido' });
+function requireCronAuth(req, res, next) {
+    const secret = process.env.SEFAZ_CRON_SECRET;
+    if (!secret) {
+        console.error('[requireCronAuth] SEFAZ_CRON_SECRET not configured');
+        return res.status(500).json({ error: 'Cron secret not configured' });
     }
-}
-
-async function requireCronAuth(req, res, next) {
-    const secret = req.headers['x-sefaz-cron-secret'];
-    const expected = process.env.SEFAZ_CRON_SECRET;
-    if (expected && secret === expected) {
-        req.cron = { source: 'secret' };
+    const headerSecret = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
+    if (headerSecret === secret) {
         return next();
     }
-    const auth = req.headers.authorization || '';
-    if (auth.match(/^Bearer\s+(.+)$/i)) {
-        req.cron = { source: 'oidc' };
-        return next();
-    }
-    return res.status(401).json({ error: 'Cron não autorizado' });
+    return res.status(403).json({ error: 'Cron auth failed' });
 }
 
 // ── POST /sync-one ────────────────────────────────────────────────────────
