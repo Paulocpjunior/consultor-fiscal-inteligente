@@ -88,8 +88,10 @@ service cloud.firestore {
     }
 
     match /documentos_fiscais/{docId} {
-      allow get: if isOwnerOrAdmin(resource.data.createdBy);
-      allow list: if isSignedIn();
+      // get: qualquer logado (colaboradores acessam via carteira).
+      // list: limite de query para evitar download massivo.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
       allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
@@ -103,7 +105,7 @@ service cloud.firestore {
 
     match /carteiras/{vinculoId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
       allow create, update, delete: if isAdmin();
     }
 
@@ -155,7 +157,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /categorias_fornecedor/{regraId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -167,7 +171,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /empresa_credito_config/{empresaId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -179,7 +185,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /fornecedores_ocultos/{regraId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -190,7 +198,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /notas_ocultas/{regraId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -199,7 +209,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /invoices_manuais/{invoiceId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -208,7 +220,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /categorias_credito_custom/{catId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -218,7 +232,8 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /tarefas/{tarefaId} {
-      allow read: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
       allow create, update: if isSignedIn();
       allow delete: if isAdmin();
     }
@@ -267,7 +282,8 @@ service cloud.firestore {
     //     leitura no frontend por qualquer signed-in) ─────────────────
 
     match /caixa_postal_mensagens/{docId} {
-      allow read: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
       allow write: if false;
     }
 

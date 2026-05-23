@@ -134,8 +134,26 @@ function logGeminiRoute(modelo, contexto) {
     console.log(`[gemini-router] ${tag} ${JSON.stringify(contexto)}`);
 }
 
-app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', ai: !!ai, timestamp: new Date().toISOString() });
+app.get('/health', async (_req, res) => {
+    const checks = {
+        status: 'ok',
+        ai: !!ai,
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
+    };
+    try {
+        const adminMod = (await import('firebase-admin')).default;
+        if (adminMod.apps.length) {
+            await adminMod.firestore().collection('users').limit(1).get();
+            checks.firestore = 'ok';
+        } else {
+            checks.firestore = 'not_initialized';
+        }
+    } catch (e) {
+        checks.firestore = 'error';
+    }
+    res.json(checks);
 });
 
 app.post('/api/fiscal/query', requireAuth, requireAI, async (req, res) => {
