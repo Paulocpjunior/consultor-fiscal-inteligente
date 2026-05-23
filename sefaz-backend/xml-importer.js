@@ -345,14 +345,25 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
     await docRef.update(updates);
     return { status: 'evento_anexado', chave: chaveNFe, tipo: evento.tipo };
   } else {
-    // Stub: cria um doc parcial pra quando a NFe chegar, ela faz merge
+    // Stub: cria um doc parcial pra quando a NFe chegar, ela faz merge.
+    // 23/05 — adicionado defaults pra campos undefined (numero, serie, etc)
     await docRef.set({
       id: chaveNFe,
       chave: chaveNFe,
       empresaId,
       empresaCnpj: capturadoPor?.empresaCnpj?.replace(/\D/g, '') || null,
       tipoDoc: 'NFe',
+      tipo: 'NFe',
       status: evento.tipo === 'cancelamento' && evento.cStat === '135' ? 'cancelado' : 'pendente',
+      direcao: 'desconhecida', // sera atualizado quando NFe original chegar
+      numero: null,
+      serie: null,
+      natOp: null,
+      itens: [],
+      totais: null,
+      temItens: false,
+      cStat: evento.cStat || null,
+      schema: schema || null,
       eventos: [eventoData],
       origem: 'sefaz',
       eventosBeforeNFe: true,
@@ -462,9 +473,19 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   // 23/05 — extrai itens/totais/direcao/status para docData completo
   const itens = extrairItens(xml);
   const totais = extrairTotais(xml);
-  const direcao = decidirDirecao(meta.cnpjEmit, meta.cnpjDest, empresaCnpj);
+  let direcao = decidirDirecao(meta.cnpjEmit, meta.cnpjDest, empresaCnpj);
   const status = statusFromCStat(xml);
   const temItens = itens.length > 0;
+
+  // 23/05 — resNFe (resumo) nao tem <dest> separado, so <CNPJ> do emit.
+  // Resumo sempre chega pra DESTINATARIO (manifestacao ou recebimento). Logo:
+  // se eh resumo e a empresa-cliente nao eh emit, entao eh entrada.
+  const norm = c => String(c || '').replace(/\D/g, '');
+  if (direcao === 'desconhecida' && meta.tipoDoc === 'resNFe' && meta.cnpjEmit) {
+    if (norm(meta.cnpjEmit) !== norm(empresaCnpj)) {
+      direcao = 'entrada';
+    }
+  }
 
   // Para o frontend e manifestacao, tipoDoc='NFe' tanto para procNFe quanto resNFe
   // (a distincao fica em temItens/schema). Resumos viram 'NFe' tambem para o
