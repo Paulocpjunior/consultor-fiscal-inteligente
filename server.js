@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
@@ -54,6 +55,25 @@ app.use('/api/admin/nfse-nacional-dfe', nfseNacionalDfeRouter);
 app.use('/api/internal/plano-contas', planoContasBridgeRouter);
 
 const PORT = process.env.PORT || 8080;
+
+const ALLOWED_ORIGINS = [
+    process.env.CORS_ORIGIN,
+    'https://consultorfiscalapp.web.app',
+    'https://consultorfiscalapp.firebaseapp.com',
+    'http://localhost:3000',
+    'http://localhost:5173',
+].filter(Boolean);
+
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Blocked by CORS'));
+        }
+    },
+    credentials: true,
+}));
 
 app.use(helmet({
     contentSecurityPolicy: {

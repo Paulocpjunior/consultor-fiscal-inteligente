@@ -66,17 +66,23 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /simples_empresas/{empId} {
-      // get (1 doc): so dono ou admin. list (query): qualquer logado —
-      // o filtro por carteira do colaborador e garantido pelo codigo do app.
-      allow get: if isOwnerOrAdmin(resource.data.createdBy);
-      allow list: if isSignedIn();
+      // get: qualquer logado — colaboradores precisam ler empresas
+      // atribuidas via carteira, nao apenas as que criaram.
+      // list: qualquer logado com limite de query — o filtro por carteira
+      // do colaborador e feito no codigo do app. Idealmente a carteira
+      // seria denormalizada no documento da empresa para permitir
+      // filtragem nas rules, mas isso exigiria refatoracao do modelo.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
       allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
 
     match /lucro_empresas/{empId} {
-      allow get: if isOwnerOrAdmin(resource.data.createdBy);
-      allow list: if isSignedIn();
+      // get: qualquer logado (colaboradores acessam via carteira).
+      // list: limite de query para evitar download massivo.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
       allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
