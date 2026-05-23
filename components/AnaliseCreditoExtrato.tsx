@@ -41,6 +41,7 @@ import {
   listarInvoicesManuais,
   adicionarInvoice,
   removerInvoice,
+  atualizarCategoriaInvoice,
   normalizarPeriodo,
   type InvoiceManual,
   type NovaInvoice,
@@ -650,13 +651,62 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     }
   }, [empresaSel?.id]);
 
+  // Loading state pra dropdown de categoria de invoice manual individual.
+  // Separado do salvandoCnpj porque sao tabelas diferentes (UX feedback
+  // local) e nao queremos um afetar o outro.
+  const [salvandoInvoiceId, setSalvandoInvoiceId] = useState<string | null>(null);
+
+  /**
+   * Salva categoria fixada de UMA invoice manual individual.
+   *
+   * Diferente de salvarCategoriaFornecedor (que casa por CNPJ): essa salva
+   * direto no doc da invoice. Necessario porque invoices estrangeiras tem
+   * CNPJ 00000000000000 — varias empresas distintas com mesmo CNPJ-zero,
+   * que de outro modo compartilhariam o mesmo override (estragando uma
+   * quando o usuario tenta reclassificar outra).
+   */
+  const salvarCategoriaInvoice = useCallback(async (
+    invoiceId: string,
+    categoria: string,
+  ) => {
+    setSalvandoInvoiceId(invoiceId);
+    const r = await atualizarCategoriaInvoice(invoiceId, categoria || null);
+    setSalvandoInvoiceId(null);
+    if (r.ok) {
+      setInvoicesVersao(v => v + 1);  // recarrega lista -> credito recalcula
+    } else {
+      setErro('Erro ao salvar categoria da invoice: ' + (r.error || 'desconhecido'));
+    }
+  }, []);
+
   // Credito recalcula sempre que o PDF parseado OU a empresa mudam.
   const credito = useMemo<CreditoEfiscal | null>(() => {
     if (!efiscal || !empresaSel) return null;
     const regCalc = regimeParaCalculo(empresaSel.regimeSugerido);
 
-    // 1. converte invoices manuais em EfiscalNf
-    const notasManuais = invoicesManuais.map(im => ({
+    // 1. Separa invoices manuais em DOIS grupos:
+    //    A) SEM categoria: agregam normalmente por CNPJ junto com o PDF
+    //       (classificacao automatica pela razao social).
+    //    B) COM categoria fixada: cada uma vira um "fornecedor sintetico"
+    //       isolado. Necessario pra invoices estrangeiras (CNPJ 0..0) onde
+    //       um override por CNPJ vazaria pra outras empresas no mesmo CNPJ.
+    //
+    // Chave sintetica: `${cnpjDigits}__inv__${id.slice(-8)}` — preserva o
+    // CNPJ original visualmente mas garante unicidade no fornMap/catPorCnpj.
+    const invoicesSemCat = invoicesManuais.filter(im => !im.categoria);
+    const invoicesComCat = invoicesManuais.filter(im => !!im.categoria);
+
+    // Mapa de chave sintetica -> categoria fixada (usado como override extra)
+    const overridesSinteticos = new Map<string, string>(overrides);
+    for (const im of invoicesComCat) {
+      const k = `${(im.cnpjCpf || '').replace(/\D+/g, '')}__inv__${im.id.slice(-8)}`;
+      overridesSinteticos.set(k, im.categoria as string);
+    }
+
+    // 2. converte invoices manuais em EfiscalNf
+    //    Invoices SEM categoria mantem o cnpjCpf real (agregam por CNPJ).
+    //    Invoices COM categoria recebem cnpjCpf SINTETICO (isolam por id).
+    const notasManuaisSemCat = invoicesSemCat.map(im => ({
       emissao: im.emissao || '',
       numero: im.numero || '',
       serie: im.serie || '',
@@ -669,16 +719,35 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
       issRetido: Number(im.issRetido) || 0,
       pagina: 0,
     }));
-    const notasMescladas = [...efiscal.notas, ...notasManuais];
+    const notasManuaisComCat = invoicesComCat.map(im => {
+      const cnpjSint = `${(im.cnpjCpf || '').replace(/\D+/g, '')}__inv__${im.id.slice(-8)}`;
+      return {
+        emissao: im.emissao || '',
+        numero: im.numero || '',
+        serie: im.serie || '',
+        cnpjCpf: cnpjSint,
+        razaoSocial: im.razaoSocial,
+        valorNf: Number(im.valorNf) || 0,
+        baseCalculo: Number(im.baseCalculo) || 0,
+        aliquota: Number(im.aliquota) || 0,
+        valorIss: Number(im.valorIss) || 0,
+        issRetido: Number(im.issRetido) || 0,
+        pagina: 0,
+      };
+    });
+    const notasMescladas = [...efiscal.notas, ...notasManuaisSemCat, ...notasManuaisComCat];
 
-    // 2. reagrupa fornecedores incluindo manuais
-    //    Comeca com os do PDF e soma as manuais (1 CNPJ = 1 linha)
+    // 3. reagrupa fornecedores
+    //    a) Comeca com os do PDF (CNPJ real)
+    //    b) Soma invoices SEM categoria por CNPJ (1 CNPJ = 1 linha)
+    //    c) Adiciona invoices COM categoria como fornecedores INDIVIDUAIS
+    //       (cada uma com chave sintetica, 1 invoice = 1 linha)
     const fornMap = new Map<string, typeof efiscal.fornecedores[number]>();
     const soDigF = (s: string) => (s || '').replace(/\D+/g, '');
     for (const f of efiscal.fornecedores) {
       fornMap.set(soDigF(f.cnpjCpf), { ...f });
     }
-    for (const im of invoicesManuais) {
+    for (const im of invoicesSemCat) {
       const k = soDigF(im.cnpjCpf);
       const existente = fornMap.get(k);
       if (existente) {
@@ -698,6 +767,20 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
           somaIssRetido: Number(im.issRetido) || 0,
         });
       }
+    }
+    for (const im of invoicesComCat) {
+      const cnpjSint = `${soDigF(im.cnpjCpf)}__inv__${im.id.slice(-8)}`;
+      // Cada invoice com categoria sempre vira UM fornecedor proprio
+      // (chave unica via id da invoice).
+      fornMap.set(cnpjSint, {
+        cnpjCpf: cnpjSint,
+        razaoSocial: im.razaoSocial,
+        qtdNotas: 1,
+        somaValorNf: Number(im.valorNf) || 0,
+        somaBaseCalculo: Number(im.baseCalculo) || 0,
+        somaValorIss: Number(im.valorIss) || 0,
+        somaIssRetido: Number(im.issRetido) || 0,
+      });
     }
     const fornMesclados = Array.from(fornMap.values());
 
@@ -746,7 +829,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
       !notasOcultasEfetivas.has(nfChave(n.cnpjCpf, n.numero, n.serie || ''))
     );
 
-    return calcularCreditoEfiscal(fornFiltrados, regCalc, notasFiltradas, overrides, categoriasNaoCreditaveis);
+    return calcularCreditoEfiscal(fornFiltrados, regCalc, notasFiltradas, overridesSinteticos, categoriasNaoCreditaveis);
   }, [efiscal, empresaSel, overrides, invoicesManuais, categoriasNaoCreditaveis, fornecedoresOcultosEfetivos, notasOcultasEfetivas]);
 
   // Aviso de divergencia de CNPJ — tambem reativo.
@@ -1508,6 +1591,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                       <th className="px-2 py-1 text-left">Número</th>
                       <th className="px-2 py-1 text-left">CNPJ</th>
                       <th className="px-2 py-1 text-left">Razão Social</th>
+                      <th className="px-2 py-1 text-left">Categoria</th>
                       <th className="px-2 py-1 text-right">Valor NF</th>
                       <th className="px-2 py-1 text-right">Base Cálc.</th>
                       <th className="px-2 py-1"></th>
@@ -1520,6 +1604,31 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                         <td className="px-2 py-1">{im.numero || '—'}</td>
                         <td className="px-2 py-1 font-mono">{im.cnpjCpf}</td>
                         <td className="px-2 py-1">{im.razaoSocial}</td>
+                        <td className="px-2 py-1">
+                          <select
+                            value={im.categoria || ''}
+                            disabled={salvandoInvoiceId === im.id}
+                            onChange={e => {
+                              const v = e.target.value;
+                              if (v === '__gerenciar__') {
+                                setModalCategoriasAberto(true);
+                                return;
+                              }
+                              salvarCategoriaInvoice(im.id, v);
+                            }}
+                            className="text-xs bg-transparent border border-amber-300 dark:border-amber-700 rounded px-1.5 py-0.5 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+                            title="Categoria fixada desta invoice (substitui a classificação automática)"
+                          >
+                            <option value="">— auto (pela razão social) —</option>
+                            {todasCategorias.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                            <option value="__gerenciar__">⚙️ Gerenciar categorias…</option>
+                          </select>
+                          {salvandoInvoiceId === im.id && (
+                            <span className="ml-1 text-[10px] text-gray-400">salvando…</span>
+                          )}
+                        </td>
                         <td className="px-2 py-1 text-right">R$ {brl(Number(im.valorNf) || 0)}</td>
                         <td className="px-2 py-1 text-right font-semibold">R$ {brl(Number(im.baseCalculo) || 0)}</td>
                         <td className="px-2 py-1 text-right">

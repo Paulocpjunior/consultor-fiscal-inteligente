@@ -23,6 +23,7 @@ import {
     query,
     where,
     serverTimestamp,
+    updateDoc,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 
@@ -42,6 +43,18 @@ export interface InvoiceManual {
     aliquota: number;
     valorIss: number;
     issRetido: number;
+    /**
+     * Categoria fixada para ESTA invoice individualmente (override por id,
+     * nao por CNPJ). Quando preenchida, sobrepoe a classificacao automatica
+     * (pela razao social) e ignora os overrides por CNPJ.
+     *
+     * Caso de uso primario: invoices estrangeiras (CNPJ 00000000000000)
+     * onde o CNPJ-zero agruparia varias empresas distintas (Twilio, OpenAI,
+     * Atlassian etc), e cada uma precisa de classificacao independente.
+     *
+     * Quando vazia/undefined: cai na classificacao automatica.
+     */
+    categoria?: string;
     criadoPor: string | null;
 }
 
@@ -149,6 +162,37 @@ export async function removerInvoice(invoiceId: string): Promise<{ ok: boolean; 
         return { ok: true };
     } catch (e) {
         console.error('[invoicesManuais] remover:', e);
+        return { ok: false, error: e instanceof Error ? e.message : 'erro' };
+    }
+}
+
+/**
+ * Define (ou limpa) a categoria fixada de UMA invoice individualmente.
+ *
+ * Diferente de salvarRegra() (categorias_fornecedor) que casa por CNPJ:
+ * essa funcao salva o campo `categoria` direto no doc da invoice. Necessario
+ * pra invoices com CNPJ 00000000000000 (estrangeiras), que de outro modo
+ * compartilhariam o mesmo override por CNPJ.
+ *
+ * @param invoiceId  id do doc em invoices_manuais
+ * @param categoria  string da categoria, ou null/'' para LIMPAR (volta a
+ *                   classificacao automatica pela razao social)
+ */
+export async function atualizarCategoriaInvoice(
+    invoiceId: string,
+    categoria: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+    if (!isFirebaseConfigured || !invoiceId) {
+        return { ok: false, error: 'invoiceId obrigatorio' };
+    }
+    try {
+        // String vazia ou null: armazena como '' pra desfazer (mais simples que deleteField).
+        await updateDoc(doc(db, COLLECTION, invoiceId), {
+            categoria: categoria || '',
+        });
+        return { ok: true };
+    } catch (e) {
+        console.error('[invoicesManuais] atualizarCategoriaInvoice:', e);
         return { ok: false, error: e instanceof Error ? e.message : 'erro' };
     }
 }
