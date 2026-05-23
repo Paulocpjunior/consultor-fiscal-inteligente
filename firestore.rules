@@ -273,7 +273,8 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /empresas_xml_config/{configId} {
-      allow read: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
       allow update, delete: if isAdmin();
     }
