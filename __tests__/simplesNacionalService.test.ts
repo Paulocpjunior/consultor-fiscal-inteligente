@@ -530,8 +530,8 @@ describe('simplesNacionalService', () => {
             // Detailed monthly: 15000 in Anexo I (commerce) + 10000 in Anexo III (services)
             const detalhado: any = {
                 [mesChave]: {
-                    'desc::4711302::I': { valor: 15000, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false },
-                    'desc::6201501::III': { valor: 10000, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false },
+                    'atividade::comercio::4711302::I': { valor: 15000, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false },
+                    'atividade::servicos::6201501::III': { valor: 10000, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false },
                 },
             };
 
