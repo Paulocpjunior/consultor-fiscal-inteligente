@@ -23,7 +23,8 @@ export enum SearchType {
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
   CARTEIRA = 'Carteira de Clientes',
   AGENTES_A3 = 'Agentes A3',
-  EMISSAO_TRIBUTOS = 'Central de Emissões'
+  EMISSAO_TRIBUTOS = 'Central de Emissões',
+  RECUPERACAO_TRIBUTARIA = 'Recuperação Tributária',
 }
 
 export interface GroundingSource {
