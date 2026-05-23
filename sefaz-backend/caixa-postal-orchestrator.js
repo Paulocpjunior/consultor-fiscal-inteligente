@@ -153,10 +153,13 @@ export async function listarMensagensLocais({ empresaCnpj, naoLidas, categoria }
     if (empresaCnpj) q = q.where('empresaCnpj', '==', empresaCnpj);
     if (categoria) q = q.where('categoria', '==', categoria);
 
-    const snap = await q.limit(500).get();
+    // FIX 23/05: ordena por dataEnvio desc ANTES de paginar pra mostrar
+    // as mensagens mais recentes (e nao uma fatia arbitraria do .limit()).
+    // Limite subido pra 2000 — ainda barato, cobre nosso volume atual de 4091
+    // total com folga (a maioria das telas filtra por nao-lidas).
+    const snap = await q.orderBy('dataEnvio', 'desc').limit(2000).get();
     let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (naoLidas) docs = docs.filter(d => !d.dataLeitura);
-    docs.sort((a, b) => (b.dataEnvio || '').localeCompare(a.dataEnvio || ''));
     return docs;
 }
 
@@ -165,7 +168,11 @@ export async function listarMensagensLocais({ empresaCnpj, naoLidas, categoria }
  */
 export async function getResumoGlobal(cnpjsPermitidos = null) {
     const db = fa().firestore();
-    const snap = await db.collection(COLLECTION).limit(1000).get();
+    // FIX 23/05: removido .limit(1000) que cortava a contagem em 1000 de 4091 docs.
+    // .select() reduz payload: traz so os 4 campos que importam pra agregacao.
+    const snap = await db.collection(COLLECTION)
+        .select('empresaCnpj', 'categoria', 'dataLeitura')
+        .get();
     let docs = snap.docs.map(d => d.data());
 
     // Filtro opcional por carteira: se vier uma lista de CNPJs, conta so
