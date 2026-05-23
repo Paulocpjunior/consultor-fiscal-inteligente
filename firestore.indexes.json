@@ -1,0 +1,30 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "caixa_postal_mensagens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "categoria", "order": "ASCENDING" },
+        { "fieldPath": "dataEnvio", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "caixa_postal_mensagens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "empresaCnpj", "order": "ASCENDING" },
+        { "fieldPath": "dataEnvio", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "caixa_postal_mensagens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "empresaCnpj", "order": "ASCENDING" },
+        { "fieldPath": "categoria", "order": "ASCENDING" },
+        { "fieldPath": "dataEnvio", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
