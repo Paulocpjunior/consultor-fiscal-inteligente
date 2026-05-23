@@ -72,8 +72,9 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
     const mensagensRemotas = await provider.listarMensagens(empresaCnpj);
 
     // Lê estado de leitura atual do Firestore pra preservar
+    // 23/05: usa CNPJ normalizado pra bater com docs ja limpos
     const snap = await db.collection(COLLECTION)
-        .where('empresaCnpj', '==', empresaCnpj)
+        .where('empresaCnpj', '==', _normCnpj(empresaCnpj))
         .get();
 
     const lidasLocais = new Map();
@@ -85,15 +86,20 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
     const batch = db.batch();
     let novas = 0, atualizadas = 0;
 
+    // 23/05: normaliza empresaCnpj defensivamente.
+    // SERPRO as vezes retorna CNPJ formatado; salvar sempre limpo previne
+    // 746 mensagens com formatacao suja que vimos hoje.
+    const empresaCnpjLimpo = _normCnpj(empresaCnpj);
+
     for (const msg of mensagensRemotas) {
-        const docId = `${empresaCnpj}_${msg.mensagemId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const docId = `${empresaCnpjLimpo}_${msg.mensagemId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
         const ref = db.collection(COLLECTION).doc(docId);
         const dataLeituraLocal = lidasLocais.get(msg.mensagemId) || msg.dataLeitura || null;
 
-        const empresaNome = _nomeCache.get(_normCnpj(empresaCnpj)) || '';
+        const empresaNome = _nomeCache.get(empresaCnpjLimpo) || '';
         const payload = {
             empresaId,
-            empresaCnpj,
+            empresaCnpj: empresaCnpjLimpo,
             empresaNome,
             mensagemId: msg.mensagemId,
             assunto: msg.assunto || '',
