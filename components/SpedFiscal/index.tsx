@@ -12,11 +12,13 @@
  *
  * Layout alvo: Guia Prático 3.2.2 / Leiaute 020 (vigente 01/01/2026).
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import type { User } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { auth } from '../../services/firebaseConfig';
 import { formatCnpjCpf } from '../../services/xmlParserService';
+
+const AnaliseConferencia = lazy(() => import('./AnaliseConferencia'));
 
 interface Props {
     currentUser: User | null;
@@ -46,7 +48,10 @@ function getTrimestreFromCompetencia(comp: string): { inicio: string; fim: strin
     return { inicio: fmt(mesInicio), fim: fmt(mesFim) };
 }
 
+type SpedTab = 'gerar' | 'analisar';
+
 const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
+    const [spedTab, setSpedTab] = useState<SpedTab>('gerar');
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
     const [loadingEmpresas, setLoadingEmpresas] = useState(true);
     const [empresaId, setEmpresaId] = useState<string>('');
@@ -214,6 +219,30 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             EFD ICMS/IPI — Guia Prático 3.2.2 / Leiaute 020
                         </p>
                     </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setSpedTab('gerar')}
+                            className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
+                            style={{
+                                background: spedTab === 'gerar' ? 'var(--accent)' : 'var(--bg-card)',
+                                color: spedTab === 'gerar' ? '#fff' : 'var(--text-muted)',
+                                border: `1px solid ${spedTab === 'gerar' ? 'var(--accent)' : 'var(--border-default)'}`,
+                            }}
+                        >
+                            Gerar SPED
+                        </button>
+                        <button
+                            onClick={() => setSpedTab('analisar')}
+                            className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
+                            style={{
+                                background: spedTab === 'analisar' ? 'var(--accent)' : 'var(--bg-card)',
+                                color: spedTab === 'analisar' ? '#fff' : 'var(--text-muted)',
+                                border: `1px solid ${spedTab === 'analisar' ? 'var(--accent)' : 'var(--border-default)'}`,
+                            }}
+                        >
+                            Importar e Analisar
+                        </button>
+                    </div>
                     <span
                         className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full"
                         style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
@@ -223,6 +252,13 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 </div>
             </div>
 
+            {spedTab === 'analisar' && (
+                <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
+                    <AnaliseConferencia currentUser={currentUser} onShowToast={onShowToast} />
+                </Suspense>
+            )}
+
+            {spedTab === 'gerar' && <>
             {/* Lista de empresas elegíveis */}
             <div
                 className="p-5 rounded-xl"
@@ -425,7 +461,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 }}
             >
                 <p className="text-xs font-bold" style={{ color: 'var(--accent)' }}>
-                    🛠️ Fase 1 — Bloco 0 e 9 implementados
+                    Fase 1 — Bloco 0 e 9 implementados
                 </p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
                     A geração inclui dados da empresa (registro 0000), endereço (0005),
@@ -436,6 +472,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     Por enquanto, o SPED gerado <strong>NÃO</strong> deve ser entregue à PVA — use para validação visual.
                 </p>
             </div>
+            </>}
         </div>
     );
 };

@@ -1593,3 +1593,136 @@ export interface RecuperacaoParecerIa {
     modelo: string;
     geradoEm: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPED Fiscal — Análise e Conferência (importação de TXT EFD ICMS/IPI)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SpedFiscalStatus = 'IMPORTADO' | 'PROCESSADO' | 'COM_ERROS' | 'CONFERIDO';
+
+export type SpedInconsistenciaTipo =
+    | 'XML_NAO_ESCRITURADO' | 'SPED_SEM_XML' | 'VALOR_DIVERGENTE'
+    | 'ICMS_DIVERGENTE' | 'CFOP_DIVERGENTE' | 'CST_DIVERGENTE'
+    | 'NOTA_CANCELADA_ESCRITURADA' | 'CHAVE_INVALIDA' | 'DOCUMENTO_DUPLICADO' | 'REGISTRO_INCOMPLETO';
+
+export type SpedInconsistenciaGravidade = 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';
+
+export interface SpedFiscalArquivo {
+    id: string;
+    empresaId?: string;
+    cnpj?: string;
+    razaoSocial?: string;
+    competencia?: string;
+    periodoInicial?: string;
+    periodoFinal?: string;
+    nomeArquivo: string;
+    tamanhoBytes: number;
+    importadoPorUid?: string;
+    importadoPorNome?: string;
+    importadoEm: number;
+    status: SpedFiscalStatus;
+    totalLinhas: number;
+    totalRegistros: number;
+}
+
+export interface SpedRegistro0000 {
+    tipo: '0000'; codVer?: string; codFin?: string; dtIni?: string; dtFin?: string;
+    nome?: string; cnpj?: string; cpf?: string; uf?: string; ie?: string;
+    codMun?: string; im?: string; suframa?: string; indPerfil?: string; indAtiv?: string;
+}
+
+export interface SpedParticipante0150 {
+    tipo: '0150'; codPart: string; nome?: string; codPais?: string;
+    cnpj?: string; cpf?: string; ie?: string; codMun?: string; suframa?: string;
+    endereco?: string; numero?: string; complemento?: string; bairro?: string;
+}
+
+export interface SpedProduto0200 {
+    tipo: '0200'; codItem: string; descrItem?: string; codBarra?: string;
+    codAntItem?: string; unidInv?: string; tipoItem?: string; codNcm?: string;
+    exIpi?: string; codGen?: string; codLst?: string; aliqIcms?: number; cest?: string;
+}
+
+export interface SpedItemC170 {
+    tipo: 'C170'; numItem?: string; codItem?: string; descricaoComplementar?: string;
+    quantidade?: number; unidade?: string; valorItem?: number; valorDesconto?: number;
+    cstIcms?: string; cfop?: string; natBcCred?: string;
+    valorBcIcms?: number; aliquotaIcms?: number; valorIcms?: number;
+    valorBcIcmsSt?: number; aliquotaSt?: number; valorIcmsSt?: number;
+    indApur?: string; cstIpi?: string; codEnq?: string;
+    valorBcIpi?: number; aliquotaIpi?: number; valorIpi?: number;
+    cstPis?: string; valorBcPis?: number; aliquotaPis?: number; valorPis?: number;
+    cstCofins?: string; valorBcCofins?: number; aliquotaCofins?: number; valorCofins?: number;
+}
+
+export interface SpedResumoC190 {
+    tipo: 'C190'; cstIcms?: string; cfop?: string; aliquotaIcms?: number;
+    valorOperacao?: number; valorBcIcms?: number; valorIcms?: number;
+    valorBcIcmsSt?: number; valorIcmsSt?: number; valorReducaoBc?: number;
+    valorIpi?: number; codObs?: string;
+}
+
+export interface SpedDocumentoC100 {
+    tipo: 'C100'; indOper?: string; indEmit?: string; codPart?: string;
+    codMod?: string; codSit?: string; serie?: string; numDoc?: string;
+    chave?: string; dataDoc?: string; dataES?: string;
+    valorDocumento: number; valorDesconto?: number; valorMercadoria?: number;
+    valorIcms?: number; valorIpi?: number; valorPis?: number; valorCofins?: number;
+    itens: SpedItemC170[]; resumos: SpedResumoC190[];
+}
+
+export interface SpedDocumentoD100 {
+    tipo: 'D100'; indOper?: string; indEmit?: string; codPart?: string;
+    codMod?: string; codSit?: string; serie?: string; subSerie?: string;
+    numDoc?: string; chave?: string; dataDoc?: string; dataAP?: string;
+    tpCtE?: string; chaveCteRef?: string;
+    valorDocumento: number; valorDesconto?: number; valorServico?: number;
+    valorBcIcms?: number; valorIcms?: number;
+}
+
+export interface SpedApuracaoE110 {
+    tipo: 'E110'; valorTotalDebitos?: number; valorAjustesDebitos?: number;
+    valorTotalAjustesDebitos?: number; valorEstornosCreditos?: number;
+    valorTotalCreditos?: number; valorAjustesCreditos?: number;
+    valorTotalAjustesCreditos?: number; valorEstornosDebitos?: number;
+    saldoCredorAnterior?: number; valorSaldoDevedor?: number;
+    valorDeducoes?: number; valorIcmsRecolher?: number;
+    valorSaldoCredorTransportar?: number;
+}
+
+export interface SpedApuracaoE520 {
+    tipo: 'E520'; valorSaldoDevedorIpi?: number; valorDeducoesIpi?: number;
+    valorIpiRecolher?: number; valorSaldoCredorIpi?: number;
+}
+
+export interface SpedFiscalParseResult {
+    arquivo: SpedFiscalArquivo;
+    registro0000?: SpedRegistro0000;
+    participantes: SpedParticipante0150[];
+    produtos: SpedProduto0200[];
+    documentosC100: SpedDocumentoC100[];
+    documentosD100: SpedDocumentoD100[];
+    apuracaoIcms?: SpedApuracaoE110;
+    apuracaoIpi?: SpedApuracaoE520;
+    erros: string[];
+    avisos: string[];
+}
+
+export interface SpedFiscalInconsistencia {
+    id: string;
+    tipo: SpedInconsistenciaTipo;
+    gravidade: SpedInconsistenciaGravidade;
+    chave?: string;
+    documento?: string;
+    descricao: string;
+    valorXml?: number;
+    valorSped?: number;
+    status: 'ABERTA' | 'EM_ANALISE' | 'CORRIGIDA' | 'JUSTIFICADA';
+}
+
+export interface SpedFiscalConferenceResult {
+    totalXmls: number;
+    totalDocumentosSped: number;
+    documentosConferidos: number;
+    inconsistencias: SpedFiscalInconsistencia[];
+}
