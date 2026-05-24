@@ -34,8 +34,9 @@ interface Tese {
     nome: string;
     descricao: string;
     fundamentoLegal: string;
-    regimes: string[];
-    tributos: string[];
+    regimes?: string[];
+    regimesAplicaveis?: string[];
+    tributos?: string[];
 }
 
 interface ItemRecuperacao {
@@ -376,7 +377,7 @@ const RecuperacaoTributaria: React.FC<Props> = ({ currentUser, onShowToast }) =>
                                             {t.descricao}
                                         </p>
                                         <div className="flex flex-wrap gap-1">
-                                            {t.regimes.map(r => (
+                                            {(t.regimes || t.regimesAplicaveis || []).map(r => (
                                                 <span
                                                     key={r}
                                                     className="px-2 py-0.5 rounded text-[10px] font-medium"
@@ -385,7 +386,7 @@ const RecuperacaoTributaria: React.FC<Props> = ({ currentUser, onShowToast }) =>
                                                     {r}
                                                 </span>
                                             ))}
-                                            {t.tributos.map(tr => (
+                                            {(t.tributos || []).map(tr => (
                                                 <span
                                                     key={tr}
                                                     className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-700"
