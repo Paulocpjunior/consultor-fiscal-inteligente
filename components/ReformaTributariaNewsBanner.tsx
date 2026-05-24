@@ -121,6 +121,7 @@ const ReformaTributariaNewsBanner: React.FC = () => {
                         onClick={() => setVisible(false)}
                         className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                         title="Fechar"
+                        aria-label="Fechar banner de notícias"
                     >
                         <CloseIcon />
                     </button>
@@ -157,11 +158,11 @@ const ReformaTributariaNewsBanner: React.FC = () => {
 
                         {/* Navigation */}
                         <div className="flex flex-col items-center gap-2 flex-shrink-0">
-                            <button onClick={prev} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-sky-100 dark:hover:bg-sky-900/30 hover:text-sky-600 transition-colors">
+                            <button onClick={prev} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-sky-100 dark:hover:bg-sky-900/30 hover:text-sky-600 transition-colors" aria-label="Notícia anterior">
                                 <ChevronLeftIcon />
                             </button>
                             <span className="text-[10px] font-mono text-slate-400">{activeIndex + 1}/{NEWS_ITEMS.length}</span>
-                            <button onClick={next} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-sky-100 dark:hover:bg-sky-900/30 hover:text-sky-600 transition-colors">
+                            <button onClick={next} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-sky-100 dark:hover:bg-sky-900/30 hover:text-sky-600 transition-colors" aria-label="Próxima notícia">
                                 <ChevronRightIcon />
                             </button>
                         </div>
@@ -173,6 +174,7 @@ const ReformaTributariaNewsBanner: React.FC = () => {
                             <button
                                 key={i}
                                 onClick={() => setActiveIndex(i)}
+                                aria-label={`Ir para notícia ${i + 1}`}
                                 className={`rounded-full transition-all duration-200 ${
                                     i === activeIndex
                                         ? 'w-4 h-1.5 bg-amber-500'

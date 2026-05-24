@@ -32,19 +32,29 @@ function calcularAcrescimos(valor, vencimento, dataPagamento) {
     if (isNaN(venc) || isNaN(pgto) || pgto <= venc) {
         return { multa: 0, juros: 0, valorTotal: valor };
     }
+
+    // Integer-cent arithmetic to avoid floating-point rounding errors
+    const principalCents = Math.round(valor * 100);
+
     const diasAtraso = Math.ceil((pgto - venc) / 86400000);
-    const multa = Math.min(valor * 0.0033 * diasAtraso, valor * 0.20);
+    // Multa: 0,33% por dia, cap 20%
+    const multaCents = Math.min(
+        Math.round(principalCents * 0.0033 * diasAtraso),
+        Math.round(principalCents * 0.20),
+    );
 
     // Juros: meses completos entre vencimento e pagamento × SELIC mensal aprox.
     let mesesAtraso = (pgto.getFullYear() - venc.getFullYear()) * 12
                     + (pgto.getMonth() - venc.getMonth());
     if (mesesAtraso < 1) mesesAtraso = 1; // mínimo 1% (mês do pagamento)
-    const juros = valor * SELIC_MENSAL_APROXIMADA * mesesAtraso;
+    const jurosCents = Math.round(principalCents * SELIC_MENSAL_APROXIMADA * mesesAtraso);
+
+    const totalCents = principalCents + multaCents + jurosCents;
 
     return {
-        multa: +multa.toFixed(2),
-        juros: +juros.toFixed(2),
-        valorTotal: +(valor + multa + juros).toFixed(2),
+        multa: multaCents / 100,
+        juros: jurosCents / 100,
+        valorTotal: totalCents / 100,
     };
 }
 

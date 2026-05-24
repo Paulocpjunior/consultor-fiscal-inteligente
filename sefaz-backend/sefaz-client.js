@@ -127,10 +127,11 @@ export async function consultaDistDFeComCert({ cnpj, ultNSU = '0', certOverride 
   let cert = certOverride || await loadCertificate();
   const envelope = montaEnvelope({ cnpj, ultNSU, uf });
 
-  // DEBUG TEMPORARIO — investigar cStat 215
-  console.log('[sefaz-client DEBUG] ENVELOPE ENVIADO:');
-  console.log(envelope);
-  console.log('[sefaz-client DEBUG] cert CNPJ:', cert.cnpj || '?');
+  if (process.env.SEFAZ_DEBUG === '1') {
+    console.log('[sefaz-client DEBUG] ENVELOPE ENVIADO:');
+    console.log(envelope);
+    console.log('[sefaz-client DEBUG] cert CNPJ:', cert.cnpj || '?');
+  }
 
   let response;
   try {
@@ -145,13 +146,16 @@ export async function consultaDistDFeComCert({ cnpj, ultNSU = '0', certOverride 
   }
   if (response.statusCode !== 200) throw new Error(`SEFAZ HTTP ${response.statusCode}: ${response.body.slice(0, 500)}`);
 
-  // DEBUG TEMPORARIO — investigar cStat 215
-  console.log('[sefaz-client DEBUG] RESPONSE STATUS:', response.statusCode);
-  console.log('[sefaz-client DEBUG] RESPONSE BODY (primeiros 2000 chars):');
-  console.log(response.body.slice(0, 2000));
+  if (process.env.SEFAZ_DEBUG === '1') {
+    console.log('[sefaz-client DEBUG] RESPONSE STATUS:', response.statusCode);
+    console.log('[sefaz-client DEBUG] RESPONSE BODY (primeiros 2000 chars):');
+    console.log(response.body.slice(0, 2000));
+  }
 
   const parsed = parseRetorno(response.body);
-  console.log('[sefaz-client DEBUG] PARSED:', JSON.stringify({ cStat: parsed.cStat, xMotivo: parsed.xMotivo, ultNSU: parsed.ultNSU, maxNSU: parsed.maxNSU, docsCount: parsed.docs.length }));
+  if (process.env.SEFAZ_DEBUG === '1') {
+    console.log('[sefaz-client DEBUG] PARSED:', JSON.stringify({ cStat: parsed.cStat, xMotivo: parsed.xMotivo, ultNSU: parsed.ultNSU, maxNSU: parsed.maxNSU, docsCount: parsed.docs.length }));
+  }
   const xmls = parsed.docs.map(d => {
     try { return { nsu: d.nsu, schema: d.schema, xml: descomprimirDocZip(d.base64) }; }
     catch (e) {

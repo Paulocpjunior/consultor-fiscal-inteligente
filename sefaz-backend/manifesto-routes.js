@@ -7,6 +7,7 @@ import admin from 'firebase-admin';
 import {
   manifestarUma, manifestarPendentes, listarElegiveis,
 } from './manifesto-orchestrator.js';
+import { requireAuth as authUser } from './require-admin.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET;
 const router = Router();
@@ -14,19 +15,6 @@ const router = Router();
 function fa() {
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
   return admin;
-}
-
-async function authUser(req, res, next) {
-  try {
-    const authz = req.headers.authorization || '';
-    const m = authz.match(/^Bearer (.+)$/);
-    if (!m) return res.status(401).json({ erro: 'Bearer token ausente' });
-    const decoded = await fa().auth().verifyIdToken(m[1]);
-    req.user = { uid: decoded.uid, email: decoded.email };
-    next();
-  } catch (e) {
-    res.status(401).json({ erro: 'Token inválido', detalhe: e.message });
-  }
 }
 
 function authCron(req, res, next) {

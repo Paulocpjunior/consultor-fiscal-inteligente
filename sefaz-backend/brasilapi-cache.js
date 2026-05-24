@@ -14,6 +14,7 @@
 const cache = new Map();       // cnpj -> dados
 const failedSet = new Set();   // cnpjs que falharam no fetch (nao tenta de novo)
 const TIMEOUT_MS = 8000;
+const MAX_CACHE_SIZE = 5000;
 
 async function fetchCnpjData(cnpj) {
     const ctrl = new AbortController();
@@ -67,9 +68,17 @@ export async function enrichParticipantesViaBrasilApi(participantes) {
         if (!data) {
             data = await fetchCnpjData(cnpj);
             if (!data) {
+                if (failedSet.size >= MAX_CACHE_SIZE) {
+                    const oldestKey = failedSet.values().next().value;
+                    failedSet.delete(oldestKey);
+                }
                 failedSet.add(cnpj);
                 failed++;
                 continue;
+            }
+            if (cache.size >= MAX_CACHE_SIZE) {
+                const oldestKey = cache.keys().next().value;
+                cache.delete(oldestKey);
             }
             cache.set(cnpj, data);
         }

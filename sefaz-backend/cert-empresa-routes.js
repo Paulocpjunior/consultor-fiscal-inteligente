@@ -5,7 +5,6 @@
 
 import express from 'express';
 import multer from 'multer';
-import admin from 'firebase-admin';
 import {
     uploadCertEmpresa,
     loadCertEmpresa,
@@ -13,6 +12,7 @@ import {
     getCertInfoEmpresa,
     listCertsEmpresas,
 } from './cert-storage.js';
+import { requireAuth } from './require-admin.js';
 
 const router = express.Router();
 
@@ -21,43 +21,12 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-function fa() {
-    if (!admin.apps.length) {
-        admin.initializeApp({ credential: admin.credential.applicationDefault() });
-    }
-    return admin;
-}
-
-// Middleware: admin only — Bearer token Firebase + role check no Firestore
-async function requireAdmin(req, res, next) {
-    try {
-        const auth = req.headers.authorization || '';
-        const m = auth.match(/^Bearer\s+(.+)$/i);
-        if (!m) return res.status(401).json({ error: 'Token ausente' });
-
-        const decoded = await fa().auth().verifyIdToken(m[1]);
-        const uid = decoded.uid;
-        const userDoc = await fa().firestore().collection('users').doc(uid).get();
-        if (!userDoc.exists) return res.status(403).json({ error: 'Usuario nao encontrado' });
-        const role = userDoc.data().role;
-        if (role !== 'admin' && role !== 'colaborador') {
-            return res.status(403).json({ error: 'Sem permissao' });
-        }
-
-        req.user = { uid, email: decoded.email || userDoc.data().email, role };
-        next();
-    } catch (e) {
-        console.error('[cert-empresa requireAdmin] erro:', e.message);
-        return res.status(401).json({ error: 'Token invalido ou expirado' });
-    }
-}
-
 // ── POST /upload — sobe um cert pra uma empresa ──────────────────────────
 // Body: multipart/form-data
 //   - cert: arquivo .pfx (binary)
 //   - password: senha do .pfx (string)
 //   - empresaId: id da empresa
-router.post('/upload', requireAdmin, upload.single('cert'), async (req, res) => {
+router.post('/upload', requireAuth, upload.single('cert'), async (req, res) => {
     try {
         const { empresaId, password } = req.body || {};
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
@@ -80,7 +49,7 @@ router.post('/upload', requireAdmin, upload.single('cert'), async (req, res) => 
 });
 
 // ── GET /list — lista todos os certs cadastrados (so metadados) ──────────
-router.get('/list', requireAdmin, async (req, res) => {
+router.get('/list', requireAuth, async (req, res) => {
     try {
         const lista = await listCertsEmpresas();
         return res.json({ ok: true, total: lista.length, certs: lista });
@@ -91,7 +60,7 @@ router.get('/list', requireAdmin, async (req, res) => {
 });
 
 // ── GET /info/:empresaId — info de 1 cert especifico ─────────────────────
-router.get('/info/:empresaId', requireAdmin, async (req, res) => {
+router.get('/info/:empresaId', requireAuth, async (req, res) => {
     try {
         const info = await getCertInfoEmpresa(req.params.empresaId);
         if (!info) return res.status(404).json({ ok: false, error: 'cert nao encontrado' });
@@ -103,7 +72,7 @@ router.get('/info/:empresaId', requireAdmin, async (req, res) => {
 });
 
 // ── DELETE /:empresaId — deleta o cert ───────────────────────────────────
-router.delete('/:empresaId', requireAdmin, async (req, res) => {
+router.delete('/:empresaId', requireAuth, async (req, res) => {
     try {
         const result = await deleteCertEmpresa(req.params.empresaId);
         if (!result.ok) return res.status(404).json(result);
@@ -116,7 +85,7 @@ router.delete('/:empresaId', requireAdmin, async (req, res) => {
 
 // ── POST /test/:empresaId — testa o cert chamando SEFAZ ──────────────────
 // Util pra UI confirmar visualmente que o cert funciona
-router.post('/test/:empresaId', requireAdmin, async (req, res) => {
+router.post('/test/:empresaId', requireAuth, async (req, res) => {
     try {
         const empresaId = req.params.empresaId;
         const cert = await loadCertEmpresa(empresaId);

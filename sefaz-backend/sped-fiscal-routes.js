@@ -6,34 +6,10 @@
 // ============================================================================
 
 import express from 'express';
-import admin from 'firebase-admin';
 import { coletarDadosEmpresa, montarBlocos } from './sped-fiscal-orchestrator.js';
+import { requireAuth } from './require-admin.js';
 
 const router = express.Router();
-
-function fa() {
-    if (!admin.apps.length) {
-        admin.initializeApp({ credential: admin.credential.applicationDefault() });
-    }
-    return admin;
-}
-
-async function requireAuth(req, res, next) {
-    try {
-        const auth = req.headers.authorization || '';
-        const m = auth.match(/^Bearer\s+(.+)$/i);
-        if (!m) return res.status(401).json({ error: 'Token ausente' });
-        const decoded = await fa().auth().verifyIdToken(m[1]);
-        const uid = decoded.uid;
-        const userDoc = await fa().firestore().collection('users').doc(uid).get();
-        if (!userDoc.exists) return res.status(403).json({ error: 'Usuario nao encontrado' });
-        req.user = { uid, email: decoded.email || userDoc.data().email, role: userDoc.data().role };
-        next();
-    } catch (e) {
-        console.error('[sped-fiscal requireAuth] erro:', e.message);
-        return res.status(401).json({ error: 'Token invalido ou expirado' });
-    }
-}
 
 /**
  * GET /preview?empresaId=X&competencia=YYYY-MM

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo, Suspense, laz
 import Header from './components/Header';
 import Footer from './components/Footer';
 import LoadingSpinner from './components/LoadingSpinner';
+import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
 import UpdateBanner from './components/UpdateBanner';
 import TaxAlerts from './components/TaxAlerts';
@@ -18,11 +19,11 @@ import UserManagementModal from './components/UserManagementModal';
 import { PopularSuggestions } from './components/PopularSuggestions';
 import Tooltip from './components/Tooltip';
 import Toast from './components/Toast';
-import { SearchType, type SearchResult, type ComparisonResult, type FavoriteItem, type HistoryItem, type SimilarService, type CnaeSuggestion, SimplesNacionalEmpresa, SimplesNacionalNota, SimplesNacionalAnexo, SimplesNacionalImportResult, SimplesNacionalAtividade, User } from './types';
-import { fetchFiscalData, fetchComparison, fetchSimilarServices, fetchCnaeSuggestions } from './services/geminiService';
+import { SearchType, type SearchResult, type ComparisonResult, type FavoriteItem, type HistoryItem, type SimilarService, SimplesNacionalEmpresa, SimplesNacionalNota, SimplesNacionalAnexo, SimplesNacionalImportResult, SimplesNacionalAtividade, User } from './types';
+import { fetchFiscalData, fetchComparison, fetchSimilarServices } from './services/geminiService';
 import * as simplesService from './services/simplesNacionalService';
 import * as authService from './services/authService';
-import { BuildingIcon, CalculatorIcon, ChevronDownIcon, DocumentTextIcon, LocationIcon, SearchIcon, TagIcon, UserIcon, InfoIcon, CalendarIcon, ChatBubbleIcon, DownloadIcon } from './components/Icons';
+import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon, ScaleIcon } from './components/Icons';
 import FiscalObligationsDashboard from './components/FiscalObligationsDashboard';
 import { runInitialSync } from './services/cloudSyncService';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
@@ -53,6 +54,7 @@ const CalendarioFiscal = lazy(() => import('./components/CalendarioFiscal'));
 const AnomaliasView = lazy(() => import('./components/Anomalias'));
 const SimuladorReforma = lazy(() => import('./components/SimuladorReforma'));
 const TaxEmissionDashboard = lazy(() => import('./components/TaxEmission'));
+const RecuperacaoTributaria = lazy(() => import('./components/RecuperacaoTributaria'));
 
 const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
@@ -79,6 +81,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.ANOMALIAS]: "Detector de Anomalias — análise estatística + IA detecta irregularidades no DAS de cada empresa.",
     [SearchType.SIMULADOR_IBS_CBS]: "Simulador IBS/CBS — projeção da carga tributária 2026-2033 sob a Reforma Tributária (LC 214/2025).",
     [SearchType.EMISSAO_TRIBUTOS]: "Central de Emissões — emissão unificada de DAS (Simples) e DARF (IRPJ/CSLL/PIS/COFINS para Presumido e Real) com controle de pagamento.",
+    [SearchType.RECUPERACAO_TRIBUTARIA]: "Recuperação Tributária — identifica impostos pagos a maior e oportunidades de restituição/compensação.",
 };
 
 const App: React.FC = () => {
@@ -130,12 +133,6 @@ const App: React.FC = () => {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-    const [cnaeSuggestions, setCnaeSuggestions] = useState<CnaeSuggestion[]>([]);
-    const [isLoadingCnaeSuggestions, setIsLoadingCnaeSuggestions] = useState(false);
-    const [errorCnaeSuggestions, setErrorCnaeSuggestions] = useState<string | null>(null);
-    const cnaeDebounceTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const suggestionsContainerRef = useRef<HTMLDivElement>(null);
 
     // Simples Nacional State
     const [simplesView, setSimplesView] = useState<'dashboard' | 'detalhe' | 'nova' | 'cliente'>('dashboard');
@@ -273,9 +270,11 @@ const App: React.FC = () => {
             id: Date.now().toString(),
             timestamp: Date.now(),
         };
-        const updatedHistory = [newHistoryItem, ...history].slice(0, 50);
-        setHistory(updatedHistory);
-        localStorage.setItem('fiscal-consultant-history', JSON.stringify(updatedHistory));
+        setHistory(prev => {
+            const updatedHistory = [newHistoryItem, ...prev].slice(0, 50);
+            localStorage.setItem('fiscal-consultant-history', JSON.stringify(updatedHistory));
+            return updatedHistory;
+        });
     };
 
     const handleSelectFavorite = (item: FavoriteItem) => {
@@ -624,7 +623,7 @@ const App: React.FC = () => {
             <>
                 <LoginScreen onLoginSuccess={handleLoginSuccess} />
                 <div className="fixed bottom-4 right-4 flex gap-2">
-                    <button onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} className="p-2 bg-white dark:bg-slate-800 rounded-full shadow-lg">
+                    <button onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} className="p-2 bg-white dark:bg-slate-800 rounded-full shadow-lg" aria-label="Alternar tema claro/escuro">
                         {theme === 'light' ? '🌙' : '☀️'}
                     </button>
                 </div>
@@ -651,12 +650,14 @@ const App: React.FC = () => {
 
                 <div className="flex flex-col md:flex-row gap-6">
                     <main className="flex-grow min-w-0">
-                        <Suspense fallback={null}>
-                            <CaixaPostalAlerta
-                                currentUser={currentUser}
-                                onIrParaCaixaPostal={() => setSearchType(SearchType.CAIXA_POSTAL)}
-                            />
-                        </Suspense>
+                        <ErrorBoundary>
+                            <Suspense fallback={null}>
+                                <CaixaPostalAlerta
+                                    currentUser={currentUser}
+                                    onIrParaCaixaPostal={() => setSearchType(SearchType.CAIXA_POSTAL)}
+                                />
+                            </Suspense>
+                        </ErrorBoundary>
                         {/* Search Type Selection Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
                             {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL).map((type) => (
@@ -695,6 +696,7 @@ const App: React.FC = () => {
                                         {type === SearchType.SIMPLES_NACIONAL && <CalculatorIcon className="w-5 h-5" />}
                                         {type === SearchType.LUCRO_PRESUMIDO_REAL && <BuildingIcon className="w-5 h-5" />}
                                         {type === SearchType.OBRIGACOES_FISCAIS && <CalendarIcon className="w-5 h-5" />}
+                                        {type === SearchType.RECUPERACAO_TRIBUTARIA && <ScaleIcon className="w-5 h-5" />}
                                     </div>
                                     <span className="text-xs font-bold text-center leading-tight">{type}</span>
                                 </button>
@@ -704,6 +706,7 @@ const App: React.FC = () => {
                                 href="https://consulta-sp.web.app"
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                aria-label="NFP Pro Cloud (abre em nova aba)"
                                 className="flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200" style={{background:"var(--bg-elevated)",border:"1px solid var(--border-default)",color:"var(--text-secondary)"}}
                             >
                                 <div className="mb-2">
@@ -992,6 +995,7 @@ const App: React.FC = () => {
 
                         {/* Simples Nacional Views */}
                         {searchType === SearchType.SIMPLES_NACIONAL && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 {simplesView === 'dashboard' && (
                                     <SimplesNacionalDashboard
@@ -1049,10 +1053,12 @@ const App: React.FC = () => {
                                     />
                                 )}
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Lucro Presumido View */}
                         {searchType === SearchType.LUCRO_PRESUMIDO_REAL && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <LucroPresumidoRealDashboard
                                     currentUser={currentUser}
@@ -1060,6 +1066,7 @@ const App: React.FC = () => {
                                     onAddToHistory={addHistory}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Fiscal Obligations View */}
@@ -1069,89 +1076,108 @@ const App: React.FC = () => {
 
                         {/* Central de Documentos Fiscais (XML) */}
                         {searchType === SearchType.IMPORTA_XML && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CentralDocumentosFiscais
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Análise Relatório SAGE View */}
                         {searchType === SearchType.ANALISE_RELATORIO_SAGE && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnaliseRelatorioSAGE
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* SPED Fiscal (EFD ICMS/IPI) View */}
                         {searchType === SearchType.SPED_FISCAL && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <SpedFiscal
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.CAIXA_POSTAL && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CaixaPostalDashboard
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.DAS_SIMPLES && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DasDashboard
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.DCTFWEB && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DCTFWebDashboard
                                     currentUser={currentUser}
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.CARTEIRA && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CarteiraDashboard
                                     currentUser={currentUser}
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.AGENTES_A3 && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AgentesA3Dashboard
                                     currentUser={currentUser}
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
 
                         {searchType === SearchType.NFSE_NACIONAL && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <NfseNacionalDashboard
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.DASHBOARD_CEO && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DashboardCeo
                                     currentUser={currentUser ?? null}
@@ -1164,66 +1190,93 @@ const App: React.FC = () => {
                                     }}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.CALENDARIO && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CalendarioFiscal
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.ANOMALIAS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnomaliasView
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.SIMULADOR_IBS_CBS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <SimuladorReforma
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {searchType === SearchType.EMISSAO_TRIBUTOS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <TaxEmissionDashboard
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.RECUPERACAO_TRIBUTARIA && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <RecuperacaoTributaria
+                                    currentUser={currentUser ?? null}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
                         )}
 
                 {/* Analisador de Regime Tributario */}
                 {searchType === SearchType.ANALISADOR_REGIME && (
+                  <ErrorBoundary>
                   <Suspense fallback={<LoadingSpinner />}>
                     <AnalisadorRegime />
                   </Suspense>
+                  </ErrorBoundary>
                 )}
 
                         {/* Análise de Créditos Fiscais */}
                         {searchType === SearchType.ANALISE_CREDITOS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnaliseCreditos currentUser={currentUser ?? null} />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Tarefas */}
                         {searchType === SearchType.TAREFAS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <Tarefas currentUser={currentUser ?? null} />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Results Display */}
+                        <ErrorBoundary>
                         <Suspense fallback={<LoadingSpinner />}>
                             {!result && !comparisonResult && ![SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) && (
                                 <InitialStateDisplay searchType={searchType} mode={mode} />
@@ -1255,6 +1308,7 @@ const App: React.FC = () => {
                                 />
                             )}
                         </Suspense>
+                        </ErrorBoundary>
 
                         <SimilarServicesDisplay
                             services={similarServices}

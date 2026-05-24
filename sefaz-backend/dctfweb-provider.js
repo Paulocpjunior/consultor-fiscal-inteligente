@@ -58,7 +58,7 @@ class MockProvider {
             valorTotal: 1000 + (seed % 5000),
             inssRetido: 500 + (seed % 2000),
             cprbDevido: (seed % 7 === 0) ? 200 + (seed % 300) : 0,
-            dataVencimento: `${ano}-${String(mes + 1).padStart(2,'0')}-15`,
+            dataVencimento: `${mes + 1 > 12 ? ano + 1 : ano}-${String(mes + 1 > 12 ? 1 : mes + 1).padStart(2,'0')}-15`,
             numeroRecibo: (seed % 3 === 0) ? `${ano}${mes}.${(seed % 99999).toString().padStart(5,'0')}` : '',
             transmitidoEm: (seed % 3 === 0) ? `${ano}-${String(mes).padStart(2,'0')}-10T15:00:00-03:00` : null,
             fonte: 'mock',

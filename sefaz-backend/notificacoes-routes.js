@@ -115,7 +115,7 @@ router.post('/cron-resumo', async (req, res) => {
         }
 
         const r = await enviarResumoIndividualizado({
-            remetente: 'junior@spassessoriacontabil.com.br',
+            remetente: process.env.NOTIF_REMETENTE_EMAIL || '',
             usuarios,
             horas: 24,
         });

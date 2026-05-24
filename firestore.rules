@@ -66,24 +66,32 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /simples_empresas/{empId} {
-      // get (1 doc): so dono ou admin. list (query): qualquer logado —
-      // o filtro por carteira do colaborador e garantido pelo codigo do app.
-      allow get: if isOwnerOrAdmin(resource.data.createdBy);
-      allow list: if isSignedIn();
+      // get: qualquer logado — colaboradores precisam ler empresas
+      // atribuidas via carteira, nao apenas as que criaram.
+      // list: qualquer logado com limite de query — o filtro por carteira
+      // do colaborador e feito no codigo do app. Idealmente a carteira
+      // seria denormalizada no documento da empresa para permitir
+      // filtragem nas rules, mas isso exigiria refatoracao do modelo.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
       allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
 
     match /lucro_empresas/{empId} {
-      allow get: if isOwnerOrAdmin(resource.data.createdBy);
-      allow list: if isSignedIn();
+      // get: qualquer logado (colaboradores acessam via carteira).
+      // list: limite de query para evitar download massivo.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
       allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
 
     match /documentos_fiscais/{docId} {
-      allow get: if isOwnerOrAdmin(resource.data.createdBy);
-      allow list: if isSignedIn();
+      // get: qualquer logado (colaboradores acessam via carteira).
+      // list: limite de query para evitar download massivo.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
       allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
@@ -97,7 +105,7 @@ service cloud.firestore {
 
     match /carteiras/{vinculoId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
       allow create, update, delete: if isAdmin();
     }
 
@@ -149,7 +157,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /categorias_fornecedor/{regraId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -161,7 +171,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /empresa_credito_config/{empresaId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -173,7 +185,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /fornecedores_ocultos/{regraId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -184,7 +198,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /notas_ocultas/{regraId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -193,7 +209,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /invoices_manuais/{invoiceId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -202,7 +220,9 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /categorias_credito_custom/{catId} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -212,13 +232,93 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /tarefas/{tarefaId} {
-      allow read: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
       allow create, update: if isSignedIn();
       allow delete: if isAdmin();
     }
 
     // Logs do cron: leitura admin, escrita soh backend (regra firme)
     match /tarefas_cron_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // xml_capturas: log de capturas XML — append-only para usuarios
+    // comuns, admin le/escreve tudo.
+    // ───────────────────────────────────────────────────────────────
+
+    match /xml_capturas/{logId} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.usuarioId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.usuarioId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // xml_erros: erros de importacao XML — usuario pode marcar como
+    // resolvido o seu proprio, admin gerencia todos.
+    // ───────────────────────────────────────────────────────────────
+
+    match /xml_erros/{errId} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.usuarioId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.usuarioId == request.auth.uid;
+      allow update: if isAdmin() || (isSignedIn() && resource.data.usuarioId == request.auth.uid && request.resource.data.usuarioId == resource.data.usuarioId);
+      allow delete: if isAdmin();
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // empresas_xml_config: configuracoes XML por empresa
+    // (monitoramento, agendamento).
+    // ───────────────────────────────────────────────────────────────
+
+    match /empresas_xml_config/{configId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── Coleções operacionais (escritas pelo backend via admin SDK,
+    //     leitura no frontend por qualquer signed-in) ─────────────────
+
+    match /caixa_postal_mensagens/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if false;
+    }
+
+    match /das_emitidos/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if false;
+    }
+
+    match /nfse_nacional_emitidas/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if false;
+    }
+
+    match /dctfweb_declaracoes/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if false;
+    }
+
+    match /darf_emitidos/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if false;
+    }
+
+    match /notificacoes/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if false;
+    }
+
+    match /sharepoint_sync_log/{docId} {
       allow read: if isAdmin();
       allow write: if false;
     }

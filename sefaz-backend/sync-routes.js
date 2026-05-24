@@ -7,6 +7,7 @@ import express from 'express';
 import admin from 'firebase-admin';
 import { sincronizarEmpresa } from './sync-orchestrator.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
+import { requireAuth } from './require-admin.js';
 
 const router = express.Router();
 
@@ -17,41 +18,17 @@ function fa() {
   return admin;
 }
 
-async function requireAuth(req, res, next) {
-  try {
-    const auth = req.headers.authorization || '';
-    const m = auth.match(/^Bearer\s+(.+)$/i);
-    if (!m) return res.status(401).json({ error: 'Token ausente' });
-    const decoded = await fa().auth().verifyIdToken(m[1]);
-    const uid = decoded.uid;
-    const userDoc = await fa().firestore().collection('users').doc(uid).get();
-    if (!userDoc.exists) return res.status(403).json({ error: 'Usuário não encontrado' });
-    req.user = {
-      uid,
-      email: decoded.email || userDoc.data().email,
-      role: userDoc.data().role || 'colaborador',
-    };
-    next();
-  } catch (e) {
-    console.error('[requireAuth] erro:', e.message);
-    return res.status(401).json({ error: 'Token inválido ou expirado' });
-  }
-}
-
-async function requireCronAuth(req, res, next) {
-  const cronSecret = req.headers['x-sefaz-cron-secret'];
-  const expectedSecret = process.env.SEFAZ_CRON_SECRET;
-  if (expectedSecret && cronSecret === expectedSecret) {
-    req.cron = { source: 'secret' };
-    return next();
-  }
-  const authHeader = req.headers.authorization || '';
-  const m = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (m) {
-    req.cron = { source: 'oidc', token: m[1].slice(0, 20) + '...' };
-    return next();
-  }
-  return res.status(401).json({ error: 'Cron não autorizado' });
+function requireCronAuth(req, res, next) {
+    const secret = process.env.SEFAZ_CRON_SECRET;
+    if (!secret) {
+        console.error('[requireCronAuth] SEFAZ_CRON_SECRET not configured');
+        return res.status(500).json({ error: 'Cron secret not configured' });
+    }
+    const headerSecret = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
+    if (headerSecret === secret) {
+        return next();
+    }
+    return res.status(403).json({ error: 'Cron auth failed' });
 }
 
 router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
@@ -295,17 +272,14 @@ router.post('/toggle/:cnpj', requireAuth, express.json(), async (req, res) => {
     const colNames = ['simples_empresas', 'lucro_empresas'];
     let updated = 0;
     for (const colName of colNames) {
-      const snap = await db.collection(colName).where('cnpj', '>=', '').get();
+      const snap = await db.collection(colName).where('cnpj', '==', cnpj).limit(1).get();
       for (const doc of snap.docs) {
-        const docCnpj = (doc.data().cnpj || '').replace(/\D/g, '');
-        if (docCnpj === cnpj) {
-          await doc.ref.update({
-            capturarSefaz: ativo,
-            capturarSefazAlteradoEm: fa().firestore.FieldValue.serverTimestamp(),
-            capturarSefazAlteradoPor: req.user.email,
-          });
-          updated++;
-        }
+        await doc.ref.update({
+          capturarSefaz: ativo,
+          capturarSefazAlteradoEm: fa().firestore.FieldValue.serverTimestamp(),
+          capturarSefazAlteradoPor: req.user.email,
+        });
+        updated++;
       }
     }
     if (updated === 0) return res.status(404).json({ error: 'Empresa não encontrada' });

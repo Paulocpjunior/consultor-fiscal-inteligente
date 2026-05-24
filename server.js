@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
@@ -26,6 +27,8 @@ import notificacoesRouter from './sefaz-backend/notificacoes-routes.js';
 import agentRouter from './sefaz-backend/agent-routes.js';
 import agentAdminRouter from './sefaz-backend/agent-admin-routes.js';
 import nfseNacionalDfeRouter from './sefaz-backend/nfse-nacional-dfe-routes.js';
+import recuperacaoRouter from './sefaz-backend/recuperacao-tributaria-routes.js';
+import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -51,10 +54,41 @@ app.use('/api/admin/agent', agentAdminRouter);
 app.use('/api/agent', agentRouter);
 app.use('/api/admin/nfse-nacional-dfe', nfseNacionalDfeRouter);
 app.use('/api/internal/plano-contas', planoContasBridgeRouter);
+app.use('/api/admin/recuperacao', recuperacaoRouter);
 
 const PORT = process.env.PORT || 8080;
 
-app.use(helmet({ contentSecurityPolicy: false }));
+const ALLOWED_ORIGINS = [
+    process.env.CORS_ORIGIN,
+    'https://consultorfiscalapp.web.app',
+    'https://consultorfiscalapp.firebaseapp.com',
+    'http://localhost:3000',
+    'http://localhost:5173',
+].filter(Boolean);
+
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Blocked by CORS'));
+        }
+    },
+    credentials: true,
+}));
+
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            imgSrc: ["'self'", "data:", "https:"],
+            connectSrc: ["'self'", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.firebaseapp.com", "https://firebasestorage.googleapis.com", "https://identitytoolkit.googleapis.com", "https://securetoken.googleapis.com"],
+        },
+    },
+}));
 app.use(express.json({ limit: '20mb' }));
 app.use('/api/', rateLimit({ windowMs: 60000, max: 120, message: { error: 'Aguarde.' } }));
 
@@ -62,6 +96,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 let ai = null;
 if (GEMINI_API_KEY) {
     ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    app.set('ai', ai);
     console.log('Gemini API configurada');
 } else {
     console.warn('GEMINI_API_KEY nao configurada');
@@ -102,11 +137,29 @@ function logGeminiRoute(modelo, contexto) {
     console.log(`[gemini-router] ${tag} ${JSON.stringify(contexto)}`);
 }
 
-app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', ai: !!ai, timestamp: new Date().toISOString() });
+app.get('/health', async (_req, res) => {
+    const checks = {
+        status: 'ok',
+        ai: !!ai,
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
+    };
+    try {
+        const adminMod = (await import('firebase-admin')).default;
+        if (adminMod.apps.length) {
+            await adminMod.firestore().collection('users').limit(1).get();
+            checks.firestore = 'ok';
+        } else {
+            checks.firestore = 'not_initialized';
+        }
+    } catch (e) {
+        checks.firestore = 'error';
+    }
+    res.json(checks);
 });
 
-app.post('/api/fiscal/query', requireAI, async (req, res) => {
+app.post('/api/fiscal/query', requireAuth, requireAI, async (req, res) => {
     const { prompt, model, temperature, googleSearch } = req.body;
     if (!prompt) return res.status(400).json({ error: 'prompt obrigatorio' });
     try {
@@ -126,7 +179,7 @@ app.post('/api/fiscal/query', requireAI, async (req, res) => {
     }
 });
 
-app.post('/api/fiscal/multimodal', requireAI, async (req, res) => {
+app.post('/api/fiscal/multimodal', requireAuth, requireAI, async (req, res) => {
     const { prompt, base64Data, mimeType, model } = req.body;
     if (!prompt || !base64Data || !mimeType) return res.status(400).json({ error: 'campos obrigatorios' });
     try {
@@ -196,11 +249,8 @@ function mesReferenciaParaYYYYMM(mesRef) {
     return `${ano}-${String(mes).padStart(2, '0')}`;
 }
 
-app.get('/api/admin/das/previsao/:empresaId', async (req, res) => {
+app.get('/api/admin/das/previsao/:empresaId', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const adminMod = (await import('firebase-admin')).default;
         if (!adminMod.apps.length) {
             adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
@@ -296,11 +346,8 @@ app.get('/api/admin/das/previsao/:empresaId', async (req, res) => {
     }
 });
 
-app.post('/api/admin/das/previsao-ia', requireAI, async (req, res) => {
+app.post('/api/admin/das/previsao-ia', requireAdmin, requireAI, async (req, res) => {
     try {
-        const role = req.headers['x-user-res'] || req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { dadosPrevisao } = req.body;
         if (!dadosPrevisao) return res.status(400).json({ error: 'dadosPrevisao obrigatorio' });
 
@@ -349,11 +396,8 @@ Use **negrito** nos pontos-chave. Direto, sem rodeios.`;
 });
 
 // ─── Empresa: contato (email + telefone) ──────────────────────────────────
-app.get('/api/admin/empresa-contato/:cnpj', async (req, res) => {
+app.get('/api/admin/empresa-contato/:cnpj', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const cnpjLimpo = (req.params.cnpj || '').replace(/\D/g, '');
         if (!cnpjLimpo) return res.json({ email: '', telefone: '' });
 
@@ -479,11 +523,8 @@ function detectarAnomalias(empresa) {
     return { anomalias };
 }
 
-app.get('/api/admin/das/anomalias/:empresaId', async (req, res) => {
+app.get('/api/admin/das/anomalias/:empresaId', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const adminMod = (await import('firebase-admin')).default;
         if (!adminMod.apps.length) {
             adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
@@ -510,11 +551,8 @@ app.get('/api/admin/das/anomalias/:empresaId', async (req, res) => {
 });
 
 // Endpoint global: scaneia todas as empresas e retorna as que tem anomalias
-app.get('/api/admin/das/anomalias-todas', async (req, res) => {
+app.get('/api/admin/das/anomalias-todas', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const adminMod = (await import('firebase-admin')).default;
         if (!adminMod.apps.length) {
             adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
@@ -555,11 +593,8 @@ app.get('/api/admin/das/anomalias-todas', async (req, res) => {
     }
 });
 
-app.post('/api/admin/das/anomalia-explicar', requireAI, async (req, res) => {
+app.post('/api/admin/das/anomalia-explicar', requireAdmin, requireAI, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { empresaNome, empresaAnexo, anomalia } = req.body;
         if (!anomalia) return res.status(400).json({ error: 'anomalia obrigatoria' });
 
@@ -599,11 +634,8 @@ Use **negrito** nos pontos-chave. Seja direto, sem rodeios.`;
 // ─── Cobranca DAS via IA ───────────────────────────────────────────────────
 // POST /api/admin/das/cobranca-ia
 // Gera draft de email/whatsapp pro cliente. NUNCA envia automaticamente.
-app.post('/api/admin/das/cobranca-ia', requireAI, async (req, res) => {
+app.post('/api/admin/das/cobranca-ia', requireAdmin, requireAI, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { empresaNome, valor, competencia, vencimento, diasAtraso, tom, assinante, canal } = req.body;
         if (!empresaNome || !valor) {
             return res.status(400).json({ error: 'empresaNome e valor obrigatorios' });
@@ -679,11 +711,8 @@ ${canal === 'whatsapp' ? 'Comece direto sem assunto.' : 'Comece com ASSUNTO: ...
 
 // GET /api/admin/sharepoint/test-auth
 //   Valida credenciais OAuth2 + resolve site ID. Nao expoe secret.
-app.get('/api/admin/sharepoint/test-auth', async (req, res) => {
+app.get('/api/admin/sharepoint/test-auth', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const info = await sharepoint.testAuth();
         return res.json({ ok: true, info });
     } catch (err) {
@@ -700,11 +729,8 @@ app.get('/api/admin/sharepoint/test-auth', async (req, res) => {
 //   Autoriza este app a ler o site especifico. Roda 1 vez apos
 //   configurar permissoes Sites.Selected no Azure.
 //   Idempotente — chamar 2x cria 2 permissoes identicas, sem dano.
-app.post('/api/admin/sharepoint/grant-site', async (req, res) => {
+app.post('/api/admin/sharepoint/grant-site', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const permission = await sharepoint.grantAppPermissionOnSite();
         return res.json({
             ok: true,
@@ -723,10 +749,8 @@ app.post('/api/admin/sharepoint/grant-site', async (req, res) => {
 
 // GET /api/admin/sharepoint/list-drives
 //   Lista bibliotecas de documentos do site.
-app.get('/api/admin/sharepoint/list-drives', async (req, res) => {
+app.get('/api/admin/sharepoint/list-drives', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
         const drives = await sharepoint.listDrives();
         return res.json({ ok: true, drives });
     } catch (err) {
@@ -737,10 +761,8 @@ app.get('/api/admin/sharepoint/list-drives', async (req, res) => {
 
 // GET /api/admin/sharepoint/list-root
 //   Lista raiz do drive default (pastas e arquivos no nivel raiz).
-app.get('/api/admin/sharepoint/list-root', async (req, res) => {
+app.get('/api/admin/sharepoint/list-root', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
         const items = await sharepoint.listRootItems();
         return res.json({ ok: true, items });
     } catch (err) {
@@ -751,11 +773,8 @@ app.get('/api/admin/sharepoint/list-root', async (req, res) => {
 
 // POST /api/admin/sharepoint/test-write
 //   Cria pasta /Empresas/_test/ + arquivo dentro pra validar escrita.
-app.post('/api/admin/sharepoint/test-write', async (req, res) => {
+app.post('/api/admin/sharepoint/test-write', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const testPath = 'Empresas/_test_cfi';
         const fileName = `test_${Date.now()}.txt`;
         const fullPath = `${testPath}/${fileName}`;
@@ -786,11 +805,8 @@ app.post('/api/admin/sharepoint/test-write', async (req, res) => {
 
 // GET /api/admin/sharepoint/check-folder?cnpj=...&tipo=XMLs&periodo=2026-05
 //   Verifica se uma pasta de empresa existe (idempotencia).
-app.get('/api/admin/sharepoint/check-folder', async (req, res) => {
+app.get('/api/admin/sharepoint/check-folder', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { cnpj, tipo = 'XMLs', periodo } = req.query;
         if (!cnpj) return res.status(400).json({ error: 'cnpj obrigatorio' });
 
@@ -810,11 +826,8 @@ app.get('/api/admin/sharepoint/check-folder', async (req, res) => {
 
 // GET /api/admin/sharepoint/empresa-folder?cnpj=...
 //   Retorna URL clicavel pra pasta da empresa (pra UI).
-app.get('/api/admin/sharepoint/empresa-folder', async (req, res) => {
+app.get('/api/admin/sharepoint/empresa-folder', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { cnpj } = req.query;
         if (!cnpj) return res.status(400).json({ error: 'cnpj obrigatorio' });
 
@@ -833,11 +846,8 @@ app.get('/api/admin/sharepoint/empresa-folder', async (req, res) => {
 // POST /api/admin/sharepoint/upload-xml
 //   Body: { cnpj, periodo: 'YYYY-MM', fileName: 'NFe123.xml', xmlContent: '<xml>...</xml>' }
 //   Upload manual de XML pra empresa (usado depois pelo cron).
-app.post('/api/admin/sharepoint/upload-xml', async (req, res) => {
+app.post('/api/admin/sharepoint/upload-xml', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { cnpj, periodo, fileName, xmlContent } = req.body || {};
         if (!cnpj || !periodo || !fileName || !xmlContent) {
             return res.status(400).json({
@@ -856,11 +866,8 @@ app.post('/api/admin/sharepoint/upload-xml', async (req, res) => {
 // POST /api/admin/sharepoint/upload-relatorio
 //   Body: { cnpj, subPath: 'PGDAS/2026-05.pdf', content: base64, mimeType: 'application/pdf' }
 //   Upload de relatorio pra empresa.
-app.post('/api/admin/sharepoint/upload-relatorio', async (req, res) => {
+app.post('/api/admin/sharepoint/upload-relatorio', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { cnpj, subPath, content, mimeType = 'application/pdf', encoding = 'base64' } = req.body || {};
         if (!cnpj || !subPath || !content) {
             return res.status(400).json({
@@ -882,11 +889,8 @@ app.post('/api/admin/sharepoint/upload-relatorio', async (req, res) => {
 
 // GET /api/admin/sharepoint/sync-dry-run?cnpj=&periodo=2026-05
 //   Pre-visualizacao: lista o que SERIA sincronizado, sem subir nada.
-app.get('/api/admin/sharepoint/sync-dry-run', async (req, res) => {
+app.get('/api/admin/sharepoint/sync-dry-run', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { cnpj, periodo } = req.query;
         if (!cnpj || !periodo) {
             return res.status(400).json({ error: 'cnpj e periodo obrigatorios' });
@@ -906,11 +910,8 @@ app.get('/api/admin/sharepoint/sync-dry-run', async (req, res) => {
 //   Body: { cnpj, periodo: 'YYYY-MM', force: bool }
 //   Sincroniza uma empresa+periodo. Idempotente (skipa o que ja foi).
 //   force=true re-uploada tudo.
-app.post('/api/admin/sharepoint/sync-empresa', async (req, res) => {
+app.post('/api/admin/sharepoint/sync-empresa', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { cnpj, periodo, force = false } = req.body || {};
         if (!cnpj || !periodo) {
             return res.status(400).json({ error: 'cnpj e periodo obrigatorios' });
@@ -930,11 +931,8 @@ app.post('/api/admin/sharepoint/sync-empresa', async (req, res) => {
 //   Body: { periodo: 'YYYY-MM', force: bool, maxEmpresas: int }
 //   Sincroniza TODAS as empresas (simples + lucro) pro periodo.
 //   Usado pelo cron noturno + botao admin.
-app.post('/api/admin/sharepoint/sync-all', async (req, res) => {
+app.post('/api/admin/sharepoint/sync-all', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { periodo, force = false, maxEmpresas = null } = req.body || {};
         if (!periodo) return res.status(400).json({ error: 'periodo obrigatorio' });
 
@@ -950,11 +948,8 @@ app.post('/api/admin/sharepoint/sync-all', async (req, res) => {
 
 // GET /api/admin/sharepoint/sync-log?limit=10
 //   Retorna as N ultimas execucoes do cron (ou manual via sync-all).
-app.get('/api/admin/sharepoint/sync-log', async (req, res) => {
+app.get('/api/admin/sharepoint/sync-log', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const limit = parseInt(req.query.limit) || 10;
         const adminMod = (await import('firebase-admin')).default;
         if (!adminMod.apps.length) {
@@ -993,11 +988,8 @@ app.get('/api/admin/sharepoint/sync-log', async (req, res) => {
 
 // DELETE /api/admin/sharepoint/cleanup-test
 //   Remove pasta de teste apos validacao.
-app.delete('/api/admin/sharepoint/cleanup-test', async (req, res) => {
+app.delete('/api/admin/sharepoint/cleanup-test', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const result = await sharepoint.deleteItem('Empresas/_test_cfi');
         return res.json({ ok: true, ...result });
     } catch (err) {
@@ -1008,10 +1000,8 @@ app.delete('/api/admin/sharepoint/cleanup-test', async (req, res) => {
 
 // GET /api/admin/sharepoint/list-folder?path=Pasta1/Subpasta
 //   Lista items de pasta especifica.
-app.get('/api/admin/sharepoint/list-folder', async (req, res) => {
+app.get('/api/admin/sharepoint/list-folder', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
         const path = req.query.path || '/';
         const items = await sharepoint.listFolderItems(path);
         return res.json({ ok: true, path, items });
@@ -1023,11 +1013,8 @@ app.get('/api/admin/sharepoint/list-folder', async (req, res) => {
 
 // GET /api/admin/sharepoint/list-permissions
 //   Lista permissoes ativas do app no site (debug do grant-site).
-app.get('/api/admin/sharepoint/list-permissions', async (req, res) => {
+app.get('/api/admin/sharepoint/list-permissions', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const perms = await sharepoint.listSitePermissions();
         return res.json({ ok: true, perms });
     } catch (err) {
@@ -1159,11 +1146,8 @@ function simularAnoLucroReal(ano, faturamentoAnual, regime) {
     };
 }
 
-app.post('/api/admin/simulador-ibs-cbs', async (req, res) => {
+app.post('/api/admin/simulador-ibs-cbs', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { faturamentoAnual, regime, dasAtualAnual } = req.body || {};
         if (!faturamentoAnual || faturamentoAnual <= 0) {
             return res.status(400).json({ error: 'faturamentoAnual obrigatorio (>0)' });
@@ -1211,11 +1195,8 @@ app.post('/api/admin/simulador-ibs-cbs', async (req, res) => {
     }
 });
 
-app.post('/api/admin/simulador-ibs-cbs-explicar', requireAI, async (req, res) => {
+app.post('/api/admin/simulador-ibs-cbs-explicar', requireAdmin, requireAI, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { simulacao, empresaNome } = req.body || {};
         if (!simulacao) return res.status(400).json({ error: 'simulacao obrigatoria' });
 
@@ -1261,11 +1242,8 @@ Use **negrito** nos pontos-chave. Seja direto, sem rodeios. Nao invente numeros 
 // ─── Conferencia PGDAS-D ───────────────────────────────────────────────────
 // POST /api/admin/pgdas/conferir
 // Recebe { empresaId, base64Pdf } e retorna comparacao PGDAS vs calculo proprio.
-app.post('/api/admin/pgdas/conferir', requireAI, async (req, res) => {
+app.post('/api/admin/pgdas/conferir', requireAdmin, requireAI, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { empresaId, base64Pdf } = req.body || {};
         if (!empresaId || !base64Pdf) return res.status(400).json({ error: 'empresaId e base64Pdf obrigatorios' });
 
@@ -1429,11 +1407,8 @@ Responda APENAS o JSON, sem markdown, sem comentarios.`;
 });
 
 // POST /api/admin/pgdas/conferir-explicar — IA contextualiza divergencias
-app.post('/api/admin/pgdas/conferir-explicar', requireAI, async (req, res) => {
+app.post('/api/admin/pgdas/conferir-explicar', requireAdmin, requireAI, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { empresaNome, divergencia, contextoExtraido } = req.body || {};
         if (!divergencia) return res.status(400).json({ error: 'divergencia obrigatoria' });
 
@@ -1723,11 +1698,8 @@ app.get('/api/admin/calendario/:ano/:mes', requireAuthOrColab, async (req, res) 
 });
 
 // ─── Dashboard CEO — endpoint de KPIs + insights IA ─────────────────────────
-app.get('/api/admin/dashboard-ceo/kpis', async (req, res) => {
+app.get('/api/admin/dashboard-ceo/kpis', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const admin = (await import('firebase-admin')).default;
         if (!admin.apps.length) {
             admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -1832,11 +1804,8 @@ function getMesNome(yyyymm) {
     return meses[m] || '';
 }
 
-app.get('/api/admin/dashboard-ceo/acoes', async (req, res) => {
+app.get('/api/admin/dashboard-ceo/acoes', requireAdmin, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const adminMod = (await import('firebase-admin')).default;
         if (!adminMod.apps.length) {
             adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
@@ -1976,11 +1945,8 @@ app.get('/api/admin/dashboard-ceo/acoes', async (req, res) => {
     }
 });
 
-app.post('/api/admin/dashboard-ceo/insights', requireAI, async (req, res) => {
+app.post('/api/admin/dashboard-ceo/insights', requireAdmin, requireAI, async (req, res) => {
     try {
-        const role = req.headers['x-user-role'] || 'colaborador';
-        if (role !== 'admin') return res.status(403).json({ error: 'apenas admin' });
-
         const { kpis } = req.body;
         if (!kpis) return res.status(400).json({ error: 'kpis obrigatorio' });
 

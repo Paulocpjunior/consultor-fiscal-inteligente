@@ -16,6 +16,7 @@
 import express from 'express';
 import admin from 'firebase-admin';
 import { gerarAgentKey, listarAgentKeys, revogarAgentKey } from './agent-keys-storage.js';
+import { requireAdmin } from './require-admin.js';
 
 const router = express.Router();
 
@@ -24,23 +25,6 @@ function fa() {
         admin.initializeApp({ credential: admin.credential.applicationDefault() });
     }
     return admin;
-}
-
-async function requireAdmin(req, res, next) {
-    try {
-        const auth = req.headers.authorization || '';
-        const m = auth.match(/^Bearer\s+(.+)$/i);
-        if (!m) return res.status(401).json({ error: 'Token ausente' });
-        const decoded = await fa().auth().verifyIdToken(m[1]);
-        const userDoc = await fa().firestore().collection('users').doc(decoded.uid).get();
-        if (!userDoc.exists) return res.status(403).json({ error: 'Usuário não encontrado' });
-        if (userDoc.data().role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
-        req.user = { uid: decoded.uid, email: decoded.email || userDoc.data().email, role: 'admin' };
-        next();
-    } catch (e) {
-        console.error('[agent-admin requireAdmin] erro:', e.message);
-        return res.status(401).json({ error: 'Token inválido ou expirado' });
-    }
 }
 
 // ── POST /agent-keys — gera uma key nova ─────────────────────────────────
