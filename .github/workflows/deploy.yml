@@ -8,7 +8,7 @@ on:
 env:
   PROJECT_ID: consultorfiscalapp
   SERVICE_NAME: consultor-fiscal-inteligente
-  REGION: us-central1
+  REGION: us-west1
 
 jobs:
   deploy:
@@ -56,19 +56,19 @@ jobs:
             --build-arg VITE_FIREBASE_STORAGE_BUCKET="$VITE_FIREBASE_STORAGE_BUCKET" \
             --build-arg VITE_FIREBASE_MESSAGING_SENDER_ID="$VITE_FIREBASE_MESSAGING_SENDER_ID" \
             --build-arg VITE_FIREBASE_APP_ID="$VITE_FIREBASE_APP_ID" \
-            -t us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/consultor-fiscal-inteligente:${{ github.sha }} \
+            -t us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             .
 
       - name: Push to Artifact Registry
         run: |
-          docker push us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/consultor-fiscal-inteligente:${{ github.sha }}
+          docker push us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/${{ env.SERVICE_NAME }}:${{ github.sha }}
 
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy consultor-fiscal-inteligente \
-            --image us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/consultor-fiscal-inteligente:${{ github.sha }} \
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             --platform managed \
-            --region us-central1 \
+            --region ${{ env.REGION }} \
             --allow-unauthenticated \
             --port 8080 \
             --memory 512Mi \
@@ -79,7 +79,7 @@ jobs:
 
       - name: Show Service URL
         run: |
-          gcloud run services describe consultor-fiscal-inteligente \
+          gcloud run services describe ${{ env.SERVICE_NAME }} \
             --platform managed \
-            --region us-central1 \
+            --region ${{ env.REGION }} \
             --format 'value(status.url)'
