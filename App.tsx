@@ -55,6 +55,7 @@ const AnomaliasView = lazy(() => import('./components/Anomalias'));
 const SimuladorReforma = lazy(() => import('./components/SimuladorReforma'));
 const TaxEmissionDashboard = lazy(() => import('./components/TaxEmission'));
 const RecuperacaoTributaria = lazy(() => import('./components/RecuperacaoTributaria'));
+const NfpProCloud = lazy(() => import('./components/NfpProCloud'));
 
 const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
@@ -82,6 +83,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.SIMULADOR_IBS_CBS]: "Simulador IBS/CBS — projeção da carga tributária 2026-2033 sob a Reforma Tributária (LC 214/2025).",
     [SearchType.EMISSAO_TRIBUTOS]: "Central de Emissões — emissão unificada de DAS (Simples) e DARF (IRPJ/CSLL/PIS/COFINS para Presumido e Real) com controle de pagamento.",
     [SearchType.RECUPERACAO_TRIBUTARIA]: "Recuperação Tributária — identifica impostos pagos a maior e oportunidades de restituição/compensação.",
+    [SearchType.NFP_PRO_CLOUD]: "Compliance tributário: débitos, certidões, obrigações, parcelamentos e plano de ação.",
 };
 
 const App: React.FC = () => {
@@ -660,7 +662,7 @@ const App: React.FC = () => {
                         </ErrorBoundary>
                         {/* Search Type Selection Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
-                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL).map((type) => (
+                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL && t !== SearchType.NFP_PRO_CLOUD).map((type) => (
                                 <button
                                     key={type}
                                     onClick={() => {
@@ -701,19 +703,30 @@ const App: React.FC = () => {
                                     <span className="text-xs font-bold text-center leading-tight">{type}</span>
                                 </button>
                             ))}
-                            {/* NFP Pro Cloud — atalho externo */}
-                            <a
-                                href="https://consulta-sp.web.app"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label="NFP Pro Cloud (abre em nova aba)"
-                                className="flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200" style={{background:"var(--bg-elevated)",border:"1px solid var(--border-default)",color:"var(--text-secondary)"}}
+                            {/* NFP Pro Cloud — módulo interno */}
+                            <button
+                                onClick={() => {
+                                    setSearchType(SearchType.NFP_PRO_CLOUD);
+                                    setResult(null);
+                                    setQuery1('');
+                                    setQuery2('');
+                                    setError(null);
+                                    setValidationErrors({});
+                                    setUserNotes('');
+                                }}
+                                className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
+                                style={{
+                                    background: searchType === SearchType.NFP_PRO_CLOUD ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
+                                    border: searchType === SearchType.NFP_PRO_CLOUD ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
+                                    color: searchType === SearchType.NFP_PRO_CLOUD ? 'var(--text-primary)' : 'var(--text-muted)',
+                                    transform: searchType === SearchType.NFP_PRO_CLOUD ? 'scale(1.05)' : 'scale(1)'
+                                }}
                             >
                                 <div className="mb-2">
                                     <DocumentTextIcon className="w-5 h-5" />
                                 </div>
                                 <span className="text-xs font-bold text-center leading-tight">NFP Pro Cloud</span>
-                            </a>
+                            </button>
                             {/* Importa XML */}
                             <button
                                 onClick={() => {
@@ -1241,6 +1254,17 @@ const App: React.FC = () => {
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <RecuperacaoTributaria
+                                    currentUser={currentUser ?? null}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.NFP_PRO_CLOUD && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <NfpProCloud
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />

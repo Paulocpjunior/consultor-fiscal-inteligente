@@ -25,6 +25,7 @@ export enum SearchType {
   AGENTES_A3 = 'Agentes A3',
   EMISSAO_TRIBUTOS = 'Central de Emissões',
   RECUPERACAO_TRIBUTARIA = 'Recuperação Tributária',
+  NFP_PRO_CLOUD = 'NFP Pro Cloud',
 }
 
 export interface GroundingSource {
@@ -1736,4 +1737,110 @@ export interface SpedFiscalConferenceResult {
     totalDocumentosSped: number;
     documentosConferidos: number;
     inconsistencias: SpedFiscalInconsistencia[];
+}
+
+
+// ─── NFP Pro Cloud ────────────────────────────────────────────────────────
+
+export type NfpEsfera = 'federal' | 'estadual' | 'municipal';
+export type NfpGravidade = 'alta' | 'media' | 'baixa';
+export type NfpStatusDebito = 'aberto' | 'parcelado' | 'em_analise' | 'quitado' | 'prescrito';
+export type NfpStatusCertidao = 'positiva' | 'negativa' | 'positiva_efeitos_negativa' | 'indisponivel' | 'nao_consultada';
+export type NfpStatusObrigacao = 'entregue' | 'pendente' | 'atrasada' | 'dispensada' | 'nao_verificada';
+export type NfpTipoAcao = 'civil' | 'trabalhista' | 'tributaria' | 'criminal';
+
+export interface NfpDebito {
+    id: string;
+    empresaId: string;
+    esfera: NfpEsfera;
+    orgao: string;
+    descricao: string;
+    valorOriginal: number;
+    dataVencimento: string;
+    valorAtualizado?: number;
+    dataAtualizacao?: string;
+    status: NfpStatusDebito;
+    parcelamentoId?: string;
+    observacao?: string;
+}
+
+export interface NfpParcelamento {
+    id: string;
+    empresaId: string;
+    esfera: NfpEsfera;
+    programa: string;
+    valorTotal: number;
+    parcelas: number;
+    parcelasPagas: number;
+    valorParcela: number;
+    status: 'ativo' | 'inadimplente' | 'quitado' | 'cancelado';
+    dataInicio: string;
+    dataFim?: string;
+}
+
+export interface NfpCertidao {
+    id: string;
+    empresaId: string;
+    esfera: NfpEsfera;
+    orgao: string;
+    tipo: string;
+    status: NfpStatusCertidao;
+    dataConsulta?: string;
+    dataValidade?: string;
+    motivoImpedimento?: string;
+    urlDocumento?: string;
+}
+
+export interface NfpObrigacao {
+    id: string;
+    empresaId: string;
+    nome: string;
+    sigla: string;
+    esfera: NfpEsfera;
+    periodicidade: 'mensal' | 'trimestral' | 'anual' | 'eventual';
+    competencia?: string;
+    status: NfpStatusObrigacao;
+    dataEntrega?: string;
+    prazoLegal?: string;
+    observacao?: string;
+}
+
+export interface NfpAcaoJudicial {
+    id: string;
+    empresaId: string;
+    tipo: NfpTipoAcao;
+    numero?: string;
+    vara?: string;
+    descricao: string;
+    valorCausa?: number;
+    status: 'em_andamento' | 'encerrada' | 'arquivada';
+    dataDistribuicao?: string;
+    observacao?: string;
+}
+
+export interface NfpPlanoAcao {
+    id: string;
+    empresaId: string;
+    descricao: string;
+    gravidade: NfpGravidade;
+    esfera: NfpEsfera;
+    prazo?: string;
+    responsavel?: string;
+    status: 'pendente' | 'em_andamento' | 'concluida';
+    tipo?: NfpTipoAcao;
+}
+
+export interface NfpAnaliseEmpresa {
+    empresaId: string;
+    empresaNome: string;
+    empresaCnpj: string;
+    dataAnalise: string;
+    analisadoPor: string;
+    fonte: 'certificado_escritorio' | 'certificado_cliente' | 'offline';
+    debitos: NfpDebito[];
+    parcelamentos: NfpParcelamento[];
+    certidoes: NfpCertidao[];
+    obrigacoes: NfpObrigacao[];
+    acoes: NfpAcaoJudicial[];
+    planoAcao: NfpPlanoAcao[];
 }

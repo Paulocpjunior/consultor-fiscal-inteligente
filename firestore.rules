@@ -335,6 +335,16 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // nfp_analises: analises de compliance tributario (NFP Pro Cloud).
+    // Leitura para qualquer signed-in, escrita para signed-in, delete apenas admin.
+
+    match /nfp_analises/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
     // ───────────────────────────────────────────────────────────────
     // Default deny: qualquer coleção não listada acima é negada.
     // ───────────────────────────────────────────────────────────────
