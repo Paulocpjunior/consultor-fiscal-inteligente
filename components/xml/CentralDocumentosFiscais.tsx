@@ -141,7 +141,7 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                     <XmlEmpresasMonitoradas currentUser={currentUser} />
                 )}
                 {tab === 'sharepoint' && (
-                    <XmlSharePoint />
+                    <XmlSharePoint currentUser={currentUser} onShowToast={onShowToast} onImported={() => setRefreshKey(k => k + 1)} />
                 )}
                 {tab === 'exportar-iob' && (
                     <XmlExportarIobSage currentUser={currentUser} onShowToast={onShowToast} />
