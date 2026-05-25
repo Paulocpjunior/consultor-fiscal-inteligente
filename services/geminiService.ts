@@ -1,15 +1,26 @@
 
 import { SearchType, type SearchResult, type GroundingSource, type ComparisonResult, type NewsAlert, type SimilarService, type CnaeSuggestion, type SimplesNacionalEmpresa, type SimplesNacionalResumo, CnaeTaxDetail } from '../types';
+import { auth } from './firebaseConfig';
 
 interface ProxyResponse { text: string; candidates?: any[]; }
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    try {
+        const token = await auth?.currentUser?.getIdToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+    } catch { /* sem token — servidor decidirá */ }
+    return headers;
+}
+
 const callProxy = async (prompt: string | any[], options?: { temperature?: number; googleSearch?: boolean; model?: string }): Promise<ProxyResponse> => {
+    const headers = await getAuthHeaders();
     if (Array.isArray(prompt)) {
         const textPart = prompt.find((p: any) => p.text)?.text || '';
         const dataPart = prompt.find((p: any) => p.inlineData);
         if (dataPart?.inlineData) {
             const response = await fetch('/api/fiscal/multimodal', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers,
                 body: JSON.stringify({ prompt: textPart, base64Data: dataPart.inlineData.data, mimeType: dataPart.inlineData.mimeType, model: options?.model }),
             });
             if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.error || `Erro ${response.status}`); }
@@ -17,7 +28,7 @@ const callProxy = async (prompt: string | any[], options?: { temperature?: numbe
         }
     }
     const response = await fetch('/api/fiscal/query', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers,
         body: JSON.stringify({ prompt: typeof prompt === 'string' ? prompt : JSON.stringify(prompt), model: options?.model, temperature: options?.temperature, googleSearch: options?.googleSearch }),
     });
     if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.error || `Erro ${response.status}`); }
