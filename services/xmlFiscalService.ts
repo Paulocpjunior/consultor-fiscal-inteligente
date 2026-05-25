@@ -99,8 +99,12 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
     const isMaster = isMasterUser(user);
     const uid = auth?.currentUser?.uid;
 
-    const buildQuery = (col: string): QueryConstraint[] =>
-        (isMaster || !uid) ? [] : [where('createdBy', '==', uid)];
+    const buildQuery = (col: string): QueryConstraint[] => {
+        const constraints: QueryConstraint[] = [];
+        if (!isMaster && uid) constraints.push(where('createdBy', '==', uid));
+        constraints.push(fbLimit(500));
+        return constraints;
+    };
 
     try {
         const [simplesSnap, lucroSnap] = await Promise.all([
@@ -176,7 +180,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
     // Seletor de empresa da Analise de Creditos / Carteira: TODOS os
     // usuarios logados veem TODAS as empresas (sem filtro por createdBy).
     // O Firestore ja garante isso com `allow list: if isSignedIn()`.
-    const buildQuery = (_col: string): QueryConstraint[] => [];
+    const buildQuery = (_col: string): QueryConstraint[] => [fbLimit(500)];
 
     try {
         const [simplesSnap, lucroSnap] = await Promise.all([
