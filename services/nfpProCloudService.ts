@@ -14,10 +14,38 @@ import {
     limit as fbLimit,
     serverTimestamp,
 } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import type { User, NfpAnaliseEmpresa, NfpDebito } from '../types';
 
 const COLLECTION = 'nfp_analises';
+const API_BASE = '/api/admin/nfp-compliance';
+
+async function authHeaders(): Promise<Record<string, string>> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Usuário não autenticado');
+    const token = await u.getIdToken();
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+    };
+}
+
+/**
+ * Chama a análise completa de compliance via backend SERPRO.
+ */
+export async function analisarEmpresaCompleta(cnpj: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/analise-completa`, {
+        method: 'POST',
+        headers: await authHeaders(),
+        body: JSON.stringify({ cnpj }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Erro ${res.status} na análise completa`);
+    }
+    return res.json();
+}
 
 /**
  * Salva (ou atualiza) a análise de uma empresa.

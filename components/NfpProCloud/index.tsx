@@ -102,6 +102,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     // Análise tab state
     const [fonteAnalise, setFonteAnalise] = useState<'certificado_escritorio' | 'certificado_cliente' | 'offline'>('certificado_escritorio');
+    const [analiseRealLoading, setAnaliseRealLoading] = useState(false);
 
     useEffect(() => {
         getEmpresasDisponiveis(currentUser).then(setEmpresas).catch(() => {});
@@ -502,6 +503,105 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         );
     };
 
+    const handleAnaliseReal = useCallback(async () => {
+        if (!selectedEmpresa?.cnpj) return;
+        setAnaliseRealLoading(true);
+        try {
+            const resp = await nfpService.analisarEmpresaCompleta(selectedEmpresa.cnpj);
+            // Create or update analysis from SERPRO response
+            const base = analise || createEmptyAnalise();
+
+            // Populate debitos from situacaoFiscal + dividaAtiva
+            const debitos: NfpDebito[] = [];
+            if (resp.situacaoFiscal?.ok && resp.situacaoFiscal.debitos) {
+                for (const d of resp.situacaoFiscal.debitos) {
+                    debitos.push({
+                        id: uid(), empresaId: selectedEmpresaId, esfera: 'federal' as NfpEsfera,
+                        orgao: 'Receita Federal', descricao: d.tributo || d.descricao || 'Débito Federal',
+                        valorOriginal: Number(d.valorOriginal || 0), dataVencimento: d.competencia || new Date().toISOString().slice(0, 10),
+                        status: (d.status === 'quitado' ? 'quitado' : 'aberto') as NfpStatusDebito,
+                    });
+                }
+            }
+            if (resp.dividaAtiva?.ok && resp.dividaAtiva.inscricoes) {
+                for (const i of resp.dividaAtiva.inscricoes) {
+                    debitos.push({
+                        id: uid(), empresaId: selectedEmpresaId, esfera: 'federal' as NfpEsfera,
+                        orgao: 'PGFN', descricao: `Dívida Ativa ${i.numero || ''}`.trim(),
+                        valorOriginal: Number(i.valorConsolidado || 0), dataVencimento: i.dataInscricao || new Date().toISOString().slice(0, 10),
+                        status: 'aberto' as NfpStatusDebito,
+                    });
+                }
+            }
+
+            // Populate certidoes
+            const certidoes: NfpCertidao[] = CERTIDOES_BASE.map(c => {
+                const match = resp.certidoes?.certidoes?.find((rc: any) => {
+                    const esf = String(rc.esfera || '').toLowerCase();
+                    if (c.esfera === 'federal' && c.tipo.includes('CND Federal') && esf === 'federal') return true;
+                    if (c.esfera === 'estadual' && esf === 'estadual') return true;
+                    if (c.tipo.includes('CNDT') && esf === 'trabalhista') return true;
+                    if (c.tipo.includes('FGTS') && esf === 'fgts') return true;
+                    return false;
+                });
+                return {
+                    id: uid(), empresaId: selectedEmpresaId, esfera: c.esfera,
+                    orgao: c.orgao, tipo: c.tipo,
+                    status: (match?.status as NfpStatusCertidao) || 'nao_consultada',
+                    dataValidade: match?.validade || undefined,
+                    motivoImpedimento: match?.motivo || undefined,
+                };
+            });
+
+            // Populate obrigacoes
+            const obrigacoes: NfpObrigacao[] = OBRIGACOES_BASE.map(o => {
+                const match = resp.obrigacoes?.obrigacoes?.find((ro: any) =>
+                    (ro.sigla || '').toUpperCase() === o.sigla.toUpperCase()
+                );
+                return {
+                    id: uid(), empresaId: selectedEmpresaId,
+                    nome: o.nome, sigla: o.sigla, esfera: o.esfera, periodicidade: o.periodicidade,
+                    status: (match?.status as NfpStatusObrigacao) || 'nao_verificada',
+                    competencia: match?.competencia || undefined,
+                };
+            });
+
+            // Populate parcelamentos
+            const parcelamentos: NfpParcelamento[] = [];
+            if (resp.parcelamentos?.ok && resp.parcelamentos.parcelamentos) {
+                for (const p of resp.parcelamentos.parcelamentos) {
+                    parcelamentos.push({
+                        id: uid(), empresaId: selectedEmpresaId, esfera: 'federal' as NfpEsfera,
+                        programa: p.programa || '', valorTotal: Number(p.valorTotal || 0),
+                        parcelas: Number(p.parcelas || 0), parcelasPagas: Number(p.parcelasPagas || 0),
+                        valorParcela: p.parcelas > 0 ? Math.round((p.valorTotal / p.parcelas) * 100) / 100 : 0,
+                        status: (p.status || 'ativo') as any, dataInicio: p.dataInicio || new Date().toISOString().slice(0, 10),
+                    });
+                }
+            }
+
+            const updated: NfpAnaliseEmpresa = {
+                ...base,
+                dataAnalise: new Date().toISOString(),
+                analisadoPor: currentUser?.name || '',
+                fonte: fonteAnalise,
+                debitos: debitos.length > 0 ? debitos : base.debitos,
+                certidoes: resp.certidoes?.ok ? certidoes : base.certidoes,
+                obrigacoes: resp.obrigacoes?.ok ? obrigacoes : base.obrigacoes,
+                parcelamentos: parcelamentos.length > 0 ? parcelamentos : base.parcelamentos,
+            };
+
+            setAnalise(updated);
+            await saveAnalise(updated);
+            onShowToast?.('Análise real SERPRO concluída com sucesso');
+            setTab('dashboard');
+        } catch (e: any) {
+            onShowToast?.('Erro na análise real: ' + (e?.message || 'desconhecido'));
+        } finally {
+            setAnaliseRealLoading(false);
+        }
+    }, [selectedEmpresa, selectedEmpresaId, analise, createEmptyAnalise, currentUser, fonteAnalise, saveAnalise, onShowToast, updateAnalise]);
+
     const renderAnalise = () => (
         <div>
             <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
@@ -528,6 +628,21 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 >
                     Iniciar Análise
                 </button>
+                <button
+                    disabled={!selectedEmpresaId || !selectedEmpresa?.cnpj || analiseRealLoading}
+                    onClick={handleAnaliseReal}
+                    style={{
+                        ...btnStyleSave,
+                        opacity: (selectedEmpresaId && selectedEmpresa?.cnpj && !analiseRealLoading) ? 1 : 0.5,
+                    }}
+                >
+                    {analiseRealLoading ? 'Consultando SERPRO...' : 'Iniciar Análise Real'}
+                </button>
+                {analiseRealLoading && (
+                    <p style={{ color: 'var(--accent)', fontSize: '0.85rem' }}>
+                        Consultando situação fiscal, dívida ativa, certidões, obrigações e parcelamentos via SERPRO...
+                    </p>
+                )}
                 {analise && (
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                         Última análise: {new Date(analise.dataAnalise).toLocaleDateString('pt-BR')} por {analise.analisadoPor} (fonte: {analise.fonte})
