@@ -25,7 +25,7 @@ import type {
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import * as nfpService from '../../services/nfpProCloudService';
 import { auth } from '../../services/firebaseConfig';
-import { fetchCnpjFromBrasilAPI } from '../../services/externalApiService';
+
 import CertificadoEmpresaUpload from '../CertificadoEmpresaUpload';
 
 interface Props {
@@ -187,30 +187,41 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         setAnalise(null);
 
         try {
-            // Fetch full company data from BrasilAPI (with fallback to CNPJ.ws)
-            const parsed = await fetchCnpjFromBrasilAPI(cnpj);
+            const token = await auth?.currentUser?.getIdToken();
+            const resp = await fetch(`/api/admin/cnpj-lookup/${cnpj}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || `Erro ${resp.status}`);
+            }
+            const raw = await resp.json();
 
-            // Also fetch raw BrasilAPI response for situacao_cadastral
-            let situacao = '';
-            let descSituacao = '';
-            try {
-                const rawResp = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
-                    headers: { 'Accept': 'application/json' },
-                });
-                if (rawResp.ok) {
-                    const raw = await rawResp.json();
-                    situacao = String(raw.situacao_cadastral ?? raw.descricao_situacao_cadastral ?? '');
-                    descSituacao = raw.descricao_situacao_cadastral || '';
-                    // BrasilAPI uses numeric codes: 2 = Ativa, 3 = Suspensa, 4 = Inapta, 8 = Baixada
-                    if (!descSituacao) {
-                        const map: Record<string, string> = { '2': 'Ativa', '3': 'Suspensa', '4': 'Inapta', '8': 'Baixada' };
-                        descSituacao = map[situacao] || situacao;
-                    }
-                }
-            } catch { /* situacao stays empty */ }
+            const situacao = String(raw.situacao_cadastral ?? '');
+            let descSituacao = raw.descricao_situacao_cadastral || '';
+            if (!descSituacao) {
+                const map: Record<string, string> = { '2': 'Ativa', '3': 'Suspensa', '4': 'Inapta', '8': 'Baixada' };
+                descSituacao = map[situacao] || situacao;
+            }
 
             const data: ProspectData = {
-                ...parsed,
+                razaoSocial: raw.razao_social || raw.nome_fantasia || '',
+                nomeFantasia: raw.nome_fantasia || '',
+                cnaePrincipal: {
+                    codigo: raw.cnae_fiscal?.toString() || '',
+                    descricao: raw.cnae_fiscal_descricao || '',
+                },
+                cnaesSecundarios: (raw.cnaes_secundarios || []).map((c: any) => ({
+                    codigo: c.codigo?.toString() || '',
+                    descricao: c.descricao || '',
+                })),
+                logradouro: raw.logradouro || '',
+                numero: raw.numero || '',
+                bairro: raw.bairro || '',
+                municipio: raw.municipio || '',
+                uf: raw.uf || '',
+                cep: raw.cep || '',
+                dataAbertura: raw.data_inicio_atividade || '',
                 cnpj,
                 situacaoCadastral: situacao,
                 descricaoSituacaoCadastral: descSituacao,

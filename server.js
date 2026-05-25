@@ -398,6 +398,23 @@ Use **negrito** nos pontos-chave. Direto, sem rodeios.`;
     }
 });
 
+// ─── Consulta CNPJ via BrasilAPI (proxy para CSP) ────────────────────────
+app.get('/api/admin/cnpj-lookup/:cnpj', requireAuth, async (req, res) => {
+    const cnpj = (req.params.cnpj || '').replace(/\D/g, '');
+    if (!cnpj || cnpj.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });
+    try {
+        const resp = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!resp.ok) return res.status(resp.status).json({ error: `BrasilAPI retornou ${resp.status}` });
+        const data = await resp.json();
+        res.json(data);
+    } catch (e) {
+        res.status(502).json({ error: e.message || 'Falha ao consultar BrasilAPI' });
+    }
+});
+
 // ─── Empresa: contato (email + telefone) ──────────────────────────────────
 app.get('/api/admin/empresa-contato/:cnpj', requireAdmin, async (req, res) => {
     try {
