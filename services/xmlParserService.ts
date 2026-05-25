@@ -98,7 +98,7 @@ export class XmlParseError extends Error {
 // ─── Parser principal ───────────────────────────────────────────────────────
 
 /**
- * Faz o parse de um XML de NFe/NFCe.
+ * Faz o parse de um XML de NFe/NFCe ou CT-e.
  * Lança XmlParseError quando o documento é inválido ou não suportado.
  */
 export function parseNFeXml(xmlText: string): ParsedXml {
@@ -109,10 +109,15 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         throw new XmlParseError('Arquivo XML inválido ou corrompido.');
     }
 
+    // CT-e: redireciona para parser específico
+    const infCte = doc.getElementsByTagName('infCte')[0];
+    if (infCte) {
+        return parseCTeXml(doc, infCte);
+    }
+
     const infNFe = doc.getElementsByTagName('infNFe')[0];
     if (!infNFe) {
-        // NFSe / CTe ainda não suportados nesta primeira entrega.
-        throw new XmlParseError('XML não é uma NFe/NFCe válida (tag <infNFe> ausente).');
+        throw new XmlParseError('XML não é uma NFe/NFCe/CTe válida (tag <infNFe> ou <infCte> ausente).');
     }
 
     const ide = doc.getElementsByTagName('ide')[0];
@@ -309,6 +314,115 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         itens,
         totais,
         infAdic: infAdFisco?.textContent?.trim() || infCpl?.textContent?.trim() || undefined,
+    };
+}
+
+// ─── Parser CT-e ────────────────────────────────────────────────────────────
+
+function parseCTeXml(doc: Document, infCte: Element): ParsedXml {
+    const ide = doc.getElementsByTagName('ide')[0];
+    const emit = doc.getElementsByTagName('emit')[0];
+    const rem = doc.getElementsByTagName('rem')[0];
+    const dest = doc.getElementsByTagName('dest')[0];
+    const vPrest = doc.getElementsByTagName('vPrest')[0];
+    const imp = doc.getElementsByTagName('imp')[0];
+    const icmsEl = imp ? imp.getElementsByTagName('ICMS')[0] : null;
+
+    const chave = extractChaveFromId(infCte.getAttribute('Id') || '');
+
+    const enderEmit = emit ? emit.getElementsByTagName('enderEmit')[0] : null;
+    const enderRem = rem ? rem.getElementsByTagName('enderReme')[0] : null;
+    const enderDest = dest ? dest.getElementsByTagName('enderDest')[0] : null;
+
+    const emitente: DocumentoFiscalParticipante = {
+        cnpjCpf: onlyDigits(getTextContent(emit, 'CNPJ') || getTextContent(emit, 'CPF')),
+        nome: getTextContent(emit, 'xNome'),
+        fantasia: getTextContent(emit, 'xFant') || undefined,
+        ie: getTextContent(emit, 'IE') || undefined,
+        uf: getTextContent(enderEmit, 'UF') || undefined,
+        municipio: getTextContent(enderEmit, 'xMun') || undefined,
+        codMunIBGE: getTextContent(enderEmit, 'cMun') || undefined,
+    };
+
+    // CT-e usa remetente como "contraparte principal" no campo destinatário
+    // para manter compatibilidade com matchCompanyAndDirection
+    const remetente: DocumentoFiscalParticipante = {
+        cnpjCpf: onlyDigits(getTextContent(rem, 'CNPJ') || getTextContent(rem, 'CPF')),
+        nome: getTextContent(rem, 'xNome'),
+        fantasia: getTextContent(rem, 'xFant') || undefined,
+        ie: getTextContent(rem, 'IE') || undefined,
+        uf: getTextContent(enderRem, 'UF') || undefined,
+        municipio: getTextContent(enderRem, 'xMun') || undefined,
+        codMunIBGE: getTextContent(enderRem, 'cMun') || undefined,
+    };
+
+    const destinatario: DocumentoFiscalParticipante = {
+        cnpjCpf: onlyDigits(getTextContent(dest, 'CNPJ') || getTextContent(dest, 'CPF')),
+        nome: getTextContent(dest, 'xNome'),
+        fantasia: getTextContent(dest, 'xFant') || undefined,
+        ie: getTextContent(dest, 'IE') || undefined,
+        uf: getTextContent(enderDest, 'UF') || undefined,
+        municipio: getTextContent(enderDest, 'xMun') || undefined,
+        codMunIBGE: getTextContent(enderDest, 'cMun') || undefined,
+    };
+
+    // ICMS do CT-e
+    let vICMS = 0;
+    let vBC = 0;
+    if (icmsEl) {
+        const inner = icmsEl.children[0];
+        if (inner) {
+            vICMS = num(getTextContent(inner, 'vICMS'));
+            vBC = num(getTextContent(inner, 'vBC'));
+        }
+    }
+
+    const valorPrest = num(getTextContent(vPrest, 'vTPrest'));
+    const valorRec = num(getTextContent(vPrest, 'vRec'));
+
+    const totais: DocumentoFiscalTotais = {
+        vBC,
+        vICMS,
+        vICMSDeson: 0,
+        vFCP: 0,
+        vBCST: 0,
+        vST: 0,
+        vFCPST: 0,
+        vProd: valorPrest,
+        vFrete: valorPrest,
+        vSeg: 0,
+        vDesc: 0,
+        vII: 0,
+        vIPI: 0,
+        vIPIDevol: 0,
+        vPIS: 0,
+        vCOFINS: 0,
+        vOutro: 0,
+        vNF: valorRec || valorPrest,
+    };
+
+    const cStat = getTextContent(doc.getElementsByTagName('infProt')[0], 'cStat');
+    const status: XmlStatusDocumento =
+        cStat === '100' ? 'autorizado'
+        : cStat === '101' ? 'cancelado'
+        : cStat === '110' ? 'denegado'
+        : !cStat ? 'desconhecido'
+        : 'rejeitado';
+
+    return {
+        chave,
+        tipo: 'CTe',
+        modelo: getTextContent(ide, 'mod') || '57',
+        serie: getTextContent(ide, 'serie'),
+        numero: getTextContent(ide, 'nCT'),
+        natOp: getTextContent(ide, 'natOp'),
+        dhEmi: getTextContent(ide, 'dhEmi'),
+        status,
+        emitente,
+        destinatario: remetente.cnpjCpf ? remetente : destinatario,
+        itens: [],
+        totais,
+        infAdic: getTextContent(doc.documentElement, 'infCpl') || undefined,
     };
 }
 
