@@ -1010,6 +1010,16 @@ export interface NFeEvento {
 
 export type XmlDirecao = 'entrada' | 'saida' | 'desconhecida';
 
+export type CategoriaOperacao =
+    | 'compra'
+    | 'venda'
+    | 'servico_prestado'
+    | 'servico_tomado'
+    | 'devolucao'
+    | 'transferencia'
+    | 'remessa'
+    | 'outro';
+
 export type XmlTipoDocumento = 'NFe' | 'NFCe' | 'NFSe' | 'CTe' | 'MDFe' | 'desconhecido';
 
 /**
@@ -1183,6 +1193,7 @@ export interface DocumentoFiscal {
     /** Competência calculada a partir da emissão (YYYY-MM). */
     competencia: string;
     direcao: XmlDirecao;
+    categoriaOperacao?: CategoriaOperacao;
     status: XmlStatusDocumento;
 
     /** Empresa cadastrada no app à qual este documento pertence. */

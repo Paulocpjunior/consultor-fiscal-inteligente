@@ -324,6 +324,18 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // sped_arquivos: histórico de importações SPED.
+    // Criador + admin leem/escrevem.
+    // ───────────────────────────────────────────────────────────────
+
+    match /sped_arquivos/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // Default deny: qualquer coleção não listada acima é negada.
     // ───────────────────────────────────────────────────────────────
 

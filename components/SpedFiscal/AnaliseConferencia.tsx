@@ -11,6 +11,7 @@ import type {
 import { parseSpedFiscalFile } from '../../services/spedFiscalParserService';
 import { conferXmlContraSped, type XmlConferenciaInput } from '../../services/spedFiscalConferenceService';
 import { listDocumentos } from '../../services/xmlFiscalService';
+import { salvarSpedArquivo } from '../../services/spedFiscalStorageService';
 import { isFirebaseConfigured } from '../../services/firebaseConfig';
 import { formatCnpjCpf, formatCurrency } from '../../services/xmlParserService';
 
@@ -61,10 +62,19 @@ const AnaliseConferencia: React.FC<Props> = ({ currentUser, onShowToast }) => {
             const result = await parseSpedFiscalFile(file, currentUser);
             setParseResult(result);
             setActiveTab('painel');
+
+            if (isFirebaseConfigured && currentUser) {
+                try {
+                    await salvarSpedArquivo(result, currentUser);
+                } catch (saveErr) {
+                    console.warn('Falha ao persistir SPED no Firestore:', saveErr);
+                }
+            }
+
             if (onShowToast) {
                 const statusMsg = result.erros.length > 0
                     ? `Importado com ${result.erros.length} erro(s)`
-                    : 'Importado com sucesso';
+                    : 'Importado e salvo com sucesso';
                 onShowToast(`SPED "${file.name}" — ${statusMsg}`);
             }
         } catch (err: any) {

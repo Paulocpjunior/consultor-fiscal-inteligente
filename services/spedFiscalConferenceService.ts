@@ -5,6 +5,7 @@ import type {
     SpedInconsistenciaTipo,
     SpedInconsistenciaGravidade,
     SpedDocumentoC100,
+    SpedDocumentoD100,
 } from '../types';
 
 export interface XmlConferenciaInput {
@@ -13,6 +14,15 @@ export interface XmlConferenciaInput {
     valorTotal?: number;
     valorIcms?: number;
     status?: string;
+}
+
+interface SpedDocGenerico {
+    chave?: string;
+    numDoc?: string;
+    codSit?: string;
+    valorDocumento: number;
+    valorIcms?: number;
+    registro: 'C100' | 'D100';
 }
 
 const TOLERANCE = 0.01;
@@ -65,16 +75,28 @@ export function conferXmlContraSped(
 ): SpedFiscalConferenceResult {
     const inconsistencias: SpedFiscalInconsistencia[] = [];
 
-    const spedByChave = new Map<string, SpedDocumentoC100>();
+    // Unifica C100 (NF-e) + D100 (CT-e) num mapa genérico para conferência
+    const allSpedDocs: SpedDocGenerico[] = [
+        ...parseResult.documentosC100.map(d => ({
+            chave: d.chave, numDoc: d.numDoc, codSit: d.codSit,
+            valorDocumento: d.valorDocumento, valorIcms: d.valorIcms, registro: 'C100' as const,
+        })),
+        ...parseResult.documentosD100.map(d => ({
+            chave: d.chave, numDoc: d.numDoc, codSit: d.codSit,
+            valorDocumento: d.valorDocumento, valorIcms: d.valorIcms, registro: 'D100' as const,
+        })),
+    ];
+
+    const spedByChave = new Map<string, SpedDocGenerico>();
     const spedChaveDupCount = new Map<string, number>();
 
-    for (const doc of parseResult.documentosC100) {
+    for (const doc of allSpedDocs) {
         if (!chaveValida(doc.chave)) {
             if (doc.chave) {
                 inconsistencias.push(
                     buildInconsistencia(
                         'CHAVE_INVALIDA',
-                        `Documento ${doc.numDoc || '?'} possui chave inválida: ${doc.chave}`,
+                        `${doc.registro} ${doc.numDoc || '?'} possui chave inválida: ${doc.chave}`,
                         doc.chave,
                         doc.numDoc,
                     ),
@@ -88,7 +110,7 @@ export function conferXmlContraSped(
             inconsistencias.push(
                 buildInconsistencia(
                     'DOCUMENTO_DUPLICADO',
-                    `Chave ${doc.chave} aparece ${count} vezes no SPED`,
+                    `Chave ${doc.chave} aparece ${count} vezes no SPED (${doc.registro})`,
                     doc.chave,
                     doc.numDoc,
                 ),
@@ -185,7 +207,7 @@ export function conferXmlContraSped(
             inconsistencias.push(
                 buildInconsistencia(
                     'SPED_SEM_XML',
-                    `Documento ${spedDoc.numDoc || '?'} (chave ${chave}) escriturado no SPED mas sem XML correspondente`,
+                    `${spedDoc.registro} ${spedDoc.numDoc || '?'} (chave ${chave}) escriturado no SPED mas sem XML correspondente`,
                     chave,
                     spedDoc.numDoc,
                     undefined,
@@ -195,7 +217,7 @@ export function conferXmlContraSped(
         }
     }
 
-    const allDocs = parseResult.documentosC100.length + parseResult.documentosD100.length;
+    const allDocs = allSpedDocs.length;
     let documentosConferidos = 0;
     for (const xml of xmls) {
         if (chaveValida(xml.chave) && spedByChave.has(xml.chave)) {

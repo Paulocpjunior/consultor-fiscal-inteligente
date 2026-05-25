@@ -70,6 +70,45 @@ export function competenciaFromIso(iso: string): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+// ─── Classificação CFOP ──────────────────────────────────────────────────────
+
+import type { CategoriaOperacao, XmlDirecao as Direcao } from '../types';
+
+export function classificarPorCfop(itens: { cfop: string }[], direcao: Direcao): CategoriaOperacao {
+    const cfops = itens.map(i => i.cfop).filter(Boolean);
+    if (cfops.length === 0) return 'outro';
+
+    const contagem: Record<CategoriaOperacao, number> = {
+        compra: 0, venda: 0, servico_prestado: 0, servico_tomado: 0,
+        devolucao: 0, transferencia: 0, remessa: 0, outro: 0,
+    };
+
+    for (const cfop of cfops) {
+        const d = cfop.replace(/\D/g, '');
+        if (d.length < 4) { contagem.outro++; continue; }
+        const primeiro = d[0];
+        const grupo = parseInt(d[1], 10);
+        const isEntrada = primeiro === '1' || primeiro === '2' || primeiro === '3';
+
+        if (grupo === 4) contagem.devolucao++;
+        else if (grupo === 5 || grupo === 6) contagem.transferencia++;
+        else if (grupo === 9) { if (isEntrada) contagem.servico_tomado++; else contagem.servico_prestado++; }
+        else if (grupo === 3) contagem.remessa++;
+        else if (grupo === 1 || grupo === 2) { if (isEntrada) contagem.compra++; else contagem.venda++; }
+        else { if (isEntrada) contagem.compra++; else contagem.venda++; }
+    }
+
+    let best: CategoriaOperacao = 'outro';
+    let bestCount = 0;
+    for (const [cat, count] of Object.entries(contagem) as [CategoriaOperacao, number][]) {
+        if (count > bestCount) { best = cat; bestCount = count; }
+    }
+
+    if (best === 'outro' && direcao === 'entrada') return 'compra';
+    if (best === 'outro' && direcao === 'saida') return 'venda';
+    return best;
+}
+
 // ─── Tipos internos do parser ───────────────────────────────────────────────
 
 export interface ParsedXml {
@@ -494,6 +533,7 @@ export function buildDocumentoFiscal(input: {
         dhEmi: parsed.dhEmi,
         competencia: competenciaFromIso(parsed.dhEmi),
         direcao: input.direcao,
+        categoriaOperacao: classificarPorCfop(parsed.itens, input.direcao),
         status: parsed.status,
         empresaId: input.empresaId,
         empresaCnpj: onlyDigits(input.empresaCnpj),
