@@ -796,7 +796,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     return (
         <div style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                <h2 style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '1.5rem', margin: 0 }}>NFP Pro Cloud</h2>
+                <h2 style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '1.5rem', margin: 0 }}>Consulta Situação Fiscal</h2>
                 {prospectMode && (
                     <span style={{
                         padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,

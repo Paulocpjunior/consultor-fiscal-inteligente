@@ -25,7 +25,7 @@ export enum SearchType {
   AGENTES_A3 = 'Agentes A3',
   EMISSAO_TRIBUTOS = 'Central de Emissões',
   RECUPERACAO_TRIBUTARIA = 'Recuperação Tributária',
-  NFP_PRO_CLOUD = 'NFP Pro Cloud',
+  NFP_PRO_CLOUD = 'Consulta Situação Fiscal',
 }
 
 export interface GroundingSource {

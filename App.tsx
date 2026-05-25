@@ -83,7 +83,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.SIMULADOR_IBS_CBS]: "Simulador IBS/CBS — projeção da carga tributária 2026-2033 sob a Reforma Tributária (LC 214/2025).",
     [SearchType.EMISSAO_TRIBUTOS]: "Central de Emissões — emissão unificada de DAS (Simples) e DARF (IRPJ/CSLL/PIS/COFINS para Presumido e Real) com controle de pagamento.",
     [SearchType.RECUPERACAO_TRIBUTARIA]: "Recuperação Tributária — identifica impostos pagos a maior e oportunidades de restituição/compensação.",
-    [SearchType.NFP_PRO_CLOUD]: "Compliance tributário: débitos, certidões, obrigações, parcelamentos e plano de ação.",
+    [SearchType.NFP_PRO_CLOUD]: "Consulta de situação fiscal: débitos, certidões, obrigações, parcelamentos e plano de ação. Acesso restrito a administradores.",
 };
 
 const App: React.FC = () => {
@@ -703,7 +703,8 @@ const App: React.FC = () => {
                                     <span className="text-xs font-bold text-center leading-tight">{type}</span>
                                 </button>
                             ))}
-                            {/* NFP Pro Cloud — módulo interno */}
+                            {/* Consulta Situação Fiscal — somente admin */}
+                            {currentUser.role === 'admin' && (
                             <button
                                 onClick={() => {
                                     setSearchType(SearchType.NFP_PRO_CLOUD);
@@ -722,11 +723,15 @@ const App: React.FC = () => {
                                     transform: searchType === SearchType.NFP_PRO_CLOUD ? 'scale(1.05)' : 'scale(1)'
                                 }}
                             >
-                                <div className="mb-2">
+                                <div className="mb-2 relative">
                                     <DocumentTextIcon className="w-5 h-5" />
+                                    <svg className="w-3 h-3 absolute -top-1 -right-1" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--warning, #f59e0b)' }}>
+                                        <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clipRule="evenodd" />
+                                    </svg>
                                 </div>
-                                <span className="text-xs font-bold text-center leading-tight">NFP Pro Cloud</span>
+                                <span className="text-xs font-bold text-center leading-tight">Consulta Situação Fiscal</span>
                             </button>
+                            )}
                             {/* Importa XML */}
                             <button
                                 onClick={() => {
