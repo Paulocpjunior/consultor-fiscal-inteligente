@@ -402,18 +402,55 @@ Use **negrito** nos pontos-chave. Direto, sem rodeios.`;
 app.get('/api/admin/cnpj-lookup/:cnpj', requireAuth, async (req, res) => {
     const cnpj = (req.params.cnpj || '').replace(/\D/g, '');
     if (!cnpj || cnpj.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });
-    try {
-        const resp = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
-            headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(10000),
-        });
-        if (!resp.ok) return res.status(resp.status).json({ error: `BrasilAPI retornou ${resp.status}` });
-        const data = await resp.json();
-        res.json(data);
-    } catch (e) {
-        res.status(502).json({ error: e.message || 'Falha ao consultar BrasilAPI' });
+
+    const apis = [
+        { name: 'BrasilAPI', url: `https://brasilapi.com.br/api/cnpj/v1/${cnpj}` },
+        { name: 'ReceitaWS', url: `https://receitaws.com.br/v1/cnpj/${cnpj}` },
+        { name: 'CNPJ.ws', url: `https://publica.cnpj.ws/cnpj/${cnpj}` },
+    ];
+
+    for (const api of apis) {
+        try {
+            const resp = await fetch(api.url, {
+                headers: { 'Accept': 'application/json', 'User-Agent': 'ConsultorFiscal/1.0' },
+                signal: AbortSignal.timeout(10000),
+            });
+            if (resp.ok) {
+                const raw = await resp.json();
+                const data = api.name === 'CNPJ.ws' ? normalizeCnpjWs(raw, cnpj) : api.name === 'ReceitaWS' ? normalizeReceitaWs(raw, cnpj) : raw;
+                return res.json(data);
+            }
+            console.warn(`[cnpj-lookup] ${api.name} retornou ${resp.status} para ${cnpj}`);
+        } catch (e) {
+            console.warn(`[cnpj-lookup] ${api.name} falhou: ${e.message}`);
+        }
     }
+    res.status(502).json({ error: 'Todas as APIs de consulta CNPJ falharam. Tente novamente em alguns minutos.' });
 });
+
+function normalizeReceitaWs(raw, cnpj) {
+    return {
+        cnpj, razao_social: raw.nome, nome_fantasia: raw.fantasia,
+        cnae_fiscal: raw.atividade_principal?.[0]?.code, cnae_fiscal_descricao: raw.atividade_principal?.[0]?.text,
+        logradouro: raw.logradouro, numero: raw.numero, bairro: raw.bairro,
+        municipio: raw.municipio, uf: raw.uf, cep: raw.cep,
+        situacao_cadastral: raw.situacao === 'ATIVA' ? '2' : '8',
+        descricao_situacao_cadastral: raw.situacao,
+        data_inicio_atividade: raw.abertura,
+    };
+}
+
+function normalizeCnpjWs(raw, cnpj) {
+    return {
+        cnpj, razao_social: raw.razao_social, nome_fantasia: raw.estabelecimento?.nome_fantasia || '',
+        cnae_fiscal: raw.estabelecimento?.atividade_principal?.id, cnae_fiscal_descricao: raw.estabelecimento?.atividade_principal?.descricao,
+        logradouro: raw.estabelecimento?.logradouro, numero: raw.estabelecimento?.numero, bairro: raw.estabelecimento?.bairro,
+        municipio: raw.estabelecimento?.cidade?.nome, uf: raw.estabelecimento?.estado?.sigla, cep: raw.estabelecimento?.cep,
+        situacao_cadastral: raw.estabelecimento?.situacao_cadastral === 'Ativa' ? '2' : '8',
+        descricao_situacao_cadastral: raw.estabelecimento?.situacao_cadastral,
+        data_inicio_atividade: raw.estabelecimento?.data_inicio_atividade,
+    };
+}
 
 // ─── Empresa: contato (email + telefone) ──────────────────────────────────
 app.get('/api/admin/empresa-contato/:cnpj', requireAdmin, async (req, res) => {
