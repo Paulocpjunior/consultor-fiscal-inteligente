@@ -16,6 +16,7 @@ import {
 } from './nfp-compliance-provider.js';
 
 const router = express.Router();
+router.use(express.json());
 
 // ─── Validação ──────────────────────────────────────────────────────────────
 
