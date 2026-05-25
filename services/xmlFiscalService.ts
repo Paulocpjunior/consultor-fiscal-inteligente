@@ -82,6 +82,8 @@ export interface EmpresaXmlOption {
     nome: string;
     cnpj: string;
     fonte: 'simples' | 'lucro';
+    uf?: string;
+    municipio?: string;
     createdBy?: string;
 }
 
@@ -117,13 +119,13 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
             const data = d.data() as SimplesNacionalEmpresa;
-            return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples', createdBy: data.createdBy };
+            return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples', uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
         });
         const lucro: EmpresaXmlOption[] = lucroSnap.docs
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
             const data = d.data() as LucroPresumidoEmpresa;
-            return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro', createdBy: data.createdBy };
+            return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro', uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
         });
 
         return dedupEmpresas([...simples, ...lucro]);
