@@ -52,10 +52,10 @@ const OBRIGACOES: Obrigacao[] = [
     penalidade: 'Multa de R$ 500,00 por mês ou fração', categoria: 'federal',
   },
   {
-    id: 'dctf', nome: 'DCTF - Declaração de Débitos e Créditos Tributários Federais', sigla: 'DCTF',
-    orgao: 'Receita Federal', regimes: ['lucro_presumido', 'lucro_real'], periodicidade: 'mensal',
-    diaVencimento: 15, descricao: 'Declaração mensal dos débitos e créditos de tributos federais (IRPJ, CSLL, PIS, COFINS, IPI, IRRF).',
-    penalidade: 'Multa de 2% ao mês (máx 20%) sobre o valor dos tributos declarados', categoria: 'federal', requerResponsavel: true,
+    id: 'dctfweb', nome: 'DCTFWeb - Declaração de Débitos e Créditos Tributários Federais Web', sigla: 'DCTFWeb',
+    orgao: 'Receita Federal', regimes: ['lucro_presumido', 'lucro_real', 'simples_nacional'], periodicidade: 'mensal',
+    diaVencimento: 25, descricao: 'Declaração mensal que substitui a DCTF convencional. Integra débitos previdenciários e de terceiros com créditos de retenções. Vencimento dia 25 do mês seguinte ao fato gerador (prorroga para próximo dia útil).',
+    penalidade: 'Multa de 2% ao mês (máx 20%) sobre o valor dos tributos declarados, mínimo R$ 200,00 (inativas) ou R$ 500,00', categoria: 'federal', requerResponsavel: true,
   },
   {
     id: 'sped_contabil', nome: 'SPED Contábil - ECD', sigla: 'ECD',
