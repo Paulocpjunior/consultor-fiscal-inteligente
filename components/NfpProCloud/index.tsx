@@ -25,6 +25,15 @@ import type {
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import * as nfpService from '../../services/nfpProCloudService';
 import { auth } from '../../services/firebaseConfig';
+import {
+    gerarPerfilTributario,
+    inferirAtividadePorCnae,
+    inferirRegimePorFonte,
+    regimeLabel,
+    atividadeLabel,
+    type TaxProfile,
+    type RegimeTributario,
+} from '../../services/nfpTaxRulesEngine';
 
 import CertificadoEmpresaUpload from '../CertificadoEmpresaUpload';
 
@@ -142,6 +151,10 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [prospectError, setProspectError] = useState('');
     const [prospectData, setProspectData] = useState<ProspectData | null>(null);
 
+    // Tax rules engine state
+    const [taxProfile, setTaxProfile] = useState<TaxProfile | null>(null);
+    const [prospectRegime, setProspectRegime] = useState<RegimeTributario>('simples_nacional');
+
     useEffect(() => {
         getEmpresasDisponiveis(currentUser).then(setEmpresas).catch(() => {});
     }, [currentUser]);
@@ -157,6 +170,18 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     }, [selectedEmpresaId]);
 
     const selectedEmpresa = useMemo(() => empresas.find(e => e.id === selectedEmpresaId), [empresas, selectedEmpresaId]);
+
+    // Compute tax profile when empresa changes (non-prospect mode)
+    useEffect(() => {
+        if (!selectedEmpresa) { setTaxProfile(null); return; }
+        // Try to get CNAE from the empresa data — look up from Simples or Lucro
+        // The empresa list comes from xmlFiscalService and has fonte ('simples'|'lucro')
+        const regime = inferirRegimePorFonte(selectedEmpresa.fonte);
+        // CNAE is not available on EmpresaXmlOption directly; will be populated
+        // from analysis or prospect. For now, create a basic profile.
+        const profile = gerarPerfilTributario({ cnae: '', regime });
+        setTaxProfile(profile);
+    }, [selectedEmpresa]);
 
     // Derived helpers for prospect mode
     const prospectCnpjClean = useMemo(() => prospectCnpjInput.replace(/\D/g, ''), [prospectCnpjInput]);
@@ -185,6 +210,15 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             setFonteAnalise('certificado_cliente');
         }
     }, [prospectMode]);
+
+    // Compute tax profile when prospect data or prospect regime changes
+    useEffect(() => {
+        if (!prospectMode || !prospectData) { return; }
+        const cnae = prospectData.cnaePrincipal?.codigo || '';
+        const desc = prospectData.cnaePrincipal?.descricao || '';
+        const profile = gerarPerfilTributario({ cnae, descricaoCnae: desc, regime: prospectRegime });
+        setTaxProfile(profile);
+    }, [prospectMode, prospectData, prospectRegime]);
 
     /** Consultar CNPJ do prospect via BrasilAPI. */
     const handleProspectLookup = useCallback(async () => {
@@ -265,35 +299,55 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
     }, [currentUser, onShowToast]);
 
-    const createEmptyAnalise = useCallback((): NfpAnaliseEmpresa => ({
-        empresaId: activeEmpresaId,
-        empresaNome: activeNome,
-        empresaCnpj: activeCnpj,
-        dataAnalise: new Date().toISOString(),
-        analisadoPor: currentUser?.name || '',
-        fonte: fonteAnalise,
-        debitos: [],
-        parcelamentos: [],
-        certidoes: CERTIDOES_BASE.map(c => ({
-            id: uid(),
+    const createEmptyAnalise = useCallback((): NfpAnaliseEmpresa => {
+        // When a TaxProfile is available, use its rules-driven lists
+        const certidoesSrc = taxProfile
+            ? taxProfile.certidoesObrigatorias.map(c => ({
+                esfera: c.esfera as NfpEsfera,
+                orgao: c.orgao,
+                tipo: c.tipo,
+            }))
+            : CERTIDOES_BASE.map(c => ({ esfera: c.esfera, orgao: c.orgao, tipo: c.tipo }));
+
+        const obrigacoesSrc = taxProfile
+            ? taxProfile.obrigacoesObrigatorias.map(o => ({
+                nome: o.nome,
+                sigla: o.sigla,
+                esfera: o.esfera as NfpEsfera,
+                periodicidade: o.periodicidade as 'mensal' | 'trimestral' | 'anual' | 'eventual',
+            }))
+            : OBRIGACOES_BASE.map(o => ({ nome: o.nome, sigla: o.sigla, esfera: o.esfera, periodicidade: o.periodicidade }));
+
+        return {
             empresaId: activeEmpresaId,
-            esfera: c.esfera,
-            orgao: c.orgao,
-            tipo: c.tipo,
-            status: 'nao_consultada' as NfpStatusCertidao,
-        })),
-        obrigacoes: OBRIGACOES_BASE.map(o => ({
-            id: uid(),
-            empresaId: activeEmpresaId,
-            nome: o.nome,
-            sigla: o.sigla,
-            esfera: o.esfera,
-            periodicidade: o.periodicidade,
-            status: 'nao_verificada' as NfpStatusObrigacao,
-        })),
-        acoes: [],
-        planoAcao: [],
-    }), [activeEmpresaId, activeNome, activeCnpj, currentUser, fonteAnalise]);
+            empresaNome: activeNome,
+            empresaCnpj: activeCnpj,
+            dataAnalise: new Date().toISOString(),
+            analisadoPor: currentUser?.name || '',
+            fonte: fonteAnalise,
+            debitos: [],
+            parcelamentos: [],
+            certidoes: certidoesSrc.map(c => ({
+                id: uid(),
+                empresaId: activeEmpresaId,
+                esfera: c.esfera,
+                orgao: c.orgao,
+                tipo: c.tipo,
+                status: 'nao_consultada' as NfpStatusCertidao,
+            })),
+            obrigacoes: obrigacoesSrc.map(o => ({
+                id: uid(),
+                empresaId: activeEmpresaId,
+                nome: o.nome,
+                sigla: o.sigla,
+                esfera: o.esfera,
+                periodicidade: o.periodicidade,
+                status: 'nao_verificada' as NfpStatusObrigacao,
+            })),
+            acoes: [],
+            planoAcao: [],
+        };
+    }, [activeEmpresaId, activeNome, activeCnpj, currentUser, fonteAnalise, taxProfile]);
 
     // ─── Esfera Section Helpers ────────────────────────────────────────────
 
@@ -337,6 +391,78 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     // ─── Render Helpers ─────────────────────────────────────────────────────
 
+    const renderTaxProfileCard = () => {
+        if (!taxProfile) return null;
+
+        const regimeBadgeColors: Record<RegimeTributario, string> = {
+            simples_nacional: 'var(--success)',
+            lucro_presumido: 'var(--accent)',
+            lucro_real: '#9333ea',
+            mei: 'var(--text-muted)',
+        };
+        const badgeColor = regimeBadgeColors[taxProfile.regime] || 'var(--text-muted)';
+
+        return (
+            <div style={{
+                ...cardStyle, marginBottom: '1rem',
+                borderLeft: `4px solid ${badgeColor}`,
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                    <span style={{
+                        padding: '3px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                        background: badgeColor + '22', color: badgeColor,
+                        border: `1px solid ${badgeColor}44`,
+                    }}>
+                        {regimeLabel(taxProfile.regime)}
+                    </span>
+                    <span style={{
+                        padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600,
+                        background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+                        border: '1px solid var(--border-default)',
+                    }}>
+                        {atividadeLabel(taxProfile.atividadeTipo)}
+                    </span>
+                    {taxProfile.cnae && (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                            CNAE {taxProfile.cnae}{taxProfile.descricaoCnae ? ` - ${taxProfile.descricaoCnae}` : ''}
+                        </span>
+                    )}
+                </div>
+
+                {taxProfile.impostosAplicaveis.length > 0 && (
+                    <div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>
+                            Impostos Aplicaveis
+                        </span>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.4rem' }}>
+                            {taxProfile.impostosAplicaveis.map((imp, i) => (
+                                <span key={i} title={imp.aliquotaBase || ''} style={{
+                                    padding: '2px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 500,
+                                    background: imp.esfera === 'federal' ? 'var(--accent)11' : imp.esfera === 'estadual' ? 'var(--warning)11' : 'var(--success)11',
+                                    color: imp.esfera === 'federal' ? 'var(--accent)' : imp.esfera === 'estadual' ? 'var(--warning)' : 'var(--success)',
+                                    border: `1px solid ${imp.esfera === 'federal' ? 'var(--accent)' : imp.esfera === 'estadual' ? 'var(--warning)' : 'var(--success)'}33`,
+                                    cursor: imp.aliquotaBase ? 'help' : 'default',
+                                }}>
+                                    {imp.nome}{imp.aliquotaBase ? ` (${imp.aliquotaBase})` : ''}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {taxProfile.observacoes.length > 0 && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                        {taxProfile.observacoes.map((obs, i) => (
+                            <p key={i} style={{ margin: '2px 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                {obs}
+                            </p>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const renderDashboard = () => {
         if (!analise) return <p style={{ color: 'var(--text-muted)' }}>Selecione uma empresa e inicie uma análise na aba "Análise".</p>;
         const debitosAbertos = analise.debitos.filter(d => d.status === 'aberto');
@@ -347,13 +473,16 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         const planoAlta = analise.planoAcao.filter(p => p.gravidade === 'alta' && p.status !== 'concluida').length;
 
         return (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
-                <DashCard title="Débitos Abertos" value={String(debitosAbertos.length)} sub={formatCurrency(debitosAbertos.reduce((s, d) => s + (d.valorAtualizado || d.valorOriginal), 0))} color="var(--danger)" />
-                <DashCard title="Certidões Negativas" value={`${certNeg}/${analise.certidoes.length}`} sub={certPos > 0 ? `${certPos} positiva(s)` : 'Sem impedimentos'} color={certPos > 0 ? 'var(--danger)' : 'var(--success)'} />
-                <DashCard title="Obrigações Pendentes" value={String(obrigPend)} sub={`de ${analise.obrigacoes.length} totais`} color={obrigPend > 0 ? 'var(--warning)' : 'var(--success)'} />
-                <DashCard title="Ações em Andamento" value={String(acoesAtivas)} sub={`de ${analise.acoes.length} totais`} color={acoesAtivas > 0 ? 'var(--warning)' : 'var(--success)'} />
-                <DashCard title="Plano de Ação (Alta)" value={String(planoAlta)} sub={`de ${analise.planoAcao.length} itens`} color={planoAlta > 0 ? 'var(--danger)' : 'var(--success)'} />
-                <DashCard title="Parcelamentos Ativos" value={String(analise.parcelamentos.filter(p => p.status === 'ativo').length)} sub={formatCurrency(analise.parcelamentos.filter(p => p.status === 'ativo').reduce((s, p) => s + p.valorTotal, 0))} color="var(--accent)" />
+            <div>
+                {renderTaxProfileCard()}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                    <DashCard title="Débitos Abertos" value={String(debitosAbertos.length)} sub={formatCurrency(debitosAbertos.reduce((s, d) => s + (d.valorAtualizado || d.valorOriginal), 0))} color="var(--danger)" />
+                    <DashCard title="Certidões Negativas" value={`${certNeg}/${analise.certidoes.length}`} sub={certPos > 0 ? `${certPos} positiva(s)` : 'Sem impedimentos'} color={certPos > 0 ? 'var(--danger)' : 'var(--success)'} />
+                    <DashCard title="Obrigações Pendentes" value={String(obrigPend)} sub={`de ${analise.obrigacoes.length} totais`} color={obrigPend > 0 ? 'var(--warning)' : 'var(--success)'} />
+                    <DashCard title="Ações em Andamento" value={String(acoesAtivas)} sub={`de ${analise.acoes.length} totais`} color={acoesAtivas > 0 ? 'var(--warning)' : 'var(--success)'} />
+                    <DashCard title="Plano de Ação (Alta)" value={String(planoAlta)} sub={`de ${analise.planoAcao.length} itens`} color={planoAlta > 0 ? 'var(--danger)' : 'var(--success)'} />
+                    <DashCard title="Parcelamentos Ativos" value={String(analise.parcelamentos.filter(p => p.status === 'ativo').length)} sub={formatCurrency(analise.parcelamentos.filter(p => p.status === 'ativo').reduce((s, p) => s + p.valorTotal, 0))} color="var(--accent)" />
+                </div>
             </div>
         );
     };
@@ -1201,6 +1330,43 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             <option key={e.id} value={e.id}>{e.nome} ({e.cnpj})</option>
                         ))}
                     </select>
+                    {/* Tax Profile summary card for selected empresa */}
+                    {selectedEmpresa && taxProfile && (
+                        <div style={{ marginTop: '0.75rem' }}>{renderTaxProfileCard()}</div>
+                    )}
+                </div>
+            )}
+
+            {/* Prospect regime selector + Tax Profile card */}
+            {prospectMode && prospectData && (
+                <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Regime Tributario:</span>
+                        {(['simples_nacional', 'lucro_presumido', 'lucro_real', 'mei'] as RegimeTributario[]).map(r => {
+                            const colors: Record<RegimeTributario, string> = {
+                                simples_nacional: 'var(--success)',
+                                lucro_presumido: 'var(--accent)',
+                                lucro_real: '#9333ea',
+                                mei: 'var(--text-muted)',
+                            };
+                            const isActive = prospectRegime === r;
+                            return (
+                                <button
+                                    key={r}
+                                    onClick={() => setProspectRegime(r)}
+                                    style={{
+                                        padding: '4px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                                        border: isActive ? `2px solid ${colors[r]}` : '1px solid var(--border-default)',
+                                        background: isActive ? colors[r] + '18' : 'transparent',
+                                        color: isActive ? colors[r] : 'var(--text-muted)',
+                                    }}
+                                >
+                                    {regimeLabel(r)}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {taxProfile && renderTaxProfileCard()}
                 </div>
             )}
 
