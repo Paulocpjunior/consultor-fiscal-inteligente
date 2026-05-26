@@ -17,6 +17,7 @@ import {
     query,
     where,
     serverTimestamp,
+    limit as fbLimit,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import type { User } from '../types';
@@ -58,7 +59,7 @@ export interface NovoVinculo {
 export async function listarCarteiras(user: User | null): Promise<VinculoCarteira[]> {
     if (!user || !isFirebaseConfigured || !db) return [];
     try {
-        const snap = await getDocs(collection(db, COLLECTION));
+        const snap = await getDocs(query(collection(db, COLLECTION), fbLimit(500)));
         const todos: VinculoCarteira[] = snap.docs.map(d => ({
             id: d.id,
             ...(d.data() as Omit<VinculoCarteira, 'id'>),
@@ -87,6 +88,7 @@ export async function atribuir(novo: NovoVinculo): Promise<{ ok: boolean; jaExis
             collection(db, COLLECTION),
             where('empresaId', '==', novo.empresaId),
             where('colaboradorUid', '==', novo.colaboradorUid),
+            fbLimit(1),
         ));
         if (!existentes.empty) {
             return { ok: true, jaExistia: true };
@@ -131,6 +133,7 @@ export async function getEmpresasDoColaborador(uid: string): Promise<string[]> {
         const snap = await getDocs(query(
             collection(db, COLLECTION),
             where('colaboradorUid', '==', uid),
+            fbLimit(500),
         ));
         return snap.docs.map(d => (d.data() as VinculoCarteira).empresaId);
     } catch (err: any) {

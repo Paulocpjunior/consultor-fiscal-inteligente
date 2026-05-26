@@ -10,7 +10,7 @@ import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import {
     collection, getDocs, doc, setDoc, getDoc,
-    query, where, deleteDoc
+    query, where, deleteDoc, limit as fbLimit
 } from 'firebase/firestore';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -95,11 +95,10 @@ export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEm
         try {
             const uid = auth.currentUser.uid;
             const q = isMaster
-                ? query(collection(db, 'simples_empresas'))
-                : query(collection(db, 'simples_empresas'), where('createdBy', '==', uid));
+                ? query(collection(db, 'simples_empresas'), fbLimit(500))
+                : query(collection(db, 'simples_empresas'), where('createdBy', '==', uid), fbLimit(500));
 
             const snapshot = await getDocs(q);
-            // 23/05: filtra perdedores do merge de duplicatas
             const cloudEmpresas = snapshot.docs
                 .filter(d => !(d.data() as any)._merged_into)
                 .map(d => ({ id: d.id, ...d.data() } as SimplesNacionalEmpresa));
@@ -223,8 +222,8 @@ export const getAllNotas = async (
         try {
             const uid = auth.currentUser.uid;
             const q = isMaster
-                ? query(collection(db, 'simples_notas'))
-                : query(collection(db, 'simples_notas'), where('createdBy', '==', uid));
+                ? query(collection(db, 'simples_notas'), fbLimit(500))
+                : query(collection(db, 'simples_notas'), where('createdBy', '==', uid), fbLimit(500));
             const snapshot = await getDocs(q);
             cloudNotas = snapshot.docs.map(d =>
                 ({ id: d.id, ...d.data() } as SimplesNacionalNota));

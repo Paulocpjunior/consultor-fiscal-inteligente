@@ -24,6 +24,7 @@ import {
     where,
     serverTimestamp,
     writeBatch,
+    limit as fbLimit,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 
@@ -50,6 +51,7 @@ export async function listarOcultos(empresaId: string): Promise<Set<string>> {
         const snap = await getDocs(query(
             collection(db, COLLECTION),
             where('empresaId', '==', empresaId),
+            fbLimit(500),
         ));
         snap.forEach(d => {
             const r = d.data() as FornecedorOculto;
@@ -108,6 +110,7 @@ export async function restaurarTodos(empresaId: string): Promise<{ ok: boolean; 
         const snap = await getDocs(query(
             collection(db, COLLECTION),
             where('empresaId', '==', empresaId),
+            fbLimit(500),
         ));
         if (snap.empty) return { ok: true, count: 0 };
         const batch = writeBatch(db);

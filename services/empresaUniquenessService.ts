@@ -21,7 +21,7 @@
  * do mesmo CNPJ). YAGNI — chance praticamente zero no fluxo de cadastro
  * manual da contabilidade.
  */
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, limit as fbLimit } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebaseConfig';
 
 export interface ResultadoCnpjCheck {
@@ -44,7 +44,7 @@ export async function verificarCnpjDuplicado(cnpj: string): Promise<ResultadoCnp
 
     // 1. simples_empresas
     try {
-        const snap = await getDocs(collection(db, 'simples_empresas'));
+        const snap = await getDocs(query(collection(db, 'simples_empresas'), fbLimit(500)));
         for (const d of snap.docs) {
             const data = d.data() as { cnpj?: string; nome?: string; _merged_into?: string };
             if (data._merged_into) continue; // 23/05: ignora perdedores do merge
@@ -63,7 +63,7 @@ export async function verificarCnpjDuplicado(cnpj: string): Promise<ResultadoCnp
 
     // 2. lucro_empresas
     try {
-        const snap = await getDocs(collection(db, 'lucro_empresas'));
+        const snap = await getDocs(query(collection(db, 'lucro_empresas'), fbLimit(500)));
         for (const d of snap.docs) {
             const data = d.data() as { cnpj?: string; nome?: string; _merged_into?: string };
             if (data._merged_into) continue; // 23/05: ignora perdedores do merge

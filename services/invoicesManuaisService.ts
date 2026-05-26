@@ -24,6 +24,7 @@ import {
     where,
     serverTimestamp,
     updateDoc,
+    limit as fbLimit,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 
@@ -108,6 +109,7 @@ export async function listarInvoicesManuais(
             collection(db, COLLECTION),
             where('empresaId', '==', empresaId),
             where('periodo', '==', p),
+            fbLimit(500),
         ));
         return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<InvoiceManual, 'id'>) }));
     } catch (e) {

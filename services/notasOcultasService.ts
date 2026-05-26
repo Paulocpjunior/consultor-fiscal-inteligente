@@ -27,6 +27,7 @@ import {
     where,
     serverTimestamp,
     writeBatch,
+    limit as fbLimit,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 
@@ -61,6 +62,7 @@ export async function listarNotasOcultas(empresaId: string): Promise<Set<string>
         const snap = await getDocs(query(
             collection(db, COLLECTION),
             where('empresaId', '==', empresaId),
+            fbLimit(500),
         ));
         snap.forEach(d => {
             const r = d.data() as NotaOculta;
@@ -111,6 +113,7 @@ export async function restaurarTodasNotas(empresaId: string): Promise<{ ok: bool
         const snap = await getDocs(query(
             collection(db, COLLECTION),
             where('empresaId', '==', empresaId),
+            fbLimit(500),
         ));
         if (snap.empty) return { ok: true, count: 0 };
         const batch = writeBatch(db);

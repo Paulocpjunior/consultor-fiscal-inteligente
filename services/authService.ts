@@ -250,7 +250,7 @@ export const login = async (
 export const getAllUsers = async (): Promise<User[]> => {
     if (isFirebaseConfigured && db) {
         try {
-            const snapshot = await getDocs(collection(db, 'users'));
+            const snapshot = await getDocs(query(collection(db, 'users'), fbLimit(500)));
             return snapshot.docs.map(d => d.data() as User);
         } catch (e: any) {
             if (e.code === 'permission-denied') {

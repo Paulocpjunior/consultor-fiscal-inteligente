@@ -2,7 +2,7 @@
 import { LucroPresumidoEmpresa, FichaFinanceiraRegistro, User } from '../types';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
-import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, deleteDoc, limit as fbLimit } from 'firebase/firestore';
 
 const STORAGE_KEY_LUCRO_EMPRESAS = 'lucro_presumido_empresas';
 const MASTER_ADMIN_EMAIL = 'junior@spassessoriacontabil.com.br';
@@ -43,9 +43,9 @@ export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresu
             let q;
             // Se for Admin/Junior, busca TUDO. Se for colaborador, busca apenas os seus.
             if (isMasterAdmin) {
-                q = query(collection(db, 'lucro_empresas'));
+                q = query(collection(db, 'lucro_empresas'), fbLimit(500));
             } else {
-                q = query(collection(db, 'lucro_empresas'), where('createdBy', '==', uid));
+                q = query(collection(db, 'lucro_empresas'), where('createdBy', '==', uid), fbLimit(500));
             }
             
             try {

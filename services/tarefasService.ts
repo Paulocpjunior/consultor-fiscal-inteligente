@@ -128,6 +128,7 @@ export async function getTitularDaEmpresa(
             collection(db, COLLECTION_CARTEIRAS),
             where('empresaId', '==', empresaId),
             where('papel', '==', 'principal'),
+            fbLimit(10),
         ));
         if (snap.empty) return null;
         const d = snap.docs[0].data();
@@ -154,9 +155,8 @@ export async function listarTarefas(filtros: FiltrosTarefa = {}): Promise<Tarefa
         }
         if (filtros.obrigacao) constraints.push(where('obrigacao', '==', filtros.obrigacao));
 
-        const q = constraints.length > 0
-            ? query(collection(db, COLLECTION), ...constraints)
-            : collection(db, COLLECTION);
+        constraints.push(fbLimit(500));
+        const q = query(collection(db, COLLECTION), ...constraints);
 
         const snap = await getDocs(q);
         let lista = snap.docs.map(d => docToTarefa(d.id, d.data()));
@@ -249,6 +249,7 @@ export async function criarTarefaAutomatica(params: {
             where('empresaId', '==', params.empresaId),
             where('obrigacao', '==', params.regra.obrigacao),
             where('competencia', '==', params.competencia),
+            fbLimit(1),
         ));
         if (!dup.empty) {
             return { ok: true, id: dup.docs[0].id, jaExistia: true };
@@ -324,6 +325,7 @@ export async function marcarConcluidaPorSistema(params: {
             where('empresaId', '==', params.empresaId),
             where('obrigacao', '==', params.obrigacao),
             where('competencia', '==', params.competencia),
+            fbLimit(10),
         ));
         let n = 0;
         for (const d of snap.docs) {
