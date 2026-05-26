@@ -18,6 +18,7 @@ import {
     query,
     where,
     serverTimestamp,
+    limit as fbLimit,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import type { TipoDespesaCredito } from './analiseCreditoExtratoService';
@@ -52,6 +53,7 @@ export async function carregarRegras(empresaId: string): Promise<Map<string, str
         const snap = await getDocs(query(
             collection(db, COLLECTION),
             where('empresaId', '==', empresaId),
+            fbLimit(500),
         ));
         snap.forEach(d => {
             const r = d.data() as RegraCategoria;

@@ -23,6 +23,7 @@ import {
     where,
     updateDoc,
     serverTimestamp,
+    limit as fbLimit,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import { CATEGORIAS_CREDITO } from './analiseCreditoExtratoService';
@@ -52,7 +53,7 @@ const FIXAS_UPPER = new Set(
 export async function listarCustom(): Promise<CategoriaCustom[]> {
     if (!isFirebaseConfigured) return [];
     try {
-        const snap = await getDocs(collection(db, COLLECTION));
+        const snap = await getDocs(query(collection(db, COLLECTION), fbLimit(500)));
         return snap.docs
             .map(d => ({ id: d.id, ...(d.data() as Omit<CategoriaCustom, 'id'>) }))
             .sort((a, b) => a.nome.localeCompare(b.nome));
@@ -82,6 +83,7 @@ export async function criarCategoria(
         const snap = await getDocs(query(
             collection(db, COLLECTION),
             where('nome', '==', norm),
+            fbLimit(1),
         ));
         if (!snap.empty) {
             const d = snap.docs[0];
@@ -113,6 +115,7 @@ export async function renomearCategoria(
         const snap = await getDocs(query(
             collection(db, COLLECTION),
             where('nome', '==', norm),
+            fbLimit(10),
         ));
         // dedup: ja existe outra com o mesmo nome?
         const colisao = snap.docs.find(d => d.id !== id);
@@ -139,6 +142,7 @@ export async function contarFornecedoresNaCategoria(
         const snap = await getDocs(query(
             collection(db, 'categorias_fornecedor'),
             where('categoria', '==', nomeCategoria),
+            fbLimit(500),
         ));
         return snap.size;
     } catch (e) {
