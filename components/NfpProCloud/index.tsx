@@ -130,6 +130,10 @@ interface ProspectData extends CnpjData {
     cnpj: string;
     situacaoCadastral: string;
     descricaoSituacaoCadastral: string;
+    opcaoSimples?: boolean | null;
+    opcaoMei?: boolean | null;
+    porte?: string;
+    naturezaJuridica?: string;
 }
 
 const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
@@ -251,6 +255,11 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 descSituacao = map[situacao] || situacao;
             }
 
+            const opcaoSimples = raw.opcao_simples ?? raw.opcao_pelo_simples ?? null;
+            const opcaoMei = raw.opcao_mei ?? null;
+            const porte = raw.porte || raw.descricao_porte || '';
+            const naturezaJuridica = raw.natureza_juridica || '';
+
             const data: ProspectData = {
                 razaoSocial: raw.razao_social || raw.nome_fantasia || '',
                 nomeFantasia: raw.nome_fantasia || '',
@@ -272,8 +281,22 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 cnpj,
                 situacaoCadastral: situacao,
                 descricaoSituacaoCadastral: descSituacao,
+                opcaoSimples,
+                opcaoMei,
+                porte,
+                naturezaJuridica,
             };
             setProspectData(data);
+
+            // Auto-infer regime from API response
+            if (opcaoMei === true) {
+                setProspectRegime('mei');
+            } else if (opcaoSimples === true) {
+                setProspectRegime('simples_nacional');
+            } else {
+                setProspectRegime('lucro_presumido');
+            }
+
             onShowToast?.(`Empresa encontrada: ${data.razaoSocial}`);
         } catch (e: any) {
             setProspectError(e?.message || 'Erro ao consultar CNPJ.');
@@ -926,7 +949,15 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
         return (
             <div>
-                {renderTaxProfileCard()}
+                {(analise as any)?._serproMock && (
+                    <div style={{
+                        padding: '10px 16px', marginBottom: '1rem', borderRadius: '8px',
+                        background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)',
+                        color: 'var(--warning)', fontSize: '0.85rem', fontWeight: 600,
+                    }}>
+                        DADOS SIMULADOS — SERPRO em modo teste (DRY_RUN). Os valores exibidos nao correspondem a situacao real da empresa.
+                    </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
                     <button
                         onClick={exportarRelatorioPdf}
@@ -1548,11 +1579,18 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 parcelamentos: parcelamentos.length > 0 ? parcelamentos : base.parcelamentos,
             };
 
+            const isMock = resp.situacaoFiscal?.fonte === 'mock' || resp.certidoes?.fonte === 'mock';
+            if (isMock) {
+                (updated as any)._serproMock = true;
+            }
+
             setAnalise(updated);
             if (!prospectMode) {
                 await saveAnalise(updated);
             }
-            onShowToast?.('Análise real SERPRO concluída com sucesso');
+            onShowToast?.(isMock
+                ? 'Análise concluída com DADOS SIMULADOS (SERPRO em modo teste)'
+                : 'Análise real SERPRO concluída com sucesso');
             setTab('dashboard');
         } catch (e: any) {
             onShowToast?.('Erro na análise real: ' + (e?.message || 'desconhecido'));
