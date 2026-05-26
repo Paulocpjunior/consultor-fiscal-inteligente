@@ -4,6 +4,9 @@
  *
  * Extraído do componente ImportaXML.tsx para permitir reaproveitamento entre
  * importação manual, captura SEFAZ e captura SharePoint.
+ *
+ * NFSe: parse de XML ABRASF (v1.0, 2.0, 2.04) com tags
+ * <CompNfse>, <Nfse>, <InfNfse>, <Servico>, <PrestadorServico>, <TomadorServico>.
  */
 
 import type {
@@ -148,6 +151,13 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         throw new XmlParseError('Arquivo XML inválido ou corrompido.');
     }
 
+    // NFSe (ABRASF): redireciona para parser específico
+    const infNfse = doc.getElementsByTagName('InfNfse')[0]
+        || doc.getElementsByTagName('infNfse')[0];
+    if (infNfse || doc.getElementsByTagName('CompNfse')[0]) {
+        return parseNFSeXml(doc, infNfse);
+    }
+
     // CT-e: redireciona para parser específico
     const infCte = doc.getElementsByTagName('infCte')[0];
     if (infCte) {
@@ -156,7 +166,7 @@ export function parseNFeXml(xmlText: string): ParsedXml {
 
     const infNFe = doc.getElementsByTagName('infNFe')[0];
     if (!infNFe) {
-        throw new XmlParseError('XML não é uma NFe/NFCe/CTe válida (tag <infNFe> ou <infCte> ausente).');
+        throw new XmlParseError('XML não é uma NFe/NFCe/CTe/NFSe válida (tag <infNFe>, <infCte> ou <InfNfse> ausente).');
     }
 
     const ide = doc.getElementsByTagName('ide')[0];
@@ -465,6 +475,262 @@ function parseCTeXml(doc: Document, infCte: Element): ParsedXml {
     };
 }
 
+// ─── Parser NFSe (ABRASF 1.0 / 2.0 / 2.04) ───────────────────────────────
+
+/**
+ * Faz parse de um XML de NFSe padrão ABRASF.
+ * Aceita tanto <InfNfse> quanto <infNfse> (case-insensitive na detecção,
+ * mas getElementsByTagName é case-sensitive, por isso tentamos ambas).
+ *
+ * Estrutura esperada:
+ *   <CompNfse><Nfse><InfNfse>...</InfNfse></Nfse></CompNfse>
+ * ou variantes onde <InfNfse> aparece diretamente.
+ */
+function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
+    // Se infNfse não foi passado, tenta navegar pela hierarquia ABRASF
+    if (!infNfse) {
+        const nfse = doc.getElementsByTagName('Nfse')[0]
+            || doc.getElementsByTagName('nfse')[0];
+        if (nfse) {
+            infNfse = nfse.getElementsByTagName('InfNfse')[0]
+                || nfse.getElementsByTagName('infNfse')[0];
+        }
+    }
+    if (!infNfse) {
+        throw new XmlParseError('XML NFSe inválida: tag <InfNfse> não encontrada.');
+    }
+
+    // ── Dados básicos ──────────────────────────────────────────────────────
+    const numero = getTextContent(infNfse, 'Numero')
+        || getTextContent(infNfse, 'NumeroNfse');
+    const codigoVerificacao = getTextContent(infNfse, 'CodigoVerificacao');
+    const dhEmi = getTextContent(infNfse, 'DataEmissao')
+        || getTextContent(infNfse, 'DataEmissaoNfse');
+    const competenciaTag = getTextContent(infNfse, 'Competencia');
+
+    // ── Serviço ────────────────────────────────────────────────────────────
+    const servico = infNfse.getElementsByTagName('Servico')[0]
+        || infNfse.getElementsByTagName('servico')[0];
+    const valores = servico
+        ? (servico.getElementsByTagName('Valores')[0]
+            || servico.getElementsByTagName('valores')[0])
+        : null;
+
+    const valorServicos = num(getTextContent(valores, 'ValorServicos'));
+    const valorDeducoes = num(getTextContent(valores, 'ValorDeducoes'));
+    const baseCalculo = num(getTextContent(valores, 'BaseCalculo')) || (valorServicos - valorDeducoes);
+    const aliquotaIss = num(getTextContent(valores, 'Aliquota'));
+    const valorIss = num(getTextContent(valores, 'ValorIss'));
+    const issRetido = getTextContent(valores, 'IssRetido');
+    const valorIssRetido = num(getTextContent(valores, 'ValorIssRetido'));
+    const valorPis = num(getTextContent(valores, 'ValorPis'));
+    const valorCofins = num(getTextContent(valores, 'ValorCofins'));
+    const valorInss = num(getTextContent(valores, 'ValorInss'));
+    const valorIr = num(getTextContent(valores, 'ValorIr'));
+    const valorCsll = num(getTextContent(valores, 'ValorCsll'));
+    const valorLiquido = num(getTextContent(valores, 'ValorLiquidoNfse'));
+    const descontoCondicionado = num(getTextContent(valores, 'DescontoCondicionado'));
+    const descontoIncondicionado = num(getTextContent(valores, 'DescontoIncondicionado'));
+
+    const discriminacao = getTextContent(servico, 'Discriminacao')
+        || getTextContent(servico, 'discriminacao');
+    const itemListaServico = getTextContent(servico, 'ItemListaServico');
+    const codigoCnae = getTextContent(servico, 'CodigoCnae');
+
+    // ── Prestador ──────────────────────────────────────────────────────────
+    const prestadorEl = infNfse.getElementsByTagName('PrestadorServico')[0]
+        || infNfse.getElementsByTagName('prestadorServico')[0]
+        || infNfse.getElementsByTagName('Prestador')[0];
+    const identPrestador = prestadorEl
+        ? (prestadorEl.getElementsByTagName('IdentificacaoPrestador')[0]
+            || prestadorEl.getElementsByTagName('identificacaoPrestador')[0])
+        : null;
+
+    const prestadorCnpj = onlyDigits(
+        getTextContent(identPrestador, 'Cnpj')
+        || getTextContent(identPrestador, 'cnpj')
+        || getTextContent(prestadorEl, 'Cnpj')
+    );
+    const prestadorCpf = onlyDigits(
+        getTextContent(identPrestador, 'Cpf')
+        || getTextContent(identPrestador, 'cpf')
+    );
+
+    const prestadorEnder = prestadorEl
+        ? (prestadorEl.getElementsByTagName('Endereco')[0]
+            || prestadorEl.getElementsByTagName('endereco')[0])
+        : null;
+
+    const emitente: DocumentoFiscalParticipante = {
+        cnpjCpf: prestadorCnpj || prestadorCpf,
+        nome: getTextContent(prestadorEl, 'RazaoSocial')
+            || getTextContent(prestadorEl, 'razaoSocial')
+            || getTextContent(prestadorEl, 'NomeFantasia'),
+        fantasia: getTextContent(prestadorEl, 'NomeFantasia') || undefined,
+        ie: getTextContent(identPrestador, 'InscricaoMunicipal')
+            || getTextContent(identPrestador, 'inscricaoMunicipal') || undefined,
+        uf: getTextContent(prestadorEnder, 'Uf')
+            || getTextContent(prestadorEnder, 'uf') || undefined,
+        codMunIBGE: getTextContent(prestadorEnder, 'CodigoMunicipio')
+            || getTextContent(prestadorEnder, 'codigoMunicipio') || undefined,
+        logradouro: getTextContent(prestadorEnder, 'Endereco')
+            || getTextContent(prestadorEnder, 'endereco') || undefined,
+        numero: getTextContent(prestadorEnder, 'Numero')
+            || getTextContent(prestadorEnder, 'numero') || undefined,
+        bairro: getTextContent(prestadorEnder, 'Bairro')
+            || getTextContent(prestadorEnder, 'bairro') || undefined,
+        cep: onlyDigits(getTextContent(prestadorEnder, 'Cep')
+            || getTextContent(prestadorEnder, 'cep')) || undefined,
+    };
+
+    // ── Tomador ────────────────────────────────────────────────────────────
+    const tomadorEl = infNfse.getElementsByTagName('TomadorServico')[0]
+        || infNfse.getElementsByTagName('tomadorServico')[0]
+        || infNfse.getElementsByTagName('Tomador')[0];
+    const identTomador = tomadorEl
+        ? (tomadorEl.getElementsByTagName('IdentificacaoTomador')[0]
+            || tomadorEl.getElementsByTagName('identificacaoTomador')[0])
+        : null;
+    // ABRASF wraps CNPJ/CPF inside <CpfCnpj>
+    const cpfCnpjTomador = identTomador
+        ? (identTomador.getElementsByTagName('CpfCnpj')[0]
+            || identTomador.getElementsByTagName('cpfCnpj')[0])
+        : null;
+
+    const tomadorCnpj = onlyDigits(
+        getTextContent(cpfCnpjTomador, 'Cnpj')
+        || getTextContent(cpfCnpjTomador, 'cnpj')
+        || getTextContent(identTomador, 'Cnpj')
+    );
+    const tomadorCpf = onlyDigits(
+        getTextContent(cpfCnpjTomador, 'Cpf')
+        || getTextContent(cpfCnpjTomador, 'cpf')
+        || getTextContent(identTomador, 'Cpf')
+    );
+
+    const tomadorEnder = tomadorEl
+        ? (tomadorEl.getElementsByTagName('Endereco')[0]
+            || tomadorEl.getElementsByTagName('endereco')[0])
+        : null;
+
+    const destinatario: DocumentoFiscalParticipante = {
+        cnpjCpf: tomadorCnpj || tomadorCpf,
+        nome: getTextContent(tomadorEl, 'RazaoSocial')
+            || getTextContent(tomadorEl, 'razaoSocial')
+            || getTextContent(tomadorEl, 'NomeFantasia') || '',
+        fantasia: getTextContent(tomadorEl, 'NomeFantasia') || undefined,
+        ie: getTextContent(identTomador, 'InscricaoMunicipal')
+            || getTextContent(identTomador, 'inscricaoMunicipal') || undefined,
+        uf: getTextContent(tomadorEnder, 'Uf')
+            || getTextContent(tomadorEnder, 'uf') || undefined,
+        codMunIBGE: getTextContent(tomadorEnder, 'CodigoMunicipio')
+            || getTextContent(tomadorEnder, 'codigoMunicipio') || undefined,
+        logradouro: getTextContent(tomadorEnder, 'Endereco')
+            || getTextContent(tomadorEnder, 'endereco') || undefined,
+        numero: getTextContent(tomadorEnder, 'Numero')
+            || getTextContent(tomadorEnder, 'numero') || undefined,
+        bairro: getTextContent(tomadorEnder, 'Bairro')
+            || getTextContent(tomadorEnder, 'bairro') || undefined,
+        cep: onlyDigits(getTextContent(tomadorEnder, 'Cep')
+            || getTextContent(tomadorEnder, 'cep')) || undefined,
+    };
+
+    // ── Chave sintética (NFSe não tem chave de 44 dígitos) ─────────────────
+    // Usa CodigoVerificacao quando presente; senão, monta Numero+CNPJ.
+    const chave = codigoVerificacao
+        || `NFSE-${numero}-${emitente.cnpjCpf}`;
+
+    // ── Item único a partir de Serviço ─────────────────────────────────────
+    const itens: DocumentoFiscalItem[] = [];
+    if (servico) {
+        itens.push({
+            nItem: '1',
+            cProd: itemListaServico || codigoCnae || '',
+            xProd: discriminacao || 'Serviço',
+            ncm: '',  // NFSe não usa NCM
+            cfop: '',  // NFSe não usa CFOP
+            uCom: 'SV',
+            qCom: 1,
+            vUnCom: valorServicos,
+            vProd: valorServicos,
+            vDesc: (descontoCondicionado + descontoIncondicionado) || undefined,
+            vICMS: 0,
+            vIPI: 0,
+            vPIS: valorPis,
+            vCOFINS: valorCofins,
+            cst: '',
+            orig: '',
+        });
+    }
+
+    // ── Totais (mapeia para DocumentoFiscalTotais) ─────────────────────────
+    const totais: DocumentoFiscalTotais = {
+        vBC: baseCalculo,
+        vICMS: 0,
+        vICMSDeson: 0,
+        vFCP: 0,
+        vBCST: 0,
+        vST: 0,
+        vFCPST: 0,
+        vProd: valorServicos,
+        vFrete: 0,
+        vSeg: 0,
+        vDesc: descontoCondicionado + descontoIncondicionado,
+        vII: 0,
+        vIPI: 0,
+        vIPIDevol: 0,
+        vPIS: valorPis,
+        vCOFINS: valorCofins,
+        vOutro: 0,
+        vNF: valorServicos,
+    };
+
+    // ── NatOp sintético ────────────────────────────────────────────────────
+    const natOp = discriminacao
+        ? `Prestação de serviço – LC ${itemListaServico || ''}`
+        : 'Prestação de serviço';
+
+    // ── Status ─────────────────────────────────────────────────────────────
+    // NFSe emitida e presente no XML é sempre autorizada.
+    // Cancelamento vem em XML separado (evento).
+    const cancelada = getTextContent(infNfse, 'NfseCancelamento')
+        || getTextContent(infNfse, 'DataHoraCancelamento')
+        || getTextContent(doc.documentElement, 'NfseCancelamento');
+    const status: XmlStatusDocumento = cancelada ? 'cancelado' : 'autorizado';
+
+    return {
+        chave,
+        tipo: 'NFSe',
+        modelo: '99',  // NFSe não tem modelo oficial; convencional = 99
+        serie: '',       // NFSe não usa série
+        numero,
+        natOp,
+        dhEmi,
+        status,
+        emitente,
+        destinatario,
+        itens,
+        totais,
+        infAdic: discriminacao || undefined,
+        // Campos extras transportados via totais/itens para que
+        // buildDocumentoFiscal possa preencher doc.valores no xmlFiscalService
+        _nfseValores: {
+            liquido: valorLiquido || (valorServicos - valorIssRetido - valorPis - valorCofins - valorInss - valorIr - valorCsll),
+            iss: valorIss,
+            issRetido: issRetido === '1' || issRetido === 'true',
+            valorIssRetido,
+            baseCalculo,
+            deducoes: valorDeducoes,
+            pis: valorPis,
+            cofins: valorCofins,
+            inss: valorInss,
+            ir: valorIr,
+            csll: valorCsll,
+            aliquotaIss,
+        },
+    } as ParsedXml & { _nfseValores?: any };
+}
+
 // ─── Validação de empresa & direção ─────────────────────────────────────────
 
 export interface CompanyMatchResult {
@@ -521,7 +787,15 @@ export function buildDocumentoFiscal(input: {
     storageUrl?: string;
 }): DocumentoFiscal {
     const { parsed } = input;
-    return {
+    const isNFSe = parsed.tipo === 'NFSe';
+    const nfseValores = (parsed as any)._nfseValores;
+
+    // Categoria de operação: NFSe usa prestador/tomador em vez de CFOP
+    const categoriaOperacao = isNFSe
+        ? (input.direcao === 'saida' ? 'servico_prestado' : 'servico_tomado')
+        : classificarPorCfop(parsed.itens, input.direcao);
+
+    const documento: DocumentoFiscal = {
         id: input.id,
         chave: parsed.chave,
         xmlHash: input.xmlHash,
@@ -533,14 +807,27 @@ export function buildDocumentoFiscal(input: {
         dhEmi: parsed.dhEmi,
         competencia: competenciaFromIso(parsed.dhEmi),
         direcao: input.direcao,
-        categoriaOperacao: classificarPorCfop(parsed.itens, input.direcao),
+        categoriaOperacao,
         status: parsed.status,
         empresaId: input.empresaId,
         empresaCnpj: onlyDigits(input.empresaCnpj),
         empresaNome: input.empresaNome,
-        emitente: parsed.emitente,
-        destinatario: parsed.destinatario,
+        // NFSe: usa prestador/tomador; NF-e/CT-e: usa emitente/destinatario
+        ...(isNFSe
+            ? { prestador: parsed.emitente, tomador: parsed.destinatario }
+            : { emitente: parsed.emitente, destinatario: parsed.destinatario }),
         totais: parsed.totais,
+        // NFSe valores adicionais (ISS, líquido, etc.)
+        ...(isNFSe && nfseValores ? {
+            valores: {
+                liquido: nfseValores.liquido,
+                pis: nfseValores.pis,
+                cofins: nfseValores.cofins,
+                iss: nfseValores.iss,
+                baseCalculo: nfseValores.baseCalculo,
+                deducoes: nfseValores.deducoes,
+            },
+        } : {}),
         itens: parsed.itens,
         infAdic: parsed.infAdic,
         storagePath: input.storagePath,
@@ -554,6 +841,7 @@ export function buildDocumentoFiscal(input: {
         createdBy: input.importadoPor,
         createdByEmail: input.importadoPorEmail,
     };
+    return documento;
 }
 
 // ─── Formatadores reutilizáveis (UI) ────────────────────────────────────────

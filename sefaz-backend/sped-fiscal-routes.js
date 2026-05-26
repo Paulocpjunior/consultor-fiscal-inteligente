@@ -8,6 +8,7 @@
 import express from 'express';
 import { coletarDadosEmpresa, montarBlocos } from './sped-fiscal-orchestrator.js';
 import { requireAuth } from './require-admin.js';
+import { validarSpedFiscal } from './sped-fiscal-validador.js';
 
 const router = express.Router();
 
@@ -63,6 +64,9 @@ router.post('/gerar', requireAuth, express.json(), async (req, res) => {
 
         const txt = await montarBlocos({ dados });
 
+        // Validacao PVA server-side
+        const validacao = validarSpedFiscal(txt);
+
         // Encoding Windows-1252 (legado SPED)
         const buffer = Buffer.from(txt, 'latin1');
 
@@ -85,7 +89,27 @@ router.post('/gerar', requireAuth, express.json(), async (req, res) => {
             participantes: dados.participantes.length,
             linhas: txt.split('\r\n').length - 1,
         })));
+        // Resultado da validacao PVA no header (arquivo ainda eh gerado mesmo com erros)
+        res.setHeader('X-SPED-Validation', encodeURIComponent(JSON.stringify(validacao)));
         return res.send(buffer);
+    } catch (e) {
+        return tratarErro(e, res);
+    }
+});
+
+/**
+ * GET /validar
+ * Body: { txt: string }
+ * Valida um arquivo SPED Fiscal TXT e retorna erros/avisos sem gerar download.
+ */
+router.get('/validar', requireAuth, express.json({ limit: '10mb' }), (req, res) => {
+    try {
+        const { txt } = req.body || {};
+        if (!txt || typeof txt !== 'string') {
+            return res.status(400).json({ error: 'Campo "txt" (string) eh obrigatorio no body.' });
+        }
+        const resultado = validarSpedFiscal(txt);
+        return res.json(resultado);
     } catch (e) {
         return tratarErro(e, res);
     }
