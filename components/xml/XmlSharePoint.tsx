@@ -8,7 +8,7 @@ import {
     type SharePointSyncResult,
 } from '../../services/sharePointXmlService';
 import { importXmlManual, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
-import { isFirebaseConfigured } from '../../services/firebaseConfig';
+import { isFirebaseConfigured, auth } from '../../services/firebaseConfig';
 
 interface Props {
     currentUser?: User | null;
@@ -250,6 +250,189 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                         </div>
                     )}
                 </div>
+            )}
+            {/* Auto-Sync Config (admin only) */}
+            {currentUser?.role === 'admin' && (
+                <AutoSyncConfig empresas={empresas} />
+            )}
+        </div>
+    );
+};
+
+// ─── Auto-Sync Config Panel ─────────────────────────────────────────────────
+
+interface AutoSyncStatus {
+    lastSync: { competencia: string; totalNovos: number; totalDup: number; totalErros: number; timestamp?: { _seconds: number } } | null;
+    empresasAutoSync: { id: string; nome: string; cnpj: string; grupo: string; empresaPasta: string }[];
+}
+
+const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }) => {
+    const [status, setStatus] = useState<AutoSyncStatus | null>(null);
+    const [loadingStatus, setLoadingStatus] = useState(true);
+    const [triggerRunning, setTriggerRunning] = useState(false);
+    const [triggerResult, setTriggerResult] = useState<string | null>(null);
+
+    const [configEmpresaId, setConfigEmpresaId] = useState('');
+    const [configGrupo, setConfigGrupo] = useState('');
+    const [configPasta, setConfigPasta] = useState('');
+    const [configEnabled, setConfigEnabled] = useState(true);
+    const [savingConfig, setSavingConfig] = useState(false);
+
+    const getHeaders = async () => {
+        const token = await auth?.currentUser?.getIdToken();
+        return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    };
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const headers = await getHeaders();
+                const resp = await fetch('/api/admin/sharepoint/status', { headers });
+                if (resp.ok) setStatus(await resp.json());
+            } catch { /* ignore */ }
+            setLoadingStatus(false);
+        })();
+    }, []);
+
+    const handleTriggerSync = async () => {
+        setTriggerRunning(true);
+        setTriggerResult(null);
+        try {
+            const headers = await getHeaders();
+            const resp = await fetch('/api/admin/sharepoint/auto-sync', {
+                method: 'POST', headers, body: JSON.stringify({}),
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                setTriggerResult(`Sync concluído: ${data.totalNovos} novos, ${data.totalDup} duplicados, ${data.totalErros} erros.`);
+                const statusResp = await fetch('/api/admin/sharepoint/status', { headers });
+                if (statusResp.ok) setStatus(await statusResp.json());
+            } else {
+                setTriggerResult(`Erro: ${data.error || resp.statusText}`);
+            }
+        } catch (err: any) {
+            setTriggerResult(`Erro: ${err?.message || 'Falha'}`);
+        } finally {
+            setTriggerRunning(false);
+        }
+    };
+
+    const handleSaveConfig = async () => {
+        if (!configEmpresaId) return;
+        setSavingConfig(true);
+        try {
+            const empresa = empresas.find(e => e.id === configEmpresaId);
+            const collection = empresa?.fonte === 'simples' ? 'simples_empresas' : 'lucro_empresas';
+            const headers = await getHeaders();
+            const resp = await fetch('/api/admin/sharepoint/config', {
+                method: 'POST', headers,
+                body: JSON.stringify({
+                    empresaId: configEmpresaId,
+                    collection,
+                    sharePointConfig: { grupo: configGrupo, empresaPasta: configPasta, autoSyncEnabled: configEnabled },
+                }),
+            });
+            if (resp.ok) {
+                const statusResp = await fetch('/api/admin/sharepoint/status', { headers });
+                if (statusResp.ok) setStatus(await statusResp.json());
+                setConfigEmpresaId('');
+                setConfigGrupo('');
+                setConfigPasta('');
+            }
+        } catch { /* ignore */ }
+        setSavingConfig(false);
+    };
+
+    const lastTs = status?.lastSync?.timestamp?._seconds
+        ? new Date(status.lastSync.timestamp._seconds * 1000).toLocaleString('pt-BR')
+        : null;
+
+    return (
+        <div className="p-5 rounded-xl space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+            <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                    Auto-Sync SharePoint
+                </h3>
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                    Cloud Scheduler
+                </span>
+            </div>
+
+            {loadingStatus ? (
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Carregando...</p>
+            ) : (
+                <>
+                    {/* Last sync */}
+                    {status?.lastSync && (
+                        <div className="text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
+                            <p>Última execução: <strong>{lastTs || '-'}</strong> — Competência: <strong>{status.lastSync.competencia}</strong></p>
+                            <p>{status.lastSync.totalNovos} novos, {status.lastSync.totalDup} duplicados, {status.lastSync.totalErros} erros</p>
+                        </div>
+                    )}
+
+                    {/* Empresas enabled */}
+                    {status?.empresasAutoSync && status.empresasAutoSync.length > 0 && (
+                        <div>
+                            <p className="text-[10px] font-bold uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Empresas com auto-sync</p>
+                            <div className="space-y-1">
+                                {status.empresasAutoSync.map(e => (
+                                    <div key={e.id} className="flex items-center gap-2 text-xs py-0.5">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                                        <span style={{ color: 'var(--text-primary)' }}>{e.nome}</span>
+                                        <span style={{ color: 'var(--text-muted)' }}>({e.grupo}/{e.empresaPasta})</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Trigger manual sync */}
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleTriggerSync}
+                            disabled={triggerRunning}
+                            className="px-4 py-2 text-xs font-bold rounded-lg disabled:opacity-40"
+                            style={{ background: 'var(--accent)', color: '#fff' }}
+                        >
+                            {triggerRunning ? 'Executando...' : 'Executar Sync Agora'}
+                        </button>
+                        {triggerResult && (
+                            <span className="text-xs" style={{ color: triggerResult.startsWith('Erro') ? 'var(--danger)' : 'var(--success)' }}>
+                                {triggerResult}
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Add empresa config */}
+                    <div className="border-t pt-3 mt-3" style={{ borderColor: 'var(--border-subtle)' }}>
+                        <p className="text-[10px] font-bold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Adicionar empresa ao auto-sync</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <select value={configEmpresaId} onChange={e => setConfigEmpresaId(e.target.value)}
+                                className="p-2 text-xs rounded-lg"
+                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
+                                <option value="">Empresa</option>
+                                {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                            </select>
+                            <input value={configGrupo} onChange={e => setConfigGrupo(e.target.value)} placeholder="Grupo (pasta)"
+                                className="p-2 text-xs rounded-lg"
+                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
+                            <input value={configPasta} onChange={e => setConfigPasta(e.target.value)} placeholder="Empresa (pasta)"
+                                className="p-2 text-xs rounded-lg"
+                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
+                            <div className="flex items-center gap-2">
+                                <label className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                                    <input type="checkbox" checked={configEnabled} onChange={e => setConfigEnabled(e.target.checked)} />
+                                    Ativo
+                                </label>
+                                <button onClick={handleSaveConfig} disabled={savingConfig || !configEmpresaId}
+                                    className="px-3 py-1.5 text-xs font-bold rounded-lg disabled:opacity-40"
+                                    style={{ background: 'var(--accent)', color: '#fff' }}>
+                                    {savingConfig ? '...' : 'Salvar'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     );

@@ -29,6 +29,7 @@ import agentAdminRouter from './sefaz-backend/agent-admin-routes.js';
 import nfseNacionalDfeRouter from './sefaz-backend/nfse-nacional-dfe-routes.js';
 import recuperacaoRouter from './sefaz-backend/recuperacao-tributaria-routes.js';
 import nfpComplianceRouter from './sefaz-backend/nfp-compliance-routes.js';
+import sharepointAutoSyncRouter from './sefaz-backend/sharepoint-auto-sync.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -57,6 +58,7 @@ app.use('/api/admin/nfse-nacional-dfe', nfseNacionalDfeRouter);
 app.use('/api/internal/plano-contas', planoContasBridgeRouter);
 app.use('/api/admin/recuperacao', recuperacaoRouter);
 app.use('/api/admin/nfp-compliance', nfpComplianceRouter);
+app.use('/api/admin/sharepoint', sharepointAutoSyncRouter);
 
 const PORT = process.env.PORT || 8080;
 
