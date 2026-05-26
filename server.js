@@ -436,9 +436,13 @@ function normalizeReceitaWs(raw, cnpj) {
         cnae_fiscal: raw.atividade_principal?.[0]?.code, cnae_fiscal_descricao: raw.atividade_principal?.[0]?.text,
         logradouro: raw.logradouro, numero: raw.numero, bairro: raw.bairro,
         municipio: raw.municipio, uf: raw.uf, cep: raw.cep,
-        situacao_cadastral: raw.situacao === 'ATIVA' ? '2' : '8',
+        situacao_cadastral: raw.situacao === 'ATIVA' ? '2' : raw.situacao === 'INAPTA' ? '4' : '8',
         descricao_situacao_cadastral: raw.situacao,
         data_inicio_atividade: raw.abertura,
+        opcao_simples: raw.simples?.optante === 'Sim' ? true : raw.simples?.optante === 'Nao' ? false : null,
+        opcao_mei: raw.simples?.mei === 'Sim',
+        porte: raw.porte || '',
+        natureza_juridica: raw.natureza_juridica || '',
     };
 }
 
@@ -448,9 +452,13 @@ function normalizeCnpjWs(raw, cnpj) {
         cnae_fiscal: raw.estabelecimento?.atividade_principal?.id, cnae_fiscal_descricao: raw.estabelecimento?.atividade_principal?.descricao,
         logradouro: raw.estabelecimento?.logradouro, numero: raw.estabelecimento?.numero, bairro: raw.estabelecimento?.bairro,
         municipio: raw.estabelecimento?.cidade?.nome, uf: raw.estabelecimento?.estado?.sigla, cep: raw.estabelecimento?.cep,
-        situacao_cadastral: raw.estabelecimento?.situacao_cadastral === 'Ativa' ? '2' : '8',
+        situacao_cadastral: raw.estabelecimento?.situacao_cadastral === 'Ativa' ? '2' : raw.estabelecimento?.situacao_cadastral === 'Inapta' ? '4' : '8',
         descricao_situacao_cadastral: raw.estabelecimento?.situacao_cadastral,
         data_inicio_atividade: raw.estabelecimento?.data_inicio_atividade,
+        opcao_simples: raw.simples?.simples ?? null,
+        opcao_mei: raw.simples?.mei ?? null,
+        porte: raw.porte?.descricao || '',
+        natureza_juridica: raw.natureza_juridica?.descricao || '',
     };
 }
 
