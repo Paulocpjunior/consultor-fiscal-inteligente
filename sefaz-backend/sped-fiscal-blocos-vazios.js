@@ -33,7 +33,7 @@ export const buildBlocoB = () => buildBlocoVazio('B');
 // buildBlocoD foi pra ./sped-fiscal-blocoD.js (com D100/D190 reais).
 // buildBlocoE foi pra ./sped-fiscal-blocoE.js (com E100/E110 zerada).
 export const buildBlocoG = () => buildBlocoVazio('G');
-export const buildBlocoH = () => buildBlocoVazio('H');
+// buildBlocoH foi pra ./sped-fiscal-blocoH.js (com H005/H010 reais).
 export const buildBlocoK = () => buildBlocoVazio('K');
 /**
  * Bloco 1 — gera 1001|0| + 1010|N|x14| + 1990|3|.
