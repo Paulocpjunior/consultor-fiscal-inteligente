@@ -1,14 +1,8 @@
 /**
  * SpedFiscal — Aba de geração SPED Fiscal (EFD ICMS/IPI).
  *
- * Fase 1: Bloco 0 + Bloco 9 implementados, faz download do .txt.
- *
- * Roadmap:
- *   Fase 0: UI placeholder (entregue 07/05)
- *   Fase 1: Backend stub + UI funcional (07/05) + LOGICA REAL (08/05) ← AQUI
- *   Fase 2: Bloco C (mercadorias)
- *   Fase 3: Bloco E (apuração ICMS/IPI)
- *   Fase 4: Validação na PVA + histórico Firestore
+ * Blocos implementados: 0, B(vazio), C(NF-e/NFC-e), D(CT-e), E(apuração ICMS),
+ * G/H/K(vazios), 1(vazio), 9(contagem).
  *
  * Layout alvo: Guia Prático 3.2.2 / Leiaute 020 (vigente 01/01/2026).
  */
@@ -247,7 +241,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full"
                         style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
                     >
-                        Fase 1 — Bloco 0 + 9
+                        Blocos 0 + C + D + E + 9
                     </span>
                 </div>
             </div>
