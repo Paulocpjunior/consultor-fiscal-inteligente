@@ -1,7 +1,7 @@
 /**
  * services/efiscalPdfParserService.ts
  *
- * Parser do relatório "Relação de NFs de Serviços Tomados" do Sistema E-Fiscal.
+ * Parser do relatório "Relação de NFs de Serviços Tomados/Prestados" do E-Fiscal / Office Fiscal.
  * Formato tabular, multipágina. Extração por COORDENADA X (não texto corrido)
  * — imune ao desalinhamento de colunas quando campos opcionais (Série, C.I.)
  * estão vazios.
@@ -127,9 +127,9 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
     }
 
     const textoTodo = linhas.flatMap(l => l.tokens.map(t => t.str)).join(' ');
-    if (!/Servi[cç]os\s+Tomados/i.test(textoTodo) && !/E-?Fiscal/i.test(textoTodo)) {
+    if (!/Servi[cç]os\s+(Tomados|Prestados)/i.test(textoTodo) && !/E-?Fiscal/i.test(textoTodo) && !/Office\s+Fiscal/i.test(textoTodo)) {
         throw new EfiscalPdfParseError(
-            'Documento não parece ser o relatório "Relação de NFs de Serviços Tomados" do E-Fiscal.',
+            'Documento não parece ser o relatório "Relação de NFs de Serviços" do E-Fiscal / Office Fiscal.',
         );
     }
 
