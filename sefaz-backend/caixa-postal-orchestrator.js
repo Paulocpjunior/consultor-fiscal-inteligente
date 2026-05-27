@@ -190,31 +190,37 @@ export async function sincronizarTodasEmpresas() {
  */
 export async function listarMensagensLocais({ empresaCnpj, naoLidas, categoria, fonte } = {}) {
     const db = fa().firestore();
-    let q = db.collection(COLLECTION);
-    if (empresaCnpj) q = q.where('empresaCnpj', '==', empresaCnpj);
-    if (categoria) q = q.where('categoria', '==', categoria);
-
     let snap;
+
     try {
-        if (fonte) {
-            snap = await q.where('fonte', '==', fonte).orderBy('dataEnvio', 'desc').limit(2000).get();
-        } else {
-            snap = await q.orderBy('dataEnvio', 'desc').limit(2000).get();
-        }
+        let q = db.collection(COLLECTION);
+        if (empresaCnpj) q = q.where('empresaCnpj', '==', empresaCnpj);
+        if (categoria) q = q.where('categoria', '==', categoria);
+        if (fonte) q = q.where('fonte', '==', fonte);
+        snap = await q.orderBy('dataEnvio', 'desc').limit(2000).get();
     } catch (err) {
-        if (err.code === 9 || /index/i.test(err.message)) {
-            console.warn('[caixa-postal] Indice fonte+dataEnvio pendente, filtrando em memoria');
-            snap = await q.orderBy('dataEnvio', 'desc').limit(2000).get();
-        } else {
-            throw err;
+        console.warn('[caixa-postal] Query composta falhou, fallback simples:', err.message);
+        try {
+            let q2 = db.collection(COLLECTION);
+            if (empresaCnpj) q2 = q2.where('empresaCnpj', '==', empresaCnpj);
+            snap = await q2.orderBy('dataEnvio', 'desc').limit(2000).get();
+        } catch (err2) {
+            console.warn('[caixa-postal] Query ordenada falhou, fallback sem ordem:', err2.message);
+            let q3 = db.collection(COLLECTION);
+            if (empresaCnpj) q3 = q3.where('empresaCnpj', '==', empresaCnpj);
+            snap = await q3.limit(2000).get();
         }
     }
 
     let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (fonte && !docs[0]?.__filtered) {
-        docs = docs.filter(d => !fonte || d.fonte === fonte);
-    }
+    if (fonte) docs = docs.filter(d => d.fonte === fonte);
+    if (categoria) docs = docs.filter(d => d.categoria === categoria);
     if (naoLidas) docs = docs.filter(d => !d.dataLeitura);
+    docs.sort((a, b) => {
+        const da = a.dataEnvio?._seconds || a.dataEnvio || 0;
+        const db2 = b.dataEnvio?._seconds || b.dataEnvio || 0;
+        return db2 - da;
+    });
     return docs;
 }
 
