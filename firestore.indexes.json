@@ -59,6 +59,34 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "caixa_postal_mensagens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "fonte",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataEnvio",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "caixa_postal_mensagens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "fonte",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataLeitura",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -193,14 +193,27 @@ export async function listarMensagensLocais({ empresaCnpj, naoLidas, categoria, 
     let q = db.collection(COLLECTION);
     if (empresaCnpj) q = q.where('empresaCnpj', '==', empresaCnpj);
     if (categoria) q = q.where('categoria', '==', categoria);
-    if (fonte) q = q.where('fonte', '==', fonte);
 
-    // FIX 23/05: ordena por dataEnvio desc ANTES de paginar pra mostrar
-    // as mensagens mais recentes (e nao uma fatia arbitraria do .limit()).
-    // Limite subido pra 2000 — ainda barato, cobre nosso volume atual de 4091
-    // total com folga (a maioria das telas filtra por nao-lidas).
-    const snap = await q.orderBy('dataEnvio', 'desc').limit(2000).get();
+    let snap;
+    try {
+        if (fonte) {
+            snap = await q.where('fonte', '==', fonte).orderBy('dataEnvio', 'desc').limit(2000).get();
+        } else {
+            snap = await q.orderBy('dataEnvio', 'desc').limit(2000).get();
+        }
+    } catch (err) {
+        if (err.code === 9 || /index/i.test(err.message)) {
+            console.warn('[caixa-postal] Indice fonte+dataEnvio pendente, filtrando em memoria');
+            snap = await q.orderBy('dataEnvio', 'desc').limit(2000).get();
+        } else {
+            throw err;
+        }
+    }
+
     let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (fonte && !docs[0]?.__filtered) {
+        docs = docs.filter(d => !fonte || d.fonte === fonte);
+    }
     if (naoLidas) docs = docs.filter(d => !d.dataLeitura);
     return docs;
 }
@@ -225,17 +238,14 @@ export async function getResumoGlobal(cnpjsPermitidos = null) {
                       'emac_notificacao'];
 
         // Counts em paralelo: total geral + não-lidas por categoria + não-lidas por fonte
+        const safeCount = (q) => q.count().get().catch(() => ({ data: () => ({ count: 0 }) }));
         const [totalAgg, ...restos] = await Promise.all([
             col.count().get(),
             ...CATS.map(c =>
-                col.where('categoria', '==', c)
-                   .where('dataLeitura', '==', null)
-                   .count().get()
+                safeCount(col.where('categoria', '==', c).where('dataLeitura', '==', null))
             ),
             ...FONTES.map(f =>
-                col.where('fonte', '==', f)
-                   .where('dataLeitura', '==', null)
-                   .count().get()
+                safeCount(col.where('fonte', '==', f).where('dataLeitura', '==', null))
             ),
         ]);
 
