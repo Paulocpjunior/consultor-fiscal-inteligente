@@ -56,13 +56,39 @@ function mockDividaAtiva(cnpj) {
 }
 
 function mockCertidoes(cnpj) {
+    const today = new Date().toISOString().slice(0, 10);
+    const futureDate = (days) => {
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+    };
     return {
         ok: true,
         certidoes: [
-            { esfera: 'federal', status: 'negativa', validade: '2026-08-20', motivo: null },
-            { esfera: 'estadual', status: 'positiva_efeitos_negativa', validade: '2026-07-15', motivo: 'Parcelamento ativo' },
-            { esfera: 'trabalhista', status: 'negativa', validade: '2026-09-01', motivo: null },
-            { esfera: 'fgts', status: 'positiva', validade: null, motivo: 'Recolhimento em atraso competência 03/2025' },
+            {
+                esfera: 'federal', orgao: 'Receita Federal / PGFN', tipo: 'CND Federal',
+                status: 'negativa', validade: futureDate(180), numero: `CND-${cnpj.slice(0, 8)}-2026`,
+                dataEmissao: today, fonte: 'serpro',
+            },
+            {
+                esfera: 'fgts', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)',
+                status: 'positiva', validade: null,
+                motivo: 'Recolhimento em atraso comp. 03/2026', fonte: 'serpro',
+            },
+            {
+                esfera: 'trabalhista', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)',
+                status: 'negativa', validade: futureDate(180), numero: `CNDT-${cnpj.slice(0, 8)}`,
+                dataEmissao: today, fonte: 'serpro',
+            },
+            {
+                esfera: 'estadual', orgao: 'Sefaz Estadual', tipo: 'CND Estadual (ICMS)',
+                status: 'positiva_efeitos_negativa', validade: futureDate(90),
+                motivo: 'Parcelamento ICMS ativo', fonte: 'manual',
+            },
+            {
+                esfera: 'municipal', orgao: 'Prefeitura Municipal', tipo: 'CND Municipal (ISS)',
+                status: 'negativa', validade: futureDate(90), fonte: 'manual',
+            },
         ],
         fonte: 'mock',
     };
@@ -443,9 +469,148 @@ export async function consultarDividaAtiva(cnpj) {
     }
 }
 
-// ─── Certidões (CND/CPEN/CPN) ──────────────────────────────────────────────
+// ─── Certidões (CND/CPEN/CPN) — Consulta automatizada por tipo ─────────────
 
-const ESFERAS_CERTIDAO = ['federal', 'estadual', 'trabalhista', 'fgts'];
+/**
+ * Parse a raw SERPRO CND response into a normalised object.
+ */
+function parseCndResponse(resp) {
+    const status = normalizarStatusCertidao(resp?.situacao || resp?.status || resp?.resultado);
+    return {
+        ok: true,
+        status,
+        validade: resp?.dataValidade || resp?.validade || resp?.dtValidade || null,
+        motivo: resp?.motivoImpedimento || resp?.motivo || resp?.descricao || null,
+        numero: resp?.numeroCertidao || resp?.numero || null,
+        dataEmissao: resp?.dataEmissao || null,
+        pdfBase64: resp?.pdfCertidao || resp?.pdf || resp?.arquivo || null,
+    };
+}
+
+/**
+ * Build a certidão entry from a Promise.allSettled result.
+ */
+function extrairCertidao(settled, esfera, orgao, tipo) {
+    if (settled.status === 'fulfilled' && settled.value?.ok) {
+        const v = settled.value;
+        return {
+            esfera, orgao, tipo,
+            status: v.status,
+            validade: v.validade,
+            motivo: v.motivo,
+            numero: v.numero,
+            dataEmissao: v.dataEmissao,
+            pdfBase64: v.pdfBase64,
+            fonte: 'serpro',
+        };
+    }
+    const reason = settled.status === 'rejected'
+        ? settled.reason?.message
+        : settled.value?.erro || settled.value?.motivo || 'Serviço indisponível';
+    return {
+        esfera, orgao, tipo,
+        status: 'indisponivel',
+        validade: null,
+        motivo: reason || 'Erro ao consultar via SERPRO',
+        fonte: 'serpro',
+    };
+}
+
+/**
+ * CND Federal (Tributos + Dívida Ativa da União) — RFB/PGFN.
+ * SERPRO idSistema: CERTIDOES / EMITIRCNDFEDERAL
+ */
+async function consultarCndFederalSerpro(cnpj) {
+    console.log(TAG, 'consultarCndFederalSerpro', cnpj);
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'CERTIDOES',
+            idServico: 'EMITIRCNDFEDERAL',
+            contribuinteCnpj: cnpj,
+            dados: {},
+        });
+        return parseCndResponse(resp);
+    } catch (err) {
+        console.error(TAG, 'CND Federal SERPRO erro:', err.message);
+        // Fallback: try the generic CONSULTARCERTIDAO with esfera
+        try {
+            const resp2 = await invokeIntegraContador({
+                idSistema: 'CERTIDOES',
+                idServico: 'CONSULTARCERTIDAO',
+                contribuinteCnpj: cnpj,
+                dados: { esfera: 'federal' },
+            });
+            return parseCndResponse(resp2);
+        } catch (err2) {
+            console.error(TAG, 'CND Federal fallback erro:', err2.message);
+            return { ok: false, erro: err2.message };
+        }
+    }
+}
+
+/**
+ * CRF (Certificado de Regularidade do FGTS) — Caixa Econômica Federal.
+ * SERPRO idSistema: FGTS / CONSULTARCRF
+ */
+async function consultarCrfFgtsSerpro(cnpj) {
+    console.log(TAG, 'consultarCrfFgtsSerpro', cnpj);
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'FGTS',
+            idServico: 'CONSULTARCRF',
+            contribuinteCnpj: cnpj,
+            dados: {},
+        });
+        return parseCndResponse(resp);
+    } catch (err) {
+        console.error(TAG, 'CRF FGTS SERPRO erro:', err.message);
+        // Fallback: try via CERTIDOES
+        try {
+            const resp2 = await invokeIntegraContador({
+                idSistema: 'CERTIDOES',
+                idServico: 'EMITIRCRF',
+                contribuinteCnpj: cnpj,
+                dados: {},
+            });
+            return parseCndResponse(resp2);
+        } catch (err2) {
+            console.error(TAG, 'CRF FGTS fallback erro:', err2.message);
+            return { ok: false, erro: err2.message };
+        }
+    }
+}
+
+/**
+ * CNDT (Certidão Negativa de Débitos Trabalhistas) — TST.
+ * SERPRO idSistema: CERTIDOES / EMITIRCNDT
+ */
+async function consultarCndtTrabalhistaSerpro(cnpj) {
+    console.log(TAG, 'consultarCndtTrabalhistaSerpro', cnpj);
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'CERTIDOES',
+            idServico: 'EMITIRCNDT',
+            contribuinteCnpj: cnpj,
+            dados: {},
+        });
+        return parseCndResponse(resp);
+    } catch (err) {
+        console.error(TAG, 'CNDT SERPRO erro:', err.message);
+        // Fallback: try the generic CONSULTARCERTIDAO with esfera
+        try {
+            const resp2 = await invokeIntegraContador({
+                idSistema: 'CERTIDOES',
+                idServico: 'CONSULTARCERTIDAO',
+                contribuinteCnpj: cnpj,
+                dados: { esfera: 'trabalhista' },
+            });
+            return parseCndResponse(resp2);
+        } catch (err2) {
+            console.error(TAG, 'CNDT fallback erro:', err2.message);
+            return { ok: false, erro: err2.message };
+        }
+    }
+}
 
 export async function consultarCertidoes(cnpj) {
     const cnpjNum = cnpjLimpo(cnpj);
@@ -456,35 +621,31 @@ export async function consultarCertidoes(cnpj) {
         return mockCertidoes(cnpjNum);
     }
 
-    const certidoes = [];
+    // Query each CND type in parallel via SERPRO-specific endpoints
+    const [cndFederal, crfFgts, cndtTrabalhista] = await Promise.allSettled([
+        consultarCndFederalSerpro(cnpjNum),
+        consultarCrfFgtsSerpro(cnpjNum),
+        consultarCndtTrabalhistaSerpro(cnpjNum),
+    ]);
 
-    for (const esfera of ESFERAS_CERTIDAO) {
-        try {
-            const resp = await invokeIntegraContador({
-                idSistema: 'CERTIDOES',
-                idServico: 'CONSULTARCERTIDAO',
-                contribuinteCnpj: cnpjNum,
-                dados: { esfera },
-            });
+    const certidoes = [
+        extrairCertidao(cndFederal, 'federal', 'Receita Federal / PGFN', 'CND Federal'),
+        extrairCertidao(crfFgts, 'fgts', 'Caixa Econômica Federal', 'CRF (FGTS)'),
+        extrairCertidao(cndtTrabalhista, 'trabalhista', 'Justiça do Trabalho (TST)', 'CNDT (Trabalhista)'),
+        // Estadual and Municipal — no standard SERPRO API, require manual portal access
+        {
+            esfera: 'estadual', orgao: 'Sefaz Estadual', tipo: 'CND Estadual (ICMS)',
+            status: 'nao_consultada', motivo: 'Consulta manual via portal da SEFAZ do estado',
+            fonte: 'manual',
+        },
+        {
+            esfera: 'municipal', orgao: 'Prefeitura Municipal', tipo: 'CND Municipal (ISS)',
+            status: 'nao_consultada', motivo: 'Consulta manual via portal da prefeitura',
+            fonte: 'manual',
+        },
+    ];
 
-            certidoes.push({
-                esfera,
-                status: normalizarStatusCertidao(resp?.situacao || resp?.status),
-                validade: resp?.dataValidade || resp?.validade || null,
-                motivo: resp?.motivoImpedimento || resp?.motivo || null,
-            });
-        } catch (err) {
-            console.error(TAG, `Erro certidão ${esfera}:`, err.message);
-            certidoes.push({
-                esfera,
-                status: 'indisponivel',
-                validade: null,
-                motivo: err.message,
-            });
-        }
-    }
-
-    return { ok: true, certidoes };
+    return { ok: true, certidoes, fonte: 'serpro' };
 }
 
 function normalizarStatusCertidao(raw) {
@@ -493,6 +654,8 @@ function normalizarStatusCertidao(raw) {
     if (s.includes('NEGATIVA') && s.includes('EFEITO')) return 'positiva_efeitos_negativa';
     if (s.includes('NEGATIVA')) return 'negativa';
     if (s.includes('POSITIVA')) return 'positiva';
+    if (s.includes('REGULAR') && !s.includes('IRREGULAR')) return 'negativa';
+    if (s.includes('IRREGULAR')) return 'positiva';
     return 'indisponivel';
 }
 

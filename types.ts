@@ -1792,6 +1792,8 @@ export interface NfpParcelamento {
     dataFim?: string;
 }
 
+export type NfpFonteCertidao = 'serpro' | 'consulta_publica' | 'manual';
+
 export interface NfpCertidao {
     id: string;
     empresaId: string;
@@ -1801,8 +1803,14 @@ export interface NfpCertidao {
     status: NfpStatusCertidao;
     dataConsulta?: string;
     dataValidade?: string;
+    dataEmissao?: string;
+    numeroCertidao?: string;
     motivoImpedimento?: string;
     urlDocumento?: string;
+    /** PDF da certidao em base64, quando disponibilizado pelo SERPRO. */
+    pdfBase64?: string;
+    /** Origem da consulta: SERPRO, portal publico, ou manual. */
+    fonte?: NfpFonteCertidao;
 }
 
 export interface NfpObrigacao {

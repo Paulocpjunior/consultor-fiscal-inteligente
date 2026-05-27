@@ -111,19 +111,44 @@ router.post('/analise-completa', requireAuth, async (req, res) => {
         if (cnds) {
             result.cndsPublicas = cnds.certidoes;
             if (cnds.dadosSimples) result.dadosSimples = cnds.dadosSimples;
+
             if (!result.certidoes?.ok || !result.certidoes?.certidoes?.length) {
+                // SERPRO completely failed — use public data as primary source
                 result.certidoes = {
                     ok: true,
-                    certidoes: cnds.certidoes,
+                    certidoes: (cnds.certidoes || []).map(c => ({ ...c, fonte: c.fonte || 'consulta_publica' })),
                     fonte: 'consulta_publica',
                 };
             } else {
+                // SERPRO returned data — use public as fallback for 'indisponivel' entries
+                for (const serproCnd of result.certidoes.certidoes) {
+                    if (serproCnd.status !== 'indisponivel') continue;
+                    // Find matching public CND by esfera mapping
+                    const esf = String(serproCnd.esfera || '').toLowerCase();
+                    const pub = (cnds.certidoes || []).find(p => {
+                        const pe = String(p.esfera || '').toLowerCase();
+                        if (esf === 'federal' && pe === 'federal') return true;
+                        if (esf === 'fgts' && pe === 'fgts') return true;
+                        if (esf === 'trabalhista' && pe === 'trabalhista') return true;
+                        if (esf === pe) return true;
+                        return false;
+                    });
+                    if (pub && pub.status !== 'indisponivel') {
+                        // Replace SERPRO indisponivel with public data
+                        serproCnd.status = pub.status;
+                        serproCnd.validade = pub.validade || serproCnd.validade;
+                        serproCnd.motivo = pub.motivo || serproCnd.motivo;
+                        serproCnd.fonte = 'consulta_publica';
+                    }
+                }
+                // Add any public CNDs not already covered by SERPRO
                 for (const pub of cnds.certidoes) {
                     const ja = result.certidoes.certidoes.find(
-                        c => c.tipo === pub.tipo || c.orgao === pub.orgao
+                        c => c.tipo === pub.tipo || c.orgao === pub.orgao ||
+                             (c.esfera === pub.esfera)
                     );
                     if (!ja && pub.status !== 'indisponivel') {
-                        result.certidoes.certidoes.push(pub);
+                        result.certidoes.certidoes.push({ ...pub, fonte: pub.fonte || 'consulta_publica' });
                     }
                 }
             }

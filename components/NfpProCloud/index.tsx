@@ -398,17 +398,26 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         );
     };
 
-    const renderFonteBadge = (tipo: 'automatico' | 'manual') => {
-        const isAuto = tipo === 'automatico';
+    const renderFonteBadge = (tipo: 'automatico' | 'manual' | 'serpro' | 'consulta_publica') => {
+        const labelMap: Record<string, string> = {
+            automatico: 'SERPRO', serpro: 'SERPRO',
+            consulta_publica: 'Portal Publico', manual: 'Manual',
+        };
+        const colorMap: Record<string, string> = {
+            automatico: 'var(--accent)', serpro: 'var(--accent)',
+            consulta_publica: 'var(--text-muted)', manual: '#e67e22',
+        };
+        const label = labelMap[tipo] || tipo;
+        const color = colorMap[tipo] || 'var(--text-muted)';
         return (
             <span style={{
                 padding: '1px 8px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 600,
-                background: isAuto ? 'var(--accent)18' : 'var(--text-muted)18',
-                color: isAuto ? 'var(--accent)' : 'var(--text-muted)',
-                border: `1px solid ${isAuto ? 'var(--accent)' : 'var(--text-muted)'}33`,
+                background: color + '18',
+                color: color,
+                border: `1px solid ${color}33`,
                 whiteSpace: 'nowrap' as const,
             }}>
-                {isAuto ? 'Automatico (SERPRO)' : 'Manual'}
+                {label}
             </span>
         );
     };
@@ -1229,10 +1238,27 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             updateAnalise({ certidoes: [...analise.certidoes, nova] });
         };
 
-        // Check if a certidao is from the base list (automatico for federal ones)
-        const getCertidaoFonte = (c: NfpCertidao): 'automatico' | 'manual' => {
+        // Determine the fonte badge: use the certidão's own fonte field, or infer from base list
+        const getCertidaoFonte = (c: NfpCertidao): 'serpro' | 'consulta_publica' | 'manual' => {
+            if (c.fonte) return c.fonte;
             const base = CERTIDOES_BASE.find(b => b.tipo === c.tipo && b.esfera === c.esfera);
-            return base?.fonte || 'manual';
+            return base?.fonte === 'automatico' ? 'serpro' : 'manual';
+        };
+
+        const downloadPdf = (c: NfpCertidao) => {
+            if (!c.pdfBase64) return;
+            const byteChars = atob(c.pdfBase64);
+            const byteArray = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+            const blob = new Blob([byteArray], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${c.tipo.replace(/[^a-zA-Z0-9]/g, '_')}_${(c.numeroCertidao || 'certidao')}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         };
 
         const isCustomCertidao = (c: NfpCertidao): boolean => {
@@ -1264,19 +1290,36 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         <select value={c.status} onChange={e => updateCertidao(c.id, { status: e.target.value as NfpStatusCertidao })} style={{ ...inputStyle, width: 'auto', fontSize: '0.8rem' }}>
                             <option value="negativa">Negativa</option><option value="positiva_efeitos_negativa">Positiva c/ Efeitos Negativa</option><option value="positiva">Positiva</option><option value="indisponivel">Indisponivel</option><option value="nao_consultada">Nao consultada</option>
                         </select>
+                        {c.pdfBase64 && (
+                            <button onClick={() => downloadPdf(c)} title="Baixar PDF da certidao" style={{ background: 'var(--accent)14', border: `1px solid var(--accent)44`, borderRadius: '8px', padding: '2px 10px', cursor: 'pointer', color: 'var(--accent)', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                Baixar PDF
+                            </button>
+                        )}
                         {isCustomCertidao(c) && (
                             <button onClick={() => removeCertidao(c.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.2rem' }}>x</button>
                         )}
                     </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    <label style={labelSmall}>Data Consulta<input type="date" value={c.dataConsulta || ''} onChange={e => updateCertidao(c.id, { dataConsulta: e.target.value })} style={inputStyle} /></label>
+                {/* Numero da certidao */}
+                {c.numeroCertidao && (
+                    <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        Certidao n.{'º'} <strong>{c.numeroCertidao}</strong>
+                    </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <label style={labelSmall}>Data Emissao<input type="date" value={c.dataEmissao || ''} onChange={e => updateCertidao(c.id, { dataEmissao: e.target.value })} style={inputStyle} /></label>
                     <label style={labelSmall}>Validade<input type="date" value={c.dataValidade || ''} onChange={e => updateCertidao(c.id, { dataValidade: e.target.value })} style={inputStyle} /></label>
+                    <label style={labelSmall}>Data Consulta<input type="date" value={c.dataConsulta || ''} onChange={e => updateCertidao(c.id, { dataConsulta: e.target.value })} style={inputStyle} /></label>
                 </div>
-                {c.status === 'positiva' && (
+                {(c.status === 'positiva' || c.status === 'positiva_efeitos_negativa') && (
                     <div style={{ marginTop: '0.5rem' }}>
                         <input placeholder="Motivo do impedimento" value={c.motivoImpedimento || ''} onChange={e => updateCertidao(c.id, { motivoImpedimento: e.target.value })}
                             style={{ ...inputStyle, width: '100%' }} />
+                    </div>
+                )}
+                {(c.status === 'nao_consultada') && getCertidaoFonte(c) === 'manual' && (
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.78rem', color: '#e67e22', fontStyle: 'italic' }}>
+                        {c.motivoImpedimento || 'Consulta manual necessaria — acesse o portal do orgao emissor.'}
                     </div>
                 )}
             </div>
@@ -1524,7 +1567,8 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 }
             }
 
-            // Populate certidoes
+            // Populate certidoes — map SERPRO response (which uses esfera 'fgts'/'trabalhista')
+            // to our CERTIDOES_BASE (which uses esfera 'federal' for all federal-scope CNDs)
             const certidoes: NfpCertidao[] = CERTIDOES_BASE.map(c => {
                 const match = resp.certidoes?.certidoes?.find((rc: any) => {
                     const esf = String(rc.esfera || '').toLowerCase();
@@ -1536,10 +1580,15 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 });
                 return {
                     id: uid(), empresaId: activeEmpresaId, esfera: c.esfera,
-                    orgao: c.orgao, tipo: c.tipo,
+                    orgao: match?.orgao || c.orgao, tipo: match?.tipo || c.tipo,
                     status: (match?.status as NfpStatusCertidao) || 'nao_consultada',
                     dataValidade: match?.validade || undefined,
+                    dataEmissao: match?.dataEmissao || undefined,
+                    numeroCertidao: match?.numero || undefined,
                     motivoImpedimento: match?.motivo || undefined,
+                    pdfBase64: match?.pdfBase64 || undefined,
+                    fonte: (match?.fonte || undefined) as any,
+                    dataConsulta: match ? new Date().toISOString().slice(0, 10) : undefined,
                 };
             });
 
