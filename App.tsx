@@ -44,6 +44,7 @@ const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAG
 const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
 const CaixaPostalDashboard = lazy(() => import('./components/CaixaPostal'));
 const CaixaPostalAlerta = lazy(() => import('./components/CaixaPostal/AlertaPopup'));
+const CronCapturaBanner = lazy(() => import('./components/CronCapturaBanner'));
 const DasDashboard = lazy(() => import('./components/Das'));
 const DCTFWebDashboard = lazy(() => import('./components/DCTFWeb'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
@@ -652,6 +653,11 @@ const App: React.FC = () => {
 
                 <div className="flex flex-col md:flex-row gap-6">
                     <main className="flex-grow min-w-0">
+                        <ErrorBoundary>
+                            <Suspense fallback={null}>
+                                <CronCapturaBanner currentUser={currentUser} />
+                            </Suspense>
+                        </ErrorBoundary>
                         <ErrorBoundary>
                             <Suspense fallback={null}>
                                 <CaixaPostalAlerta

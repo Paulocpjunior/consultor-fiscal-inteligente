@@ -258,6 +258,23 @@ router.get('/window', requireAuth, (req, res) => {
   return res.json(statusJanelaOperacional());
 });
 
+// GET /cron-status — retorna o último log do cron SEFAZ
+router.get('/cron-status', requireAuth, async (req, res) => {
+  try {
+    const db = fa().firestore();
+    const snap = await db.collection('sefaz_cron_logs')
+      .orderBy('executadoEm', 'desc')
+      .limit(1)
+      .get();
+    if (snap.empty) return res.json({ hasRun: false });
+    const data = snap.docs[0].data();
+    return res.json({ hasRun: true, ...data });
+  } catch (e) {
+    console.error('[GET /cron-status] erro:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 router.post('/toggle/:cnpj', requireAuth, express.json(), async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
