@@ -57,6 +57,7 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                 codMunIBGE: dados.codMunIBGE?.replace(/\D/g, ''),
                 cep: dados.cep?.replace(/\D/g, ''),
                 telefone: dados.telefone?.replace(/\D/g, ''),
+                ccmSp: dados.ccmSp?.trim(),
             };
             await onSave(limpo);
             onClose();
@@ -130,6 +131,13 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                             />
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                            <Field
+                                label="CCM SP (Inscrição Municipal São Paulo)"
+                                value={dados.ccmSp || ''}
+                                onChange={v => handleField('ccmSp', v)}
+                                placeholder="1.234.567-8"
+                                hint="Obrigatório para consultar NFS-e SP. Apenas para empresas de SP capital."
+                            />
                             <Field
                                 label="IE Substituto Tributário"
                                 value={dados.inscEstSubstTrib || ''}
