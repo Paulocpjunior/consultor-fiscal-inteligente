@@ -83,6 +83,44 @@ function mockObrigacoes(cnpj) {
     };
 }
 
+// ─── Mocks individuais por sistema (SERPRO_DRY_RUN=1) ──────────────────────
+
+function mockDctfWeb() {
+    return { ok: true, entregue: true, situacao: 'ENTREGUE', dataEntrega: '2025-04-15' };
+}
+
+function mockESocial() {
+    return { ok: true, entregue: true, situacao: 'FECHAMENTO_TRANSMITIDO', dataEntrega: '2025-04-14' };
+}
+
+function mockFgtsDigital() {
+    return { ok: true, regular: false, depositoDevido: 3200.00, depositoRealizado: 2800.00 };
+}
+
+function mockSpedFiscal() {
+    return { ok: true, entregue: true, situacao: 'ENTREGUE', dataEntrega: '2025-04-20' };
+}
+
+function mockSpedContribuicoes() {
+    return { ok: true, entregue: true, situacao: 'ENTREGUE', dataEntrega: '2025-04-18' };
+}
+
+function mockEcd() {
+    return { ok: true, entregue: true, situacao: 'ENTREGUE', dataEntrega: '2025-05-30' };
+}
+
+function mockEcf() {
+    return { ok: true, entregue: false, situacao: 'PENDENTE', dataEntrega: null };
+}
+
+function mockDas() {
+    return { ok: true, gerado: true, valorDas: 1850.00, pago: true };
+}
+
+function mockDefis() {
+    return { ok: true, entregue: true, situacao: 'ENTREGUE' };
+}
+
 function mockParcelamentos(cnpj) {
     return {
         ok: true,
@@ -91,6 +129,243 @@ function mockParcelamentos(cnpj) {
         ],
         fonte: 'mock',
     };
+}
+
+// ─── Helpers de competência ─────────────────────────────────────────────────
+
+function computarCompAnterior(comp) {
+    const [ano, mes] = comp.split('-').map(Number);
+    if (mes === 1) return `${ano - 1}-12`;
+    return `${ano}-${String(mes - 1).padStart(2, '0')}`;
+}
+
+// ─── Consultas individuais por sistema SERPRO ──────────────────────────────
+
+async function consultarDctfWeb(cnpj, competencia) {
+    console.log(TAG, 'consultarDctfWeb', cnpj, competencia);
+    if (DRY_RUN) {
+        console.log(TAG, 'DRY_RUN ativo — retornando mock DCTFWeb');
+        return mockDctfWeb();
+    }
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'DCTFWEB',
+            idServico: 'CONSDECCOMPLETA33',
+            contribuinteCnpj: cnpj,
+            dados: { periodoApuracao: competencia.replace('-', '') },
+        });
+        return {
+            ok: true,
+            entregue: !!(resp?.situacao || '').match(/ENTREG/i),
+            situacao: resp?.situacao || 'INDETERMINADA',
+            dataEntrega: resp?.dataEntrega || resp?.dataTransmissao || null,
+        };
+    } catch (err) {
+        console.error(TAG, 'Erro consultarDctfWeb:', err.message);
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+    }
+}
+
+async function consultarESocial(cnpj, competencia) {
+    console.log(TAG, 'consultarESocial', cnpj, competencia);
+    if (DRY_RUN) {
+        console.log(TAG, 'DRY_RUN ativo — retornando mock eSocial');
+        return mockESocial();
+    }
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'ESOCIAL',
+            idServico: 'CONSULTARFECHAMENTO',
+            contribuinteCnpj: cnpj,
+            dados: { periodoApuracao: competencia.replace('-', '') },
+        });
+        const sit = resp?.situacao || resp?.statusFechamento || '';
+        return {
+            ok: true,
+            entregue: !!(sit).match(/TRANSMITID|FECHAD|ENTREG/i),
+            situacao: sit || 'INDETERMINADA',
+            dataEntrega: resp?.dataFechamento || resp?.dataTransmissao || null,
+        };
+    } catch (err) {
+        console.error(TAG, 'Erro consultarESocial:', err.message);
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+    }
+}
+
+async function consultarFgtsDigital(cnpj, competencia) {
+    console.log(TAG, 'consultarFgtsDigital', cnpj, competencia);
+    if (DRY_RUN) {
+        console.log(TAG, 'DRY_RUN ativo — retornando mock FGTS Digital');
+        return mockFgtsDigital();
+    }
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'FGTS',
+            idServico: 'CONSULTARRECOLHIMENTO',
+            contribuinteCnpj: cnpj,
+            dados: { periodoApuracao: competencia.replace('-', '') },
+        });
+        const devido = Number(resp?.valorDevido || resp?.depositoDevido || 0);
+        const realizado = Number(resp?.valorRecolhido || resp?.depositoRealizado || 0);
+        return {
+            ok: true,
+            regular: realizado >= devido,
+            depositoDevido: devido,
+            depositoRealizado: realizado,
+        };
+    } catch (err) {
+        console.error(TAG, 'Erro consultarFgtsDigital:', err.message);
+        return { ok: false, regular: false, depositoDevido: 0, depositoRealizado: 0, situacao: 'indisponivel', erro: err.message };
+    }
+}
+
+async function consultarSpedFiscal(cnpj, competencia) {
+    console.log(TAG, 'consultarSpedFiscal', cnpj, competencia);
+    if (DRY_RUN) {
+        console.log(TAG, 'DRY_RUN ativo — retornando mock SPED Fiscal');
+        return mockSpedFiscal();
+    }
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'SPEDFISCAL',
+            idServico: 'CONSULTARENTREGA',
+            contribuinteCnpj: cnpj,
+            dados: { periodoApuracao: competencia.replace('-', '') },
+        });
+        return {
+            ok: true,
+            entregue: !!(resp?.situacao || '').match(/ENTREG/i),
+            situacao: resp?.situacao || 'INDETERMINADA',
+            dataEntrega: resp?.dataEntrega || resp?.dataTransmissao || null,
+        };
+    } catch (err) {
+        console.error(TAG, 'Erro consultarSpedFiscal:', err.message);
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+    }
+}
+
+async function consultarSpedContribuicoes(cnpj, competencia) {
+    console.log(TAG, 'consultarSpedContribuicoes', cnpj, competencia);
+    if (DRY_RUN) {
+        console.log(TAG, 'DRY_RUN ativo — retornando mock SPED Contribuições');
+        return mockSpedContribuicoes();
+    }
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'SPEDCONTRIB',
+            idServico: 'CONSULTARENTREGA',
+            contribuinteCnpj: cnpj,
+            dados: { periodoApuracao: competencia.replace('-', '') },
+        });
+        return {
+            ok: true,
+            entregue: !!(resp?.situacao || '').match(/ENTREG/i),
+            situacao: resp?.situacao || 'INDETERMINADA',
+            dataEntrega: resp?.dataEntrega || resp?.dataTransmissao || null,
+        };
+    } catch (err) {
+        console.error(TAG, 'Erro consultarSpedContribuicoes:', err.message);
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+    }
+}
+
+async function consultarEcd(cnpj, anoCalendario) {
+    console.log(TAG, 'consultarEcd', cnpj, anoCalendario);
+    if (DRY_RUN) {
+        console.log(TAG, 'DRY_RUN ativo — retornando mock ECD');
+        return mockEcd();
+    }
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'SPED',
+            idServico: 'CONSULTARECD',
+            contribuinteCnpj: cnpj,
+            dados: { anoCalendario },
+        });
+        return {
+            ok: true,
+            entregue: !!(resp?.situacao || '').match(/ENTREG/i),
+            situacao: resp?.situacao || 'INDETERMINADA',
+            dataEntrega: resp?.dataEntrega || resp?.dataTransmissao || null,
+        };
+    } catch (err) {
+        console.error(TAG, 'Erro consultarEcd:', err.message);
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+    }
+}
+
+async function consultarEcf(cnpj, anoCalendario) {
+    console.log(TAG, 'consultarEcf', cnpj, anoCalendario);
+    if (DRY_RUN) {
+        console.log(TAG, 'DRY_RUN ativo — retornando mock ECF');
+        return mockEcf();
+    }
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'SPED',
+            idServico: 'CONSULTARECF',
+            contribuinteCnpj: cnpj,
+            dados: { anoCalendario },
+        });
+        return {
+            ok: true,
+            entregue: !!(resp?.situacao || '').match(/ENTREG/i),
+            situacao: resp?.situacao || 'INDETERMINADA',
+            dataEntrega: resp?.dataEntrega || resp?.dataTransmissao || null,
+        };
+    } catch (err) {
+        console.error(TAG, 'Erro consultarEcf:', err.message);
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+    }
+}
+
+async function consultarDas(cnpj, competencia) {
+    console.log(TAG, 'consultarDas', cnpj, competencia);
+    if (DRY_RUN) {
+        console.log(TAG, 'DRY_RUN ativo — retornando mock DAS');
+        return mockDas();
+    }
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'PGDASD',
+            idServico: 'GERARDAS21',
+            contribuinteCnpj: cnpj,
+            dados: { periodoApuracao: competencia.replace('-', '') },
+        });
+        return {
+            ok: true,
+            gerado: !!(resp?.valorApurado || resp?.valorDas),
+            valorDas: Number(resp?.valorApurado || resp?.valorDas || 0),
+            pago: !!(resp?.situacaoPagamento || '').match(/PAG|QUIT/i),
+        };
+    } catch (err) {
+        console.error(TAG, 'Erro consultarDas:', err.message);
+        return { ok: false, gerado: false, valorDas: 0, pago: false, situacao: 'indisponivel', erro: err.message };
+    }
+}
+
+async function consultarDefis(cnpj, anoCalendario) {
+    console.log(TAG, 'consultarDefis', cnpj, anoCalendario);
+    if (DRY_RUN) {
+        console.log(TAG, 'DRY_RUN ativo — retornando mock DEFIS');
+        return mockDefis();
+    }
+    try {
+        const resp = await invokeIntegraContador({
+            idSistema: 'PGDASD',
+            idServico: 'CONSULTARDEFIS',
+            contribuinteCnpj: cnpj,
+            dados: { anoCalendario },
+        });
+        return {
+            ok: true,
+            entregue: !!(resp?.situacao || '').match(/ENTREG/i),
+            situacao: resp?.situacao || 'INDETERMINADA',
+        };
+    } catch (err) {
+        console.error(TAG, 'Erro consultarDefis:', err.message);
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+    }
 }
 
 // ─── Situação Fiscal Federal ────────────────────────────────────────────────
@@ -311,45 +586,86 @@ function normalizarStatusParcelamento(raw) {
     return 'ativo';
 }
 
-// ─── Análise Completa ───────────────────────────────────────────────────────
+// ─── Análise Completa (parametrizada por regime) ───────────────────────────
 
-export async function analisarEmpresaCompleta(cnpj) {
+export async function analisarEmpresaCompleta(cnpj, regime = 'lucro_presumido') {
     const cnpjNum = cnpjLimpo(cnpj);
-    console.log(TAG, 'analisarEmpresaCompleta', cnpjNum);
+    console.log(TAG, 'analisarEmpresaCompleta', cnpjNum, 'regime:', regime);
 
-    const [
-        situacaoResult,
-        dividaResult,
-        certidoesResult,
-        obrigacoesResult,
-        parcelamentosResult,
-    ] = await Promise.allSettled([
-        consultarSituacaoFiscal(cnpjNum),
-        consultarDividaAtiva(cnpjNum),
-        consultarCertidoes(cnpjNum),
-        consultarObrigacoes(cnpjNum),
-        consultarParcelamentos(cnpjNum),
-    ]);
+    const now = new Date();
+    const competenciaAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const competenciaAnterior = computarCompAnterior(competenciaAtual);
+    const anoCalendarioAnterior = String(now.getFullYear() - 1);
 
     const extrair = (result) => {
         if (result.status === 'fulfilled') return result.value;
         return erroEstruturado(result.reason?.message || 'Erro desconhecido');
     };
 
-    const situacao = extrair(situacaoResult);
-    const divida = extrair(dividaResult);
-    const certidoes = extrair(certidoesResult);
-    const obrigacoes = extrair(obrigacoesResult);
-    const parcelamentos = extrair(parcelamentosResult);
+    // Always query these (all regimes)
+    const baseQueries = [
+        consultarSituacaoFiscal(cnpjNum),
+        consultarDividaAtiva(cnpjNum),
+        consultarCertidoes(cnpjNum),
+        consultarParcelamentos(cnpjNum),
+    ];
+
+    // Regime-specific obligation queries
+    const obrigQueries = [];
+
+    if (regime !== 'mei') {
+        obrigQueries.push(
+            consultarDctfWeb(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'DCTFWeb', competencia: competenciaAnterior, ...r })),
+            consultarESocial(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'eSocial', competencia: competenciaAnterior, ...r })),
+            consultarFgtsDigital(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'FGTS Digital', competencia: competenciaAnterior, ...r })),
+        );
+    }
+
+    if (regime === 'simples_nacional') {
+        obrigQueries.push(
+            consultarDas(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'DAS', competencia: competenciaAnterior, ...r })),
+            consultarDefis(cnpjNum, anoCalendarioAnterior).then(r => ({ sigla: 'DEFIS', competencia: anoCalendarioAnterior, ...r })),
+        );
+    }
+
+    if (regime === 'lucro_presumido' || regime === 'lucro_real') {
+        obrigQueries.push(
+            consultarEcd(cnpjNum, anoCalendarioAnterior).then(r => ({ sigla: 'ECD', competencia: anoCalendarioAnterior, ...r })),
+            consultarEcf(cnpjNum, anoCalendarioAnterior).then(r => ({ sigla: 'ECF', competencia: anoCalendarioAnterior, ...r })),
+            consultarSpedContribuicoes(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'SPED Contribuicoes', competencia: competenciaAnterior, ...r })),
+            consultarSpedFiscal(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'SPED Fiscal', competencia: competenciaAnterior, ...r })),
+        );
+    }
+
+    // Run all in parallel
+    const [baseResults, obrigResults] = await Promise.all([
+        Promise.allSettled(baseQueries),
+        Promise.allSettled(obrigQueries),
+    ]);
+
+    // Extract base results
+    const [situacaoR, dividaR, certidoesR, parcelamentosR] = baseResults;
+
+    // Build obrigacoes from individual system queries
+    const obrigacoes = obrigResults.map(r => {
+        if (r.status === 'fulfilled') return r.value;
+        return { sigla: '?', ok: false, entregue: false, situacao: 'indisponivel' };
+    }).map(o => ({
+        nome: o.sigla === 'DAS' ? 'DAS Simples Nacional' : o.sigla,
+        sigla: o.sigla,
+        competencia: o.competencia || competenciaAnterior,
+        status: o.entregue ? 'entregue' : o.regular ? 'entregue' : o.gerado ? (o.pago ? 'entregue' : 'pendente') : 'pendente',
+    }));
 
     return {
         ok: true,
         cnpj: cnpjNum,
+        regime,
         consultadoEm: new Date().toISOString(),
-        situacaoFiscal: situacao,
-        dividaAtiva: divida,
-        certidoes,
-        obrigacoes,
-        parcelamentos,
+        situacaoFiscal: extrair(situacaoR),
+        dividaAtiva: extrair(dividaR),
+        certidoes: extrair(certidoesR),
+        obrigacoes: { ok: true, obrigacoes },
+        parcelamentos: extrair(parcelamentosR),
     };
 }

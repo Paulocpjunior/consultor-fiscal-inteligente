@@ -95,9 +95,10 @@ router.post('/parcelamentos', requireAuth, async (req, res) => {
 router.post('/analise-completa', requireAuth, async (req, res) => {
     const cnpj = validarCnpj(req, res);
     if (!cnpj) return;
+    const regime = req.body.regime || 'lucro_presumido';
     try {
         const [serproResult, cndsPublicas] = await Promise.allSettled([
-            analisarEmpresaCompleta(cnpj),
+            analisarEmpresaCompleta(cnpj, regime),
             consultarCndsPublicas(cnpj),
         ]);
 

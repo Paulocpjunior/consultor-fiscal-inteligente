@@ -34,11 +34,11 @@ async function authHeaders(): Promise<Record<string, string>> {
 /**
  * Chama a análise completa de compliance via backend SERPRO.
  */
-export async function analisarEmpresaCompleta(cnpj: string): Promise<any> {
+export async function analisarEmpresaCompleta(cnpj: string, regime?: string): Promise<any> {
     const res = await fetch(`${API_BASE}/analise-completa`, {
         method: 'POST',
         headers: await authHeaders(),
-        body: JSON.stringify({ cnpj }),
+        body: JSON.stringify({ cnpj, regime }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
