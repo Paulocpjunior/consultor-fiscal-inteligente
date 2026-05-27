@@ -84,3 +84,71 @@ export async function consultarTodas(dryRun = false): Promise<NfseSpResultadoLot
     if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
     return r.json();
 }
+
+// ─── Tipos para a consulta direta de NFS-e ──────────────────────────────────
+
+export interface NfseSpItem {
+    chave: string;
+    inscricaoPrestador: string;
+    numero: string;
+    codigoVerificacao: string;
+
+    cnpjPrestador: string;
+    razaoSocialPrestador: string;
+    emailPrestador: string;
+
+    cnpjTomador: string;
+    razaoSocialTomador: string;
+    emailTomador: string;
+    inscricaoMunicipalTomador: string;
+
+    dhEmi: string;
+    dataFatoGerador: string;
+    competencia: string;
+    cancelado: boolean;
+    dataCancelamento: string;
+
+    valorServicos: number | null;
+    valorIss: number | null;
+    valorPis: number | null;
+    valorCofins: number | null;
+    valorInss: number | null;
+    valorIr: number | null;
+    valorCsll: number | null;
+    valorDeducoes: number | null;
+    valorCredito: number | null;
+
+    aliquotaServicos: number | null;
+    codigoServico: string;
+    issRetido: boolean;
+    municipioPrestacao: string;
+    discriminacao: string;
+}
+
+export interface NfseSpConsultaResult {
+    sucesso: boolean;
+    erros: Array<{ codigo?: string; descricao?: string }>;
+    alertas: Array<{ codigo?: string; descricao?: string }>;
+    totalNFes: number;
+    nfes: NfseSpItem[];
+}
+
+export async function consultarNfseSp(params: {
+    cnpj: string;
+    inscricaoMunicipal: string;
+    tipo: 'recebidas' | 'emitidas';
+    mes: number;
+    ano: number;
+}): Promise<NfseSpConsultaResult> {
+    const token = await authToken();
+    const r = await fetch(`${BASE}/nfsesp-consultar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+    });
+    if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error((body as any).erro || `HTTP ${r.status}`);
+    }
+    return r.json();
+}

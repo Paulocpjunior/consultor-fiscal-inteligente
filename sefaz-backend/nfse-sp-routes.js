@@ -12,6 +12,8 @@ import {
     consultarUma,
     consultarTodasElegiveis,
 } from './nfse-sp-orchestrator.js';
+import { consultarNfseRecebidas, consultarNfseEmitidas } from './nfse-sp-client.js';
+import { parseNfseSpXml } from './nfse-sp-importer.js';
 import { requireAuth as authUser } from './require-admin.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET;
@@ -80,6 +82,85 @@ router.post('/nfsesp-consultar-todas', authUser, json(), async (req, res) => {
         res.json(r);
     } catch (e) {
         console.error('[nfse-sp-routes] consultar-todas:', e);
+        res.status(500).json({ erro: e.message });
+    }
+});
+
+/**
+ * Endpoint de consulta direta — retorna os dados parseados das NFS-e
+ * para exibicao no frontend (sem importar automaticamente no Firestore).
+ * Suporta recebidas (servicos tomados) e emitidas (servicos prestados).
+ */
+router.post('/nfsesp-consultar', authUser, json(), async (req, res) => {
+    try {
+        const { cnpj, inscricaoMunicipal, tipo, mes, ano } = req.body || {};
+
+        if (!cnpj || !/^\d{14}$/.test((cnpj || '').replace(/\D/g, ''))) {
+            return res.status(400).json({ erro: 'CNPJ inválido (14 dígitos numéricos)' });
+        }
+        if (!inscricaoMunicipal) {
+            return res.status(400).json({ erro: 'Inscrição Municipal (CCM) é obrigatória' });
+        }
+        const mesNum = Number(mes);
+        const anoNum = Number(ano);
+        if (!mesNum || mesNum < 1 || mesNum > 12) {
+            return res.status(400).json({ erro: 'Mês inválido (1-12)' });
+        }
+        if (!anoNum || anoNum < 2000 || anoNum > 2100) {
+            return res.status(400).json({ erro: 'Ano inválido' });
+        }
+
+        const cnpjRemetente = process.env.NFSE_SP_REMETENTE_CNPJ || '';
+        const cnpjLimpo = cnpj.replace(/\D/g, '');
+        const periodo = { ano: anoNum, mes: mesNum };
+
+        let resultado;
+        if (tipo === 'emitidas') {
+            resultado = await consultarNfseEmitidas({
+                cnpjRemetente,
+                inscricaoMunicipalPrestador: inscricaoMunicipal,
+                dtInicio: periodo,
+                dtFim: periodo,
+            });
+        } else {
+            resultado = await consultarNfseRecebidas({
+                cnpjRemetente,
+                inscricaoMunicipalTomador: inscricaoMunicipal,
+                dtInicio: periodo,
+                dtFim: periodo,
+            });
+        }
+
+        if (!resultado.sucesso) {
+            return res.json({
+                sucesso: false,
+                erros: resultado.erros,
+                alertas: resultado.alertas,
+                nfes: [],
+                totalNFes: 0,
+            });
+        }
+
+        // Parsear cada NFe XML em dados estruturados
+        const nfesParsed = [];
+        for (const nfeXml of resultado.nfes) {
+            try {
+                const parsed = parseNfseSpXml(nfeXml);
+                nfesParsed.push(parsed);
+            } catch (parseErr) {
+                console.warn('[nfse-sp-routes] erro parseando NFe individual:', parseErr.message);
+            }
+        }
+
+        res.json({
+            sucesso: true,
+            erros: resultado.erros || [],
+            alertas: resultado.alertas || [],
+            totalNFes: nfesParsed.length,
+            nfes: nfesParsed,
+        });
+    } catch (e) {
+        console.error('[nfse-sp-routes] consultar:', e);
         res.status(500).json({ erro: e.message });
     }
 });

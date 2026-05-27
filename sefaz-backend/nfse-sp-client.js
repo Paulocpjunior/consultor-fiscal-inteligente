@@ -22,6 +22,7 @@ import { loadCertificate } from './secret-loader.js';
 const ENDPOINT_HOST = 'nfews.prefeitura.sp.gov.br';
 const ENDPOINT_PATH = '/lotenfe.asmx';
 const SOAP_ACTION_RECEBIDAS = 'http://www.prefeitura.sp.gov.br/nfe/ws/consultaNFeRecebidas';
+const SOAP_ACTION_EMITIDAS = 'http://www.prefeitura.sp.gov.br/nfe/ws/consultaNFeEmitidas';
 const NS_NFE = 'http://www.prefeitura.sp.gov.br/nfe';
 
 const stripFormat = (xml) => xml.replace(/\r?\n|\r|\t/g, '').replace(/>\s+</g, '><').trim();
@@ -73,22 +74,22 @@ function assinarXmlSp(xmlString, certPem, keyPem) {
     return sig.getSignedXml();
 }
 
-function envelopeSoap(xmlAssinado) {
+function envelopeSoap(xmlAssinado, metodo = 'ConsultaNFeRecebidas') {
     // O webservice de SP espera o XML do pedido dentro de CDATA — nao escapado
     // com entidades. Conteudo escapado dispara erro 1102 ("MensagemXML sem
     // conteudo"). extrairRetornoXml tambem le a resposta a partir de CDATA.
     return `<?xml version="1.0" encoding="utf-8"?>
 <soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
   <soap12:Body>
-    <ConsultaNFeRecebidas xmlns="${NS_NFE}">
+    <${metodo} xmlns="${NS_NFE}">
       <VersaoSchema>1</VersaoSchema>
       <MensagemXML><![CDATA[${xmlAssinado}]]></MensagemXML>
-    </ConsultaNFeRecebidas>
+    </${metodo}>
   </soap12:Body>
 </soap12:Envelope>`;
 }
 
-function postSoap(body, pfxBuffer, password) {
+function postSoap(body, pfxBuffer, password, soapAction = SOAP_ACTION_RECEBIDAS) {
     return new Promise((resolve, reject) => {
         const req = https.request(
             {
@@ -101,7 +102,7 @@ function postSoap(body, pfxBuffer, password) {
                 rejectUnauthorized: true,
                 headers: {
                     // SOAP 1.2: o action vai DENTRO do Content-Type, nao como header separado
-                    'Content-Type': `application/soap+xml; charset=utf-8; action="${SOAP_ACTION_RECEBIDAS}"`,
+                    'Content-Type': `application/soap+xml; charset=utf-8; action="${soapAction}"`,
                     'Content-Length': Buffer.byteLength(body, 'utf8'),
                 },
                 timeout: 60000,
@@ -121,16 +122,17 @@ function postSoap(body, pfxBuffer, password) {
     });
 }
 
-function extrairRetornoXml(soapResposta) {
+function extrairRetornoXml(soapResposta, metodo = 'ConsultaNFeRecebidas') {
     const cdataMatch = soapResposta.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
     if (cdataMatch) return cdataMatch[1];
 
+    const resultTag = `${metodo}Result`;
     const resultMatch = soapResposta.match(
-        /<ConsultaNFeRecebidasResult>([\s\S]*?)<\/ConsultaNFeRecebidasResult>/
+        new RegExp(`<${resultTag}>([\\s\\S]*?)<\\/${resultTag}>`)
     );
     if (!resultMatch) {
-        console.error('[nfse-sp-client] resposta sem ConsultaNFeRecebidasResult — corpo recebido:', (soapResposta || '').slice(0, 3000));
-        throw new Error('NFS-e SP: ConsultaNFeRecebidasResult não localizado no SOAP de resposta.');
+        console.error(`[nfse-sp-client] resposta sem ${resultTag} — corpo recebido:`, (soapResposta || '').slice(0, 3000));
+        throw new Error(`NFS-e SP: ${resultTag} não localizado no SOAP de resposta.`);
     }
     return resultMatch[1]
         .replace(/&lt;/g, '<')
@@ -222,6 +224,74 @@ export async function consultarNfseRecebidas({
     }
 
     const retornoXml = extrairRetornoXml(body);
+    const parsed = parseRetorno(retornoXml);
+    return { ...parsed, statusCode };
+}
+
+/**
+ * Consulta NFS-e emitidas (Serviços Prestados) no webservice de SP.
+ * Layout idêntico ao de recebidas, muda apenas o método SOAP e a inscricao
+ * no pedido refere-se ao prestador (não tomador).
+ */
+export async function consultarNfseEmitidas({
+    cnpjRemetente,
+    inscricaoMunicipalPrestador,
+    dtInicio,
+    dtFim,
+}) {
+    if (!cnpjRemetente || !/^\d{14}$/.test(cnpjRemetente)) {
+        throw new Error('NFS-e SP: cnpjRemetente inválido (precisa 14 dígitos numéricos)');
+    }
+    if (!inscricaoMunicipalPrestador) {
+        throw new Error('NFS-e SP: inscricaoMunicipalPrestador (CCM) é obrigatória');
+    }
+
+    const certs = await loadCertificate();
+    if (!certs.pemCert || !certs.pemKey) {
+        throw new Error(
+            'NFS-e SP: certificado sem PEM extraído. Verifique secret-loader.js (extrairPem falhou no pfx).'
+        );
+    }
+
+    const xmlInterno = montarPedidoXml({
+        cnpjRemetente,
+        inscricaoMunicipalTomador: inscricaoMunicipalPrestador,
+        dtInicio,
+        dtFim,
+    });
+    const xmlAssinado = assinarXmlSp(xmlInterno, certs.pemCert, certs.pemKey);
+    const metodo = 'ConsultaNFeEmitidas';
+    const soap = envelopeSoap(xmlAssinado, metodo);
+
+    if (process.env.SEFAZ_DEBUG === '1') {
+        const _flat = (x) => (x || '').replace(/[\r\n]+/g, ' ');
+        console.error('[nfse-sp-DIAG2] SOAP-EMITIDAS len=' + (soap||'').length + ' :: ' + _flat(soap));
+    }
+
+    const { statusCode, body } = await postSoap(soap, certs.pfxBuffer, certs.password, SOAP_ACTION_EMITIDAS);
+
+    if (statusCode >= 500) {
+        console.error(`[nfse-sp-client] HTTP ${statusCode} — corpo da resposta:`, (body || '').slice(0, 2000));
+        throw new Error(`NFS-e SP: HTTP ${statusCode} — ${(body || '').replace(/\s+/g, ' ').slice(0, 300) || 'sem corpo'}`);
+    }
+    if (statusCode === 401 || statusCode === 403) {
+        return {
+            sucesso: false,
+            erros: [
+                {
+                    codigo: `HTTP_${statusCode}`,
+                    descricao:
+                        'Não autorizado. Verifique se o contribuinte autorizou o CNPJ remetente como contador no portal nfe.prefeitura.sp.gov.br > Configurações do Perfil do Contribuinte.',
+                },
+            ],
+            alertas: [],
+            totalNFes: 0,
+            nfes: [],
+            statusCode,
+        };
+    }
+
+    const retornoXml = extrairRetornoXml(body, metodo);
     const parsed = parseRetorno(retornoXml);
     return { ...parsed, statusCode };
 }

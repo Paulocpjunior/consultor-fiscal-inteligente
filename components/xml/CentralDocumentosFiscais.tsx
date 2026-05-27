@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import type { User, DocumentoFiscal } from '../../types';
 import { isFirebaseConfigured, isFirebaseStorageConfigured } from '../../services/firebaseConfig';
 import XmlDashboard from './XmlDashboard';
@@ -13,6 +13,8 @@ import XmlSharePoint from './XmlSharePoint';
 import XmlConfiguracoes from './XmlConfiguracoes';
 import XmlExportarIobSage from './XmlExportarIobSage';
 
+const XmlNfseSp = lazy(() => import('./XmlNfseSp'));
+
 type TabId =
     | 'dashboard'
     | 'documentos'
@@ -23,13 +25,15 @@ type TabId =
     | 'erros'
     | 'relatorios'
     | 'config'
-    | 'nfse_pdf';
+    | 'nfse_pdf'
+    | 'nfse_sp';
 
 const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'documentos', label: 'XMLs Capturados' },
     { id: 'importacao', label: 'Importação Manual' },
     { id: 'nfse_pdf', label: 'Importar NFSe (PDF)' },
+    { id: 'nfse_sp', label: 'NFS-e SP' },
     { id: 'empresas', label: 'Empresas Monitoradas' },
     { id: 'sharepoint', label: 'SharePoint' },
     { id: 'exportar-iob', label: 'Exportar IOB SAGE' },
@@ -158,6 +162,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                         onShowToast={onShowToast}
                         onImported={() => setRefreshKey(k => k + 1)}
                     />
+                )}
+                {tab === 'nfse_sp' && (
+                    <Suspense fallback={<p className="text-center text-xs text-slate-400 py-6">Carregando...</p>}>
+                        <XmlNfseSp currentUser={currentUser} onShowToast={onShowToast} />
+                    </Suspense>
                 )}
                 {tab === 'config' && (
                     <XmlConfiguracoes currentUser={currentUser} />
