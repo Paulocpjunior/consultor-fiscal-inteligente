@@ -1,12 +1,14 @@
 /**
  * components/CaixaPostal/index.tsx
- * Dashboard global de Caixa Postal e-CAC.
+ * Dashboard global de Caixa Postal multi-canal.
+ * Canais: eCAC | DET | DEC | DJE | e-MAC
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import type { User, CaixaPostalMensagem, CaixaPostalResumo, CaixaPostalCategoria } from '../../types';
+import type { User, CaixaPostalMensagem, CaixaPostalResumo, CaixaPostalCategoria, CaixaPostalFonte } from '../../types';
 import {
     getResumo, listarMensagens, sincronizarTodas, marcarComoLida,
     categoriaLabel, categoriaColor, isCritica,
+    fonteLabel, fonteBadgeColor, fonteDotColor,
 } from '../../services/caixaPostalService';
 
 interface Props {
@@ -14,12 +16,15 @@ interface Props {
     onShowToast?: (msg: string) => void;
 }
 
+const FONTES: CaixaPostalFonte[] = ['ecac', 'det', 'dec', 'dje', 'emac'];
+
 const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [resumo, setResumo] = useState<CaixaPostalResumo | null>(null);
     const [mensagens, setMensagens] = useState<CaixaPostalMensagem[]>([]);
     const [loading, setLoading] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [filtroCategoria, setFiltroCategoria] = useState<CaixaPostalCategoria | ''>('');
+    const [filtroFonte, setFiltroFonte] = useState<CaixaPostalFonte | ''>('');
     const [soNaoLidas, setSoNaoLidas] = useState(true);
     const [selecionada, setSelecionada] = useState<CaixaPostalMensagem | null>(null);
     const [erro, setErro] = useState<string | null>(null);
@@ -32,6 +37,7 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                 getResumo(currentUser),
                 listarMensagens(currentUser, {
                     categoria: filtroCategoria || undefined,
+                    fonte: filtroFonte || undefined,
                     naoLidas: soNaoLidas,
                 }),
             ]);
@@ -44,7 +50,7 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
         }
     };
 
-    useEffect(() => { carregar(); }, [filtroCategoria, soNaoLidas]);
+    useEffect(() => { carregar(); }, [filtroCategoria, filtroFonte, soNaoLidas]);
 
     const handleSincronizar = async () => {
         setSyncing(true);
@@ -80,16 +86,22 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
         }));
     }, [resumo, filtroCategoria]);
 
+    // Per-fonte unread counts
+    const fonteCounts = useMemo(() => {
+        if (!resumo?.naoLidasPorFonte) return {};
+        return resumo.naoLidasPorFonte;
+    }, [resumo]);
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">📬 Caixa Postal e-CAC</h2>
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Caixa Postal</h2>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        Mensagens da Receita Federal por empresa
+                        Mensagens de orgaos governamentais por empresa
                         {resumo && (
                             <span className={`ml-2 px-2 py-0.5 rounded text-xs font-bold ${resumo.mode === 'mock' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                {resumo.mode === 'mock' ? 'MODO TESTE' : 'PRODUÇÃO'}
+                                {resumo.mode === 'mock' ? 'MODO TESTE' : 'PRODUCAO'}
                             </span>
                         )}
                     </p>
@@ -99,11 +111,56 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                     disabled={syncing}
                     className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 disabled:opacity-50"
                 >
-                    {syncing ? '⏳ Sincronizando...' : '🔄 Sincronizar Todas'}
+                    {syncing ? 'Sincronizando...' : 'Sincronizar Todas'}
                 </button>
             </div>
 
-            {/* Cards de resumo */}
+            {/* Channel tabs / filter */}
+            <div className="flex flex-wrap items-center gap-2">
+                <button
+                    onClick={() => { setFiltroFonte(''); setFiltroCategoria(''); }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        !filtroFonte
+                            ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                >
+                    Todos
+                    {resumo && (
+                        <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-xs bg-slate-600 text-white dark:bg-slate-400 dark:text-slate-900">
+                            {resumo.naoLidasTotal}
+                        </span>
+                    )}
+                </button>
+                {FONTES.map(f => {
+                    const count = fonteCounts[f] || 0;
+                    const isActive = filtroFonte === f;
+                    return (
+                        <button
+                            key={f}
+                            onClick={() => {
+                                setFiltroFonte(isActive ? '' : f);
+                                setFiltroCategoria('');
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
+                                isActive
+                                    ? fonteBadgeColor(f)
+                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                            }`}
+                        >
+                            <span className={`inline-block w-2 h-2 rounded-full ${fonteDotColor(f)}`}></span>
+                            {fonteLabel(f)}
+                            {count > 0 && (
+                                <span className={`px-1.5 py-0.5 rounded-full text-xs ${isActive ? 'bg-white/30' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+                                    {count}
+                                </span>
+                            )}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Cards de resumo por categoria */}
             {resumo && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {cards.map(card => (
@@ -128,7 +185,7 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
             {resumo && resumo.empresasComCriticas > 0 && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
                     <p className="text-red-700 dark:text-red-300 font-bold">
-                        ⚠️ {resumo.empresasComCriticas} empresa(s) com pendências críticas (intimação, malha ou exclusão)
+                        {resumo.empresasComCriticas} empresa(s) com pendencias criticas (intimacao, malha, exclusao ou notificacao trabalhista/judicial)
                     </p>
                 </div>
             )}
@@ -142,14 +199,22 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                         onChange={e => setSoNaoLidas(e.target.checked)}
                         className="rounded"
                     />
-                    Apenas não lidas
+                    Apenas nao lidas
                 </label>
                 {filtroCategoria && (
                     <button
                         onClick={() => setFiltroCategoria('')}
                         className="text-xs text-slate-500 hover:text-slate-700 underline"
                     >
-                        Limpar filtro: {categoriaLabel(filtroCategoria)} ✕
+                        Limpar filtro: {categoriaLabel(filtroCategoria)} x
+                    </button>
+                )}
+                {filtroFonte && (
+                    <button
+                        onClick={() => setFiltroFonte('')}
+                        className="text-xs text-slate-500 hover:text-slate-700 underline"
+                    >
+                        Limpar canal: {fonteLabel(filtroFonte)} x
                     </button>
                 )}
             </div>
@@ -161,7 +226,7 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">{erro}</div>
             ) : mensagens.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">
-                    {soNaoLidas ? 'Nenhuma mensagem não lida.' : 'Nenhuma mensagem encontrada.'}
+                    {soNaoLidas ? 'Nenhuma mensagem nao lida.' : 'Nenhuma mensagem encontrada.'}
                 </div>
             ) : (
                 <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden">
@@ -169,6 +234,7 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                         <thead className="bg-slate-50 dark:bg-slate-900/50 text-left">
                             <tr>
                                 <th className="px-4 py-2 font-medium">Status</th>
+                                <th className="px-4 py-2 font-medium">Canal</th>
                                 <th className="px-4 py-2 font-medium">Data</th>
                                 <th className="px-4 py-2 font-medium">Empresa</th>
                                 <th className="px-4 py-2 font-medium">Categoria</th>
@@ -186,6 +252,12 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                                 >
                                     <td className="px-4 py-2">
                                         {!m.dataLeitura ? <span className="inline-block w-2 h-2 bg-sky-500 rounded-full"></span> : ''}
+                                    </td>
+                                    <td className="px-4 py-2">
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${fonteBadgeColor(m.fonte)}`}>
+                                            <span className={`inline-block w-1.5 h-1.5 rounded-full ${fonteDotColor(m.fonte)}`}></span>
+                                            {fonteLabel(m.fonte)}
+                                        </span>
                                     </td>
                                     <td className="px-4 py-2 font-mono text-xs">
                                         {m.dataEnvio ? m.dataEnvio.slice(0, 10) : '-'}
@@ -219,11 +291,17 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                     >
                         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
                             <div className="flex items-center justify-between mb-2">
-                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${categoriaColor(selecionada.categoria)}`}>
-                                    {categoriaLabel(selecionada.categoria)}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold ${fonteBadgeColor(selecionada.fonte)}`}>
+                                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${fonteDotColor(selecionada.fonte)}`}></span>
+                                        {fonteLabel(selecionada.fonte)}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${categoriaColor(selecionada.categoria)}`}>
+                                        {categoriaLabel(selecionada.categoria)}
+                                    </span>
+                                </div>
                                 {isCritica(selecionada.categoria) && (
-                                    <span className="text-xs text-red-600 font-bold">⚠️ AÇÃO NECESSÁRIA</span>
+                                    <span className="text-xs text-red-600 font-bold">ACAO NECESSARIA</span>
                                 )}
                             </div>
                             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
@@ -232,6 +310,11 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                             <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
                                 {selecionada.remetente} | {selecionada.dataEnvio?.slice(0, 10)} | {selecionada.empresaNome ? `${selecionada.empresaNome} (${selecionada.empresaCnpj})` : `CNPJ ${selecionada.empresaCnpj}`}
                             </p>
+                            {selecionada.prazoResposta && (
+                                <p className="text-xs text-red-600 dark:text-red-400 font-bold mt-2">
+                                    Prazo para resposta: {selecionada.prazoResposta.slice(0, 10)}
+                                </p>
+                            )}
                         </div>
                         <div className="flex-1 overflow-y-auto p-6 text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
                             {selecionada.corpo}

@@ -1,10 +1,11 @@
 // ============================================================================
 // sefaz-backend/caixa-postal-orchestrator.js
 // Sincroniza mensagens entre o provider (mock/SERPRO) e o Firestore.
+// Suporta multi-canal: eCAC, DET, DEC, DJE, e-MAC.
 // ============================================================================
 
 import admin from 'firebase-admin';
-import { getCaixaPostalProvider, getProviderMode } from './caixa-postal-provider.js';
+import { getCaixaPostalProvider, getProviderMode, CANAIS_DISPONIVEIS } from './caixa-postal-provider.js';
 
 const COLLECTION = 'caixa_postal_mensagens';
 
@@ -40,8 +41,8 @@ function fa() {
 }
 
 /**
- * Sincroniza a caixa postal de uma empresa: chama o provider, persiste novos,
- * preserva o estado de leitura local (data leitura).
+ * Sincroniza a caixa postal de uma empresa: chama TODOS os canais via
+ * listarTodasMensagens, persiste novos, preserva o estado de leitura local.
  */
 export async function sincronizarEmpresa(empresaId, empresaCnpj) {
     const db = fa().firestore();
@@ -55,7 +56,7 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
     // idServico nao funciona pra contratante/autor=SP Assessoria. Cada tentativa gasta 1
     // chamada SERPRO cobrada + polui logs com business_error que nao eh erro de verdade.
     //
-    // Estrategia atual: pula direto pro MSGCONTRIBUINTE61. Quando o SERPRO corrigir o
+    // Estrategia atual: pula direto pro listarTodasMensagens. Quando o SERPRO corrigir o
     // INNOVAMSG63, setar env SERPRO_CAIXA_POSTAL_USE_INNOVAMSG63=true reativa sem deploy.
     const useInnovamsg63 = process.env.SERPRO_CAIXA_POSTAL_USE_INNOVAMSG63 === 'true';
     if (useInnovamsg63 && mode === 'serpro' && typeof provider.temNovasMensagens === 'function') {
@@ -69,7 +70,18 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
         }
     }
 
-    const mensagensRemotas = await provider.listarMensagens(empresaCnpj);
+    // Chama todos os canais em paralelo via listarTodasMensagens
+    let mensagensRemotas;
+    let canaisStatus = {};
+
+    if (typeof provider.listarTodasMensagens === 'function') {
+        const resultado = await provider.listarTodasMensagens(empresaCnpj);
+        mensagensRemotas = resultado.mensagens;
+        canaisStatus = resultado.canais || {};
+    } else {
+        // Fallback: só eCAC (compatibilidade com providers antigos)
+        mensagensRemotas = await provider.listarMensagens(empresaCnpj);
+    }
 
     // Lê estado de leitura atual do Firestore pra preservar
     // 23/05: usa CNPJ normalizado pra bater com docs ja limpos
@@ -85,6 +97,7 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
 
     const batch = db.batch();
     let novas = 0, atualizadas = 0;
+    const porCanal = {};
 
     // 23/05: normaliza empresaCnpj defensivamente.
     // SERPRO as vezes retorna CNPJ formatado; salvar sempre limpo previne
@@ -97,6 +110,10 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
         const dataLeituraLocal = lidasLocais.get(msg.mensagemId) || msg.dataLeitura || null;
 
         const empresaNome = _nomeCache.get(empresaCnpjLimpo) || '';
+
+        // Normaliza fonte: mock messages usam o canal real (ecac, det, etc)
+        const fonte = msg.fonte || (mode === 'mock' ? 'ecac' : mode);
+
         const payload = {
             empresaId,
             empresaCnpj: empresaCnpjLimpo,
@@ -108,16 +125,26 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
             corpo: msg.corpo || '',
             dataEnvio: msg.dataEnvio,
             dataLeitura: dataLeituraLocal,
-            fonte: msg.fonte || mode,
+            fonte,
+            prazoResposta: msg.prazoResposta || null,
             ultimaSincronizacao: new Date().toISOString(),
         };
         batch.set(ref, payload, { merge: true });
 
-        if (lidasLocais.has(msg.mensagemId)) atualizadas++; else novas++;
+        // Contabiliza por canal
+        if (!porCanal[fonte]) porCanal[fonte] = { total: 0, novas: 0 };
+        porCanal[fonte].total++;
+
+        if (lidasLocais.has(msg.mensagemId)) {
+            atualizadas++;
+        } else {
+            novas++;
+            if (porCanal[fonte]) porCanal[fonte].novas++;
+        }
     }
     await batch.commit();
 
-    return { mode, total: mensagensRemotas.length, novas, atualizadas };
+    return { mode, total: mensagensRemotas.length, novas, atualizadas, porCanal, canaisStatus };
 }
 
 /**
@@ -161,11 +188,12 @@ export async function sincronizarTodasEmpresas() {
 /**
  * Lista mensagens do Firestore com filtros.
  */
-export async function listarMensagensLocais({ empresaCnpj, naoLidas, categoria } = {}) {
+export async function listarMensagensLocais({ empresaCnpj, naoLidas, categoria, fonte } = {}) {
     const db = fa().firestore();
     let q = db.collection(COLLECTION);
     if (empresaCnpj) q = q.where('empresaCnpj', '==', empresaCnpj);
     if (categoria) q = q.where('categoria', '==', categoria);
+    if (fonte) q = q.where('fonte', '==', fonte);
 
     // FIX 23/05: ordena por dataEnvio desc ANTES de paginar pra mostrar
     // as mensagens mais recentes (e nao uma fatia arbitraria do .limit()).
@@ -182,6 +210,7 @@ export async function listarMensagensLocais({ empresaCnpj, naoLidas, categoria }
  */
 export async function getResumoGlobal(cnpjsPermitidos = null) {
     const db = fa().firestore();
+    const FONTES = ['ecac', 'det', 'dec', 'dje', 'emac'];
 
     // 23/05 Patch B: usa aggregation queries (.count()) em vez de baixar todos
     // os docs. 4091 reads -> ~6 reads por chamada. Latencia ~50ms vs ~2s.
@@ -189,13 +218,22 @@ export async function getResumoGlobal(cnpjsPermitidos = null) {
     // Caminho rapido: admin (sem filtro de carteira) — usa count().
     if (cnpjsPermitidos === null) {
         const col = db.collection(COLLECTION);
-        const CATS = ['intimacao', 'malha', 'exclusao', 'informativo'];
+        const CATS = ['intimacao', 'malha', 'exclusao', 'informativo',
+                      'det_notificacao', 'det_auto_infracao',
+                      'dec_intimacao', 'dec_comunicado',
+                      'dje_citacao', 'dje_intimacao',
+                      'emac_notificacao'];
 
-        // 5 counts em paralelo: total geral + 4 nao-lidas por categoria
-        const [totalAgg, ...porCatAgg] = await Promise.all([
+        // Counts em paralelo: total geral + não-lidas por categoria + não-lidas por fonte
+        const [totalAgg, ...restos] = await Promise.all([
             col.count().get(),
             ...CATS.map(c =>
                 col.where('categoria', '==', c)
+                   .where('dataLeitura', '==', null)
+                   .count().get()
+            ),
+            ...FONTES.map(f =>
+                col.where('fonte', '==', f)
                    .where('dataLeitura', '==', null)
                    .count().get()
             ),
@@ -203,15 +241,25 @@ export async function getResumoGlobal(cnpjsPermitidos = null) {
 
         const porCategoria = {};
         CATS.forEach((c, i) => {
-            const n = porCatAgg[i].data().count;
+            const n = restos[i].data().count;
             if (n > 0) porCategoria[c] = n;
+        });
+
+        const naoLidasPorFonte = {};
+        FONTES.forEach((f, i) => {
+            const n = restos[CATS.length + i].data().count;
+            naoLidasPorFonte[f] = n;
         });
 
         const naoLidasTotal = Object.values(porCategoria).reduce((a, b) => a + b, 0);
 
         // Empresas com criticas: precisa fetch (~48 docs hoje, bem menor que 4091).
+        const criticasCats = ['intimacao', 'malha', 'exclusao',
+                              'det_notificacao', 'det_auto_infracao',
+                              'dec_intimacao', 'dje_citacao', 'dje_intimacao'];
+        // Firestore 'in' limit = 30, estamos com 8 — ok
         const criticasSnap = await col
-            .where('categoria', 'in', ['intimacao', 'malha', 'exclusao'])
+            .where('categoria', 'in', criticasCats)
             .where('dataLeitura', '==', null)
             .select('empresaCnpj')
             .get();
@@ -223,6 +271,7 @@ export async function getResumoGlobal(cnpjsPermitidos = null) {
             totalMensagens: totalAgg.data().count,
             naoLidasTotal,
             naoLidasPorCategoria: porCategoria,
+            naoLidasPorFonte,
             empresasComCriticas: empresasComCriticas.size,
             mode: getProviderMode(),
         };
@@ -231,7 +280,7 @@ export async function getResumoGlobal(cnpjsPermitidos = null) {
     // Caminho carteira (colaborador): mantem agregacao em memoria.
     // Firestore 'where in' tem limite 30 valores e colaborador pode ter 50+ empresas.
     const snap = await db.collection(COLLECTION)
-        .select('empresaCnpj', 'categoria', 'dataLeitura')
+        .select('empresaCnpj', 'categoria', 'dataLeitura', 'fonte')
         .get();
     let docs = snap.docs.map(d => d.data());
 
@@ -240,12 +289,24 @@ export async function getResumoGlobal(cnpjsPermitidos = null) {
 
     const naoLidas = docs.filter(d => !d.dataLeitura);
     const porCategoria = {};
+    const naoLidasPorFonte = {};
+    FONTES.forEach(f => { naoLidasPorFonte[f] = 0; });
+
     for (const d of naoLidas) {
         porCategoria[d.categoria] = (porCategoria[d.categoria] || 0) + 1;
+        if (d.fonte && naoLidasPorFonte[d.fonte] !== undefined) {
+            naoLidasPorFonte[d.fonte]++;
+        }
     }
+
+    const criticasCats = new Set([
+        'intimacao', 'malha', 'exclusao',
+        'det_notificacao', 'det_auto_infracao',
+        'dec_intimacao', 'dje_citacao', 'dje_intimacao',
+    ]);
     const empresasComCriticas = new Set();
     for (const d of naoLidas) {
-        if (d.categoria === 'intimacao' || d.categoria === 'malha' || d.categoria === 'exclusao') {
+        if (criticasCats.has(d.categoria)) {
             empresasComCriticas.add(d.empresaCnpj);
         }
     }
@@ -254,6 +315,7 @@ export async function getResumoGlobal(cnpjsPermitidos = null) {
         totalMensagens: docs.length,
         naoLidasTotal: naoLidas.length,
         naoLidasPorCategoria: porCategoria,
+        naoLidasPorFonte,
         empresasComCriticas: empresasComCriticas.size,
         mode: getProviderMode(),
     };

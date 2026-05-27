@@ -1,6 +1,6 @@
 // ============================================================================
 // sefaz-backend/caixa-postal-routes.js
-// Express router pra Caixa Postal e-CAC.
+// Express router pra Caixa Postal multi-canal.
 // Montado em /api/admin/caixa-postal pelo server.js raiz.
 // ============================================================================
 
@@ -16,7 +16,7 @@ import {
 } from './caixa-postal-orchestrator.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
-import { getProviderMode } from './caixa-postal-provider.js';
+import { getProviderMode, CANAIS_DISPONIVEIS } from './caixa-postal-provider.js';
 
 const router = express.Router();
 
@@ -25,6 +25,14 @@ const router = express.Router();
 
 router.get('/status', (_req, res) => {
     res.json({ mode: getProviderMode(), ok: true });
+});
+
+// Lista de canais disponíveis com metadata (cor, portal, descrição)
+router.get('/canais', requireAuth, (_req, res) => {
+    res.json({
+        mode: getProviderMode(),
+        canais: CANAIS_DISPONIVEIS,
+    });
 });
 
 // Resumo pra dashboard / popup.
@@ -56,6 +64,7 @@ router.get('/mensagens', requireAuth, async (req, res) => {
         const r = await listarMensagensLocais({
             empresaCnpj: req.query.empresaCnpj,
             categoria: req.query.categoria,
+            fonte: req.query.fonte,
             naoLidas: req.query.naoLidas === 'true',
         });
         res.json(r);

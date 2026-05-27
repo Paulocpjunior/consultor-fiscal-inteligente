@@ -527,30 +527,43 @@ export interface LucroInput {
 }
 
 
-// ─── Caixa Postal e-CAC ───────────────────────────────────────────────────
+// ─── Caixa Postal (multi-canal) ─────────────────────────────────────────
 
-export type CaixaPostalCategoria = 'intimacao' | 'malha' | 'exclusao' | 'informativo';
+export type CaixaPostalCategoria =
+    | 'intimacao' | 'malha' | 'exclusao' | 'informativo'
+    // DET (Domicílio Eletrônico Trabalhista)
+    | 'det_notificacao' | 'det_auto_infracao'
+    // DEC (Domicílio Eletrônico do Contribuinte)
+    | 'dec_intimacao' | 'dec_comunicado'
+    // DJE (Diário de Justiça Eletrônico)
+    | 'dje_citacao' | 'dje_intimacao'
+    // e-MAC (Ministério da Agricultura)
+    | 'emac_notificacao';
+
+export type CaixaPostalFonte = 'ecac' | 'det' | 'dec' | 'dje' | 'emac';
 
 export interface CaixaPostalMensagem {
     id: string;                  // doc id no Firestore
     empresaId: string;
     empresaCnpj: string;
     empresaNome?: string;
-    mensagemId: string;          // id na Receita
+    mensagemId: string;          // id na Receita / órgão
     assunto: string;
     remetente: string;
     categoria: CaixaPostalCategoria;
     corpo: string;
     dataEnvio: string;           // ISO
     dataLeitura?: string | null; // null = não lida
-    fonte: 'mock' | 'serpro';
+    fonte: CaixaPostalFonte | 'mock' | 'serpro';
     ultimaSincronizacao?: string;
+    prazoResposta?: string | null; // ISO — prazo legal p/ resposta (DET/DEC)
 }
 
 export interface CaixaPostalResumo {
     totalMensagens: number;
     naoLidasTotal: number;
-    naoLidasPorCategoria: Record<CaixaPostalCategoria, number>;
+    naoLidasPorCategoria: Record<string, number>;
+    naoLidasPorFonte?: Record<CaixaPostalFonte, number>;
     empresasComCriticas: number;
     mode: 'mock' | 'serpro';
 }
@@ -560,6 +573,7 @@ export interface CaixaPostalSyncStats {
     total: number;
     novas: number;
     atualizadas: number;
+    porCanal?: Record<CaixaPostalFonte, { total: number; novas: number }>;
 }
 
 
