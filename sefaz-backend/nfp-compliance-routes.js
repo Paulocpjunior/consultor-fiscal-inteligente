@@ -14,6 +14,7 @@ import {
     consultarParcelamentos,
     analisarEmpresaCompleta,
 } from './nfp-compliance-provider.js';
+import { consultarCndsPublicas } from './cnd-publica-provider.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -95,10 +96,53 @@ router.post('/analise-completa', requireAuth, async (req, res) => {
     const cnpj = validarCnpj(req, res);
     if (!cnpj) return;
     try {
-        const result = await analisarEmpresaCompleta(cnpj);
+        const [serproResult, cndsPublicas] = await Promise.allSettled([
+            analisarEmpresaCompleta(cnpj),
+            consultarCndsPublicas(cnpj),
+        ]);
+
+        const result = serproResult.status === 'fulfilled'
+            ? serproResult.value
+            : { ok: false, error: serproResult.reason?.message, cnpj };
+
+        const cnds = cndsPublicas.status === 'fulfilled' ? cndsPublicas.value : null;
+
+        if (cnds) {
+            result.cndsPublicas = cnds.certidoes;
+            if (cnds.dadosSimples) result.dadosSimples = cnds.dadosSimples;
+            if (!result.certidoes?.ok || !result.certidoes?.certidoes?.length) {
+                result.certidoes = {
+                    ok: true,
+                    certidoes: cnds.certidoes,
+                    fonte: 'consulta_publica',
+                };
+            } else {
+                for (const pub of cnds.certidoes) {
+                    const ja = result.certidoes.certidoes.find(
+                        c => c.tipo === pub.tipo || c.orgao === pub.orgao
+                    );
+                    if (!ja && pub.status !== 'indisponivel') {
+                        result.certidoes.certidoes.push(pub);
+                    }
+                }
+            }
+        }
+
         res.json(result);
     } catch (err) {
         console.error('[nfp-compliance-routes] analise-completa error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/cnds-publicas', requireAuth, async (req, res) => {
+    const cnpj = validarCnpj(req, res);
+    if (!cnpj) return;
+    try {
+        const result = await consultarCndsPublicas(cnpj);
+        res.json(result);
+    } catch (err) {
+        console.error('[nfp-compliance-routes] cnds-publicas error:', err);
         res.status(500).json({ error: err.message });
     }
 });
