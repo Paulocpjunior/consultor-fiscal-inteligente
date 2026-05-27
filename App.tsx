@@ -655,7 +655,7 @@ const App: React.FC = () => {
                     <main className="flex-grow min-w-0">
                         <ErrorBoundary>
                             <Suspense fallback={null}>
-                                <CronCapturaBanner currentUser={currentUser} />
+                                <CronCapturaBanner currentUser={currentUser} onShowToast={(msg) => setToastMessage(msg)} />
                             </Suspense>
                         </ErrorBoundary>
                         <ErrorBoundary>
