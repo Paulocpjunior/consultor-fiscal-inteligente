@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import type { User, CaixaPostalResumo, CaixaPostalFonte } from '../../types';
 import { getResumo, fonteLabel, fonteDotColor } from '../../services/caixaPostalService';
+import { notifyCaixaPostalCritica } from '../../services/notificacoesService';
 
 const STORAGE_KEY = 'caixaPostal:lastAlertDate';
 
@@ -36,6 +37,8 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
             .then(r => {
                 if (r.empresasComCriticas > 0) {
                     setResumo(r);
+                    // Browser push notification (works even if tab is in background)
+                    notifyCaixaPostalCritica(r.empresasComCriticas);
                 }
             })
             .catch(() => { /* silencioso, modulo opcional */ });

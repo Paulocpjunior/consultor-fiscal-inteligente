@@ -12,6 +12,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import type { User } from '../types';
 import { getAuth } from 'firebase/auth';
+import { notifyCapturaSefaz } from '../services/notificacoesService';
 
 interface CronStatus {
     hasRun: boolean;
@@ -143,6 +144,15 @@ const CronCapturaBanner: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         ? `Captura SEFAZ ${hora}: ${newData.totalNovosXmls ?? 0} novos XMLs, ${newData.falhas} falha(s)`
                         : `Captura SEFAZ ${hora}: ${newData.totalNovosXmls ?? 0} novos XMLs em ${newData.totalEmpresas ?? 0} empresas`;
                     onShowToast(msg);
+                }
+
+                // Browser push notification (works even if tab is in background)
+                if (newData.hasRun) {
+                    notifyCapturaSefaz(
+                        newData.totalNovosXmls ?? 0,
+                        newData.falhas ?? 0,
+                        newData.totalEmpresas ?? 0,
+                    );
                 }
             } else if (newData) {
                 // No new cron, but update data silently in case other fields changed

@@ -26,6 +26,7 @@ import * as authService from './services/authService';
 import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon, ScaleIcon } from './components/Icons';
 import FiscalObligationsDashboard from './components/FiscalObligationsDashboard';
 import { runInitialSync } from './services/cloudSyncService';
+import { requestNotificationPermission } from './services/notificacoesService';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
 // ✅ REMOVIDO: import { onAuthStateChanged } from 'firebase/auth';
 // Ambos encapsulados em authService.subscribeAuthState
@@ -176,6 +177,7 @@ const App: React.FC = () => {
                 if (user) {
                     loadSimplesData(user);
                     runInitialSync(user); // fire-and-forget: sync localStorage -> Firestore
+                    requestNotificationPermission(); // fire-and-forget: pede permissão push
                 }
             });
 
@@ -198,6 +200,7 @@ const App: React.FC = () => {
     const handleLoginSuccess = (user: User) => {
         setCurrentUser(user);
         loadSimplesData(user);
+        requestNotificationPermission(); // fire-and-forget: pede permissão push
     };
 
     const handleLogout = () => {
