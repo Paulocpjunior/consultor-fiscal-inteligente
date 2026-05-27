@@ -97,7 +97,7 @@ async function consultarCrfFgts(cnpj) {
         });
 
         if (!resp.ok) {
-            return { esfera: 'federal', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)', status: 'indisponivel', motivo: `HTTP ${resp.status}`, fonte: 'consulta_publica' };
+            return { esfera: 'fgts', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)', status: 'indisponivel', motivo: `HTTP ${resp.status}`, fonte: 'consulta_publica' };
         }
 
         const html = await resp.text();
@@ -105,7 +105,7 @@ async function consultarCrfFgts(cnpj) {
         if (/regular/i.test(html) && !/irregular/i.test(html)) {
             const validade = html.match(/v[aá]lid[oa]\s+at[eé]\s+(\d{2}\/\d{2}\/\d{4})/i);
             return {
-                esfera: 'federal', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)',
+                esfera: 'fgts', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)',
                 status: 'negativa',
                 validade: validade ? parseDataBR(validade[1]) : null,
                 fonte: 'consulta_publica',
@@ -113,17 +113,17 @@ async function consultarCrfFgts(cnpj) {
         }
         if (/irregular/i.test(html)) {
             return {
-                esfera: 'federal', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)',
+                esfera: 'fgts', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)',
                 status: 'positiva',
                 motivo: 'Recolhimento FGTS irregular',
                 fonte: 'consulta_publica',
             };
         }
 
-        return { esfera: 'federal', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)', status: 'indisponivel', motivo: 'Resposta não identificada', fonte: 'consulta_publica' };
+        return { esfera: 'fgts', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)', status: 'indisponivel', motivo: 'Resposta não identificada', fonte: 'consulta_publica' };
     } catch (err) {
         console.warn('[cnd-publica] CRF FGTS falhou:', err.message);
-        return { esfera: 'federal', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)', status: 'indisponivel', motivo: err.message, fonte: 'consulta_publica' };
+        return { esfera: 'fgts', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)', status: 'indisponivel', motivo: err.message, fonte: 'consulta_publica' };
     }
 }
 
@@ -145,7 +145,7 @@ async function consultarCndtTrabalhista(cnpj) {
         });
 
         if (!resp.ok) {
-            return { esfera: 'federal', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)', status: 'indisponivel', motivo: `HTTP ${resp.status}`, fonte: 'consulta_publica' };
+            return { esfera: 'trabalhista', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)', status: 'indisponivel', motivo: `HTTP ${resp.status}`, fonte: 'consulta_publica' };
         }
 
         const html = await resp.text();
@@ -153,7 +153,7 @@ async function consultarCndtTrabalhista(cnpj) {
         if (/certid[aã]o\s+negativa/i.test(html) && !/positiva/i.test(html)) {
             const validade = html.match(/v[aá]lid[oa]\s+at[eé][\s:]+(\d{2}\/\d{2}\/\d{4})/i);
             return {
-                esfera: 'federal', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)',
+                esfera: 'trabalhista', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)',
                 status: 'negativa',
                 validade: validade ? parseDataBR(validade[1]) : null,
                 fonte: 'consulta_publica',
@@ -161,17 +161,17 @@ async function consultarCndtTrabalhista(cnpj) {
         }
         if (/positiva/i.test(html)) {
             return {
-                esfera: 'federal', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)',
+                esfera: 'trabalhista', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)',
                 status: 'positiva',
                 motivo: 'Débitos trabalhistas registrados',
                 fonte: 'consulta_publica',
             };
         }
 
-        return { esfera: 'federal', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)', status: 'indisponivel', motivo: 'Resposta não identificada', fonte: 'consulta_publica' };
+        return { esfera: 'trabalhista', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)', status: 'indisponivel', motivo: 'Resposta não identificada', fonte: 'consulta_publica' };
     } catch (err) {
         console.warn('[cnd-publica] CNDT falhou:', err.message);
-        return { esfera: 'federal', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)', status: 'indisponivel', motivo: err.message, fonte: 'consulta_publica' };
+        return { esfera: 'trabalhista', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)', status: 'indisponivel', motivo: err.message, fonte: 'consulta_publica' };
     }
 }
 
@@ -223,8 +223,8 @@ export async function consultarCndsPublicas(cnpj) {
 
     const certidoes = [
         cndFederal.status === 'fulfilled' ? cndFederal.value : { esfera: 'federal', orgao: 'Receita Federal / PGFN', tipo: 'CND Federal', status: 'indisponivel', fonte: 'consulta_publica' },
-        crfFgts.status === 'fulfilled' ? crfFgts.value : { esfera: 'federal', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)', status: 'indisponivel', fonte: 'consulta_publica' },
-        cndtTrabalhista.status === 'fulfilled' ? cndtTrabalhista.value : { esfera: 'federal', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)', status: 'indisponivel', fonte: 'consulta_publica' },
+        crfFgts.status === 'fulfilled' ? crfFgts.value : { esfera: 'fgts', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)', status: 'indisponivel', fonte: 'consulta_publica' },
+        cndtTrabalhista.status === 'fulfilled' ? cndtTrabalhista.value : { esfera: 'trabalhista', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)', status: 'indisponivel', fonte: 'consulta_publica' },
     ];
 
     const dadosSimples = optanteSimples.status === 'fulfilled' ? optanteSimples.value : null;

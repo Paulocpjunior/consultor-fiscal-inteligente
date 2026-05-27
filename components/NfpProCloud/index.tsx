@@ -943,6 +943,8 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         const debitosAbertos = analise.debitos.filter(d => d.status === 'aberto');
         const certNeg = analise.certidoes.filter(c => c.status === 'negativa').length;
         const certPos = analise.certidoes.filter(c => c.status === 'positiva').length;
+        const certPEN = analise.certidoes.filter(c => c.status === 'positiva_efeitos_negativa').length;
+        const certIndisp = analise.certidoes.filter(c => c.status === 'indisponivel' || c.status === 'nao_consultada').length;
         const obrigPend = analise.obrigacoes.filter(o => o.status === 'pendente' || o.status === 'atrasada').length;
         const acoesAtivas = analise.acoes.filter(a => a.status === 'em_andamento').length;
         const planoAlta = analise.planoAcao.filter(p => p.gravidade === 'alta' && p.status !== 'concluida').length;
@@ -976,7 +978,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
                     <DashCard title="Débitos Abertos" value={String(debitosAbertos.length)} sub={formatCurrency(debitosAbertos.reduce((s, d) => s + (d.valorAtualizado || d.valorOriginal), 0))} color="var(--danger)" />
-                    <DashCard title="Certidões Negativas" value={`${certNeg}/${analise.certidoes.length}`} sub={certPos > 0 ? `${certPos} positiva(s)` : 'Sem impedimentos'} color={certPos > 0 ? 'var(--danger)' : 'var(--success)'} />
+                    <DashCard title="Certidões Negativas" value={`${certNeg}/${analise.certidoes.length}`} sub={certPos > 0 ? `${certPos} positiva(s)` : certIndisp > 0 ? `${certIndisp} indisponivel(is)` : certPEN > 0 ? `${certPEN} PEN` : 'Sem impedimentos'} color={certPos > 0 ? 'var(--danger)' : certIndisp > 0 ? 'var(--text-muted)' : 'var(--success)'} />
                     <DashCard title="Obrigações Pendentes" value={String(obrigPend)} sub={`de ${analise.obrigacoes.length} totais`} color={obrigPend > 0 ? 'var(--warning)' : 'var(--success)'} />
                     <DashCard title="Ações em Andamento" value={String(acoesAtivas)} sub={`de ${analise.acoes.length} totais`} color={acoesAtivas > 0 ? 'var(--warning)' : 'var(--success)'} />
                     <DashCard title="Plano de Ação (Alta)" value={String(planoAlta)} sub={`de ${analise.planoAcao.length} itens`} color={planoAlta > 0 ? 'var(--danger)' : 'var(--success)'} />
