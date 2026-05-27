@@ -1,10 +1,15 @@
 /**
- * SpedFiscal — Aba de geração SPED Fiscal (EFD ICMS/IPI).
+ * SpedFiscal — Aba de geração SPED Fiscal (EFD ICMS/IPI) e SPED Contribuições
+ * (EFD PIS/COFINS).
  *
- * Blocos implementados: 0, B(vazio), C(NF-e/NFC-e), D(CT-e), E(apuração ICMS),
+ * SPED Fiscal - Blocos: 0, B(vazio), C(NF-e/NFC-e), D(CT-e), E(apuração ICMS),
  * G/H/K(vazios), 1(vazio), 9(contagem).
  *
- * Layout alvo: Guia Prático 3.2.2 / Leiaute 020 (vigente 01/01/2026).
+ * SPED Contribuições - Blocos: 0, A(NFSe), C(NF-e PIS/COFINS), D(CTe),
+ * F(vazio), M(apuração PIS/COFINS), 1, 9.
+ *
+ * Layout alvo Fiscal: Guia Prático 3.2.2 / Leiaute 020 (vigente 01/01/2026).
+ * Layout alvo Contrib: Guia Prático 1.35, versão 006 (vigente 2026).
  */
 import React, { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import type { User } from '../../types';
@@ -42,7 +47,65 @@ function getTrimestreFromCompetencia(comp: string): { inicio: string; fim: strin
     return { inicio: fmt(mesInicio), fim: fmt(mesFim) };
 }
 
-type SpedTab = 'gerar' | 'analisar';
+type SpedTab = 'gerar' | 'analisar' | 'contribuicoes';
+
+/** Renderiza bloco de mensagem (reutilizado por ambas abas) */
+function MensagemBlock({ mensagem }: { mensagem: MensagemRetorno }) {
+    return (
+        <div
+            className="p-4 rounded-xl flex items-start gap-3 animate-fade-in"
+            style={{
+                background:
+                    mensagem.tipo === 'success' ? 'rgba(34,197,94,0.1)' :
+                    mensagem.tipo === 'error' ? 'rgba(239,68,68,0.1)' :
+                    mensagem.tipo === 'warning' ? 'var(--warning-soft)' :
+                    'rgba(91,127,255,0.1)',
+                border: `1px solid ${
+                    mensagem.tipo === 'success' ? 'rgba(34,197,94,0.3)' :
+                    mensagem.tipo === 'error' ? 'rgba(239,68,68,0.3)' :
+                    mensagem.tipo === 'warning' ? 'var(--warning-soft-border)' :
+                    'rgba(91,127,255,0.3)'
+                }`,
+                borderLeft: `4px solid ${
+                    mensagem.tipo === 'success' ? 'var(--success)' :
+                    mensagem.tipo === 'error' ? 'var(--danger)' :
+                    mensagem.tipo === 'warning' ? 'var(--warning)' :
+                    'var(--accent)'
+                }`,
+            }}
+        >
+            <div className="flex-1">
+                <p className="text-sm font-bold" style={{
+                    color: mensagem.tipo === 'success' ? 'var(--success)' :
+                           mensagem.tipo === 'error' ? 'var(--danger)' :
+                           mensagem.tipo === 'warning' ? 'var(--warning)' :
+                           'var(--accent)',
+                }}>
+                    {mensagem.titulo}
+                </p>
+                {mensagem.detalhes && (
+                    <p className="text-xs mt-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        {mensagem.detalhes}
+                    </p>
+                )}
+                {mensagem.extras && (
+                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {mensagem.extras.map(e => (
+                            <div key={e.label} className="p-2 rounded" style={{ background: 'var(--bg-card)' }}>
+                                <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                                    {e.label}
+                                </p>
+                                <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                                    {e.value}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
 
 const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [spedTab, setSpedTab] = useState<SpedTab>('gerar');
@@ -53,6 +116,10 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [escopo, setEscopo] = useState<Escopo>('mensal');
     const [gerando, setGerando] = useState(false);
     const [mensagem, setMensagem] = useState<MensagemRetorno | null>(null);
+    // Contribuições state
+    const [gerandoContrib, setGerandoContrib] = useState(false);
+    const [mensagemContrib, setMensagemContrib] = useState<MensagemRetorno | null>(null);
+    const [competenciaContrib, setCompetenciaContrib] = useState<string>(getCompetenciaAtual());
 
     useEffect(() => {
         let alive = true;
@@ -136,7 +203,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 return;
             }
 
-            // ─── Download do arquivo ───
+            // Download do arquivo
             const blob = await resp.blob();
             const filename = (() => {
                 const cd = resp.headers.get('Content-Disposition') || '';
@@ -152,7 +219,6 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            // Stats e warnings (se vieram nos headers)
             let stats = null as null | { notas: number; itens: number; participantes: number; linhas: number };
             try {
                 const raw = resp.headers.get('X-SPED-Stats');
@@ -194,6 +260,118 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
     };
 
+    const handleGerarContrib = async () => {
+        if (!empresaId) {
+            setMensagemContrib({ tipo: 'error', titulo: 'Selecione uma empresa.' });
+            return;
+        }
+
+        setGerandoContrib(true);
+        setMensagemContrib(null);
+
+        try {
+            const token = await auth?.currentUser?.getIdToken();
+            if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+
+            const body = { empresaId, competencia: competenciaContrib };
+
+            const resp = await fetch('/api/admin/sped-contrib/gerar', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify(body),
+            });
+
+            if (resp.status === 400) {
+                const data = await resp.json();
+                if (data.error === 'DADOS_FISCAIS_INCOMPLETOS') {
+                    setMensagemContrib({
+                        tipo: 'warning',
+                        titulo: 'Dados Fiscais incompletos',
+                        detalhes: data.message,
+                    });
+                    return;
+                }
+                setMensagemContrib({
+                    tipo: 'error',
+                    titulo: 'Erro de validação',
+                    detalhes: data.message || data.error,
+                });
+                return;
+            }
+
+            if (!resp.ok) {
+                let msg = `HTTP ${resp.status}`;
+                try {
+                    const data = await resp.json();
+                    msg = data.message || data.error || msg;
+                } catch { /* nao eh JSON */ }
+                setMensagemContrib({ tipo: 'error', titulo: 'Erro ao gerar SPED Contribuições', detalhes: msg });
+                return;
+            }
+
+            const blob = await resp.blob();
+            const filename = (() => {
+                const cd = resp.headers.get('Content-Disposition') || '';
+                const m = cd.match(/filename="([^"]+)"/);
+                return m ? m[1] : 'SPED_Contribuicoes.txt';
+            })();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            let stats = null as null | { notas: number; itens: number; participantes: number; linhas: number; regimeApuracao?: string };
+            try {
+                const raw = resp.headers.get('X-SPED-Stats');
+                if (raw) stats = JSON.parse(decodeURIComponent(raw));
+            } catch { /* ignora */ }
+
+            let warnings: string[] = [];
+            try {
+                const raw = resp.headers.get('X-SPED-Warnings');
+                if (raw) warnings = JSON.parse(decodeURIComponent(raw));
+            } catch { /* ignora */ }
+
+            const regimeLabel = stats?.regimeApuracao === '1' ? 'Não-cumulativo'
+                : stats?.regimeApuracao === '3' ? 'Ambos' : 'Cumulativo';
+
+            const extras = stats ? [
+                { label: 'Notas processadas', value: String(stats.notas) },
+                { label: 'Itens únicos', value: String(stats.itens) },
+                { label: 'Participantes', value: String(stats.participantes) },
+                { label: 'Linhas no arquivo', value: String(stats.linhas) },
+                { label: 'Regime PIS/COFINS', value: regimeLabel },
+            ] : undefined;
+
+            setMensagemContrib({
+                tipo: warnings.length ? 'warning' : 'success',
+                titulo: warnings.length
+                    ? `SPED Contribuições gerado com avisos: ${filename}`
+                    : `SPED Contribuições gerado: ${filename}`,
+                detalhes: warnings.length ? warnings.join(' — ') : 'Download concluído.',
+                extras,
+            });
+            if (onShowToast && !warnings.length) {
+                onShowToast(`SPED Contribuições "${filename}" gerado com sucesso!`);
+            }
+        } catch (err: any) {
+            setMensagemContrib({
+                tipo: 'error',
+                titulo: 'Erro de comunicação',
+                detalhes: err?.message || 'Falha desconhecida',
+            });
+        } finally {
+            setGerandoContrib(false);
+        }
+    };
+
     return (
         <div className="space-y-6 animate-fade-in">
             {/* Header */}
@@ -207,13 +385,15 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <div className="flex items-start justify-between flex-wrap gap-4">
                     <div>
                         <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                            SPED Fiscal
+                            {spedTab === 'contribuicoes' ? 'SPED Contribuições' : 'SPED Fiscal'}
                         </h2>
                         <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-                            EFD ICMS/IPI — Guia Prático 3.2.2 / Leiaute 020
+                            {spedTab === 'contribuicoes'
+                                ? 'EFD PIS/COFINS — Guia Prático 1.35 / Versão 006'
+                                : 'EFD ICMS/IPI — Guia Prático 3.2.2 / Leiaute 020'}
                         </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                         <button
                             onClick={() => setSpedTab('gerar')}
                             className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
@@ -223,7 +403,18 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 border: `1px solid ${spedTab === 'gerar' ? 'var(--accent)' : 'var(--border-default)'}`,
                             }}
                         >
-                            Gerar SPED
+                            Gerar SPED Fiscal
+                        </button>
+                        <button
+                            onClick={() => setSpedTab('contribuicoes')}
+                            className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
+                            style={{
+                                background: spedTab === 'contribuicoes' ? 'var(--accent)' : 'var(--bg-card)',
+                                color: spedTab === 'contribuicoes' ? '#fff' : 'var(--text-muted)',
+                                border: `1px solid ${spedTab === 'contribuicoes' ? 'var(--accent)' : 'var(--border-default)'}`,
+                            }}
+                        >
+                            SPED Contribuições
                         </button>
                         <button
                             onClick={() => setSpedTab('analisar')}
@@ -241,7 +432,9 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full"
                         style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
                     >
-                        Blocos 0 + C + D + E + 9
+                        {spedTab === 'contribuicoes'
+                            ? 'Blocos 0 + A + C + D + F + M + 1 + 9'
+                            : 'Blocos 0 + C + D + E + 9'}
                     </span>
                 </div>
             </div>
@@ -252,8 +445,8 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 </Suspense>
             )}
 
+            {/* ═══ SPED FISCAL (EFD ICMS/IPI) ═══ */}
             {spedTab === 'gerar' && <>
-            {/* Lista de empresas elegíveis */}
             <div
                 className="p-5 rounded-xl"
                 style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}
@@ -307,7 +500,6 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 )}
             </div>
 
-            {/* Período */}
             <div
                 className="p-5 rounded-xl"
                 style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}
@@ -372,7 +564,6 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 </div>
             </div>
 
-            {/* Botão Gerar */}
             <div className="flex justify-center">
                 <button
                     onClick={handleGerar}
@@ -389,63 +580,8 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 </button>
             </div>
 
-            {/* Mensagem de retorno */}
-            {mensagem && (
-                <div
-                    className="p-4 rounded-xl flex items-start gap-3 animate-fade-in"
-                    style={{
-                        background:
-                            mensagem.tipo === 'success' ? 'rgba(34,197,94,0.1)' :
-                            mensagem.tipo === 'error' ? 'rgba(239,68,68,0.1)' :
-                            mensagem.tipo === 'warning' ? 'var(--warning-soft)' :
-                            'rgba(91,127,255,0.1)',
-                        border: `1px solid ${
-                            mensagem.tipo === 'success' ? 'rgba(34,197,94,0.3)' :
-                            mensagem.tipo === 'error' ? 'rgba(239,68,68,0.3)' :
-                            mensagem.tipo === 'warning' ? 'var(--warning-soft-border)' :
-                            'rgba(91,127,255,0.3)'
-                        }`,
-                        borderLeft: `4px solid ${
-                            mensagem.tipo === 'success' ? 'var(--success)' :
-                            mensagem.tipo === 'error' ? 'var(--danger)' :
-                            mensagem.tipo === 'warning' ? 'var(--warning)' :
-                            'var(--accent)'
-                        }`,
-                    }}
-                >
-                    <div className="flex-1">
-                        <p className="text-sm font-bold" style={{
-                            color: mensagem.tipo === 'success' ? 'var(--success)' :
-                                   mensagem.tipo === 'error' ? 'var(--danger)' :
-                                   mensagem.tipo === 'warning' ? 'var(--warning)' :
-                                   'var(--accent)',
-                        }}>
-                            {mensagem.titulo}
-                        </p>
-                        {mensagem.detalhes && (
-                            <p className="text-xs mt-1.5" style={{ color: 'var(--text-secondary)' }}>
-                                {mensagem.detalhes}
-                            </p>
-                        )}
-                        {mensagem.extras && (
-                            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
-                                {mensagem.extras.map(e => (
-                                    <div key={e.label} className="p-2 rounded" style={{ background: 'var(--bg-card)' }}>
-                                        <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-                                            {e.label}
-                                        </p>
-                                        <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-                                            {e.value}
-                                        </p>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
+            {mensagem && <MensagemBlock mensagem={mensagem} />}
 
-            {/* Aviso da fase atual */}
             <div
                 className="p-4 rounded-xl"
                 style={{
@@ -464,6 +600,135 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     <strong className="block mt-2">Pendente Fase 2:</strong>
                     Bloco C (mercadorias - notas item-a-item) e Bloco E (apuração ICMS/IPI).
                     Por enquanto, o SPED gerado <strong>NÃO</strong> deve ser entregue à PVA — use para validação visual.
+                </p>
+            </div>
+            </>}
+
+            {/* ═══ SPED CONTRIBUIÇÕES (EFD PIS/COFINS) ═══ */}
+            {spedTab === 'contribuicoes' && <>
+            <div
+                className="p-5 rounded-xl"
+                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}
+            >
+                <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--text-secondary)' }}>
+                    1. Empresa
+                </h3>
+                {loadingEmpresas ? (
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Carregando empresas...</p>
+                ) : empresas.length === 0 ? (
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nenhuma empresa cadastrada.</p>
+                ) : (
+                    <select
+                        value={empresaId}
+                        onChange={e => { setEmpresaId(e.target.value); setMensagemContrib(null); }}
+                        className="w-full p-3 text-sm rounded-lg outline-none"
+                        style={{
+                            background: 'var(--bg-card)',
+                            border: '1px solid var(--border-default)',
+                            color: 'var(--text-primary)',
+                        }}
+                    >
+                        {empresas.map(e => (
+                            <option key={e.id} value={e.id}>
+                                {e.nome} — {formatCnpjCpf(e.cnpj)} ({e.fonte})
+                            </option>
+                        ))}
+                    </select>
+                )}
+
+                {isSimples && (
+                    <div
+                        className="mt-3 p-3 rounded-lg flex items-start gap-3"
+                        style={{
+                            background: 'var(--warning-soft)',
+                            border: '1px solid var(--warning-soft-border)',
+                            borderLeft: '4px solid var(--warning)',
+                        }}
+                    >
+                        <div className="flex-1">
+                            <p className="text-xs font-bold" style={{ color: 'var(--warning)' }}>
+                                ⚠ Verificar obrigatoriedade
+                            </p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                                Empresas do Simples Nacional geralmente <strong>não entregam EFD Contribuições</strong>.
+                                Obrigatório apenas para Lucro Presumido (cumulativo) e Lucro Real (não-cumulativo).
+                            </p>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <div
+                className="p-5 rounded-xl"
+                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}
+            >
+                <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--text-secondary)' }}>
+                    2. Competência (Mensal)
+                </h3>
+                <div>
+                    <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>
+                        Mês/Ano
+                    </label>
+                    <input
+                        type="month"
+                        value={competenciaContrib}
+                        onChange={e => { setCompetenciaContrib(e.target.value); setMensagemContrib(null); }}
+                        className="w-full p-2.5 text-sm rounded-lg outline-none"
+                        style={{
+                            background: 'var(--bg-card)',
+                            border: '1px solid var(--border-default)',
+                            color: 'var(--text-primary)',
+                        }}
+                    />
+                </div>
+
+                <div className="mt-4 p-3 rounded-lg" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+                    <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        <strong>Regime de apuração:</strong> determinado automaticamente pelo tipo da empresa.
+                        Lucro Presumido = cumulativo (PIS 0,65% / COFINS 3%).
+                        Lucro Real = não-cumulativo (PIS 1,65% / COFINS 7,6%).
+                    </p>
+                </div>
+            </div>
+
+            <div className="flex justify-center">
+                <button
+                    onClick={handleGerarContrib}
+                    disabled={gerandoContrib || !empresaId}
+                    className="btn-press px-8 py-4 text-white font-bold text-base rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ background: 'var(--accent)', minWidth: '280px' }}
+                >
+                    {gerandoContrib ? (
+                        <span className="flex items-center justify-center gap-3">
+                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Gerando...
+                        </span>
+                    ) : 'Gerar SPED Contribuições'}
+                </button>
+            </div>
+
+            {mensagemContrib && <MensagemBlock mensagem={mensagemContrib} />}
+
+            <div
+                className="p-4 rounded-xl"
+                style={{
+                    background: 'var(--accent-soft)',
+                    border: '1px solid var(--accent-soft)',
+                    borderLeft: '4px solid var(--accent)',
+                }}
+            >
+                <p className="text-xs font-bold" style={{ color: 'var(--accent)' }}>
+                    EFD Contribuições — Blocos implementados
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                    <strong>Bloco 0:</strong> Abertura, contabilista, regime (0110), estabelecimentos, participantes, itens.{' '}
+                    <strong>Bloco A:</strong> NFSe (serviços).{' '}
+                    <strong>Bloco C:</strong> NF-e com CST PIS/COFINS e alíquotas por item.{' '}
+                    <strong>Bloco D:</strong> CT-e (transporte).{' '}
+                    <strong>Bloco F:</strong> Estrutura mínima.{' '}
+                    <strong>Bloco M:</strong> Apuração PIS/COFINS (créditos não-cumulativo, contribuição devida).{' '}
+                    <strong>Bloco 1:</strong> Complemento.{' '}
+                    <strong>Bloco 9:</strong> Controle e encerramento.
                 </p>
             </div>
             </>}
