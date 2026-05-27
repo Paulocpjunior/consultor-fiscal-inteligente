@@ -108,6 +108,9 @@ export function categoriaLabel(c: CaixaPostalCategoria): string {
         dje_citacao: 'Citacao Judicial',
         dje_intimacao: 'Intimacao Judicial',
         emac_notificacao: 'Notif. Agricultura',
+        prefeitura_sp_nfse: 'NFS-e SP Recebida',
+        prefeitura_sp_iss: 'Pendencia ISS SP',
+        prefeitura_sp_comunicado: 'Comunicado Pref. SP',
     };
     return map[c] || c;
 }
@@ -125,6 +128,9 @@ export function categoriaColor(c: CaixaPostalCategoria): string {
         dje_citacao: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
         dje_intimacao: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
         emac_notificacao: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200',
+        prefeitura_sp_nfse: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200',
+        prefeitura_sp_iss: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200',
+        prefeitura_sp_comunicado: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
     };
     return map[c] || 'bg-slate-100 text-slate-700';
 }
@@ -135,6 +141,7 @@ export function isCritica(c: CaixaPostalCategoria): boolean {
         'det_notificacao', 'det_auto_infracao',
         'dec_intimacao',
         'dje_citacao', 'dje_intimacao',
+        'prefeitura_sp_iss',
     ];
     return criticas.includes(c);
 }
@@ -147,6 +154,7 @@ export function fonteLabel(f: CaixaPostalFonte | string): string {
         dec: 'DEC',
         dje: 'DJE',
         emac: 'e-MAC',
+        prefeitura_sp: 'Prefeitura SP',
         mock: 'e-CAC',
         serpro: 'e-CAC',
     };
@@ -160,6 +168,7 @@ export function fonteBadgeColor(f: CaixaPostalFonte | string): string {
         dec: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
         dje: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
         emac: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200',
+        prefeitura_sp: 'bg-sky-900/20 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200',
         mock: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
         serpro: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
     };
@@ -173,6 +182,7 @@ export function fonteDotColor(f: CaixaPostalFonte | string): string {
         dec: 'bg-emerald-500',
         dje: 'bg-violet-500',
         emac: 'bg-amber-600',
+        prefeitura_sp: 'bg-sky-800',
     };
     return map[f] || 'bg-slate-400';
 }

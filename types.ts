@@ -538,9 +538,11 @@ export type CaixaPostalCategoria =
     // DJE (Diário de Justiça Eletrônico)
     | 'dje_citacao' | 'dje_intimacao'
     // e-MAC (Ministério da Agricultura)
-    | 'emac_notificacao';
+    | 'emac_notificacao'
+    // Prefeitura SP (NFS-e e ISS)
+    | 'prefeitura_sp_nfse' | 'prefeitura_sp_iss' | 'prefeitura_sp_comunicado';
 
-export type CaixaPostalFonte = 'ecac' | 'det' | 'dec' | 'dje' | 'emac';
+export type CaixaPostalFonte = 'ecac' | 'det' | 'dec' | 'dje' | 'emac' | 'prefeitura_sp';
 
 export interface CaixaPostalMensagem {
     id: string;                  // doc id no Firestore

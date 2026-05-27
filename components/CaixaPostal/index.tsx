@@ -1,7 +1,7 @@
 /**
  * components/CaixaPostal/index.tsx
  * Dashboard global de Caixa Postal multi-canal.
- * Canais: eCAC | DET | DEC | DJE | e-MAC
+ * Canais: eCAC | DET | DEC | DJE | e-MAC | Prefeitura SP
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import type { User, CaixaPostalMensagem, CaixaPostalResumo, CaixaPostalCategoria, CaixaPostalFonte } from '../../types';
@@ -16,7 +16,7 @@ interface Props {
     onShowToast?: (msg: string) => void;
 }
 
-const FONTES: CaixaPostalFonte[] = ['ecac', 'det', 'dec', 'dje', 'emac'];
+const FONTES: CaixaPostalFonte[] = ['ecac', 'det', 'dec', 'dje', 'emac', 'prefeitura_sp'];
 
 const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [resumo, setResumo] = useState<CaixaPostalResumo | null>(null);

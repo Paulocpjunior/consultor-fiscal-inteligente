@@ -59,8 +59,10 @@ router.post('/divida-ativa', requireAuth, async (req, res) => {
 router.post('/certidoes', requireAuth, async (req, res) => {
     const cnpj = validarCnpj(req, res);
     if (!cnpj) return;
+    const uf = req.body.uf || '';
+    const codMunIBGE = req.body.codMunIBGE || '';
     try {
-        const result = await consultarCertidoes(cnpj);
+        const result = await consultarCertidoes(cnpj, { uf, codMunIBGE });
         res.json(result);
     } catch (err) {
         console.error('[nfp-compliance-routes] certidoes error:', err);
@@ -96,9 +98,11 @@ router.post('/analise-completa', requireAuth, async (req, res) => {
     const cnpj = validarCnpj(req, res);
     if (!cnpj) return;
     const regime = req.body.regime || 'lucro_presumido';
+    const uf = req.body.uf || '';
+    const codMunIBGE = req.body.codMunIBGE || '';
     try {
         const [serproResult, cndsPublicas] = await Promise.allSettled([
-            analisarEmpresaCompleta(cnpj, regime),
+            analisarEmpresaCompleta(cnpj, regime, { uf, codMunIBGE }),
             consultarCndsPublicas(cnpj),
         ]);
 

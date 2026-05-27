@@ -1540,7 +1540,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         if (!activeCnpj) return;
         setAnaliseRealLoading(true);
         try {
-            const resp = await nfpService.analisarEmpresaCompleta(activeCnpj, taxProfile?.regime || prospectRegime || 'lucro_presumido');
+            const resp = await nfpService.analisarEmpresaCompleta(activeCnpj, taxProfile?.regime || prospectRegime || 'lucro_presumido', activeUf || undefined);
             // Create or update analysis from SERPRO response
             const base = analise || createEmptyAnalise();
 

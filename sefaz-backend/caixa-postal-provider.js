@@ -3,11 +3,12 @@
 // Provider abstrato pra Caixa Postal multi-canal.
 //
 // Canais suportados:
-//   - eCAC   (Receita Federal) — SERPRO Integra Contador IC-CXPOSTAL
-//   - DET    (Domicílio Eletrônico Trabalhista) — MTE
-//   - DEC    (Domicílio Eletrônico do Contribuinte) — SEFAZ estadual
-//   - DJE    (Diário de Justiça Eletrônico) — Tribunais
-//   - e-MAC  (Ministério da Agricultura) — MAPA
+//   - eCAC          (Receita Federal) — SERPRO Integra Contador IC-CXPOSTAL
+//   - DET           (Domicílio Eletrônico Trabalhista) — MTE
+//   - DEC           (Domicílio Eletrônico do Contribuinte) — SEFAZ estadual
+//   - DJE           (Diário de Justiça Eletrônico) — Tribunais
+//   - e-MAC         (Ministério da Agricultura) — MAPA
+//   - Prefeitura SP (NFS-e e comunicados da Prefeitura de São Paulo)
 //
 // Suporta 2 modos:
 //   - 'mock'   (default): gera mensagens sintéticas pra testar UI
@@ -23,6 +24,7 @@
 // ============================================================================
 
 import { invokeIntegraContador } from './serpro-client.js';
+import { consultarNfseRecebidas } from './nfse-sp-client.js';
 
 const MODE = process.env.CAIXA_POSTAL_MODE || 'mock';
 
@@ -155,6 +157,29 @@ const MOCK_TEMPLATES_EMAC = [
     },
 ];
 
+// Prefeitura SP (NFS-e, ISS e comunicados da Fazenda Municipal)
+const MOCK_TEMPLATES_PREFEITURA_SP = [
+    {
+        categoria: 'prefeitura_sp_nfse',
+        assunto: 'Nova NFS-e recebida — Prestador CNPJ {RECIBO}',
+        remetente: 'Prefeitura de São Paulo — SF/SUREM',
+        corpo: 'Informamos que foi emitida NFS-e de serviço tomado pela sua empresa, referente à competência {COMP}. Número da NFS-e: {RECIBO}. Acesse o portal nfe.prefeitura.sp.gov.br para visualizar o documento fiscal completo e verificar a retenção de ISS na fonte, se aplicável.',
+    },
+    {
+        categoria: 'prefeitura_sp_iss',
+        assunto: 'Pendência ISS competência {COMP}',
+        remetente: 'Prefeitura de São Paulo — SF/SUREM',
+        corpo: 'Prezado contribuinte, identificamos pendência no recolhimento do ISS referente à competência {COMP}. Valor apurado: R$ 2.847,50. Regularize o pagamento através do portal da Nota Fiscal Paulistana (nfe.prefeitura.sp.gov.br) ou via DAS (Simples Nacional), conforme seu regime tributário. Fundamento: Lei Municipal 13.701/2003, art. 14.',
+        prazo: 30,
+    },
+    {
+        categoria: 'prefeitura_sp_comunicado',
+        assunto: 'Comunicado CAT/Fazenda Municipal — Atualização cadastral CCM',
+        remetente: 'Prefeitura de São Paulo — SF/SUREM',
+        corpo: 'A Secretaria Municipal da Fazenda comunica que, conforme Instrução Normativa SF/SUREM nº 15/2025, todos os contribuintes com inscrição no CCM (Cadastro de Contribuintes Mobiliários) devem atualizar seus dados cadastrais até {DATA_FUTURA}. A não atualização poderá resultar em suspensão temporária da inscrição municipal.',
+    },
+];
+
 function hashCnpj(cnpj) {
     let h = 0;
     for (const c of String(cnpj || '')) h = (h * 31 + c.charCodeAt(0)) | 0;
@@ -210,22 +235,28 @@ class MockProvider {
         return this._gerarMensagensCanal(empresaCnpj, MOCK_TEMPLATES_EMAC, 'emac', 1, 1);
     }
 
+    async listarMensagensPrefeituraSP(empresaCnpj) {
+        return this._gerarMensagensCanal(empresaCnpj, MOCK_TEMPLATES_PREFEITURA_SP, 'prefeitura_sp', 1, 3);
+    }
+
     async listarTodasMensagens(empresaCnpj, uf = 'SP') {
-        const [ecac, det, dec, dje, emac] = await Promise.all([
+        const [ecac, det, dec, dje, emac, prefSp] = await Promise.all([
             this.listarMensagens(empresaCnpj),
             this.listarMensagensDET(empresaCnpj),
             this.listarMensagensDEC(empresaCnpj, uf),
             this.listarMensagensDJE(empresaCnpj),
             this.listarMensagensEMAC(empresaCnpj),
+            this.listarMensagensPrefeituraSP(empresaCnpj),
         ]);
         return {
-            mensagens: [...ecac, ...det, ...dec, ...dje, ...emac],
+            mensagens: [...ecac, ...det, ...dec, ...dje, ...emac, ...prefSp],
             canais: {
-                ecac:  { ok: true, total: ecac.length,  status: 'integrado' },
-                det:   { ok: true, total: det.length,   status: 'integrado' },
-                dec:   { ok: true, total: dec.length,   status: 'integrado' },
-                dje:   { ok: true, total: dje.length,   status: 'integrado' },
-                emac:  { ok: true, total: emac.length,  status: 'integrado' },
+                ecac:          { ok: true, total: ecac.length,  status: 'integrado' },
+                det:           { ok: true, total: det.length,   status: 'integrado' },
+                dec:           { ok: true, total: dec.length,   status: 'integrado' },
+                dje:           { ok: true, total: dje.length,   status: 'integrado' },
+                emac:          { ok: true, total: emac.length,  status: 'integrado' },
+                prefeitura_sp: { ok: true, total: prefSp.length, status: 'integrado' },
             },
         };
     }
@@ -397,22 +428,95 @@ class SerproProvider {
         };
     }
 
+    // Prefeitura SP — Dados reais via nfse-sp-client.js (ConsultaNFeRecebidas)
+    async listarMensagensPrefeituraSP(empresaCnpj, ccmSp) {
+        const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        if (!ccmSp) {
+            return {
+                ok: true,
+                mensagens: [],
+                fonte: 'prefeitura_sp',
+                status: 'nao_integrado',
+                motivo: 'CCM (inscrição municipal SP) não configurado — configure em Cadastro da empresa',
+            };
+        }
+        try {
+            const now = new Date();
+            const dtFim = { ano: now.getFullYear(), mes: now.getMonth() + 1 };
+            // Últimos 3 meses
+            const dtInicioDate = new Date(now);
+            dtInicioDate.setMonth(dtInicioDate.getMonth() - 3);
+            const dtInicio = { ano: dtInicioDate.getFullYear(), mes: dtInicioDate.getMonth() + 1 };
+
+            const result = await consultarNfseRecebidas({
+                cnpjRemetente: cnpj,
+                inscricaoMunicipalTomador: ccmSp,
+                dtInicio,
+                dtFim,
+            });
+
+            if (!result.sucesso || result.totalNFes === 0) {
+                return [];
+            }
+
+            // Map NFS-e received into inbox messages
+            const mensagens = [];
+            for (let i = 0; i < result.totalNFes && i < 20; i++) {
+                const nfeXml = result.nfes[i] || '';
+                // Extract basic info from the NFe XML
+                const numMatch = nfeXml.match(/<NumeroNFe>(\d+)<\/NumeroNFe>/);
+                const valorMatch = nfeXml.match(/<ValorServicos>([\d.,]+)<\/ValorServicos>/);
+                const dataMatch = nfeXml.match(/<DataEmissao>(\d{4}-\d{2}-\d{2})/);
+                const prestadorMatch = nfeXml.match(/<RazaoSocialPrestador>([^<]+)<\/RazaoSocialPrestador>/);
+
+                const numero = numMatch ? numMatch[1] : `${i + 1}`;
+                const valor = valorMatch ? valorMatch[1] : '—';
+                const dataEmissao = dataMatch ? dataMatch[1] : new Date().toISOString().slice(0, 10);
+                const prestador = prestadorMatch ? prestadorMatch[1] : 'Prestador SP';
+
+                mensagens.push({
+                    mensagemId: `NFSE-SP-${cnpj}-${numero}`,
+                    empresaCnpj: cnpj,
+                    assunto: `Nova NFS-e recebida nº ${numero} — ${prestador} (R$ ${valor})`,
+                    remetente: 'Prefeitura de São Paulo — SF/SUREM',
+                    categoria: 'prefeitura_sp_nfse',
+                    corpo: `NFS-e nº ${numero} emitida por ${prestador} em ${dataEmissao}. Valor dos serviços: R$ ${valor}. Verifique a retenção de ISS aplicável no portal nfe.prefeitura.sp.gov.br.`,
+                    dataEnvio: `${dataEmissao}T12:00:00-03:00`,
+                    dataLeitura: null,
+                    fonte: 'prefeitura_sp',
+                });
+            }
+            return mensagens;
+        } catch (err) {
+            console.warn(`[caixa-postal] Prefeitura SP falhou pra ${cnpj}: ${err.message}`);
+            return {
+                ok: true,
+                mensagens: [],
+                fonte: 'prefeitura_sp',
+                status: 'erro',
+                motivo: `Erro ao consultar NFS-e SP: ${err.message}`,
+            };
+        }
+    }
+
     async listarTodasMensagens(empresaCnpj, uf = 'SP') {
-        const [ecac, det, decResult, djeResult, emacResult] = await Promise.all([
+        const [ecac, det, decResult, djeResult, emacResult, prefSpResult] = await Promise.all([
             this.listarMensagens(empresaCnpj),
             this.listarMensagensDET(empresaCnpj),
             this.listarMensagensDEC(empresaCnpj, uf),
             this.listarMensagensDJE(empresaCnpj),
             this.listarMensagensEMAC(empresaCnpj),
+            this.listarMensagensPrefeituraSP(empresaCnpj),
         ]);
 
-        // DEC, DJE, e-MAC retornam objeto { ok, mensagens, ... } quando não integrados
+        // DEC, DJE, e-MAC, Prefeitura SP retornam objeto { ok, mensagens, ... } quando não integrados
         const decMsgs = Array.isArray(decResult) ? decResult : (decResult.mensagens || []);
         const djeMsgs = Array.isArray(djeResult) ? djeResult : (djeResult.mensagens || []);
         const emacMsgs = Array.isArray(emacResult) ? emacResult : (emacResult.mensagens || []);
+        const prefSpMsgs = Array.isArray(prefSpResult) ? prefSpResult : (prefSpResult.mensagens || []);
 
         return {
-            mensagens: [...ecac, ...det, ...decMsgs, ...djeMsgs, ...emacMsgs],
+            mensagens: [...ecac, ...det, ...decMsgs, ...djeMsgs, ...emacMsgs, ...prefSpMsgs],
             canais: {
                 ecac: { ok: true, total: ecac.length, status: 'integrado' },
                 det:  { ok: true, total: det.length, status: 'integrado' },
@@ -425,6 +529,9 @@ class SerproProvider {
                 emac: Array.isArray(emacResult)
                     ? { ok: true, total: emacResult.length, status: 'integrado' }
                     : { ok: true, total: 0, status: emacResult.status || 'nao_integrado', motivo: emacResult.motivo },
+                prefeitura_sp: Array.isArray(prefSpResult)
+                    ? { ok: true, total: prefSpResult.length, status: 'integrado' }
+                    : { ok: true, total: 0, status: prefSpResult.status || 'nao_integrado', motivo: prefSpResult.motivo },
             },
         };
     }
@@ -477,6 +584,10 @@ class SerproProvider {
             else categoria = 'dje_intimacao';
         } else if (fonte === 'emac') {
             categoria = 'emac_notificacao';
+        } else if (fonte === 'prefeitura_sp') {
+            if (/nfs-?e|nota fiscal/i.test(assunto)) categoria = 'prefeitura_sp_nfse';
+            else if (/iss|pend[eê]ncia|cobran/i.test(assunto)) categoria = 'prefeitura_sp_iss';
+            else categoria = 'prefeitura_sp_comunicado';
         } else {
             // eCAC original
             if (/intima|notifica/.test(assunto)) categoria = 'intimacao';
@@ -526,4 +637,5 @@ export const CANAIS_DISPONIVEIS = [
     { id: 'dec',  nome: 'DEC',    descricao: 'Domicílio Eletrônico do Contribuinte',    cor: 'green',  portal: 'https://dec.fazenda.sp.gov.br' },
     { id: 'dje',  nome: 'DJE',    descricao: 'Diário de Justiça Eletrônico',            cor: 'purple', portal: 'https://dje.trt2.jus.br' },
     { id: 'emac', nome: 'e-MAC',  descricao: 'Ministério da Agricultura — MAPA',        cor: 'brown',  portal: 'https://sistemasweb.agricultura.gov.br' },
+    { id: 'prefeitura_sp', nome: 'Prefeitura SP', descricao: 'NFS-e e comunicados da Prefeitura de São Paulo', cor: '#1e3a5f', portal: 'https://nfe.prefeitura.sp.gov.br' },
 ];

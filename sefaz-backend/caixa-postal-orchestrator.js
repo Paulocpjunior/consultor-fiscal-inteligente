@@ -1,7 +1,7 @@
 // ============================================================================
 // sefaz-backend/caixa-postal-orchestrator.js
 // Sincroniza mensagens entre o provider (mock/SERPRO) e o Firestore.
-// Suporta multi-canal: eCAC, DET, DEC, DJE, e-MAC.
+// Suporta multi-canal: eCAC, DET, DEC, DJE, e-MAC, Prefeitura SP.
 // ============================================================================
 
 import admin from 'firebase-admin';
@@ -229,7 +229,7 @@ export async function listarMensagensLocais({ empresaCnpj, naoLidas, categoria, 
  */
 export async function getResumoGlobal(cnpjsPermitidos = null) {
     const db = fa().firestore();
-    const FONTES = ['ecac', 'det', 'dec', 'dje', 'emac'];
+    const FONTES = ['ecac', 'det', 'dec', 'dje', 'emac', 'prefeitura_sp'];
 
     // 23/05 Patch B: usa aggregation queries (.count()) em vez de baixar todos
     // os docs. 4091 reads -> ~6 reads por chamada. Latencia ~50ms vs ~2s.
@@ -241,7 +241,8 @@ export async function getResumoGlobal(cnpjsPermitidos = null) {
                       'det_notificacao', 'det_auto_infracao',
                       'dec_intimacao', 'dec_comunicado',
                       'dje_citacao', 'dje_intimacao',
-                      'emac_notificacao'];
+                      'emac_notificacao',
+                      'prefeitura_sp_nfse', 'prefeitura_sp_iss', 'prefeitura_sp_comunicado'];
 
         // Counts em paralelo: total geral + não-lidas por categoria + não-lidas por fonte
         const safeCount = (q) => q.count().get().catch(() => ({ data: () => ({ count: 0 }) }));

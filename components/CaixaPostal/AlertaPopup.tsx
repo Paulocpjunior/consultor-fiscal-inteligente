@@ -63,7 +63,7 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
     const djeCit = (resumo.naoLidasPorCategoria.dje_citacao || 0) + (resumo.naoLidasPorCategoria.dje_intimacao || 0);
 
     // Per-fonte breakdown
-    const fontes: CaixaPostalFonte[] = ['ecac', 'det', 'dec', 'dje', 'emac'];
+    const fontes: CaixaPostalFonte[] = ['ecac', 'det', 'dec', 'dje', 'emac', 'prefeitura_sp'];
     const naoLidasPorFonte = resumo.naoLidasPorFonte || {};
 
     return (
