@@ -16,6 +16,7 @@ import {
     consultarDctfWeb,
     consultarCrfFgtsSerpro,
 } from './nfp-compliance-provider.js';
+import { consultarCndsPublicas } from './cnd-publica-provider.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -53,18 +54,31 @@ router.post('/fgts/recolhimento', requireCrossProjectAuth, async (req, res) => {
 });
 
 // FGTS - Consulta CRF (Certificado de Regularidade)
+// Tenta SERPRO primeiro; se falhar, cai no fallback de consulta pública (Caixa).
 // POST /api/dp-integration/fgts/crf
 // Body: { cnpj }
 router.post('/fgts/crf', requireCrossProjectAuth, async (req, res) => {
     const cnpj = validarCnpj(req, res);
     if (!cnpj) return;
+    let result;
     try {
-        const result = await consultarCrfFgtsSerpro(cnpj);
-        return res.json(result);
-    } catch (err) {
-        console.error('[dp-integration/fgts/crf]', err);
-        return res.status(500).json({ error: err.message });
+        result = await consultarCrfFgtsSerpro(cnpj);
+    } catch {
+        result = { ok: false, status: 'indisponivel' };
     }
+    // Se SERPRO falhou ou indisponivel, tenta consulta pública
+    if (!result?.ok || result?.status === 'indisponivel' || result?.status === 'nao_consultada') {
+        try {
+            const publicas = await consultarCndsPublicas(cnpj);
+            const crfPub = (publicas?.certidoes || []).find(c => c.tipo?.includes('CRF') || c.esfera === 'fgts');
+            if (crfPub && crfPub.status !== 'indisponivel') {
+                return res.json({ ...crfPub, fonte: 'consulta_publica' });
+            }
+        } catch (err) {
+            console.warn('[dp-integration/fgts/crf] fallback publico falhou:', err.message);
+        }
+    }
+    return res.json(result || { ok: false, status: 'indisponivel' });
 });
 
 // eSocial - Status de fechamento mensal
