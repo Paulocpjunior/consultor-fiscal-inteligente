@@ -60,13 +60,23 @@ const ALLOWED_ORIGINS = [
 // CORS PRECISA estar antes dos routers, senão não é aplicado a eles
 app.use(cors({
     origin: (origin, callback) => {
+        console.log('[CORS] check origin:', origin);
         if (!origin) return callback(null, true);
-        if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-        if (/^https:\/\/[a-z0-9-]+\.github\.io$/i.test(origin)) return callback(null, true);
-        if (/^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/i.test(origin)) return callback(null, true);
+        if (ALLOWED_ORIGINS.includes(origin)) {
+            console.log('[CORS] allowed via allowlist:', origin);
+            return callback(null, true);
+        }
+        if (/^https:\/\/[a-z0-9-]+\.github\.io$/i.test(origin)) {
+            console.log('[CORS] allowed via github.io regex:', origin);
+            return callback(null, true);
+        }
+        if (/^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/i.test(origin)) {
+            console.log('[CORS] allowed via firebase regex:', origin);
+            return callback(null, true);
+        }
         if (origin.endsWith('.run.app')) return callback(null, true);
         if (/^http:\/\/localhost:\d+$/.test(origin)) return callback(null, true);
-        console.warn('[CORS] Origin rejeitado:', origin);
+        console.warn('[CORS] REJECTED:', origin);
         callback(null, false);
     },
     credentials: true,
