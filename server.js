@@ -42,6 +42,37 @@ const app = express();
 // Cloud Run roda atrás de 1 proxy (Google Front End)
 // Necessário pra express-rate-limit ler X-Forwarded-For correto
 app.set('trust proxy', 1);
+
+const PORT = process.env.PORT || 8080;
+
+const ALLOWED_ORIGINS = [
+    process.env.CORS_ORIGIN,
+    'https://consultorfiscalapp.web.app',
+    'https://consultorfiscalapp.firebaseapp.com',
+    // Projeto Consultor-DP-Folhapagamentos (deploy separado, mesma org/domínio).
+    'https://paulocpjunior.github.io',
+    'https://consultor-dp-folha.web.app',
+    'https://consultor-dp-folha.firebaseapp.com',
+    'http://localhost:3000',
+    'http://localhost:5173',
+].filter(Boolean);
+
+// CORS PRECISA estar antes dos routers, senão não é aplicado a eles
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+        if (/^https:\/\/[a-z0-9-]+\.github\.io$/i.test(origin)) return callback(null, true);
+        if (/^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/i.test(origin)) return callback(null, true);
+        if (origin.endsWith('.run.app')) return callback(null, true);
+        if (/^http:\/\/localhost:\d+$/.test(origin)) return callback(null, true);
+        console.warn('[CORS] Origin rejeitado:', origin);
+        callback(null, false);
+    },
+    credentials: true,
+}));
+
+// Routers montados APÓS o middleware CORS
 app.use('/api/admin/sefaz', sefazCertRouter);
 app.use('/api/admin/sefaz', sefazSyncRouter);
 app.use('/api/admin/sefaz', sefazManifestoRouter);
@@ -64,40 +95,6 @@ app.use('/api/admin/recuperacao', recuperacaoRouter);
 app.use('/api/admin/nfp-compliance', nfpComplianceRouter);
 app.use('/api/dp-integration', dpIntegrationRouter);
 app.use('/api/admin/sharepoint', sharepointAutoSyncRouter);
-
-const PORT = process.env.PORT || 8080;
-
-const ALLOWED_ORIGINS = [
-    process.env.CORS_ORIGIN,
-    'https://consultorfiscalapp.web.app',
-    'https://consultorfiscalapp.firebaseapp.com',
-    // Projeto Consultor-DP-Folhapagamentos (deploy separado, mesma org/domínio).
-    'https://paulocpjunior.github.io',
-    'https://consultor-dp-folha.web.app',
-    'https://consultor-dp-folha.firebaseapp.com',
-    'http://localhost:3000',
-    'http://localhost:5173',
-].filter(Boolean);
-
-app.use(cors({
-    origin: (origin, callback) => {
-        // Sem origin (server-to-server) — permite
-        if (!origin) return callback(null, true);
-        // Origins permitidos explícitos
-        if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-        // GitHub Pages (qualquer subdomínio paulocpjunior)
-        if (/^https:\/\/[a-z0-9-]+\.github\.io$/i.test(origin)) return callback(null, true);
-        // Firebase Hosting (web.app e firebaseapp.com)
-        if (/^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/i.test(origin)) return callback(null, true);
-        // Cloud Run (run.app)
-        if (origin.endsWith('.run.app')) return callback(null, true);
-        // Localhost dev
-        if (/^http:\/\/localhost:\d+$/.test(origin)) return callback(null, true);
-        console.warn('[CORS] Origin rejeitado:', origin);
-        callback(null, false);
-    },
-    credentials: true,
-}));
 
 app.use(helmet({
     contentSecurityPolicy: {
