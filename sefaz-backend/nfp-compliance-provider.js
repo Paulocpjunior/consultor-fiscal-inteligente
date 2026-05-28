@@ -169,7 +169,7 @@ function computarCompAnterior(comp) {
 
 // ─── Consultas individuais por sistema SERPRO ──────────────────────────────
 
-async function consultarDctfWeb(cnpj, competencia) {
+export async function consultarDctfWeb(cnpj, competencia) {
     console.log(TAG, 'consultarDctfWeb', cnpj, competencia);
     if (DRY_RUN) {
         console.log(TAG, 'DRY_RUN ativo — retornando mock DCTFWeb');
@@ -194,7 +194,7 @@ async function consultarDctfWeb(cnpj, competencia) {
     }
 }
 
-async function consultarESocial(cnpj, competencia) {
+export async function consultarESocial(cnpj, competencia) {
     console.log(TAG, 'consultarESocial', cnpj, competencia);
     if (DRY_RUN) {
         console.log(TAG, 'DRY_RUN ativo — retornando mock eSocial');
@@ -220,7 +220,7 @@ async function consultarESocial(cnpj, competencia) {
     }
 }
 
-async function consultarFgtsDigital(cnpj, competencia) {
+export async function consultarFgtsDigital(cnpj, competencia) {
     console.log(TAG, 'consultarFgtsDigital', cnpj, competencia);
     if (DRY_RUN) {
         console.log(TAG, 'DRY_RUN ativo — retornando mock FGTS Digital');
@@ -554,7 +554,7 @@ async function consultarCndFederalSerpro(cnpj) {
  * CRF (Certificado de Regularidade do FGTS) — Caixa Econômica Federal.
  * SERPRO idSistema: FGTS / CONSULTARCRF
  */
-async function consultarCrfFgtsSerpro(cnpj) {
+export async function consultarCrfFgtsSerpro(cnpj) {
     console.log(TAG, 'consultarCrfFgtsSerpro', cnpj);
     try {
         const resp = await invokeIntegraContador({
