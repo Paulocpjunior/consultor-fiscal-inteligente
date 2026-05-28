@@ -9,7 +9,7 @@
 // ============================================================================
 
 import express from 'express';
-import { requireAuth } from './require-admin.js';
+import { requireCrossProjectAuth } from './require-cross-project-auth.js';
 import {
     consultarFgtsDigital,
     consultarESocial,
@@ -36,7 +36,7 @@ function validarCnpj(req, res) {
 // FGTS - Consulta recolhimento por competência
 // POST /api/dp-integration/fgts/recolhimento
 // Body: { cnpj, competencia: 'YYYY-MM' }
-router.post('/fgts/recolhimento', requireAuth, async (req, res) => {
+router.post('/fgts/recolhimento', requireCrossProjectAuth, async (req, res) => {
     const cnpj = validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia;
@@ -55,7 +55,7 @@ router.post('/fgts/recolhimento', requireAuth, async (req, res) => {
 // FGTS - Consulta CRF (Certificado de Regularidade)
 // POST /api/dp-integration/fgts/crf
 // Body: { cnpj }
-router.post('/fgts/crf', requireAuth, async (req, res) => {
+router.post('/fgts/crf', requireCrossProjectAuth, async (req, res) => {
     const cnpj = validarCnpj(req, res);
     if (!cnpj) return;
     try {
@@ -70,7 +70,7 @@ router.post('/fgts/crf', requireAuth, async (req, res) => {
 // eSocial - Status de fechamento mensal
 // POST /api/dp-integration/esocial/status
 // Body: { cnpj, competencia: 'YYYY-MM' }
-router.post('/esocial/status', requireAuth, async (req, res) => {
+router.post('/esocial/status', requireCrossProjectAuth, async (req, res) => {
     const cnpj = validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia;
@@ -87,7 +87,7 @@ router.post('/esocial/status', requireAuth, async (req, res) => {
 // DCTFWeb - Status de transmissão
 // POST /api/dp-integration/dctfweb/status
 // Body: { cnpj, competencia: 'YYYY-MM' }
-router.post('/dctfweb/status', requireAuth, async (req, res) => {
+router.post('/dctfweb/status', requireCrossProjectAuth, async (req, res) => {
     const cnpj = validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia;
@@ -104,7 +104,7 @@ router.post('/dctfweb/status', requireAuth, async (req, res) => {
 // Batch query — all DP-relevant data for a company in a single call.
 // POST /api/dp-integration/empresa-completo
 // Body: { cnpj, competencia: 'YYYY-MM' }
-router.post('/empresa-completo', requireAuth, async (req, res) => {
+router.post('/empresa-completo', requireCrossProjectAuth, async (req, res) => {
     const cnpj = validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia || new Date().toISOString().slice(0, 7);
