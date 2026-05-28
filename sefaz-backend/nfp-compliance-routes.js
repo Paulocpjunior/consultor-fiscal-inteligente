@@ -126,7 +126,6 @@ router.post('/analise-completa', requireAuth, async (req, res) => {
             } else {
                 // SERPRO returned data — use public as fallback for 'indisponivel' entries
                 for (const serproCnd of result.certidoes.certidoes) {
-                    if (serproCnd.status !== 'indisponivel') continue;
                     // Find matching public CND by esfera mapping
                     const esf = String(serproCnd.esfera || '').toLowerCase();
                     const pub = (cnds.certidoes || []).find(p => {
@@ -137,6 +136,11 @@ router.post('/analise-completa', requireAuth, async (req, res) => {
                         if (esf === pe) return true;
                         return false;
                     });
+                    // SEMPRE anexa portalUrl quando disponível (para link manual)
+                    if (pub?.portalUrl) {
+                        serproCnd.portalUrl = pub.portalUrl;
+                    }
+                    if (serproCnd.status !== 'indisponivel') continue;
                     if (pub && pub.status !== 'indisponivel') {
                         // Replace SERPRO indisponivel with public data
                         serproCnd.status = pub.status;
