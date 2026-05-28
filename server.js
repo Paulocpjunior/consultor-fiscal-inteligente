@@ -57,22 +57,13 @@ const ALLOWED_ORIGINS = [
     'http://localhost:5173',
 ].filter(Boolean);
 
-// CORS manual — sempre permite (mas só responde se origin presente)
-app.use((req, res, next) => {
-    console.error('[REQ]', req.method, req.path, 'origin=' + (req.headers.origin || 'none'));
-    const origin = req.headers.origin;
-    if (origin) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With, X-Cron-Secret');
-        res.setHeader('Vary', 'Origin');
-    }
-    if (req.method === 'OPTIONS') {
-        return res.status(204).end();
-    }
-    next();
-});
+// CORS — reflete origin recebido (validação fica no requireAuth, não no CORS)
+app.use(cors({
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type', 'X-Requested-With', 'X-Cron-Secret'],
+}));
 
 // Routers montados APÓS o middleware CORS
 app.use('/api/admin/sefaz', sefazCertRouter);
