@@ -30,6 +30,17 @@ function cnpjLimpo(cnpj) {
     return (cnpj || '').replace(/\D/g, '').padStart(14, '0').slice(0, 14);
 }
 
+function mensagemErroLimpa(errMsg) {
+    const s = String(errMsg || '');
+    if (/ICGERENCIADOR-052|sistema ou serviço inválida/i.test(s)) {
+        return 'Serviço não disponível no plano SERPRO contratado';
+    }
+    if (s.startsWith('SERPRO ')) {
+        return 'Serviço SERPRO indisponível no momento';
+    }
+    return 'Serviço indisponível';
+}
+
 // ─── Mock Data (SERPRO_DRY_RUN=1) ───────────────────────────────────────────
 
 function mockSituacaoFiscal(cnpj) {
@@ -190,7 +201,7 @@ export async function consultarDctfWeb(cnpj, competencia) {
         };
     } catch (err) {
         console.error(TAG, 'Erro consultarDctfWeb:', err.message);
-        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: mensagemErroLimpa(err.message) };
     }
 }
 
@@ -216,7 +227,7 @@ export async function consultarESocial(cnpj, competencia) {
         };
     } catch (err) {
         console.error(TAG, 'Erro consultarESocial:', err.message);
-        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: mensagemErroLimpa(err.message) };
     }
 }
 
@@ -243,7 +254,10 @@ export async function consultarFgtsDigital(cnpj, competencia) {
         };
     } catch (err) {
         console.error(TAG, 'Erro consultarFgtsDigital:', err.message);
-        return { ok: false, regular: false, depositoDevido: 0, depositoRealizado: 0, situacao: 'indisponivel', erro: err.message };
+        const msgLimpa = /ICGERENCIADOR-052|sistema ou serviço inválida/i.test(String(err.message || ''))
+            ? 'FGTS Digital não disponível no plano SERPRO contratado'
+            : 'FGTS Digital indisponível no momento';
+        return { ok: false, regular: false, depositoDevido: 0, depositoRealizado: 0, situacao: 'indisponivel', erro: msgLimpa };
     }
 }
 
@@ -268,7 +282,7 @@ async function consultarSpedFiscal(cnpj, competencia) {
         };
     } catch (err) {
         console.error(TAG, 'Erro consultarSpedFiscal:', err.message);
-        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: mensagemErroLimpa(err.message) };
     }
 }
 
@@ -293,7 +307,7 @@ async function consultarSpedContribuicoes(cnpj, competencia) {
         };
     } catch (err) {
         console.error(TAG, 'Erro consultarSpedContribuicoes:', err.message);
-        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: mensagemErroLimpa(err.message) };
     }
 }
 
@@ -318,7 +332,7 @@ async function consultarEcd(cnpj, anoCalendario) {
         };
     } catch (err) {
         console.error(TAG, 'Erro consultarEcd:', err.message);
-        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: mensagemErroLimpa(err.message) };
     }
 }
 
@@ -343,7 +357,7 @@ async function consultarEcf(cnpj, anoCalendario) {
         };
     } catch (err) {
         console.error(TAG, 'Erro consultarEcf:', err.message);
-        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: mensagemErroLimpa(err.message) };
     }
 }
 
@@ -368,7 +382,7 @@ async function consultarDas(cnpj, competencia) {
         };
     } catch (err) {
         console.error(TAG, 'Erro consultarDas:', err.message);
-        return { ok: false, gerado: false, valorDas: 0, pago: false, situacao: 'indisponivel', erro: err.message };
+        return { ok: false, gerado: false, valorDas: 0, pago: false, situacao: 'indisponivel', erro: mensagemErroLimpa(err.message) };
     }
 }
 
@@ -392,7 +406,7 @@ async function consultarDefis(cnpj, anoCalendario) {
         };
     } catch (err) {
         console.error(TAG, 'Erro consultarDefis:', err.message);
-        return { ok: false, entregue: false, situacao: 'indisponivel', erro: err.message };
+        return { ok: false, entregue: false, situacao: 'indisponivel', erro: mensagemErroLimpa(err.message) };
     }
 }
 
