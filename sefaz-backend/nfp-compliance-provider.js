@@ -509,11 +509,17 @@ function extrairCertidao(settled, esfera, orgao, tipo) {
     const reason = settled.status === 'rejected'
         ? settled.reason?.message
         : settled.value?.erro || settled.value?.motivo || 'Serviço indisponível';
+    // Mensagem limpa para o usuário (esconde JSON do SERPRO)
+    const motivoLimpo = /ICGERENCIADOR-052|sistema ou serviço inválida/i.test(String(reason || ''))
+        ? 'Serviço não disponível no plano SERPRO contratado'
+        : (typeof reason === 'string' && reason.startsWith('SERPRO ')
+            ? 'Serviço SERPRO indisponível no momento'
+            : (reason || 'Erro ao consultar via SERPRO'));
     return {
         esfera, orgao, tipo,
         status: 'indisponivel',
         validade: null,
-        motivo: reason || 'Erro ao consultar via SERPRO',
+        motivo: motivoLimpo,
         fonte: 'serpro',
     };
 }
