@@ -1322,6 +1322,29 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         {c.motivoImpedimento || 'Consulta manual necessaria — acesse o portal do orgao emissor.'}
                     </div>
                 )}
+                {(c.status === 'indisponivel' || c.status === 'nao_consultada') && c.portalUrl && (
+                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <a
+                            href={c.portalUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                                padding: '4px 12px', borderRadius: '8px',
+                                background: 'var(--accent)14', border: '1px solid var(--accent)44',
+                                color: 'var(--accent)', fontSize: '0.78rem', fontWeight: 600,
+                                textDecoration: 'none', cursor: 'pointer',
+                            }}
+                        >
+                            Consultar no Portal Oficial →
+                        </a>
+                        {c.motivoImpedimento && (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                {c.motivoImpedimento}
+                            </span>
+                        )}
+                    </div>
+                )}
             </div>
         );
 
@@ -1588,6 +1611,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     motivoImpedimento: match?.motivo || undefined,
                     pdfBase64: match?.pdfBase64 || undefined,
                     fonte: (match?.fonte || undefined) as any,
+                    portalUrl: match?.portalUrl || undefined,
                     dataConsulta: match ? new Date().toISOString().slice(0, 10) : undefined,
                 };
             });

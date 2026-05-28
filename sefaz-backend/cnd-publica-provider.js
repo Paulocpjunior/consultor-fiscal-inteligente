@@ -206,9 +206,16 @@ function parseDataBR(dataBR) {
     return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
+// URLs oficiais para consulta manual quando a automação falha (CAPTCHA)
+const URLS_PORTAIS = {
+    cnd_federal: 'https://solucoes.receita.fazenda.gov.br/Servicos/certidaointernet/PJ/Emitir',
+    crf_fgts: 'https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf',
+    cndt: 'https://cndt-certidao.tst.jus.br/inicio.faces',
+};
+
 /**
  * Consulta todas as CNDs públicas em paralelo.
- * Retorna array de objetos { esfera, orgao, tipo, status, validade?, motivo?, fonte }.
+ * Sempre inclui portalUrl pra consulta manual quando indisponivel.
  */
 export async function consultarCndsPublicas(cnpj) {
     const cnpjNum = cnpjLimpo(cnpj);
@@ -221,12 +228,24 @@ export async function consultarCndsPublicas(cnpj) {
         consultarOptanteSimples(cnpjNum),
     ]);
 
-    const certidoes = [
-        cndFederal.status === 'fulfilled' ? cndFederal.value : { esfera: 'federal', orgao: 'Receita Federal / PGFN', tipo: 'CND Federal', status: 'indisponivel', fonte: 'consulta_publica' },
-        crfFgts.status === 'fulfilled' ? crfFgts.value : { esfera: 'fgts', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)', status: 'indisponivel', fonte: 'consulta_publica' },
-        cndtTrabalhista.status === 'fulfilled' ? cndtTrabalhista.value : { esfera: 'trabalhista', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)', status: 'indisponivel', fonte: 'consulta_publica' },
-    ];
+    const cndFedRes = cndFederal.status === 'fulfilled' ? cndFederal.value : { esfera: 'federal', orgao: 'Receita Federal / PGFN', tipo: 'CND Federal', status: 'indisponivel', fonte: 'consulta_publica' };
+    const crfRes = crfFgts.status === 'fulfilled' ? crfFgts.value : { esfera: 'fgts', orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)', status: 'indisponivel', fonte: 'consulta_publica' };
+    const cndtRes = cndtTrabalhista.status === 'fulfilled' ? cndtTrabalhista.value : { esfera: 'trabalhista', orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)', status: 'indisponivel', fonte: 'consulta_publica' };
 
+    // Adiciona portalUrl em cada CND para consulta manual
+    cndFedRes.portalUrl = URLS_PORTAIS.cnd_federal;
+    crfRes.portalUrl = URLS_PORTAIS.crf_fgts;
+    cndtRes.portalUrl = URLS_PORTAIS.cndt;
+
+    // Mensagem clara quando indisponivel automaticamente
+    if (cndFedRes.status === 'indisponivel') {
+        cndFedRes.motivo = 'Portal RFB usa CAPTCHA — consulte manualmente';
+    }
+    if (cndtRes.status === 'indisponivel') {
+        cndtRes.motivo = 'Portal TST usa CAPTCHA — consulte manualmente';
+    }
+
+    const certidoes = [cndFedRes, crfRes, cndtRes];
     const dadosSimples = optanteSimples.status === 'fulfilled' ? optanteSimples.value : null;
 
     return { certidoes, dadosSimples };

@@ -1827,6 +1827,8 @@ export interface NfpCertidao {
     pdfBase64?: string;
     /** Origem da consulta: SERPRO, portal publico, ou manual. */
     fonte?: NfpFonteCertidao;
+    /** URL do portal oficial para consulta manual quando SERPRO/scraping falha (CAPTCHA). */
+    portalUrl?: string;
 }
 
 export interface NfpObrigacao {
