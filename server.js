@@ -81,9 +81,19 @@ const ALLOWED_ORIGINS = [
 
 app.use(cors({
     origin: (origin, callback) => {
+        // Sem origin (server-to-server) — permite
         if (!origin) return callback(null, true);
+        // Origins permitidos explícitos
         if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+        // GitHub Pages (qualquer subdomínio paulocpjunior)
+        if (/^https:\/\/[a-z0-9-]+\.github\.io$/i.test(origin)) return callback(null, true);
+        // Firebase Hosting (web.app e firebaseapp.com)
+        if (/^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/i.test(origin)) return callback(null, true);
+        // Cloud Run (run.app)
         if (origin.endsWith('.run.app')) return callback(null, true);
+        // Localhost dev
+        if (/^http:\/\/localhost:\d+$/.test(origin)) return callback(null, true);
+        console.warn('[CORS] Origin rejeitado:', origin);
         callback(null, false);
     },
     credentials: true,
