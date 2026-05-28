@@ -57,30 +57,16 @@ const ALLOWED_ORIGINS = [
     'http://localhost:5173',
 ].filter(Boolean);
 
-// CORS manual — mais confiável que o middleware npm
+// CORS manual — sempre permite (mas só responde se origin presente)
 app.use((req, res, next) => {
+    console.error('[REQ]', req.method, req.path, 'origin=' + (req.headers.origin || 'none'));
     const origin = req.headers.origin;
-    console.log('[CORS-manual] origin:', origin, 'method:', req.method, 'path:', req.path);
-    let allowed = false;
-    if (!origin) {
-        allowed = true;
-    } else if (ALLOWED_ORIGINS.includes(origin)) {
-        allowed = true;
-    } else if (/^https:\/\/[a-z0-9-]+\.github\.io$/i.test(origin)) {
-        allowed = true;
-    } else if (/^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/i.test(origin)) {
-        allowed = true;
-    } else if (origin.endsWith('.run.app')) {
-        allowed = true;
-    } else if (/^http:\/\/localhost:\d+$/.test(origin)) {
-        allowed = true;
-    }
-    if (allowed && origin) {
+    if (origin) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Credentials', 'true');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With, X-Cron-Secret, X-CloudScheduler, X-CloudScheduler-JobName');
-        res.setHeader('Access-Control-Max-Age', '3600');
+        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With, X-Cron-Secret');
+        res.setHeader('Vary', 'Origin');
     }
     if (req.method === 'OPTIONS') {
         return res.status(204).end();
