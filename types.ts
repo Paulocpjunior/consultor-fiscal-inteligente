@@ -771,8 +771,22 @@ export interface AcoesResponse {
 // ─── Calendário Fiscal ─────────────────────────────────────────────────────
 
 export type ObrigacaoTipo =
-    | 'DAS' | 'DEFIS' | 'DARF-IRPJ' | 'DARF-CSLL'
-    | 'PIS-COFINS' | 'DCTF' | 'DCTFWEB' | 'ESOCIAL';
+    // Federais — pagamento principal
+    | 'DAS' | 'DAS-MEI'
+    // Folha
+    | 'INSS' | 'FGTS'
+    // Declarações federais
+    | 'DCTF' | 'DCTFWEB' | 'EFD-REINF' | 'ESOCIAL'
+    // IR / contribuições
+    | 'IRRF' | 'PIS-COFINS' | 'DARF-IRPJ' | 'DARF-CSLL'
+    // Anuais
+    | 'DEFIS' | 'DASN-SIMEI' | 'ECD' | 'ECF' | 'DIRF' | 'DIRPF'
+    // SPED
+    | 'SPED-FISCAL' | 'SPED-CONTRIB'
+    // Estaduais (ICMS)
+    | 'GIA' | 'ICMS' | 'ICMS-ST' | 'DESTDA'
+    // Municipais (ISS)
+    | 'ISS' | 'DMS';
 
 export interface ObrigacaoFiscal {
     tipo: ObrigacaoTipo;
