@@ -57,30 +57,36 @@ const ALLOWED_ORIGINS = [
     'http://localhost:5173',
 ].filter(Boolean);
 
-// CORS PRECISA estar antes dos routers, senão não é aplicado a eles
-app.use(cors({
-    origin: (origin, callback) => {
-        console.log('[CORS] check origin:', origin);
-        if (!origin) return callback(null, true);
-        if (ALLOWED_ORIGINS.includes(origin)) {
-            console.log('[CORS] allowed via allowlist:', origin);
-            return callback(null, true);
-        }
-        if (/^https:\/\/[a-z0-9-]+\.github\.io$/i.test(origin)) {
-            console.log('[CORS] allowed via github.io regex:', origin);
-            return callback(null, true);
-        }
-        if (/^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/i.test(origin)) {
-            console.log('[CORS] allowed via firebase regex:', origin);
-            return callback(null, true);
-        }
-        if (origin.endsWith('.run.app')) return callback(null, true);
-        if (/^http:\/\/localhost:\d+$/.test(origin)) return callback(null, true);
-        console.warn('[CORS] REJECTED:', origin);
-        callback(null, false);
-    },
-    credentials: true,
-}));
+// CORS manual — mais confiável que o middleware npm
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    console.log('[CORS-manual] origin:', origin, 'method:', req.method, 'path:', req.path);
+    let allowed = false;
+    if (!origin) {
+        allowed = true;
+    } else if (ALLOWED_ORIGINS.includes(origin)) {
+        allowed = true;
+    } else if (/^https:\/\/[a-z0-9-]+\.github\.io$/i.test(origin)) {
+        allowed = true;
+    } else if (/^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/i.test(origin)) {
+        allowed = true;
+    } else if (origin.endsWith('.run.app')) {
+        allowed = true;
+    } else if (/^http:\/\/localhost:\d+$/.test(origin)) {
+        allowed = true;
+    }
+    if (allowed && origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With, X-Cron-Secret, X-CloudScheduler, X-CloudScheduler-JobName');
+        res.setHeader('Access-Control-Max-Age', '3600');
+    }
+    if (req.method === 'OPTIONS') {
+        return res.status(204).end();
+    }
+    next();
+});
 
 // Routers montados APÓS o middleware CORS
 app.use('/api/admin/sefaz', sefazCertRouter);
