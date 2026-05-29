@@ -523,6 +523,44 @@ export async function getDocumento(id: string): Promise<DocumentoFiscal | null> 
     return { id: snap.id, ...(snap.data() as any) } as DocumentoFiscal;
 }
 
+/**
+ * Busca documentos por chave de acesso (44 dígitos) em batches.
+ * Usado pela conferência SPED — busca por chave é independente de empresaId
+ * e ignora filtro de createdBy (qualquer admin/colaborador pode conferir).
+ *
+ * Firestore aceita até 30 chaves por query 'in'. Batches em paralelo.
+ */
+export async function getDocumentosByChaves(chaves: string[]): Promise<DocumentoFiscal[]> {
+    if (!isFirebaseConfigured || !db || !chaves.length) return [];
+    const chavesLimpas = chaves.map(c => (c || '').replace(/\D/g, '')).filter(c => c.length === 44);
+    if (!chavesLimpas.length) return [];
+
+    const BATCH_SIZE = 30;
+    const batches: string[][] = [];
+    for (let i = 0; i < chavesLimpas.length; i += BATCH_SIZE) {
+        batches.push(chavesLimpas.slice(i, i + BATCH_SIZE));
+    }
+
+    const results: DocumentoFiscal[] = [];
+    await Promise.all(batches.map(async batch => {
+        try {
+            const q = query(
+                collection(db!, COLLECTIONS.DOCUMENTOS),
+                where('chave', 'in', batch),
+                fbLimit(30),
+            );
+            const snap = await getDocs(q);
+            snap.docs.forEach(d => {
+                results.push({ id: d.id, ...(d.data() as any) } as DocumentoFiscal);
+            });
+        } catch (err: any) {
+            console.warn('getDocumentosByChaves batch failed:', err?.message);
+        }
+    }));
+
+    return results;
+}
+
 export async function listCapturas(user: User | null, max = 200): Promise<XmlCaptura[]> {
     if (!user || !isFirebaseConfigured || !db) return [];
     const isMaster = isMasterUser(user);

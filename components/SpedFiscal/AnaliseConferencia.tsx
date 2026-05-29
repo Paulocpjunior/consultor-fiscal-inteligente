@@ -10,7 +10,7 @@ import type {
 } from '../../types';
 import { parseSpedFiscalFile } from '../../services/spedFiscalParserService';
 import { conferXmlContraSped, type XmlConferenciaInput } from '../../services/spedFiscalConferenceService';
-import { listDocumentos } from '../../services/xmlFiscalService';
+import { listDocumentos, getDocumentosByChaves } from '../../services/xmlFiscalService';
 import { salvarSpedArquivo } from '../../services/spedFiscalStorageService';
 import { isFirebaseConfigured } from '../../services/firebaseConfig';
 import { formatCnpjCpf, formatCurrency } from '../../services/xmlParserService';
@@ -94,10 +94,23 @@ const AnaliseConferencia: React.FC<Props> = ({ currentUser, onShowToast }) => {
             let xmlInputs: XmlConferenciaInput[] = [];
 
             if (isFirebaseConfigured && cnpj) {
-                const docs = await listDocumentos(currentUser, {});
+                // Coleta TODAS as chaves de acesso do SPED (C100 + D100)
+                const chavesSped: string[] = [];
+                (parseResult.documentosC100 || []).forEach(d => { if (d.chave) chavesSped.push(d.chave); });
+                (parseResult.documentosD100 || []).forEach(d => { if (d.chave) chavesSped.push(d.chave); });
+
+                // Busca XMLs por chave (eficiente, sem limite de 500 nem filtro createdBy)
+                const docs = chavesSped.length > 0
+                    ? await getDocumentosByChaves(chavesSped)
+                    : await listDocumentos(currentUser, {});
+
+                // Filtro adicional por CNPJ da empresa (defensivo)
                 const filtered = docs.filter(d => {
+                    if (!d) return false;
                     const emitCnpj = d.emitente?.cnpjCpf?.replace(/\D/g, '') || '';
                     const destCnpj = d.destinatario?.cnpjCpf?.replace(/\D/g, '') || '';
+                    // Se tem CNPJ da empresa, valida; senão aceita (busca foi por chave)
+                    if (chavesSped.length > 0) return true;
                     return emitCnpj === cnpj || destCnpj === cnpj;
                 });
 
