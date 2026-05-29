@@ -12,11 +12,13 @@ import XmlRelatorios from './XmlRelatorios';
 import XmlSharePoint from './XmlSharePoint';
 import XmlConfiguracoes from './XmlConfiguracoes';
 import XmlExportarIobSage from './XmlExportarIobSage';
+import CapturaDiagnosticoPanel from '../CapturaDiagnosticoPanel';
 
 const XmlNfseSp = lazy(() => import('./XmlNfseSp'));
 
 type TabId =
     | 'dashboard'
+    | 'captura-auto'
     | 'documentos'
     | 'importacao'
     | 'empresas'
@@ -30,6 +32,7 @@ type TabId =
 
 const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'captura-auto', label: '🛰️ Captura Automática' },
     { id: 'documentos', label: 'XMLs Capturados' },
     { id: 'importacao', label: 'Importação Manual' },
     { id: 'nfse_pdf', label: 'Importar NFSe (PDF)' },
@@ -119,6 +122,9 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
             <div>
                 {tab === 'dashboard' && (
                     <XmlDashboard currentUser={currentUser} refreshKey={refreshKey} />
+                )}
+                {tab === 'captura-auto' && (
+                    <CapturaDiagnosticoPanel currentUser={currentUser} />
                 )}
                 {tab === 'documentos' && (
                     <>

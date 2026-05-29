@@ -70,23 +70,71 @@ router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
     }
 });
 
+// ── POST /sync-cron-now ──────────────────────────────────────────────────
+// Disparo manual pelo admin (Bearer, sem precisar do cron-secret).
+router.post('/sync-cron-now', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores' });
+        }
+        res.json({ ok: true, motivo: 'Captura NFSe Nacional iniciada em background' });
+        setImmediate(async () => {
+            const inicio = Date.now();
+            let sucessos = 0, falhas = 0, totalNovos = 0, total = 0;
+            try {
+                const empresas = await listarEmpresasParaCron();
+                total = empresas.length;
+                for (const emp of empresas) {
+                    try {
+                        const r = await sincronizarEmpresaNfseNacionalDfe({
+                            empresaId: emp.id,
+                            empresaCnpj: emp.cnpj,
+                            capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'cron-now-admin' },
+                        });
+                        if (r.ok) { sucessos++; totalNovos += r.novos || 0; }
+                        else falhas++;
+                    } catch (e) {
+                        falhas++;
+                        console.error(`[nfse-nac-dfe/sync-cron-now] exceção em ${emp.cnpj}:`, e.message);
+                    }
+                }
+                await fa().firestore().collection('nfse_nacional_dfe_cron_logs').add({
+                    executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                    duracaoMs: Date.now() - inicio,
+                    fonte: 'admin-manual',
+                    totalEmpresas: total, sucessos, falhas, totalNovos,
+                });
+                console.log(`[nfse-nac-dfe/sync-cron-now] ok — ${sucessos}/${total} sucessos, ${totalNovos} novos`);
+            } catch (e) {
+                console.error('[nfse-nac-dfe/sync-cron-now] erro fatal:', e);
+            }
+        });
+    } catch (e) {
+        console.error('[nfse-nac-dfe/sync-cron-now]', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 // ── POST /sync-cron ───────────────────────────────────────────────────────
 router.post('/sync-cron', requireCronAuth, async (req, res) => {
     res.json({ ok: true, motivo: 'Cron iniciado em background' });
 
     setImmediate(async () => {
         const inicio = Date.now();
-        console.log('[nfse-nac-dfe/sync-cron] início — fonte:', req.cron?.source);
+        const fonte = req.cron?.source || 'unknown';
+        console.log('[nfse-nac-dfe/sync-cron] início — fonte:', fonte);
+        let sucessos = 0, falhas = 0, totalNovos = 0, totalEmpresas = 0;
+        let erroFatal = null;
         try {
             const empresas = await listarEmpresasParaCron();
+            totalEmpresas = empresas.length;
             console.log(`[nfse-nac-dfe/sync-cron] ${empresas.length} empresas elegíveis`);
-            let sucessos = 0, falhas = 0, totalNovos = 0;
             for (const emp of empresas) {
                 try {
                     const r = await sincronizarEmpresaNfseNacionalDfe({
                         empresaId: emp.id,
                         empresaCnpj: emp.cnpj,
-                        capturadoPor: { fonte: 'cron', source: req.cron?.source || 'unknown' },
+                        capturadoPor: { fonte: 'cron', source: fonte },
                     });
                     if (r.ok) { sucessos++; totalNovos += r.novos || 0; }
                     else falhas++;
@@ -98,7 +146,19 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
             const dur = Date.now() - inicio;
             console.log(`[nfse-nac-dfe/sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos, ${dur}ms`);
         } catch (e) {
+            erroFatal = e.message;
             console.error('[nfse-nac-dfe/sync-cron] erro fatal:', e);
+        }
+        try {
+            await fa().firestore().collection('nfse_nacional_dfe_cron_logs').add({
+                executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                duracaoMs: Date.now() - inicio,
+                fonte,
+                totalEmpresas, sucessos, falhas, totalNovos,
+                erroFatal,
+            });
+        } catch (logErr) {
+            console.warn('[nfse-nac-dfe/sync-cron] log falhou:', logErr.message);
         }
     });
 });

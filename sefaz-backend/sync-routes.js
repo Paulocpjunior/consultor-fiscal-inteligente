@@ -258,7 +258,7 @@ router.get('/window', requireAuth, (req, res) => {
   return res.json(statusJanelaOperacional());
 });
 
-// GET /cron-status — retorna o último log do cron SEFAZ
+// GET /cron-status — retorna o último log do cron SEFAZ (legacy, usado pelo banner antigo).
 router.get('/cron-status', requireAuth, async (req, res) => {
   try {
     const db = fa().firestore();
@@ -271,6 +271,190 @@ router.get('/cron-status', requireAuth, async (req, res) => {
     return res.json({ hasRun: true, ...data });
   } catch (e) {
     console.error('[GET /cron-status] erro:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+
+// ── POST /sync-cron-now ──────────────────────────────────────────────────
+// Dispara o cron de NFe sob demanda. Auth = Bearer admin (não precisa
+// do x-cron-secret porque é interno). Reusa o mesmo orquestrador do cron.
+router.post('/sync-cron-now', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Apenas administradores' });
+    }
+    res.json({ ok: true, motivo: 'Cron iniciado em background' });
+    setImmediate(async () => {
+      const inicio = Date.now();
+      console.log('[sync-cron-now] início — admin:', req.user.email);
+      let sucessos = 0, falhas = 0, totalNovos = 0, total = 0;
+      try {
+        const empresas = await listarEmpresasParaCron();
+        total = empresas.length;
+        for (const emp of empresas) {
+          try {
+            const result = await sincronizarEmpresa({
+              empresaId: emp.id, empresaCnpj: emp.cnpj,
+              capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'cron-now-admin' },
+            });
+            if (result.ok) { sucessos++; totalNovos += result.novosXmls || 0; }
+            else falhas++;
+          } catch (e) {
+            falhas++;
+            console.error(`[sync-cron-now] exceção em ${emp.cnpj}:`, e.message);
+          }
+        }
+        await fa().firestore().collection('sefaz_cron_logs').add({
+          executadoEm: fa().firestore.FieldValue.serverTimestamp(),
+          totalEmpresas: total, sucessos, falhas, totalNovosXmls: totalNovos,
+          duracaoMs: Date.now() - inicio,
+          fonte: 'admin-manual',
+        });
+        console.log(`[sync-cron-now] fim — ${sucessos}/${total} ok, ${totalNovos} novos, ${Date.now() - inicio}ms`);
+      } catch (e) {
+        console.error('[sync-cron-now] erro fatal:', e);
+      }
+    });
+  } catch (e) {
+    console.error('[sync-cron-now] erro:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /captura-diagnostico ─────────────────────────────────────────────
+// Estado consolidado das 3 capturas (NFe DistDFe, NFSe SP, NFSe Nacional ADN).
+// Retorna por fonte: último cron, total empresas elegíveis, empresas travadas,
+// total docs capturados nos últimos 7d, janela atual.
+router.get('/captura-diagnostico', requireAuth, async (req, res) => {
+  try {
+    const db = fa().firestore();
+    const agora = Date.now();
+    const seteDias = agora - 7 * 24 * 60 * 60 * 1000;
+
+    async function ultimoLog(col) {
+      try {
+        const snap = await db.collection(col).orderBy('executadoEm', 'desc').limit(1).get();
+        if (snap.empty) return null;
+        const d = snap.docs[0].data();
+        const ts = d.executadoEm?.toMillis?.() ?? null;
+        return {
+          executadoEmMs: ts,
+          duracaoMs: d.duracaoMs ?? null,
+          totalEmpresas: d.totalEmpresas ?? d.total ?? null,
+          sucessos: d.sucessos ?? null,
+          falhas: d.falhas ?? null,
+          totalNovos: d.totalNovos ?? d.totalNovosXmls ?? d.totalNFes ?? d.criadas ?? null,
+          erroFatal: d.erroFatal ?? d.erro ?? null,
+          fonte: d.fonte ?? null,
+        };
+      } catch (e) {
+        return { erro: e.message };
+      }
+    }
+
+    async function travadas(col, campoTimestamp) {
+      try {
+        const snap = await db.collection(col).get();
+        let travadas = 0, total = 0;
+        snap.forEach(doc => {
+          const x = doc.data();
+          total++;
+          const ts = x[campoTimestamp]?.toMillis?.() ?? null;
+          if (!ts || ts < seteDias) travadas++;
+        });
+        return { total, travadas };
+      } catch (e) {
+        return { erro: e.message };
+      }
+    }
+
+    // NFSe SP não tem state-por-CNPJ; conta empresas elegíveis (ccmSp + autorizadoEm).
+    async function elegiveisNfseSp() {
+      try {
+        let total = 0;
+        for (const col of ['simples_empresas', 'lucro_empresas']) {
+          const snap = await db.collection(col).get();
+          snap.forEach(doc => {
+            const d = doc.data();
+            if ((d.ccmSp || '').toString().trim() && d.nfseSpAutorizadoEm) total++;
+          });
+        }
+        return { total, travadas: null };
+      } catch (e) {
+        return { erro: e.message };
+      }
+    }
+
+    async function docsRecentes(tipos) {
+      try {
+        let total = 0;
+        for (const tipo of tipos) {
+          const snap = await db.collection('documentos_fiscais')
+            .where('tipo', '==', tipo)
+            .where('createdAt', '>=', new Date(seteDias))
+            .count().get().catch(async () => {
+              const s = await db.collection('documentos_fiscais')
+                .where('tipo', '==', tipo)
+                .where('createdAt', '>=', new Date(seteDias))
+                .limit(1000).get();
+              return { data: () => ({ count: s.size }) };
+            });
+          total += snap.data().count;
+        }
+        return total;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    const [
+      logSefaz, logNfseSp, logNfseNac,
+      stateSefaz, stateNfseSp, stateNfseNac,
+      docsNfe, docsNfseSp, docsNfseNac,
+    ] = await Promise.all([
+      ultimoLog('sefaz_cron_logs'),
+      ultimoLog('nfsesp_cron_logs'),
+      ultimoLog('nfse_nacional_dfe_cron_logs'),
+      travadas('sefaz_state', 'ultimaSync'),
+      elegiveisNfseSp(),
+      travadas('nfse_nacional_dfe_state', 'ultimaSync'),
+      docsRecentes(['nfe', 'nfceCte']),
+      docsRecentes(['nfsesp']),
+      docsRecentes(['nfseNacional']),
+    ]);
+
+    return res.json({
+      janela: statusJanelaOperacional(),
+      capturas: {
+        sefazNfe: {
+          fonte: 'SEFAZ DistDFe (NFe entrada/saída)',
+          endpointCron: '/api/admin/sefaz/sync-cron',
+          schedulerEsperado: 'sefaz-cron-noturno (02:00 BRT seg-sex)',
+          ultimoCron: logSefaz,
+          state: stateSefaz,
+          docsUltimos7d: docsNfe,
+        },
+        nfseSp: {
+          fonte: 'NFSe SP (tomados + prestados)',
+          endpointCron: '/api/admin/sefaz/nfsesp-cron',
+          schedulerEsperado: 'nfsesp-cron-noturno (03:00 BRT seg-sex)',
+          ultimoCron: logNfseSp,
+          state: stateNfseSp,
+          docsUltimos7d: docsNfseSp,
+        },
+        nfseNacional: {
+          fonte: 'NFSe Nacional ADN (DFe)',
+          endpointCron: '/api/admin/nfse-nacional-dfe/sync-cron',
+          schedulerEsperado: 'nfse-nacional-dfe-cron-noturno (04:00 BRT seg-sex)',
+          ultimoCron: logNfseNac,
+          state: stateNfseNac,
+          docsUltimos7d: docsNfseNac,
+        },
+      },
+    });
+  } catch (e) {
+    console.error('[GET /captura-diagnostico] erro:', e);
     return res.status(500).json({ error: e.message });
   }
 });
