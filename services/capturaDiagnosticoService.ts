@@ -1,0 +1,84 @@
+/**
+ * capturaDiagnosticoService.ts
+ *
+ * Cliente do endpoint /api/admin/sefaz/captura-diagnostico — estado
+ * consolidado das 3 capturas noturnas (NFe DistDFe, NFSe SP, NFSe Nacional).
+ *
+ * Usado pelo CapturaDiagnosticoPanel pra mostrar ao admin se a captura
+ * REAL de XMLs está rodando ou parou.
+ */
+
+import { getAuth } from 'firebase/auth';
+
+export interface CronLog {
+    executadoEmMs: number | null;
+    duracaoMs: number | null;
+    totalEmpresas: number | null;
+    sucessos: number | null;
+    falhas: number | null;
+    totalNovos: number | null;
+    erroFatal: string | null;
+    fonte: string | null;
+}
+
+export interface CapturaStatus {
+    fonte: string;
+    endpointCron: string;
+    schedulerEsperado: string;
+    ultimoCron: CronLog | null | { erro: string };
+    state: { total: number; travadas: number | null } | { erro: string };
+    docsUltimos7d: number | null;
+}
+
+export interface CapturaDiagnostico {
+    janela: {
+        dentro: boolean;
+        agoraBRT: string;
+        motivo?: string;
+    };
+    capturas: {
+        sefazNfe: CapturaStatus;
+        nfseSp: CapturaStatus;
+        nfseNacional: CapturaStatus;
+    };
+}
+
+async function getToken(): Promise<string> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Sessão expirada');
+    return u.getIdToken();
+}
+
+export async function fetchCapturaDiagnostico(): Promise<CapturaDiagnostico> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/captura-diagnostico', {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+}
+
+/**
+ * Dispara o cron de NFe manualmente (mesma rota do Cloud Scheduler).
+ * Precisa do x-cron-secret — não disponível no front, então este chama
+ * o endpoint de admin que roda o cron com a auth Bearer + verifica role.
+ */
+export async function forcarCapturaAgora(fonte: 'sefazNfe' | 'nfseSp' | 'nfseNacional'): Promise<{ ok: boolean; motivo?: string }> {
+    const token = await getToken();
+    const paths: Record<typeof fonte, string> = {
+        sefazNfe: '/api/admin/sefaz/sync-cron-now',
+        nfseSp: '/api/admin/sefaz/nfsesp-cron-now',
+        nfseNacional: '/api/admin/nfse-nacional-dfe/sync-cron-now',
+    };
+    const res = await fetch(paths[fonte], {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: '{}',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, motivo: data.error || `HTTP ${res.status}` };
+    return { ok: true, motivo: data.motivo };
+}

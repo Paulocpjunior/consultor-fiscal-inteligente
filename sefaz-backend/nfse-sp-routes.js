@@ -85,13 +85,18 @@ router.post('/nfsesp-consultar-todas', authUser, json(), async (req, res) => {
 });
 
 router.post('/nfsesp-cron', json(), async (req, res) => {
-    const headerSecret = req.header('X-Sefaz-Cron-Secret') || '';
+    const headerSecret = req.header('X-Sefaz-Cron-Secret')
+        || req.header('x-cron-secret')
+        || '';
     if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
         return res.status(403).json({ erro: 'cron secret inválido' });
     }
     try {
         const db = fa().firestore();
-        const dryRun = req.body?.dryRun !== false;
+        // PRODUÇÃO REAL: dryRun=false por default. Cloud Scheduler chama com
+        // body vazio {} e queremos persistir as NFs. Pra testar sem gravar,
+        // mandar body {"dryRun": true} explícito.
+        const dryRun = req.body?.dryRun === true;
         const t0 = Date.now();
         const r = await consultarTodasElegiveis(db, {
             tipo: 'cron',
@@ -120,6 +125,43 @@ router.post('/nfsesp-cron', json(), async (req, res) => {
     } catch (e) {
         console.error('[nfse-sp-routes] cron:', e);
         res.status(500).json({ erro: e.message });
+    }
+});
+
+// Disparo manual pelo admin (Bearer, sem precisar do cron-secret).
+router.post('/nfsesp-cron-now', authUser, json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ erro: 'Apenas administradores' });
+        }
+        res.json({ ok: true, motivo: 'Captura NFSe SP iniciada em background' });
+        setImmediate(async () => {
+            const db = fa().firestore();
+            const t0 = Date.now();
+            try {
+                const r = await consultarTodasElegiveis(db, {
+                    tipo: 'cron',
+                    dryRun: false,
+                    importadoPor: req.user.email,
+                });
+                await fa().firestore().collection('nfsesp_cron_logs').add({
+                    executadoEm: fa().firestore.FieldValue.serverTimestamp(),
+                    iniciadoEm: new Date(t0).toISOString(),
+                    dryRun: false,
+                    totalEmpresas: r.totalEmpresas,
+                    sucessos: r.sucessos, falhas: r.falhas,
+                    totalNFes: r.totalNFes, criadas: r.criadas, atualizadas: r.atualizadas,
+                    durationMs: r.durationMs,
+                    fonte: 'admin-manual',
+                });
+                console.log(`[nfsesp-cron-now] ok — admin=${req.user.email} ${r.sucessos}/${r.totalEmpresas}`);
+            } catch (e) {
+                console.error('[nfsesp-cron-now] erro:', e);
+            }
+        });
+    } catch (e) {
+        console.error('[nfse-sp-routes] cron-now:', e);
+        return res.status(500).json({ erro: e.message });
     }
 });
 
