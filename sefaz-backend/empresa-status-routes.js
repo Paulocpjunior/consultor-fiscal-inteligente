@@ -55,6 +55,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                     regime: col === 'simples_empresas' ? 'simples' : 'lucro',
                     fonte: col,
                     capturarSefaz: d.capturarSefaz !== false, // default true
+                    uf: d.dadosFiscais?.uf || d.uf || '',
                     ccmSp: (d.ccmSp || '').toString().trim(),
                     nfseSpAutorizadoEm: d.nfseSpAutorizadoEm?.toMillis?.() ?? null,
                     nfseNacionalDfeAtivo: d.nfseNacionalDfeAtivo === true,
@@ -93,6 +94,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
         const empresas = [];
         const resumo = {
             total: 0,
+            semUf: 0,
             comCertA1: 0,
             comCertA3: 0,
             usandoCertEscritorio: 0,
@@ -138,9 +140,10 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             // Cálculo de capacidade de captura
             const motivosBloqueio = [];
 
-            // a) NFe DistDFe: precisa cert válido (próprio ou do escritório via procuração)
-            const capturaNfeOk = certValido && emp.capturarSefaz;
+            // a) NFe DistDFe: precisa cert válido + UF cadastrada
+            const capturaNfeOk = certValido && emp.capturarSefaz && !!emp.uf;
             if (!emp.capturarSefaz) motivosBloqueio.push('Captura SEFAZ desativada manualmente');
+            else if (!emp.uf) motivosBloqueio.push('UF não cadastrada (preencha dadosFiscais.uf, ex: SP)');
             else if (tipoCert === 'nenhum') motivosBloqueio.push('Sem certificado A1/A3 e sem procuração e-CAC');
             else if (!certValido && certUploaded) motivosBloqueio.push(`Certificado ${tipoCert} expirado em ${certVenceEm}`);
             else if (tipoCert === 'A3') motivosBloqueio.push('Tipo A3 — captura via agente local cfi-a3, não pelo Cloud Run');
@@ -163,6 +166,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 nome: emp.nome,
                 regime: emp.regime,
                 fonte: emp.fonte,
+                uf: emp.uf,
                 // certificados
                 tipoCert,
                 certUploaded,
@@ -189,6 +193,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
 
             // Resumo
             resumo.total++;
+            if (!emp.uf) resumo.semUf++;
             if (tipoCert === 'A1') resumo.comCertA1++;
             else if (tipoCert === 'A3') resumo.comCertA3++;
             else if (tipoCert === 'escritorio') resumo.usandoCertEscritorio++;

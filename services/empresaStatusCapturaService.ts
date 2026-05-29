@@ -13,6 +13,7 @@ export interface EmpresaStatusCaptura {
     nome: string;
     regime: 'simples' | 'lucro';
     fonte: 'simples_empresas' | 'lucro_empresas';
+    uf: string;
     tipoCert: 'A1' | 'A3' | 'escritorio' | 'nenhum';
     certUploaded: boolean;
     certValido: boolean;
@@ -34,6 +35,7 @@ export interface EmpresaStatusCaptura {
 
 export interface EmpresaStatusResumo {
     total: number;
+    semUf: number;
     comCertA1: number;
     comCertA3: number;
     usandoCertEscritorio: number;

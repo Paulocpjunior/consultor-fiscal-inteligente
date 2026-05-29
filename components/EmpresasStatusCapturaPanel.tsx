@@ -28,7 +28,7 @@ interface Props {
     currentUser: User;
 }
 
-type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'ok-tudo';
+type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'ok-tudo';
 
 function formatCnpj(s: string) {
     return s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -92,6 +92,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
             }
             switch (filtro) {
                 case 'bloqueadas': return e.motivosBloqueio.length > 0;
+                case 'sem-uf': return !e.uf;
                 case 'sem-cert': return e.tipoCert === 'nenhum';
                 case 'cert-vencendo': {
                     const d = diasAteVencimento(e.certVenceEm);
@@ -170,6 +171,11 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <div className="text-xs text-purple-700 font-semibold">Sem cert + sem procuração</div>
                     <div className="text-2xl font-bold text-purple-900">{r.semCertNenhum}</div>
                 </div>
+                <div className="bg-orange-50 border border-orange-300 rounded-lg p-3">
+                    <div className="text-xs text-orange-700 font-semibold">Sem UF cadastrada</div>
+                    <div className="text-2xl font-bold text-orange-900">{r.semUf}</div>
+                    <div className="text-xs text-orange-600">bloqueia captura NFe</div>
+                </div>
                 <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
                     <div className="text-xs text-gray-700 font-semibold">Cert A1 próprio</div>
                     <div className="text-2xl font-bold text-gray-900">{r.comCertA1}</div>
@@ -193,6 +199,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
             <div className="flex flex-wrap gap-2 items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
                 <select value={filtro} onChange={e => setFiltro(e.target.value as FiltroTipo)} className="px-3 py-1.5 text-sm border rounded bg-white">
                     <option value="bloqueadas">🚨 Bloqueadas (qualquer motivo)</option>
+                    <option value="sem-uf">Sem UF cadastrada (dadosFiscais.uf)</option>
                     <option value="sem-cert">Sem certificado A1/A3</option>
                     <option value="cert-vencendo">Certificado vence em &lt;30d</option>
                     <option value="sem-procuracao">Sem procuração e-CAC</option>
