@@ -21,6 +21,7 @@
 import express from 'express';
 import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
+import { lookupCnpj } from './brasilapi-cache.js';
 
 const router = express.Router();
 
@@ -265,6 +266,69 @@ router.post('/empresa-toggle-flag', requireAuth, express.json(), async (req, res
         return res.json({ ok: true, cnpj: cnpjLimpo, campo, valor, atualizadas });
     } catch (e) {
         console.error('[empresa-toggle-flag] erro:', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── Auto-preencher UF via BrasilAPI ───────────────────────────────────────
+// Itera empresas sem dadosFiscais.uf e busca o estado via BrasilAPI a partir
+// do CNPJ. Resolve em massa o motivo "UF não cadastrada" sem trabalho manual.
+router.post('/auto-preencher-uf', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores' });
+        }
+        res.json({ ok: true, motivo: 'Auto-preenchimento iniciado em background' });
+
+        setImmediate(async () => {
+            const db = fa().firestore();
+            const t0 = Date.now();
+            let preenchidas = 0, jaTinham = 0, naoEncontradas = 0, erros = 0, total = 0;
+
+            for (const col of ['simples_empresas', 'lucro_empresas']) {
+                const snap = await db.collection(col).get();
+                for (const doc of snap.docs) {
+                    total++;
+                    const d = doc.data();
+                    const ufAtual = d.dadosFiscais?.uf || d.uf || '';
+                    if (ufAtual) { jaTinham++; continue; }
+                    const cnpj = (d.cnpj || '').replace(/\D/g, '');
+                    if (cnpj.length !== 14) { erros++; continue; }
+                    try {
+                        const info = await lookupCnpj(cnpj);
+                        const uf = info?.uf || null;
+                        const municipio = info?.municipio || null;
+                        const codMunIBGE = info?.codigo_municipio_ibge || info?.codigo_municipio || null;
+                        if (!uf) { naoEncontradas++; continue; }
+                        const update = {
+                            'dadosFiscais.uf': uf,
+                            'dadosFiscais.autoPreenchidoEm': admin.firestore.FieldValue.serverTimestamp(),
+                            'dadosFiscais.autoPreenchidoPor': req.user.email,
+                        };
+                        if (municipio && !d.dadosFiscais?.municipio) update['dadosFiscais.municipio'] = municipio;
+                        if (codMunIBGE && !d.dadosFiscais?.codMunIBGE) update['dadosFiscais.codMunIBGE'] = String(codMunIBGE);
+                        await doc.ref.update(update);
+                        preenchidas++;
+                        console.log(`[auto-preencher-uf] ${cnpj} ${d.razaoSocial || d.nome} → uf=${uf} mun=${municipio || '?'}`);
+                    } catch (e) {
+                        erros++;
+                        console.warn(`[auto-preencher-uf] ${cnpj} erro:`, e.message);
+                    }
+                }
+            }
+
+            const duracaoMs = Date.now() - t0;
+            await fa().firestore().collection('sefaz_cron_logs').add({
+                executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                tipo: 'auto-preencher-uf',
+                total, preenchidas, jaTinham, naoEncontradas, erros,
+                duracaoMs,
+                fonte: req.user.email,
+            });
+            console.log(`[auto-preencher-uf] FIM — total=${total} preenchidas=${preenchidas} jaTinham=${jaTinham} naoEncontradas=${naoEncontradas} erros=${erros} (${duracaoMs}ms)`);
+        });
+    } catch (e) {
+        console.error('[auto-preencher-uf] erro:', e);
         return res.status(500).json({ error: e.message });
     }
 });

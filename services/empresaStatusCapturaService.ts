@@ -90,6 +90,17 @@ export async function toggleEmpresaFlag(cnpj: string, campo: FlagCampo, valor: b
     return { ok: true, atualizadas: data.atualizadas };
 }
 
+export async function autoPreencherUf(): Promise<{ ok: boolean; motivo?: string; error?: string }> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/auto-preencher-uf', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true, motivo: data.motivo };
+}
+
 export function exportarEmpresasCsv(empresas: EmpresaStatusCaptura[]): string {
     const headers = [
         'CNPJ', 'Razão Social', 'Regime', 'Tipo Cert', 'Cert Válido',

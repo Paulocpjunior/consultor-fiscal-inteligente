@@ -17,6 +17,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
     fetchEmpresasStatusCaptura,
     toggleEmpresaFlag,
+    autoPreencherUf,
     exportarEmpresasCsv,
     type EmpresaStatusCaptura,
     type EmpresaStatusResumo,
@@ -63,7 +64,25 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [filtro, setFiltro] = useState<FiltroTipo>('bloqueadas');
     const [busca, setBusca] = useState('');
     const [togglingCnpj, setTogglingCnpj] = useState<string | null>(null);
+    const [autoUfRunning, setAutoUfRunning] = useState(false);
     const isAdmin = currentUser.role === 'admin';
+
+    const handleAutoUf = async () => {
+        if (!isAdmin) return;
+        if (!confirm(`Auto-preencher UF de ${data?.resumo.semUf || 0} empresas via BrasilAPI? Roda em background, leva ~1-3 min.`)) return;
+        setAutoUfRunning(true);
+        try {
+            const r = await autoPreencherUf();
+            if (r.ok) {
+                alert('Auto-preenchimento iniciado em background. Aguarde 1-3 min e clique em "Atualizar" pra ver o resultado.');
+                setTimeout(load, 60000);
+            } else {
+                alert(`Erro: ${r.error}`);
+            }
+        } finally {
+            setAutoUfRunning(false);
+        }
+    };
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -174,7 +193,17 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 <div className="bg-orange-50 border border-orange-300 rounded-lg p-3">
                     <div className="text-xs text-orange-700 font-semibold">Sem UF cadastrada</div>
                     <div className="text-2xl font-bold text-orange-900">{r.semUf}</div>
-                    <div className="text-xs text-orange-600">bloqueia captura NFe</div>
+                    {isAdmin && r.semUf > 0 && (
+                        <button
+                            onClick={handleAutoUf}
+                            disabled={autoUfRunning}
+                            className="mt-1 text-[10px] px-2 py-0.5 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
+                            title="Busca a UF de cada CNPJ na BrasilAPI e preenche em massa"
+                        >
+                            {autoUfRunning ? '⏳ rodando…' : '🔧 Auto-preencher via BrasilAPI'}
+                        </button>
+                    )}
+                    {!isAdmin && <div className="text-xs text-orange-600">bloqueia captura NFe</div>}
                 </div>
                 <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
                     <div className="text-xs text-gray-700 font-semibold">Cert A1 próprio</div>

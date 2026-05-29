@@ -46,6 +46,28 @@ async function fetchCnpjData(cnpj) {
 }
 
 /**
+ * Lookup público: busca dados de um CNPJ na BrasilAPI (com cache).
+ * Retorna o objeto bruto da API ou null se falhar.
+ */
+export async function lookupCnpj(cnpj) {
+    const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
+    if (cnpjLimpo.length !== 14) return null;
+    if (cache.has(cnpjLimpo)) return cache.get(cnpjLimpo);
+    if (failedSet.has(cnpjLimpo)) return null;
+    const data = await fetchCnpjData(cnpjLimpo);
+    if (!data) {
+        failedSet.add(cnpjLimpo);
+        return null;
+    }
+    if (cache.size >= MAX_CACHE_SIZE) {
+        const firstKey = cache.keys().next().value;
+        cache.delete(firstKey);
+    }
+    cache.set(cnpjLimpo, data);
+    return data;
+}
+
+/**
  * Enriquece em-place uma lista de participantes preenchendo apenas os
  * campos vazios (nao sobrescreve dados que ja vieram do XML/Firestore).
  *
