@@ -561,6 +561,53 @@ export async function getDocumentosByChaves(chaves: string[]): Promise<Documento
     return results;
 }
 
+/**
+ * Busca XMLs pra uma empresa (CNPJ) num período [dtIniIso, dtFimIso].
+ * Tenta tanto cnpjDest (NFe entrada) quanto cnpjEmit (NFe saída) e empresaCnpj
+ * (campo do importer). Usado como fallback quando getDocumentosByChaves
+ * não encontra nada — provável que captura SEFAZ não rodou contra essa empresa.
+ */
+export async function getDocumentosByCnpjPeriodo(
+    cnpj: string,
+    dtIniIso: string,
+    dtFimIso: string,
+): Promise<DocumentoFiscal[]> {
+    if (!isFirebaseConfigured || !db || !cnpj) return [];
+    const cnpjLimpo = cnpj.replace(/\D/g, '');
+    if (cnpjLimpo.length !== 14) return [];
+
+    const results: DocumentoFiscal[] = [];
+    const visto = new Set<string>();
+
+    async function buscar(campo: string) {
+        try {
+            const q = query(
+                collection(db!, COLLECTIONS.DOCUMENTOS),
+                where(campo, '==', cnpjLimpo),
+                where('dhEmi', '>=', dtIniIso),
+                where('dhEmi', '<=', dtFimIso),
+                fbLimit(2000),
+            );
+            const snap = await getDocs(q);
+            snap.docs.forEach(d => {
+                if (visto.has(d.id)) return;
+                visto.add(d.id);
+                results.push({ id: d.id, ...(d.data() as any) } as DocumentoFiscal);
+            });
+        } catch (err: any) {
+            console.warn(`getDocumentosByCnpjPeriodo (${campo}) falhou:`, err?.message);
+        }
+    }
+
+    await Promise.all([
+        buscar('empresaCnpj'),
+        buscar('cnpjDest'),
+        buscar('cnpjEmit'),
+    ]);
+
+    return results;
+}
+
 export async function listCapturas(user: User | null, max = 200): Promise<XmlCaptura[]> {
     if (!user || !isFirebaseConfigured || !db) return [];
     const isMaster = isMasterUser(user);

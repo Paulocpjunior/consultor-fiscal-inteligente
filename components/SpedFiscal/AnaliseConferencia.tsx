@@ -10,7 +10,7 @@ import type {
 } from '../../types';
 import { parseSpedFiscalFile } from '../../services/spedFiscalParserService';
 import { conferXmlContraSped, type XmlConferenciaInput } from '../../services/spedFiscalConferenceService';
-import { listDocumentos, getDocumentosByChaves } from '../../services/xmlFiscalService';
+import { listDocumentos, getDocumentosByChaves, getDocumentosByCnpjPeriodo } from '../../services/xmlFiscalService';
 import { salvarSpedArquivo } from '../../services/spedFiscalStorageService';
 import { isFirebaseConfigured } from '../../services/firebaseConfig';
 import { formatCnpjCpf, formatCurrency } from '../../services/xmlParserService';
@@ -99,18 +99,40 @@ const AnaliseConferencia: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 (parseResult.documentosC100 || []).forEach(d => { if (d.chave) chavesSped.push(d.chave); });
                 (parseResult.documentosD100 || []).forEach(d => { if (d.chave) chavesSped.push(d.chave); });
 
-                // Busca XMLs por chave (eficiente, sem limite de 500 nem filtro createdBy)
-                const docs = chavesSped.length > 0
+                // 1ª busca: por chave de 44 dígitos (precisa)
+                let docs = chavesSped.length > 0
                     ? await getDocumentosByChaves(chavesSped)
-                    : await listDocumentos(currentUser, {});
+                    : [];
+
+                // 2ª busca (fallback): por CNPJ destinatário/emitente + período do SPED.
+                // Útil quando o XML está no Firestore mas a chave salva tem leve
+                // divergência, ou quando o XML não chegou pela DistDFe (saídas
+                // emitidas pela própria empresa).
+                if (docs.length === 0) {
+                    const dtIni = parseResult.registro0000?.dtIni;
+                    const dtFin = parseResult.registro0000?.dtFin;
+                    if (dtIni && dtFin) {
+                        // Formato dtIni/dtFin = 'YYYY-MM-DD'; dhEmi salvo como ISO completo
+                        const dtIniIso = dtIni + 'T00:00:00';
+                        const dtFimIso = dtFin + 'T23:59:59';
+                        docs = await getDocumentosByCnpjPeriodo(cnpj, dtIniIso, dtFimIso);
+                        if (docs.length > 0 && onShowToast) {
+                            onShowToast(`Fallback CNPJ+período: encontrou ${docs.length} XMLs (busca por chave retornou 0)`);
+                        }
+                    }
+                }
+
+                // 3º fallback: empresas antigas sem dhEmi indexado — pega tudo do usuário
+                if (docs.length === 0 && chavesSped.length === 0) {
+                    docs = await listDocumentos(currentUser, {});
+                }
 
                 // Filtro adicional por CNPJ da empresa (defensivo)
                 const filtered = docs.filter(d => {
                     if (!d) return false;
-                    const emitCnpj = d.emitente?.cnpjCpf?.replace(/\D/g, '') || '';
-                    const destCnpj = d.destinatario?.cnpjCpf?.replace(/\D/g, '') || '';
-                    // Se tem CNPJ da empresa, valida; senão aceita (busca foi por chave)
-                    if (chavesSped.length > 0) return true;
+                    const emitCnpj = d.emitente?.cnpjCpf?.replace(/\D/g, '') || (d as any).cnpjEmit || '';
+                    const destCnpj = d.destinatario?.cnpjCpf?.replace(/\D/g, '') || (d as any).cnpjDest || '';
+                    if (chavesSped.length > 0 && docs.length > 0) return true;
                     return emitCnpj === cnpj || destCnpj === cnpj;
                 });
 
@@ -121,6 +143,11 @@ const AnaliseConferencia: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     valorIcms: d.totais?.vICMS,
                     status: d.status,
                 }));
+
+                // Alerta crítico se 0 XMLs encontrados — provável que captura SEFAZ não rodou
+                if (xmlInputs.length === 0 && chavesSped.length > 0 && onShowToast) {
+                    onShowToast(`⚠️ 0 XMLs no Firestore p/ ${chavesSped.length} chaves do SPED. Verifique 📋 Status por Empresa → cert A1/procuração.`);
+                }
             }
 
             const result = conferXmlContraSped(xmlInputs, parseResult);
