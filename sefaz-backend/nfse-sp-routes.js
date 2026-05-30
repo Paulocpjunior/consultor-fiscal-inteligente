@@ -17,6 +17,7 @@ import { consultarNfseRecebidas, consultarNfseEmitidas } from './nfse-sp-client.
 import { parseNfseSpXml } from './nfse-sp-importer.js';
 import { parseCsvNfseSp } from './nfse-sp-csv-parser.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
+import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
 import { requireAuth as authUser } from './require-admin.js';
 
 const uploadCsv = multer({
@@ -363,6 +364,54 @@ router.post('/nfsesp-importar-csv', authUser, uploadCsv.single('csv'), async (re
     } catch (e) {
         console.error('[nfsesp-importar-csv] erro:', e);
         res.status(500).json({ erro: e.message });
+    }
+});
+
+// ─── CAPTURA AUTOMÁTICA VIA PORTAL (CSV) — SUBSTITUI WS LEGACY ────────────
+// Cron noturno: login do escritório via mTLS → enumera prestadores
+// autorizados → baixa CSV emitidas + recebidas de cada empresa cliente.
+
+router.post('/nfsesp-portal-cron', json(), async (req, res) => {
+    const headerSecret = req.header('x-cron-secret')
+        || req.header('X-Sefaz-Cron-Secret')
+        || '';
+    if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
+        return res.status(403).json({ erro: 'cron secret inválido' });
+    }
+    res.json({ ok: true, motivo: 'Captura NFSe SP via portal iniciada em background' });
+    setImmediate(async () => {
+        const periodo = req.body?.periodo || null;
+        try {
+            const r = await sincronizarNfseSpViaPortal({
+                periodo, capturadoPor: 'cron-scheduler',
+            });
+            console.log(`[nfsesp-portal-cron] fim: ${r.processadas}/${r.prestadoresAutorizados} ok, ${r.totalNovos} novos, ${r.duracaoMs}ms`);
+        } catch (e) {
+            console.error('[nfsesp-portal-cron] erro:', e);
+        }
+    });
+});
+
+// Disparo manual (Bearer admin, sem precisar do cron-secret)
+router.post('/nfsesp-portal-cron-now', authUser, json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ erro: 'Apenas administradores' });
+        }
+        res.json({ ok: true, motivo: 'Captura NFSe SP via portal iniciada em background' });
+        setImmediate(async () => {
+            try {
+                const r = await sincronizarNfseSpViaPortal({
+                    periodo: req.body?.periodo || null,
+                    capturadoPor: req.user.email,
+                });
+                console.log(`[nfsesp-portal-cron-now] fim: ${r.processadas}/${r.prestadoresAutorizados} ok, ${r.totalNovos} novos, ${r.duracaoMs}ms`);
+            } catch (e) {
+                console.error('[nfsesp-portal-cron-now] erro:', e);
+            }
+        });
+    } catch (e) {
+        return res.status(500).json({ erro: e.message });
     }
 });
 

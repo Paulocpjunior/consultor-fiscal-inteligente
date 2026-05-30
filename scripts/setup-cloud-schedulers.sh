@@ -104,6 +104,14 @@ upsert_job \
     "/api/admin/nfse-nacional-dfe/sync-cron" \
     "Captura NFSe Nacional ADN (DFe) todas empresas habilitadas"
 
+# NFSe SP via PORTAL CSV — substitui o WS legacy que retornava erro 1102.
+# 1 login do escritório baixa CSV de TODAS empresas autorizadas no portal.
+upsert_job \
+    "nfsesp-portal-cron-noturno" \
+    "30 3 * * 1-5" \
+    "/api/admin/sefaz/nfsesp-portal-cron" \
+    "Captura NFSe SP via portal CSV (todas empresas autorizadas no mês anterior)"
+
 # ─── Verifica ──────────────────────────────────────────────────────────────
 echo ""
 echo "═══ Jobs ativos em $REGION ═══"
