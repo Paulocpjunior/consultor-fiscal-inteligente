@@ -80,18 +80,19 @@ function assinarXmlSp(xmlString, certPem, keyPem) {
 }
 
 function envelopeSoap(xmlAssinado, metodo = 'ConsultaNFeRecebidas') {
-    // O webservice de SP espera o XML do pedido dentro de CDATA — nao escapado
-    // com entidades. Conteudo escapado dispara erro 1102 ("MensagemXML sem
-    // conteudo"). extrairRetornoXml tambem le a resposta a partir de CDATA.
+    // SOAP 1.1 — mais conservador. Webservice SP `nfews.prefeitura.sp.gov.br`
+    // aceita ambos, mas alguns métodos só funcionam com 1.1 (binding clássico
+    // LoteNFeBinding em vez do LoteNFeBinding12).
+    // CDATA no <MensagemXML> conforme manual (entities escapadas dispara 1102).
     return `<?xml version="1.0" encoding="utf-8"?>
-<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
-  <soap12:Body>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
     <${metodo} xmlns="${NS_NFE}">
       <VersaoSchema>1</VersaoSchema>
       <MensagemXML><![CDATA[${xmlAssinado}]]></MensagemXML>
     </${metodo}>
-  </soap12:Body>
-</soap12:Envelope>`;
+  </soap:Body>
+</soap:Envelope>`;
 }
 
 function postSoap(body, pfxBuffer, password, soapAction = SOAP_ACTION_RECEBIDAS) {
@@ -106,8 +107,9 @@ function postSoap(body, pfxBuffer, password, soapAction = SOAP_ACTION_RECEBIDAS)
                 minVersion: 'TLSv1.2',
                 rejectUnauthorized: true,
                 headers: {
-                    // SOAP 1.2: o action vai DENTRO do Content-Type, nao como header separado
-                    'Content-Type': `application/soap+xml; charset=utf-8; action="${soapAction}"`,
+                    // SOAP 1.1: Content-Type text/xml + SOAPAction header separado
+                    'Content-Type': 'text/xml; charset=utf-8',
+                    'SOAPAction': `"${soapAction}"`,
                     'Content-Length': Buffer.byteLength(body, 'utf8'),
                 },
                 timeout: 60000,
