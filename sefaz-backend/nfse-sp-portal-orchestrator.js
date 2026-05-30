@@ -236,13 +236,44 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
         let processadas = 0;
         let prestadasTotal = 0, tomadasTotal = 0;
         let erros = 0;
+        let autoCadastradas = 0;
         const detalhes = [];
 
         for (const prest of tela.prestadores) {
-            const emp = mapaEmpresas.get(prest.ccm);
+            let emp = mapaEmpresas.get(prest.ccm);
+            // AUTO-CADASTRO: empresa autorizada no portal SP mas sem cadastro
+            // no Firestore — cria stub em `nfsesp_empresas_descobertas` pra
+            // permitir captura no próximo cron sem trabalho operacional.
             if (!emp) {
-                detalhes.push({ ccm: prest.ccm, nome: prest.nome, status: 'sem-cadastro-firestore' });
-                continue;
+                try {
+                    const stubId = `ccm-${prest.ccm}`;
+                    const stubRef = fa().firestore().collection('nfsesp_empresas_descobertas').doc(stubId);
+                    const stubSnap = await stubRef.get();
+                    if (!stubSnap.exists) {
+                        await stubRef.set({
+                            ccm: prest.ccm,
+                            nome: prest.nome,
+                            value: prest.value,
+                            descobertoEm: admin.firestore.FieldValue.serverTimestamp(),
+                            descobertoPor: capturadoPor || 'cron',
+                            statusCadastro: 'pendente-cnpj',
+                        });
+                        autoCadastradas++;
+                    }
+                    // Usa o stub como empresa pra ainda baixar CSV (cnpj não preenchido
+                    // ainda, mas baixar a NF mesmo assim — direção identificada pelo
+                    // próprio CSV)
+                    emp = {
+                        id: stubId,
+                        cnpj: '', // desconhecido — empresa precisa ser linkada manualmente
+                        ccm: prest.ccm,
+                        nome: prest.nome,
+                        colecao: 'nfsesp_empresas_descobertas',
+                    };
+                } catch (e) {
+                    detalhes.push({ ccm: prest.ccm, nome: prest.nome, status: 'erro-auto-cadastro', motivo: e.message });
+                    continue;
+                }
             }
 
             // Lock por CNPJ
@@ -272,6 +303,7 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
         }
 
         log.processadas = processadas;
+        log.autoCadastradas = autoCadastradas;
         log.prestadasTotalNotas = prestadasTotal;
         log.tomadasTotalNotas = tomadasTotal;
         log.totalNovos = prestadasTotal + tomadasTotal;
