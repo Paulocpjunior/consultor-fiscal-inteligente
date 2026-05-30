@@ -19,7 +19,10 @@
 import { consultarNfseRecebidas } from './nfse-sp-client.js';
 import { salvarNfseSpRecebida } from './nfse-sp-importer.js';
 
-const CNPJ_SP_CONTABIL = process.env.NFSE_SP_REMETENTE_CNPJ || '';
+// Remetente = escritório (SP Assessoria 44388152000189). Hardcoded como
+// fallback porque o env não foi configurado em produção e a NFSe SP precisa
+// SEMPRE do CNPJ do contador (não da empresa consultada).
+const CNPJ_SP_CONTABIL = (process.env.NFSE_SP_REMETENTE_CNPJ || process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 const THROTTLE_MS = 2000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

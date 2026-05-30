@@ -110,7 +110,9 @@ router.post('/nfsesp-consultar', authUser, json(), async (req, res) => {
             return res.status(400).json({ erro: 'Ano inválido' });
         }
 
-        const cnpjRemetente = process.env.NFSE_SP_REMETENTE_CNPJ || '';
+        // Remetente = escritório (SP Assessoria). Pode vir do env ou usar
+        // o CNPJ default do escritório (44388152000189).
+        const cnpjRemetente = (process.env.NFSE_SP_REMETENTE_CNPJ || process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
         const cnpjLimpo = cnpj.replace(/\D/g, '');
         const periodo = { ano: anoNum, mes: mesNum };
 

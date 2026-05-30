@@ -104,11 +104,11 @@ const CardCaptura: React.FC<{
                     <>
                         <div className="flex justify-between">
                             <span className="opacity-80">Sucessos / Falhas:</span>
-                            <span className="font-mono">{log.sucessos ?? '—'} / {log.falhas ?? '—'}</span>
+                            <span className="font-mono">{log.sucessos ?? 0} / {log.falhas ?? 0}</span>
                         </div>
                         <div className="flex justify-between">
                             <span className="opacity-80">Novos docs (essa exec.):</span>
-                            <span className="font-mono">{log.totalNovos ?? '—'}</span>
+                            <span className="font-mono">{log.totalNovos ?? 0}</span>
                         </div>
                         {log.erroFatal && (
                             <div className="text-red-700 bg-red-50 p-2 rounded text-xs mt-1">

@@ -138,6 +138,11 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 }
             }
 
+            // Empresa com cert A1/A3 próprio NÃO precisa de procuração e-CAC
+            // separada — o cert já autoriza. A flag só importa quando usa cert
+            // do escritório. Pra UI mostrar verde, inferimos como ativa.
+            const procuracaoInferida = emp.procuracaoEcacAtiva || (tipoCert === 'A1' || tipoCert === 'A3');
+
             // Cálculo de capacidade de captura
             const motivosBloqueio = [];
 
@@ -154,9 +159,9 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             if (!emp.ccmSp) motivosBloqueio.push('NFSe SP: falta Inscrição Municipal (ccmSp)');
             else if (!emp.nfseSpAutorizadoEm) motivosBloqueio.push('NFSe SP: falta autorização do escritório no portal nfe.prefeitura.sp.gov.br');
 
-            // c) NFSe Nacional: precisa flag + procuração e-CAC
-            const capturaNfseNacionalOk = emp.nfseNacionalDfeAtivo && emp.procuracaoEcacAtiva;
-            if (!emp.procuracaoEcacAtiva) motivosBloqueio.push('NFSe Nacional: falta procuração e-CAC pro escritório');
+            // c) NFSe Nacional: precisa flag + procuração e-CAC (ou cert próprio que já autoriza)
+            const capturaNfseNacionalOk = emp.nfseNacionalDfeAtivo && procuracaoInferida;
+            if (!procuracaoInferida) motivosBloqueio.push('NFSe Nacional: falta procuração e-CAC pro escritório (ou cert A1 próprio)');
             else if (!emp.nfseNacionalDfeAtivo) motivosBloqueio.push('NFSe Nacional: flag nfseNacionalDfeAtivo desabilitada');
 
             const state = stateMap.get(emp.cnpj);
@@ -174,8 +179,9 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 certValido,
                 certVenceEm,
                 usaCertEscritorio,
-                // procuração / autorizações
-                procuracaoEcacAtiva: emp.procuracaoEcacAtiva,
+                // procuração / autorizações (inferida=true se tem cert A1/A3 próprio)
+                procuracaoEcacAtiva: procuracaoInferida,
+                procuracaoEcacFlagBruta: emp.procuracaoEcacAtiva,
                 ccmSp: emp.ccmSp,
                 nfseSpAutorizado: !!emp.nfseSpAutorizadoEm,
                 nfseNacionalDfeAtivo: emp.nfseNacionalDfeAtivo,
@@ -204,7 +210,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 if (dias < 0) resumo.certExpirado++;
                 else if (dias < 30) resumo.certVenceEm30d++;
             }
-            if (emp.procuracaoEcacAtiva) resumo.comProcuracaoEcac++;
+            if (procuracaoInferida) resumo.comProcuracaoEcac++;
             else resumo.semProcuracaoEcac++;
             if (capturaNfseSpOk) resumo.ccmSpAutorizado++;
             if (emp.nfseNacionalDfeAtivo) resumo.nfseNacionalAtivo++;
