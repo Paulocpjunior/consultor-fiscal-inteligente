@@ -55,6 +55,9 @@ function assinarXmlSp(xmlString, certPem, keyPem) {
         canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     });
 
+    // SP NFSe espera URI="" (referência vazia ao root) e SEM atributo Id
+    // no elemento raiz. Erro 1102 'MensagemXML sem conteúdo' acontece quando
+    // mandamos URI="#_0" (default do xml-crypto) — SP rejeita por schema.
     sig.addReference({
         xpath: '/*',
         transforms: [
@@ -62,6 +65,8 @@ function assinarXmlSp(xmlString, certPem, keyPem) {
             'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
         ],
         digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+        uri: '',
+        isEmptyUri: true,
     });
 
     const certBody = certPem
