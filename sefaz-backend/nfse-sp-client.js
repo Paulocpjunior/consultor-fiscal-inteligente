@@ -35,7 +35,9 @@ function montarPedidoXml({ cnpjRemetente, inscricaoMunicipalTomador, dtInicio, d
     // Layout confirmado contra PyTrustNFe (biblioteca testada): o elemento raiz
     // do metodo ConsultaNFeRecebidas e <PedidoConsultaNFePeriodo>; a inscricao
     // municipal e <Inscricao>; NumeroPagina vai DENTRO do Cabecalho, apos dtFim.
-    return stripFormat(`
+    // CABEÇALHO XML <?xml?> é OBRIGATÓRIO — sem ele SP retorna Cabecalho
+    // Versao="0" (falha de parse) e erro 1102.
+    return '<?xml version="1.0" encoding="utf-8"?>' + stripFormat(`
 <PedidoConsultaNFePeriodo xmlns="${NS_NFE}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <Cabecalho Versao="1" xmlns="">
     <CPFCNPJRemetente><CNPJ>${cnpjRemetente}</CNPJ></CPFCNPJRemetente>
@@ -332,7 +334,7 @@ export async function consultarNfseEmitidas({
     // Test 1.1: o envelope SOAP 1.1 usa text/xml + SOAPAction header.
     // Test 1.2: o envelope SOAP 1.2 usa application/soap+xml + action no Content-Type.
     // Hoje usamos 1.2. Se SP rejeitar 1.1 também, problema é no XML interno.
-    console.error(`[nfse-sp] soap-envelope-head-500: ${soap.slice(0, 500)}`);
+    console.error(`[nfse-sp] soap-envelope-FULL: ${soap.replace(/[\r\n]+/g, ' ').slice(0, 5000)}`);
     if (xmlAssinado.includes(']]>')) {
         console.error('[nfse-sp] xmlAssinado contém "]]>" — vai QUEBRAR o CDATA do envelope!');
     }
