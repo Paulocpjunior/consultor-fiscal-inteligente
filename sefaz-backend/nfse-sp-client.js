@@ -320,6 +320,12 @@ export async function consultarNfseEmitidas({
     // Log diagnóstico SEMPRE (não precisa SEFAZ_DEBUG=1).
     console.error(`[nfse-sp] REQUEST-EMITIDAS cnpjRemetente=${cnpjRemetente} CCM=${inscricaoMunicipalPrestador} xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
     console.error(`[nfse-sp] xmlInterno-EMITIDAS: ${xmlInterno}`);
+    console.error(`[nfse-sp] xmlAssinado-EMITIDAS-head-1500: ${xmlAssinado.slice(0, 1500)}`);
+    console.error(`[nfse-sp] xmlAssinado-EMITIDAS-tail-500: ${xmlAssinado.slice(-500)}`);
+    // Test 1.1: o envelope SOAP 1.1 usa text/xml + SOAPAction header.
+    // Test 1.2: o envelope SOAP 1.2 usa application/soap+xml + action no Content-Type.
+    // Hoje usamos 1.2. Se SP rejeitar 1.1 também, problema é no XML interno.
+    console.error(`[nfse-sp] soap-envelope-head-500: ${soap.slice(0, 500)}`);
     if (xmlAssinado.includes(']]>')) {
         console.error('[nfse-sp] xmlAssinado contém "]]>" — vai QUEBRAR o CDATA do envelope!');
     }
