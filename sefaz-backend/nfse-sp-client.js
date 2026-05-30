@@ -241,6 +241,12 @@ export async function consultarNfseRecebidas({
     const xmlAssinado = assinarXmlSp(xmlInterno, certs.pemCert, certs.pemKey);
     const soap = envelopeSoap(xmlAssinado);
 
+    // Log diagnóstico SEMPRE (não precisa SEFAZ_DEBUG=1). Pra diagnosticar
+    // erro 1102 e 'MensagemXML sem conteúdo'.
+    console.log(`[nfse-sp] REQUEST cnpjRemetente=${cnpjRemetente} CCM=${inscricaoMunicipalTomador} xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
+    if (xmlAssinado.includes(']]>')) {
+        console.warn('[nfse-sp] xmlAssinado contém "]]>" — vai QUEBRAR o CDATA do envelope!');
+    }
     if (process.env.SEFAZ_DEBUG === '1') {
         const _flat = (x) => (x || '').replace(/[\r\n]+/g, ' ');
         console.error('[nfse-sp-DIAG2] SOAP-COMPLETO len=' + (soap||'').length + ' :: ' + _flat(soap));
@@ -309,6 +315,11 @@ export async function consultarNfseEmitidas({
     const metodo = 'ConsultaNFeEmitidas';
     const soap = envelopeSoap(xmlAssinado, metodo);
 
+    // Log diagnóstico SEMPRE (não precisa SEFAZ_DEBUG=1).
+    console.log(`[nfse-sp] REQUEST-EMITIDAS cnpjRemetente=${cnpjRemetente} CCM=${inscricaoMunicipalPrestador} xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
+    if (xmlAssinado.includes(']]>')) {
+        console.warn('[nfse-sp] xmlAssinado contém "]]>" — vai QUEBRAR o CDATA do envelope!');
+    }
     if (process.env.SEFAZ_DEBUG === '1') {
         const _flat = (x) => (x || '').replace(/[\r\n]+/g, ' ');
         console.error('[nfse-sp-DIAG2] SOAP-EMITIDAS len=' + (soap||'').length + ' :: ' + _flat(soap));
