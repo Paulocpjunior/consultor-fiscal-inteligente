@@ -64,8 +64,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# Baixa só o Chromium do Playwright (mais leve que --with-deps)
-RUN npx --yes playwright install chromium
+# Baixa só o Chromium do Playwright. Definimos PLAYWRIGHT_BROWSERS_PATH
+# pra garantir caminho previsível independente do user que roda.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN node_modules/.bin/playwright install chromium
 
 COPY --from=builder /app/dist ./dist
 COPY server.js ./

@@ -16,7 +16,7 @@
 // Esse módulo NÃO é importado em hot path do frontend — só backend cron.
 // ============================================================================
 
-import { chromium } from 'playwright-core';
+import { chromium } from 'playwright';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
