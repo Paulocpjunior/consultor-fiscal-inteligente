@@ -244,15 +244,22 @@ export async function loginPortalSp({ pfxBuffer, password } = {}) {
  * de prestadores autorizados (dropdown ddlPrestador).
  */
 export async function carregarTelaExportacao({ cookies, pfxBuffer, password }) {
+    const cookieNames = Object.keys(cookies);
+    console.log(`[nfsesp-portal] GET exportaarquivo enviando ${cookieNames.length} cookies: ${cookieNames.join(',')}`);
     const res = await httpsRequest({
         host: PORTAL_HOST,
         path: ENDPOINT_EXPORTAR,
         method: 'GET',
-        headers: { Cookie: cookieJarToHeader(cookies) },
+        headers: {
+            Cookie: cookieJarToHeader(cookies),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9',
+            'Referer': `https://${PORTAL_HOST}/contribuinte/opcoes.aspx`,
+        },
         pfxBuffer, password,
     });
     if (res.statusCode === 302 || res.statusCode === 301) {
-        throw new Error(`Portal SP: sessão expirou (HTTP ${res.statusCode} redirect → ${res.headers.location})`);
+        throw new Error(`Portal SP: sessão expirou (HTTP ${res.statusCode} redirect → ${res.headers.location}). Cookies enviados: ${cookieNames.join(',')}`);
     }
     if (res.statusCode !== 200) {
         throw new Error(`Portal SP exportaarquivo GET: HTTP ${res.statusCode}`);
