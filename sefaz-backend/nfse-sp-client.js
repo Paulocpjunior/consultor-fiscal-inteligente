@@ -243,9 +243,11 @@ export async function consultarNfseRecebidas({
 
     // Log diagnóstico SEMPRE (não precisa SEFAZ_DEBUG=1). Pra diagnosticar
     // erro 1102 e 'MensagemXML sem conteúdo'.
-    console.log(`[nfse-sp] REQUEST cnpjRemetente=${cnpjRemetente} CCM=${inscricaoMunicipalTomador} xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
+    // Usa console.error pra garantir que apareça nos logs do Cloud Run
+    // (INFO pode ser filtrado dependendo do nível configurado).
+    console.error(`[nfse-sp] REQUEST cnpjRemetente=${cnpjRemetente} CCM=${inscricaoMunicipalTomador} xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
     if (xmlAssinado.includes(']]>')) {
-        console.warn('[nfse-sp] xmlAssinado contém "]]>" — vai QUEBRAR o CDATA do envelope!');
+        console.error('[nfse-sp] xmlAssinado contém "]]>" — vai QUEBRAR o CDATA do envelope!');
     }
     if (process.env.SEFAZ_DEBUG === '1') {
         const _flat = (x) => (x || '').replace(/[\r\n]+/g, ' ');
@@ -316,9 +318,9 @@ export async function consultarNfseEmitidas({
     const soap = envelopeSoap(xmlAssinado, metodo);
 
     // Log diagnóstico SEMPRE (não precisa SEFAZ_DEBUG=1).
-    console.log(`[nfse-sp] REQUEST-EMITIDAS cnpjRemetente=${cnpjRemetente} CCM=${inscricaoMunicipalPrestador} xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
+    console.error(`[nfse-sp] REQUEST-EMITIDAS cnpjRemetente=${cnpjRemetente} CCM=${inscricaoMunicipalPrestador} xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
     if (xmlAssinado.includes(']]>')) {
-        console.warn('[nfse-sp] xmlAssinado contém "]]>" — vai QUEBRAR o CDATA do envelope!');
+        console.error('[nfse-sp] xmlAssinado contém "]]>" — vai QUEBRAR o CDATA do envelope!');
     }
     if (process.env.SEFAZ_DEBUG === '1') {
         const _flat = (x) => (x || '').replace(/[\r\n]+/g, ' ');
