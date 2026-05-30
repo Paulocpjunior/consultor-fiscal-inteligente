@@ -20,6 +20,9 @@ import { loadCertificate } from './secret-loader.js';
 const PORTAL_HOST = 'nfe.prefeitura.sp.gov.br';
 const ENDPOINT_EXPORTAR = '/contribuinte/exportaarquivo.aspx';
 const ENDPOINT_OPCOES = '/contribuinte/opcoes.aspx';
+// LoginICP é o endpoint de autenticação via cert ICP-Brasil. Confirmado
+// via inspeção do fluxo no Safari (DevTools mostrou LoginICP.aspx como 1ª request).
+const ENDPOINT_LOGIN_ICP = '/LoginICP.aspx';
 const USER_AGENT = 'Mozilla/5.0 (consultor-fiscal-inteligente/1.0)';
 
 // IDs/names confirmados via inspeção do HTML real do portal (30/05/2026):
@@ -101,8 +104,14 @@ function httpsRequest({ host, path, method, headers, body, pfxBuffer, password }
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * Estabelece sessão no portal SP via mTLS. Retorna jar de cookies a usar
- * nas próximas chamadas.
+ * Estabelece sessão no portal SP via cert ICP-Brasil.
+ *
+ * Fluxo confirmado por inspeção em browser:
+ *   1. GET /LoginICP.aspx COM cert mTLS → portal valida cert → 302 redirect
+ *      + Set-Cookie PMSP_NFeID, PMSP_NFE_CPFCNPJ, ASP.NET_SessionId
+ *   2. GET /contribuinte/opcoes.aspx COM os cookies → 200 OK (sessão ativa)
+ *
+ * Retorna jar de cookies a usar nas próximas chamadas.
  */
 export async function loginPortalSp({ pfxBuffer, password } = {}) {
     // Se não passou cert, carrega o default (escritório)
@@ -111,25 +120,42 @@ export async function loginPortalSp({ pfxBuffer, password } = {}) {
         pfxBuffer = cert.pfxBuffer;
         password = cert.password;
     }
-    // GET raiz com mTLS → portal autentica via cert e devolve cookies
-    const res = await httpsRequest({
+
+    // PASSO 1: GET em /LoginICP.aspx com mTLS — portal autentica e retorna cookies
+    const resLogin = await httpsRequest({
         host: PORTAL_HOST,
-        path: ENDPOINT_OPCOES,
+        path: ENDPOINT_LOGIN_ICP,
         method: 'GET',
         pfxBuffer, password,
     });
-    if (res.statusCode === 302 || res.statusCode === 301) {
-        // Segue redirect mantendo cookies
-        const cookies = parseCookies(res.setCookies);
-        return { cookies, statusCode: res.statusCode, location: res.headers.location };
+
+    // Coleta cookies (LoginICP geralmente retorna 302 com Set-Cookie)
+    let cookies = parseCookies(resLogin.setCookies);
+
+    if (!cookies['PMSP_NFeID']) {
+        // Se PMSP_NFeID não veio, login falhou — provavelmente cert não autorizado
+        const bodyHead = resLogin.body.toString('latin1').slice(0, 500).replace(/\s+/g, ' ');
+        throw new Error(`Portal SP LoginICP: cookie PMSP_NFeID não retornado (HTTP ${resLogin.statusCode}). Cert pode não estar autorizado. Body: ${bodyHead}`);
     }
-    if (res.statusCode !== 200) {
-        throw new Error(`Portal SP login: HTTP ${res.statusCode}`);
+
+    // Se houve redirect, segue ele pra estabelecer sessão completa
+    if (resLogin.statusCode === 302 || resLogin.statusCode === 301) {
+        const loc = resLogin.headers.location || ENDPOINT_OPCOES;
+        const path = loc.startsWith('http') ? new URL(loc).pathname + new URL(loc).search : loc;
+        const resRedirect = await httpsRequest({
+            host: PORTAL_HOST,
+            path,
+            method: 'GET',
+            headers: { Cookie: cookieJarToHeader(cookies) },
+            pfxBuffer, password,
+        });
+        cookies = mergeCookies(cookies, resRedirect.setCookies);
     }
-    const cookies = parseCookies(res.setCookies);
+
     if (!cookies['ASP.NET_SessionId']) {
-        throw new Error('Portal SP login: sessão não estabelecida (sem ASP.NET_SessionId)');
+        throw new Error('Portal SP login: ASP.NET_SessionId não estabelecido após redirect');
     }
+
     return { cookies };
 }
 
