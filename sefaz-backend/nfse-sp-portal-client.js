@@ -23,7 +23,9 @@ const ENDPOINT_OPCOES = '/contribuinte/opcoes.aspx';
 // LoginICP é o endpoint de autenticação via cert ICP-Brasil. Confirmado
 // via inspeção do fluxo no Safari (DevTools mostrou LoginICP.aspx como 1ª request).
 const ENDPOINT_LOGIN_ICP = '/LoginICP.aspx';
-const USER_AGENT = 'Mozilla/5.0 (consultor-fiscal-inteligente/1.0)';
+// User-Agent de Safari real — alguns portais governamentais rejeitam
+// agentes não-padronizados retornando HTML genérico em vez do redirect.
+const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15';
 
 // IDs/names confirmados via inspeção do HTML real do portal (30/05/2026):
 const FORM_FIELDS = {
@@ -121,21 +123,43 @@ export async function loginPortalSp({ pfxBuffer, password } = {}) {
         password = cert.password;
     }
 
-    // PASSO 1: GET em /LoginICP.aspx com mTLS — portal autentica e retorna cookies
+    // PASSO 0: GET na home pra inicializar SessionId anônimo
+    const resHome = await httpsRequest({
+        host: PORTAL_HOST,
+        path: '/',
+        method: 'GET',
+        headers: {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9',
+        },
+        pfxBuffer, password,
+    });
+    let cookies = parseCookies(resHome.setCookies);
+    console.log(`[nfsesp-portal] home GET status=${resHome.statusCode}, cookies=${Object.keys(cookies).join(',')}`);
+
+    // PASSO 1: GET em /LoginICP.aspx com mTLS + cookies — portal autentica
     const resLogin = await httpsRequest({
         host: PORTAL_HOST,
         path: ENDPOINT_LOGIN_ICP,
         method: 'GET',
+        headers: {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9',
+            'Referer': `https://${PORTAL_HOST}/`,
+            'Cookie': cookieJarToHeader(cookies),
+        },
         pfxBuffer, password,
     });
 
     // Coleta cookies (LoginICP geralmente retorna 302 com Set-Cookie)
-    let cookies = parseCookies(resLogin.setCookies);
+    cookies = mergeCookies(cookies, resLogin.setCookies);
+    console.log(`[nfsesp-portal] LoginICP status=${resLogin.statusCode}, cookies=${Object.keys(cookies).join(',')}`);
 
     if (!cookies['PMSP_NFeID']) {
         // Se PMSP_NFeID não veio, login falhou — provavelmente cert não autorizado
-        const bodyHead = resLogin.body.toString('latin1').slice(0, 500).replace(/\s+/g, ' ');
-        throw new Error(`Portal SP LoginICP: cookie PMSP_NFeID não retornado (HTTP ${resLogin.statusCode}). Cert pode não estar autorizado. Body: ${bodyHead}`);
+        const bodyHead = resLogin.body.toString('latin1').slice(0, 800).replace(/\s+/g, ' ');
+        const locationHdr = resLogin.headers.location || '';
+        throw new Error(`Portal SP LoginICP: PMSP_NFeID não retornado (HTTP ${resLogin.statusCode}, location=${locationHdr}). Cookies recebidos: ${Object.keys(cookies).join(',') || '(nenhum)'}. Body head: ${bodyHead.slice(0, 400)}`);
     }
 
     // Se houve redirect, segue ele pra estabelecer sessão completa
