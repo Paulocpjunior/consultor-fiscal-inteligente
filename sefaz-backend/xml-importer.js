@@ -250,10 +250,19 @@ function extrairMetadados(xml, schema) {
       }
     }
     const classif = tpEvento ? classificarEvento(tpEvento) : { tipo: 'desconhecido', descricao: 'Evento sem tpEvento' };
+    // chNFeRef é SEMPRE 44 dígitos. Se pickTag retornou lixo grande
+    // (XML com múltiplos eventos, envelope mal formado, etc), extrai apenas
+    // a primeira sequência de 44 dígitos.
+    let chNFeLimpa = null;
+    if (chNFeRef) {
+      const onlyDigits = chNFeRef.replace(/\D/g, '');
+      const match = onlyDigits.match(/(\d{44})/);
+      chNFeLimpa = match ? match[1] : null;
+    }
     evento = {
       tpEvento, nSeqEvento, dhEvento: dhEventoTag,
       xCorrecao, xJust, nProt, cStat, xMotivo,
-      chNFeRef: chNFeRef ? chNFeRef.replace(/\D/g, '') : null,
+      chNFeRef: chNFeLimpa,
       tipo: classif.tipo, descricao: classif.descricao,
     };
   }
@@ -384,8 +393,12 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
 
   // ── EVENTOS: caminho separado (anexa à NFe original) ────────────────
   if ((meta.tipoDoc === 'eventoNFe' || meta.tipoDoc === 'resEvento') && meta.evento?.chNFeRef) {
-    // Upload do XML do evento no Storage (path próprio sob "eventos/")
-    const storagePathEvento = `xmls/${empresaId || 'sem-empresa'}/eventos/${meta.evento.chNFeRef}-${meta.evento.nProt || meta.evento.tpEvento || Date.now()}.xml`;
+    // Sanitiza componentes do path pra não estourar limite de 1024 chars
+    // do Firebase Storage. Chave NFe = 44 dígitos exatos; nProt/tpEvento ~15 chars.
+    const chRefSafe = String(meta.evento.chNFeRef || '').replace(/\D/g, '').slice(0, 44);
+    const idEventoSafe = String(meta.evento.nProt || meta.evento.tpEvento || Date.now())
+      .replace(/[^a-zA-Z0-9]/g, '').slice(0, 30);
+    const storagePathEvento = `xmls/${empresaId || 'sem-empresa'}/eventos/${chRefSafe || 'sem-chave'}-${idEventoSafe || 'sem-id'}.xml`;
     const bucket = storage.bucket(STORAGE_BUCKET);
     await bucket.file(storagePathEvento).save(xml, {
       contentType: 'application/xml',
