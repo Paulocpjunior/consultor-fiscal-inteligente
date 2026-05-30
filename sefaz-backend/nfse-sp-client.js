@@ -35,9 +35,9 @@ function montarPedidoXml({ cnpjRemetente, inscricaoMunicipalTomador, dtInicio, d
     // Layout confirmado contra PyTrustNFe (biblioteca testada): o elemento raiz
     // do metodo ConsultaNFeRecebidas e <PedidoConsultaNFePeriodo>; a inscricao
     // municipal e <Inscricao>; NumeroPagina vai DENTRO do Cabecalho, apos dtFim.
-    // CABEÇALHO XML <?xml?> é OBRIGATÓRIO — sem ele SP retorna Cabecalho
-    // Versao="0" (falha de parse) e erro 1102.
-    return '<?xml version="1.0" encoding="utf-8"?>' + stripFormat(`
+    // PyTrustNFe NÃO inclui <?xml?> no MensagemXML — somente o envelope externo
+    // tem. Testes confirmaram que adicionar <?xml?> aqui NÃO resolve 1102.
+    return stripFormat(`
 <PedidoConsultaNFePeriodo xmlns="${NS_NFE}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <Cabecalho Versao="1" xmlns="">
     <CPFCNPJRemetente><CNPJ>${cnpjRemetente}</CNPJ></CPFCNPJRemetente>
