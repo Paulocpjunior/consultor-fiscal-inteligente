@@ -46,6 +46,7 @@ const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
 const CaixaPostalDashboard = lazy(() => import('./components/CaixaPostal'));
 const CaixaPostalAlerta = lazy(() => import('./components/CaixaPostal/AlertaPopup'));
 const CronCapturaBanner = lazy(() => import('./components/CronCapturaBanner'));
+const VencimentosBanner = lazy(() => import('./components/VencimentosBanner'));
 const DasDashboard = lazy(() => import('./components/Das'));
 const DCTFWebDashboard = lazy(() => import('./components/DCTFWeb'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
@@ -658,6 +659,10 @@ const App: React.FC = () => {
                     <main className="flex-grow min-w-0">
                         <ErrorBoundary>
                             <Suspense fallback={null}>
+                                <VencimentosBanner
+                                    currentUser={currentUser}
+                                    onClickIrTarefas={() => setSearchType(SearchType.TAREFAS)}
+                                />
                                 <CronCapturaBanner currentUser={currentUser} onShowToast={(msg) => setToastMessage(msg)} />
                             </Suspense>
                         </ErrorBoundary>

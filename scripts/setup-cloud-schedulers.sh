@@ -114,6 +114,14 @@ upsert_job \
     "/api/admin/sefaz/nfsesp-portal-cron" \
     "Captura NFSe SP via portal CSV (todas empresas autorizadas no mês anterior)"
 
+# Alertas de vencimento de obrigações — D-3, D-1, D-0, atrasadas.
+# Envia email + cria notificação in-app + banner topo do app.
+upsert_job \
+    "vencimentos-cron-diario" \
+    "0 8 * * 1-5" \
+    "/api/admin/vencimentos/cron" \
+    "Verifica tarefas vencendo e dispara emails + notificações in-app"
+
 # ─── Verifica ──────────────────────────────────────────────────────────────
 echo ""
 echo "═══ Jobs ativos em $REGION ═══"
