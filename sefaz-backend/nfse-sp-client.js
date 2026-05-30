@@ -39,11 +39,11 @@ function montarPedidoXml({ cnpjRemetente, inscricaoMunicipalTomador, dtInicio, d
     // Layout confirmado contra PyTrustNFe (biblioteca testada): o elemento raiz
     // do metodo ConsultaNFeRecebidas e <PedidoConsultaNFePeriodo>; a inscricao
     // municipal e <Inscricao>; NumeroPagina vai DENTRO do Cabecalho, apos dtFim.
-    // Layout v2 obrigatório desde 01/01/2026 (Reforma Tributária).
-    // Cabecalho Versao="2". Erro 1102 pode acontecer com Versao="1" pós-RT.
+    // Versao="1" — resposta SP vem com Versao="1" também, sugere que v1 é o
+    // schema correto pra CONSULTA (v2 só pra EMISSÃO com IBS/CBS).
     return stripFormat(`
 <PedidoConsultaNFePeriodo xmlns="${NS_NFE}">
-  <Cabecalho Versao="2" xmlns="">
+  <Cabecalho Versao="1" xmlns="">
     <CPFCNPJRemetente><CNPJ>${cnpjRemetente}</CNPJ></CPFCNPJRemetente>
     <Inscricao>${inscricaoMunicipalTomador}</Inscricao>
     <dtInicio>${inicio}</dtInicio>
@@ -103,7 +103,7 @@ function envelopeSoap(xmlAssinado, metodo = 'ConsultaNFeRecebidas') {
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
     <${metodo} xmlns="${NS_NFE}">
-      <VersaoSchema>2</VersaoSchema>
+      <VersaoSchema>1</VersaoSchema>
       <MensagemXML><![CDATA[${xmlAssinado}]]></MensagemXML>
     </${metodo}>
   </soap:Body>
