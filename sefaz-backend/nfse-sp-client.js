@@ -163,23 +163,41 @@ function parseRetorno(retornoXml) {
         errorHandler: { warning: () => {}, error: () => {}, fatalError: (e) => { throw e; } },
     }).parseFromString(retornoXml, 'text/xml');
 
-    const sucessoNode = doc.getElementsByTagName('Sucesso')[0];
+    // Tolerante a namespace prefix: pega qualquer elemento cujo localName bata.
+    const all = Array.from(doc.getElementsByTagName('*'));
+    const byLocal = (name) => all.filter(el => el.localName === name);
+    const firstByLocal = (name) => byLocal(name)[0];
+
+    const sucessoNode = firstByLocal('Sucesso');
     const sucesso = sucessoNode?.textContent?.trim().toLowerCase() === 'true';
 
-    const erros = Array.from(doc.getElementsByTagName('Erro')).map((e) => ({
-        codigo: e.getElementsByTagName('Codigo')[0]?.textContent?.trim() || '',
-        descricao: e.getElementsByTagName('Descricao')[0]?.textContent?.trim() || '',
+    const erros = byLocal('Erro').map((e) => ({
+        codigo: firstByLocal('Codigo', e)?.textContent?.trim()
+            || Array.from(e.getElementsByTagName('*')).find(x => x.localName === 'Codigo')?.textContent?.trim()
+            || '',
+        descricao: Array.from(e.getElementsByTagName('*')).find(x => x.localName === 'Descricao')?.textContent?.trim() || '',
     }));
 
-    const alertas = Array.from(doc.getElementsByTagName('Alerta')).map((a) => ({
-        codigo: a.getElementsByTagName('Codigo')[0]?.textContent?.trim() || '',
-        descricao: a.getElementsByTagName('Descricao')[0]?.textContent?.trim() || '',
+    const alertas = byLocal('Alerta').map((a) => ({
+        codigo: Array.from(a.getElementsByTagName('*')).find(x => x.localName === 'Codigo')?.textContent?.trim() || '',
+        descricao: Array.from(a.getElementsByTagName('*')).find(x => x.localName === 'Descricao')?.textContent?.trim() || '',
     }));
 
     const xmlSerializer = new XMLSerializer();
-    const nfes = Array.from(doc.getElementsByTagName('NFe')).map((n) => xmlSerializer.serializeToString(n));
+    const nfes = byLocal('NFe').map((n) => xmlSerializer.serializeToString(n));
 
-    return { sucesso, erros, alertas, totalNFes: nfes.length, nfes };
+    // Diagnóstico: se sucesso=false sem erros nem alertas, devolve uma amostra
+    // do XML interno pra debug. Mostra também todas as tags presentes (úteis
+    // pra identificar respostas inesperadas tipo <MensagemRetorno>, <Status>).
+    let rawSample = null;
+    let tagsEncontradas = null;
+    if (!sucesso && erros.length === 0 && alertas.length === 0) {
+        rawSample = (retornoXml || '').slice(0, 1500);
+        const uniqueTags = Array.from(new Set(all.map(el => el.localName).filter(Boolean)));
+        tagsEncontradas = uniqueTags.join(', ');
+    }
+
+    return { sucesso, erros, alertas, totalNFes: nfes.length, nfes, rawSample, tagsEncontradas };
 }
 
 export async function consultarNfseRecebidas({

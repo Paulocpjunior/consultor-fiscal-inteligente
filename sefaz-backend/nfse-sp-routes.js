@@ -140,6 +140,8 @@ router.post('/nfsesp-consultar', authUser, json(), async (req, res) => {
                 alertas: resultado.alertas,
                 nfes: [],
                 totalNFes: 0,
+                rawSample: resultado.rawSample || null,
+                tagsEncontradas: resultado.tagsEncontradas || null,
             });
         }
 
