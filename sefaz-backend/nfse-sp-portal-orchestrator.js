@@ -54,6 +54,11 @@ function periodoMesAnterior() {
 // ─── Lock por CNPJ ────────────────────────────────────────────────────────
 
 async function tentaLockCnpj(cnpj) {
+    if (!cnpj || String(cnpj).length !== 14) {
+        // Empresa auto-cadastrada sem CNPJ ainda — não tem como criar lock.
+        // Permite seguir (sem lock); o portal SP já é rate-limit por sessão.
+        return true;
+    }
     const db = fa().firestore();
     const ref = db.collection('nfsesp_portal_locks').doc(cnpj);
     const now = Date.now();
