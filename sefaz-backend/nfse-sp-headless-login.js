@@ -56,7 +56,7 @@ export async function loginHeadlessPortalSp() {
 
     const executablePath = await findChromiumExecutable();
     const launchOpts = {
-        headless: 'new',
+        headless: true,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
