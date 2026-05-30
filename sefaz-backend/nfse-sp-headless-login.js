@@ -102,6 +102,49 @@ export async function loginHeadlessPortalSp() {
         const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500) || '').catch(() => '');
         console.log(`[headless-login] URL pós-wait: ${urlPos} title="${title}" body-head="${bodyText.replace(/\s+/g, ' ').slice(0, 200)}"`);
 
+        // Se a página ainda é LoginICP, é a tela de confirmação:
+        // "Certificado identificado: ... [botão ENTRAR]"
+        // Clicamos no botão pra completar a autenticação.
+        if (urlPos.includes('LoginICP.aspx')) {
+            console.log('[headless-login] tela de confirmação detectada, clicando ENTRAR…');
+            const clicked = await page.evaluate(() => {
+                // Procura botão "Entrar" — pode ser <input type=submit> ou <button>
+                const candidates = [
+                    ...document.querySelectorAll('input[type=submit]'),
+                    ...document.querySelectorAll('button'),
+                    ...document.querySelectorAll('input[type=button]'),
+                    ...document.querySelectorAll('a[href*="javascript:"]'),
+                ];
+                for (const el of candidates) {
+                    const txt = (el.value || el.innerText || el.textContent || '').trim().toUpperCase();
+                    if (txt.includes('ENTRAR') || txt.includes('CONTINUAR') || txt.includes('ACESSAR') || txt.includes('CONFIRMAR')) {
+                        el.click();
+                        return { ok: true, label: txt, tag: el.tagName, id: el.id, name: el.name };
+                    }
+                }
+                // Fallback: submit do primeiro form
+                const form = document.forms[0];
+                if (form) {
+                    form.submit();
+                    return { ok: true, label: '(submit form)', tag: 'FORM', id: form.id };
+                }
+                return { ok: false };
+            });
+            console.log(`[headless-login] clicou: ${JSON.stringify(clicked)}`);
+
+            // Espera redirect pra opcoes.aspx
+            try {
+                await page.waitForURL(/opcoes\.aspx|inicio\.aspx/, { timeout: 30000 });
+            } catch (_) {
+                // continua
+            }
+            await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+
+            const urlFinal = page.url();
+            const titleFinal = await page.title().catch(() => '?');
+            console.log(`[headless-login] URL após clique: ${urlFinal} title="${titleFinal}"`);
+        }
+
         if (urlPos.includes('relogin.aspx') || urlPos.includes('avisoacesso')) {
             const screenshot = await page.screenshot({ type: 'png', fullPage: false }).catch(() => null);
             throw new Error(`Portal SP rejeitou cert (redirect ${urlPos}). ${screenshot ? 'screenshot capturada (descartada).' : ''}`);
