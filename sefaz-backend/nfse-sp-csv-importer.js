@@ -36,15 +36,16 @@ export async function salvarNotaCsv(nota, ctx = {}) {
     const snap = await ref.get();
     const existia = snap.exists;
 
-    // Direção: 'saida' se a empresa do contexto é o prestador,
-    // 'entrada' se é o tomador.
-    let direcao = ctx.direcao;
-    if (!direcao) {
-        const ctxCnpj = (ctx.empresaCnpj || '').replace(/\D/g, '');
-        if (ctxCnpj && ctxCnpj === cnpjP) direcao = 'saida';
-        else if (ctxCnpj && ctxCnpj === cnpjT) direcao = 'entrada';
-        else direcao = 'entrada';
-    }
+    // Direção REAL baseada nos CNPJs da nota (não no parâmetro de download).
+    // Resolve casos em que o portal SP devolve a mesma nota em "Recebidas" e
+    // "Emitidas" — o docId fica idêntico e o último save sobrescreveria a
+    // direção. Aqui forçamos: se empresa do contexto é prestador, é saída;
+    // se é tomador, é entrada. Ignora ctx.direcao se inferível pelos dados.
+    let direcao = null;
+    const ctxCnpj = (ctx.empresaCnpj || '').replace(/\D/g, '');
+    if (ctxCnpj && ctxCnpj === cnpjP) direcao = 'saida';
+    else if (ctxCnpj && ctxCnpj === cnpjT) direcao = 'entrada';
+    else direcao = ctx.direcao || 'entrada';
 
     const empresaCnpjFinal = direcao === 'saida' ? cnpjP : cnpjT;
     const empresaNomeFinal = direcao === 'saida'

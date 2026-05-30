@@ -451,4 +451,90 @@ router.post('/nfsesp-portal-session', authUser, json(), async (req, res) => {
     }
 });
 
+// ─── CORREÇÃO em massa de direção das NFSe SP capturadas ─────────────────
+// Bug fix retroativo: notas baixadas em "Recebidas" mas onde a S&P é
+// prestadora foram marcadas erroneamente como direcao='entrada'.
+// Itera todas as NFSe do fonte=csv-portal-sp e infere direção pelo CNPJ
+// prestador/tomador da nota vs CNPJ da empresa do contexto.
+router.post('/nfsesp-corrigir-direcoes', authUser, json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ erro: 'Apenas administradores' });
+        }
+        res.json({ ok: true, motivo: 'Correção iniciada em background' });
+
+        setImmediate(async () => {
+            const db = fa().firestore();
+            const t0 = Date.now();
+            let total = 0, corrigidas = 0, erros = 0;
+            try {
+                const snap = await db.collection('documentos_fiscais')
+                    .where('tipoDoc', '==', 'NFSe')
+                    .where('fonte', '==', 'csv-portal-sp')
+                    .get();
+
+                // Lista CNPJs do escritório + clientes (pra inferir direção)
+                const empresasMap = new Map();
+                for (const col of ['simples_empresas', 'lucro_empresas']) {
+                    const s = await db.collection(col).get();
+                    s.forEach(d => {
+                        const cnpj = (d.data().cnpj || '').replace(/\D/g, '');
+                        if (cnpj.length === 14) empresasMap.set(cnpj, true);
+                    });
+                }
+                console.log(`[corrigir-direcoes] ${snap.size} NFSe, ${empresasMap.size} empresas cadastradas`);
+
+                for (const doc of snap.docs) {
+                    total++;
+                    const d = doc.data();
+                    const cnpjP = (d.prestadorCnpj || d.cnpjEmit || '').replace(/\D/g, '');
+                    const cnpjT = (d.tomadorCnpj || d.cnpjDest || '').replace(/\D/g, '');
+
+                    // Estratégia: a empresa CADASTRADA no nosso sistema é a
+                    // empresa "do contexto" — direção é em relação a ela.
+                    let novaDirecao = null;
+                    if (empresasMap.has(cnpjP) && !empresasMap.has(cnpjT)) {
+                        // Empresa cadastrada é prestadora → emitida (saída)
+                        novaDirecao = 'saida';
+                    } else if (empresasMap.has(cnpjT) && !empresasMap.has(cnpjP)) {
+                        // Empresa cadastrada é tomadora → recebida (entrada)
+                        novaDirecao = 'entrada';
+                    } else if (empresasMap.has(cnpjP) && empresasMap.has(cnpjT)) {
+                        // Ambas cadastradas — fica como já estava (relação entre clientes do escritório)
+                        continue;
+                    }
+                    // Se nenhuma das duas é nossa empresa, mantém
+
+                    if (novaDirecao && novaDirecao !== d.direcao) {
+                        try {
+                            const novoEmpresaCnpj = novaDirecao === 'saida' ? cnpjP : cnpjT;
+                            const novoEmpresaNome = novaDirecao === 'saida' ? d.prestadorNome : d.tomadorNome;
+                            await doc.ref.update({
+                                direcao: novaDirecao,
+                                empresaCnpj: novoEmpresaCnpj,
+                                empresaNome: novoEmpresaNome,
+                                direcaoCorrigidaEm: admin.firestore.FieldValue.serverTimestamp(),
+                            });
+                            corrigidas++;
+                        } catch (e) {
+                            erros++;
+                        }
+                    }
+                }
+                console.log(`[corrigir-direcoes] FIM total=${total} corrigidas=${corrigidas} erros=${erros} (${Date.now() - t0}ms)`);
+                await db.collection('nfsesp_correcoes_log').add({
+                    executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                    executadoPor: req.user.email,
+                    total, corrigidas, erros,
+                    duracaoMs: Date.now() - t0,
+                });
+            } catch (e) {
+                console.error('[corrigir-direcoes] erro fatal:', e);
+            }
+        });
+    } catch (e) {
+        return res.status(500).json({ erro: e.message });
+    }
+});
+
 export default router;
