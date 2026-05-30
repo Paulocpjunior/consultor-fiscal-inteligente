@@ -6,6 +6,7 @@
 // ============================================================================
 
 import { Router, json } from 'express';
+import multer from 'multer';
 import admin from 'firebase-admin';
 import {
     listarEmpresasElegiveis,
@@ -14,7 +15,14 @@ import {
 } from './nfse-sp-orchestrator.js';
 import { consultarNfseRecebidas, consultarNfseEmitidas } from './nfse-sp-client.js';
 import { parseNfseSpXml } from './nfse-sp-importer.js';
+import { parseCsvNfseSp } from './nfse-sp-csv-parser.js';
+import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 import { requireAuth as authUser } from './require-admin.js';
+
+const uploadCsv = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+});
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET;
 const router = Router();
@@ -247,6 +255,114 @@ router.post('/nfsesp-cron-now', authUser, json(), async (req, res) => {
     } catch (e) {
         console.error('[nfse-sp-routes] cron-now:', e);
         return res.status(500).json({ erro: e.message });
+    }
+});
+
+// ─── Importação manual via CSV exportado do portal SP ─────────────────────
+// Endpoint pragmático que destrava NFSe SP enquanto WS legacy retorna 1102.
+// User exporta CSV no portal nfe.prefeitura.sp.gov.br → Exportação de NFS-e →
+// Layout V.006 (CSV). Sobe aqui. Sistema parseia e importa todas as notas.
+router.post('/nfsesp-importar-csv', authUser, uploadCsv.single('csv'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ erro: 'Arquivo CSV obrigatório no campo "csv"' });
+
+        // Parse direto do buffer (parser decodifica ISO-8859-1 internamente)
+        let parsed;
+        try {
+            parsed = parseCsvNfseSp(req.file.buffer);
+        } catch (e) {
+            return res.status(400).json({ erro: `CSV inválido: ${e.message}` });
+        }
+
+        if (!parsed.notas?.length) {
+            return res.json({
+                ok: true,
+                aviso: 'CSV não contém notas',
+                resumo: { totalNotas: 0 },
+            });
+        }
+
+        // Contexto da empresa (opcional — se vier no body, usa pra setar direcao)
+        const ctx = {
+            empresaId: req.body?.empresaId || null,
+            empresaCnpj: (req.body?.empresaCnpj || '').replace(/\D/g, '') || null,
+            empresaNome: req.body?.empresaNome || null,
+            direcao: req.body?.direcao || null, // 'entrada' | 'saida' | (auto)
+            importadoPor: req.user?.email || 'admin',
+        };
+
+        // Se direcao não veio, tenta inferir pelo nome do arquivo
+        // (E_ = Emitidas → saida; R_ = Recebidas → entrada)
+        if (!ctx.direcao && req.file.originalname) {
+            const nm = req.file.originalname.toUpperCase();
+            if (/NFSE_E_|EMITIDAS|EMITIDA/.test(nm)) ctx.direcao = 'saida';
+            else if (/NFSE_R_|RECEBIDAS|TOMADAS|RECEBIDA/.test(nm)) ctx.direcao = 'entrada';
+        }
+
+        // Se empresaCnpj não veio, usa o do CCM do CSV (procura por CCM no Firestore)
+        if (!ctx.empresaCnpj && parsed.ccmExportado) {
+            try {
+                const db = admin.firestore();
+                for (const col of ['simples_empresas', 'lucro_empresas']) {
+                    const snap = await db.collection(col).where('ccmSp', '==', parsed.ccmExportado).limit(1).get();
+                    if (!snap.empty) {
+                        const d = snap.docs[0];
+                        ctx.empresaId = d.id;
+                        ctx.empresaCnpj = (d.data().cnpj || '').replace(/\D/g, '');
+                        ctx.empresaNome = d.data().razaoSocial || d.data().nome;
+                        break;
+                    }
+                }
+            } catch (e) {
+                console.warn('[nfsesp-importar-csv] falha procurar empresa por CCM:', e.message);
+            }
+        }
+
+        const resultado = await importarCsvNfseSp(parsed, ctx);
+
+        // Log de auditoria
+        try {
+            await admin.firestore().collection('nfsesp_csv_imports').add({
+                executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                importadoPor: ctx.importadoPor,
+                fileName: req.file.originalname,
+                fileSize: req.file.size,
+                ccmExportado: parsed.ccmExportado,
+                empresaId: ctx.empresaId,
+                empresaCnpj: ctx.empresaCnpj,
+                direcao: ctx.direcao,
+                totalNotas: resultado.totalNotas,
+                criadas: resultado.criadas,
+                atualizadas: resultado.atualizadas,
+                erros: resultado.erros,
+                valorTotal: resultado.valorTotal,
+                periodo: resultado.periodo,
+            });
+        } catch (logErr) {
+            console.warn('[nfsesp-importar-csv] log falhou:', logErr.message);
+        }
+
+        res.json({
+            ok: true,
+            ctx: { empresaId: ctx.empresaId, empresaCnpj: ctx.empresaCnpj, empresaNome: ctx.empresaNome, direcao: ctx.direcao },
+            resumo: {
+                layout: parsed.layout,
+                ccmExportado: parsed.ccmExportado,
+                totalNotas: resultado.totalNotas,
+                criadas: resultado.criadas,
+                atualizadas: resultado.atualizadas,
+                erros: resultado.erros,
+                valorTotal: resultado.valorTotal,
+                periodo: resultado.periodo,
+                duracaoMs: resultado.duracaoMs,
+                contagemBate: parsed.contagemBate,
+                somaBate: parsed.somaBate,
+            },
+            // Não retorna detalhes individuais por padrão (pode ser grande)
+        });
+    } catch (e) {
+        console.error('[nfsesp-importar-csv] erro:', e);
+        res.status(500).json({ erro: e.message });
     }
 });
 

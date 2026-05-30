@@ -16,6 +16,7 @@ import CapturaDiagnosticoPanel from '../CapturaDiagnosticoPanel';
 import EmpresasStatusCapturaPanel from '../EmpresasStatusCapturaPanel';
 
 const XmlNfseSp = lazy(() => import('./XmlNfseSp'));
+const XmlNfseSpCsv = lazy(() => import('./XmlNfseSpCsv'));
 
 type TabId =
     | 'dashboard'
@@ -30,7 +31,8 @@ type TabId =
     | 'relatorios'
     | 'config'
     | 'nfse_pdf'
-    | 'nfse_sp';
+    | 'nfse_sp'
+    | 'nfse_sp_csv';
 
 const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'dashboard', label: 'Dashboard' },
@@ -39,7 +41,8 @@ const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'documentos', label: 'XMLs Capturados' },
     { id: 'importacao', label: 'Importação Manual' },
     { id: 'nfse_pdf', label: 'Importar NFSe (PDF)' },
-    { id: 'nfse_sp', label: 'NFS-e SP' },
+    { id: 'nfse_sp_csv', label: '📥 Importar NFSe SP (CSV)' },
+    { id: 'nfse_sp', label: 'NFS-e SP (WS)' },
     { id: 'empresas', label: 'Empresas Monitoradas' },
     { id: 'sharepoint', label: 'SharePoint' },
     { id: 'exportar-iob', label: 'Exportar IOB SAGE' },
@@ -178,6 +181,15 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 {tab === 'nfse_sp' && (
                     <Suspense fallback={<p className="text-center text-xs text-slate-400 py-6">Carregando...</p>}>
                         <XmlNfseSp currentUser={currentUser} onShowToast={onShowToast} />
+                    </Suspense>
+                )}
+                {tab === 'nfse_sp_csv' && (
+                    <Suspense fallback={<p className="text-center text-xs text-slate-400 py-6">Carregando...</p>}>
+                        <XmlNfseSpCsv
+                            currentUser={currentUser}
+                            onShowToast={onShowToast}
+                            onImported={() => setRefreshKey(k => k + 1)}
+                        />
                     </Suspense>
                 )}
                 {tab === 'config' && (
