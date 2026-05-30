@@ -15,6 +15,7 @@ import admin from 'firebase-admin';
 import { loadCertificate } from './secret-loader.js';
 import {
     loginPortalSp,
+    loadSessaoManual,
     carregarTelaExportacao,
     baixarCsv,
     fmtDataPt,
@@ -206,15 +207,27 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
     let session;
     try {
         const certs = await loadCertificate();
-        const login = await loginPortalSp({ pfxBuffer: certs.pfxBuffer, password: certs.password });
+        // Tenta cookies manuais (admin colou) primeiro — funciona JÁ
+        // enquanto o login mTLS automático não está resolvido.
+        let cookies;
+        try {
+            const manual = await loadSessaoManual();
+            cookies = manual.cookies;
+            console.log(`[nfsesp-portal] usando cookies manuais (atualizados ${manual.atualizadoEm?.toDate?.()?.toISOString?.()})`);
+        } catch (e) {
+            console.log(`[nfsesp-portal] cookies manuais indisponíveis (${e.message}), tentando login mTLS automático…`);
+            const login = await loginPortalSp({ pfxBuffer: certs.pfxBuffer, password: certs.password });
+            cookies = login.cookies;
+            console.log('[nfsesp-portal] login mTLS automático ok');
+        }
         const tela = await carregarTelaExportacao({
-            cookies: login.cookies,
+            cookies,
             pfxBuffer: certs.pfxBuffer,
             password: certs.password,
         });
         session = { cookies: tela.cookies, tokens: tela.tokens };
         log.prestadoresAutorizados = tela.prestadores.length;
-        console.log(`[nfsesp-portal] login ok. ${tela.prestadores.length} prestadores autorizados.`);
+        console.log(`[nfsesp-portal] tela exportação ok. ${tela.prestadores.length} prestadores autorizados.`);
 
         // Cruza com Firestore (só sincroniza empresas que estão no nosso cadastro)
         const empresasFs = await listarEmpresasComCcm();

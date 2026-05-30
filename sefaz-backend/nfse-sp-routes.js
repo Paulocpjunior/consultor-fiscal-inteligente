@@ -18,6 +18,7 @@ import { parseNfseSpXml } from './nfse-sp-importer.js';
 import { parseCsvNfseSp } from './nfse-sp-csv-parser.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
+import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
 import { requireAuth as authUser } from './require-admin.js';
 
 const uploadCsv = multer({
@@ -410,6 +411,41 @@ router.post('/nfsesp-portal-cron-now', authUser, json(), async (req, res) => {
                 console.error('[nfsesp-portal-cron-now] erro:', e);
             }
         });
+    } catch (e) {
+        return res.status(500).json({ erro: e.message });
+    }
+});
+
+// ─── Sessão manual do portal SP (admin cola cookies do DevTools) ──────────
+// Estratégia pragmática enquanto o login mTLS automático não está
+// resolvido: admin loga no portal SP via browser, copia 3 cookies do
+// DevTools (PMSP_NFeID, PMSP_NFE_CPFCNPJ, ASP.NET_SessionId), cola aqui.
+// Cron noturno usa esses cookies pra baixar CSV de todas as empresas.
+
+router.get('/nfsesp-portal-session', authUser, async (_req, res) => {
+    try {
+        const s = await loadSessaoManual();
+        return res.json({
+            ok: true,
+            valida: true,
+            cookiesNomes: Object.keys(s.cookies),
+            atualizadoEm: s.atualizadoEm?.toDate?.()?.toISOString?.() || null,
+            expiraEm: s.expiraEm?.toDate?.()?.toISOString?.() || null,
+        });
+    } catch (e) {
+        return res.json({ ok: false, valida: false, motivo: e.message });
+    }
+});
+
+router.post('/nfsesp-portal-session', authUser, json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ erro: 'Apenas administradores' });
+        }
+        const { cookieString } = req.body || {};
+        if (!cookieString) return res.status(400).json({ erro: 'cookieString obrigatório' });
+        const r = await saveSessaoManual(cookieString, req.user.email);
+        return res.json(r);
     } catch (e) {
         return res.status(500).json({ erro: e.message });
     }

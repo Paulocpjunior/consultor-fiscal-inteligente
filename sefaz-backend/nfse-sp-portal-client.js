@@ -106,6 +106,62 @@ function httpsRequest({ host, path, method, headers, body, pfxBuffer, password }
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
+ * Carrega cookies de sessão salvos manualmente pelo admin via UI.
+ * Validades típicas: PMSP_NFeID dura algumas horas; admin renova quando expirar.
+ */
+export async function loadSessaoManual() {
+    const admin = (await import('firebase-admin')).default;
+    if (!admin.apps.length) {
+        admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    }
+    const db = admin.firestore();
+    const snap = await db.collection('nfsesp_portal_session').doc('cookies').get();
+    if (!snap.exists) {
+        throw new Error('Cookies do portal SP não cadastrados. Admin precisa colar via UI > 🛰️ Captura Automática > Cookies Portal SP.');
+    }
+    const data = snap.data();
+    const expira = data.expiraEm?.toMillis?.() ?? 0;
+    if (expira && expira < Date.now()) {
+        throw new Error('Cookies do portal SP expiraram. Admin precisa renovar via UI.');
+    }
+    if (!data.cookies || !data.cookies['PMSP_NFeID']) {
+        throw new Error('Cookies salvos não têm PMSP_NFeID — formato inválido.');
+    }
+    return { cookies: data.cookies, atualizadoEm: data.atualizadoEm, expiraEm: data.expiraEm };
+}
+
+/**
+ * Salva cookies da sessão do portal (recebe string raw "k=v; k=v; ..."
+ * que o admin copia do DevTools).
+ */
+export async function saveSessaoManual(cookieString, importadoPor) {
+    const admin = (await import('firebase-admin')).default;
+    if (!admin.apps.length) {
+        admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    }
+    const cookies = {};
+    for (const pair of String(cookieString || '').split(';')) {
+        const [k, ...rest] = pair.split('=');
+        const key = k?.trim();
+        const value = rest.join('=').trim();
+        if (key && value) cookies[key] = value;
+    }
+    if (!cookies['PMSP_NFeID']) {
+        throw new Error('Cookie PMSP_NFeID não encontrado. Copie da aba Rede do DevTools após login.');
+    }
+    // PMSP_NFeID dura ~3h no portal. Marca expira em 2h pra ter margem.
+    const expiraEm = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const db = admin.firestore();
+    await db.collection('nfsesp_portal_session').doc('cookies').set({
+        cookies,
+        atualizadoEm: admin.firestore.FieldValue.serverTimestamp(),
+        atualizadoPor: importadoPor || 'admin',
+        expiraEm: admin.firestore.Timestamp.fromDate(expiraEm),
+    });
+    return { ok: true, cookiesNomes: Object.keys(cookies), expiraEm: expiraEm.toISOString() };
+}
+
+/**
  * Estabelece sessão no portal SP via cert ICP-Brasil.
  *
  * Fluxo confirmado por inspeção em browser:
