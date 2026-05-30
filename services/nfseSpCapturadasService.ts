@@ -44,15 +44,52 @@ export interface NfseSpFiltros {
 
 export async function listarNfseSpCapturadas(filtros: NfseSpFiltros = {}): Promise<NfseSpCapturada[]> {
     if (!isFirebaseConfigured || !db) return [];
-    // Firestore rules limitam list query a <= 5000 docs (suficiente pra 1 mês).
     const lim = Math.min(filtros.limite || 5000, 5000);
+    const cnpjFiltro = (filtros.empresaCnpj || '').replace(/\D/g, '');
     const constraints: any[] = [
         where('tipoDoc', '==', 'NFSe'),
         where('fonte', '==', 'csv-portal-sp'),
     ];
-    if (filtros.empresaCnpj && filtros.empresaCnpj.length === 14) {
-        constraints.push(where('empresaCnpj', '==', filtros.empresaCnpj));
+    // Se filtra por CNPJ específico, busca onde esse CNPJ é prestador OU tomador.
+    // Filtro por direção é feito em MEMÓRIA depois, comparando o cnpjFiltro
+    // com prestadorCnpj/tomadorCnpj — direção é POSIÇÃO RELATIVA, não fixa.
+    if (cnpjFiltro.length === 14) {
+        // Firestore não permite OR — fazemos 2 queries paralelas e juntamos.
+        const baseConstraints = [
+            where('tipoDoc', '==', 'NFSe'),
+            where('fonte', '==', 'csv-portal-sp'),
+            fbLimit(lim),
+        ];
+        try {
+            const [snapP, snapT] = await Promise.all([
+                getDocs(query(collection(db, 'documentos_fiscais'), ...baseConstraints, where('prestadorCnpj', '==', cnpjFiltro))),
+                getDocs(query(collection(db, 'documentos_fiscais'), ...baseConstraints, where('tomadorCnpj', '==', cnpjFiltro))),
+            ]);
+            const mapa = new Map<string, NfseSpCapturada>();
+            [...snapP.docs, ...snapT.docs].forEach(d => {
+                mapa.set(d.id, { id: d.id, ...(d.data() as any) } as NfseSpCapturada);
+            });
+            let lista = Array.from(mapa.values());
+            // Filtro por direção EFETIVA baseado no CNPJ do filtro
+            if (filtros.direcao && filtros.direcao !== 'todas') {
+                lista = lista.filter(n => {
+                    const isPrestador = (n.prestadorCnpj || '').replace(/\D/g, '') === cnpjFiltro;
+                    const direcaoEfetiva = isPrestador ? 'saida' : 'entrada';
+                    return direcaoEfetiva === filtros.direcao;
+                });
+            }
+            if (filtros.dataInicio) {
+                lista = lista.filter(n => !n.dhEmi || n.dhEmi >= `${filtros.dataInicio}T00:00:00`);
+            }
+            if (filtros.dataFim) {
+                lista = lista.filter(n => !n.dhEmi || n.dhEmi <= `${filtros.dataFim}T23:59:59`);
+            }
+            return lista.sort((a, b) => (b.dhEmi || '').localeCompare(a.dhEmi || ''));
+        } catch (e: any) {
+            console.warn('[nfseSpCapturadasService] queries por cnpj falharam:', e?.message);
+        }
     }
+    // Sem CNPJ específico: usa direção fixa do doc (já corrigida)
     if (filtros.direcao && filtros.direcao !== 'todas') {
         constraints.push(where('direcao', '==', filtros.direcao));
     }
@@ -70,8 +107,7 @@ export async function listarNfseSpCapturadas(filtros: NfseSpFiltros = {}): Promi
         const snap = await getDocs(q);
         return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as NfseSpCapturada));
     } catch (e: any) {
-        // Provavelmente índice composto faltando — degrade pra query mais simples
-        console.warn('[nfseSpCapturadasService] query falhou, tentando sem orderBy:', e?.message);
+        console.warn('[nfseSpCapturadasService] query falhou, fallback simples:', e?.message);
         const fallback: any[] = [
             where('tipoDoc', '==', 'NFSe'),
             where('fonte', '==', 'csv-portal-sp'),
@@ -79,16 +115,9 @@ export async function listarNfseSpCapturadas(filtros: NfseSpFiltros = {}): Promi
         ];
         const q2 = query(collection(db, 'documentos_fiscais'), ...fallback);
         const snap = await getDocs(q2);
-        const docs = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as NfseSpCapturada));
-        // Filtro/sort em memória
-        return docs
-            .filter(d => {
-                if (filtros.empresaCnpj && filtros.empresaCnpj.length === 14 && d.tomadorCnpj !== filtros.empresaCnpj && d.prestadorCnpj !== filtros.empresaCnpj) return false;
-                if (filtros.direcao && filtros.direcao !== 'todas' && d.direcao !== filtros.direcao) return false;
-                if (filtros.dataInicio && d.dhEmi && d.dhEmi < `${filtros.dataInicio}T00:00:00`) return false;
-                if (filtros.dataFim && d.dhEmi && d.dhEmi > `${filtros.dataFim}T23:59:59`) return false;
-                return true;
-            })
+        return snap.docs
+            .map(d => ({ id: d.id, ...(d.data() as any) } as NfseSpCapturada))
+            .filter(d => !filtros.direcao || filtros.direcao === 'todas' || d.direcao === filtros.direcao)
             .sort((a, b) => (b.dhEmi || '').localeCompare(a.dhEmi || ''));
     }
 }

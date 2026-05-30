@@ -95,21 +95,33 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
 
     useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [refreshKey, direcao]);
 
+    // Calcula direção EFETIVA por nota com base no CNPJ do filtro.
+    // Sem filtro de CNPJ → usa direção do doc (pra resumo de escritório).
+    const cnpjPivot = cnpjFiltro.replace(/\D/g, '');
+    const calcDirecaoEfetiva = (n: NfseSpCapturada): 'saida' | 'entrada' => {
+        if (cnpjPivot.length !== 14) return (n.direcao as any) || 'entrada';
+        const cnpjP = (n.prestadorCnpj || '').replace(/\D/g, '');
+        return cnpjP === cnpjPivot ? 'saida' : 'entrada';
+    };
+
     const filtradas = useMemo(() => {
-        if (!busca) return notas;
-        const b = busca.toLowerCase();
-        return notas.filter(n =>
-            (n.numero || '').includes(b) ||
-            (n.prestadorNome || '').toLowerCase().includes(b) ||
-            (n.tomadorNome || '').toLowerCase().includes(b) ||
-            (n.descricao || '').toLowerCase().includes(b)
-        );
+        let lista = notas;
+        if (busca) {
+            const b = busca.toLowerCase();
+            lista = lista.filter(n =>
+                (n.numero || '').includes(b) ||
+                (n.prestadorNome || '').toLowerCase().includes(b) ||
+                (n.tomadorNome || '').toLowerCase().includes(b) ||
+                (n.descricao || '').toLowerCase().includes(b)
+            );
+        }
+        return lista;
     }, [notas, busca]);
 
     const exportarCsv = () => {
         const headers = ['Direção', 'Número', 'Data', 'Prestador CNPJ', 'Prestador Nome', 'Tomador CNPJ', 'Tomador Nome', 'Valor Serviços', 'ISS', 'Cód Serviço', 'Discriminação'];
         const rows = filtradas.map(n => [
-            n.direcao === 'saida' ? 'Emitida' : 'Recebida',
+            calcDirecaoEfetiva(n) === 'saida' ? 'Emitida' : 'Recebida',
             n.numero,
             fmtData(n.dhEmi),
             fmtCnpj(n.prestadorCnpj),
@@ -253,11 +265,13 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtradas.map(n => (
+                            {filtradas.map(n => {
+                                const dirEf = calcDirecaoEfetiva(n);
+                                return (
                                 <tr key={n.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700">
                                     <td className="px-2 py-1.5 text-center">
-                                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${n.direcao === 'saida' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
-                                            {n.direcao === 'saida' ? '📤 EM' : '📥 RC'}
+                                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${dirEf === 'saida' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                                            {dirEf === 'saida' ? '📤 EM' : '📥 RC'}
                                         </span>
                                     </td>
                                     <td className="px-2 py-1.5 font-mono">{n.numero}</td>
@@ -274,7 +288,8 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                                     <td className="px-2 py-1.5 text-right font-mono text-gray-600">{fmtBRL(n.issDevido)}</td>
                                     <td className="px-2 py-1.5 max-w-md truncate" title={n.descricao}>{n.descricao || '—'}</td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                         </tbody>
                     </table>
                     {filtradas.length === 0 && (
