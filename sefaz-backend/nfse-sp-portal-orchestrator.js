@@ -20,6 +20,7 @@ import {
     baixarCsv,
     fmtDataPt,
 } from './nfse-sp-portal-client.js';
+import { loginHeadlessPortalSp } from './nfse-sp-headless-login.js';
 import { parseCsvNfseSp } from './nfse-sp-csv-parser.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 
@@ -207,18 +208,30 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
     let session;
     try {
         const certs = await loadCertificate();
-        // Tenta cookies manuais (admin colou) primeiro — funciona JÁ
-        // enquanto o login mTLS automático não está resolvido.
+        // Estratégia de login (em ordem):
+        // 1. Headless (Chromium com cert A1) — 100% automático
+        // 2. Cookies manuais (admin colou via UI) — fallback emergencial
+        // 3. mTLS direto — fallback derradeiro
         let cookies;
         try {
-            const manual = await loadSessaoManual();
-            cookies = manual.cookies;
-            console.log(`[nfsesp-portal] usando cookies manuais (atualizados ${manual.atualizadoEm?.toDate?.()?.toISOString?.()})`);
-        } catch (e) {
-            console.log(`[nfsesp-portal] cookies manuais indisponíveis (${e.message}), tentando login mTLS automático…`);
-            const login = await loginPortalSp({ pfxBuffer: certs.pfxBuffer, password: certs.password });
-            cookies = login.cookies;
-            console.log('[nfsesp-portal] login mTLS automático ok');
+            const headless = await loginHeadlessPortalSp();
+            cookies = headless.cookies;
+            log.metodoLogin = 'headless';
+            console.log(`[nfsesp-portal] login headless ok (${Object.keys(cookies).length} cookies)`);
+        } catch (headlessErr) {
+            console.warn(`[nfsesp-portal] login headless falhou: ${headlessErr.message} — tentando cookies manuais`);
+            try {
+                const manual = await loadSessaoManual();
+                cookies = manual.cookies;
+                log.metodoLogin = 'cookies-manuais';
+                console.log(`[nfsesp-portal] usando cookies manuais (atualizados ${manual.atualizadoEm?.toDate?.()?.toISOString?.()})`);
+            } catch (manualErr) {
+                console.warn(`[nfsesp-portal] cookies manuais indisponíveis (${manualErr.message}) — tentando mTLS direto`);
+                const login = await loginPortalSp({ pfxBuffer: certs.pfxBuffer, password: certs.password });
+                cookies = login.cookies;
+                log.metodoLogin = 'mtls-direto';
+                console.log('[nfsesp-portal] login mTLS direto ok');
+            }
         }
         const tela = await carregarTelaExportacao({
             cookies,

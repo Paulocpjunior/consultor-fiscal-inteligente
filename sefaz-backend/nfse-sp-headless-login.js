@@ -1,0 +1,124 @@
+// ============================================================================
+// sefaz-backend/nfse-sp-headless-login.js
+// Login programático no portal nfe.prefeitura.sp.gov.br via Chromium headless.
+//
+// Substitui completamente o login mTLS manual (que rejeitava silenciosamente)
+// e elimina a necessidade de o admin copiar cookies todo dia.
+//
+// Fluxo:
+//   1. Carrega cert A1 do Secret Manager
+//   2. Salva cert temporário em /tmp/sp-cert.pfx
+//   3. Abre Chromium headless com clientCertificates configurado
+//   4. Navega pra /LoginICP.aspx → Chromium responde ao TLS challenge com cert
+//   5. Portal devolve PMSP_NFeID
+//   6. Captura todos os cookies → retorna jar pra uso pelo cron
+//
+// Esse módulo NÃO é importado em hot path do frontend — só backend cron.
+// ============================================================================
+
+import { chromium } from 'playwright-core';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { loadCertificate } from './secret-loader.js';
+
+const PORTAL_HOST = 'nfe.prefeitura.sp.gov.br';
+const LOGIN_URL = `https://${PORTAL_HOST}/LoginICP.aspx`;
+const OPCOES_URL = `https://${PORTAL_HOST}/contribuinte/opcoes.aspx`;
+
+// Path executável do Chromium baixado pelo `npx playwright install chromium`
+// no Dockerfile. Localização padrão do Playwright dentro do container.
+const CHROMIUM_PATHS = [
+    process.env.PLAYWRIGHT_CHROMIUM_PATH,
+    '/root/.cache/ms-playwright/chromium-*/chrome-linux/chrome',
+    '/home/nodeuser/.cache/ms-playwright/chromium-*/chrome-linux/chrome',
+];
+
+async function findChromiumExecutable() {
+    // Playwright detecta automaticamente quando PLAYWRIGHT_BROWSERS_PATH
+    // não está customizado. Retornamos null pra deixar playwright resolver.
+    return null;
+}
+
+/**
+ * Faz login no portal SP via Chromium headless e retorna jar de cookies.
+ *
+ * @returns {Promise<{cookies: Record<string, string>}>}
+ */
+export async function loginHeadlessPortalSp() {
+    const certs = await loadCertificate();
+    if (!certs.pfxBuffer) throw new Error('Cert A1 não disponível no Secret Manager');
+
+    // Salva cert temporário (Playwright lê do disco)
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sp-cert-'));
+    const pfxPath = path.join(tmpDir, 'cert.pfx');
+    await fs.writeFile(pfxPath, certs.pfxBuffer);
+
+    const executablePath = await findChromiumExecutable();
+    const launchOpts = {
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+        ],
+    };
+    if (executablePath) launchOpts.executablePath = executablePath;
+
+    const browser = await chromium.launch(launchOpts);
+    try {
+        const context = await browser.newContext({
+            ignoreHTTPSErrors: true,
+            clientCertificates: [
+                {
+                    origin: `https://${PORTAL_HOST}`,
+                    pfxPath,
+                    passphrase: certs.password,
+                },
+            ],
+            userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15',
+        });
+
+        const page = await context.newPage();
+        // Navega pra LoginICP — Chromium responde ao TLS challenge automático
+        const resp = await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        const finalUrl = page.url();
+        console.log(`[headless-login] LoginICP final URL: ${finalUrl} (status ${resp?.status?.() || '?'})`);
+
+        // Aguarda redirect (pode levar uns segundos)
+        try {
+            await page.waitForURL(/opcoes\.aspx|relogin\.aspx/, { timeout: 15000 });
+        } catch (_) {
+            // Sem match — segue com URL atual
+        }
+
+        const urlPos = page.url();
+        console.log(`[headless-login] URL pós-redirect: ${urlPos}`);
+
+        if (urlPos.includes('relogin.aspx') || urlPos.includes('avisoacesso')) {
+            const screenshot = await page.screenshot({ type: 'png', fullPage: false }).catch(() => null);
+            throw new Error(`Portal SP rejeitou cert (redirect ${urlPos}). ${screenshot ? 'screenshot capturada (descartada).' : ''}`);
+        }
+
+        // Coleta todos os cookies do contexto
+        const allCookies = await context.cookies();
+        const jar = {};
+        for (const c of allCookies) {
+            if (c.domain.includes('prefeitura.sp.gov.br')) {
+                jar[c.name] = c.value;
+            }
+        }
+
+        if (!jar['PMSP_NFeID']) {
+            const cookieNames = Object.keys(jar).join(',');
+            throw new Error(`Login headless: PMSP_NFeID não retornado. Cookies recebidos: ${cookieNames || '(nenhum)'}`);
+        }
+
+        console.log(`[headless-login] ok — ${Object.keys(jar).length} cookies, PMSP_NFeID len=${jar['PMSP_NFeID'].length}`);
+        return { cookies: jar };
+    } finally {
+        await browser.close().catch(() => {});
+        await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+}
