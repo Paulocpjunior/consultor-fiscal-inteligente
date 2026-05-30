@@ -136,8 +136,16 @@ const XmlNfseSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 ano,
             });
 
-            if (!r.sucesso && r.erros?.length) {
-                setErro(r.erros.map((e) => `[${e.codigo || '?'}] ${e.descricao || ''}`).join('\n'));
+            if (!r.sucesso) {
+                if (r.erros?.length) {
+                    setErro(r.erros.map((e) => `[${e.codigo || '?'}] ${e.descricao || ''}`).join('\n'));
+                } else if (r.alertas?.length) {
+                    setErro('Alertas do portal SP:\n' + r.alertas.map((a: any) => `[${a.codigo || '?'}] ${a.descricao || ''}`).join('\n'));
+                } else {
+                    setErro('Portal SP retornou sucesso=false mas sem erros nem alertas. Resposta crua: ' + JSON.stringify(r).slice(0, 500));
+                }
+            } else if (r.sucesso && (!r.nfes || r.nfes.length === 0)) {
+                setErro(`Portal SP retornou sucesso=true mas 0 NFs no período ${mes}/${ano}. Confirme se a empresa realmente emitiu/recebeu NFs nesse mês (ou se a Inscrição Municipal ${empresaObj.ccmSp} está correta no cadastro).`);
             }
             setResultado(r);
         } catch (e: any) {
