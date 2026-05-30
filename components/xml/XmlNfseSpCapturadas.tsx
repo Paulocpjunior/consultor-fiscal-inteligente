@@ -80,7 +80,7 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                     empresaCnpj: cnpjFiltro.replace(/\D/g, '') || undefined,
                     dataInicio: dataInicio || undefined,
                     dataFim: dataFim || undefined,
-                    limite: 500,
+                    limite: 5000,
                 }),
                 resumoNfseSpCapturadas(),
             ]);

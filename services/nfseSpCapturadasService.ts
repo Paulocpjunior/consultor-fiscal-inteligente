@@ -44,8 +44,8 @@ export interface NfseSpFiltros {
 
 export async function listarNfseSpCapturadas(filtros: NfseSpFiltros = {}): Promise<NfseSpCapturada[]> {
     if (!isFirebaseConfigured || !db) return [];
-    // Firestore rules limitam list query a <= 500 docs.
-    const lim = Math.min(filtros.limite || 500, 500);
+    // Firestore rules limitam list query a <= 5000 docs (suficiente pra 1 mês).
+    const lim = Math.min(filtros.limite || 5000, 5000);
     const constraints: any[] = [
         where('tipoDoc', '==', 'NFSe'),
         where('fonte', '==', 'csv-portal-sp'),
@@ -110,7 +110,7 @@ export async function resumoNfseSpCapturadas(): Promise<{
             collection(db, 'documentos_fiscais'),
             where('tipoDoc', '==', 'NFSe'),
             where('fonte', '==', 'csv-portal-sp'),
-            fbLimit(500),
+            fbLimit(5000),
         );
         const snap = await getDocs(q);
         const empresas = new Set<string>();

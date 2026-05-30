@@ -90,8 +90,9 @@ service cloud.firestore {
     match /documentos_fiscais/{docId} {
       // get: qualquer logado (colaboradores acessam via carteira).
       // list: limite de query para evitar download massivo.
+      // 5000 cobre captura de NFSe SP via cron (319 empresas × ~10 NFs/mês).
       allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 500;
+      allow list: if isSignedIn() && request.query.limit <= 5000;
       allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
