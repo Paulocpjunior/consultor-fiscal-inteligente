@@ -1,0 +1,247 @@
+/**
+ * XmlNfseSpCapturadas.tsx
+ *
+ * Lista das NFSe SP capturadas via cron noturno (CSV portal SP).
+ * Mostra serviços tomados (recebidas) + serviços prestados (emitidas) por
+ * empresa, com filtros e exportação.
+ */
+
+import React, { useEffect, useState, useMemo } from 'react';
+import type { User } from '../../types';
+import {
+    listarNfseSpCapturadas,
+    resumoNfseSpCapturadas,
+    type NfseSpCapturada,
+} from '../../services/nfseSpCapturadasService';
+
+interface Props {
+    currentUser: User | null;
+    refreshKey?: number;
+}
+
+const fmtBRL = (n?: number) =>
+    typeof n === 'number'
+        ? n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        : '—';
+const fmtData = (iso?: string) => {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleDateString('pt-BR'); } catch { return iso; }
+};
+const fmtCnpj = (s?: string) => (s || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+
+const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
+    const [notas, setNotas] = useState<NfseSpCapturada[]>([]);
+    const [resumo, setResumo] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [erro, setErro] = useState<string | null>(null);
+    const [direcao, setDirecao] = useState<'todas' | 'saida' | 'entrada'>('todas');
+    const [busca, setBusca] = useState('');
+    const [cnpjFiltro, setCnpjFiltro] = useState('');
+    const [dataInicio, setDataInicio] = useState('');
+    const [dataFim, setDataFim] = useState('');
+
+    const carregar = async () => {
+        if (!currentUser) return;
+        setLoading(true);
+        setErro(null);
+        try {
+            const [lista, r] = await Promise.all([
+                listarNfseSpCapturadas({
+                    direcao,
+                    empresaCnpj: cnpjFiltro.replace(/\D/g, '') || undefined,
+                    dataInicio: dataInicio || undefined,
+                    dataFim: dataFim || undefined,
+                    limite: 1000,
+                }),
+                resumoNfseSpCapturadas(),
+            ]);
+            setNotas(lista);
+            setResumo(r);
+        } catch (e: any) {
+            setErro(e.message || 'Falha ao carregar NFSe');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [refreshKey, direcao]);
+
+    const filtradas = useMemo(() => {
+        if (!busca) return notas;
+        const b = busca.toLowerCase();
+        return notas.filter(n =>
+            (n.numero || '').includes(b) ||
+            (n.prestadorNome || '').toLowerCase().includes(b) ||
+            (n.tomadorNome || '').toLowerCase().includes(b) ||
+            (n.descricao || '').toLowerCase().includes(b)
+        );
+    }, [notas, busca]);
+
+    const exportarCsv = () => {
+        const headers = ['Direção', 'Número', 'Data', 'Prestador CNPJ', 'Prestador Nome', 'Tomador CNPJ', 'Tomador Nome', 'Valor Serviços', 'ISS', 'Cód Serviço', 'Discriminação'];
+        const rows = filtradas.map(n => [
+            n.direcao === 'saida' ? 'Emitida' : 'Recebida',
+            n.numero,
+            fmtData(n.dhEmi),
+            fmtCnpj(n.prestadorCnpj),
+            (n.prestadorNome || '').replace(/"/g, '""'),
+            fmtCnpj(n.tomadorCnpj),
+            (n.tomadorNome || '').replace(/"/g, '""'),
+            (n.valorServicos || 0).toFixed(2).replace('.', ','),
+            (n.issDevido || 0).toFixed(2).replace('.', ','),
+            n.codigoServico || '',
+            (n.descricao || '').replace(/"/g, '""'),
+        ].map(c => `"${c}"`).join(';'));
+        const csv = [headers.join(';'), ...rows].join('\n');
+        const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `nfse-sp-capturadas-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 rounded-lg text-white">
+                <h3 className="font-bold">📋 NFSe SP capturadas (tomados + prestados)</h3>
+                <p className="text-xs text-indigo-100 mt-1">
+                    Notas baixadas automaticamente do portal nfe.prefeitura.sp.gov.br via cron noturno (cert A1).
+                </p>
+            </div>
+
+            {resumo && (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div className="bg-white border rounded p-3">
+                        <div className="text-xs text-gray-500">Total NFs</div>
+                        <div className="text-2xl font-bold">{resumo.total}</div>
+                    </div>
+                    <div className="bg-green-50 border border-green-200 rounded p-3">
+                        <div className="text-xs text-green-700">📤 Emitidas (prestados)</div>
+                        <div className="text-2xl font-bold text-green-800">{resumo.emitidas}</div>
+                        <div className="text-xs text-green-600">{fmtBRL(resumo.valorEmitidasTotal)}</div>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                        <div className="text-xs text-blue-700">📥 Recebidas (tomados)</div>
+                        <div className="text-2xl font-bold text-blue-800">{resumo.recebidas}</div>
+                        <div className="text-xs text-blue-600">{fmtBRL(resumo.valorRecebidasTotal)}</div>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-200 rounded p-3">
+                        <div className="text-xs text-purple-700">Empresas únicas</div>
+                        <div className="text-2xl font-bold text-purple-800">{resumo.empresasUnicas}</div>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded p-3">
+                        <div className="text-xs text-gray-700">Última captura</div>
+                        <div className="text-sm font-bold text-gray-800">{fmtData(resumo.ultimaCaptura)}</div>
+                    </div>
+                </div>
+            )}
+
+            <div className="flex flex-wrap gap-2 items-end bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                <div>
+                    <label className="text-xs font-semibold block">Direção</label>
+                    <select
+                        value={direcao}
+                        onChange={(e) => setDirecao(e.target.value as any)}
+                        className="px-2 py-1 text-sm border rounded bg-white"
+                    >
+                        <option value="todas">Todas</option>
+                        <option value="saida">📤 Emitidas (prestados)</option>
+                        <option value="entrada">📥 Recebidas (tomados)</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs font-semibold block">CNPJ empresa</label>
+                    <input
+                        type="text"
+                        value={cnpjFiltro}
+                        onChange={(e) => setCnpjFiltro(e.target.value)}
+                        placeholder="44.388.152/0001-89"
+                        className="px-2 py-1 text-sm border rounded bg-white w-44"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs font-semibold block">Data início</label>
+                    <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="px-2 py-1 text-sm border rounded bg-white" />
+                </div>
+                <div>
+                    <label className="text-xs font-semibold block">Data fim</label>
+                    <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="px-2 py-1 text-sm border rounded bg-white" />
+                </div>
+                <div>
+                    <label className="text-xs font-semibold block">Buscar</label>
+                    <input
+                        type="text"
+                        value={busca}
+                        onChange={(e) => setBusca(e.target.value)}
+                        placeholder="número, prestador, tomador, descrição"
+                        className="px-2 py-1 text-sm border rounded bg-white w-72"
+                    />
+                </div>
+                <button onClick={carregar} className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 rounded">↻ Atualizar</button>
+                <button onClick={exportarCsv} className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700">⬇ Exportar CSV</button>
+                <span className="text-sm text-gray-600 ml-auto">
+                    {filtradas.length} de {notas.length} carregadas
+                </span>
+            </div>
+
+            {loading && <p className="text-sm text-gray-500">Carregando…</p>}
+            {erro && (
+                <div className="p-3 bg-red-50 border border-red-300 rounded text-red-700 text-sm">
+                    {erro}
+                </div>
+            )}
+
+            {!loading && !erro && (
+                <div className="overflow-x-auto border rounded">
+                    <table className="min-w-full text-xs">
+                        <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
+                            <tr>
+                                <th className="px-2 py-2 text-center">Dir</th>
+                                <th className="px-2 py-2 text-left">Nº NFSe</th>
+                                <th className="px-2 py-2 text-left">Data</th>
+                                <th className="px-2 py-2 text-left">Prestador</th>
+                                <th className="px-2 py-2 text-left">Tomador</th>
+                                <th className="px-2 py-2 text-right">Valor</th>
+                                <th className="px-2 py-2 text-right">ISS</th>
+                                <th className="px-2 py-2 text-left">Discriminação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filtradas.map(n => (
+                                <tr key={n.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700">
+                                    <td className="px-2 py-1.5 text-center">
+                                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${n.direcao === 'saida' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                                            {n.direcao === 'saida' ? '📤 EM' : '📥 RC'}
+                                        </span>
+                                    </td>
+                                    <td className="px-2 py-1.5 font-mono">{n.numero}</td>
+                                    <td className="px-2 py-1.5">{fmtData(n.dhEmi)}</td>
+                                    <td className="px-2 py-1.5">
+                                        <div className="font-semibold">{n.prestadorNome}</div>
+                                        <div className="text-[10px] text-gray-500">{fmtCnpj(n.prestadorCnpj)}</div>
+                                    </td>
+                                    <td className="px-2 py-1.5">
+                                        <div className="font-semibold">{n.tomadorNome}</div>
+                                        <div className="text-[10px] text-gray-500">{fmtCnpj(n.tomadorCnpj)}</div>
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right font-mono font-semibold">{fmtBRL(n.valorServicos)}</td>
+                                    <td className="px-2 py-1.5 text-right font-mono text-gray-600">{fmtBRL(n.issDevido)}</td>
+                                    <td className="px-2 py-1.5 max-w-md truncate" title={n.descricao}>{n.descricao || '—'}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {filtradas.length === 0 && (
+                        <div className="p-6 text-center text-gray-500 text-sm">
+                            Nenhuma NFSe encontrada com esses filtros. Aguarde o cron noturno terminar a captura.
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default XmlNfseSpCapturadas;

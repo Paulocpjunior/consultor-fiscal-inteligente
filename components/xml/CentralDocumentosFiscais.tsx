@@ -17,6 +17,7 @@ import EmpresasStatusCapturaPanel from '../EmpresasStatusCapturaPanel';
 
 const XmlNfseSp = lazy(() => import('./XmlNfseSp'));
 const XmlNfseSpCsv = lazy(() => import('./XmlNfseSpCsv'));
+const XmlNfseSpCapturadas = lazy(() => import('./XmlNfseSpCapturadas'));
 const NfseSpSessaoCookies = lazy(() => import('../NfseSpSessaoCookies'));
 
 type TabId =
@@ -34,13 +35,15 @@ type TabId =
     | 'nfse_pdf'
     | 'nfse_sp'
     | 'nfse_sp_csv'
+    | 'nfse_sp_capturadas'
     | 'nfse_sp_sessao';
 
 const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'captura-auto', label: '🛰️ Captura Automática' },
     { id: 'empresas-status', label: '📋 Status por Empresa' },
-    { id: 'documentos', label: 'XMLs Capturados' },
+    { id: 'documentos', label: 'XMLs NFe (Entrada/Saída)' },
+    { id: 'nfse_sp_capturadas', label: '📋 NFSe SP Capturadas (Tomados/Prestados)' },
     { id: 'importacao', label: 'Importação Manual' },
     { id: 'nfse_pdf', label: 'Importar NFSe (PDF)' },
     { id: 'nfse_sp_sessao', label: '🔐 Cookies Portal SP (cron)' },
@@ -189,6 +192,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 {tab === 'nfse_sp_sessao' && (
                     <Suspense fallback={<p className="text-center text-xs text-slate-400 py-6">Carregando...</p>}>
                         <NfseSpSessaoCookies currentUser={currentUser} />
+                    </Suspense>
+                )}
+                {tab === 'nfse_sp_capturadas' && (
+                    <Suspense fallback={<p className="text-center text-xs text-slate-400 py-6">Carregando...</p>}>
+                        <XmlNfseSpCapturadas currentUser={currentUser} refreshKey={refreshKey} />
                     </Suspense>
                 )}
                 {tab === 'nfse_sp_csv' && (
