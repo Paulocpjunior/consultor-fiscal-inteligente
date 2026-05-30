@@ -51,13 +51,15 @@ upsert_job() {
     if gcloud scheduler jobs describe "$JOB_NAME" \
         --location="$REGION" --project="$PROJECT_ID" &>/dev/null; then
         echo "  → job existe, atualizando…"
+        # Atenção: no gcloud atual a flag pra atualizar headers é
+        # --update-headers (não --headers que só existe no create).
         gcloud scheduler jobs update http "$JOB_NAME" \
             --location="$REGION" --project="$PROJECT_ID" \
             --schedule="$SCHEDULE" \
             --time-zone="$TZ" \
             --uri="$URL" \
             --http-method=POST \
-            --headers="x-cron-secret=${CRON_SECRET},Content-Type=application/json" \
+            --update-headers="x-cron-secret=${CRON_SECRET},Content-Type=application/json" \
             --message-body='{}' \
             --description="$DESCRICAO" \
             --oidc-service-account-email="$SA_EMAIL" \
