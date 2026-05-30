@@ -159,9 +159,21 @@ function extrairRetornoXml(soapResposta, metodo = 'ConsultaNFeRecebidas') {
 }
 
 function parseRetorno(retornoXml) {
+    // Defensivo: o portal SP às vezes devolve o XML interno com entidades
+    // HTML escapadas (&lt; &gt;) em vez de CDATA. Desescape ANTES de parsear
+    // garante que getElementsByTagName encontre as tags.
+    let xmlLimpo = retornoXml || '';
+    if (xmlLimpo.includes('&lt;') && !xmlLimpo.includes('<RetornoConsulta')) {
+        xmlLimpo = xmlLimpo
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&apos;/g, "'")
+            .replace(/&amp;/g, '&');
+    }
     const doc = new DOMParser({
         errorHandler: { warning: () => {}, error: () => {}, fatalError: (e) => { throw e; } },
-    }).parseFromString(retornoXml, 'text/xml');
+    }).parseFromString(xmlLimpo, 'text/xml');
 
     // Tolerante a namespace prefix: pega qualquer elemento cujo localName bata.
     const all = Array.from(doc.getElementsByTagName('*'));
@@ -192,7 +204,7 @@ function parseRetorno(retornoXml) {
     let rawSample = null;
     let tagsEncontradas = null;
     if (!sucesso && erros.length === 0 && alertas.length === 0) {
-        rawSample = (retornoXml || '').slice(0, 1500);
+        rawSample = xmlLimpo.slice(0, 1500);
         const uniqueTags = Array.from(new Set(all.map(el => el.localName).filter(Boolean)));
         tagsEncontradas = uniqueTags.join(', ');
     }
