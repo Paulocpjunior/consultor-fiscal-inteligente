@@ -56,12 +56,14 @@ export async function loginHeadlessPortalSp() {
 
     const executablePath = await findChromiumExecutable();
     const launchOpts = {
-        headless: true,
+        headless: 'new',
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
             '--disable-gpu',
+            '--ignore-certificate-errors',
+            '--auto-select-certificate-for-urls=https://nfe.prefeitura.sp.gov.br',
         ],
     };
     if (executablePath) launchOpts.executablePath = executablePath;
@@ -81,20 +83,24 @@ export async function loginHeadlessPortalSp() {
         });
 
         const page = await context.newPage();
-        // Navega pra LoginICP — Chromium responde ao TLS challenge automático
-        const resp = await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
-        const finalUrl = page.url();
-        console.log(`[headless-login] LoginICP final URL: ${finalUrl} (status ${resp?.status?.() || '?'})`);
 
-        // Aguarda redirect (pode levar uns segundos)
-        try {
-            await page.waitForURL(/opcoes\.aspx|relogin\.aspx/, { timeout: 15000 });
-        } catch (_) {
-            // Sem match — segue com URL atual
-        }
+        // Captura console errors pra diagnóstico
+        page.on('pageerror', e => console.error('[headless] pageerror:', e.message));
+        page.on('requestfailed', r => console.error('[headless] requestfailed:', r.url(), r.failure()?.errorText));
+
+        // Navega pra LoginICP
+        const resp = await page.goto(LOGIN_URL, { waitUntil: 'networkidle', timeout: 60000 });
+        const finalUrl = page.url();
+        const status = resp?.status?.() || 0;
+        console.log(`[headless-login] LoginICP final URL: ${finalUrl} (status ${status})`);
+
+        // Espera adicional pra qualquer JS redirect
+        await page.waitForTimeout(3000);
 
         const urlPos = page.url();
-        console.log(`[headless-login] URL pós-redirect: ${urlPos}`);
+        const title = await page.title().catch(() => '?');
+        const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500) || '').catch(() => '');
+        console.log(`[headless-login] URL pós-wait: ${urlPos} title="${title}" body-head="${bodyText.replace(/\s+/g, ' ').slice(0, 200)}"`);
 
         if (urlPos.includes('relogin.aspx') || urlPos.includes('avisoacesso')) {
             const screenshot = await page.screenshot({ type: 'png', fullPage: false }).catch(() => null);
