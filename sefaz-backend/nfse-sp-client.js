@@ -126,13 +126,29 @@ function extrairRetornoXml(soapResposta, metodo = 'ConsultaNFeRecebidas') {
     const cdataMatch = soapResposta.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
     if (cdataMatch) return cdataMatch[1];
 
+    // Detecta SOAP Fault explícito (erro retornado pelo serviço SP)
+    const faultMatch = soapResposta.match(/<(?:\w+:)?Fault[^>]*>([\s\S]*?)<\/(?:\w+:)?Fault>/i);
+    if (faultMatch) {
+        const faultStr = (() => {
+            const fs = faultMatch[1].match(/<(?:\w+:)?faultstring[^>]*>([\s\S]*?)<\/(?:\w+:)?faultstring>/i);
+            return fs ? fs[1].trim() : faultMatch[1].slice(0, 500);
+        })();
+        throw new Error(`NFS-e SP retornou SOAP Fault: ${faultStr}`);
+    }
+
     const resultTag = `${metodo}Result`;
+    // Tolerante a prefixos de namespace (ex: <ns2:ConsultaNFeRecebidasResult>)
     const resultMatch = soapResposta.match(
-        new RegExp(`<${resultTag}>([\\s\\S]*?)<\\/${resultTag}>`)
+        new RegExp(`<(?:\\w+:)?${resultTag}[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?${resultTag}>`)
     );
     if (!resultMatch) {
-        console.error(`[nfse-sp-client] resposta sem ${resultTag} — corpo recebido:`, (soapResposta || '').slice(0, 3000));
-        throw new Error(`NFS-e SP: ${resultTag} não localizado no SOAP de resposta.`);
+        // Fallback: às vezes o portal SP devolve <RetornoXML> direto
+        const retornoMatch = soapResposta.match(/<(?:\w+:)?RetornoXML[^>]*>([\s\S]*?)<\/(?:\w+:)?RetornoXML>/);
+        if (retornoMatch) return retornoMatch[1];
+
+        console.error(`[nfse-sp-client] resposta sem ${resultTag} — corpo (primeiros 3000 chars):`, (soapResposta || '').slice(0, 3000));
+        const corpoCurto = (soapResposta || '').slice(0, 200).replace(/\s+/g, ' ').trim();
+        throw new Error(`NFS-e SP: ${resultTag} não localizado. Resposta recebida (início): ${corpoCurto}`);
     }
     return resultMatch[1]
         .replace(/&lt;/g, '<')
