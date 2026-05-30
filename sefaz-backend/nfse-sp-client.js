@@ -319,6 +319,7 @@ export async function consultarNfseEmitidas({
 
     // Log diagnóstico SEMPRE (não precisa SEFAZ_DEBUG=1).
     console.error(`[nfse-sp] REQUEST-EMITIDAS cnpjRemetente=${cnpjRemetente} CCM=${inscricaoMunicipalPrestador} xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
+    console.error(`[nfse-sp] xmlInterno-EMITIDAS: ${xmlInterno}`);
     if (xmlAssinado.includes(']]>')) {
         console.error('[nfse-sp] xmlAssinado contém "]]>" — vai QUEBRAR o CDATA do envelope!');
     }
@@ -328,6 +329,8 @@ export async function consultarNfseEmitidas({
     }
 
     const { statusCode, body } = await postSoap(soap, certs.pfxBuffer, certs.password, SOAP_ACTION_EMITIDAS);
+    console.error(`[nfse-sp] RESPONSE-EMITIDAS statusCode=${statusCode} body.len=${body?.length || 0}`);
+    console.error(`[nfse-sp] RESPONSE-EMITIDAS body-head-1500: ${(body || '').replace(/[\r\n]+/g, ' ').slice(0, 1500)}`);
 
     if (statusCode >= 500) {
         console.error(`[nfse-sp-client] HTTP ${statusCode} — corpo da resposta:`, (body || '').slice(0, 2000));
