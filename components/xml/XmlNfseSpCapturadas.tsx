@@ -7,6 +7,7 @@
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { getAuth } from 'firebase/auth';
 import type { User } from '../../types';
 import {
     listarNfseSpCapturadas,
@@ -39,6 +40,34 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
     const [cnpjFiltro, setCnpjFiltro] = useState('');
     const [dataInicio, setDataInicio] = useState('');
     const [dataFim, setDataFim] = useState('');
+    const [corrigindo, setCorrigindo] = useState(false);
+    const [msgCorrecao, setMsgCorrecao] = useState<string | null>(null);
+    const isAdmin = currentUser?.role === 'admin';
+
+    const corrigirDirecoes = async () => {
+        if (!confirm('Corrigir direção de TODAS as NFSe importadas? Pode levar 1-2 min. Ok?')) return;
+        setCorrigindo(true);
+        setMsgCorrecao(null);
+        try {
+            const token = await getAuth().currentUser?.getIdToken();
+            const r = await fetch('/api/admin/sefaz/nfsesp-corrigir-direcoes', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: '{}',
+            });
+            const d = await r.json();
+            if (r.ok) {
+                setMsgCorrecao('✅ Correção iniciada. Aguarde 1-2 min e clique Atualizar.');
+                setTimeout(carregar, 90000);
+            } else {
+                setMsgCorrecao(`❌ ${d.erro || 'Falha'}`);
+            }
+        } catch (e: any) {
+            setMsgCorrecao(`❌ ${e.message}`);
+        } finally {
+            setCorrigindo(false);
+        }
+    };
 
     const carregar = async () => {
         if (!currentUser) return;
@@ -181,12 +210,27 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                 </div>
                 <button onClick={carregar} className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 rounded">↻ Atualizar</button>
                 <button onClick={exportarCsv} className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700">⬇ Exportar CSV</button>
+                {isAdmin && (
+                    <button
+                        onClick={corrigirDirecoes}
+                        disabled={corrigindo}
+                        className="px-3 py-1.5 text-sm bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
+                        title="Recalcula direção (emitida/recebida) pelos CNPJs reais — corrige notas marcadas erradas"
+                    >
+                        {corrigindo ? '⏳ Corrigindo…' : '🔧 Corrigir direções'}
+                    </button>
+                )}
                 <span className="text-sm text-gray-600 ml-auto">
                     {filtradas.length} de {notas.length} carregadas
                 </span>
             </div>
 
             {loading && <p className="text-sm text-gray-500">Carregando…</p>}
+            {msgCorrecao && (
+                <div className="p-3 bg-orange-50 border border-orange-300 rounded text-orange-800 text-sm">
+                    {msgCorrecao}
+                </div>
+            )}
             {erro && (
                 <div className="p-3 bg-red-50 border border-red-300 rounded text-red-700 text-sm">
                     {erro}
