@@ -95,16 +95,16 @@ function escapeXmlEntities(s) {
 }
 
 function envelopeSoap(xmlAssinado, metodo = 'ConsultaNFeRecebidas') {
-    // PyTrustNFe usa suds (cliente WSDL automático) e suds escapa entidades
-    // por default no MensagemXML. Tentamos CDATA com erro 1102; mudamos pra
-    // escape de entidades pra alinhar com PyTrustNFe testado.
-    const xmlEscaped = escapeXmlEntities(xmlAssinado);
+    // Endpoint correto (nfe.prefeitura.sp.gov.br/ws/lotenfe.asmx) + CDATA.
+    // Já testamos endpoint correto + escape de entities = 1102.
+    // Testando agora endpoint correto + CDATA pra ver se algum elemento ainda
+    // está modificando o XML após assinado.
     return `<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
     <${metodo} xmlns="${NS_NFE}">
       <VersaoSchema>1</VersaoSchema>
-      <MensagemXML>${xmlEscaped}</MensagemXML>
+      <MensagemXML><![CDATA[${xmlAssinado}]]></MensagemXML>
     </${metodo}>
   </soap:Body>
 </soap:Envelope>`;
