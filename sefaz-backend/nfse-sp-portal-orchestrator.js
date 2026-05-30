@@ -267,19 +267,25 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
         log.falhas = erros;
         log.duracaoMs = Date.now() - inicio;
         log.detalhes = detalhes;
+        log.detalhesCount = detalhes.length;
     } catch (e) {
         log.erroFatal = e.message;
         log.duracaoMs = Date.now() - inicio;
+        log.processadas = 0;
+        log.sucessos = 0;
+        log.falhas = 0;
+        log.totalNovos = 0;
+        log.totalEmpresas = 0;
+        log.detalhesCount = 0;
         console.error('[nfsesp-portal] erro fatal:', e);
     } finally {
-        // Persiste log
+        // Persiste log (sem detalhes individuais — pode estourar 1 MiB)
         try {
+            const logFirestore = { ...log };
+            delete logFirestore.detalhes; // remove array de detalhes antes de salvar
             await fa().firestore().collection('nfsesp_portal_cron_logs').add({
                 executadoEm: admin.firestore.FieldValue.serverTimestamp(),
-                ...log,
-                // Para não exceder 1 MiB do Firestore: salva resumo sem detalhes
-                detalhes: undefined,
-                detalhesCount: log.detalhes?.length || 0,
+                ...logFirestore,
             });
         } catch (logErr) {
             console.warn('[nfsesp-portal] log falhou:', logErr.message);
