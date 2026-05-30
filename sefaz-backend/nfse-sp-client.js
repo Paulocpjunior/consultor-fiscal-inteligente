@@ -19,8 +19,10 @@ import { SignedXml } from 'xml-crypto';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { loadCertificate } from './secret-loader.js';
 
-const ENDPOINT_HOST = 'nfews.prefeitura.sp.gov.br';
-const ENDPOINT_PATH = '/lotenfe.asmx';
+// PyTrustNFe (testado em produção) usa nfe.prefeitura.sp.gov.br/ws/lotenfe.asmx
+// O domínio nfews.prefeitura.sp.gov.br pode estar ativo mas rejeita silenciosamente.
+const ENDPOINT_HOST = 'nfe.prefeitura.sp.gov.br';
+const ENDPOINT_PATH = '/ws/lotenfe.asmx';
 const SOAP_ACTION_RECEBIDAS = 'http://www.prefeitura.sp.gov.br/nfe/ws/consultaNFeRecebidas';
 const SOAP_ACTION_EMITIDAS = 'http://www.prefeitura.sp.gov.br/nfe/ws/consultaNFeEmitidas';
 const NS_NFE = 'http://www.prefeitura.sp.gov.br/nfe';
@@ -35,10 +37,12 @@ function montarPedidoXml({ cnpjRemetente, inscricaoMunicipalTomador, dtInicio, d
     // Layout confirmado contra PyTrustNFe (biblioteca testada): o elemento raiz
     // do metodo ConsultaNFeRecebidas e <PedidoConsultaNFePeriodo>; a inscricao
     // municipal e <Inscricao>; NumeroPagina vai DENTRO do Cabecalho, apos dtFim.
-    // PyTrustNFe NÃO inclui <?xml?> no MensagemXML — somente o envelope externo
-    // tem. Testes confirmaram que adicionar <?xml?> aqui NÃO resolve 1102.
+    // Layout EXATO do PyTrustNFe (testado e funcionando):
+    // - Apenas xmlns no root (sem xmlns:xsi)
+    // - <Cabecalho Versao="1" xmlns=""> (namespace vazio explícito)
+    // - SEM declaração <?xml?> aqui (envelope externo já tem)
     return stripFormat(`
-<PedidoConsultaNFePeriodo xmlns="${NS_NFE}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<PedidoConsultaNFePeriodo xmlns="${NS_NFE}">
   <Cabecalho Versao="1" xmlns="">
     <CPFCNPJRemetente><CNPJ>${cnpjRemetente}</CNPJ></CPFCNPJRemetente>
     <Inscricao>${inscricaoMunicipalTomador}</Inscricao>
@@ -81,17 +85,26 @@ function assinarXmlSp(xmlString, certPem, keyPem) {
     return sig.getSignedXml();
 }
 
+function escapeXmlEntities(s) {
+    return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
 function envelopeSoap(xmlAssinado, metodo = 'ConsultaNFeRecebidas') {
-    // SOAP 1.1 — mais conservador. Webservice SP `nfews.prefeitura.sp.gov.br`
-    // aceita ambos, mas alguns métodos só funcionam com 1.1 (binding clássico
-    // LoteNFeBinding em vez do LoteNFeBinding12).
-    // CDATA no <MensagemXML> conforme manual (entities escapadas dispara 1102).
+    // PyTrustNFe usa suds (cliente WSDL automático) e suds escapa entidades
+    // por default no MensagemXML. Tentamos CDATA com erro 1102; mudamos pra
+    // escape de entidades pra alinhar com PyTrustNFe testado.
+    const xmlEscaped = escapeXmlEntities(xmlAssinado);
     return `<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
     <${metodo} xmlns="${NS_NFE}">
       <VersaoSchema>1</VersaoSchema>
-      <MensagemXML><![CDATA[${xmlAssinado}]]></MensagemXML>
+      <MensagemXML>${xmlEscaped}</MensagemXML>
     </${metodo}>
   </soap:Body>
 </soap:Envelope>`;
