@@ -19,10 +19,12 @@ import { SignedXml } from 'xml-crypto';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { loadCertificate } from './secret-loader.js';
 
-// PyTrustNFe (testado em produção) usa nfe.prefeitura.sp.gov.br/ws/lotenfe.asmx
-// O domínio nfews.prefeitura.sp.gov.br pode estar ativo mas rejeita silenciosamente.
-const ENDPOINT_HOST = 'nfe.prefeitura.sp.gov.br';
-const ENDPOINT_PATH = '/ws/lotenfe.asmx';
+// Endpoint OFICIAL atualizado (confirmado em maio/2026):
+// - nfews.prefeitura.sp.gov.br/lotenfe.asmx — síncrono, suporta layout v1 E v2 (RT 2026)
+// - nfe.prefeitura.sp.gov.br/ws/lotenfe.asmx — LEGACY, pode estar deprecated com RT 2026
+// PyTrustNFe usava o legacy (master3 é de 2016).
+const ENDPOINT_HOST = 'nfews.prefeitura.sp.gov.br';
+const ENDPOINT_PATH = '/lotenfe.asmx';
 const SOAP_ACTION_RECEBIDAS = 'http://www.prefeitura.sp.gov.br/nfe/ws/consultaNFeRecebidas';
 const SOAP_ACTION_EMITIDAS = 'http://www.prefeitura.sp.gov.br/nfe/ws/consultaNFeEmitidas';
 const NS_NFE = 'http://www.prefeitura.sp.gov.br/nfe';
