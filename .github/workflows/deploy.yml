@@ -60,6 +60,7 @@ jobs:
             --cpu 1 \
             --min-instances 0 \
             --max-instances 10 \
+            --update-env-vars=GRAPH_CLIENT_ID=59fd4ec9-37bd-472c-9fa7-373461dffd50,GRAPH_TENANT_ID=8b8254a4-9a63-4c2d-81a2-577942081943,GRAPH_REMETENTE=junior@spassessoriacontabil.com.br \
             --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,GRAPH_CLIENT_SECRET=graph-client-secret:latest
 
       - name: Show Service URL
