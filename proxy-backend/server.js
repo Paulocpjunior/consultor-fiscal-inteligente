@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
-import { GoogleGenAI } from '@google/genai';
 import {
     getAccessToken,
     listXmlFiles,
@@ -47,91 +46,9 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// ─── Gemini Client (chave fica APENAS no servidor) ───────────────────────────
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-if (!GEMINI_API_KEY) {
-    console.error('❌ GEMINI_API_KEY não configurada!');
-    process.exit(1);
-}
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-// Modelo default centralizado (gemini-2.0-flash foi deprecado em mar/2026).
-const GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || 'gemini-3.5-flash';
-
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// ─── Proxy endpoint: Consulta Fiscal ─────────────────────────────────────────
-app.post('/api/fiscal/query', async (req, res) => {
-    const { prompt, model = GEMINI_MODEL_FLASH } = req.body;
-
-    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
-        return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });
-    }
-
-    if (prompt.length > 4000) {
-        return res.status(400).json({ error: 'Prompt muito longo (máx 4000 chars).' });
-    }
-
-    try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-        });
-
-        const text = response.text ?? '';
-        return res.json({ text });
-    } catch (err) {
-        console.error('Erro Gemini:', err?.message);
-
-        const status = err?.status || 500;
-        const message = err?.message || 'Erro ao comunicar com a IA.';
-
-        return res.status(status >= 400 && status < 600 ? status : 500).json({ error: message });
-    }
-});
-
-// ─── Proxy endpoint: Comparação ───────────────────────────────────────────────
-app.post('/api/fiscal/compare', async (req, res) => {
-    const { prompt, model = GEMINI_MODEL_FLASH } = req.body;
-
-    if (!prompt || typeof prompt !== 'string') {
-        return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });
-    }
-
-    try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-        });
-
-        return res.json({ text: response.text ?? '' });
-    } catch (err) {
-        console.error('Erro Gemini (compare):', err?.message);
-        return res.status(500).json({ error: err?.message || 'Erro interno.' });
-    }
-});
-
-// ─── Proxy endpoint: Serviços similares ──────────────────────────────────────
-app.post('/api/fiscal/similar', async (req, res) => {
-    const { prompt, model = GEMINI_MODEL_FLASH } = req.body;
-
-    if (!prompt || typeof prompt !== 'string') {
-        return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });
-    }
-
-    try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-        });
-
-        return res.json({ text: response.text ?? '' });
-    } catch (err) {
-        console.error('Erro Gemini (similar):', err?.message);
-        return res.status(500).json({ error: err?.message || 'Erro interno.' });
-    }
 });
 
 // ─── SharePoint: Health check ────────────────────────────────────────────────

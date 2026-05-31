@@ -112,9 +112,12 @@ app.use('/api/', rateLimit({ windowMs: 60000, max: 120, message: { error: 'Aguar
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Modelos centralizados em env vars — trocar de versao = atualizar o secret no
-// Cloud Run, sem mexer em codigo. Default: gemini-3.5-flash (GA, mai/2026).
-const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-3.5-flash';
-const GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || 'gemini-3.5-flash';
+// Cloud Run, sem mexer em codigo. Default: gemini-flash-latest (alias oficial
+// do Google que SEMPRE aponta pra ultima versao GA do Flash). Pra pinar uma
+// versao especifica (ex: se uma release nova quebrar prompts), defina o env
+// GEMINI_MODEL_PRO/FLASH com o ID exato (ex: gemini-3.5-flash).
+const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-flash-latest';
+const GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || 'gemini-flash-latest';
 let ai = null;
 if (GEMINI_API_KEY) {
     ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });

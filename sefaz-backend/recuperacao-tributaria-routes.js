@@ -4,8 +4,10 @@ import { getCatalogoTeses, analisarEmpresa, analisarTodas } from './recuperacao-
 
 const router = Router();
 
-// Modelo centralizado em env var (default gemini-3.5-flash, GA mai/2026).
-const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-3.5-flash';
+// Modelo centralizado: alias gemini-flash-latest segue sempre a versao mais
+// recente do Flash (Google atualiza automaticamente). Pra pinar uma versao,
+// setar GEMINI_MODEL_PRO no Cloud Run.
+const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-flash-latest';
 
 // GET /status — modo atual
 router.get('/status', (_req, res) => {
