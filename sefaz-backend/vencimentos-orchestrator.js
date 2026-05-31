@@ -56,10 +56,11 @@ function classificar(diasAteVencimento) {
 // Decide se manda email/push pra essa tarefa hoje
 function deveAlertar(tarefa, diasAteVencimento) {
     if (!['a_fazer', 'em_andamento'].includes(tarefa.status)) return false;
-    // Alerta em: 3 dias antes, 1 dia antes, no dia, 1 dia depois,
-    // 7 dias atrasada, 30 dias atrasada (escalation).
-    const marcos = [3, 1, 0, -1, -7, -30];
-    return marcos.includes(diasAteVencimento);
+    // Janela de alerta: 3 dias antes até 30 dias atrasada.
+    // Não usamos marcos exatos pra cobrir TODOS os dias da zona crítica
+    // (ex: 11 dias atrasada cai entre D-7 e D-30, mas ainda precisa alerta).
+    // Idempotência diária (ultimoEmailEm) previne email duplicado.
+    return diasAteVencimento <= 3 && diasAteVencimento >= -30;
 }
 
 function getEmailResponsavel(tarefa, mapaUsuarios) {
@@ -212,7 +213,10 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
         log.examinadas = docs.length;
         console.log(`[vencimentos] totalAtivas=${log.totalAtivas} semVenc=${semVencimento} foraJanela=${foraJanela} examinadas=${log.examinadas} janela=[${new Date(inicioJanela).toISOString()},${new Date(fimJanela).toISOString()}]`);
 
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
         for (const doc of docs) {
+            // Throttle pra não estourar limite Graph (~30 emails/min): 250ms entre tarefas
+            if (log.emailsEnviados > 0 && log.emailsEnviados % 10 === 0) await sleep(2500);
             try {
                 const tarefa = { id: doc.id, ...doc.data() };
                 const dias = diffDiasBrt(tarefa.vencimento, hoje);
