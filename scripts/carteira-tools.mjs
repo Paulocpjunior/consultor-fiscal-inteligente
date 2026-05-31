@@ -201,7 +201,9 @@ async function cmdImport(caminho, dryRun) {
     let doisPrincipais = 0;
     const principalVisto = new Set();
     for (const r of rows) {
-        const emp = (r.cnpj && empresas.porCnpj.get(r.cnpj)) || (r.empresaId && empresas.porId.get(r.empresaId));
+        // empresaId primeiro (único por linha do export; cobre empresas
+        // duplicadas com mesmo CNPJ). Fallback p/ CNPJ em CSV feito à mão.
+        const emp = (r.empresaId && empresas.porId.get(r.empresaId)) || (r.cnpj && empresas.porCnpj.get(r.cnpj));
         const col = usuarios.get(r.email);
         if (!emp) { cnpjNaoEncontrado.push(r.cnpj || r.empresaId); continue; }
         if (!col) { emailNaoEncontrado.add(r.email); continue; }
@@ -238,6 +240,26 @@ async function cmdAtribuirTodas(email, dryRun) {
     console.log(dryRun ? '\n(DRY-RUN — nada gravado.)' : '\n✓ carteiras gravadas. Agora rode: node scripts/carteira-tools.mjs aplicar');
 }
 
+// ─── duplicatas ──────────────────────────────────────────────────────────--
+async function cmdDuplicatas() {
+    const empresas = await carregarEmpresas();
+    const porCnpj = new Map(); // cnpj -> [regs]
+    for (const e of empresas.todas) {
+        if (!e.empresaCnpj) continue;
+        if (!porCnpj.has(e.empresaCnpj)) porCnpj.set(e.empresaCnpj, []);
+        porCnpj.get(e.empresaCnpj).push(e);
+    }
+    const dups = [...porCnpj.entries()].filter(([, regs]) => regs.length > 1);
+    console.log(JSON.stringify({
+        cnpjsDuplicados: dups.length,
+        empresasExtras: dups.reduce((s, [, r]) => s + (r.length - 1), 0),
+        detalhe: dups.slice(0, 50).map(([cnpj, regs]) => ({
+            cnpj, ocorrencias: regs.length,
+            registros: regs.map(r => ({ empresaId: r.empresaId, colecao: r.empresaColecao, nome: r.empresaNome })),
+        })),
+    }, null, 2));
+}
+
 // ─── aplicar (backfill) ───────────────────────────────────────────────────--
 async function cmdAplicar() {
     const { aplicarCarteiraRetroativo } = await import('../sefaz-backend/tarefas-orchestrator.js');
@@ -253,11 +275,12 @@ const arg1 = arg && !arg.startsWith('--') ? arg : null;
 try {
     if (cmd === 'status') await cmdStatus();
     else if (cmd === 'exportar-empresas') await cmdExportarEmpresas(arg1);
+    else if (cmd === 'duplicatas') await cmdDuplicatas();
     else if (cmd === 'import') await cmdImport(arg1, dryRun);
     else if (cmd === 'atribuir-todas') await cmdAtribuirTodas(arg1, dryRun);
     else if (cmd === 'aplicar') await cmdAplicar();
     else {
-        console.log('Comandos: status | exportar-empresas <csv> | import <csv> [--dry-run] | atribuir-todas <email> [--dry-run] | aplicar');
+        console.log('Comandos: status | exportar-empresas <csv> | duplicatas | import <csv> [--dry-run] | atribuir-todas <email> [--dry-run] | aplicar');
     }
 } catch (e) {
     console.error('✗ erro:', e.message);
