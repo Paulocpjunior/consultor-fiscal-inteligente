@@ -162,19 +162,27 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
         const hoje = hojeBrt();
         const janelaFutura = new Date(hoje.getTime() + 5 * 24 * 60 * 60 * 1000);
 
-        // Pega tarefas ativas (a_fazer | em_andamento) com vencimento na janela [hoje-30d, hoje+5d]
+        // Pega tarefas ativas com vencimento na janela [hoje-30d, hoje+5d].
+        // Faz 2 queries separadas (a_fazer + em_andamento) em vez de 'in'
+        // — mais barato e usa índice (status ASC, vencimento ASC) que já temos.
         const limiteFuturo = admin.firestore.Timestamp.fromDate(janelaFutura);
         const limitePassado = admin.firestore.Timestamp.fromDate(new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000));
 
-        const snap = await db.collection('tarefas')
-            .where('status', 'in', ['a_fazer', 'em_andamento'])
+        const baseQuery = (status) => db.collection('tarefas')
+            .where('status', '==', status)
             .where('vencimento', '>=', limitePassado)
             .where('vencimento', '<=', limiteFuturo)
-            .get();
+            .limit(2000);
 
-        log.examinadas = snap.size;
+        const [snapAfazer, snapAndamento] = await Promise.all([
+            baseQuery('a_fazer').get(),
+            baseQuery('em_andamento').get(),
+        ]);
 
-        for (const doc of snap.docs) {
+        const docs = [...snapAfazer.docs, ...snapAndamento.docs];
+        log.examinadas = docs.length;
+
+        for (const doc of docs) {
             try {
                 const tarefa = { id: doc.id, ...doc.data() };
                 const dias = diffDiasBrt(tarefa.vencimento, hoje);
@@ -259,17 +267,19 @@ export async function resumoVencimentos({ uid, role } = {}) {
     const janelaFutura = new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000);
     const limitePassado = new Date(hoje.getTime() - 60 * 24 * 60 * 60 * 1000);
 
-    const snap = await db.collection('tarefas')
-        .where('status', 'in', ['a_fazer', 'em_andamento'])
+    const baseQ = (status) => db.collection('tarefas')
+        .where('status', '==', status)
         .where('vencimento', '>=', admin.firestore.Timestamp.fromDate(limitePassado))
         .where('vencimento', '<=', admin.firestore.Timestamp.fromDate(janelaFutura))
-        .limit(500)
-        .get();
+        .limit(500);
+
+    const [s1, s2] = await Promise.all([baseQ('a_fazer').get(), baseQ('em_andamento').get()]);
+    const todos = [...s1.docs, ...s2.docs];
 
     const resumo = { atrasadas: 0, venceHoje: 0, venceAmanha: 0, vence3d: 0, vence7d: 0, vence30d: 0, total: 0 };
     const proximas = [];
 
-    snap.forEach(d => {
+    todos.forEach(d => {
         const t = { id: d.id, ...d.data() };
         // Se for colaborador, só conta as dele
         if (role !== 'admin' && uid && t.responsavel && t.responsavel !== uid) return;
