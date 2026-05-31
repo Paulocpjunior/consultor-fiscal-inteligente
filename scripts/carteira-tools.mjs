@@ -56,6 +56,7 @@ async function carregarEmpresas() {
         const snap = await db.collection(colecao).get();
         snap.forEach(d => {
             const e = d.data();
+            if (e._merged_into) return; // pula perdedores do merge (23/05)
             const cnpj = soDigitos(e.cnpj || e.empresaCnpj);
             const nome = e.razaoSocial || e.nome || e.empresaNome || '';
             const reg = { empresaId: d.id, empresaColecao: colecao, empresaNome: nome, empresaCnpj: cnpj };
@@ -240,6 +241,57 @@ async function cmdAtribuirTodas(email, dryRun) {
     console.log(dryRun ? '\n(DRY-RUN — nada gravado.)' : '\n✓ carteiras gravadas. Agora rode: node scripts/carteira-tools.mjs aplicar');
 }
 
+// ─── limpar-tarefas-merge ──────────────────────────────────────────────────
+// Remove tarefas AUTOMÁTICAS criadas pros empresaIds perdedores do merge
+// (_merged_into). Preserva concluídas e tarefas manuais (reporta p/ revisão).
+async function carregarPerdedores() {
+    const losers = [];
+    for (const colecao of COLECOES_EMPRESA) {
+        const snap = await db.collection(colecao).get();
+        snap.forEach(d => {
+            const e = d.data();
+            if (e._merged_into) losers.push({
+                empresaId: d.id, colecao, mergedInto: e._merged_into,
+                cnpj: soDigitos(e.cnpj || e.empresaCnpj),
+                nome: e.razaoSocial || e.nome || e.empresaNome || '',
+            });
+        });
+    }
+    return losers;
+}
+
+async function cmdLimparTarefasMerge(apply) {
+    const losers = await carregarPerdedores();
+    const log = {
+        apply: !!apply, perdedores: losers.length, tarefasEncontradas: 0,
+        porStatus: {}, removidas: 0,
+        preservadas_concluidas: 0, preservadas_manuais: 0,
+    };
+    let batch = db.batch();
+    let n = 0;
+    for (const L of losers) {
+        const snap = await db.collection('tarefas').where('empresaId', '==', L.empresaId).get();
+        for (const d of snap.docs) {
+            const t = d.data();
+            log.tarefasEncontradas++;
+            log.porStatus[t.status] = (log.porStatus[t.status] || 0) + 1;
+            if (t.status === 'concluida' || t.status === 'cancelada') { log.preservadas_concluidas++; continue; }
+            if (t.origem !== 'automatica') { log.preservadas_manuais++; continue; }
+            if (apply) {
+                batch.delete(d.ref);
+                n++;
+                if (n % 400 === 0) { await batch.commit(); batch = db.batch(); }
+            }
+            log.removidas++;
+        }
+    }
+    if (apply && n % 400 !== 0) await batch.commit();
+    console.log(JSON.stringify(log, null, 2));
+    console.log(apply
+        ? '\n✓ tarefas automáticas dos perdedores removidas (concluídas e manuais preservadas)'
+        : '\n(DRY-RUN — nada removido. Rode com --apply pra remover.)');
+}
+
 // ─── duplicatas ──────────────────────────────────────────────────────────--
 async function cmdDuplicatas() {
     const empresas = await carregarEmpresas();
@@ -276,11 +328,12 @@ try {
     if (cmd === 'status') await cmdStatus();
     else if (cmd === 'exportar-empresas') await cmdExportarEmpresas(arg1);
     else if (cmd === 'duplicatas') await cmdDuplicatas();
+    else if (cmd === 'limpar-tarefas-merge') await cmdLimparTarefasMerge(process.argv.includes('--apply'));
     else if (cmd === 'import') await cmdImport(arg1, dryRun);
     else if (cmd === 'atribuir-todas') await cmdAtribuirTodas(arg1, dryRun);
     else if (cmd === 'aplicar') await cmdAplicar();
     else {
-        console.log('Comandos: status | exportar-empresas <csv> | duplicatas | import <csv> [--dry-run] | atribuir-todas <email> [--dry-run] | aplicar');
+        console.log('Comandos: status | exportar-empresas <csv> | duplicatas | limpar-tarefas-merge [--apply] | import <csv> [--dry-run] | atribuir-todas <email> [--dry-run] | aplicar');
     }
 } catch (e) {
     console.error('✗ erro:', e.message);
