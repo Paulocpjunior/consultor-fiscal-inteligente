@@ -213,10 +213,27 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
         log.examinadas = docs.length;
         console.log(`[vencimentos] totalAtivas=${log.totalAtivas} semVenc=${semVencimento} foraJanela=${foraJanela} examinadas=${log.examinadas} janela=[${new Date(inicioJanela).toISOString()},${new Date(fimJanela).toISOString()}]`);
 
+        // Pré-computa UIDs admin (1 vez, não por tarefa)
+        const adminUids = [];
+        for (const [uid, user] of usuariosMapa) {
+            if (user.role === 'admin') adminUids.push(uid);
+        }
+
+        // Email com timeout pra não travar o loop se Graph estiver lento/off
+        const enviarEmailComTimeout = (args, ms = 8000) => Promise.race([
+            enviarEmail(args),
+            new Promise((resolve) => setTimeout(() => resolve({ ok: false, error: 'timeout' }), ms)),
+        ]);
+
         const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const atrasadasParaDigest = []; // acumula pra digest dos admins
+        let processadas = 0;
+
         for (const doc of docs) {
-            // Throttle pra não estourar limite Graph (~30 emails/min): 250ms entre tarefas
-            if (log.emailsEnviados > 0 && log.emailsEnviados % 10 === 0) await sleep(2500);
+            processadas++;
+            if (processadas % 100 === 0) {
+                console.log(`[vencimentos] progresso ${processadas}/${docs.length} — alertadas=${log.alertadas} emails=${log.emailsEnviados}`);
+            }
             try {
                 const tarefa = { id: doc.id, ...doc.data() };
                 const dias = diffDiasBrt(tarefa.vencimento, hoje);
@@ -229,41 +246,37 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
                 const ultimoEmail = tarefa.ultimoEmailEm?.toDate?.()?.toISOString?.()?.slice(0, 10);
                 if (ultimoEmail === hojeIso) continue;
 
-                // Calcula multa estimada se atrasada e tem valorEstimado
+                // Multa estimada se atrasada e tem valorEstimado
                 let multaEstimada = null;
                 if (dias < 0 && tarefa.valorEstimado) {
                     multaEstimada = calcularMultaPorObrigacao(tarefa.obrigacao, tarefa.valorEstimado, tarefa.vencimento.toDate?.() || new Date(tarefa.vencimento), hoje);
                 }
 
-                const tarefaComMulta = { ...tarefa, multaEstimada };
-                const { assunto, corpoHtml } = montarConteudoEmail(tarefaComMulta, dias, categoria);
-
-                // Email pro responsável
+                // Email pro responsável (só se tiver responsável com email)
                 const emailResp = getEmailResponsavel(tarefa, usuariosMapa);
                 if (emailResp) {
-                    try {
-                        const r = await enviarEmail({ remetente: REMETENTE_DEFAULT, para: emailResp, assunto, corpoHtml });
-                        if (r.ok) log.emailsEnviados++;
-                        else { log.emailsFalhados++; log.erros.push({ tarefa: tarefa.id, motivo: r.error }); }
-                    } catch (e) {
+                    const tarefaComMulta = { ...tarefa, multaEstimada };
+                    const { assunto, corpoHtml } = montarConteudoEmail(tarefaComMulta, dias, categoria);
+                    const r = await enviarEmailComTimeout({ remetente: REMETENTE_DEFAULT, para: emailResp, assunto, corpoHtml });
+                    if (r.ok) {
+                        log.emailsEnviados++;
+                        if (log.emailsEnviados % 10 === 0) await sleep(2500); // throttle Graph
+                    } else {
                         log.emailsFalhados++;
-                        log.erros.push({ tarefa: tarefa.id, motivo: e.message });
+                        if (log.erros.length < 20) log.erros.push({ tarefa: tarefa.id, motivo: r.error });
                     }
-                }
-
-                // Notificação in-app pro responsável + admins (master ve tudo)
-                if (tarefa.responsavel) {
+                    // Notificação in-app pro responsável
                     await criarNotificacaoInApp(db, tarefa.responsavel, tarefa, dias, categoria);
                     log.notificacoesIn++;
                 }
-                // Admins recebem notificação de atrasadas/vencendo hoje pra acompanhar
+
+                // Atrasadas/vence-hoje entram no digest dos admins (agregado no fim)
                 if (dias <= 0) {
-                    for (const [uid, user] of usuariosMapa) {
-                        if (user.role === 'admin' && uid !== tarefa.responsavel) {
-                            await criarNotificacaoInApp(db, uid, tarefa, dias, categoria);
-                            log.notificacoesIn++;
-                        }
-                    }
+                    atrasadasParaDigest.push({
+                        id: tarefa.id, titulo: tarefa.titulo, empresaNome: tarefa.empresaNome,
+                        empresaCnpj: tarefa.empresaCnpj, obrigacao: tarefa.obrigacao,
+                        competencia: tarefa.competencia, dias,
+                    });
                 }
 
                 // Marca ultimoEmailEm
@@ -272,8 +285,34 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
                 log.alertadas++;
                 if (log.porCategoria[categoria.categoria] !== undefined) log.porCategoria[categoria.categoria]++;
             } catch (eDoc) {
-                log.erros.push({ tarefa: doc.id, motivo: eDoc.message });
+                if (log.erros.length < 20) log.erros.push({ tarefa: doc.id, motivo: eDoc.message });
             }
+        }
+
+        // Digest agregado pros admins (1 notificação resumo por admin, não 1 por tarefa)
+        if (atrasadasParaDigest.length > 0 && adminUids.length > 0) {
+            const hojeIso = hoje.toISOString().slice(0, 10);
+            atrasadasParaDigest.sort((a, b) => a.dias - b.dias);
+            for (const uid of adminUids) {
+                try {
+                    await db.collection('notificacoes').doc(uid).collection('items').doc(`digest-venc-${hojeIso}`).set({
+                        tipo: 'vencimento_digest',
+                        urgencia: 'critica',
+                        emoji: '🔴',
+                        titulo: `${atrasadasParaDigest.length} obrigações atrasadas ou vencendo hoje`,
+                        total: atrasadasParaDigest.length,
+                        amostra: atrasadasParaDigest.slice(0, 15),
+                        lida: false,
+                        criadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                        link: '/Tarefas',
+                    }, { merge: true });
+                    log.notificacoesIn++;
+                } catch (e) {
+                    if (log.erros.length < 20) log.erros.push({ admin: uid, motivo: e.message });
+                }
+            }
+            log.adminsNotificados = adminUids.length;
+            log.atrasadasNoDigest = atrasadasParaDigest.length;
         }
     } catch (e) {
         log.erroFatal = e.message;
