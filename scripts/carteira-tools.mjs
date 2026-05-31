@@ -293,23 +293,133 @@ async function cmdLimparTarefasMerge(apply) {
 }
 
 // ─── duplicatas ──────────────────────────────────────────────────────────--
+async function contarTarefas(empresaId) {
+    const ts = await db.collection('tarefas').where('empresaId', '==', empresaId).get();
+    let ativas = 0, concluidas = 0;
+    ts.forEach(d => {
+        const s = d.data().status;
+        if (s === 'a_fazer' || s === 'em_andamento') ativas++;
+        else if (s === 'concluida') concluidas++;
+    });
+    return { total: ts.size, ativas, concluidas };
+}
+
 async function cmdDuplicatas() {
     const empresas = await carregarEmpresas();
-    const porCnpj = new Map(); // cnpj -> [regs]
+    const porCnpj = new Map();
     for (const e of empresas.todas) {
         if (!e.empresaCnpj) continue;
         if (!porCnpj.has(e.empresaCnpj)) porCnpj.set(e.empresaCnpj, []);
         porCnpj.get(e.empresaCnpj).push(e);
     }
     const dups = [...porCnpj.entries()].filter(([, regs]) => regs.length > 1);
+    const detalhe = [];
+    for (const [cnpj, regs] of dups.slice(0, 50)) {
+        const registros = [];
+        for (const r of regs) {
+            const t = await contarTarefas(r.empresaId);
+            registros.push({ empresaId: r.empresaId, colecao: r.empresaColecao, nome: r.empresaNome, tarefas: t });
+        }
+        // sugere canônica = registro com mais tarefas (proxy de "em uso")
+        const canonica = [...registros].sort((a, b) => b.tarefas.total - a.tarefas.total)[0];
+        detalhe.push({
+            cnpj, ocorrencias: regs.length,
+            sugestaoCanonica: canonica.empresaId,
+            merge_comando: registros.filter(r => r.empresaId !== canonica.empresaId)
+                .map(r => `node scripts/carteira-tools.mjs merge ${r.empresaId} ${canonica.empresaId} --apply`),
+            registros,
+        });
+    }
     console.log(JSON.stringify({
         cnpjsDuplicados: dups.length,
         empresasExtras: dups.reduce((s, [, r]) => s + (r.length - 1), 0),
-        detalhe: dups.slice(0, 50).map(([cnpj, regs]) => ({
-            cnpj, ocorrencias: regs.length,
-            registros: regs.map(r => ({ empresaId: r.empresaId, colecao: r.empresaColecao, nome: r.empresaNome })),
-        })),
+        detalhe,
     }, null, 2));
+}
+
+// ─── merge <loser> <canonical> ─────────────────────────────────────────────--
+async function findEmpresaDoc(id) {
+    for (const colecao of COLECOES_EMPRESA) {
+        const d = await db.collection(colecao).doc(id).get();
+        if (d.exists) {
+            const e = d.data();
+            return { ref: d.ref, colecao, cnpj: soDigitos(e.cnpj || e.empresaCnpj), nome: e.razaoSocial || e.nome || '', data: e };
+        }
+    }
+    return null;
+}
+
+async function cmdMerge(loserId, canonicalId, apply) {
+    if (!loserId || !canonicalId) { console.error('✗ uso: merge <loserEmpresaId> <canonicalEmpresaId> [--apply]'); process.exit(1); }
+    if (loserId === canonicalId) { console.error('✗ loser e canonical são iguais'); process.exit(1); }
+    const loser = await findEmpresaDoc(loserId);
+    const canon = await findEmpresaDoc(canonicalId);
+    if (!loser) { console.error(`✗ loser ${loserId} não encontrado`); process.exit(1); }
+    if (!canon) { console.error(`✗ canonical ${canonicalId} não encontrado`); process.exit(1); }
+    if (loser.data._merged_into) { console.error(`✗ loser já está mergeado em ${loser.data._merged_into}`); process.exit(1); }
+    if (loser.cnpj && canon.cnpj && loser.cnpj !== canon.cnpj) {
+        console.error(`✗ CNPJs diferentes (loser=${loser.cnpj} canon=${canon.cnpj}) — abortando por segurança`); process.exit(1);
+    }
+
+    const log = {
+        apply: !!apply, cnpj: canon.cnpj,
+        loser: { id: loserId, colecao: loser.colecao, nome: loser.nome },
+        canonical: { id: canonicalId, colecao: canon.colecao, nome: canon.nome },
+        tarefasRemovidas_autoAtivas: 0, tarefasRepontadas: 0, tarefasJaNoCanonico: 0,
+        carteirasRepontadas: 0,
+    };
+
+    // chaves de tarefa já existentes no canônico (obrigacao|competencia)
+    const canonSnap = await db.collection('tarefas').where('empresaId', '==', canonicalId).get();
+    const canonKeys = new Set(canonSnap.docs.map(d => `${d.data().obrigacao}|${d.data().competencia}`));
+
+    let batch = db.batch();
+    let n = 0;
+    const flush = async (force = false) => { if (n >= 400 || (force && n > 0)) { await batch.commit(); batch = db.batch(); n = 0; } };
+
+    const loserSnap = await db.collection('tarefas').where('empresaId', '==', loserId).get();
+    for (const d of loserSnap.docs) {
+        const t = d.data();
+        const key = `${t.obrigacao}|${t.competencia}`;
+        const ativa = t.status === 'a_fazer' || t.status === 'em_andamento';
+        if (t.origem === 'automatica' && ativa) {
+            // duplicada — o canônico regenera pelo cron. Remove.
+            if (apply) { batch.delete(d.ref); n++; await flush(); }
+            log.tarefasRemovidas_autoAtivas++;
+        } else if (canonKeys.has(key)) {
+            // concluída/manual mas canônico já tem a mesma obrigação/competência
+            if (apply) { batch.delete(d.ref); n++; await flush(); }
+            log.tarefasJaNoCanonico++;
+        } else {
+            // preserva histórico/manual — re-aponta pro canônico
+            if (apply) { batch.update(d.ref, { empresaId: canonicalId }); n++; await flush(); }
+            canonKeys.add(key);
+            log.tarefasRepontadas++;
+        }
+    }
+
+    // re-aponta carteiras do loser
+    const cartSnap = await db.collection('carteiras').where('empresaId', '==', loserId).get();
+    for (const d of cartSnap.docs) {
+        if (apply) { batch.update(d.ref, { empresaId: canonicalId }); n++; await flush(); }
+        log.carteirasRepontadas++;
+    }
+
+    // marca o loser como mergeado (consumidores já filtram _merged_into)
+    if (apply) {
+        batch.update(loser.ref, {
+            _merged_into: canonicalId,
+            _merged_at: admin.firestore.FieldValue.serverTimestamp(),
+            _merged_by: 'carteira-tools',
+        });
+        n++;
+        await flush(true);
+    }
+
+    console.log(JSON.stringify(log, null, 2));
+    console.log(apply
+        ? '\n✓ merge aplicado: loser marcado _merged_into, tarefas consolidadas no canônico.'
+        : '\n(DRY-RUN — nada alterado. Rode com --apply pra mergear.)');
 }
 
 // ─── aplicar (backfill) ───────────────────────────────────────────────────--
@@ -329,11 +439,12 @@ try {
     else if (cmd === 'exportar-empresas') await cmdExportarEmpresas(arg1);
     else if (cmd === 'duplicatas') await cmdDuplicatas();
     else if (cmd === 'limpar-tarefas-merge') await cmdLimparTarefasMerge(process.argv.includes('--apply'));
+    else if (cmd === 'merge') await cmdMerge(arg1, process.argv[4] && !process.argv[4].startsWith('--') ? process.argv[4] : null, process.argv.includes('--apply'));
     else if (cmd === 'import') await cmdImport(arg1, dryRun);
     else if (cmd === 'atribuir-todas') await cmdAtribuirTodas(arg1, dryRun);
     else if (cmd === 'aplicar') await cmdAplicar();
     else {
-        console.log('Comandos: status | exportar-empresas <csv> | duplicatas | limpar-tarefas-merge [--apply] | import <csv> [--dry-run] | atribuir-todas <email> [--dry-run] | aplicar');
+        console.log('Comandos: status | exportar-empresas <csv> | duplicatas | limpar-tarefas-merge [--apply] | merge <loser> <canonical> [--apply] | import <csv> [--dry-run] | atribuir-todas <email> [--dry-run] | aplicar');
     }
 } catch (e) {
     console.error('✗ erro:', e.message);
