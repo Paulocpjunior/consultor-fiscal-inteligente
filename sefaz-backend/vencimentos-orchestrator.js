@@ -56,11 +56,9 @@ function classificar(diasAteVencimento) {
 // Decide se manda email/push pra essa tarefa hoje
 function deveAlertar(tarefa, diasAteVencimento) {
     if (!['a_fazer', 'em_andamento'].includes(tarefa.status)) return false;
-    // Janela de alerta: 3 dias antes até 30 dias atrasada.
-    // Não usamos marcos exatos pra cobrir TODOS os dias da zona crítica
-    // (ex: 11 dias atrasada cai entre D-7 e D-30, mas ainda precisa alerta).
+    // Alerta TODA tarefa não concluída que está atrasada ou vence em <=7 dias.
     // Idempotência diária (ultimoEmailEm) previne email duplicado.
-    return diasAteVencimento <= 3 && diasAteVencimento >= -30;
+    return diasAteVencimento <= 7;
 }
 
 function getEmailResponsavel(tarefa, mapaUsuarios) {
