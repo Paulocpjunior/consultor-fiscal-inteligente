@@ -162,25 +162,32 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
         const hoje = hojeBrt();
         const janelaFutura = new Date(hoje.getTime() + 5 * 24 * 60 * 60 * 1000);
 
-        // Pega tarefas ativas com vencimento na janela [hoje-30d, hoje+5d].
-        // Faz 2 queries separadas (a_fazer + em_andamento) em vez de 'in'
-        // — mais barato e usa índice (status ASC, vencimento ASC) que já temos.
-        const limiteFuturo = admin.firestore.Timestamp.fromDate(janelaFutura);
-        const limitePassado = admin.firestore.Timestamp.fromDate(new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000));
-
+        // Pega TODAS tarefas ativas (sem filtro de vencimento Firestore-side
+        // porque tarefas antigas podem ter vencimento como string em vez de
+        // Timestamp). Filtra janela em memória. 2 queries paralelas pra
+        // evitar 'in' operator.
         const baseQuery = (status) => db.collection('tarefas')
             .where('status', '==', status)
-            .where('vencimento', '>=', limitePassado)
-            .where('vencimento', '<=', limiteFuturo)
-            .limit(2000);
+            .limit(5000);
 
         const [snapAfazer, snapAndamento] = await Promise.all([
             baseQuery('a_fazer').get(),
             baseQuery('em_andamento').get(),
         ]);
 
-        const docs = [...snapAfazer.docs, ...snapAndamento.docs];
+        // Filtra janela em memória: [hoje-30d, hoje+5d]
+        const inicioJanela = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000).getTime();
+        const fimJanela = janelaFutura.getTime();
+
+        const docs = [...snapAfazer.docs, ...snapAndamento.docs].filter(d => {
+            const v = d.data().vencimento;
+            const ms = v?.toDate?.()?.getTime?.() ?? (v ? new Date(v).getTime() : NaN);
+            return !Number.isNaN(ms) && ms >= inicioJanela && ms <= fimJanela;
+        });
+
+        log.totalAtivas = snapAfazer.size + snapAndamento.size;
         log.examinadas = docs.length;
+        console.log(`[vencimentos] totalAtivas=${log.totalAtivas} examinadas (janela)=${log.examinadas}`);
 
         for (const doc of docs) {
             try {
@@ -269,12 +276,16 @@ export async function resumoVencimentos({ uid, role } = {}) {
 
     const baseQ = (status) => db.collection('tarefas')
         .where('status', '==', status)
-        .where('vencimento', '>=', admin.firestore.Timestamp.fromDate(limitePassado))
-        .where('vencimento', '<=', admin.firestore.Timestamp.fromDate(janelaFutura))
-        .limit(500);
+        .limit(2500);
 
     const [s1, s2] = await Promise.all([baseQ('a_fazer').get(), baseQ('em_andamento').get()]);
-    const todos = [...s1.docs, ...s2.docs];
+    const inicioJanela = limitePassado.getTime();
+    const fimJanela = janelaFutura.getTime();
+    const todos = [...s1.docs, ...s2.docs].filter(d => {
+        const v = d.data().vencimento;
+        const ms = v?.toDate?.()?.getTime?.() ?? (v ? new Date(v).getTime() : NaN);
+        return !Number.isNaN(ms) && ms >= inicioJanela && ms <= fimJanela;
+    });
 
     const resumo = { atrasadas: 0, venceHoje: 0, venceAmanha: 0, vence3d: 0, vence7d: 0, vence30d: 0, total: 0 };
     const proximas = [];
