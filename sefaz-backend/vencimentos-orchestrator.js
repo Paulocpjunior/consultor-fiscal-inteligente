@@ -15,7 +15,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
-import { enviarEmail } from './graph-provider.js';
+import { enviarEmail, isGraphConfigured } from './graph-provider.js';
 import { calcularMultaPorObrigacao } from './multa-calculator.js';
 
 const TZ_OFFSET_BRT = -3; // BRT = UTC-3
@@ -139,10 +139,74 @@ async function criarNotificacaoInApp(db, uidDestinatario, tarefa, dias, categori
     }, { merge: true });
 }
 
+// Monta o email-resumo (digest) que vai pros admins. Lista TODAS as
+// obrigações da janela de alerta, agrupando atrasadas / hoje / próximas.
+function montarDigestEmail(itens, hojeIso) {
+    const atrasadas = itens.filter(i => i.dias < 0);
+    const hoje = itens.filter(i => i.dias === 0);
+    const proximas = itens.filter(i => i.dias > 0);
+
+    const linha = (i) => {
+        const quando = i.dias < 0 ? `<b style="color:#d33">há ${Math.abs(i.dias)}d</b>`
+            : i.dias === 0 ? `<b style="color:#d33">hoje</b>`
+            : i.dias === 1 ? `<b style="color:#e80">amanhã</b>`
+            : `em ${i.dias}d`;
+        const valor = i.valorEstimado ? `R$ ${Number(i.valorEstimado).toFixed(2)}` : '—';
+        return `<tr>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap">${quando}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee">${i.titulo || i.obrigacao || '—'}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee">${i.empresaNome || '—'}<br><span style="color:#999;font-size:11px">${i.empresaCnpj || ''}</span></td>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee">${i.responsavelNome || '<span style="color:#c00">(sem responsável)</span>'}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;font-family:monospace">${valor}</td>
+        </tr>`;
+    };
+
+    const secao = (titulo, cor, lista) => lista.length === 0 ? '' : `
+        <tr><td colspan="5" style="padding:10px 8px 4px;font-weight:700;color:${cor};border-bottom:2px solid ${cor}">${titulo} (${lista.length})</td></tr>
+        ${lista.slice(0, 80).map(linha).join('')}
+        ${lista.length > 80 ? `<tr><td colspan="5" style="padding:6px 8px;color:#999;font-style:italic">… e mais ${lista.length - 80}</td></tr>` : ''}`;
+
+    const corpo = `
+<!DOCTYPE html><html><body style="font-family:-apple-system,Arial,sans-serif;max-width:760px;margin:0 auto;color:#111">
+    <div style="background:linear-gradient(135deg,#dc2626,#7c3aed);color:#fff;padding:22px;border-radius:12px 12px 0 0">
+        <h1 style="margin:0;font-size:20px">📋 Resumo diário de obrigações</h1>
+        <p style="margin:6px 0 0;opacity:.9;font-size:13px">${hojeIso} — SP Assessoria Contábil</p>
+    </div>
+    <div style="background:#fff;padding:18px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px">
+        <p style="margin:0 0 12px;font-size:14px">
+            <b>${atrasadas.length}</b> atrasada${atrasadas.length === 1 ? '' : 's'} ·
+            <b>${hoje.length}</b> vence${hoje.length === 1 ? '' : 'm'} hoje ·
+            <b>${proximas.length}</b> próxima${proximas.length === 1 ? '' : 's'} (≤7d)
+        </p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead><tr style="background:#f3f4f6">
+                <th style="padding:6px 8px;text-align:left">Quando</th>
+                <th style="padding:6px 8px;text-align:left">Obrigação</th>
+                <th style="padding:6px 8px;text-align:left">Empresa</th>
+                <th style="padding:6px 8px;text-align:left">Responsável</th>
+                <th style="padding:6px 8px;text-align:right">Valor est.</th>
+            </tr></thead>
+            <tbody>
+                ${secao('🔴 Atrasadas', '#dc2626', atrasadas)}
+                ${secao('🟠 Vencem hoje', '#ea580c', hoje)}
+                ${secao('🟡 Próximas (≤7 dias)', '#ca8a04', proximas)}
+            </tbody>
+        </table>
+        <div style="margin-top:20px;text-align:center">
+            <a href="https://consultor-fiscal-inteligente-631239634290.us-west1.run.app/" style="display:inline-block;padding:11px 22px;background:#4f46e5;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">Abrir no sistema →</a>
+        </div>
+    </div>
+</body></html>`;
+    return corpo;
+}
+
 /**
  * Pipeline principal: roda diariamente.
+ * @param {object} opts
+ * @param {string} opts.disparadoPor
+ * @param {boolean} opts.force  ignora idempotência diária (re-dispara hoje)
  */
-export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
+export async function processarVencimentos({ disparadoPor = 'cron-08h', force = false } = {}) {
     const db = fa().firestore();
     const t0 = Date.now();
     const log = {
@@ -209,7 +273,8 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
         log.semVencimento = semVencimento;
         log.foraJanela = foraJanela;
         log.examinadas = docs.length;
-        console.log(`[vencimentos] totalAtivas=${log.totalAtivas} semVenc=${semVencimento} foraJanela=${foraJanela} examinadas=${log.examinadas} janela=[${new Date(inicioJanela).toISOString()},${new Date(fimJanela).toISOString()}]`);
+        log.graphConfigured = isGraphConfigured();
+        console.log(`[vencimentos] totalAtivas=${log.totalAtivas} semVenc=${semVencimento} foraJanela=${foraJanela} examinadas=${log.examinadas} force=${force} graphConfigured=${log.graphConfigured} janela=[${new Date(inicioJanela).toISOString()},${new Date(fimJanela).toISOString()}]`);
 
         // Pré-computa UIDs admin (1 vez, não por tarefa)
         const adminUids = [];
@@ -224,7 +289,6 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
         ]);
 
         const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-        const atrasadasParaDigest = []; // acumula pra digest dos admins
         let processadas = 0;
 
         for (const doc of docs) {
@@ -239,10 +303,10 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
 
                 if (!deveAlertar(tarefa, dias)) continue;
 
-                // Idempotência por dia
+                // Idempotência por dia (force ignora pra re-disparar)
                 const hojeIso = hoje.toISOString().slice(0, 10);
                 const ultimoEmail = tarefa.ultimoEmailEm?.toDate?.()?.toISOString?.()?.slice(0, 10);
-                if (ultimoEmail === hojeIso) continue;
+                if (!force && ultimoEmail === hojeIso) continue;
 
                 // Multa estimada se atrasada e tem valorEstimado
                 let multaEstimada = null;
@@ -268,15 +332,6 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
                     log.notificacoesIn++;
                 }
 
-                // Atrasadas/vence-hoje entram no digest dos admins (agregado no fim)
-                if (dias <= 0) {
-                    atrasadasParaDigest.push({
-                        id: tarefa.id, titulo: tarefa.titulo, empresaNome: tarefa.empresaNome,
-                        empresaCnpj: tarefa.empresaCnpj, obrigacao: tarefa.obrigacao,
-                        competencia: tarefa.competencia, dias,
-                    });
-                }
-
                 // Marca ultimoEmailEm
                 await doc.ref.update({ ultimoEmailEm: admin.firestore.FieldValue.serverTimestamp() });
 
@@ -287,19 +342,45 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
             }
         }
 
-        // Digest agregado pros admins (1 notificação resumo por admin, não 1 por tarefa)
-        if (atrasadasParaDigest.length > 0 && adminUids.length > 0) {
-            const hojeIso = hoje.toISOString().slice(0, 10);
-            atrasadasParaDigest.sort((a, b) => a.dias - b.dias);
+        // ─── Digest pros admins (in-app + EMAIL) ────────────────────────────
+        // Passada completa sobre TODAS as obrigações da janela que merecem
+        // alerta (deveAlertar), independente de terem responsável ou de já
+        // terem sido marcadas hoje. Garante que o admin tem a visão completa
+        // todo dia e recebe 1 email-resumo diário (mesmo com 0 responsáveis).
+        const hojeIso = hoje.toISOString().slice(0, 10);
+        const digestItens = [];
+        for (const doc of docs) {
+            const t = doc.data();
+            const dias = diffDiasBrt(t.vencimento, hoje);
+            if (!deveAlertar(t, dias)) continue;
+            digestItens.push({
+                id: doc.id, titulo: t.titulo, empresaNome: t.empresaNome,
+                empresaCnpj: t.empresaCnpj, obrigacao: t.obrigacao,
+                competencia: t.competencia, dias,
+                responsavelNome: t.responsavelNome || null,
+                valorEstimado: t.valorEstimado || null,
+            });
+        }
+        digestItens.sort((a, b) => a.dias - b.dias);
+        log.digestTotal = digestItens.length;
+
+        if (digestItens.length > 0 && adminUids.length > 0) {
+            const atrasadas = digestItens.filter(i => i.dias < 0).length;
+            const venceHoje = digestItens.filter(i => i.dias === 0).length;
+            const proximas = digestItens.filter(i => i.dias > 0).length;
+            const tituloDigest = `${digestItens.length} obrigações — ${atrasadas} atrasadas, ${venceHoje} hoje, ${proximas} próximas`;
+
+            // (1) Notificação in-app por admin (idempotente por id de data)
             for (const uid of adminUids) {
                 try {
                     await db.collection('notificacoes').doc(uid).collection('items').doc(`digest-venc-${hojeIso}`).set({
                         tipo: 'vencimento_digest',
-                        urgencia: 'critica',
-                        emoji: '🔴',
-                        titulo: `${atrasadasParaDigest.length} obrigações atrasadas ou vencendo hoje`,
-                        total: atrasadasParaDigest.length,
-                        amostra: atrasadasParaDigest.slice(0, 15),
+                        urgencia: atrasadas > 0 || venceHoje > 0 ? 'critica' : 'media',
+                        emoji: atrasadas > 0 || venceHoje > 0 ? '🔴' : '🟡',
+                        titulo: tituloDigest,
+                        total: digestItens.length,
+                        atrasadas, venceHoje, proximas,
+                        amostra: digestItens.slice(0, 15),
                         lida: false,
                         criadoEm: admin.firestore.FieldValue.serverTimestamp(),
                         link: '/Tarefas',
@@ -310,7 +391,42 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
                 }
             }
             log.adminsNotificados = adminUids.length;
-            log.atrasadasNoDigest = atrasadasParaDigest.length;
+
+            // (2) Email-resumo pros admins — 1x/dia (force ignora a trava)
+            const emailsAdmin = adminUids.map(uid => usuariosMapa.get(uid)?.email).filter(Boolean);
+            const metaRef = db.collection('vencimentos_meta').doc('digest-email');
+            let jaEnviouHoje = false;
+            try {
+                const metaSnap = await metaRef.get();
+                jaEnviouHoje = metaSnap.exists && metaSnap.data().ultimoEnvioIso === hojeIso;
+            } catch { /* sem meta = nunca enviou */ }
+
+            if (emailsAdmin.length > 0 && (force || !jaEnviouHoje)) {
+                const corpoHtml = montarDigestEmail(digestItens, hojeIso);
+                const r = await enviarEmailComTimeout({
+                    remetente: REMETENTE_DEFAULT,
+                    para: emailsAdmin,
+                    assunto: `📋 [Obrigações ${hojeIso}] ${tituloDigest}`,
+                    corpoHtml,
+                }, 12000);
+                if (r.ok) {
+                    log.emailDigestEnviado = true;
+                    log.emailsEnviados++;
+                    try {
+                        await metaRef.set({
+                            ultimoEnvioIso: hojeIso,
+                            atualizadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                            totalNoDigest: digestItens.length,
+                            destinatarios: emailsAdmin,
+                        }, { merge: true });
+                    } catch { /* trava best-effort */ }
+                } else {
+                    log.emailDigestErro = r.error;
+                    if (log.erros.length < 20) log.erros.push({ digestEmail: true, motivo: r.error });
+                }
+            } else {
+                log.emailDigestPulado = emailsAdmin.length === 0 ? 'sem-email-admin' : 'ja-enviado-hoje';
+            }
         }
     } catch (e) {
         log.erroFatal = e.message;

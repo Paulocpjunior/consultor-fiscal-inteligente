@@ -37,11 +37,14 @@ router.post('/cron', requireCronAuth, async (req, res) => {
 
 router.post('/cron-now', requireAuth, async (req, res) => {
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
-    res.json({ ok: true, motivo: 'Disparado em background' });
+    // force=true (body ou query) ignora a idempotência diária e re-dispara
+    // (re-marca tarefas + re-envia o email-resumo pros admins).
+    const force = req.body?.force === true || req.query?.force === '1' || req.query?.force === 'true';
+    res.json({ ok: true, motivo: 'Disparado em background', force });
     setImmediate(async () => {
         try {
-            const log = await processarVencimentos({ disparadoPor: req.user.email });
-            console.log(`[vencimentos-cron-now] fim — examinadas=${log.examinadas} alertadas=${log.alertadas} emails=${log.emailsEnviados}`);
+            const log = await processarVencimentos({ disparadoPor: req.user.email, force });
+            console.log(`[vencimentos-cron-now] fim — force=${force} examinadas=${log.examinadas} alertadas=${log.alertadas} emails=${log.emailsEnviados} digestEmail=${log.emailDigestEnviado || false} digestErro=${log.emailDigestErro || '-'}`);
         } catch (e) {
             console.error('[vencimentos-cron-now] erro:', e);
         }
