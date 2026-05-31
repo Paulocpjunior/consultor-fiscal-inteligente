@@ -45,4 +45,66 @@ snap.forEach((d, i) => {
     }, null, 2));
 });
 
+// ─── Diagnóstico LIVE: roda a lógica nova sobre os dados reais ──────────────
+// Independe do que está deployado — usa o código local (deveAlertar <= 7).
+console.log('\n\n════════ DIAGNÓSTICO LIVE (lógica deveAlertar<=7 local) ════════');
+
+const TZ_OFFSET_BRT = -3;
+function hojeBrt() {
+    const agora = new Date();
+    const brt = new Date(agora.getTime() + (TZ_OFFSET_BRT * 60 * 60 * 1000) - (agora.getTimezoneOffset() * 60 * 1000));
+    brt.setHours(0, 0, 0, 0);
+    return brt;
+}
+function diffDiasBrt(v, hoje) {
+    let ms = null;
+    if (v && typeof v.toDate === 'function') ms = v.toDate().getTime();
+    else if (v && typeof v.seconds === 'number') ms = v.seconds * 1000;
+    else if (v) { const p = new Date(v).getTime(); if (!Number.isNaN(p)) ms = p; }
+    if (ms === null) return null;
+    const dv = new Date(ms); dv.setHours(0, 0, 0, 0);
+    return Math.round((dv.getTime() - hoje.getTime()) / 86400000);
+}
+
+const hoje = hojeBrt();
+const hojeIso = hoje.toISOString().slice(0, 10);
+const inicioJanela = hoje.getTime() - 90 * 86400000;
+const fimJanela = hoje.getTime() + 5 * 86400000;
+
+const [sAf, sAnd] = await Promise.all([
+    db.collection('tarefas').where('status', '==', 'a_fazer').limit(5000).get(),
+    db.collection('tarefas').where('status', '==', 'em_andamento').limit(5000).get(),
+]);
+const docs = [...sAf.docs, ...sAnd.docs];
+
+let naJanela = 0, passariaDeveAlertar = 0, comUltimoEmailHoje = 0, comResponsavel = 0;
+const amostras = [];
+for (const d of docs) {
+    const t = d.data();
+    const dias = diffDiasBrt(t.vencimento, hoje);
+    if (dias === null) continue;
+    const ms = (t.vencimento?.toDate?.()?.getTime?.()) ?? (t.vencimento?.seconds ? t.vencimento.seconds * 1000 : NaN);
+    if (Number.isNaN(ms) || ms < inicioJanela || ms > fimJanela) continue;
+    naJanela++;
+    const deveAlertar = dias <= 7; // status já garantido pela query
+    if (deveAlertar) passariaDeveAlertar++;
+    const ultimoEmail = t.ultimoEmailEm?.toDate?.()?.toISOString?.()?.slice(0, 10);
+    if (ultimoEmail === hojeIso) comUltimoEmailHoje++;
+    if (t.responsavel) comResponsavel++;
+    if (amostras.length < 8) {
+        amostras.push({ id: d.id, status: t.status, dias, deveAlertar, ultimoEmail: ultimoEmail || null, responsavel: t.responsavel || null });
+    }
+}
+
+console.log(JSON.stringify({
+    hojeBrt: hojeIso,
+    totalAtivas: docs.length,
+    naJanela,
+    passariaDeveAlertar,          // quantas a lógica NOVA alertaria
+    comUltimoEmailHoje,           // quantas a idempotência pularia
+    comResponsavel,               // quantas têm email-alvo
+    deveriaAlertarHoje: passariaDeveAlertar - comUltimoEmailHoje,
+}, null, 2));
+console.log('amostras:', JSON.stringify(amostras, null, 2));
+
 process.exit(0);
