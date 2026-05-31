@@ -56,8 +56,9 @@ function classificar(diasAteVencimento) {
 // Decide se manda email/push pra essa tarefa hoje
 function deveAlertar(tarefa, diasAteVencimento) {
     if (!['a_fazer', 'em_andamento'].includes(tarefa.status)) return false;
-    // Alerta em D-3, D-1, D-0, D+1, D+7
-    const marcos = [3, 1, 0, -1, -7];
+    // Alerta em: 3 dias antes, 1 dia antes, no dia, 1 dia depois,
+    // 7 dias atrasada, 30 dias atrasada (escalation).
+    const marcos = [3, 1, 0, -1, -7, -30];
     return marcos.includes(diasAteVencimento);
 }
 
@@ -175,8 +176,9 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
             baseQuery('em_andamento').get(),
         ]);
 
-        // Filtra janela em memória: [hoje-30d, hoje+5d]
-        const inicioJanela = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000).getTime();
+        // Filtra janela em memória: [hoje-90d, hoje+5d]
+        // (90d passados pra cobrir tarefas atrasadas mais antigas)
+        const inicioJanela = new Date(hoje.getTime() - 90 * 24 * 60 * 60 * 1000).getTime();
         const fimJanela = janelaFutura.getTime();
 
         const todasDocs = [...snapAfazer.docs, ...snapAndamento.docs];
