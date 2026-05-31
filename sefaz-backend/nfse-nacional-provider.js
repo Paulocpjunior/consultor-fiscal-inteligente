@@ -15,7 +15,9 @@
 // virao em iteracoes futuras.
 // ============================================================================
 
-const MODE = process.env.NFSE_NAC_MODE || 'mock';
+// Default 'serpro' (REAL). 'mock' só com NFSE_NAC_MODE=mock explícito (dev local).
+// Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
+const MODE = process.env.NFSE_NAC_MODE || 'serpro';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 

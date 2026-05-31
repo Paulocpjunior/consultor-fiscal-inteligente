@@ -26,7 +26,9 @@
 import { invokeIntegraContador } from './serpro-client.js';
 import { consultarNfseRecebidas } from './nfse-sp-client.js';
 
-const MODE = process.env.CAIXA_POSTAL_MODE || 'mock';
+// Default 'serpro' (REAL). 'mock' só com CAIXA_POSTAL_MODE=mock explícito (dev local).
+// Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
+const MODE = process.env.CAIXA_POSTAL_MODE || 'serpro';
 
 // ── Mock Templates ─────────────────────────────────────────────────────────
 

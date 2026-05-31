@@ -20,7 +20,9 @@
 
 import { invokeIntegraContador } from './serpro-client.js';
 
-const MODE = process.env.DCTFWEB_MODE || 'mock';
+// Default 'serpro' (REAL). 'mock' só com DCTFWEB_MODE=mock explícito (dev local).
+// Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
+const MODE = process.env.DCTFWEB_MODE || 'serpro';
 
 export const DCTFWEB_CATEGORIAS = {
     GERAL_MENSAL: 40,

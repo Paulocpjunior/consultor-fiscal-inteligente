@@ -15,7 +15,9 @@ import { gerarBarrasDarf, gerarLinhaDigitavelArrecadacao } from './febraban-barc
 import { sugerirCodigoReceita } from './darf-codigos-receita.js';
 import { invokeIntegraContador } from './serpro-client.js';
 
-const MODE = process.env.DARF_MODE || 'mock';
+// Default 'serpro' (REAL). 'mock' só com DARF_MODE=mock explícito (dev local).
+// Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
+const MODE = process.env.DARF_MODE || 'serpro';
 
 // Multas e juros (cálculo simplificado quando DARF é emitida atrasada)
 //
