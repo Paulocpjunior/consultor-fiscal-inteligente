@@ -54,6 +54,8 @@ if (!GEMINI_API_KEY) {
     process.exit(1);
 }
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+// Modelo default centralizado (gemini-2.0-flash foi deprecado em mar/2026).
+const GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || 'gemini-3.5-flash';
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
@@ -62,7 +64,7 @@ app.get('/health', (_req, res) => {
 
 // ─── Proxy endpoint: Consulta Fiscal ─────────────────────────────────────────
 app.post('/api/fiscal/query', async (req, res) => {
-    const { prompt, model = 'gemini-2.0-flash' } = req.body;
+    const { prompt, model = GEMINI_MODEL_FLASH } = req.body;
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
         return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });
@@ -92,7 +94,7 @@ app.post('/api/fiscal/query', async (req, res) => {
 
 // ─── Proxy endpoint: Comparação ───────────────────────────────────────────────
 app.post('/api/fiscal/compare', async (req, res) => {
-    const { prompt, model = 'gemini-2.0-flash' } = req.body;
+    const { prompt, model = GEMINI_MODEL_FLASH } = req.body;
 
     if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });
@@ -113,7 +115,7 @@ app.post('/api/fiscal/compare', async (req, res) => {
 
 // ─── Proxy endpoint: Serviços similares ──────────────────────────────────────
 app.post('/api/fiscal/similar', async (req, res) => {
-    const { prompt, model = 'gemini-2.0-flash' } = req.body;
+    const { prompt, model = GEMINI_MODEL_FLASH } = req.body;
 
     if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ error: 'Campo "prompt" é obrigatório.' });

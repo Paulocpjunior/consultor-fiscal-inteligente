@@ -111,6 +111,10 @@ app.use(express.json({ limit: '20mb' }));
 app.use('/api/', rateLimit({ windowMs: 60000, max: 120, message: { error: 'Aguarde.' } }));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// Modelos centralizados em env vars — trocar de versao = atualizar o secret no
+// Cloud Run, sem mexer em codigo. Default: gemini-3.5-flash (GA, mai/2026).
+const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-3.5-flash';
+const GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || 'gemini-3.5-flash';
 let ai = null;
 if (GEMINI_API_KEY) {
     ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
@@ -138,21 +142,21 @@ function pickGeminiModel({ explicitModel, prompt, hasAttachment }) {
         return explicitModel;
     }
     // 2. Anexo -> Pro (Flash multimodal eh menos confiavel pra docs/imagens longas)
-    if (hasAttachment) return 'gemini-2.5-pro';
+    if (hasAttachment) return GEMINI_MODEL_PRO;
     // 3. Prompt longo -> Pro
     const len = typeof prompt === 'string' ? prompt.length : (prompt ? JSON.stringify(prompt).length : 0);
-    if (len > 4000) return 'gemini-2.5-pro';
+    if (len > 4000) return GEMINI_MODEL_PRO;
     // 4. Keywords analiticas -> Pro
     if (typeof prompt === 'string' && GEMINI_KEYWORDS_ANALITICAS.test(prompt)) {
-        return 'gemini-2.5-pro';
+        return GEMINI_MODEL_PRO;
     }
     // 5. Default: Flash (barato)
-    return 'gemini-2.5-flash';
+    return GEMINI_MODEL_FLASH;
 }
 
 function logGeminiRoute(modelo, contexto) {
-    const tag = modelo === 'gemini-2.5-flash' ? 'FLASH' : 'PRO  ';
-    console.log(`[gemini-router] ${tag} ${JSON.stringify(contexto)}`);
+    const tag = modelo === GEMINI_MODEL_FLASH ? 'FLASH' : 'PRO  ';
+    console.log(`[gemini-router] ${tag} ${modelo} ${JSON.stringify(contexto)}`);
 }
 
 app.get('/health', async (_req, res) => {
@@ -1386,7 +1390,7 @@ Responda APENAS o JSON, sem markdown, sem comentarios.`;
         let extraido = {};
         try {
             const respExt = await ai.models.generateContent({
-                model: 'gemini-2.5-pro',
+                model: GEMINI_MODEL_PRO,
                 contents: [
                     { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
                     { text: promptExtrator },

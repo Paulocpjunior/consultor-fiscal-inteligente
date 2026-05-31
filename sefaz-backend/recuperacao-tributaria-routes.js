@@ -4,6 +4,9 @@ import { getCatalogoTeses, analisarEmpresa, analisarTodas } from './recuperacao-
 
 const router = Router();
 
+// Modelo centralizado em env var (default gemini-3.5-flash, GA mai/2026).
+const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-3.5-flash';
+
 // GET /status — modo atual
 router.get('/status', (_req, res) => {
     res.json({ mode: 'ativo', teses: getCatalogoTeses().length });
@@ -71,13 +74,13 @@ Em portugues brasileiro, em 4 paragrafos:
 Use **negrito** nos pontos-chave. Seja tecnicamente preciso.`;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: GEMINI_MODEL_PRO,
             contents: prompt,
         });
 
         res.json({
             analise: response.text ?? '',
-            modelo: 'gemini-2.5-pro',
+            modelo: GEMINI_MODEL_PRO,
             geradoEm: new Date().toISOString(),
         });
     } catch (err) {
