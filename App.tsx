@@ -24,7 +24,7 @@ import { fetchFiscalData, fetchComparison, fetchSimilarServices } from './servic
 import * as simplesService from './services/simplesNacionalService';
 import * as authService from './services/authService';
 import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon, ScaleIcon } from './components/Icons';
-import FiscalObligationsDashboard from './components/FiscalObligationsDashboard';
+// (FiscalObligationsDashboard, Tarefas, CalendarioFiscal agora dentro de ObrigacoesETarefas)
 import { runInitialSync } from './services/cloudSyncService';
 import { requestNotificationPermission } from './services/notificacoesService';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
@@ -38,7 +38,7 @@ const ComparisonDisplay = lazy(() => import('./components/ComparisonDisplay'));
 const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDisplay'));
 const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumidoRealDashboard'));
 const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
-const Tarefas = lazy(() => import('./components/Tarefas'));
+const ObrigacoesETarefas = lazy(() => import('./components/ObrigacoesETarefas'));
 const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocumentosFiscais'));
 const SpedFiscal = lazy(() => import('./components/SpedFiscal'));
 const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
@@ -53,7 +53,6 @@ const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
 const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
-const CalendarioFiscal = lazy(() => import('./components/CalendarioFiscal'));
 const AnomaliasView = lazy(() => import('./components/Anomalias'));
 const SimuladorReforma = lazy(() => import('./components/SimuladorReforma'));
 const TaxEmissionDashboard = lazy(() => import('./components/TaxEmission'));
@@ -676,7 +675,7 @@ const App: React.FC = () => {
                         </ErrorBoundary>
                         {/* Search Type Selection Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
-                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL && t !== SearchType.NFP_PRO_CLOUD).map((type) => (
+                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL && t !== SearchType.NFP_PRO_CLOUD && t !== SearchType.TAREFAS && t !== SearchType.CALENDARIO).map((type) => (
                                 <button
                                     key={type}
                                     onClick={() => {
@@ -1101,9 +1100,14 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
-                        {/* Fiscal Obligations View */}
+                        {/* Obrigações & Tarefas (Dashboard + Kanban + Calendário) */}
                         {searchType === SearchType.OBRIGACOES_FISCAIS && (
-                            <FiscalObligationsDashboard />
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <ObrigacoesETarefas
+                                    currentUser={currentUser ?? null}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
                         )}
 
                         {/* Central de Documentos Fiscais (XML) */}
@@ -1225,17 +1229,6 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
-                        {searchType === SearchType.CALENDARIO && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <CalendarioFiscal
-                                    currentUser={currentUser ?? null}
-                                    onShowToast={(msg) => setToastMessage(msg)}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
                         {searchType === SearchType.ANOMALIAS && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
@@ -1305,15 +1298,6 @@ const App: React.FC = () => {
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnaliseCreditos currentUser={currentUser ?? null} />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {/* Tarefas */}
-                        {searchType === SearchType.TAREFAS && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <Tarefas currentUser={currentUser ?? null} />
                             </Suspense>
                             </ErrorBoundary>
                         )}

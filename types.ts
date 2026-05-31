@@ -6,7 +6,7 @@ export enum SearchType {
     REFORMA_TRIBUTARIA = 'Reforma Tributária',
     SIMPLES_NACIONAL = 'Simples Nacional',
     LUCRO_PRESUMIDO_REAL = 'Lucro Presumido/Real',
-    OBRIGACOES_FISCAIS = 'Obrigações Fiscais',
+    OBRIGACOES_FISCAIS = 'Obrigações & Tarefas',
     IMPORTA_XML = 'Importa XML',
     ANALISE_RELATORIO_SAGE = 'Análise Relatório SAGE',
   ANALISADOR_REGIME = 'Regime Tributário',
