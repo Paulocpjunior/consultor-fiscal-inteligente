@@ -2,17 +2,21 @@
  * services/anomaliasService.ts
  * Cliente HTTP do detector de anomalias DAS.
  */
+import { getAuth } from 'firebase/auth';
 import type { User, AnomaliasGlobalResponse, AnomaliaDetectada, AnomaliaIaResponse } from '../types';
 
-function authHeaders(user: User | null): Record<string, string> {
+async function authHeaders(_user: User | null): Promise<Record<string, string>> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Sessão expirada — faça login novamente');
+    const token = await u.getIdToken();
     return {
         'Content-Type': 'application/json',
-        'X-User-Role': user?.role || 'colaborador',
+        Authorization: `Bearer ${token}`,
     };
 }
 
 export async function getAnomaliasTodas(user: User | null): Promise<AnomaliasGlobalResponse> {
-    const res = await fetch('/api/admin/das/anomalias-todas', { headers: authHeaders(user) });
+    const res = await fetch('/api/admin/das/anomalias-todas', { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`getAnomaliasTodas: ${res.status}`);
     return res.json();
 }
@@ -25,7 +29,7 @@ export async function explicarAnomaliaIa(
 ): Promise<AnomaliaIaResponse> {
     const res = await fetch('/api/admin/das/anomalia-explicar', {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify({ empresaNome, empresaAnexo, anomalia }),
     });
     if (!res.ok) {

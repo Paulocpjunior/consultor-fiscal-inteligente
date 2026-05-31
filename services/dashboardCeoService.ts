@@ -2,17 +2,21 @@
  * services/dashboardCeoService.ts
  * Cliente HTTP do Dashboard CEO (KPIs + insights IA).
  */
+import { getAuth } from 'firebase/auth';
 import type { User, DashboardCeoKpis, DashboardCeoInsights, AcoesResponse } from '../types';
 
-function authHeaders(user: User | null): Record<string, string> {
+async function authHeaders(_user: User | null): Promise<Record<string, string>> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Sessão expirada — faça login novamente');
+    const token = await u.getIdToken();
     return {
         'Content-Type': 'application/json',
-        'X-User-Role': user?.role || 'colaborador',
+        Authorization: `Bearer ${token}`,
     };
 }
 
 export async function getKpis(user: User | null): Promise<DashboardCeoKpis> {
-    const res = await fetch('/api/admin/dashboard-ceo/kpis', { headers: authHeaders(user) });
+    const res = await fetch('/api/admin/dashboard-ceo/kpis', { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`getKpis: ${res.status}`);
     return res.json();
 }
@@ -20,7 +24,7 @@ export async function getKpis(user: User | null): Promise<DashboardCeoKpis> {
 export async function getInsights(user: User | null, kpis: DashboardCeoKpis): Promise<DashboardCeoInsights> {
     const res = await fetch('/api/admin/dashboard-ceo/insights', {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify({ kpis }),
     });
     if (!res.ok) {
@@ -37,7 +41,7 @@ export function formatBRL(v: number): string {
 
 
 export async function getAcoes(user: User | null): Promise<AcoesResponse> {
-    const res = await fetch('/api/admin/dashboard-ceo/acoes', { headers: authHeaders(user) });
+    const res = await fetch('/api/admin/dashboard-ceo/acoes', { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`getAcoes: ${res.status}`);
     return res.json();
 }

@@ -768,7 +768,7 @@ const App: React.FC = () => {
                                 <div className="mb-2">
                                     <DownloadIcon className="w-5 h-5" />
                                 </div>
-                                <span className="text-xs font-bold text-center leading-tight">Importa XML/PDF</span>
+                                <span className="text-xs font-bold text-center leading-tight">Central de Documentos Fiscais</span>
                             </button>
                             {/* Análise Relatório SAGE */}
                             <button
