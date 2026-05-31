@@ -179,15 +179,36 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h' } = {}) {
         const inicioJanela = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000).getTime();
         const fimJanela = janelaFutura.getTime();
 
-        const docs = [...snapAfazer.docs, ...snapAndamento.docs].filter(d => {
+        const todasDocs = [...snapAfazer.docs, ...snapAndamento.docs];
+        log.totalAtivas = todasDocs.length;
+
+        // DEBUG: amostra primeira tarefa pra ver formato vencimento
+        if (todasDocs.length > 0) {
+            const sample = todasDocs[0].data();
+            const v = sample.vencimento;
+            console.log(`[vencimentos] DEBUG sample tarefa: id=${todasDocs[0].id} vencimento=${JSON.stringify(v)} typeof=${typeof v} hasToDate=${typeof v?.toDate === 'function'}`);
+        }
+
+        let semVencimento = 0;
+        let foraJanela = 0;
+        const docs = todasDocs.filter(d => {
             const v = d.data().vencimento;
-            const ms = v?.toDate?.()?.getTime?.() ?? (v ? new Date(v).getTime() : NaN);
-            return !Number.isNaN(ms) && ms >= inicioJanela && ms <= fimJanela;
+            let ms = null;
+            if (v && typeof v.toDate === 'function') ms = v.toDate().getTime();
+            else if (v && typeof v.seconds === 'number') ms = v.seconds * 1000;
+            else if (v) {
+                const parsed = new Date(v).getTime();
+                if (!Number.isNaN(parsed)) ms = parsed;
+            }
+            if (ms === null) { semVencimento++; return false; }
+            if (ms < inicioJanela || ms > fimJanela) { foraJanela++; return false; }
+            return true;
         });
 
-        log.totalAtivas = snapAfazer.size + snapAndamento.size;
+        log.semVencimento = semVencimento;
+        log.foraJanela = foraJanela;
         log.examinadas = docs.length;
-        console.log(`[vencimentos] totalAtivas=${log.totalAtivas} examinadas (janela)=${log.examinadas}`);
+        console.log(`[vencimentos] totalAtivas=${log.totalAtivas} semVenc=${semVencimento} foraJanela=${foraJanela} examinadas=${log.examinadas} janela=[${new Date(inicioJanela).toISOString()},${new Date(fimJanela).toISOString()}]`);
 
         for (const doc of docs) {
             try {
