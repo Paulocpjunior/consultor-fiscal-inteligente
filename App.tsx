@@ -1299,7 +1299,12 @@ const App: React.FC = () => {
                         {/* Results Display */}
                         <ErrorBoundary>
                         <Suspense fallback={<LoadingSpinner />}>
-                            {!result && !comparisonResult && ![SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) && (
+                            {/* InitialStateDisplay e o prompt "digite no campo de busca acima".
+                                So faz sentido nas abas que TEM barra de busca (CFOP/NCM/Servico/
+                                Reforma). Os demais SearchType sao dashboards com componente proprio
+                                e renderizavam essa mensagem morta apontando pra uma busca inexistente
+                                (allowlist em vez do antigo blocklist de 4 abas). */}
+                            {!result && !comparisonResult && [SearchType.CFOP, SearchType.NCM, SearchType.SERVICO, SearchType.REFORMA_TRIBUTARIA].includes(searchType) && (
                                 <InitialStateDisplay searchType={searchType} mode={mode} />
                             )}
 

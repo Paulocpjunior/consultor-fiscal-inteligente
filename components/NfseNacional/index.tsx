@@ -23,6 +23,7 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
     const [docs, setDocs] = useState<NfseNacionalEmitida[]>([]);
     const [loading, setLoading] = useState(false);
     const [filtroStatus, setFiltroStatus] = useState<NfseNacStatus | ''>('');
+    const [busca, setBusca] = useState('');
     const [selecionada, setSelecionada] = useState<NfseNacionalEmitida | null>(null);
 
     const carregar = async () => {
@@ -65,6 +66,25 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
             { label: 'ISS Total', valor: resumo.valorIssTotal, isMoney: true, clave: '' },
         ];
     }, [resumo]);
+
+    // Busca em memoria sobre as emitidas ja carregadas (numero, tomador,
+    // CNPJ, descricao do servico ou chave). Substitui a falsa promessa de
+    // "campo de busca acima" que apontava pra uma barra inexistente.
+    const docsFiltrados = useMemo(() => {
+        const termo = busca.trim().toLowerCase();
+        if (!termo) return docs;
+        const digitos = termo.replace(/\D/g, '');
+        return docs.filter(d => {
+            const cnpjTomador = (d.tomador?.cnpj || '').replace(/\D/g, '');
+            return (
+                (d.numero || '').toLowerCase().includes(termo) ||
+                (d.tomador?.nome || '').toLowerCase().includes(termo) ||
+                (d.servico?.descricao || '').toLowerCase().includes(termo) ||
+                (d.chave || '').toLowerCase().includes(termo) ||
+                (digitos.length >= 3 && cnpjTomador.includes(digitos))
+            );
+        });
+    }, [docs, busca]);
 
     return (
         <div className="space-y-6">
@@ -112,12 +132,34 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
                 </div>
             )}
 
+            {/* Busca em memoria sobre as emitidas ja carregadas */}
+            {docs.length > 0 && (
+                <div className="relative">
+                    <input
+                        type="text"
+                        value={busca}
+                        onChange={e => setBusca(e.target.value)}
+                        placeholder="🔍 Buscar por número, tomador, CNPJ, serviço ou chave…"
+                        className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
+                    />
+                    {busca && (
+                        <span className="absolute right-3 top-2.5 text-xs text-slate-400">
+                            {docsFiltrados.length} de {docs.length}
+                        </span>
+                    )}
+                </div>
+            )}
+
             {/* Tabela */}
             {loading ? (
                 <div className="text-center py-12 text-slate-500">Carregando...</div>
             ) : docs.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">
                     Nenhuma NFSe emitida ainda. Use a tela da empresa Simples pra emitir.
+                </div>
+            ) : docsFiltrados.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                    Nenhuma NFSe corresponde à busca "{busca}".
                 </div>
             ) : (
                 <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-x-auto">
@@ -133,7 +175,7 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
                             </tr>
                         </thead>
                         <tbody>
-                            {docs.map(d => (
+                            {docsFiltrados.map(d => (
                                 <tr
                                     key={d.id}
                                     onClick={() => setSelecionada(d)}
