@@ -70,7 +70,6 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.ANALISE_RELATORIO_SAGE]: "Analise relatórios SAGE (XLSX/XML) e identifique gaps, canceladas, denegadas e segregação E/S.",
     [SearchType.ANALISADOR_REGIME]: "Compare cenários de tributação (Simples, Lucro Presumido, Lucro Real) e identifique o regime mais vantajoso.",
     [SearchType.ANALISE_CREDITOS]: "Análise de créditos PIS/COFINS, conciliação bancária e mapeamento por categoria fiscal.",
-    [SearchType.TAREFAS]: "Gestão de tarefas e prazos das obrigações acessórias (DAS, DCTFWeb, FGTS, SPED) por empresa.",
     [SearchType.SPED_FISCAL]: "Geração do arquivo SPED Fiscal (EFD ICMS/IPI) — escrituração digital mensal.",
     [SearchType.CAIXA_POSTAL]: "Caixa Postal e-CAC — mensagens da Receita Federal por empresa (intimações, malha fiscal, comunicados).",
     [SearchType.DAS_SIMPLES]: "DAS Simples Nacional — emissão regular (com PGDAS-D) e avulso, controle de pagamentos por empresa.",
@@ -659,7 +658,7 @@ const App: React.FC = () => {
                             <Suspense fallback={null}>
                                 <VencimentosBanner
                                     currentUser={currentUser}
-                                    onClickIrTarefas={() => setSearchType(SearchType.TAREFAS)}
+                                    onClickIrTarefas={() => setSearchType(SearchType.OBRIGACOES_FISCAIS)}
                                 />
                                 <CronCapturaBanner currentUser={currentUser} onShowToast={(msg) => setToastMessage(msg)} />
                             </Suspense>
@@ -674,7 +673,7 @@ const App: React.FC = () => {
                         </ErrorBoundary>
                         {/* Search Type Selection Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
-                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL && t !== SearchType.NFP_PRO_CLOUD && t !== SearchType.TAREFAS && t !== SearchType.CALENDARIO).map((type) => (
+                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL && t !== SearchType.NFP_PRO_CLOUD && t !== SearchType.CALENDARIO).map((type) => (
                                 <button
                                     key={type}
                                     onClick={() => {

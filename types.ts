@@ -11,7 +11,6 @@ export enum SearchType {
     ANALISE_RELATORIO_SAGE = 'Análise Relatório SAGE',
   ANALISADOR_REGIME = 'Regime Tributário',
   ANALISE_CREDITOS = 'Análise de Créditos',
-  TAREFAS = 'Tarefas',
   SPED_FISCAL = 'SPED Fiscal',
   CAIXA_POSTAL = 'Caixa Postal',
   DAS_SIMPLES = 'DAS Simples Nacional',
