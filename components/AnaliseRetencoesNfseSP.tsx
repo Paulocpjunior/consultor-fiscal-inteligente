@@ -39,6 +39,7 @@ const AnaliseRetencoesNfseSP: React.FC = () => {
     const [filtro, setFiltro] = useState<'todas' | 'comRetencao' | 'semRetencao'>('comRetencao');
     const [erro, setErro] = useState<string | null>(null);
     const [nomeArquivo, setNomeArquivo] = useState<string>('');
+    const [exportandoPDF, setExportandoPDF] = useState(false);
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -67,6 +68,132 @@ const AnaliseRetencoesNfseSP: React.FC = () => {
         if (filtro === 'comRetencao') return linhas.filter(l => l.analise.temAlgumaRetencao);
         return linhas.filter(l => !l.analise.temAlgumaRetencao);
     }, [linhas, filtro]);
+
+    const exportarPDF = async () => {
+        if (linhas.length === 0) return;
+        setExportandoPDF(true);
+        try {
+            const { jsPDF } = await import('jspdf');
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const W = pdf.internal.pageSize.getWidth();
+            const H = pdf.internal.pageSize.getHeight();
+            const m = 12;
+            const now = new Date().toLocaleDateString('pt-BR');
+            const brl = (v: number) => (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            const drawHeader = () => {
+                pdf.setFillColor(2, 0, 38); pdf.rect(0, 0, W, 16, 'F');
+                pdf.setTextColor(255, 255, 255); pdf.setFontSize(11); pdf.setFont('helvetica', 'bold');
+                pdf.text('Auditoria de Retencoes - NFSe SP', m, 10);
+                pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+                pdf.text('Gerado em: ' + now, W - m - 40, 10);
+            };
+            drawHeader();
+            let y = 24;
+            const checkPage = (h: number) => { if (y + h > H - 12) { pdf.addPage(); drawHeader(); y = 24; } };
+
+            if (nomeArquivo) {
+                pdf.setFontSize(8); pdf.setFont('helvetica', 'italic'); pdf.setTextColor(100, 100, 100);
+                pdf.text(`Origem: ${nomeArquivo}`, m, y); y += 6;
+            }
+
+            pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
+            pdf.text('RESUMO DA AUDITORIA', m, y); y += 6;
+
+            const kpisGerais = [
+                ['Total de Notas', String(resumo.totalNotas)],
+                ['Com Retencao', String(resumo.notasComRetencao)],
+                ['Total Retido', 'R$ ' + brl(resumo.totalRetido)],
+            ];
+            const kWg = (W - m * 2) / 3;
+            kpisGerais.forEach((k, i) => {
+                const x = m + i * kWg;
+                pdf.setFillColor(240, 245, 255); pdf.rect(x, y - 4, kWg - 2, 14, 'F');
+                pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(80, 80, 80);
+                pdf.text(k[0], x + 2, y + 1);
+                pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
+                pdf.text(k[1], x + 2, y + 7);
+            });
+            y += 20;
+
+            pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
+            pdf.text('Quebra por Tributo', m, y); y += 4;
+            const kWt = (W - m * 2) / 6;
+            TRIBUTOS.forEach((t, i) => {
+                const x = m + i * kWt;
+                pdf.setFillColor(245, 250, 255); pdf.rect(x, y - 2, kWt - 2, 16, 'F');
+                pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(40, 40, 40);
+                pdf.text(LABEL_TRIBUTO[t], x + 2, y + 2);
+                pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(80, 80, 80);
+                pdf.text(`${resumo.porTributo[t].qtd} notas`, x + 2, y + 7);
+                pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
+                pdf.text('R$ ' + brl(resumo.porTributo[t].valor), x + 2, y + 11);
+            });
+            y += 20;
+
+            const renderSecao = (titulo: string, items: LinhaAnalisada[], showRetencoes: boolean) => {
+                if (items.length === 0) return;
+
+                checkPage(16);
+                pdf.setFillColor(225, 235, 255); pdf.rect(m, y - 4, W - m * 2, 12, 'F');
+                pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
+                pdf.text(titulo, m + 2, y + 1);
+                pdf.setTextColor(60, 60, 60); pdf.setFont('helvetica', 'normal');
+                pdf.text(`${items.length} notas`, W - m - 30, y + 1);
+                y += 14;
+
+                checkPage(8);
+                pdf.setFillColor(245, 245, 245); pdf.rect(m + 2, y - 3, W - m * 2 - 4, 6, 'F');
+                pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(80, 80, 80);
+                pdf.text('DIR', m + 4, y + 1);
+                pdf.text('Nº', m + 14, y + 1);
+                pdf.text('DATA', m + 32, y + 1);
+                pdf.text('CONTRAPARTE', m + 50, y + 1);
+                pdf.text('VALOR', m + 122, y + 1);
+                if (showRetencoes) {
+                    pdf.text('RETENCOES', m + 144, y + 1);
+                    pdf.text('TOTAL RET.', W - m - 22, y + 1);
+                }
+                y += 6;
+
+                for (const l of items) {
+                    checkPage(5);
+                    const contraparte = l.direcao === 'Emitida' ? l.tomadorNome : l.prestadorNome;
+                    pdf.setFont('helvetica', 'normal'); pdf.setTextColor(50, 50, 50); pdf.setFontSize(7);
+                    pdf.text((l.direcao || '').substring(0, 3), m + 4, y);
+                    pdf.text(String(l.numero || '-').substring(0, 10), m + 14, y);
+                    pdf.text(String(l.data || '-').substring(0, 10), m + 32, y);
+                    pdf.text(String(contraparte || '-').substring(0, 38), m + 50, y);
+                    pdf.text('R$ ' + brl(l.valorServicos), m + 122, y);
+                    if (showRetencoes) {
+                        const trib = TRIBUTOS.filter(t => l.analise[t].retido).map(t => LABEL_TRIBUTO[t]).join(', ');
+                        pdf.text(trib.substring(0, 30), m + 144, y);
+                        pdf.setFont('helvetica', 'bold');
+                        pdf.text('R$ ' + brl(l.analise.totalRetido), W - m - 22, y);
+                    }
+                    y += 5;
+                }
+                y += 3;
+            };
+
+            const comRetencao = linhas.filter(l => l.analise.temAlgumaRetencao);
+            const semRetencao = linhas.filter(l => !l.analise.temAlgumaRetencao);
+            renderSecao('NOTAS COM RETENCAO', comRetencao, true);
+            renderSecao('NOTAS SEM RETENCAO', semRetencao, false);
+
+            checkPage(14);
+            pdf.setFillColor(2, 0, 38); pdf.rect(m, y - 3, W - m * 2, 10, 'F');
+            pdf.setTextColor(255, 255, 255); pdf.setFontSize(10); pdf.setFont('helvetica', 'bold');
+            pdf.text(`TOTAL RETIDO: R$ ${brl(resumo.totalRetido)}`, m + 2, y + 4);
+
+            const filename = `auditoria-retencoes-nfse-sp-${new Date().toISOString().slice(0, 10)}.pdf`;
+            pdf.save(filename);
+        } catch (err: any) {
+            setErro(`Falha ao gerar PDF: ${err?.message || err}`);
+        } finally {
+            setExportandoPDF(false);
+        }
+    };
 
     return (
         <div className="space-y-4">
@@ -136,6 +263,13 @@ const AnaliseRetencoesNfseSP: React.FC = () => {
                         <span className="ml-auto text-sm font-semibold text-gray-700 dark:text-gray-200">
                             Total retido: {formatBRL(resumo.totalRetido)}
                         </span>
+                        <button
+                            onClick={exportarPDF}
+                            disabled={exportandoPDF || linhas.length === 0}
+                            className="px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {exportandoPDF ? 'Gerando...' : '📄 Exportar PDF'}
+                        </button>
                     </div>
 
                     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
