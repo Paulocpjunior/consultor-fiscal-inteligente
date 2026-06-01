@@ -600,9 +600,16 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     créditos, saldo e GARE/E116 para Lucro; e de IPI — E200/E210 quando
                     há atividade), bloco H (inventário) e bloco 9 (controle).
                     Simples Nacional sai com apuração zerada (paga via DAS), conforme regra.
-                    <strong className="block mt-2">Antes de transmitir:</strong>
-                    valide o arquivo gerado no PVA da Receita ao menos uma vez para a
-                    empresa — o app já roda validações internas, mas o PVA é a fonte oficial.
+                </p>
+                <p className="text-xs mt-3 font-bold" style={{ color: '#b45309' }}>
+                    ⚠ Antes de transmitir à Receita pela primeira vez:
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                    este SPED ainda <strong>não foi validado linha-a-linha contra o PVA da Receita
+                    em ambiente real</strong>. Para cada empresa nova, baixe o arquivo aqui,
+                    abra no PVA oficial (Programa Validador e Assinador EFD ICMS/IPI) e
+                    confira a apuração contra um período já transmitido manualmente.
+                    Só transmita pelo app após essa conferência cruzada.
                 </p>
             </div>
             </>}
