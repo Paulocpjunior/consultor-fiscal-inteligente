@@ -1281,7 +1281,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
           onClick={() => { setModo('nfsesp'); setErro(null); }}
           className={`px-4 py-2 rounded-xl text-sm font-semibold ${modo==='nfsesp'?'bg-teal-600 text-white':'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600'}`}
         >
-          📑 Retenções NFSe SP (CSV)
+          🔍 Auditoria de Retenções (CSV NFSe SP)
         </button>
       </div>
 

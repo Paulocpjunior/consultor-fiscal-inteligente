@@ -15,7 +15,6 @@ import XmlExportarIobSage from './XmlExportarIobSage';
 import CapturaDiagnosticoPanel from '../CapturaDiagnosticoPanel';
 import EmpresasStatusCapturaPanel from '../EmpresasStatusCapturaPanel';
 
-const XmlNfseSp = lazy(() => import('./XmlNfseSp'));
 const XmlNfseSpCsv = lazy(() => import('./XmlNfseSpCsv'));
 const XmlNfseSpCapturadas = lazy(() => import('./XmlNfseSpCapturadas'));
 const NfseSpSessaoCookies = lazy(() => import('../NfseSpSessaoCookies'));
@@ -33,22 +32,18 @@ type TabId =
     | 'relatorios'
     | 'config'
     | 'nfse_pdf'
-    | 'nfse_sp'
     | 'nfse_sp_csv'
-    | 'nfse_sp_capturadas'
-    | 'nfse_sp_sessao';
+    | 'nfse_sp_captura';
 
 const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'captura-auto', label: '🛰️ Captura Automática' },
     { id: 'empresas-status', label: '📋 Status por Empresa' },
     { id: 'documentos', label: 'XMLs NFe (Entrada/Saída)' },
-    { id: 'nfse_sp_capturadas', label: '📋 NFSe SP Capturadas (Tomados/Prestados)' },
+    { id: 'nfse_sp_captura', label: '🛰️ Captura Portal SP' },
     { id: 'importacao', label: 'Importação Manual' },
     { id: 'nfse_pdf', label: 'Importar NFSe (PDF)' },
-    { id: 'nfse_sp_sessao', label: '🔐 Cookies Portal SP (cron)' },
     { id: 'nfse_sp_csv', label: '📥 Importar NFSe SP (CSV)' },
-    { id: 'nfse_sp', label: 'NFS-e SP (WS)' },
     { id: 'empresas', label: 'Empresas Monitoradas' },
     { id: 'sharepoint', label: 'SharePoint' },
     { id: 'exportar-iob', label: 'Exportar IOB SAGE' },
@@ -184,19 +179,12 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                         onImported={() => setRefreshKey(k => k + 1)}
                     />
                 )}
-                {tab === 'nfse_sp' && (
+                {tab === 'nfse_sp_captura' && (
                     <Suspense fallback={<p className="text-center text-xs text-slate-400 py-6">Carregando...</p>}>
-                        <XmlNfseSp currentUser={currentUser} onShowToast={onShowToast} />
-                    </Suspense>
-                )}
-                {tab === 'nfse_sp_sessao' && (
-                    <Suspense fallback={<p className="text-center text-xs text-slate-400 py-6">Carregando...</p>}>
-                        <NfseSpSessaoCookies currentUser={currentUser} />
-                    </Suspense>
-                )}
-                {tab === 'nfse_sp_capturadas' && (
-                    <Suspense fallback={<p className="text-center text-xs text-slate-400 py-6">Carregando...</p>}>
-                        <XmlNfseSpCapturadas currentUser={currentUser} refreshKey={refreshKey} />
+                        <div className="space-y-6">
+                            <NfseSpSessaoCookies currentUser={currentUser} />
+                            <XmlNfseSpCapturadas currentUser={currentUser} refreshKey={refreshKey} />
+                        </div>
                     </Suspense>
                 )}
                 {tab === 'nfse_sp_csv' && (
