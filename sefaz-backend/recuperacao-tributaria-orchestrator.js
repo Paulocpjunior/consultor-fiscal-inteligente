@@ -1,4 +1,5 @@
 import admin from 'firebase-admin';
+import { fetchAllDocs } from './firestore-paginate.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -83,11 +84,12 @@ function isNcmMonofasico(ncm) {
 // ─── Análise: PIS/COFINS Monofásico ─────────────────────────────────────
 async function analisarMonofasico(empresaId, empresa) {
     const db = fa().firestore();
-    const docsSnap = await db.collection('documentos_fiscais')
-        .where('empresaId', '==', empresaId)
-        .where('direcao', '==', 'entrada')
-        .limit(2000)
-        .get();
+    const docsSnap = await fetchAllDocs(
+        db.collection('documentos_fiscais')
+            .where('empresaId', '==', empresaId)
+            .where('direcao', '==', 'entrada'),
+        { label: 'recuperacao/monofasico' },
+    );
 
     const itensMonofasicos = [];
     let totalRecuperavel = 0;
@@ -196,11 +198,12 @@ async function analisarIcmsBasePisCofins(empresaId, empresa) {
 // ─── Análise: ICMS-ST MVA Excedente ──────────────────────────────────────
 async function analisarIcmsStMva(empresaId) {
     const db = fa().firestore();
-    const docsSnap = await db.collection('documentos_fiscais')
-        .where('empresaId', '==', empresaId)
-        .where('direcao', '==', 'entrada')
-        .limit(2000)
-        .get();
+    const docsSnap = await fetchAllDocs(
+        db.collection('documentos_fiscais')
+            .where('empresaId', '==', empresaId)
+            .where('direcao', '==', 'entrada'),
+        { label: 'recuperacao/icms-st' },
+    );
 
     const itens = [];
     let totalRecuperavel = 0;
@@ -297,11 +300,12 @@ async function analisarDasSegregacao(empresaId, empresa) {
 // ─── Análise: ISS Local Incorreto ────────────────────────────────────────
 async function analisarIssLocal(empresaId, empresa) {
     const db = fa().firestore();
-    const nfseSnap = await db.collection('documentos_fiscais')
-        .where('empresaId', '==', empresaId)
-        .where('tipo', '==', 'NFSe')
-        .limit(1000)
-        .get();
+    const nfseSnap = await fetchAllDocs(
+        db.collection('documentos_fiscais')
+            .where('empresaId', '==', empresaId)
+            .where('tipo', '==', 'NFSe'),
+        { label: 'recuperacao/iss' },
+    );
 
     const itens = [];
     let totalRecuperavel = 0;

@@ -7,6 +7,7 @@ import {
 import { extractDocumentData, extractPgdasDataFromPdf } from './geminiService';
 import { parsePgdasExtrato } from './pgdasPdfParser';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
+import { fetchAllDocs } from './firestorePaginate';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import {
     collection, getDocs, doc, setDoc, getDoc,
@@ -94,12 +95,8 @@ export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEm
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
             const uid = auth.currentUser.uid;
-            const q = isMaster
-                ? query(collection(db, 'simples_empresas'), fbLimit(500))
-                : query(collection(db, 'simples_empresas'), where('createdBy', '==', uid), fbLimit(500));
-
-            const snapshot = await getDocs(q);
-            const cloudEmpresas = snapshot.docs
+            const snaps = await fetchAllDocs('simples_empresas', isMaster ? [] : [where('createdBy', '==', uid)]);
+            const cloudEmpresas = snaps
                 .filter(d => !(d.data() as any)._merged_into)
                 .map(d => ({ id: d.id, ...d.data() } as SimplesNacionalEmpresa));
 
@@ -221,11 +218,8 @@ export const getAllNotas = async (
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
             const uid = auth.currentUser.uid;
-            const q = isMaster
-                ? query(collection(db, 'simples_notas'), fbLimit(500))
-                : query(collection(db, 'simples_notas'), where('createdBy', '==', uid), fbLimit(500));
-            const snapshot = await getDocs(q);
-            cloudNotas = snapshot.docs.map(d =>
+            const snaps = await fetchAllDocs('simples_notas', isMaster ? [] : [where('createdBy', '==', uid)]);
+            cloudNotas = snaps.map(d =>
                 ({ id: d.id, ...d.data() } as SimplesNacionalNota));
         } catch { /* silent */ }
     }

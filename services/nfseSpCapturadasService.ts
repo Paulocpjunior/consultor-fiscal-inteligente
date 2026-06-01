@@ -10,6 +10,7 @@ import {
     collection, getDocs, query, where, orderBy, limit as fbLimit,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebaseConfig';
+import { fetchAllDocs } from './firestorePaginate';
 
 export interface NfseSpCapturada {
     id: string;
@@ -135,17 +136,14 @@ export async function resumoNfseSpCapturadas(): Promise<{
         return { total: 0, emitidas: 0, recebidas: 0, valorEmitidasTotal: 0, valorRecebidasTotal: 0, empresasUnicas: 0 };
     }
     try {
-        const q = query(
-            collection(db, 'documentos_fiscais'),
+        const snaps = await fetchAllDocs('documentos_fiscais', [
             where('tipoDoc', '==', 'NFSe'),
             where('fonte', '==', 'csv-portal-sp'),
-            fbLimit(5000),
-        );
-        const snap = await getDocs(q);
+        ]);
         const empresas = new Set<string>();
         let emitidas = 0, recebidas = 0, valE = 0, valR = 0;
         let ultima = '';
-        snap.docs.forEach(d => {
+        snaps.forEach(d => {
             const x = d.data() as any;
             const cnpjP = x.prestadorCnpj || '';
             const cnpjT = x.tomadorCnpj || '';
@@ -156,7 +154,7 @@ export async function resumoNfseSpCapturadas(): Promise<{
             if (x.dhEmi && x.dhEmi > ultima) ultima = x.dhEmi;
         });
         return {
-            total: snap.size,
+            total: snaps.length,
             emitidas, recebidas,
             valorEmitidasTotal: +valE.toFixed(2),
             valorRecebidasTotal: +valR.toFixed(2),

@@ -102,27 +102,23 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
     const isMaster = isMasterUser(user);
     const uid = auth?.currentUser?.uid;
 
-    const buildQuery = (col: string): QueryConstraint[] => {
-        const constraints: QueryConstraint[] = [];
-        if (!isMaster && uid) constraints.push(where('createdBy', '==', uid));
-        constraints.push(fbLimit(500));
-        return constraints;
-    };
+    const buildConstraints = (): QueryConstraint[] =>
+        (!isMaster && uid) ? [where('createdBy', '==', uid)] : [];
 
     try {
         const [simplesSnap, lucroSnap] = await Promise.all([
-            getDocs(query(collection(db, 'simples_empresas'), ...buildQuery('simples_empresas'))),
-            getDocs(query(collection(db, 'lucro_empresas'), ...buildQuery('lucro_empresas'))),
+            fetchAllDocs('simples_empresas', buildConstraints()),
+            fetchAllDocs('lucro_empresas', buildConstraints()),
         ]);
 
         // 23/05: filtra perdedores do merge de duplicatas
-        const simples: EmpresaXmlOption[] = simplesSnap.docs
+        const simples: EmpresaXmlOption[] = simplesSnap
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
             const data = d.data() as SimplesNacionalEmpresa;
             return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples', uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
         });
-        const lucro: EmpresaXmlOption[] = lucroSnap.docs
+        const lucro: EmpresaXmlOption[] = lucroSnap
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
             const data = d.data() as LucroPresumidoEmpresa;
@@ -183,16 +179,14 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
     // Seletor de empresa da Analise de Creditos / Carteira: TODOS os
     // usuarios logados veem TODAS as empresas (sem filtro por createdBy).
     // O Firestore ja garante isso com `allow list: if isSignedIn()`.
-    const buildQuery = (_col: string): QueryConstraint[] => [fbLimit(500)];
-
     try {
         const [simplesSnap, lucroSnap] = await Promise.all([
-            getDocs(query(collection(db, 'simples_empresas'), ...buildQuery('simples_empresas'))),
-            getDocs(query(collection(db, 'lucro_empresas'), ...buildQuery('lucro_empresas'))),
+            fetchAllDocs('simples_empresas'),
+            fetchAllDocs('lucro_empresas'),
         ]);
 
         // 23/05: filtra perdedores do merge de duplicatas
-        const simples: EmpresaPerfilOption[] = simplesSnap.docs
+        const simples: EmpresaPerfilOption[] = simplesSnap
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
             const data = d.data() as SimplesNacionalEmpresa;
@@ -208,7 +202,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 createdBy: data.createdBy,
             };
         });
-        const lucro: EmpresaPerfilOption[] = lucroSnap.docs
+        const lucro: EmpresaPerfilOption[] = lucroSnap
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
             const data = d.data() as LucroPresumidoEmpresa;

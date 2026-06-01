@@ -1,6 +1,7 @@
 
 import { LucroPresumidoEmpresa, FichaFinanceiraRegistro, User } from '../types';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
+import { fetchAllDocs } from './firestorePaginate';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, deleteDoc, limit as fbLimit } from 'firebase/firestore';
 
@@ -40,18 +41,11 @@ export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresu
         try {
             const uid = auth.currentUser.uid;
             
-            let q;
-            // Se for Admin/Junior, busca TUDO. Se for colaborador, busca apenas os seus.
-            if (isMasterAdmin) {
-                q = query(collection(db, 'lucro_empresas'), fbLimit(500));
-            } else {
-                q = query(collection(db, 'lucro_empresas'), where('createdBy', '==', uid), fbLimit(500));
-            }
-            
             try {
-                const snapshot = await getDocs(q);
+                // Se for Admin/Junior, busca TUDO. Se for colaborador, só os seus.
+                const snaps = await fetchAllDocs('lucro_empresas', isMasterAdmin ? [] : [where('createdBy', '==', uid)]);
                 // 23/05: filtra perdedores do merge de duplicatas
-                const cloudEmpresas = snapshot.docs
+                const cloudEmpresas = snaps
                     .filter(doc => !(doc.data() as any)._merged_into)
                     .map(doc => ({ id: doc.id, ...doc.data() } as LucroPresumidoEmpresa));
                 

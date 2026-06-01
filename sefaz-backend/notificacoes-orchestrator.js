@@ -12,6 +12,7 @@
 
 import admin from 'firebase-admin';
 import { enviarEmail, isGraphConfigured } from './graph-provider.js';
+import { fetchAllDocs } from './firestore-paginate.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -108,10 +109,10 @@ export async function coletarResumoParaCarteira(horas, cnpjsPermitidos) {
 
     // documentos_fiscais.createdAt (SEFAZ, NFSe SP, etc)
     try {
-        const snap = await db.collection('documentos_fiscais')
-            .where('createdAt', '>=', desde)
-            .limit(5000)
-            .get();
+        const snap = await fetchAllDocs(
+            db.collection('documentos_fiscais').where('createdAt', '>=', desde),
+            { label: 'notif/createdAt' },
+        );
         snap.forEach(d => {
             const x = d.data();
             const cnpj = normCnpj(x.empresaCnpj);
@@ -130,10 +131,10 @@ export async function coletarResumoParaCarteira(horas, cnpjsPermitidos) {
     // documentos_fiscais.capturadoEm (NFSe Nacional DFe e qualquer outro
     // importer mais novo que use capturadoEm em vez de createdAt)
     try {
-        const snap = await db.collection('documentos_fiscais')
-            .where('capturadoEm', '>=', desde)
-            .limit(5000)
-            .get();
+        const snap = await fetchAllDocs(
+            db.collection('documentos_fiscais').where('capturadoEm', '>=', desde),
+            { label: 'notif/capturadoEm' },
+        );
         snap.forEach(d => {
             if (jaContado.has(d.id)) return;
             const x = d.data();

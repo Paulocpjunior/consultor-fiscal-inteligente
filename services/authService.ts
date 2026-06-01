@@ -1,5 +1,6 @@
 import { User, UserRole, AccessLog } from '../types';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
+import { fetchAllDocs } from './firestorePaginate';
 import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
@@ -250,8 +251,8 @@ export const login = async (
 export const getAllUsers = async (): Promise<User[]> => {
     if (isFirebaseConfigured && db) {
         try {
-            const snapshot = await getDocs(query(collection(db, 'users'), fbLimit(500)));
-            return snapshot.docs.map(d => d.data() as User);
+            const snaps = await fetchAllDocs('users');
+            return snaps.map(d => d.data() as User);
         } catch (e: any) {
             if (e.code === 'permission-denied') {
                 // Propaga erro pra UI mostrar mensagem clara
