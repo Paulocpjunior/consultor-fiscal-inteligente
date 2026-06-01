@@ -386,6 +386,57 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       }
     }
 
+    // NFe DistDFe: total = universo REAL elegível agora (mesmos filtros do cron
+    // em listarEmpresasParaCron). travadas = subset desse universo que está
+    // sem sync ou com ultimaSync < 7d em sefaz_state. Substitui o
+    // travadas('sefaz_state',...) anterior, que misturava docs históricos
+    // (empresas removidas, A3, etc) com elegibilidade atual.
+    async function elegiveisNfeReais() {
+      try {
+        const limite30d = agora - 30 * 24 * 60 * 60 * 1000;
+        const elegiveis = new Map(); // cnpj -> docId
+        for (const col of ['simples_empresas', 'lucro_empresas']) {
+          try {
+            const snap = await db.collection(col).get();
+            snap.forEach(doc => {
+              const d = doc.data();
+              if (d.capturarSefaz === false) return;
+              const cnpj = (d.cnpj || '').replace(/\D/g, '');
+              if (cnpj.length !== 14) return;
+              if (d.ultimoAcessoXml) {
+                const ult = d.ultimoAcessoXml.toMillis?.() ?? new Date(d.ultimoAcessoXml).getTime();
+                if (ult < limite30d) return;
+              }
+              if (!elegiveis.has(cnpj)) elegiveis.set(cnpj, doc.id);
+            });
+          } catch (e) { /* collection indisponível, continua */ }
+        }
+        try {
+          const a3Snap = await db.collection('empresas_certificados').where('tipoCert', '==', 'A3').get();
+          const a3Ids = new Set(a3Snap.docs.map(d => d.id));
+          for (const [cnpj, id] of elegiveis) {
+            if (a3Ids.has(id)) elegiveis.delete(cnpj);
+          }
+        } catch (e) { /* sem certificados, sem filtro A3 */ }
+        const total = elegiveis.size;
+        let travadas = 0;
+        try {
+          const stateSnap = await db.collection('sefaz_state').get();
+          const stateById = new Map();
+          stateSnap.forEach(doc => {
+            stateById.set(doc.id, doc.data().ultimaSync?.toMillis?.() ?? null);
+          });
+          for (const id of elegiveis.values()) {
+            const ts = stateById.get(id);
+            if (!ts || ts < seteDias) travadas++;
+          }
+        } catch (e) { /* sem state, deixa travadas=0 */ }
+        return { total, travadas };
+      } catch (e) {
+        return { erro: e.message };
+      }
+    }
+
     async function docsRecentes(tipos) {
       try {
         let total = 0;
@@ -416,7 +467,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       ultimoLog('sefaz_cron_logs'),
       ultimoLog('nfsesp_cron_logs'),
       ultimoLog('nfse_nacional_dfe_cron_logs'),
-      travadas('sefaz_state', 'ultimaSync'),
+      elegiveisNfeReais(),
       elegiveisNfseSp(),
       travadas('nfse_nacional_dfe_state', 'ultimaSync'),
       docsRecentes(['nfe', 'nfceCte']),

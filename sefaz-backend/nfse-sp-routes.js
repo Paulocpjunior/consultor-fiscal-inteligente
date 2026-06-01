@@ -16,7 +16,7 @@ import { parseCsvNfseSp } from './nfse-sp-csv-parser.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
 import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
-import { requireAuth as authUser } from './require-admin.js';
+import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 
 const uploadCsv = multer({
     storage: multer.memoryStorage(),
@@ -309,7 +309,7 @@ router.post('/nfsesp-portal-cron-now', authUser, json(), async (req, res) => {
 // DevTools (PMSP_NFeID, PMSP_NFE_CPFCNPJ, ASP.NET_SessionId), cola aqui.
 // Cron noturno usa esses cookies pra baixar CSV de todas as empresas.
 
-router.get('/nfsesp-portal-session', authUser, async (_req, res) => {
+router.get('/nfsesp-portal-session', requireAdmin, async (_req, res) => {
     try {
         const s = await loadSessaoManual();
         return res.json({
@@ -324,11 +324,8 @@ router.get('/nfsesp-portal-session', authUser, async (_req, res) => {
     }
 });
 
-router.post('/nfsesp-portal-session', authUser, json(), async (req, res) => {
+router.post('/nfsesp-portal-session', requireAdmin, json(), async (req, res) => {
     try {
-        if (req.user?.role !== 'admin') {
-            return res.status(403).json({ erro: 'Apenas administradores' });
-        }
         const { cookieString } = req.body || {};
         if (!cookieString) return res.status(400).json({ erro: 'cookieString obrigatório' });
         const r = await saveSessaoManual(cookieString, req.user.email);
