@@ -31,7 +31,7 @@ function fa() {
     return admin;
 }
 
-router.post('/nfsesp-consultar-uma', authUser, json(), async (req, res) => {
+router.post('/nfsesp-consultar-uma', requireAdmin, json(), async (req, res) => {
     try {
         const { empresaId, colecao, periodo } = req.body || {};
         if (!empresaId) return res.status(400).json({ erro: 'empresaId é obrigatório' });
@@ -151,7 +151,7 @@ router.post('/nfsesp-cron-now', authUser, json(), async (req, res) => {
 // Endpoint pragmático que destrava NFSe SP enquanto WS legacy retorna 1102.
 // User exporta CSV no portal nfe.prefeitura.sp.gov.br → Exportação de NFS-e →
 // Layout V.006 (CSV). Sobe aqui. Sistema parseia e importa todas as notas.
-router.post('/nfsesp-importar-csv', authUser, uploadCsv.single('csv'), async (req, res) => {
+router.post('/nfsesp-importar-csv', requireAdmin, uploadCsv.single('csv'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ erro: 'Arquivo CSV obrigatório no campo "csv"' });
 

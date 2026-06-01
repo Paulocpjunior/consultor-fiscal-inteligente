@@ -7,7 +7,7 @@
 
 import express from 'express';
 import { coletarDadosContribuicoes, montarBlocosContribuicoes } from './sped-contrib-orchestrator.js';
-import { requireAuth } from './require-admin.js';
+import { requireAdmin } from './require-admin.js';
 
 const router = express.Router();
 
@@ -15,7 +15,7 @@ const router = express.Router();
  * GET /preview?empresaId=X&competencia=YYYY-MM
  * Retorna estatisticas: notas, itens, participantes elegiveis pro periodo.
  */
-router.get('/preview', requireAuth, async (req, res) => {
+router.get('/preview', requireAdmin, async (req, res) => {
     try {
         const { empresaId, competencia } = req.query;
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
@@ -46,7 +46,7 @@ router.get('/preview', requireAuth, async (req, res) => {
  * Body: { empresaId, competencia }
  * Retorna o .txt do SPED Contribuicoes montado, com Content-Disposition pra download.
  */
-router.post('/gerar', requireAuth, express.json(), async (req, res) => {
+router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
     try {
         const { empresaId, competencia } = req.body || {};
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });

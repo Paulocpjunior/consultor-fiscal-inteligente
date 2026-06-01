@@ -88,13 +88,14 @@ router.get('/previa-resumo', requireAdmin, async (_req, res) => {
 // Cron do resumo diario. Autenticado por NOTIF_CRON_SECRET (header) ou OIDC.
 // Dispara o resumo global para todos os usuarios com e-mail cadastrado.
 router.post('/cron-resumo', async (req, res) => {
-    // auth do cron
+    // auth do cron — exige NOTIF_CRON_SECRET no header X-Notif-Cron-Secret.
+    // Bug anterior: aceitava qualquer header 'Authorization: Bearer ...' sem
+    // validar assinatura/issuer do OIDC — bypass via curl com token random.
+    // Fix: removido o fallback Bearer-qualquer. Se o Cloud Scheduler usa OIDC,
+    // ele DEVE ser configurado tambem com x-notif-cron-secret.
     const cronSecret = req.headers['x-notif-cron-secret'];
     const expected = process.env.NOTIF_CRON_SECRET;
-    const authHeader = req.headers.authorization || '';
-    const okSecret = expected && cronSecret === expected;
-    const okOidc = /^Bearer\s+/i.test(authHeader);
-    if (!okSecret && !okOidc) {
+    if (!expected || cronSecret !== expected) {
         return res.status(401).json({ error: 'Cron nao autorizado' });
     }
 

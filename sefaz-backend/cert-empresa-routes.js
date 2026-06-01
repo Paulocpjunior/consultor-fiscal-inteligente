@@ -12,7 +12,7 @@ import {
     getCertInfoEmpresa,
     listCertsEmpresas,
 } from './cert-storage.js';
-import { requireAuth } from './require-admin.js';
+import { requireAdmin } from './require-admin.js';
 
 const router = express.Router();
 
@@ -26,7 +26,7 @@ const upload = multer({
 //   - cert: arquivo .pfx (binary)
 //   - password: senha do .pfx (string)
 //   - empresaId: id da empresa
-router.post('/upload', requireAuth, upload.single('cert'), async (req, res) => {
+router.post('/upload', requireAdmin, upload.single('cert'), async (req, res) => {
     try {
         const { empresaId, password } = req.body || {};
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
@@ -49,7 +49,7 @@ router.post('/upload', requireAuth, upload.single('cert'), async (req, res) => {
 });
 
 // ── GET /list — lista todos os certs cadastrados (so metadados) ──────────
-router.get('/list', requireAuth, async (req, res) => {
+router.get('/list', requireAdmin, async (req, res) => {
     try {
         const lista = await listCertsEmpresas();
         return res.json({ ok: true, total: lista.length, certs: lista });
@@ -60,7 +60,7 @@ router.get('/list', requireAuth, async (req, res) => {
 });
 
 // ── GET /info/:empresaId — info de 1 cert especifico ─────────────────────
-router.get('/info/:empresaId', requireAuth, async (req, res) => {
+router.get('/info/:empresaId', requireAdmin, async (req, res) => {
     try {
         const info = await getCertInfoEmpresa(req.params.empresaId);
         if (!info) return res.status(404).json({ ok: false, error: 'cert nao encontrado' });
@@ -72,7 +72,7 @@ router.get('/info/:empresaId', requireAuth, async (req, res) => {
 });
 
 // ── DELETE /:empresaId — deleta o cert ───────────────────────────────────
-router.delete('/:empresaId', requireAuth, async (req, res) => {
+router.delete('/:empresaId', requireAdmin, async (req, res) => {
     try {
         const result = await deleteCertEmpresa(req.params.empresaId);
         if (!result.ok) return res.status(404).json(result);
@@ -85,7 +85,7 @@ router.delete('/:empresaId', requireAuth, async (req, res) => {
 
 // ── POST /test/:empresaId — testa o cert chamando SEFAZ ──────────────────
 // Util pra UI confirmar visualmente que o cert funciona
-router.post('/test/:empresaId', requireAuth, async (req, res) => {
+router.post('/test/:empresaId', requireAdmin, async (req, res) => {
     try {
         const empresaId = req.params.empresaId;
         const cert = await loadCertEmpresa(empresaId);

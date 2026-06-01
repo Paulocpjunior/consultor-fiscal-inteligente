@@ -7,7 +7,7 @@
 
 import express from 'express';
 import { coletarDadosEmpresa, montarBlocos } from './sped-fiscal-orchestrator.js';
-import { requireAuth } from './require-admin.js';
+import { requireAdmin } from './require-admin.js';
 import { validarSpedFiscal } from './sped-fiscal-validador.js';
 
 const router = express.Router();
@@ -16,7 +16,7 @@ const router = express.Router();
  * GET /preview?empresaId=X&competencia=YYYY-MM
  * Retorna estatisticas: notas, itens, participantes elegiveis pro periodo.
  */
-router.get('/preview', requireAuth, async (req, res) => {
+router.get('/preview', requireAdmin, async (req, res) => {
     try {
         const { empresaId, competencia, competenciaInicio, competenciaFim } = req.query;
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
@@ -50,7 +50,7 @@ router.get('/preview', requireAuth, async (req, res) => {
  * Body: { empresaId, competencia | (competenciaInicio + competenciaFim) }
  * Retorna o .txt do SPED Fiscal montado, com Content-Disposition pra download.
  */
-router.post('/gerar', requireAuth, express.json(), async (req, res) => {
+router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
     try {
         const { empresaId, competencia, competenciaInicio, competenciaFim } = req.body || {};
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
@@ -102,7 +102,7 @@ router.post('/gerar', requireAuth, express.json(), async (req, res) => {
  * Body: { txt: string }
  * Valida um arquivo SPED Fiscal TXT e retorna erros/avisos sem gerar download.
  */
-router.get('/validar', requireAuth, express.json({ limit: '10mb' }), (req, res) => {
+router.get('/validar', requireAdmin, express.json({ limit: '10mb' }), (req, res) => {
     try {
         const { txt } = req.body || {};
         if (!txt || typeof txt !== 'string') {
@@ -115,7 +115,7 @@ router.get('/validar', requireAuth, express.json({ limit: '10mb' }), (req, res) 
     }
 });
 
-router.get('/historico', requireAuth, async (_req, res) => {
+router.get('/historico', requireAdmin, async (_req, res) => {
     return res.json({ entries: [], message: 'Historico sera implementado na Fase 4.' });
 });
 

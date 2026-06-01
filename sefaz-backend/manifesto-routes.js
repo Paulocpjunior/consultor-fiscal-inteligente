@@ -7,7 +7,7 @@ import admin from 'firebase-admin';
 import {
   manifestarUma, manifestarPendentes, listarElegiveis,
 } from './manifesto-orchestrator.js';
-import { requireAuth as authUser } from './require-admin.js';
+import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET;
 const router = Router();
@@ -48,7 +48,7 @@ router.get('/manifest-elegiveis', authUser, async (req, res) => {
   }
 });
 
-router.post('/manifest-one', authUser, async (req, res) => {
+router.post('/manifest-one', requireAdmin, async (req, res) => {
   try {
     const { chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa, dryRun = false } = req.body || {};
     if (!chNFe || !cnpjDestinatario) {
@@ -65,7 +65,7 @@ router.post('/manifest-one', authUser, async (req, res) => {
   }
 });
 
-router.post('/manifest-pending', authUser, async (req, res) => {
+router.post('/manifest-pending', requireAdmin, async (req, res) => {
   try {
     const { empresaId = null, tipo = 'ciencia', limit = 20, dryRun = false } = req.body || {};
     const r = await manifestarPendentes({

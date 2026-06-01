@@ -16,7 +16,7 @@ import express from 'express';
 import admin from 'firebase-admin';
 import { sincronizarEmpresaNfseNacionalDfe } from './nfse-nacional-dfe-orchestrator.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
-import { requireAuth } from './require-admin.js';
+import { requireAuth, requireAdmin } from './require-admin.js';
 
 const router = express.Router();
 
@@ -41,7 +41,7 @@ function requireCronAuth(req, res, next) {
 }
 
 // ── POST /sync-one ────────────────────────────────────────────────────────
-router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
+router.post('/sync-one', requireAdmin, express.json(), async (req, res) => {
     try {
         const { empresaId, empresaCnpj } = req.body || {};
         if (!empresaId || !empresaCnpj) {
