@@ -28,6 +28,13 @@ function requireCronAuth(req, res, next) {
     if (headerSecret === secret) {
         return next();
     }
+    // Drift de secret entre Scheduler e Cloud Run e causa conhecida de cron
+    // silenciosamente parado (vide commit 71d4c3a + incidente 01/06/2026).
+    // Loga prefixos pra diagnosticar sem vazar secret completo.
+    const headerPrefix = headerSecret ? String(headerSecret).slice(0, 4) + '...' : '(ausente)';
+    const envPrefix = secret.slice(0, 4) + '...';
+    const jobName = req.headers['x-cloudscheduler-jobname'] || '(no header)';
+    console.warn(`[requireCronAuth] 403 mismatch — header=${headerPrefix} env=${envPrefix} job=${jobName} ip=${req.ip}`);
     return res.status(403).json({ error: 'Cron auth failed' });
 }
 
@@ -386,6 +393,24 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       }
     }
 
+    // NFSe Nacional ADN: conta empresas com nfseNacionalDfeAtivo === true. Antes
+    // contava docs em nfse_nacional_dfe_state, que so populam APOS primeira sync —
+    // mostrava 0 mesmo com admin tendo habilitado empresas.
+    async function elegiveisNfseNacional() {
+      try {
+        let total = 0;
+        for (const col of ['simples_empresas', 'lucro_empresas']) {
+          const snap = await db.collection(col).get();
+          snap.forEach(doc => {
+            if (doc.data().nfseNacionalDfeAtivo === true) total++;
+          });
+        }
+        return { total, travadas: null };
+      } catch (e) {
+        return { erro: e.message };
+      }
+    }
+
     // NFe DistDFe: total = universo REAL elegível agora (mesmos filtros do cron
     // em listarEmpresasParaCron). travadas = subset desse universo que está
     // sem sync ou com ultimaSync < 7d em sefaz_state. Substitui o
@@ -469,7 +494,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       ultimoLog('nfse_nacional_dfe_cron_logs'),
       elegiveisNfeReais(),
       elegiveisNfseSp(),
-      travadas('nfse_nacional_dfe_state', 'ultimaSync'),
+      elegiveisNfseNacional(),
       docsRecentes(['nfe', 'nfceCte']),
       docsRecentes(['nfsesp']),
       docsRecentes(['nfseNacional']),

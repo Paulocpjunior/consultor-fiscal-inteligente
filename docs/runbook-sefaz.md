@@ -58,7 +58,7 @@
 | Recurso | Valor |
 |---|---|
 | Projeto GCP | `consultorfiscalapp` |
-| Region | `us-central1` |
+| Region | `us-west1` |
 | Service account dedicada | `sefaz-capture-sa@consultorfiscalapp.iam.gserviceaccount.com` |
 | Roles da SA | `roles/secretmanager.secretAccessor`, `roles/datastore.user`, `roles/storage.objectAdmin` |
 | Cert digital A1 | CNPJ 44.388.152/0001-89 (SP Assessoria Contábil) |
@@ -79,7 +79,7 @@
 Verificar:
 ```bash
 gcloud run services describe consultor-fiscal-inteligente \
-  --region=us-central1 --project=consultorfiscalapp \
+  --region=us-west1 --project=consultorfiscalapp \
   --format="value(spec.template.spec.containers[0].env)"
 ```
 
@@ -123,7 +123,7 @@ gcloud run services describe consultor-fiscal-inteligente \
 ### Disparar cron manualmente (sem esperar 02:00)
 ```bash
 gcloud scheduler jobs run sefaz-cron-noturno \
-  --location=us-central1 --project=consultorfiscalapp
+  --location=us-west1 --project=consultorfiscalapp
 ```
 
 ### Ver logs do cron
@@ -158,7 +158,7 @@ gcloud firestore documents delete \
 
 ### Verificar status de uma empresa
 ```bash
-curl -sS "https://consultor-fiscal-inteligente-631239634290.us-central1.run.app/api/admin/sefaz/state/44388152000189" \
+curl -sS "https://consultor-fiscal-inteligente-631239634290.us-west1.run.app/api/admin/sefaz/state/44388152000189" \
   -H "Authorization: Bearer <ID_TOKEN>"
 ```
 
@@ -258,7 +258,7 @@ Falhas de captura — motivo, contexto (NSU, schema), timestamp.
 ### Cron não rodou às 02:00
 1. Verificar Cloud Scheduler:
    ```bash
-   gcloud scheduler jobs describe sefaz-cron-noturno --location=us-central1 --project=consultorfiscalapp
+   gcloud scheduler jobs describe sefaz-cron-noturno --location=us-west1 --project=consultorfiscalapp
    ```
    Esperar `state: ENABLED`.
 2. Verificar última execução em `sefaz_cron_logs` (Firestore Console)
@@ -301,14 +301,14 @@ bash ~/Downloads/sefaz-fase1/scripts/03-deploy.sh        # deploy automatizado
 
 Health check pós-deploy:
 ```bash
-curl -sS https://consultor-fiscal-inteligente-631239634290.us-central1.run.app/health
+curl -sS https://consultor-fiscal-inteligente-631239634290.us-west1.run.app/health
 # Esperado: {"status":"ok","ai":true,"timestamp":"..."}
 ```
 
 Se `traffic` ficar em 0% após deploy:
 ```bash
 gcloud run services update-traffic consultor-fiscal-inteligente \
-  --to-latest --region=us-central1 --project=consultorfiscalapp
+  --to-latest --region=us-west1 --project=consultorfiscalapp
 ```
 
 ---
