@@ -9,6 +9,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import sefazCertRouter from './sefaz-backend/cert-manager.js';
 import sefazSyncRouter from './sefaz-backend/sync-routes.js';
+import { fetchAllDocs } from './sefaz-backend/firestore-paginate.js';
 import empresaStatusRouter from './sefaz-backend/empresa-status-routes.js';
 import vencimentosRouter from './sefaz-backend/vencimentos-routes.js';
 import sefazManifestoRouter from './sefaz-backend/manifesto-routes.js';
@@ -1655,7 +1656,7 @@ app.get('/api/admin/dashboard-ceo/kpis', requireAdmin, async (req, res) => {
         const totalEmpresas = simplesAtivos.length + lucroAtivos.length;
 
         // ── Caixa Postal
-        const cxSnap = await db.collection('caixa_postal_mensagens').limit(2000).get();
+        const cxSnap = await fetchAllDocs(db.collection('caixa_postal_mensagens'), { label: 'caixa_postal/ceo' });
         let cxNaoLidasCriticas = 0;
         const cnpjsCriticos = new Set();
         cxSnap.forEach(d => {
@@ -1667,7 +1668,7 @@ app.get('/api/admin/dashboard-ceo/kpis', requireAdmin, async (req, res) => {
         });
 
         // ── DAS
-        const dasSnap = await db.collection('das_emitidos').limit(2000).get();
+        const dasSnap = await fetchAllDocs(db.collection('das_emitidos'), { label: 'das_emitidos/ceo' });
         let dasPendentes = 0, dasVencidos = 0, valorVencido = 0;
         const cnpjsDasVencido = new Set();
         dasSnap.forEach(d => {
@@ -1685,7 +1686,7 @@ app.get('/api/admin/dashboard-ceo/kpis', requireAdmin, async (req, res) => {
         });
 
         // ── NFSe
-        const nfseSnap = await db.collection('nfse_nacional_emitidas').limit(2000).get();
+        const nfseSnap = await fetchAllDocs(db.collection('nfse_nacional_emitidas'), { label: 'nfse_nacional_emitidas/ceo' });
         let nfseMes = 0, nfseIssMes = 0;
         nfseSnap.forEach(d => {
             const m = d.data();
@@ -1752,7 +1753,7 @@ app.get('/api/admin/dashboard-ceo/acoes', requireAdmin, async (req, res) => {
         const mesAtual = hoje.slice(0, 7);
 
         // ── 1. Mensagens criticas Caixa Postal (urgencia ALTA)
-        const cxSnap = await db.collection('caixa_postal_mensagens').limit(2000).get();
+        const cxSnap = await fetchAllDocs(db.collection('caixa_postal_mensagens'), { label: 'caixa_postal/ceo' });
         const empresasCxCriticas = new Map();
         cxSnap.forEach(d => {
             const m = d.data();
@@ -1803,7 +1804,7 @@ app.get('/api/admin/dashboard-ceo/acoes', requireAdmin, async (req, res) => {
         }
 
         // ── 2. DAS vencidos (urgencia ALTA)
-        const dasSnap = await db.collection('das_emitidos').limit(2000).get();
+        const dasSnap = await fetchAllDocs(db.collection('das_emitidos'), { label: 'das_emitidos/ceo' });
         const empresasDasVencido = new Map();
         dasSnap.forEach(d => {
             const m = d.data();

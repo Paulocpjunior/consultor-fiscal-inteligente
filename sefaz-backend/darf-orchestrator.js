@@ -5,6 +5,7 @@
 
 import admin from 'firebase-admin';
 import { getDarfProvider, getDarfMode } from './darf-provider.js';
+import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
 
 const COLLECTION = 'darfs_emitidos';
 
@@ -90,8 +91,7 @@ export async function listarDarfs({ empresaId, competencia, tributo, status, reg
  */
 export async function getResumoDarf() {
     const db = fa().firestore();
-    const snap = await db.collection(COLLECTION).limit(1000).get();
-    const docs = snap.docs.map(d => d.data());
+    const docs = (await fetchAllDocs(db.collection(COLLECTION), { label: 'darf_emitidos/resumo' })).map(d => d.data());
 
     const hoje = new Date().toISOString().slice(0, 10);
     let pendentes = 0, vencidos = 0, pagos = 0;
@@ -143,24 +143,22 @@ export async function marcarPago(docId, dataPagamento) {
 export async function processarVencimentos() {
     const db = fa().firestore();
     const hoje = new Date().toISOString().slice(0, 10);
-    const snap = await db.collection(COLLECTION).limit(2000).get();
-    const stats = { total: snap.size, atualizados: 0 };
-    const batch = db.batch();
-    let comOps = false;
+    const snapDocs = await fetchAllDocs(db.collection(COLLECTION), { label: 'darf_emitidos/cron' });
+    const stats = { total: snapDocs.length, atualizados: 0 };
+    const updates = [];
 
-    for (const doc of snap.docs) {
+    for (const doc of snapDocs) {
         const d = doc.data();
         if ((d.statusPagamento || 'pendente') !== 'pendente') continue;
         if (!d.vencimento) continue;
         if (d.vencimento < hoje) {
-            batch.update(doc.ref, {
-                statusPagamento: 'vencido',
-                atualizadoEm: new Date().toISOString(),
+            updates.push({
+                ref: doc.ref,
+                data: { statusPagamento: 'vencido', atualizadoEm: new Date().toISOString() },
             });
             stats.atualizados++;
-            comOps = true;
         }
     }
-    if (comOps) await batch.commit();
+    await commitUpdatesInChunks(db, updates);
     return stats;
 }

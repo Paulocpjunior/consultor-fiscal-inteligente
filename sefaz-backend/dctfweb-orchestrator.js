@@ -174,8 +174,7 @@ export async function consultarApuracoesAno({ empresaCnpj, anoPA }) {
 
 export async function getResumoGlobal() {
     const db = fa().firestore();
-    const snap = await db.collection(COLLECTION).limit(1000).get();
-    const docs = snap.docs.map(d => d.data());
+    const docs = (await fetchAllDocs(db.collection(COLLECTION), { label: 'dctfweb_declaracoes/resumo' })).map(d => d.data());
     const pendentes = docs.filter(d => d.situacao === 'EM_ANDAMENTO');
     const transmitidas = docs.filter(d => d.situacao === 'ATIVA');
     return {

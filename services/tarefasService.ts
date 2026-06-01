@@ -40,6 +40,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import { calcularVencimento, type Obrigacao, type RegraObrigacao } from './calendarioFiscal';
+import { fetchAllDocs } from './firestorePaginate';
 
 const COLLECTION = 'tarefas';
 const COLLECTION_CARTEIRAS = 'carteiras';
@@ -155,11 +156,10 @@ export async function listarTarefas(filtros: FiltrosTarefa = {}): Promise<Tarefa
         }
         if (filtros.obrigacao) constraints.push(where('obrigacao', '==', filtros.obrigacao));
 
-        constraints.push(fbLimit(500));
-        const q = query(collection(db, COLLECTION), ...constraints);
-
-        const snap = await getDocs(q);
-        let lista = snap.docs.map(d => docToTarefa(d.id, d.data()));
+        // Paginação via cursor (fetchAllDocs) substitui o antigo fbLimit(500)
+        // que truncava a tela de Tarefas quando a base passava de 500 itens.
+        const snaps = await fetchAllDocs(COLLECTION, constraints);
+        let lista = snaps.map(d => docToTarefa(d.id, d.data()));
 
         // Filtros que ficam em memoria
         if (filtros.responsavel !== undefined) {

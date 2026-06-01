@@ -16,6 +16,7 @@
 
 import admin from 'firebase-admin';
 import { enviarEmail, isGraphConfigured } from './graph-provider.js';
+import { fetchAllDocs } from './firestore-paginate.js';
 import { calcularMultaPorObrigacao } from './multa-calculator.js';
 
 const TZ_OFFSET_BRT = -3; // BRT = UTC-3
@@ -231,12 +232,11 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h', force = 
         // Timestamp). Filtra janela em memória. 2 queries paralelas pra
         // evitar 'in' operator.
         const baseQuery = (status) => db.collection('tarefas')
-            .where('status', '==', status)
-            .limit(5000);
+            .where('status', '==', status);
 
         const [snapAfazer, snapAndamento] = await Promise.all([
-            baseQuery('a_fazer').get(),
-            baseQuery('em_andamento').get(),
+            fetchAllDocs(baseQuery('a_fazer'), { label: 'tarefas/venc-cron/a_fazer' }),
+            fetchAllDocs(baseQuery('em_andamento'), { label: 'tarefas/venc-cron/em_andamento' }),
         ]);
 
         // Filtra janela em memória: [hoje-90d, hoje+5d]
@@ -244,7 +244,7 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h', force = 
         const inicioJanela = new Date(hoje.getTime() - 90 * 24 * 60 * 60 * 1000).getTime();
         const fimJanela = janelaFutura.getTime();
 
-        const todasDocs = [...snapAfazer.docs, ...snapAndamento.docs];
+        const todasDocs = [...snapAfazer, ...snapAndamento];
         log.totalAtivas = todasDocs.length;
 
         // DEBUG: amostra primeira tarefa pra ver formato vencimento
@@ -455,13 +455,15 @@ export async function resumoVencimentos({ uid, role } = {}) {
     const limitePassado = new Date(hoje.getTime() - 60 * 24 * 60 * 60 * 1000);
 
     const baseQ = (status) => db.collection('tarefas')
-        .where('status', '==', status)
-        .limit(2500);
+        .where('status', '==', status);
 
-    const [s1, s2] = await Promise.all([baseQ('a_fazer').get(), baseQ('em_andamento').get()]);
+    const [s1, s2] = await Promise.all([
+        fetchAllDocs(baseQ('a_fazer'), { label: 'tarefas/venc-resumo/a_fazer' }),
+        fetchAllDocs(baseQ('em_andamento'), { label: 'tarefas/venc-resumo/em_andamento' }),
+    ]);
     const inicioJanela = limitePassado.getTime();
     const fimJanela = janelaFutura.getTime();
-    const todos = [...s1.docs, ...s2.docs].filter(d => {
+    const todos = [...s1, ...s2].filter(d => {
         const v = d.data().vencimento;
         const ms = v?.toDate?.()?.getTime?.() ?? (v ? new Date(v).getTime() : NaN);
         return !Number.isNaN(ms) && ms >= inicioJanela && ms <= fimJanela;

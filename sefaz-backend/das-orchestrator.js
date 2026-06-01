@@ -5,6 +5,7 @@
 
 import admin from 'firebase-admin';
 import { getDasProvider, getDasMode } from './das-provider.js';
+import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -114,8 +115,7 @@ export async function listarDas({ empresaId, competencia, status } = {}) {
  */
 export async function getResumoDas() {
     const db = fa().firestore();
-    const snap = await db.collection(COLLECTION).limit(1000).get();
-    const docs = snap.docs.map(d => d.data());
+    const docs = (await fetchAllDocs(db.collection(COLLECTION), { label: 'das_emitidos/resumo' })).map(d => d.data());
 
     const hoje = new Date().toISOString().slice(0, 10);
     let pendentes = 0, vencidos = 0, pagos = 0;
@@ -162,9 +162,9 @@ export async function processarCronDas() {
         return d.toISOString().slice(0, 10);
     })();
 
-    const snap = await db.collection(COLLECTION).limit(2000).get();
+    const snapDocs = await fetchAllDocs(db.collection(COLLECTION), { label: 'das_emitidos/cron' });
     const stats = {
-        totalDas: snap.size,
+        totalDas: snapDocs.length,
         vencidos: 0,
         aVencer: 0,
         pagos: 0,
@@ -176,10 +176,9 @@ export async function processarCronDas() {
     const aVencerLista = [];
     const vencidosLista = [];
 
-    const batch = db.batch();
-    let comOps = false;
+    const updates = [];
 
-    for (const doc of snap.docs) {
+    for (const doc of snapDocs) {
         const d = doc.data();
         const status = d.statusPagamento || 'pendente';
         if (status === 'pago') {
@@ -203,9 +202,8 @@ export async function processarCronDas() {
                 diasAtraso: Math.floor((new Date(hoje) - new Date(venc)) / 86400000),
             });
             if (status !== 'vencido') {
-                batch.update(doc.ref, { statusPagamento: 'vencido', atualizadoEm: new Date().toISOString() });
+                updates.push({ ref: doc.ref, data: { statusPagamento: 'vencido', atualizadoEm: new Date().toISOString() } });
                 stats.atualizadosParaVencido++;
-                comOps = true;
             }
         } else if (venc <= cincoDiasFrente) {
             // Proximo vencimento
@@ -222,7 +220,7 @@ export async function processarCronDas() {
         }
     }
 
-    if (comOps) await batch.commit();
+    await commitUpdatesInChunks(db, updates);
 
     return {
         ...stats,

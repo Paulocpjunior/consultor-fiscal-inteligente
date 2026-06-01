@@ -22,6 +22,7 @@ import {
     type QueryConstraint,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured, isFirebaseStorageConfigured } from './firebaseConfig';
+import { fetchAllDocs } from './firestorePaginate';
 import {
     parseNFeXml,
     matchCompanyAndDirection,
@@ -475,12 +476,13 @@ export async function listDocumentos(
     if (filters.empresaId) constraints.push(where('empresaId', '==', filters.empresaId));
     // NÃO usamos orderBy aqui: Firestore exclui docs que não têm o campo.
     // Ordenação fica em memória com fallbacks (ver abaixo).
-    constraints.push(fbLimit(500));
+    // Paginação via cursor (fetchAllDocs) substitui o antigo fbLimit(500) que
+    // truncava o dashboard silenciosamente quando a base passava de 500 XMLs.
 
     let docs: DocumentoFiscal[] = [];
     try {
-        const snap = await getDocs(query(collection(db, COLLECTIONS.DOCUMENTOS), ...constraints));
-        docs = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
+        const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints);
+        docs = snaps.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
     } catch (err: any) {
         console.warn('listDocumentos:', err?.message);
         return [];
