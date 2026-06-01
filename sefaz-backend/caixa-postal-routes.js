@@ -6,6 +6,7 @@
 
 import express from 'express';
 import { requireAdmin, requireAuth } from './require-admin.js';
+import { getCnpjsDaCarteira, podeAcessarCnpj } from './carteira-auth.js';
 import admin from 'firebase-admin';
 import {
     sincronizarEmpresa,
@@ -58,15 +59,30 @@ router.get('/resumo', requireAuth, async (req, res) => {
     }
 });
 
-// Lista mensagens (com filtros opcionais)
+// Lista mensagens (com filtros opcionais).
+// Admin ve tudo. Colaborador: se passar empresaCnpj precisa estar na carteira;
+// se nao passar, devolve so as mensagens das empresas da carteira dele.
 router.get('/mensagens', requireAuth, async (req, res) => {
     try {
-        const r = await listarMensagensLocais({
+        const isAdmin = req.user?.role === 'admin';
+        let cnpjsPermitidos = null;
+        if (!isAdmin) {
+            cnpjsPermitidos = await getCnpjsDaCarteira(req.user);
+            if (req.query.empresaCnpj) {
+                const check = await podeAcessarCnpj(req.user, req.query.empresaCnpj);
+                if (!check.ok) return res.status(check.status).json({ error: check.error });
+            }
+        }
+        let r = await listarMensagensLocais({
             empresaCnpj: req.query.empresaCnpj,
             categoria: req.query.categoria,
             fonte: req.query.fonte,
             naoLidas: req.query.naoLidas === 'true',
         });
+        if (!isAdmin && !req.query.empresaCnpj && cnpjsPermitidos) {
+            const setOk = new Set(cnpjsPermitidos);
+            r = r.filter(m => setOk.has((m.empresaCnpj || '').replace(/\D/g, '')));
+        }
         res.json(r);
     } catch (err) {
         res.status(500).json({ error: err.message });

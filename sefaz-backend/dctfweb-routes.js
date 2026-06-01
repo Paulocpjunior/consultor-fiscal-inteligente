@@ -5,6 +5,7 @@
 
 import express from 'express';
 import admin from 'firebase-admin';
+import { podeAcessarCnpj } from './carteira-auth.js';
 import {
     sincronizarEmpresa, sincronizarTodasLucro,
     listarDeclaracoes, transmitirDeclaracao, gerarDarf,
@@ -29,6 +30,8 @@ router.get('/resumo', requireAuth, async (_req, res) => {
 });
 
 router.get('/declaracoes', requireAuth, async (req, res) => {
+    const carteira = await podeAcessarCnpj(req.user, req.query.empresaCnpj);
+    if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
     try {
         res.json(await listarDeclaracoes({
             empresaCnpj: req.query.empresaCnpj,
@@ -66,6 +69,8 @@ router.post('/gerar-darf', requireAdmin, express.json(), async (req, res) => {
 router.get('/declaracao-completa', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, anoPA, mesPA, categoria } = req.query;
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await consultarDeclaracaoCompleta({ empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA), categoria }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -73,6 +78,8 @@ router.get('/declaracao-completa', requireAuth, async (req, res) => {
 router.get('/recibo', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, anoPA, mesPA, categoria } = req.query;
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await consultarRecibo({ empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA), categoria }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -88,6 +95,8 @@ router.post('/mit/encerrar', requireAdmin, express.json(), async (req, res) => {
 router.get('/mit/status', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, protocolo, anoPA, mesPA } = req.query;
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await consultarStatusEncerramentoMit({
             empresaCnpj, protocolo,
             anoPA: anoPA ? Number(anoPA) : undefined,
@@ -99,6 +108,8 @@ router.get('/mit/status', requireAuth, async (req, res) => {
 router.get('/mit/apuracao', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, anoPA, mesPA } = req.query;
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await consultarApuracaoMit({ empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA) }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -106,6 +117,8 @@ router.get('/mit/apuracao', requireAuth, async (req, res) => {
 router.get('/mit/historico', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, anoPA } = req.query;
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await consultarApuracoesAno({ empresaCnpj, anoPA: Number(anoPA) }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });

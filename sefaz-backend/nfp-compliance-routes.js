@@ -6,6 +6,7 @@
 
 import express from 'express';
 import { requireAuth } from './require-admin.js';
+import { podeAcessarCnpj } from './carteira-auth.js';
 import {
     consultarSituacaoFiscal,
     consultarDividaAtiva,
@@ -19,12 +20,21 @@ import { consultarCndsPublicas } from './cnd-publica-provider.js';
 const router = express.Router();
 router.use(express.json());
 
-// ─── Validação ──────────────────────────────────────────────────────────────
+// ─── Validação + filtro de carteira ────────────────────────────────────────
+// Toda rota nfp-compliance consome quota SERPRO (paga). Antes, qualquer
+// colaborador podia passar CNPJ arbitrario (incluindo nao-clientes) e queimar
+// quota sem dono identificado. Agora exige que o CNPJ pertenca a carteira do
+// user (admin segue irrestrito).
 
-function validarCnpj(req, res) {
+async function validarCnpj(req, res) {
     const cnpj = (req.body.cnpj || '').replace(/\D/g, '');
     if (!cnpj || cnpj.length !== 14) {
         res.status(400).json({ error: 'CNPJ inválido — informe 14 dígitos numéricos.' });
+        return null;
+    }
+    const carteira = await podeAcessarCnpj(req.user, cnpj);
+    if (!carteira.ok) {
+        res.status(carteira.status).json({ error: carteira.error });
         return null;
     }
     return cnpj;
@@ -33,7 +43,7 @@ function validarCnpj(req, res) {
 // ─── Rotas ──────────────────────────────────────────────────────────────────
 
 router.post('/situacao-fiscal', requireAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     try {
         const result = await consultarSituacaoFiscal(cnpj);
@@ -45,7 +55,7 @@ router.post('/situacao-fiscal', requireAuth, async (req, res) => {
 });
 
 router.post('/divida-ativa', requireAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     try {
         const result = await consultarDividaAtiva(cnpj);
@@ -57,7 +67,7 @@ router.post('/divida-ativa', requireAuth, async (req, res) => {
 });
 
 router.post('/certidoes', requireAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     const uf = req.body.uf || '';
     const codMunIBGE = req.body.codMunIBGE || '';
@@ -71,7 +81,7 @@ router.post('/certidoes', requireAuth, async (req, res) => {
 });
 
 router.post('/obrigacoes', requireAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     try {
         const result = await consultarObrigacoes(cnpj);
@@ -83,7 +93,7 @@ router.post('/obrigacoes', requireAuth, async (req, res) => {
 });
 
 router.post('/parcelamentos', requireAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     try {
         const result = await consultarParcelamentos(cnpj);
@@ -95,7 +105,7 @@ router.post('/parcelamentos', requireAuth, async (req, res) => {
 });
 
 router.post('/analise-completa', requireAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     const regime = req.body.regime || 'lucro_presumido';
     const uf = req.body.uf || '';
@@ -170,7 +180,7 @@ router.post('/analise-completa', requireAuth, async (req, res) => {
 });
 
 router.post('/cnds-publicas', requireAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     try {
         const result = await consultarCndsPublicas(cnpj);

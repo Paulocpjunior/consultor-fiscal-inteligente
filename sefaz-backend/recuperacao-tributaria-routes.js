@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAdmin, requireAuth } from './require-admin.js';
+import { podeAcessarEmpresaId } from './carteira-auth.js';
 import { getCatalogoTeses, analisarEmpresa, analisarTodas } from './recuperacao-tributaria-orchestrator.js';
 
 const router = Router();
@@ -22,6 +23,8 @@ router.get('/teses', requireAuth, (_req, res) => {
 // GET /analisar/:empresaId?regime=simples|lucro — análise de uma empresa
 router.get('/analisar/:empresaId', requireAuth, async (req, res) => {
     try {
+        const carteira = await podeAcessarEmpresaId(req.user, req.params.empresaId);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         const regime = req.query.regime || 'simples';
         const resultado = await analisarEmpresa(req.params.empresaId, regime);
         res.json(resultado);

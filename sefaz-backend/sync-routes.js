@@ -8,6 +8,7 @@ import admin from 'firebase-admin';
 import { sincronizarEmpresa } from './sync-orchestrator.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth } from './require-admin.js';
+import { podeAcessarCnpj } from './carteira-auth.js';
 
 const router = express.Router();
 
@@ -44,6 +45,8 @@ router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
     if (!empresaId || !empresaCnpj) {
       return res.status(400).json({ error: 'empresaId e empresaCnpj são obrigatórios' });
     }
+    const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+    if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
     const janela = statusJanelaOperacional();
     if (!janela.dentro) {
       return res.status(403).json({

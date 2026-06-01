@@ -8,6 +8,7 @@ import {
   manifestarUma, manifestarPendentes, listarElegiveis,
 } from './manifesto-orchestrator.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
+import { getEmpresaIdsDaCarteira, podeAcessarEmpresaId } from './carteira-auth.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET;
 const router = Router();
@@ -29,7 +30,17 @@ router.get('/manifest-elegiveis', authUser, async (req, res) => {
   try {
     const empresaId = req.query.empresaId || null;
     const limit = Math.min(parseInt(req.query.limit || '50'), 200);
-    const lista = await listarElegiveis({ empresaId, limit });
+    const isAdmin = req.user?.role === 'admin';
+    if (!isAdmin && empresaId) {
+      const check = await podeAcessarEmpresaId(req.user, empresaId);
+      if (!check.ok) return res.status(check.status).json({ erro: check.error });
+    }
+    let lista = await listarElegiveis({ empresaId, limit });
+    if (!isAdmin && !empresaId) {
+      const idsCarteira = await getEmpresaIdsDaCarteira(req.user);
+      const setOk = new Set(idsCarteira || []);
+      lista = lista.filter(d => setOk.has(d.empresaId));
+    }
     res.json({
       total: lista.length,
       itens: lista.map(d => ({
