@@ -122,6 +122,22 @@ upsert_job \
     "/api/admin/vencimentos/cron" \
     "Verifica tarefas vencendo e dispara emails + notificações in-app"
 
+# Captura NFe extra durante o dia (alem do noturno) — 6h/12h/18h.
+# Mesmo endpoint do cron noturno; reforca captura intra-dia.
+upsert_job \
+    "sefaz-xml-capture" \
+    "0 6,12,18 * * 1-5" \
+    "/api/admin/sefaz/sync-cron" \
+    "Captura NFe DistDFe intra-dia (6h/12h/18h)"
+
+# SharePoint auto-sync — importa XMLs das pastas SharePoint das empresas.
+# Protegido por x-cron-secret (alinhado aos demais crons).
+upsert_job \
+    "sharepoint-auto-sync" \
+    "0 8 * * 1-5" \
+    "/api/admin/sharepoint/auto-sync" \
+    "Importa XMLs das pastas SharePoint (empresas com autoSyncEnabled)"
+
 # ─── Verifica ──────────────────────────────────────────────────────────────
 echo ""
 echo "═══ Jobs ativos em $REGION ═══"

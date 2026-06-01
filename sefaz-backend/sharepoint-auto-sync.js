@@ -427,23 +427,24 @@ async function syncEmpresa(db, empresa, competencia) {
  */
 router.post('/auto-sync', async (req, res) => {
     try {
-        // Auth: accept either admin Bearer token or Cloud Scheduler OIDC
+        // Auth: admin Bearer (token Firebase + role admin) OU x-cron-secret.
+        // Antes aceitava QUALQUER request com header x-cloudscheduler-jobname,
+        // que e trivialmente spoofavel via curl. Agora exige o cron-secret
+        // (alinhado a /sync-cron e demais crons) ou um admin autenticado.
         const authHeader = req.headers.authorization || '';
-        const schedulerHeader = req.headers['x-cloudscheduler'] ||
-            req.headers['x-cloudscheduler-jobname'] || '';
+        const cronSecret = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'] || '';
+        const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 
-        if (!authHeader && !schedulerHeader) {
-            // Also accept the service-to-service OIDC token from Cloud Scheduler
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
-
-        if (authHeader.startsWith('Bearer ') && !schedulerHeader) {
+        const isCron = !!CRON_SECRET && cronSecret === CRON_SECRET;
+        let isAdmin = false;
+        if (!isCron && authHeader.startsWith('Bearer ')) {
             const token = authHeader.split(' ')[1];
             const decoded = await fa().auth().verifyIdToken(token);
             const userDoc = await fa().firestore().collection('users').doc(decoded.uid).get();
-            if (!userDoc.exists || userDoc.data().role !== 'admin') {
-                return res.status(403).json({ error: 'Admin only' });
-            }
+            isAdmin = userDoc.exists && userDoc.data().role === 'admin';
+        }
+        if (!isCron && !isAdmin) {
+            return res.status(401).json({ error: 'Unauthorized' });
         }
 
         const db = fa().firestore();
