@@ -17,7 +17,6 @@ export enum SearchType {
   DCTFWEB = 'DCTFWeb',
   NFSE_NACIONAL = 'NFS-e Nacional',
   DASHBOARD_CEO = 'Dashboard CEO',
-  CALENDARIO = 'Calendário Fiscal',
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
   CARTEIRA = 'Carteira de Clientes',

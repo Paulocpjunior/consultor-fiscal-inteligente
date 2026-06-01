@@ -78,7 +78,6 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.AGENTES_A3]: "Agentes A3 — gerenciar API keys do agente local cfi-a3 e marcar empresas como A3 (somente administradores).",
     [SearchType.NFSE_NACIONAL]: "NFS-e Nacional (CGSN 189/2026) — emissão e gestão de notas de serviço no padrão nacional, obrigatório set/2026.",
     [SearchType.DASHBOARD_CEO]: "Dashboard CEO — visão executiva unificada com KPIs e recomendações da IA.",
-    [SearchType.CALENDARIO]: "Calendário Fiscal — vencimentos de obrigações por empresa (DAS, DARF, DCTF, eSocial, etc).",
     [SearchType.ANOMALIAS]: "Detector de Anomalias — análise estatística + IA detecta irregularidades no DAS de cada empresa.",
     [SearchType.SIMULADOR_IBS_CBS]: "Simulador IBS/CBS — projeção da carga tributária 2026-2033 sob a Reforma Tributária (LC 214/2025).",
     [SearchType.EMISSAO_TRIBUTOS]: "Central de Emissões — emissão unificada de DAS (Simples) e DARF (IRPJ/CSLL/PIS/COFINS para Presumido e Real) com controle de pagamento.",
@@ -673,7 +672,7 @@ const App: React.FC = () => {
                         </ErrorBoundary>
                         {/* Search Type Selection Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
-                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL && t !== SearchType.NFP_PRO_CLOUD && t !== SearchType.CALENDARIO).map((type) => (
+                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL && t !== SearchType.NFP_PRO_CLOUD).map((type) => (
                                 <button
                                     key={type}
                                     onClick={() => {

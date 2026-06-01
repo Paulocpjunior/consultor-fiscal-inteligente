@@ -9,12 +9,9 @@ import { Router, json } from 'express';
 import multer from 'multer';
 import admin from 'firebase-admin';
 import {
-    listarEmpresasElegiveis,
     consultarUma,
     consultarTodasElegiveis,
 } from './nfse-sp-orchestrator.js';
-import { consultarNfseRecebidas, consultarNfseEmitidas } from './nfse-sp-client.js';
-import { parseNfseSpXml } from './nfse-sp-importer.js';
 import { parseCsvNfseSp } from './nfse-sp-csv-parser.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
@@ -33,17 +30,6 @@ function fa() {
     if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
     return admin;
 }
-
-router.get('/nfsesp-elegiveis', authUser, async (_req, res) => {
-    try {
-        const db = fa().firestore();
-        const lista = await listarEmpresasElegiveis(db);
-        res.json({ total: lista.length, empresas: lista });
-    } catch (e) {
-        console.error('[nfse-sp-routes] elegiveis:', e);
-        res.status(500).json({ erro: e.message });
-    }
-});
 
 router.post('/nfsesp-consultar-uma', authUser, json(), async (req, res) => {
     try {
@@ -76,105 +62,6 @@ router.post('/nfsesp-consultar-uma', authUser, json(), async (req, res) => {
         res.json(r);
     } catch (e) {
         console.error('[nfse-sp-routes] consultar-uma:', e);
-        res.status(500).json({ erro: e.message });
-    }
-});
-
-router.post('/nfsesp-consultar-todas', authUser, json(), async (req, res) => {
-    try {
-        const db = fa().firestore();
-        const dryRun = req.body?.dryRun === true;
-        const r = await consultarTodasElegiveis(db, {
-            tipo: 'manual',
-            dryRun,
-            importadoPor: req.user?.email || 'admin',
-        });
-        res.json(r);
-    } catch (e) {
-        console.error('[nfse-sp-routes] consultar-todas:', e);
-        res.status(500).json({ erro: e.message });
-    }
-});
-
-/**
- * Endpoint de consulta direta — retorna os dados parseados das NFS-e
- * para exibicao no frontend (sem importar automaticamente no Firestore).
- * Suporta recebidas (servicos tomados) e emitidas (servicos prestados).
- */
-router.post('/nfsesp-consultar', authUser, json(), async (req, res) => {
-    try {
-        const { cnpj, inscricaoMunicipal, tipo, mes, ano } = req.body || {};
-
-        if (!cnpj || !/^\d{14}$/.test((cnpj || '').replace(/\D/g, ''))) {
-            return res.status(400).json({ erro: 'CNPJ inválido (14 dígitos numéricos)' });
-        }
-        if (!inscricaoMunicipal) {
-            return res.status(400).json({ erro: 'Inscrição Municipal (CCM) é obrigatória' });
-        }
-        const mesNum = Number(mes);
-        const anoNum = Number(ano);
-        if (!mesNum || mesNum < 1 || mesNum > 12) {
-            return res.status(400).json({ erro: 'Mês inválido (1-12)' });
-        }
-        if (!anoNum || anoNum < 2000 || anoNum > 2100) {
-            return res.status(400).json({ erro: 'Ano inválido' });
-        }
-
-        // Remetente = escritório (SP Assessoria). Pode vir do env ou usar
-        // o CNPJ default do escritório (44388152000189).
-        const cnpjRemetente = (process.env.NFSE_SP_REMETENTE_CNPJ || process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
-        const cnpjLimpo = cnpj.replace(/\D/g, '');
-        const periodo = { ano: anoNum, mes: mesNum };
-
-        let resultado;
-        if (tipo === 'emitidas') {
-            resultado = await consultarNfseEmitidas({
-                cnpjRemetente,
-                inscricaoMunicipalPrestador: inscricaoMunicipal,
-                dtInicio: periodo,
-                dtFim: periodo,
-            });
-        } else {
-            resultado = await consultarNfseRecebidas({
-                cnpjRemetente,
-                inscricaoMunicipalTomador: inscricaoMunicipal,
-                dtInicio: periodo,
-                dtFim: periodo,
-            });
-        }
-
-        if (!resultado.sucesso) {
-            return res.json({
-                sucesso: false,
-                erros: resultado.erros,
-                alertas: resultado.alertas,
-                nfes: [],
-                totalNFes: 0,
-                rawSample: resultado.rawSample || null,
-                tagsEncontradas: resultado.tagsEncontradas || null,
-            });
-        }
-
-        // Parsear cada NFe XML em dados estruturados
-        const nfesParsed = [];
-        for (const nfeXml of resultado.nfes) {
-            try {
-                const parsed = parseNfseSpXml(nfeXml);
-                nfesParsed.push(parsed);
-            } catch (parseErr) {
-                console.warn('[nfse-sp-routes] erro parseando NFe individual:', parseErr.message);
-            }
-        }
-
-        res.json({
-            sucesso: true,
-            erros: resultado.erros || [],
-            alertas: resultado.alertas || [],
-            totalNFes: nfesParsed.length,
-            nfes: nfesParsed,
-        });
-    } catch (e) {
-        console.error('[nfse-sp-routes] consultar:', e);
         res.status(500).json({ erro: e.message });
     }
 });

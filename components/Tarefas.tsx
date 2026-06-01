@@ -75,7 +75,7 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
     // 'lista' = tabela original (default — nao muda nada pra usuarios atuais)
     // 'kanban' = 3 colunas drag-and-drop. Cancelada nao aparece no Kanban
     //           (raras; gerencie pela Lista filtrando status=Cancelada).
-    const [vista, setVista] = useState<'lista' | 'kanban'>('lista');
+    const [vista, setVista] = useState<'lista' | 'kanban'>('kanban');
     // Card sendo arrastado (HTML5 drag) — null quando nao ha drag em curso.
     const [arrastando, setArrastando] = useState<Tarefa | null>(null);
     // Modal "Mover para" — fallback mobile quando drag-and-drop nao funciona.
