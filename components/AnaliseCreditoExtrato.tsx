@@ -4,6 +4,7 @@
 // Reaproveita as 11 categorias do Relatório de Créditos já usado pela Eunice.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import AnaliseRetencoesNfseSP from './AnaliseRetencoesNfseSP';
 import {
   parseExtratoConciliacao,
   classificar,
@@ -453,8 +454,9 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
   const [filtro, setFiltro]         = useState<'todos' | 'com_credito' | 'sem_credito' | 'revisar'>('todos');
   const [exportandoPDF, setExportandoPDF] = useState(false);
 
-  // Modo de entrada: 'csv' (extrato Itau) ou 'efiscal' (PDF Servicos Tomados)
-  const [modo, setModo] = useState<'csv' | 'efiscal'>('csv');
+  // Modo de entrada: 'csv' (extrato Itau), 'efiscal' (PDF Servicos Tomados),
+  // 'nfsesp' (CSV de NFSe SP capturadas — analise de retencoes).
+  const [modo, setModo] = useState<'csv' | 'efiscal' | 'nfsesp'>('csv');
   const [efiscal, setEfiscal] = useState<EfiscalPdfParsed | null>(null);
   const [efiscalCarregando, setEfiscalCarregando] = useState(false);
   const [empresaSelId, setEmpresaSelId] = useState<string>('');
@@ -1275,7 +1277,15 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
         >
           📄 PDF E-Fiscal (Serviços Tomados)
         </button>
+        <button
+          onClick={() => { setModo('nfsesp'); setErro(null); }}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold ${modo==='nfsesp'?'bg-teal-600 text-white':'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600'}`}
+        >
+          📑 Retenções NFSe SP (CSV)
+        </button>
       </div>
+
+      {modo === 'nfsesp' && <AnaliseRetencoesNfseSP />}
 
       {/* ─── Upload CSV ───────────────────────────────────────────────── */}
       {modo === 'csv' && (
