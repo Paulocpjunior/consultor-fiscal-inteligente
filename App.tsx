@@ -8,7 +8,6 @@ import UpdateBanner from './components/UpdateBanner';
 import TaxAlerts from './components/TaxAlerts';
 import NewsAlerts from './components/NewsAlerts';
 import ReformaNews from './components/ReformaNews';
-import ReformaTributariaNewsBanner from './components/ReformaTributariaNewsBanner';
 import FavoritesSidebar from './components/FavoritesSidebar';
 import SimplesNacionalDashboard from './components/SimplesNacionalDashboard';
 import SimplesNacionalNovaEmpresa from './components/SimplesNacionalNovaEmpresa';
@@ -818,9 +817,6 @@ const App: React.FC = () => {
                                 <span className="text-xs font-bold text-center leading-tight">SPED Fiscal</span>
                             </button>
                         </div>
-
-                        {/* ✅ NEWS REFORMA TRIBUTÁRIA — aparece em todas as telas */}
-                        <ReformaTributariaNewsBanner />
 
                         {/* Standard Search Views (CFOP, NCM, Serviço, Simples, Lucro, Obrigações) */}
                         {[SearchType.CFOP, SearchType.NCM, SearchType.SERVICO, SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) && (
