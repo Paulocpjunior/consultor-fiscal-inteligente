@@ -246,7 +246,7 @@ export async function montarBlocos({ dados }) {
     const linhasBlocoB = buildBlocoB();   // vazio
     const linhasBlocoC = buildBlocoC(dados);
     const linhasBlocoD = buildBlocoD(dados);  // CTe modelo 57
-    const linhasBlocoE = buildBlocoE(dados);  // E001+E100+E110 zerada+E990
+    const linhasBlocoE = buildBlocoE(dados);  // ICMS (E100/E110/E116) + IPI (E200/E210 se houver)
     const linhasBlocoG = buildBlocoG();   // vazio
     const linhasBlocoH = buildBlocoH(dados);   // inventario (Bloco H real)
     const linhasBlocoK = buildBlocoK();   // vazio

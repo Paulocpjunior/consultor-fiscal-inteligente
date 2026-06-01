@@ -591,15 +591,18 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 }}
             >
                 <p className="text-xs font-bold" style={{ color: 'var(--accent)' }}>
-                    Fase 1 — Bloco 0 e 9 implementados
+                    EFD ICMS/IPI — blocos implementados
                 </p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-                    A geração inclui dados da empresa (registro 0000), endereço (0005),
-                    contador (0100), participantes (0150), unidades (0190),
-                    itens (0200) e bloco de controle (9001-9999).
-                    <strong className="block mt-2">Pendente Fase 2:</strong>
-                    Bloco C (mercadorias - notas item-a-item) e Bloco E (apuração ICMS/IPI).
-                    Por enquanto, o SPED gerado <strong>NÃO</strong> deve ser entregue à PVA — use para validação visual.
+                    A geração inclui: bloco 0 (empresa, contador, participantes,
+                    unidades, itens), bloco C (mercadorias — C100/C170/C190 nota
+                    item-a-item), bloco D (CT-e), bloco E (apuração de ICMS — débitos,
+                    créditos, saldo e GARE/E116 para Lucro; e de IPI — E200/E210 quando
+                    há atividade), bloco H (inventário) e bloco 9 (controle).
+                    Simples Nacional sai com apuração zerada (paga via DAS), conforme regra.
+                    <strong className="block mt-2">Antes de transmitir:</strong>
+                    valide o arquivo gerado no PVA da Receita ao menos uma vez para a
+                    empresa — o app já roda validações internas, mas o PVA é a fonte oficial.
                 </p>
             </div>
             </>}
