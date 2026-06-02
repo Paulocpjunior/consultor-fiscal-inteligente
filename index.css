@@ -11,13 +11,18 @@ body {
 
 /* --- Animacoes e Feedback Visual --- */
 
+/* IMPORTANTE: o estado final NAO pode reter transform != none nem will-change,
+ * senao o elemento vira "containing block" de descendentes position:fixed
+ * (spec CSS) e quebra modais `fixed inset-0` — eles passam a ancorar nesta div
+ * (alta, com a lista toda) em vez da viewport e aparecem fora da tela.
+ * Por isso o keyframe `to` so mexe em opacity (transform reverte pra none) e
+ * NAO ha `will-change` persistente. O slide de entrada continua igual. */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; }
 }
 .animate-fade-in {
   animation: fadeIn 0.4s ease-out forwards;
-  will-change: transform, opacity;
 }
 
 .btn-press {
@@ -28,14 +33,15 @@ body {
   transform: scale(0.96);
 }
 
+/* Mesmo cuidado do fadeIn: 100% nao retem transform (so opacity) e sem
+ * will-change persistente, pra nao virar containing block de fixed. */
 @keyframes popIn {
   0% { transform: scale(0.8); opacity: 0; }
   60% { transform: scale(1.1); opacity: 1; }
-  100% { transform: scale(1); }
+  100% { opacity: 1; }
 }
 .animate-pop-in {
   animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-  will-change: transform, opacity;
 }
 
 @keyframes drawCheck {
