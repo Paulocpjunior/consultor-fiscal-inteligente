@@ -5,6 +5,7 @@
 
 import admin from 'firebase-admin';
 import { getDctfwebProvider, getDctfwebMode } from './dctfweb-provider.js';
+import { fetchAllDocs } from './firestore-paginate.js';
 
 const COLLECTION = 'dctfweb_declaracoes';
 const COLLECTION_MIT = 'dctfweb_mit_apuracoes';
