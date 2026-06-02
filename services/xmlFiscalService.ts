@@ -475,7 +475,8 @@ export async function listDocumentos(
 
     let docs: DocumentoFiscal[] = [];
     try {
-        const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints);
+        // documentos_fiscais permite limit <=5000 nas rules; usa pagina maior.
+        const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000 });
         docs = snaps.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
     } catch (err: any) {
         console.warn('listDocumentos:', err?.message);

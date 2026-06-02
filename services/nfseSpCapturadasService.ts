@@ -139,7 +139,7 @@ export async function resumoNfseSpCapturadas(): Promise<{
         const snaps = await fetchAllDocs('documentos_fiscais', [
             where('tipoDoc', '==', 'NFSe'),
             where('fonte', '==', 'csv-portal-sp'),
-        ]);
+        ], { batchSize: 2000 });
         const empresas = new Set<string>();
         let emitidas = 0, recebidas = 0, valE = 0, valR = 0;
         let ultima = '';

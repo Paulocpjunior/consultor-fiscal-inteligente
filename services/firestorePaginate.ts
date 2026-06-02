@@ -9,6 +9,14 @@
 // NOTA: pra bases muito grandes (dezenas de milhares), o ideal e agregacao
 // server-side. Aqui resolvemos o truncamento mantendo o contrato client-side,
 // com teto de seguranca (maxDocs) pra nao explodir memoria/custo no navegador.
+//
+// IMPORTANTE — batchSize default = 500 NAO e arbitrario: as firestore.rules
+// exigem `request.query.limit <= 500` em simples_empresas/lucro_empresas/
+// carteiras (e <=1000/<=5000 em outras). fbLimit(batchSize) vira request.query.limit;
+// se passar de 500 nessas colecoes a query INTEIRA e negada (permission-denied)
+// e o caller engole no catch -> tela vazia silenciosa (bug "Empresas elegiveis (0)").
+// 500 satisfaz o cap mais estrito. Pra colecoes com cap maior e alto volume
+// (documentos_fiscais, cap 5000) passe batchSize explicito pra ganhar eficiencia.
 import {
     collection,
     query,
@@ -24,7 +32,7 @@ import { db } from './firebaseConfig';
 export async function fetchAllDocs(
     collectionName: string,
     baseConstraints: QueryConstraint[] = [],
-    { batchSize = 1000, maxDocs = 20000 }: { batchSize?: number; maxDocs?: number } = {},
+    { batchSize = 500, maxDocs = 20000 }: { batchSize?: number; maxDocs?: number } = {},
 ): Promise<QueryDocumentSnapshot<DocumentData>[]> {
     if (!db) return [];
     const out: QueryDocumentSnapshot<DocumentData>[] = [];
