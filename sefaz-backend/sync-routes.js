@@ -102,12 +102,17 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
         executadoEm: fa().firestore.FieldValue.serverTimestamp(),
         totalEmpresas: empresas.length,
         sucessos, falhas, totalNovosXmls: totalNovos, duracaoMs,
+        // Bloqueadas por cadastro (sem cert A1/A3 e sem procuracao e-CAC) e A3
+        // sao puladas em listarEmpresasParaCron, mas persistidas aqui pra que
+        // o painel mostre o estado real (em vez de fingir que sao "falhas").
+        bloqueadasSemAcesso: empresas._bloqueadasSemAcesso || 0,
+        totalA3: empresas._totalA3 || 0,
         // req.cron?.source nunca era setado (codigo morto). Usa o header
         // oficial do Cloud Scheduler como fonte. Fallback 'unknown' garante
         // que NUNCA persistimos `undefined` (Firestore rejeita o write inteiro).
         fonte: req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno',
       });
-      console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos, ${duracaoMs}ms`);
+      console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos, ${duracaoMs}ms (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);
     } catch (e) {
       console.error('[sync-cron] erro fatal:', e);
       try {
@@ -226,7 +231,13 @@ async function listarEmpresasParaCron() {
           const ult = d.ultimoAcessoXml.toMillis ? d.ultimoAcessoXml.toMillis() : new Date(d.ultimoAcessoXml).getTime();
           if (ult < limite.getTime()) return;
         }
-        empresas.push({ id: doc.id, cnpj, nome: d.nome || d.razaoSocial || '', fonte: colName });
+        empresas.push({
+          id: doc.id,
+          cnpj,
+          nome: d.nome || d.razaoSocial || '',
+          fonte: colName,
+          procuracaoEcacAtiva: d.procuracaoEcacAtiva === true,
+        });
       });
       console.log(`[sync-cron] collection ${colName}: ${snap.size} docs`);
     } catch (e) {
@@ -235,19 +246,49 @@ async function listarEmpresasParaCron() {
   }
   const map = new Map();
   empresas.forEach(e => { if (!map.has(e.cnpj)) map.set(e.cnpj, e); });
-  // Filtra empresas com tipoCert='A3' — elas só são capturadas pelo agente local cfi-a3
+
+  // Carrega certs uma vez (A1/A3) — fonte unica pra classificar acesso a SEFAZ.
+  // Antes so filtrava A3; agora cruza tambem com procuracaoEcacAtiva pra evitar
+  // tentar capturar empresas SEM cert proprio E SEM procuracao (bloqueadas
+  // por cadastro). Sem o filtro: 215+ empresas falhavam todo cron com
+  // "aguardando cert A1", poluindo o painel com 262 falhas todo dia.
+  const certsPorId = new Map();
+  const a3Ids = new Set();
   try {
-    const a3Snap = await db.collection('empresas_certificados').where('tipoCert', '==', 'A3').get();
-    const a3Ids = new Set(a3Snap.docs.map(d => d.id));
+    const certsSnap = await db.collection('empresas_certificados').get();
+    certsSnap.forEach(d => {
+      const c = d.data();
+      const tipoCert = c.tipoCert || 'A1';
+      certsPorId.set(d.id, tipoCert);
+      if (tipoCert === 'A3') a3Ids.add(d.id);
+    });
     if (a3Ids.size > 0) {
-      console.log(`[sync-cron] pulando ${a3Ids.size} empresa(s) tipoCert=A3 (capturadas pelo agente local)`);
+      console.log(`[sync-cron] pulando ${a3Ids.size} empresa(s) tipoCert=A3 (capturadas pelo agente local cfi-a3)`);
     }
-    const filtradas = Array.from(map.values()).filter(e => !a3Ids.has(e.id));
-    return filtradas;
   } catch (e) {
-    console.warn('[sync-cron] erro filtrando A3:', e.message);
-    return Array.from(map.values());
+    console.warn('[sync-cron] erro carregando empresas_certificados:', e.message);
   }
+
+  let bloqueadasSemAcesso = 0;
+  const filtradas = Array.from(map.values()).filter(e => {
+    if (a3Ids.has(e.id)) return false;
+    const tipoCert = certsPorId.get(e.id);
+    const temCertProprio = tipoCert === 'A1' || tipoCert === 'A3';
+    const temAcesso = temCertProprio || e.procuracaoEcacAtiva;
+    if (!temAcesso) {
+      bloqueadasSemAcesso++;
+      return false;
+    }
+    return true;
+  });
+
+  if (bloqueadasSemAcesso > 0) {
+    console.log(`[sync-cron] pulando ${bloqueadasSemAcesso} empresa(s) sem cert A1/A3 nem procuracao e-CAC (bloqueadas por cadastro — admin precisa configurar)`);
+  }
+  // Anexa contadores na lista pra orchestrator persistir no log + painel
+  filtradas._bloqueadasSemAcesso = bloqueadasSemAcesso;
+  filtradas._totalA3 = a3Ids.size;
+  return filtradas;
 }
 
 router.get('/state/:cnpj', requireAuth, async (req, res) => {
@@ -426,7 +467,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
     async function elegiveisNfeReais() {
       try {
         const limite30d = agora - 30 * 24 * 60 * 60 * 1000;
-        const elegiveis = new Map(); // cnpj -> docId
+        const candidatos = new Map(); // cnpj -> { id, procuracaoEcacAtiva }
         for (const col of ['simples_empresas', 'lucro_empresas']) {
           try {
             const snap = await db.collection(col).get();
@@ -439,17 +480,42 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
                 const ult = d.ultimoAcessoXml.toMillis?.() ?? new Date(d.ultimoAcessoXml).getTime();
                 if (ult < limite30d) return;
               }
-              if (!elegiveis.has(cnpj)) elegiveis.set(cnpj, doc.id);
+              if (!candidatos.has(cnpj)) {
+                candidatos.set(cnpj, { id: doc.id, procuracaoEcacAtiva: d.procuracaoEcacAtiva === true });
+              }
             });
           } catch (e) { /* collection indisponível, continua */ }
         }
+
+        // Cruza com empresas_certificados pra classificar acesso a SEFAZ.
+        // Critério (mesmo do listarEmpresasParaCron):
+        //   elegivel = cert A1 proprio OU procuracao e-CAC ativa
+        //   bloqueada = sem cert E sem procuracao (admin precisa configurar)
+        //   A3 = capturada por agente local cfi-a3, fora deste cron
+        const certsPorId = new Map();
+        const a3Ids = new Set();
         try {
-          const a3Snap = await db.collection('empresas_certificados').where('tipoCert', '==', 'A3').get();
-          const a3Ids = new Set(a3Snap.docs.map(d => d.id));
-          for (const [cnpj, id] of elegiveis) {
-            if (a3Ids.has(id)) elegiveis.delete(cnpj);
+          const certsSnap = await db.collection('empresas_certificados').get();
+          certsSnap.forEach(d => {
+            const tipoCert = d.data().tipoCert || 'A1';
+            certsPorId.set(d.id, tipoCert);
+            if (tipoCert === 'A3') a3Ids.add(d.id);
+          });
+        } catch (e) { /* sem certificados, segue sem filtrar */ }
+
+        const elegiveis = new Map(); // cnpj -> id (de quem vai mesmo ser capturado)
+        let bloqueadas = 0;
+        for (const [cnpj, info] of candidatos) {
+          if (a3Ids.has(info.id)) continue; // A3 fora deste cron
+          const tipoCert = certsPorId.get(info.id);
+          const temCertProprio = tipoCert === 'A1' || tipoCert === 'A3';
+          if (temCertProprio || info.procuracaoEcacAtiva) {
+            elegiveis.set(cnpj, info.id);
+          } else {
+            bloqueadas++;
           }
-        } catch (e) { /* sem certificados, sem filtro A3 */ }
+        }
+
         const total = elegiveis.size;
         let travadas = 0;
         try {
@@ -463,7 +529,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
             if (!ts || ts < seteDias) travadas++;
           }
         } catch (e) { /* sem state, deixa travadas=0 */ }
-        return { total, travadas };
+        return { total, travadas, bloqueadas };
       } catch (e) {
         return { erro: e.message };
       }
