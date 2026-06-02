@@ -1258,14 +1258,18 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                                     </button>
                                                 </div>
                                                 <div className="flex flex-wrap gap-x-4 gap-y-1 items-center pl-1 pt-1 border-t border-slate-200 dark:border-slate-600">
-                                                    <label className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-300 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
-                                                        <input 
+                                                    <label
+                                                        className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-300 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                                                        title="Marque APENAS se a despesa se enquadra nas hipóteses da Lei 10.637/02 art. 3 + Lei 10.833/03 art. 3: insumos da produção/prestação, energia, aluguel a PJ, depreciação ativo imobilizado, frete na venda, vale-transporte/refeição. Salários, impostos, juros e propaganda NÃO geram crédito."
+                                                    >
+                                                        <input
                                                             type="checkbox"
                                                             checked={!!despesa.geraCreditoPisCofins}
                                                             onChange={(e) => handleUpdateDespesa(despesa.id, 'geraCreditoPisCofins', e.target.checked)}
                                                             className="rounded border-slate-300 dark:border-slate-500 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-0 w-3 h-3"
                                                         />
                                                         <span className="font-medium">Crédito PIS/COFINS</span>
+                                                        <span className="text-amber-600 dark:text-amber-400" title="Hipóteses restritas — passe o mouse">ⓘ</span>
                                                     </label>
                                                     <label className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-300 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
                                                         <input 
@@ -1286,7 +1290,12 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                 </div>
 
                                 <CurrencyInput label="Outras Despesas (Total)" value={fichaDespesas} onChange={setFichaDespesas} />
-                                <CurrencyInput label="Despesas Dedutíveis (PIS/COFINS)" value={fichaDespesasDedutiveis} onChange={setFichaDespesasDedutiveis} />
+                                <CurrencyInput
+                                    label="Despesas Dedutíveis (PIS/COFINS)"
+                                    value={fichaDespesasDedutiveis}
+                                    onChange={setFichaDespesasDedutiveis}
+                                    subtitle="Soma das hipóteses do art. 3º das Leis 10.637/02 e 10.833/03 (insumo, energia, aluguel PJ, depreciação, frete venda). Para apuração detalhada por categoria de fornecedor, use 'Análise de Créditos' (E-Fiscal)."
+                                />
                                 
                                 <div className="pt-3 border-t border-slate-100 dark:border-slate-700 grid grid-cols-2 gap-4">
                                     <CurrencyInput label="Ret. PIS" value={fichaRetPis} onChange={setFichaRetPis} />
