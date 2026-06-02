@@ -45,9 +45,19 @@ async function getAesKey() {
     if (aesKeyCache && now < aesKeyCacheExpiry) return aesKeyCache;
 
     const name = `projects/${PROJECT_ID}/secrets/${AES_KEY_SECRET}/versions/latest`;
-    const [version] = await secretClient.accessSecretVersion({ name });
+    let version;
+    try {
+        [version] = await secretClient.accessSecretVersion({ name });
+    } catch (e) {
+        // Causa #1 de upload de cert por empresa falhar: o secret nunca foi
+        // provisionado. Mensagem nomeia a dependencia exata pro operador.
+        throw new Error(
+            `Nao foi possivel acessar o Secret Manager "${AES_KEY_SECRET}" no projeto ${PROJECT_ID}: ${e.message}. ` +
+            `Crie o secret com uma chave AES-256 (64 hex) e de acesso (secretmanager.versions.access) a service account do Cloud Run.`,
+        );
+    }
     const hex = version.payload.data.toString('utf-8').trim();
-    if (hex.length !== 64) throw new Error(`AES key invalida: esperado 64 chars hex, got ${hex.length}`);
+    if (hex.length !== 64) throw new Error(`AES key invalida no secret "${AES_KEY_SECRET}": esperado 64 chars hex, got ${hex.length}`);
     aesKeyCache = Buffer.from(hex, 'hex');
     aesKeyCacheExpiry = now + KEY_CACHE_TTL_MS;
     return aesKeyCache;

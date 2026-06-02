@@ -41,10 +41,29 @@ router.post('/upload', requireAdmin, upload.single('cert'), async (req, res) => 
         return res.json(result);
     } catch (err) {
         console.error('[cert-empresa/upload]', err);
-        // Erros de cripto/forge geralmente sao senha errada
         const msg = err.message || 'erro desconhecido';
-        const status = /password|senha|MAC|pkcs12|asn1|cert/i.test(msg) ? 400 : 500;
-        return res.status(status).json({ ok: false, error: msg });
+
+        // Classificacao precisa do erro pra NAO mascarar problema de infra
+        // como "senha errada". Tres familias:
+        //  1) Senha/.pfx invalido (node-forge)  -> 400, culpa do input
+        //  2) Secret Manager / Storage / infra  -> 503, culpa do ambiente
+        //  3) Resto                              -> 500
+        const ehSenhaOuPfx = /MAC could not be verified|Invalid password|PKCS#12|pkcs12|asn1|Too few bytes|unsupported|integrity|DER/i.test(msg);
+        const ehInfra = /Secret\b|secretmanager|cfi-empresa-cert-key|PERMISSION_DENIED|NOT_FOUND|accessSecretVersion|bucket|storage|AES key invalida|Could not (load|refresh) default credentials/i.test(msg);
+
+        if (ehSenhaOuPfx) {
+            return res.status(400).json({ ok: false, error: 'Senha incorreta ou arquivo .pfx invalido.' });
+        }
+        if (ehInfra) {
+            // Mensagem acionavel pro operador — sem expor o erro cru do GCP no toast.
+            return res.status(503).json({
+                ok: false,
+                error: 'Falha de infraestrutura ao guardar o certificado (Secret Manager/Storage). ' +
+                       'Verifique se o secret "cfi-empresa-cert-key" existe no projeto e se a service account do Cloud Run tem acesso. Detalhe nos logs.',
+                _infra: true,
+            });
+        }
+        return res.status(500).json({ ok: false, error: msg });
     }
 });
 
