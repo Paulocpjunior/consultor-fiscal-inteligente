@@ -20,6 +20,60 @@ import admin from 'firebase-admin';
 const DRY_RUN = process.env.SERPRO_DRY_RUN === '1';
 const TAG = '[nfp-compliance]';
 
+// ─── Cache Firestore (economiza quota SERPRO paga) ─────────────────────────
+//
+// Toda chamada SERPRO (situacao fiscal, divida, certidoes, etc) e cobrada
+// por consulta (~R\$ 0,06-0,40 cada). Cliente clicando varias vezes em
+// "atualizar" multiplica o custo. Cache de 6h cobre uso tipico de contador
+// (consulta -> aja -> reconsulta no dia seguinte) sem desatualizar muito.
+//
+// Cache so persiste RESPOSTAS OK. Erros (ok:false) NAO sao cacheados —
+// proxima tentativa volta a bater no SERPRO (que pode ter se recuperado).
+//
+// Cache NAO inclui dados sensiveis em texto plano (apenas o payload da
+// resposta SERPRO, que ja vem por chamada autenticada).
+
+const _fa = () => {
+    if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    return admin;
+};
+
+const CACHE_TTL_DEFAULT = 6 * 60 * 60 * 1000; // 6 horas
+
+async function withFirestoreCache(key, fn, { ttlMs = CACHE_TTL_DEFAULT, forceRefresh = false } = {}) {
+    const db = _fa().firestore();
+    const ref = db.collection('nfp_compliance_cache').doc(key);
+
+    if (!forceRefresh) {
+        try {
+            const snap = await ref.get();
+            if (snap.exists) {
+                const d = snap.data();
+                const exp = d.expiresAt?.toMillis?.() ?? d.expiresAt;
+                if (exp && exp > Date.now() && d.payload && d.payload.ok !== false) {
+                    return { ...d.payload, _cache: { hit: true, key, expiresAt: exp } };
+                }
+            }
+        } catch (e) {
+            console.warn(TAG, 'cache read falhou (continua sem cache):', e.message);
+        }
+    }
+
+    const result = await fn();
+    if (result && result.ok !== false) {
+        try {
+            await ref.set({
+                payload: result,
+                cachedAt: _fa().firestore.FieldValue.serverTimestamp(),
+                expiresAt: _fa().firestore.Timestamp.fromMillis(Date.now() + ttlMs),
+            });
+        } catch (e) {
+            console.warn(TAG, 'cache write falhou (resultado retornado):', e.message);
+        }
+    }
+    return result;
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function erroEstruturado(mensagem, codigo = 'SERVICO_INDISPONIVEL') {
@@ -412,7 +466,7 @@ async function consultarDefis(cnpj, anoCalendario) {
 
 // ─── Situação Fiscal Federal ────────────────────────────────────────────────
 
-export async function consultarSituacaoFiscal(cnpj) {
+export async function consultarSituacaoFiscal(cnpj, { forceRefresh = false } = {}) {
     const cnpjNum = cnpjLimpo(cnpj);
     console.log(TAG, 'consultarSituacaoFiscal', cnpjNum);
 
@@ -421,35 +475,36 @@ export async function consultarSituacaoFiscal(cnpj) {
         return mockSituacaoFiscal(cnpjNum);
     }
 
-    try {
-        const resp = await invokeIntegraContador({
-            idSistema: 'SITFIS',
-            idServico: 'CONSULTARSITUACAOFISCAL',
-            contribuinteCnpj: cnpjNum,
-            dados: {},
-        });
-
-        return {
-            ok: true,
-            situacao: resp?.situacaoFiscal || resp?.situacao || 'INDETERMINADA',
-            pendencias: resp?.pendencias || [],
-            debitos: (resp?.debitos || []).map(d => ({
-                tributo: d.tributo || d.descricao || '',
-                competencia: d.competencia || d.periodoApuracao || '',
-                valorOriginal: Number(d.valorOriginal || d.valor || 0),
-                status: d.situacao || 'aberto',
-            })),
-            ultimaConsulta: new Date().toISOString(),
-        };
-    } catch (err) {
-        console.error(TAG, 'Erro consultarSituacaoFiscal:', err.message);
-        return erroEstruturado(err.message);
-    }
+    return withFirestoreCache(`${cnpjNum}_situacao_fiscal`, async () => {
+        try {
+            const resp = await invokeIntegraContador({
+                idSistema: 'SITFIS',
+                idServico: 'CONSULTARSITUACAOFISCAL',
+                contribuinteCnpj: cnpjNum,
+                dados: {},
+            });
+            return {
+                ok: true,
+                situacao: resp?.situacaoFiscal || resp?.situacao || 'INDETERMINADA',
+                pendencias: resp?.pendencias || [],
+                debitos: (resp?.debitos || []).map(d => ({
+                    tributo: d.tributo || d.descricao || '',
+                    competencia: d.competencia || d.periodoApuracao || '',
+                    valorOriginal: Number(d.valorOriginal || d.valor || 0),
+                    status: d.situacao || 'aberto',
+                })),
+                ultimaConsulta: new Date().toISOString(),
+            };
+        } catch (err) {
+            console.error(TAG, 'Erro consultarSituacaoFiscal:', err.message);
+            return erroEstruturado(err.message);
+        }
+    }, { forceRefresh });
 }
 
 // ─── Dívida Ativa / PGFN ───────────────────────────────────────────────────
 
-export async function consultarDividaAtiva(cnpj) {
+export async function consultarDividaAtiva(cnpj, { forceRefresh = false } = {}) {
     const cnpjNum = cnpjLimpo(cnpj);
     console.log(TAG, 'consultarDividaAtiva', cnpjNum);
 
@@ -458,31 +513,31 @@ export async function consultarDividaAtiva(cnpj) {
         return mockDividaAtiva(cnpjNum);
     }
 
-    try {
-        const resp = await invokeIntegraContador({
-            idSistema: 'PGFN',
-            idServico: 'CONSULTARSITUACAOINSCRICAO',
-            contribuinteCnpj: cnpjNum,
-            dados: {},
-        });
-
-        const inscricoes = (resp?.inscricoes || []).map(i => ({
-            numero: i.numeroInscricao || i.numero || '',
-            valorConsolidado: Number(i.valorConsolidado || i.valor || 0),
-            situacao: i.situacao || 'ATIVA',
-            dataInscricao: i.dataInscricao || '',
-        }));
-
-        return {
-            ok: true,
-            inscricoes,
-            valorTotal: inscricoes.reduce((s, i) => s + i.valorConsolidado, 0),
-            parcelamentos: resp?.parcelamentos || [],
-        };
-    } catch (err) {
-        console.error(TAG, 'Erro consultarDividaAtiva:', err.message);
-        return erroEstruturado(err.message);
-    }
+    return withFirestoreCache(`${cnpjNum}_divida_ativa`, async () => {
+        try {
+            const resp = await invokeIntegraContador({
+                idSistema: 'PGFN',
+                idServico: 'CONSULTARSITUACAOINSCRICAO',
+                contribuinteCnpj: cnpjNum,
+                dados: {},
+            });
+            const inscricoes = (resp?.inscricoes || []).map(i => ({
+                numero: i.numeroInscricao || i.numero || '',
+                valorConsolidado: Number(i.valorConsolidado || i.valor || 0),
+                situacao: i.situacao || 'ATIVA',
+                dataInscricao: i.dataInscricao || '',
+            }));
+            return {
+                ok: true,
+                inscricoes,
+                valorTotal: inscricoes.reduce((s, i) => s + i.valorConsolidado, 0),
+                parcelamentos: resp?.parcelamentos || [],
+            };
+        } catch (err) {
+            console.error(TAG, 'Erro consultarDividaAtiva:', err.message);
+            return erroEstruturado(err.message);
+        }
+    }, { forceRefresh });
 }
 
 // ─── Certidões (CND/CPEN/CPN) — Consulta automatizada por tipo ─────────────
@@ -725,6 +780,7 @@ export async function consultarCertidoes(cnpj, opts = {}) {
     const cnpjNum = cnpjLimpo(cnpj);
     const uf = (opts.uf || '').toUpperCase();
     const codMunIBGE = opts.codMunIBGE || '';
+    const forceRefresh = !!opts.forceRefresh;
     console.log(TAG, 'consultarCertidoes', cnpjNum, 'uf:', uf, 'codMunIBGE:', codMunIBGE);
 
     if (DRY_RUN) {
@@ -732,6 +788,12 @@ export async function consultarCertidoes(cnpj, opts = {}) {
         return mockCertidoes(cnpjNum);
     }
 
+    return withFirestoreCache(`${cnpjNum}_certidoes_${uf}_${codMunIBGE}`, async () => {
+        return await _consultarCertidoesInterno(cnpjNum, uf, codMunIBGE);
+    }, { forceRefresh });
+}
+
+async function _consultarCertidoesInterno(cnpjNum, uf, codMunIBGE) {
     // Detect if empresa is in São Paulo capital
     const isSP = uf === 'SP' || codMunIBGE === '3550308';
 
@@ -812,7 +874,7 @@ function normalizarStatusCertidao(raw) {
 
 // ─── Obrigações Acessórias ──────────────────────────────────────────────────
 
-export async function consultarObrigacoes(cnpj) {
+export async function consultarObrigacoes(cnpj, { forceRefresh = false } = {}) {
     const cnpjNum = cnpjLimpo(cnpj);
     console.log(TAG, 'consultarObrigacoes', cnpjNum);
 
@@ -821,27 +883,28 @@ export async function consultarObrigacoes(cnpj) {
         return mockObrigacoes(cnpjNum);
     }
 
-    try {
-        const resp = await invokeIntegraContador({
-            idSistema: 'SITFIS',
-            idServico: 'CONSULTAROBRIGACOES',
-            contribuinteCnpj: cnpjNum,
-            dados: {},
-        });
-
-        return {
-            ok: true,
-            obrigacoes: (resp?.obrigacoes || []).map(o => ({
-                nome: o.nomeObrigacao || o.nome || '',
-                sigla: o.sigla || '',
-                competencia: o.competencia || o.periodoApuracao || '',
-                status: normalizarStatusObrigacao(o.situacao || o.status),
-            })),
-        };
-    } catch (err) {
-        console.error(TAG, 'Erro consultarObrigacoes:', err.message);
-        return erroEstruturado(err.message);
-    }
+    return withFirestoreCache(`${cnpjNum}_obrigacoes`, async () => {
+        try {
+            const resp = await invokeIntegraContador({
+                idSistema: 'SITFIS',
+                idServico: 'CONSULTAROBRIGACOES',
+                contribuinteCnpj: cnpjNum,
+                dados: {},
+            });
+            return {
+                ok: true,
+                obrigacoes: (resp?.obrigacoes || []).map(o => ({
+                    nome: o.nomeObrigacao || o.nome || '',
+                    sigla: o.sigla || '',
+                    competencia: o.competencia || o.periodoApuracao || '',
+                    status: normalizarStatusObrigacao(o.situacao || o.status),
+                })),
+            };
+        } catch (err) {
+            console.error(TAG, 'Erro consultarObrigacoes:', err.message);
+            return erroEstruturado(err.message);
+        }
+    }, { forceRefresh });
 }
 
 function normalizarStatusObrigacao(raw) {
@@ -856,7 +919,7 @@ function normalizarStatusObrigacao(raw) {
 
 // ─── Parcelamentos vigentes ─────────────────────────────────────────────────
 
-export async function consultarParcelamentos(cnpj) {
+export async function consultarParcelamentos(cnpj, { forceRefresh = false } = {}) {
     const cnpjNum = cnpjLimpo(cnpj);
     console.log(TAG, 'consultarParcelamentos', cnpjNum);
 
@@ -865,29 +928,30 @@ export async function consultarParcelamentos(cnpj) {
         return mockParcelamentos(cnpjNum);
     }
 
-    try {
-        const resp = await invokeIntegraContador({
-            idSistema: 'PGFN',
-            idServico: 'CONSULTARPARCELAMENTO',
-            contribuinteCnpj: cnpjNum,
-            dados: {},
-        });
-
-        return {
-            ok: true,
-            parcelamentos: (resp?.parcelamentos || []).map(p => ({
-                programa: p.programa || p.nomePrograma || '',
-                valorTotal: Number(p.valorTotal || p.valorConsolidado || 0),
-                parcelas: Number(p.quantidadeParcelas || p.parcelas || 0),
-                parcelasPagas: Number(p.parcelasPagas || 0),
-                status: normalizarStatusParcelamento(p.situacao || p.status),
-                dataInicio: p.dataAdesao || p.dataInicio || '',
-            })),
-        };
-    } catch (err) {
-        console.error(TAG, 'Erro consultarParcelamentos:', err.message);
-        return erroEstruturado(err.message);
-    }
+    return withFirestoreCache(`${cnpjNum}_parcelamentos`, async () => {
+        try {
+            const resp = await invokeIntegraContador({
+                idSistema: 'PGFN',
+                idServico: 'CONSULTARPARCELAMENTO',
+                contribuinteCnpj: cnpjNum,
+                dados: {},
+            });
+            return {
+                ok: true,
+                parcelamentos: (resp?.parcelamentos || []).map(p => ({
+                    programa: p.programa || p.nomePrograma || '',
+                    valorTotal: Number(p.valorTotal || p.valorConsolidado || 0),
+                    parcelas: Number(p.quantidadeParcelas || p.parcelas || 0),
+                    parcelasPagas: Number(p.parcelasPagas || 0),
+                    status: normalizarStatusParcelamento(p.situacao || p.status),
+                    dataInicio: p.dataAdesao || p.dataInicio || '',
+                })),
+            };
+        } catch (err) {
+            console.error(TAG, 'Erro consultarParcelamentos:', err.message);
+            return erroEstruturado(err.message);
+        }
+    }, { forceRefresh });
 }
 
 function normalizarStatusParcelamento(raw) {
