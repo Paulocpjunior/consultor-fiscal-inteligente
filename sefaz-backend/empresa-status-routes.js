@@ -32,6 +32,28 @@ function fa() {
     return admin;
 }
 
+// Normaliza uma data que pode chegar em formatos diferentes para millis:
+//   - Timestamp do Firestore   (escrito pelo backend/cron)    -> .toMillis()
+//   - string ISO               (escrita pelo front via setDoc) -> Date.parse
+//   - number em millis / Date  -> direto
+// Sem isso o badge NFSe SP rodava .toMillis() numa string ISO (o painel grava
+// nfseSpAutorizadoEm como ISO via new Date().toISOString()), o resultado virava
+// null e marcava "falta autorização" mesmo com a data salva e a empresa
+// ELEGÍVEL no painel. A captura em si nunca foi bloqueada — os orquestradores
+// (nfse-sp-routes/orchestrator, sync-routes) checam truthiness do valor cru.
+function toMillis(v) {
+    if (v == null) return null;
+    if (typeof v.toMillis === 'function') return v.toMillis();        // Firestore Timestamp
+    if (typeof v.toDate === 'function') return v.toDate().getTime();  // Timestamp-like
+    if (v instanceof Date) return v.getTime();
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    if (typeof v === 'string') {
+        const ms = Date.parse(v);
+        return Number.isNaN(ms) ? null : ms;
+    }
+    return null;
+}
+
 // CNPJ do escritório (SP Assessoria Contábil) — quem detém o cert default.
 const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 
@@ -60,7 +82,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                     // Cadastro UNICO: ccmSp em dadosFiscais.ccmSp (canonico, igual
                     // uf/IE). Fallback ao top-level d.ccmSp so pra dado legado.
                     ccmSp: (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, ''),
-                    nfseSpAutorizadoEm: d.nfseSpAutorizadoEm?.toMillis?.() ?? null,
+                    nfseSpAutorizadoEm: toMillis(d.nfseSpAutorizadoEm),
                     nfseNacionalDfeAtivo: d.nfseNacionalDfeAtivo === true,
                     procuracaoEcacAtiva: d.procuracaoEcacAtiva === true,
                 });
