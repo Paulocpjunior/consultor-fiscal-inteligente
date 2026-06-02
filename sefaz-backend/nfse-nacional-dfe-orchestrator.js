@@ -57,6 +57,21 @@ async function acquireLock(cnpj, lockedBy) {
     return result;
 }
 
+/**
+ * Libera o lock manualmente (em caso de excecao). Em sucesso, o lock e
+ * mantido ate TTL pra preservar o rate-limit do SERPRO (evita 2 syncs
+ * concorrentes na mesma empresa).
+ */
+async function releaseLock(cnpj) {
+    const cnpjNum = String(cnpj).replace(/\D/g, '');
+    const ref = fa().firestore().collection('nfse_nacional_dfe_locks').doc(cnpjNum);
+    try {
+        await ref.delete();
+    } catch (e) {
+        console.warn('[nfse-nac-dfe orch] erro liberando lock:', e.message);
+    }
+}
+
 async function carregaUltNSU(cnpj) {
     const cnpjNum = String(cnpj).replace(/\D/g, '');
     const ref = fa().firestore().collection('nfse_nacional_dfe_state').doc(cnpjNum);
@@ -184,6 +199,9 @@ export async function sincronizarEmpresaNfseNacionalDfe({ empresaId, empresaCnpj
         };
     } catch (e) {
         motivoFinal = `exceção: ${e.message}`;
+        // Libera o lock em caso de excecao pra nao bloquear retry por 1h.
+        // Sucesso mantem o lock ate TTL pra preservar rate-limit SERPRO.
+        await releaseLock(cnpjNum);
         await registrarLog(cnpjNum, {
             empresaId, sucesso: false,
             novos, duplicados, erros, paginas, motivo: motivoFinal,
