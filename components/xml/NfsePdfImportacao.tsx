@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getApp } from 'firebase/app';
 import { ref as storageRef, uploadBytes, getDownloadURL, getStorage } from 'firebase/storage';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../services/firebaseConfig';
 import { getEmpresasDisponiveis } from '../../services/xmlFiscalService';
 import { parseNfsePdf, matchNfseEmpresa, NfsePdfParseError } from '../../services/nfsePdfParserService';
@@ -190,7 +190,16 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 importadoEmServer: serverTimestamp(),
             };
 
-            await setDoc(doc(db, 'documentos_fiscais', docId), payload);
+            // merge:true preserva campos do cron (eventos/NSU/captura state)
+            // e nao quebra createdBy original quando o doc ja existe.
+            // Pra docs novos: createdBy e setado normalmente.
+            // Pra docs existentes do cron: NAO sobrescreve createdBy (regra rejeitaria).
+            const docRef = doc(db, 'documentos_fiscais', docId);
+            const existingSnap = await getDoc(docRef);
+            const payloadFinal = existingSnap.exists()
+                ? { ...payload, createdBy: existingSnap.data().createdBy ?? uid }
+                : payload;
+            await setDoc(docRef, payloadFinal, { merge: true });
 
             onShowToast?.(`NFSe ${parsed.numero}/${parsed.serie} importada com sucesso.`);
             setParsed(null);

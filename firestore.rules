@@ -93,7 +93,16 @@ service cloud.firestore {
       // 5000 cobre captura de NFSe SP via cron (319 empresas × ~10 NFs/mês).
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 5000;
-      allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
+      // UPDATE: qualquer signed-in pode atualizar (re-import PDF complementa
+      // doc criado pelo cron, retag, marcar evento, etc). Bloqueia mudanca
+      // de dono — preserva auditoria. Tambem libera caso a regra antiga
+      // bloqueava import PDF de doc capturado por 'system:auto-sync'/cron.
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        request.resource.data.createdBy == resource.data.createdBy
+      );
+      // DELETE: dono original ou admin (operacao destrutiva).
+      allow delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
 
