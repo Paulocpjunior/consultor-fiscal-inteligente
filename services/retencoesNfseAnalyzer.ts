@@ -52,7 +52,187 @@ export type AnaliseRetencoes = {
     irrf: TributoRetido;
     totalRetido: number;
     temAlgumaRetencao: boolean;
+    inconsistencias?: Inconsistencia[];
 };
+
+export type SeveridadeInconsistencia = 'erro' | 'alerta' | 'info';
+export type Inconsistencia = {
+    severidade: SeveridadeInconsistencia;
+    codigo: string;
+    mensagem: string;
+};
+
+// ─── Constantes fiscais (CSRF/IRRF) ──────────────────────────────────────
+// Base legal:
+//   - Lei 10.833/2003 art. 30 e 31 (regra geral CSRF)
+//   - Lei 13.137/2015 art. 24 (alteração do art. 31 §3º)
+//   - IN RFB 2.110/2022 (substitui IN 459/2004)
+//   - Decreto-Lei 1.598/1977 + Lei 7.713/88 (IRRF serviços)
+//
+// IMPORTANTE: as alíquotas DE RETENÇÃO sao distintas das aliquotas DO
+// REGIME tributario do prestador (que pode ser cumulativo ou nao).
+// Lei 10.833/03 art. 30 §1º + IN RFB 2.110/22 art. 2º:
+export const ALIQ_PIS_RETENCAO = 0.0065;     // 0,65%
+export const ALIQ_COFINS_RETENCAO = 0.03;    // 3,00%
+export const ALIQ_CSLL_RETENCAO = 0.01;      // 1,00%
+export const ALIQ_CSRF_TOTAL = 0.0465;       // 4,65% = soma das três (0,65 + 3 + 1)
+/**
+ * Alíquotas usuais de IRRF retido na fonte (Decreto 3.000/99 art. 647-651):
+ *   1.0%  — serviços de limpeza, vigilância, locação de mão-de-obra (Lei 7.713/88 art. 55)
+ *   1.5%  — serviços profissionais em geral (Decreto-Lei 1.598/77)
+ *   4.8%  — comissões/propaganda (raro em NFSe SP)
+ */
+export const ALIQUOTAS_IRRF_USUAIS = [0.01, 0.015, 0.048];
+/**
+ * Teto de dispensa CSRF: pagamento ≤ R$ 215,05 → CSRF (4,65%) ≤ R$ 10,00.
+ * Lei 10.833/03 art. 31 §3º (com redação da Lei 13.137/2015).
+ * Aplicado por PAGAMENTO INDIVIDUAL — nao cumula com outras notas do mes.
+ */
+export const TETO_DISPENSA_CSRF = 215.05;
+const TOLERANCIA_PCT = 0.01; // 1% de tolerância pra arredondamento
+
+export type ContextoValidacao = {
+    /** CNPJs do tomador atual que são optantes Simples (dispensa CSRF). */
+    cnpjsSimples?: Set<string>;
+};
+
+/**
+ * Aplica validações fiscais à análise extraída de uma linha. Retorna lista
+ * de inconsistências (vazia quando tudo bate). Use opts.cnpjsSimples pra
+ * cruzar Simples — se o prestador (em notas Recebidas) for Simples, a CSRF
+ * normalmente é indevida (LC 123/06 art. 13 §1º VI — exceção Anexo IV).
+ */
+export function validarRetencoesLinha(
+    linha: LinhaNfseCsv,
+    analise: AnaliseRetencoes,
+    opts?: ContextoValidacao,
+): Inconsistencia[] {
+    const incs: Inconsistencia[] = [];
+    const valor = linha.valorServicos;
+    if (valor <= 0) return incs;
+
+    // 1) Erro lógico: retenção total > valor do serviço
+    if (analise.totalRetido > valor + 0.01) {
+        incs.push({
+            severidade: 'erro',
+            codigo: 'RETENCAO_MAIOR_QUE_SERVICO',
+            mensagem: `Retenção total (R$ ${analise.totalRetido.toFixed(2)}) maior que o valor do serviço (R$ ${valor.toFixed(2)}).`,
+        });
+    }
+
+    // 2) CSRF consistência: quando PIS+COFINS+CSLL todos retidos, soma deve
+    //    bater com 4,65% × valor (Lei 10.833/03 art. 30). Tolerância 1%.
+    const csrfRetido = analise.pis.valor + analise.cofins.valor + analise.csll.valor;
+    if (analise.pis.retido && analise.cofins.retido && analise.csll.retido) {
+        const esperado = valor * ALIQ_CSRF_TOTAL;
+        if (Math.abs(csrfRetido - esperado) / esperado > TOLERANCIA_PCT) {
+            incs.push({
+                severidade: 'alerta',
+                codigo: 'CSRF_INCONSISTENTE',
+                mensagem: `CSRF retido R$ ${csrfRetido.toFixed(2)} diverge de 4,65% × valor (esperado R$ ${esperado.toFixed(2)}).`,
+            });
+        }
+    }
+
+    // 3) IRRF: alíquota deve ser uma das usuais
+    if (analise.irrf.retido && analise.irrf.valor > 0) {
+        const aliq = analise.irrf.valor / valor;
+        const usual = ALIQUOTAS_IRRF_USUAIS.some(a => Math.abs(aliq - a) <= 0.001);
+        if (!usual) {
+            incs.push({
+                severidade: 'alerta',
+                codigo: 'IRRF_ALIQUOTA_ATIPICA',
+                mensagem: `IRRF a ${(aliq * 100).toFixed(2)}% (usual: 1%, 1,5% ou 4,8%).`,
+            });
+        }
+    }
+
+    // 4) Cruzamento com Simples — só aplica em notas Recebidas (eu sou tomador,
+    //    prestador é o CNPJ na coluna). Se o prestador for Simples e tiver
+    //    sofrido CSRF, alerta — geralmente indevida (LC 123/06 art. 13 §1º VI,
+    //    salvo Anexo IV: vigilância, limpeza, construção).
+    if (linha.direcao === 'Recebida') {
+        const cnpjPrestador = (linha.prestadorCnpj || '').replace(/\D/g, '');
+        const prestadorEhSimples = opts?.cnpjsSimples?.has(cnpjPrestador) || false;
+        if (prestadorEhSimples) {
+            const teveCsrf = analise.pis.retido || analise.cofins.retido || analise.csll.retido;
+            if (teveCsrf) {
+                incs.push({
+                    severidade: 'alerta',
+                    codigo: 'CSRF_PRESTADOR_SIMPLES',
+                    mensagem: 'Prestador é Simples — CSRF geralmente indevida (verifique se prestou serviço do Anexo IV).',
+                });
+            }
+        }
+    }
+
+    // 5) Falta de retenção quando obrigatória: valor > R$ 215,05, sem CSRF,
+    //    prestador NÃO-Simples (em notas Recebidas, eu sou tomador).
+    if (linha.direcao === 'Recebida' && valor > TETO_DISPENSA_CSRF) {
+        const cnpjPrestador = (linha.prestadorCnpj || '').replace(/\D/g, '');
+        const prestadorEhSimples = opts?.cnpjsSimples?.has(cnpjPrestador) || false;
+        const teveCsrf = analise.pis.retido || analise.cofins.retido || analise.csll.retido;
+        if (!prestadorEhSimples && !teveCsrf) {
+            incs.push({
+                severidade: 'alerta',
+                codigo: 'FALTA_CSRF',
+                mensagem: `Pagamento R$ ${valor.toFixed(2)} > teto de dispensa R$ 215,05 e nenhuma CSRF retida (Lei 10.833/03 art. 30 — verifique se prestador não-Simples).`,
+            });
+        }
+    }
+
+    return incs;
+}
+
+export type ConsolidadoPorPrestadorMes = {
+    prestadorCnpj: string;
+    prestadorNome: string;
+    competencia: string; // YYYY-MM
+    qtdNotas: number;
+    valorTotal: number;
+    csrfTotalRetido: number;
+    irrfTotalRetido: number;
+};
+
+/**
+ * Agrupa notas RECEBIDAS por prestador + mês. Útil pra conferir DARF
+ * mensal consolidado (IN RFB 1.234/2012 art. 4º §3º — pagamentos ao mesmo
+ * prestador no mês recolhem em DARF único).
+ *
+ * NOTA fiscal importante: a dispensa de R$ 10,00 (art. 31 §3º Lei 10.833/03)
+ * aplica-se a CADA PAGAMENTO, não cumula. Logo, não geramos alerta de
+ * "falta retenção" apenas porque o cumulativo passou de R$ 215,05 — isso
+ * é tratado por nota individual em validarRetencoesLinha.
+ */
+export function consolidarPorPrestadorMes(
+    items: { linha: LinhaNfseCsv; analise: AnaliseRetencoes }[],
+): ConsolidadoPorPrestadorMes[] {
+    const grupos = new Map<string, ConsolidadoPorPrestadorMes>();
+    for (const it of items) {
+        if (it.linha.direcao !== 'Recebida') continue;
+        const cnpj = (it.linha.prestadorCnpj || '').replace(/\D/g, '');
+        const mes = (it.linha.data || '').slice(0, 7);
+        if (!cnpj || !mes) continue;
+        const key = `${cnpj}|${mes}`;
+        if (!grupos.has(key)) {
+            grupos.set(key, {
+                prestadorCnpj: cnpj,
+                prestadorNome: it.linha.prestadorNome || '',
+                competencia: mes,
+                qtdNotas: 0,
+                valorTotal: 0,
+                csrfTotalRetido: 0,
+                irrfTotalRetido: 0,
+            });
+        }
+        const g = grupos.get(key)!;
+        g.qtdNotas++;
+        g.valorTotal += it.linha.valorServicos;
+        g.csrfTotalRetido += it.analise.pis.valor + it.analise.cofins.valor + it.analise.csll.valor;
+        g.irrfTotalRetido += it.analise.irrf.valor;
+    }
+    return Array.from(grupos.values()).sort((a, b) => b.valorTotal - a.valorTotal);
+}
 
 // Parse "1.234,56" / "1234.56" / "1234,56" -> number
 function parseValorBR(s: string): number {

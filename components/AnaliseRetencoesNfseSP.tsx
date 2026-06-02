@@ -8,14 +8,20 @@
  *
  * Função pura de análise mora em services/retencoesNfseAnalyzer.ts.
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     parseCsvNfseSp,
     analisarRetencoes,
     resumirRetencoes,
+    validarRetencoesLinha,
+    consolidarPorPrestadorMes,
     type LinhaNfseCsv,
     type AnaliseRetencoes,
+    type Inconsistencia,
+    type ConsolidadoPorPrestadorMes,
 } from '../services/retencoesNfseAnalyzer';
+import { getEmpresas as getSimplesEmpresas } from '../services/simplesNacionalService';
+import type { User } from '../types';
 
 type LinhaAnalisada = LinhaNfseCsv & { analise: AnaliseRetencoes };
 
@@ -34,12 +40,39 @@ const COR_TRIBUTO: Record<typeof TRIBUTOS[number], string> = {
 
 const formatBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const AnaliseRetencoesNfseSP: React.FC = () => {
+interface Props {
+    currentUser?: User | null;
+}
+
+const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
     const [linhas, setLinhas] = useState<LinhaAnalisada[]>([]);
-    const [filtro, setFiltro] = useState<'todas' | 'comRetencao' | 'semRetencao'>('comRetencao');
+    const [filtro, setFiltro] = useState<'todas' | 'comRetencao' | 'semRetencao' | 'inconsistencias'>('comRetencao');
     const [erro, setErro] = useState<string | null>(null);
     const [nomeArquivo, setNomeArquivo] = useState<string>('');
     const [exportandoPDF, setExportandoPDF] = useState(false);
+    const [cnpjsSimples, setCnpjsSimples] = useState<Set<string>>(new Set());
+    const [mostrarConsolidado, setMostrarConsolidado] = useState(false);
+
+    // Carrega CNPJs de empresas Simples pra cruzar com prestadores (auditoria
+    // de retencao indevida — LC 123/06 art. 13 §1º VI: Simples nao sofre CSRF
+    // exceto Anexo IV).
+    useEffect(() => {
+        let alive = true;
+        getSimplesEmpresas(currentUser ?? null).then(emps => {
+            if (!alive) return;
+            const set = new Set(emps.map(e => (e.cnpj || '').replace(/\D/g, '')).filter(Boolean));
+            setCnpjsSimples(set);
+        }).catch(() => { /* tolerante: sem cruzamento se falhar */ });
+        return () => { alive = false; };
+    }, [currentUser]);
+
+    // Re-aplica validacao quando lista de CNPJs Simples carregar (ou mudar)
+    useEffect(() => {
+        setLinhas(prev => prev.map(l => {
+            const incs = validarRetencoesLinha(l, l.analise, { cnpjsSimples });
+            return { ...l, analise: { ...l.analise, inconsistencias: incs } };
+        }));
+    }, [cnpjsSimples]);
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -54,7 +87,12 @@ const AnaliseRetencoesNfseSP: React.FC = () => {
                 setLinhas([]);
                 return;
             }
-            setLinhas(parsed.map(l => ({ ...l, analise: analisarRetencoes(l) })));
+            const analisadas: LinhaAnalisada[] = parsed.map(l => {
+                const analise = analisarRetencoes(l);
+                const incs = validarRetencoesLinha(l, analise, { cnpjsSimples });
+                return { ...l, analise: { ...analise, inconsistencias: incs } };
+            });
+            setLinhas(analisadas);
         } catch (err: any) {
             setErro(`Falha ao processar CSV: ${err?.message || err}`);
             setLinhas([]);
@@ -63,9 +101,20 @@ const AnaliseRetencoesNfseSP: React.FC = () => {
 
     const resumo = useMemo(() => resumirRetencoes(linhas.map(l => l.analise)), [linhas]);
 
+    const consolidado = useMemo<ConsolidadoPorPrestadorMes[]>(
+        () => consolidarPorPrestadorMes(linhas.map(l => ({ linha: l, analise: l.analise }))),
+        [linhas],
+    );
+
+    const totalComInconsistencia = useMemo(
+        () => linhas.filter(l => (l.analise.inconsistencias?.length || 0) > 0).length,
+        [linhas],
+    );
+
     const linhasFiltradas = useMemo(() => {
         if (filtro === 'todas') return linhas;
         if (filtro === 'comRetencao') return linhas.filter(l => l.analise.temAlgumaRetencao);
+        if (filtro === 'inconsistencias') return linhas.filter(l => (l.analise.inconsistencias?.length || 0) > 0);
         return linhas.filter(l => !l.analise.temAlgumaRetencao);
     }, [linhas, filtro]);
 
@@ -245,21 +294,28 @@ const AnaliseRetencoesNfseSP: React.FC = () => {
 
                     <div className="flex items-center gap-2 mt-2">
                         <span className="text-sm text-gray-600 dark:text-gray-300">Filtro:</span>
-                        {(['comRetencao', 'semRetencao', 'todas'] as const).map(f => (
+                        {(['comRetencao', 'semRetencao', 'todas', 'inconsistencias'] as const).map(f => (
                             <button
                                 key={f}
                                 onClick={() => setFiltro(f)}
                                 className={`px-3 py-1 rounded-lg text-xs font-semibold ${
                                     filtro === f
-                                        ? 'bg-teal-600 text-white'
+                                        ? (f === 'inconsistencias' ? 'bg-amber-600 text-white' : 'bg-teal-600 text-white')
                                         : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600'
                                 }`}
                             >
                                 {f === 'comRetencao' && `Com retenção (${resumo.notasComRetencao})`}
                                 {f === 'semRetencao' && `Sem retenção (${resumo.totalNotas - resumo.notasComRetencao})`}
                                 {f === 'todas' && `Todas (${resumo.totalNotas})`}
+                                {f === 'inconsistencias' && `⚠ Inconsistências (${totalComInconsistencia})`}
                             </button>
                         ))}
+                        <button
+                            onClick={() => setMostrarConsolidado(v => !v)}
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold ${mostrarConsolidado ? 'bg-indigo-700 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600'}`}
+                        >
+                            🗂 Consolidado por prestador/mês ({consolidado.length})
+                        </button>
                         <span className="ml-auto text-sm font-semibold text-gray-700 dark:text-gray-200">
                             Total retido: {formatBRL(resumo.totalRetido)}
                         </span>
@@ -284,6 +340,7 @@ const AnaliseRetencoesNfseSP: React.FC = () => {
                                         <th className="px-2 py-2 text-right font-medium">Valor Serv.</th>
                                         <th className="px-2 py-2 text-left font-medium">Retenções</th>
                                         <th className="px-2 py-2 text-right font-medium">Total Retido</th>
+                                        <th className="px-2 py-2 text-left font-medium">Conformidade</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -322,6 +379,23 @@ const AnaliseRetencoesNfseSP: React.FC = () => {
                                                 <td className="px-2 py-2 text-right font-mono font-semibold">
                                                     {l.analise.totalRetido > 0 ? formatBRL(l.analise.totalRetido) : '—'}
                                                 </td>
+                                                <td className="px-2 py-2">
+                                                    {(l.analise.inconsistencias && l.analise.inconsistencias.length > 0) ? (
+                                                        <div className="flex flex-col gap-0.5">
+                                                            {l.analise.inconsistencias.map((inc, k) => (
+                                                                <span
+                                                                    key={k}
+                                                                    title={inc.mensagem}
+                                                                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${inc.severidade === 'erro' ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}
+                                                                >
+                                                                    {inc.severidade === 'erro' ? '✗' : '⚠'} {inc.codigo.replace(/_/g, ' ')}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-emerald-600 text-[10px] font-semibold">✓ ok</span>
+                                                    )}
+                                                </td>
                                             </tr>
                                         );
                                     })}
@@ -334,6 +408,54 @@ const AnaliseRetencoesNfseSP: React.FC = () => {
                             </div>
                         )}
                     </div>
+
+                    {mostrarConsolidado && consolidado.length > 0 && (
+                        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-indigo-200 dark:border-indigo-800 overflow-hidden mt-2">
+                            <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-200 dark:border-indigo-800">
+                                <h4 className="text-sm font-bold text-indigo-900 dark:text-indigo-200">
+                                    Consolidado por prestador/mês — notas RECEBIDAS
+                                </h4>
+                                <p className="text-[11px] text-indigo-700 dark:text-indigo-300 mt-1">
+                                    Útil pra conferir DARF mensal consolidado (IN RFB 1.234/2012). A dispensa de R$ 10,00 (Lei 10.833/03 art. 31 §3º com Lei 13.137/2015) aplica-se a cada PAGAMENTO individual — não cumula.
+                                </p>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                    <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                                        <tr>
+                                            <th className="px-2 py-2 text-left font-medium">Prestador</th>
+                                            <th className="px-2 py-2 text-left font-medium">CNPJ</th>
+                                            <th className="px-2 py-2 text-left font-medium">Mês</th>
+                                            <th className="px-2 py-2 text-right font-medium">Notas</th>
+                                            <th className="px-2 py-2 text-right font-medium">Valor total</th>
+                                            <th className="px-2 py-2 text-right font-medium">CSRF retida</th>
+                                            <th className="px-2 py-2 text-right font-medium">IRRF retido</th>
+                                            <th className="px-2 py-2 text-left font-medium">Simples?</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                        {consolidado.map((c, i) => {
+                                            const eSimples = cnpjsSimples.has(c.prestadorCnpj);
+                                            return (
+                                                <tr key={`${c.prestadorCnpj}-${c.competencia}-${i}`}>
+                                                    <td className="px-2 py-2 truncate max-w-[200px]" title={c.prestadorNome}>{c.prestadorNome || '—'}</td>
+                                                    <td className="px-2 py-2 font-mono text-[10px]">{c.prestadorCnpj}</td>
+                                                    <td className="px-2 py-2 font-mono">{c.competencia}</td>
+                                                    <td className="px-2 py-2 text-right">{c.qtdNotas}</td>
+                                                    <td className="px-2 py-2 text-right font-mono">{formatBRL(c.valorTotal)}</td>
+                                                    <td className="px-2 py-2 text-right font-mono">{c.csrfTotalRetido > 0 ? formatBRL(c.csrfTotalRetido) : '—'}</td>
+                                                    <td className="px-2 py-2 text-right font-mono">{c.irrfTotalRetido > 0 ? formatBRL(c.irrfTotalRetido) : '—'}</td>
+                                                    <td className="px-2 py-2 text-[10px]">
+                                                        {eSimples ? <span className="text-emerald-700 font-semibold">Sim</span> : <span className="text-gray-400">—</span>}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
         </div>

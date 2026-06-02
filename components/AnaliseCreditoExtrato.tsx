@@ -1285,7 +1285,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
         </button>
       </div>
 
-      {modo === 'nfsesp' && <AnaliseRetencoesNfseSP />}
+      {modo === 'nfsesp' && <AnaliseRetencoesNfseSP currentUser={currentUser} />}
 
       {/* ─── Upload CSV ───────────────────────────────────────────────── */}
       {modo === 'csv' && (
