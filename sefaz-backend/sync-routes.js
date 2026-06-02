@@ -102,7 +102,10 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
         executadoEm: fa().firestore.FieldValue.serverTimestamp(),
         totalEmpresas: empresas.length,
         sucessos, falhas, totalNovosXmls: totalNovos, duracaoMs,
-        fonte: req.cron?.source,
+        // req.cron?.source nunca era setado (codigo morto). Usa o header
+        // oficial do Cloud Scheduler como fonte. Fallback 'unknown' garante
+        // que NUNCA persistimos `undefined` (Firestore rejeita o write inteiro).
+        fonte: req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno',
       });
       console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos, ${duracaoMs}ms`);
     } catch (e) {
@@ -110,7 +113,8 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
       try {
         await fa().firestore().collection('sefaz_cron_logs').add({
           executadoEm: fa().firestore.FieldValue.serverTimestamp(),
-          erro: e.message, fonte: req.cron?.source,
+          erro: e.message,
+          fonte: req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno',
         });
       } catch (_) {}
     }
