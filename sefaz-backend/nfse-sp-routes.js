@@ -44,7 +44,8 @@ router.post('/nfsesp-consultar-uma', requireAdmin, json(), async (req, res) => {
         if (!snap.exists) return res.status(404).json({ erro: 'empresa não encontrada' });
 
         const d = snap.data();
-        const ccmSp = (d.ccmSp || '').toString().trim();
+        // Cadastro unico dadosFiscais.ccmSp (fallback top-level legado), so digitos
+        const ccmSp = (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, '');
         const autorizado = d.nfseSpAutorizadoEm;
         if (!ccmSp || !autorizado) {
             return res.status(400).json({ erro: 'empresa não elegível: precisa ccmSp e nfseSpAutorizadoEm preenchidos' });

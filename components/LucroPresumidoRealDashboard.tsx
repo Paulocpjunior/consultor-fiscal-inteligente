@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { LucroPresumidoEmpresa, User, FichaFinanceiraRegistro, LucroInput, HistoryItem, SearchType, ItemFinanceiroAvulso } from '../types';
 import * as lucroPresumidoService from '../services/lucroPresumidoService';
 import { fetchCnpjFromBrasilAPI } from '../services/externalApiService';
@@ -7,6 +8,7 @@ import { PlusIcon, CalculatorIcon, DownloadIcon, TrashIcon, ArrowLeftIcon, SaveI
 import LoadingSpinner from './LoadingSpinner';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
+import NfseSpAdminPanel from './NfseSpAdminPanel';
 
 // Helper to convert Ficha to Input for Calculation Service
 const convertFichaToInput = (ficha: FichaFinanceiraRegistro, empresa: LucroPresumidoEmpresa): LucroInput => {
@@ -161,6 +163,12 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const [view, setView] = useState<'list' | 'details' | 'report' | 'new_company' | 'new_ficha'>('list');
     const [loading, setLoading] = useState(false);
     const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
+    // Toast local (o Lucro nao recebe onShowToast por prop como o Simples).
+    const [toastMsg, setToastMsg] = useState<string | null>(null);
+    const showToast = (msg: string) => {
+        setToastMsg(msg);
+        window.setTimeout(() => setToastMsg(null), 4000);
+    };
     const [isCfopCorrelacaoModalOpen, setIsCfopCorrelacaoModalOpen] = useState(false);
 
     // New Company Form State
@@ -1345,6 +1353,27 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                     </button>
                 </div>
 
+                {/* NFSe SP — mesmo painel do Simples, agora tambem pro Lucro (admin) */}
+                {currentUser?.role === 'admin' && (
+                    <NfseSpAdminPanel
+                        empresaId={selectedEmpresa.id}
+                        colecao="lucro_empresas"
+                        ccmSpAtual={selectedEmpresa.dadosFiscais?.ccmSp || selectedEmpresa.ccmSp}
+                        nfseSpAutorizadoEmAtual={selectedEmpresa.nfseSpAutorizadoEm}
+                        onSalvarConfig={async ({ ccmSp, nfseSpAutorizadoEm }) => {
+                            // Cadastro unico: grava ccmSp em dadosFiscais (spread do
+                            // existente pra preservar uf/IE) + a data de autorizacao.
+                            await lucroPresumidoService.updateEmpresa(selectedEmpresa.id, {
+                                dadosFiscais: { ...selectedEmpresa.dadosFiscais, ccmSp },
+                                nfseSpAutorizadoEm,
+                            });
+                            const atualizadas = await lucroPresumidoService.getEmpresas(currentUser);
+                            setEmpresas(atualizadas);
+                        }}
+                        onShowToast={showToast}
+                    />
+                )}
+
                 <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
@@ -1688,6 +1717,14 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                     }}
                 />
                 </>
+            )}
+
+            {/* Toast local via portal (escapa de ancestrais com transform) */}
+            {toastMsg && createPortal(
+                <div className="fixed bottom-4 right-4 z-[100] max-w-sm bg-slate-800 text-white text-sm px-4 py-3 rounded-lg shadow-2xl border border-slate-700">
+                    {toastMsg}
+                </div>,
+                document.body
             )}
         </div>
     );
