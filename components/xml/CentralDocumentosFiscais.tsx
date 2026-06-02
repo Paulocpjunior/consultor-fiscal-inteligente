@@ -182,8 +182,13 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 {tab === 'nfse_sp_captura' && (
                     <Suspense fallback={<p className="text-center text-xs text-slate-400 py-6">Carregando...</p>}>
                         <div className="space-y-6">
-                            <NfseSpSessaoCookies currentUser={currentUser} />
+                            {/* Lista de NFSe capturadas primeiro (conteudo principal).
+                                O card de gestao de cookies da sessao do portal SP foi
+                                movido pro FIM da pagina — e acao de manutencao (renovar
+                                a cada ~2h), nao o foco diario do contador. Continua em
+                                uso ativo: o cron nfsesp-portal-cron depende desses cookies. */}
                             <XmlNfseSpCapturadas currentUser={currentUser} refreshKey={refreshKey} />
+                            <NfseSpSessaoCookies currentUser={currentUser} />
                         </div>
                     </Suspense>
                 )}
