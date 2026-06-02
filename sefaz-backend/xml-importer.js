@@ -193,11 +193,25 @@ function decidirDirecao(cnpjEmit, cnpjDest, empresaCnpj) {
 }
 
 function extrairMetadados(xml, schema) {
+  // Chave: cada modelo de DFe tem seu container raiz.
+  //   NFe/NFCe -> <infNFe Id="NFe...">  ou <chNFe>
+  //   CTe      -> <infCte Id="CTe...">  ou <chCTe>
+  //   MDFe     -> <infMDFe Id="MDFe..."> ou <chMDFe>
+  //   Eventos  -> <infEvento Id="ID...">
+  // Antes so extraia infNFe/infEvento/chNFe — CTe e MDFe vinham com chave=null
+  // e eram REJEITADOS no import ('Chave da NFe nao encontrada'), apesar de
+  // serem baixados normalmente pelo DistDFe. Por isso CT-e nunca aparecia.
   let chave = pickAttr(xml, 'infNFe', 'Id') ||
+              pickAttr(xml, 'infCte', 'Id') ||
+              pickAttr(xml, 'infMDFe', 'Id') ||
               pickAttr(xml, 'infEvento', 'Id') ||
               pickTag(xml, 'chNFe') ||
+              pickTag(xml, 'chCTe') ||
+              pickTag(xml, 'chMDFe') ||
               null;
-  if (chave) chave = chave.replace(/^NFe|^ID/i, '').replace(/\D/g, '');
+  // Remove prefixos de letra (NFe/CTe/MDFe/ID) e qualquer nao-digito.
+  // O \D final ja tira as letras, mas o replace explicito documenta a intencao.
+  if (chave) chave = chave.replace(/^(NFe|CTe|MDFe|ID)/i, '').replace(/\D/g, '');
 
   const cnpjEmit = pickTag(xml, 'CNPJ') || null;
   const cnpjDest = (() => {
@@ -211,7 +225,10 @@ function extrairMetadados(xml, schema) {
 
   const xNome = pickTag(xml, 'xNome') || null;
   const dhEmi = pickTag(xml, 'dhEmi') || pickTag(xml, 'dEmi') || pickTag(xml, 'dhEvento') || null;
-  const vNF = pickTag(xml, 'vNF') || null;
+  // Valor: NFe usa <vNF>; CTe usa <vTPrest> (valor total da prestacao);
+  // MDFe nao tem valor financeiro (so carga). Sem o fallback, CT-e capturado
+  // aparecia com valor R$ 0,00.
+  const vNF = pickTag(xml, 'vNF') || pickTag(xml, 'vTPrest') || pickTag(xml, 'vRec') || null;
   const tpNF = pickTag(xml, 'tpNF') || null;
 
   let tipoDoc = 'desconhecido';
@@ -386,13 +403,16 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   if (!xml) return { status: 'erro', motivo: 'XML vazio' };
 
   const meta = extrairMetadados(xml, schema);
-  if (!meta.chave) return { status: 'erro', motivo: 'Chave da NFe não encontrada no XML' };
+  if (!meta.chave) return { status: 'erro', motivo: `Chave do documento fiscal nao encontrada no XML (schema: ${schema || 'desconhecido'})` };
 
   const db = fa().firestore();
   const xmlHash = sha256(xml);
 
-  // ── EVENTOS: caminho separado (anexa à NFe original) ────────────────
-  if ((meta.tipoDoc === 'eventoNFe' || meta.tipoDoc === 'resEvento') && meta.evento?.chNFeRef) {
+  // ── EVENTOS: caminho separado (anexa ao documento original) ─────────
+  // Inclui eventos de CTe e MDFe (cancelamento, CCe, etc), nao so NFe.
+  // chNFeRef e a chave do doc referenciado (44 digitos), seja NFe/CTe/MDFe.
+  if ((meta.tipoDoc === 'eventoNFe' || meta.tipoDoc === 'eventoCTe' ||
+       meta.tipoDoc === 'eventoMDFe' || meta.tipoDoc === 'resEvento') && meta.evento?.chNFeRef) {
     // Sanitiza componentes do path pra não estourar limite de 1024 chars
     // do Firebase Storage. Chave NFe = 44 dígitos exatos; nProt/tpEvento ~15 chars.
     const chRefSafe = String(meta.evento.chNFeRef || '').replace(/\D/g, '').slice(0, 44);
