@@ -6,6 +6,7 @@
 import admin from 'firebase-admin';
 import { getDarfProvider, getDarfMode } from './darf-provider.js';
 import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
+import { calcularMultaDarf } from './multa-calculator.js';
 
 const COLLECTION = 'darfs_emitidos';
 
@@ -96,6 +97,7 @@ export async function getResumoDarf() {
     const hoje = new Date().toISOString().slice(0, 10);
     let pendentes = 0, vencidos = 0, pagos = 0;
     let valorPendente = 0, valorVencido = 0, valorPago = 0;
+    let valorMultaEstimada = 0;
     const porTributo = {};
 
     for (const d of docs) {
@@ -107,6 +109,13 @@ export async function getResumoDarf() {
         } else if (venc && venc < hoje) {
             vencidos++;
             valorVencido += d.valor || 0;
+            const me = d.multaEstimada;
+            if (me && me.calculadoEm === hoje) {
+                valorMultaEstimada += (me.multaValor || 0) + (me.jurosValor || 0);
+            } else if (d.valor > 0) {
+                const calc = calcularMultaDarf(d.valor, new Date(venc), new Date(hoje));
+                if (calc) valorMultaEstimada += (calc.multaValor || 0) + (calc.jurosValor || 0);
+            }
         } else {
             pendentes++;
             valorPendente += d.valor || 0;
@@ -119,7 +128,10 @@ export async function getResumoDarf() {
     return {
         totalDarfs: docs.length,
         pendentes, vencidos, pagos,
-        valorPendente, valorVencido, valorPago,
+        valorPendente, valorVencido,
+        valorVencidoAtualizado: +(valorVencido + valorMultaEstimada).toFixed(2),
+        valorMultaEstimada: +valorMultaEstimada.toFixed(2),
+        valorPago,
         porTributo,
         mode: getDarfMode(),
     };
@@ -149,14 +161,32 @@ export async function processarVencimentos() {
 
     for (const doc of snapDocs) {
         const d = doc.data();
-        if ((d.statusPagamento || 'pendente') !== 'pendente') continue;
+        if ((d.statusPagamento || 'pendente') !== 'pendente' && (d.statusPagamento !== 'vencido')) continue;
         if (!d.vencimento) continue;
         if (d.vencimento < hoje) {
-            updates.push({
-                ref: doc.ref,
-                data: { statusPagamento: 'vencido', atualizadoEm: new Date().toISOString() },
-            });
-            stats.atualizados++;
+            // Calcula atualizacao monetaria (Lei 9.430/96 art. 61) e persiste.
+            // Atualiza a cada execucao do cron — dias passam, multa cresce ate 20%.
+            const calc = d.valor > 0
+                ? calcularMultaDarf(d.valor, new Date(d.vencimento), new Date(hoje))
+                : null;
+            const multaEstimada = calc ? {
+                dias: calc.dias,
+                multaPct: calc.multaPct,
+                multaValor: calc.multaValor,
+                jurosPct: calc.jurosPct,
+                jurosValor: calc.jurosValor,
+                total: calc.total,
+                calculadoEm: hoje,
+            } : null;
+
+            const updateData = { atualizadoEm: new Date().toISOString() };
+            const eraPendente = (d.statusPagamento || 'pendente') === 'pendente';
+            if (eraPendente) {
+                updateData.statusPagamento = 'vencido';
+                stats.atualizados++;
+            }
+            if (multaEstimada) updateData.multaEstimada = multaEstimada;
+            updates.push({ ref: doc.ref, data: updateData });
         }
     }
     await commitUpdatesInChunks(db, updates);

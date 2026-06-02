@@ -49,11 +49,12 @@ export async function getResumoConsolidado() {
     const valorPendente  = (das.valorPendente || 0)  + (darf.valorPendente || 0);
     const valorVencido   = (das.valorVencido || 0)   + (darf.valorVencido || 0);
     const valorPago      = (das.valorPago || 0)      + (darf.valorPago || 0);
+    const valorMultaEstimada = +((das.valorMultaEstimada || 0) + (darf.valorMultaEstimada || 0)).toFixed(2);
 
     return {
         totalGuias: (das.totalDas || 0) + (darf.totalDarfs || 0),
         pendentes, vencidos, pagos,
-        valorPendente, valorVencido, valorPago,
+        valorPendente, valorVencido, valorMultaEstimada, valorPago,
         breakdown: {
             das: {
                 total: das.totalDas || 0,

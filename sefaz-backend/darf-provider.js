@@ -14,61 +14,53 @@
 import { gerarBarrasDarf, gerarLinhaDigitavelArrecadacao } from './febraban-barcode.js';
 import { sugerirCodigoReceita } from './darf-codigos-receita.js';
 import { invokeIntegraContador } from './serpro-client.js';
+import { calcularMultaDarf } from './multa-calculator.js';
 
 // Default 'serpro' (REAL). 'mock' só com DARF_MODE=mock explícito (dev local).
 // Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
 const MODE = process.env.DARF_MODE || 'serpro';
 
-// Multas e juros (cálculo simplificado quando DARF é emitida atrasada)
-//
-// Multa de mora: 0,33% por dia de atraso, limitada a 20% (Lei 9.430/96 art. 61)
-// Juros SELIC: 1% no mês do pagamento + SELIC acumulada do mês seguinte ao
-// vencimento até o mês anterior ao pagamento. Mock usa SELIC anualizada média.
-//
-// Para produção real: importar SELIC mensal via BACEN API ou tabela atualizada.
-const SELIC_MENSAL_APROXIMADA = 0.009; // ~0,9% a.m. (referência abril/2026)
-
+/**
+ * Calcula multa + juros de DARF atrasada. Delega para o calcularMultaDarf
+ * central (Lei 9.430/96 art. 61) pra manter consistencia com o que e
+ * exibido em outros lugares do app (DAS, vencimentos de obrigacoes).
+ *
+ * Antes existia uma implementacao local com SELIC 0,9% (diferente da
+ * usada no multa-calculator que e 1,05%), gerando valores DIVERGENTES
+ * pra mesma DARF dependendo de qual fluxo a calculasse. Unificado aqui.
+ */
 function calcularAcrescimos(valor, vencimento, dataPagamento) {
     const venc = new Date(vencimento);
     const pgto = new Date(dataPagamento);
     if (isNaN(venc) || isNaN(pgto) || pgto <= venc) {
         return { multa: 0, juros: 0, valorTotal: valor };
     }
+    const r = calcularMultaDarf(valor, venc, pgto);
+    if (!r) return { multa: 0, juros: 0, valorTotal: valor };
+    return { multa: r.multaValor, juros: r.jurosValor, valorTotal: r.total };
+}
 
-    // Integer-cent arithmetic to avoid floating-point rounding errors
-    const principalCents = Math.round(valor * 100);
-
-    const diasAtraso = Math.ceil((pgto - venc) / 86400000);
-    // Multa: 0,33% por dia, cap 20%
-    const multaCents = Math.min(
-        Math.round(principalCents * 0.0033 * diasAtraso),
-        Math.round(principalCents * 0.20),
-    );
-
-    // Juros: meses completos entre vencimento e pagamento × SELIC mensal aprox.
-    let mesesAtraso = (pgto.getFullYear() - venc.getFullYear()) * 12
-                    + (pgto.getMonth() - venc.getMonth());
-    if (mesesAtraso < 1) mesesAtraso = 1; // mínimo 1% (mês do pagamento)
-    const jurosCents = Math.round(principalCents * SELIC_MENSAL_APROXIMADA * mesesAtraso);
-
-    const totalCents = principalCents + multaCents + jurosCents;
-
-    return {
-        multa: multaCents / 100,
-        juros: jurosCents / 100,
-        valorTotal: totalCents / 100,
-    };
+/**
+ * Calcula o último dia do mês a partir de ano+mes (mes 1-12).
+ * Trata fevereiro, abril, junho, setembro, novembro (que não tem dia 30/31).
+ */
+function ultimoDiaDoMes(ano, mes) {
+    // new Date(ano, mes, 0) retorna o último dia do mes-1 (porque mes em
+    // Date e 0-indexed e dia=0 volta pra ultimo dia do anterior).
+    // Mes 1-12 input -> use mes diretamente, Date.UTC(ano, mes, 0).
+    return new Date(Date.UTC(ano, mes, 0)).getUTCDate();
 }
 
 function calcularVencimentoDarf(competencia, tributo, periodicidade = 'trimestral') {
     // Vencimentos padrão RFB:
-    //   IRPJ/CSLL Presumido/Real trimestral: último dia útil do mês seguinte ao
-    //                                         encerramento do trimestre
-    //   PIS/COFINS mensal: dia 25 do mês seguinte
-    //   IRPJ/CSLL Real estimativa: último dia útil do mês seguinte
+    //   IRPJ/CSLL Presumido/Real trimestral: ultimo dia util do mes seguinte ao
+    //                                         encerramento do trimestre (Lei 9.430/96 art. 5º)
+    //   PIS/COFINS mensal: dia 25 do mes seguinte (Lei 9.715/98 + 10.833/03)
+    //   IRPJ/CSLL Real estimativa: ultimo dia util do mes seguinte (Lei 9.430/96 art. 5º §1º)
     //
-    // Simplificação: usamos dia 30 (ou último dia do mês) — não aplica
-    // calendário de dias úteis. Frontend pode sobrescrever.
+    // Simplificacao: usamos ultimo DIA DO MES (nao dia util). Frontend pode
+    // sobrescrever via req.vencimento. Bug anterior: fixo em '30' gerava
+    // data invalida pra fevereiro (ex: '2026-02-30').
     const m = String(competencia).match(/^(\d{4})-(\d{2})$/);
     if (!m) return new Date().toISOString().slice(0, 10);
     let ano = parseInt(m[1]), mes = parseInt(m[2]);
@@ -82,17 +74,19 @@ function calcularVencimentoDarf(competencia, tributo, periodicidade = 'trimestra
         const mesFimTrim = trimestre * 3;                       // 3, 6, 9, 12
         mes = mesFimTrim + 1;
         if (mes > 12) { mes = 1; ano += 1; }
-        return `${ano}-${String(mes).padStart(2, '0')}-30`;
+        const dia = ultimoDiaDoMes(ano, mes);
+        return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
     }
     if (t === 'PIS' || t === 'COFINS') {
         mes += 1;
         if (mes > 12) { mes = 1; ano += 1; }
         return `${ano}-${String(mes).padStart(2, '0')}-25`;
     }
-    // Default (IRPJ/CSLL Real estimativa mensal, IRRF etc)
+    // Default (IRPJ/CSLL Real estimativa mensal, IRRF etc): ultimo dia do mes seguinte
     mes += 1;
     if (mes > 12) { mes = 1; ano += 1; }
-    return `${ano}-${String(mes).padStart(2, '0')}-30`;
+    const dia = ultimoDiaDoMes(ano, mes);
+    return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
 }
 
 function resolverCodigoReceita(req) {

@@ -76,7 +76,7 @@ const TaxEmissionDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
         return [
             { label: 'Total Guias', valor: resumo.totalGuias, cor: 'bg-slate-100 dark:bg-slate-700', clave: '' as const },
             { label: 'Pendentes',   valor: resumo.pendentes,  valorBRL: resumo.valorPendente, cor: 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300',          clave: 'pendente' as DarfStatusPagamento },
-            { label: 'Vencidos',    valor: resumo.vencidos,   valorBRL: resumo.valorVencido,  cor: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',          clave: 'vencido'  as DarfStatusPagamento },
+            { label: 'Vencidos',    valor: resumo.vencidos,   valorBRL: resumo.valorVencido,  valorExtra: (resumo.valorMultaEstimada && resumo.valorMultaEstimada > 0) ? `+ ${formatBRL(resumo.valorMultaEstimada)} mora` : undefined,  cor: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',          clave: 'vencido'  as DarfStatusPagamento },
             { label: 'Pagas',       valor: resumo.pagos,      valorBRL: resumo.valorPago,     cor: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300', clave: 'pago'     as DarfStatusPagamento },
         ];
     }, [resumo]);
@@ -134,6 +134,11 @@ const TaxEmissionDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                             <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">{c.label}</div>
                             {c.valorBRL !== undefined && (
                                 <div className="text-xs text-slate-500 mt-0.5">{formatBRL(c.valorBRL)}</div>
+                            )}
+                            {(c as any).valorExtra && (
+                                <div className="text-[10px] text-red-600 dark:text-red-400 mt-0.5" title="Multa de mora + juros SELIC estimados — confirme no SERPRO antes de pagar.">
+                                    {(c as any).valorExtra}
+                                </div>
                             )}
                         </button>
                     ))}
@@ -241,7 +246,17 @@ const TaxEmissionDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                                         <td className="px-4 py-2 text-xs text-slate-500">{d.regime}</td>
                                         <td className="px-4 py-2 font-mono text-xs">{d.competencia}</td>
                                         <td className="px-4 py-2 font-mono text-xs">{d.codigoReceita}</td>
-                                        <td className="px-4 py-2 text-right font-mono">{formatBRL(d.valor)}</td>
+                                        <td className="px-4 py-2 text-right font-mono">
+                                            {formatBRL(d.valor)}
+                                            {d.statusPagamento === 'vencido' && d.multaEstimada && (
+                                                <div
+                                                    className="text-[10px] text-red-600 dark:text-red-400 mt-0.5"
+                                                    title={`Multa ${d.multaEstimada.multaPct.toFixed(2)}% + juros SELIC ${d.multaEstimada.jurosPct.toFixed(2)}% (${d.multaEstimada.dias} dias). Estimativa — confirme no SERPRO antes de pagar.`}
+                                                >
+                                                    +{formatBRL(d.multaEstimada.multaValor + d.multaEstimada.jurosValor)} mora ⓘ
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-2 font-mono text-xs">{d.vencimento}</td>
                                         <td className="px-4 py-2">
                                             <span className={`px-2 py-0.5 rounded text-xs ${statusBadgeClass(d.statusPagamento)}`}>

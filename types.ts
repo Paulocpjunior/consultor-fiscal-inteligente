@@ -1545,6 +1545,22 @@ export interface DarfEmitido {
     dataPagamento?: string | null;
     fonte?: string;
     mensagem?: string;
+    /**
+     * Estimativa de atualização monetária quando a DARF está vencida. Calculada
+     * pelo cron noturno (processarVencimentos) com base em Lei 9.430/96 art. 61:
+     * multa de mora 0,33%/dia (máx 20%) + juros SELIC mensal + 1% no mês do
+     * pagamento. SELIC é estimativa conservadora — valor REAL deve ser
+     * confirmado no DARF gerado pelo SERPRO antes do pagamento.
+     */
+    multaEstimada?: {
+        dias: number;
+        multaPct: number;
+        multaValor: number;
+        jurosPct: number;
+        jurosValor: number;
+        total: number;
+        calculadoEm: string;
+    };
 }
 
 export interface DarfResumo {
@@ -1554,6 +1570,10 @@ export interface DarfResumo {
     pagos: number;
     valorPendente: number;
     valorVencido: number;
+    /** Somatório de principal + multa + juros estimados (DARFs vencidos). */
+    valorVencidoAtualizado?: number;
+    /** Somatório só da parcela de multa+juros adicionais (informativo). */
+    valorMultaEstimada?: number;
     valorPago: number;
     porTributo: Record<string, { qtd: number; valor: number }>;
     mode: 'mock' | 'serpro';
@@ -1596,6 +1616,8 @@ export interface EmissaoResumoConsolidado {
     pagos: number;
     valorPendente: number;
     valorVencido: number;
+    /** Soma de multa+juros estimados (DAS + DARF) sobre o total vencido. */
+    valorMultaEstimada?: number;
     valorPago: number;
     breakdown: {
         das: {
