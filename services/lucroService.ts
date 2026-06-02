@@ -114,21 +114,14 @@ const calcularProporcaoMajoradaLc224 = (
     // Para o IRPJ: 1.250.000 × N (onde N = trimestre atual).
     // Para a CSLL em 2026: o limite anual reduzido (3,75 mi) é distribuído nos 3 trimestres
     //   em que a majoração vigora (2T, 3T, 4T) → mantém-se o sublimite de 1,25 mi/trimestre.
+    //
+    // NOTA: a LC 224/25 majora a PRESUNÇÃO do Lucro Presumido. Lucro Presumido
+    // e trimestral por lei (Lei 9.430/96 art. 1º). Lucro Real nao usa presuncao
+    // (logo nao chama esta funcao). Portanto periodoApuracao aqui e sempre
+    // 'Trimestral' na pratica. O parametro fica preservado pra compat futura
+    // (caso a Receita venha a regulamentar apuracao mensal).
     const sublimiteAcumuladoAteAgora = SUBLIMITE_TRIMESTRAL_LC224 * trimestre;
-    let sublimiteDisponivelPeriodo = sublimiteAcumuladoAteAgora - receitaAnoAcumuladaAnterior;
-
-    // Para apuração mensal, o sublimite do período é proporcional (1/3 do trimestre).
-    // Mantém-se o sublimite acumulado mas o "período" é menor.
-    if (periodoApuracao === 'Mensal') {
-        // Acumulado total do ano (anterior + período atual)
-        const acumuladoAteAgora = receitaAnoAcumuladaAnterior + receitaPeriodoAtual;
-        // Sublimite acumulado considerando que é um mês dentro do trimestre
-        // Uso aproximação: sublimite mensal = trimestral / 3
-        const sublimiteMensalAcumulado = SUBLIMITE_TRIMESTRAL_LC224 / 3 *
-            (trimestre - 1) * 3 + // meses dos trimestres anteriores
-            (SUBLIMITE_TRIMESTRAL_LC224); // sublimite cheio do trimestre atual
-        sublimiteDisponivelPeriodo = sublimiteMensalAcumulado - receitaAnoAcumuladaAnterior;
-    }
+    const sublimiteDisponivelPeriodo = sublimiteAcumuladoAteAgora - receitaAnoAcumuladaAnterior;
 
     if (receitaPeriodoAtual <= sublimiteDisponivelPeriodo) return 0;
     if (sublimiteDisponivelPeriodo < 0) return 1; // já estourou todo o sublimite acumulado

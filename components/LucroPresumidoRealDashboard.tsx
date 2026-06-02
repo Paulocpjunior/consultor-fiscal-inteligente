@@ -358,9 +358,22 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         }
     }, [view, selectedFichaId, selectedEmpresa]);
 
+    // Defesa em profundidade: se a empresa selecionada e Lucro Presumido e
+    // o state esta em 'Mensal' (vindo de ficha antiga salva ou default), forca
+    // Trimestral. Lucro Presumido nao admite apuracao mensal (Lei 9.430/96 art. 1º).
+    useEffect(() => {
+        if (selectedEmpresa?.regimePadrao === 'Presumido' && periodoApuracao === 'Mensal') {
+            setPeriodoApuracao('Trimestral');
+        }
+    }, [selectedEmpresa, periodoApuracao]);
+
     const resetForm = () => {
         setFichaMes(new Date().toISOString().substring(0, 7));
-        setPeriodoApuracao('Mensal');
+        // Lucro Presumido e trimestral por lei (Lei 9.430/96 art. 1º). Default
+        // pra Trimestral quando o regime da empresa for Presumido — evita
+        // que o contador gere calculo num cenario impossivel legalmente.
+        // Lucro Real pode ser mensal (estimativa) ou trimestral.
+        setPeriodoApuracao(selectedEmpresa?.regimePadrao === 'Real' ? 'Mensal' : 'Trimestral');
         setFichaComercio(0); setFichaIndustria(0); setFichaServico(0); setFichaServicoRetido(0); setFichaLocacao(0); setFichaServicoHospitalar(0);
         setFichaFilialComercio(0); setFichaFilialIndustria(0); setFichaFilialServico(0); setFichaFilialServicoHospitalar(0);
         setFichaIpi(0); setFichaDevolucoes(0); setFichaCmv(0); setFichaFolha(0); setFichaDespesas(0); setFichaDespesasDedutiveis(0); setFichaIcmsVendas(0);
@@ -910,17 +923,23 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                     <input type="month" value={fichaMes} onChange={e => setFichaMes(e.target.value)} className="w-full p-2 rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white" />
                                 </div>
                                 <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex items-center h-[42px]">
-                                    <button 
-                                        onClick={() => setPeriodoApuracao('Mensal')}
-                                        className={`px-3 h-full text-xs font-bold rounded transition-all ${periodoApuracao === 'Mensal' ? 'bg-white dark:bg-slate-600 text-sky-700 dark:text-sky-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
-                                    >
-                                        Estimativa Mensal
-                                    </button>
-                                    <button 
+                                    {/* "Estimativa Mensal" so faz sentido pra Lucro Real
+                                        (pagamento por estimativa, encerramento anual). Lucro
+                                        Presumido e trimestral por lei (Lei 9.430/96 art. 1º) —
+                                        o botao fica oculto pra impedir cenario ilegal. */}
+                                    {selectedEmpresa?.regimePadrao !== 'Presumido' && (
+                                        <button
+                                            onClick={() => setPeriodoApuracao('Mensal')}
+                                            className={`px-3 h-full text-xs font-bold rounded transition-all ${periodoApuracao === 'Mensal' ? 'bg-white dark:bg-slate-600 text-sky-700 dark:text-sky-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+                                        >
+                                            Estimativa Mensal
+                                        </button>
+                                    )}
+                                    <button
                                         onClick={() => setPeriodoApuracao('Trimestral')}
                                         className={`px-3 h-full text-xs font-bold rounded transition-all ${periodoApuracao === 'Trimestral' ? 'bg-white dark:bg-slate-600 text-sky-700 dark:text-sky-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
                                     >
-                                        Encerramento Trimestral
+                                        {selectedEmpresa?.regimePadrao === 'Presumido' ? 'Trimestral (obrigatorio)' : 'Encerramento Trimestral'}
                                     </button>
                                 </div>
                             </div>
@@ -1132,6 +1151,16 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                             
                             {liveResults ? (
                                 <div className="p-6 space-y-6">
+                                    {liveResults.alertaLc224 && (
+                                        <div className="p-3 bg-amber-100 dark:bg-amber-900/40 border-l-4 border-amber-500 rounded-r">
+                                            <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                                                Reforma Tributária 2025 (LC 224/25) aplicada
+                                            </p>
+                                            <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1">
+                                                A presunção foi majorada em 10% sobre a parcela da receita anual acima de R$ 5 milhões (R$ 3,75 mi para CSLL em 2026, por anterioridade nonagesimal). Veja o detalhe na observação de cada imposto (IRPJ/CSLL). Base legal: IN RFB 2.305/2025 art. 15.
+                                            </p>
+                                        </div>
+                                    )}
                                     {liveResults.detalhamento.map((item, idx) => (
                                         <div key={idx} className="border-b border-slate-700/50 pb-4 last:border-0 last:pb-0">
                                             <div className="flex justify-between items-start mb-1">
