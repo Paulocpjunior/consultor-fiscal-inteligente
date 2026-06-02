@@ -5,6 +5,7 @@
 
 import admin from 'firebase-admin';
 import { manifestarNFe, TIPOS_MANIFESTACAO } from './manifesto-client.js';
+import { fetchAllDocs } from './firestore-paginate.js';
 
 const TIPOS_QUE_BLOQUEIAM_NOVA_MANIFESTACAO = new Set([
   'manifestacao_ciencia',
@@ -14,6 +15,23 @@ const TIPOS_QUE_BLOQUEIAM_NOVA_MANIFESTACAO = new Set([
 ]);
 
 const STATUS_QUE_BLOQUEIAM = new Set(['cancelado', 'denegado', 'inutilizado']);
+
+// Prazo SEFAZ (Ajuste SINIEF 9/2007 Cláusula 21 + Manual ENT 6.0):
+//   Ciência/Confirmação:        ate 180 dias da emissao (cienca automatica apos)
+//   Desconhecimento:            ate 10 dias da ciencia (automatica ou manual)
+//   Operacao Nao Realizada:     ate 10 dias da ciencia
+//
+// Como o app nem sempre tem registro da ciencia automatica, usamos a
+// emissao como referencia. Como buffer conservador: 180 dias pra
+// Ciencia/Confirmacao (regra geral) e 30 dias pra Desconhecimento/Nao
+// Realizada (com aviso pro contador conferir manualmente o prazo).
+const IDADE_MAX_DIAS_POR_TIPO = {
+  ciencia: 180,
+  confirmacao: 180,
+  desconhecimento: 30,
+  nao_realizada: 30,
+};
+const IDADE_MAX_PADRAO = 180;
 
 function fa() {
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -25,32 +43,34 @@ function temManifestacao(doc) {
   return eventos.some(e => TIPOS_QUE_BLOQUEIAM_NOVA_MANIFESTACAO.has(e.tipo));
 }
 
-function ehElegivel(doc) {
+function ehElegivel(doc, tipoPretendido = 'ciencia') {
   if (doc.direcao !== 'entrada') return { ok: false, motivo: 'Não é entrada' };
   if (STATUS_QUE_BLOQUEIAM.has(doc.status)) return { ok: false, motivo: `status=${doc.status}` };
   if (temManifestacao(doc)) return { ok: false, motivo: 'Já manifestada' };
   if (doc.dhEmi) {
     const idadeDias = (Date.now() - new Date(doc.dhEmi).getTime()) / (1000 * 3600 * 24);
-    if (idadeDias > 90) return { ok: false, motivo: `Emitida há ${Math.round(idadeDias)} dias (>90)` };
+    const idadeMax = IDADE_MAX_DIAS_POR_TIPO[tipoPretendido] ?? IDADE_MAX_PADRAO;
+    if (idadeDias > idadeMax) return { ok: false, motivo: `Emitida há ${Math.round(idadeDias)} dias (>${idadeMax} pra '${tipoPretendido}')` };
     if (idadeDias < 0) return { ok: false, motivo: 'dhEmi futuro?' };
   }
   if (!doc.empresaCnpj && !doc.cnpjDest) return { ok: false, motivo: 'Sem CNPJ destinatário' };
   return { ok: true };
 }
 
-export async function listarElegiveis({ empresaId = null, limit = 50 } = {}) {
+export async function listarElegiveis({ empresaId = null, limit = 50, tipo = 'ciencia' } = {}) {
   const db = fa().firestore();
-  let query = db.collection('documentos_fiscais')
+  let baseQuery = db.collection('documentos_fiscais')
     .where('direcao', '==', 'entrada')
-    .where('tipoDoc', '==', 'NFe')
-    .limit(500);
-  if (empresaId) query = query.where('empresaId', '==', empresaId);
+    .where('tipoDoc', '==', 'NFe');
+  if (empresaId) baseQuery = baseQuery.where('empresaId', '==', empresaId);
 
-  const snap = await query.get();
+  // Pagina sem limite arbitrario; corta pela quantidade de elegiveis,
+  // nao pela query bruta (antes truncava em 500 e podia faltar candidatos).
+  const snapDocs = await fetchAllDocs(baseQuery, { label: 'documentos_fiscais/manifest-elegiveis' });
   const elegiveis = [];
-  for (const d of snap.docs) {
+  for (const d of snapDocs) {
     const doc = { id: d.id, ...d.data() };
-    const check = ehElegivel(doc);
+    const check = ehElegivel(doc, tipo);
     if (check.ok) {
       elegiveis.push(doc);
       if (elegiveis.length >= limit) break;
@@ -62,6 +82,19 @@ export async function listarElegiveis({ empresaId = null, limit = 50 } = {}) {
 export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa = null, dryRun = false, capturadoPor = null }) {
   if (!TIPOS_MANIFESTACAO.includes(tipo)) {
     throw new Error(`Tipo inválido: ${tipo}. Use: ${TIPOS_MANIFESTACAO.join(', ')}`);
+  }
+
+  // Validacao fiscal — operacao IRREVERSIVEL na SEFAZ.
+  // Manual ENT 6.0: operacao_nao_realizada exige justificativa 15-255 chars.
+  // Desconhecimento aceita justificativa opcional. Ciencia/Confirmacao nao usam.
+  if (tipo === 'operacao_nao_realizada' || tipo === 'nao_realizada') {
+    const just = String(xJustificativa || '').trim();
+    if (just.length < 15) {
+      throw new Error(`Manifestacao 'operacao_nao_realizada' EXIGE xJustificativa com 15-255 caracteres (Manual SEFAZ ENT 6.0). Recebido: ${just.length} chars.`);
+    }
+    if (just.length > 255) {
+      throw new Error(`xJustificativa deve ter no maximo 255 caracteres (Manual SEFAZ ENT 6.0). Recebido: ${just.length} chars.`);
+    }
   }
 
   const result = await manifestarNFe({ chNFe, cnpjDestinatario, tipo, xJustificativa, dryRun });
@@ -112,7 +145,7 @@ export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia',
 }
 
 export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun = false, tipo = 'ciencia', capturadoPor = null } = {}) {
-  const elegiveis = await listarElegiveis({ empresaId, limit });
+  const elegiveis = await listarElegiveis({ empresaId, limit, tipo });
   const resultado = { total: elegiveis.length, sucessos: 0, falhas: 0, detalhes: [] };
 
   for (const doc of elegiveis) {
