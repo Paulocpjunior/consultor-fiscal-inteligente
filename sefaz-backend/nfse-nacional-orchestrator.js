@@ -5,6 +5,7 @@
 
 import admin from 'firebase-admin';
 import { getNfseNacionalProvider, getNfseNacionalMode } from './nfse-nacional-provider.js';
+import { fetchAllDocs } from './firestore-paginate.js';
 
 const COLLECTION = 'nfse_nacional_emitidas';
 
@@ -51,8 +52,8 @@ export async function listarNfse({ empresaId, status, dataInicio, dataFim } = {}
     if (empresaId) q = q.where('empresaId', '==', empresaId);
     if (status) q = q.where('status', '==', status);
 
-    const snap = await q.limit(500).get();
-    let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const snaps = await fetchAllDocs(q, { label: 'nfse_nacional_emitidas/list' });
+    let docs = snaps.map(d => ({ id: d.id, ...d.data() }));
     if (dataInicio) docs = docs.filter(d => (d.emitidaEm || '') >= dataInicio);
     if (dataFim) docs = docs.filter(d => (d.emitidaEm || '') <= dataFim);
     docs.sort((a, b) => (b.emitidaEm || '').localeCompare(a.emitidaEm || ''));
@@ -61,8 +62,7 @@ export async function listarNfse({ empresaId, status, dataInicio, dataFim } = {}
 
 export async function getResumoNfse() {
     const db = fa().firestore();
-    const snap = await db.collection(COLLECTION).limit(1000).get();
-    const docs = snap.docs.map(d => d.data());
+    const docs = (await fetchAllDocs(db.collection(COLLECTION), { label: 'nfse_nacional_emitidas/resumo' })).map(d => d.data());
     let autorizadas = 0, canceladas = 0;
     let valorBrutoTotal = 0, valorIssTotal = 0;
     for (const d of docs) {

@@ -65,6 +65,17 @@ class MockProvider {
         if (!servico?.descricao) throw new Error('Descricao do servico obrigatoria');
         if (!tomador?.nome) throw new Error('Tomador.nome obrigatorio');
 
+        // Validacao fiscal — LC 116/2003 art. 8º II: aliquota maxima ISS = 5%.
+        // EC 37/2002 art. 88: aliquota minima ISS = 2% (exceto servicos com
+        // beneficio formal do municipio listados no art. 88 §1º).
+        const aliq = servico.aliquotaIss ?? 5;
+        if (aliq > 5) {
+            throw new Error(`Aliquota ISS ${aliq}% excede maximo legal de 5% (LC 116/2003 art. 8º II).`);
+        }
+        if (aliq < 0) {
+            throw new Error('Aliquota ISS nao pode ser negativa.');
+        }
+
         const ano = new Date().getFullYear().toString().slice(-2);
         const seq = req.sequencial || Math.floor(Math.random() * 999999);
         const numero = `2026${String(seq).padStart(8, '0')}`;
@@ -132,9 +143,11 @@ class MockProvider {
 class SerproProvider {
     constructor() {
         throw new Error(
-            'SerproProvider NFSe Nacional ainda nao implementado. ' +
-            'Pre-requisitos: certificado e-CNPJ A1 SP Contabil + cadastro no Emissor Nacional NFSe ' +
-            '(gratuito, gov.br/nfse). Quando ativar: NFSE_NAC_MODE=serpro.'
+            'NFSe Nacional em modo SERPRO ainda nao implementado. ' +
+            'Pra emitir: defina NFSE_NAC_MODE=mock pra usar o gerador local (dados ficticios), ' +
+            'OU complete a integracao com Emissor Nacional NFSe (gov.br/nfse, gratuito) — ' +
+            'pre-requisitos: certificado e-CNPJ A1 da SP Contabil + cadastro no portal gov.br/nfse + ' +
+            'procuracao eletronica e-CAC ativa pra cada empresa cliente.'
         );
     }
     async emitirNfse() { throw new Error('SerproProvider.emitirNfse nao implementado'); }
