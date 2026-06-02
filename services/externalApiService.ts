@@ -1,5 +1,6 @@
 
 import { CnpjData } from '../types';
+import { auth } from './firebaseConfig';
 
 const parseBrasilAPIResponse = (data: any): CnpjData => ({
     razaoSocial: data.razao_social,
@@ -83,7 +84,43 @@ export const fetchCnpjFromBrasilAPI = async (cnpj: string): Promise<CnpjData> =>
         throw new Error('CNPJ deve conter 14 dígitos.');
     }
 
-    // Tenta BrasilAPI primeiro, depois ReceitaWS como fallback
+    // PROXY BACKEND: server.js:425 expoe /api/admin/cnpj-lookup/:cnpj que
+    // tenta 3 APIs em sequencia (BrasilAPI -> ReceitaWS -> CNPJ.ws) com
+    // header User-Agent proprio + timeout. Resolve:
+    //   - CORS (alguns provedores bloqueiam navegador)
+    //   - Rate-limit por IP do user
+    //   - CSP do navegador
+    //   - Falha de uma API sem fallback no client
+    // Existia desde sempre mas frontend nunca foi adaptado. Bug em prod:
+    // modal 'Nova Empresa' falhava com 'Erro de conexao' inutil.
+    try {
+        const u = auth?.currentUser;
+        if (u) {
+            const token = await u.getIdToken();
+            const resp = await fetch(`/api/admin/cnpj-lookup/${cleanCnpj}`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                return parseBrasilAPIResponse(data);
+            }
+            // 404 do backend = CNPJ nao encontrado em nenhuma das 3 APIs (definitivo)
+            if (resp.status === 400 || resp.status === 404) {
+                const errJson = await resp.json().catch(() => ({}));
+                throw new Error(errJson.error || 'CNPJ não encontrado na base de dados da Receita Federal.');
+            }
+            // 502 do backend = todas as APIs externas falharam -> mensagem clara
+            // Outros status -> tenta fallback direto pra dar mais uma chance
+            console.warn(`[externalApi] backend cnpj-lookup retornou ${resp.status}, tentando fallback direto`);
+        }
+    } catch (err: any) {
+        // Erros "nao encontrado" sao definitivos — propaga
+        if (err.message?.includes('não encontrado')) throw err;
+        console.warn('[externalApi] backend proxy falhou, tentando direto:', err.message);
+    }
+
+    // FALLBACK: tenta direto do navegador (caso o user nao esteja logado,
+    // ou caso o backend esteja inacessivel). Mesma logica anterior.
     const apis = [
         { name: 'BrasilAPI', fn: () => fetchFromBrasilAPI(cleanCnpj) },
         { name: 'CNPJ.ws', fn: () => fetchFromCnpjWs(cleanCnpj) },
