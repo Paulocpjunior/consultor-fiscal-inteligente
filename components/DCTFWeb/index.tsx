@@ -253,35 +253,6 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 </button>
             </div>
 
-            {/* Sincronizar DCTFWeb de uma empresa cadastrada (usa Ano/Mes dos filtros) */}
-            <div className="bg-white border rounded-lg p-4 flex flex-wrap gap-3 items-end">
-                <div className="flex-1 min-w-[260px]">
-                    <label className="block text-xs text-slate-500 mb-1">
-                        Sincronizar DCTFWeb de uma empresa
-                    </label>
-                    <select
-                        value={empresaNovaSyncId}
-                        onChange={e => setEmpresaNovaSyncId(e.target.value)}
-                        className="w-full border rounded px-2 py-1 text-sm"
-                    >
-                        <option value="">Selecione a empresa...</option>
-                        {empresas.map(emp => (
-                            <option key={emp.id} value={emp.id}>{emp.nome}</option>
-                        ))}
-                    </select>
-                </div>
-                <button
-                    onClick={handleSincronizarNova}
-                    disabled={!empresaNovaSyncId || !!syncingEmpresa}
-                    className="px-4 py-1.5 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700 disabled:opacity-50"
-                >
-                    {syncingEmpresa ? 'Sincronizando...' : 'Sincronizar DCTFWeb'}
-                </button>
-                <p className="text-xs text-slate-400 w-full">
-                    Usa o Ano e o Mes selecionados nos filtros acima.
-                </p>
-            </div>
-
             {error && (
                 <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded p-3 text-sm">
                     {error}
@@ -364,6 +335,41 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </tbody>
                 </table>
             </div>
+
+            {/* Sincronizar DCTFWeb de uma empresa nova (acao esporadica — fica ao fim,
+                fora do fluxo principal de visualizar/transmitir declaracoes). */}
+            <details className="bg-white border rounded-lg">
+                <summary className="px-4 py-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-50">
+                    + Sincronizar DCTFWeb de uma empresa especifica
+                </summary>
+                <div className="p-4 flex flex-wrap gap-3 items-end border-t">
+                    <div className="flex-1 min-w-[260px]">
+                        <label className="block text-xs text-slate-500 mb-1">
+                            Empresa
+                        </label>
+                        <select
+                            value={empresaNovaSyncId}
+                            onChange={e => setEmpresaNovaSyncId(e.target.value)}
+                            className="w-full border rounded px-2 py-1 text-sm"
+                        >
+                            <option value="">Selecione a empresa...</option>
+                            {empresas.map(emp => (
+                                <option key={emp.id} value={emp.id}>{emp.nome}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <button
+                        onClick={handleSincronizarNova}
+                        disabled={!empresaNovaSyncId || !!syncingEmpresa}
+                        className="px-4 py-1.5 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                        {syncingEmpresa ? 'Sincronizando...' : 'Sincronizar DCTFWeb'}
+                    </button>
+                    <p className="text-xs text-slate-400 w-full">
+                        Usa o Ano e o Mes selecionados nos filtros acima.
+                    </p>
+                </div>
+            </details>
 
             {/* Modais */}
             {detalheAberto && (

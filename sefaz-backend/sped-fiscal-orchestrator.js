@@ -1,9 +1,10 @@
 // ============================================================================
 // sefaz-backend/sped-fiscal-orchestrator.js
 //
-// Coleta dados do Firestore + monta os blocos do SPED Fiscal.
-//
-// Fase 1 implementada: Bloco 0 + Bloco 9.
+// Coleta dados do Firestore + monta os blocos do SPED Fiscal EFD ICMS/IPI.
+// Blocos implementados: 0 (abertura), B (ISS/RJ — placeholder), C (NFe entrada/saida),
+// D (CTe/conhec. transporte), E (apuracao ICMS/IPI), G (CIAP), H (inventario),
+// K (producao), 1 (outras informacoes), 9 (encerramento/totais).
 // ============================================================================
 
 import admin from 'firebase-admin';

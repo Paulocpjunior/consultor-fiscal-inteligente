@@ -121,7 +121,10 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
           erro: e.message,
           fonte: req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno',
         });
-      } catch (_) {}
+      } catch (errLog) {
+        // Duplo silenciamento aqui apaga rastro do erro fatal — logamos.
+        console.error('[sync-cron] FALHA registrando erro fatal em sefaz_cron_logs:', errLog.message);
+      }
     }
   });
 });

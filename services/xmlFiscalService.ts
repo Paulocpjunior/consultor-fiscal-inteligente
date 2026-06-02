@@ -659,6 +659,7 @@ export interface DashboardSummary {
     porCompetencia: Record<string, { entradas: number; saidas: number; valorEntradas: number; valorSaidas: number }>;
     porEmpresa: Record<string, { nome: string; total: number; valorTotal: number }>;
     porStatus: Record<string, number>;
+    porTipoDoc: Record<string, { quantidade: number; valor: number }>;
     cfops: Record<string, { quantidade: number; valor: number }>;
     ncms: Record<string, { quantidade: number; valor: number }>;
     duplicados: number;
@@ -675,6 +676,7 @@ export function summarize(docs: DocumentoFiscal[]): DashboardSummary {
         porCompetencia: {},
         porEmpresa: {},
         porStatus: {},
+        porTipoDoc: {},
         cfops: {},
         ncms: {},
         duplicados: 0,
@@ -682,7 +684,12 @@ export function summarize(docs: DocumentoFiscal[]): DashboardSummary {
 
     const seenChaves = new Set<string>();
     for (const d of docs) {
-        const valor = d.totais?.vNF || 0;
+        // valorTotal normalizado pelo importer (vNF | vTPrest | vRec). Fallback p/ docs antigos.
+        const valor = d.valorTotal ?? d.totais?.vNF ?? d.valores?.liquido ?? 0;
+        const tipoKey = d.tipoDoc || d.tipo || 'desconhecido';
+        const t = out.porTipoDoc[tipoKey] ||= { quantidade: 0, valor: 0 };
+        t.quantidade++;
+        t.valor += valor;
         out.valorTotal += valor;
         if (d.direcao === 'entrada') { out.entradas++; out.valorEntradas += valor; }
         else if (d.direcao === 'saida') { out.saidas++; out.valorSaidas += valor; }

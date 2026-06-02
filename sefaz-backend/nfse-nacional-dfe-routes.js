@@ -262,7 +262,8 @@ router.post('/toggle/:cnpj', requireAuth, express.json(), async (req, res) => {
         if (typeof ativo !== 'boolean') return res.status(400).json({ error: 'campo "ativo" boolean obrigatório' });
 
         const db = fa().firestore();
-        // Atualiza nas duas coleções (a empresa só está numa delas, então uma vai falhar silently)
+        // Empresa esta em apenas uma das duas colecoes (simples OU lucro).
+        // Erro de query/update vira warn — fluxo continua tentando a outra colecao.
         for (const col of ['simples_empresas', 'lucro_empresas']) {
             try {
                 const snap = await db.collection(col).where('cnpj', '==', cnpj).limit(1).get();
@@ -274,7 +275,9 @@ router.post('/toggle/:cnpj', requireAuth, express.json(), async (req, res) => {
                     });
                     return res.json({ ok: true, cnpj, ativo, coleção: col });
                 }
-            } catch {}
+            } catch (e) {
+                console.warn(`[nfse-nacional-dfe] falha atualizando ${col}/${cnpj}:`, e.message);
+            }
         }
         return res.status(404).json({ error: `Empresa CNPJ ${cnpj} não encontrada` });
     } catch (e) {

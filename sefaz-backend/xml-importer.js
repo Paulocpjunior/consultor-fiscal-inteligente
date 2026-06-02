@@ -313,7 +313,7 @@ function sha256(text) {
   return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
-async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath, xmlHash, schema, nsu, capturadoPor }) {
+async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath, xmlHash, schema, nsu, capturadoPor, tipoDocNormalizado }) {
   // Persiste evento como subdoc/array dentro da NFe original.
   // Se a NFe original não existir ainda, cria um "stub" com status pendente.
   const docRef = db.collection('documentos_fiscais').doc(chaveNFe);
@@ -371,15 +371,17 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
     await docRef.update(updates);
     return { status: 'evento_anexado', chave: chaveNFe, tipo: evento.tipo };
   } else {
-    // Stub: cria um doc parcial pra quando a NFe chegar, ela faz merge.
+    // Stub: cria um doc parcial pra quando o documento-pai chegar, ela faz merge.
     // 23/05 — adicionado defaults pra campos undefined (numero, serie, etc)
+    // 02/06 — tipoDoc/tipo derivam do evento real (NFe/CTe/MDFe), nao hardcoded.
+    const tipoFinal = tipoDocNormalizado || 'NFe';
     await docRef.set({
       id: chaveNFe,
       chave: chaveNFe,
       empresaId,
       empresaCnpj: capturadoPor?.empresaCnpj?.replace(/\D/g, '') || null,
-      tipoDoc: 'NFe',
-      tipo: 'NFe',
+      tipoDoc: tipoFinal,
+      tipo: tipoFinal,
       status: evento.tipo === 'cancelamento' && evento.cStat === '135' ? 'cancelado' : 'pendente',
       direcao: 'desconhecida', // sera atualizado quando NFe original chegar
       numero: null,
@@ -446,6 +448,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
       schema,
       nsu,
       capturadoPor: { ...capturadoPor, empresaCnpj },
+      tipoDocNormalizado: meta.tipoNormalizado,
     });
 
     // Auditoria

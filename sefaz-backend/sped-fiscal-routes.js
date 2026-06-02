@@ -116,7 +116,9 @@ router.get('/validar', requireAdmin, express.json({ limit: '10mb' }), (req, res)
 });
 
 router.get('/historico', requireAdmin, async (_req, res) => {
-    return res.json({ entries: [], message: 'Historico sera implementado na Fase 4.' });
+    // Endpoint reservado pra historico de geracoes SPED Fiscal.
+    // Hoje retorna vazio — geracoes ainda nao sao persistidas (sao on-demand).
+    return res.json({ entries: [] });
 });
 
 function tratarErro(e, res) {
@@ -129,12 +131,6 @@ function tratarErro(e, res) {
     if (e.code === 'EMPRESA_NAO_ENCONTRADA') {
         return res.status(404).json({
             error: 'EMPRESA_NAO_ENCONTRADA',
-            message: e.message,
-        });
-    }
-    if (e.code === 'FASE1_PENDENTE') {
-        return res.status(501).json({
-            error: 'Fase 1 em desenvolvimento',
             message: e.message,
         });
     }

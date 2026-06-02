@@ -47,10 +47,12 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
             if (empresaId && d.empresaId !== empresaId) return false;
             if (competencia && d.competencia !== competencia) return false;
             if (direcao && d.direcao !== direcao) return false;
-            // IOB/SAGE Folhamatic Fiscal so aceita NFe (modelo 55/65). NFSe seguem fluxo
-            // proprio na contabilidade municipal e nao entram neste arquivo .FML.
-            // Decisao tomada com o contador em 2026-05-07 (ver historico fix simples_notas).
-            if ((d as any).tipo === 'NFSe') return false;
+            // IOB/SAGE Folhamatic Fiscal so aceita NFe/NFCe (modelo 55/65). CTe (57),
+            // MDFe (58) e NFSe seguem fluxo proprio e nao entram neste arquivo .FML.
+            // Whitelist explicita pra evitar registros corrompidos no .FML quando o
+            // doc nao tem estrutura de NFe (vTPrest ao inves de vNF, sem itens, etc).
+            const tipo = (d as any).tipoDoc || (d as any).tipo;
+            if (tipo && !['NFe', 'NFCe'].includes(tipo)) return false;
             // Por padrão, não exporta canceladas/denegadas/inutilizadas (situação 2/4/5).
             // O contador pode incluir manualmente removendo o filtro de status no futuro.
             return true;

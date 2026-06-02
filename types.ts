@@ -1298,6 +1298,10 @@ export interface DocumentoFiscal {
     totais?: DocumentoFiscalTotais;
     /** Valores NFSe (liquido, pis, cofins, iss). */
     valores?: { liquido?: number; pis?: number; cofins?: number; iss?: number; baseCalculo?: number; deducoes?: number };
+    /** Valor total normalizado: vNF (NFe), vTPrest (CTe), vRec (NFSe). Gravado pelo importer. */
+    valorTotal?: number;
+    /** Tipo do documento (normalizado para o frontend). Espelha `tipo` mas vem do schema do XML. */
+    tipoDoc?: XmlTipoDocumento;
     itens: DocumentoFiscalItem[];
     infAdic?: string;
 

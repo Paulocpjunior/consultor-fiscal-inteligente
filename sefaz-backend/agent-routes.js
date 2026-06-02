@@ -109,7 +109,9 @@ router.get('/empresas-a3', requireAgentKey, async (req, res) => {
                         ultimaCapturaA3 = s.ultimaSync?.toMillis ? s.ultimaSync.toMillis() : null;
                     }
                 }
-            } catch {}
+            } catch (e) {
+                console.warn(`[agent-routes] falha lendo sefaz_state/${cnpjNum}:`, e.message);
+            }
 
             empresas.push({
                 id: empresaId,
@@ -199,7 +201,9 @@ router.post('/upload-batch', requireAgentKey, express.json({ limit: '20mb' }), a
                         contexto: { nsu: d.nsu, schema: d.schema, fonte: 'agent-a3' },
                         capturadoPor,
                     });
-                } catch {}
+                } catch (errReg) {
+                    console.warn(`[agent-routes] falha registrando xml_erros (${cnpjNum} nsu=${d.nsu}):`, errReg.message);
+                }
             }
         }
 
