@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { User } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { isSefazCaptureAvailable } from '../../services/dfeCaptureService';
@@ -76,8 +77,10 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
                 )}
             </div>
 
-            {/* Modal certificado */}
-            {certModalFor && (
+            {/* Modal certificado — via portal no body pra escapar de ancestrais
+                com transform/will-change/filter, que viram containing block de
+                position:fixed e jogavam o modal pra fora da tela (top ~8700). */}
+            {certModalFor && createPortal(
                 <div
                     className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
                     onClick={() => setCertModalFor(null)}
@@ -104,7 +107,8 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
                             />
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

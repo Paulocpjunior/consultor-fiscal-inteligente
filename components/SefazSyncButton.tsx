@@ -3,6 +3,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
     captureFromSefaz, getSefazState, getSefazWindow, toggleSefazCapture,
     type SefazState, type SefazWindow,
@@ -146,7 +147,7 @@ const SefazSyncButton: React.FC<Props> = ({ empresa, currentUser, onSyncComplete
                 <div className={`text-xs border rounded px-2 py-1 ${corResultado}`}>{result.texto}</div>
             )}
 
-            {showSettings && (
+            {showSettings && createPortal(
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
                     onClick={() => !savingToggle && setShowSettings(false)}
@@ -218,7 +219,8 @@ const SefazSyncButton: React.FC<Props> = ({ empresa, currentUser, onSyncComplete
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
