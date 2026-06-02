@@ -15,9 +15,18 @@ const Card: React.FC<{ label: string; value: string | number; tone?: string }> =
     </div>
 );
 
+const SELECT_CLS = 'bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs';
+
 const XmlDashboard: React.FC<Props> = ({ currentUser, refreshKey }) => {
     const [docs, setDocs] = useState<DocumentoFiscal[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Filtros do dashboard. Aplicados client-side sobre os docs ja carregados,
+    // entao todos os cards (summarize) reagem sem refetch.
+    const [fDirecao, setFDirecao] = useState('');
+    const [fCompetencia, setFCompetencia] = useState('');
+    const [fStatus, setFStatus] = useState('');
+    const [fEmpresa, setFEmpresa] = useState('');
 
     useEffect(() => {
         let alive = true;
@@ -28,7 +37,34 @@ const XmlDashboard: React.FC<Props> = ({ currentUser, refreshKey }) => {
         return () => { alive = false; };
     }, [currentUser, refreshKey]);
 
-    const summary = useMemo(() => summarize(docs), [docs]);
+    // Opcoes dos dropdowns vem do conjunto COMPLETO (nao do filtrado), pra
+    // nao sumirem conforme o usuario filtra.
+    const competenciasOpts = useMemo(() => {
+        const set = new Set<string>();
+        docs.forEach(d => set.add(d.competencia || 'sem-competencia'));
+        return Array.from(set).sort((a, b) => b.localeCompare(a));
+    }, [docs]);
+    const statusOpts = useMemo(() => {
+        const set = new Set<string>();
+        docs.forEach(d => d.status && set.add(d.status));
+        return Array.from(set).sort();
+    }, [docs]);
+    const empresasOpts = useMemo(() => {
+        const map = new Map<string, string>();
+        docs.forEach(d => { if (d.empresaId) map.set(d.empresaId, d.empresaNome || d.empresaId); });
+        return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+    }, [docs]);
+
+    const filteredDocs = useMemo(() => docs.filter(d => {
+        if (fDirecao && d.direcao !== fDirecao) return false;
+        if (fCompetencia && (d.competencia || 'sem-competencia') !== fCompetencia) return false;
+        if (fStatus && d.status !== fStatus) return false;
+        if (fEmpresa && d.empresaId !== fEmpresa) return false;
+        return true;
+    }), [docs, fDirecao, fCompetencia, fStatus, fEmpresa]);
+
+    const summary = useMemo(() => summarize(filteredDocs), [filteredDocs]);
+    const filtroAtivo = !!(fDirecao || fCompetencia || fStatus || fEmpresa);
 
     if (loading) return <p className="text-center text-xs text-slate-400 py-6">Carregando dashboard...</p>;
     if (docs.length === 0) {
@@ -46,6 +82,43 @@ const XmlDashboard: React.FC<Props> = ({ currentUser, refreshKey }) => {
 
     return (
         <div className="space-y-4">
+            {/* Barra de filtros — todos os cards abaixo refletem o filtro */}
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <select className={SELECT_CLS} value={fDirecao} onChange={e => setFDirecao(e.target.value)}>
+                        <option value="">Direção (todas)</option>
+                        <option value="entrada">Entrada</option>
+                        <option value="saida">Saída</option>
+                    </select>
+                    <select className={SELECT_CLS} value={fCompetencia} onChange={e => setFCompetencia(e.target.value)}>
+                        <option value="">Competência (todas)</option>
+                        {competenciasOpts.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select className={SELECT_CLS} value={fStatus} onChange={e => setFStatus(e.target.value)}>
+                        <option value="">Status (todos)</option>
+                        {statusOpts.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <select className={SELECT_CLS} value={fEmpresa} onChange={e => setFEmpresa(e.target.value)}>
+                        <option value="">Empresa (todas)</option>
+                        {empresasOpts.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
+                    </select>
+                </div>
+                {filtroAtivo && (
+                    <div className="flex items-center gap-3 mt-2">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Mostrando <strong>{filteredDocs.length}</strong> de {docs.length} documentos.
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => { setFDirecao(''); setFCompetencia(''); setFStatus(''); setFEmpresa(''); }}
+                            className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                            Limpar filtros
+                        </button>
+                    </div>
+                )}
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <Card label="Total de XMLs" value={summary.total} />
                 <Card label="Entradas" value={summary.entradas} tone="blue" />
