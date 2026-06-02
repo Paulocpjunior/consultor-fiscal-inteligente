@@ -27,32 +27,30 @@
 // ============================================================================
 
 /**
- * Tabela default: para cada natureza, sufixo desejado por categoria de CFOP.
- * Categorias agrupam CFOPs com semântica similar (compra produto, devolução,
- * remessa, ativo, energia, etc).
+ * Apenas os CFOPs de COMPRA DE PRODUTO/MERCADORIA exigem heurística de
+ * natureza (porque o sufixo do destinatário DIFERE do sufixo do emitente:
+ * 5102→1101 quando indústria, 5102→1102 quando comércio). Todos os
+ * demais CFOPs preservam o sufixo (só inverte o primeiro dígito: 5→1,
+ * 6→2, 7→3) — o que é o comportamento DEFAULT.
  *
- * Quando o sufixo do XML cai em uma categoria, aplica-se o sufixo da natureza.
- * Quando cai fora de qualquer categoria conhecida, mantém-se o sufixo original
- * (conversão mecânica do primeiro dígito).
+ * Sufixos cobertos: 101 (venda produção), 102 (venda mercadoria revenda),
+ * 116/117 (venda originada de encomenda), 118/120/122 (venda à ordem /
+ * por conta e ordem / por outro estabelecimento).
  */
-
-// CFOPs de COMPRA DE PRODUTO/MERCADORIA (excluindo ST, devolução, etc).
-// Sufixos do emitente: 101, 102, 116 etc -> destinatário define se é
-// industrialização (101) ou comercialização (102).
 const SUFIXOS_COMPRA_PRODUTO = ['101', '102', '116', '117', '118', '120', '122'];
 
-// CFOPs de SUBSTITUIÇÃO TRIBUTÁRIA — emitente 401-411 -> destinatário 401-411
-// (sufixo "se preserva", só inverte o primeiro dígito).
-const SUFIXOS_ST = ['401', '403', '405', '406', '407', '408', '409', '410', '411'];
-
-// DEVOLUÇÃO de venda (910-918) -> entrada como devolução
-const SUFIXOS_DEVOLUCAO = ['910', '911', '912', '913', '918', '919'];
-
-// ATIVO IMOBILIZADO
-const SUFIXOS_ATIVO = ['551', '552', '553', '554', '555'];
-
-// USO E CONSUMO
-const SUFIXOS_USO_CONSUMO = ['556', '557'];
+/*
+ * Histórico (removido em refactor): havia arrays SUFIXOS_ST, _DEVOLUCAO,
+ * _ATIVO, _USO_CONSUMO listando 401/403.../910.../551.../556. Eles só
+ * forçavam o "preserva sufixo + inverte primeiro digito" — que JÁ É
+ * o comportamento default. Tinham apenas valor documental e davam
+ * falsa sensação de tratamento especial. Removidos pra evitar que
+ * leitor futuro confie em tratamento dedicado que não existe.
+ *
+ * CFOPs ST (401-411), devolução (910-919), ativo (551-555), uso/consumo
+ * (556-557) continuam funcionando perfeitamente via conversão mecânica:
+ *   5401→1401, 5910→1910, 5551→1551, 5556→1556 (e variantes 6→2, 7→3).
+ */
 
 /**
  * Para uma natureza de atividade, qual sufixo usar quando o XML traz um
@@ -102,27 +100,16 @@ export function correlacionarCfop(cfopOrigem, direcao, ctx = {}) {
     const sufixo = c.slice(1);  // 3 últimos dígitos
     const primeiroDestino = { '5': '1', '6': '2', '7': '3' }[c[0]];
 
-    // 2. Categorias que SEMPRE preservam sufixo (só inverte o primeiro dígito)
-    if (
-        SUFIXOS_ST.includes(sufixo) ||
-        SUFIXOS_DEVOLUCAO.includes(sufixo) ||
-        SUFIXOS_ATIVO.includes(sufixo) ||
-        SUFIXOS_USO_CONSUMO.includes(sufixo)
-    ) {
-        return inverterPrimeiroDigito(c);
-    }
-
-    // 3. Compra de produto: aplica sufixo da natureza
+    // Compra de produto: aplica sufixo da natureza (única categoria com
+    // tratamento diferente da inversão mecânica).
     if (SUFIXOS_COMPRA_PRODUTO.includes(sufixo)) {
         const sufNatureza = sufixoCompraPorNatureza(ctx.naturezaAtividade);
-        if (sufNatureza) {
-            return primeiroDestino + sufNatureza;
-        }
+        if (sufNatureza) return primeiroDestino + sufNatureza;
         // Sem natureza definida ou misto -> conversão mecânica
-        return inverterPrimeiroDigito(c);
     }
 
-    // 4. Default: conversão mecânica
+    // Default: ST (4xx), devolução (9xx), ativo (55x), uso/consumo (55x)
+    // e qualquer outro CFOP — preserva sufixo, só inverte primeiro dígito.
     return inverterPrimeiroDigito(c);
 }
 
