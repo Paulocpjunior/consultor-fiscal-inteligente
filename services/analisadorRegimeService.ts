@@ -15,4 +15,38 @@ function alqEf(rba:number,tab:{l:number;a:number;pd:number}[]){const fx=tab.find
 export function calcularSimples(e:EntradaCalculo):ResultadoRegime{if(e.receitaBrutaAcumulada12>4800000)return{regime:'simples',label:'Simples Nacional',impostoMensal:0,aliquotaEfetiva:0,detalhamento:{},observacoes:['Receita acima do limite de R$ 4,8M. Vedado ao Simples.'],recomendado:false};const{tab,obs}=tabela(e.atividade,e.folhaPagamentoMensal,e.receitaBrutaAcumulada12);const ae=alqEf(e.receitaBrutaAcumulada12,tab);const das=e.receitaBrutaMensal*ae;return{regime:'simples',label:'Simples Nacional',impostoMensal:das,aliquotaEfetiva:ae*100,detalhamento:{'DAS (unificado)':das},observacoes:obs};}
 export function calcularLucroPresumido(e:EntradaCalculo):ResultadoRegime{const bI=e.receitaBrutaMensal*PIRPJ[e.atividade],bC=e.receitaBrutaMensal*PCSLL[e.atividade];const irpj=bI*.15,adicIRPJ=Math.max(0,bI-20000)*.10,csll=bC*.09,pis=e.receitaBrutaMensal*.0065,cofins=e.receitaBrutaMensal*.03;const sv=['servicos_simples','servicos_fator_r','servicos_especiais','servicos_gerais'].includes(e.atividade);const iss=sv?e.receitaBrutaMensal*(e.issAliquota/100):0,icms=sv?0:e.receitaBrutaMensal*.12;const total=irpj+adicIRPJ+csll+pis+cofins+iss+icms;return{regime:'presumido',label:'Lucro Presumido',impostoMensal:total,aliquotaEfetiva:(total/e.receitaBrutaMensal)*100,detalhamento:{'IRPJ 15%':irpj,'IRPJ Adicional 10%':adicIRPJ,'CSLL 9%':csll,'PIS 0,65%':pis,'COFINS 3%':cofins,...(iss>0?{['ISS '+e.issAliquota+'%']:iss}:{}),...(icms>0?{'ICMS est.':icms}:{})},observacoes:sv?[]:['ICMS estimado 12% — verifique aliquota real.']};}
 export function calcularLucroReal(e:EntradaCalculo):ResultadoRegime{const lucro=e.receitaBrutaMensal-e.custosMercadorias-e.despesasDedutiveis-e.folhaPagamentoMensal;const irpj=lucro>0?lucro*.15:0,adicIRPJ=lucro>0?Math.max(0,lucro-20000)*.10:0,csll=lucro>0?lucro*.09:0;const pis=Math.max(0,e.receitaBrutaMensal*.0165-e.creditosPisCofins*.179),cofins=Math.max(0,e.receitaBrutaMensal*.076-e.creditosPisCofins*.821);const sv=['servicos_simples','servicos_fator_r','servicos_especiais','servicos_gerais'].includes(e.atividade);const iss=sv?e.receitaBrutaMensal*(e.issAliquota/100):0,icms=sv?0:e.receitaBrutaMensal*.12;const total=irpj+adicIRPJ+csll+pis+cofins+iss+icms;return{regime:'real',label:'Lucro Real',impostoMensal:total,aliquotaEfetiva:(total/e.receitaBrutaMensal)*100,detalhamento:{'IRPJ 15%':irpj,'IRPJ Adicional 10%':adicIRPJ,'CSLL 9%':csll,'PIS ncum 1,65%':pis,'COFINS ncum 7,6%':cofins,...(iss>0?{['ISS '+e.issAliquota+'%']:iss}:{}),...(icms>0?{'ICMS est.':icms}:{})},observacoes:lucro<=0?['Prejuizo: IRPJ/CSLL zerados.']:[]};}
-export function analisarRegimes(e:EntradaCalculo):ResultadoAnalise{const s=calcularSimples(e),p=calcularLucroPresumido(e),r=calcularLucroReal(e);const todos=[s,p,r].filter(x=>x.impostoMensal>0);todos.sort((a,b)=>a.impostoMensal-b.impostoMensal);if(todos[0])todos[0].recomendado=true;const melhor=todos[0],pior=todos[todos.length-1];const econAno=pior&&melhor?(pior.impostoMensal-melhor.impostoMensal)*12:0;const econPct=pior&&pior.impostoMensal>0?((pior.impostoMensal-melhor.impostoMensal)/pior.impostoMensal)*100:0;const alertas:string[]=[];if(e.receitaBrutaAcumulada12>3600000)alertas.push('Receita proxima ao limite Simples (R$ 4,8M). Planeje migracao.');if(e.folhaPagamentoMensal/e.receitaBrutaMensal<.20&&(e.atividade==='servicos_especiais'||e.atividade==='servicos_fator_r'))alertas.push('Folha baixa para servicos — verifique Fator R.');return{resultados:todos,melhorOpcao:melhor?.regime||'presumido',economiaAnual:econAno,percentualEconomia:econPct,alertas};}
+export function analisarRegimes(e: EntradaCalculo): ResultadoAnalise {
+    const s = calcularSimples(e), p = calcularLucroPresumido(e), r = calcularLucroReal(e);
+    const todos = [s, p, r].filter(x => x.impostoMensal > 0);
+    todos.sort((a, b) => a.impostoMensal - b.impostoMensal);
+    if (todos[0]) todos[0].recomendado = true;
+    const melhor = todos[0], pior = todos[todos.length - 1];
+    const econAno = pior && melhor ? (pior.impostoMensal - melhor.impostoMensal) * 12 : 0;
+    const econPct = pior && pior.impostoMensal > 0 ? ((pior.impostoMensal - melhor.impostoMensal) / pior.impostoMensal) * 100 : 0;
+
+    // Alertas de faturamento — LC 123/2006. Antes era um unico alerta confuso
+    // que disparava em R$ 3,6M mas dizia "proximo ao limite de R$ 4,8M",
+    // misturando sublimite ICMS/ISS (art. 13-A) com limite federal (art. 3º II).
+    // Agora cada threshold gera o alerta correto, em ordem de gravidade.
+    const alertas: string[] = [];
+    const rbt = e.receitaBrutaAcumulada12;
+
+    if (rbt > 5_760_000) {
+        alertas.push('Receita ultrapassou em mais de 20% o limite Simples (R$ 5,76M). DESENQUADRAMENTO RETROATIVO ao mes seguinte do excesso (LC 123 art. 30 §1º II) — comunicar a Receita ate o ultimo dia util do mes seguinte.');
+    } else if (rbt > 4_800_000) {
+        alertas.push('Receita ultrapassou o limite federal do Simples Nacional (R$ 4,8M). Empresa vedada ao Simples (LC 123 art. 3º II); desenquadramento a partir do ano seguinte. Planeje migracao para Lucro Presumido/Real.');
+    } else if (rbt > 4_320_000) {
+        alertas.push('Receita acumulada em 12 meses se aproxima do limite federal do Simples (R$ 4,8M). Planeje migracao para Lucro Presumido/Real.');
+    }
+
+    if (rbt > 3_600_000 && rbt <= 4_800_000) {
+        alertas.push('Receita ultrapassou sublimite estadual de ICMS/ISS (R$ 3,6M). ICMS e ISS deverao ser apurados FORA do DAS (LC 123 art. 13-A); demais tributos seguem no Simples.');
+    }
+
+    if (e.folhaPagamentoMensal / e.receitaBrutaMensal < 0.20 &&
+        (e.atividade === 'servicos_especiais' || e.atividade === 'servicos_fator_r')) {
+        alertas.push('Folha baixa para servicos — verifique Fator R.');
+    }
+
+    return { resultados: todos, melhorOpcao: melhor?.regime || 'presumido', economiaAnual: econAno, percentualEconomia: econPct, alertas };
+}

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { SimplesNacionalEmpresa, SimplesNacionalNota } from '../types';
 import * as simplesService from '../services/simplesNacionalService';
 import Logo from './Logo';
-import { ArrowLeftIcon, DownloadIcon, ShieldIcon } from './Icons';
+import { ArrowLeftIcon, DownloadIcon, ShieldIcon, InfoIcon } from './Icons';
 import SimpleChart from './SimpleChart';
 
 interface SimplesNacionalClienteViewProps {
@@ -300,15 +300,82 @@ const SimplesNacionalClienteView: React.FC<SimplesNacionalClienteViewProps> = ({
                     </div>
                     
                     <div className="space-y-8">
-                         {/* Alerta de Sub-limite no Cliente */}
-                        {resumo.ultrapassou_sublimite && (
+                        {/* Alertas de faturamento — em ordem de gravidade (LC 123/2006).
+                            Cada cenario tem consequencia fiscal distinta; nao mesclar. */}
+                        {resumo.alertas_faturamento?.excesso_maior_20_pct.atingido && (
+                            <div className="p-4 bg-red-50 dark:bg-red-900/30 border-l-4 border-red-600 rounded-r-lg">
+                                <div className="flex items-start">
+                                    <ShieldIcon className="w-6 h-6 text-red-700 dark:text-red-400 mr-3 mt-0.5" />
+                                    <div>
+                                        <h3 className="font-bold text-red-800 dark:text-red-200">Crítico: Desenquadramento RETROATIVO do Simples</h3>
+                                        <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                                            Receita acumulada em 12 meses ultrapassou em mais de 20% o limite federal do Simples (R$ 5,76 milhões). Conforme LC 123/2006 art. 30 §1º II, o desenquadramento é <strong>retroativo ao mês seguinte do excesso</strong> — comunicar à Receita até o último dia útil do mês seguinte ao da ocorrência.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {!resumo.alertas_faturamento?.excesso_maior_20_pct.atingido && resumo.alertas_faturamento?.limite_federal.atingido && (
+                            <div className="p-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-r-lg">
+                                <div className="flex items-start">
+                                    <ShieldIcon className="w-6 h-6 text-red-600 dark:text-red-400 mr-3 mt-0.5" />
+                                    <div>
+                                        <h3 className="font-bold text-red-800 dark:text-red-200">Limite federal do Simples ultrapassado</h3>
+                                        <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                                            Receita acumulada em 12 meses ultrapassou R$ 4,8 milhões — empresa vedada ao Simples Nacional (LC 123/2006 art. 3º II). Desenquadramento a partir do ano seguinte. Planeje migração para Lucro Presumido ou Real.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {!resumo.alertas_faturamento?.limite_federal.atingido && resumo.alertas_faturamento?.proximo_limite_federal.atingido && (
+                            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 rounded-r-lg">
+                                <div className="flex items-start">
+                                    <ShieldIcon className="w-6 h-6 text-amber-600 dark:text-amber-400 mr-3 mt-0.5" />
+                                    <div>
+                                        <h3 className="font-bold text-amber-800 dark:text-amber-200">Aproximação do limite federal do Simples</h3>
+                                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                                            Receita já passa de 90% do limite federal (R$ 4,8 milhões). Margem restante: R$ {resumo.alertas_faturamento.proximo_limite_federal.margem_ate_limite.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Comece a planejar a migração para Lucro Presumido/Real.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {resumo.alertas_faturamento?.sublimite_icms_iss.atingido && !resumo.alertas_faturamento?.limite_federal.atingido && (
                             <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border-l-4 border-orange-500 dark:border-orange-400 rounded-r-lg">
                                 <div className="flex items-start">
                                     <ShieldIcon className="w-6 h-6 text-orange-600 dark:text-orange-400 mr-3 mt-0.5" />
                                     <div>
                                         <h3 className="font-bold text-orange-800 dark:text-orange-200">Atenção: Sub-limite Estadual/Municipal Excedido</h3>
                                         <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                                            Sua empresa ultrapassou o limite de R$ 3,6 milhões de faturamento em 12 meses. O ICMS (Estadual) e ISS (Municipal) não estão mais incluídos na guia única do DAS e deverão ser pagos separadamente. Entre em contato para mais detalhes.
+                                            Sua empresa ultrapassou o limite de R$ 3,6 milhões de faturamento em 12 meses. O ICMS (Estadual) e ISS (Municipal) não estão mais incluídos na guia única do DAS e deverão ser pagos separadamente. Demais tributos seguem no Simples (LC 123/2006 art. 13-A).
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {/* Fallback pro boolean legado, caso o resumo nao traga a struct nova */}
+                        {!resumo.alertas_faturamento && resumo.ultrapassou_sublimite && (
+                            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border-l-4 border-orange-500 dark:border-orange-400 rounded-r-lg">
+                                <div className="flex items-start">
+                                    <ShieldIcon className="w-6 h-6 text-orange-600 dark:text-orange-400 mr-3 mt-0.5" />
+                                    <div>
+                                        <h3 className="font-bold text-orange-800 dark:text-orange-200">Atenção: Sub-limite Estadual/Municipal Excedido</h3>
+                                        <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                                            Sua empresa ultrapassou o limite de R$ 3,6 milhões de faturamento em 12 meses. O ICMS (Estadual) e ISS (Municipal) não estão mais incluídos na guia única do DAS e deverão ser pagos separadamente.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {resumo.alertas_faturamento?.proxima_mudanca_faixa && !resumo.alertas_faturamento?.limite_federal.atingido && (
+                            <div className="p-4 bg-sky-50 dark:bg-sky-900/20 border-l-4 border-sky-500 rounded-r-lg">
+                                <div className="flex items-start">
+                                    <InfoIcon className="w-6 h-6 text-sky-600 dark:text-sky-400 mr-3 mt-0.5" />
+                                    <div>
+                                        <h3 className="font-bold text-sky-800 dark:text-sky-200">Aproximação da próxima faixa do Simples</h3>
+                                        <p className="text-sm text-sky-700 dark:text-sky-300 mt-1">
+                                            A R$ {resumo.alertas_faturamento.proxima_mudanca_faixa.margem_ate_proxima_faixa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de mudar para a próxima faixa de alíquota nominal de {resumo.alertas_faturamento.proxima_mudanca_faixa.aliquota_nominal_proxima.toFixed(2).replace('.', ',')}%. Use para planejamento tributário.
                                         </p>
                                     </div>
                                 </div>

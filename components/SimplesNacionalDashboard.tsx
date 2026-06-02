@@ -120,12 +120,33 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                         </td>
                                         <td className="px-6 py-4 text-right font-mono">
                                             {e.resumo.rbt12.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            {e.resumo.ultrapassou_sublimite && (
-                                                <div className="flex items-center justify-end gap-1 mt-1 text-orange-600 dark:text-orange-400 text-xs font-bold" title="Sub-limite Estadual/Municipal ultrapassado (R$ 3.6M)">
+                                            {/* Badges em ordem de gravidade — so a mais grave aparece. */}
+                                            {e.resumo.alertas_faturamento?.excesso_maior_20_pct.atingido ? (
+                                                <div className="flex items-center justify-end gap-1 mt-1 text-red-700 dark:text-red-400 text-xs font-bold" title="Excesso > 20% do limite federal (R$ 5,76M) — desenquadramento RETROATIVO (LC 123 art. 30 §1º II)">
+                                                    <InfoIcon className="w-3 h-3" />
+                                                    Excesso 20%!
+                                                </div>
+                                            ) : e.resumo.alertas_faturamento?.limite_federal.atingido ? (
+                                                <div className="flex items-center justify-end gap-1 mt-1 text-red-600 dark:text-red-400 text-xs font-bold" title="Limite federal Simples ultrapassado (R$ 4,8M) — empresa vedada ao Simples">
+                                                    <InfoIcon className="w-3 h-3" />
+                                                    Limite federal!
+                                                </div>
+                                            ) : e.resumo.alertas_faturamento?.proximo_limite_federal.atingido ? (
+                                                <div className="flex items-center justify-end gap-1 mt-1 text-amber-600 dark:text-amber-400 text-xs font-bold" title="Receita acima de 90% do limite federal (R$ 4,32M)">
+                                                    <InfoIcon className="w-3 h-3" />
+                                                    {'>'}90% limite
+                                                </div>
+                                            ) : (e.resumo.alertas_faturamento?.sublimite_icms_iss.atingido ?? e.resumo.ultrapassou_sublimite) ? (
+                                                <div className="flex items-center justify-end gap-1 mt-1 text-orange-600 dark:text-orange-400 text-xs font-bold" title="Sub-limite Estadual/Municipal ICMS/ISS ultrapassado (R$ 3,6M)">
                                                     <InfoIcon className="w-3 h-3" />
                                                     Sub-limite!
                                                 </div>
-                                            )}
+                                            ) : e.resumo.alertas_faturamento?.proxima_mudanca_faixa ? (
+                                                <div className="flex items-center justify-end gap-1 mt-1 text-sky-600 dark:text-sky-400 text-xs font-bold" title={`Próxima faixa: alíquota nominal ${e.resumo.alertas_faturamento.proxima_mudanca_faixa.aliquota_nominal_proxima.toFixed(2)}%`}>
+                                                    <InfoIcon className="w-3 h-3" />
+                                                    Próx. faixa
+                                                </div>
+                                            ) : null}
                                         </td>
                                         <td className="px-6 py-4 text-center font-mono">{e.resumo.aliq_eff.toFixed(2)}%</td>
                                         <td className="px-6 py-4 text-right font-mono font-bold bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300">

@@ -273,6 +273,45 @@ export interface SimplesNacionalResumo {
     /** RBT12 proporcionalizada efetivamente usada para enquadramento. */
     rbt12pInterno?: number;
     rbt12pExterno?: number;
+    /**
+     * Alertas estruturados de faturamento/faixa do Simples Nacional. Opcional
+     * pra manter compat com chamadores antigos; quando presente, traz a foto
+     * fiscal completa: sublimite ICMS/ISS, limite federal, excesso > 20% (que
+     * dispara desenquadramento RETROATIVO), aproximação do limite e mudança
+     * de faixa de alíquota.
+     */
+    alertas_faturamento?: AlertasFaturamentoSimples;
+}
+
+/**
+ * Foto estruturada dos alertas de faturamento do Simples Nacional.
+ * Baseado em LC 123/2006:
+ *   - art. 3º II  — limite federal (R$ 4,8M)
+ *   - art. 13-A   — sublimite estadual ICMS/ISS (R$ 3,6M)
+ *   - art. 30 §1º II — desenquadramento por excesso > 20% (R$ 5,76M)
+ */
+export interface AlertasFaturamentoSimples {
+    /** RBT12 > R$ 3,6M — ICMS/ISS saem do DAS, demais continuam no Simples. */
+    sublimite_icms_iss: { atingido: boolean; valor_limite: number };
+    /** RBT12 > R$ 4,8M — vedação ao Simples; empresa precisa migrar regime. */
+    limite_federal: { atingido: boolean; valor_limite: number };
+    /**
+     * RBT12 > R$ 5,76M (excesso de 20%). Desenquadramento RETROATIVO ao
+     * mês seguinte ao excesso (LC 123 art. 30 §1º II).
+     */
+    excesso_maior_20_pct: { atingido: boolean; valor_limite: number };
+    /** RBT12 entre 90% e 100% do limite federal (R$ 4,32M a R$ 4,8M). */
+    proximo_limite_federal: {
+        atingido: boolean;
+        valor_alerta: number;
+        margem_ate_limite: number;
+    };
+    /** Empresa nos últimos 10% da faixa atual e ainda dentro do Simples. */
+    proxima_mudanca_faixa: null | {
+        aliquota_nominal_proxima: number;
+        limite_faixa_atual: number;
+        margem_ate_proxima_faixa: number;
+    };
 }
 
 export interface SimplesNacionalImportResult {

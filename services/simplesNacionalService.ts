@@ -638,9 +638,71 @@ export const calcularResumoEmpresa = (
         historico_simulado, anexo_efetivo: empresa.anexo, fator_r,
         folha_12: empresa.folha12, ultrapassou_sublimite: rbt12Global > 3600000,
         faixa_index: faixaIndexPrincipal, detalhamento_anexos: detalhamentoAnexos,
-        totalMercadoInterno, totalMercadoExterno
+        totalMercadoInterno, totalMercadoExterno,
+        alertas_faturamento: calcularAlertasFaturamento(
+            rbt12Global, rbtPrincipalParaEnquadramento, tabelaPrincipal, faixaIndexPrincipal,
+        ),
     };
 };
+
+// ─── Alertas de faturamento (LC 123/2006) ─────────────────────────────────
+// Constantes oficiais. NAO mexer sem cruzar com a LC e a Resolucao CGSN
+// vigente — esses numeros determinam vedacao ao Simples e desenquadramento.
+
+/** Sublimite estadual ICMS/ISS — LC 123 art. 13-A. */
+const SUBLIMITE_ICMS_ISS = 3_600_000;
+/** Limite federal do Simples Nacional — LC 123 art. 3º, II. */
+const LIMITE_FEDERAL_SIMPLES = 4_800_000;
+/** Excesso > 20% do limite federal — LC 123 art. 30 §1º II (R$ 5.760.000). */
+const EXCESSO_20_PCT_LIMITE = LIMITE_FEDERAL_SIMPLES * 1.20;
+/** Zona de alerta de aproximação (90% do limite federal). */
+const ALERTA_PROXIMO_LIMITE = LIMITE_FEDERAL_SIMPLES * 0.90;
+/** Empresa nos últimos 10% da faixa de alíquota atual. */
+const ALERTA_PROXIMA_FAIXA_PCT = 0.10;
+
+function calcularAlertasFaturamento(
+    rbt12Global: number,
+    rbtParaEnquadramento: number,
+    tabelaPrincipal: any[],
+    faixaIndex: number,
+): import('../types').AlertasFaturamentoSimples {
+    const ultrapassouLimiteFederal = rbt12Global > LIMITE_FEDERAL_SIMPLES;
+    const margemAteLimite = LIMITE_FEDERAL_SIMPLES - rbt12Global;
+
+    let proximaMudancaFaixa: ReturnType<typeof calcularAlertasFaturamento>['proxima_mudanca_faixa'] = null;
+    if (!ultrapassouLimiteFederal && tabelaPrincipal && faixaIndex >= 0 && faixaIndex < 5) {
+        const limiteFaixaAtual = tabelaPrincipal[faixaIndex].limite;
+        const zonaAlerta = limiteFaixaAtual * (1 - ALERTA_PROXIMA_FAIXA_PCT);
+        if (rbtParaEnquadramento >= zonaAlerta) {
+            proximaMudancaFaixa = {
+                aliquota_nominal_proxima: tabelaPrincipal[faixaIndex + 1].aliquota,
+                limite_faixa_atual: limiteFaixaAtual,
+                margem_ate_proxima_faixa: limiteFaixaAtual - rbtParaEnquadramento,
+            };
+        }
+    }
+
+    return {
+        sublimite_icms_iss: {
+            atingido: rbt12Global > SUBLIMITE_ICMS_ISS,
+            valor_limite: SUBLIMITE_ICMS_ISS,
+        },
+        limite_federal: {
+            atingido: ultrapassouLimiteFederal,
+            valor_limite: LIMITE_FEDERAL_SIMPLES,
+        },
+        excesso_maior_20_pct: {
+            atingido: rbt12Global > EXCESSO_20_PCT_LIMITE,
+            valor_limite: EXCESSO_20_PCT_LIMITE,
+        },
+        proximo_limite_federal: {
+            atingido: !ultrapassouLimiteFederal && rbt12Global > ALERTA_PROXIMO_LIMITE,
+            valor_alerta: ALERTA_PROXIMO_LIMITE,
+            margem_ate_limite: margemAteLimite,
+        },
+        proxima_mudanca_faixa: proximaMudancaFaixa,
+    };
+}
 
 export const calcularDiscriminacaoImpostos = (
     anexo: string, faixaIndex: number, valorDas: number
