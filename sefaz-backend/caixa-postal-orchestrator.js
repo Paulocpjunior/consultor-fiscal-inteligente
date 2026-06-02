@@ -96,7 +96,10 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
         if (d.dataLeitura) lidasLocais.set(d.mensagemId, d.dataLeitura);
     });
 
-    const batch = db.batch();
+    // Coleta operacoes pra chunking (Firestore limita 500 ops/batch). Sem o
+    // chunking, primeira sync de empresa com historico grande (>500 mensagens
+    // RFB acumuladas) estouraria o batch e perderia escritas silenciosamente.
+    const operacoes = [];
     let novas = 0, atualizadas = 0;
     const porCanal = {};
 
@@ -130,7 +133,7 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
             prazoResposta: msg.prazoResposta || null,
             ultimaSincronizacao: new Date().toISOString(),
         };
-        batch.set(ref, payload, { merge: true });
+        operacoes.push({ ref, payload });
 
         // Contabiliza por canal
         if (!porCanal[fonte]) porCanal[fonte] = { total: 0, novas: 0 };
@@ -143,7 +146,15 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
             if (porCanal[fonte]) porCanal[fonte].novas++;
         }
     }
-    await batch.commit();
+
+    // Commita em lotes de 450 (margem de seguranca sobre o teto 500 do Firestore)
+    const CHUNK = 450;
+    for (let i = 0; i < operacoes.length; i += CHUNK) {
+        const batch = db.batch();
+        const slice = operacoes.slice(i, i + CHUNK);
+        for (const op of slice) batch.set(op.ref, op.payload, { merge: true });
+        await batch.commit();
+    }
 
     return { mode, total: mensagensRemotas.length, novas, atualizadas, porCanal, canaisStatus };
 }
