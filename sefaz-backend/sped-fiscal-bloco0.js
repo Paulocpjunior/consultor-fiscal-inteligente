@@ -107,7 +107,7 @@ function build0000(dados) {
         fmt.sanitizeString(df.uf || '', 2).toUpperCase(),
         fmt.sanitizeString(df.inscricaoEstadual || '', 14),
         fmt.sanitizeString(df.codMunIBGE || '', 7),
-        fmt.sanitizeString(empresa.ccmSp || df.ccmSp || '', 15),  // Inscricao Municipal (top-level ou dadosFiscais)
+        fmt.sanitizeString(df.ccmSp || empresa.ccmSp || '', 15),  // Inscricao Municipal (cadastro unico dadosFiscais, fallback legado)
         fmt.sanitizeString(df.codSuframa || '', 9),
         'A',  // perfil EFD: sempre A
         df.indAtividade === 'industrial' ? '0' : '1',

@@ -198,7 +198,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 regimeSugerido: 'SIMPLES' as RegimeSugerido,
                 uf: data.dadosFiscais?.uf,
                 inscricaoEstadual: data.dadosFiscais?.inscricaoEstadual,
-                ccmSp: data.ccmSp,
+                ccmSp: data.dadosFiscais?.ccmSp || data.ccmSp,
                 createdBy: data.createdBy,
             };
         });
@@ -214,7 +214,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 regimeSugerido: inferirRegimeLucro(data),
                 uf: data.dadosFiscais?.uf,
                 inscricaoEstadual: data.dadosFiscais?.inscricaoEstadual,
-                ccmSp: data.ccmSp,
+                ccmSp: data.dadosFiscais?.ccmSp || data.ccmSp,
                 createdBy: data.createdBy,
             };
         });

@@ -200,7 +200,8 @@ export interface SimplesNacionalEmpresa {
      */
     dataAbertura?: string;
     /** Captura automática SEFAZ (cron noturno). Default = true. Admin pode desativar. */
-    /** Inscrição Municipal SP capital (CCM). Usado pela captura NFS-e Nota do Milhão. */
+    /** @deprecated CCM legado top-level. Cadastro unico agora em dadosFiscais.ccmSp.
+     *  Mantido so pra leitura de dados antigos (readers fazem fallback). Nao gravar aqui. */
     ccmSp?: string;
     /** Data ISO em que o cliente autorizou SP Contábil como contador no portal nfe.prefeitura.sp.gov.br. */
     nfseSpAutorizadoEm?: string;

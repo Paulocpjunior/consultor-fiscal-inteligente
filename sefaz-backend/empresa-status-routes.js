@@ -57,11 +57,9 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                     fonte: col,
                     capturarSefaz: d.capturarSefaz !== false, // default true
                     uf: d.dadosFiscais?.uf || d.uf || '',
-                    // ccmSp pode estar no top-level (NfseSpAdminPanel grava digitos)
-                    // OU em dadosFiscais.ccmSp (modal "Dados Fiscais" grava aninhado).
-                    // Le os dois — mesmo fallback que o uf acima — senao a empresa
-                    // aparece "falta ccmSp" mesmo com o CCM preenchido no modal.
-                    ccmSp: (d.ccmSp || d.dadosFiscais?.ccmSp || '').toString().trim(),
+                    // Cadastro UNICO: ccmSp em dadosFiscais.ccmSp (canonico, igual
+                    // uf/IE). Fallback ao top-level d.ccmSp so pra dado legado.
+                    ccmSp: (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, ''),
                     nfseSpAutorizadoEm: d.nfseSpAutorizadoEm?.toMillis?.() ?? null,
                     nfseNacionalDfeAtivo: d.nfseNacionalDfeAtivo === true,
                     procuracaoEcacAtiva: d.procuracaoEcacAtiva === true,

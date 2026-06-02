@@ -57,7 +57,7 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                 codMunIBGE: dados.codMunIBGE?.replace(/\D/g, ''),
                 cep: dados.cep?.replace(/\D/g, ''),
                 telefone: dados.telefone?.replace(/\D/g, ''),
-                ccmSp: dados.ccmSp?.trim(),
+                ccmSp: dados.ccmSp?.replace(/\D/g, '') || undefined,  // canonico: so digitos
             };
             await onSave(limpo);
             onClose();

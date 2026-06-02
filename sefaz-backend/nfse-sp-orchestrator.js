@@ -31,10 +31,13 @@ export async function listarEmpresasElegiveis(db) {
     const resultado = [];
 
     for (const col of colecoes) {
-        const snap = await db.collection(col).where('ccmSp', '!=', '').get();
+        // Sem .where('ccmSp',...): o cadastro unico fica em dadosFiscais.ccmSp,
+        // que o .where no top-level nao alcanca. Busca todos e filtra no codigo
+        // (fallback ao top-level legado). Sao ~300 empresas — custo desprezivel.
+        const snap = await db.collection(col).get();
         for (const doc of snap.docs) {
             const d = doc.data();
-            const ccmSp = (d.ccmSp || '').toString().trim();
+            const ccmSp = (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, '');
             const autorizado = d.nfseSpAutorizadoEm;
             if (!ccmSp || !autorizado) continue;
 

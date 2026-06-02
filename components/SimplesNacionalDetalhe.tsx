@@ -458,10 +458,16 @@ if (filialServico > 0) {
                         <NfseSpAdminPanel
                             empresaId={empresa.id}
                             colecao="simples_empresas"
-                            ccmSpAtual={empresa.ccmSp}
+                            ccmSpAtual={empresa.dadosFiscais?.ccmSp || empresa.ccmSp}
                             nfseSpAutorizadoEmAtual={empresa.nfseSpAutorizadoEm}
                             onSalvarConfig={async ({ ccmSp, nfseSpAutorizadoEm }) => {
-                                await onUpdateEmpresa(empresa.id, { ccmSp, nfseSpAutorizadoEm });
+                                // Grava no cadastro UNICO (dadosFiscais.ccmSp). Passa o
+                                // dadosFiscais completo (spread do existente) pra nao
+                                // apagar uf/IE/codMunIBGE no merge nem no cache local.
+                                await onUpdateEmpresa(empresa.id, {
+                                    dadosFiscais: { ...empresa.dadosFiscais, ccmSp },
+                                    nfseSpAutorizadoEm,
+                                });
                             }}
                             onShowToast={onShowToast}
                         />
@@ -870,12 +876,9 @@ if (filialServico > 0) {
                 empresaNome={empresa.nome}
                 valoresAtuais={empresa.dadosFiscais}
                 onSave={async (dados) => {
-                    // Espelha ccmSp no top-level (canonico) — backend le empresa.ccmSp,
-                    // nao dadosFiscais.ccmSp. So digitos, igual ao NfseSpAdminPanel.
-                    await onUpdateEmpresa(empresa.id, {
-                        dadosFiscais: dados,
-                        ccmSp: dados.ccmSp?.replace(/\D/g, '') || undefined,
-                    });
+                    // Cadastro UNICO: ccmSp vive em dadosFiscais.ccmSp (igual aos
+                    // demais campos). Backend le esse caminho (fallback top-level).
+                    await onUpdateEmpresa(empresa.id, { dadosFiscais: dados });
                     onShowToast('Dados fiscais salvos com sucesso!');
                 }}
             />
