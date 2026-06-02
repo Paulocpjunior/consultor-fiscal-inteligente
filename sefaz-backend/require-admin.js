@@ -36,7 +36,25 @@ export async function requireAdmin(req, res, next) {
         const role = userDoc.exists ? userDoc.data().role : null;
 
         if (role !== 'admin') {
-            return res.status(403).json({ error: 'Acesso restrito a admin' });
+            // Mensagem precisa pra UI nao esconder a causa real (mesmo padrao da
+            // varredura: "erros mentirosos"). Diferencia:
+            //   a) doc users/{uid} nao existe (auto-seed falhou no login)
+            //   b) doc existe mas role != 'admin' (rebaixado / nunca promovido)
+            // Inclui o uid e o email do token pra operador localizar no console.
+            console.warn(
+                `[require-admin] 403 — uid=${decoded.uid} email=${decoded.email || '?'} ` +
+                `docExists=${userDoc.exists} role=${JSON.stringify(role)}`,
+            );
+            return res.status(403).json({
+                error: 'Acesso restrito a admin',
+                motivo: !userDoc.exists
+                    ? 'Seu perfil nao foi encontrado em users/{uid} no Firestore. ' +
+                      'Faca logout/login pra recriar, ou peca pra um admin criar o doc.'
+                    : `Seu role atual e ${JSON.stringify(role)}. ` +
+                      'Apenas role=admin pode usar este recurso.',
+                uid: decoded.uid,
+                email: decoded.email || null,
+            });
         }
         req.user = { uid: decoded.uid, role, email: decoded.email || null };
         next();
