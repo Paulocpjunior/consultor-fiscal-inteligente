@@ -24,9 +24,16 @@ import { invokeIntegraContador } from './serpro-client.js';
 // Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
 const MODE = process.env.DCTFWEB_MODE || 'serpro';
 
+// Codigos oficiais das categorias DCTFWeb (manual RFB 2024 + IN RFB 2.005/2021):
+//   13 = Geral Mensal (categoria principal — contribuicoes previdenciarias mensais)
+//   14 = 13º Salário Geral
+//   50 = Aferição de Obra
+//   51 = Espetáculo Desportivo
+//   52 = Reclamatória Trabalhista
+//   60 = MIT (Modulo de Inclusao de Tributos — mensal, para tributos proprios)
 export const DCTFWEB_CATEGORIAS = {
-    GERAL_MENSAL: 40,
-    GERAL_13: 41,
+    GERAL_MENSAL: 13,
+    GERAL_13: 14,
     AFERICAO: 50,
     ESPETACULO: 51,
     RECLAMATORIA: 52,
@@ -53,7 +60,7 @@ class MockProvider {
             id: `${empresaCnpj}_${ano}${String(mes).padStart(2,'0')}_GERAL_MENSAL`,
             empresaCnpj,
             categoria: 'GERAL_MENSAL',
-            categoriaCodigo: 40,
+            categoriaCodigo: DCTFWEB_CATEGORIAS.GERAL_MENSAL,
             anoPA: ano,
             mesPA: mes,
             situacao: (seed % 3 === 0) ? 'ATIVA' : 'EM_ANDAMENTO',
@@ -81,11 +88,15 @@ class MockProvider {
 
     async gerarDarf({ empresaCnpj, anoPA, mesPA, categoria }) {
         const seed = hashCnpj(empresaCnpj);
+        // Vencimento DARF dia 20 do mês seguinte ao da competência (Lei 8.212/91
+        // art. 30). Usa Date object pra tratar virada de ano (mesPA=12 → ano+1, mes=1).
+        const dtVcto = new Date(Date.UTC(anoPA, mesPA, 20)); // mesPA é 1-12; new Date com mes 0-11, então mesPA já avança
+        const vencimento = dtVcto.toISOString().slice(0, 10);
         return {
             valor: 500 + (seed % 5000),
             numeroDocumento: `${anoPA}${mesPA}${(seed % 99999).toString().padStart(5,'0')}`,
             codigoBarras: '85820000000-0 02261202602-3 50000044388-1 521234567890',
-            vencimento: `${anoPA}-${String(mesPA + 1).padStart(2,'0')}-20`,
+            vencimento,
             pdfBase64: '',
             mensagem: 'Mock: DARF gerado.',
             fonte: 'mock',
@@ -218,7 +229,7 @@ class SerproProvider {
 
     async consultarRecibo({ empresaCnpj, anoPA, mesPA, categoria = 40 }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
-        const catCode = typeof categoria === 'number' ? categoria : (DCTFWEB_CATEGORIAS[categoria] || 40);
+        const catCode = typeof categoria === 'number' ? categoria : (DCTFWEB_CATEGORIAS[categoria] || DCTFWEB_CATEGORIAS.GERAL_MENSAL);
         const r = await invokeIntegraContador({
             idSistema: 'DCTFWEB',
             idServico: 'CONSRECIBO32',
