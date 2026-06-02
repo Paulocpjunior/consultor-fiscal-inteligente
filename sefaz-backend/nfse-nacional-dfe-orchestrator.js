@@ -72,6 +72,37 @@ async function releaseLock(cnpj) {
     }
 }
 
+/**
+ * Limpa locks orfaos (expirados). Util pra cobrir caso raro de processo
+ * morto antes do catch (ex: OOM kill no Cloud Run) — sem isso o lock
+ * fica ate o TTL natural de 1h. Chamada no inicio do cron noturno e
+ * tambem exposta como rota admin pra cleanup manual.
+ *
+ * Retorna { total: locks varridos, removidos: locks orfaos apagados }.
+ */
+export async function limparLocksOrfaos() {
+    const db = fa().firestore();
+    const now = Date.now();
+    const snap = await db.collection('nfse_nacional_dfe_locks').get();
+    let total = 0, removidos = 0;
+    // Chunking de delete pra nao estourar batch de 500
+    const refsParaApagar = [];
+    snap.forEach(doc => {
+        total++;
+        const exp = doc.data().expiresAt?.toMillis?.() ?? doc.data().expiresAt;
+        if (exp && exp < now) refsParaApagar.push(doc.ref);
+    });
+    const CHUNK = 450;
+    for (let i = 0; i < refsParaApagar.length; i += CHUNK) {
+        const batch = db.batch();
+        const slice = refsParaApagar.slice(i, i + CHUNK);
+        for (const ref of slice) batch.delete(ref);
+        await batch.commit();
+        removidos += slice.length;
+    }
+    return { total, removidos };
+}
+
 async function carregaUltNSU(cnpj) {
     const cnpjNum = String(cnpj).replace(/\D/g, '');
     const ref = fa().firestore().collection('nfse_nacional_dfe_state').doc(cnpjNum);

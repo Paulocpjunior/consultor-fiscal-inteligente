@@ -14,7 +14,7 @@
 
 import express from 'express';
 import admin from 'firebase-admin';
-import { sincronizarEmpresaNfseNacionalDfe } from './nfse-nacional-dfe-orchestrator.js';
+import { sincronizarEmpresaNfseNacionalDfe, limparLocksOrfaos } from './nfse-nacional-dfe-orchestrator.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth, requireAdmin } from './require-admin.js';
 
@@ -126,6 +126,16 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
         let sucessos = 0, falhas = 0, totalNovos = 0, totalEmpresas = 0;
         let erroFatal = null;
         try {
+            // Cleanup de locks orfaos antes do batch — cobre caso raro de
+            // processo morto antes do catch (OOM kill, etc) na sync anterior.
+            try {
+                const limpeza = await limparLocksOrfaos();
+                if (limpeza.removidos > 0) {
+                    console.log(`[nfse-nac-dfe/sync-cron] cleanup: ${limpeza.removidos}/${limpeza.total} locks orfaos removidos`);
+                }
+            } catch (e) {
+                console.warn('[nfse-nac-dfe/sync-cron] cleanup falhou (continua):', e.message);
+            }
             const empresas = await listarEmpresasParaCron();
             totalEmpresas = empresas.length;
             console.log(`[nfse-nac-dfe/sync-cron] ${empresas.length} empresas elegíveis`);
