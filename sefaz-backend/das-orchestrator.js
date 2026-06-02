@@ -6,6 +6,7 @@
 import admin from 'firebase-admin';
 import { getDasProvider, getDasMode } from './das-provider.js';
 import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
+import { calcularMultaDarf } from './multa-calculator.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -120,6 +121,7 @@ export async function getResumoDas() {
     const hoje = new Date().toISOString().slice(0, 10);
     let pendentes = 0, vencidos = 0, pagos = 0;
     let valorPendente = 0, valorVencido = 0, valorPago = 0;
+    let valorMultaEstimada = 0;
 
     for (const d of docs) {
         const status = d.statusPagamento || 'pendente';
@@ -130,6 +132,15 @@ export async function getResumoDas() {
         } else if (venc && venc < hoje) {
             vencidos++;
             valorVencido += d.valor || 0;
+            // Soma multa+juros do snapshot persistido pelo cron (se houver).
+            // Pra DAS vencidos sem snapshot, calcula on-the-fly como fallback.
+            const me = d.multaEstimada;
+            if (me && me.calculadoEm === hoje) {
+                valorMultaEstimada += (me.multaValor || 0) + (me.jurosValor || 0);
+            } else if (d.valor > 0) {
+                const calc = calcularMultaDarf(d.valor, new Date(venc), new Date(hoje));
+                if (calc) valorMultaEstimada += (calc.multaValor || 0) + (calc.jurosValor || 0);
+            }
         } else {
             pendentes++;
             valorPendente += d.valor || 0;
@@ -138,7 +149,10 @@ export async function getResumoDas() {
     return {
         totalDas: docs.length,
         pendentes, vencidos, pagos,
-        valorPendente, valorVencido, valorPago,
+        valorPendente, valorVencido,
+        valorVencidoAtualizado: +(valorVencido + valorMultaEstimada).toFixed(2),
+        valorMultaEstimada: +valorMultaEstimada.toFixed(2),
+        valorPago,
         mode: getDasMode(),
     };
 }
@@ -189,10 +203,26 @@ export async function processarCronDas() {
         if (!venc) continue;
 
         if (venc < hoje) {
-            // Esta vencido: atualiza status se ainda nao foi
+            // Esta vencido: atualiza status se ainda nao foi + persiste estimativa
+            // de atualizacao monetaria (Lei 9.430/96 art. 61 + LC 123 art. 35).
+            // SELIC e estimativa conservadora; valor REAL vem do SERPRO ao re-emitir.
             stats.vencidos++;
             stats.valorVencidoTotal += d.valor || 0;
             stats.empresasComVencido.add(d.empresaCnpj);
+
+            const multaEst = d.valor > 0
+                ? calcularMultaDarf(d.valor, new Date(venc), new Date(hoje))
+                : null;
+            const multaEstimadaDoc = multaEst ? {
+                dias: multaEst.dias,
+                multaPct: multaEst.multaPct,
+                multaValor: multaEst.multaValor,
+                jurosPct: multaEst.jurosPct,
+                jurosValor: multaEst.jurosValor,
+                total: multaEst.total,
+                calculadoEm: hoje,
+            } : null;
+
             vencidosLista.push({
                 empresaCnpj: d.empresaCnpj,
                 empresaNome: d.empresaNome || '',
@@ -200,11 +230,20 @@ export async function processarCronDas() {
                 valor: d.valor,
                 vencimento: venc,
                 diasAtraso: Math.floor((new Date(hoje) - new Date(venc)) / 86400000),
+                multaEstimada: multaEstimadaDoc,
             });
+
+            // Persiste status 'vencido' (se mudou) + sempre atualiza multaEstimada
+            // (mesmo se ja era vencido — dias passam, valores mudam).
+            const updateData = { atualizadoEm: new Date().toISOString() };
             if (status !== 'vencido') {
-                updates.push({ ref: doc.ref, data: { statusPagamento: 'vencido', atualizadoEm: new Date().toISOString() } });
+                updateData.statusPagamento = 'vencido';
                 stats.atualizadosParaVencido++;
             }
+            if (multaEstimadaDoc) {
+                updateData.multaEstimada = multaEstimadaDoc;
+            }
+            updates.push({ ref: doc.ref, data: updateData });
         } else if (venc <= cincoDiasFrente) {
             // Proximo vencimento
             stats.aVencer++;

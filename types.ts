@@ -642,6 +642,22 @@ export interface DasEmitido {
     dataPagamento?: string | null;
     fonte?: string;
     mensagem?: string;
+    /**
+     * Estimativa de atualização monetária quando o DAS está vencido. Calculada
+     * pelo cron noturno (processarCronDas) com base em Lei 9.430/96 art. 61 +
+     * LC 123 art. 35: multa de mora 0,33%/dia (máx 20%) + juros SELIC mensal
+     * acumulada + 1% no mês do pagamento. SELIC é estimativa conservadora —
+     * valor REAL deve ser confirmado no DAS gerado pelo SERPRO antes do pagamento.
+     */
+    multaEstimada?: {
+        dias: number;
+        multaPct: number;
+        multaValor: number;
+        jurosPct: number;
+        jurosValor: number;
+        total: number;       // valor + multa + juros
+        calculadoEm: string; // ISO YYYY-MM-DD
+    };
 }
 
 export interface DasResumo {
@@ -651,6 +667,10 @@ export interface DasResumo {
     pagos: number;
     valorPendente: number;
     valorVencido: number;
+    /** Somatório de valor original + multa + juros estimados (DAS vencidos). */
+    valorVencidoAtualizado?: number;
+    /** Somatório só da parcela de multa+juros adicionais (informativo). */
+    valorMultaEstimada?: number;
     valorPago: number;
     mode: 'mock' | 'serpro';
 }
