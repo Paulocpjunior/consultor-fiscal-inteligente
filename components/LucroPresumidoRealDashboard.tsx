@@ -1663,7 +1663,14 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                     empresaNome={selectedEmpresa.nome}
                     valoresAtuais={selectedEmpresa.dadosFiscais}
                     onSave={async (dados) => {
-                        await lucroPresumidoService.updateEmpresa(selectedEmpresa.id, { dadosFiscais: dados });
+                        // Espelha ccmSp no top-level (campo canonico): o backend
+                        // (status, cron, SPED e o .where do orquestrador NFSe SP)
+                        // le empresa.ccmSp, nao dadosFiscais.ccmSp. So digitos,
+                        // igual ao NfseSpAdminPanel.
+                        await lucroPresumidoService.updateEmpresa(selectedEmpresa.id, {
+                            dadosFiscais: dados,
+                            ccmSp: dados.ccmSp?.replace(/\D/g, '') || undefined,
+                        });
                         // Refresh lista pra refletir mudanca
                         const empresasAtualizadas = await lucroPresumidoService.getEmpresas(currentUser);
                         setEmpresas(empresasAtualizadas);

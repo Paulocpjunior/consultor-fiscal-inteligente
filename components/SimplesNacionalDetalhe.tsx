@@ -870,7 +870,12 @@ if (filialServico > 0) {
                 empresaNome={empresa.nome}
                 valoresAtuais={empresa.dadosFiscais}
                 onSave={async (dados) => {
-                    await onUpdateEmpresa(empresa.id, { dadosFiscais: dados });
+                    // Espelha ccmSp no top-level (canonico) — backend le empresa.ccmSp,
+                    // nao dadosFiscais.ccmSp. So digitos, igual ao NfseSpAdminPanel.
+                    await onUpdateEmpresa(empresa.id, {
+                        dadosFiscais: dados,
+                        ccmSp: dados.ccmSp?.replace(/\D/g, '') || undefined,
+                    });
                     onShowToast('Dados fiscais salvos com sucesso!');
                 }}
             />

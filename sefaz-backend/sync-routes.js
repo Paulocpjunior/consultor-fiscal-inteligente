@@ -435,7 +435,8 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           const snap = await db.collection(col).get();
           snap.forEach(doc => {
             const d = doc.data();
-            if ((d.ccmSp || '').toString().trim() && d.nfseSpAutorizadoEm) total++;
+            // ccmSp: top-level (NfseSpAdminPanel) ou dadosFiscais.ccmSp (modal Dados Fiscais)
+            if ((d.ccmSp || d.dadosFiscais?.ccmSp || '').toString().trim() && d.nfseSpAutorizadoEm) total++;
           });
         }
         return { total, travadas: null };

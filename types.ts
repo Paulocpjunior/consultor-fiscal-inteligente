@@ -1123,6 +1123,12 @@ export interface EmpresaDadosFiscais {
     uf?: string;
     /** Codigo do municipio IBGE (7 digitos, ex: '3550308' = Sao Paulo). */
     codMunIBGE?: string;
+    /**
+     * Inscrição Municipal SP capital (CCM) — usada pra consultar NFSe SP.
+     * O modal Dados Fiscais grava aqui; o backend tambem espera no top-level
+     * empresa.ccmSp (espelhado no onSave). Ver EmpresaDadosFiscaisModal.
+     */
+    ccmSp?: string;
     /** Endereço sede da empresa. */
     logradouro?: string;
     numero?: string;
