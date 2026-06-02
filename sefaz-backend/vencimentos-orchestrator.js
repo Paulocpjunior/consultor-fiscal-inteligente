@@ -120,10 +120,18 @@ function montarConteudoEmail(tarefa, dias, categoria) {
     return { assunto: titulo, corpoHtml: corpo };
 }
 
-// Cria item em `notificacoes/{uid}/items` pra mostrar no UI
+// Cria item em `notificacoes/{uid}/items` pra mostrar no UI.
+//
+// Re-execucao do cron mesmo dia: o docId inclui a data (`venc-{id}-{hoje}`),
+// entao o mesmo dia = mesma doc. Antes, set+merge sobrescrevia `lida: false`
+// quando o user JA tinha marcado como lida — bug que desmarcava notificacoes
+// silenciosamente. Agora: so seta `lida: false` na PRIMEIRA criacao.
 async function criarNotificacaoInApp(db, uidDestinatario, tarefa, dias, categoria) {
     const ref = db.collection('notificacoes').doc(uidDestinatario).collection('items').doc(`venc-${tarefa.id}-${new Date().toISOString().slice(0, 10)}`);
-    await ref.set({
+    const snap = await ref.get();
+    const ehNovo = !snap.exists;
+
+    const payload = {
         tipo: 'vencimento',
         urgencia: categoria.urgencia,
         emoji: categoria.emoji,
@@ -133,11 +141,15 @@ async function criarNotificacaoInApp(db, uidDestinatario, tarefa, dias, categori
         obrigacao: tarefa.obrigacao,
         competencia: tarefa.competencia,
         diasAteVencimento: dias,
-        lida: false,
-        criadoEm: admin.firestore.FieldValue.serverTimestamp(),
         tarefaId: tarefa.id,
         link: '/Tarefas',
-    }, { merge: true });
+        atualizadoEm: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (ehNovo) {
+        payload.lida = false;
+        payload.criadoEm = admin.firestore.FieldValue.serverTimestamp();
+    }
+    await ref.set(payload, { merge: true });
 }
 
 // Monta o email-resumo (digest) que vai pros admins. Lista TODAS as
