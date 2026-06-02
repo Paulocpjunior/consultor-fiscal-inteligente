@@ -81,13 +81,15 @@ const CertificadoEmpresaUpload: React.FC<Props> = ({ empresaId, empresaNome, emp
       const res = await fetch(`/api/admin/cert-empresa/info/${empresaId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      // Backend novo retorna 200 com { exists: false } quando nao ha cert.
+      // 404 mantido pra compatibilidade durante a janela de deploy.
       if (res.status === 404) {
         setInfo(null);
       } else if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       } else {
         const data = await res.json();
-        setInfo(data);
+        setInfo(data?.exists === false ? null : data);
       }
     } catch (e: any) {
       setError(e.message || 'Falha ao carregar info do cert');

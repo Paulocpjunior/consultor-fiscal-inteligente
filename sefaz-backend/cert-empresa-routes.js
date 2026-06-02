@@ -79,11 +79,17 @@ router.get('/list', requireAdmin, async (req, res) => {
 });
 
 // ── GET /info/:empresaId — info de 1 cert especifico ─────────────────────
+// Retorna SEMPRE 200 quando a rota e auth estao ok:
+//   - cert existe:    { ok: true, exists: true, ...info }
+//   - cert nao existe: { ok: true, exists: false }
+// O caso "ainda nao tem cert" e NORMAL (empresa recem-cadastrada antes do
+// admin enviar o .pfx) e nao deve poluir o console com 404 nem disparar
+// alarmes — mesma familia dos "erros mentirosos" da varredura.
 router.get('/info/:empresaId', requireAdmin, async (req, res) => {
     try {
         const info = await getCertInfoEmpresa(req.params.empresaId);
-        if (!info) return res.status(404).json({ ok: false, error: 'cert nao encontrado' });
-        return res.json({ ok: true, ...info });
+        if (!info) return res.json({ ok: true, exists: false });
+        return res.json({ ok: true, exists: true, ...info });
     } catch (err) {
         console.error('[cert-empresa/info]', err);
         return res.status(500).json({ ok: false, error: err.message });
