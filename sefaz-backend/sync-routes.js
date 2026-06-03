@@ -848,6 +848,7 @@ router.get('/cron-logs', requireAuth, async (req, res) => {
         capturadoPor: d.capturadoPor ?? null,
         periodo: d.periodo ?? null,
         prestadoresAutorizados: d.prestadoresAutorizados ?? null,
+        errosResumo: d.errosResumo ?? null,
       };
     });
     return res.json({ colecao: col, total: logs.length, logs });
