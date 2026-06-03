@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { User } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
@@ -16,6 +16,8 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
     const [loading, setLoading] = useState(true);
     const [certModalFor, setCertModalFor] = useState<EmpresaXmlOption | null>(null);
+    const [busca, setBusca] = useState('');
+    const [fonteFiltro, setFonteFiltro] = useState<'todas' | 'simples' | 'lucro'>('todas');
 
     useEffect(() => {
         let alive = true;
@@ -24,6 +26,24 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
         });
         return () => { alive = false; };
     }, [currentUser]);
+
+    const empresasFiltradas = useMemo(() => {
+        const termo = busca.trim().toLowerCase();
+        const termoCnpj = termo.replace(/\D/g, '');
+        return empresas.filter(e => {
+            if (fonteFiltro !== 'todas') {
+                const ehSimples = String((e as any).fonte || '').toLowerCase().startsWith('simples');
+                if (fonteFiltro === 'simples' && !ehSimples) return false;
+                if (fonteFiltro === 'lucro' && ehSimples) return false;
+            }
+            if (!termo) return true;
+            const nome = (e.nome || '').toLowerCase();
+            const cnpj = (e.cnpj || '').replace(/\D/g, '');
+            if (nome.includes(termo)) return true;
+            if (termoCnpj && cnpj.includes(termoCnpj)) return true;
+            return false;
+        });
+    }, [empresas, busca, fonteFiltro]);
 
     return (
         <div className="space-y-3">
@@ -35,16 +55,44 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
                 </p>
             </div>
 
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <input
+                        type="text"
+                        placeholder="🔎 Buscar por nome ou CNPJ…"
+                        value={busca}
+                        onChange={(e) => setBusca(e.target.value)}
+                        className="md:col-span-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    <select
+                        value={fonteFiltro}
+                        onChange={(e) => setFonteFiltro(e.target.value as any)}
+                        className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"
+                    >
+                        <option value="todas">Regime (todos)</option>
+                        <option value="simples">Simples Nacional</option>
+                        <option value="lucro">Lucro Presumido/Real</option>
+                    </select>
+                </div>
+                {(busca || fonteFiltro !== 'todas') && (
+                    <p className="text-[10px] text-slate-500 mt-2">
+                        {empresasFiltradas.length} de {empresas.length} empresa(s) — <button onClick={() => { setBusca(''); setFonteFiltro('todas'); }} className="text-blue-600 hover:underline">limpar filtros</button>
+                    </p>
+                )}
+            </div>
+
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-                    <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">Empresas elegíveis ({empresas.length})</h3>
+                    <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">Empresas elegíveis ({empresasFiltradas.length}{empresasFiltradas.length !== empresas.length ? ` de ${empresas.length}` : ''})</h3>
                     <p className="text-[11px] text-slate-500 mt-0.5">Lista oriunda dos cadastros de Simples Nacional e Lucro Presumido/Real.</p>
                 </div>
                 {loading ? <p className="text-center text-xs text-slate-400 py-6">Carregando...</p>
                 : empresas.length === 0 ? <p className="text-center text-xs text-slate-400 py-6">Nenhuma empresa disponível para o seu perfil.</p>
+                : empresasFiltradas.length === 0 ? <p className="text-center text-xs text-slate-400 py-6">Nenhuma empresa encontrada com o filtro atual.</p>
                 : (
+                    <div className="overflow-x-auto max-h-[520px]">
                     <table className="w-full text-xs">
-                        <thead className="bg-slate-50 dark:bg-slate-700">
+                        <thead className="bg-slate-50 dark:bg-slate-700 sticky top-0">
                             <tr>
                                 <th className="px-3 py-2 text-left text-slate-500 font-bold">Empresa</th>
                                 <th className="px-3 py-2 text-left text-slate-500 font-bold">CNPJ</th>
@@ -55,7 +103,7 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {empresas.map(e => (
+                            {empresasFiltradas.map(e => (
                                 <tr key={e.id}>
                                     <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{e.nome}</td>
                                     <td className="px-3 py-2 text-slate-500 font-mono">{formatCnpjCpf(e.cnpj)}</td>
@@ -74,6 +122,7 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 )}
             </div>
 
