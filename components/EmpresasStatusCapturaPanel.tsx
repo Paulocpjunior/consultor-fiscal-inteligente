@@ -23,6 +23,7 @@ import {
     type EmpresaStatusResumo,
     type FlagCampo,
 } from '../services/empresaStatusCapturaService';
+import { captureFromSefaz } from '../services/dfeCaptureService';
 import type { User } from '../types';
 
 interface Props {
@@ -65,7 +66,37 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [busca, setBusca] = useState('');
     const [togglingCnpj, setTogglingCnpj] = useState<string | null>(null);
     const [autoUfRunning, setAutoUfRunning] = useState(false);
+    const [capturandoCnpj, setCapturandoCnpj] = useState<string | null>(null);
+    const [ultimaCaptura, setUltimaCaptura] = useState<Record<string, { ok: boolean; msg: string }>>({});
     const isAdmin = currentUser.role === 'admin';
+
+    const handleCaptureOne = async (emp: EmpresaStatusCaptura) => {
+        if (!isAdmin) return;
+        setCapturandoCnpj(emp.cnpj);
+        try {
+            const r = await captureFromSefaz({
+                empresa: { id: emp.id, cnpj: emp.cnpj } as any,
+            });
+            setUltimaCaptura(prev => ({
+                ...prev,
+                [emp.cnpj]: {
+                    ok: r.sucesso,
+                    msg: r.sucesso
+                        ? `✓ ${r.motivo}`
+                        : (r.foraDeJanela ? `⏰ ${r.motivo}` :
+                           r.rateLimited ? `🚦 ${r.motivo}` :
+                           `✗ ${r.motivo}`),
+                },
+            }));
+        } catch (e: any) {
+            setUltimaCaptura(prev => ({
+                ...prev,
+                [emp.cnpj]: { ok: false, msg: `✗ ${e.message || 'erro'}` },
+            }));
+        } finally {
+            setCapturandoCnpj(null);
+        }
+    };
 
     const handleAutoUf = async () => {
         if (!isAdmin) return;
@@ -267,6 +298,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                             <th className="px-2 py-2 text-center">NFSe Nacional</th>
                             <th className="px-2 py-2 text-center">Capturas</th>
                             <th className="px-2 py-2 text-left">Motivos Bloqueio</th>
+                            {isAdmin && <th className="px-2 py-2 text-center">Ações</th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -362,6 +394,25 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                             </ul>
                                         )}
                                     </td>
+                                    {isAdmin && (
+                                        <td className="px-2 py-1.5 text-center align-top">
+                                            <button
+                                                onClick={() => handleCaptureOne(e)}
+                                                disabled={capturandoCnpj === e.cnpj}
+                                                className="px-2 py-1 text-[10px] font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
+                                                title="Dispara /sync-one — NFe DistDFe só pra essa empresa, mostra o resultado aqui mesmo"
+                                            >
+                                                {capturandoCnpj === e.cnpj ? '⏳…' : '▶ Capturar'}
+                                            </button>
+                                            {ultimaCaptura[e.cnpj] && (
+                                                <div className={`mt-1 text-[10px] font-mono break-words ${
+                                                    ultimaCaptura[e.cnpj].ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                                                }`}>
+                                                    {ultimaCaptura[e.cnpj].msg}
+                                                </div>
+                                            )}
+                                        </td>
+                                    )}
                                 </tr>
                             );
                         })}
