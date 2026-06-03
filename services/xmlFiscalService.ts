@@ -446,6 +446,7 @@ export interface ListDocumentosFilters {
     competenciaFim?: string;
     status?: DocumentoFiscal['status'];
     origem?: XmlOrigem;
+    tipoDoc?: string;            // NFe | NFCe | NFSe | CTe | MDFe — compara em memoria contra tipoDoc OU tipo
     busca?: string;              // numero / chave / emitente / destinatario
 }
 
@@ -501,6 +502,12 @@ export async function listDocumentos(
         if (filters.direcao && d.direcao !== filters.direcao) return false;
         if (filters.status && d.status !== filters.status) return false;
         if (filters.origem && d.origem !== filters.origem) return false;
+        if (filters.tipoDoc) {
+            // tipoDoc vem do importer SEFAZ (NFe/CTe/MDFe/...) e 'tipo' vem do
+            // import manual de NFSe — comparamos ambos pra cobrir os dois fluxos.
+            const t = String((d as any).tipoDoc || d.tipo || '').toLowerCase();
+            if (t !== filters.tipoDoc.toLowerCase()) return false;
+        }
         if (filters.competencia && d.competencia !== filters.competencia) return false;
         if (filters.competenciaInicio && d.competencia < filters.competenciaInicio) return false;
         if (filters.competenciaFim && d.competencia > filters.competenciaFim) return false;

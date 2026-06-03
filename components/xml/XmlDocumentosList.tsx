@@ -38,6 +38,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     // Ex: 'todos' (sem filtro) ou 'entrada-2026-05-autorizado'.
     const filtroSlug = useMemo(() => {
         const partes = [
+            filters.tipoDoc,
             filters.direcao,
             filters.competencia,
             filters.status,
@@ -330,13 +331,25 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     return (
         <div className="space-y-3">
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
                     <input
                         placeholder="Buscar (nº, chave, emit/dest)"
                         className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"
                         value={busca}
                         onChange={(e) => setBusca(e.target.value)}
                     />
+                    <select
+                        className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"
+                        value={filters.tipoDoc || ''}
+                        onChange={(e) => setFilters(f => ({ ...f, tipoDoc: e.target.value || undefined }))}
+                    >
+                        <option value="">Tipo (todos)</option>
+                        <option value="NFe">📄 NFe</option>
+                        <option value="NFCe">🧾 NFCe</option>
+                        <option value="NFSe">🏛️ NFSe</option>
+                        <option value="CTe">📦 CT-e</option>
+                        <option value="MDFe">🚚 MDF-e</option>
+                    </select>
                     <select
                         className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"
                         value={filters.direcao || ''}
