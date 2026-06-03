@@ -6,10 +6,18 @@
 import admin from 'firebase-admin';
 import { consultaDistDFe, consultaDistDFeComCert } from './sefaz-client.js';
 import { loadCertEmpresa } from './cert-storage.js';
+import { loadCertificate } from './secret-loader.js';
 import { importarXmlSefaz, registrarErroSefaz } from './xml-importer.js';
 
 const LOCK_TTL_MS = 60 * 60 * 1000; // 1 hora
 const MAX_PAGINAS = 5;
+
+// CNPJ do escritório (S&P Assessoria Contábil). Cert dele vive no Secret
+// Manager (loadCertificate), NAO em empresas_certificados. Quando o escritorio
+// aparece como cliente de si mesmo no cadastro, o cron NFe nao achava cert e
+// abortava — entao NF-e de compra/saida do escritorio nunca eram capturadas
+// (so NFSe SP capital, que usa cert global por outro caminho).
+const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 
 function fa() {
   if (!admin.apps.length) {
@@ -120,6 +128,26 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
     certOverride = await loadCertEmpresa(empresaId);
   } catch (e) {
     console.warn(`[sync-orchestrator] erro carregando cert empresa ${empresaId}:`, e.message);
+  }
+  // Fallback APENAS pra propria S&P: cert dela vive no Secret Manager,
+  // nao em empresas_certificados. Sem isso, NFe de entrada do escritorio
+  // (compras, materiais, etc) nunca eram baixadas. Nao aplicar pra outras
+  // empresas com procuracao e-CAC sem discussao — multiplicaria 6x o
+  // volume diario de DistDFe contra a quota do IP do Cloud Run.
+  if (!certOverride && cnpjNum === CNPJ_ESCRITORIO) {
+    try {
+      const escritorio = await loadCertificate();
+      certOverride = {
+        pfxBuffer: escritorio.pfxBuffer,
+        password: escritorio.password,
+        cnpj: cnpjNum,           // pro sanity check de CNPJ-Base mais abaixo
+        notAfter: null,           // desconhecido aqui, nao usado no fluxo
+        fingerprint: null,
+      };
+      console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} cert=escritorio (S&P, fallback Secret Manager)`);
+    } catch (e) {
+      console.warn(`[sync-orchestrator] falha carregando cert do escritorio: ${e.message}`);
+    }
   }
   if (!certOverride) {
     console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} SEM cert próprio — aguardando upload`);
