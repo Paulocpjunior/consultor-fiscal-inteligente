@@ -78,20 +78,28 @@ async function persisteUltNSU(cnpj, ultNSU, info = {}) {
 
 // Carrega UF da empresa (de dadosFiscais.uf) consultando coleções
 // simples_empresas e lucro_empresas (tenta as duas).
-async function carregarUfEmpresa(empresaId) {
+async function carregarUfEmpresa(empresaId, empresaCnpj) {
   if (!empresaId) return null;
   const db = fa().firestore();
   for (const col of ['simples_empresas', 'lucro_empresas']) {
     try {
       const snap = await db.collection(col).doc(empresaId).get();
       if (snap.exists) {
-        const uf = snap.data()?.dadosFiscais?.uf;
+        const d = snap.data() || {};
+        // Cadastro canonico: dadosFiscais.uf. Fallback ao top-level pra
+        // cobrir docs legados onde a UF foi gravada como d.uf direto.
+        const uf = d.dadosFiscais?.uf || d.uf;
         if (uf) return String(uf).trim().toUpperCase();
       }
     } catch (e) {
       console.warn(`[sync-orchestrator] erro lendo ${col}/${empresaId}:`, e.message);
     }
   }
+  // Caso especial: a propria S&P (escritorio) — defaulta SP. Sem isso,
+  // o escritorio tinha que cadastrar UF=SP pra si mesmo manualmente, o
+  // que e ridiculo (S&P Assessoria Contabil esta literalmente em SP).
+  const cnpjNum = String(empresaCnpj || '').replace(/\D/g, '');
+  if (cnpjNum === CNPJ_ESCRITORIO) return 'SP';
   return null;
 }
 
@@ -100,7 +108,7 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
   if (cnpjNum.length !== 14) return { ok: false, motivo: `CNPJ inválido: ${empresaCnpj}` };
 
   // Carrega UF da empresa — necessária pro envelope cUFAutor.
-  const uf = await carregarUfEmpresa(empresaId);
+  const uf = await carregarUfEmpresa(empresaId, cnpjNum);
   if (!uf) {
     return {
       ok: false,

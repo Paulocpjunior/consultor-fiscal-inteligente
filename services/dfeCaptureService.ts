@@ -27,6 +27,9 @@ export interface DfeCaptureResult {
     duplicados?: number;
     erros?: number;
     ultNSU?: string;
+    cStat?: string;
+    xMotivo?: string;
+    paginas?: number;
     rateLimited?: boolean;
     foraDeJanela?: boolean;
 }
@@ -83,14 +86,24 @@ export async function captureFromSefaz(req: DfeCaptureRequest): Promise<DfeCaptu
         if (!res.ok) {
             return { sucesso: false, motivo: data.error || data.motivo || `Falha HTTP ${res.status}`, itens: [] };
         }
+        // Monta motivo verboso: SEFAZ cStat + qty + NSU. Sem isso fica
+        // dificil saber se '0 novos' significa 'NSU em dia' ou 'cert errado'.
+        // Lista de codigos: https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=tW+YMyk/50s=
+        const cStatLabel = data.cStat ? `cStat=${data.cStat}` : '';
+        const xMotivo = data.xMotivo ? ` ${data.xMotivo}` : '';
+        const nsu = data.ultNSU ? ` · NSU agora=${data.ultNSU}` : '';
+        const pag = data.paginas ? ` · ${data.paginas} pág` : '';
         return {
             sucesso: true,
-            motivo: `${data.novosXmls || 0} novos · ${data.duplicados || 0} dup · ${data.erros || 0} erros`,
+            motivo: `${data.novosXmls || 0} novos · ${data.duplicados || 0} dup · ${data.erros || 0} erros${cStatLabel ? ` · ${cStatLabel}${xMotivo}` : ''}${nsu}${pag}`,
             itens: [],
             novosXmls: data.novosXmls,
             duplicados: data.duplicados,
             erros: data.erros,
             ultNSU: data.ultNSU,
+            cStat: data.cStat,
+            xMotivo: data.xMotivo,
+            paginas: data.paginas,
         };
     } catch (err: any) {
         return { sucesso: false, motivo: err.message || 'Erro de rede', itens: [] };
