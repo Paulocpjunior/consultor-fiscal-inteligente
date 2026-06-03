@@ -20,7 +20,16 @@ const XmlErros: React.FC<Props> = ({ currentUser, refreshKey }) => {
     const [loading, setLoading] = useState(true);
     const [cronCol, setCronCol] = useState<CronLogColecao>('nfsesp_cron_logs');
     const [cronLogs, setCronLogs] = useState<CronLogItem[] | { erro: string } | null>(null);
+    const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
     const isAdmin = currentUser?.role === 'admin';
+
+    const toggleExpand = (id: string) => {
+        setExpandidos(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
 
     useEffect(() => {
         let alive = true;
@@ -94,14 +103,24 @@ const XmlErros: React.FC<Props> = ({ currentUser, refreshKey }) => {
                                             const dt = log.executadoEmMs ? new Date(log.executadoEmMs) : null;
                                             const erro = !!log.erroFatal;
                                             const semNovas = !erro && (log.totalNovos ?? 0) === 0;
+                                            const temFalhas = (log.falhas ?? 0) > 0;
+                                            const temResumo = (log.errosResumo?.length ?? 0) > 0;
+                                            const podeExpandir = temResumo || erro;
+                                            const aberto = expandidos.has(log.id);
                                             const rowCls = erro
                                                 ? 'bg-red-50/50 dark:bg-red-900/10'
                                                 : semNovas
                                                     ? 'bg-amber-50/40 dark:bg-amber-900/10'
                                                     : '';
                                             return (
-                                                <tr key={log.id} className={rowCls}>
-                                                    <td className="px-3 py-1.5 text-slate-600 dark:text-slate-300 font-mono">{dt ? dt.toLocaleString('pt-BR') : '—'}</td>
+                                                <React.Fragment key={log.id}>
+                                                <tr className={`${rowCls} ${podeExpandir ? 'cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-700/30' : ''}`}
+                                                    onClick={() => podeExpandir && toggleExpand(log.id)}
+                                                    title={podeExpandir ? 'Clique pra ver detalhes' : ''}>
+                                                    <td className="px-3 py-1.5 text-slate-600 dark:text-slate-300 font-mono">
+                                                        {podeExpandir && <span className="inline-block w-3 text-slate-400">{aberto ? '▼' : '▶'}</span>}{' '}
+                                                        {dt ? dt.toLocaleString('pt-BR') : '—'}
+                                                    </td>
                                                     <td className="px-3 py-1.5 text-right text-slate-500">{log.duracaoMs != null ? `${(log.duracaoMs / 1000).toFixed(1)}s` : '—'}</td>
                                                     <td className="px-3 py-1.5 text-right">{log.processadas ?? log.totalEmpresas ?? '—'}</td>
                                                     <td className="px-3 py-1.5 text-right text-emerald-700 dark:text-emerald-400">{log.sucessos ?? '—'}</td>
@@ -111,6 +130,36 @@ const XmlErros: React.FC<Props> = ({ currentUser, refreshKey }) => {
                                                     <td className="px-3 py-1.5 text-slate-500">{log.capturadoPor || '—'}</td>
                                                     <td className="px-3 py-1.5 text-red-600 dark:text-red-400 max-w-[280px] truncate" title={log.erroFatal || ''}>{log.erroFatal || '—'}</td>
                                                 </tr>
+                                                {aberto && podeExpandir && (
+                                                    <tr className="bg-slate-50 dark:bg-slate-900/30">
+                                                        <td colSpan={9} className="px-3 py-2">
+                                                            {temResumo ? (
+                                                                <div className="space-y-1">
+                                                                    <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                                                                        Erros por empresa (top {log.errosResumo!.length} de {log.falhas ?? 0}):
+                                                                    </div>
+                                                                    {log.errosResumo!.map((e, i) => {
+                                                                        const msg = e.erroPrestador || e.erroTomador || e.motivo || `(${e.status})`;
+                                                                        return (
+                                                                            <div key={i} className="font-mono text-[11px] flex gap-2 items-start border-l-2 border-red-400 pl-2 py-0.5">
+                                                                                <span className="text-slate-500 shrink-0">{e.cnpj || e.ccm || '—'}</span>
+                                                                                <span className="text-slate-700 dark:text-slate-200 shrink-0 truncate max-w-[180px]" title={e.nome || ''}>{e.nome || '—'}</span>
+                                                                                <span className="text-red-600 dark:text-red-400 flex-1">{msg}</span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            ) : erro ? (
+                                                                <div className="font-mono text-[11px] text-red-600 dark:text-red-400">
+                                                                    Erro fatal (sem detalhes por empresa): {log.erroFatal}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-[11px] text-slate-500">Sem detalhes registrados — execuções antigas (anteriores ao deploy do PR #27) não persistiam motivos individuais.</div>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                                </React.Fragment>
                                             );
                                         })}
                                     </tbody>
