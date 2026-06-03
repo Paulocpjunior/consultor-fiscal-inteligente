@@ -96,7 +96,8 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
             const W = pdf.internal.pageSize.getWidth();   // 297
             const H = pdf.internal.pageSize.getHeight();  // 210
             const M = 10;                                  // margem
-            const colorBrand: [number, number, number] = [16, 122, 87];   // emerald-700
+            const colorBrand: [number, number, number] = [30, 64, 175];    // sp-blue (#1E40AF, --accent do index.css)
+            const colorOk: [number, number, number]    = [16, 122, 87];    // verde semantico pra 'autorizado'
             const colorMuted: [number, number, number] = [100, 116, 139]; // slate-500
             const colorRed: [number, number, number]   = [220, 38, 38];   // red-600
             const colorAmber: [number, number, number] = [217, 119, 6];   // amber-600
@@ -191,7 +192,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
             const kpis: { label: string; valor: string; sub: string; color: [number, number, number] }[] = [
                 { label: 'Total de Docs', valor: String(docs.length), sub: `${entradas.qtd} entrada · ${saidas.qtd} saída`, color: colorBrand },
                 { label: 'Valor Bruto', valor: fmtBRL(valorTotal), sub: `Autorizado: ${fmtBRL(valorLiquido)}`, color: [40, 40, 40] },
-                { label: 'Autorizadas', valor: String(autorizados), sub: cancelados ? `${cancelados} canceladas` : 'sem cancelamentos', color: [16, 122, 87] },
+                { label: 'Autorizadas', valor: String(autorizados), sub: cancelados ? `${cancelados} canceladas` : 'sem cancelamentos', color: colorOk },
                 { label: 'Canceladas / Rejeitadas', valor: String(cancelados + denegados + rejeitados), sub: `${cancelados} canc · ${denegados} den · ${rejeitados} rej`, color: cancelados > 0 ? colorRed : colorMuted },
             ];
             kpis.forEach((k, i) => {
@@ -270,7 +271,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                 const statusColor: [number, number, number] =
                     status === 'cancelado' ? colorRed :
                     status === 'denegado' || status === 'rejeitado' ? colorAmber :
-                    status === 'autorizado' ? colorBrand : colorMuted;
+                    status === 'autorizado' ? colorOk : colorMuted;
 
                 const cells = [
                     { txt: formatDate(d.dhEmi).split(' ')[0] || '—', color: [40,40,40] as [number,number,number] },
