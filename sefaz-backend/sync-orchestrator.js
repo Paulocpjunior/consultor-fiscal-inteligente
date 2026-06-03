@@ -185,6 +185,12 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
   }
   console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} cert=empresa`);
 
+  // Detalhe por documento processado — exposto no retorno pra debug fino
+  // (qual chave veio, qual o status, qual o erro). Sem isso era impossivel
+  // saber se uma NFe especifica chegou via DistDFe ou nao — o cron so dava
+  // total agregado.
+  const documentosProcessados = [];
+
   try {
     while (pagina < MAX_PAGINAS) {
       pagina++;
@@ -199,6 +205,10 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
         for (const docZip of result.xmls) {
           if (!docZip.xml) {
             erros++;
+            documentosProcessados.push({
+              nsu: docZip.nsu, schema: docZip.schema, chave: null,
+              status: 'erro-descompressao', motivo: docZip.erroDescompressao || 'docZip vazio',
+            });
             await registrarErroSefaz({
               empresaId, empresaCnpj: cnpjNum,
               motivo: 'Falha ao descomprimir docZip',
@@ -207,21 +217,34 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
             });
             continue;
           }
+          // Extrai chave do XML pra mostrar no retorno (mesmo padrao do xml-importer)
+          const chaveMatch = docZip.xml.match(/Id="(?:NFe|CTe|MDFe|ID)?(\d{44})"/i)
+            || docZip.xml.match(/<ch(?:NFe|CTe|MDFe)>(\d{44})<\/ch/i);
+          const chave = chaveMatch ? chaveMatch[1] : null;
           try {
             const r = await importarXmlSefaz({
               empresaId, empresaCnpj: cnpjNum,
               xml: docZip.xml, schema: docZip.schema, nsu: docZip.nsu,
               capturadoPor,
             });
-            if (r.status === 'ok') novosXmls++;
-            else if (r.status === 'duplicado') duplicados++;
-            else { erros++; console.warn('[orchestrator] import retornou erro:', r); }
+            if (r.status === 'ok') {
+              novosXmls++;
+              documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'ok', motivo: null });
+            } else if (r.status === 'duplicado') {
+              duplicados++;
+              documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'duplicado', motivo: r.motivo || null });
+            } else {
+              erros++;
+              documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'erro-import', motivo: r.motivo || JSON.stringify(r).slice(0, 200) });
+              console.warn('[orchestrator] import retornou erro:', r);
+            }
           } catch (e) {
             erros++;
+            documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'excecao-import', motivo: e.message });
             console.error('[orchestrator] exceção no import:', e.message);
             await registrarErroSefaz({
               empresaId, empresaCnpj: cnpjNum,
-              motivo: e.message, contexto: { nsu: docZip.nsu, schema: docZip.schema },
+              motivo: e.message, contexto: { nsu: docZip.nsu, schema: docZip.schema, chave },
               capturadoPor,
             });
           }
@@ -246,12 +269,14 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
         ok: false, rateLimited: true,
         motivo: 'SEFAZ retornou cStat 656 (Consumo Indevido) — aguarde 1h.',
         novosXmls, duplicados, erros, ultNSU, paginas: pagina,
+        documentosProcessados,
       };
     }
 
     return {
       ok: true, novosXmls, duplicados, erros, ultNSU, paginas: pagina,
       cStat: cStatFinal, xMotivo: xMotivoFinal,
+      documentosProcessados,
     };
   } catch (e) {
     console.error('[orchestrator] erro fatal:', e);
@@ -259,6 +284,6 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
       empresaId, empresaCnpj: cnpjNum,
       motivo: e.message, contexto: { ultNSU, pagina }, capturadoPor,
     });
-    return { ok: false, motivo: e.message, novosXmls, duplicados, erros, ultNSU, paginas: pagina };
+    return { ok: false, motivo: e.message, novosXmls, duplicados, erros, ultNSU, paginas: pagina, documentosProcessados };
   }
 }

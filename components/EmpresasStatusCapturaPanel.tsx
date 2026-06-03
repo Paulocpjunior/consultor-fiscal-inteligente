@@ -23,7 +23,7 @@ import {
     type EmpresaStatusResumo,
     type FlagCampo,
 } from '../services/empresaStatusCapturaService';
-import { captureFromSefaz } from '../services/dfeCaptureService';
+import { captureFromSefaz, type DfeDocProcessado } from '../services/dfeCaptureService';
 import type { User } from '../types';
 
 interface Props {
@@ -67,7 +67,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [togglingCnpj, setTogglingCnpj] = useState<string | null>(null);
     const [autoUfRunning, setAutoUfRunning] = useState(false);
     const [capturandoCnpj, setCapturandoCnpj] = useState<string | null>(null);
-    const [ultimaCaptura, setUltimaCaptura] = useState<Record<string, { ok: boolean; msg: string }>>({});
+    const [ultimaCaptura, setUltimaCaptura] = useState<Record<string, { ok: boolean; msg: string; docs?: DfeDocProcessado[] }>>({});
     const isAdmin = currentUser.role === 'admin';
 
     const handleCaptureOne = async (emp: EmpresaStatusCaptura) => {
@@ -86,6 +86,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                         : (r.foraDeJanela ? `⏰ ${r.motivo}` :
                            r.rateLimited ? `🚦 ${r.motivo}` :
                            `✗ ${r.motivo}`),
+                    docs: r.documentosProcessados,
                 },
             }));
         } catch (e: any) {
@@ -420,6 +421,30 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                 }`}>
                                                     {ultimaCaptura[e.cnpj].msg}
                                                 </div>
+                                            )}
+                                            {ultimaCaptura[e.cnpj]?.docs && ultimaCaptura[e.cnpj].docs!.length > 0 && (
+                                                <details className="mt-1 text-left">
+                                                    <summary className="text-[10px] text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">
+                                                        Ver {ultimaCaptura[e.cnpj].docs!.length} doc(s) processado(s)
+                                                    </summary>
+                                                    <div className="mt-1 space-y-1 max-h-[200px] overflow-y-auto">
+                                                        {ultimaCaptura[e.cnpj].docs!.map((d, i) => {
+                                                            const cor = d.status === 'ok' ? 'text-emerald-700' :
+                                                                d.status === 'duplicado' ? 'text-amber-700' :
+                                                                'text-red-600';
+                                                            return (
+                                                                <div key={i} className="text-[9px] font-mono border-l-2 border-slate-300 pl-1 py-0.5">
+                                                                    <div className="flex gap-1 items-baseline">
+                                                                        <span className={`font-bold ${cor}`}>{d.status}</span>
+                                                                        <span className="text-slate-500">{d.schema || '?'}</span>
+                                                                    </div>
+                                                                    {d.chave && <div className="text-slate-700 dark:text-slate-300 break-all">{d.chave}</div>}
+                                                                    {d.motivo && <div className="text-red-600 dark:text-red-400 break-words">{d.motivo}</div>}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </details>
                                             )}
                                         </td>
                                     )}
