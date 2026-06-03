@@ -12,9 +12,20 @@ import {
     getCertInfoEmpresa,
     listCertsEmpresas,
 } from './cert-storage.js';
-import { requireAdmin } from './require-admin.js';
+import { requireAdmin, requireAuth } from './require-admin.js';
+import { podeAcessarEmpresaId } from './carteira-auth.js';
 
 const router = express.Router();
+
+// Middleware: usado APOS requireAuth. Garante que admin OU colaborador-com-
+// a-empresa-na-carteira pode acessar a rota. Pega empresaId de req.params
+// (rotas /:empresaId) ou de req.body (upload).
+async function requireCarteira(req, res, next) {
+    const empresaId = req.params.empresaId || req.body?.empresaId;
+    const check = await podeAcessarEmpresaId(req.user, empresaId);
+    if (!check.ok) return res.status(check.status).json({ error: check.error });
+    next();
+}
 
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -26,7 +37,7 @@ const upload = multer({
 //   - cert: arquivo .pfx (binary)
 //   - password: senha do .pfx (string)
 //   - empresaId: id da empresa
-router.post('/upload', requireAdmin, upload.single('cert'), async (req, res) => {
+router.post('/upload', requireAuth, upload.single('cert'), requireCarteira, async (req, res) => {
     try {
         const { empresaId, password } = req.body || {};
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
@@ -85,7 +96,7 @@ router.get('/list', requireAdmin, async (req, res) => {
 // O caso "ainda nao tem cert" e NORMAL (empresa recem-cadastrada antes do
 // admin enviar o .pfx) e nao deve poluir o console com 404 nem disparar
 // alarmes — mesma familia dos "erros mentirosos" da varredura.
-router.get('/info/:empresaId', requireAdmin, async (req, res) => {
+router.get('/info/:empresaId', requireAuth, requireCarteira, async (req, res) => {
     try {
         const info = await getCertInfoEmpresa(req.params.empresaId);
         if (!info) return res.json({ ok: true, exists: false });
@@ -110,7 +121,7 @@ router.delete('/:empresaId', requireAdmin, async (req, res) => {
 
 // ── POST /test/:empresaId — testa o cert chamando SEFAZ ──────────────────
 // Util pra UI confirmar visualmente que o cert funciona
-router.post('/test/:empresaId', requireAdmin, async (req, res) => {
+router.post('/test/:empresaId', requireAuth, requireCarteira, async (req, res) => {
     try {
         const empresaId = req.params.empresaId;
         const cert = await loadCertEmpresa(empresaId);
