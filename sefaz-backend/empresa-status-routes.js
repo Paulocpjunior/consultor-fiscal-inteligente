@@ -20,8 +20,10 @@
 
 import express from 'express';
 import admin from 'firebase-admin';
+import forge from 'node-forge';
 import { requireAuth } from './require-admin.js';
 import { getCnpjsDaCarteira } from './carteira-auth.js';
+import { loadCertificate } from './secret-loader.js';
 import { lookupCnpj } from './brasilapi-cache.js';
 
 const router = express.Router();
@@ -163,6 +165,29 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             capturaNfseNacionalOk: 0,
         };
 
+        // Lê o cert do escritório (Secret Manager) UMA vez por request e
+        // extrai o CNPJ-Base do subject. Usado pra detectar o mismatch que
+        // causa cStat=593 em massa (cert global pertence a outro CNPJ).
+        // loadCertificate() tem cache TTL 5min — chamada repetida é grátis.
+        let cnpjBaseCertEscritorio = null;
+        let certEscritorioErro = null;
+        try {
+            const certEsc = await loadCertificate();
+            if (certEsc?.pemCert) {
+                const cert509 = forge.pki.certificateFromPem(certEsc.pemCert);
+                const subjectAttrs = cert509.subject?.attributes || [];
+                const cn = (subjectAttrs.find(a => a.shortName === 'CN' || a.name === 'commonName')?.value || '');
+                const serial = (subjectAttrs.find(a => a.shortName === 'serialNumber')?.value || '');
+                const matchCN = cn.match(/:(\d{14})$/);
+                const matchSerial = serial.match(/\d{14}/);
+                const cnpjCert = matchCN ? matchCN[1] : (matchSerial ? matchSerial[0] : null);
+                if (cnpjCert) cnpjBaseCertEscritorio = cnpjCert.slice(0, 8);
+            }
+        } catch (e) {
+            certEscritorioErro = e.message;
+            console.warn('[empresa-status-routes] falha lendo cert do escritorio:', e.message);
+        }
+
         for (const emp of empresasMap.values()) {
             const cert = certsMap.get(emp.id);
             let tipoCert = 'nenhum';
@@ -210,13 +235,29 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             // Cálculo de capacidade de captura
             const motivosBloqueio = [];
 
-            // a) NFe DistDFe: precisa cert válido + UF cadastrada
-            const capturaNfeOk = certValido && emp.capturarSefaz && !!emp.uf;
+            // a) NFe DistDFe: precisa cert válido + UF cadastrada + cert-base bater
+            // O mismatch CNPJ-Base só importa quando usa cert do escritório (cert
+            // global) ou quando a empresa É o escritório. Empresas com cert próprio
+            // já são validadas pelo sanity check do sync-orchestrator.
+            const empresaCnpjBase = String(emp.cnpj || '').slice(0, 8);
+            const certBaseMismatch = (usaCertEscritorio || emp.cnpj === CNPJ_ESCRITORIO)
+                && cnpjBaseCertEscritorio
+                && cnpjBaseCertEscritorio !== empresaCnpjBase;
+            const capturaNfeOk = certValido && emp.capturarSefaz && !!emp.uf && !certBaseMismatch;
             if (!emp.capturarSefaz) motivosBloqueio.push('Captura SEFAZ desativada manualmente');
             else if (!emp.uf) motivosBloqueio.push('UF não cadastrada (preencha dadosFiscais.uf, ex: SP)');
             else if (tipoCert === 'nenhum') motivosBloqueio.push('Sem certificado A1/A3 e sem procuração e-CAC');
             else if (!certValido && certUploaded) motivosBloqueio.push(`Certificado ${tipoCert} expirado em ${certVenceEm}`);
             else if (tipoCert === 'A3') motivosBloqueio.push('Tipo A3 — captura via agente local cfi-a3, não pelo Cloud Run');
+            else if (certBaseMismatch) {
+                motivosBloqueio.push(
+                    `Cert do escritório no Secret Manager é de outro CNPJ-Base (${cnpjBaseCertEscritorio}) — esperado ${empresaCnpjBase}. ` +
+                    `SEFAZ rejeita com cStat=593. Suba o .pfx correto via 'Empresas Monitoradas → Certificado'.`
+                );
+            }
+            if (certEscritorioErro && (usaCertEscritorio || emp.cnpj === CNPJ_ESCRITORIO)) {
+                motivosBloqueio.push(`Cert do escritório indisponível: ${certEscritorioErro}`);
+            }
 
             // b) NFSe SP: precisa ccmSp + autorização do contador no portal SP
             const capturaNfseSpOk = !!emp.ccmSp && !!emp.nfseSpAutorizadoEm;
