@@ -18,6 +18,14 @@ export interface DfeCaptureResultItem {
     motivo?: string;
 }
 
+export interface DfeDocProcessado {
+    nsu: string | null;
+    schema: string | null;
+    chave: string | null;
+    status: 'ok' | 'duplicado' | 'erro-import' | 'excecao-import' | 'erro-descompressao';
+    motivo: string | null;
+}
+
 export interface DfeCaptureResult {
     sucesso: boolean;
     motivo: string;
@@ -32,6 +40,7 @@ export interface DfeCaptureResult {
     paginas?: number;
     rateLimited?: boolean;
     foraDeJanela?: boolean;
+    documentosProcessados?: DfeDocProcessado[];
 }
 
 export interface SefazWindow {
@@ -102,6 +111,7 @@ export async function captureFromSefaz(req: DfeCaptureRequest): Promise<DfeCaptu
             erros: data.erros,
             ultNSU: data.ultNSU,
             cStat: data.cStat,
+            documentosProcessados: data.documentosProcessados,
             xMotivo: data.xMotivo,
             paginas: data.paginas,
         };
