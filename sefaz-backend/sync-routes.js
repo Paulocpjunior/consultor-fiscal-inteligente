@@ -19,6 +19,12 @@ function fa() {
   return admin;
 }
 
+// CNPJ do escritorio (S&P). Cert dele vive no Secret Manager (loadCertificate)
+// e nao em empresas_certificados — entao a checagem de elegibilidade da S&P
+// falha pelo caminho normal (sem cert proprio E sem procuracao a si mesmo).
+// Usado em listarEmpresasParaCron pra incluir o escritorio mesmo assim.
+const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
+
 function requireCronAuth(req, res, next) {
     const secret = process.env.SEFAZ_CRON_SECRET;
     if (!secret) {
@@ -277,7 +283,12 @@ async function listarEmpresasParaCron() {
     if (a3Ids.has(e.id)) return false;
     const tipoCert = certsPorId.get(e.id);
     const temCertProprio = tipoCert === 'A1' || tipoCert === 'A3';
-    const temAcesso = temCertProprio || e.procuracaoEcacAtiva;
+    // A propria S&P (escritorio) entra mesmo sem cert em empresas_certificados:
+    // o cert dela vive em Secret Manager e o orquestrador (sync-orchestrator.js)
+    // sabe fazer fallback via loadCertificate() quando o CNPJ bate. Sem essa
+    // excecao aqui, nem chegava a tentar — caia em "sem acesso" e era pulada.
+    const ehEscritorio = e.cnpj === CNPJ_ESCRITORIO;
+    const temAcesso = temCertProprio || e.procuracaoEcacAtiva || ehEscritorio;
     if (!temAcesso) {
       bloqueadasSemAcesso++;
       return false;
