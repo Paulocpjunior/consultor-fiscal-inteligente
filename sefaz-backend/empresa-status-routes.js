@@ -21,6 +21,7 @@
 import express from 'express';
 import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
+import { getCnpjsDaCarteira } from './carteira-auth.js';
 import { lookupCnpj } from './brasilapi-cache.js';
 
 const router = express.Router();
@@ -62,6 +63,13 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
         const db = fa().firestore();
         const agora = new Date();
 
+        // Multi-tenancy: admin ve todas. Colaborador ve so as empresas da
+        // carteira dele (via colecao `carteiras`). Se nao tem nenhuma na
+        // carteira, vai retornar lista vazia (intencional — sem carteira =
+        // sem acesso a empresa nenhuma).
+        const cnpjsPermitidos = await getCnpjsDaCarteira(req.user);
+        const cnpjsSet = cnpjsPermitidos ? new Set(cnpjsPermitidos) : null;
+
         // 1. Lista todas as empresas (Simples + Lucro)
         const empresasMap = new Map();
         for (const col of ['simples_empresas', 'lucro_empresas']) {
@@ -71,6 +79,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 const cnpj = (d.cnpj || '').replace(/\D/g, '');
                 if (cnpj.length !== 14) return;
                 if (empresasMap.has(cnpj)) return; // dedup
+                if (cnpjsSet && !cnpjsSet.has(cnpj)) return; // filtra pela carteira
                 empresasMap.set(cnpj, {
                     id: doc.id,
                     cnpj,
