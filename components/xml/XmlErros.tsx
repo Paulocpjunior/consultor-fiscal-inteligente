@@ -105,7 +105,7 @@ const XmlErros: React.FC<Props> = ({ currentUser, refreshKey }) => {
                                             const semNovas = !erro && (log.totalNovos ?? 0) === 0;
                                             const temFalhas = (log.falhas ?? 0) > 0;
                                             const temResumo = (log.errosResumo?.length ?? 0) > 0;
-                                            const podeExpandir = temResumo || erro;
+                                            const podeExpandir = true; // sempre permite — mensagem util quando vazio (execucoes antigas sem errosResumo persistido)
                                             const aberto = expandidos.has(log.id);
                                             const rowCls = erro
                                                 ? 'bg-red-50/50 dark:bg-red-900/10'
@@ -153,8 +153,20 @@ const XmlErros: React.FC<Props> = ({ currentUser, refreshKey }) => {
                                                                 <div className="font-mono text-[11px] text-red-600 dark:text-red-400">
                                                                     Erro fatal (sem detalhes por empresa): {log.erroFatal}
                                                                 </div>
+                                                            ) : temFalhas ? (
+                                                                <div className="text-[11px] space-y-1">
+                                                                    <p className="text-amber-700 dark:text-amber-300 font-semibold">
+                                                                        ⚠ Esta execução teve {log.falhas} falha(s), mas não persistiu os motivos individuais.
+                                                                    </p>
+                                                                    <p className="text-slate-500">
+                                                                        Execuções <strong>após o deploy 03/06 16:30 BRT (PR #27)</strong> já gravam o resumo. Pra ver os motivos:
+                                                                        <strong> dispare a captura de novo agora</strong> em <em>Captura Automática → ▶ Forçar captura agora</em>, depois recarregue esta tela.
+                                                                    </p>
+                                                                </div>
                                                             ) : (
-                                                                <div className="text-[11px] text-slate-500">Sem detalhes registrados — execuções antigas (anteriores ao deploy do PR #27) não persistiam motivos individuais.</div>
+                                                                <div className="text-[11px] text-slate-500">
+                                                                    Execução sem falhas registradas. Login: {log.metodoLogin || '—'} · Período: {log.periodo || '—'} · Empresas processadas: {log.processadas ?? log.totalEmpresas ?? '—'} · Docs novos: {log.totalNovos ?? 0}.
+                                                                </div>
                                                             )}
                                                         </td>
                                                     </tr>
