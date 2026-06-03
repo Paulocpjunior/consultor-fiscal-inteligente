@@ -89,53 +89,233 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     };
 
     const exportPdf = async () => {
-        if (!tableRef.current) return;
         setExporting('pdf');
         try {
             const { default: jsPDF } = await import('jspdf');
-            const { default: html2canvas } = await import('html2canvas');
-            const canvas = await html2canvas(tableRef.current, {
-                scale: 2,
-                backgroundColor: '#ffffff',
-                useCORS: true,
-                logging: false,
-            });
             const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const W = pdf.internal.pageSize.getWidth();   // 297
+            const H = pdf.internal.pageSize.getHeight();  // 210
+            const M = 10;                                  // margem
+            const colorBrand: [number, number, number] = [16, 122, 87];   // emerald-700
+            const colorMuted: [number, number, number] = [100, 116, 139]; // slate-500
+            const colorRed: [number, number, number]   = [220, 38, 38];   // red-600
+            const colorAmber: [number, number, number] = [217, 119, 6];   // amber-600
+            const colorBorder: [number, number, number]= [203, 213, 225]; // slate-300
 
-            // Cabeçalho próprio do layout do app
-            pdf.setFontSize(12);
-            pdf.setTextColor(40);
-            pdf.text('Central de Documentos Fiscais — XMLs NFe (Entrada/Saída)', 10, 10);
-            pdf.setFontSize(9);
-            pdf.setTextColor(120);
-            pdf.text(
-                `Filtros: ${filtroSlug.replace(/-/g, ' · ')}  ·  ${docs.length} documento(s)  ·  gerado em ${new Date().toLocaleString('pt-BR')}`,
-                10, 15,
-            );
+            // ─── Helpers ───────────────────────────────────────────────────
+            const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const truncate = (s: string, max: number) => (s || '').length > max ? (s || '').slice(0, max - 1) + '…' : (s || '');
 
-            // Imagem da tabela, mantendo proporção e quebrando em páginas
-            // se passar da altura útil.
-            const usableTop = 20;
-            const usableHeight = pdfHeight - usableTop - 10;
-            const imgWidthMm = pdfWidth - 20;
-            const imgHeightMm = (canvas.height * imgWidthMm) / canvas.width;
-            const imgData = canvas.toDataURL('image/png');
-
-            if (imgHeightMm <= usableHeight) {
-                pdf.addImage(imgData, 'PNG', 10, usableTop, imgWidthMm, imgHeightMm);
-            } else {
-                // Tabela longa: distribui em N páginas mantendo a largura.
-                const totalPages = Math.ceil(imgHeightMm / usableHeight);
-                for (let i = 0; i < totalPages; i++) {
-                    if (i > 0) pdf.addPage();
-                    pdf.addImage(
-                        imgData, 'PNG',
-                        10, usableTop - i * usableHeight,
-                        imgWidthMm, imgHeightMm,
-                    );
+            // ─── Stats ─────────────────────────────────────────────────────
+            const docsView = docs.map(d => ({ d, v: getView(d) }));
+            const valorTotal = docsView.reduce((acc, { v }) => acc + (v.valores.total || 0), 0);
+            const porStatus: Record<string, { qtd: number; valor: number }> = {};
+            const porDirecao: Record<string, { qtd: number; valor: number }> = {};
+            let dataMin = '';
+            let dataMax = '';
+            docsView.forEach(({ d, v }) => {
+                const st = (d.status || 'desconhecido').toLowerCase();
+                porStatus[st] = porStatus[st] || { qtd: 0, valor: 0 };
+                porStatus[st].qtd++;
+                porStatus[st].valor += v.valores.total || 0;
+                const dir = (v.direcao || 'desconhecida').toLowerCase();
+                porDirecao[dir] = porDirecao[dir] || { qtd: 0, valor: 0 };
+                porDirecao[dir].qtd++;
+                porDirecao[dir].valor += v.valores.total || 0;
+                const dia = formatDate(d.dhEmi).split(' ')[0];
+                if (dia && /^\d{2}\/\d{2}\/\d{4}$/.test(dia)) {
+                    if (!dataMin || dia < dataMin) dataMin = dia;
+                    if (!dataMax || dia > dataMax) dataMax = dia;
                 }
+            });
+            const cancelados = porStatus['cancelado']?.qtd || 0;
+            const autorizados = porStatus['autorizado']?.qtd || 0;
+            const denegados = porStatus['denegado']?.qtd || 0;
+            const rejeitados = porStatus['rejeitado']?.qtd || 0;
+            const entradas = porDirecao['entrada'] || { qtd: 0, valor: 0 };
+            const saidas = porDirecao['saida'] || { qtd: 0, valor: 0 };
+            const valorLiquido = (porStatus['autorizado']?.valor || 0); // exclui cancelado/denegado/rejeitado
+
+            // ─── Cabeçalho da página (chamado em toda nova página) ─────────
+            const drawHeader = () => {
+                pdf.setFillColor(...colorBrand);
+                pdf.rect(0, 0, W, 18, 'F');
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(14);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('Central de Documentos Fiscais', M, 8);
+                pdf.setFontSize(10);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text('Relatório · XMLs NFe (Entrada/Saída)', M, 14);
+                pdf.setFontSize(8);
+                pdf.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, W - M, 8, { align: 'right' });
+                pdf.text('SP Assessoria Contábil', W - M, 14, { align: 'right' });
+            };
+
+            // ─── Rodapé (chamado no fim, escreve número da página) ─────────
+            const drawFooter = (pageNum: number, totalPages: number) => {
+                pdf.setTextColor(...colorMuted);
+                pdf.setFontSize(8);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text(`Página ${pageNum} de ${totalPages}`, W / 2, H - 5, { align: 'center' });
+                pdf.text('Documento gerado automaticamente — Confira com as fontes oficiais.', M, H - 5);
+            };
+
+            // ─── Página 1: header + filtros + KPIs ─────────────────────────
+            drawHeader();
+            let y = 24;
+
+            // Bloco de Filtros aplicados
+            pdf.setTextColor(40);
+            pdf.setFontSize(9);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('Filtros aplicados', M, y);
+            y += 4;
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(8);
+            pdf.setTextColor(...colorMuted);
+            const filtrosTxt = [
+                `Busca: ${busca || '—'}`,
+                `Direção: ${filters.direcao || 'todas'}`,
+                `Competência: ${filters.competencia || 'todas'}`,
+                `Status: ${filters.status || 'todos'}`,
+                `Origem: ${filters.origem || 'todas'}`,
+                `Período dos docs: ${dataMin || '—'} → ${dataMax || '—'}`,
+            ].join('   ·   ');
+            pdf.text(filtrosTxt, M, y);
+            y += 6;
+
+            // KPI Cards (4 colunas)
+            const kpiW = (W - 2 * M - 9) / 4;
+            const kpiH = 18;
+            const kpis: { label: string; valor: string; sub: string; color: [number, number, number] }[] = [
+                { label: 'Total de Docs', valor: String(docs.length), sub: `${entradas.qtd} entrada · ${saidas.qtd} saída`, color: colorBrand },
+                { label: 'Valor Bruto', valor: fmtBRL(valorTotal), sub: `Autorizado: ${fmtBRL(valorLiquido)}`, color: [40, 40, 40] },
+                { label: 'Autorizadas', valor: String(autorizados), sub: cancelados ? `${cancelados} canceladas` : 'sem cancelamentos', color: [16, 122, 87] },
+                { label: 'Canceladas / Rejeitadas', valor: String(cancelados + denegados + rejeitados), sub: `${cancelados} canc · ${denegados} den · ${rejeitados} rej`, color: cancelados > 0 ? colorRed : colorMuted },
+            ];
+            kpis.forEach((k, i) => {
+                const x = M + i * (kpiW + 3);
+                pdf.setDrawColor(...colorBorder);
+                pdf.setFillColor(248, 250, 252);
+                pdf.roundedRect(x, y, kpiW, kpiH, 1.5, 1.5, 'FD');
+                pdf.setTextColor(...colorMuted);
+                pdf.setFontSize(7);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(k.label.toUpperCase(), x + 3, y + 4);
+                pdf.setTextColor(...k.color);
+                pdf.setFontSize(13);
+                pdf.text(k.valor, x + 3, y + 11);
+                pdf.setTextColor(...colorMuted);
+                pdf.setFontSize(7);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text(k.sub, x + 3, y + 15);
+            });
+            y += kpiH + 6;
+
+            // ─── Tabela ────────────────────────────────────────────────────
+            const cols = [
+                { key: 'data',         label: 'Data',        w: 18,  align: 'left' as const },
+                { key: 'empresa',      label: 'Empresa',     w: 50,  align: 'left' as const },
+                { key: 'tipo',         label: 'Tipo',        w: 14,  align: 'left' as const },
+                { key: 'numero',       label: 'Nº',          w: 22,  align: 'left' as const },
+                { key: 'direcao',      label: 'Direção',     w: 16,  align: 'left' as const },
+                { key: 'contraparte',  label: 'Contraparte', w: 70,  align: 'left' as const },
+                { key: 'valor',        label: 'Valor',       w: 28,  align: 'right' as const },
+                { key: 'status',       label: 'Status',      w: 22,  align: 'left' as const },
+            ];
+            const tableX = M;
+            const rowH = 5;
+            const headerH = 6;
+
+            const drawTableHeader = () => {
+                pdf.setFillColor(241, 245, 249); // slate-100
+                pdf.rect(tableX, y, W - 2 * M, headerH, 'F');
+                pdf.setTextColor(...colorMuted);
+                pdf.setFontSize(7);
+                pdf.setFont('helvetica', 'bold');
+                let cx = tableX + 2;
+                cols.forEach(c => {
+                    const xText = c.align === 'right' ? cx + c.w - 2 : cx;
+                    pdf.text(c.label.toUpperCase(), xText, y + 4, { align: c.align });
+                    cx += c.w;
+                });
+                pdf.setDrawColor(...colorBorder);
+                pdf.line(tableX, y + headerH, tableX + (W - 2 * M), y + headerH);
+                y += headerH;
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(7);
+            };
+
+            drawTableHeader();
+            const totalDocsRender = docsView.length;
+            let pageNum = 1;
+            const usableBottom = H - 12;
+
+            docsView.forEach(({ d, v }, idx) => {
+                if (y + rowH > usableBottom) {
+                    drawFooter(pageNum, 0); // 0 = placeholder, vamos atualizar no fim
+                    pdf.addPage();
+                    pageNum++;
+                    drawHeader();
+                    y = 22;
+                    drawTableHeader();
+                }
+                if (idx % 2 === 1) {
+                    pdf.setFillColor(250, 250, 252);
+                    pdf.rect(tableX, y, W - 2 * M, rowH, 'F');
+                }
+                const contraparte = d.direcao === 'entrada' ? v.emitente : v.destinatario;
+                const status = (d.status || 'desconhecido');
+                const statusColor: [number, number, number] =
+                    status === 'cancelado' ? colorRed :
+                    status === 'denegado' || status === 'rejeitado' ? colorAmber :
+                    status === 'autorizado' ? colorBrand : colorMuted;
+
+                const cells = [
+                    { txt: formatDate(d.dhEmi).split(' ')[0] || '—', color: [40,40,40] as [number,number,number] },
+                    { txt: truncate(d.empresaNome || formatCnpjCpf(d.empresaCnpj || '') || '—', 32), color: [40,40,40] as [number,number,number] },
+                    { txt: d.tipo || '—', color: [40,40,40] as [number,number,number] },
+                    { txt: `${v.numero || '—'}/${v.serie || '—'}`, color: [40,40,40] as [number,number,number] },
+                    { txt: v.direcao || '—', color: [40,40,40] as [number,number,number] },
+                    { txt: truncate(`${contraparte.nome || '—'} ${contraparte.cnpj ? `(${formatCnpjCpf(contraparte.cnpj)})` : ''}`, 50), color: [40,40,40] as [number,number,number] },
+                    { txt: fmtBRL(v.valores.total || 0), color: [40,40,40] as [number,number,number] },
+                    { txt: status, color: statusColor },
+                ];
+
+                let cx = tableX + 2;
+                cells.forEach((cell, i) => {
+                    pdf.setTextColor(...cell.color);
+                    const col = cols[i];
+                    const xText = col.align === 'right' ? cx + col.w - 2 : cx;
+                    pdf.text(cell.txt, xText, y + 3.5, { align: col.align });
+                    cx += col.w;
+                });
+                y += rowH;
+            });
+
+            // ─── Bloco final: linha de totais ──────────────────────────────
+            if (y + 8 > usableBottom) {
+                drawFooter(pageNum, 0);
+                pdf.addPage();
+                pageNum++;
+                drawHeader();
+                y = 22;
+            }
+            pdf.setDrawColor(...colorBorder);
+            pdf.line(tableX, y + 1, tableX + (W - 2 * M), y + 1);
+            y += 3;
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(8);
+            pdf.setTextColor(40);
+            pdf.text(`Totalizando ${totalDocsRender} documentos`, tableX, y + 3);
+            pdf.text(fmtBRL(valorTotal), W - M, y + 3, { align: 'right' });
+
+            // ─── Atualiza rodapés com o total de páginas ───────────────────
+            const totalPages = pageNum;
+            for (let p = 1; p <= totalPages; p++) {
+                pdf.setPage(p);
+                drawFooter(p, totalPages);
             }
 
             pdf.save(`xmls-${filtroSlug}-${new Date().toISOString().slice(0, 10)}.pdf`);
