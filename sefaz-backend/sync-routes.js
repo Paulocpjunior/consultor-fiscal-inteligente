@@ -612,6 +612,65 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
   }
 });
 
+// Histórico de execuções de qualquer cron de captura (whitelist por nome de
+// coleção). Usado pelas abas "Erros & Logs" e "Captura Portal SP" pra mostrar
+// quando o cron realmente rodou, sucesso/falha e quantos docs novos vieram.
+//
+// Antes só dava pra ver o ÚLTIMO log via /captura-diagnostico. Sem histórico
+// ficava impossível diferenciar "cron parou em 31/05" de "cron rodou todo dia
+// mas trouxe 0 NFs novas" — ambos aparecem como "Última captura 31/05" no
+// painel (que na verdade lê MAX(dhEmi), não executadoEm).
+const CRON_LOG_COLLECTIONS = new Set([
+  'sefaz_cron_logs',
+  'nfsesp_cron_logs',
+  'nfse_nacional_dfe_cron_logs',
+  'das_cron_logs',
+  'caixa_postal_cron_logs',
+  'dctfweb_cron_logs',
+  'manifestacoes_cron_logs',
+  'vencimentos_cron_logs',
+]);
+
+router.get('/cron-logs', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Apenas administradores' });
+    }
+    const col = String(req.query.col || '');
+    if (!CRON_LOG_COLLECTIONS.has(col)) {
+      return res.status(400).json({
+        error: `Coleção inválida. Use uma de: ${[...CRON_LOG_COLLECTIONS].join(', ')}`,
+      });
+    }
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || '20'), 10) || 20, 1), 100);
+    const db = fa().firestore();
+    const snap = await db.collection(col).orderBy('executadoEm', 'desc').limit(limit).get();
+    const logs = snap.docs.map(doc => {
+      const d = doc.data();
+      return {
+        id: doc.id,
+        executadoEmMs: d.executadoEm?.toMillis?.() ?? null,
+        duracaoMs: d.duracaoMs ?? null,
+        totalEmpresas: d.totalEmpresas ?? d.total ?? null,
+        processadas: d.processadas ?? null,
+        sucessos: d.sucessos ?? null,
+        falhas: d.falhas ?? null,
+        totalNovos: d.totalNovos ?? d.totalNovosXmls ?? d.totalNFes ?? d.criadas ?? null,
+        erroFatal: d.erroFatal ?? d.erro ?? null,
+        fonte: d.fonte ?? null,
+        metodoLogin: d.metodoLogin ?? null,
+        capturadoPor: d.capturadoPor ?? null,
+        periodo: d.periodo ?? null,
+        prestadoresAutorizados: d.prestadoresAutorizados ?? null,
+      };
+    });
+    return res.json({ colecao: col, total: logs.length, logs });
+  } catch (e) {
+    console.error('[GET /cron-logs] erro:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 router.post('/toggle/:cnpj', requireAuth, express.json(), async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
