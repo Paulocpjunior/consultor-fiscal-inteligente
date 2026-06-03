@@ -9,8 +9,8 @@
  * Bate direto na SEFAZ via DistDFe `consChNFe` usando o cert do escritório.
  */
 
-import React, { useState } from 'react';
-import { consultarNFePorChave, type NFeChaveResposta } from '../services/consultaNFeChaveService';
+import React, { useEffect, useState } from 'react';
+import { consultarNFePorChave, getCertEscritorioInfo, type NFeChaveResposta, type CertEscritorioInfo } from '../services/consultaNFeChaveService';
 
 const formatCnpj = (s: string | null | undefined) => {
     if (!s) return '—';
@@ -35,6 +35,18 @@ const ConsultaNFePorChavePanel: React.FC = () => {
     const [chave, setChave] = useState('');
     const [carregando, setCarregando] = useState(false);
     const [resultado, setResultado] = useState<NFeChaveResposta | null>(null);
+    const [certInfo, setCertInfo] = useState<CertEscritorioInfo | null>(null);
+
+    useEffect(() => {
+        getCertEscritorioInfo()
+            .then(setCertInfo)
+            .catch((e) => setCertInfo({
+                ok: false, cnpjEsperado: '', cnpjNoCert: null, cnpjBaseDoCert: null,
+                cnpjBaseEsperado: '', mismatch: null, mismatchBase: null,
+                subject: '', cn: '', notBefore: null, notAfter: null, valido: false,
+                pfxVersion: null, error: e.message,
+            }));
+    }, []);
 
     const chaveLimpa = chave.replace(/\D/g, '');
     const valido = chaveLimpa.length === 44;
@@ -68,6 +80,51 @@ const ConsultaNFePorChavePanel: React.FC = () => {
                 Útil pra diagnosticar quando uma NFe não chegou pelo cron — confirma se ela está mesmo
                 destinada ao escritório.
             </p>
+
+            {/* Card de saúde do cert do escritório — diagnóstico de cStat=593 */}
+            {certInfo && (
+                <div className={`p-3 rounded border mb-3 text-xs ${
+                    certInfo.error ? 'bg-red-50 border-red-300 dark:bg-red-900/20 dark:border-red-700' :
+                    certInfo.mismatchBase ? 'bg-red-50 border-red-400 dark:bg-red-900/20 dark:border-red-700' :
+                    certInfo.mismatch ? 'bg-amber-50 border-amber-300 dark:bg-amber-900/20 dark:border-amber-700' :
+                    !certInfo.valido ? 'bg-amber-50 border-amber-300 dark:bg-amber-900/20 dark:border-amber-700' :
+                    'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700'
+                }`}>
+                    {certInfo.error ? (
+                        <span className="text-red-700 dark:text-red-300"><strong>Falha lendo cert do escritório:</strong> {certInfo.error}</span>
+                    ) : certInfo.mismatchBase ? (
+                        <div>
+                            <div className="font-bold text-red-700 dark:text-red-300 mb-1">
+                                ⚠ Certificado do Secret Manager NÃO é da S&P — cStat=593 garantido
+                            </div>
+                            <div className="text-slate-700 dark:text-slate-300 grid grid-cols-1 md:grid-cols-2 gap-1">
+                                <span><strong>Esperado:</strong> <code>{certInfo.cnpjEsperado}</code> (S&P)</span>
+                                <span><strong>No cert atual:</strong> <code>{certInfo.cnpjNoCert || '—'}</code> ({certInfo.cn})</span>
+                            </div>
+                            <div className="text-slate-700 dark:text-slate-300 mt-1">
+                                Pra resolver, suba o .pfx correto da S&P no Secret Manager (secret <code>sefaz-cert-pfx</code>) e
+                                a senha (<code>sefaz-cert-pass</code>). Depois reinicia o Cloud Run.
+                            </div>
+                        </div>
+                    ) : certInfo.mismatch ? (
+                        <div className="text-amber-800 dark:text-amber-300">
+                            <strong>Atenção:</strong> CNPJ-Base bate ({certInfo.cnpjBaseEsperado}) mas filial diferente.
+                            Cert: <code>{certInfo.cnpjNoCert}</code> · esperado: <code>{certInfo.cnpjEsperado}</code>.
+                            Provavelmente vai funcionar (DistDFe é por CNPJ-Base), mas confirme.
+                        </div>
+                    ) : !certInfo.valido ? (
+                        <div className="text-amber-800 dark:text-amber-300">
+                            <strong>Cert válido como CNPJ {certInfo.cnpjNoCert}</strong>, mas <strong>fora da validade</strong>
+                            (de {certInfo.notBefore?.slice(0, 10)} a {certInfo.notAfter?.slice(0, 10)}).
+                        </div>
+                    ) : (
+                        <div className="text-emerald-700 dark:text-emerald-300">
+                            ✓ Cert do escritório OK · CNPJ <code>{certInfo.cnpjNoCert}</code> ({certInfo.cn}) ·
+                            válido até {certInfo.notAfter?.slice(0, 10)}
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="flex flex-wrap gap-2 items-stretch">
                 <input

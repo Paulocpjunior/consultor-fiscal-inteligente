@@ -5,10 +5,12 @@
 
 import express from 'express';
 import admin from 'firebase-admin';
+import forge from 'node-forge';
 import { sincronizarEmpresa } from './sync-orchestrator.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth } from './require-admin.js';
 import { consultaNFePorChave } from './sefaz-client.js';
+import { loadCertificate } from './secret-loader.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
 
 const router = express.Router();
@@ -487,6 +489,79 @@ router.post('/consulta-nfe-por-chave', requireAuth, express.json(), async (req, 
     });
   } catch (e) {
     console.error('[POST /consulta-nfe-por-chave] erro:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /cert-escritorio-info ────────────────────────────────────────────
+// Carrega o cert do escritorio (Secret Manager) e mostra QUAL CNPJ ele tem
+// no subject. Usado pra diagnosticar cStat=593 — quando o CNPJ do cert nao
+// bate com o CNPJ esperado, NFe nao chega pelo DistDFe pra esse escritorio.
+//
+// Caso real do dia: o cert estava configurado pra outro CNPJ (nao a S&P),
+// entao DistDFe sempre rejeitava com 593. So foi diagnosticado porque
+// o usuario tentou consultar uma NFe especifica e viu o cStat literal.
+router.get('/cert-escritorio-info', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Apenas administradores' });
+    }
+    const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
+    const cert = await loadCertificate();
+    if (!cert?.pemCert) {
+      return res.json({
+        ok: false,
+        erro: 'Cert carregado mas PEM nao foi extraido (provavel falha de decifragem PFX no boot)',
+        cnpjEsperado: CNPJ_ESCRITORIO,
+        cnpjNoCert: null,
+        mismatch: null,
+      });
+    }
+    // Parseia o cert pra extrair subject e validade
+    const cert509 = forge.pki.certificateFromPem(cert.pemCert);
+    const subjectAttrs = (cert509.subject?.attributes || []).map(a => ({
+      shortName: a.shortName || a.name || a.type,
+      value: a.value,
+    }));
+    const subjectStr = subjectAttrs.map(a => `${a.shortName}=${a.value}`).join(', ');
+
+    // CNPJ pode estar:
+    //   a) No CN (padrão ICP-Brasil: "NOME EMPRESA:CNPJ")
+    //   b) No serialNumber (OID 2.5.4.5)
+    //   c) Em otherName (SAN — mais raro)
+    const cn = subjectAttrs.find(a => a.shortName === 'CN' || a.shortName === 'commonName')?.value || '';
+    const matchCN = cn.match(/:(\d{14})$/);
+    const cnpjDoCN = matchCN ? matchCN[1] : null;
+    const serial = subjectAttrs.find(a => a.shortName === 'serialNumber')?.value || '';
+    const matchSerial = serial.match(/\d{14}/);
+    const cnpjDoSerial = matchSerial ? matchSerial[0] : null;
+    const cnpjNoCert = cnpjDoCN || cnpjDoSerial;
+
+    const notBefore = cert509.validity?.notBefore?.toISOString?.() || null;
+    const notAfter = cert509.validity?.notAfter?.toISOString?.() || null;
+    const valido = notBefore && notAfter && new Date() >= new Date(notBefore) && new Date() < new Date(notAfter);
+    const mismatch = cnpjNoCert ? cnpjNoCert !== CNPJ_ESCRITORIO : null;
+    const cnpjBaseDoCert = cnpjNoCert ? cnpjNoCert.slice(0, 8) : null;
+    const cnpjBaseEsperado = CNPJ_ESCRITORIO.slice(0, 8);
+    const mismatchBase = cnpjBaseDoCert ? cnpjBaseDoCert !== cnpjBaseEsperado : null;
+
+    return res.json({
+      ok: true,
+      cnpjEsperado: CNPJ_ESCRITORIO,        // o que o codigo espera (env var CNPJ_ESCRITORIO)
+      cnpjNoCert,                            // o que o cert no Secret Manager tem
+      cnpjBaseDoCert,
+      cnpjBaseEsperado,
+      mismatch,                              // true se diferentes (filial pode bater base)
+      mismatchBase,                          // true se nem a base bate — sintoma DEFINITIVO de cStat=593
+      subject: subjectStr,
+      cn,
+      notBefore,
+      notAfter,
+      valido,
+      pfxVersion: cert.version || null,
+    });
+  } catch (e) {
+    console.error('[GET /cert-escritorio-info] erro:', e);
     return res.status(500).json({ error: e.message });
   }
 });

@@ -35,10 +35,36 @@ export interface NFeChaveResposta {
     error?: string;
 }
 
+export interface CertEscritorioInfo {
+    ok: boolean;
+    cnpjEsperado: string;
+    cnpjNoCert: string | null;
+    cnpjBaseDoCert: string | null;
+    cnpjBaseEsperado: string;
+    mismatch: boolean | null;
+    mismatchBase: boolean | null;
+    subject: string;
+    cn: string;
+    notBefore: string | null;
+    notAfter: string | null;
+    valido: boolean;
+    pfxVersion: string | null;
+    erro?: string;
+    error?: string;
+}
+
 async function getToken(): Promise<string> {
     const u = getAuth().currentUser;
     if (!u) throw new Error('Sessão expirada');
     return u.getIdToken();
+}
+
+export async function getCertEscritorioInfo(): Promise<CertEscritorioInfo> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/cert-escritorio-info', {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.json();
 }
 
 export async function consultarNFePorChave(chave: string): Promise<NFeChaveResposta> {
