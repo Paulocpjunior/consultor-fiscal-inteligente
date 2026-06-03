@@ -21,6 +21,7 @@ import {
     type CronLog,
 } from '../services/capturaDiagnosticoService';
 import type { User } from '../types';
+import ConsultaNFePorChavePanel from './ConsultaNFePorChavePanel';
 
 interface Props {
     currentUser: User;
@@ -260,6 +261,8 @@ const CapturaDiagnosticoPanel: React.FC<Props> = ({ currentUser }) => {
                 <strong>Como ler:</strong> 🟢 verde = última execução &lt;30h · 🟡 amarelo = 30-72h · 🔴 vermelho = &gt;72h ou nunca executado.
                 Empresas <strong>travadas &gt;7d</strong> são as que não tiveram nova captura — verifique cert, autorização ou flag de captura.
             </div>
+
+            {isAdmin && <ConsultaNFePorChavePanel />}
         </div>
     );
 };

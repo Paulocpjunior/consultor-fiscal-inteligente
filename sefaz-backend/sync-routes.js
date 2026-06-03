@@ -8,6 +8,7 @@ import admin from 'firebase-admin';
 import { sincronizarEmpresa } from './sync-orchestrator.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth } from './require-admin.js';
+import { consultaNFePorChave } from './sefaz-client.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
 
 const router = express.Router();
@@ -387,6 +388,105 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
     });
   } catch (e) {
     console.error('[sync-cron-now] erro:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// ── POST /consulta-nfe-por-chave ─────────────────────────────────────────
+// Consulta UMA NFe pela chave (44 dig) e devolve emit/dest parseados do XML.
+// Usado pra diagnosticar quando uma NFe nao aparece via cron — descobre se
+// o destinatario tem o CNPJ esperado ou nao.
+//
+// Estrategia: tenta primeiro com CNPJ do ESCRITORIO como interessado (cert
+// global). Se SEFAZ retornar cStat=137 (nao localizado), tenta com o CNPJ
+// EMITENTE (primeiros 7-20 digitos da chave) — assim cobrimos os dois lados
+// da NFe (emitente sempre tem acesso a propria NFe via DistDFe).
+router.post('/consulta-nfe-por-chave', requireAuth, express.json(), async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Apenas administradores' });
+    }
+    const chave = String(req.body?.chave || '').replace(/\D/g, '');
+    if (chave.length !== 44) {
+      return res.status(400).json({ error: `Chave invalida — esperado 44 digitos, recebido ${chave.length}` });
+    }
+    const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
+    const cnpjEmitente = chave.slice(6, 20);
+    const ufCod = chave.slice(0, 2);
+    // Mapa codigo IBGE -> sigla UF (so cobre os principais; SEFAZ recebe
+    // qualquer UF valida no cUFAutor — usamos a UF do emitente da chave).
+    const ufPorCod = {
+      '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
+      '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL', '28': 'SE', '29': 'BA',
+      '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP',
+      '41': 'PR', '42': 'SC', '43': 'RS',
+      '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF',
+    };
+    const ufSigla = ufPorCod[ufCod] || 'SP';
+
+    // Helper: extrai emit/dest de um XML de NFe
+    const parseEmitDest = (xml) => {
+      const pickIn = (tag, scope) => {
+        const m = scope.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`, 'i'));
+        return m ? m[1].trim() : null;
+      };
+      const pickSection = (tag) => {
+        const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i'));
+        return m ? m[1] : '';
+      };
+      const emit = pickSection('emit');
+      const dest = pickSection('dest');
+      const ide = pickSection('ide');
+      const total = pickSection('ICMSTot');
+      return {
+        emitente: { cnpj: pickIn('CNPJ', emit), nome: pickIn('xNome', emit), uf: pickIn('UF', emit) },
+        destinatario: { cnpj: pickIn('CNPJ', dest) || pickIn('CPF', dest), nome: pickIn('xNome', dest), uf: pickIn('UF', dest) },
+        numero: pickIn('nNF', ide),
+        dataEmissao: pickIn('dhEmi', ide) || pickIn('dEmi', ide),
+        valorTotal: pickIn('vNF', total),
+        modelo: pickIn('mod', ide),
+        natureza: pickIn('natOp', ide),
+      };
+    };
+
+    // 1ª tentativa: como escritorio (cert global)
+    let resp = await consultaNFePorChave({ chave, cnpjInteressado: CNPJ_ESCRITORIO, uf: ufSigla });
+    let tentou = ['escritorio'];
+
+    // 2ª tentativa: como emitente — se ainda nao achou
+    if (resp.cStat === '137' && cnpjEmitente !== CNPJ_ESCRITORIO) {
+      try {
+        resp = await consultaNFePorChave({ chave, cnpjInteressado: cnpjEmitente, uf: ufSigla });
+        tentou.push('emitente');
+      } catch (e) {
+        // se falhar (provavel: cert do escritorio nao autoriza pra outro CNPJ),
+        // mantem a 1a resposta
+        console.warn('[consulta-nfe-por-chave] retry como emitente falhou:', e.message);
+      }
+    }
+
+    const nfeXml = resp.xmls?.find(x => x.xml && (x.xml.includes('<infNFe') || x.xml.includes('<NFe')));
+    let detalhes = null;
+    if (nfeXml) {
+      try { detalhes = parseEmitDest(nfeXml.xml); } catch (e) { console.warn('[parse] falhou:', e.message); }
+    }
+
+    return res.json({
+      ok: resp.ok,
+      cStat: resp.cStat,
+      xMotivo: resp.xMotivo,
+      chave,
+      cnpjConsultadoComo: tentou.join(' → '),
+      ufEmitente: ufSigla,
+      cnpjEmitenteChave: cnpjEmitente,
+      cnpjEscritorio: CNPJ_ESCRITORIO,
+      escritorioEhDestinatario: detalhes?.destinatario?.cnpj
+        ? detalhes.destinatario.cnpj.replace(/\D/g, '') === CNPJ_ESCRITORIO
+        : null,
+      detalhes,
+    });
+  } catch (e) {
+    console.error('[POST /consulta-nfe-por-chave] erro:', e);
     return res.status(500).json({ error: e.message });
   }
 });
