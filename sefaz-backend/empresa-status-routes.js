@@ -171,6 +171,12 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             let certVenceEm = null;
             let usaCertEscritorio = false;
 
+            // A propria empresa do escritorio (S&P) tem o cert dela no Secret
+            // Manager (carregado por loadCertificate()), NAO em empresas_certificados.
+            // Sem esse caso especial, ela aparecia como "sem cert" na varredura
+            // mesmo sendo o dono do cert global usado por todas as procuracoes.
+            const ehEscritorio = emp.cnpj === CNPJ_ESCRITORIO;
+
             if (cert) {
                 certUploaded = true;
                 tipoCert = cert.tipoCert;
@@ -179,6 +185,14 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                     certValido = venceEm > agora;
                     certVenceEm = cert.notAfter;
                 }
+            } else if (ehEscritorio) {
+                // Cert do escritorio vive em Secret Manager. Marca como A1 proprio.
+                // Nao puxa notAfter daqui pra nao adicionar chamada ao Secret Manager
+                // na rota de varredura (cara, +200ms por request). Se precisar do
+                // venc real, a tela de Configurações > Certificado Digital mostra.
+                tipoCert = 'A1';
+                certUploaded = true;
+                certValido = true;
             } else {
                 // Sem cert próprio — pode usar o cert do escritório se houver procuração
                 if (emp.procuracaoEcacAtiva) {
