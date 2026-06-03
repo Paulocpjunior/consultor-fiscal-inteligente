@@ -17,6 +17,8 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<ListDocumentosFilters>({});
     const [busca, setBusca] = useState('');
+    const [exporting, setExporting] = useState<'pdf' | 'csv' | null>(null);
+    const tableRef = React.useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         let alive = true;
@@ -31,6 +33,118 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         docs.forEach(d => d.competencia && set.add(d.competencia));
         return Array.from(set).sort().reverse();
     }, [docs]);
+
+    // Slug dos filtros ativos pra usar no nome do arquivo exportado.
+    // Ex: 'todos' (sem filtro) ou 'entrada-2026-05-autorizado'.
+    const filtroSlug = useMemo(() => {
+        const partes = [
+            filters.direcao,
+            filters.competencia,
+            filters.status,
+            filters.origem,
+            busca ? `busca-${busca.toLowerCase().replace(/[^\w]+/g, '-').slice(0, 20)}` : null,
+        ].filter(Boolean);
+        return partes.length === 0 ? 'todos' : partes.join('-');
+    }, [filters, busca]);
+
+    const exportCsv = () => {
+        setExporting('csv');
+        try {
+            const headers = [
+                'Data', 'Empresa', 'CNPJ Empresa', 'Tipo', 'Número', 'Série',
+                'Direção', 'Contraparte', 'CNPJ Contraparte', 'Valor', 'Status',
+            ];
+            const escape = (v: string | number | undefined | null) => {
+                const s = (v ?? '').toString();
+                return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+            };
+            const rows = docs.map(d => {
+                const view = getView(d);
+                const contraparte = d.direcao === 'entrada' ? view.emitente : view.destinatario;
+                return [
+                    formatDate(d.dhEmi).split(' ')[0],
+                    d.empresaNome || '',
+                    formatCnpjCpf(d.empresaCnpj || ''),
+                    d.tipo,
+                    view.numero || '',
+                    view.serie || '',
+                    view.direcao || '',
+                    contraparte.nome || '',
+                    formatCnpjCpf(contraparte.cnpj || ''),
+                    view.valores.total ?? 0,
+                    d.status || '',
+                ].map(escape).join(',');
+            });
+            const csv = '﻿' + [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `xmls-${filtroSlug}-${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } finally {
+            setExporting(null);
+        }
+    };
+
+    const exportPdf = async () => {
+        if (!tableRef.current) return;
+        setExporting('pdf');
+        try {
+            const { default: jsPDF } = await import('jspdf');
+            const { default: html2canvas } = await import('html2canvas');
+            const canvas = await html2canvas(tableRef.current, {
+                scale: 2,
+                backgroundColor: '#ffffff',
+                useCORS: true,
+                logging: false,
+            });
+            const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+
+            // Cabeçalho próprio do layout do app
+            pdf.setFontSize(12);
+            pdf.setTextColor(40);
+            pdf.text('Central de Documentos Fiscais — XMLs NFe (Entrada/Saída)', 10, 10);
+            pdf.setFontSize(9);
+            pdf.setTextColor(120);
+            pdf.text(
+                `Filtros: ${filtroSlug.replace(/-/g, ' · ')}  ·  ${docs.length} documento(s)  ·  gerado em ${new Date().toLocaleString('pt-BR')}`,
+                10, 15,
+            );
+
+            // Imagem da tabela, mantendo proporção e quebrando em páginas
+            // se passar da altura útil.
+            const usableTop = 20;
+            const usableHeight = pdfHeight - usableTop - 10;
+            const imgWidthMm = pdfWidth - 20;
+            const imgHeightMm = (canvas.height * imgWidthMm) / canvas.width;
+            const imgData = canvas.toDataURL('image/png');
+
+            if (imgHeightMm <= usableHeight) {
+                pdf.addImage(imgData, 'PNG', 10, usableTop, imgWidthMm, imgHeightMm);
+            } else {
+                // Tabela longa: distribui em N páginas mantendo a largura.
+                const totalPages = Math.ceil(imgHeightMm / usableHeight);
+                for (let i = 0; i < totalPages; i++) {
+                    if (i > 0) pdf.addPage();
+                    pdf.addImage(
+                        imgData, 'PNG',
+                        10, usableTop - i * usableHeight,
+                        imgWidthMm, imgHeightMm,
+                    );
+                }
+            }
+
+            pdf.save(`xmls-${filtroSlug}-${new Date().toISOString().slice(0, 10)}.pdf`);
+        } catch (e) {
+            console.error('[exportPdf]', e);
+        } finally {
+            setExporting(null);
+        }
+    };
 
     return (
         <div className="space-y-3">
@@ -87,17 +201,35 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
             </div>
 
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center gap-3 flex-wrap">
                     <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
                         XMLs Capturados ({docs.length})
                     </h3>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={exportCsv}
+                            disabled={exporting !== null || docs.length === 0}
+                            className="px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Baixa os XMLs filtrados em CSV (Excel)"
+                        >
+                            {exporting === 'csv' ? 'Gerando…' : '⬇ CSV'}
+                        </button>
+                        <button
+                            onClick={exportPdf}
+                            disabled={exporting !== null || docs.length === 0}
+                            className="px-3 py-1.5 text-xs font-semibold bg-rose-600 text-white rounded hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Baixa relatório em PDF com o layout do app"
+                        >
+                            {exporting === 'pdf' ? 'Gerando…' : '⬇ PDF'}
+                        </button>
+                    </div>
                 </div>
                 {loading ? (
                     <p className="text-center text-xs text-slate-400 py-6">Carregando...</p>
                 ) : docs.length === 0 ? (
                     <p className="text-center text-xs text-slate-400 py-6">Nenhum documento encontrado.</p>
                 ) : (
-                    <div className="overflow-x-auto max-h-[520px]">
+                    <div ref={tableRef} className="overflow-x-auto max-h-[520px]">
                         <table className="w-full text-xs">
                             <thead className="bg-slate-50 dark:bg-slate-700 sticky top-0">
                                 <tr>
