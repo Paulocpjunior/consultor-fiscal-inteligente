@@ -66,6 +66,38 @@ export async function fetchCapturaDiagnostico(): Promise<CapturaDiagnostico> {
  * Precisa do x-cron-secret — não disponível no front, então este chama
  * o endpoint de admin que roda o cron com a auth Bearer + verifica role.
  */
+export type CronLogColecao =
+    | 'sefaz_cron_logs'
+    | 'nfsesp_cron_logs'
+    | 'nfse_nacional_dfe_cron_logs'
+    | 'das_cron_logs'
+    | 'caixa_postal_cron_logs'
+    | 'dctfweb_cron_logs'
+    | 'manifestacoes_cron_logs'
+    | 'vencimentos_cron_logs';
+
+export interface CronLogItem extends CronLog {
+    id: string;
+    processadas?: number | null;
+    metodoLogin?: string | null;
+    capturadoPor?: string | null;
+    periodo?: string | null;
+    prestadoresAutorizados?: number | null;
+}
+
+export async function fetchCronLogs(colecao: CronLogColecao, limit = 20): Promise<CronLogItem[]> {
+    const token = await getToken();
+    const res = await fetch(`/api/admin/sefaz/cron-logs?col=${encodeURIComponent(colecao)}&limit=${limit}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    return data.logs || [];
+}
+
 export async function forcarCapturaAgora(fonte: 'sefazNfe' | 'nfseSp' | 'nfseNacional'): Promise<{ ok: boolean; motivo?: string }> {
     const token = await getToken();
     const paths: Record<typeof fonte, string> = {

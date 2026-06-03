@@ -1,16 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import type { User, XmlErro, XmlCaptura } from '../../types';
 import { listErros, listCapturas } from '../../services/xmlFiscalService';
+import { fetchCronLogs, type CronLogItem, type CronLogColecao } from '../../services/capturaDiagnosticoService';
 
 interface Props {
     currentUser: User;
     refreshKey?: number;
 }
 
+const CRONS: { col: CronLogColecao; label: string; descricao: string }[] = [
+    { col: 'sefaz_cron_logs', label: 'SEFAZ NFe (DistDFe)', descricao: '02:00 BRT seg-sex' },
+    { col: 'nfsesp_cron_logs', label: 'NFSe SP (portal)', descricao: '03:00 BRT seg-sex' },
+    { col: 'nfse_nacional_dfe_cron_logs', label: 'NFSe Nacional (ADN DFe)', descricao: '04:00 BRT seg-sex' },
+];
+
 const XmlErros: React.FC<Props> = ({ currentUser, refreshKey }) => {
     const [erros, setErros] = useState<XmlErro[]>([]);
     const [capturas, setCapturas] = useState<XmlCaptura[]>([]);
     const [loading, setLoading] = useState(true);
+    const [cronCol, setCronCol] = useState<CronLogColecao>('nfsesp_cron_logs');
+    const [cronLogs, setCronLogs] = useState<CronLogItem[] | { erro: string } | null>(null);
+    const isAdmin = currentUser?.role === 'admin';
 
     useEffect(() => {
         let alive = true;
@@ -21,10 +31,97 @@ const XmlErros: React.FC<Props> = ({ currentUser, refreshKey }) => {
         return () => { alive = false; };
     }, [currentUser, refreshKey]);
 
+    useEffect(() => {
+        if (!isAdmin) return;
+        let alive = true;
+        setCronLogs(null);
+        fetchCronLogs(cronCol, 20)
+            .then(logs => { if (alive) setCronLogs(logs); })
+            .catch(e => { if (alive) setCronLogs({ erro: e.message }); });
+        return () => { alive = false; };
+    }, [cronCol, isAdmin, refreshKey]);
+
     if (loading) return <p className="text-center text-xs text-slate-400 py-6">Carregando logs...</p>;
 
     return (
         <div className="space-y-4">
+            {isAdmin && (
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">Execuções automáticas (cron)</h3>
+                            <p className="text-[11px] text-slate-500 mt-0.5">Últimas 20 execuções de cada cron noturno. Confirma se está rodando e quando trouxe documentos novos.</p>
+                        </div>
+                        <select
+                            value={cronCol}
+                            onChange={(e) => setCronCol(e.target.value as CronLogColecao)}
+                            className="px-2 py-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600"
+                        >
+                            {CRONS.map(c => (
+                                <option key={c.col} value={c.col}>{c.label} — {c.descricao}</option>
+                            ))}
+                        </select>
+                    </div>
+                    {cronLogs === null ? (
+                        <p className="text-center text-xs text-slate-400 py-6">Carregando…</p>
+                    ) : Array.isArray(cronLogs) ? (
+                        cronLogs.length === 0 ? (
+                            <div className="px-4 py-6 text-xs">
+                                <p className="text-red-600 dark:text-red-400 font-semibold">⚠ Nenhuma execução registrada nesta coleção.</p>
+                                <p className="text-slate-500 mt-1">
+                                    O cron pode estar desabilitado no Cloud Scheduler, retornando 403 (secret drift entre Scheduler e Cloud Run)
+                                    ou nunca ter rodado. Verifique <code>gcloud scheduler jobs list</code> e os logs do Cloud Run.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="max-h-[360px] overflow-y-auto">
+                                <table className="w-full text-xs">
+                                    <thead className="bg-slate-50 dark:bg-slate-700 sticky top-0">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left">Executado em</th>
+                                            <th className="px-3 py-2 text-right">Duração</th>
+                                            <th className="px-3 py-2 text-right">Empresas</th>
+                                            <th className="px-3 py-2 text-right">Sucessos</th>
+                                            <th className="px-3 py-2 text-right">Falhas</th>
+                                            <th className="px-3 py-2 text-right">Docs novos</th>
+                                            <th className="px-3 py-2 text-left">Login</th>
+                                            <th className="px-3 py-2 text-left">Origem</th>
+                                            <th className="px-3 py-2 text-left">Erro fatal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                        {cronLogs.map(log => {
+                                            const dt = log.executadoEmMs ? new Date(log.executadoEmMs) : null;
+                                            const erro = !!log.erroFatal;
+                                            const semNovas = !erro && (log.totalNovos ?? 0) === 0;
+                                            const rowCls = erro
+                                                ? 'bg-red-50/50 dark:bg-red-900/10'
+                                                : semNovas
+                                                    ? 'bg-amber-50/40 dark:bg-amber-900/10'
+                                                    : '';
+                                            return (
+                                                <tr key={log.id} className={rowCls}>
+                                                    <td className="px-3 py-1.5 text-slate-600 dark:text-slate-300 font-mono">{dt ? dt.toLocaleString('pt-BR') : '—'}</td>
+                                                    <td className="px-3 py-1.5 text-right text-slate-500">{log.duracaoMs != null ? `${(log.duracaoMs / 1000).toFixed(1)}s` : '—'}</td>
+                                                    <td className="px-3 py-1.5 text-right">{log.processadas ?? log.totalEmpresas ?? '—'}</td>
+                                                    <td className="px-3 py-1.5 text-right text-emerald-700 dark:text-emerald-400">{log.sucessos ?? '—'}</td>
+                                                    <td className="px-3 py-1.5 text-right text-red-700 dark:text-red-400">{log.falhas ?? '—'}</td>
+                                                    <td className={`px-3 py-1.5 text-right font-bold ${(log.totalNovos ?? 0) > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>{log.totalNovos ?? 0}</td>
+                                                    <td className="px-3 py-1.5 text-slate-500">{log.metodoLogin || '—'}</td>
+                                                    <td className="px-3 py-1.5 text-slate-500">{log.capturadoPor || '—'}</td>
+                                                    <td className="px-3 py-1.5 text-red-600 dark:text-red-400 max-w-[280px] truncate" title={log.erroFatal || ''}>{log.erroFatal || '—'}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )
+                    ) : (
+                        <p className="px-4 py-4 text-xs text-red-600 dark:text-red-400">Erro ao carregar logs: {cronLogs.erro}</p>
+                    )}
+                </div>
+            )}
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
                     <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">Erros de importação ({erros.length})</h3>

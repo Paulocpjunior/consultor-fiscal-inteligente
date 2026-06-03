@@ -14,6 +14,7 @@ import {
     resumoNfseSpCapturadas,
     type NfseSpCapturada,
 } from '../../services/nfseSpCapturadasService';
+import { fetchCronLogs, type CronLogItem } from '../../services/capturaDiagnosticoService';
 
 interface Props {
     currentUser: User | null;
@@ -33,6 +34,7 @@ const fmtCnpj = (s?: string) => (s || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})
 const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
     const [notas, setNotas] = useState<NfseSpCapturada[]>([]);
     const [resumo, setResumo] = useState<any>(null);
+    const [ultimoCron, setUltimoCron] = useState<CronLogItem | null | 'erro'>(null);
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
     const [direcao, setDirecao] = useState<'todas' | 'saida' | 'entrada'>('todas');
@@ -74,7 +76,7 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
         setLoading(true);
         setErro(null);
         try {
-            const [lista, r] = await Promise.all([
+            const [lista, r, cronLogs] = await Promise.all([
                 listarNfseSpCapturadas({
                     direcao,
                     empresaCnpj: cnpjFiltro.replace(/\D/g, '') || undefined,
@@ -83,9 +85,11 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                     limite: 5000,
                 }),
                 resumoNfseSpCapturadas(),
+                fetchCronLogs('nfsesp_cron_logs', 1).catch(() => [] as CronLogItem[]),
             ]);
             setNotas(lista);
             setResumo(r);
+            setUltimoCron(cronLogs[0] || 'erro');
         } catch (e: any) {
             setErro(e.message || 'Falha ao carregar NFSe');
         } finally {
@@ -153,7 +157,7 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
             </div>
 
             {resumo && (
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                     <div className="bg-white border rounded p-3">
                         <div className="text-xs text-gray-500">Total NFs</div>
                         <div className="text-2xl font-bold">{resumo.total}</div>
@@ -172,10 +176,48 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                         <div className="text-xs text-purple-700">Empresas únicas</div>
                         <div className="text-2xl font-bold text-purple-800">{resumo.empresasUnicas}</div>
                     </div>
-                    <div className="bg-gray-50 border border-gray-200 rounded p-3">
-                        <div className="text-xs text-gray-700">Última captura</div>
+                    <div className="bg-gray-50 border border-gray-200 rounded p-3" title="Data de emissão da nota mais recente já capturada (não é a hora do cron — pode haver dias sem notas novas)">
+                        <div className="text-xs text-gray-700">Última nota</div>
                         <div className="text-sm font-bold text-gray-800">{fmtData(resumo.ultimaCaptura)}</div>
+                        <div className="text-[10px] text-gray-500">data de emissão</div>
                     </div>
+                    {(() => {
+                        const cron = ultimoCron;
+                        if (cron === null) {
+                            return (
+                                <div className="bg-gray-50 border border-gray-200 rounded p-3">
+                                    <div className="text-xs text-gray-700">Último cron</div>
+                                    <div className="text-sm font-bold text-gray-400">…</div>
+                                </div>
+                            );
+                        }
+                        if (cron === 'erro' || !cron || !cron.executadoEmMs) {
+                            return (
+                                <div className="bg-red-50 border border-red-200 rounded p-3" title="Nenhum log de execução do cron encontrado em nfsesp_cron_logs. Cron pode estar desabilitado no Cloud Scheduler ou retornando 403 (secret drift).">
+                                    <div className="text-xs text-red-700">Último cron</div>
+                                    <div className="text-sm font-bold text-red-800">sem registro</div>
+                                </div>
+                            );
+                        }
+                        const dt = new Date(cron.executadoEmMs);
+                        const erro = !!cron.erroFatal;
+                        const semNovas = !erro && (cron.totalNovos ?? 0) === 0;
+                        const cor = erro
+                            ? 'bg-red-50 border-red-200 text-red-800'
+                            : semNovas
+                                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                                : 'bg-emerald-50 border-emerald-200 text-emerald-800';
+                        const tituloCor = erro ? 'text-red-700' : semNovas ? 'text-amber-700' : 'text-emerald-700';
+                        return (
+                            <div className={`border rounded p-3 ${cor}`} title={erro ? `Falha: ${cron.erroFatal}` : `Login: ${cron.metodoLogin || '—'} · ${cron.processadas ?? 0} empresas processadas`}>
+                                <div className={`text-xs ${tituloCor}`}>Último cron</div>
+                                <div className="text-sm font-bold">{dt.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
+                                <div className="text-[10px]">
+                                    {erro ? '❌ erro fatal' : semNovas ? `⚠ 0 novas (${cron.processadas ?? 0} empresas)` : `✓ ${cron.totalNovos} novas`}
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
             )}
 

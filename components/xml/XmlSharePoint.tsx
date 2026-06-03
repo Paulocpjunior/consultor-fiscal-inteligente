@@ -113,9 +113,22 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                         ✓ Conectado · {health.sharepointHost} · {health.sitePath}
                     </p>
                 ) : (
-                    <p className="text-xs" style={{ color: 'var(--danger, #ef4444)' }}>
-                        ✗ Credenciais não configuradas no proxy backend.
-                    </p>
+                    <div className="text-xs space-y-1" style={{ color: 'var(--danger, #ef4444)' }}>
+                        <p className="font-semibold">✗ Proxy SharePoint indisponível.</p>
+                        <p style={{ color: 'var(--text-muted)' }}>
+                            O frontend chama <code>consultor-fiscal-proxy.us-west1.run.app/api/sharepoint/health</code> (deploy
+                            separado deste app). Causas possíveis:
+                        </p>
+                        <ul className="list-disc ml-4 space-y-0.5" style={{ color: 'var(--text-muted)' }}>
+                            <li>Serviço <code>consultor-fiscal-proxy</code> fora do ar no Cloud Run</li>
+                            <li>Secrets <code>GRAPH_CLIENT_ID</code> / <code>GRAPH_TENANT_ID</code> / <code>GRAPH_CLIENT_SECRET</code> não setados no proxy</li>
+                            <li>Token do app Microsoft Entra expirado/revogado</li>
+                        </ul>
+                        <p style={{ color: 'var(--text-muted)' }} className="pt-1">
+                            Para diagnosticar: <code>gcloud run services describe consultor-fiscal-proxy --region=us-west1</code>
+                            {' '}e checar os logs.
+                        </p>
+                    </div>
                 )}
             </div>
 
