@@ -74,12 +74,7 @@ service cloud.firestore {
       // filtragem nas rules, mas isso exigiria refatoracao do modelo.
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow update: if isOwnerOrAdmin(resource.data.createdBy);
-      // delete: SO admin. Colaborador pode visualizar e editar, mas nao
-      // excluir a empresa do cadastro. Antes era isOwnerOrAdmin, mas
-      // colaborador que criou conseguia apagar — inconsistente com a UI
-      // (Lucro/Simples ja escondem botao delete pra nao-admin) e perigoso.
-      allow delete: if isAdmin();
+      allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
 
@@ -88,9 +83,7 @@ service cloud.firestore {
       // list: limite de query para evitar download massivo.
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow update: if isOwnerOrAdmin(resource.data.createdBy);
-      // delete: SO admin (ver comentario em simples_empresas).
-      allow delete: if isAdmin();
+      allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
 
