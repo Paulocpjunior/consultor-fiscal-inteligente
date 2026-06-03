@@ -133,13 +133,20 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const empresasFiltradas = useMemo(() => {
         if (!data) return [];
         const buscaLow = busca.toLowerCase().replace(/\D/g, '');
-        const buscaTxt = busca.toLowerCase();
+        const buscaTxt = busca.toLowerCase().trim();
+        // Quando ha busca ativa, ela PREVALECE sobre o filtro de status —
+        // achar a empresa especifica importa mais que respeitar o filtro
+        // (UX padrao de qualquer 'find' — encontra independente de outro
+        // criterio). Sem isso o usuario digitava o CNPJ da empresa, o
+        // filtro 'Bloqueadas' excluia ela e a busca parecia quebrada.
+        if (buscaTxt) {
+            return data.empresas.filter(e => {
+                if (buscaLow && e.cnpj.includes(buscaLow)) return true;
+                if (buscaTxt && e.nome.toLowerCase().includes(buscaTxt)) return true;
+                return false;
+            });
+        }
         return data.empresas.filter(e => {
-            if (busca) {
-                if (buscaLow && e.cnpj.includes(buscaLow)) {} // match
-                else if (buscaTxt && e.nome.toLowerCase().includes(buscaTxt)) {} // match
-                else return false;
-            }
             switch (filtro) {
                 case 'bloqueadas': return e.motivosBloqueio.length > 0;
                 case 'sem-uf': return !e.uf;
@@ -277,6 +284,9 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 />
                 <span className="text-sm text-gray-600 ml-2">
                     {empresasFiltradas.length} de {data.empresas.length}
+                    {busca && filtro !== 'todas' && (
+                        <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-400">(filtro de status ignorado durante busca)</span>
+                    )}
                 </span>
                 <div className="ml-auto flex gap-2">
                     <button onClick={load} className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 rounded">↻ Atualizar</button>
