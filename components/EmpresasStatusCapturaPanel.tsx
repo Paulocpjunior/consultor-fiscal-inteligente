@@ -29,7 +29,7 @@ interface Props {
     currentUser: User;
 }
 
-type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'ok-tudo';
+type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'sem-responsavel' | 'ok-tudo';
 
 function formatCnpj(s: string) {
     return s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -120,6 +120,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 case 'sem-procuracao': return !e.procuracaoEcacAtiva;
                 case 'sem-ccmsp': return !e.nfseSpAutorizado;
                 case 'nfse-nac-inativa': return !e.nfseNacionalDfeAtivo;
+                case 'sem-responsavel': return !e.responsaveis || e.responsaveis.length === 0;
                 case 'ok-tudo': return e.capturaNfeOk && e.capturaNfseSpOk && e.capturaNfseNacionalOk;
                 case 'todas':
                 default: return true;
@@ -234,6 +235,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <option value="sem-procuracao">Sem procuração e-CAC</option>
                     <option value="sem-ccmsp">Sem autorização NFSe SP</option>
                     <option value="nfse-nac-inativa">NFSe Nacional desativada</option>
+                    <option value="sem-responsavel">👤 Sem responsável na carteira</option>
                     <option value="ok-tudo">✅ Tudo OK</option>
                     <option value="todas">Todas</option>
                 </select>
@@ -258,6 +260,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                         <tr>
                             <th className="px-2 py-2 text-left">CNPJ</th>
                             <th className="px-2 py-2 text-left">Razão Social</th>
+                            <th className="px-2 py-2 text-left">Responsável</th>
                             <th className="px-2 py-2 text-center">Cert</th>
                             <th className="px-2 py-2 text-center">Procuração e-CAC</th>
                             <th className="px-2 py-2 text-center">NFSe SP</th>
@@ -280,6 +283,20 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                     <td className="px-2 py-1.5">
                                         <div className="font-semibold">{e.nome}</div>
                                         <div className="text-[10px] text-gray-500">{e.regime}</div>
+                                    </td>
+                                    <td className="px-2 py-1.5">
+                                        {(e.responsaveis && e.responsaveis.length > 0) ? (
+                                            <div className="flex flex-col gap-0.5">
+                                                {e.responsaveis.map((r, i) => (
+                                                    <div key={i} className="text-[11px]">
+                                                        <span className="font-medium">{r.nome}</span>
+                                                        {r.papel === 'backup' && <span className="ml-1 text-[9px] text-gray-500 uppercase">backup</span>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">⚠ sem responsável</span>
+                                        )}
                                     </td>
                                     <td className="px-2 py-1.5 text-center">
                                         <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border ${certCor}`}>

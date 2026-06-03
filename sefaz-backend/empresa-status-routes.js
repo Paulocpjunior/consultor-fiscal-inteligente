@@ -115,6 +115,23 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             });
         });
 
+        // 3b. Responsáveis (vínculos da Carteira de Clientes) por CNPJ.
+        // Permite admin/colaborador ver de cara quem cuida de cada empresa
+        // direto no painel de Status (antes precisava abrir Carteira de Clientes
+        // numa aba separada e cruzar manualmente).
+        const responsaveisMap = new Map();
+        const carteirasSnap = await db.collection('carteiras').get();
+        carteirasSnap.forEach(doc => {
+            const d = doc.data();
+            const cnpj = (d.empresaCnpj || '').replace(/\D/g, '');
+            if (!cnpj) return;
+            if (!responsaveisMap.has(cnpj)) responsaveisMap.set(cnpj, []);
+            responsaveisMap.get(cnpj).push({
+                nome: d.colaboradorNome || '—',
+                papel: d.papel || 'principal',
+            });
+        });
+
         // 4. Monta resposta agregada
         const empresas = [];
         const resumo = {
@@ -215,6 +232,8 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 capturaNfseSpOk,
                 capturaNfseNacionalOk,
                 motivosBloqueio,
+                // responsáveis na carteira de clientes (vazio = ninguém atribuído)
+                responsaveis: responsaveisMap.get(emp.cnpj) || [],
                 // estado última sync
                 ultimaSyncMs: state?.ultimaSyncMs ?? null,
                 ultNSU: state?.ultNSU ?? null,
