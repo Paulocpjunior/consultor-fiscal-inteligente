@@ -10,6 +10,50 @@ import {
 import { importXmlManual, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { isFirebaseConfigured, auth } from '../../services/firebaseConfig';
 
+interface SharePointLastSync {
+    competencia?: string;
+    totalNovos?: number;
+    totalDup?: number;
+    totalErros?: number;
+    timestamp?: { _seconds: number };
+}
+
+// Mostra o estado REAL do auto-sync diário (separado do /health do proxy).
+// Útil quando o card "Conexão SharePoint" fica vermelho ou amarelo: o auto-sync
+// pode estar funcionando mesmo assim — ou pode ter parado por secret drift no
+// Cloud Scheduler (commit b9c583b de 01/06 endureceu a auth e exigia atualizar
+// o job manualmente; se a ação não foi feita, o cron das 08h pega 403).
+const SharePointAutoSyncStatusLine: React.FC<{ lastSync: SharePointLastSync | null }> = ({ lastSync }) => {
+    if (!lastSync) return null;
+    const ts = lastSync.timestamp?._seconds ? lastSync.timestamp._seconds * 1000 : null;
+    if (!ts) {
+        return (
+            <p className="text-[11px] mt-2 pt-2 border-t border-slate-200 dark:border-slate-700" style={{ color: 'var(--text-muted)' }}>
+                Auto-sync diário: <span className="font-semibold text-amber-600 dark:text-amber-400">nunca rodou</span>
+            </p>
+        );
+    }
+    const ageH = (Date.now() - ts) / 3600_000;
+    const fresh = ageH < 48;
+    return (
+        <p className="text-[11px] mt-2 pt-2 border-t border-slate-200 dark:border-slate-700" style={{ color: 'var(--text-muted)' }}>
+            Auto-sync diário:
+            {' '}
+            <span className={`font-semibold ${fresh ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                {fresh ? '✓' : '⚠'} {new Date(ts).toLocaleString('pt-BR')}
+            </span>
+            {' · '}
+            {lastSync.totalNovos ?? 0} novos · {lastSync.totalDup ?? 0} dup · {lastSync.totalErros ?? 0} erros
+            {' · comp '}{lastSync.competencia || '—'}
+            {!fresh && (
+                <>
+                    {' '}— <span className="text-amber-700 dark:text-amber-300">parado há {Math.floor(ageH / 24)}d. Provável secret drift no Cloud Scheduler do job <code>sharepoint-auto-sync</code> (rotação 01/06 exigia atualização manual).</span>
+                </>
+            )}
+        </p>
+    );
+};
+
 interface Props {
     currentUser?: User | null;
     onShowToast?: (msg: string) => void;
@@ -20,6 +64,7 @@ const MESES = ['01','02','03','04','05','06','07','08','09','10','11','12'];
 
 const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }) => {
     const [health, setHealth] = useState<SharePointHealthStatus | null>(null);
+    const [autoSyncLastSync, setAutoSyncLastSync] = useState<SharePointLastSync | null>(null);
     const [loading, setLoading] = useState(false);
     const [syncResult, setSyncResult] = useState<SharePointSyncResult | null>(null);
     const [importProgress, setImportProgress] = useState<string | null>(null);
@@ -42,6 +87,21 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
         if (currentUser) {
             getEmpresasDisponiveis(currentUser).then(setEmpresas);
         }
+        // Estado real do auto-sync diário, INDEPENDENTE do /health do proxy.
+        // O proxy pode estar fora e o auto-sync ainda estar rodando (ou vice-versa).
+        (async () => {
+            try {
+                const token = await auth?.currentUser?.getIdToken();
+                if (!token) return;
+                const r = await fetch('/api/admin/sharepoint/status', {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (r.ok) {
+                    const d = await r.json();
+                    setAutoSyncLastSync(d.lastSync || null);
+                }
+            } catch { /* silencia — só serve pra exibir status, não bloquear UI */ }
+        })();
     }, [currentUser]);
 
     const folderPath = useCustom
@@ -130,6 +190,7 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                         </p>
                     </div>
                 )}
+                <SharePointAutoSyncStatusLine lastSync={autoSyncLastSync} />
             </div>
 
             {/* Formulário */}
