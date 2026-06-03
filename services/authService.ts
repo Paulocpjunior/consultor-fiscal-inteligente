@@ -293,6 +293,36 @@ export const setUserRole = async (userId: string, role: 'admin' | 'colaborador')
 };
 
 /**
+ * Atualiza o display name (campo `name`) do usuario. So admin pode chamar
+ * (rules em users.update já garantem isso). Email NAO eh editavel daqui:
+ * o email vive no Firebase Auth + e duplicado no doc; alterar so o doc
+ * deixaria as duas coisas dessincronizadas e o login continuaria com o
+ * email antigo. Mudanca de email exige Admin SDK no backend.
+ */
+export const setUserName = async (userId: string, name: string): Promise<boolean> => {
+    const nameTrim = (name || '').trim();
+    if (!nameTrim) return false;
+    if (!isFirebaseConfigured || !db) {
+        const users = getLocalUsers();
+        const idx = users.findIndex(u => u.id === userId);
+        if (idx === -1) return false;
+        users[idx].name = nameTrim;
+        saveLocalUsers(users);
+        return true;
+    }
+    try {
+        await setDoc(doc(db, 'users', userId), { name: nameTrim }, { merge: true });
+        return true;
+    } catch (e: any) {
+        console.warn('setUserName:', e.message);
+        if (e.code === 'permission-denied') {
+            throw new Error('PERMISSION_DENIED: Apenas administradores podem editar o nome.');
+        }
+        return false;
+    }
+};
+
+/**
  * Le os ultimos N logs do access_logs.
  * @param limit numero maximo de logs (default 50)
  */

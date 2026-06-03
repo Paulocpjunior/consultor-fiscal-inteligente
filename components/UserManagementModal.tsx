@@ -120,6 +120,27 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
         }
     };
 
+    const handleEditName = async (user: User) => {
+        const novoNome = window.prompt(
+            `Editar nome do usuário com email ${user.email}:`,
+            user.name,
+        );
+        if (novoNome === null) return;
+        const trimmed = novoNome.trim();
+        if (!trimmed || trimmed === user.name) return;
+        try {
+            const ok = await authService.setUserName(user.id, trimmed);
+            if (ok) {
+                setMsg({ text: `Nome alterado para "${trimmed}".`, type: 'success' });
+                loadUsers();
+            } else {
+                setMsg({ text: 'Erro ao alterar nome.', type: 'error' });
+            }
+        } catch (e: any) {
+            setMsg({ text: e?.message || 'Erro ao alterar nome.', type: 'error' });
+        }
+    };
+
     if (!isOpen) return null;
 
     const TabButton: React.FC<{ id: Tab; label: string; count?: number }> = ({ id, label, count }) => (
@@ -208,6 +229,15 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                         <td className="px-4 py-2 text-center">
                                             {user.email !== currentUserEmail && (
                                                 <div className="flex justify-center gap-2">
+                                                    {isAdmin && (
+                                                        <button
+                                                            onClick={() => handleEditName(user)}
+                                                            className="px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-xs font-semibold"
+                                                            title="Editar nome de exibição"
+                                                        >
+                                                            Editar nome
+                                                        </button>
+                                                    )}
                                                     {isAdmin && (
                                                         <button
                                                             onClick={() => handleToggleRole(user)}
