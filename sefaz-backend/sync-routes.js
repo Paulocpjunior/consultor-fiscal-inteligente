@@ -64,7 +64,21 @@ router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
         agoraBRT: janela.agoraBRT,
       });
     }
+<<<<<<< ours
     console.log(`[sync-one] início — empresa=${empresaId} cnpj=${empresaCnpj} user=${req.user.email}`);
+=======
+    console.log(`[sync-one] início — empresa=${empresaId} cnpj=${empresaCnpj} user=${req.user.email} role=${req.user.role}`);
+    // Admin bypassa o lock 1h tambem — diagnostico de bug exige varios
+    // disparos seguidos sem esperar TTL. Deleta o lock antes; o orquestrador
+    // vai recriar normalmente. Race-condition de 2 admins disparando o mesmo
+    // CNPJ ao mesmo tempo eh suficientemente improvavel (admin sao poucos).
+    if (req.user.role === 'admin') {
+      try {
+        const cnpjNum = String(empresaCnpj).replace(/\D/g, '');
+        await fa().firestore().collection('sefaz_locks').doc(cnpjNum).delete();
+      } catch (e) { /* lock pode nao existir — segue */ }
+    }
+>>>>>>> theirs
     const result = await sincronizarEmpresa({
       empresaId, empresaCnpj,
       capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'manual' },
