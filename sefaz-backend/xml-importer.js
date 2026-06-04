@@ -8,6 +8,7 @@
 import crypto from 'crypto';
 import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
+import { classificarTipoDoc } from './xml-tipo-doc.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -231,23 +232,15 @@ function extrairMetadados(xml, schema) {
   const vNF = pickTag(xml, 'vNF') || pickTag(xml, 'vTPrest') || pickTag(xml, 'vRec') || null;
   const tpNF = pickTag(xml, 'tpNF') || null;
 
-  let tipoDoc = 'desconhecido';
-  let tipoNormalizado = 'desconhecido';  // alinha com XmlTipoDocumento do frontend (NFe/NFCe/CTe/MDFe/...)
-  if (schema?.startsWith('procNFe'))        { tipoDoc = 'NFe';        tipoNormalizado = 'NFe'; }
-  else if (schema?.startsWith('resNFe'))    { tipoDoc = 'resNFe';     tipoNormalizado = 'NFe'; }
-  else if (schema?.startsWith('procCTe'))   { tipoDoc = 'CTe';        tipoNormalizado = 'CTe'; }
-  else if (schema?.startsWith('resCTe'))    { tipoDoc = 'resCTe';     tipoNormalizado = 'CTe'; }
-  else if (schema?.startsWith('procMDFe'))  { tipoDoc = 'MDFe';       tipoNormalizado = 'MDFe'; }
-  else if (schema?.startsWith('resMDFe'))   { tipoDoc = 'resMDFe';    tipoNormalizado = 'MDFe'; }
-  else if (schema?.startsWith('procEPEC'))  { tipoDoc = 'EPEC';       tipoNormalizado = 'NFe'; }
-  else if (schema?.startsWith('procEventoNFe'))   { tipoDoc = 'eventoNFe';   tipoNormalizado = 'NFe'; }
-  else if (schema?.startsWith('procEventoCTe'))   { tipoDoc = 'eventoCTe';   tipoNormalizado = 'CTe'; }
-  else if (schema?.startsWith('procEventoMDFe'))  { tipoDoc = 'eventoMDFe';  tipoNormalizado = 'MDFe'; }
-  else if (schema?.startsWith('resEvento'))       { tipoDoc = 'resEvento';   tipoNormalizado = 'NFe'; }
+  // Classificacao em modulo PURO (testavel direto em jest). Cobre NFe, NFCe,
+  // CTe, MDFe (proc/res), seus eventos, e fallback por modelo da chave quando
+  // o schema vier malformado/ausente. Substituiu a if-chain inline antiga, que
+  // ignorava NFCe (modelo 65) — clientes varejistas nao tinham captura.
+  const { tipoDoc, tipoNormalizado } = classificarTipoDoc(schema, chave);
 
   // Para eventos, extrai metadados específicos
   let evento = null;
-  if (tipoDoc === 'eventoNFe' || tipoDoc === 'eventoCTe' || tipoDoc === 'eventoMDFe' || tipoDoc === 'resEvento') {
+  if (tipoDoc === 'eventoNFe' || tipoDoc === 'eventoNFCe' || tipoDoc === 'eventoCTe' || tipoDoc === 'eventoMDFe' || tipoDoc === 'resEvento') {
     const tpEvento = pickTag(xml, 'tpEvento');
     const nSeqEvento = pickTag(xml, 'nSeqEvento');
     const dhEventoTag = pickTag(xml, 'dhEvento');
@@ -411,10 +404,11 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   const xmlHash = sha256(xml);
 
   // ── EVENTOS: caminho separado (anexa ao documento original) ─────────
-  // Inclui eventos de CTe e MDFe (cancelamento, CCe, etc), nao so NFe.
-  // chNFeRef e a chave do doc referenciado (44 digitos), seja NFe/CTe/MDFe.
-  if ((meta.tipoDoc === 'eventoNFe' || meta.tipoDoc === 'eventoCTe' ||
-       meta.tipoDoc === 'eventoMDFe' || meta.tipoDoc === 'resEvento') && meta.evento?.chNFeRef) {
+  // Inclui eventos de NFe, NFCe, CTe e MDFe (cancelamento, CCe, etc).
+  // chNFeRef e a chave do doc referenciado (44 digitos).
+  if ((meta.tipoDoc === 'eventoNFe' || meta.tipoDoc === 'eventoNFCe' ||
+       meta.tipoDoc === 'eventoCTe' || meta.tipoDoc === 'eventoMDFe' ||
+       meta.tipoDoc === 'resEvento') && meta.evento?.chNFeRef) {
     // Sanitiza componentes do path pra não estourar limite de 1024 chars
     // do Firebase Storage. Chave NFe = 44 dígitos exatos; nProt/tpEvento ~15 chars.
     const chRefSafe = String(meta.evento.chNFeRef || '').replace(/\D/g, '').slice(0, 44);
@@ -487,7 +481,8 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   const existingData = existing?.exists ? existing.data() : null;
 
   // resNFe (resumo, ~531 bytes, SEM itens/valor) x procNFe (NFe COMPLETA).
-  // O DistDFe entrega PRIMEIRO o resumo pro destinatario; a NFe completa so e
+  // Vale tambem pra NFCe (resNFCe x procNFCe — mesma logica, modelo 65).
+  // O DistDFe entrega PRIMEIRO o resumo pro destinatario; a nota completa so e
   // liberada pela SEFAZ APOS a Manifestacao (Ciencia 210210) e chega numa
   // DistDFe/consChNFe posterior. Nesse momento a chave JA EXISTE na base
   // (gravada como resumo). ANTES o import rejeitava como 'duplicado' e
@@ -495,9 +490,11 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   // R$ 547,70) nunca apareciam, mesmo com a Ciencia disparada.
   // Agora: se o que esta na base e RESUMO e o que chega e COMPLETA, faz UPGRADE
   // (sobrescreve com itens/totais/valor, preservando eventos ja anexados).
-  const incomingResumo = meta.tipoDoc === 'resNFe' || String(schema || '').startsWith('resNFe');
+  const isResumoSchema = (sch) => /^res(NFe|NFCe)/.test(String(sch || ''));
+  const isResumoTipoDoc = (td) => td === 'resNFe' || td === 'resNFCe';
+  const incomingResumo = isResumoTipoDoc(meta.tipoDoc) || isResumoSchema(schema);
   const existingResumo = existingData
-    ? (String(existingData.schema || '').startsWith('resNFe') || existingData.temItens === false)
+    ? (isResumoSchema(existingData.schema) || existingData.temItens === false)
     : false;
   const ehUpgradeResumoParaCompleta = !!existingData && existingResumo && !incomingResumo;
 
@@ -530,21 +527,23 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   const status = statusFromCStat(xml);
   const temItens = itens.length > 0;
 
-  // 23/05 — resNFe (resumo) nao tem <dest> separado, so <CNPJ> do emit.
+  // 23/05 — resumo (resNFe/resNFCe) nao tem <dest> separado, so <CNPJ> do emit.
   // Resumo sempre chega pra DESTINATARIO (manifestacao ou recebimento). Logo:
   // se eh resumo e a empresa-cliente nao eh emit, entao eh entrada.
   const norm = c => String(c || '').replace(/\D/g, '');
-  if (direcao === 'desconhecida' && meta.tipoDoc === 'resNFe' && meta.cnpjEmit) {
+  if (direcao === 'desconhecida' && isResumoTipoDoc(meta.tipoDoc) && meta.cnpjEmit) {
     if (norm(meta.cnpjEmit) !== norm(empresaCnpj)) {
       direcao = 'entrada';
     }
   }
 
-  // Para o frontend e manifestacao, tipoDoc='NFe' tanto para procNFe quanto resNFe
-  // (a distincao fica em temItens/schema). Resumos viram 'NFe' tambem para o
-  // manifesto-orchestrator encontra-los (filtra tipoDoc==='NFe').
+  // Para o frontend e manifestacao, agrupa resumo+completa sob a mesma "familia":
+  //  - resNFe/procNFe   -> tipoDoc='NFe'   (manifesto-orchestrator filtra por isso)
+  //  - resNFCe/procNFCe -> tipoDoc='NFCe'  (UI filtra por isso na coluna Tipo)
+  // A distincao resumo x completa fica em temItens/schema.
   let tipoDocFinal = meta.tipoDoc;
-  if (meta.tipoDoc === 'resNFe' || meta.tipoDoc === 'NFe') tipoDocFinal = 'NFe';
+  if (meta.tipoDoc === 'resNFe' || meta.tipoDoc === 'NFe')   tipoDocFinal = 'NFe';
+  if (meta.tipoDoc === 'resNFCe' || meta.tipoDoc === 'NFCe') tipoDocFinal = 'NFCe';
 
   const docData = {
     id: docId,
