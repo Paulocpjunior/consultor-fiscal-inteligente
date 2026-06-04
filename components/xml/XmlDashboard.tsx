@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { User, DocumentoFiscal } from '../../types';
-import { listDocumentos, summarize } from '../../services/xmlFiscalService';
-import { formatCurrency } from '../../services/xmlParserService';
+import { listDocumentos, summarize, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
+import { formatCurrency, formatCnpjCpf } from '../../services/xmlParserService';
 
 interface Props {
     currentUser: User;
@@ -20,6 +20,9 @@ const SELECT_CLS = 'bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:b
 const XmlDashboard: React.FC<Props> = ({ currentUser, refreshKey }) => {
     const [docs, setDocs] = useState<DocumentoFiscal[]>([]);
     const [loading, setLoading] = useState(true);
+    // Cadastro de empresas — usado pra resolver nome a partir do CNPJ quando
+    // o doc nao tem empresaNome (Top Empresas mostrava CNPJ cru).
+    const [empresasCadastro, setEmpresasCadastro] = useState<EmpresaXmlOption[]>([]);
 
     // Filtros do dashboard. Aplicados client-side sobre os docs ja carregados,
     // entao todos os cards (summarize) reagem sem refetch.
@@ -34,8 +37,34 @@ const XmlDashboard: React.FC<Props> = ({ currentUser, refreshKey }) => {
         listDocumentos(currentUser).then(d => {
             if (alive) { setDocs(d); setLoading(false); }
         });
+        getEmpresasDisponiveis(currentUser).then(list => {
+            if (alive) setEmpresasCadastro(list);
+        }).catch(() => { /* lista opcional — Top Empresas funciona sem ela */ });
         return () => { alive = false; };
     }, [currentUser, refreshKey]);
+
+    // Mapa CNPJ (so digitos) -> nome do cadastro, pra resolver Top Empresas.
+    const nomePorCnpj = useMemo(() => {
+        const m = new Map<string, string>();
+        empresasCadastro.forEach(e => {
+            const c = (e.cnpj || '').replace(/\D/g, '');
+            if (c && e.nome) m.set(c, e.nome);
+        });
+        return m;
+    }, [empresasCadastro]);
+
+    // Mapa empresaId -> empresaCnpj a partir dos docs. A chave de porEmpresa
+    // pode ser um UUID (empresaId), entao precisamos do CNPJ pra cruzar com
+    // o cadastro.
+    const cnpjPorEmpresaId = useMemo(() => {
+        const m = new Map<string, string>();
+        docs.forEach(d => {
+            const id = d.empresaId || '';
+            const cnpj = (d.empresaCnpj || '').replace(/\D/g, '');
+            if (id && cnpj && !m.has(id)) m.set(id, cnpj);
+        });
+        return m;
+    }, [docs]);
 
     // Opcoes dos dropdowns vem do conjunto COMPLETO (nao do filtrado), pra
     // nao sumirem conforme o usuario filtra.
@@ -77,7 +106,28 @@ const XmlDashboard: React.FC<Props> = ({ currentUser, refreshKey }) => {
     }
 
     const competencias = Object.entries(summary.porCompetencia).sort(([a], [b]) => b.localeCompare(a)).slice(0, 6);
-    const empresas = Object.entries(summary.porEmpresa).sort(([, a], [, b]) => b.valorTotal - a.valorTotal).slice(0, 5);
+    // Resolve nome de cada empresa: usa nome do doc; se for CNPJ cru (sem
+    // nome), tenta o cadastro pelo CNPJ; senao mantem CNPJ formatado.
+    const resolveNome = (id: string, nome: string): string => {
+        // Nome ja bom? usa direto.
+        const nomeDigits = (nome || '').replace(/\D/g, '');
+        const nomeEhCnpjOuVazio = !nome || nome === '(sem identificação)' || nomeDigits.length === 14;
+        if (!nomeEhCnpjOuVazio) return nome;
+        // Descobre o CNPJ: a chave pode ser o proprio CNPJ, ou um empresaId
+        // que mapeamos pro CNPJ via docs.
+        const idDigits = (id || '').replace(/\D/g, '');
+        const cnpj = idDigits.length === 14 ? idDigits : (cnpjPorEmpresaId.get(id) || '');
+        if (cnpj) {
+            const doCadastro = nomePorCnpj.get(cnpj);
+            if (doCadastro) return doCadastro;
+            return formatCnpjCpf(cnpj);
+        }
+        return nome || '(sem identificação)';
+    };
+    const empresas = Object.entries(summary.porEmpresa)
+        .sort(([, a], [, b]) => b.valorTotal - a.valorTotal)
+        .slice(0, 5)
+        .map(([id, e]) => [id, { ...e, nome: resolveNome(id, e.nome) }] as [string, typeof e]);
     const cfops = Object.entries(summary.cfops).sort(([, a], [, b]) => b.quantidade - a.quantidade).slice(0, 5);
 
     return (
