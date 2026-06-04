@@ -503,28 +503,48 @@ export async function listDocumentos(
         const e = d as any;
         const norm = (s: any) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-        // Direção semantica: quando busca eh CNPJ valido E direcao foi escolhida,
-        // avalia direcao relativa ao CNPJ buscado, NAO ao empresaCnpj do doc.
-        //
-        // Sem isso: buscar S&P (44388) + 'entrada' mostrava NFSe emitidas pela
-        // S&P pra clientes (gravadas como 'entrada' dos clientes) — semantica
-        // invertida. Reportado pelo usuario.
-        //
-        // Com isso:
-        //   'entrada' → CNPJ buscado deve aparecer em dest/tomador
-        //   'saida'   → CNPJ buscado deve aparecer em emit/prestador
-        let direcaoJaFiltrada = false;
-        if (filters.busca && filters.direcao) {
-            const termNorm = norm(filters.busca);
-            if (/^\d{8,14}$/.test(termNorm)) {
-                const destCnpjs = [e.destinatario?.cnpj, e.tomador?.cnpj, e.cnpjDest, e.cpfDest].map(norm).join(' ');
-                const emitCnpjs = [e.emitente?.cnpj, e.prestador?.cnpj, e.cnpjEmit].map(norm).join(' ');
-                if (filters.direcao === 'entrada' && !destCnpjs.includes(termNorm)) return false;
-                if (filters.direcao === 'saida' && !emitCnpjs.includes(termNorm)) return false;
-                direcaoJaFiltrada = true;
+        // ── Blobs de CNPJ (reusados por busca E direção) ──────────────────
+        const destCnpjs = [e.destinatario?.cnpj, e.tomador?.cnpj, e.cnpjDest, e.cpfDest].map(norm).join(' ');
+        const emitCnpjs = [e.emitente?.cnpj, e.prestador?.cnpj, e.cnpjEmit].map(norm).join(' ');
+        const empresaCnpjN = norm(d.empresaCnpj);
+        const cnpjBlob = [empresaCnpjN, destCnpjs, emitCnpjs].join(' ');
+
+        const term = filters.busca ? norm(filters.busca) : '';
+        // Termo "CNPJ-like": SÓ dígitos, de QUALQUER tamanho. Cobre o CNPJ
+        // completo (14) e o prefixo digitado pelo usuário (ex: '44388').
+        // O threshold antigo (8-14) deixava prefixos curtos caírem na busca
+        // textual — que varria o CNPJ da contraparte e ignorava a
+        // reinterpretação de direção. Era esse o bug do filtro '44388'
+        // trazendo as notas dos CLIENTES (onde a S&P é só contraparte).
+        const termIsNumeric = !!term && /^\d+$/.test(term);
+        const termInDest = !!term && destCnpjs.includes(term);
+        const termInEmit = !!term && emitCnpjs.includes(term);
+        const termIsEmpresa = !!term && !!empresaCnpjN && empresaCnpjN.includes(term);
+        const termMatchesCnpj = termIsNumeric && (termInDest || termInEmit || termIsEmpresa);
+
+        // ── Direção (relativa ao CNPJ buscado) ────────────────────────────
+        // Quando a busca é um CNPJ, a direção é avaliada RELATIVA a ele, não
+        // ao empresaCnpj gravado no doc:
+        //   - CNPJ buscado no dest/tomador   → entrada
+        //   - CNPJ buscado no emit/prestador → saída
+        //   - resumo (resNFe) NÃO tem dest: cai no empresaCnpj + direção gravada
+        //     (sem isso o resumo BRASLIMPO sumia da busca por CNPJ completo).
+        // Quando a busca NÃO é CNPJ (vazia, número da nota ou nome), usa a
+        // direção gravada no doc.
+        if (filters.direcao) {
+            if (termMatchesCnpj) {
+                let isEntradaForTerm = termInDest;
+                let isSaidaForTerm = termInEmit;
+                if (!termInDest && !termInEmit && termIsEmpresa) {
+                    isEntradaForTerm = d.direcao === 'entrada';
+                    isSaidaForTerm = d.direcao === 'saida';
+                }
+                if (filters.direcao === 'entrada' && !isEntradaForTerm) return false;
+                if (filters.direcao === 'saida' && !isSaidaForTerm) return false;
+            } else if (d.direcao !== filters.direcao) {
+                return false;
             }
         }
-        if (!direcaoJaFiltrada && filters.direcao && d.direcao !== filters.direcao) return false;
 
         if (filters.status && d.status !== filters.status) return false;
         if (filters.origem && d.origem !== filters.origem) return false;
@@ -537,34 +557,28 @@ export async function listDocumentos(
         if (filters.competencia && d.competencia !== filters.competencia) return false;
         if (filters.competenciaInicio && d.competencia < filters.competenciaInicio) return false;
         if (filters.competenciaFim && d.competencia > filters.competenciaFim) return false;
-        if (filters.busca) {
-            // Busca canonica: normaliza tudo (lowercase + tira nao-alfanumerico)
-            // pra casar com qualquer formatacao de CNPJ ('44.388.152/0001-89',
-            // '44388152000189', '44388152') E qualquer variacao de nome.
-            const term = norm(filters.busca);
-            if (term) {
-                // Quando termo eh CNPJ-like (so digitos, 8-14), busca SO em
-                // campos de CNPJ — sem isso, '44388' casava com qualquer chave
-                // de 44 digitos que tivesse '44388' em algum lugar (falso pos.
-                // reportado: linha do CNPJ 51.227.692 aparecia na busca '44388'
-                // porque a chave de acesso contem esses digitos).
-                if (/^\d{8,14}$/.test(term)) {
-                    const cnpjBlob = [
-                        d.empresaCnpj,
-                        e.emitente?.cnpj, e.prestador?.cnpj, e.cnpjEmit,
-                        e.destinatario?.cnpj, e.tomador?.cnpj, e.cnpjDest, e.cpfDest,
-                    ].map(norm).join(' ');
-                    if (!cnpjBlob.includes(term)) return false;
-                } else {
-                    // Busca textual: usa todos os campos (CNPJ + nome + numero + chave)
-                    const blob = [
-                        d.numero, d.chave, d.empresaNome, d.empresaCnpj,
-                        e.emitente?.nome, e.emitente?.cnpj, e.prestador?.nome, e.prestador?.cnpj,
-                        e.destinatario?.nome, e.destinatario?.cnpj, e.tomador?.nome, e.tomador?.cnpj,
-                        e.cnpjEmit, e.cnpjDest, e.cpfDest,
-                    ].map(norm).join(' ');
-                    if (!blob.includes(term)) return false;
-                }
+
+        // ── Busca textual / numérica ──────────────────────────────────────
+        if (term) {
+            if (termIsNumeric) {
+                // Numérico: casa em campo de CNPJ (substring) OU no número da
+                // nota. A CHAVE só é comparada pra termos longos (>=15 dígitos)
+                // — sem isso, '44388' casava dentro de qualquer chave de 44
+                // dígitos (falso positivo reportado: CNPJ 51.227.692 aparecia).
+                const numeroN = norm(d.numero);
+                const chaveN = norm(d.chave);
+                const matchNum = !!numeroN && numeroN.includes(term);
+                const matchChave = term.length >= 15 && chaveN.includes(term);
+                if (!cnpjBlob.includes(term) && !matchNum && !matchChave) return false;
+            } else {
+                // Textual: nome + CNPJ + número + chave.
+                const blob = [
+                    d.numero, d.chave, d.empresaNome, d.empresaCnpj,
+                    e.emitente?.nome, e.emitente?.cnpj, e.prestador?.nome, e.prestador?.cnpj,
+                    e.destinatario?.nome, e.destinatario?.cnpj, e.tomador?.nome, e.tomador?.cnpj,
+                    e.cnpjEmit, e.cnpjDest, e.cpfDest,
+                ].map(norm).join(' ');
+                if (!blob.includes(term)) return false;
             }
         }
         return true;
