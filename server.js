@@ -69,7 +69,56 @@ app.use(cors({
     allowedHeaders: ['Authorization', 'Content-Type', 'X-Requested-With', 'X-Cron-Secret'],
 }));
 
-// Routers montados APÓS o middleware CORS
+// ── Middleware de segurança e parsing — ANTES dos routers! ──────────────
+// BUG corrigido: helmet/express.json/rateLimit estavam montados DEPOIS dos
+// routers /api/admin/*. No Express o middleware roda na ordem de registro;
+// como o router respondia primeiro, esses 3 NUNCA rodavam pras rotas da API
+// (a superficie inteira, incluindo SEFAZ, ficava SEM rate limit nem headers
+// de seguranca). Movido pra ca, antes dos mounts, pra valer de verdade.
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com", "https://www.gstatic.com", "https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            imgSrc: ["'self'", "data:", "https:"],
+            frameSrc: ["'self'", "https://*.firebaseapp.com", "https://apis.google.com"],
+            workerSrc: ["'self'", "https://cdnjs.cloudflare.com", "blob:"],
+            connectSrc: ["'self'", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.firebaseapp.com", "https://firebasestorage.googleapis.com", "https://identitytoolkit.googleapis.com", "https://securetoken.googleapis.com", "https://cdnjs.cloudflare.com"],
+        },
+    },
+}));
+app.use(express.json({ limit: '20mb' }));
+
+// Rate limiting. skip: requisicoes de cron autenticadas (Cloud Scheduler)
+// nunca sao limitadas — senao um pico de crons as 7-8h poderia ser barrado.
+const isCronRequest = (req) => {
+    const secret = process.env.SEFAZ_CRON_SECRET;
+    const header = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
+    return !!secret && header === secret;
+};
+// Limite geral anti-flood em toda a API.
+const apiLimiter = rateLimit({
+    windowMs: 60_000, max: 120,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    message: { error: 'Muitas requisições em pouco tempo. Aguarde um momento.' },
+});
+// Limite RIGOROSO nas rotas que consultam a SEFAZ on-demand: cada hit =
+// 1 chamada à SEFAZ/SERPRO. Sem isso, um cliente em loop queima a quota do
+// IP do Cloud Run e provoca cStat 656 (Consumo Indevido) pra todo mundo.
+const sefazLimiter = rateLimit({
+    windowMs: 60_000, max: 30,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    message: { error: 'Muitas consultas à SEFAZ em pouco tempo. Aguarde ~1 minuto.' },
+});
+app.use('/api/', apiLimiter);
+app.use('/api/admin/sefaz/consulta-nfe-por-chave', sefazLimiter);
+app.use('/api/admin/sefaz/sync-one', sefazLimiter);
+
+// ── Routers (montados DEPOIS do middleware de segurança/limite) ─────────
 app.use('/api/admin/sefaz', sefazCertRouter);
 app.use('/api/admin/sefaz', sefazCertAlertaCronRouter);
 app.use('/api/admin/sefaz', sefazSyncRouter);
@@ -95,23 +144,6 @@ app.use('/api/admin/recuperacao', recuperacaoRouter);
 app.use('/api/admin/nfp-compliance', nfpComplianceRouter);
 app.use('/api/dp-integration', dpIntegrationRouter);
 app.use('/api/admin/sharepoint', sharepointAutoSyncRouter);
-
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com", "https://www.gstatic.com", "https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com"],
-            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-            fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            imgSrc: ["'self'", "data:", "https:"],
-            frameSrc: ["'self'", "https://*.firebaseapp.com", "https://apis.google.com"],
-            workerSrc: ["'self'", "https://cdnjs.cloudflare.com", "blob:"],
-            connectSrc: ["'self'", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.firebaseapp.com", "https://firebasestorage.googleapis.com", "https://identitytoolkit.googleapis.com", "https://securetoken.googleapis.com", "https://cdnjs.cloudflare.com"],
-        },
-    },
-}));
-app.use(express.json({ limit: '20mb' }));
-app.use('/api/', rateLimit({ windowMs: 60000, max: 120, message: { error: 'Aguarde.' } }));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Modelos centralizados em env vars — trocar de versao = atualizar o secret no

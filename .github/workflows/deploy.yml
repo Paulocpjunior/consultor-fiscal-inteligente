@@ -32,8 +32,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Type check
-        run: npm run typecheck || echo "::warning::TypeScript errors found (non-blocking)"
+      # Gate BLOQUEANTE: sintaxe do backend. Pega a classe de bug que REALMENTE
+      # derruba produção (erro de sintaxe em server.js / sefaz-backend/*.js —
+      # já houve incidentes). node --check é syntax-only (não resolve imports),
+      # rápido e determinístico. Se algum arquivo não parsear, o deploy PARA.
+      - name: Backend syntax check (blocking)
+        run: |
+          fail=0
+          for f in $(find server.js sefaz-backend -name '*.js'); do
+            node --check "$f" || { echo "::error file=$f::Erro de sintaxe"; fail=1; }
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Backend tem erro(s) de sintaxe — deploy abortado."
+            exit 1
+          fi
+          echo "✓ Backend OK (sintaxe)"
+
+      # Type check do FRONTEND: NÃO-bloqueante de propósito. O codebase tem
+      # milhares de erros TS legados (o type-check nunca passou de fato; o
+      # runtime funciona porque o Vite/esbuild transpila sem checar tipos).
+      # Tornar bloqueante hoje barraria TODO deploy. Mantém como informativo
+      # até a dívida de tipos ser paga incrementalmente.
+      - name: Type check (frontend, non-blocking)
+        run: npm run typecheck || echo "::warning::Erros TS pré-existentes (não-bloqueante — ver dívida de tipos)"
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
