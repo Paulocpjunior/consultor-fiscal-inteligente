@@ -183,10 +183,37 @@ const ConsultaNFePorChavePanel: React.FC = () => {
                                     </div>
                                 )}
                                 {resultado.escritorioEhDestinatario === null && !resultado.detalhes && (
-                                    <div className="text-sm text-slate-700 dark:text-slate-300">
-                                        SEFAZ não devolveu o XML da NFe. cStat=137 normalmente significa
-                                        "Nenhum documento localizado para o interessado" — o CNPJ do escritório
-                                        não consta como emitente nem destinatário.
+                                    <div className="text-sm space-y-2">
+                                        {resultado.cStat === '137' ? (
+                                            <p className="text-slate-700 dark:text-slate-300">
+                                                <strong>cStat=137</strong> "Nenhum documento localizado para o interessado" —
+                                                o CNPJ do escritório não consta como emitente nem destinatário desta NFe.
+                                            </p>
+                                        ) : resultado.cStat === '138' ? (
+                                            <p className="text-amber-700 dark:text-amber-400">
+                                                <strong>cStat=138</strong> "Documento localizado" — a NFe EXISTE pro escritório,
+                                                mas a SEFAZ devolveu apenas <strong>{resultado.totalXmls || 0} doc(s)</strong> sem a NFe completa parseável.
+                                                Provavelmente resumos (resNFe) ou eventos. Veja abaixo:
+                                            </p>
+                                        ) : (
+                                            <p className="text-slate-700 dark:text-slate-300">
+                                                SEFAZ retornou <strong>cStat={resultado.cStat || '?'}</strong> sem XML legível.
+                                            </p>
+                                        )}
+                                        {resultado.xmlsResumo && resultado.xmlsResumo.length > 0 && (
+                                            <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded text-[11px] font-mono space-y-1">
+                                                <div className="text-slate-500 mb-1">XMLs retornados pela SEFAZ:</div>
+                                                {resultado.xmlsResumo.map((x, i) => (
+                                                    <div key={i} className="flex gap-2 items-baseline">
+                                                        <span className="text-slate-500 shrink-0">#{i + 1}</span>
+                                                        <span className="text-slate-700 dark:text-slate-200 shrink-0">{x.schema || '(sem schema)'}</span>
+                                                        <span className="text-slate-500 shrink-0">NSU {x.nsu || '—'}</span>
+                                                        <span className="text-slate-500 shrink-0">{x.temXml ? `${x.tamanho}b` : '(vazio)'}</span>
+                                                        {x.primeiraTag && <span className="text-blue-600 dark:text-blue-400 shrink-0">{'<' + x.primeiraTag + '>'}</span>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

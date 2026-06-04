@@ -32,6 +32,8 @@ export interface NFeChaveResposta {
     cnpjEscritorio: string;
     escritorioEhDestinatario: boolean | null;
     detalhes: NFeChaveDetalhes | null;
+    xmlsResumo?: { schema: string | null; nsu: string | null; temXml: boolean; tamanho: number; primeiraTag: string | null }[];
+    totalXmls?: number;
     error?: string;
 }
 
