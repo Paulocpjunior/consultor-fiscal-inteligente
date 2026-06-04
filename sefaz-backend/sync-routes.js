@@ -56,15 +56,20 @@ router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
     }
     const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
     if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
-    const janela = statusJanelaOperacional();
-    if (!janela.dentro) {
-      return res.status(403).json({
-        error: 'Fora da janela operacional',
-        motivo: janela.motivo,
-        agoraBRT: janela.agoraBRT,
-      });
+    // Janela operacional 07-20 BRT bloqueia colaborador disparando captura fora
+    // do horario comercial — protege quota SEFAZ. Admin tem bypass (sabe o que
+    // faz, e precisa testar fora-da-janela pra debug — vide caso S&P 03/06).
+    if (req.user.role !== 'admin') {
+      const janela = statusJanelaOperacional();
+      if (!janela.dentro) {
+        return res.status(403).json({
+          error: 'Fora da janela operacional',
+          motivo: janela.motivo,
+          agoraBRT: janela.agoraBRT,
+        });
+      }
     }
-    console.log(`[sync-one] início — empresa=${empresaId} cnpj=${empresaCnpj} user=${req.user.email}`);
+    console.log(`[sync-one] início — empresa=${empresaId} cnpj=${empresaCnpj} user=${req.user.email} role=${req.user.role}`);
     const result = await sincronizarEmpresa({
       empresaId, empresaCnpj,
       capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'manual' },
