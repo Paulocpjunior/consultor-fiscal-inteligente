@@ -586,7 +586,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     console.warn('[xml-importer] falha auditoria xml_capturas:', e.message);
   }
 
-  return { status: 'ok', chave: meta.chave };
+  return { status: 'ok', chave: meta.chave, tipoDoc: meta.tipoDoc };
 }
 
 export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor }) {

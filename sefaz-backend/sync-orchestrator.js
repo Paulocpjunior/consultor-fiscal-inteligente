@@ -230,6 +230,25 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
             if (r.status === 'ok') {
               novosXmls++;
               documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'ok', motivo: null });
+              // Manifestacao automatica: assim que um resNFe e importado com
+              // sucesso, dispara 'Ciencia da Operacao' (210210) em background.
+              // SEFAZ libera o procNFe completo na proxima DistDFe pra essa
+              // chave. Sem isso a base fica so com resumos, sem itens/totais.
+              if (r.tipoDoc === 'resNFe' && r.chave) {
+                setImmediate(async () => {
+                  try {
+                    const { manifestarUma } = await import('./manifesto-orchestrator.js');
+                    await manifestarUma({
+                      chNFe: r.chave,
+                      cnpjDestinatario: cnpjNum,
+                      tipo: 'ciencia',
+                      capturadoPor: { ...capturadoPor, motivo: 'auto-pos-import-resNFe' },
+                    });
+                  } catch (mfErr) {
+                    console.warn(`[auto-manifestar] ${r.chave} falhou:`, mfErr.message);
+                  }
+                });
+              }
             } else if (r.status === 'duplicado') {
               duplicados++;
               documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'duplicado', motivo: r.motivo || null });
