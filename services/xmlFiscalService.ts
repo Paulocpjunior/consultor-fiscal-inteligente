@@ -522,6 +522,27 @@ export function applyDocumentosFilters(
     docs: DocumentoFiscal[],
     filters: ListDocumentosFilters = {},
 ): DocumentoFiscal[] {
+    const normTop = (s: any) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Mapa CNPJ→nome derivado dos próprios docs carregados. Necessário pra
+    // achar docs cujo `empresaNome` está vazio mas `empresaCnpj` aponta pra
+    // uma empresa que aparece NOMEADA em outros docs.
+    //
+    // Caso real: o resumo da BRASLIMPO tem empresaCnpj=44388152000189 mas
+    // empresaNome=null (importer SEFAZ não popula nome). Buscar "S&P" só
+    // achava os 24 NFSe (todos tem empresaNome="S&P ASSESSORIA CONTABIL S/S"),
+    // a BRASLIMPO ficava fora. Já buscar "44388" (numerico) bate em
+    // empresaCnpj direto e inclui — daí a divergencia (25 vs 24) que o
+    // usuario reportou. Com o mapa, "S&P" agora resolve o nome da S&P pelo
+    // CNPJ da BRASLIMPO e inclui ela.
+    const nomePorCnpj = new Map<string, string>();
+    for (const d of docs) {
+        if (d.empresaCnpj && d.empresaNome) {
+            const k = normTop(d.empresaCnpj);
+            if (k && !nomePorCnpj.has(k)) nomePorCnpj.set(k, d.empresaNome);
+        }
+    }
+
     return docs.filter(d => {
         const e = d as any;
         const norm = (s: any) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -587,8 +608,12 @@ export function applyDocumentosFilters(
                     String(s ?? '').toLowerCase().split(/\s+/)
                         .map(t => t.replace(/[^a-z0-9]/g, ''))
                         .filter(Boolean);
+                // Fallback: docs sem empresaNome (ex: BRASLIMPO resumo) puxam
+                // o nome do mapa CNPJ→nome construido acima.
+                const empresaNomeResolved =
+                    d.empresaNome || (empresaCnpjN ? nomePorCnpj.get(empresaCnpjN) : undefined);
                 const nameTokens = [
-                    ...splitTokens(d.empresaNome),
+                    ...splitTokens(empresaNomeResolved),
                     ...splitTokens(e.emitente?.nome),
                     ...splitTokens(e.prestador?.nome),
                     ...splitTokens(e.destinatario?.nome),
