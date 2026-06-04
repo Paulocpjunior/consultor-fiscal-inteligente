@@ -10,6 +10,8 @@ export interface DfeCaptureRequest {
     user: User;
     desde?: string;
     ate?: string;
+    /** Zera o cursor NSU — SEFAZ reenvia ~90 dias de DF-e. Só admin. */
+    resetNSU?: boolean;
 }
 
 export interface DfeCaptureResultItem {
@@ -80,7 +82,7 @@ export async function captureFromSefaz(req: DfeCaptureRequest): Promise<DfeCaptu
         const res = await fetch('/api/admin/sefaz/sync-one', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ empresaId: req.empresa.id, empresaCnpj: String((req.empresa as any).cnpj || '').replace(/\D/g, '') }),
+            body: JSON.stringify({ empresaId: req.empresa.id, empresaCnpj: String((req.empresa as any).cnpj || '').replace(/\D/g, ''), resetNSU: !!req.resetNSU }),
         });
         const data = await res.json();
         if (res.status === 403) {
