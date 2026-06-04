@@ -60,8 +60,15 @@ jobs:
         run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       - name: Build Docker image
+        # VITE_SENTRY_DSN injetado como --build-arg pra o Vite incluir no
+        # bundle (telemetria frontend). Se o secret SENTRY_DSN nao existir no
+        # repo, vira string vazia — app roda sem Sentry (services/sentry.ts
+        # vira NO-OP). Pra ativar: GitHub repo → Settings → Secrets → Actions
+        # → New: SENTRY_DSN = <dsn do projeto frontend no Sentry>.
         run: |
           docker build \
+            --build-arg VITE_SENTRY_DSN="${{ secrets.SENTRY_DSN }}" \
+            --build-arg VITE_SENTRY_ENV="production" \
             -t us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             .
 
