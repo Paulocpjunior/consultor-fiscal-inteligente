@@ -61,15 +61,17 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
             };
             const rows = docs.map(d => {
                 const view = getView(d);
-                const contraparte = d.direcao === 'entrada' ? view.emitente : view.destinatario;
+                // view.direcao ja faz fallback (PR pós-cStat138). Usa ela como fonte.
+                const direcao = view.direcao || '';
+                const contraparte = direcao === 'entrada' ? view.emitente : view.destinatario;
                 return [
                     formatDate(d.dhEmi).split(' ')[0],
-                    d.empresaNome || '',
+                    d.empresaNome || formatCnpjCpf(d.empresaCnpj || '') || '—',
                     formatCnpjCpf(d.empresaCnpj || ''),
                     d.tipo,
                     view.numero || '',
                     view.serie || '',
-                    view.direcao || '',
+                    direcao,
                     contraparte.nome || '',
                     formatCnpjCpf(contraparte.cnpj || ''),
                     view.valores.total ?? 0,

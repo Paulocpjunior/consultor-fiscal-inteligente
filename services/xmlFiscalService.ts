@@ -543,13 +543,28 @@ export async function listDocumentos(
             // '44388152000189', '44388152') E qualquer variacao de nome.
             const term = norm(filters.busca);
             if (term) {
-                const blob = [
-                    d.numero, d.chave, d.empresaNome, d.empresaCnpj,
-                    e.emitente?.nome, e.emitente?.cnpj, e.prestador?.nome, e.prestador?.cnpj,
-                    e.destinatario?.nome, e.destinatario?.cnpj, e.tomador?.nome, e.tomador?.cnpj,
-                    e.cnpjEmit, e.cnpjDest, e.cpfDest,
-                ].map(norm).join(' ');
-                if (!blob.includes(term)) return false;
+                // Quando termo eh CNPJ-like (so digitos, 8-14), busca SO em
+                // campos de CNPJ — sem isso, '44388' casava com qualquer chave
+                // de 44 digitos que tivesse '44388' em algum lugar (falso pos.
+                // reportado: linha do CNPJ 51.227.692 aparecia na busca '44388'
+                // porque a chave de acesso contem esses digitos).
+                if (/^\d{8,14}$/.test(term)) {
+                    const cnpjBlob = [
+                        d.empresaCnpj,
+                        e.emitente?.cnpj, e.prestador?.cnpj, e.cnpjEmit,
+                        e.destinatario?.cnpj, e.tomador?.cnpj, e.cnpjDest, e.cpfDest,
+                    ].map(norm).join(' ');
+                    if (!cnpjBlob.includes(term)) return false;
+                } else {
+                    // Busca textual: usa todos os campos (CNPJ + nome + numero + chave)
+                    const blob = [
+                        d.numero, d.chave, d.empresaNome, d.empresaCnpj,
+                        e.emitente?.nome, e.emitente?.cnpj, e.prestador?.nome, e.prestador?.cnpj,
+                        e.destinatario?.nome, e.destinatario?.cnpj, e.tomador?.nome, e.tomador?.cnpj,
+                        e.cnpjEmit, e.cnpjDest, e.cpfDest,
+                    ].map(norm).join(' ');
+                    if (!blob.includes(term)) return false;
+                }
             }
         }
         return true;
