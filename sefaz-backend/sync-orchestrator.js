@@ -256,6 +256,16 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
             } else if (r.status === 'duplicado') {
               duplicados++;
               documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'duplicado', motivo: r.motivo || null });
+            } else if (r.status === 'evento_anexado' || r.status === 'evento_stub_criado') {
+              // Evento (cancelamento/ciencia/etc) anexado a uma NFe — sucesso,
+              // nao e erro. Conta como 'novo' (algo foi gravado).
+              novosXmls++;
+              documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'evento-ok', motivo: r.tipo || null });
+            } else if (r.status === 'duplicado_evento' || r.status === 'evento_skip_vazio') {
+              // Evento que ja tinha sido anexado antes (reprocessamento via
+              // reset NSU) OU evento vazio — nao e erro, e duplicata benigna.
+              duplicados++;
+              documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'evento-dup', motivo: r.tipo || null });
             } else {
               erros++;
               documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'erro-import', motivo: r.motivo || JSON.stringify(r).slice(0, 200) });
