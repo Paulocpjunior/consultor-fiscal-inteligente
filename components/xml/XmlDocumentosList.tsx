@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getView } from '../../services/xmlDocumentoView';
 import type { User, DocumentoFiscal } from '../../types';
-import { listDocumentos, type ListDocumentosFilters } from '../../services/xmlFiscalService';
+import { listDocumentos, applyDocumentosFilters, type ListDocumentosFilters } from '../../services/xmlFiscalService';
 import NFeStatusCell from './NFeStatusCell';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
 
@@ -13,7 +13,13 @@ interface Props {
 }
 
 const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey }) => {
-    const [docs, setDocs] = useState<DocumentoFiscal[]>([]);
+    // ANTES: cada tecla no campo "Buscar" disparava listDocumentos → fetchAllDocs
+    // (5k+ docs pela rede) → filtro em memoria → setDocs. Resultado: digitação
+    // travada e custo absurdo.
+    // AGORA: fetch UMA vez por [currentUser, refreshKey] em allDocs; filtro
+    // (busca/direção/competência/tipo/status/origem) roda em memoria via useMemo
+    // a cada tecla, sem rede.
+    const [allDocs, setAllDocs] = useState<DocumentoFiscal[]>([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<ListDocumentosFilters>({});
     const [busca, setBusca] = useState('');
@@ -23,10 +29,17 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     useEffect(() => {
         let alive = true;
         setLoading(true);
-        listDocumentos(currentUser, { ...filters, busca })
-            .then(list => { if (alive) { setDocs(list); setLoading(false); } });
+        // listDocumentos sem filtros = busca todos os docs visiveis ao usuario
+        // (ja aplica createdBy pra colaborador, allow-all pra admin).
+        listDocumentos(currentUser, {})
+            .then(list => { if (alive) { setAllDocs(list); setLoading(false); } });
         return () => { alive = false; };
-    }, [currentUser, filters, busca, refreshKey]);
+    }, [currentUser, refreshKey]);
+
+    const docs = useMemo(
+        () => applyDocumentosFilters(allDocs, { ...filters, busca }),
+        [allDocs, filters, busca],
+    );
 
     const competencias = useMemo(() => {
         const set = new Set<string>();

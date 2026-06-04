@@ -499,6 +499,29 @@ export async function listDocumentos(
     };
     docs.sort((a, b) => tsOf(b) - tsOf(a));
 
+    return applyDocumentosFilters(docs, filters);
+}
+
+/**
+ * Aplica filtros em memoria sobre uma lista ja carregada do Firestore.
+ *
+ * Exportado separadamente do listDocumentos pra a UI poder refiltrar a
+ * cada tecla SEM re-puxar 5k+ docs da rede. O componente XmlDocumentosList
+ * carrega uma vez (por user/refreshKey) e refiltra via useMemo.
+ *
+ * Regras de busca:
+ *  - termo numerico (so digitos)      -> CNPJ substring | numero exato | chave (>=15 chars)
+ *  - termo textual com <4 chars       -> token EXATO (evita "sp" casar "spa" / "hsprojetos")
+ *  - termo textual com >=4 chars      -> token PREFIX (permite "brasli" achar "braslimpo")
+ *
+ * Tokenizacao: split por whitespace, depois normaliza cada palavra removendo
+ * nao-alfanumerico. Assim "S&P ASSESSORIA" -> tokens ["sp","assessoria"]
+ * e "HS PROJETOS" -> ["hs","projetos"] (sem casar "sp" exato).
+ */
+export function applyDocumentosFilters(
+    docs: DocumentoFiscal[],
+    filters: ListDocumentosFilters = {},
+): DocumentoFiscal[] {
     return docs.filter(d => {
         const e = d as any;
         const norm = (s: any) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -512,10 +535,6 @@ export async function listDocumentos(
         const term = filters.busca ? norm(filters.busca) : '';
         // Termo "CNPJ-like": SÓ dígitos, de QUALQUER tamanho. Cobre o CNPJ
         // completo (14) e o prefixo digitado pelo usuário (ex: '44388').
-        // O threshold antigo (8-14) deixava prefixos curtos caírem na busca
-        // textual — que varria o CNPJ da contraparte e ignorava a
-        // reinterpretação de direção. Era esse o bug do filtro '44388'
-        // trazendo as notas dos CLIENTES (onde a S&P é só contraparte).
         const termIsNumeric = !!term && /^\d+$/.test(term);
         const termInDest = !!term && destCnpjs.includes(term);
         const termInEmit = !!term && emitCnpjs.includes(term);
@@ -523,14 +542,6 @@ export async function listDocumentos(
         const termMatchesCnpj = termIsNumeric && (termInDest || termInEmit || termIsEmpresa);
 
         // ── Direção (relativa ao CNPJ buscado) ────────────────────────────
-        // Quando a busca é um CNPJ, a direção é avaliada RELATIVA a ele, não
-        // ao empresaCnpj gravado no doc:
-        //   - CNPJ buscado no dest/tomador   → entrada
-        //   - CNPJ buscado no emit/prestador → saída
-        //   - resumo (resNFe) NÃO tem dest: cai no empresaCnpj + direção gravada
-        //     (sem isso o resumo BRASLIMPO sumia da busca por CNPJ completo).
-        // Quando a busca NÃO é CNPJ (vazia, número da nota ou nome), usa a
-        // direção gravada no doc.
         if (filters.direcao) {
             if (termMatchesCnpj) {
                 let isEntradaForTerm = termInDest;
@@ -549,8 +560,6 @@ export async function listDocumentos(
         if (filters.status && d.status !== filters.status) return false;
         if (filters.origem && d.origem !== filters.origem) return false;
         if (filters.tipoDoc) {
-            // tipoDoc vem do importer SEFAZ (NFe/CTe/MDFe/...) e 'tipo' vem do
-            // import manual de NFSe — comparamos ambos pra cobrir os dois fluxos.
             const t = String((d as any).tipoDoc || d.tipo || '').toLowerCase();
             if (t !== filters.tipoDoc.toLowerCase()) return false;
         }
@@ -561,24 +570,41 @@ export async function listDocumentos(
         // ── Busca textual / numérica ──────────────────────────────────────
         if (term) {
             if (termIsNumeric) {
-                // Numérico: casa em campo de CNPJ (substring) OU no número da
-                // nota. A CHAVE só é comparada pra termos longos (>=15 dígitos)
-                // — sem isso, '44388' casava dentro de qualquer chave de 44
-                // dígitos (falso positivo reportado: CNPJ 51.227.692 aparecia).
+                // Numérico: substring em CNPJ blob, OU em numero, OU em chave
+                // (chave só se termo ≥15 dígitos pra evitar falso-positivo de
+                // prefixo curto bater dentro da chave de 44 dígitos).
                 const numeroN = norm(d.numero);
                 const chaveN = norm(d.chave);
                 const matchNum = !!numeroN && numeroN.includes(term);
                 const matchChave = term.length >= 15 && chaveN.includes(term);
                 if (!cnpjBlob.includes(term) && !matchNum && !matchChave) return false;
             } else {
-                // Textual: nome + CNPJ + número + chave.
-                const blob = [
-                    d.numero, d.chave, d.empresaNome, d.empresaCnpj,
-                    e.emitente?.nome, e.emitente?.cnpj, e.prestador?.nome, e.prestador?.cnpj,
-                    e.destinatario?.nome, e.destinatario?.cnpj, e.tomador?.nome, e.tomador?.cnpj,
-                    e.cnpjEmit, e.cnpjDest, e.cpfDest,
-                ].map(norm).join(' ');
-                if (!blob.includes(term)) return false;
+                // Textual: TOKEN match (não substring solto).
+                // Substring solto era o bug do "S&P" trazendo HS PROJETOS,
+                // R A CARPETES, S.P.A. SAUDE etc — porque norm("S&P")="sp" e
+                // "sp" aparece DENTRO de "hsprojetos", "carpetespisos", "spa".
+                const splitTokens = (s: any): string[] =>
+                    String(s ?? '').toLowerCase().split(/\s+/)
+                        .map(t => t.replace(/[^a-z0-9]/g, ''))
+                        .filter(Boolean);
+                const nameTokens = [
+                    ...splitTokens(d.empresaNome),
+                    ...splitTokens(e.emitente?.nome),
+                    ...splitTokens(e.prestador?.nome),
+                    ...splitTokens(e.destinatario?.nome),
+                    ...splitTokens(e.tomador?.nome),
+                ];
+                const nameMatch = term.length < 4
+                    ? nameTokens.some(t => t === term)            // <4: exato (evita "sp"→"spa")
+                    : nameTokens.some(t => t.startsWith(term));   // ≥4: prefixo (brasli→braslimpo)
+                // Tambem permite achar pelo numero/chave/CNPJ digitados como texto
+                const numeroN = norm(d.numero);
+                const chaveN = norm(d.chave);
+                const numMatch =
+                    (!!numeroN && numeroN === term) ||
+                    (term.length >= 15 && chaveN.includes(term)) ||
+                    cnpjBlob.includes(term);
+                if (!nameMatch && !numMatch) return false;
             }
         }
         return true;
