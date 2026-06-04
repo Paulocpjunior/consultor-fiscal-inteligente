@@ -484,8 +484,25 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     console.warn('[xml-importer] erro lendo doc existente:', e.message);
   }
 
-  // Se já existe E não é stub-de-evento, é duplicidade
-  if (existing?.exists && !existing.data().eventosBeforeNFe) {
+  const existingData = existing?.exists ? existing.data() : null;
+
+  // resNFe (resumo, ~531 bytes, SEM itens/valor) x procNFe (NFe COMPLETA).
+  // O DistDFe entrega PRIMEIRO o resumo pro destinatario; a NFe completa so e
+  // liberada pela SEFAZ APOS a Manifestacao (Ciencia 210210) e chega numa
+  // DistDFe/consChNFe posterior. Nesse momento a chave JA EXISTE na base
+  // (gravada como resumo). ANTES o import rejeitava como 'duplicado' e
+  // DESCARTAVA a nota completa — por isso o valor/itens (ex: BRASLIMPO
+  // R$ 547,70) nunca apareciam, mesmo com a Ciencia disparada.
+  // Agora: se o que esta na base e RESUMO e o que chega e COMPLETA, faz UPGRADE
+  // (sobrescreve com itens/totais/valor, preservando eventos ja anexados).
+  const incomingResumo = meta.tipoDoc === 'resNFe' || String(schema || '').startsWith('resNFe');
+  const existingResumo = existingData
+    ? (String(existingData.schema || '').startsWith('resNFe') || existingData.temItens === false)
+    : false;
+  const ehUpgradeResumoParaCompleta = !!existingData && existingResumo && !incomingResumo;
+
+  // Duplicidade só quando NÃO é stub-de-evento E NÃO é upgrade resumo→completa.
+  if (existing?.exists && !existingData.eventosBeforeNFe && !ehUpgradeResumoParaCompleta) {
     return { status: 'duplicado', chave: meta.chave };
   }
 
@@ -562,8 +579,11 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     capturadoPor: capturadoPor || null,
     eventosBeforeNFe: false,
   };
-  // Se já existia stub com eventos, faz merge (preserva array)
-  if (existing?.exists && existing.data().eventosBeforeNFe) {
+  // Merge (preserva array de eventos) quando:
+  //  - ja existia stub de evento (eventosBeforeNFe), OU
+  //  - e upgrade resumo→completa (preserva eventos/manifestacoes ja anexados
+  //    ao resumo, ex: a propria Ciencia que liberou a NFe completa).
+  if (existing?.exists && (existingData.eventosBeforeNFe || ehUpgradeResumoParaCompleta)) {
     await docRef.set(docData, { merge: true });
   } else {
     await docRef.set(docData);
@@ -586,7 +606,12 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     console.warn('[xml-importer] falha auditoria xml_capturas:', e.message);
   }
 
-  return { status: 'ok', chave: meta.chave, tipoDoc: meta.tipoDoc };
+  return {
+    status: ehUpgradeResumoParaCompleta ? 'atualizado' : 'ok',
+    chave: meta.chave,
+    tipoDoc: meta.tipoDoc,
+    upgrade: ehUpgradeResumoParaCompleta || undefined,
+  };
 }
 
 export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor }) {

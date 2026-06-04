@@ -255,23 +255,42 @@ const ConsultaNFePorChavePanel: React.FC = () => {
                                 </div>
                             )}
 
-                            {resultado.importacao && resultado.importacao.length > 0 && (
+                            {resultado.importacao && resultado.importacao.length > 0 && (() => {
+                                const houveCompleta = resultado.importacao.some(
+                                    (imp) => imp.status === 'atualizado' || (imp.schema || '').startsWith('procNFe'));
+                                const houveResumo = resultado.importacao.some(
+                                    (imp) => (imp.schema || '').startsWith('resNFe'));
+                                return (
                                 <div className="p-2 rounded border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700 text-[11px]">
                                     <div className="font-semibold text-emerald-800 dark:text-emerald-300 mb-1">📥 Importação na base:</div>
                                     {resultado.importacao.map((imp, i) => (
                                         <div key={i} className="font-mono flex gap-2">
-                                            <span className={imp.status === 'ok' ? 'text-emerald-700' : imp.status === 'duplicado' ? 'text-amber-700' : 'text-red-600'}>
-                                                {imp.status}
+                                            <span className={
+                                                imp.status === 'atualizado' ? 'text-emerald-800 font-semibold'
+                                                : imp.status === 'ok' ? 'text-emerald-700'
+                                                : imp.status === 'duplicado' ? 'text-amber-700'
+                                                : 'text-red-600'
+                                            }>
+                                                {imp.status === 'atualizado' ? 'atualizado (NF completa gravada)' : imp.status}
                                             </span>
                                             <span className="text-slate-500">{imp.schema || ''}</span>
                                             {imp.motivo && <span className="text-red-600">{imp.motivo}</span>}
                                         </div>
                                     ))}
-                                    <div className="text-slate-500 mt-1">
-                                        Se gravou resumo, a Ciência foi disparada — o XML completo vem no próximo cron. Recarregue a aba XMLs pra ver.
-                                    </div>
+                                    {houveCompleta ? (
+                                        <div className="text-emerald-700 dark:text-emerald-300 mt-1 font-medium">
+                                            ✓ NF-e completa gravada (com itens e valor). Recarregue a aba XMLs pra ver.
+                                        </div>
+                                    ) : houveResumo ? (
+                                        <div className="text-slate-500 mt-1">
+                                            Só veio o <b>resumo</b> (sem valor/itens) — a Ciência foi disparada. A NF-e completa
+                                            é liberada pela SEFAZ após a Ciência: clique <b>Consultar + Importar</b> de novo em alguns
+                                            minutos, ou aguarde o próximo cron. Quando a completa chegar, ela substitui o resumo.
+                                        </div>
+                                    ) : null}
                                 </div>
-                            )}
+                                );
+                            })()}
 
                             <div className="text-[10px] text-slate-400 font-mono">
                                 Chave: {resultado.chave} · Consultado como: {resultado.cnpjConsultadoComo} · UF emit (chave): {resultado.ufEmitente}

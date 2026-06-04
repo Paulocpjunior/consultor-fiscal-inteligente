@@ -231,13 +231,21 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
               xml: docZip.xml, schema: docZip.schema, nsu: docZip.nsu,
               capturadoPor,
             });
-            if (r.status === 'ok') {
+            if (r.status === 'ok' || r.status === 'atualizado') {
               novosXmls++;
-              documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'ok', motivo: null });
+              // 'atualizado' = upgrade de resumo→NFe completa (chegou a procNFe
+              // com itens/totais que substituiu o resumo de 531 bytes). Conta
+              // como novo (algo de valor foi gravado) e marca o motivo pra debug.
+              documentosProcessados.push({
+                nsu: docZip.nsu, schema: docZip.schema, chave,
+                status: r.status,
+                motivo: r.upgrade ? 'resumo→completa (valor/itens gravados)' : null,
+              });
               // Manifestacao automatica: assim que um resNFe e importado com
               // sucesso, dispara 'Ciencia da Operacao' (210210) em background.
               // SEFAZ libera o procNFe completo na proxima DistDFe pra essa
               // chave. Sem isso a base fica so com resumos, sem itens/totais.
+              // Nao dispara pra 'atualizado' (ja e a completa, nao precisa).
               if (r.tipoDoc === 'resNFe' && r.chave) {
                 setImmediate(async () => {
                   try {
