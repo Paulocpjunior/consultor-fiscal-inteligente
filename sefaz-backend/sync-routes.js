@@ -12,6 +12,7 @@ import { requireAuth } from './require-admin.js';
 import { consultaNFePorChave } from './sefaz-client.js';
 import { loadCertificate } from './secret-loader.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
+import { importarXmlSefaz } from './xml-importer.js';
 
 const router = express.Router();
 
@@ -522,6 +523,41 @@ router.post('/consulta-nfe-por-chave', requireAuth, express.json(), async (req, 
       primeiraTag: x.xml ? (x.xml.match(/<(\w+)[\s>]/)?.[1] || null) : null,
     }));
 
+    // GRAVAR a nota — quando importar=true, persiste os XMLs que a SEFAZ
+    // devolveu na consulta por chave, usando o mesmo importer do distNSU.
+    // Resolve o caso de NFe que existe na SEFAZ (cStat=138 por chave) mas
+    // NAO vem pelo distNSU (passou do cursor / nao distribuida). Se vier
+    // resumo, dispara Ciencia pra liberar o procNFe completo no proximo run.
+    const importacao = [];
+    if (req.body?.importar === true && resp.xmls?.length) {
+      // Destinatario da nota = empresa-cliente dona do doc. Usa o do XML
+      // parseado (detalhes.destinatario) ou o escritorio como fallback.
+      const cnpjDest = detalhes?.destinatario?.cnpj?.replace(/\D/g, '') || CNPJ_ESCRITORIO;
+      for (const x of resp.xmls) {
+        if (!x.xml) continue;
+        try {
+          const r = await importarXmlSefaz({
+            empresaId: null,
+            empresaCnpj: cnpjDest,
+            xml: x.xml, schema: x.schema, nsu: x.nsu,
+            capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'consulta-chave-importar' },
+          });
+          importacao.push({ schema: x.schema, status: r.status, chave: r.chave || chave, motivo: r.motivo || null });
+          // Se gravou resumo, dispara Ciencia pra liberar o XML completo
+          if ((r.status === 'ok') && r.tipoDoc === 'resNFe') {
+            setImmediate(async () => {
+              try {
+                const { manifestarUma } = await import('./manifesto-orchestrator.js');
+                await manifestarUma({ chNFe: chave, cnpjDestinatario: cnpjDest, tipo: 'ciencia', capturadoPor: req.user });
+              } catch (e) { console.warn('[consulta-chave-importar] manifest falhou:', e.message); }
+            });
+          }
+        } catch (e) {
+          importacao.push({ schema: x.schema, status: 'erro', motivo: e.message });
+        }
+      }
+    }
+
     return res.json({
       ok: resp.ok,
       cStat: resp.cStat,
@@ -537,6 +573,7 @@ router.post('/consulta-nfe-por-chave', requireAuth, express.json(), async (req, 
       detalhes,
       xmlsResumo,
       totalXmls: resp.xmls?.length || 0,
+      importacao: importacao.length ? importacao : null,
     });
   } catch (e) {
     console.error('[POST /consulta-nfe-por-chave] erro:', e);

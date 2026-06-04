@@ -51,12 +51,12 @@ const ConsultaNFePorChavePanel: React.FC = () => {
     const chaveLimpa = chave.replace(/\D/g, '');
     const valido = chaveLimpa.length === 44;
 
-    const consultar = async () => {
+    const consultar = async (importar = false) => {
         if (!valido) return;
         setCarregando(true);
         setResultado(null);
         try {
-            const r = await consultarNFePorChave(chaveLimpa);
+            const r = await consultarNFePorChave(chaveLimpa, importar);
             setResultado(r);
         } catch (e: any) {
             setResultado({
@@ -140,11 +140,20 @@ const ConsultaNFePorChavePanel: React.FC = () => {
                 </div>
                 <button
                     type="button"
-                    onClick={consultar}
+                    onClick={() => consultar(false)}
                     disabled={!valido || carregando}
                     className="px-4 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white rounded-md transition"
                 >
-                    {carregando ? '⏳ Consultando…' : '🔎 Consultar SEFAZ'}
+                    {carregando ? '⏳…' : '🔎 Consultar'}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => consultar(true)}
+                    disabled={!valido || carregando}
+                    className="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white rounded-md transition"
+                    title="Consulta na SEFAZ E grava a nota na base (sem precisar do arquivo XML)"
+                >
+                    {carregando ? '⏳…' : '📥 Consultar + Importar'}
                 </button>
             </div>
 
@@ -242,6 +251,24 @@ const ConsultaNFePorChavePanel: React.FC = () => {
                                         <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Valor / Natureza</div>
                                         <div className="text-lg font-bold text-slate-900 dark:text-white">{formatBRL(resultado.detalhes.valorTotal)}</div>
                                         <div className="text-slate-600 dark:text-slate-300 text-[11px]">{resultado.detalhes.natureza || '—'}</div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {resultado.importacao && resultado.importacao.length > 0 && (
+                                <div className="p-2 rounded border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700 text-[11px]">
+                                    <div className="font-semibold text-emerald-800 dark:text-emerald-300 mb-1">📥 Importação na base:</div>
+                                    {resultado.importacao.map((imp, i) => (
+                                        <div key={i} className="font-mono flex gap-2">
+                                            <span className={imp.status === 'ok' ? 'text-emerald-700' : imp.status === 'duplicado' ? 'text-amber-700' : 'text-red-600'}>
+                                                {imp.status}
+                                            </span>
+                                            <span className="text-slate-500">{imp.schema || ''}</span>
+                                            {imp.motivo && <span className="text-red-600">{imp.motivo}</span>}
+                                        </div>
+                                    ))}
+                                    <div className="text-slate-500 mt-1">
+                                        Se gravou resumo, a Ciência foi disparada — o XML completo vem no próximo cron. Recarregue a aba XMLs pra ver.
                                     </div>
                                 </div>
                             )}
