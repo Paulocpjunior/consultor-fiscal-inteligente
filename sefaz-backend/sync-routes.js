@@ -488,6 +488,16 @@ router.post('/consulta-nfe-por-chave', requireAuth, express.json(), async (req, 
       try { detalhes = parseEmitDest(nfeXml.xml); } catch (e) { console.warn('[parse] falhou:', e.message); }
     }
 
+    // Resumo do que SEFAZ devolveu — util quando cStat=138 mas o parse falhou
+    // (geralmente porque vieram resumos/eventos em vez do XML completo da NFe).
+    const xmlsResumo = (resp.xmls || []).map(x => ({
+      schema: x.schema || null,
+      nsu: x.nsu || null,
+      temXml: !!x.xml,
+      tamanho: x.xml?.length || 0,
+      primeiraTag: x.xml ? (x.xml.match(/<(\w+)[\s>]/)?.[1] || null) : null,
+    }));
+
     return res.json({
       ok: resp.ok,
       cStat: resp.cStat,
@@ -501,6 +511,8 @@ router.post('/consulta-nfe-por-chave', requireAuth, express.json(), async (req, 
         ? detalhes.destinatario.cnpj.replace(/\D/g, '') === CNPJ_ESCRITORIO
         : null,
       detalhes,
+      xmlsResumo,
+      totalXmls: resp.xmls?.length || 0,
     });
   } catch (e) {
     console.error('[POST /consulta-nfe-por-chave] erro:', e);
