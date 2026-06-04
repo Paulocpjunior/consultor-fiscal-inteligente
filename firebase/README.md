@@ -1,64 +1,40 @@
 # Firebase Security Rules — Consultor Fiscal Inteligente
 
-Sugestão de regras para o Firestore e o Cloud Storage cobrindo a Central
-de Documentos Fiscais (XML) e mantendo compatibilidade com os módulos
-existentes (Simples Nacional, Lucro Presumido/Real, autenticação).
-
-## Arquivos
-
-- `firestore.rules` — coleções `users`, `access_logs`, `simples_empresas`,
-  `simples_notas`, `empresas_lucro`, `obrigacoes`, **`documentos_fiscais`**,
-  **`xml_capturas`**, **`xml_erros`** e **`empresas_xml_config`**.
-- `storage.rules` — caminho `xmls/{empresaId}/{file}` com limite de 10 MB
-  e validação de content-type.
+> **Os arquivos de regras vivem na RAIZ do repositório**, não nesta pasta:
+> - `../firestore.rules` — regras do Firestore (canônica, mantida).
+> - `../storage.rules` — regras do Cloud Storage (`xmls/{empresaId}/{file}`,
+>   limite 10 MB, validação de content-type, delete só admin).
+> - `../firestore.indexes.json` — índices compostos.
+>
+> O `firebase.json` (raiz) referencia esses 3 arquivos. Esta pasta guarda só
+> este README. (Antes havia cópias duplicadas de `firestore.rules`/`storage.rules`
+> aqui — eram rascunhos de 24/05 e foram removidos pra evitar editar a versão
+> errada.)
 
 ## Modelo de permissão
 
 - Master admin: `junior@spassessoriacontabil.com.br`.
 - Outros admins: documento em `users/{uid}` com `role == 'admin'`.
-- Colaboradores: enxergam apenas o que criaram (`createdBy == uid` para
-  documentos fiscais e empresas; `usuarioId == uid` para logs/erros).
+- Colaboradores: enxergam o cadastro (via carteira), mas só editam/excluem
+  conforme as regras de cada coleção. `createdBy == uid` para documentos
+  fiscais/empresas; `usuarioId == uid` para logs/erros.
 - Default deny em qualquer coleção/caminho não listado.
 
-## Como publicar
+## Deploy
 
-> ⚠️ Antes de publicar, **revise as regras das coleções existentes** que
-> já estão no Console — esses arquivos são uma proposta consolidada,
-> não necessariamente o estado atual da sua produção. Consolide com o
-> que estiver lá hoje.
+**Automático:** o workflow `.github/workflows/deploy.yml` publica
+`firestore:rules` e `storage` a cada push na `main` (passo "Deploy Firestore
+& Storage rules"), usando a mesma service account do deploy do Cloud Run.
 
-### Firestore
+> Se o passo falhar com erro de permissão, conceda à SA do GitHub
+> (`secrets.GCP_SA_KEY`) o papel **`roles/firebaserules.admin`** no projeto
+> `consultorfiscalapp`. O passo é `continue-on-error` — não bloqueia o deploy
+> do app, mas loga um aviso visível.
 
-1. Firebase Console → Firestore Database → aba **Rules**.
-2. Copie o conteúdo de `firestore.rules` e cole no editor.
-3. Use **Rules Playground** para validar:
-   - usuário autenticado lendo `documentos_fiscais` em que é `createdBy`;
-   - usuário autenticado tentando ler `documentos_fiscais` de outro uid (deve falhar);
-   - master admin lendo qualquer documento (deve passar).
-4. **Publish**.
-
-### Cloud Storage
-
-1. Firebase Console → Storage → aba **Rules**.
-2. Copie o conteúdo de `storage.rules` e cole.
-3. **Publish**.
-
-## Deploy via CLI (alternativo)
-
-Se preferir versionar via Firebase CLI no futuro, adicione um
-`firebase.json` na raiz com:
-
-```json
-{
-  "firestore": { "rules": "firebase/firestore.rules" },
-  "storage":   { "rules": "firebase/storage.rules" }
-}
-```
-
-E publique com:
+**Manual (quando precisar publicar fora do CI):**
 
 ```bash
-firebase deploy --only firestore:rules,storage:rules
+firebase deploy --only firestore:rules,storage --project consultorfiscalapp
 ```
 
 ## Verificação rápida pós-deploy
@@ -67,9 +43,7 @@ firebase deploy --only firestore:rules,storage:rules
 2. Importe um XML válido em **Importa XML → Importação Manual**.
 3. Confira no Console:
    - **Firestore**: documento criado em `documentos_fiscais` com
-     `createdBy == seu_uid`; log em `xml_capturas`; nenhum erro em
-     `xml_erros`.
+     `createdBy == seu_uid`; log em `xml_capturas`; nenhum erro em `xml_erros`.
    - **Storage**: arquivo em `xmls/{empresaId}/{chave}.xml`.
 4. Tente importar o mesmo XML de novo — deve aparecer "duplicado".
-5. Login como admin (master) e confirme que enxerga documentos importados
-   por outros usuários.
+5. Login como admin (master) e confirme que enxerga documentos de outros usuários.

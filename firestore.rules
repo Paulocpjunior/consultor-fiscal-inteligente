@@ -167,6 +167,31 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // MODELO SHARED-WRITE (categorias_fornecedor, empresa_credito_config,
+    // fornecedores_ocultos, notas_ocultas, invoices_manuais,
+    // categorias_credito_custom)
+    //
+    // ⚠ NÃO "endureça" essas regras pra createdBy/uid achando que é
+    //   vazamento multi-tenant — o produto é SINGLE-TENANT (um escritório,
+    //   S&P, com admin + colaboradores; sem conceito de organização). O
+    //   write aberto a qualquer signed-in é INTENCIONAL: qualquer
+    //   colaborador classifica fornecedor, oculta/desoculta nota, etc.
+    //
+    // ⚠ DELETE é fluxo NORMAL de colaborador em fornecedores_ocultos,
+    //   notas_ocultas e invoices_manuais (desocultar = deletar o doc;
+    //   remover invoice manual). Restringir delete a admin QUEBRA a UI.
+    //
+    // ⚠ empresa_credito_config usa o empresaId como docId e NÃO carrega
+    //   empresaId no corpo — uma regra exigindo request.resource.data.empresaId
+    //   quebraria a gravação. Idem campos de autor: categorias_fornecedor usa
+    //   `atualizadoPor`, as ocultas usam `criadoPor` — não há campo único.
+    //
+    // Se um dia o produto virar multi-tenant, o caminho seguro é primeiro
+    // padronizar os payloads dos services (empresaId + autor) e SÓ DEPOIS
+    // gatear aqui — senão quebra o app em produção.
+    // ═══════════════════════════════════════════════════════════════
+
     // ───────────────────────────────────────────────────────────────
     // categorias_fornecedor: tabela CNPJ -> categoria por empresa.
     // Leitura e escrita para QUALQUER usuario logado — todos os

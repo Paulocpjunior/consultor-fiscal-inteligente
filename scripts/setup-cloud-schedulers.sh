@@ -138,6 +138,16 @@ upsert_job \
     "/api/admin/sharepoint/auto-sync" \
     "Importa XMLs das pastas SharePoint (empresas com autoSyncEnabled)"
 
+# Alerta de vencimento de CERTIFICADO digital — escritório + por empresa.
+# Dispara email (Graph) UMA vez por faixa (30/15/7/3/1 dias e expirado).
+# Roda 7h BRT, antes do cron de vencimentos de obrigações (8h).
+# Critico: o cert do escritorio e usado por 54+ empresas via fallback.
+upsert_job \
+    "cert-alerta-cron-diario" \
+    "0 7 * * 1-5" \
+    "/api/admin/sefaz/cert-alerta-cron" \
+    "Alerta por email quando certificado (escritorio ou empresa) esta vencendo"
+
 # ─── Verifica ──────────────────────────────────────────────────────────────
 echo ""
 echo "═══ Jobs ativos em $REGION ═══"

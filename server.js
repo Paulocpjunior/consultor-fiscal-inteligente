@@ -8,6 +8,7 @@ import { dirname, join } from 'path';
 import multer from 'multer';
 import * as XLSX from 'xlsx';
 import sefazCertRouter from './sefaz-backend/cert-manager.js';
+import sefazCertAlertaCronRouter from './sefaz-backend/cert-alerta-cron.js';
 import sefazSyncRouter from './sefaz-backend/sync-routes.js';
 import { fetchAllDocs } from './sefaz-backend/firestore-paginate.js';
 import empresaStatusRouter from './sefaz-backend/empresa-status-routes.js';
@@ -70,6 +71,7 @@ app.use(cors({
 
 // Routers montados APÓS o middleware CORS
 app.use('/api/admin/sefaz', sefazCertRouter);
+app.use('/api/admin/sefaz', sefazCertAlertaCronRouter);
 app.use('/api/admin/sefaz', sefazSyncRouter);
 app.use('/api/admin/sefaz', empresaStatusRouter);
 app.use('/api/admin/vencimentos', vencimentosRouter);
