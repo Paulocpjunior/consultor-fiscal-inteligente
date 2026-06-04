@@ -111,6 +111,10 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
       let sucessos = 0;
       let falhas = 0;
       let totalNovos = 0;
+      // Top 50 falhas com motivo — pra UI 'Erros & Logs' mostrar detalhe
+      // por linha expandida (PR #28). Sem isso, painel so dizia '17 falhas'
+      // sem nenhuma pista de QUAIS empresas e por que.
+      const errosResumo = [];
       for (const emp of empresas) {
         try {
           const result = await sincronizarEmpresa({
@@ -119,10 +123,25 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
             capturadoPor: { uid: 'cron-system', email: 'cron@spassessoriacontabil', fonte: 'cron' },
           });
           if (result.ok) { sucessos++; totalNovos += (result.novosXmls || 0); }
-          else { falhas++; console.warn(`[sync-cron] falha em ${emp.cnpj}: ${result.motivo}`); }
+          else {
+            falhas++;
+            console.warn(`[sync-cron] falha em ${emp.cnpj}: ${result.motivo}`);
+            if (errosResumo.length < 50) errosResumo.push({
+              cnpj: emp.cnpj,
+              nome: (emp.nome || '').slice(0, 60),
+              motivo: String(result.motivo || '').slice(0, 200),
+              codigo: result.rateLimited ? 'cStat=656' : (result.certInvalido ? 'cStat=593' : (result.locked ? 'LOCK' : null)),
+            });
+          }
         } catch (e) {
           falhas++;
           console.error(`[sync-cron] exceção em ${emp.cnpj}:`, e.message);
+          if (errosResumo.length < 50) errosResumo.push({
+            cnpj: emp.cnpj,
+            nome: (emp.nome || '').slice(0, 60),
+            motivo: `[EXCECAO] ${String(e.message || '').slice(0, 200)}`,
+            codigo: 'EXCEPTION',
+          });
         }
       }
       const duracaoMs = Date.now() - inicio;
@@ -139,6 +158,7 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
         // oficial do Cloud Scheduler como fonte. Fallback 'unknown' garante
         // que NUNCA persistimos `undefined` (Firestore rejeita o write inteiro).
         fonte: req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno',
+        errosResumo,
       });
       console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos, ${duracaoMs}ms (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);
     } catch (e) {
