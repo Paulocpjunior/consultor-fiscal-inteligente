@@ -499,7 +499,32 @@ export async function listDocumentos(
     docs.sort((a, b) => tsOf(b) - tsOf(a));
 
     return docs.filter(d => {
-        if (filters.direcao && d.direcao !== filters.direcao) return false;
+        const e = d as any;
+        const norm = (s: any) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        // Direção semantica: quando busca eh CNPJ valido E direcao foi escolhida,
+        // avalia direcao relativa ao CNPJ buscado, NAO ao empresaCnpj do doc.
+        //
+        // Sem isso: buscar S&P (44388) + 'entrada' mostrava NFSe emitidas pela
+        // S&P pra clientes (gravadas como 'entrada' dos clientes) — semantica
+        // invertida. Reportado pelo usuario.
+        //
+        // Com isso:
+        //   'entrada' → CNPJ buscado deve aparecer em dest/tomador
+        //   'saida'   → CNPJ buscado deve aparecer em emit/prestador
+        let direcaoJaFiltrada = false;
+        if (filters.busca && filters.direcao) {
+            const termNorm = norm(filters.busca);
+            if (/^\d{8,14}$/.test(termNorm)) {
+                const destCnpjs = [e.destinatario?.cnpj, e.tomador?.cnpj, e.cnpjDest, e.cpfDest].map(norm).join(' ');
+                const emitCnpjs = [e.emitente?.cnpj, e.prestador?.cnpj, e.cnpjEmit].map(norm).join(' ');
+                if (filters.direcao === 'entrada' && !destCnpjs.includes(termNorm)) return false;
+                if (filters.direcao === 'saida' && !emitCnpjs.includes(termNorm)) return false;
+                direcaoJaFiltrada = true;
+            }
+        }
+        if (!direcaoJaFiltrada && filters.direcao && d.direcao !== filters.direcao) return false;
+
         if (filters.status && d.status !== filters.status) return false;
         if (filters.origem && d.origem !== filters.origem) return false;
         if (filters.tipoDoc) {
@@ -514,13 +539,9 @@ export async function listDocumentos(
         if (filters.busca) {
             // Busca canonica: normaliza tudo (lowercase + tira nao-alfanumerico)
             // pra casar com qualquer formatacao de CNPJ ('44.388.152/0001-89',
-            // '44388152000189', '44388152') E qualquer variacao de nome
-            // ('S&P ASSESSORIA' vs 'SP ASSESSORIA' vs 'S/P').
-            // CNPJ e o identificador canonico — sempre incluido no blob.
-            const norm = (s: any) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            // '44388152000189', '44388152') E qualquer variacao de nome.
             const term = norm(filters.busca);
             if (term) {
-                const e = d as any;
                 const blob = [
                     d.numero, d.chave, d.empresaNome, d.empresaCnpj,
                     e.emitente?.nome, e.emitente?.cnpj, e.prestador?.nome, e.prestador?.cnpj,
