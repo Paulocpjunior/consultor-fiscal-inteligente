@@ -512,9 +512,23 @@ export async function listDocumentos(
         if (filters.competenciaInicio && d.competencia < filters.competenciaInicio) return false;
         if (filters.competenciaFim && d.competencia > filters.competenciaFim) return false;
         if (filters.busca) {
-            const term = filters.busca.toLowerCase();
-            const blob = `${d.numero || ''} ${d.chave || ''} ${(d as any).emitente?.nome || (d as any).prestador?.nome || ''} ${(d as any).destinatario?.nome || (d as any).tomador?.nome || ''} ${d.empresaNome || ''}`.toLowerCase();
-            if (!blob.includes(term)) return false;
+            // Busca canonica: normaliza tudo (lowercase + tira nao-alfanumerico)
+            // pra casar com qualquer formatacao de CNPJ ('44.388.152/0001-89',
+            // '44388152000189', '44388152') E qualquer variacao de nome
+            // ('S&P ASSESSORIA' vs 'SP ASSESSORIA' vs 'S/P').
+            // CNPJ e o identificador canonico — sempre incluido no blob.
+            const norm = (s: any) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const term = norm(filters.busca);
+            if (term) {
+                const e = d as any;
+                const blob = [
+                    d.numero, d.chave, d.empresaNome, d.empresaCnpj,
+                    e.emitente?.nome, e.emitente?.cnpj, e.prestador?.nome, e.prestador?.cnpj,
+                    e.destinatario?.nome, e.destinatario?.cnpj, e.tomador?.nome, e.tomador?.cnpj,
+                    e.cnpjEmit, e.cnpjDest, e.cpfDest,
+                ].map(norm).join(' ');
+                if (!blob.includes(term)) return false;
+            }
         }
         return true;
     });
