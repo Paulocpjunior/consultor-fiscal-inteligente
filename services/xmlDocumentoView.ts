@@ -117,10 +117,17 @@ export function getView(d: any): XmlDocumentoView {
 
     const cnpjEmpresa = s(d?.empresaCnpj).replace(/\D/g, '');
     const cnpjEmitFlat = s(d?.cnpjEmit, emit.cnpjCpf, emit.cnpj).replace(/\D/g, '');
+    const cnpjDestFlat = s(d?.cnpjDest, dest.cnpjCpf, dest.cnpj).replace(/\D/g, '');
     let direcaoFallback = '';
-    if (cnpjEmpresa && cnpjEmitFlat) {
-        direcaoFallback = (cnpjEmitFlat === cnpjEmpresa) ? 'saida' : 'entrada';
+    if (cnpjEmpresa) {
+        if (cnpjEmitFlat === cnpjEmpresa) direcaoFallback = 'saida';
+        else if (cnpjDestFlat === cnpjEmpresa) direcaoFallback = 'entrada';
+        else if (cnpjEmitFlat) direcaoFallback = 'entrada'; // empresa nao eh emit, assume entrada (resNFe so traz emit)
     }
+    // 'desconhecida' deve ser tratada como vazia pra acionar o fallback.
+    // resNFe vinha gravado com direcao='desconhecida' antes do fallback amplo.
+    const direcaoGravada = s(d?.direcao);
+    const direcaoFinal = (direcaoGravada && direcaoGravada !== 'desconhecida') ? direcaoGravada : direcaoFallback;
 
     return {
         tipo,
@@ -128,7 +135,7 @@ export function getView(d: any): XmlDocumentoView {
         numero:  s(d?.numero, chaveMeta.numero),
         serie:   s(d?.serie, chaveMeta.serie),
         modelo:  s(d?.modelo, chaveMeta.modelo),
-        direcao: s(d?.direcao, direcaoFallback),
+        direcao: direcaoFinal,
         resumoOnly,
         emitente: {
             nome:      s(emit.nome, prest.nome, d?.xNomeEmit, d?.xNome),
