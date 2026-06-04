@@ -224,7 +224,15 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
             log.metodoLogin = 'headless';
             console.log(`[nfsesp-portal] login headless ok (${Object.keys(cookies).length} cookies)`);
         } catch (headlessErr) {
-            console.warn(`[nfsesp-portal] login headless falhou: ${headlessErr.message} — tentando cookies manuais`);
+            // HeadlessLoginError carrega tipo (manutencao | timeout-rede |
+            // selector-mudou | cert-rejeitado | desconhecido) e tentativas.
+            // Persistimos no log do cron pra metrica honesta de causa-raiz —
+            // sem isso, painel so dizia "login falhou" sem distinguir
+            // "portal em manutencao" (esperar) de "DOM mudou" (atualizar
+            // selectors) de "cert rejeitado" (renovar cert).
+            log.headlessErroTipo = headlessErr.tipo || 'desconhecido';
+            log.headlessTentativas = headlessErr.tentativas || 1;
+            console.warn(`[nfsesp-portal] login headless falhou: tipo=${log.headlessErroTipo} tentativas=${log.headlessTentativas} msg=${headlessErr.message} — tentando cookies manuais`);
             try {
                 const manual = await loadSessaoManual();
                 cookies = manual.cookies;

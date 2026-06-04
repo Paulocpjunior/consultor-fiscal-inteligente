@@ -13,6 +13,16 @@
 //   5. Portal devolve PMSP_NFeID
 //   6. Captura todos os cookies → retorna jar pra uso pelo cron
 //
+// Resiliencia:
+//   - Retry com backoff exponencial (3 tentativas: 0s, 3s, 9s) so para erros
+//     RETENTAVEIS — timeout, rede, manutencao do portal.
+//   - Erros ESTRUTURAIS (selector mudou, cert rejeitado) NAO disparam retry
+//     (nao vao mudar em segundos; reportam imediatamente pra admin agir).
+//   - Classe HeadlessLoginError carrega `tipo` (manutencao | timeout-rede |
+//     selector-mudou | cert-rejeitado | desconhecido), `tentativas` (quantas
+//     foram feitas) e `ultimaMensagem` — orchestrator persiste no log do
+//     cron pra metrica honesta de causa-raiz.
+//
 // Esse módulo NÃO é importado em hot path do frontend — só backend cron.
 // ============================================================================
 
@@ -21,40 +31,31 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { loadCertificate } from './secret-loader.js';
+import { HeadlessLoginError, classificarErro } from './nfse-sp-error-classifier.js';
+
+// Re-exporta pra compat — testes e callers que importavam daqui continuam ok.
+export { HeadlessLoginError, classificarErro };
 
 const PORTAL_HOST = 'nfe.prefeitura.sp.gov.br';
 const LOGIN_URL = `https://${PORTAL_HOST}/LoginICP.aspx`;
 const OPCOES_URL = `https://${PORTAL_HOST}/contribuinte/opcoes.aspx`;
 
-// Path executável do Chromium baixado pelo `npx playwright install chromium`
-// no Dockerfile. Localização padrão do Playwright dentro do container.
-const CHROMIUM_PATHS = [
-    process.env.PLAYWRIGHT_CHROMIUM_PATH,
-    '/root/.cache/ms-playwright/chromium-*/chrome-linux/chrome',
-    '/home/nodeuser/.cache/ms-playwright/chromium-*/chrome-linux/chrome',
-];
+// Backoff entre tentativas RETENTAVEIS. Total time-box ~12s no pior caso.
+// Conservador: o portal SP ja eh rate-limit por sessao; nao quero piorar.
+const RETRY_BACKOFF_MS = [0, 3_000, 9_000];
 
-async function findChromiumExecutable() {
-    // Playwright detecta automaticamente quando PLAYWRIGHT_BROWSERS_PATH
-    // não está customizado. Retornamos null pra deixar playwright resolver.
-    return null;
-}
-
-/**
- * Faz login no portal SP via Chromium headless e retorna jar de cookies.
- *
- * @returns {Promise<{cookies: Record<string, string>}>}
- */
-export async function loginHeadlessPortalSp() {
+// ─── 1 TENTATIVA isolada (sem retry) ─────────────────────────────────────
+async function tentativaLoginHeadlessPortalSp() {
     const certs = await loadCertificate();
-    if (!certs.pfxBuffer) throw new Error('Cert A1 não disponível no Secret Manager');
+    if (!certs.pfxBuffer) {
+        throw new HeadlessLoginError('cert-rejeitado', 'Cert A1 não disponível no Secret Manager');
+    }
 
     // Salva cert temporário (Playwright lê do disco)
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sp-cert-'));
     const pfxPath = path.join(tmpDir, 'cert.pfx');
     await fs.writeFile(pfxPath, certs.pfxBuffer);
 
-    const executablePath = await findChromiumExecutable();
     const launchOpts = {
         headless: true,
         args: [
@@ -66,7 +67,6 @@ export async function loginHeadlessPortalSp() {
             '--auto-select-certificate-for-urls=https://nfe.prefeitura.sp.gov.br',
         ],
     };
-    if (executablePath) launchOpts.executablePath = executablePath;
 
     const browser = await chromium.launch(launchOpts);
     try {
@@ -94,6 +94,11 @@ export async function loginHeadlessPortalSp() {
         const status = resp?.status?.() || 0;
         console.log(`[headless-login] LoginICP final URL: ${finalUrl} (status ${status})`);
 
+        // Status 5xx aqui = manutencao do portal SP.
+        if (status >= 500) {
+            throw new HeadlessLoginError('manutencao', `Portal respondeu HTTP ${status} no LoginICP`);
+        }
+
         // Espera adicional pra qualquer JS redirect
         await page.waitForTimeout(3000);
 
@@ -101,6 +106,12 @@ export async function loginHeadlessPortalSp() {
         const title = await page.title().catch(() => '?');
         const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500) || '').catch(() => '');
         console.log(`[headless-login] URL pós-wait: ${urlPos} title="${title}" body-head="${bodyText.replace(/\s+/g, ' ').slice(0, 200)}"`);
+
+        // Detecta texto de manutencao mesmo com HTTP 200 (portal SP retorna 200
+        // com "Sistema em manutencao" no body em janelas curtas de atualizacao).
+        if (/em manuten[cç][aã]o|sistema.*indispon[ií]vel/i.test(bodyText)) {
+            throw new HeadlessLoginError('manutencao', `Portal SP em manutencao (body match): ${bodyText.slice(0, 100)}`);
+        }
 
         // Se a página ainda é LoginICP, é a tela de confirmação:
         // "Certificado identificado: ... [botão ENTRAR]"
@@ -132,6 +143,12 @@ export async function loginHeadlessPortalSp() {
             });
             console.log(`[headless-login] clicou: ${JSON.stringify(clicked)}`);
 
+            // Botao ENTRAR nao encontrado E sem form — selector mudou no portal.
+            if (!clicked.ok) {
+                throw new HeadlessLoginError('selector-mudou',
+                    `Botao ENTRAR/CONTINUAR/ACESSAR/CONFIRMAR nao encontrado na LoginICP. Portal mudou layout?`);
+            }
+
             // Espera redirect pra opcoes.aspx
             try {
                 await page.waitForURL(/opcoes\.aspx|inicio\.aspx/, { timeout: 30000 });
@@ -146,8 +163,8 @@ export async function loginHeadlessPortalSp() {
         }
 
         if (urlPos.includes('relogin.aspx') || urlPos.includes('avisoacesso')) {
-            const screenshot = await page.screenshot({ type: 'png', fullPage: false }).catch(() => null);
-            throw new Error(`Portal SP rejeitou cert (redirect ${urlPos}). ${screenshot ? 'screenshot capturada (descartada).' : ''}`);
+            throw new HeadlessLoginError('cert-rejeitado',
+                `Portal SP rejeitou cert (redirect ${urlPos}).`);
         }
 
         // Coleta todos os cookies do contexto
@@ -161,7 +178,8 @@ export async function loginHeadlessPortalSp() {
 
         if (!jar['PMSP_NFeID']) {
             const cookieNames = Object.keys(jar).join(',');
-            throw new Error(`Login headless: PMSP_NFeID não retornado. Cookies recebidos: ${cookieNames || '(nenhum)'}`);
+            throw new HeadlessLoginError('selector-mudou',
+                `PMSP_NFeID não retornado. Cookies recebidos: ${cookieNames || '(nenhum)'}`);
         }
 
         console.log(`[headless-login] ok — ${Object.keys(jar).length} cookies, PMSP_NFeID len=${jar['PMSP_NFeID'].length}`);
@@ -170,4 +188,40 @@ export async function loginHeadlessPortalSp() {
         await browser.close().catch(() => {});
         await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Faz login no portal SP via Chromium headless e retorna jar de cookies.
+ * Retry com backoff so para erros retentaveis (manutencao | timeout-rede).
+ * Erros estruturais (selector-mudou | cert-rejeitado) abortam imediato.
+ *
+ * @returns {Promise<{cookies: Record<string, string>}>}
+ * @throws {HeadlessLoginError} com .tipo, .tentativas, .ultimaMensagem
+ */
+export async function loginHeadlessPortalSp() {
+    let ultimoErro = null;
+    for (let tentativa = 1; tentativa <= RETRY_BACKOFF_MS.length; tentativa++) {
+        const delayMs = RETRY_BACKOFF_MS[tentativa - 1];
+        if (delayMs > 0) {
+            console.log(`[headless-login] retry ${tentativa}/${RETRY_BACKOFF_MS.length} — aguardando ${delayMs}ms (ultimo erro: ${ultimoErro?.tipo || '?'})`);
+            await sleep(delayMs);
+        }
+        try {
+            return await tentativaLoginHeadlessPortalSp();
+        } catch (raw) {
+            const err = classificarErro(raw);
+            err.tentativas = tentativa;
+            err.ultimaMensagem = String(raw?.message || raw);
+            ultimoErro = err;
+            console.warn(`[headless-login] tentativa ${tentativa} falhou: tipo=${err.tipo} retentavel=${err.retentavel} msg=${err.ultimaMensagem.slice(0, 200)}`);
+            if (!err.retentavel) {
+                // Estrutural — proximas tentativas nao vao mudar resultado.
+                throw err;
+            }
+        }
+    }
+    // Esgotou retries em erro retentavel — re-lanca com contagem.
+    throw ultimoErro || new HeadlessLoginError('desconhecido', 'Loop de retry sem erro registrado');
 }
