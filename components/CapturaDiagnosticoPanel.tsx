@@ -22,6 +22,7 @@ import {
 } from '../services/capturaDiagnosticoService';
 import type { User } from '../types';
 import ConsultaNFePorChavePanel from './ConsultaNFePorChavePanel';
+import { manifestarPendentes, type ManifestarPendentesResult, type TipoManifestacao } from '../services/manifestoService';
 
 interface Props {
     currentUser: User;
@@ -263,6 +264,122 @@ const CapturaDiagnosticoPanel: React.FC<Props> = ({ currentUser }) => {
             </div>
 
             {isAdmin && <ConsultaNFePorChavePanel />}
+            {isAdmin && <ManifestarPendentesCard />}
+        </div>
+    );
+};
+
+// Botao admin pra disparar manifestacao em lote dos resNFe pendentes na base.
+// Auto-manifestacao (PR #35) cobre NOVOS imports. Esse botao cobre o HISTORICO
+// que ja estava como resumo antes do PR #35 — usuario clica uma vez (ou
+// algumas, em batches de 100) e a base e atualizada com procNFe completos.
+const ManifestarPendentesCard: React.FC = () => {
+    const [rodando, setRodando] = React.useState(false);
+    const [resultado, setResultado] = React.useState<ManifestarPendentesResult | null>(null);
+    const [limit, setLimit] = React.useState(100);
+    const [tipo, setTipo] = React.useState<TipoManifestacao>('ciencia');
+
+    const handleRun = async (dryRun: boolean) => {
+        setRodando(true);
+        setResultado(null);
+        try {
+            const r = await manifestarPendentes({ tipo, limit, dryRun });
+            setResultado(r);
+        } catch (e: any) {
+            setResultado({ erro: e.message || 'erro' });
+        } finally {
+            setRodando(false);
+        }
+    };
+
+    return (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">
+                📨 Manifestar resNFe pendentes (libera procNFe completo)
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                Dispara <strong>Manifestação do Destinatário</strong> em lote pros resNFe já capturados na base.
+                SEFAZ libera o <strong>procNFe completo</strong> (com itens, totais, natOp) na próxima DistDFe.
+                Novas capturas já fazem isso automaticamente (PR #35) — esse botão cobre o histórico.
+            </p>
+            <div className="flex flex-wrap gap-2 items-end mb-3">
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Tipo</label>
+                    <select
+                        value={tipo}
+                        onChange={(e) => setTipo(e.target.value as TipoManifestacao)}
+                        className="px-2 py-1 text-xs bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded"
+                    >
+                        <option value="ciencia">Ciência (210210) — recomendado</option>
+                        <option value="confirmacao">Confirmação (210200) — implica concordância</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Lote (max 500)</label>
+                    <input
+                        type="number" min={1} max={500}
+                        value={limit}
+                        onChange={(e) => setLimit(Math.min(500, Math.max(1, parseInt(e.target.value) || 100)))}
+                        className="w-20 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded"
+                    />
+                </div>
+                <button
+                    onClick={() => handleRun(true)}
+                    disabled={rodando}
+                    className="px-3 py-1.5 text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50 rounded"
+                    title="Lista quantos seriam manifestados, sem enviar à SEFAZ"
+                >
+                    👀 Dry-run (preview)
+                </button>
+                <button
+                    onClick={() => handleRun(false)}
+                    disabled={rodando}
+                    className="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded"
+                >
+                    {rodando ? '⏳ Manifestando…' : `📨 Manifestar até ${limit} pendentes`}
+                </button>
+            </div>
+
+            {resultado && (
+                <div className={`mt-2 p-3 rounded border text-xs ${
+                    resultado.erro
+                        ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-700 dark:text-red-400'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-300'
+                }`}>
+                    {resultado.erro ? (
+                        <span><strong>Erro:</strong> {resultado.erro}</span>
+                    ) : (
+                        <div className="space-y-1">
+                            <div className="font-semibold">
+                                {resultado.dryRun ? '[DRY-RUN] ' : ''}
+                                Total: {resultado.total ?? 0} ·
+                                Sucessos: <strong>{resultado.sucessos ?? 0}</strong> ·
+                                Falhas: <strong className={resultado.falhas ? 'text-red-700 dark:text-red-400' : ''}>{resultado.falhas ?? 0}</strong> ·
+                                Puladas: {resultado.puladas ?? 0}
+                            </div>
+                            {resultado.detalhes && resultado.detalhes.length > 0 && (
+                                <details className="text-[11px]">
+                                    <summary className="cursor-pointer hover:underline">Ver detalhes ({resultado.detalhes.length})</summary>
+                                    <div className="mt-1 max-h-[200px] overflow-y-auto space-y-1 font-mono">
+                                        {resultado.detalhes.map((d, i) => (
+                                            <div key={i} className="flex gap-2">
+                                                <span className={d.status === 'ok' ? 'text-emerald-700' : 'text-red-600'}>{d.status}</span>
+                                                <span className="text-slate-500">{d.chave?.slice(0, 12)}…</span>
+                                                <span className="text-slate-700 dark:text-slate-300">{d.motivo || ''}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </details>
+                            )}
+                            {(resultado.total || 0) >= limit && (
+                                <div className="text-amber-700 dark:text-amber-400 text-[11px]">
+                                    ⚠ Lote completo — pode haver mais pendentes. Clica de novo pra processar o próximo batch.
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
