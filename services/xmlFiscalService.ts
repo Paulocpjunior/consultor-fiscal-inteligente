@@ -28,6 +28,7 @@ import {
     matchCompanyAndDirection,
     buildDocumentoFiscal,
     sha256Hex,
+    formatCnpjCpf,
     XmlParseError,
 } from './xmlParserService';
 import { uploadXml, deleteXml } from './xmlStorageService';
@@ -747,7 +748,19 @@ export function summarize(docs: DocumentoFiscal[]): DashboardSummary {
         if (d.direcao === 'entrada') { c.entradas++; c.valorEntradas += valor; }
         else if (d.direcao === 'saida') { c.saidas++; c.valorSaidas += valor; }
 
-        const e = out.porEmpresa[d.empresaId] ||= { nome: d.empresaNome, total: 0, valorTotal: 0 };
+        // Top Empresas: fallback CNPJ formatado quando empresaNome vier vazio
+        // (docs antigos importados antes do importer popular empresaNome, OU
+        // empresas auto-cadastradas pelo cron NFSe SP em nfsesp_empresas_descobertas
+        // sem CNPJ linkado). Sem isso o painel mostra linhas em branco.
+        const eid = d.empresaId || d.empresaCnpj || 'sem-empresa';
+        const nomeFallback = d.empresaNome || formatCnpjCpf(d.empresaCnpj || '') || '(sem identificação)';
+        if (!out.porEmpresa[eid]) {
+            out.porEmpresa[eid] = { nome: nomeFallback, total: 0, valorTotal: 0 };
+        } else if (d.empresaNome && out.porEmpresa[eid].nome !== d.empresaNome) {
+            // Se um doc posterior trouxe o nome real, sobrescreve o fallback
+            out.porEmpresa[eid].nome = d.empresaNome;
+        }
+        const e = out.porEmpresa[eid];
         e.total++;
         e.valorTotal += valor;
 
