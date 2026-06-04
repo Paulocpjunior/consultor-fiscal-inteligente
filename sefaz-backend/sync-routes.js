@@ -13,6 +13,7 @@ import { consultaNFePorChave } from './sefaz-client.js';
 import { loadCertificate } from './secret-loader.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
 import { importarXmlSefaz } from './xml-importer.js';
+import { withCronHeartbeat, listarCronsOrfaos } from './cron-heartbeat.js';
 
 const router = express.Router();
 
@@ -101,80 +102,73 @@ router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
 });
 
 router.post('/sync-cron', requireCronAuth, async (req, res) => {
-  res.json({ ok: true, motivo: 'Cron iniciado em background', startedAt: new Date().toISOString() });
-
-  setImmediate(async () => {
-    const inicio = Date.now();
-    console.log('[sync-cron] início — fonte:', req.cron?.source);
-    try {
-      const empresas = await listarEmpresasParaCron();
-      console.log(`[sync-cron] ${empresas.length} empresas elegíveis`);
-      let sucessos = 0;
-      let falhas = 0;
-      let totalNovos = 0;
-      // Top 50 falhas com motivo — pra UI 'Erros & Logs' mostrar detalhe
-      // por linha expandida (PR #28). Sem isso, painel so dizia '17 falhas'
-      // sem nenhuma pista de QUAIS empresas e por que.
-      const errosResumo = [];
-      for (const emp of empresas) {
-        try {
-          const result = await sincronizarEmpresa({
-            empresaId: emp.id,
-            empresaCnpj: emp.cnpj,
-            capturadoPor: { uid: 'cron-system', email: 'cron@spassessoriacontabil', fonte: 'cron' },
-          });
-          if (result.ok) { sucessos++; totalNovos += (result.novosXmls || 0); }
-          else {
-            falhas++;
-            console.warn(`[sync-cron] falha em ${emp.cnpj}: ${result.motivo}`);
-            if (errosResumo.length < 50) errosResumo.push({
-              cnpj: emp.cnpj,
-              nome: (emp.nome || '').slice(0, 60),
-              motivo: String(result.motivo || '').slice(0, 200),
-              codigo: result.rateLimited ? 'cStat=656' : (result.certInvalido ? 'cStat=593' : (result.locked ? 'LOCK' : null)),
-            });
-          }
-        } catch (e) {
+  const fonte = req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno';
+  // withCronHeartbeat:
+  //  1) cria log em sefaz_cron_logs com status='iniciado' ANTES de responder 200;
+  //  2) responde 200 imediato (Scheduler nao retentara);
+  //  3) roda o trabalho em setImmediate e atualiza o log pra 'sucesso'/'falha'.
+  //
+  // Se o container for reciclado no meio, o log fica em 'iniciado' — detectavel
+  // por GET /sync-cron-health (e por listarCronsOrfaos no cron de alerta).
+  // Antes: 200 imediato + setImmediate gravando log SO no fim. Container morto
+  // = NENHUM log gravado = ninguem sabia que o cron parou.
+  await withCronHeartbeat({
+    collection: 'sefaz_cron_logs',
+    fonte,
+    res,
+  }, async () => {
+    console.log('[sync-cron] início — fonte:', fonte);
+    const empresas = await listarEmpresasParaCron();
+    console.log(`[sync-cron] ${empresas.length} empresas elegíveis`);
+    let sucessos = 0;
+    let falhas = 0;
+    let totalNovos = 0;
+    // Top 50 falhas com motivo — pra UI 'Erros & Logs' mostrar detalhe
+    // por linha expandida (PR #28). Sem isso, painel so dizia '17 falhas'
+    // sem nenhuma pista de QUAIS empresas e por que.
+    const errosResumo = [];
+    for (const emp of empresas) {
+      try {
+        const result = await sincronizarEmpresa({
+          empresaId: emp.id,
+          empresaCnpj: emp.cnpj,
+          capturadoPor: { uid: 'cron-system', email: 'cron@spassessoriacontabil', fonte: 'cron' },
+        });
+        if (result.ok) { sucessos++; totalNovos += (result.novosXmls || 0); }
+        else {
           falhas++;
-          console.error(`[sync-cron] exceção em ${emp.cnpj}:`, e.message);
+          console.warn(`[sync-cron] falha em ${emp.cnpj}: ${result.motivo}`);
           if (errosResumo.length < 50) errosResumo.push({
             cnpj: emp.cnpj,
             nome: (emp.nome || '').slice(0, 60),
-            motivo: `[EXCECAO] ${String(e.message || '').slice(0, 200)}`,
-            codigo: 'EXCEPTION',
+            motivo: String(result.motivo || '').slice(0, 200),
+            codigo: result.rateLimited ? 'cStat=656' : (result.certInvalido ? 'cStat=593' : (result.locked ? 'LOCK' : null)),
           });
         }
-      }
-      const duracaoMs = Date.now() - inicio;
-      await fa().firestore().collection('sefaz_cron_logs').add({
-        executadoEm: fa().firestore.FieldValue.serverTimestamp(),
-        totalEmpresas: empresas.length,
-        sucessos, falhas, totalNovosXmls: totalNovos, duracaoMs,
-        // Bloqueadas por cadastro (sem cert A1/A3 e sem procuracao e-CAC) e A3
-        // sao puladas em listarEmpresasParaCron, mas persistidas aqui pra que
-        // o painel mostre o estado real (em vez de fingir que sao "falhas").
-        bloqueadasSemAcesso: empresas._bloqueadasSemAcesso || 0,
-        totalA3: empresas._totalA3 || 0,
-        // req.cron?.source nunca era setado (codigo morto). Usa o header
-        // oficial do Cloud Scheduler como fonte. Fallback 'unknown' garante
-        // que NUNCA persistimos `undefined` (Firestore rejeita o write inteiro).
-        fonte: req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno',
-        errosResumo,
-      });
-      console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos, ${duracaoMs}ms (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);
-    } catch (e) {
-      console.error('[sync-cron] erro fatal:', e);
-      try {
-        await fa().firestore().collection('sefaz_cron_logs').add({
-          executadoEm: fa().firestore.FieldValue.serverTimestamp(),
-          erro: e.message,
-          fonte: req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno',
+      } catch (e) {
+        falhas++;
+        console.error(`[sync-cron] exceção em ${emp.cnpj}:`, e.message);
+        if (errosResumo.length < 50) errosResumo.push({
+          cnpj: emp.cnpj,
+          nome: (emp.nome || '').slice(0, 60),
+          motivo: `[EXCECAO] ${String(e.message || '').slice(0, 200)}`,
+          codigo: 'EXCEPTION',
         });
-      } catch (errLog) {
-        // Duplo silenciamento aqui apaga rastro do erro fatal — logamos.
-        console.error('[sync-cron] FALHA registrando erro fatal em sefaz_cron_logs:', errLog.message);
       }
     }
+    console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);
+    // Campos retornados aqui sao MERGED no log (junto com status='sucesso',
+    // duracaoMs, finalizadoEm). Bloqueadas por cadastro (sem cert A1/A3 e sem
+    // procuracao e-CAC) e A3 sao puladas em listarEmpresasParaCron, mas
+    // persistidas aqui pra que o painel mostre o estado real (em vez de
+    // fingir que sao "falhas").
+    return {
+      totalEmpresas: empresas.length,
+      sucessos, falhas, totalNovosXmls: totalNovos,
+      bloqueadasSemAcesso: empresas._bloqueadasSemAcesso || 0,
+      totalA3: empresas._totalA3 || 0,
+      errosResumo,
+    };
   });
 });
 
@@ -370,6 +364,22 @@ router.get('/window', requireAuth, (req, res) => {
   return res.json(statusJanelaOperacional());
 });
 
+// GET /sync-cron-health — detecta crons orfaos (status='iniciado' por > staleMin).
+// Se aparecer algo aqui, e prova direta de que o container morreu no meio do
+// setImmediate (cold scale-down, OOM, deploy). Vide cron-heartbeat.js.
+// Query: ?staleMin=120 (default 120 — folga generosa pra varredura de 60+ empresas).
+router.get('/sync-cron-health', requireAuth, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
+  const staleMin = Math.max(5, parseInt(req.query.staleMin || '120', 10));
+  try {
+    const orfaos = await listarCronsOrfaos('sefaz_cron_logs', staleMin);
+    return res.json({ ok: true, staleMin, orfaosCount: orfaos.length, orfaos });
+  } catch (e) {
+    console.error('[GET /sync-cron-health] erro:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /cron-status — retorna o último log do cron SEFAZ (legacy, usado pelo banner antigo).
 router.get('/cron-status', requireAuth, async (req, res) => {
   try {
@@ -392,46 +402,34 @@ router.get('/cron-status', requireAuth, async (req, res) => {
 // Dispara o cron de NFe sob demanda. Auth = Bearer admin (não precisa
 // do x-cron-secret porque é interno). Reusa o mesmo orquestrador do cron.
 router.post('/sync-cron-now', requireAuth, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Apenas administradores' });
-    }
-    res.json({ ok: true, motivo: 'Cron iniciado em background' });
-    setImmediate(async () => {
-      const inicio = Date.now();
-      console.log('[sync-cron-now] início — admin:', req.user.email);
-      let sucessos = 0, falhas = 0, totalNovos = 0, total = 0;
-      try {
-        const empresas = await listarEmpresasParaCron();
-        total = empresas.length;
-        for (const emp of empresas) {
-          try {
-            const result = await sincronizarEmpresa({
-              empresaId: emp.id, empresaCnpj: emp.cnpj,
-              capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'cron-now-admin' },
-            });
-            if (result.ok) { sucessos++; totalNovos += result.novosXmls || 0; }
-            else falhas++;
-          } catch (e) {
-            falhas++;
-            console.error(`[sync-cron-now] exceção em ${emp.cnpj}:`, e.message);
-          }
-        }
-        await fa().firestore().collection('sefaz_cron_logs').add({
-          executadoEm: fa().firestore.FieldValue.serverTimestamp(),
-          totalEmpresas: total, sucessos, falhas, totalNovosXmls: totalNovos,
-          duracaoMs: Date.now() - inicio,
-          fonte: 'admin-manual',
-        });
-        console.log(`[sync-cron-now] fim — ${sucessos}/${total} ok, ${totalNovos} novos, ${Date.now() - inicio}ms`);
-      } catch (e) {
-        console.error('[sync-cron-now] erro fatal:', e);
-      }
-    });
-  } catch (e) {
-    console.error('[sync-cron-now] erro:', e);
-    return res.status(500).json({ error: e.message });
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Apenas administradores' });
   }
+  await withCronHeartbeat({
+    collection: 'sefaz_cron_logs',
+    fonte: 'admin-manual',
+    res,
+    metadados: { adminEmail: req.user.email },
+  }, async () => {
+    console.log('[sync-cron-now] início — admin:', req.user.email);
+    let sucessos = 0, falhas = 0, totalNovos = 0;
+    const empresas = await listarEmpresasParaCron();
+    for (const emp of empresas) {
+      try {
+        const result = await sincronizarEmpresa({
+          empresaId: emp.id, empresaCnpj: emp.cnpj,
+          capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'cron-now-admin' },
+        });
+        if (result.ok) { sucessos++; totalNovos += result.novosXmls || 0; }
+        else falhas++;
+      } catch (e) {
+        falhas++;
+        console.error(`[sync-cron-now] exceção em ${emp.cnpj}:`, e.message);
+      }
+    }
+    console.log(`[sync-cron-now] fim — ${sucessos}/${empresas.length} ok, ${totalNovos} novos`);
+    return { totalEmpresas: empresas.length, sucessos, falhas, totalNovosXmls: totalNovos };
+  });
 });
 
 // ── POST /consulta-nfe-por-chave ─────────────────────────────────────────
