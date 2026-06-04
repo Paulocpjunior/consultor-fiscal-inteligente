@@ -50,9 +50,13 @@ function requireCronAuth(req, res, next) {
 
 router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
   try {
-    const { empresaId, empresaCnpj } = req.body || {};
+    const { empresaId, empresaCnpj, resetNSU = false } = req.body || {};
     if (!empresaId || !empresaCnpj) {
       return res.status(400).json({ error: 'empresaId e empresaCnpj são obrigatórios' });
+    }
+    // resetNSU so admin (operacao pesada — reprocessa 90 dias de DF-e)
+    if (resetNSU && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'resetNSU é exclusivo de admin' });
     }
     const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
     if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
@@ -81,8 +85,8 @@ router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
       } catch (e) { /* lock pode nao existir — segue */ }
     }
     const result = await sincronizarEmpresa({
-      empresaId, empresaCnpj,
-      capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'manual' },
+      empresaId, empresaCnpj, resetNSU,
+      capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: resetNSU ? 'manual-reset-nsu' : 'manual' },
     });
     if (!result.ok && result.locked) return res.status(409).json(result);
     if (!result.ok && result.rateLimited) return res.status(429).json(result);

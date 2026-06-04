@@ -103,7 +103,7 @@ async function carregarUfEmpresa(empresaId, empresaCnpj) {
   return null;
 }
 
-export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor }) {
+export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor, resetNSU = false }) {
   const cnpjNum = String(empresaCnpj).replace(/\D/g, '');
   if (cnpjNum.length !== 14) return { ok: false, motivo: `CNPJ inválido: ${empresaCnpj}` };
 
@@ -119,7 +119,11 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor 
   const lockResult = await acquireLock(cnpjNum, capturadoPor?.email || capturadoPor?.uid || 'system');
   if (!lockResult.ok) return { ok: false, motivo: lockResult.motivo, locked: true };
 
-  let ultNSU = await carregaUltNSU(cnpjNum);
+  // resetNSU=true zera o cursor → SEFAZ reenvia TODO o historico de DF-e dos
+  // ultimos ~90 dias. Usado quando uma nota "passou" do cursor sem ser gravada
+  // (caso BRASLIMPO: cursor avancou em disparos que abortavam por cert/UF).
+  let ultNSU = resetNSU ? '0' : await carregaUltNSU(cnpjNum);
+  if (resetNSU) console.log(`[sync-orchestrator] empresa=${empresaId} RESET NSU=0 solicitado`);
   let novosXmls = 0;
   let duplicados = 0;
   let erros = 0;

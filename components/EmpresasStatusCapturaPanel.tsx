@@ -70,12 +70,14 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [ultimaCaptura, setUltimaCaptura] = useState<Record<string, { ok: boolean; msg: string; docs?: DfeDocProcessado[] }>>({});
     const isAdmin = currentUser.role === 'admin';
 
-    const handleCaptureOne = async (emp: EmpresaStatusCaptura) => {
+    const handleCaptureOne = async (emp: EmpresaStatusCaptura, resetNSU = false) => {
         if (!isAdmin) return;
+        if (resetNSU && !confirm(`Recapturar do ZERO ${emp.nome}?\n\nZera o cursor NSU e reprocessa ~90 dias de DF-e da SEFAZ. Use quando uma nota "sumiu" (passou do cursor). Pode demorar e trazer muitos documentos.`)) return;
         setCapturandoCnpj(emp.cnpj);
         try {
             const r = await captureFromSefaz({
                 empresa: { id: emp.id, cnpj: emp.cnpj } as any,
+                resetNSU,
             });
             setUltimaCaptura(prev => ({
                 ...prev,
@@ -407,14 +409,24 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                     </td>
                                     {isAdmin && (
                                         <td className="px-2 py-1.5 text-center align-top">
-                                            <button
-                                                onClick={() => handleCaptureOne(e)}
-                                                disabled={capturandoCnpj === e.cnpj}
-                                                className="px-2 py-1 text-[10px] font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
-                                                title="Dispara /sync-one — NFe DistDFe só pra essa empresa, mostra o resultado aqui mesmo"
-                                            >
-                                                {capturandoCnpj === e.cnpj ? '⏳…' : '▶ Capturar'}
-                                            </button>
+                                            <div className="flex flex-col gap-1 items-stretch">
+                                                <button
+                                                    onClick={() => handleCaptureOne(e)}
+                                                    disabled={capturandoCnpj === e.cnpj}
+                                                    className="px-2 py-1 text-[10px] font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
+                                                    title="Captura NFe DistDFe a partir do cursor NSU atual"
+                                                >
+                                                    {capturandoCnpj === e.cnpj ? '⏳…' : '▶ Capturar'}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleCaptureOne(e, true)}
+                                                    disabled={capturandoCnpj === e.cnpj}
+                                                    className="px-2 py-1 text-[10px] font-semibold bg-amber-600 hover:bg-amber-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
+                                                    title="Zera o cursor NSU e reprocessa ~90 dias — use quando uma nota sumiu (passou do cursor)"
+                                                >
+                                                    {capturandoCnpj === e.cnpj ? '⏳…' : '⟲ Recapturar do zero'}
+                                                </button>
+                                            </div>
                                             {ultimaCaptura[e.cnpj] && (
                                                 <div className={`mt-1 text-[10px] font-mono break-words ${
                                                     ultimaCaptura[e.cnpj].ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
