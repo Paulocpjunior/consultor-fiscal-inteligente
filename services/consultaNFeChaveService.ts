@@ -34,6 +34,7 @@ export interface NFeChaveResposta {
     detalhes: NFeChaveDetalhes | null;
     xmlsResumo?: { schema: string | null; nsu: string | null; temXml: boolean; tamanho: number; primeiraTag: string | null }[];
     totalXmls?: number;
+    importacao?: { schema: string | null; status: string; chave?: string; motivo?: string | null }[] | null;
     error?: string;
 }
 
@@ -69,12 +70,12 @@ export async function getCertEscritorioInfo(): Promise<CertEscritorioInfo> {
     return res.json();
 }
 
-export async function consultarNFePorChave(chave: string): Promise<NFeChaveResposta> {
+export async function consultarNFePorChave(chave: string, importar = false): Promise<NFeChaveResposta> {
     const token = await getToken();
     const res = await fetch('/api/admin/sefaz/consulta-nfe-por-chave', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chave: chave.replace(/\D/g, '') }),
+        body: JSON.stringify({ chave: chave.replace(/\D/g, ''), importar }),
     });
     const data = await res.json();
     if (!res.ok) {
