@@ -11,14 +11,16 @@
  */
 
 import React, { useState } from 'react';
-import { parseSped, exportarXlsx, aplicarEdicoesXlsx, validarEstrutura, aplicarRegrasTributarias, type ValidacaoSped, type RegrasTributariasResult } from '../../services/spedFiscalExcelEditor';
+import { parseSped, exportarXlsx, aplicarEdicoesXlsx, validarEstrutura, aplicarRegrasTributarias, analisarRecuperacaoMonofasico, type ValidacaoSped, type RegrasTributariasResult, type RecuperacaoMonofasico } from '../../services/spedFiscalExcelEditor';
 
 type Status =
     | { fase: 'idle' }
     | { fase: 'analisando' }
-    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }>; validacao: ValidacaoSped; regras: RegrasTributariasResult }
+    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }>; validacao: ValidacaoSped; regras: RegrasTributariasResult; recuperacao: RecuperacaoMonofasico }
     | { fase: 'aplicando' }
     | { fase: 'erro'; mensagem: string };
+
+const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const downloadBlob = (blob: Blob, nome: string) => {
     const url = URL.createObjectURL(blob);
@@ -39,6 +41,7 @@ const EditarViaExcel: React.FC = () => {
             const parsed = await parseSped(txt);
             const validacao = await validarEstrutura(parsed);
             const regras = await aplicarRegrasTributarias(parsed);
+            const recuperacao = await analisarRecuperacaoMonofasico(parsed);
             setStatus({
                 fase: 'pronto-edicao',
                 nomeOriginal: file.name,
@@ -49,6 +52,7 @@ const EditarViaExcel: React.FC = () => {
                 mismatch: parsed.resumo.layoutMismatch || {},
                 validacao,
                 regras,
+                recuperacao,
             });
         } catch (err: any) {
             setStatus({ fase: 'erro', mensagem: err?.message || 'Falha ao ler SPED' });
@@ -176,6 +180,21 @@ const EditarViaExcel: React.FC = () => {
                                     </ul>
                                 </div>
                             )
+                        )}
+
+                        {/* Recuperação PIS/COFINS monofásico — só EFD Contribuições. */}
+                        {status.recuperacao.aplicavel && status.recuperacao.resumo.qtdItens > 0 && (
+                            <div className="mb-3 p-3 rounded border border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 text-[11px] text-emerald-900 dark:text-emerald-200">
+                                <b>💰 Potencial recuperação PIS/COFINS (monofásico): {brl(status.recuperacao.total)}</b>
+                                {' '}— {status.recuperacao.resumo.qtdItens} item(ns) com NCM monofásico tributado (PIS {brl(status.recuperacao.totalPis)} + COFINS {brl(status.recuperacao.totalCofins)}).
+                                <p className="mt-1 text-[10px] opacity-80">{status.recuperacao.resumo.motivo}</p>
+                                <ul className="mt-1 list-disc list-inside max-h-32 overflow-auto font-mono text-[10px]">
+                                    {status.recuperacao.itens.slice(0, 20).map((it, i) => (
+                                        <li key={i}>NCM {it.ncm} · item {it.numItem} · PIS {brl(it.vlPis)} COFINS {brl(it.vlCofins)}</li>
+                                    ))}
+                                    {status.recuperacao.itens.length > 20 && <li>… +{status.recuperacao.itens.length - 20}</li>}
+                                </ul>
+                            </div>
                         )}
 
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-[11px]">

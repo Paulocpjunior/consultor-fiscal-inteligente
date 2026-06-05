@@ -71,6 +71,19 @@ export async function aplicarRegrasTributarias(parsed: ParseResult): Promise<Reg
     return mod.aplicarRegrasTributarias(parsed);
 }
 
+export interface RecuperacaoMonofasico {
+    aplicavel: boolean;
+    itens: { idx: number; numItem: string; codItem: string; ncm: string; cstPis: string; cstCofins: string; vlPis: number; vlCofins: number }[];
+    totalPis: number; totalCofins: number; total: number;
+    resumo: { qtdItens: number; motivo?: string };
+}
+
+/** Recuperacao PIS/COFINS monofasico — so EFD Contribuicoes. */
+export async function analisarRecuperacaoMonofasico(parsed: ParseResult): Promise<RecuperacaoMonofasico> {
+    const mod = await import('../sefaz-backend/sped-contrib-recuperacao.js' as any);
+    return mod.analisarRecuperacaoMonofasico(parsed);
+}
+
 /**
  * Exporta o SPED parseado pra XLSX editavel.
  * - 1 aba "Resumo" com contagem por tipo.
