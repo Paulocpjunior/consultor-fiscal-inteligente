@@ -94,8 +94,8 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                         Padrão Nacional CGSN 189/2026 — obrigatório a partir de 1º setembro 2026
                         {resumo && (
-                            <span className={`ml-2 px-2 py-0.5 rounded text-xs font-bold ${resumo.mode === 'mock' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                {resumo.mode === 'mock' ? 'MODO TESTE' : 'PRODUÇÃO'}
+                            <span className={`ml-2 px-2 py-0.5 rounded text-xs font-bold ${resumo.mode === 'mock' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>
+                                {resumo.mode === 'mock' ? 'MODO TESTE' : 'SERPRO CONFIGURADO'}
                             </span>
                         )}
                     </p>
@@ -108,6 +108,11 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
                     A emissão acontece na tela de cada empresa Simples Nacional —
                     procure o botão <strong>"Emitir NFSe"</strong>. Esta tela é para gestão e visualização.
                 </p>
+                {resumo?.mode === 'serpro' && (
+                    <p className="text-amber-700 dark:text-amber-300 mt-2">
+                        Em produção, a emissão direta pelo app fica bloqueada até a integração com o Emissor Nacional ser implementada. A captura ADN/DF-e permanece em módulo separado.
+                    </p>
+                )}
             </div>
 
             {/* Cards */}

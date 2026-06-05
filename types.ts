@@ -734,6 +734,16 @@ export interface NfseNacResumo {
     mode: 'mock' | 'serpro';
 }
 
+export interface NfseNacRuntimeStatus {
+    ok: boolean;
+    mode: 'mock' | 'serpro';
+    emissaoDisponivel: boolean;
+    cancelamentoDisponivel: boolean;
+    emissaoFiscalDisponivel: boolean;
+    capturaDfeDisponivel: boolean;
+    motivoIndisponibilidade?: string | null;
+}
+
 export interface NbsCodigo {
     codigo: string;
     descricao: string;

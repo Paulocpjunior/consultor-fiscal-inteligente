@@ -3,8 +3,8 @@
  * Modal pra emitir NFS-e Nacional a partir da tela de empresa Simples.
  */
 import React, { useEffect, useState } from 'react';
-import type { User, SimplesNacionalEmpresa, NbsCodigo } from '../../types';
-import { emitirNfse, getNbsCodigos, formatBRL } from '../../services/nfseNacionalService';
+import type { User, SimplesNacionalEmpresa, NbsCodigo, NfseNacRuntimeStatus } from '../../types';
+import { emitirNfse, getNbsCodigos, getNfseNacionalStatus, formatBRL } from '../../services/nfseNacionalService';
 
 interface Props {
     empresa: SimplesNacionalEmpresa;
@@ -15,6 +15,8 @@ interface Props {
 
 const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToast }) => {
     const [nbsCodigos, setNbsCodigos] = useState<NbsCodigo[]>([]);
+    const [runtimeStatus, setRuntimeStatus] = useState<NfseNacRuntimeStatus | null>(null);
+    const [statusLoading, setStatusLoading] = useState(true);
     const [emitindo, setEmitindo] = useState(false);
 
     // Form
@@ -31,6 +33,25 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
 
     useEffect(() => {
         getNbsCodigos().then(setNbsCodigos).catch(() => {});
+        let alive = true;
+        setStatusLoading(true);
+        getNfseNacionalStatus()
+            .then(s => { if (alive) setRuntimeStatus(s); })
+            .catch(() => {
+                if (alive) {
+                    setRuntimeStatus({
+                        ok: false,
+                        mode: 'serpro',
+                        emissaoDisponivel: false,
+                        cancelamentoDisponivel: false,
+                        emissaoFiscalDisponivel: false,
+                        capturaDfeDisponivel: false,
+                        motivoIndisponibilidade: 'Nao foi possivel confirmar o status da emissao NFSe Nacional neste ambiente.',
+                    });
+                }
+            })
+            .finally(() => { if (alive) setStatusLoading(false); });
+        return () => { alive = false; };
     }, []);
 
     useEffect(() => {
@@ -47,8 +68,12 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
     const issCalculado = +(valorNum * aliquotaNum / 100).toFixed(2);
     const issRetidoValor = issRetido ? issCalculado : 0;
     const liquido = +(valorNum - issRetidoValor).toFixed(2);
+    const emissaoDisponivel = runtimeStatus?.emissaoDisponivel === true;
+    const motivoBloqueio = runtimeStatus?.motivoIndisponibilidade
+        || 'Emissao de NFSe Nacional indisponivel neste ambiente.';
 
     const handleEmitir = async () => {
+        if (!emissaoDisponivel) return onShowToast(motivoBloqueio);
         if (!tomadorDoc || !tomadorNome) return onShowToast('Preencha CNPJ/CPF e nome do tomador');
         if (!descricao) return onShowToast('Preencha a descrição do serviço');
         if (valorNum <= 0) return onShowToast('Valor deve ser maior que zero');
@@ -109,6 +134,16 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    {!emissaoDisponivel && (
+                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-sm text-amber-800 dark:text-amber-200">
+                            <div className="font-bold">Emissao pelo app bloqueada</div>
+                            <div className="mt-1">{statusLoading ? 'Verificando status da integracao...' : motivoBloqueio}</div>
+                            <div className="mt-1 text-xs">
+                                A captura de NFSe Nacional via ADN/DF-e continua separada; este bloqueio vale apenas para emissao/cancelamento direto pelo app.
+                            </div>
+                        </div>
+                    )}
+
                     {/* Tomador */}
                     <div>
                         <h4 className="text-sm font-bold mb-2">Tomador do serviço</h4>
@@ -249,10 +284,10 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                     </button>
                     <button
                         onClick={handleEmitir}
-                        disabled={emitindo || valorNum <= 0 || !tomadorDoc || !tomadorNome || !descricao}
+                        disabled={emitindo || statusLoading || !emissaoDisponivel || valorNum <= 0 || !tomadorDoc || !tomadorNome || !descricao}
                         className="btn-press px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 disabled:opacity-50"
                     >
-                        {emitindo ? '⏳ Emitindo...' : '📑 Emitir NFSe'}
+                        {emitindo ? '⏳ Emitindo...' : statusLoading ? 'Verificando...' : emissaoDisponivel ? '📑 Emitir NFSe' : 'Emissao indisponivel'}
                     </button>
                 </div>
             </div>

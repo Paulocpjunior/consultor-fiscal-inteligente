@@ -17,7 +17,33 @@
 
 // Default 'serpro' (REAL). 'mock' só com NFSE_NAC_MODE=mock explícito (dev local).
 // Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
-const MODE = process.env.NFSE_NAC_MODE || 'serpro';
+const MODE = process.env.NFSE_NAC_MODE === 'mock' ? 'mock' : 'serpro';
+
+export const NFSE_NACIONAL_SERPRO_UNAVAILABLE_MESSAGE =
+    'Emissao de NFSe Nacional pelo app esta indisponivel: o provider SERPRO/Emissor Nacional ainda nao foi implementado. ' +
+    'Use o portal oficial gov.br/nfse para emitir em producao ou defina NFSE_NAC_MODE=mock apenas em ambiente de desenvolvimento.';
+
+export class NfseNacionalFeatureUnavailableError extends Error {
+    constructor(feature = 'emissao') {
+        super(NFSE_NACIONAL_SERPRO_UNAVAILABLE_MESSAGE);
+        this.name = 'NfseNacionalFeatureUnavailableError';
+        this.code = 'NFSE_NACIONAL_SERPRO_NOT_IMPLEMENTED';
+        this.statusCode = 501;
+        this.feature = feature;
+    }
+}
+
+export function getNfseNacionalCapabilities() {
+    const mock = MODE === 'mock';
+    return {
+        mode: MODE,
+        emissaoDisponivel: mock,
+        cancelamentoDisponivel: mock,
+        emissaoFiscalDisponivel: false,
+        capturaDfeDisponivel: true,
+        motivoIndisponibilidade: mock ? null : NFSE_NACIONAL_SERPRO_UNAVAILABLE_MESSAGE,
+    };
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -141,17 +167,8 @@ class MockProvider {
 // ─── SerproProvider (skeleton) ────────────────────────────────────────────
 
 class SerproProvider {
-    constructor() {
-        throw new Error(
-            'NFSe Nacional em modo SERPRO ainda nao implementado. ' +
-            'Pra emitir: defina NFSE_NAC_MODE=mock pra usar o gerador local (dados ficticios), ' +
-            'OU complete a integracao com Emissor Nacional NFSe (gov.br/nfse, gratuito) — ' +
-            'pre-requisitos: certificado e-CNPJ A1 da SP Contabil + cadastro no portal gov.br/nfse + ' +
-            'procuracao eletronica e-CAC ativa pra cada empresa cliente.'
-        );
-    }
-    async emitirNfse() { throw new Error('SerproProvider.emitirNfse nao implementado'); }
-    async cancelarNfse() { throw new Error('SerproProvider.cancelarNfse nao implementado'); }
+    async emitirNfse() { throw new NfseNacionalFeatureUnavailableError('emissao'); }
+    async cancelarNfse() { throw new NfseNacionalFeatureUnavailableError('cancelamento'); }
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────

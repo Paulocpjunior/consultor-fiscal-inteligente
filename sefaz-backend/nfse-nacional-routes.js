@@ -8,14 +8,14 @@ import { requireAdmin, requireAuth } from './require-admin.js';
 import {
     emitirNfse, cancelarNfse, listarNfse, getResumoNfse,
 } from './nfse-nacional-orchestrator.js';
-import { getNfseNacionalMode, NBS_CODIGOS_COMUNS } from './nfse-nacional-provider.js';
+import { getNfseNacionalCapabilities, getNfseNacionalMode, NBS_CODIGOS_COMUNS } from './nfse-nacional-provider.js';
 
 const router = express.Router();
 
 // requireAdmin agora vem do middleware compartilhado (verifyIdToken)
 
 router.get('/status', (_req, res) => {
-    res.json({ mode: getNfseNacionalMode(), ok: true });
+    res.json({ ok: true, ...getNfseNacionalCapabilities() });
 });
 
 router.get('/resumo', requireAuth, async (_req, res) => {
@@ -57,7 +57,15 @@ router.get('/nbs', async (_req, res) => {
 
 router.post('/emitir', requireAdmin, express.json(), async (req, res) => {
     try { res.json(await emitirNfse(req.body)); }
-    catch (err) { res.status(400).json({ error: err.message }); }
+    catch (err) {
+        const status = err.statusCode || 400;
+        res.status(status).json({
+            error: err.message,
+            code: err.code || 'NFSE_NACIONAL_EMITIR_FAILED',
+            feature: err.feature || 'emissao',
+            mode: getNfseNacionalMode(),
+        });
+    }
 });
 
 router.post('/cancelar', requireAdmin, express.json(), async (req, res) => {
@@ -65,7 +73,15 @@ router.post('/cancelar', requireAdmin, express.json(), async (req, res) => {
         const { chave, motivo } = req.body;
         if (!chave) return res.status(400).json({ error: 'chave obrigatoria' });
         res.json(await cancelarNfse(chave, motivo));
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+        const status = err.statusCode || 500;
+        res.status(status).json({
+            error: err.message,
+            code: err.code || 'NFSE_NACIONAL_CANCELAR_FAILED',
+            feature: err.feature || 'cancelamento',
+            mode: getNfseNacionalMode(),
+        });
+    }
 });
 
 // Importa CSV NBS oficial (XLSX -> CSV).
