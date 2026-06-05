@@ -9,8 +9,15 @@ import { requireAdmin } from './require-admin.js';
 import {
     emitirGuia, getResumoConsolidado, getCatalogoEmissao,
 } from './emission-orchestrator.js';
+import { statusEmissaoGuard } from './emissao-guard.js';
 
 const router = express.Router();
+
+// Estado do freio de emissao (go-live gate). Admin ve quais tipos estao
+// bloqueados sem precisar abrir o Cloud Run.
+router.get('/guard-status', requireAdmin, (_req, res) => {
+    res.json(statusEmissaoGuard());
+});
 
 router.get('/resumo', requireAdmin, async (_req, res) => {
     try { res.json(await getResumoConsolidado()); }
@@ -25,7 +32,7 @@ router.get('/catalogo', requireAdmin, (req, res) => {
 
 router.post('/emitir', requireAdmin, express.json(), async (req, res) => {
     try { res.json(await emitirGuia(req.body)); }
-    catch (err) { res.status(400).json({ error: err.message }); }
+    catch (err) { res.status(err.httpStatus || 400).json({ error: err.message, code: err.code }); }
 });
 
 export default router;

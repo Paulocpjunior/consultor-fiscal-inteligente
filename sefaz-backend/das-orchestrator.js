@@ -5,6 +5,7 @@
 
 import admin from 'firebase-admin';
 import { getDasProvider, getDasMode } from './das-provider.js';
+import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
 import { calcularMultaDarf } from './multa-calculator.js';
 
@@ -24,6 +25,7 @@ function fa() {
  * @returns {object} doc DAS persistido
  */
 export async function emitirDasRegular(req) {
+    assertEmissaoLiberada('DAS');
     const { empresaId, empresaCnpj, empresaNome, competencia, valor, dadosPgdas } = req;
     if (!empresaId || !empresaCnpj || !competencia || !valor) {
         throw new Error('Campos obrigatorios: empresaId, empresaCnpj, competencia, valor');
@@ -66,6 +68,7 @@ export async function emitirDasRegular(req) {
  * Emite DAS avulso (sem PGDAS-D — caso de complementar, atrasado, etc).
  */
 export async function emitirDasAvulso(req) {
+    assertEmissaoLiberada('DAS');
     const { empresaId, empresaCnpj, empresaNome, competencia, valor, descricao } = req;
     if (!empresaId || !empresaCnpj || !competencia || !valor) {
         throw new Error('Campos obrigatorios: empresaId, empresaCnpj, competencia, valor');
