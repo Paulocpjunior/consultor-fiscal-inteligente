@@ -12,8 +12,9 @@ import {
 } from './sharepoint-sync.js';
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8080;
-const PROXY_SHARED_TOKEN = process.env.SHAREPOINT_PROXY_TOKEN || process.env.PROXY_SHARED_TOKEN || '';
+const PROXY_SHARED_TOKEN = (process.env.SHAREPOINT_PROXY_TOKEN || process.env.PROXY_SHARED_TOKEN || '').trim();
 
 function fa() {
     if (!admin.apps.length) {
