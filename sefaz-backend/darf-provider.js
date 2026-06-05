@@ -12,9 +12,14 @@
 // ============================================================================
 
 import { gerarBarrasDarf, gerarLinhaDigitavelArrecadacao } from './febraban-barcode.js';
-import { sugerirCodigoReceita } from './darf-codigos-receita.js';
 import { invokeIntegraContador } from './serpro-client.js';
 import { calcularMultaDarf } from './multa-calculator.js';
+import {
+    montarPayloadDarfSerpro, resolverCodigoReceita, calcularVencimentoDarf,
+} from './darf-payload-builder.js';
+
+// Re-exporta pra darf-routes (preview) continuar importando daqui.
+export { montarPayloadDarfSerpro };
 
 // Default 'serpro' (REAL). 'mock' só com DARF_MODE=mock explícito (dev local).
 // Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
@@ -40,61 +45,9 @@ function calcularAcrescimos(valor, vencimento, dataPagamento) {
     return { multa: r.multaValor, juros: r.jurosValor, valorTotal: r.total };
 }
 
-/**
- * Calcula o último dia do mês a partir de ano+mes (mes 1-12).
- * Trata fevereiro, abril, junho, setembro, novembro (que não tem dia 30/31).
- */
-function ultimoDiaDoMes(ano, mes) {
-    // new Date(ano, mes, 0) retorna o último dia do mes-1 (porque mes em
-    // Date e 0-indexed e dia=0 volta pra ultimo dia do anterior).
-    // Mes 1-12 input -> use mes diretamente, Date.UTC(ano, mes, 0).
-    return new Date(Date.UTC(ano, mes, 0)).getUTCDate();
-}
-
-function calcularVencimentoDarf(competencia, tributo, periodicidade = 'trimestral') {
-    // Vencimentos padrão RFB:
-    //   IRPJ/CSLL Presumido/Real trimestral: ultimo dia util do mes seguinte ao
-    //                                         encerramento do trimestre (Lei 9.430/96 art. 5º)
-    //   PIS/COFINS mensal: dia 25 do mes seguinte (Lei 9.715/98 + 10.833/03)
-    //   IRPJ/CSLL Real estimativa: ultimo dia util do mes seguinte (Lei 9.430/96 art. 5º §1º)
-    //
-    // Simplificacao: usamos ultimo DIA DO MES (nao dia util). Frontend pode
-    // sobrescrever via req.vencimento. Bug anterior: fixo em '30' gerava
-    // data invalida pra fevereiro (ex: '2026-02-30').
-    const m = String(competencia).match(/^(\d{4})-(\d{2})$/);
-    if (!m) return new Date().toISOString().slice(0, 10);
-    let ano = parseInt(m[1]), mes = parseInt(m[2]);
-
-    const t = String(tributo || '').toUpperCase();
-    const isTri = periodicidade === 'trimestral' && (t === 'IRPJ' || t === 'CSLL');
-
-    if (isTri) {
-        // Próximo mês após fim do trimestre da competência
-        const trimestre = Math.floor((mes - 1) / 3) + 1;       // 1..4
-        const mesFimTrim = trimestre * 3;                       // 3, 6, 9, 12
-        mes = mesFimTrim + 1;
-        if (mes > 12) { mes = 1; ano += 1; }
-        const dia = ultimoDiaDoMes(ano, mes);
-        return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-    }
-    if (t === 'PIS' || t === 'COFINS') {
-        mes += 1;
-        if (mes > 12) { mes = 1; ano += 1; }
-        return `${ano}-${String(mes).padStart(2, '0')}-25`;
-    }
-    // Default (IRPJ/CSLL Real estimativa mensal, IRRF etc): ultimo dia do mes seguinte
-    mes += 1;
-    if (mes > 12) { mes = 1; ano += 1; }
-    const dia = ultimoDiaDoMes(ano, mes);
-    return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-}
-
-function resolverCodigoReceita(req) {
-    if (req.codigoReceita) return req.codigoReceita;
-    const sug = sugerirCodigoReceita(req.regime, req.tributo, req.periodicidade);
-    if (!sug) throw new Error(`Codigo de receita nao definido pra ${req.regime}/${req.tributo}`);
-    return sug.codigo;
-}
+// ultimoDiaDoMes / calcularVencimentoDarf / resolverCodigoReceita /
+// montarPayloadDarfSerpro -> movidos pra darf-payload-builder.js (PURO,
+// testavel sem undici). Importados no topo deste arquivo.
 
 // ── Mock Provider ──────────────────────────────────────────────────────────
 
@@ -160,35 +113,18 @@ class MockProvider {
 //   - Procuração eletrônica e-CAC ativa entre escritório e empresa cliente
 //
 // TODO[SERPRO_REAL]: confirmar o nome exato do idServico de EMISSÃO de DARF
-// no portal autenticado SERPRO. Serviços conhecidos do PAGTOWEB incluem
-// COMPARRECADACAO72 (comprovante). O serviço de emissão real (ex:
-// EMITEDARF / EMITEGUIADARF) precisa ser confirmado pelo cliente que tem
-// acesso ao catálogo da sua conta. Override via env SERPRO_DARF_SERVICO.
-
-const DARF_ID_SISTEMA = process.env.SERPRO_DARF_SISTEMA || 'PAGTOWEB';
-const DARF_ID_SERVICO = process.env.SERPRO_DARF_SERVICO || 'EMITEDARF61';  // CONFIRMAR
+// no portal autenticado SERPRO. idSistema/idServico (PAGTOWEB/EMITEDARF61)
+// + builder do payload vivem em darf-payload-builder.js (configuravel via
+// env SERPRO_DARF_SISTEMA / SERPRO_DARF_SERVICO). Use POST /darf/preview pra
+// inspecionar o payload exato antes de emitir.
 
 class SerproProvider {
     async gerarDarf(req) {
-        const { empresaCnpj, competencia, valor } = req;
-        if (!empresaCnpj || !competencia || !valor) {
-            throw new Error('empresaCnpj, competencia e valor obrigatorios');
-        }
-        const codigoReceita = resolverCodigoReceita(req);
-        const periodoAAAAMM = String(competencia).replace(/\D/g, '').slice(0, 6);
+        const { valor } = req;
+        const payload = montarPayloadDarfSerpro(req);   // mesmo builder do preview
+        const codigoReceita = payload.dados.codigoReceita;
 
-        const result = await invokeIntegraContador({
-            idSistema: DARF_ID_SISTEMA,
-            idServico: DARF_ID_SERVICO,
-            contribuinteCnpj: empresaCnpj,
-            acao: 'Emitir',
-            dados: {
-                codigoReceita,
-                periodoApuracao: periodoAAAAMM,
-                valorPrincipal: valor,
-                vencimento: req.vencimento || calcularVencimentoDarf(competencia, req.tributo, req.periodicidade),
-            },
-        });
+        const result = await invokeIntegraContador(payload);
         const d = result.dados || {};
         return {
             numeroDocumento: d.numeroDocumento || d.numeroDarf || '',

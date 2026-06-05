@@ -10,7 +10,7 @@ import {
     emitirDarf, listarDarfs, getResumoDarf,
     marcarPago, processarVencimentos,
 } from './darf-orchestrator.js';
-import { getDarfMode } from './darf-provider.js';
+import { getDarfMode, montarPayloadDarfSerpro } from './darf-provider.js';
 import { listarCodigos, sugerirCodigoReceita } from './darf-codigos-receita.js';
 
 const router = express.Router();
@@ -49,7 +49,23 @@ router.get('/listar', requireAdmin, async (req, res) => {
 
 router.post('/emitir', requireAdmin, express.json(), async (req, res) => {
     try { res.json(await emitirDarf(req.body)); }
-    catch (err) { res.status(400).json({ error: err.message }); }
+    catch (err) { res.status(err.httpStatus || 400).json({ error: err.message, code: err.code }); }
+});
+
+// PREVIEW (dry-run): monta o payload EXATO que seria enviado ao SERPRO pra
+// emitir o DARF — SEM enviar nada. Read-only, NAO passa pelo kill-switch.
+// Uso: validar o idServico (EMITEDARF61 e chute) + estrutura do payload contra
+// o catalogo da conta SERPRO ANTES de ligar a emissao real.
+router.post('/preview', requireAdmin, express.json(), (req, res) => {
+    try {
+        const payload = montarPayloadDarfSerpro(req.body || {});
+        res.json({
+            preview: true,
+            avisoIdServico: 'idServico EMITEDARF61 e suposto (TODO[SERPRO_REAL]). '
+                + 'Confirme no catalogo PAGTOWEB da sua conta SERPRO; ajuste via env SERPRO_DARF_SERVICO se diferente.',
+            payloadSerpro: payload,
+        });
+    } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 router.post('/marcar-pago', requireAdmin, express.json(), async (req, res) => {
