@@ -11,12 +11,12 @@
  */
 
 import React, { useState } from 'react';
-import { parseSped, exportarXlsx, aplicarEdicoesXlsx } from '../../services/spedFiscalExcelEditor';
+import { parseSped, exportarXlsx, aplicarEdicoesXlsx, validarEstrutura, type ValidacaoSped } from '../../services/spedFiscalExcelEditor';
 
 type Status =
     | { fase: 'idle' }
     | { fase: 'analisando' }
-    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }> }
+    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }>; validacao: ValidacaoSped }
     | { fase: 'aplicando' }
     | { fase: 'erro'; mensagem: string };
 
@@ -37,6 +37,7 @@ const EditarViaExcel: React.FC = () => {
         try {
             const txt = await file.text();
             const parsed = await parseSped(txt);
+            const validacao = await validarEstrutura(parsed);
             setStatus({
                 fase: 'pronto-edicao',
                 nomeOriginal: file.name,
@@ -45,6 +46,7 @@ const EditarViaExcel: React.FC = () => {
                 totalLinhas: parsed.resumo.totalLinhas,
                 tipoSped: parsed.tipoSped,
                 mismatch: parsed.resumo.layoutMismatch || {},
+                validacao,
             });
         } catch (err: any) {
             setStatus({ fase: 'erro', mensagem: err?.message || 'Falha ao ler SPED' });
@@ -69,9 +71,20 @@ const EditarViaExcel: React.FC = () => {
         try {
             const ab = await file.arrayBuffer();
             const spedNovo = await aplicarEdicoesXlsx(status.conteudoOriginal, ab);
+            // Valida o arquivo CORRIGIDO antes de entregar — confirma que a
+            // edição + recálculo do Bloco 9 mantiveram a integridade do PVA.
+            const parsedNovo = await parseSped(spedNovo);
+            const valNovo = await validarEstrutura(parsedNovo);
+            if (!valNovo.valido) {
+                setStatus({
+                    fase: 'erro',
+                    mensagem: 'O arquivo corrigido ficou inválido — NÃO foi baixado. Erros: '
+                        + valNovo.erros.slice(0, 5).join(' · '),
+                });
+                return;
+            }
             const nomeSpedNovo = status.nomeOriginal.replace(/\.txt$/i, '') + '.corrigido.txt';
             downloadBlob(new Blob([spedNovo], { type: 'text/plain' }), nomeSpedNovo);
-            // volta ao estado pronto pra outra rodada de edição se quiser
             setStatus(s => s.fase === 'aplicando' ? { fase: 'idle' } : s);
         } catch (err: any) {
             setStatus({ fase: 'erro', mensagem: err?.message || 'Falha ao aplicar edições' });
@@ -121,6 +134,21 @@ const EditarViaExcel: React.FC = () => {
                             <div className="mb-3 p-2 rounded border border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-[11px] text-amber-800 dark:text-amber-300">
                                 ⚠️ Registros com layout divergente do esperado — mantidos <b>somente leitura</b> (round-trip preserva, não corrompe):{' '}
                                 {Object.entries(status.mismatch).map(([t, m]) => `${t} (${m.real}≠${m.esperado} campos)`).join(', ')}
+                            </div>
+                        )}
+
+                        {/* Validação estrutural (tipo PVA) do arquivo subido. */}
+                        {status.validacao.valido ? (
+                            <div className="mb-3 p-2 rounded border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 text-[11px] text-emerald-800 dark:text-emerald-300">
+                                ✓ Estrutura válida (0000/9999, blocos, Bloco 9 conferem){status.validacao.avisos.length ? ` · ${status.validacao.avisos.length} aviso(s)` : ''}
+                            </div>
+                        ) : (
+                            <div className="mb-3 p-2 rounded border border-red-300 bg-red-50 dark:bg-red-900/20 text-[11px] text-red-700 dark:text-red-300">
+                                <b>⚠️ {status.validacao.erros.length} erro(s) de estrutura no arquivo subido</b> (corrija na origem; mesmo assim dá pra editar e baixar):
+                                <ul className="mt-1 list-disc list-inside">
+                                    {status.validacao.erros.slice(0, 6).map((e, i) => <li key={i}>{e}</li>)}
+                                    {status.validacao.erros.length > 6 && <li>… +{status.validacao.erros.length - 6}</li>}
+                                </ul>
                             </div>
                         )}
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-[11px]">
