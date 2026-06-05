@@ -15,7 +15,7 @@ module.exports = {
     // OU transforma o .js via a regra de transform abaixo.
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
-  setupFilesAfterSetup: ['<rootDir>/__tests__/setupTests.ts'],
+  setupFilesAfterEnv: ['<rootDir>/__tests__/setupTests.ts'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: 'tsconfig.json',
@@ -35,5 +35,9 @@ module.exports = {
   },
   transformIgnorePatterns: [
     'node_modules/(?!(lucide-react|motion)/)',
+  ],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '<rootDir>/__tests__/setupTests.ts',
   ],
 };
