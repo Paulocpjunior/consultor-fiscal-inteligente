@@ -49,6 +49,14 @@ export async function reconstruirSped(parsed: ParseResult, edicoes: SpedEdicao[]
     return mod.reconstruirSped(parsed, edicoes);
 }
 
+export interface ValidacaoSped { valido: boolean; erros: string[]; avisos: string[]; }
+
+/** Validacao estrutural generica (serve EFD ICMS/IPI e Contribuicoes). */
+export async function validarEstrutura(parsed: ParseResult): Promise<ValidacaoSped> {
+    const mod = await import('../sefaz-backend/sped-fiscal-editor-validador.js' as any);
+    return mod.validarEstruturaSped(parsed);
+}
+
 /**
  * Exporta o SPED parseado pra XLSX editavel.
  * - 1 aba "Resumo" com contagem por tipo.
