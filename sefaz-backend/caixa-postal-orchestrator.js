@@ -285,8 +285,9 @@ export async function getResumoGlobal(cnpjsPermitidos = null) {
         // Empresas com criticas: precisa fetch (~48 docs hoje, bem menor que 4091).
         const criticasCats = ['intimacao', 'malha', 'exclusao',
                               'det_notificacao', 'det_auto_infracao',
-                              'dec_intimacao', 'dje_citacao', 'dje_intimacao'];
-        // Firestore 'in' limit = 30, estamos com 8 — ok
+                              'dec_intimacao', 'dje_citacao', 'dje_intimacao',
+                              'prefeitura_sp_iss'];
+        // Firestore 'in' limit = 30, estamos com 9 — ok
         const criticasSnap = await col
             .where('categoria', 'in', criticasCats)
             .where('dataLeitura', '==', null)
@@ -332,6 +333,7 @@ export async function getResumoGlobal(cnpjsPermitidos = null) {
         'intimacao', 'malha', 'exclusao',
         'det_notificacao', 'det_auto_infracao',
         'dec_intimacao', 'dje_citacao', 'dje_intimacao',
+        'prefeitura_sp_iss',
     ]);
     const empresasComCriticas = new Set();
     for (const d of naoLidas) {

@@ -66,9 +66,9 @@ export function notifyCapturaSefaz(novosXmls: number, falhas: number, empresas: 
 export function notifyCaixaPostalCritica(count: number) {
     if (count === 0) return;
     sendBrowserNotification(
-        'Pendências críticas na Caixa Postal',
-        `${count} mensagem(ns) crítica(s) aguardando atenção`,
-        { tag: 'caixa-postal-critica' }
+        'Pendências fiscais críticas',
+        `${count} item(ns) aguardando acompanhamento`,
+        { tag: 'monitor-fiscal-critico' }
     );
 }
 

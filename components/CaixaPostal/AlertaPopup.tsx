@@ -1,22 +1,50 @@
 /**
- * AlertaPopup — banner de alerta sobre mensagens criticas na Caixa Postal.
+ * AlertaPopup — alerta consolidado de pendencias fiscais criticas.
  * Aparece uma vez por dia (deduplicado via localStorage).
- * Mostra breakdown por canal (eCAC, DET, DEC, DJE, e-MAC).
+ * Combina Caixa Postal/portais e vencimentos de obrigacoes, impostos e entregas.
  */
 import React, { useEffect, useState } from 'react';
 import type { User, CaixaPostalResumo, CaixaPostalFonte } from '../../types';
 import { getResumo, fonteLabel, fonteDotColor } from '../../services/caixaPostalService';
+import {
+    fetchResumoVencimentos,
+    type VencimentosResponse,
+    type ProximaObrigacao,
+} from '../../services/vencimentosService';
 import { notifyCaixaPostalCritica } from '../../services/notificacoesService';
 
-const STORAGE_KEY = 'caixaPostal:lastAlertDate';
+const STORAGE_KEY = 'monitorFiscal:lastAlertDate:v2';
 
 interface Props {
     currentUser: User | null;
     onIrParaCaixaPostal: () => void;
+    onIrParaObrigacoes: () => void;
 }
 
-const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
+const isTributo = (obrigacao?: string) => /\b(DAS|DARF|IRPJ|CSLL|PIS|COFINS|ISS|ICMS|IPI|INSS|FGTS)\b/i.test(obrigacao || '');
+const isEntrega = (obrigacao?: string) => /\b(DCTF|DCTFWEB|MIT|EFD|REINF|ESOCIAL|SPED|GIA|DEFIS|ECD|ECF|DIRF|DECLARA|ENTREGA)\b/i.test(obrigacao || '');
+
+const countMensagensCriticas = (caixa?: CaixaPostalResumo | null): number => {
+    const c = caixa?.naoLidasPorCategoria || {};
+    return (c.intimacao || 0)
+        + (c.malha || 0)
+        + (c.exclusao || 0)
+        + (c.det_notificacao || 0)
+        + (c.det_auto_infracao || 0)
+        + (c.dec_intimacao || 0)
+        + (c.dje_citacao || 0)
+        + (c.dje_intimacao || 0)
+        + (c.prefeitura_sp_iss || 0);
+};
+
+const countVencimentosCriticos = (venc?: VencimentosResponse | null): number => {
+    const r = venc?.resumo;
+    return r ? r.atrasadas + r.venceHoje + r.venceAmanha + r.vence3d + r.vence7d : 0;
+};
+
+const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal, onIrParaObrigacoes }) => {
     const [resumo, setResumo] = useState<CaixaPostalResumo | null>(null);
+    const [vencimentos, setVencimentos] = useState<VencimentosResponse | null>(null);
     const [dispensado, setDispensado] = useState(false);
 
     useEffect(() => {
@@ -33,12 +61,23 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
             }
         } catch { /* ignore */ }
 
-        getResumo(currentUser)
-            .then(r => {
-                if (r.empresasComCriticas > 0) {
-                    setResumo(r);
-                    // Browser push notification (works even if tab is in background)
-                    notifyCaixaPostalCritica(r.empresasComCriticas);
+        Promise.allSettled([
+            getResumo(currentUser),
+            fetchResumoVencimentos(),
+        ])
+            .then(([caixaResult, vencResult]) => {
+                const caixa = caixaResult.status === 'fulfilled' ? caixaResult.value : null;
+                const venc = vencResult.status === 'fulfilled' ? vencResult.value : null;
+
+                const mensagensCriticas = countMensagensCriticas(caixa);
+                const vencimentosCriticos = countVencimentosCriticos(venc);
+                const empresasComMensagens = caixa?.empresasComCriticas || 0;
+
+                if (empresasComMensagens > 0) setResumo(caixa);
+                if (vencimentosCriticos > 0) setVencimentos(venc);
+
+                if (empresasComMensagens > 0 || vencimentosCriticos > 0) {
+                    notifyCaixaPostalCritica(mensagensCriticas + vencimentosCriticos);
                 }
             })
             .catch(() => { /* silencioso, modulo opcional */ });
@@ -53,21 +92,36 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
 
     const handleIr = () => {
         handleDispensar();
-        onIrParaCaixaPostal();
+        if (totalVencimentosCriticos > 0) onIrParaObrigacoes();
+        else onIrParaCaixaPostal();
     };
 
-    if (dispensado || !resumo || resumo.empresasComCriticas === 0) return null;
+    const resumoVenc = vencimentos?.resumo;
+    const totalVencimentosCriticos = countVencimentosCriticos(vencimentos);
+    const temMensagens = !!resumo && resumo.empresasComCriticas > 0;
+    const temVencimentos = totalVencimentosCriticos > 0;
 
-    const intimacoes = resumo.naoLidasPorCategoria.intimacao || 0;
-    const malha = resumo.naoLidasPorCategoria.malha || 0;
-    const exclusoes = resumo.naoLidasPorCategoria.exclusao || 0;
-    const detNotif = (resumo.naoLidasPorCategoria.det_notificacao || 0) + (resumo.naoLidasPorCategoria.det_auto_infracao || 0);
-    const decIntim = resumo.naoLidasPorCategoria.dec_intimacao || 0;
-    const djeCit = (resumo.naoLidasPorCategoria.dje_citacao || 0) + (resumo.naoLidasPorCategoria.dje_intimacao || 0);
+    if (dispensado || (!temMensagens && !temVencimentos)) return null;
+
+    const categorias = resumo?.naoLidasPorCategoria || {};
+    const intimacoes = categorias.intimacao || 0;
+    const malha = categorias.malha || 0;
+    const exclusoes = categorias.exclusao || 0;
+    const detNotif = (categorias.det_notificacao || 0) + (categorias.det_auto_infracao || 0);
+    const decIntim = categorias.dec_intimacao || 0;
+    const djeCit = (categorias.dje_citacao || 0) + (categorias.dje_intimacao || 0);
+    const issPrefeitura = categorias.prefeitura_sp_iss || 0;
+    const mensagensCriticas = countMensagensCriticas(resumo);
+
+    const proximasCriticas: ProximaObrigacao[] = (vencimentos?.proximas || [])
+        .filter(o => o.diasAteVencimento <= 7);
+    const tributos = proximasCriticas.filter(o => isTributo(o.obrigacao)).length;
+    const entregas = proximasCriticas.filter(o => isEntrega(o.obrigacao)).length;
+    const outrasObrigacoes = Math.max(0, proximasCriticas.length - tributos - entregas);
 
     // Per-fonte breakdown
     const fontes: CaixaPostalFonte[] = ['ecac', 'det', 'dec', 'dje', 'emac', 'prefeitura_sp'];
-    const naoLidasPorFonte: Partial<Record<CaixaPostalFonte, number>> = resumo.naoLidasPorFonte || {};
+    const naoLidasPorFonte: Partial<Record<CaixaPostalFonte, number>> = resumo?.naoLidasPorFonte || {};
 
     return (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80] animate-fade-in">
@@ -76,16 +130,64 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
                     <div className="text-4xl">&#9888;&#65039;</div>
                     <div className="flex-1">
                         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                            Pendencias fiscais criticas detectadas
+                            Monitor fiscal com pendencias criticas
                         </h3>
                         <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                            {resumo.empresasComCriticas} empresa(s) tem mensagens importantes nao lidas.
+                            Varredura encontrou mensagens, obrigacoes, impostos ou entregas mensais que exigem acompanhamento.
                         </p>
                     </div>
                 </div>
 
-                {/* Breakdown por categoria critica */}
+                {/* Visao consolidada */}
                 <div className="space-y-1 text-sm bg-slate-50 dark:bg-slate-900/40 rounded-lg p-3 mb-3">
+                    {temMensagens && (
+                        <div className="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2 mb-2">
+                            <span className="font-bold text-slate-700 dark:text-slate-200">Mensagens fiscais nao lidas</span>
+                            <span className="font-bold">{mensagensCriticas}</span>
+                        </div>
+                    )}
+                    {temVencimentos && (
+                        <div className="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2 mb-2">
+                            <span className="font-bold text-slate-700 dark:text-slate-200">Obrigacoes, impostos e entregas</span>
+                            <span className="font-bold">{totalVencimentosCriticos}</span>
+                        </div>
+                    )}
+                    {resumoVenc && resumoVenc.atrasadas > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-red-700 dark:text-red-400">Atrasadas</span>
+                            <span className="font-bold">{resumoVenc.atrasadas}</span>
+                        </div>
+                    )}
+                    {resumoVenc && resumoVenc.venceHoje > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-red-700 dark:text-red-400">Vencem hoje</span>
+                            <span className="font-bold">{resumoVenc.venceHoje}</span>
+                        </div>
+                    )}
+                    {resumoVenc && (resumoVenc.venceAmanha + resumoVenc.vence3d + resumoVenc.vence7d) > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-orange-700 dark:text-orange-400">Vencem em ate 7 dias</span>
+                            <span className="font-bold">{resumoVenc.venceAmanha + resumoVenc.vence3d + resumoVenc.vence7d}</span>
+                        </div>
+                    )}
+                    {tributos > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-emerald-700 dark:text-emerald-400">Tributos/guias</span>
+                            <span className="font-bold">{tributos}</span>
+                        </div>
+                    )}
+                    {entregas > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-sky-700 dark:text-sky-400">Declaracoes/entregas</span>
+                            <span className="font-bold">{entregas}</span>
+                        </div>
+                    )}
+                    {outrasObrigacoes > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-slate-700 dark:text-slate-300">Demais obrigacoes</span>
+                            <span className="font-bold">{outrasObrigacoes}</span>
+                        </div>
+                    )}
                     {intimacoes > 0 && (
                         <div className="flex justify-between">
                             <span className="text-red-700 dark:text-red-400">Intimacoes (Receita)</span>
@@ -100,7 +202,7 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
                     )}
                     {exclusoes > 0 && (
                         <div className="flex justify-between">
-                            <span className="text-purple-700 dark:text-purple-400">Exclusao Simples</span>
+                            <span className="text-purple-700 dark:text-purple-400">Exclusao do Simples</span>
                             <span className="font-bold">{exclusoes}</span>
                         </div>
                     )}
@@ -122,10 +224,16 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
                             <span className="font-bold">{djeCit}</span>
                         </div>
                     )}
+                    {issPrefeitura > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-sky-800 dark:text-sky-300">ISS / Prefeitura SP</span>
+                            <span className="font-bold">{issPrefeitura}</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Breakdown por canal */}
-                {resumo.naoLidasPorFonte && (
+                {resumo?.naoLidasPorFonte && (
                     <div className="flex flex-wrap gap-2 mb-4">
                         {fontes.map(f => {
                             const count = naoLidasPorFonte[f] || 0;
@@ -140,7 +248,7 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
                     </div>
                 )}
 
-                {resumo.mode === 'mock' && (
+                {resumo?.mode === 'mock' && (
                     <p className="text-xs text-amber-600 dark:text-amber-400 mb-4">
                         Modo teste -- dados sinteticos para desenvolvimento. Ative producao via env CAIXA_POSTAL_MODE=serpro quando o Integra Contador estiver contratado.
                     </p>
@@ -153,11 +261,22 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
                     >
                         Ver depois
                     </button>
+                    {temMensagens && temVencimentos && (
+                        <button
+                            onClick={() => {
+                                handleDispensar();
+                                onIrParaCaixaPostal();
+                            }}
+                            className="btn-press px-4 py-2 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+                        >
+                            Caixa Postal
+                        </button>
+                    )}
                     <button
                         onClick={handleIr}
                         className="btn-press px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700"
                     >
-                        Ver agora
+                        {temVencimentos ? 'Ver obrigacoes' : 'Ver mensagens'}
                     </button>
                 </div>
             </div>

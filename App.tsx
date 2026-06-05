@@ -667,6 +667,7 @@ const App: React.FC = () => {
                                 <CaixaPostalAlerta
                                     currentUser={currentUser}
                                     onIrParaCaixaPostal={() => setSearchType(SearchType.CAIXA_POSTAL)}
+                                    onIrParaObrigacoes={() => setSearchType(SearchType.OBRIGACOES_FISCAIS)}
                                 />
                             </Suspense>
                         </ErrorBoundary>
