@@ -63,6 +63,7 @@ JSONs estarão no log do job (impressos via `console.log`) — copia daí.
 |---|---|---|---|---|
 | 1 | `PGDASD` | `CONSULTIMADECREC14` | Consultar | Sim — 1 consulta SERPRO |
 | 2 | `DCTFWEB` | `CONSDECCOMPLETA33` | Consultar | Sim — 1 consulta |
+| 2b | `DCTFWEB` | `CONSAPURACAOMIT` | Consultar | Sim — **crítico p/ cruzamento DCTFWeb×apuração** (define o `dctfweb-mit-normalizer.js`) |
 | 3 | `CAIXAPOSTAL` | `OBTERLISTAMSGS53` | Consultar | Sim — não marca lidas |
 | 4 | `DET` | `CONSULTARMENSAGENS` | Consultar | Sim — alternativa do Caixa Postal |
 
@@ -92,6 +93,7 @@ antes de gastar credenciais.
 Me devolva os 4 JSONs (cole no chat ou anexa). Vou mapear:
 - `das-provider.js:237` (campos do GERARDAS12 — atualmente supostos)
 - `dctfweb-provider.js` (CONSDECCOMPLETA33 — confirma se a estrutura bate)
+- `dctfweb-mit-normalizer.js` (CONSAPURACAOMIT — **confirma os campos de código/valor/descrição dos débitos**; hoje o normalizador tenta vários nomes defensivamente)
 - `caixa-postal-orchestrator.js` (OBTERLISTAMSGS53 — paginação, formato de msg)
 
 Sem adivinhar campos. Os parsers param de ser "tente isso e veja se cai".
