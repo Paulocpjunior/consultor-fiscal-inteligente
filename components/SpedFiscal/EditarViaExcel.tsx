@@ -16,7 +16,7 @@ import { parseSped, exportarXlsx, aplicarEdicoesXlsx } from '../../services/sped
 type Status =
     | { fase: 'idle' }
     | { fase: 'analisando' }
-    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number }
+    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }> }
     | { fase: 'aplicando' }
     | { fase: 'erro'; mensagem: string };
 
@@ -43,6 +43,8 @@ const EditarViaExcel: React.FC = () => {
                 conteudoOriginal: txt,
                 resumo: parsed.resumo.registrosPorTipo,
                 totalLinhas: parsed.resumo.totalLinhas,
+                tipoSped: parsed.tipoSped,
+                mismatch: parsed.resumo.layoutMismatch || {},
             });
         } catch (err: any) {
             setStatus({ fase: 'erro', mensagem: err?.message || 'Falha ao ler SPED' });
@@ -108,9 +110,19 @@ const EditarViaExcel: React.FC = () => {
                         className="p-5 rounded-xl"
                         style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}
                     >
-                        <h3 className="text-sm font-bold mb-3" style={{ color: 'var(--text-primary)' }}>
+                        <h3 className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                             2. Resumo do SPED — {status.totalLinhas.toLocaleString('pt-BR')} linhas
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                                style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                                {status.tipoSped === 'contribuicoes' ? 'EFD Contribuições (PIS/COFINS)' : 'EFD ICMS/IPI'}
+                            </span>
                         </h3>
+                        {Object.keys(status.mismatch).length > 0 && (
+                            <div className="mb-3 p-2 rounded border border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-[11px] text-amber-800 dark:text-amber-300">
+                                ⚠️ Registros com layout divergente do esperado — mantidos <b>somente leitura</b> (round-trip preserva, não corrompe):{' '}
+                                {Object.entries(status.mismatch).map(([t, m]) => `${t} (${m.real}≠${m.esperado} campos)`).join(', ')}
+                            </div>
+                        )}
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-[11px]">
                             {Object.entries(status.resumo).sort().map(([tipo, qtd]) => (
                                 <div key={tipo} className="px-2 py-1 rounded" style={{ background: 'var(--bg-card)' }}>

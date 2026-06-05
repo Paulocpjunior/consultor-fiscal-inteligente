@@ -20,10 +20,17 @@ import * as XLSX from 'xlsx';
 
 // Dynamic import: sao .js ESM em sefaz-backend; ts-jest precisa de .js literal
 // pra encontrar via moduleNameMapper. Em prod, vite resolve.
+type TipoSped = 'fiscal' | 'contribuicoes';
 type ParseResult = {
+    tipoSped: TipoSped;
     linhas: Array<{ idx: number; tipo: string; campos: string[]; original: string }>;
     editaveis: Record<string, Array<{ idx: number; campos: Record<string, string> }>>;
-    resumo: { totalLinhas: number; registrosPorTipo: Record<string, number> };
+    resumo: {
+        totalLinhas: number;
+        registrosPorTipo: Record<string, number>;
+        tipoSped: TipoSped;
+        layoutMismatch: Record<string, { esperado: number; real: number }>;
+    };
 };
 type SpedEdicao = { idx: number; campos: string[] };
 
@@ -32,9 +39,9 @@ export async function parseSped(text: string): Promise<ParseResult> {
     return mod.parseSpedFiscalParaEdicao(text);
 }
 
-export async function colunasDoTipo(tipo: string): Promise<string[] | null> {
+export async function colunasDoTipo(tipo: string, tipoSped: TipoSped = 'fiscal'): Promise<string[] | null> {
     const mod = await import('../sefaz-backend/sped-fiscal-editor-parser.js' as any);
-    return mod.colunasDoTipo(tipo);
+    return mod.colunasDoTipo(tipo, tipoSped);
 }
 
 export async function reconstruirSped(parsed: ParseResult, edicoes: SpedEdicao[]): Promise<string> {
@@ -69,7 +76,7 @@ export async function exportarXlsx(parsed: ParseResult, nomeArquivo: string): Pr
     // Uma aba por tipo editavel
     for (const tipo of Object.keys(parsed.editaveis).sort()) {
         const itens = parsed.editaveis[tipo];
-        const cols = await colunasDoTipo(tipo);
+        const cols = await colunasDoTipo(tipo, parsed.tipoSped);
         if (!cols || !itens.length) continue;
         const header = ['_idx_NAO_MEXER', ...cols];
         const data = itens.map(it => [it.idx, ...cols.map(c => it.campos[c] ?? '')]);
@@ -100,7 +107,7 @@ export async function exportarXlsx(parsed: ParseResult, nomeArquivo: string): Pr
  * Sheets "Resumo" e "Outros (preservados)" sao IGNORADAS — round-trip mantem.
  * Outras sheets sao interpretadas como tipos editaveis.
  */
-export async function lerXlsx(arrayBuffer: ArrayBuffer): Promise<SpedEdicao[]> {
+export async function lerXlsx(arrayBuffer: ArrayBuffer, tipoSped: TipoSped = 'fiscal'): Promise<SpedEdicao[]> {
     const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: false, cellText: true });
     const edicoes: SpedEdicao[] = [];
 
@@ -112,7 +119,7 @@ export async function lerXlsx(arrayBuffer: ArrayBuffer): Promise<SpedEdicao[]> {
         const header = (rows[0] || []).map((c: any) => String(c).trim());
         const idxCol = header.indexOf('_idx_NAO_MEXER');
         if (idxCol === -1) continue; // sheet desconhecida
-        const cols = await colunasDoTipo(sheetName);
+        const cols = await colunasDoTipo(sheetName, tipoSped);
         if (!cols) continue;
 
         for (let r = 1; r < rows.length; r++) {
@@ -138,6 +145,8 @@ export async function lerXlsx(arrayBuffer: ArrayBuffer): Promise<SpedEdicao[]> {
  */
 export async function aplicarEdicoesXlsx(spedTextOriginal: string, xlsxBuffer: ArrayBuffer): Promise<string> {
     const parsed = await parseSped(spedTextOriginal);
-    const edicoes = await lerXlsx(xlsxBuffer);
+    // tipoSped do arquivo original define o layout usado pra reler o XLSX —
+    // garante que C170 contribuicoes nao seja lido com layout fiscal.
+    const edicoes = await lerXlsx(xlsxBuffer, parsed.tipoSped);
     return await reconstruirSped(parsed, edicoes);
 }
