@@ -5,6 +5,7 @@
 
 import admin from 'firebase-admin';
 import { getDarfProvider, getDarfMode } from './darf-provider.js';
+import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
 import { calcularMultaDarf } from './multa-calculator.js';
 
@@ -33,6 +34,7 @@ function fa() {
  *   descricao?, observacao?
  */
 export async function emitirDarf(req) {
+    assertEmissaoLiberada('DARF');
     const {
         empresaId, empresaCnpj, empresaNome,
         regime, tributo, competencia, valor,
