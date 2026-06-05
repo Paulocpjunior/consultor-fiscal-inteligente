@@ -12,6 +12,12 @@
     "cors": "^2.8.5",
     "express": "^4.21.0",
     "express-rate-limit": "^7.4.0",
+    "firebase-admin": "^13.10.0",
     "helmet": "^8.0.0"
+  },
+  "overrides": {
+    "@protobufjs/utf8": "1.1.1",
+    "protobufjs": "7.5.8",
+    "uuid": "11.1.1"
   }
 }

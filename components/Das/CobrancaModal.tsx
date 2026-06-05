@@ -5,6 +5,7 @@
  * Resultado: link mailto: ou wa.me/ pre-preenchido.
  */
 import React, { useEffect, useState } from 'react';
+import { getAuth } from 'firebase/auth';
 import type { User } from '../../types';
 import { getCobrancaIa, formatBRL } from '../../services/dasService';
 
@@ -40,8 +41,10 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
     useEffect(() => {
         (async () => {
             try {
+                const token = await getAuth().currentUser?.getIdToken();
+                if (!token) throw new Error('Usuario nao autenticado');
                 const res = await fetch(`/api/admin/empresa-contato/${encodeURIComponent(dasInfo.empresaCnpj)}`, {
-                    headers: { 'X-User-Role': currentUser?.role || 'colaborador' },
+                    headers: { 'Authorization': `Bearer ${token}` },
                 });
                 if (res.ok) {
                     const j = await res.json();
@@ -51,7 +54,7 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
             } catch { /* segue sem contato */ }
             setLoadingDados(false);
         })();
-    }, [dasInfo.empresaCnpj]);
+    }, [dasInfo.empresaCnpj, currentUser?.id]);
 
     const calcularDiasAtraso = (): number => {
         if (!dasInfo.vencimento) return 0;

@@ -48,13 +48,14 @@ jobs:
           fi
           echo "✓ Backend OK (sintaxe)"
 
-      # Type check do FRONTEND: NÃO-bloqueante de propósito. O codebase tem
-      # milhares de erros TS legados (o type-check nunca passou de fato; o
-      # runtime funciona porque o Vite/esbuild transpila sem checar tipos).
-      # Tornar bloqueante hoje barraria TODO deploy. Mantém como informativo
-      # até a dívida de tipos ser paga incrementalmente.
-      - name: Type check (frontend, non-blocking)
-        run: npm run typecheck || echo "::warning::Erros TS pré-existentes (não-bloqueante — ver dívida de tipos)"
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test -- --runInBand
+
+      - name: Dependency audit
+        run: npm audit --audit-level=moderate
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
@@ -99,16 +100,13 @@ jobs:
         # ANTES: nada publicava as rules — firebase.json apontava pra
         # storage.rules inexistente e o pipeline só subia o Cloud Run.
         # Resultado: regras de Firestore/Storage podiam ficar defasadas em prod.
-        # continue-on-error: nao bloqueia o deploy do app. Se falhar por
-        # permissao, conceda roles/firebaserules.admin (+ datastore.indexAdmin
-        # p/ indexes) a SA do GCP_SA_KEY e o aviso some.
-        continue-on-error: true
+        # Se falhar por permissao, conceda roles/firebaserules.admin
+        # (+ datastore.indexAdmin p/ indexes) a SA do GCP_SA_KEY.
         run: |
           npx --yes firebase-tools@latest deploy \
             --only firestore:rules,firestore:indexes,storage \
             --project consultorfiscalapp \
-            --non-interactive \
-          || echo "::warning::Falha ao publicar regras Firebase. Conceda roles/firebaserules.admin a SA do GCP_SA_KEY."
+            --non-interactive
 
       - name: Show Service URL
         run: |

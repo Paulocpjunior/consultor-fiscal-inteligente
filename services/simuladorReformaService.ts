@@ -3,11 +3,15 @@
  * Cliente HTTP do Simulador IBS/CBS (Reforma Tributaria 2026-2033).
  */
 import type { User, SimulacaoReforma, SimuladorIaResponse, RegimeReforma } from '../types';
+import { getAuth } from 'firebase/auth';
 
-function authHeaders(user: User | null): Record<string, string> {
+async function authHeaders(_user: User | null): Promise<Record<string, string>> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Usuario nao autenticado');
+    const token = await u.getIdToken();
     return {
         'Content-Type': 'application/json',
-        'X-User-Role': user?.role || 'colaborador',
+        'Authorization': `Bearer ${token}`,
     };
 }
 
@@ -19,7 +23,7 @@ export async function simular(
 ): Promise<SimulacaoReforma> {
     const res = await fetch('/api/admin/simulador-ibs-cbs', {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify({ faturamentoAnual, regime, dasAtualAnual }),
     });
     if (!res.ok) {
@@ -36,7 +40,7 @@ export async function explicarSimulacao(
 ): Promise<SimuladorIaResponse> {
     const res = await fetch('/api/admin/simulador-ibs-cbs-explicar', {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify({ simulacao, empresaNome }),
     });
     if (!res.ok) {

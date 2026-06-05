@@ -67,7 +67,7 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal }) => {
 
     // Per-fonte breakdown
     const fontes: CaixaPostalFonte[] = ['ecac', 'det', 'dec', 'dje', 'emac', 'prefeitura_sp'];
-    const naoLidasPorFonte = resumo.naoLidasPorFonte || {};
+    const naoLidasPorFonte: Partial<Record<CaixaPostalFonte, number>> = resumo.naoLidasPorFonte || {};
 
     return (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80] animate-fade-in">

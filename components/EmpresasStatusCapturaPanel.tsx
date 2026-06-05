@@ -77,6 +77,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
         try {
             const r = await captureFromSefaz({
                 empresa: { id: emp.id, cnpj: emp.cnpj } as any,
+                user: currentUser,
                 resetNSU,
             });
             setUltimaCaptura(prev => ({

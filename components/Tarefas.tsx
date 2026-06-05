@@ -124,7 +124,7 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
     }, [filtroResp, filtroEmpresa, filtroStatus, filtroObrigacao, filtroCompetencia, versao]);
 
     // Helpers
-    const formataData = (d: Date | null) => {
+    const formataData = (d: Date | null | undefined) => {
         if (!d || d.getTime() === 0) return '—';
         return d.toLocaleDateString('pt-BR');
     };

@@ -28,7 +28,19 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && (
+          // Perfil comum criado pelo proprio usuario nunca pode nascer admin.
+          !('role' in request.resource.data)
+          || request.resource.data.role == 'colaborador'
+          // Excecao operacional existente: auto-seed do admin master.
+          || (
+            request.auth.token.email == 'junior@spassessoriacontabil.com.br'
+            && request.auth.token.email_verified == true
+            && request.resource.data.role == 'admin'
+          )
+        );
 
       // User pode atualizar proprio doc, MAS nao pode mudar a propria role
       allow update: if (

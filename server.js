@@ -50,7 +50,7 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8080;
 
 const ALLOWED_ORIGINS = [
-    process.env.CORS_ORIGIN,
+    ...(process.env.CORS_ORIGIN || '').split(',').map((origin) => origin.trim()),
     'https://consultorfiscalapp.web.app',
     'https://consultorfiscalapp.firebaseapp.com',
     // Projeto Consultor-DP-Folhapagamentos (deploy separado, mesma org/domínio).
@@ -61,12 +61,26 @@ const ALLOWED_ORIGINS = [
     'http://localhost:5173',
 ].filter(Boolean);
 
-// CORS — reflete origin recebido (validação fica no requireAuth, não no CORS)
+function validateCorsOrigin(origin, callback) {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    return callback(null, false);
+}
+
+// CORS — permite apenas origens conhecidas; chamadas server-to-server sem Origin passam.
 app.use(cors({
-    origin: true,
+    origin: validateCorsOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Authorization', 'Content-Type', 'X-Requested-With', 'X-Cron-Secret'],
+    allowedHeaders: [
+        'Authorization',
+        'Content-Type',
+        'X-Requested-With',
+        'X-Cron-Secret',
+        'X-Sefaz-Cron-Secret',
+        'X-Notif-Cron-Secret',
+        'X-Fiscal-Gateway-Token',
+        'X-Internal-Token',
+    ],
 }));
 
 // ── Middleware de segurança e parsing — ANTES dos routers! ──────────────
@@ -2272,7 +2286,7 @@ function parseCsv(text) {
         };
     });
 }
-app.post('/api/analise-creditos/manual', async (req, res) => {
+app.post('/api/analise-creditos/manual', requireAuth, async (req, res) => {
     try {
         const { notas, perfilCliente } = req.body;
         if (!Array.isArray(notas)||!notas.length||!perfilCliente)
@@ -2280,7 +2294,7 @@ app.post('/api/analise-creditos/manual', async (req, res) => {
         return res.json({ resultado: calcularResultado(notas, perfilCliente.regime) });
     } catch(err) { return res.status(500).json({ erro: err.message||'Erro interno' }); }
 });
-app.post('/api/analise-creditos/upload', upload.single('arquivo'), async (req, res) => {
+app.post('/api/analise-creditos/upload', requireAuth, upload.single('arquivo'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ erro:'Arquivo não enviado' });
         const perfil = JSON.parse(req.body.perfil||'{}');

@@ -17,19 +17,17 @@ export const isFirebaseConfigured = true;
 export const isFirebaseStorageConfigured =
   isFirebaseConfigured && !!firebaseConfig.storageBucket;
 
-let app: FirebaseApp | undefined;
-let auth: Auth | null = null;
-let db: Firestore | null = null;
-let storage: FirebaseStorage | null = null;
-
-app = getApps().length === 0
+const app: FirebaseApp = getApps().length === 0
   ? initializeApp(firebaseConfig)
   : getApps()[0];
-auth = getAuth(app);
-db = getFirestore(app);
-if (isFirebaseStorageConfigured) {
-  storage = getStorage(app);
-} else {
+
+const auth: Auth = getAuth(app);
+const db: Firestore = getFirestore(app);
+const storage: FirebaseStorage | null = isFirebaseStorageConfigured
+  ? getStorage(app)
+  : null;
+
+if (!isFirebaseStorageConfigured) {
   console.warn('⚠️ Firebase Storage bucket não configurado. Upload de XMLs ficará indisponível.');
 }
 

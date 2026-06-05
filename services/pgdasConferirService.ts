@@ -3,11 +3,15 @@
  * Cliente HTTP da Conferencia PGDAS-D.
  */
 import type { User, PgdasConferirResponse, PgdasDivergencia, PgdasExplicarResponse, PgdasExtraido } from '../types';
+import { getAuth } from 'firebase/auth';
 
-function authHeaders(user: User | null): Record<string, string> {
+async function authHeaders(_user: User | null): Promise<Record<string, string>> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Usuario nao autenticado');
+    const token = await u.getIdToken();
     return {
         'Content-Type': 'application/json',
-        'X-User-Role': user?.role || 'colaborador',
+        'Authorization': `Bearer ${token}`,
     };
 }
 
@@ -18,7 +22,7 @@ export async function conferirPgdas(
 ): Promise<PgdasConferirResponse> {
     const res = await fetch('/api/admin/pgdas/conferir', {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify({ empresaId, base64Pdf }),
     });
     if (!res.ok) {
@@ -36,7 +40,7 @@ export async function explicarDivergencia(
 ): Promise<PgdasExplicarResponse> {
     const res = await fetch('/api/admin/pgdas/conferir-explicar', {
         method: 'POST',
-        headers: authHeaders(user),
+        headers: await authHeaders(user),
         body: JSON.stringify({ empresaNome, divergencia, contextoExtraido }),
     });
     if (!res.ok) {

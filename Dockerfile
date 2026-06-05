@@ -4,7 +4,7 @@ FROM node:20-slim AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 COPY . .
 
@@ -68,7 +68,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 # Baixa só o Chromium do Playwright. Definimos PLAYWRIGHT_BROWSERS_PATH
 # pra garantir caminho previsível independente do user que roda.

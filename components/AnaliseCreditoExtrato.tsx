@@ -1342,11 +1342,10 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
           )}
         </div>
         <div
-          className={empresaSelId ? '' : 'opacity-40 pointer-events-none'}
+          className={`border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center cursor-pointer hover:border-teal-400 transition-all ${empresaSelId ? '' : 'opacity-40 pointer-events-none'}`}
           onClick={() => empresaSelId && document.getElementById('input-efiscal')?.click()}
           onDragOver={e => e.preventDefault()}
           onDrop={e => { e.preventDefault(); onFileEfiscal(e.dataTransfer.files?.[0] ?? null); }}
-          className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center cursor-pointer hover:border-teal-400 transition-all"
         >
           <div className="text-3xl mb-1">📄</div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
