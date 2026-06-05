@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { SimplesNacionalAnexo, SimplesNacionalAtividade, CnaeSuggestion, SimplesNacionalEmpresa } from '../types';
+import { SimplesNacionalAnexo, SimplesNacionalAtividade, CnaeSuggestion, SimplesNacionalEmpresa, EmpresaDadosFiscais } from '../types';
 import { fetchCnpjFromBrasilAPI } from '../services/externalApiService';
-import { sugerirAnexoPorCnae } from '../services/simplesNacionalService';
+import { sugerirAnexoPorCnae, updateEmpresa as updateSimplesEmpresa } from '../services/simplesNacionalService';
+import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import { fetchCnaeSuggestions, fetchCnaeDescription } from '../services/geminiService';
 import { PlusIcon, TrashIcon, SearchIcon, CalculatorIcon, ShieldIcon, CloseIcon } from './Icons';
 import LoadingSpinner from './LoadingSpinner';
@@ -38,6 +39,10 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
     const [anexo, setAnexo] = useState<'auto' | SimplesNacionalAnexo>('auto');
     const [dataAbertura, setDataAbertura] = useState('');
     const [error, setError] = useState('');
+    // Dados fiscais (IE, UF, CCM SP, IBGE...) — mesmo modal usado no Lucro.
+    // Empresa do Simples que presta servico precisa de CCM pra captura NFSe.
+    const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
+    const [dadosFiscaisLocal, setDadosFiscaisLocal] = useState<EmpresaDadosFiscais | undefined>(undefined);
 
     const [isCnpjLoading, setIsCnpjLoading] = useState(false);
     const [cnpjError, setCnpjError] = useState('');
@@ -69,6 +74,7 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
             setAtividadesSecundarias(initialData.atividadesSecundarias || []);
             setNomeFantasia(initialData.nomeFantasia || '');
             setDataAbertura(initialData.dataAbertura || '');
+            setDadosFiscaisLocal(initialData.dadosFiscais);
         }
     }, [initialData]);
 
@@ -454,6 +460,40 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
                     </div>
 
 
+                    {/* Dados Fiscais (IE, UF, CCM SP, IBGE) — mesmo modal do Lucro.
+                        CCM é necessária pra captura de NFSe municipal quando a
+                        empresa do Simples presta serviço. Disponível na edição
+                        (a empresa precisa já existir pra salvar os dados). */}
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
+                        <h3 className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1">Dados Fiscais</h3>
+                        <p className="text-xs text-slate-500 mb-3">
+                            Inscrição Estadual, UF, código IBGE e <b>CCM</b> (Inscrição Municipal SP) — necessários
+                            pra SPED, DCTFWeb e captura de NFS-e municipal.
+                        </p>
+                        {initialData?.id ? (
+                            <div className="flex items-center gap-3 flex-wrap">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsDadosFiscaisModalOpen(true)}
+                                    className="btn-press px-4 py-2 text-sm font-semibold rounded-lg border border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-900/30"
+                                >
+                                    📋 Editar Dados Fiscais / CCM
+                                </button>
+                                <span className="text-xs text-slate-500">
+                                    {dadosFiscaisLocal?.ccmSp
+                                        ? <>CCM: <b className="font-mono">{dadosFiscaisLocal.ccmSp}</b></>
+                                        : 'CCM não informada'}
+                                    {dadosFiscaisLocal?.uf ? <> · UF: <b>{dadosFiscaisLocal.uf}</b></> : null}
+                                    {dadosFiscaisLocal?.inscricaoEstadual ? <> · IE: <b>{dadosFiscaisLocal.inscricaoEstadual}</b></> : null}
+                                </span>
+                            </div>
+                        ) : (
+                            <p className="text-xs italic text-slate-400">
+                                Salve a empresa primeiro; depois reabra para editar a CCM e os demais dados fiscais.
+                            </p>
+                        )}
+                    </div>
+
                     {error && <p className="text-sm text-red-500">{error}</p>}
                     <div className="flex justify-end gap-4 pt-4">
                         <button
@@ -471,6 +511,22 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
                         </button>
                     </div>
                 </form>
+
+                {initialData?.id && (
+                    <EmpresaDadosFiscaisModal
+                        isOpen={isDadosFiscaisModalOpen}
+                        onClose={() => setIsDadosFiscaisModalOpen(false)}
+                        empresaNome={initialData.nome}
+                        valoresAtuais={dadosFiscaisLocal}
+                        onSave={async (dados) => {
+                            // Cadastro unico: ccmSp vive em dadosFiscais.ccmSp (igual ao
+                            // Lucro). updateEmpresa faz merge no doc simples_empresas.
+                            await updateSimplesEmpresa(initialData.id, { dadosFiscais: dados });
+                            setDadosFiscaisLocal(dados);
+                            onShowToast?.('Dados fiscais atualizados.');
+                        }}
+                    />
+                )}
              </div>
 
              {/* Modal de Validação CNAE */}
