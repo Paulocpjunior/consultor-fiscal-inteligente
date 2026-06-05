@@ -29,9 +29,10 @@ async function authHeader(): Promise<Record<string, string>> {
 export interface ReinfAnaliseResposta {
     qtd: number;
     eventos: Array<{
-        ok: boolean; codigo: string | null; tipoRetorno: string;
+        ok: boolean; codigo: string | null; schemaToken: string; tipoRetorno: string;
         perApur: string; contribuinte: { tpInsc: string; nrInsc: string };
         totais: { inssRetPrinc: number; inssRetAdic: number; irrf: number; csll: number; pis: number; cofins: number };
+        fechamento: { fechRet: string | null; responsavel?: { nome: string; cpf: string } | null } | null;
         validacao: { valido: boolean; erros: string[]; avisos: string[] };
         observacoes: string[];
     }>;
@@ -44,6 +45,11 @@ export interface ReinfAnaliseResposta {
     };
 }
 
+/** Detalhe de um débito de retenção lido na DCTFWeb (transparência). */
+export interface DetalheRetencaoDctfweb {
+    codReceita: string; familia: string; descricao: string; ctCnpj: string; valor: number;
+}
+
 /** Resposta do GET /dctfweb/retencao-normalizada. */
 export interface RetencaoDctfwebResposta {
     competencia: string;
@@ -51,7 +57,8 @@ export interface RetencaoDctfwebResposta {
     lido: boolean;
     motivo: string | null;
     retencoes: RetencoesPorFamilia;
-    camposUsados: { tag: string; familia: string; valor: number }[];
+    detalhes: DetalheRetencaoDctfweb[];
+    ignorados: number;
     totalReconhecido: number;
 }
 
@@ -63,7 +70,7 @@ export interface ConferenciaReinfCompleta {
     retencoesReinf: RetencoesPorFamilia;
     consolidacaoReinf: ReinfAnaliseResposta['consolidacao'];
     eventos: ReinfAnaliseResposta['eventos'];
-    camposUsadosDctfweb: { tag: string; familia: string; valor: number }[];
+    camposUsadosDctfweb: DetalheRetencaoDctfweb[];
 }
 
 /** Parseia os XMLs de eventos EFD-Reinf no backend. */
@@ -129,7 +136,7 @@ export async function conferirReinfDctfweb(
             dctfwebLido: false,
             motivoDctfweb: dctfweb.motivo,
             retencoesReinf, consolidacaoReinf: consolidacao, eventos: analise.eventos,
-            camposUsadosDctfweb: dctfweb.camposUsados || [],
+            camposUsadosDctfweb: dctfweb.detalhes || [],
         };
     }
 
@@ -139,6 +146,6 @@ export async function conferirReinfDctfweb(
         dctfwebLido: true,
         motivoDctfweb: null,
         retencoesReinf, consolidacaoReinf: consolidacao, eventos: analise.eventos,
-        camposUsadosDctfweb: dctfweb.camposUsados || [],
+        camposUsadosDctfweb: dctfweb.detalhes || [],
     };
 }

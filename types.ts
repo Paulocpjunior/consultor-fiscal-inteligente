@@ -15,6 +15,7 @@ export enum SearchType {
   CAIXA_POSTAL = 'Caixa Postal',
   DAS_SIMPLES = 'DAS Simples Nacional',
   DCTFWEB = 'DCTFWeb',
+  EFD_REINF = 'EFD-Reinf × DCTFWeb',
   NFSE_NACIONAL = 'NFS-e Nacional',
   DASHBOARD_CEO = 'Dashboard CEO',
   ANOMALIAS = 'Detector de Anomalias',
