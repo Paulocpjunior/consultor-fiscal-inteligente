@@ -20,7 +20,7 @@
 // (CFOP, CST, NCM, base de calculo, aliquota, valores). Nomes seguem Guia
 // Pratico EFD ICMS/IPI 3.2.2. Ordem do array = ordem no SPED (campos[0]=tipo,
 // campos[1]=primeiro campo). Indices 1-based correspondem aos do Manual.
-const LAYOUT = {
+const LAYOUT_FISCAL = {
     // Bloco 0 — Identificacao + cadastros
     '0150': [
         'COD_PART', 'NOME', 'COD_PAIS', 'CNPJ', 'CPF',
@@ -64,6 +64,57 @@ const LAYOUT = {
     ],
 };
 
+// Layout EFD CONTRIBUICOES (PIS/COFINS) — Guia Pratico 1.35.
+// Registros compartilhados (0150, 0200) sao IDENTICOS ao Fiscal — reusados.
+// C170 e M210/M610 tem layout PROPRIO (foco PIS/COFINS, nao ICMS).
+// A rede de seguranca (contagem de campos) protege: se um layout nao bater
+// com a linha real, o registro vira read-only em vez de corromper.
+const LAYOUT_CONTRIB = {
+    '0150': LAYOUT_FISCAL['0150'],
+    '0200': LAYOUT_FISCAL['0200'],
+    // C170 do EFD Contribuicoes (sem campos de ICMS; NAT_BC_CRED/IND_ORIG_CRED
+    // no lugar). Guia Pratico EFD Contribuicoes.
+    'C170': [
+        'NUM_ITEM', 'COD_ITEM', 'DESCR_COMPL', 'QTD', 'UNID', 'VL_ITEM', 'VL_DESC',
+        'NAT_BC_CRED', 'IND_ORIG_CRED',
+        'CST_PIS', 'VL_BC_PIS', 'ALIQ_PIS', 'QUANT_BC_PIS', 'ALIQ_PIS_QUANT', 'VL_PIS',
+        'CST_COFINS', 'VL_BC_COFINS', 'ALIQ_COFINS', 'QUANT_BC_COFINS', 'ALIQ_COFINS_QUANT', 'VL_COFINS',
+        'COD_CTA',
+    ],
+    // M210 — Detalhamento da contribuicao PIS por CST (layout v3+).
+    'M210': [
+        'CST_PIS', 'VL_REC_BRT', 'VL_BC_CONT',
+        'VL_AJUS_ACRES_BC_PIS', 'VL_AJUS_REDUC_BC_PIS', 'VL_BC_CONT_AJUS',
+        'ALIQ_PIS', 'QUANT_BC_PIS', 'ALIQ_PIS_QUANT', 'VL_CONT_APUR',
+        'VL_AJUS_ACRES', 'VL_AJUS_REDUC', 'VL_CONT_DIFER', 'VL_CONT_DIFER_ANT', 'VL_CONT_PER',
+    ],
+    // M610 — Detalhamento da contribuicao COFINS por CST (espelho do M210).
+    'M610': [
+        'CST_COFINS', 'VL_REC_BRT', 'VL_BC_CONT',
+        'VL_AJUS_ACRES_BC_COFINS', 'VL_AJUS_REDUC_BC_COFINS', 'VL_BC_CONT_AJUS',
+        'ALIQ_COFINS', 'QUANT_BC_COFINS', 'ALIQ_COFINS_QUANT', 'VL_CONT_APUR',
+        'VL_AJUS_ACRES', 'VL_AJUS_REDUC', 'VL_CONT_DIFER', 'VL_CONT_DIFER_ANT', 'VL_CONT_PER',
+    ],
+};
+
+/**
+ * Detecta o tipo de SPED pela presenca de registros caracteristicos:
+ *   - M200/M600 (apuracao PIS/COFINS) -> EFD Contribuicoes
+ *   - E110/E520 (apuracao ICMS/IPI)   -> EFD ICMS/IPI (Fiscal)
+ * Default: 'fiscal'.
+ */
+function detectarTipoSped(tiposPresentes) {
+    if (tiposPresentes.has('M200') || tiposPresentes.has('M600') || tiposPresentes.has('M210') || tiposPresentes.has('M610')) {
+        return 'contribuicoes';
+    }
+    if (tiposPresentes.has('E110') || tiposPresentes.has('E520')) return 'fiscal';
+    return 'fiscal';
+}
+
+function layoutDe(tipoSped) {
+    return tipoSped === 'contribuicoes' ? LAYOUT_CONTRIB : LAYOUT_FISCAL;
+}
+
 /**
  * @param {string} text  conteudo bruto do SPED (.txt)
  * @returns {{
@@ -82,49 +133,66 @@ export function parseSpedFiscalParaEdicao(text) {
     const linhas = [];
     const editaveis = {};
     const registrosPorTipo = {};
+    const layoutMismatch = {}; // tipos com layout divergente -> read-only (nao corrompe)
     let idx = 0;
 
+    // 1a passada: coleta linhas validas + tipos presentes (pra detectar SPED).
+    const parsedLinhas = [];
     for (const raw of rawLines) {
         if (!raw || !raw.trim()) continue;
-        // Linha SPED: |TIPO|c1|c2|...|cN|
         if (!raw.startsWith('|') || !raw.endsWith('|')) {
-            // Linha mal-formada (cabecalho de email anexado, BOM, etc) — ignora
-            // mas mantem visivel no resumo pra investigacao.
             registrosPorTipo['_invalida'] = (registrosPorTipo['_invalida'] || 0) + 1;
             continue;
         }
         const campos = raw.slice(1, -1).split('|');
         const tipo = campos[0] || '';
         if (!tipo) continue;
-
-        linhas.push({ idx, tipo, campos, original: raw });
+        parsedLinhas.push({ campos, tipo, original: raw });
         registrosPorTipo[tipo] = (registrosPorTipo[tipo] || 0) + 1;
+    }
 
+    const tipoSped = detectarTipoSped(new Set(Object.keys(registrosPorTipo)));
+    const LAYOUT = layoutDe(tipoSped);
+
+    // 2a passada: indexa + marca editaveis SO quando a contagem de campos do
+    // layout BATE com a linha real. REDE DE SEGURANCA: se nao bater (layout
+    // errado/versao diferente), o registro vira read-only (round-trip preserva)
+    // em vez de corromper na reconstrucao.
+    for (const { campos, tipo, original } of parsedLinhas) {
+        linhas.push({ idx, tipo, campos, original });
         const layout = LAYOUT[tipo];
         if (layout) {
-            const camposNomeados = {};
-            for (let i = 0; i < layout.length; i++) {
-                camposNomeados[layout[i]] = campos[i + 1] || '';
+            const camposReais = campos.length - 1; // exclui o tipo (campo 0)
+            if (camposReais === layout.length) {
+                const camposNomeados = {};
+                for (let i = 0; i < layout.length; i++) {
+                    camposNomeados[layout[i]] = campos[i + 1] || '';
+                }
+                if (!editaveis[tipo]) editaveis[tipo] = [];
+                editaveis[tipo].push({ idx, campos: camposNomeados });
+            } else {
+                // Layout conhecido MAS contagem divergente — fail-safe read-only.
+                layoutMismatch[tipo] = { esperado: layout.length, real: camposReais };
             }
-            if (!editaveis[tipo]) editaveis[tipo] = [];
-            editaveis[tipo].push({ idx, campos: camposNomeados });
         }
         idx++;
     }
 
     return {
+        tipoSped,
         linhas,
         editaveis,
-        resumo: { totalLinhas: linhas.length, registrosPorTipo },
+        resumo: { totalLinhas: linhas.length, registrosPorTipo, tipoSped, layoutMismatch },
     };
 }
 
-/** Devolve a lista de tipos com layout estruturado (pra UI). */
-export function tiposEditaveis() {
-    return Object.keys(LAYOUT).sort();
+/** Lista de tipos com layout estruturado pra um SPED (pra UI). */
+export function tiposEditaveis(tipoSped = 'fiscal') {
+    return Object.keys(layoutDe(tipoSped)).sort();
 }
 
-/** Layout (colunas nomeadas) de um tipo — pra cabecalho da planilha. */
-export function colunasDoTipo(tipo) {
-    return LAYOUT[tipo] ? [...LAYOUT[tipo]] : null;
+/** Layout (colunas nomeadas) de um tipo dentro de um SPED. */
+export function colunasDoTipo(tipo, tipoSped = 'fiscal') {
+    const L = layoutDe(tipoSped);
+    return L[tipo] ? [...L[tipo]] : null;
 }
