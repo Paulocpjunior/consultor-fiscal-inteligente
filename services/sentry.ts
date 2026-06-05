@@ -90,7 +90,7 @@ export function captureException(err: unknown, context?: Record<string, unknown>
  * Define identidade do usuario logado pra correlacionar erros.
  * Chamar apos login. Passar `null` no logout.
  */
-export function setUser(user: { id?: string; email?: string } | null) {
+export function setUser(user: { id?: string; email?: string; username?: string } | null) {
     if (!_initialized) return;
     try {
         Sentry.setUser(user || null);

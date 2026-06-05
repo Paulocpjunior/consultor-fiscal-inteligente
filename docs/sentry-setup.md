@@ -74,13 +74,17 @@ vontade sem se preocupar com o ambiente.
 
 ## Identificar o usuário
 
-Chame logo após o login (e com `null` no logout):
+O app já identifica automaticamente o usuário no Sentry pelo listener global de
+autenticação (`App.tsx`): login, refresh de sessão e logout chamam
+`setUser(...)`/`setUser(null)`.
+
+Para capturas manuais fora desse fluxo, use o mesmo helper:
 
 ```ts
 import { setUser } from '@/services/sentry';
 
 // após auth completar:
-setUser({ id: user.uid, email: user.email });
+setUser({ id: user.uid, email: user.email, username: user.displayName });
 ```
 
 Isso correlaciona erros por usuário no Sentry — útil pra reproduzir o caminho

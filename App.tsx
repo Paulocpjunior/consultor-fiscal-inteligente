@@ -22,6 +22,7 @@ import { SearchType, type SearchResult, type ComparisonResult, type FavoriteItem
 import { fetchFiscalData, fetchComparison, fetchSimilarServices } from './services/geminiService';
 import * as simplesService from './services/simplesNacionalService';
 import * as authService from './services/authService';
+import { setUser as setSentryUser } from './services/sentry';
 import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon, ScaleIcon } from './components/Icons';
 // (FiscalObligationsDashboard, Tarefas, CalendarioFiscal agora dentro de ObrigacoesETarefas)
 import { runInitialSync } from './services/cloudSyncService';
@@ -171,6 +172,7 @@ const App: React.FC = () => {
 
             const unsubscribe = authService.subscribeAuthState((user) => {
                 setCurrentUser(user);
+                setSentryUser(user ? { id: user.id, email: user.email, username: user.name } : null);
                 if (user) {
                     loadSimplesData(user);
                     runInitialSync(user); // fire-and-forget: sync localStorage -> Firestore
@@ -196,11 +198,13 @@ const App: React.FC = () => {
 
     const handleLoginSuccess = (user: User) => {
         setCurrentUser(user);
+        setSentryUser({ id: user.id, email: user.email, username: user.name });
         loadSimplesData(user);
         requestNotificationPermission(); // fire-and-forget: pede permissão push
     };
 
     const handleLogout = () => {
+        setSentryUser(null);
         authService.logout();
         setCurrentUser(null);
         setSimplesEmpresas([]);
