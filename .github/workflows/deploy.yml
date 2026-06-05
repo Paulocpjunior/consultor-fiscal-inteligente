@@ -48,6 +48,9 @@ jobs:
           fi
           echo "✓ Backend OK (sintaxe)"
 
+      - name: Jest regression tests (blocking)
+        run: npm test -- --runInBand
+
       # Type check do FRONTEND: NÃO-bloqueante de propósito. O codebase tem
       # milhares de erros TS legados (o type-check nunca passou de fato; o
       # runtime funciona porque o Vite/esbuild transpila sem checar tipos).
