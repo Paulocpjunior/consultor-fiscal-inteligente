@@ -266,19 +266,24 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
                                 Fechar
                             </button>
                             <button
-                                onClick={() => baixarDanfse(selecionada, true)}
+                                onClick={() => baixarDanfse(selecionada, selecionada.modeUsado === 'mock')}
                                 className="btn-press px-4 py-2 bg-slate-700 text-white font-bold rounded-lg hover:bg-slate-800 flex items-center gap-2"
                                 title="Baixar DANFSe (PDF representação simplificada da NFSe)"
                             >
                                 📄 Baixar DANFSe
                             </button>
-                            {selecionada.status === 'autorizada' && (
+                            {selecionada.status === 'autorizada' && selecionada.modeUsado !== 'serpro' && (
                                 <button
                                     onClick={() => handleCancelar(selecionada)}
                                     className="btn-press px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700"
                                 >
                                     Cancelar NFSe
                                 </button>
+                            )}
+                            {selecionada.status === 'autorizada' && selecionada.modeUsado === 'serpro' && (
+                                <span className="text-xs text-slate-500 self-center">
+                                    Cancelamento SERPRO exige evento XML oficial.
+                                </span>
                             )}
                         </div>
                     </div>

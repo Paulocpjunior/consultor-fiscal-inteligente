@@ -7,19 +7,44 @@
 //   Toda ME/EPP do Simples prestadora de servicos OBRIGADA a usar.
 //
 // Modos:
-//   - 'mock'   (default): emite NFSe ficticia com numero + chave + DPS
-//   - 'serpro' (futuro):  Emissor Nacional NFS-e via API
+//   - 'mock'   (dev): emite NFSe ficticia com numero + chave + DPS
+//   - 'serpro' (default): Emissor Publico Nacional NFS-e via API SEFIN
 //                         https://www.gov.br/nfse (gratuito)
 //
-// Estrutura simplificada — versao base; cancelamento/eventos/contingencia
-// virao em iteracoes futuras.
+// Em modo SERPRO, este provider nao monta uma DPS fiscal do zero: ele recebe
+// dpsXmlGZipB64 OU dpsXml/dpsXmlAssinado, assina quando necessario, compacta
+// e envia ao endpoint oficial POST /nfse.
 // ============================================================================
+
+import { gzipSync, gunzipSync } from 'node:zlib';
+import { Agent } from 'undici';
+import { DOMParser } from '@xmldom/xmldom';
+import { SignedXml } from 'xml-crypto';
+import { loadCertificate } from './secret-loader.js';
 
 // Default 'serpro' (REAL). 'mock' só com NFSE_NAC_MODE=mock explícito (dev local).
 // Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
-const MODE = process.env.NFSE_NAC_MODE || 'serpro';
+const MODE = normalizeMode(process.env.NFSE_NAC_MODE || 'serpro');
+const AMBIENTE = normalizeAmbiente(process.env.NFSE_NAC_ENV || process.env.NFSE_NAC_AMB || 'producao');
+const BASE_URL = (
+    process.env.NFSE_NAC_BASE_URL
+    || (AMBIENTE === 'restrita'
+        ? 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional'
+        : 'https://sefin.nfse.gov.br/SefinNacional')
+).replace(/\/+$/, '');
+const REQUEST_TIMEOUT_MS = Number(process.env.NFSE_NAC_TIMEOUT_MS || 60000);
+const NFSE_VERSAO = process.env.NFSE_NAC_LAYOUT_VERSION || '1.01';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
+
+function normalizeMode(value) {
+    return String(value || '').toLowerCase() === 'mock' ? 'mock' : 'serpro';
+}
+
+function normalizeAmbiente(value) {
+    const v = String(value || '').toLowerCase();
+    return ['restrita', 'homologacao', 'homologação', 'teste', 'testes'].includes(v) ? 'restrita' : 'producao';
+}
 
 function gerarChaveNfse(cnpjPrestador, ano, sequencial) {
     // Chave simplificada: 50 chars (versao mock; padrao real tem layout especifico)
@@ -34,6 +59,216 @@ function gerarChaveNfse(cnpjPrestador, ano, sequencial) {
 function calcularIssRetido(valorServico, aliquotaIss, deveRetido) {
     if (!deveRetido) return 0;
     return +(valorServico * (aliquotaIss / 100)).toFixed(2);
+}
+
+function onlyDigits(value) {
+    return String(value || '').replace(/\D/g, '');
+}
+
+function parseJsonOrText(text) {
+    if (!text) return null;
+    try { return JSON.parse(text); }
+    catch { return text; }
+}
+
+function xmlHasSignature(xml) {
+    return /<(?:\w+:)?Signature[\s>]/.test(String(xml || ''));
+}
+
+function getElementsByLocalName(doc, name) {
+    const all = doc.getElementsByTagName('*');
+    const nodes = [];
+    for (let i = 0; i < all.length; i++) {
+        const node = all[i];
+        if ((node.localName || node.nodeName.split(':').pop()) === name) nodes.push(node);
+    }
+    return nodes;
+}
+
+function xmlGetFirstText(xml, names) {
+    if (!xml) return '';
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    for (const name of names) {
+        const nodes = getElementsByLocalName(doc, name);
+        if (nodes.length && nodes[0]?.textContent) return nodes[0].textContent.trim();
+    }
+    return '';
+}
+
+function xmlGetInfDpsId(xml) {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    const nodes = getElementsByLocalName(doc, 'infDPS');
+    const node = nodes[0];
+    return node?.getAttribute('Id') || '';
+}
+
+function gzipXmlToBase64(xml) {
+    return gzipSync(Buffer.from(String(xml || ''), 'utf8'), { level: 9 }).toString('base64');
+}
+
+function gunzipBase64ToText(value) {
+    return gunzipSync(Buffer.from(String(value || ''), 'base64')).toString('utf8');
+}
+
+function pickMensagemErro(body) {
+    if (!body) return '';
+    if (typeof body === 'string') return body.slice(0, 1000);
+    const erros = body.erros || body.mensagens || body.errors;
+    if (Array.isArray(erros) && erros.length) {
+        return erros.map(e => {
+            if (typeof e === 'string') return e;
+            return [e.codigo, e.descricao || e.mensagem || e.message].filter(Boolean).join(' - ');
+        }).filter(Boolean).join('; ');
+    }
+    return body.error || body.message || JSON.stringify(body).slice(0, 1000);
+}
+
+function normalizarNfseSerpro(req, response, dpsXmlGZipB64) {
+    const nfseXmlGZipB64 = response?.nfseXmlGZipB64 || '';
+    const nfseXml = nfseXmlGZipB64 ? gunzipBase64ToText(nfseXmlGZipB64) : '';
+
+    const numero = xmlGetFirstText(nfseXml, ['nNFSe', 'nDFSe'])
+        || String(response?.chaveAcesso || '').slice(-13)
+        || '';
+    const chave = response?.chaveAcesso || xmlGetFirstText(nfseXml, ['chNFSe']);
+    if (!chave) throw new Error('SEFIN Nacional retornou sucesso sem chaveAcesso.');
+
+    const valorServico = Number(req.servico?.valor || xmlGetFirstText(nfseXml, ['vServ']) || 0);
+    const aliquota = Number(req.servico?.aliquotaIss || xmlGetFirstText(nfseXml, ['pAliq']) || 0);
+    const issValor = +(valorServico * (aliquota / 100)).toFixed(2);
+    const issRetido = calcularIssRetido(valorServico, aliquota, !!req.servico?.issRetido);
+
+    return {
+        numero,
+        chave,
+        dpsRecibo: response.idDps || response.idDPS || null,
+        dataEmissao: response.dataHoraProcessamento || xmlGetFirstText(nfseXml, ['dhProc', 'dhEmi']) || new Date().toISOString(),
+        status: 'autorizada',
+        prestador: {
+            cnpj: onlyDigits(req.prestador?.cnpj),
+            im: req.prestador?.im || '',
+            nome: req.prestador?.nome || '',
+        },
+        tomador: {
+            cnpj: req.tomador?.cnpj ? onlyDigits(req.tomador.cnpj) : null,
+            cpf: req.tomador?.cpf ? onlyDigits(req.tomador.cpf) : null,
+            nome: req.tomador?.nome || '',
+            endereco: req.tomador?.endereco || null,
+        },
+        servico: {
+            codigoNbs: req.servico?.codigoNbs || xmlGetFirstText(nfseXml, ['cNBS']) || '',
+            descricao: req.servico?.descricao || xmlGetFirstText(nfseXml, ['xDescServ']) || '',
+            valor: valorServico,
+            aliquotaIss: aliquota,
+            issValor,
+            issRetido,
+            municipioPrestacao: req.servico?.municipioPrestacao || xmlGetFirstText(nfseXml, ['cLocPrestacao']) || '',
+            cIndOp: req.servico?.cIndOp || '',
+            cClassTrib: req.servico?.cClassTrib || '',
+            cTribNac: req.servico?.cTribNac || xmlGetFirstText(nfseXml, ['cTribNac']) || '',
+        },
+        valores: {
+            bruto: valorServico,
+            deducoes: Number(req.servico?.deducoes || 0),
+            issRetido,
+            liquido: +(valorServico - issRetido).toFixed(2),
+        },
+        fonte: 'serpro',
+        mensagem: 'NFSe Nacional autorizada pela SEFIN Nacional.',
+        serpro: {
+            ambiente: AMBIENTE,
+            tipoAmbiente: response.tipoAmbiente || null,
+            versaoAplicativo: response.versaoAplicativo || null,
+            dataHoraProcessamento: response.dataHoraProcessamento || null,
+            alertas: response.alertas || [],
+        },
+        nfseXmlGZipB64,
+        dpsXmlGZipB64,
+    };
+}
+
+async function assinarDpsXml(xml) {
+    if (xmlHasSignature(xml)) return xml;
+    const infDpsId = xmlGetInfDpsId(xml);
+    if (!infDpsId) {
+        throw new Error('XML da DPS sem infDPS@Id. Informe uma DPS no layout oficial antes de emitir.');
+    }
+
+    const cert = await loadCertificate();
+    if (!cert.pemKey || !cert.pemCert) {
+        throw new Error('Certificado A1 sem PEM extraido. NFS-e Nacional precisa assinar XMLDSIG da DPS.');
+    }
+
+    const sig = new SignedXml({
+        privateKey: cert.pemKey,
+        publicCert: cert.pemCert,
+        signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+        canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    });
+    sig.addReference({
+        xpath: `//*[@Id="${infDpsId}"]`,
+        transforms: [
+            'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+            'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+        ],
+        digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+        uri: `#${infDpsId}`,
+    });
+
+    const certBody = cert.pemCert
+        .replace(/-----BEGIN CERTIFICATE-----/, '')
+        .replace(/-----END CERTIFICATE-----/, '')
+        .replace(/\s+/g, '');
+    sig.getKeyInfoContent = () => `<X509Data><X509Certificate>${certBody}</X509Certificate></X509Data>`;
+    sig.computeSignature(xml, {
+        location: {
+            reference: `//*[@Id="${infDpsId}"]`,
+            action: 'after',
+        },
+    });
+    return sig.getSignedXml();
+}
+
+async function prepararDpsXmlGZipB64(req) {
+    if (req.dpsXmlGZipB64) return String(req.dpsXmlGZipB64).trim();
+    const xml = String(req.dpsXmlAssinado || req.dpsXml || '').trim();
+    if (!xml) {
+        throw new Error(
+            'NFSe Nacional em modo SERPRO exige dpsXmlGZipB64, dpsXmlAssinado ou dpsXml. ' +
+            'A DPS deve seguir o layout oficial ' + NFSE_VERSAO + '.'
+        );
+    }
+    const xmlAssinado = await assinarDpsXml(xml);
+    return gzipXmlToBase64(xmlAssinado);
+}
+
+let mtlsDispatcherCache = { dispatcher: null, certVersion: null };
+async function getNfseMtlsDispatcher() {
+    const cert = await loadCertificate();
+    if (mtlsDispatcherCache.dispatcher && mtlsDispatcherCache.certVersion === cert.version) {
+        return mtlsDispatcherCache.dispatcher;
+    }
+    if (!cert.pemKey || !cert.pemCert) {
+        throw new Error('Certificado A1 ICP-Brasil obrigatório para emissão NFS-e Nacional via SEFIN.');
+    }
+    const dispatcher = new Agent({
+        connect: {
+            key: cert.pemKey,
+            cert: cert.pemCert,
+            rejectUnauthorized: true,
+        },
+    });
+    mtlsDispatcherCache = { dispatcher, certVersion: cert.version };
+    return dispatcher;
+}
+
+export class NfseNacionalApiError extends Error {
+    constructor(status, body) {
+        super(`SEFIN Nacional ${status}: ${pickMensagemErro(body)}`);
+        this.name = 'NfseNacionalApiError';
+        this.statusCode = status;
+        this.body = body;
+    }
 }
 
 // ─── MockProvider ─────────────────────────────────────────────────────────
@@ -141,17 +376,51 @@ class MockProvider {
 // ─── SerproProvider (skeleton) ────────────────────────────────────────────
 
 class SerproProvider {
-    constructor() {
-        throw new Error(
-            'NFSe Nacional em modo SERPRO ainda nao implementado. ' +
-            'Pra emitir: defina NFSE_NAC_MODE=mock pra usar o gerador local (dados ficticios), ' +
-            'OU complete a integracao com Emissor Nacional NFSe (gov.br/nfse, gratuito) — ' +
-            'pre-requisitos: certificado e-CNPJ A1 da SP Contabil + cadastro no portal gov.br/nfse + ' +
-            'procuracao eletronica e-CAC ativa pra cada empresa cliente.'
-        );
+    async emitirNfse(req) {
+        const dpsXmlGZipB64 = await prepararDpsXmlGZipB64(req);
+        const dispatcher = await getNfseMtlsDispatcher();
+        const res = await fetch(`${BASE_URL}/nfse`, {
+            method: 'POST',
+            dispatcher,
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dpsXmlGZipB64 }),
+        });
+        const text = await res.text().catch(() => '');
+        const body = parseJsonOrText(text);
+        if (!res.ok) throw new NfseNacionalApiError(res.status, body);
+        return normalizarNfseSerpro(req, body, dpsXmlGZipB64);
     }
-    async emitirNfse() { throw new Error('SerproProvider.emitirNfse nao implementado'); }
-    async cancelarNfse() { throw new Error('SerproProvider.cancelarNfse nao implementado'); }
+
+    async cancelarNfse(req) {
+        if (!req?.pedidoRegistroEventoXmlGZipB64) {
+            throw new Error(
+                'Cancelamento SERPRO exige pedidoRegistroEventoXmlGZipB64 no layout oficial de evento. ' +
+                'A emissao esta liberada; cancelamento real fica condicionado ao XML do evento.'
+            );
+        }
+        const chave = onlyDigits(req.chave);
+        if (chave.length !== 50) throw new Error('chave obrigatoria com 50 digitos');
+        const dispatcher = await getNfseMtlsDispatcher();
+        const res = await fetch(`${BASE_URL}/nfse/${chave}/eventos`, {
+            method: 'POST',
+            dispatcher,
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pedidoRegistroEventoXmlGZipB64: req.pedidoRegistroEventoXmlGZipB64 }),
+        });
+        const text = await res.text().catch(() => '');
+        const body = parseJsonOrText(text);
+        if (!res.ok) throw new NfseNacionalApiError(res.status, body);
+        return {
+            ok: true,
+            chave,
+            motivo: req.motivo || 'cancelamento via evento SEFIN Nacional',
+            canceladaEm: body?.dataHoraProcessamento || new Date().toISOString(),
+            fonte: 'serpro',
+            serpro: body,
+        };
+    }
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────
@@ -163,6 +432,35 @@ export function getNfseNacionalProvider() {
     return providerInstance;
 }
 export function getNfseNacionalMode() { return MODE; }
+
+export function getNfseNacionalCapabilities() {
+    return {
+        mode: MODE,
+        ok: true,
+        ambiente: AMBIENTE,
+        layoutVersion: NFSE_VERSAO,
+        baseUrl: MODE === 'serpro' ? BASE_URL : null,
+        emitir: {
+            available: true,
+            provider: MODE === 'serpro' ? 'sefin-nacional' : 'mock',
+            requiresDpsXml: MODE === 'serpro',
+            accepts: MODE === 'serpro' ? ['dpsXmlGZipB64', 'dpsXmlAssinado', 'dpsXml'] : ['formulario'],
+        },
+        cancelar: {
+            available: MODE === 'mock',
+            provider: MODE === 'serpro' ? 'sefin-nacional-eventos' : 'mock',
+            requiresPedidoRegistroEventoXmlGZipB64: MODE === 'serpro',
+        },
+    };
+}
+
+export const __testables = {
+    gzipXmlToBase64,
+    gunzipBase64ToText,
+    normalizarNfseSerpro,
+    prepararDpsXmlGZipB64,
+    xmlGetInfDpsId,
+};
 
 // ─── NBS — Nomenclatura Brasileira de Servicos (subset inicial) ───────────
 //

@@ -2,7 +2,7 @@
  * services/nfseNacionalService.ts
  * Cliente HTTP pra /api/admin/nfse-nacional.
  */
-import type { User, NfseNacionalEmitida, NfseNacResumo, NfseNacStatus, NbsCodigo } from '../types';
+import type { User, NfseNacionalEmitida, NfseNacResumo, NfseNacRuntimeStatus, NfseNacStatus, NbsCodigo } from '../types';
 
 import { getAuth } from 'firebase/auth';
 
@@ -21,6 +21,12 @@ async function authHeaders(_user: User | null): Promise<Record<string, string>> 
 export async function getResumoNfse(user: User | null): Promise<NfseNacResumo> {
     const res = await fetch(`${BASE}/resumo`, { headers: await authHeaders(user) });
     if (!res.ok) throw new Error(`getResumoNfse: ${res.status}`);
+    return res.json();
+}
+
+export async function getNfseNacionalStatus(): Promise<NfseNacRuntimeStatus> {
+    const res = await fetch(`${BASE}/status`);
+    if (!res.ok) throw new Error(`getNfseNacionalStatus: ${res.status}`);
     return res.json();
 }
 
@@ -58,8 +64,12 @@ export interface EmitirNfseRequest {
         municipioPrestacao?: string;
         cIndOp?: string;
         cClassTrib?: string;
+        cTribNac?: string;
     };
     dataEmissao?: string;
+    dpsXml?: string;
+    dpsXmlAssinado?: string;
+    dpsXmlGZipB64?: string;
 }
 
 export async function emitirNfse(user: User | null, payload: EmitirNfseRequest): Promise<NfseNacionalEmitida> {
@@ -70,7 +80,7 @@ export async function emitirNfse(user: User | null, payload: EmitirNfseRequest):
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || `emitirNfse: ${res.status}`);
+        throw new Error(err.error || err.body?.message || `emitirNfse: ${res.status}`);
     }
     return res.json();
 }
@@ -81,7 +91,10 @@ export async function cancelarNfse(user: User | null, chave: string, motivo?: st
         headers: await authHeaders(user),
         body: JSON.stringify({ chave, motivo }),
     });
-    if (!res.ok) throw new Error(`cancelarNfse: ${res.status}`);
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `cancelarNfse: ${res.status}`);
+    }
     return res.json();
 }
 

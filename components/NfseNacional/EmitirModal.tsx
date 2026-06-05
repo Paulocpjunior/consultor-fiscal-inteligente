@@ -3,8 +3,8 @@
  * Modal pra emitir NFS-e Nacional a partir da tela de empresa Simples.
  */
 import React, { useEffect, useState } from 'react';
-import type { User, SimplesNacionalEmpresa, NbsCodigo } from '../../types';
-import { emitirNfse, getNbsCodigos, formatBRL } from '../../services/nfseNacionalService';
+import type { User, SimplesNacionalEmpresa, NbsCodigo, NfseNacRuntimeStatus } from '../../types';
+import { emitirNfse, getNbsCodigos, getNfseNacionalStatus, formatBRL } from '../../services/nfseNacionalService';
 
 interface Props {
     empresa: SimplesNacionalEmpresa;
@@ -15,6 +15,7 @@ interface Props {
 
 const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToast }) => {
     const [nbsCodigos, setNbsCodigos] = useState<NbsCodigo[]>([]);
+    const [runtimeStatus, setRuntimeStatus] = useState<NfseNacRuntimeStatus | null>(null);
     const [emitindo, setEmitindo] = useState(false);
 
     // Form
@@ -28,9 +29,11 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
     const [issRetido, setIssRetido] = useState(false);
     const [cIndOp, setCIndOp] = useState('050201');
     const [cClassTrib, setCClassTrib] = useState('00000000');
+    const [dpsXml, setDpsXml] = useState('');
 
     useEffect(() => {
         getNbsCodigos().then(setNbsCodigos).catch(() => {});
+        getNfseNacionalStatus().then(setRuntimeStatus).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -47,11 +50,16 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
     const issCalculado = +(valorNum * aliquotaNum / 100).toFixed(2);
     const issRetidoValor = issRetido ? issCalculado : 0;
     const liquido = +(valorNum - issRetidoValor).toFixed(2);
+    const isSerpro = runtimeStatus?.mode === 'serpro';
+    const dpsXmlObrigatorio = isSerpro && runtimeStatus?.emitir?.requiresDpsXml;
 
     const handleEmitir = async () => {
         if (!tomadorDoc || !tomadorNome) return onShowToast('Preencha CNPJ/CPF e nome do tomador');
         if (!descricao) return onShowToast('Preencha a descrição do serviço');
         if (valorNum <= 0) return onShowToast('Valor deve ser maior que zero');
+        if (dpsXmlObrigatorio && !dpsXml.trim()) {
+            return onShowToast('Informe o XML da DPS para emissão SERPRO.');
+        }
 
         // Validacao fiscal de aliquota ISS (LC 116/03 art. 8º II + EC 37/02 art. 88)
         if (aliquotaNum > 5) {
@@ -88,6 +96,7 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                     cIndOp,
                     cClassTrib,
                 },
+                ...(dpsXml.trim() ? { dpsXml: dpsXml.trim() } : {}),
             });
             onShowToast(`NFSe Nº ${r.numero} emitida com sucesso!`);
             onClose();
@@ -189,6 +198,23 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                         )}
                     </div>
 
+                    {isSerpro && (
+                        <div>
+                            <label className="text-xs text-slate-500 block mb-1">DPS XML</label>
+                            <textarea
+                                value={dpsXml}
+                                onChange={e => setDpsXml(e.target.value)}
+                                placeholder="<DPS versao=&quot;1.01&quot; xmlns=&quot;http://www.sped.fazenda.gov.br/nfse&quot;>..."
+                                rows={6}
+                                spellCheck={false}
+                                className="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-mono resize-none"
+                            />
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                                Em SERPRO, o backend assina a DPS com o certificado A1 se o XML ainda não tiver Signature.
+                            </div>
+                        </div>
+                    )}
+
                     {/* Valores */}
                     <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -249,7 +275,7 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                     </button>
                     <button
                         onClick={handleEmitir}
-                        disabled={emitindo || valorNum <= 0 || !tomadorDoc || !tomadorNome || !descricao}
+                        disabled={emitindo || valorNum <= 0 || !tomadorDoc || !tomadorNome || !descricao || (dpsXmlObrigatorio && !dpsXml.trim())}
                         className="btn-press px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 disabled:opacity-50"
                     >
                         {emitindo ? '⏳ Emitindo...' : '📑 Emitir NFSe'}

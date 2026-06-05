@@ -723,6 +723,15 @@ export interface NfseNacionalEmitida {
     fonte?: string;
     modeUsado: 'mock' | 'serpro';
     mensagem?: string;
+    nfseXmlGZipB64?: string;
+    dpsXmlGZipB64?: string;
+    serpro?: {
+        ambiente?: 'producao' | 'restrita';
+        tipoAmbiente?: number | null;
+        versaoAplicativo?: string | null;
+        dataHoraProcessamento?: string | null;
+        alertas?: any[];
+    };
 }
 
 export interface NfseNacResumo {
@@ -732,6 +741,25 @@ export interface NfseNacResumo {
     valorBrutoTotal: number;
     valorIssTotal: number;
     mode: 'mock' | 'serpro';
+}
+
+export interface NfseNacRuntimeStatus {
+    ok: boolean;
+    mode: 'mock' | 'serpro';
+    ambiente?: 'producao' | 'restrita';
+    layoutVersion?: string;
+    baseUrl?: string | null;
+    emitir: {
+        available: boolean;
+        provider: 'mock' | 'sefin-nacional';
+        requiresDpsXml: boolean;
+        accepts: string[];
+    };
+    cancelar: {
+        available: boolean;
+        provider: 'mock' | 'sefin-nacional-eventos';
+        requiresPedidoRegistroEventoXmlGZipB64?: boolean;
+    };
 }
 
 export interface NbsCodigo {
