@@ -1,60 +1,61 @@
 // ============================================================================
 // dctfweb-retencao-normalizer.js  (PURO — sem io/firebase, testavel)
 //
-// Normaliza a RETENCAO consolidada na DCTFWeb (Geral Mensal) num shape estavel
-// { retencoes: {INSS, IRRF, CSLL, PIS, COFINS}, ... } pra cruzar contra a
-// EFD-Reinf (que ALIMENTA a DCTFWeb). Divergencia = evento Reinf que nao chegou.
+// Normaliza a RETENCAO consolidada na DCTFWeb (Geral Mensal) pra cruzar contra
+// a EFD-Reinf (que ALIMENTA a DCTFWeb). Divergencia = evento Reinf que nao
+// chegou na DCTFWeb -> debito a menor (risco).
 //
-// HONESTIDADE sobre o shape (mesma postura do dctfweb-mit-normalizer):
-//   O SERPRO entrega a declaracao DCTFWeb via CONSXMLDECLARACAO como XML. NAO
-//   temos um XML real DESSE servico em maos pra fixar os nomes EXATOS das tags
-//   de retencao. Por isso este normalizador e DEFENSIVO:
-//     - aceita XML (string) OU objeto ja parseado;
-//     - soma SO tags de uma ALLOWLIST de retencao (nunca inventa valor);
-//     - reporta `camposUsados` (transparencia: o que de fato somou);
-//     - se NAO achar nenhuma tag de retencao conhecida, retorna { lido:false,
-//       motivo } — NUNCA zeros falsos (que virariam divergencia fake).
-//   O serpro-smoke (CONSXMLDECLARACAO) captura o XML real pra confirmar/ampliar
-//   a allowlist. Calibrado = quando bater contra arquivo real.
+// CALIBRADO contra XML REAL do CONSXMLDECLARACAO (XMLSaida_..._042026_40.xml),
+// mesmo contribuinte/competencia do R-2010 real. Estrutura confirmada:
 //
-// Namespace-agnostico: varre por localName. Funciona com ns default OU prefixo.
+//   ProcDctf > ConteudoDeclaracao > DctfXml > A000... > A050-CreditosTributarios
+//     CreditoTributarioApurado (repete):
+//       <codReceita>116201</codReceita>
+//       <ctDescricaoTributo>CP PATRONAL - RETENCAO LEI 9.711/98</ctDescricaoTributo>
+//       <ctValor>523.95</ctValor>          (ponto decimal, nao virgula)
+//       <ctCnpj>03222111000130</ctCnpj>     (prestador — so em retencao de fonte)
+//       <saldoaPagar>523.95</saldoaPagar>
+//
+// O R-2010 (INSS 523,95 do prestador 03222111000130) cai aqui como receita
+// 116201 com o MESMO ctCnpj e MESMO valor — esse e o ponto de cruzamento.
+//
+// FAMILIAS de retencao (so as oriundas da EFD-Reinf):
+//   INSS  (R-2010/2020) -> cod 1162  "CP PATRONAL - RETENCAO LEI 9.711/98"
+//   IRRF  (R-4010/4020) -> cod 1708  "IRRF - REMUNER SERV PRESTADOS POR PJ"
+//   CSRF  (R-4020)      -> cod 5952  "RET CONTRIB PJ A PJ" (CSLL+PIS+COFINS 4,65%)
+//                         + 5987/5979/5960 (CSLL/PIS/COFINS retidos individuais)
+// EXCLUI debitos proprios (patronal/segurados/terceiros) e IRRF de FOLHA
+// (cod 5610) — NAO sao retencao de fonte da Reinf.
+//
+// Honesto: se nao achar nenhuma linha de retencao, retorna { lido:false,
+// motivo } — nunca zeros falsos.
 // ============================================================================
 
 import { DOMParser } from '@xmldom/xmldom';
 
-// Allowlist de tags de retencao -> familia. Nomes vindos do dominio EFD-Reinf/
-// DCTFWeb (a DCTFWeb ingere os mesmos campos da Reinf). Conservador: so o que
-// e claramente "valor retido". Ampliar com base no XML real do serpro-smoke.
-const TAG_FAMILIA = {
-    // INSS (previdenciaria) — R-2010/R-2020 consolidados
-    vlrtotalretprinc: 'INSS',
-    vlrtotalretadic: 'INSS',
-    vlrretprinc: 'INSS',
-    vlrretadic: 'INSS',
-    inssretido: 'INSS',
-    valorretidoinss: 'INSS',
-    vlrcpretido: 'INSS',
-    // IRRF / IR retido (serie R-4000)
-    valorretidoir: 'IRRF',
-    vlrirrf: 'IRRF',
-    vlrretidoir: 'IRRF',
-    // CSLL retida
-    valorretidocsll: 'CSLL',
-    vlrretidocsll: 'CSLL',
-    // PIS retido
-    valorretidopis: 'PIS',
-    vlrretidopis: 'PIS',
-    // COFINS retida
-    valorretidocofins: 'COFINS',
-    vlrretidocofins: 'COFINS',
+// codReceita (raiz = 4 primeiros digitos) -> familia de retencao da Reinf.
+const RECEITA_RAIZ_FAMILIA = {
+    '1162': 'INSS',
+    '1708': 'IRRF',
+    '5952': 'CSRF',
+    '5987': 'CSRF', // CSLL retida PJ
+    '5979': 'CSRF', // PIS retido PJ
+    '5960': 'CSRF', // COFINS retida PJ
 };
 
-const FAMILIAS = ['INSS', 'IRRF', 'CSLL', 'PIS', 'COFINS'];
+const FAMILIAS = ['INSS', 'IRRF', 'CSRF'];
+
+function familiaPorReceita(cod) {
+    const c = String(cod || '').replace(/\D/g, '');
+    if (c.length < 4) return null;
+    return RECEITA_RAIZ_FAMILIA[c.slice(0, 4)] || null;
+}
 
 function num(v) {
     if (v == null || v === '') return 0;
     if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
     let s = String(v).trim();
+    // DCTFWeb usa ponto decimal ("523.95"); tolera tambem BR ("1.234,56").
     if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
     const n = parseFloat(s.replace(/[^\d.\-]/g, ''));
     return Number.isFinite(n) ? n : 0;
@@ -62,92 +63,105 @@ function num(v) {
 const r2 = (n) => Math.round(n * 100) / 100;
 
 function localName(node) {
-    return (node.localName || String(node.nodeName || '').replace(/^.*:/, '')).toLowerCase();
+    return (node.localName || String(node.nodeName || '').replace(/^.*:/, ''));
+}
+function childText(el, tag) {
+    const all = el.getElementsByTagName('*');
+    for (let i = 0; i < all.length; i++) {
+        if (localName(all[i]) === tag) {
+            return String(all[i].textContent || '').trim();
+        }
+    }
+    return '';
 }
 
-// Coleta pares { tag(lowercase) -> [valoresTexto] } de todo o XML.
-function coletarTagsXml(xml) {
+// Extrai a lista de creditos de um XML (string) OU de um objeto (provider).
+function extrairCreditos(entrada) {
+    // provider devolve { xml, ... }
+    if (entrada && typeof entrada === 'object' && typeof entrada.xml === 'string') {
+        return extrairCreditos(entrada.xml);
+    }
+    if (typeof entrada !== 'string') return null; // shape nao suportado
     let doc;
     try {
-        doc = new DOMParser({ onError: () => {} }).parseFromString(String(xml || ''), 'text/xml');
+        doc = new DOMParser({ errorHandler: () => {} }).parseFromString(entrada, 'text/xml');
     } catch {
         return null;
     }
     if (!doc || !doc.documentElement) return null;
-    const out = [];
-    const fila = [doc.documentElement];
-    while (fila.length) {
-        const n = fila.shift();
-        const filhos = Array.from(n.childNodes || []).filter((c) => c.nodeType === 1);
-        // folha com texto: candidata a valor
-        if (filhos.length === 0) {
-            const txt = String(n.textContent || '').trim();
-            if (txt) out.push({ tag: localName(n), valor: txt });
-        }
-        fila.push(...filhos);
+    const all = doc.getElementsByTagName('*');
+    const creditos = [];
+    for (let i = 0; i < all.length; i++) {
+        if (localName(all[i]) !== 'CreditoTributarioApurado') continue;
+        const el = all[i];
+        creditos.push({
+            codReceita: childText(el, 'codReceita'),
+            descricao: childText(el, 'ctDescricaoTributo'),
+            grupo: childText(el, 'ctDescGrupo'),
+            ctCnpj: childText(el, 'ctCnpj'),
+            ctValor: childText(el, 'ctValor'),
+            saldoaPagar: childText(el, 'saldoaPagar'),
+        });
     }
-    return out;
-}
-
-// Coleta pares de um objeto JS (caso o provider ja devolva estrutura).
-function coletarTagsObj(obj, acc = []) {
-    if (!obj || typeof obj !== 'object') return acc;
-    for (const [k, v] of Object.entries(obj)) {
-        if (v && typeof v === 'object') coletarTagsObj(v, acc);
-        else if (v != null && v !== '') acc.push({ tag: String(k).toLowerCase(), valor: v });
-    }
-    return acc;
+    return creditos;
 }
 
 /**
- * @param {string|object} entrada  XML (CONSXMLDECLARACAO) ou objeto parseado.
+ * @param {string|object} entrada  XML do CONSXMLDECLARACAO ou { xml }.
  * @returns {{
  *   lido: boolean, motivo: string|null,
- *   retencoes: {INSS:number,IRRF:number,CSLL:number,PIS:number,COFINS:number},
- *   camposUsados: Array<{tag:string, familia:string, valor:number}>,
+ *   retencoes: {INSS:number, IRRF:number, CSRF:number},
+ *   detalhes: Array<{codReceita:string, familia:string, descricao:string, ctCnpj:string, valor:number}>,
+ *   ignorados: number,            // linhas que NAO sao retencao Reinf (debitos proprios)
  *   totalReconhecido: number
  * }}
  */
 export function normalizarRetencaoDctfweb(entrada) {
-    const vazio = { INSS: 0, IRRF: 0, CSLL: 0, PIS: 0, COFINS: 0 };
+    const vazio = { INSS: 0, IRRF: 0, CSRF: 0 };
     if (entrada == null || entrada === '') {
-        return { lido: false, motivo: 'Declaracao DCTFWeb ausente.', retencoes: { ...vazio }, camposUsados: [], totalReconhecido: 0 };
+        return naoLido('Declaracao DCTFWeb ausente.');
     }
-
-    let pares = null;
-    if (typeof entrada === 'string') {
-        pares = coletarTagsXml(entrada);
-        if (pares == null) {
-            return { lido: false, motivo: 'XML da declaracao DCTFWeb ilegivel.', retencoes: { ...vazio }, camposUsados: [], totalReconhecido: 0 };
-        }
-    } else {
-        pares = coletarTagsObj(entrada);
+    const creditos = extrairCreditos(entrada);
+    if (creditos == null) {
+        return naoLido('XML da declaracao DCTFWeb ilegivel ou shape nao suportado.');
+    }
+    if (creditos.length === 0) {
+        return naoLido('Nenhum CreditoTributarioApurado na declaracao DCTFWeb. '
+            + 'Shape diferente do esperado — rode o serpro-smoke (CONSXMLDECLARACAO).');
     }
 
     const retencoes = { ...vazio };
-    const camposUsados = [];
+    const detalhes = [];
     let total = 0;
+    let ignorados = 0;
 
-    for (const { tag, valor } of pares) {
-        const familia = TAG_FAMILIA[tag];
-        if (!familia) continue;
-        const v = num(valor);
-        if (!v) continue;
-        retencoes[familia] = r2(retencoes[familia] + v);
-        total = r2(total + v);
-        camposUsados.push({ tag, familia, valor: v });
+    for (const c of creditos) {
+        const familia = familiaPorReceita(c.codReceita);
+        if (!familia) { ignorados++; continue; }
+        const valor = num(c.ctValor);
+        if (!valor) { ignorados++; continue; }
+        retencoes[familia] = r2(retencoes[familia] + valor);
+        total = r2(total + valor);
+        detalhes.push({
+            codReceita: c.codReceita, familia,
+            descricao: c.descricao, ctCnpj: c.ctCnpj, valor,
+        });
     }
 
-    if (camposUsados.length === 0) {
+    if (detalhes.length === 0) {
+        // Tem creditos, mas nenhum e retencao Reinf (so debitos proprios). Isso e
+        // um resultado VALIDO e honesto: a DCTFWeb existe e nao tem retencao.
         return {
-            lido: false,
-            motivo: 'Nenhuma tag de retencao reconhecida na declaracao DCTFWeb. '
-                + 'Shape diferente do esperado — rode o serpro-smoke (CONSXMLDECLARACAO) e amplie a allowlist.',
-            retencoes: { ...vazio }, camposUsados: [], totalReconhecido: 0,
+            lido: true, motivo: null,
+            retencoes: { ...vazio }, detalhes: [], ignorados, totalReconhecido: 0,
         };
     }
 
-    return { lido: true, motivo: null, retencoes, camposUsados, totalReconhecido: total };
+    return { lido: true, motivo: null, retencoes, detalhes, ignorados, totalReconhecido: total };
+
+    function naoLido(motivo) {
+        return { lido: false, motivo, retencoes: { ...vazio }, detalhes: [], ignorados: 0, totalReconhecido: 0 };
+    }
 }
 
-export const _internals = { num, TAG_FAMILIA, FAMILIAS };
+export const _internals = { num, familiaPorReceita, RECEITA_RAIZ_FAMILIA, FAMILIAS };

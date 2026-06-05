@@ -9,14 +9,18 @@ import {
     type RetencoesPorFamilia,
 } from '../services/efdReinfConference';
 
-const zero: RetencoesPorFamilia = { INSS: 0, IRRF: 0, CSLL: 0, PIS: 0, COFINS: 0 };
+const zero: RetencoesPorFamilia = { INSS: 0, IRRF: 0, CSRF: 0 };
 
 describe('extrairRetencoesReinf — mapeia totais do parser p/ famílias', () => {
-    it('soma INSS principal + adicional; demais 0 (não calibrado)', () => {
+    it('soma INSS principal + adicional; CSRF agrega CSLL+PIS+COFINS', () => {
         const r = extrairRetencoesReinf({ inssRetPrinc: 523.95, inssRetAdic: 10.00 });
         expect(r.INSS).toBe(533.95);
         expect(r.IRRF).toBe(0);
-        expect(r.CSLL).toBe(0);
+        expect(r.CSRF).toBe(0);
+    });
+    it('CSRF = CSLL + PIS + COFINS', () => {
+        const r = extrairRetencoesReinf({ csll: 134.00, pis: 87.10, cofins: 401.85 });
+        expect(r.CSRF).toBe(622.95);
     });
     it('totais nulos -> tudo 0', () => {
         expect(extrairRetencoesReinf(null)).toEqual(zero);
@@ -29,7 +33,7 @@ describe('cruzarRetencoes — casos centrais', () => {
         const dctf = { ...zero, INSS: 523.95 };
         const r = cruzarRetencoes(reinf, dctf, '2026-04');
         expect(r.temDivergencia).toBe(false);
-        expect(r.resumo.ok).toBe(5);
+        expect(r.resumo.ok).toBe(3);
         expect(r.divergencias.find((d) => d.familia === 'INSS')!.status).toBe('ok');
     });
 
@@ -62,10 +66,15 @@ describe('cruzarRetencoes — casos centrais', () => {
         expect(inss.severidade).toBe('alta');
     });
 
-    it('tudo zero -> 5 famílias ok, sem divergência fake', () => {
+    it('tudo zero -> 3 famílias ok, sem divergência fake', () => {
         const r = cruzarRetencoes(zero, zero, '2026-04');
-        expect(r.resumo.ok).toBe(5);
+        expect(r.resumo.ok).toBe(3);
         expect(r.temDivergencia).toBe(false);
         expect(r.totalReinf).toBe(0);
+    });
+
+    it('CSRF cruza igual às demais famílias', () => {
+        const r = cruzarRetencoes({ ...zero, CSRF: 621.29 }, { ...zero, CSRF: 621.29 }, '2026-04');
+        expect(r.divergencias.find((d) => d.familia === 'CSRF')!.status).toBe('ok');
     });
 });

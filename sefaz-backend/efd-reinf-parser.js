@@ -189,7 +189,7 @@ export function parseEventoReinf(xml) {
     const observacoes = [];
     let doc;
     try {
-        doc = new DOMParser({ onError: () => {} }).parseFromString(String(xml || ''), 'text/xml');
+        doc = new DOMParser({ errorHandler: () => {} }).parseFromString(String(xml || ''), 'text/xml');
     } catch (e) {
         return erro('XML ilegivel: ' + e.message);
     }

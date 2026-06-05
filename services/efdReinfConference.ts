@@ -8,17 +8,21 @@
  * transmitido/processado, a retenção declarada não vira débito na DCTFWeb →
  * recolhimento a menor (risco). O cruzamento por FAMÍLIA de retenção pega isso.
  *
+ * Famílias = como a DCTFWeb consolida (calibrado contra CONSXMLDECLARACAO real):
+ *   INSS (cod 1162, Reinf R-2010/2020), IRRF (cod 1708, R-4010/4020) e
+ *   CSRF (cod 5952 — CSLL+PIS+COFINS combinados 4,65%, R-4020).
+ *
  * HONESTIDADE de cobertura: hoje só o INSS (R-2010 — serviços tomados) é
- * extraído de arquivo real e populado de fato. IRRF/CSLL/PIS/COFINS (série
- * R-4000) entram no shape para quando calibrarmos os eventos R-4010/4020/...;
- * até lá ficam 0 dos dois lados (cruzar 0×0 = 'ok', não gera divergência fake).
+ * extraído de arquivo real do lado da Reinf. IRRF/CSRF entram no shape para
+ * quando calibrarmos os eventos R-4010/4020; até lá ficam 0 do lado Reinf
+ * (cruzar contra o débito DCTFWeb vira 'sem-reinf', não divergência fake).
  *
  * O lado DCTFWeb desta conferência é preenchido pelo orquestrador (que consulta
  * a DCTFWeb real). Aqui só cruzamos os dois lados já normalizados.
  */
 
-export type RetencaoFamilia = 'INSS' | 'IRRF' | 'CSLL' | 'PIS' | 'COFINS';
-export const RETENCAO_FAMILIAS: RetencaoFamilia[] = ['INSS', 'IRRF', 'CSLL', 'PIS', 'COFINS'];
+export type RetencaoFamilia = 'INSS' | 'IRRF' | 'CSRF';
+export const RETENCAO_FAMILIAS: RetencaoFamilia[] = ['INSS', 'IRRF', 'CSRF'];
 
 export type DivergenciaSeveridade = 'ok' | 'baixa' | 'media' | 'alta';
 export type DivergenciaStatus =
@@ -30,9 +34,7 @@ export type DivergenciaStatus =
 export interface RetencoesPorFamilia {
     INSS: number;
     IRRF: number;
-    CSLL: number;
-    PIS: number;
-    COFINS: number;
+    CSRF: number;
 }
 
 export interface DivergenciaRetencao {
@@ -58,7 +60,8 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Converte o `totais` do consolidarReinf (parser .js) para o shape de famílias
- * de retenção desta conferência. Só o INSS vem populado hoje (R-2010).
+ * de retenção desta conferência. Só o INSS vem populado hoje (R-2010); CSRF
+ * agrega CSLL+PIS+COFINS (como a DCTFWeb consolida via cod 5952).
  */
 export function extrairRetencoesReinf(totais: {
     inssRetPrinc?: number; inssRetAdic?: number;
@@ -68,9 +71,7 @@ export function extrairRetencoesReinf(totais: {
     return {
         INSS: round2((t.inssRetPrinc || 0) + (t.inssRetAdic || 0)),
         IRRF: round2(t.irrf || 0),
-        CSLL: round2(t.csll || 0),
-        PIS: round2(t.pis || 0),
-        COFINS: round2(t.cofins || 0),
+        CSRF: round2((t.csll || 0) + (t.pis || 0) + (t.cofins || 0)),
     };
 }
 

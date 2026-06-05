@@ -124,14 +124,26 @@ class MockProvider {
     }
 
     async consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' } = {}) {
+        const cnpj = String(empresaCnpj || '').replace(/\D/g, '');
         const seed = hashCnpj(empresaCnpj);
-        const inss = (500 + (seed % 2000)).toFixed(2).replace('.', ',');
-        // XML minimo no shape DCTFWeb (Geral Mensal) com retencao previdenciaria.
-        const xml = `<?xml version="1.0" encoding="UTF-8"?>`
-            + `<dctfweb><identificacao><categoria>${categoria}</categoria>`
-            + `<anoPA>${anoPA}</anoPA><mesPA>${mesPA}</mesPA></identificacao>`
-            + `<apuracao><retencoes><vlrTotalRetPrinc>${inss}</vlrTotalRetPrinc>`
-            + `<vlrTotalRetAdic>0,00</vlrTotalRetAdic></retencoes></apuracao></dctfweb>`;
+        const inss = (500 + (seed % 2000)).toFixed(2); // ponto decimal (igual real)
+        // XML no shape REAL do CONSXMLDECLARACAO (ProcDctf > CreditoTributarioApurado).
+        // Inclui 1 retencao Reinf (INSS 1162) + 1 debito proprio (patronal 1138,
+        // que o normalizador deve IGNORAR) — exercita o filtro por codReceita.
+        const xml = `<?xml version="1.0" encoding="utf-8"?>`
+            + `<ProcDctf xmlns="http://www.serpro.gov.br/dctf/v1"><ConteudoDeclaracao>`
+            + `<DctfXml versao="3.0"><A000-DadosIdentificadoresContribuinte>`
+            + `<inscContrib>${cnpj}</inscContrib><perApuracao>${String(mesPA).padStart(2,'0')}${anoPA}</perApuracao>`
+            + `<categoriaDCTF>40</categoriaDCTF><A050-CreditosTributariosApurados>`
+            + `<CreditoTributarioApurado><codReceita>113801</codReceita>`
+            + `<ctDescricaoTributo>CP PATRONAL - EMPREGADOS/AVULSOS</ctDescricaoTributo>`
+            + `<ctValor>1000.00</ctValor><saldoaPagar>1000.00</saldoaPagar></CreditoTributarioApurado>`
+            + `<CreditoTributarioApurado><codReceita>116201</codReceita>`
+            + `<ctDescricaoTributo>CP PATRONAL - RETENCAO LEI 9.711/98</ctDescricaoTributo>`
+            + `<ctValor>${inss}</ctValor><ctCnpj>03222111000130</ctCnpj>`
+            + `<saldoaPagar>${inss}</saldoaPagar></CreditoTributarioApurado>`
+            + `</A050-CreditosTributariosApurados></A000-DadosIdentificadoresContribuinte>`
+            + `</DctfXml></ConteudoDeclaracao></ProcDctf>`;
         return { xml, categoria, anoPA, mesPA, fonte: 'mock' };
     }
 
