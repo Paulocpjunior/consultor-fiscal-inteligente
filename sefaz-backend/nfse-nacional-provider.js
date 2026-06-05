@@ -7,17 +7,31 @@
 //   Toda ME/EPP do Simples prestadora de servicos OBRIGADA a usar.
 //
 // Modos:
-//   - 'mock'   (default): emite NFSe ficticia com numero + chave + DPS
-//   - 'serpro' (futuro):  Emissor Nacional NFS-e via API
-//                         https://www.gov.br/nfse (gratuito)
+//   - 'mock'   : gera NFSe ficticia local (sem chamar gov.br)
+//   - 'real'   : Emissor Nacional NFS-e via SEFIN (https://sefin.nfse.gov.br),
+//                mTLS com cert ICP-Brasil do prestador, DPS XML+XMLDSig
+//                +gzip+base64 dentro de envelope JSON. Manual v1.2 out/2025.
+//                Subflag NFSE_NAC_EMISSAO_AMB=homologacao|producao (default
+//                homologacao — producao restrita primeiro).
+//                Subflag NFSE_NAC_EMISSAO_DRY_RUN=1 monta tudo mas NAO envia.
 //
-// Estrutura simplificada — versao base; cancelamento/eventos/contingencia
-// virao em iteracoes futuras.
+// Note: nome 'serpro' antigo era enganoso — emissao NFS-e Nacional NAO usa
+// Integra Contador SERPRO; vai DIRETO no Sistema Nacional NFS-e (gov.br/nfse,
+// gratuito). Mantido 'serpro' como alias por compatibilidade de env var.
 // ============================================================================
 
-// Default 'serpro' (REAL). 'mock' só com NFSE_NAC_MODE=mock explícito (dev local).
-// Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
-const MODE = process.env.NFSE_NAC_MODE || 'serpro';
+import { buildDpsXml } from './nfse-nacional-dps-builder.js';
+import { assinarDpsXml } from './nfse-nacional-dps-signer.js';
+import {
+    emitirDps,
+    carregarCertPrestador,
+    getEmissaoAmbiente,
+} from './nfse-nacional-emissao-client.js';
+
+// Default 'real' (Emissor Nacional). 'mock' so com NFSE_NAC_MODE=mock explicito.
+// 'serpro' tratado como alias de 'real' (compat).
+const MODE_RAW = process.env.NFSE_NAC_MODE || 'real';
+const MODE = (MODE_RAW === 'serpro' || MODE_RAW === 'real') ? 'real' : 'mock';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -138,20 +152,133 @@ class MockProvider {
     }
 }
 
-// ─── SerproProvider (skeleton) ────────────────────────────────────────────
+// ─── EmissorNacionalProvider (REAL) ───────────────────────────────────────
+//
+// Implementacao real chamando SEFIN (https://sefin.nfse.gov.br/SefinNacional).
+// Pipeline: payload UI -> buildDpsXml -> assinarDpsXml -> emitirDps (mTLS).
+//
+// Pre-requisitos operacionais:
+//   1) Cert A1 ICP-Brasil do prestador cadastrado em cert-storage (por empresa).
+//   2) Empresa adesa ao Sistema Nacional NFS-e (gov.br/nfse) — operacional.
+//   3) Em modo cert do escritorio: procuracao e-CAC com escopo NFS-e Nacional.
+//   4) Para o primeiro disparo, recomenda-se NFSE_NAC_EMISSAO_DRY_RUN=1 +
+//      NFSE_NAC_EMISSAO_AMB=homologacao pra validar XML antes de queimar
+//      tentativa em producao restrita.
+//
+// Resposta esperada do SEFIN (sincrono): NFS-e completa + chave 50 digitos.
+// SE o primeiro teste real retornar erro de schema, devolver XML rejeitado +
+// msg do SEFIN pra ajuste dos campos do builder (NORMAL em integracao nova).
+class EmissorNacionalProvider {
+    async emitirNfse(req) {
+        const { empresaId, prestador, tomador, servico } = req;
+        if (!prestador?.cnpj) throw new Error('prestador.cnpj obrigatorio');
+        if (!tomador?.nome) throw new Error('tomador.nome obrigatorio');
+        if (!servico?.valor || servico.valor <= 0) throw new Error('servico.valor obrigatorio (>0)');
+        if (!servico?.descricao) throw new Error('servico.descricao obrigatoria');
 
-class SerproProvider {
-    constructor() {
+        // Validacao fiscal duplicada do MockProvider (mesmas regras valem).
+        const aliq = servico.aliquotaIss ?? 5;
+        if (aliq > 5) throw new Error(`Aliquota ISS ${aliq}% excede maximo legal de 5% (LC 116/2003 art. 8º II).`);
+        if (aliq < 0) throw new Error('Aliquota ISS nao pode ser negativa.');
+
+        const amb = getEmissaoAmbiente();
+        // 1) Builder (puro)
+        const { xml: xmlDps, idDps } = buildDpsXml({ ...req, ambiente: amb.ambiente });
+        // 2) Cert do prestador (sem fallback silencioso pro escritorio)
+        const cert = await carregarCertPrestador(empresaId, {
+            permitirEscritorio: req.permitirCertEscritorio === true,
+        });
+        // 3) Assina XMLDSig
+        const xmlAssinado = assinarDpsXml(xmlDps, idDps, cert.pemCert, cert.pemKey);
+        // 4) Envia (ou dry-run)
+        const r = await emitirDps({
+            xmlDpsAssinado: xmlAssinado,
+            cert: { pfxBuffer: cert.pfxBuffer, password: cert.password },
+        });
+
+        if (r.dryRun) {
+            return {
+                numero: null,
+                chave: null,
+                dpsRecibo: null,
+                dataEmissao: null,
+                status: 'dry-run',
+                idDps,
+                ambiente: amb.ambiente,
+                xmlDps: xmlAssinado,
+                bodyPreview: r.bodyPreview,
+                fonte: 'real-dry-run',
+                mensagem: 'NFSE_NAC_EMISSAO_DRY_RUN=1 — XML montado e assinado mas NAO enviado ao SEFIN. Inspecione xmlDps antes de remover a flag.',
+            };
+        }
+
+        if (r.statusCode >= 400) {
+            const motivo = r.body?.mensagem || r.body?.mensagens?.[0]?.descricao || r.raw?.slice(0, 500);
+            throw new Error(`SEFIN ${r.statusCode}: ${motivo}`);
+        }
+
+        const nfse = r.body || {};
+        // Manual prove a chave de 50 digitos no response. Nomes exatos sao
+        // confirmados na primeira chamada real — pegamos os mais provaveis.
+        const chave = nfse.chaveAcesso || nfse.chave || nfse.chNFSe || nfse.id || null;
+        const numero = nfse.numero || nfse.numeroNfse || nfse.nNFSe || null;
+        const dpsRecibo = nfse.dpsRecibo || nfse.nProtocolo || nfse.protocolo || null;
+
+        const valorBruto = +Number(servico.valor).toFixed(2);
+        const issValor = +(valorBruto * (aliq / 100)).toFixed(2);
+        const issRetido = servico.issRetido ? issValor : 0;
+        return {
+            numero,
+            chave,
+            dpsRecibo,
+            dataEmissao: nfse.dhEmi || nfse.dataEmissao || req.dataEmissao || new Date().toISOString(),
+            status: nfse.status || 'autorizada',
+            idDps,
+            ambiente: amb.ambiente,
+            certFonte: cert.fonte,
+            prestador: {
+                cnpj: prestador.cnpj,
+                im: prestador.im || '',
+                nome: prestador.nome || '',
+            },
+            tomador: {
+                cnpj: tomador.cnpj || null,
+                cpf: tomador.cpf || null,
+                nome: tomador.nome,
+                endereco: tomador.endereco || null,
+            },
+            servico: {
+                codigoNbs: servico.codigoNbs || '101010100',
+                descricao: servico.descricao,
+                valor: valorBruto,
+                aliquotaIss: aliq,
+                issValor,
+                issRetido,
+                municipioPrestacao: servico.municipioPrestacao || '3550308',
+                cIndOp: servico.cIndOp || '',
+                cClassTrib: servico.cClassTrib || '',
+            },
+            valores: {
+                bruto: valorBruto,
+                deducoes: 0,
+                issRetido,
+                liquido: +(valorBruto - issRetido).toFixed(2),
+            },
+            fonte: 'real',
+            _raw: nfse,
+        };
+    }
+
+    async cancelarNfse(req) {
+        // Cancelamento via POST /nfse/{chave}/eventos exige builder + signer
+        // proprio do evento (estrutura diferente do DPS). Mantido como TODO
+        // — primeira emissao real e o caminho critico (vigencia CGSN 189
+        // em 1°/set/2026). Cancelamento e fluxo mais raro.
         throw new Error(
-            'NFSe Nacional em modo SERPRO ainda nao implementado. ' +
-            'Pra emitir: defina NFSE_NAC_MODE=mock pra usar o gerador local (dados ficticios), ' +
-            'OU complete a integracao com Emissor Nacional NFSe (gov.br/nfse, gratuito) — ' +
-            'pre-requisitos: certificado e-CNPJ A1 da SP Contabil + cadastro no portal gov.br/nfse + ' +
-            'procuracao eletronica e-CAC ativa pra cada empresa cliente.'
+            'Cancelamento NFS-e Nacional via SEFIN nao implementado nesta fase. ' +
+            'Implementar buildEventoCancelamentoXml + assinar + postEvento em PR separado.'
         );
     }
-    async emitirNfse() { throw new Error('SerproProvider.emitirNfse nao implementado'); }
-    async cancelarNfse() { throw new Error('SerproProvider.cancelarNfse nao implementado'); }
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────
@@ -159,7 +286,7 @@ class SerproProvider {
 let providerInstance = null;
 export function getNfseNacionalProvider() {
     if (providerInstance) return providerInstance;
-    providerInstance = MODE === 'serpro' ? new SerproProvider() : new MockProvider();
+    providerInstance = MODE === 'real' ? new EmissorNacionalProvider() : new MockProvider();
     return providerInstance;
 }
 export function getNfseNacionalMode() { return MODE; }
