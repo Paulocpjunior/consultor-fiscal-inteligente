@@ -30,7 +30,7 @@
 // ============================================================================
 
 import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { basename, join } from 'path';
 import { tmpdir } from 'os';
 import { invokeIntegraContador, getAccessToken, getSerproConfig } from '../serpro-client.js';
 
@@ -66,6 +66,15 @@ if (pa.length !== 6) {
 
 const TS = new Date().toISOString().replace(/[:.]/g, '-');
 const OUT_DIR = join(tmpdir(), `serpro-smoke-${cnpj}-${TS}`);
+const PRINT_JSON = process.env.SERPRO_SMOKE_PRINT_JSON === '1';
+
+function printJsonPayload(file, payload) {
+    if (!PRINT_JSON) return;
+    const name = basename(file);
+    console.log(`\n---SERPRO_SMOKE_JSON_BEGIN ${name}---`);
+    console.log(JSON.stringify(payload));
+    console.log(`---SERPRO_SMOKE_JSON_END ${name}---`);
+}
 
 // ─── Servicos a chamar (so CONSULTA — nao Emite/Declara) ────────────────
 // Honestidade: NFSe Nacional nao tem integracao SERPRO ainda (so mock no
@@ -154,15 +163,17 @@ async function rodarUm(idx, svc) {
         console.log(`         ✓ ok em ${dur}ms — ${JSON.stringify(sumario)}`);
 
         const file = join(OUT_DIR, `${idx.toString().padStart(2, '0')}-${svc.idSistema}-${svc.idServico}.json`);
-        await writeFile(file, JSON.stringify({
+        const payload = {
             requisicao: {
                 idSistema: svc.idSistema, idServico: svc.idServico,
                 acao: svc.acao, contribuinteCnpj: cnpj, dados: svc.dados,
             },
             duracaoMs: dur,
             responseBruto: r,
-        }, null, 2));
+        };
+        await writeFile(file, JSON.stringify(payload, null, 2));
         console.log(`         → ${file}`);
+        printJsonPayload(file, payload);
         return { svc, ok: true, sumario, file };
     } catch (err) {
         const dur = Date.now() - inicio;
@@ -170,12 +181,14 @@ async function rodarUm(idx, svc) {
         if (err.serproBody) console.log(`         body: ${String(err.serproBody).slice(0, 500)}`);
 
         const file = join(OUT_DIR, `${idx.toString().padStart(2, '0')}-${svc.idSistema}-${svc.idServico}.ERROR.json`);
-        await writeFile(file, JSON.stringify({
+        const payload = {
             requisicao: { idSistema: svc.idSistema, idServico: svc.idServico, acao: svc.acao, contribuinteCnpj: cnpj, dados: svc.dados },
             duracaoMs: dur,
             erro: { name: err.name, message: err.message, status: err.status, body: err.serproBody },
-        }, null, 2));
+        };
+        await writeFile(file, JSON.stringify(payload, null, 2));
         console.log(`         → ${file}`);
+        printJsonPayload(file, payload);
         return { svc, ok: false, erro: err.message, file };
     }
 }
@@ -190,6 +203,10 @@ async function main() {
     console.log(`CNPJ-cliente alvo:  ${cnpj}`);
     console.log(`Periodo apuracao:   ${pa}`);
     console.log(`Diretorio output:   ${OUT_DIR}`);
+    console.log(`JSON no log:        ${PRINT_JSON ? 'SIM (SERPRO_SMOKE_PRINT_JSON=1)' : 'NAO (somente arquivos /tmp)'}`);
+    if (PRINT_JSON) {
+        console.log('ATENCAO: payloads SERPRO podem conter dados fiscais. Use logs somente para smoke controlado.');
+    }
 
     if (!cfg.dryRun && !cfg.hasCredentials) {
         console.error('\nABORTANDO: sem credenciais reais (SERPRO_CONSUMER_KEY/SECRET).');
@@ -224,6 +241,11 @@ async function main() {
     const ok = resultados.filter(r => r.ok).length;
     const erro = resultados.filter(r => !r.ok).length;
     console.log(`${ok} sucesso(s), ${erro} erro(s). Arquivos em ${OUT_DIR}`);
+    if (PRINT_JSON) {
+        console.log('JSONs tambem impressos acima entre marcadores SERPRO_SMOKE_JSON_BEGIN/END.');
+    } else {
+        console.log('Em Cloud Run Job, /tmp some ao terminar. Para capturar payload via logs, rode com SERPRO_SMOKE_PRINT_JSON=1.');
+    }
     console.log('');
     console.log('Proximo passo: envie os JSONs gerados pra mapear os parsers reais');
     console.log('(das-provider, dctfweb-provider, caixa-postal-orchestrator) sem ADIVINHAR campos.');

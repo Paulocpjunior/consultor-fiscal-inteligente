@@ -36,26 +36,45 @@ node sefaz-backend/scripts/serpro-smoke.js <cnpj-cliente> [202604]
 
 Saída: cria pasta em `/tmp/serpro-smoke-<cnpj>-<timestamp>/` com 4 JSONs (um por endpoint).
 
+Se quiser imprimir os JSONs no terminal além de gravar em `/tmp`, adicione:
+
+```bash
+export SERPRO_SMOKE_PRINT_JSON=1
+```
+
+Use isso com cuidado: os payloads podem conter dados fiscais reais.
+
 ### Opção B — Cloud Run job (sem precisar do cert local)
 
 ```bash
 # 1) Build e push (igual ao deploy normal)
-docker build -t us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/serpro-smoke .
-docker push us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/serpro-smoke
+SMOKE_TAG=$(date +%Y%m%d%H%M%S)
+SMOKE_IMAGE="us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/serpro-smoke:${SMOKE_TAG}"
+docker build -t "$SMOKE_IMAGE" .
+docker push "$SMOKE_IMAGE"
 
 # 2) Run-once (recebe envs e secrets idênticos ao deploy do app)
+gcloud run jobs delete serpro-smoke-once --region=us-west1 --quiet || true
 gcloud run jobs create serpro-smoke-once \
-  --image=...:latest \
+  --image="$SMOKE_IMAGE" \
   --region=us-west1 \
   --command=node \
   --args=sefaz-backend/scripts/serpro-smoke.js,<cnpj-cliente>,202604 \
-  --update-env-vars=SERPRO_CONTRATANTE_CNPJ=44388152000189 \
-  --update-secrets=SERPRO_CONSUMER_KEY=serpro-consumer-key:latest,SERPRO_CONSUMER_SECRET=serpro-consumer-secret:latest
+  --set-env-vars=SERPRO_CONTRATANTE_CNPJ=44388152000189,SERPRO_SMOKE_PRINT_JSON=1 \
+  --set-secrets=SERPRO_CONSUMER_KEY=serpro-consumer-key:latest,SERPRO_CONSUMER_SECRET=serpro-consumer-secret:latest
 gcloud run jobs execute serpro-smoke-once --region=us-west1
 gcloud run jobs logs read serpro-smoke-once --region=us-west1
 ```
 
-JSONs estarão no log do job (impressos via `console.log`) — copia daí.
+Com `SERPRO_SMOKE_PRINT_JSON=1`, os JSONs aparecem no log entre marcadores:
+
+```text
+---SERPRO_SMOKE_JSON_BEGIN 01-PGDASD-CONSULTIMADECREC14.json---
+{...}
+---SERPRO_SMOKE_JSON_END 01-PGDASD-CONSULTIMADECREC14.json---
+```
+
+Sem essa variável, o job grava apenas em `/tmp`, que some quando a execução termina. Garanta que a service account do job tenha acesso aos secrets `sefaz-cert-a1` e `sefaz-cert-password`, pois o OAuth mTLS usa o mesmo certificado A1 do app.
 
 ## O que o smoke chama (4 endpoints — todos consulta)
 
