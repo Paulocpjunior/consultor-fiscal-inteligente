@@ -88,7 +88,11 @@ async function listarEmpresasComCcm() {
         const snap = await db.collection(col).get();
         snap.forEach((doc) => {
             const d = doc.data();
-            const ccm = (d.ccmSp || '').toString().replace(/\D/g, '');
+            // Cadastro unico: CCM canonico em dadosFiscais.ccmSp (mesmo caminho
+            // do nfse-sp-orchestrator API). Fallback ao top-level legado.
+            // Sem isso, CCM gravada pelo modal Dados Fiscais (que so grava em
+            // dadosFiscais.ccmSp) nao era vista pelo caminho do portal headless.
+            const ccm = (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, '');
             const cnpj = (d.cnpj || '').replace(/\D/g, '');
             if (!ccm || cnpj.length !== 14) return;
             if (mapa.has(ccm)) return;
