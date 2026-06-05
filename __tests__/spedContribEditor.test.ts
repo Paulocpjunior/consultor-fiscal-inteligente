@@ -49,12 +49,17 @@ describe('EFD Contribuicoes — deteccao + layout', () => {
         expect(r.resumo.tipoSped).toBe('contribuicoes');
     });
 
-    it('C170 usa layout de contribuicoes (CST_PIS/CST_COFINS, sem CFOP)', () => {
+    it('C170 contribuicoes = Fiscal sem VL_ABAT_NT (36 campos, CST_PIS/COFINS + CFOP)', () => {
+        // VALIDADO contra arquivo real: o C170 do EFD Contribuicoes carrega os
+        // mesmos campos de ICMS do Fiscal (CFOP, CST_ICMS) + PIS/COFINS, so
+        // nao tem o VL_ABAT_NT final.
         const cols = colunasDoTipo('C170', 'contribuicoes');
+        expect(cols).toHaveLength(36);
         expect(cols).toContain('CST_PIS');
         expect(cols).toContain('CST_COFINS');
-        expect(cols).toContain('NAT_BC_CRED');
-        expect(cols).not.toContain('CFOP'); // contribuicoes C170 nao tem CFOP/ICMS
+        expect(cols).toContain('CFOP');       // contrib C170 TEM CFOP (confirmado em dado real)
+        expect(cols).toContain('CST_ICMS');
+        expect(cols).not.toContain('VL_ABAT_NT'); // unico campo a menos vs Fiscal
     });
 
     it('C170 editavel traz CST/valores por nome', () => {
