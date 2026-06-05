@@ -57,6 +57,20 @@ export async function validarEstrutura(parsed: ParseResult): Promise<ValidacaoSp
     return mod.validarEstruturaSped(parsed);
 }
 
+export interface AchadoTributario {
+    regra: string; severidade: 'erro' | 'aviso'; registro: string; idx: number; mensagem: string;
+}
+export interface RegrasTributariasResult {
+    achados: AchadoTributario[];
+    resumo: { erros: number; avisos: number; porRegra: Record<string, number>; naoAplicavel?: boolean };
+}
+
+/** Motor de regras tributarias (CFOP x CST x NCM) — so EFD ICMS/IPI. */
+export async function aplicarRegrasTributarias(parsed: ParseResult): Promise<RegrasTributariasResult> {
+    const mod = await import('../sefaz-backend/sped-fiscal-regras-tributarias.js' as any);
+    return mod.aplicarRegrasTributarias(parsed);
+}
+
 /**
  * Exporta o SPED parseado pra XLSX editavel.
  * - 1 aba "Resumo" com contagem por tipo.
