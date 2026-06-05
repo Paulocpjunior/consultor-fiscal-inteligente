@@ -23,13 +23,14 @@ import {
     type EmpresaStatusResumo,
     type FlagCampo,
 } from '../services/empresaStatusCapturaService';
+import { captureFromSefaz, type DfeDocProcessado } from '../services/dfeCaptureService';
 import type { User } from '../types';
 
 interface Props {
     currentUser: User;
 }
 
-type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'ok-tudo';
+type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'sem-responsavel' | 'ok-tudo';
 
 function formatCnpj(s: string) {
     return s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -65,7 +66,41 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [busca, setBusca] = useState('');
     const [togglingCnpj, setTogglingCnpj] = useState<string | null>(null);
     const [autoUfRunning, setAutoUfRunning] = useState(false);
+    const [capturandoCnpj, setCapturandoCnpj] = useState<string | null>(null);
+    const [ultimaCaptura, setUltimaCaptura] = useState<Record<string, { ok: boolean; msg: string; docs?: DfeDocProcessado[] }>>({});
     const isAdmin = currentUser.role === 'admin';
+
+    const handleCaptureOne = async (emp: EmpresaStatusCaptura, resetNSU = false) => {
+        if (!isAdmin) return;
+        if (resetNSU && !confirm(`Recapturar do ZERO ${emp.nome}?\n\nZera o cursor NSU e reprocessa ~90 dias de DF-e da SEFAZ. Use quando uma nota "sumiu" (passou do cursor). Pode demorar e trazer muitos documentos.`)) return;
+        setCapturandoCnpj(emp.cnpj);
+        try {
+            const r = await captureFromSefaz({
+                empresa: { id: emp.id, cnpj: emp.cnpj } as any,
+                user: currentUser,
+                resetNSU,
+            });
+            setUltimaCaptura(prev => ({
+                ...prev,
+                [emp.cnpj]: {
+                    ok: r.sucesso,
+                    msg: r.sucesso
+                        ? `✓ ${r.motivo}`
+                        : (r.foraDeJanela ? `⏰ ${r.motivo}` :
+                           r.rateLimited ? `🚦 ${r.motivo}` :
+                           `✗ ${r.motivo}`),
+                    docs: r.documentosProcessados,
+                },
+            }));
+        } catch (e: any) {
+            setUltimaCaptura(prev => ({
+                ...prev,
+                [emp.cnpj]: { ok: false, msg: `✗ ${e.message || 'erro'}` },
+            }));
+        } finally {
+            setCapturandoCnpj(null);
+        }
+    };
 
     const handleAutoUf = async () => {
         if (!isAdmin) return;
@@ -102,13 +137,20 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const empresasFiltradas = useMemo(() => {
         if (!data) return [];
         const buscaLow = busca.toLowerCase().replace(/\D/g, '');
-        const buscaTxt = busca.toLowerCase();
+        const buscaTxt = busca.toLowerCase().trim();
+        // Quando ha busca ativa, ela PREVALECE sobre o filtro de status —
+        // achar a empresa especifica importa mais que respeitar o filtro
+        // (UX padrao de qualquer 'find' — encontra independente de outro
+        // criterio). Sem isso o usuario digitava o CNPJ da empresa, o
+        // filtro 'Bloqueadas' excluia ela e a busca parecia quebrada.
+        if (buscaTxt) {
+            return data.empresas.filter(e => {
+                if (buscaLow && e.cnpj.includes(buscaLow)) return true;
+                if (buscaTxt && e.nome.toLowerCase().includes(buscaTxt)) return true;
+                return false;
+            });
+        }
         return data.empresas.filter(e => {
-            if (busca) {
-                if (buscaLow && e.cnpj.includes(buscaLow)) {} // match
-                else if (buscaTxt && e.nome.toLowerCase().includes(buscaTxt)) {} // match
-                else return false;
-            }
             switch (filtro) {
                 case 'bloqueadas': return e.motivosBloqueio.length > 0;
                 case 'sem-uf': return !e.uf;
@@ -120,6 +162,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 case 'sem-procuracao': return !e.procuracaoEcacAtiva;
                 case 'sem-ccmsp': return !e.nfseSpAutorizado;
                 case 'nfse-nac-inativa': return !e.nfseNacionalDfeAtivo;
+                case 'sem-responsavel': return !e.responsaveis || e.responsaveis.length === 0;
                 case 'ok-tudo': return e.capturaNfeOk && e.capturaNfseSpOk && e.capturaNfseNacionalOk;
                 case 'todas':
                 default: return true;
@@ -234,6 +277,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <option value="sem-procuracao">Sem procuração e-CAC</option>
                     <option value="sem-ccmsp">Sem autorização NFSe SP</option>
                     <option value="nfse-nac-inativa">NFSe Nacional desativada</option>
+                    <option value="sem-responsavel">👤 Sem responsável na carteira</option>
                     <option value="ok-tudo">✅ Tudo OK</option>
                     <option value="todas">Todas</option>
                 </select>
@@ -244,6 +288,9 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 />
                 <span className="text-sm text-gray-600 ml-2">
                     {empresasFiltradas.length} de {data.empresas.length}
+                    {busca && filtro !== 'todas' && (
+                        <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-400">(filtro de status ignorado durante busca)</span>
+                    )}
                 </span>
                 <div className="ml-auto flex gap-2">
                     <button onClick={load} className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 rounded">↻ Atualizar</button>
@@ -258,12 +305,14 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                         <tr>
                             <th className="px-2 py-2 text-left">CNPJ</th>
                             <th className="px-2 py-2 text-left">Razão Social</th>
+                            <th className="px-2 py-2 text-left">Responsável</th>
                             <th className="px-2 py-2 text-center">Cert</th>
                             <th className="px-2 py-2 text-center">Procuração e-CAC</th>
                             <th className="px-2 py-2 text-center">NFSe SP</th>
                             <th className="px-2 py-2 text-center">NFSe Nacional</th>
                             <th className="px-2 py-2 text-center">Capturas</th>
                             <th className="px-2 py-2 text-left">Motivos Bloqueio</th>
+                            {isAdmin && <th className="px-2 py-2 text-center">Ações</th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -280,6 +329,20 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                     <td className="px-2 py-1.5">
                                         <div className="font-semibold">{e.nome}</div>
                                         <div className="text-[10px] text-gray-500">{e.regime}</div>
+                                    </td>
+                                    <td className="px-2 py-1.5">
+                                        {(e.responsaveis && e.responsaveis.length > 0) ? (
+                                            <div className="flex flex-col gap-0.5">
+                                                {e.responsaveis.map((r, i) => (
+                                                    <div key={i} className="text-[11px]">
+                                                        <span className="font-medium">{r.nome}</span>
+                                                        {r.papel === 'backup' && <span className="ml-1 text-[9px] text-gray-500 uppercase">backup</span>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">⚠ sem responsável</span>
+                                        )}
                                     </td>
                                     <td className="px-2 py-1.5 text-center">
                                         <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border ${certCor}`}>
@@ -345,6 +408,59 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                             </ul>
                                         )}
                                     </td>
+                                    {isAdmin && (
+                                        <td className="px-2 py-1.5 text-center align-top">
+                                            <div className="flex flex-col gap-1 items-stretch">
+                                                <button
+                                                    onClick={() => handleCaptureOne(e)}
+                                                    disabled={capturandoCnpj === e.cnpj}
+                                                    className="px-2 py-1 text-[10px] font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
+                                                    title="Captura NFe DistDFe a partir do cursor NSU atual"
+                                                >
+                                                    {capturandoCnpj === e.cnpj ? '⏳…' : '▶ Capturar'}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleCaptureOne(e, true)}
+                                                    disabled={capturandoCnpj === e.cnpj}
+                                                    className="px-2 py-1 text-[10px] font-semibold bg-amber-600 hover:bg-amber-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
+                                                    title="Zera o cursor NSU e reprocessa ~90 dias — use quando uma nota sumiu (passou do cursor)"
+                                                >
+                                                    {capturandoCnpj === e.cnpj ? '⏳…' : '⟲ Recapturar do zero'}
+                                                </button>
+                                            </div>
+                                            {ultimaCaptura[e.cnpj] && (
+                                                <div className={`mt-1 text-[10px] font-mono break-words ${
+                                                    ultimaCaptura[e.cnpj].ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                                                }`}>
+                                                    {ultimaCaptura[e.cnpj].msg}
+                                                </div>
+                                            )}
+                                            {ultimaCaptura[e.cnpj]?.docs && ultimaCaptura[e.cnpj].docs!.length > 0 && (
+                                                <details className="mt-1 text-left">
+                                                    <summary className="text-[10px] text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">
+                                                        Ver {ultimaCaptura[e.cnpj].docs!.length} doc(s) processado(s)
+                                                    </summary>
+                                                    <div className="mt-1 space-y-1 max-h-[200px] overflow-y-auto">
+                                                        {ultimaCaptura[e.cnpj].docs!.map((d, i) => {
+                                                            const cor = d.status === 'ok' ? 'text-emerald-700' :
+                                                                d.status === 'duplicado' ? 'text-amber-700' :
+                                                                'text-red-600';
+                                                            return (
+                                                                <div key={i} className="text-[9px] font-mono border-l-2 border-slate-300 pl-1 py-0.5">
+                                                                    <div className="flex gap-1 items-baseline">
+                                                                        <span className={`font-bold ${cor}`}>{d.status}</span>
+                                                                        <span className="text-slate-500">{d.schema || '?'}</span>
+                                                                    </div>
+                                                                    {d.chave && <div className="text-slate-700 dark:text-slate-300 break-all">{d.chave}</div>}
+                                                                    {d.motivo && <div className="text-red-600 dark:text-red-400 break-words">{d.motivo}</div>}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </details>
+                                            )}
+                                        </td>
+                                    )}
                                 </tr>
                             );
                         })}

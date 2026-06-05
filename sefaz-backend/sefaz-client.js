@@ -58,6 +58,35 @@ export function montaEnvelope({ cnpj, ultNSU = '0', uf }) {
     + '</soap12:Envelope>';
 }
 
+// Variante do montaEnvelope usando <consChNFe> em vez de <distNSU>. Consulta
+// UMA NFe especifica pela chave de 44 digitos. Funciona se o CNPJ informado
+// e interessado na NFe (emitente OU destinatario). Se nao for, SEFAZ retorna
+// cStat=137 'Nenhum documento localizado' — util pra DIAGNOSTICAR se uma NFe
+// foi emitida com o CNPJ do escritorio como destinatario ou nao.
+export function montaEnvelopeConsChNFe({ chave, cnpjInteressado, uf }) {
+  const cnpjNum = String(cnpjInteressado).replace(/\D/g, '').padStart(14, '0');
+  const chaveLimpa = String(chave).replace(/\D/g, '');
+  if (chaveLimpa.length !== 44) {
+    throw new Error(`Chave invalida: esperado 44 digitos, recebido ${chaveLimpa.length}`);
+  }
+  const cUFAutor = ufParaCodigoIBGE(uf);
+  return '<?xml version="1.0" encoding="UTF-8"?>'
+    + '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
+    + '<soap12:Body>'
+    + '<nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">'
+    + '<nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">'
+    + `<distDFeInt versao="${VERSAO}" xmlns="http://www.portalfiscal.inf.br/nfe">`
+    + `<tpAmb>${TP_AMB}</tpAmb>`
+    + `<cUFAutor>${cUFAutor}</cUFAutor>`
+    + `<CNPJ>${cnpjNum}</CNPJ>`
+    + `<consChNFe><chNFe>${chaveLimpa}</chNFe></consChNFe>`
+    + '</distDFeInt>'
+    + '</nfeDadosMsg>'
+    + '</nfeDistDFeInteresse>'
+    + '</soap12:Body>'
+    + '</soap12:Envelope>';
+}
+
 function postSefaz(envelope, pfxBuffer, password) {
   return new Promise((resolve, reject) => {
     const agent = new https.Agent({ pfx: pfxBuffer, passphrase: password, rejectUnauthorized: true, keepAlive: false });
@@ -174,4 +203,50 @@ export async function consultaDistDFeComCert({ cnpj, ultNSU = '0', certOverride 
 // Wrapper retrocompativel — usa cert do escritorio (legado)
 export async function consultaDistDFe({ cnpj, ultNSU = '0', uf }) {
     return consultaDistDFeComCert({ cnpj, ultNSU, certOverride: null, uf });
+}
+
+/**
+ * Consulta UMA NFe especifica pela chave (44 digitos) via DistDFe.
+ *
+ * - cnpjInteressado: CNPJ usado como <CNPJ> no envelope. Deve ser emitente
+ *   OU destinatario da NFe pra SEFAZ retornar o XML. Se nao for, retorna
+ *   cStat=137 — util pra DESCOBRIR se o destinatario e quem voce esperava.
+ * - certOverride: cert proprio. Se null, usa loadCertificate() (escritorio).
+ *
+ * Retorna mesmo formato de consultaDistDFeComCert: { ok, cStat, xMotivo,
+ * xmls: [{ nsu, schema, xml }] }. Se vier 1 xml, e a NFe consultada.
+ */
+export async function consultaNFePorChave({ chave, cnpjInteressado, uf, certOverride = null }) {
+  if (DRY_RUN) {
+    const envelopeDry = montaEnvelopeConsChNFe({ chave, cnpjInteressado, uf });
+    console.log('[sefaz-client DRY-RUN consChNFe] envelope:', envelopeDry);
+    return { ok: true, cStat: 'DRY-RUN', xMotivo: 'envelope logado', xmls: [] };
+  }
+  const envelope = montaEnvelopeConsChNFe({ chave, cnpjInteressado, uf });
+  let cert = certOverride || await loadCertificate();
+  let response;
+  try {
+    response = await postSefaz(envelope, cert.pfxBuffer, cert.password);
+  } catch (err) {
+    if (/PFX|passphrase|decode|handshake/i.test(String(err.message))) {
+      invalidateCertificateCache();
+      cert = await loadCertificate(true);
+      response = await postSefaz(envelope, cert.pfxBuffer, cert.password);
+    } else throw err;
+  }
+  if (response.statusCode !== 200) {
+    throw new Error(`SEFAZ HTTP ${response.statusCode}: ${response.body.slice(0, 500)}`);
+  }
+  const parsed = parseRetorno(response.body);
+  const xmls = parsed.docs.map(d => {
+    try { return { nsu: d.nsu, schema: d.schema, xml: descomprimirDocZip(d.base64) }; }
+    catch (e) { return { nsu: d.nsu, schema: d.schema, xml: null, erroDescompressao: e.message }; }
+  });
+  return {
+    ok: parsed.cStat === '138' || parsed.cStat === '137',
+    cStat: parsed.cStat,
+    xMotivo: parsed.xMotivo,
+    xmls,
+    rateLimited: parsed.cStat === '656',
+  };
 }

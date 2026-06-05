@@ -5,6 +5,7 @@
 
 import admin from 'firebase-admin';
 import { getNfseNacionalProvider, getNfseNacionalMode } from './nfse-nacional-provider.js';
+import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
 const COLLECTION = 'nfse_nacional_emitidas';
@@ -17,6 +18,7 @@ function fa() {
 }
 
 export async function emitirNfse(req) {
+    assertEmissaoLiberada('NFSE_NAC');
     const provider = getNfseNacionalProvider();
     const mode = getNfseNacionalMode();
     const nfse = await provider.emitirNfse(req);

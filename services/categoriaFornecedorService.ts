@@ -46,8 +46,8 @@ function regraId(empresaId: string, cnpj: string): string {
  * Carrega todas as regras de uma empresa como Map<cnpjDigitos, categoria>.
  * Esse Map e passado ao calcularCreditoEfiscal como override.
  */
-export async function carregarRegras(empresaId: string): Promise<Map<string, string>> {
-    const mapa = new Map<string, string>();
+export async function carregarRegras(empresaId: string): Promise<Map<string, TipoDespesaCredito>> {
+    const mapa = new Map<string, TipoDespesaCredito>();
     if (!isFirebaseConfigured || !empresaId) return mapa;
     try {
         const snap = await getDocs(query(
@@ -58,7 +58,7 @@ export async function carregarRegras(empresaId: string): Promise<Map<string, str
         snap.forEach(d => {
             const r = d.data() as RegraCategoria;
             if (r.cnpjFornecedor && r.categoria) {
-                mapa.set(r.cnpjFornecedor, r.categoria);
+                mapa.set(r.cnpjFornecedor, r.categoria as TipoDespesaCredito);
             }
         });
     } catch (e) {

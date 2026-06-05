@@ -53,7 +53,7 @@ const OBRIGACOES: Obrigacao[] = [
   },
   {
     id: 'dctfweb', nome: 'DCTFWeb - Declaração de Débitos e Créditos Tributários Federais Web', sigla: 'DCTFWeb',
-    orgao: 'Receita Federal', regimes: ['lucro_presumido', 'lucro_real', 'simples_nacional'], periodicidade: 'mensal',
+    orgao: 'Receita Federal', regimes: ['lucro_presumido', 'lucro_real', 'simples'], periodicidade: 'mensal',
     diaVencimento: 25, descricao: 'Declaração mensal que substitui a DCTF convencional. Integra débitos previdenciários e de terceiros com créditos de retenções. Vencimento dia 25 do mês seguinte ao fato gerador (prorroga para próximo dia útil).',
     penalidade: 'Multa de 2% ao mês (máx 20%) sobre o valor dos tributos declarados, mínimo R$ 200,00 (inativas) ou R$ 500,00', categoria: 'federal', requerResponsavel: true,
   },

@@ -5,6 +5,7 @@
 
 import admin from 'firebase-admin';
 import { getDctfwebProvider, getDctfwebMode } from './dctfweb-provider.js';
+import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
 const COLLECTION = 'dctfweb_declaracoes';
@@ -108,6 +109,7 @@ export async function listarDeclaracoes({ empresaCnpj, situacao, anoPA, mesPA } 
 }
 
 export async function transmitirDeclaracao({ empresaId, empresaCnpj, anoPA, mesPA, categoria }) {
+    assertEmissaoLiberada('DCTFWEB');
     const db = fa().firestore();
     const provider = getDctfwebProvider();
     const r = await provider.transmitirDeclaracao({ empresaCnpj, anoPA, mesPA, categoria });
@@ -127,6 +129,7 @@ export async function transmitirDeclaracao({ empresaId, empresaCnpj, anoPA, mesP
 }
 
 export async function gerarDarf({ empresaId, empresaCnpj, anoPA, mesPA, categoria, emAndamento }) {
+    assertEmissaoLiberada('DCTFWEB');
     const provider = getDctfwebProvider();
     return await provider.gerarDarf({ empresaCnpj, anoPA, mesPA, categoria, emAndamento });
 }
@@ -142,6 +145,7 @@ export async function consultarRecibo({ empresaCnpj, anoPA, mesPA, categoria }) 
 }
 
 export async function encerrarApuracaoMit({ empresaId, empresaCnpj, anoPA, mesPA }) {
+    assertEmissaoLiberada('DCTFWEB');
     const db = fa().firestore();
     const provider = getDctfwebProvider();
     const r = await provider.encerrarApuracaoMit({ empresaCnpj, anoPA, mesPA });

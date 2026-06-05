@@ -24,6 +24,7 @@ router.use(express.json());
 
 const PROXY_URL = process.env.SHAREPOINT_PROXY_URL
     || 'https://consultor-fiscal-proxy-631239634290.us-west1.run.app';
+const PROXY_TOKEN = process.env.SHAREPOINT_PROXY_TOKEN || process.env.PROXY_SHARED_TOKEN || '';
 
 function fa() {
     if (!admin.apps.length) {
@@ -314,7 +315,10 @@ function buildFolderPath(grupo, ano, mes, empresa, direcao) {
 async function fetchFromProxy(path, body) {
     const resp = await fetch(`${PROXY_URL}${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            ...(PROXY_TOKEN ? { Authorization: `Bearer ${PROXY_TOKEN}` } : {}),
+        },
         body: JSON.stringify(body),
     });
     if (!resp.ok) {

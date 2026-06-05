@@ -5,10 +5,15 @@
 
 import express from 'express';
 import admin from 'firebase-admin';
+import forge from 'node-forge';
 import { sincronizarEmpresa } from './sync-orchestrator.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth } from './require-admin.js';
+import { consultaNFePorChave } from './sefaz-client.js';
+import { loadCertificate } from './secret-loader.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
+import { importarXmlSefaz } from './xml-importer.js';
+import { withCronHeartbeat, listarCronsOrfaos } from './cron-heartbeat.js';
 
 const router = express.Router();
 
@@ -18,6 +23,12 @@ function fa() {
   }
   return admin;
 }
+
+// CNPJ do escritorio (S&P). Cert dele vive no Secret Manager (loadCertificate)
+// e nao em empresas_certificados — entao a checagem de elegibilidade da S&P
+// falha pelo caminho normal (sem cert proprio E sem procuracao a si mesmo).
+// Usado em listarEmpresasParaCron pra incluir o escritorio mesmo assim.
+const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 
 function requireCronAuth(req, res, next) {
     const secret = process.env.SEFAZ_CRON_SECRET;
@@ -41,24 +52,43 @@ function requireCronAuth(req, res, next) {
 
 router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
   try {
-    const { empresaId, empresaCnpj } = req.body || {};
+    const { empresaId, empresaCnpj, resetNSU = false } = req.body || {};
     if (!empresaId || !empresaCnpj) {
       return res.status(400).json({ error: 'empresaId e empresaCnpj são obrigatórios' });
     }
+    // resetNSU so admin (operacao pesada — reprocessa 90 dias de DF-e)
+    if (resetNSU && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'resetNSU é exclusivo de admin' });
+    }
     const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
     if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
-    const janela = statusJanelaOperacional();
-    if (!janela.dentro) {
-      return res.status(403).json({
-        error: 'Fora da janela operacional',
-        motivo: janela.motivo,
-        agoraBRT: janela.agoraBRT,
-      });
+    // Janela operacional 07-20 BRT bloqueia colaborador disparando captura fora
+    // do horario comercial — protege quota SEFAZ. Admin tem bypass (sabe o que
+    // faz, e precisa testar fora-da-janela pra debug — vide caso S&P 03/06).
+    if (req.user.role !== 'admin') {
+      const janela = statusJanelaOperacional();
+      if (!janela.dentro) {
+        return res.status(403).json({
+          error: 'Fora da janela operacional',
+          motivo: janela.motivo,
+          agoraBRT: janela.agoraBRT,
+        });
+      }
     }
-    console.log(`[sync-one] início — empresa=${empresaId} cnpj=${empresaCnpj} user=${req.user.email}`);
+    console.log(`[sync-one] início — empresa=${empresaId} cnpj=${empresaCnpj} user=${req.user.email} role=${req.user.role}`);
+    // Admin tambem bypassa o lock 1h por CNPJ — diagnostico de bug exige
+    // varios disparos seguidos sem esperar TTL. Deleta o lock antes; o
+    // orquestrador recria normal. Race-condition de 2 admins disparando
+    // o mesmo CNPJ ao mesmo tempo: risco baixo (poucos admins).
+    if (req.user.role === 'admin') {
+      try {
+        const cnpjNum = String(empresaCnpj).replace(/\D/g, '');
+        await fa().firestore().collection('sefaz_locks').doc(cnpjNum).delete();
+      } catch (e) { /* lock pode nao existir — segue */ }
+    }
     const result = await sincronizarEmpresa({
-      empresaId, empresaCnpj,
-      capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'manual' },
+      empresaId, empresaCnpj, resetNSU,
+      capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: resetNSU ? 'manual-reset-nsu' : 'manual' },
     });
     if (!result.ok && result.locked) return res.status(409).json(result);
     if (!result.ok && result.rateLimited) return res.status(429).json(result);
@@ -72,60 +102,73 @@ router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
 });
 
 router.post('/sync-cron', requireCronAuth, async (req, res) => {
-  res.json({ ok: true, motivo: 'Cron iniciado em background', startedAt: new Date().toISOString() });
-
-  setImmediate(async () => {
-    const inicio = Date.now();
-    console.log('[sync-cron] início — fonte:', req.cron?.source);
-    try {
-      const empresas = await listarEmpresasParaCron();
-      console.log(`[sync-cron] ${empresas.length} empresas elegíveis`);
-      let sucessos = 0;
-      let falhas = 0;
-      let totalNovos = 0;
-      for (const emp of empresas) {
-        try {
-          const result = await sincronizarEmpresa({
-            empresaId: emp.id,
-            empresaCnpj: emp.cnpj,
-            capturadoPor: { uid: 'cron-system', email: 'cron@spassessoriacontabil', fonte: 'cron' },
-          });
-          if (result.ok) { sucessos++; totalNovos += (result.novosXmls || 0); }
-          else { falhas++; console.warn(`[sync-cron] falha em ${emp.cnpj}: ${result.motivo}`); }
-        } catch (e) {
-          falhas++;
-          console.error(`[sync-cron] exceção em ${emp.cnpj}:`, e.message);
-        }
-      }
-      const duracaoMs = Date.now() - inicio;
-      await fa().firestore().collection('sefaz_cron_logs').add({
-        executadoEm: fa().firestore.FieldValue.serverTimestamp(),
-        totalEmpresas: empresas.length,
-        sucessos, falhas, totalNovosXmls: totalNovos, duracaoMs,
-        // Bloqueadas por cadastro (sem cert A1/A3 e sem procuracao e-CAC) e A3
-        // sao puladas em listarEmpresasParaCron, mas persistidas aqui pra que
-        // o painel mostre o estado real (em vez de fingir que sao "falhas").
-        bloqueadasSemAcesso: empresas._bloqueadasSemAcesso || 0,
-        totalA3: empresas._totalA3 || 0,
-        // req.cron?.source nunca era setado (codigo morto). Usa o header
-        // oficial do Cloud Scheduler como fonte. Fallback 'unknown' garante
-        // que NUNCA persistimos `undefined` (Firestore rejeita o write inteiro).
-        fonte: req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno',
-      });
-      console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos, ${duracaoMs}ms (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);
-    } catch (e) {
-      console.error('[sync-cron] erro fatal:', e);
+  const fonte = req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno';
+  // withCronHeartbeat:
+  //  1) cria log em sefaz_cron_logs com status='iniciado' ANTES de responder 200;
+  //  2) responde 200 imediato (Scheduler nao retentara);
+  //  3) roda o trabalho em setImmediate e atualiza o log pra 'sucesso'/'falha'.
+  //
+  // Se o container for reciclado no meio, o log fica em 'iniciado' — detectavel
+  // por GET /sync-cron-health (e por listarCronsOrfaos no cron de alerta).
+  // Antes: 200 imediato + setImmediate gravando log SO no fim. Container morto
+  // = NENHUM log gravado = ninguem sabia que o cron parou.
+  await withCronHeartbeat({
+    collection: 'sefaz_cron_logs',
+    fonte,
+    res,
+  }, async () => {
+    console.log('[sync-cron] início — fonte:', fonte);
+    const empresas = await listarEmpresasParaCron();
+    console.log(`[sync-cron] ${empresas.length} empresas elegíveis`);
+    let sucessos = 0;
+    let falhas = 0;
+    let totalNovos = 0;
+    // Top 50 falhas com motivo — pra UI 'Erros & Logs' mostrar detalhe
+    // por linha expandida (PR #28). Sem isso, painel so dizia '17 falhas'
+    // sem nenhuma pista de QUAIS empresas e por que.
+    const errosResumo = [];
+    for (const emp of empresas) {
       try {
-        await fa().firestore().collection('sefaz_cron_logs').add({
-          executadoEm: fa().firestore.FieldValue.serverTimestamp(),
-          erro: e.message,
-          fonte: req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno',
+        const result = await sincronizarEmpresa({
+          empresaId: emp.id,
+          empresaCnpj: emp.cnpj,
+          capturadoPor: { uid: 'cron-system', email: 'cron@spassessoriacontabil', fonte: 'cron' },
         });
-      } catch (errLog) {
-        // Duplo silenciamento aqui apaga rastro do erro fatal — logamos.
-        console.error('[sync-cron] FALHA registrando erro fatal em sefaz_cron_logs:', errLog.message);
+        if (result.ok) { sucessos++; totalNovos += (result.novosXmls || 0); }
+        else {
+          falhas++;
+          console.warn(`[sync-cron] falha em ${emp.cnpj}: ${result.motivo}`);
+          if (errosResumo.length < 50) errosResumo.push({
+            cnpj: emp.cnpj,
+            nome: (emp.nome || '').slice(0, 60),
+            motivo: String(result.motivo || '').slice(0, 200),
+            codigo: result.rateLimited ? 'cStat=656' : (result.certInvalido ? 'cStat=593' : (result.locked ? 'LOCK' : null)),
+          });
+        }
+      } catch (e) {
+        falhas++;
+        console.error(`[sync-cron] exceção em ${emp.cnpj}:`, e.message);
+        if (errosResumo.length < 50) errosResumo.push({
+          cnpj: emp.cnpj,
+          nome: (emp.nome || '').slice(0, 60),
+          motivo: `[EXCECAO] ${String(e.message || '').slice(0, 200)}`,
+          codigo: 'EXCEPTION',
+        });
       }
     }
+    console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);
+    // Campos retornados aqui sao MERGED no log (junto com status='sucesso',
+    // duracaoMs, finalizadoEm). Bloqueadas por cadastro (sem cert A1/A3 e sem
+    // procuracao e-CAC) e A3 sao puladas em listarEmpresasParaCron, mas
+    // persistidas aqui pra que o painel mostre o estado real (em vez de
+    // fingir que sao "falhas").
+    return {
+      totalEmpresas: empresas.length,
+      sucessos, falhas, totalNovosXmls: totalNovos,
+      bloqueadasSemAcesso: empresas._bloqueadasSemAcesso || 0,
+      totalA3: empresas._totalA3 || 0,
+      errosResumo,
+    };
   });
 });
 
@@ -277,7 +320,12 @@ async function listarEmpresasParaCron() {
     if (a3Ids.has(e.id)) return false;
     const tipoCert = certsPorId.get(e.id);
     const temCertProprio = tipoCert === 'A1' || tipoCert === 'A3';
-    const temAcesso = temCertProprio || e.procuracaoEcacAtiva;
+    // A propria S&P (escritorio) entra mesmo sem cert em empresas_certificados:
+    // o cert dela vive em Secret Manager e o orquestrador (sync-orchestrator.js)
+    // sabe fazer fallback via loadCertificate() quando o CNPJ bate. Sem essa
+    // excecao aqui, nem chegava a tentar — caia em "sem acesso" e era pulada.
+    const ehEscritorio = e.cnpj === CNPJ_ESCRITORIO;
+    const temAcesso = temCertProprio || e.procuracaoEcacAtiva || ehEscritorio;
     if (!temAcesso) {
       bloqueadasSemAcesso++;
       return false;
@@ -316,6 +364,22 @@ router.get('/window', requireAuth, (req, res) => {
   return res.json(statusJanelaOperacional());
 });
 
+// GET /sync-cron-health — detecta crons orfaos (status='iniciado' por > staleMin).
+// Se aparecer algo aqui, e prova direta de que o container morreu no meio do
+// setImmediate (cold scale-down, OOM, deploy). Vide cron-heartbeat.js.
+// Query: ?staleMin=120 (default 120 — folga generosa pra varredura de 60+ empresas).
+router.get('/sync-cron-health', requireAuth, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
+  const staleMin = Math.max(5, parseInt(req.query.staleMin || '120', 10));
+  try {
+    const orfaos = await listarCronsOrfaos('sefaz_cron_logs', staleMin);
+    return res.json({ ok: true, staleMin, orfaosCount: orfaos.length, orfaos });
+  } catch (e) {
+    console.error('[GET /sync-cron-health] erro:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /cron-status — retorna o último log do cron SEFAZ (legacy, usado pelo banner antigo).
 router.get('/cron-status', requireAuth, async (req, res) => {
   try {
@@ -338,44 +402,252 @@ router.get('/cron-status', requireAuth, async (req, res) => {
 // Dispara o cron de NFe sob demanda. Auth = Bearer admin (não precisa
 // do x-cron-secret porque é interno). Reusa o mesmo orquestrador do cron.
 router.post('/sync-cron-now', requireAuth, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Apenas administradores' });
+  }
+  await withCronHeartbeat({
+    collection: 'sefaz_cron_logs',
+    fonte: 'admin-manual',
+    res,
+    metadados: { adminEmail: req.user.email },
+  }, async () => {
+    console.log('[sync-cron-now] início — admin:', req.user.email);
+    let sucessos = 0, falhas = 0, totalNovos = 0;
+    const empresas = await listarEmpresasParaCron();
+    for (const emp of empresas) {
+      try {
+        const result = await sincronizarEmpresa({
+          empresaId: emp.id, empresaCnpj: emp.cnpj,
+          capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'cron-now-admin' },
+        });
+        if (result.ok) { sucessos++; totalNovos += result.novosXmls || 0; }
+        else falhas++;
+      } catch (e) {
+        falhas++;
+        console.error(`[sync-cron-now] exceção em ${emp.cnpj}:`, e.message);
+      }
+    }
+    console.log(`[sync-cron-now] fim — ${sucessos}/${empresas.length} ok, ${totalNovos} novos`);
+    return { totalEmpresas: empresas.length, sucessos, falhas, totalNovosXmls: totalNovos };
+  });
+});
+
+// ── POST /consulta-nfe-por-chave ─────────────────────────────────────────
+// Consulta UMA NFe pela chave (44 dig) e devolve emit/dest parseados do XML.
+// Usado pra diagnosticar quando uma NFe nao aparece via cron — descobre se
+// o destinatario tem o CNPJ esperado ou nao.
+//
+// Estrategia: tenta primeiro com CNPJ do ESCRITORIO como interessado (cert
+// global). Se SEFAZ retornar cStat=137 (nao localizado), tenta com o CNPJ
+// EMITENTE (primeiros 7-20 digitos da chave) — assim cobrimos os dois lados
+// da NFe (emitente sempre tem acesso a propria NFe via DistDFe).
+router.post('/consulta-nfe-por-chave', requireAuth, express.json(), async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Apenas administradores' });
     }
-    res.json({ ok: true, motivo: 'Cron iniciado em background' });
-    setImmediate(async () => {
-      const inicio = Date.now();
-      console.log('[sync-cron-now] início — admin:', req.user.email);
-      let sucessos = 0, falhas = 0, totalNovos = 0, total = 0;
+    const chave = String(req.body?.chave || '').replace(/\D/g, '');
+    if (chave.length !== 44) {
+      return res.status(400).json({ error: `Chave invalida — esperado 44 digitos, recebido ${chave.length}` });
+    }
+    const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
+    const cnpjEmitente = chave.slice(6, 20);
+    const ufCod = chave.slice(0, 2);
+    // Mapa codigo IBGE -> sigla UF (so cobre os principais; SEFAZ recebe
+    // qualquer UF valida no cUFAutor — usamos a UF do emitente da chave).
+    const ufPorCod = {
+      '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
+      '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL', '28': 'SE', '29': 'BA',
+      '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP',
+      '41': 'PR', '42': 'SC', '43': 'RS',
+      '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF',
+    };
+    const ufSigla = ufPorCod[ufCod] || 'SP';
+
+    // Helper: extrai emit/dest de um XML de NFe
+    const parseEmitDest = (xml) => {
+      const pickIn = (tag, scope) => {
+        const m = scope.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`, 'i'));
+        return m ? m[1].trim() : null;
+      };
+      const pickSection = (tag) => {
+        const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i'));
+        return m ? m[1] : '';
+      };
+      const emit = pickSection('emit');
+      const dest = pickSection('dest');
+      const ide = pickSection('ide');
+      const total = pickSection('ICMSTot');
+      return {
+        emitente: { cnpj: pickIn('CNPJ', emit), nome: pickIn('xNome', emit), uf: pickIn('UF', emit) },
+        destinatario: { cnpj: pickIn('CNPJ', dest) || pickIn('CPF', dest), nome: pickIn('xNome', dest), uf: pickIn('UF', dest) },
+        numero: pickIn('nNF', ide),
+        dataEmissao: pickIn('dhEmi', ide) || pickIn('dEmi', ide),
+        valorTotal: pickIn('vNF', total),
+        modelo: pickIn('mod', ide),
+        natureza: pickIn('natOp', ide),
+      };
+    };
+
+    // 1ª tentativa: como escritorio (cert global)
+    let resp = await consultaNFePorChave({ chave, cnpjInteressado: CNPJ_ESCRITORIO, uf: ufSigla });
+    let tentou = ['escritorio'];
+
+    // 2ª tentativa: como emitente — se ainda nao achou
+    if (resp.cStat === '137' && cnpjEmitente !== CNPJ_ESCRITORIO) {
       try {
-        const empresas = await listarEmpresasParaCron();
-        total = empresas.length;
-        for (const emp of empresas) {
-          try {
-            const result = await sincronizarEmpresa({
-              empresaId: emp.id, empresaCnpj: emp.cnpj,
-              capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'cron-now-admin' },
-            });
-            if (result.ok) { sucessos++; totalNovos += result.novosXmls || 0; }
-            else falhas++;
-          } catch (e) {
-            falhas++;
-            console.error(`[sync-cron-now] exceção em ${emp.cnpj}:`, e.message);
-          }
-        }
-        await fa().firestore().collection('sefaz_cron_logs').add({
-          executadoEm: fa().firestore.FieldValue.serverTimestamp(),
-          totalEmpresas: total, sucessos, falhas, totalNovosXmls: totalNovos,
-          duracaoMs: Date.now() - inicio,
-          fonte: 'admin-manual',
-        });
-        console.log(`[sync-cron-now] fim — ${sucessos}/${total} ok, ${totalNovos} novos, ${Date.now() - inicio}ms`);
+        resp = await consultaNFePorChave({ chave, cnpjInteressado: cnpjEmitente, uf: ufSigla });
+        tentou.push('emitente');
       } catch (e) {
-        console.error('[sync-cron-now] erro fatal:', e);
+        // se falhar (provavel: cert do escritorio nao autoriza pra outro CNPJ),
+        // mantem a 1a resposta
+        console.warn('[consulta-nfe-por-chave] retry como emitente falhou:', e.message);
       }
+    }
+
+    const nfeXml = resp.xmls?.find(x => x.xml && (x.xml.includes('<infNFe') || x.xml.includes('<NFe')));
+    let detalhes = null;
+    if (nfeXml) {
+      try { detalhes = parseEmitDest(nfeXml.xml); } catch (e) { console.warn('[parse] falhou:', e.message); }
+    }
+
+    // Resumo do que SEFAZ devolveu — util quando cStat=138 mas o parse falhou
+    // (geralmente porque vieram resumos/eventos em vez do XML completo da NFe).
+    const xmlsResumo = (resp.xmls || []).map(x => ({
+      schema: x.schema || null,
+      nsu: x.nsu || null,
+      temXml: !!x.xml,
+      tamanho: x.xml?.length || 0,
+      primeiraTag: x.xml ? (x.xml.match(/<(\w+)[\s>]/)?.[1] || null) : null,
+    }));
+
+    // GRAVAR a nota — quando importar=true, persiste os XMLs que a SEFAZ
+    // devolveu na consulta por chave, usando o mesmo importer do distNSU.
+    // Resolve o caso de NFe que existe na SEFAZ (cStat=138 por chave) mas
+    // NAO vem pelo distNSU (passou do cursor / nao distribuida). Se vier
+    // resumo, dispara Ciencia pra liberar o procNFe completo no proximo run.
+    const importacao = [];
+    if (req.body?.importar === true && resp.xmls?.length) {
+      // Destinatario da nota = empresa-cliente dona do doc. Usa o do XML
+      // parseado (detalhes.destinatario) ou o escritorio como fallback.
+      const cnpjDest = detalhes?.destinatario?.cnpj?.replace(/\D/g, '') || CNPJ_ESCRITORIO;
+      for (const x of resp.xmls) {
+        if (!x.xml) continue;
+        try {
+          const r = await importarXmlSefaz({
+            empresaId: null,
+            empresaCnpj: cnpjDest,
+            xml: x.xml, schema: x.schema, nsu: x.nsu,
+            capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'consulta-chave-importar' },
+          });
+          importacao.push({ schema: x.schema, status: r.status, chave: r.chave || chave, motivo: r.motivo || null });
+          // Se gravou resumo, dispara Ciencia pra liberar o XML completo
+          if ((r.status === 'ok') && r.tipoDoc === 'resNFe') {
+            setImmediate(async () => {
+              try {
+                const { manifestarUma } = await import('./manifesto-orchestrator.js');
+                await manifestarUma({ chNFe: chave, cnpjDestinatario: cnpjDest, tipo: 'ciencia', capturadoPor: req.user });
+              } catch (e) { console.warn('[consulta-chave-importar] manifest falhou:', e.message); }
+            });
+          }
+        } catch (e) {
+          importacao.push({ schema: x.schema, status: 'erro', motivo: e.message });
+        }
+      }
+    }
+
+    return res.json({
+      ok: resp.ok,
+      cStat: resp.cStat,
+      xMotivo: resp.xMotivo,
+      chave,
+      cnpjConsultadoComo: tentou.join(' → '),
+      ufEmitente: ufSigla,
+      cnpjEmitenteChave: cnpjEmitente,
+      cnpjEscritorio: CNPJ_ESCRITORIO,
+      escritorioEhDestinatario: detalhes?.destinatario?.cnpj
+        ? detalhes.destinatario.cnpj.replace(/\D/g, '') === CNPJ_ESCRITORIO
+        : null,
+      detalhes,
+      xmlsResumo,
+      totalXmls: resp.xmls?.length || 0,
+      importacao: importacao.length ? importacao : null,
     });
   } catch (e) {
-    console.error('[sync-cron-now] erro:', e);
+    console.error('[POST /consulta-nfe-por-chave] erro:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /cert-escritorio-info ────────────────────────────────────────────
+// Carrega o cert do escritorio (Secret Manager) e mostra QUAL CNPJ ele tem
+// no subject. Usado pra diagnosticar cStat=593 — quando o CNPJ do cert nao
+// bate com o CNPJ esperado, NFe nao chega pelo DistDFe pra esse escritorio.
+//
+// Caso real do dia: o cert estava configurado pra outro CNPJ (nao a S&P),
+// entao DistDFe sempre rejeitava com 593. So foi diagnosticado porque
+// o usuario tentou consultar uma NFe especifica e viu o cStat literal.
+router.get('/cert-escritorio-info', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Apenas administradores' });
+    }
+    const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
+    const cert = await loadCertificate();
+    if (!cert?.pemCert) {
+      return res.json({
+        ok: false,
+        erro: 'Cert carregado mas PEM nao foi extraido (provavel falha de decifragem PFX no boot)',
+        cnpjEsperado: CNPJ_ESCRITORIO,
+        cnpjNoCert: null,
+        mismatch: null,
+      });
+    }
+    // Parseia o cert pra extrair subject e validade
+    const cert509 = forge.pki.certificateFromPem(cert.pemCert);
+    const subjectAttrs = (cert509.subject?.attributes || []).map(a => ({
+      shortName: a.shortName || a.name || a.type,
+      value: a.value,
+    }));
+    const subjectStr = subjectAttrs.map(a => `${a.shortName}=${a.value}`).join(', ');
+
+    // CNPJ pode estar:
+    //   a) No CN (padrão ICP-Brasil: "NOME EMPRESA:CNPJ")
+    //   b) No serialNumber (OID 2.5.4.5)
+    //   c) Em otherName (SAN — mais raro)
+    const cn = subjectAttrs.find(a => a.shortName === 'CN' || a.shortName === 'commonName')?.value || '';
+    const matchCN = cn.match(/:(\d{14})$/);
+    const cnpjDoCN = matchCN ? matchCN[1] : null;
+    const serial = subjectAttrs.find(a => a.shortName === 'serialNumber')?.value || '';
+    const matchSerial = serial.match(/\d{14}/);
+    const cnpjDoSerial = matchSerial ? matchSerial[0] : null;
+    const cnpjNoCert = cnpjDoCN || cnpjDoSerial;
+
+    const notBefore = cert509.validity?.notBefore?.toISOString?.() || null;
+    const notAfter = cert509.validity?.notAfter?.toISOString?.() || null;
+    const valido = notBefore && notAfter && new Date() >= new Date(notBefore) && new Date() < new Date(notAfter);
+    const mismatch = cnpjNoCert ? cnpjNoCert !== CNPJ_ESCRITORIO : null;
+    const cnpjBaseDoCert = cnpjNoCert ? cnpjNoCert.slice(0, 8) : null;
+    const cnpjBaseEsperado = CNPJ_ESCRITORIO.slice(0, 8);
+    const mismatchBase = cnpjBaseDoCert ? cnpjBaseDoCert !== cnpjBaseEsperado : null;
+
+    return res.json({
+      ok: true,
+      cnpjEsperado: CNPJ_ESCRITORIO,        // o que o codigo espera (env var CNPJ_ESCRITORIO)
+      cnpjNoCert,                            // o que o cert no Secret Manager tem
+      cnpjBaseDoCert,
+      cnpjBaseEsperado,
+      mismatch,                              // true se diferentes (filial pode bater base)
+      mismatchBase,                          // true se nem a base bate — sintoma DEFINITIVO de cStat=593
+      subject: subjectStr,
+      cn,
+      notBefore,
+      notAfter,
+      valido,
+      pfxVersion: cert.version || null,
+    });
+  } catch (e) {
+    console.error('[GET /cert-escritorio-info] erro:', e);
     return res.status(500).json({ error: e.message });
   }
 });
@@ -662,6 +934,7 @@ router.get('/cron-logs', requireAuth, async (req, res) => {
         capturadoPor: d.capturadoPor ?? null,
         periodo: d.periodo ?? null,
         prestadoresAutorizados: d.prestadoresAutorizados ?? null,
+        errosResumo: d.errosResumo ?? null,
       };
     });
     return res.json({ colecao: col, total: logs.length, logs });

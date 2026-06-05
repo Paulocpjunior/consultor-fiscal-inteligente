@@ -28,6 +28,7 @@ export interface EmpresaStatusCaptura {
     capturaNfseSpOk: boolean;
     capturaNfseNacionalOk: boolean;
     motivosBloqueio: string[];
+    responsaveis: { nome: string; papel: 'principal' | 'backup' }[];
     ultimaSyncMs: number | null;
     ultNSU: string | null;
     cStatUltimaSync: string | null;
@@ -103,14 +104,18 @@ export async function autoPreencherUf(): Promise<{ ok: boolean; motivo?: string;
 
 export function exportarEmpresasCsv(empresas: EmpresaStatusCaptura[]): string {
     const headers = [
-        'CNPJ', 'Razão Social', 'Regime', 'Tipo Cert', 'Cert Válido',
+        'CNPJ', 'Razão Social', 'Regime', 'Responsável', 'Tipo Cert', 'Cert Válido',
         'Cert Vence', 'Procuração e-CAC', 'CCM SP', 'NFSe SP Autorizado',
         'NFSe Nacional Ativo', 'Captura NFe OK', 'Captura NFSe SP OK',
         'Captura NFSe Nacional OK', 'Motivos Bloqueio',
     ];
+    const fmtResponsaveis = (rs: EmpresaStatusCaptura['responsaveis']) =>
+        rs.length === 0 ? 'sem responsável' : rs.map(r => `${r.nome} (${r.papel})`).join(' · ');
     const rows = empresas.map(e => [
         e.cnpj, `"${e.nome.replace(/"/g, '""')}"`,
-        e.regime, e.tipoCert, e.certValido ? 'sim' : 'não',
+        e.regime,
+        `"${fmtResponsaveis(e.responsaveis || []).replace(/"/g, '""')}"`,
+        e.tipoCert, e.certValido ? 'sim' : 'não',
         e.certVenceEm || '—',
         e.procuracaoEcacAtiva ? 'sim' : 'não',
         e.ccmSp || '—',

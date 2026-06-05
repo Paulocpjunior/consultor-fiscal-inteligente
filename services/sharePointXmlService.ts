@@ -3,6 +3,7 @@
  * Conecta o frontend ao proxy-backend SharePoint.
  * O proxy autentica via Microsoft Graph e acessa as pastas de XMLs.
  */
+import { getAuth } from 'firebase/auth';
 
 const PROXY_URL = 'https://consultor-fiscal-proxy-631239634290.us-west1.run.app';
 
@@ -30,9 +31,16 @@ export interface SharePointHealthStatus {
 }
 
 async function proxyFetch(path: string, body?: object): Promise<Response> {
+    const user = getAuth().currentUser;
+    if (!user) throw new Error('Usuario nao autenticado');
+    const token = await user.getIdToken();
+    const headers = {
+        'Authorization': `Bearer ${token}`,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+    };
     const opts: RequestInit = body
-        ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-        : { method: 'GET' };
+        ? { method: 'POST', headers, body: JSON.stringify(body) }
+        : { method: 'GET', headers };
     return fetch(`${PROXY_URL}${path}`, opts);
 }
 

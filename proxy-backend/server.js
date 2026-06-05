@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import admin from 'firebase-admin';
 import {
     getAccessToken,
     listXmlFiles,
@@ -11,29 +12,67 @@ import {
 } from './sharepoint-sync.js';
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8080;
+const PROXY_SHARED_TOKEN = (process.env.SHAREPOINT_PROXY_TOKEN || process.env.PROXY_SHARED_TOKEN || '').trim();
+
+function fa() {
+    if (!admin.apps.length) {
+        admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    }
+    return admin;
+}
+
+async function requireProxyAuth(req, res, next) {
+    try {
+        const auth = req.headers.authorization || '';
+        const m = auth.match(/^Bearer\s+(.+)$/i);
+        if (!m) return res.status(401).json({ error: 'Token ausente' });
+
+        const token = m[1].trim();
+        if (PROXY_SHARED_TOKEN && token === PROXY_SHARED_TOKEN) {
+            req.user = { source: 'shared-token', role: 'service' };
+            return next();
+        }
+
+        const decoded = await fa().auth().verifyIdToken(token);
+        const userDoc = await fa().firestore().collection('users').doc(decoded.uid).get();
+        const role = userDoc.exists ? userDoc.data().role : null;
+        if (role !== 'admin') return res.status(403).json({ error: 'Acesso restrito a admin' });
+
+        req.user = { source: 'firebase', uid: decoded.uid, email: decoded.email || null, role };
+        return next();
+    } catch (err) {
+        console.error('[proxy-auth]', err?.message || err);
+        return res.status(401).json({ error: 'Token invalido ou expirado' });
+    }
+}
 
 // ─── Segurança ────────────────────────────────────────────────────────────────
 app.use(helmet());
 app.use(express.json({ limit: '50mb' })); // Limita payload (increased for XML sync)
 
-// CORS: aceita apenas o domínio do seu frontend no Cloud Run
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
-    .split(',')
-    .map(o => o.trim())
-    .filter(Boolean);
+// CORS: aceita apenas origens conhecidas; chamadas server-to-server sem Origin passam.
+const ALLOWED_ORIGINS = [
+    ...(process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()),
+    ...(process.env.CORS_ORIGIN || '').split(',').map(o => o.trim()),
+    'https://consultorfiscalapp.web.app',
+    'https://consultorfiscalapp.firebaseapp.com',
+    'http://localhost:3000',
+    'http://localhost:5173',
+].filter(Boolean);
 
 app.use(cors({
     origin: (origin, callback) => {
-        // Permite chamadas sem origin (server-to-server) e origins permitidas
-        if (!origin || ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) {
+        if (!origin || ALLOWED_ORIGINS.includes(origin)) {
             callback(null, true);
         } else {
-            callback(new Error(`CORS bloqueado para origin: ${origin}`));
+            callback(null, false);
         }
     },
+    credentials: true,
     methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type'],
+    allowedHeaders: ['Authorization', 'Content-Type'],
 }));
 
 // Rate limiting: 60 req/min por IP
@@ -50,6 +89,8 @@ app.use('/api/', limiter);
 app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+app.use('/api/sharepoint', requireProxyAuth);
 
 // ─── SharePoint: Health check ────────────────────────────────────────────────
 app.get('/api/sharepoint/health', (_req, res) => {
@@ -134,7 +175,7 @@ app.post('/api/sharepoint/sync', async (req, res) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
     console.log(`✅ Proxy rodando na porta ${PORT}`);
-    console.log(`   CORS permitido para: ${ALLOWED_ORIGINS.join(', ') || 'todos (desenvolvimento)'}`);
+    console.log(`   CORS permitido para: ${ALLOWED_ORIGINS.join(', ')}`);
     const creds = checkCredentials();
     console.log(`   SharePoint: ${creds.configured ? '✅ credenciais configuradas' : '⚠️  credenciais não configuradas'}`);
 });

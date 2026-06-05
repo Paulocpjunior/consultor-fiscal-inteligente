@@ -28,7 +28,19 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && (
+          // Perfil comum criado pelo proprio usuario nunca pode nascer admin.
+          !('role' in request.resource.data)
+          || request.resource.data.role == 'colaborador'
+          // Excecao operacional existente: auto-seed do admin master.
+          || (
+            request.auth.token.email == 'junior@spassessoriacontabil.com.br'
+            && request.auth.token.email_verified == true
+            && request.resource.data.role == 'admin'
+          )
+        );
 
       // User pode atualizar proprio doc, MAS nao pode mudar a propria role
       allow update: if (
@@ -74,7 +86,12 @@ service cloud.firestore {
       // filtragem nas rules, mas isso exigiria refatoracao do modelo.
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
+      allow update: if isOwnerOrAdmin(resource.data.createdBy);
+      // delete: SO admin. Colaborador pode visualizar e editar, mas nao
+      // excluir a empresa do cadastro. Antes era isOwnerOrAdmin, mas
+      // colaborador que criou conseguia apagar — inconsistente com a UI
+      // (Lucro/Simples ja escondem botao delete pra nao-admin) e perigoso.
+      allow delete: if isAdmin();
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
 
@@ -83,7 +100,9 @@ service cloud.firestore {
       // list: limite de query para evitar download massivo.
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow update, delete: if isOwnerOrAdmin(resource.data.createdBy);
+      allow update: if isOwnerOrAdmin(resource.data.createdBy);
+      // delete: SO admin (ver comentario em simples_empresas).
+      allow delete: if isAdmin();
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
 
@@ -159,6 +178,31 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if isAdmin();
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // MODELO SHARED-WRITE (categorias_fornecedor, empresa_credito_config,
+    // fornecedores_ocultos, notas_ocultas, invoices_manuais,
+    // categorias_credito_custom)
+    //
+    // ⚠ NÃO "endureça" essas regras pra createdBy/uid achando que é
+    //   vazamento multi-tenant — o produto é SINGLE-TENANT (um escritório,
+    //   S&P, com admin + colaboradores; sem conceito de organização). O
+    //   write aberto a qualquer signed-in é INTENCIONAL: qualquer
+    //   colaborador classifica fornecedor, oculta/desoculta nota, etc.
+    //
+    // ⚠ DELETE é fluxo NORMAL de colaborador em fornecedores_ocultos,
+    //   notas_ocultas e invoices_manuais (desocultar = deletar o doc;
+    //   remover invoice manual). Restringir delete a admin QUEBRA a UI.
+    //
+    // ⚠ empresa_credito_config usa o empresaId como docId e NÃO carrega
+    //   empresaId no corpo — uma regra exigindo request.resource.data.empresaId
+    //   quebraria a gravação. Idem campos de autor: categorias_fornecedor usa
+    //   `atualizadoPor`, as ocultas usam `criadoPor` — não há campo único.
+    //
+    // Se um dia o produto virar multi-tenant, o caminho seguro é primeiro
+    // padronizar os payloads dos services (empresaId + autor) e SÓ DEPOIS
+    // gatear aqui — senão quebra o app em produção.
+    // ═══════════════════════════════════════════════════════════════
 
     // ───────────────────────────────────────────────────────────────
     // categorias_fornecedor: tabela CNPJ -> categoria por empresa.

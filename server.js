@@ -8,6 +8,7 @@ import { dirname, join } from 'path';
 import multer from 'multer';
 import * as XLSX from 'xlsx';
 import sefazCertRouter from './sefaz-backend/cert-manager.js';
+import sefazCertAlertaCronRouter from './sefaz-backend/cert-alerta-cron.js';
 import sefazSyncRouter from './sefaz-backend/sync-routes.js';
 import { fetchAllDocs } from './sefaz-backend/firestore-paginate.js';
 import empresaStatusRouter from './sefaz-backend/empresa-status-routes.js';
@@ -49,7 +50,7 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8080;
 
 const ALLOWED_ORIGINS = [
-    process.env.CORS_ORIGIN,
+    ...(process.env.CORS_ORIGIN || '').split(',').map((origin) => origin.trim()),
     'https://consultorfiscalapp.web.app',
     'https://consultorfiscalapp.firebaseapp.com',
     // Projeto Consultor-DP-Folhapagamentos (deploy separado, mesma org/domínio).
@@ -60,16 +61,80 @@ const ALLOWED_ORIGINS = [
     'http://localhost:5173',
 ].filter(Boolean);
 
-// CORS — reflete origin recebido (validação fica no requireAuth, não no CORS)
+function validateCorsOrigin(origin, callback) {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    return callback(null, false);
+}
+
+// CORS — permite apenas origens conhecidas; chamadas server-to-server sem Origin passam.
 app.use(cors({
-    origin: true,
+    origin: validateCorsOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Authorization', 'Content-Type', 'X-Requested-With', 'X-Cron-Secret'],
+    allowedHeaders: [
+        'Authorization',
+        'Content-Type',
+        'X-Requested-With',
+        'X-Cron-Secret',
+        'X-Sefaz-Cron-Secret',
+        'X-Notif-Cron-Secret',
+        'X-Fiscal-Gateway-Token',
+        'X-Internal-Token',
+    ],
 }));
 
-// Routers montados APÓS o middleware CORS
+// ── Middleware de segurança e parsing — ANTES dos routers! ──────────────
+// BUG corrigido: helmet/express.json/rateLimit estavam montados DEPOIS dos
+// routers /api/admin/*. No Express o middleware roda na ordem de registro;
+// como o router respondia primeiro, esses 3 NUNCA rodavam pras rotas da API
+// (a superficie inteira, incluindo SEFAZ, ficava SEM rate limit nem headers
+// de seguranca). Movido pra ca, antes dos mounts, pra valer de verdade.
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com", "https://www.gstatic.com", "https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            imgSrc: ["'self'", "data:", "https:"],
+            frameSrc: ["'self'", "https://*.firebaseapp.com", "https://apis.google.com"],
+            workerSrc: ["'self'", "https://cdnjs.cloudflare.com", "blob:"],
+            connectSrc: ["'self'", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.firebaseapp.com", "https://firebasestorage.googleapis.com", "https://identitytoolkit.googleapis.com", "https://securetoken.googleapis.com", "https://cdnjs.cloudflare.com"],
+        },
+    },
+}));
+app.use(express.json({ limit: '20mb' }));
+
+// Rate limiting. skip: requisicoes de cron autenticadas (Cloud Scheduler)
+// nunca sao limitadas — senao um pico de crons as 7-8h poderia ser barrado.
+const isCronRequest = (req) => {
+    const secret = process.env.SEFAZ_CRON_SECRET;
+    const header = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
+    return !!secret && header === secret;
+};
+// Limite geral anti-flood em toda a API.
+const apiLimiter = rateLimit({
+    windowMs: 60_000, max: 120,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    message: { error: 'Muitas requisições em pouco tempo. Aguarde um momento.' },
+});
+// Limite RIGOROSO nas rotas que consultam a SEFAZ on-demand: cada hit =
+// 1 chamada à SEFAZ/SERPRO. Sem isso, um cliente em loop queima a quota do
+// IP do Cloud Run e provoca cStat 656 (Consumo Indevido) pra todo mundo.
+const sefazLimiter = rateLimit({
+    windowMs: 60_000, max: 30,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    message: { error: 'Muitas consultas à SEFAZ em pouco tempo. Aguarde ~1 minuto.' },
+});
+app.use('/api/', apiLimiter);
+app.use('/api/admin/sefaz/consulta-nfe-por-chave', sefazLimiter);
+app.use('/api/admin/sefaz/sync-one', sefazLimiter);
+
+// ── Routers (montados DEPOIS do middleware de segurança/limite) ─────────
 app.use('/api/admin/sefaz', sefazCertRouter);
+app.use('/api/admin/sefaz', sefazCertAlertaCronRouter);
 app.use('/api/admin/sefaz', sefazSyncRouter);
 app.use('/api/admin/sefaz', empresaStatusRouter);
 app.use('/api/admin/vencimentos', vencimentosRouter);
@@ -93,23 +158,6 @@ app.use('/api/admin/recuperacao', recuperacaoRouter);
 app.use('/api/admin/nfp-compliance', nfpComplianceRouter);
 app.use('/api/dp-integration', dpIntegrationRouter);
 app.use('/api/admin/sharepoint', sharepointAutoSyncRouter);
-
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com", "https://www.gstatic.com", "https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com"],
-            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-            fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            imgSrc: ["'self'", "data:", "https:"],
-            frameSrc: ["'self'", "https://*.firebaseapp.com", "https://apis.google.com"],
-            workerSrc: ["'self'", "https://cdnjs.cloudflare.com", "blob:"],
-            connectSrc: ["'self'", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.firebaseapp.com", "https://firebasestorage.googleapis.com", "https://identitytoolkit.googleapis.com", "https://securetoken.googleapis.com", "https://cdnjs.cloudflare.com"],
-        },
-    },
-}));
-app.use(express.json({ limit: '20mb' }));
-app.use('/api/', rateLimit({ windowMs: 60000, max: 120, message: { error: 'Aguarde.' } }));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Modelos centralizados em env vars — trocar de versao = atualizar o secret no
@@ -2238,7 +2286,7 @@ function parseCsv(text) {
         };
     });
 }
-app.post('/api/analise-creditos/manual', async (req, res) => {
+app.post('/api/analise-creditos/manual', requireAuth, async (req, res) => {
     try {
         const { notas, perfilCliente } = req.body;
         if (!Array.isArray(notas)||!notas.length||!perfilCliente)
@@ -2246,7 +2294,7 @@ app.post('/api/analise-creditos/manual', async (req, res) => {
         return res.json({ resultado: calcularResultado(notas, perfilCliente.regime) });
     } catch(err) { return res.status(500).json({ erro: err.message||'Erro interno' }); }
 });
-app.post('/api/analise-creditos/upload', upload.single('arquivo'), async (req, res) => {
+app.post('/api/analise-creditos/upload', requireAuth, upload.single('arquivo'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ erro:'Arquivo não enviado' });
         const perfil = JSON.parse(req.body.perfil||'{}');

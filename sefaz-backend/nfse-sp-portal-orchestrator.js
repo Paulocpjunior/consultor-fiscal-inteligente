@@ -88,7 +88,11 @@ async function listarEmpresasComCcm() {
         const snap = await db.collection(col).get();
         snap.forEach((doc) => {
             const d = doc.data();
-            const ccm = (d.ccmSp || '').toString().replace(/\D/g, '');
+            // Cadastro unico: CCM canonico em dadosFiscais.ccmSp (mesmo caminho
+            // do nfse-sp-orchestrator API). Fallback ao top-level legado.
+            // Sem isso, CCM gravada pelo modal Dados Fiscais (que so grava em
+            // dadosFiscais.ccmSp) nao era vista pelo caminho do portal headless.
+            const ccm = (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, '');
             const cnpj = (d.cnpj || '').replace(/\D/g, '');
             if (!ccm || cnpj.length !== 14) return;
             if (mapa.has(ccm)) return;
@@ -224,7 +228,15 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
             log.metodoLogin = 'headless';
             console.log(`[nfsesp-portal] login headless ok (${Object.keys(cookies).length} cookies)`);
         } catch (headlessErr) {
-            console.warn(`[nfsesp-portal] login headless falhou: ${headlessErr.message} — tentando cookies manuais`);
+            // HeadlessLoginError carrega tipo (manutencao | timeout-rede |
+            // selector-mudou | cert-rejeitado | desconhecido) e tentativas.
+            // Persistimos no log do cron pra metrica honesta de causa-raiz —
+            // sem isso, painel so dizia "login falhou" sem distinguir
+            // "portal em manutencao" (esperar) de "DOM mudou" (atualizar
+            // selectors) de "cert rejeitado" (renovar cert).
+            log.headlessErroTipo = headlessErr.tipo || 'desconhecido';
+            log.headlessTentativas = headlessErr.tentativas || 1;
+            console.warn(`[nfsesp-portal] login headless falhou: tipo=${log.headlessErroTipo} tentativas=${log.headlessTentativas} msg=${headlessErr.message} — tentando cookies manuais`);
             try {
                 const manual = await loadSessaoManual();
                 cookies = manual.cookies;
@@ -331,6 +343,20 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
         log.duracaoMs = Date.now() - inicio;
         log.detalhes = detalhes;
         log.detalhesCount = detalhes.length;
+        // Resumo dos erros pra persistir (array `detalhes` inteiro estoura 1 MiB
+        // em runs grandes — guardamos top 10 falhas com motivo enxuto).
+        log.errosResumo = detalhes
+            .filter(d => d.prestador?.erro || d.tomador?.erro || d.status === 'erro' || d.status === 'erro-auto-cadastro')
+            .slice(0, 10)
+            .map(d => ({
+                cnpj: d.cnpj || null,
+                ccm: d.ccm || null,
+                nome: (d.nome || '').slice(0, 60) || null,
+                erroPrestador: (d.prestador?.erro || '').slice(0, 200) || null,
+                erroTomador: (d.tomador?.erro || '').slice(0, 200) || null,
+                motivo: (d.motivo || '').slice(0, 200) || null,
+                status: d.status || null,
+            }));
     } catch (e) {
         log.erroFatal = e.message;
         log.duracaoMs = Date.now() - inicio;

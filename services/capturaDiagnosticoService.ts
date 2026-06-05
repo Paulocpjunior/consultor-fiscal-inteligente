@@ -76,6 +76,16 @@ export type CronLogColecao =
     | 'manifestacoes_cron_logs'
     | 'vencimentos_cron_logs';
 
+export interface CronLogErroResumoItem {
+    cnpj: string | null;
+    ccm: string | null;
+    nome: string | null;
+    erroPrestador: string | null;
+    erroTomador: string | null;
+    motivo: string | null;
+    status: string | null;
+}
+
 export interface CronLogItem extends CronLog {
     id: string;
     processadas?: number | null;
@@ -83,6 +93,7 @@ export interface CronLogItem extends CronLog {
     capturadoPor?: string | null;
     periodo?: string | null;
     prestadoresAutorizados?: number | null;
+    errosResumo?: CronLogErroResumoItem[] | null;
 }
 
 export async function fetchCronLogs(colecao: CronLogColecao, limit = 20): Promise<CronLogItem[]> {

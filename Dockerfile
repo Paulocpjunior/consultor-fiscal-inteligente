@@ -4,7 +4,7 @@ FROM node:20-slim AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 COPY . .
 
@@ -17,6 +17,10 @@ ARG VITE_FIREBASE_PROJECT_ID
 ARG VITE_FIREBASE_STORAGE_BUCKET
 ARG VITE_FIREBASE_MESSAGING_SENDER_ID
 ARG VITE_FIREBASE_APP_ID
+# Sentry: DSN do projeto frontend. Se nao for passado no build, app roda
+# normal e Sentry vira NO-OP (vide services/sentry.ts). Opcional.
+ARG VITE_SENTRY_DSN
+ARG VITE_SENTRY_ENV
 
 ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
 ENV VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
@@ -25,6 +29,8 @@ ENV VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID
 ENV VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET
 ENV VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID
 ENV VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
+ENV VITE_SENTRY_ENV=$VITE_SENTRY_ENV
 
 RUN npm run build
 
@@ -62,7 +68,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 # Baixa só o Chromium do Playwright. Definimos PLAYWRIGHT_BROWSERS_PATH
 # pra garantir caminho previsível independente do user que roda.

@@ -1,4 +1,5 @@
 import React from 'react';
+import { captureException } from '../services/sentry';
 
 interface Props {
   children: React.ReactNode;
@@ -15,6 +16,13 @@ class ErrorBoundary extends React.Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Reporta ao Sentry SE inicializado (services/sentry.ts faz no-op
+    // quando VITE_SENTRY_DSN nao esta setada). Antes: stack trace ia so
+    // pro console do navegador do colaborador — invisivel em producao.
+    captureException(error, { componentStack: errorInfo.componentStack });
   }
 
   render() {

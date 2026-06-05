@@ -20,7 +20,10 @@
 
 import express from 'express';
 import admin from 'firebase-admin';
+import forge from 'node-forge';
 import { requireAuth } from './require-admin.js';
+import { getCnpjsDaCarteira } from './carteira-auth.js';
+import { loadCertificate } from './secret-loader.js';
 import { lookupCnpj } from './brasilapi-cache.js';
 
 const router = express.Router();
@@ -62,6 +65,13 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
         const db = fa().firestore();
         const agora = new Date();
 
+        // Multi-tenancy: admin ve todas. Colaborador ve so as empresas da
+        // carteira dele (via colecao `carteiras`). Se nao tem nenhuma na
+        // carteira, vai retornar lista vazia (intencional — sem carteira =
+        // sem acesso a empresa nenhuma).
+        const cnpjsPermitidos = await getCnpjsDaCarteira(req.user);
+        const cnpjsSet = cnpjsPermitidos ? new Set(cnpjsPermitidos) : null;
+
         // 1. Lista todas as empresas (Simples + Lucro)
         const empresasMap = new Map();
         for (const col of ['simples_empresas', 'lucro_empresas']) {
@@ -71,6 +81,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 const cnpj = (d.cnpj || '').replace(/\D/g, '');
                 if (cnpj.length !== 14) return;
                 if (empresasMap.has(cnpj)) return; // dedup
+                if (cnpjsSet && !cnpjsSet.has(cnpj)) return; // filtra pela carteira
                 empresasMap.set(cnpj, {
                     id: doc.id,
                     cnpj,
@@ -115,6 +126,23 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             });
         });
 
+        // 3b. Responsáveis (vínculos da Carteira de Clientes) por CNPJ.
+        // Permite admin/colaborador ver de cara quem cuida de cada empresa
+        // direto no painel de Status (antes precisava abrir Carteira de Clientes
+        // numa aba separada e cruzar manualmente).
+        const responsaveisMap = new Map();
+        const carteirasSnap = await db.collection('carteiras').get();
+        carteirasSnap.forEach(doc => {
+            const d = doc.data();
+            const cnpj = (d.empresaCnpj || '').replace(/\D/g, '');
+            if (!cnpj) return;
+            if (!responsaveisMap.has(cnpj)) responsaveisMap.set(cnpj, []);
+            responsaveisMap.get(cnpj).push({
+                nome: d.colaboradorNome || '—',
+                papel: d.papel || 'principal',
+            });
+        });
+
         // 4. Monta resposta agregada
         const empresas = [];
         const resumo = {
@@ -137,6 +165,29 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             capturaNfseNacionalOk: 0,
         };
 
+        // Lê o cert do escritório (Secret Manager) UMA vez por request e
+        // extrai o CNPJ-Base do subject. Usado pra detectar o mismatch que
+        // causa cStat=593 em massa (cert global pertence a outro CNPJ).
+        // loadCertificate() tem cache TTL 5min — chamada repetida é grátis.
+        let cnpjBaseCertEscritorio = null;
+        let certEscritorioErro = null;
+        try {
+            const certEsc = await loadCertificate();
+            if (certEsc?.pemCert) {
+                const cert509 = forge.pki.certificateFromPem(certEsc.pemCert);
+                const subjectAttrs = cert509.subject?.attributes || [];
+                const cn = (subjectAttrs.find(a => a.shortName === 'CN' || a.name === 'commonName')?.value || '');
+                const serial = (subjectAttrs.find(a => a.shortName === 'serialNumber')?.value || '');
+                const matchCN = cn.match(/:(\d{14})$/);
+                const matchSerial = serial.match(/\d{14}/);
+                const cnpjCert = matchCN ? matchCN[1] : (matchSerial ? matchSerial[0] : null);
+                if (cnpjCert) cnpjBaseCertEscritorio = cnpjCert.slice(0, 8);
+            }
+        } catch (e) {
+            certEscritorioErro = e.message;
+            console.warn('[empresa-status-routes] falha lendo cert do escritorio:', e.message);
+        }
+
         for (const emp of empresasMap.values()) {
             const cert = certsMap.get(emp.id);
             let tipoCert = 'nenhum';
@@ -144,6 +195,12 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             let certValido = false;
             let certVenceEm = null;
             let usaCertEscritorio = false;
+
+            // A propria empresa do escritorio (S&P) tem o cert dela no Secret
+            // Manager (carregado por loadCertificate()), NAO em empresas_certificados.
+            // Sem esse caso especial, ela aparecia como "sem cert" na varredura
+            // mesmo sendo o dono do cert global usado por todas as procuracoes.
+            const ehEscritorio = emp.cnpj === CNPJ_ESCRITORIO;
 
             if (cert) {
                 certUploaded = true;
@@ -153,6 +210,14 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                     certValido = venceEm > agora;
                     certVenceEm = cert.notAfter;
                 }
+            } else if (ehEscritorio) {
+                // Cert do escritorio vive em Secret Manager. Marca como A1 proprio.
+                // Nao puxa notAfter daqui pra nao adicionar chamada ao Secret Manager
+                // na rota de varredura (cara, +200ms por request). Se precisar do
+                // venc real, a tela de Configurações > Certificado Digital mostra.
+                tipoCert = 'A1';
+                certUploaded = true;
+                certValido = true;
             } else {
                 // Sem cert próprio — pode usar o cert do escritório se houver procuração
                 if (emp.procuracaoEcacAtiva) {
@@ -170,13 +235,29 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             // Cálculo de capacidade de captura
             const motivosBloqueio = [];
 
-            // a) NFe DistDFe: precisa cert válido + UF cadastrada
-            const capturaNfeOk = certValido && emp.capturarSefaz && !!emp.uf;
+            // a) NFe DistDFe: precisa cert válido + UF cadastrada + cert-base bater
+            // O mismatch CNPJ-Base só importa quando usa cert do escritório (cert
+            // global) ou quando a empresa É o escritório. Empresas com cert próprio
+            // já são validadas pelo sanity check do sync-orchestrator.
+            const empresaCnpjBase = String(emp.cnpj || '').slice(0, 8);
+            const certBaseMismatch = (usaCertEscritorio || emp.cnpj === CNPJ_ESCRITORIO)
+                && cnpjBaseCertEscritorio
+                && cnpjBaseCertEscritorio !== empresaCnpjBase;
+            const capturaNfeOk = certValido && emp.capturarSefaz && !!emp.uf && !certBaseMismatch;
             if (!emp.capturarSefaz) motivosBloqueio.push('Captura SEFAZ desativada manualmente');
             else if (!emp.uf) motivosBloqueio.push('UF não cadastrada (preencha dadosFiscais.uf, ex: SP)');
             else if (tipoCert === 'nenhum') motivosBloqueio.push('Sem certificado A1/A3 e sem procuração e-CAC');
             else if (!certValido && certUploaded) motivosBloqueio.push(`Certificado ${tipoCert} expirado em ${certVenceEm}`);
             else if (tipoCert === 'A3') motivosBloqueio.push('Tipo A3 — captura via agente local cfi-a3, não pelo Cloud Run');
+            else if (certBaseMismatch) {
+                motivosBloqueio.push(
+                    `Cert do escritório no Secret Manager é de outro CNPJ-Base (${cnpjBaseCertEscritorio}) — esperado ${empresaCnpjBase}. ` +
+                    `SEFAZ rejeita com cStat=593. Suba o .pfx correto via 'Empresas Monitoradas → Certificado'.`
+                );
+            }
+            if (certEscritorioErro && (usaCertEscritorio || emp.cnpj === CNPJ_ESCRITORIO)) {
+                motivosBloqueio.push(`Cert do escritório indisponível: ${certEscritorioErro}`);
+            }
 
             // b) NFSe SP: precisa ccmSp + autorização do contador no portal SP
             const capturaNfseSpOk = !!emp.ccmSp && !!emp.nfseSpAutorizadoEm;
@@ -215,6 +296,8 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 capturaNfseSpOk,
                 capturaNfseNacionalOk,
                 motivosBloqueio,
+                // responsáveis na carteira de clientes (vazio = ninguém atribuído)
+                responsaveis: responsaveisMap.get(emp.cnpj) || [],
                 // estado última sync
                 ultimaSyncMs: state?.ultimaSyncMs ?? null,
                 ultNSU: state?.ultNSU ?? null,

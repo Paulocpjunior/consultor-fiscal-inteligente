@@ -16,7 +16,7 @@
  *
  * Quando SERPRO retornar erro de campo faltando, refinamos esse mapper.
  */
-import type { Empresa, SimplesNacionalResumo } from '../types';
+import type { SimplesNacionalEmpresa, SimplesNacionalResumo } from '../types';
 
 interface CnaeInputState {
     valor: string;
@@ -29,7 +29,7 @@ interface CnaeInputState {
 }
 
 export interface PgdasMapperInput {
-    empresa: Empresa;
+    empresa: SimplesNacionalEmpresa;
     resumo: SimplesNacionalResumo;
     mesApuracao: Date;
     faturamentoPorCnae: Record<string, CnaeInputState>;

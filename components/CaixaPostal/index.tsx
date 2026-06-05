@@ -87,7 +87,7 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
     }, [resumo, filtroCategoria]);
 
     // Per-fonte unread counts
-    const fonteCounts = useMemo(() => {
+    const fonteCounts = useMemo<Partial<Record<CaixaPostalFonte, number>>>(() => {
         if (!resumo?.naoLidasPorFonte) return {};
         return resumo.naoLidasPorFonte;
     }, [resumo]);
