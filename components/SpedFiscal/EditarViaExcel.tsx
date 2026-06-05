@@ -11,12 +11,12 @@
  */
 
 import React, { useState } from 'react';
-import { parseSped, exportarXlsx, aplicarEdicoesXlsx, validarEstrutura, type ValidacaoSped } from '../../services/spedFiscalExcelEditor';
+import { parseSped, exportarXlsx, aplicarEdicoesXlsx, validarEstrutura, aplicarRegrasTributarias, type ValidacaoSped, type RegrasTributariasResult } from '../../services/spedFiscalExcelEditor';
 
 type Status =
     | { fase: 'idle' }
     | { fase: 'analisando' }
-    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }>; validacao: ValidacaoSped }
+    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }>; validacao: ValidacaoSped; regras: RegrasTributariasResult }
     | { fase: 'aplicando' }
     | { fase: 'erro'; mensagem: string };
 
@@ -38,6 +38,7 @@ const EditarViaExcel: React.FC = () => {
             const txt = await file.text();
             const parsed = await parseSped(txt);
             const validacao = await validarEstrutura(parsed);
+            const regras = await aplicarRegrasTributarias(parsed);
             setStatus({
                 fase: 'pronto-edicao',
                 nomeOriginal: file.name,
@@ -47,6 +48,7 @@ const EditarViaExcel: React.FC = () => {
                 tipoSped: parsed.tipoSped,
                 mismatch: parsed.resumo.layoutMismatch || {},
                 validacao,
+                regras,
             });
         } catch (err: any) {
             setStatus({ fase: 'erro', mensagem: err?.message || 'Falha ao ler SPED' });
@@ -151,6 +153,31 @@ const EditarViaExcel: React.FC = () => {
                                 </ul>
                             </div>
                         )}
+
+                        {/* Análise tributária (CFOP × CST × NCM) — só EFD ICMS/IPI. */}
+                        {!status.regras.resumo.naoAplicavel && (
+                            (status.regras.resumo.erros + status.regras.resumo.avisos) === 0 ? (
+                                <div className="mb-3 p-2 rounded border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 text-[11px] text-emerald-800 dark:text-emerald-300">
+                                    ✓ Análise tributária: nenhuma inconsistência CFOP/CST/NCM encontrada.
+                                </div>
+                            ) : (
+                                <div className="mb-3 p-2 rounded border border-orange-300 bg-orange-50 dark:bg-orange-900/20 text-[11px] text-orange-800 dark:text-orange-300">
+                                    <b>🔎 Análise tributária: {status.regras.resumo.erros} erro(s) · {status.regras.resumo.avisos} aviso(s)</b>
+                                    {' '}(CFOP/CST/NCM/ICMS-ST):
+                                    <ul className="mt-1 list-disc list-inside max-h-40 overflow-auto">
+                                        {status.regras.achados.slice(0, 30).map((a, i) => (
+                                            <li key={i}>
+                                                <span className={a.severidade === 'erro' ? 'font-bold text-red-600 dark:text-red-400' : ''}>
+                                                    [{a.severidade}] {a.registro} · {a.mensagem}
+                                                </span>
+                                            </li>
+                                        ))}
+                                        {status.regras.achados.length > 30 && <li>… +{status.regras.achados.length - 30}</li>}
+                                    </ul>
+                                </div>
+                            )
+                        )}
+
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-[11px]">
                             {Object.entries(status.resumo).sort().map(([tipo, qtd]) => (
                                 <div key={tipo} className="px-2 py-1 rounded" style={{ background: 'var(--bg-card)' }}>
