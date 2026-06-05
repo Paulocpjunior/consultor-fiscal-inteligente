@@ -5,6 +5,7 @@
 
 import admin from 'firebase-admin';
 import { getDctfwebProvider, getDctfwebMode } from './dctfweb-provider.js';
+import { normalizarRetencaoDctfweb } from './dctfweb-retencao-normalizer.js';
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
@@ -175,6 +176,16 @@ export async function consultarApuracaoMit({ empresaCnpj, anoPA, mesPA }) {
 export async function consultarApuracoesAno({ empresaCnpj, anoPA }) {
     const provider = getDctfwebProvider();
     return await provider.consultarApuracoesAno({ empresaCnpj, anoPA });
+}
+
+// Consulta a declaracao DCTFWeb (XML) e NORMALIZA a retencao consolidada pra
+// cruzar contra a EFD-Reinf. Devolve { lido, motivo, retencoes, ... } — honesto
+// quando nao consegue ler (NUNCA zeros falsos).
+export async function consultarRetencaoDctfwebNormalizada({ empresaCnpj, anoPA, mesPA, categoria }) {
+    const provider = getDctfwebProvider();
+    const consulta = await provider.consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria });
+    const norm = normalizarRetencaoDctfweb(consulta?.xml || consulta?._raw || '');
+    return { competencia: `${anoPA}-${String(mesPA).padStart(2, '0')}`, fonte: consulta?.fonte, ...norm };
 }
 
 export async function getResumoGlobal() {

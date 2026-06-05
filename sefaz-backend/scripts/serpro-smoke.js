@@ -103,6 +103,20 @@ const SERVICOS = [
             + 'codigo/valor/descricao dos debitos com este JSON.',
     },
     {
+        rotulo: 'DCTFWEB — XML da declaracao (retencao p/ cruzar com EFD-Reinf)',
+        idSistema: 'DCTFWEB',
+        idServico: 'CONSXMLDECLARACAO',
+        acao: 'Consultar',
+        dados: {
+            categoria: '41', // 41 = Mensal Geral
+            anoPA: String(pa.slice(0, 4)),
+            mesPA: String(pa.slice(4, 6)),
+        },
+        nota: 'CRITICO p/ cruzamento DCTFWeb x EFD-Reinf. O XML deste response '
+            + 'define o dctfweb-retencao-normalizer.js — confirme as TAGS de '
+            + 'retencao (INSS/IRRF/CSLL/PIS/COFINS) e amplie a allowlist com este XML.',
+    },
+    {
         rotulo: 'CAIXAPOSTAL — lista mensagens',
         idSistema: 'CAIXAPOSTAL',
         idServico: 'OBTERLISTAMSGS53',

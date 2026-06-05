@@ -12,6 +12,7 @@ import {
     consultarDeclaracaoCompleta, consultarRecibo,
     encerrarApuracaoMit, consultarStatusEncerramentoMit,
     consultarApuracaoMit, consultarApuracoesAno,
+    consultarRetencaoDctfwebNormalizada,
     getResumoGlobal,
 } from './dctfweb-orchestrator.js';
 import { getDctfwebMode } from './dctfweb-provider.js';
@@ -127,6 +128,22 @@ router.get('/mit/apuracao-normalizada', requireAuth, async (req, res) => {
         const consulta = await consultarApuracaoMit({ empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA) });
         const norm = normalizarApuracaoMit(consulta?.apuracaoMit);
         res.json({ competencia: `${anoPA}-${String(mesPA).padStart(2, '0')}`, ...norm });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Retencao consolidada NORMALIZADA — base do cruzamento DCTFWeb x EFD-Reinf.
+// Devolve { lido, motivo, retencoes:{INSS,IRRF,CSLL,PIS,COFINS}, camposUsados }.
+// lido=false (com motivo) quando o XML da declaracao tem shape inesperado —
+// NUNCA zeros falsos. Calibra-se a allowlist via serpro-smoke (CONSXMLDECLARACAO).
+router.get('/retencao-normalizada', requireAuth, async (req, res) => {
+    try {
+        const { empresaCnpj, anoPA, mesPA, categoria } = req.query;
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+        const r = await consultarRetencaoDctfwebNormalizada({
+            empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA), categoria,
+        });
+        res.json(r);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

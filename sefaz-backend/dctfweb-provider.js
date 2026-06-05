@@ -123,6 +123,18 @@ class MockProvider {
         return { apuracaoMit: { tributos: [], total: 0 }, fonte: 'mock' };
     }
 
+    async consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' } = {}) {
+        const seed = hashCnpj(empresaCnpj);
+        const inss = (500 + (seed % 2000)).toFixed(2).replace('.', ',');
+        // XML minimo no shape DCTFWeb (Geral Mensal) com retencao previdenciaria.
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>`
+            + `<dctfweb><identificacao><categoria>${categoria}</categoria>`
+            + `<anoPA>${anoPA}</anoPA><mesPA>${mesPA}</mesPA></identificacao>`
+            + `<apuracao><retencoes><vlrTotalRetPrinc>${inss}</vlrTotalRetPrinc>`
+            + `<vlrTotalRetAdic>0,00</vlrTotalRetAdic></retencoes></apuracao></dctfweb>`;
+        return { xml, categoria, anoPA, mesPA, fonte: 'mock' };
+    }
+
     async consultarApuracoesAno({ anoPA }) {
         return { ano: anoPA, apuracoes: [], fonte: 'mock' };
     }
@@ -278,6 +290,25 @@ class SerproProvider {
         });
         const d = safeJsonParse(r.dados) || {};
         return { apuracaoMit: d.apuracao || d, fonte: 'serpro' };
+    }
+
+    async consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
+        const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        const r = await invokeIntegraContador({
+            idSistema: 'DCTFWEB',
+            idServico: 'CONSXMLDECLARACAO',
+            contribuinteCnpj: cnpj,
+            acao: 'Consultar',
+            dados: { categoria, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2, '0') },
+        });
+        const d = safeJsonParse(r.dados) || {};
+        // SERPRO pode devolver o XML cru (string) OU base64 (XMLByteArrayBase64).
+        let xml = d.xml || d.XMLDeclaracao || d.declaracaoXml || '';
+        const b64 = d.XMLByteArrayBase64 || d.xmlBase64;
+        if (!xml && b64) {
+            try { xml = Buffer.from(b64, 'base64').toString('utf8'); } catch { xml = ''; }
+        }
+        return { xml, _raw: d, categoria, anoPA, mesPA, fonte: 'serpro' };
     }
 
     async consultarApuracoesAno({ empresaCnpj, anoPA }) {
