@@ -64,23 +64,22 @@ const LAYOUT_FISCAL = {
     ],
 };
 
-// Layout EFD CONTRIBUICOES (PIS/COFINS) — Guia Pratico 1.35.
-// Registros compartilhados (0150, 0200) sao IDENTICOS ao Fiscal — reusados.
-// C170 e M210/M610 tem layout PROPRIO (foco PIS/COFINS, nao ICMS).
-// A rede de seguranca (contagem de campos) protege: se um layout nao bater
-// com a linha real, o registro vira read-only em vez de corromper.
+// Layout EFD CONTRIBUICOES (PIS/COFINS) — VALIDADO contra arquivo real
+// (MODELO_EFD_CONT). Achados confirmados em dado real:
+//   - 0150: 12 campos — idêntico ao Fiscal.
+//   - 0200: 11 campos — Fiscal SEM o CEST final (COD_NCM confirmado no campo 7).
+//   - C100: 28 campos — idêntico ao Fiscal.
+//   - C170: 36 campos — C170 Fiscal SEM o VL_ABAT_NT final. CST_PIS confirmado
+//     no campo 24, ALIQ_PIS no 26, VL_PIS no 29, CST_COFINS no 30, VL_COFINS no 35.
+//     (Meu chute anterior de 22 campos estava ERRADO — corrigido com dado real.)
+//   - M210/M610: 15 campos — bateram de primeira.
+// A rede de seguranca (contagem de campos) continua protegendo qualquer
+// variacao de versao: se nao bater, vira read-only em vez de corromper.
 const LAYOUT_CONTRIB = {
     '0150': LAYOUT_FISCAL['0150'],
-    '0200': LAYOUT_FISCAL['0200'],
-    // C170 do EFD Contribuicoes (sem campos de ICMS; NAT_BC_CRED/IND_ORIG_CRED
-    // no lugar). Guia Pratico EFD Contribuicoes.
-    'C170': [
-        'NUM_ITEM', 'COD_ITEM', 'DESCR_COMPL', 'QTD', 'UNID', 'VL_ITEM', 'VL_DESC',
-        'NAT_BC_CRED', 'IND_ORIG_CRED',
-        'CST_PIS', 'VL_BC_PIS', 'ALIQ_PIS', 'QUANT_BC_PIS', 'ALIQ_PIS_QUANT', 'VL_PIS',
-        'CST_COFINS', 'VL_BC_COFINS', 'ALIQ_COFINS', 'QUANT_BC_COFINS', 'ALIQ_COFINS_QUANT', 'VL_COFINS',
-        'COD_CTA',
-    ],
+    '0200': LAYOUT_FISCAL['0200'].slice(0, 11),
+    'C100': LAYOUT_FISCAL['C100'],
+    'C170': LAYOUT_FISCAL['C170'].slice(0, 36),
     // M210 — Detalhamento da contribuicao PIS por CST (layout v3+).
     'M210': [
         'CST_PIS', 'VL_REC_BRT', 'VL_BC_CONT',
