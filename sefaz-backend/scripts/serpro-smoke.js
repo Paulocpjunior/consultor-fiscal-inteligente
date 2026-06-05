@@ -93,6 +93,16 @@ const SERVICOS = [
         nota: 'Consulta DCTFWeb mensal do PA. Empresa Lucro/Real tipica.',
     },
     {
+        rotulo: 'DCTFWEB MIT — apuracao (tributos discriminados p/ cruzamento)',
+        idSistema: 'DCTFWEB',
+        idServico: 'CONSAPURACAOMIT',
+        acao: 'Consultar',
+        dados: { anoPA: String(pa.slice(0, 4)), mesPA: String(pa.slice(4, 6)) },
+        nota: 'CRITICO p/ cruzamento DCTFWeb x apuracao. O shape deste response '
+            + 'define o dctfweb-mit-normalizer.js — confirme os campos de '
+            + 'codigo/valor/descricao dos debitos com este JSON.',
+    },
+    {
         rotulo: 'CAIXAPOSTAL — lista mensagens',
         idSistema: 'CAIXAPOSTAL',
         idServico: 'OBTERLISTAMSGS53',

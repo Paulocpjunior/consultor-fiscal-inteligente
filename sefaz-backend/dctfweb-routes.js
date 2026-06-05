@@ -15,6 +15,7 @@ import {
     getResumoGlobal,
 } from './dctfweb-orchestrator.js';
 import { getDctfwebMode } from './dctfweb-provider.js';
+import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
 import { requireAdmin, requireAuth } from './require-admin.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
@@ -111,6 +112,21 @@ router.get('/mit/apuracao', requireAuth, async (req, res) => {
         const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await consultarApuracaoMit({ empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA) }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Apuracao MIT NORMALIZADA — base do cruzamento DCTFWeb x apuracao do app.
+// Devolve { lido, motivo, tributos:{IRPJ,CSLL,PIS,COFINS}, outros }. Se o
+// normalizador NAO conseguir ler o response MIT (shape inesperado), lido=false
+// e o front mostra "DCTFWeb MIT nao pode ser lido" — NUNCA zeros falsos.
+router.get('/mit/apuracao-normalizada', requireAuth, async (req, res) => {
+    try {
+        const { empresaCnpj, anoPA, mesPA } = req.query;
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+        const consulta = await consultarApuracaoMit({ empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA) });
+        const norm = normalizarApuracaoMit(consulta?.apuracaoMit);
+        res.json({ competencia: `${anoPA}-${String(mesPA).padStart(2, '0')}`, ...norm });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

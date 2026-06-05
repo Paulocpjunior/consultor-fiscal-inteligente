@@ -4,6 +4,7 @@ import { LucroPresumidoEmpresa, User, FichaFinanceiraRegistro, LucroInput, Histo
 import * as lucroPresumidoService from '../services/lucroPresumidoService';
 import { fetchCnpjFromBrasilAPI } from '../services/externalApiService';
 import { calcularLucro } from '../services/lucroService';
+import ConferirDctfwebModal from './DCTFWeb/ConferirDctfwebModal';
 import { PlusIcon, CalculatorIcon, DownloadIcon, TrashIcon, ArrowLeftIcon, SaveIcon, UserIcon, BuildingIcon, PencilIcon, CloseIcon, TagIcon, BriefcaseIcon, ShieldIcon, InfoIcon } from './Icons';
 import LoadingSpinner from './LoadingSpinner';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
@@ -420,6 +421,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         if (!selectedFicha) return;
         setView('new_ficha');
     };
+
+    const [conferirDctfwebAberto, setConferirDctfwebAberto] = useState(false);
 
     // Live Calculation Logic
     const liveResults = useMemo(() => {
@@ -1211,6 +1214,19 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                                             </span>
                                         </div>
                                     </div>
+
+                                    {/* Conferência DCTFWeb: cruza IRPJ/CSLL/PIS/COFINS apurados aqui
+                                        contra o declarado na DCTFWeb MIT da mesma competência. */}
+                                    {selectedEmpresa?.cnpj && fichaMes && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setConferirDctfwebAberto(true)}
+                                            className="mt-3 w-full px-4 py-2 text-sm font-semibold rounded-lg border border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-900/30"
+                                            title="Compara o apurado aqui com o declarado na DCTFWeb (MIT)"
+                                        >
+                                            🔎 Conferir vs DCTFWeb ({fichaMes})
+                                        </button>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="p-8 text-center text-slate-500 italic">
@@ -1686,6 +1702,15 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
 
             {selectedEmpresa && (
                 <>
+                {conferirDctfwebAberto && liveResults && fichaMes && (
+                    <ConferirDctfwebModal
+                        empresaCnpj={selectedEmpresa.cnpj}
+                        empresaNome={selectedEmpresa.nome}
+                        competencia={fichaMes}
+                        detalhamento={liveResults.detalhamento}
+                        onClose={() => setConferirDctfwebAberto(false)}
+                    />
+                )}
                 <EmpresaDadosFiscaisModal
                     isOpen={isDadosFiscaisModalOpen}
                     onClose={() => setIsDadosFiscaisModalOpen(false)}
