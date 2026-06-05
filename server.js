@@ -36,6 +36,7 @@ import recuperacaoRouter from './sefaz-backend/recuperacao-tributaria-routes.js'
 import nfpComplianceRouter from './sefaz-backend/nfp-compliance-routes.js';
 import dpIntegrationRouter from './sefaz-backend/dp-integration-routes.js';
 import sharepointAutoSyncRouter from './sefaz-backend/sharepoint-auto-sync.js';
+import efdReinfRouter from './sefaz-backend/efd-reinf-routes.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -158,6 +159,7 @@ app.use('/api/admin/recuperacao', recuperacaoRouter);
 app.use('/api/admin/nfp-compliance', nfpComplianceRouter);
 app.use('/api/dp-integration', dpIntegrationRouter);
 app.use('/api/admin/sharepoint', sharepointAutoSyncRouter);
+app.use('/api/admin/efd-reinf', efdReinfRouter);
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Modelos centralizados em env vars — trocar de versao = atualizar o secret no
