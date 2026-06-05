@@ -713,6 +713,8 @@ export interface NfseNacionalEmitida {
         municipioPrestacao?: string;
         cIndOp?: string;
         cClassTrib?: string;
+        cTribNac?: string;
+        cTribMun?: string;
     };
     valores: {
         bruto: number;
@@ -753,6 +755,7 @@ export interface NfseNacRuntimeStatus {
         available: boolean;
         provider: 'mock' | 'sefin-nacional';
         requiresDpsXml: boolean;
+        generatesDpsXml?: boolean;
         accepts: string[];
     };
     cancelar: {
@@ -767,6 +770,7 @@ export interface NbsCodigo {
     descricao: string;
     cIndOpSugerido?: string;       // Indicador de Operação (sugerido)
     cClassTribSugerido?: string;   // Classificação Tributária (sugerido — '00000000' = placeholder)
+    cTribNacSugerido?: string;     // Código nacional ISSQN sugerido
 }
 
 

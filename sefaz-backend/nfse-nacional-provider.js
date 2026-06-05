@@ -11,9 +11,9 @@
 //   - 'serpro' (default): Emissor Publico Nacional NFS-e via API SEFIN
 //                         https://www.gov.br/nfse (gratuito)
 //
-// Em modo SERPRO, este provider nao monta uma DPS fiscal do zero: ele recebe
-// dpsXmlGZipB64 OU dpsXml/dpsXmlAssinado, assina quando necessario, compacta
-// e envia ao endpoint oficial POST /nfse.
+// Em modo SERPRO, este provider monta uma DPS fiscal basica a partir do
+// formulario, assina com o certificado A1 do escritorio, compacta e envia ao
+// endpoint oficial POST /nfse. Tambem aceita DPS XML manual como override.
 // ============================================================================
 
 import { gzipSync, gunzipSync } from 'node:zlib';
@@ -34,6 +34,10 @@ const BASE_URL = (
 ).replace(/\/+$/, '');
 const REQUEST_TIMEOUT_MS = Number(process.env.NFSE_NAC_TIMEOUT_MS || 60000);
 const NFSE_VERSAO = process.env.NFSE_NAC_LAYOUT_VERSION || '1.01';
+const NFSE_XML_NS = 'http://www.sped.fazenda.gov.br/nfse';
+const VER_APLIC = String(process.env.NFSE_NAC_VER_APLIC || 'CFI-1.2.1').slice(0, 20);
+const DEFAULT_SERIE_DPS = process.env.NFSE_NAC_SERIE_DPS || '1';
+const DEFAULT_CTRIBNAC = process.env.NFSE_NAC_DEFAULT_CTRIBNAC || '';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -63,6 +67,206 @@ function calcularIssRetido(valorServico, aliquotaIss, deveRetido) {
 
 function onlyDigits(value) {
     return String(value || '').replace(/\D/g, '');
+}
+
+function escapeXml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+function requiredText(path, value) {
+    const text = String(value ?? '').trim();
+    if (!text) throw new Error(`${path} obrigatorio para montar DPS Nacional.`);
+    return text;
+}
+
+function truncateText(value, max) {
+    return String(value ?? '').trim().slice(0, max);
+}
+
+function normalizeCnpj(value, path = 'CNPJ') {
+    const digits = onlyDigits(value);
+    if (digits.length !== 14) throw new Error(`${path} deve conter 14 digitos.`);
+    return digits;
+}
+
+function normalizeCpf(value, path = 'CPF') {
+    const digits = onlyDigits(value);
+    if (digits.length !== 11) throw new Error(`${path} deve conter 11 digitos.`);
+    return digits;
+}
+
+function normalizePrestadorFederal(prestador = {}) {
+    if (prestador.cpf) {
+        const cpf = normalizeCpf(prestador.cpf, 'Prestador.cpf');
+        return { tag: 'CPF', value: cpf, tipoInscricaoFederal: '1', idFederal: cpf.padStart(14, '0') };
+    }
+    const cnpj = normalizeCnpj(prestador.cnpj, 'Prestador.cnpj');
+    return { tag: 'CNPJ', value: cnpj, tipoInscricaoFederal: '2', idFederal: cnpj };
+}
+
+function normalizeTomadorFederal(tomador = {}) {
+    if (tomador.cpf) return { tag: 'CPF', value: normalizeCpf(tomador.cpf, 'Tomador.cpf') };
+    return { tag: 'CNPJ', value: normalizeCnpj(tomador.cnpj, 'Tomador.cnpj') };
+}
+
+function normalizeCodMun(value, path) {
+    const digits = onlyDigits(value);
+    if (digits.length !== 7) throw new Error(`${path} deve conter codigo IBGE com 7 digitos.`);
+    return digits;
+}
+
+function normalizeFixedDigits(value, length, path, { required = true } = {}) {
+    const digits = onlyDigits(value);
+    if (!digits && !required) return '';
+    if (digits.length !== length) throw new Error(`${path} deve conter ${length} digitos.`);
+    return digits;
+}
+
+function normalizeSerieDps(value) {
+    const digits = onlyDigits(value || DEFAULT_SERIE_DPS);
+    if (!digits || digits.length > 5) throw new Error('serieDps deve conter de 1 a 5 digitos.');
+    return digits;
+}
+
+function normalizeNumeroDps(value) {
+    const digits = onlyDigits(value);
+    if (!digits) throw new Error('numeroDps obrigatorio para montar DPS Nacional.');
+    if (!/^[1-9][0-9]{0,14}$/.test(digits)) {
+        throw new Error('numeroDps deve conter de 1 a 15 digitos e nao pode iniciar com zero.');
+    }
+    return digits;
+}
+
+function formatDateForNfse(value) {
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return value.trim();
+    const date = value ? new Date(value) : new Date();
+    if (Number.isNaN(date.getTime())) throw new Error('dataCompetencia/dataEmissao invalida para DPS Nacional.');
+    return date.toISOString().slice(0, 10);
+}
+
+function formatDateTimeForNfse(value) {
+    const date = value ? new Date(value) : new Date();
+    if (Number.isNaN(date.getTime())) throw new Error('dataEmissao invalida para DPS Nacional.');
+    const iso = date.toISOString();
+    return `${iso.slice(0, 19)}+00:00`;
+}
+
+function parseFiniteNumber(value, path) {
+    const num = Number(String(value ?? '').replace(',', '.'));
+    if (!Number.isFinite(num)) throw new Error(`${path} invalido.`);
+    return num;
+}
+
+function formatDecimal2(value, path) {
+    const num = parseFiniteNumber(value, path);
+    if (num < 0) throw new Error(`${path} nao pode ser negativo.`);
+    return num.toFixed(2);
+}
+
+function formatAliquotaIss(value) {
+    const num = parseFiniteNumber(value ?? 0, 'servico.aliquotaIss');
+    if (num < 0) throw new Error('servico.aliquotaIss nao pode ser negativa.');
+    if (num > 5) throw new Error(`Aliquota ISS ${num}% excede maximo legal de 5% (LC 116/2003 art. 8º II).`);
+    if (num > 9) throw new Error('servico.aliquotaIss excede limite do layout nacional.');
+    return num.toFixed(2);
+}
+
+function normalizeEnum(value, allowed, fallback, path) {
+    const text = String(value ?? fallback).trim();
+    if (!allowed.includes(text)) throw new Error(`${path} invalido: ${text}.`);
+    return text;
+}
+
+function optionalXmlElement(name, value, maxLength) {
+    const text = truncateText(value, maxLength);
+    return text ? `<${name}>${escapeXml(text)}</${name}>` : '';
+}
+
+function buildPessoaXml(pessoa, path) {
+    const federal = normalizeTomadorFederal(pessoa);
+    const nome = truncateText(requiredText(`${path}.nome`, pessoa.nome), 300);
+    const im = optionalXmlElement('IM', pessoa.im, 15);
+    return [
+        `<${federal.tag}>${federal.value}</${federal.tag}>`,
+        im,
+        `<xNome>${escapeXml(nome)}</xNome>`,
+    ].filter(Boolean).join('');
+}
+
+function montarDpsXmlBasica(req = {}) {
+    const prestador = req.prestador || {};
+    const tomador = req.tomador || {};
+    const servico = req.servico || {};
+    const prestFederal = normalizePrestadorFederal(prestador);
+
+    const cLocEmi = normalizeCodMun(
+        req.cLocEmi || prestador.municipioIbge || prestador.codMunIBGE || servico.municipioEmissor,
+        'prestador.municipioIbge'
+    );
+    const municipioPrestacao = normalizeCodMun(servico.municipioPrestacao || cLocEmi, 'servico.municipioPrestacao');
+    const serie = normalizeSerieDps(req.serieDps || req.serie || req.dpsSerie);
+    const numeroDps = normalizeNumeroDps(req.numeroDps || req.nDPS || req.sequencial);
+    const cTribNac = normalizeFixedDigits(servico.cTribNac || DEFAULT_CTRIBNAC, 6, 'servico.cTribNac');
+    const cTribMun = normalizeFixedDigits(servico.cTribMun, 3, 'servico.cTribMun', { required: false });
+    const cNBS = normalizeFixedDigits(servico.codigoNbs, 9, 'servico.codigoNbs', { required: false });
+    const descricao = truncateText(requiredText('servico.descricao', servico.descricao), 2000);
+    const valorServicoNum = parseFiniteNumber(requiredText('servico.valor', servico.valor), 'servico.valor');
+    if (valorServicoNum <= 0) throw new Error('servico.valor deve ser maior que zero.');
+    const valorServico = formatDecimal2(valorServicoNum, 'servico.valor');
+    const aliquota = formatAliquotaIss(servico.aliquotaIss ?? 0);
+    const tpRetISSQN = servico.issRetido ? '2' : '1';
+    const dhEmi = formatDateTimeForNfse(req.dataEmissao || new Date());
+    const dCompet = formatDateForNfse(req.dCompet || req.dataCompetencia || req.dataEmissao || new Date());
+    const tpAmb = AMBIENTE === 'producao' ? '1' : '2';
+    const opSimpNac = normalizeEnum(prestador.opSimpNac, ['1', '2', '3'], '3', 'prestador.opSimpNac');
+    const regApTribSN = opSimpNac === '3'
+        ? normalizeEnum(prestador.regApTribSN, ['1', '2', '3'], '1', 'prestador.regApTribSN')
+        : '';
+    const regEspTrib = normalizeEnum(prestador.regEspTrib, ['0', '1', '2', '3', '4', '5', '6', '9'], '0', 'prestador.regEspTrib');
+    const idDps = [
+        'DPS',
+        cLocEmi,
+        prestFederal.tipoInscricaoFederal,
+        prestFederal.idFederal,
+        serie.padStart(5, '0'),
+        numeroDps.padStart(15, '0'),
+    ].join('');
+
+    return [
+        `<?xml version="1.0" encoding="UTF-8"?>`,
+        `<DPS xmlns="${NFSE_XML_NS}" versao="${NFSE_VERSAO}">`,
+        `<infDPS Id="${idDps}">`,
+        `<tpAmb>${tpAmb}</tpAmb>`,
+        `<dhEmi>${dhEmi}</dhEmi>`,
+        `<verAplic>${escapeXml(VER_APLIC)}</verAplic>`,
+        `<serie>${serie}</serie>`,
+        `<nDPS>${numeroDps}</nDPS>`,
+        `<dCompet>${dCompet}</dCompet>`,
+        `<tpEmit>1</tpEmit>`,
+        `<cLocEmi>${cLocEmi}</cLocEmi>`,
+        `<prest>`,
+        `<${prestFederal.tag}>${prestFederal.value}</${prestFederal.tag}>`,
+        optionalXmlElement('IM', prestador.im, 15),
+        optionalXmlElement('xNome', prestador.nome, 300),
+        `<regTrib><opSimpNac>${opSimpNac}</opSimpNac>${regApTribSN ? `<regApTribSN>${regApTribSN}</regApTribSN>` : ''}<regEspTrib>${regEspTrib}</regEspTrib></regTrib>`,
+        `</prest>`,
+        `<toma>${buildPessoaXml(tomador, 'tomador')}</toma>`,
+        `<serv><locPrest><cLocPrestacao>${municipioPrestacao}</cLocPrestacao></locPrest><cServ>`,
+        `<cTribNac>${cTribNac}</cTribNac>`,
+        cTribMun ? `<cTribMun>${cTribMun}</cTribMun>` : '',
+        `<xDescServ>${escapeXml(descricao)}</xDescServ>`,
+        cNBS ? `<cNBS>${cNBS}</cNBS>` : '',
+        `</cServ></serv>`,
+        `<valores><vServPrest><vServ>${valorServico}</vServ></vServPrest><trib><tribMun>`,
+        `<tribISSQN>1</tribISSQN><tpRetISSQN>${tpRetISSQN}</tpRetISSQN><pAliq>${aliquota}</pAliq>`,
+        `</tribMun><totTrib><indTotTrib>0</indTotTrib></totTrib></trib></valores>`,
+        `</infDPS></DPS>`,
+    ].filter(Boolean).join('');
 }
 
 function parseJsonOrText(text) {
@@ -229,16 +433,11 @@ async function assinarDpsXml(xml) {
     return sig.getSignedXml();
 }
 
-async function prepararDpsXmlGZipB64(req) {
+async function prepararDpsXmlGZipB64(req = {}) {
     if (req.dpsXmlGZipB64) return String(req.dpsXmlGZipB64).trim();
     const xml = String(req.dpsXmlAssinado || req.dpsXml || '').trim();
-    if (!xml) {
-        throw new Error(
-            'NFSe Nacional em modo SERPRO exige dpsXmlGZipB64, dpsXmlAssinado ou dpsXml. ' +
-            'A DPS deve seguir o layout oficial ' + NFSE_VERSAO + '.'
-        );
-    }
-    const xmlAssinado = await assinarDpsXml(xml);
+    const dpsXml = xml || montarDpsXmlBasica(req);
+    const xmlAssinado = await assinarDpsXml(dpsXml);
     return gzipXmlToBase64(xmlAssinado);
 }
 
@@ -443,8 +642,9 @@ export function getNfseNacionalCapabilities() {
         emitir: {
             available: true,
             provider: MODE === 'serpro' ? 'sefin-nacional' : 'mock',
-            requiresDpsXml: MODE === 'serpro',
-            accepts: MODE === 'serpro' ? ['dpsXmlGZipB64', 'dpsXmlAssinado', 'dpsXml'] : ['formulario'],
+            requiresDpsXml: false,
+            generatesDpsXml: MODE === 'serpro',
+            accepts: MODE === 'serpro' ? ['formulario', 'dpsXmlGZipB64', 'dpsXmlAssinado', 'dpsXml'] : ['formulario'],
         },
         cancelar: {
             available: MODE === 'mock',
@@ -457,6 +657,7 @@ export function getNfseNacionalCapabilities() {
 export const __testables = {
     gzipXmlToBase64,
     gunzipBase64ToText,
+    montarDpsXmlBasica,
     normalizarNfseSerpro,
     prepararDpsXmlGZipB64,
     xmlGetInfDpsId,

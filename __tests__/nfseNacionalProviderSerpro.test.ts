@@ -16,9 +16,44 @@ describe('nfse-nacional-provider SERPRO helpers', () => {
             .resolves.toBe('abc123');
     });
 
-    it('prepararDpsXmlGZipB64 rejects SERPRO emission without DPS payload', async () => {
+    it('montarDpsXmlBasica builds DPS 1.01 from the emission form', () => {
+        const xml = __testables.montarDpsXmlBasica({
+            prestador: {
+                cnpj: '44.388.152/0001-89',
+                im: '123456',
+                nome: 'SP Contabil',
+                municipioIbge: '3550308',
+            },
+            tomador: { cnpj: '11.222.333/0001-44', nome: 'Cliente LTDA' },
+            servico: {
+                codigoNbs: '101010100',
+                descricao: 'Servicos contabeis',
+                valor: 1500,
+                aliquotaIss: 5,
+                issRetido: false,
+                municipioPrestacao: '3550308',
+                cTribNac: '171801',
+            },
+            serieDps: '1',
+            numeroDps: '123',
+            dataEmissao: '2026-06-05T10:00:00-03:00',
+        });
+
+        expect(xml).toContain('<DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01">');
+        expect(xml).toContain('<infDPS Id="DPS355030824438815200018900001000000000000123">');
+        expect(xml).toContain('<cLocEmi>3550308</cLocEmi>');
+        expect(xml).toContain('<CNPJ>44388152000189</CNPJ>');
+        expect(xml).toContain('<cTribNac>171801</cTribNac>');
+        expect(xml).toContain('<cNBS>101010100</cNBS>');
+        expect(xml).toContain('<tpRetISSQN>1</tpRetISSQN>');
+        expect(xml).toContain('<indTotTrib>0</indTotTrib>');
+        expect(xml).toContain('<opSimpNac>3</opSimpNac>');
+        expect(__testables.xmlGetInfDpsId(xml)).toBe('DPS355030824438815200018900001000000000000123');
+    });
+
+    it('prepararDpsXmlGZipB64 rejects incomplete automatic DPS payload before certificate load', async () => {
         await expect(__testables.prepararDpsXmlGZipB64({}))
-            .rejects.toThrow('exige dpsXmlGZipB64');
+            .rejects.toThrow('Prestador.cnpj');
     });
 
     it('normalizarNfseSerpro maps official response into persisted NFSe shape', () => {

@@ -14,6 +14,8 @@ interface Props {
 }
 
 const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToast }) => {
+    const municipioFiscalInicial = empresa.dadosFiscais?.codMunIBGE || '';
+    const inscricaoMunicipal = empresa.dadosFiscais?.ccmSp || empresa.ccmSp || '';
     const [nbsCodigos, setNbsCodigos] = useState<NbsCodigo[]>([]);
     const [runtimeStatus, setRuntimeStatus] = useState<NfseNacRuntimeStatus | null>(null);
     const [emitindo, setEmitindo] = useState(false);
@@ -29,6 +31,11 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
     const [issRetido, setIssRetido] = useState(false);
     const [cIndOp, setCIndOp] = useState('050201');
     const [cClassTrib, setCClassTrib] = useState('00000000');
+    const [municipioEmissor, setMunicipioEmissor] = useState(municipioFiscalInicial);
+    const [municipioPrestacao, setMunicipioPrestacao] = useState(municipioFiscalInicial);
+    const [cTribNac, setCTribNac] = useState('');
+    const [serieDps, setSerieDps] = useState('1');
+    const [numeroDps, setNumeroDps] = useState('');
     const [dpsXml, setDpsXml] = useState('');
 
     useEffect(() => {
@@ -42,6 +49,7 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
         if (nbs) {
             if (nbs.cIndOpSugerido) setCIndOp(nbs.cIndOpSugerido);
             if (nbs.cClassTribSugerido) setCClassTrib(nbs.cClassTribSugerido);
+            if (nbs.cTribNacSugerido) setCTribNac(nbs.cTribNacSugerido);
         }
     }, [codigoNbs, nbsCodigos]);
 
@@ -50,15 +58,41 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
     const issCalculado = +(valorNum * aliquotaNum / 100).toFixed(2);
     const issRetidoValor = issRetido ? issCalculado : 0;
     const liquido = +(valorNum - issRetidoValor).toFixed(2);
-    const isSerpro = runtimeStatus?.mode === 'serpro';
-    const dpsXmlObrigatorio = isSerpro && runtimeStatus?.emitir?.requiresDpsXml;
+    const isSerpro = runtimeStatus?.mode !== 'mock';
+    const dpsXmlManual = dpsXml.trim();
+    const municipioEmissorLimpo = municipioEmissor.replace(/\D/g, '');
+    const municipioPrestacaoLimpo = municipioPrestacao.replace(/\D/g, '');
+    const cTribNacLimpo = cTribNac.replace(/\D/g, '');
+    const serieDpsLimpa = serieDps.replace(/\D/g, '');
+    const numeroDpsLimpo = numeroDps.replace(/\D/g, '');
+    const geraDpsPorFormulario = isSerpro && !dpsXmlManual;
+    const serproCamposInvalidos = geraDpsPorFormulario && (
+        municipioEmissorLimpo.length !== 7
+        || municipioPrestacaoLimpo.length !== 7
+        || cTribNacLimpo.length !== 6
+        || !/^\d{1,5}$/.test(serieDpsLimpa)
+        || !/^[1-9]\d{0,14}$/.test(numeroDpsLimpo)
+    );
 
     const handleEmitir = async () => {
         if (!tomadorDoc || !tomadorNome) return onShowToast('Preencha CNPJ/CPF e nome do tomador');
         if (!descricao) return onShowToast('Preencha a descrição do serviço');
         if (valorNum <= 0) return onShowToast('Valor deve ser maior que zero');
-        if (dpsXmlObrigatorio && !dpsXml.trim()) {
-            return onShowToast('Informe o XML da DPS para emissão SERPRO.');
+        const tomadorDocLimpo = tomadorDoc.replace(/\D/g, '');
+        if (tomadorTipo === 'cnpj' && tomadorDocLimpo.length !== 14) {
+            return onShowToast('CNPJ do tomador deve ter 14 dígitos');
+        }
+        if (tomadorTipo === 'cpf' && tomadorDocLimpo.length !== 11) {
+            return onShowToast('CPF do tomador deve ter 11 dígitos');
+        }
+        if (geraDpsPorFormulario) {
+            if (municipioEmissorLimpo.length !== 7) return onShowToast('Município emissor deve ter código IBGE com 7 dígitos');
+            if (municipioPrestacaoLimpo.length !== 7) return onShowToast('Município de prestação deve ter código IBGE com 7 dígitos');
+            if (cTribNacLimpo.length !== 6) return onShowToast('Código de tributação nacional deve ter 6 dígitos');
+            if (!/^\d{1,5}$/.test(serieDpsLimpa)) return onShowToast('Série DPS deve ter de 1 a 5 dígitos');
+            if (!/^[1-9]\d{0,14}$/.test(numeroDpsLimpo)) {
+                return onShowToast('Número DPS deve ter de 1 a 15 dígitos e não iniciar com zero');
+            }
         }
 
         // Validacao fiscal de aliquota ISS (LC 116/03 art. 8º II + EC 37/02 art. 88)
@@ -83,20 +117,32 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
         try {
             const r = await emitirNfse(currentUser, {
                 empresaId: empresa.id,
-                prestador: { cnpj: empresa.cnpj, nome: empresa.nome },
+                prestador: {
+                    cnpj: empresa.cnpj,
+                    im: inscricaoMunicipal,
+                    nome: empresa.nome,
+                    municipioIbge: municipioEmissorLimpo || municipioFiscalInicial,
+                    opSimpNac: '3',
+                    regApTribSN: '1',
+                    regEspTrib: '0',
+                },
                 tomador: tomadorTipo === 'cnpj'
-                    ? { cnpj: tomadorDoc.replace(/\D/g, ''), nome: tomadorNome }
-                    : { cpf: tomadorDoc.replace(/\D/g, ''), nome: tomadorNome },
+                    ? { cnpj: tomadorDocLimpo, nome: tomadorNome }
+                    : { cpf: tomadorDocLimpo, nome: tomadorNome },
                 servico: {
                     codigoNbs,
                     descricao,
                     valor: valorNum,
                     aliquotaIss: aliquotaNum,
                     issRetido,
+                    municipioPrestacao: municipioPrestacaoLimpo,
+                    cTribNac: cTribNacLimpo || undefined,
                     cIndOp,
                     cClassTrib,
                 },
-                ...(dpsXml.trim() ? { dpsXml: dpsXml.trim() } : {}),
+                serieDps: serieDpsLimpa || undefined,
+                numeroDps: numeroDpsLimpo || undefined,
+                ...(dpsXmlManual ? { dpsXml: dpsXmlManual } : {}),
             });
             onShowToast(`NFSe Nº ${r.numero} emitida com sucesso!`);
             onClose();
@@ -200,18 +246,70 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
 
                     {isSerpro && (
                         <div>
-                            <label className="text-xs text-slate-500 block mb-1">DPS XML</label>
-                            <textarea
-                                value={dpsXml}
-                                onChange={e => setDpsXml(e.target.value)}
-                                placeholder="<DPS versao=&quot;1.01&quot; xmlns=&quot;http://www.sped.fazenda.gov.br/nfse&quot;>..."
-                                rows={6}
-                                spellCheck={false}
-                                className="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-mono resize-none"
-                            />
-                            <div className="text-[10px] text-slate-400 mt-0.5">
-                                Em SERPRO, o backend assina a DPS com o certificado A1 se o XML ainda não tiver Signature.
+                            <h4 className="text-sm font-bold mb-2">Dados fiscais da DPS Nacional</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs text-slate-500 block mb-1">Município emissor IBGE</label>
+                                    <input
+                                        value={municipioEmissor}
+                                        onChange={e => setMunicipioEmissor(e.target.value)}
+                                        placeholder="3550308"
+                                        maxLength={7}
+                                        className="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-500 block mb-1">Município prestação IBGE</label>
+                                    <input
+                                        value={municipioPrestacao}
+                                        onChange={e => setMunicipioPrestacao(e.target.value)}
+                                        placeholder="3550308"
+                                        maxLength={7}
+                                        className="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-500 block mb-1">Código tributação nacional</label>
+                                    <input
+                                        value={cTribNac}
+                                        onChange={e => setCTribNac(e.target.value)}
+                                        placeholder="171801"
+                                        maxLength={6}
+                                        className="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-500 block mb-1">Série DPS</label>
+                                    <input
+                                        value={serieDps}
+                                        onChange={e => setSerieDps(e.target.value)}
+                                        placeholder="1"
+                                        maxLength={5}
+                                        className="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-500 block mb-1">Número DPS</label>
+                                    <input
+                                        value={numeroDps}
+                                        onChange={e => setNumeroDps(e.target.value)}
+                                        placeholder="1"
+                                        maxLength={15}
+                                        className="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-mono"
+                                    />
+                                </div>
                             </div>
+                            <details className="mt-3">
+                                <summary className="text-xs text-slate-500 cursor-pointer">DPS XML manual</summary>
+                                <textarea
+                                    value={dpsXml}
+                                    onChange={e => setDpsXml(e.target.value)}
+                                    placeholder="<DPS versao=&quot;1.01&quot; xmlns=&quot;http://www.sped.fazenda.gov.br/nfse&quot;>..."
+                                    rows={6}
+                                    spellCheck={false}
+                                    className="mt-2 w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-mono resize-none"
+                                />
+                            </details>
                         </div>
                     )}
 
@@ -275,7 +373,7 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                     </button>
                     <button
                         onClick={handleEmitir}
-                        disabled={emitindo || valorNum <= 0 || !tomadorDoc || !tomadorNome || !descricao || (dpsXmlObrigatorio && !dpsXml.trim())}
+                        disabled={emitindo || valorNum <= 0 || !tomadorDoc || !tomadorNome || !descricao || serproCamposInvalidos}
                         className="btn-press px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 disabled:opacity-50"
                     >
                         {emitindo ? '⏳ Emitindo...' : '📑 Emitir NFSe'}

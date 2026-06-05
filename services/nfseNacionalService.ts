@@ -53,7 +53,17 @@ export async function getNbsCodigos(): Promise<NbsCodigo[]> {
 
 export interface EmitirNfseRequest {
     empresaId: string;
-    prestador: { cnpj: string; im?: string; nome?: string };
+    prestador: {
+        cnpj: string;
+        cpf?: string;
+        im?: string;
+        nome?: string;
+        municipioIbge?: string;
+        codMunIBGE?: string;
+        opSimpNac?: '1' | '2' | '3';
+        regApTribSN?: '1' | '2' | '3';
+        regEspTrib?: '0' | '1' | '2' | '3' | '4' | '5' | '6' | '9';
+    };
     tomador: { cnpj?: string; cpf?: string; nome: string; endereco?: any };
     servico: {
         codigoNbs: string;
@@ -65,7 +75,12 @@ export interface EmitirNfseRequest {
         cIndOp?: string;
         cClassTrib?: string;
         cTribNac?: string;
+        cTribMun?: string;
+        deducoes?: number;
     };
+    serieDps?: string;
+    numeroDps?: string | number;
+    dataCompetencia?: string;
     dataEmissao?: string;
     dpsXml?: string;
     dpsXmlAssinado?: string;
