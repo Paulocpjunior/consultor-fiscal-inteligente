@@ -34,6 +34,7 @@ describe('diagnosticarConfig — env completa', () => {
         GRAPH_TENANT_ID: 't', GRAPH_CLIENT_ID: 'c', GRAPH_CLIENT_SECRET: 's2', SHAREPOINT_HOST: 'h',
         FISCAL_GATEWAY_TOKEN: 'tk',
         CONTADOR_CRC: 'crc', CONTADOR_NOME: 'n', CONTADOR_CPF: 'cpf',
+        HEALTH_ALERT_TO: 'paulo@spassessoriacontabil.com.br',
         EMISSAO_BLOQUEADA: 'true',
         DCTFWEB_MODE: 'serpro', DAS_MODE: 'serpro', DARF_MODE: 'serpro',
         NFSE_NAC_MODE: 'serpro', CAIXA_POSTAL_MODE: 'serpro',
@@ -127,6 +128,7 @@ function minimalCompleta(): Record<string, string> {
         GRAPH_TENANT_ID: 't', GRAPH_CLIENT_ID: 'c', GRAPH_CLIENT_SECRET: 's2', SHAREPOINT_HOST: 'h',
         FISCAL_GATEWAY_TOKEN: 'tk',
         CONTADOR_CRC: 'crc', CONTADOR_NOME: 'n', CONTADOR_CPF: 'cpf',
+        HEALTH_ALERT_TO: 'p@x.com',
         EMISSAO_BLOQUEADA: 'true',
     };
 }

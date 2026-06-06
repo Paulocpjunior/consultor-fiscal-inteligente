@@ -72,6 +72,9 @@ export const CONFIGS_MONITORADAS = [
     { chave: 'CONTADOR_CPF', categoria: 'contador', criticidade: 'medio',
         descricao: 'CPF do contador responsável',
         impacto: 'SPED gerado sem CPF do responsável' },
+    { chave: 'HEALTH_ALERT_TO', categoria: 'alertas', criticidade: 'medio',
+        descricao: 'Destinatário do alerta noturno health-consolidado',
+        impacto: 'Email vai pro GRAPH_REMETENTE (Paulo) por default — sem destinatário dedicado' },
 ];
 
 /** Modos operacionais — string esperada ('serpro' em prod). */
