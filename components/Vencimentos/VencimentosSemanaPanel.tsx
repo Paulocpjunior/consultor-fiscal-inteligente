@@ -7,32 +7,20 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { getResumoVencimentos, type ResumoVencimentos, type TarefaProxima } from '../../services/vencimentosSemanaService';
+import { classificarUrgenciaVencimento, URG_LABEL, type Urg } from '../../services/vencimentosLogic';
 
 interface Props { onShowToast?: (msg: string) => void; }
 
-type Urg = 'atrasada' | 'hoje' | 'amanha' | '3d' | '7d';
+// Lógica pura testada em services/vencimentosLogic.ts.
 const urgCor: Record<Urg, string> = {
     atrasada: 'var(--danger)',
     hoje: '#dc2626',
     amanha: '#ea580c',
     '3d': 'var(--warning)',
     '7d': 'var(--text-muted)',
+    futura: 'var(--text-muted)',
 };
-const urgLabel: Record<Urg, string> = {
-    atrasada: 'ATRASADA',
-    hoje: 'VENCE HOJE',
-    amanha: 'VENCE AMANHÃ',
-    '3d': 'EM 3 DIAS',
-    '7d': 'EM 7 DIAS',
-};
-
-function classificar(dias: number): Urg {
-    if (dias < 0) return 'atrasada';
-    if (dias === 0) return 'hoje';
-    if (dias === 1) return 'amanha';
-    if (dias <= 3) return '3d';
-    return '7d';
-}
+const urgLabel = URG_LABEL;
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -53,7 +41,7 @@ const VencimentosSemanaPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) 
 
     const proximas = useMemo(() => {
         const lista = (data?.proximas || []).map((t) => ({
-            ...t, urgencia: classificar(t.diasAteVencimento) as Urg,
+            ...t, urgencia: classificarUrgenciaVencimento(t.diasAteVencimento),
         }));
         const q = busca.trim().toLowerCase();
         return lista.filter((t) => {
