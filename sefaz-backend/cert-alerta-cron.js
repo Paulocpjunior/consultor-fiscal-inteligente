@@ -61,24 +61,17 @@ function diasAte(fimIso) {
   return Math.floor((fim.getTime() - Date.now()) / 86_400_000);
 }
 
-// Faixa de alerta. null = sem alerta (dias > 30 ou desconhecido).
-// Faixas descendentes: 30 → 15 → 7 → 3 → 1 → expirado.
-function faixaDe(dias) {
-  if (dias == null) return null;
-  if (dias <= 0) return 'expirado';
-  if (dias <= 1) return '1';
-  if (dias <= 3) return '3';
-  if (dias <= 7) return '7';
-  if (dias <= 15) return '15';
-  if (dias <= 30) return '30';
-  return null;
-}
+// Logica de faixa testada em cert-vencimento-helper.js (24 testes).
+// Mantido o "emoji" aqui porque so o email usa.
+import { faixaDeVencimento, urgenciaFaixa } from './cert-vencimento-helper.js';
+
+const faixaDe = faixaDeVencimento;
 
 function urgencia(faixa) {
-  if (faixa === 'expirado') return { label: 'EXPIRADO', cor: '#dc2626', emoji: '🔴' };
-  if (faixa === '1' || faixa === '3') return { label: 'CRÍTICO', cor: '#dc2626', emoji: '🔴' };
-  if (faixa === '7') return { label: 'URGENTE', cor: '#d97706', emoji: '🟠' };
-  return { label: 'ATENÇÃO', cor: '#d97706', emoji: '🟡' };
+  const u = urgenciaFaixa(faixa);
+  // adiciona emoji especifico do email
+  const emoji = u.severidade === 'critica' ? '🔴' : u.severidade === 'alta' ? '🟠' : '🟡';
+  return { ...u, emoji };
 }
 
 function corpoEmail({ escopo, titular, cnpj, fimIso, dias, faixa, afetaTodas }) {

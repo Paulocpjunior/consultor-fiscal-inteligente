@@ -27,6 +27,7 @@ export enum SearchType {
   DIAGNOSTICO_DOCS = 'Diagnóstico Docs Fiscais',
   SIMPLES_SUBLIMITE = 'Sublimite Simples',
   DIAGNOSTICO_CADASTROS = 'Cadastros Incompletos',
+  CERT_MONITOR = 'Certificados Digitais',
   DASHBOARD_CEO = 'Dashboard CEO',
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
