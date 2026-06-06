@@ -47,10 +47,33 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         return Array.from(set).sort().reverse();
     }, [docs]);
 
+    // Lista de empresas distintas (CNPJ → nome) pro dropdown. Olha `allDocs`
+    // (nao `docs` filtrado) pra dropdown nao "encolher" quando filtra empresa.
+    const empresasDropdown = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const d of allDocs) {
+            const cnpj = (d.empresaCnpj || '').replace(/\D/g, '');
+            if (cnpj.length !== 14) continue;
+            // Prioriza primeiro nome encontrado; se ja tem, mantem
+            if (!map.has(cnpj)) map.set(cnpj, d.empresaNome || cnpj);
+            else if (!map.get(cnpj)?.match(/^\d+$/) === false && d.empresaNome) {
+                // Se mapa tem so CNPJ e doc tem nome, troca
+                map.set(cnpj, d.empresaNome);
+            }
+        }
+        return Array.from(map.entries())
+            .map(([cnpj, nome]) => ({ cnpj, nome }))
+            .sort((a, b) => a.nome.localeCompare(b.nome));
+    }, [allDocs]);
+
     // Slug dos filtros ativos pra usar no nome do arquivo exportado.
     // Ex: 'todos' (sem filtro) ou 'entrada-2026-05-autorizado'.
     const filtroSlug = useMemo(() => {
+        const empresaSlug = filters.empresaCnpj
+            ? `empresa-${filters.empresaCnpj.replace(/\D/g, '').slice(0, 14)}`
+            : null;
         const partes = [
+            empresaSlug,
             filters.tipoDoc,
             filters.direcao,
             filters.competencia,
@@ -346,13 +369,26 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     return (
         <div className="space-y-3">
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
                     <input
                         placeholder="Buscar (nº, chave, emit/dest)"
                         className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"
                         value={busca}
                         onChange={(e) => setBusca(e.target.value)}
                     />
+                    <select
+                        className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"
+                        value={filters.empresaCnpj || ''}
+                        onChange={(e) => setFilters(f => ({ ...f, empresaCnpj: e.target.value || undefined }))}
+                        title="Filtra por empresa dona do XML (campo empresaCnpj)"
+                    >
+                        <option value="">Empresa ({empresasDropdown.length})</option>
+                        {empresasDropdown.map(e => (
+                            <option key={e.cnpj} value={e.cnpj}>
+                                {e.nome} — {formatCnpjCpf(e.cnpj)}
+                            </option>
+                        ))}
+                    </select>
                     <select
                         className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"
                         value={filters.tipoDoc || ''}
