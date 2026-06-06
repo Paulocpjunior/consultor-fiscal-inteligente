@@ -243,12 +243,35 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             const certBaseMismatch = (usaCertEscritorio || emp.cnpj === CNPJ_ESCRITORIO)
                 && cnpjBaseCertEscritorio
                 && cnpjBaseCertEscritorio !== empresaCnpjBase;
-            const capturaNfeOk = certValido && emp.capturarSefaz && !!emp.uf && !certBaseMismatch;
+            const capturaNfeOk = certValido && emp.capturarSefaz && !!emp.uf && !certBaseMismatch
+                && tipoCert !== 'A3';
+            // Ordem importa: A3 bloqueia INDEPENDENTE de data de validade
+            // (não roda em Cloud Run), então vem antes de "expirado". Antes,
+            // empresa com A3 sem notAfter cadastrado virava "expirado em null"
+            // — mensagem errada (não sabíamos se expirou) e mascarava o
+            // motivo real (A3 só roda no agente local).
+            const fmtDataBr = (iso) => {
+                if (!iso) return null;
+                try { return new Date(iso).toLocaleDateString('pt-BR'); }
+                catch { return null; }
+            };
             if (!emp.capturarSefaz) motivosBloqueio.push('Captura SEFAZ desativada manualmente');
             else if (!emp.uf) motivosBloqueio.push('UF não cadastrada (preencha dadosFiscais.uf, ex: SP)');
             else if (tipoCert === 'nenhum') motivosBloqueio.push('Sem certificado A1/A3 e sem procuração e-CAC');
-            else if (!certValido && certUploaded) motivosBloqueio.push(`Certificado ${tipoCert} expirado em ${certVenceEm}`);
-            else if (tipoCert === 'A3') motivosBloqueio.push('Tipo A3 — captura via agente local cfi-a3, não pelo Cloud Run');
+            else if (tipoCert === 'A3') {
+                // Mensagem extra quando tem procuração ativa: usuário pode achar
+                // que procuração resolve NFe (não resolve — só NFSe Nacional).
+                if (emp.procuracaoEcacAtiva) {
+                    motivosBloqueio.push('Tipo A3 — captura NFe via agente local cfi-a3 (procuração e-CAC habilita só NFSe Nacional, não NFe distDFe no Cloud Run)');
+                } else {
+                    motivosBloqueio.push('Tipo A3 — captura via agente local cfi-a3, não pelo Cloud Run');
+                }
+            }
+            else if (!certValido && certUploaded) {
+                const dataBr = fmtDataBr(certVenceEm);
+                if (dataBr) motivosBloqueio.push(`Certificado ${tipoCert} expirado em ${dataBr}`);
+                else motivosBloqueio.push(`Certificado ${tipoCert} sem data de validade no cadastro — recadastre o .pfx pra confirmar`);
+            }
             else if (certBaseMismatch) {
                 motivosBloqueio.push(
                     `Cert do escritório no Secret Manager é de outro CNPJ-Base (${cnpjBaseCertEscritorio}) — esperado ${empresaCnpjBase}. ` +
