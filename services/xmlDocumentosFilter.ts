@@ -12,8 +12,9 @@
  *
  * Regras de busca:
  *  - termo numérico (só dígitos)  -> CNPJ substring | número exato | chave (≥15 chars)
- *  - termo textual <4 chars       -> token EXATO  (evita "sp" casar "spa"/"hsprojetos")
- *  - termo textual ≥4 chars       -> token PREFIX (permite "brasli" achar "braslimpo")
+ *  - termo textual <4 chars       -> token EXATO     (evita "sp" casar "spa"/"hsprojetos")
+ *  - termo textual ≥4 chars       -> token SUBSTRING (permite "limpo" achar "braslimpo",
+ *                                                     "auto" achar "autopecas")
  */
 
 import type { DocumentoFiscal } from '../types';
@@ -143,7 +144,7 @@ export function applyDocumentosFilters(
                 ];
                 const nameMatch = term.length < 4
                     ? nameTokens.some(t => t === term)            // <4: exato (evita "sp"→"spa")
-                    : nameTokens.some(t => t.startsWith(term));   // ≥4: prefixo (brasli→braslimpo)
+                    : nameTokens.some(t => t.includes(term));     // ≥4: substring (limpo→braslimpo, auto→autopecas)
                 // Tambem permite achar pelo numero/chave/CNPJ digitados como texto
                 const numeroN = norm(d.numero);
                 const chaveN = norm(d.chave);
