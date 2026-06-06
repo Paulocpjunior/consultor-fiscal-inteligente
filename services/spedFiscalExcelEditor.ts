@@ -84,6 +84,28 @@ export async function analisarRecuperacaoMonofasico(parsed: ParseResult): Promis
     return mod.analisarRecuperacaoMonofasico(parsed);
 }
 
+export interface AchadoCruzamento {
+    tipo: 'DIVERGENCIA_VALOR' | 'SO_FISCAL' | 'SO_CONTRIB';
+    severidade: 'erro' | 'aviso';
+    chave: string; numDoc: string;
+    vlFiscal: number; vlContrib: number; diferenca: number; mensagem: string;
+}
+export interface CruzamentoObrigacoes {
+    aplicavel: boolean; motivo?: string;
+    resumo: {
+        totalFiscal: number; totalContrib: number; emAmbos: number;
+        soFiscal: number; soContrib: number; divergenciasValor: number;
+        semChaveFiscal: number; semChaveContrib: number;
+    };
+    achados: AchadoCruzamento[];
+}
+
+/** Cruza SPED Fiscal × SPED Contribuicoes (mesma empresa/competencia) por C100. */
+export async function cruzarObrigacoes(a: ParseResult, b: ParseResult): Promise<CruzamentoObrigacoes> {
+    const mod = await import('../sefaz-backend/sped-cruzamento-obrigacoes.js' as any);
+    return mod.cruzarSpedFiscalContrib(a, b);
+}
+
 /**
  * Exporta o SPED parseado pra XLSX editavel.
  * - 1 aba "Resumo" com contagem por tipo.
