@@ -14,10 +14,14 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { analisarTodas } from '../../services/recuperacaoTributariaService';
+import {
+    dataLimitePrescricao, diasAteExpirar, classificarPrescricao,
+    type SeveridadePrescricao,
+} from '../../services/prescricaoLogic';
 
 interface Props { onShowToast?: (msg: string) => void; }
 
-type Severidade = 'expirado' | 'urgente' | 'alerta' | 'ok';
+type Severidade = SeveridadePrescricao;
 
 interface ItemPrescricao {
     empresaId: string;
@@ -48,20 +52,7 @@ const sevLabel: Record<Severidade, string> = {
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-function ultimoDiaCompetencia(comp: string): Date | null {
-    // YYYY-MM -> último dia do mês
-    const m = /^(\d{4})-(\d{2})$/.exec(comp);
-    if (!m) return null;
-    const ano = Number(m[1]), mes = Number(m[2]);
-    return new Date(ano, mes, 0); // dia 0 do próximo mês = último do atual
-}
-
-function classificar(diasRestantes: number): Severidade {
-    if (diasRestantes < 0) return 'expirado';
-    if (diasRestantes <= 90) return 'urgente';
-    if (diasRestantes <= 365) return 'alerta';
-    return 'ok';
-}
+// Lógica pura testada em services/prescricaoLogic.ts.
 
 const PrazosPrescricaoPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
     const [data, setData] = useState<any>(null);
@@ -86,10 +77,9 @@ const PrazosPrescricaoPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) =
         for (const emp of data.resultados) {
             for (const t of (emp.teses || [])) {
                 for (const it of (t.itens || [])) {
-                    const fim = ultimoDiaCompetencia(it.competencia);
+                    const fim = dataLimitePrescricao(it.competencia);
                     if (!fim) continue;
-                    fim.setFullYear(fim.getFullYear() + 5); // +5 anos = data limite
-                    const diasRestantes = Math.floor((fim.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24));
+                    const diasRestantes = diasAteExpirar(it.competencia, agora)!;
                     out.push({
                         empresaId: emp.empresaId,
                         empresaNome: emp.empresaNome,
@@ -101,7 +91,7 @@ const PrazosPrescricaoPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) =
                         descricao: it.descricao || '',
                         fimPrazo: fim,
                         diasRestantes,
-                        severidade: classificar(diasRestantes),
+                        severidade: classificarPrescricao(diasRestantes),
                     });
                 }
             }
