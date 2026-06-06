@@ -316,15 +316,22 @@ async function listarEmpresasParaCron() {
   }
 
   let bloqueadasSemAcesso = 0;
+  let a3PuladoSemProcuracao = 0;
   const filtradas = Array.from(map.values()).filter(e => {
-    if (a3Ids.has(e.id)) return false;
     const tipoCert = certsPorId.get(e.id);
     const temCertProprio = tipoCert === 'A1' || tipoCert === 'A3';
+    const ehEscritorio = e.cnpj === CNPJ_ESCRITORIO;
+    // A3 so e capturavel no Cloud Run via fallback procuracao e-CAC
+    // (cert do escritorio assina, CNPJ da empresa no envelope). Sem
+    // procuracao, captura tem que rodar no agente cfi-a3 local.
+    if (a3Ids.has(e.id) && !e.procuracaoEcacAtiva) {
+      a3PuladoSemProcuracao++;
+      return false;
+    }
     // A propria S&P (escritorio) entra mesmo sem cert em empresas_certificados:
     // o cert dela vive em Secret Manager e o orquestrador (sync-orchestrator.js)
     // sabe fazer fallback via loadCertificate() quando o CNPJ bate. Sem essa
     // excecao aqui, nem chegava a tentar — caia em "sem acesso" e era pulada.
-    const ehEscritorio = e.cnpj === CNPJ_ESCRITORIO;
     const temAcesso = temCertProprio || e.procuracaoEcacAtiva || ehEscritorio;
     if (!temAcesso) {
       bloqueadasSemAcesso++;
@@ -333,12 +340,16 @@ async function listarEmpresasParaCron() {
     return true;
   });
 
+  if (a3PuladoSemProcuracao > 0) {
+    console.log(`[sync-cron] pulando ${a3PuladoSemProcuracao} empresa(s) tipoCert=A3 SEM procuracao e-CAC (capturadas pelo agente local cfi-a3)`);
+  }
   if (bloqueadasSemAcesso > 0) {
     console.log(`[sync-cron] pulando ${bloqueadasSemAcesso} empresa(s) sem cert A1/A3 nem procuracao e-CAC (bloqueadas por cadastro — admin precisa configurar)`);
   }
   // Anexa contadores na lista pra orchestrator persistir no log + painel
   filtradas._bloqueadasSemAcesso = bloqueadasSemAcesso;
   filtradas._totalA3 = a3Ids.size;
+  filtradas._a3ViaProcuracao = a3Ids.size - a3PuladoSemProcuracao;
   return filtradas;
 }
 
@@ -782,7 +793,9 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
         const elegiveis = new Map(); // cnpj -> id (de quem vai mesmo ser capturado)
         let bloqueadas = 0;
         for (const [cnpj, info] of candidatos) {
-          if (a3Ids.has(info.id)) continue; // A3 fora deste cron
+          // A3 só fica fora se NÃO tem procuração e-CAC. Com procuração,
+          // captura via cert do escritório (mesmo caminho do novo orchestrator).
+          if (a3Ids.has(info.id) && !info.procuracaoEcacAtiva) continue;
           const tipoCert = certsPorId.get(info.id);
           const temCertProprio = tipoCert === 'A1' || tipoCert === 'A3';
           if (temCertProprio || info.procuracaoEcacAtiva) {
