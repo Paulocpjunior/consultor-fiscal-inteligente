@@ -16,6 +16,7 @@ import express from 'express';
 import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { getCnpjsDaCarteira, getEmpresaIdsDaCarteira } from './carteira-auth.js';
+import { ultimasCompetencias as ultimasCompetenciasHelper } from './competencias-helper.js';
 
 const router = express.Router();
 
@@ -29,17 +30,8 @@ const CAT_CRITICAS = new Set(['intimacao', 'malha', 'exclusao', 'det_auto_infrac
 const CAT_ALTAS = new Set(['dec_intimacao', 'dje_intimacao', 'emac_notificacao', 'prefeitura_sp_iss']);
 const CAT_MEDIAS = new Set(['det_notificacao']);
 
-function ultimasCompetencias(n) {
-    const out = [];
-    const d = new Date();
-    d.setDate(1);
-    d.setMonth(d.getMonth() - 1);
-    for (let i = 0; i < n; i++) {
-        out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-        d.setMonth(d.getMonth() - 1);
-    }
-    return out;
-}
+// Reusa o helper compartilhado (testado em __tests__/competenciasHelper).
+const ultimasCompetencias = (n) => ultimasCompetenciasHelper(n);
 
 router.get('/', requireAuth, async (req, res) => {
     try {

@@ -19,6 +19,7 @@ import { getDctfwebMode } from './dctfweb-provider.js';
 import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
 import { requireAdmin, requireAuth } from './require-admin.js';
 import { fetchAllDocs } from './firestore-paginate.js';
+import { ultimasCompetenciasComAnoMes as ultimasCompetenciasComAnoMesHelper } from './competencias-helper.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 const router = express.Router();
@@ -255,19 +256,7 @@ router.get('/cobertura', requireAuth, async (req, res) => {
 });
 
 function ultimasCompetenciasDctfweb(n) {
-    const out = [];
-    const d = new Date();
-    d.setDate(1);
-    d.setMonth(d.getMonth() - 1); // mes atual ainda nao venceu
-    for (let i = 0; i < n; i++) {
-        out.push({
-            anoPA: d.getFullYear(),
-            mesPA: d.getMonth() + 1,
-            label: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        });
-        d.setMonth(d.getMonth() - 1);
-    }
-    return out;
+    return ultimasCompetenciasComAnoMesHelper(n);
 }
 
 router.post('/cron', async (req, res) => {

@@ -7,6 +7,7 @@
 import express from 'express';
 import { requireAdmin, requireAuth } from './require-admin.js';
 import admin from 'firebase-admin';
+import { ultimasCompetencias as ultimasCompetenciasHelper } from './competencias-helper.js';
 import {
     emitirDasRegular, emitirDasAvulso,
     listarDas, getResumoDas, marcarPago,
@@ -146,18 +147,11 @@ router.get('/cobertura-pgdas', requireAuth, async (req, res) => {
     }
 });
 
-// Helper: ultimas N competencias YYYY-MM (decrescente, do mes passado pra tras).
-// O mes atual nao entra — PGDAS dele ainda nao venceu (vence dia 20 do seguinte).
+// Reexport pra preservar compatibilidade interna.
+// Logica: ultimas N competencias YYYY-MM (decrescente). Mes atual NAO entra —
+// PGDAS dele ainda nao venceu (vence dia 20 do seguinte).
 function ultimasCompetencias(n) {
-    const out = [];
-    const d = new Date();
-    d.setDate(1);
-    d.setMonth(d.getMonth() - 1);
-    for (let i = 0; i < n; i++) {
-        out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-        d.setMonth(d.getMonth() - 1);
-    }
-    return out;
+    return ultimasCompetenciasHelper(n);
 }
 
 // ── Cron noturno (Cloud Scheduler) ─────────────────────────────────────
