@@ -117,4 +117,94 @@ router.get('/', requireAuth, async (req, res) => {
     }
 });
 
+// POST /merge-duplicatas
+// Body: { dryRun?: boolean, empresaId?: string }
+// Pra cada chave que aparece em 2+ docs, escolhe um "vencedor" (mais recente
+// por ultimaSincronizacao; tie-break por docId mais longo = mais informacao) e
+// marca os perdedores com _merged_into: <docIdVencedor> + _merged_at + _merged_by.
+// NAO deleta — preserva auditoria. So admin. dryRun=true (default) so simula.
+router.post('/merge-duplicatas', requireAuth, express.json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
+        const dryRun = req.body?.dryRun !== false; // default true — exige opt-in pra escrever
+        const { empresaId } = req.body || {};
+
+        const db = fa().firestore();
+        let query = db.collection('documentos_fiscais');
+        if (empresaId) query = query.where('empresaId', '==', empresaId);
+        const docs = await fetchAllDocs(query, { label: 'diagnostico/merge-duplicatas' });
+
+        // Agrupa por chave (so docs com chave valida e que nao sao perdedores ja marcados)
+        const porChave = new Map();
+        for (const d of docs) {
+            const x = d.data() || {};
+            if (x._merged_into) continue; // ja marcado em pass anterior
+            const chave = String(x.chave || x.chaveAcesso || '').replace(/\D/g, '');
+            if (chave.length !== 44) continue;
+            const arr = porChave.get(chave) || [];
+            arr.push({ docId: d.id, ref: d.ref, data: x });
+            porChave.set(chave, arr);
+        }
+
+        // Decide vencedor + perdedores
+        const planoMerge = []; // { chave, vencedor, perdedores: [...] }
+        for (const [chave, grupo] of porChave) {
+            if (grupo.length < 2) continue;
+            // Vencedor: maior ultimaSincronizacao (string ISO) ou docId mais longo
+            grupo.sort((a, b) => {
+                const sa = String(a.data.ultimaSincronizacao || '');
+                const sb = String(b.data.ultimaSincronizacao || '');
+                if (sa !== sb) return sb.localeCompare(sa);
+                return (b.docId.length - a.docId.length) || b.docId.localeCompare(a.docId);
+            });
+            const [vencedor, ...perdedores] = grupo;
+            planoMerge.push({
+                chave,
+                vencedor: vencedor.docId,
+                perdedores: perdedores.map((p) => p.docId),
+                perdedoresRefs: perdedores.map((p) => p.ref),
+            });
+        }
+
+        let aplicados = 0;
+        if (!dryRun) {
+            // Aplica em lotes de 450 (margem do limite 500 do Firestore)
+            const updates = planoMerge.flatMap((p) =>
+                p.perdedoresRefs.map((ref) => ({ ref, vencedor: p.vencedor })),
+            );
+            for (let i = 0; i < updates.length; i += 450) {
+                const slice = updates.slice(i, i + 450);
+                const batch = db.batch();
+                for (const u of slice) {
+                    batch.update(u.ref, {
+                        _merged_into: u.vencedor,
+                        _merged_at: admin.firestore.FieldValue.serverTimestamp(),
+                        _merged_by: req.user.email,
+                    });
+                }
+                try {
+                    await batch.commit();
+                    aplicados += slice.length;
+                } catch (e) {
+                    console.warn('[diagnostico/merge] batch falhou:', e.message);
+                }
+            }
+        }
+
+        return res.json({
+            dryRun,
+            chavesComDuplicata: planoMerge.length,
+            totalPerdedores: planoMerge.reduce((acc, p) => acc + p.perdedores.length, 0),
+            aplicados,
+            // amostra (max 100) pra UI mostrar o plano
+            amostra: planoMerge.slice(0, 100).map((p) => ({ chave: p.chave, vencedor: p.vencedor, perdedores: p.perdedores })),
+            empresaId: empresaId || null,
+            geradoEm: new Date().toISOString(),
+        });
+    } catch (e) {
+        console.error('[diagnostico/merge-duplicatas]', e);
+        return res.status(500).json({ error: 'Falha interna' });
+    }
+});
+
 export default router;

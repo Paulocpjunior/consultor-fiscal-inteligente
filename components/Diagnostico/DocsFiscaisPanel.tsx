@@ -10,8 +10,9 @@
  */
 import React, { useState } from 'react';
 import {
-    getDiagnosticoDocsFiscais,
+    getDiagnosticoDocsFiscais, mergeDuplicatasDocsFiscais,
     type DiagnosticoResposta, type AmostraDoc, type AmostraDuplicada,
+    type MergeDuplicatasResposta,
 } from '../../services/diagnosticoDocsFiscaisService';
 
 interface Props { onShowToast?: (msg: string) => void; }
@@ -40,9 +41,36 @@ const DocsFiscaisPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
     const [loading, setLoading] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
     const [tipoAberto, setTipoAberto] = useState<string | null>(null);
+    const [mergeBusy, setMergeBusy] = useState(false);
+    const [mergeRes, setMergeRes] = useState<MergeDuplicatasResposta | null>(null);
+
+    const rodarMerge = async (dryRun: boolean) => {
+        if (!data) return;
+        if (!dryRun) {
+            const ok = window.confirm(
+                `Marcar ${data.problemas.duplicada.count - data.problemas.duplicada.amostras.filter((a: any) => a.docIds).length}+ docs como _merged_into?\n\n`
+                + `IMPORTANTE: NÃO deleta nada — só seta o flag _merged_into nos perdedores `
+                + `(vencedor = mais recente). Cruzamentos podem ser atualizados depois pra filtrar esses docs.\n\n`
+                + `Confirma?`,
+            );
+            if (!ok) return;
+        }
+        setMergeBusy(true);
+        try {
+            const r = await mergeDuplicatasDocsFiscais({
+                empresaId: empresaId.trim() || undefined, dryRun,
+            });
+            setMergeRes(r);
+            if (!dryRun) await rodar(); // re-roda diagnóstico após aplicar
+        } catch (e: any) {
+            setErro(e?.message || 'Falha no merge');
+        } finally {
+            setMergeBusy(false);
+        }
+    };
 
     const rodar = async () => {
-        setLoading(true); setErro(null);
+        setLoading(true); setErro(null); setMergeRes(null);
         try { setData(await getDiagnosticoDocsFiscais(empresaId.trim() || undefined)); }
         catch (e: any) { setErro(e?.message || 'Falha ao rodar diagnóstico'); }
         finally { setLoading(false); }
@@ -105,6 +133,26 @@ const DocsFiscaisPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
 
                                 {tipoAberto === tipo && p.amostras.length > 0 && (
                                     <div className="mt-3 overflow-x-auto">
+                                        {tipo === 'duplicada' && (
+                                            <div className="flex flex-wrap gap-2 mb-2">
+                                                <button onClick={() => rodarMerge(true)} disabled={mergeBusy}
+                                                    className="px-3 py-1.5 text-xs font-bold rounded"
+                                                    style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}>
+                                                    Simular merge (dry-run)
+                                                </button>
+                                                <button onClick={() => rodarMerge(false)} disabled={mergeBusy}
+                                                    className="px-3 py-1.5 text-xs font-bold rounded text-white"
+                                                    style={{ background: 'var(--warning)', border: '1px solid var(--warning)' }}>
+                                                    {mergeBusy ? 'Aplicando…' : 'Marcar duplicatas (_merged_into)'}
+                                                </button>
+                                                {mergeRes && (
+                                                    <span className="text-[11px] self-center" style={{ color: 'var(--text-secondary)' }}>
+                                                        {mergeRes.dryRun ? '🔍 Dry-run' : '✓ Aplicado'}: {mergeRes.chavesComDuplicata} chave(s), {mergeRes.totalPerdedores} perdedor(es)
+                                                        {!mergeRes.dryRun && <> · {mergeRes.aplicados} marcado(s)</>}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
                                         {tipo === 'duplicada' ? (
                                             <table className="w-full text-xs">
                                                 <thead>

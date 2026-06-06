@@ -53,3 +53,34 @@ export async function getDiagnosticoDocsFiscais(empresaId?: string): Promise<Dia
     }
     return res.json();
 }
+
+export interface MergeDuplicatasResposta {
+    dryRun: boolean;
+    chavesComDuplicata: number;
+    totalPerdedores: number;
+    aplicados: number;
+    amostra: { chave: string; vencedor: string; perdedores: string[] }[];
+    empresaId: string | null;
+    geradoEm: string;
+}
+
+/**
+ * Marca duplicatas (mesma chave em 2+ docs) com _merged_into=docIdVencedor.
+ * dryRun=true (default) simula, dryRun=false aplica de verdade.
+ */
+export async function mergeDuplicatasDocsFiscais(
+    opts: { empresaId?: string; dryRun?: boolean } = {},
+): Promise<MergeDuplicatasResposta> {
+    const headers = { ...(await authHeader()), 'Content-Type': 'application/json' };
+    const res = await fetch('/api/admin/diagnostico-docs-fiscais/merge-duplicatas', {
+        method: 'POST', headers, body: JSON.stringify({
+            dryRun: opts.dryRun !== false, // default true
+            empresaId: opts.empresaId,
+        }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+}
