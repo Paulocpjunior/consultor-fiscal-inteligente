@@ -58,8 +58,10 @@ describe('regras tributarias — arquivo REAL limpo nao gera ruido', () => {
         expect(r.resumo.avisos).toBe(0);
     });
 
-    it('SPED sintetico valido -> 0 achados', () => {
-        const r = aplicarRegrasTributarias(montaSped([C100_ENTRADA, c170()]));
+    it('SPED sintetico valido (com C190 totalizador) -> 0 achados', () => {
+        // c170() default: CFOP=1102, CST_ICMS=000, ALIQ=18, VL_ITEM=1000, VL_BC=1000, VL_ICMS=180
+        const c190Default = '|C190|000|1102|18|1000,00|1000,00|180,00|0,00|0,00|0,00|0,00||';
+        const r = aplicarRegrasTributarias(montaSped([C100_ENTRADA, c170(), c190Default]));
         expect(r.achados).toHaveLength(0);
     });
 });
@@ -118,6 +120,73 @@ describe('regras tributarias — AVISOS de coerencia', () => {
     it('aliquota ICMS incomum', () => {
         const r = aplicarRegrasTributarias(montaSped([C100_ENTRADA, c170({ 13: '13,5' })]));
         expect(r.achados.find((a: any) => a.regra === 'ALIQ_ICMS_INCOMUM')).toBeTruthy();
+    });
+});
+
+describe('regras tributarias — R8: C190 totalizador x C170', () => {
+    // C190: |C190|CST|CFOP|ALIQ|VL_OPR|VL_BC|VL_ICMS|VL_BC_ST|VL_ICMS_ST|VL_RED_BC|VL_IPI|COD_OBS|
+    const c190 = (cst: string, cfop: string, aliq: string, vlOpr: string, vlBc: string, vlIcms: string) =>
+        `|C190|${cst}|${cfop}|${aliq}|${vlOpr}|${vlBc}|${vlIcms}|0,00|0,00|0,00|0,00||`;
+
+    it('soma C170 bate com C190 -> sem achado', () => {
+        const r = aplicarRegrasTributarias(montaSped([
+            C100_ENTRADA,
+            c170({ 6: '1000,00', 12: '1000,00', 14: '180,00' }), // VL_ITEM, VL_BC, VL_ICMS
+            c170({ 1: '2', 6: '500,00', 12: '500,00', 14: '90,00' }),
+            c190('000', '1102', '18', '1500,00', '1500,00', '270,00'),
+        ]));
+        expect(r.achados.filter((a: any) => a.regra.startsWith('C190'))).toHaveLength(0);
+    });
+
+    it('VL_OPR do C190 não bate -> erro C190_VL_OPR_DIVERGE', () => {
+        const r = aplicarRegrasTributarias(montaSped([
+            C100_ENTRADA,
+            c170({ 6: '1000,00', 12: '1000,00', 14: '180,00' }),
+            c170({ 1: '2', 6: '500,00', 12: '500,00', 14: '90,00' }),
+            c190('000', '1102', '18', '1400,00', '1500,00', '270,00'), // VL_OPR errado
+        ]));
+        expect(r.achados.find((a: any) => a.regra === 'C190_VL_OPR_DIVERGE')).toBeTruthy();
+    });
+
+    it('VL_ICMS do C190 não bate -> erro', () => {
+        const r = aplicarRegrasTributarias(montaSped([
+            C100_ENTRADA,
+            c170({ 6: '1000,00', 12: '1000,00', 14: '180,00' }),
+            c190('000', '1102', '18', '1000,00', '1000,00', '170,00'),
+        ]));
+        expect(r.achados.find((a: any) => a.regra === 'C190_VL_ICMS_DIVERGE')).toBeTruthy();
+    });
+
+    it('C170 sem C190 correspondente (totalizador esquecido) -> erro C190_FALTANTE', () => {
+        const r = aplicarRegrasTributarias(montaSped([
+            C100_ENTRADA,
+            c170({ 6: '1000,00', 12: '1000,00', 14: '180,00' }), // CFOP 1102 + CST 000 + 18%
+            c190('000', '5102', '18', '1000,00', '1000,00', '180,00'), // C190 com CFOP DIFERENTE
+        ]));
+        expect(r.achados.find((a: any) => a.regra === 'C190_FALTANTE')).toBeTruthy();
+        // E o C190 órfão é reportado também
+        expect(r.achados.find((a: any) => a.regra === 'C190_SEM_C170')).toBeTruthy();
+    });
+
+    it('dois C190 com a mesma combinação -> aviso C190_DUPLICADO', () => {
+        const r = aplicarRegrasTributarias(montaSped([
+            C100_ENTRADA,
+            c170({ 6: '1000,00', 12: '1000,00', 14: '180,00' }),
+            c190('000', '1102', '18', '1000,00', '1000,00', '180,00'),
+            c190('000', '1102', '18', '1000,00', '1000,00', '180,00'),
+        ]));
+        expect(r.achados.find((a: any) => a.regra === 'C190_DUPLICADO')).toBeTruthy();
+    });
+
+    it('tolera 1 centavo de arredondamento -> sem achado', () => {
+        const r = aplicarRegrasTributarias(montaSped([
+            C100_ENTRADA,
+            c170({ 6: '333,33', 12: '333,33', 14: '60,00' }),
+            c170({ 1: '2', 6: '333,33', 12: '333,33', 14: '60,00' }),
+            c170({ 1: '3', 6: '333,34', 12: '333,34', 14: '60,00' }),
+            c190('000', '1102', '18', '1000,00', '1000,00', '180,00'), // soma exata
+        ]));
+        expect(r.achados.filter((a: any) => a.regra.startsWith('C190'))).toHaveLength(0);
     });
 });
 

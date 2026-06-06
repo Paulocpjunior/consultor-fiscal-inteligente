@@ -48,6 +48,20 @@ const CronCapturaBanner = lazy(() => import('./components/CronCapturaBanner'));
 const VencimentosBanner = lazy(() => import('./components/VencimentosBanner'));
 const DasDashboard = lazy(() => import('./components/Das'));
 const DCTFWebDashboard = lazy(() => import('./components/DCTFWeb'));
+const ConferirReinfDctfweb = lazy(() => import('./components/EfdReinf/ConferirReinfDctfweb'));
+const CoberturaAdnPanel = lazy(() => import('./components/NfseNacional/CoberturaAdnPanel'));
+const CoberturaPgdasPanel = lazy(() => import('./components/Das/CoberturaPgdasPanel'));
+const CoberturaDctfwebPanel = lazy(() => import('./components/DCTFWeb/CoberturaDctfwebPanel'));
+const RadarCriticasPanel = lazy(() => import('./components/CaixaPostal/RadarCriticasPanel'));
+const MinhaAgendaPanel = lazy(() => import('./components/MinhaAgenda/MinhaAgendaPanel'));
+const PrazosPrescricaoPanel = lazy(() => import('./components/RecuperacaoTributaria/PrazosPrescricaoPanel'));
+const VencimentosSemanaPanel = lazy(() => import('./components/Vencimentos/VencimentosSemanaPanel'));
+const DiagnosticoDocsFiscaisPanel = lazy(() => import('./components/Diagnostico/DocsFiscaisPanel'));
+const SublimitePanel = lazy(() => import('./components/SimplesSublimite/SublimitePanel'));
+const CadastrosPanel = lazy(() => import('./components/Diagnostico/CadastrosPanel'));
+const CertMonitorPanel = lazy(() => import('./components/CertMonitor/CertMonitorPanel'));
+const ConfigPanel = lazy(() => import('./components/Diagnostico/ConfigPanel'));
+const SaudeGeralPanel = lazy(() => import('./components/Saude/SaudeGeralPanel'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
 const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
@@ -74,6 +88,20 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CAIXA_POSTAL]: "Caixa Postal e-CAC — mensagens da Receita Federal por empresa (intimações, malha fiscal, comunicados).",
     [SearchType.DAS_SIMPLES]: "DAS Simples Nacional — emissão regular (com PGDAS-D) e avulso, controle de pagamentos por empresa.",
     [SearchType.DCTFWEB]: "DCTFWeb — Declaração de Débitos e Créditos Tributários Federais Previdenciários (empresas Lucro Presumido/Real), com transmissão, DARF e MIT.",
+    [SearchType.EFD_REINF]: "EFD-Reinf × DCTFWeb — confere as retenções declaradas na EFD-Reinf (INSS/IRRF/CSRF) contra o débito consolidado na DCTFWeb.",
+    [SearchType.NFSE_NAC_COBERTURA]: "Cobertura ADN (NFS-e Nac.) — diagnóstico e habilitação em massa da captura nacional de NFS-e por empresa (somente administradores).",
+    [SearchType.DAS_COBERTURA_PGDAS]: "Cobertura PGDAS-D — heatmap por empresa × mês mostrando quais Simples NÃO tiveram DAS emitido (gera autuação automática).",
+    [SearchType.DCTFWEB_COBERTURA]: "Cobertura DCTFWeb — heatmap por empresa Lucro × mês mostrando quais NÃO transmitiram a DCTFWeb (gera autuação automática).",
+    [SearchType.CAIXA_POSTAL_RADAR]: "Radar fiscal (e-CAC) — mensagens não lidas classificadas por risco real (intimações, malha, exclusão Simples, autos de infração) ordenadas por urgência.",
+    [SearchType.MINHA_AGENDA]: "Minha Agenda Fiscal — consolidado por carteira: PGDAS-D / DCTFWeb pendentes + caixa postal crítica em UM lugar, priorizado por risco (0-100).",
+    [SearchType.RECUPERACAO_PRAZOS]: "Prazos de Prescrição — para cada oportunidade de recuperação tributária, mostra quanto falta pra expirar (5 anos CTN art 168). URGENTE = ≤90 dias.",
+    [SearchType.VENCIMENTOS_SEMANA]: "Vencimentos da Semana — obrigações fiscais que vencem nos próximos 7 dias (ou estão atrasadas), filtradas pela sua carteira. Visão do dia-a-dia.",
+    [SearchType.DIAGNOSTICO_DOCS]: "Diagnóstico Docs Fiscais — varredura de saúde das NF-e capturadas: notas sem chave/competência/direção/valor, chaves duplicadas em 2+ docs (somente administradores).",
+    [SearchType.SIMPLES_SUBLIMITE]: "Alerta de sublimite Simples — calcula RBT12 de cada empresa Simples e classifica contra teto (R$ 4,8M) e sublimite ICMS/ISS (R$ 3,6M). Risco de exclusão automática.",
+    [SearchType.DIAGNOSTICO_CADASTROS]: "Cadastros Incompletos — empresas com UF/IBGE/anexo/CNAE faltando que bloqueiam o SPED ou cálculo do DAS (somente administradores).",
+    [SearchType.CERT_MONITOR]: "Certificados Digitais — monitora vencimento dos certs (S&P + por empresa). Cert vencido = SERPRO/SEFAZ/e-CAC param sem aviso.",
+    [SearchType.DIAGNOSTICO_CONFIG]: "Configurações Operacionais — detecta env vars faltando (SERPRO/SharePoint/CRON_SECRET/etc) e modos operacionais incorretos. Só admin, sem expor valores.",
+    [SearchType.SAUDE_GERAL]: "Saúde Geral — agrega os 4 diagnósticos (cadastros + documentos + certs + configs) numa única tela. Status global OK/MÉDIO/ALTO/CRÍTICO/DEGRADADO.",
     [SearchType.CARTEIRA]: "Carteira de Clientes — atribuição de empresas a colaboradores responsáveis (somente administradores).",
     [SearchType.AGENTES_A3]: "Agentes A3 — gerenciar API keys do agente local cfi-a3 e marcar empresas como A3 (somente administradores).",
     [SearchType.NFSE_NACIONAL]: "NFS-e Nacional (CGSN 189/2026) — emissão e gestão de notas de serviço no padrão nacional, obrigatório set/2026.",
@@ -1167,6 +1195,146 @@ const App: React.FC = () => {
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DCTFWebDashboard
                                     currentUser={currentUser}
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.EFD_REINF && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <ConferirReinfDctfweb
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.NFSE_NAC_COBERTURA && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <CoberturaAdnPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.DAS_COBERTURA_PGDAS && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <CoberturaPgdasPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.DCTFWEB_COBERTURA && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <CoberturaDctfwebPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.CAIXA_POSTAL_RADAR && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <RadarCriticasPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.MINHA_AGENDA && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <MinhaAgendaPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.RECUPERACAO_PRAZOS && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <PrazosPrescricaoPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.VENCIMENTOS_SEMANA && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <VencimentosSemanaPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.DIAGNOSTICO_DOCS && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <DiagnosticoDocsFiscaisPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.SIMPLES_SUBLIMITE && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <SublimitePanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.DIAGNOSTICO_CADASTROS && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <CadastrosPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.CERT_MONITOR && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <CertMonitorPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.DIAGNOSTICO_CONFIG && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <ConfigPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.SAUDE_GERAL && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <SaudeGeralPanel
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>

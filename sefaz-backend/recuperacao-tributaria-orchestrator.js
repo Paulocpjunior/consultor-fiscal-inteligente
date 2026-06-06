@@ -97,6 +97,7 @@ async function analisarMonofasico(empresaId, empresa) {
 
     docsSnap.forEach(d => {
         const doc = d.data();
+        if (doc._merged_into) return; // ignora docs marcados como duplicata
         const itens = doc.itens || [];
         itens.forEach(item => {
             if (isNcmMonofasico(item.ncm)) {
@@ -211,6 +212,7 @@ async function analisarIcmsStMva(empresaId) {
 
     docsSnap.forEach(d => {
         const doc = d.data();
+        if (doc._merged_into) return; // ignora docs marcados como duplicata
         (doc.itens || []).forEach(item => {
             const vICMSST = item.vICMSST || 0;
             const vBCST = item.vBCST || 0;
@@ -313,6 +315,7 @@ async function analisarIssLocal(empresaId, empresa) {
 
     nfseSnap.forEach(d => {
         const doc = d.data();
+        if (doc._merged_into) return; // ignora docs marcados como duplicata
         const tomadorUf = doc.tomador?.uf || doc.destinatario?.uf || '';
         const prestadorUf = doc.prestador?.uf || doc.emitente?.uf || '';
         const issValor = doc.valores?.iss || 0;

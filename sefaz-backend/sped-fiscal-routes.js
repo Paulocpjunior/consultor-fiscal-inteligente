@@ -6,9 +6,19 @@
 // ============================================================================
 
 import express from 'express';
+import admin from 'firebase-admin';
 import { coletarDadosEmpresa, montarBlocos } from './sped-fiscal-orchestrator.js';
-import { requireAdmin } from './require-admin.js';
+import { requireAdmin, requireAuth } from './require-admin.js';
+import { podeAcessarEmpresaId } from './carteira-auth.js';
 import { validarSpedFiscal } from './sped-fiscal-validador.js';
+import { fetchAllDocs } from './firestore-paginate.js';
+
+function fa() {
+    if (!admin.apps.length) {
+        admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    }
+    return admin;
+}
 
 const router = express.Router();
 
@@ -115,6 +125,98 @@ router.get('/validar', requireAdmin, express.json({ limit: '10mb' }), (req, res)
     }
 });
 
+// GET /nfes-capturadas?empresaId=X&competencia=YYYY-MM
+// Lista NF-e capturadas da empresa na competencia — base do cruzamento
+// SPED Fiscal × XML capturados. Devolve so o essencial pro front (chave,
+// numero, status, valor, direcao), nunca o XML inteiro.
+router.get('/nfes-capturadas', requireAuth, async (req, res) => {
+    try {
+        const { empresaId, competencia } = req.query;
+        if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
+        if (!competencia) return res.status(400).json({ error: 'competencia obrigatoria (YYYY-MM)' });
+        const carteira = await podeAcessarEmpresaId(req.user, empresaId);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+
+        const db = fa().firestore();
+        const q = db.collection('documentos_fiscais')
+            .where('empresaId', '==', empresaId)
+            .where('competencia', '==', competencia);
+        const snap = await fetchAllDocs(q, { label: 'sped-fiscal/nfes-capturadas' });
+
+        const nfes = [];
+        let descartadas = 0;
+        let perdedoresMerge = 0;
+        for (const d of snap) {
+            const doc = d.data();
+            if (doc._merged_into) { perdedoresMerge++; continue; }
+            const chave = String(doc.chave || doc.chaveAcesso || '').replace(/\D/g, '');
+            if (chave.length !== 44) { descartadas++; continue; }
+            nfes.push({
+                chave,
+                numero: doc.numero || doc.nNF || '',
+                status: doc.status || null,
+                valorTotal: Number(doc.valorTotal ?? doc.vNF ?? 0) || 0,
+                direcao: doc.direcao || null,
+                modelo: doc.modelo || doc.mod || null,
+                dataEmissao: doc.dataEmissao || doc.dhEmi || null,
+            });
+        }
+        return res.json({ empresaId, competencia, total: nfes.length, descartadas, perdedoresMerge, nfes });
+    } catch (e) {
+        return tratarErro(e, res);
+    }
+});
+
+// GET /faturamento-declarado?empresaId=X&competencia=YYYY-MM
+// Devolve o faturamento que o contador declarou pra empresa naquela
+// competencia (faturamentoManual[mes] do Simples, ou receita do Lucro).
+// Base do cruzamento "SPED Fiscal × faturamento declarado".
+router.get('/faturamento-declarado', requireAuth, async (req, res) => {
+    try {
+        const { empresaId, competencia } = req.query;
+        if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
+        if (!competencia) return res.status(400).json({ error: 'competencia obrigatoria (YYYY-MM)' });
+        const carteira = await podeAcessarEmpresaId(req.user, empresaId);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+
+        const db = fa().firestore();
+        let doc = null, fonte = null;
+        // Procura primeiro em simples_empresas, depois lucro_empresas.
+        for (const [col, tipo] of [['simples_empresas', 'simples'], ['lucro_empresas', 'lucro']]) {
+            try {
+                const snap = await db.collection(col).doc(empresaId).get();
+                if (snap.exists) { doc = snap.data(); fonte = tipo; break; }
+            } catch (e) {
+                console.warn(`[faturamento-declarado] ${col} indisponivel:`, e.message);
+            }
+        }
+        if (!doc) return res.status(404).json({ error: 'Empresa nao encontrada' });
+
+        let faturamentoDeclarado = 0;
+        let origem = null;
+        if (fonte === 'simples') {
+            // Simples: faturamentoManual[YYYY-MM] (chave usa hifen)
+            const fm = doc.faturamentoManual || {};
+            faturamentoDeclarado = Number(fm[competencia]) || 0;
+            origem = 'faturamentoManual (Simples)';
+        } else if (fonte === 'lucro') {
+            // Lucro: receita por competencia (campo varia conforme cadastro).
+            const fm = doc.faturamentoManual || doc.receitas || {};
+            faturamentoDeclarado = Number(fm[competencia]) || 0;
+            origem = doc.faturamentoManual ? 'faturamentoManual (Lucro)' : 'receitas (Lucro)';
+        }
+
+        return res.json({
+            empresaId, competencia, fonte,
+            faturamentoDeclarado, origem,
+            disponivel: faturamentoDeclarado > 0,
+        });
+    } catch (e) {
+        console.error('[sped-fiscal/faturamento-declarado]', e);
+        return res.status(500).json({ error: 'Falha interna' });
+    }
+});
+
 router.get('/historico', requireAdmin, async (_req, res) => {
     // Endpoint reservado pra historico de geracoes SPED Fiscal.
     // Hoje retorna vazio — geracoes ainda nao sao persistidas (sao on-demand).
@@ -135,7 +237,7 @@ function tratarErro(e, res) {
         });
     }
     console.error('[sped-fiscal]', e);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: "Falha interna" });
 }
 
 export default router;

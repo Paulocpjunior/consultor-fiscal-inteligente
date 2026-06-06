@@ -12,11 +12,14 @@ import {
     consultarDeclaracaoCompleta, consultarRecibo,
     encerrarApuracaoMit, consultarStatusEncerramentoMit,
     consultarApuracaoMit, consultarApuracoesAno,
+    consultarRetencaoDctfwebNormalizada,
     getResumoGlobal,
 } from './dctfweb-orchestrator.js';
 import { getDctfwebMode } from './dctfweb-provider.js';
 import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
 import { requireAdmin, requireAuth } from './require-admin.js';
+import { fetchAllDocs } from './firestore-paginate.js';
+import { ultimasCompetenciasComAnoMes as ultimasCompetenciasComAnoMesHelper } from './competencias-helper.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 const router = express.Router();
@@ -130,6 +133,22 @@ router.get('/mit/apuracao-normalizada', requireAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Retencao consolidada NORMALIZADA — base do cruzamento DCTFWeb x EFD-Reinf.
+// Devolve { lido, motivo, retencoes:{INSS,IRRF,CSLL,PIS,COFINS}, camposUsados }.
+// lido=false (com motivo) quando o XML da declaracao tem shape inesperado —
+// NUNCA zeros falsos. Calibra-se a allowlist via serpro-smoke (CONSXMLDECLARACAO).
+router.get('/retencao-normalizada', requireAuth, async (req, res) => {
+    try {
+        const { empresaCnpj, anoPA, mesPA, categoria } = req.query;
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+        const r = await consultarRetencaoDctfwebNormalizada({
+            empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA), categoria,
+        });
+        res.json(r);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/mit/historico', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, anoPA } = req.query;
@@ -138,6 +157,107 @@ router.get('/mit/historico', requireAuth, async (req, res) => {
         res.json(await consultarApuracoesAno({ empresaCnpj, anoPA: Number(anoPA) }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// GET /cobertura?meses=6
+// Pra cada empresa Lucro Presumido/Real ativa, lista as competencias dos
+// ultimos N meses onde NAO ha DCTFWeb transmitida (situacao=='ATIVA').
+// Mesmo conceito do /das/cobertura-pgdas, mas pra Lucro. So admin.
+router.get('/cobertura', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
+        const meses = Math.min(Math.max(Number(req.query.meses || 6), 1), 24);
+        const competencias = ultimasCompetenciasDctfweb(meses); // [{anoPA,mesPA,label}]
+
+        if (admin.apps.length === 0) {
+            admin.initializeApp({ credential: admin.credential.applicationDefault() });
+        }
+        const db = admin.firestore();
+
+        // 1. Empresas Lucro ativas
+        const lucroSnap = await db.collection('lucro_empresas').get();
+        const empresas = [];
+        lucroSnap.forEach((doc) => {
+            const d = doc.data();
+            if (d._merged_into) return;
+            const cnpj = (d.cnpj || '').replace(/\D/g, '');
+            if (cnpj.length !== 14) return;
+            empresas.push({ id: doc.id, cnpj, nome: d.razaoSocial || d.nome || '' });
+        });
+
+        // 2. DCTFWeb dos ultimos meses (loteia por anoPA — geralmente sao 1-2 anos)
+        const anos = Array.from(new Set(competencias.map((c) => c.anoPA)));
+        const declMap = new Map(); // empresaId|YYYY-MM -> { situacao, valor }
+        const anosFalhos = [];
+        for (const ano of anos) {
+            try {
+                // Pagina com fetchAllDocs (default 500/batch) — evita estourar reads
+                const docs = await fetchAllDocs(
+                    db.collection('dctfweb_declaracoes').where('anoPA', '==', ano),
+                    { label: 'dctfweb/cobertura' },
+                );
+                for (const d of docs) {
+                    const x = d.data();
+                    if (!x.empresaId || x.mesPA == null) continue;
+                    // So conta GERAL_MENSAL (categoria principal — a obrigacao mensal mesmo)
+                    if (x.categoria && x.categoria !== 'GERAL_MENSAL') continue;
+                    const label = `${x.anoPA}-${String(x.mesPA).padStart(2, '0')}`;
+                    const k = `${x.empresaId}|${label}`;
+                    // Prioriza ATIVA sobre EM_ANDAMENTO se houver mais de um doc
+                    const prev = declMap.get(k);
+                    if (!prev || (x.situacao === 'ATIVA' && prev.situacao !== 'ATIVA')) {
+                        declMap.set(k, { situacao: x.situacao || 'EM_ANDAMENTO', valor: x.valorTotal || 0 });
+                    }
+                }
+            } catch (e) {
+                anosFalhos.push(ano);
+                console.warn('[dctfweb/cobertura] ano', ano, 'falhou:', e.message);
+            }
+        }
+
+        // 3. Matriz empresa x competencia
+        const resultado = [];
+        let totalGaps = 0;
+        let totalEmAndamento = 0;
+        for (const emp of empresas) {
+            const mesesArr = competencias.map((c) => {
+                const k = `${emp.id}|${c.label}`;
+                const decl = declMap.get(k);
+                if (!decl) return { competencia: c.label, transmitido: false };
+                return {
+                    competencia: c.label, transmitido: true,
+                    situacao: decl.situacao, valor: decl.valor,
+                };
+            });
+            const gaps = mesesArr.filter((m) => !m.transmitido).length;
+            const emAndamento = mesesArr.filter((m) => m.transmitido && m.situacao === 'EM_ANDAMENTO').length;
+            totalGaps += gaps;
+            totalEmAndamento += emAndamento;
+            resultado.push({ id: emp.id, cnpj: emp.cnpj, nome: emp.nome, gaps, emAndamento, meses: mesesArr });
+        }
+        resultado.sort((a, b) => (b.gaps - a.gaps) || (b.emAndamento - a.emAndamento) || (a.nome || '').localeCompare(b.nome || ''));
+
+        return res.json({
+            mesesAnalisados: competencias.length,
+            competencias: competencias.map((c) => c.label),
+            totalEmpresas: empresas.length,
+            empresasComGap: resultado.filter((e) => e.gaps > 0).length,
+            totalGaps,
+            totalEmAndamento,
+            // honesto: se algum ano falhou ler, marca degraded pra UI nao mostrar
+            // falso "nao transmitido" sem aviso
+            degraded: anosFalhos.length > 0,
+            anosFalhos,
+            empresas: resultado,
+        });
+    } catch (e) {
+        console.error('[dctfweb/cobertura]', e);
+        return res.status(500).json({ error: 'Falha interna' });
+    }
+});
+
+function ultimasCompetenciasDctfweb(n) {
+    return ultimasCompetenciasComAnoMesHelper(n);
+}
 
 router.post('/cron', async (req, res) => {
     const headerSecret = req.header('X-Cron-Secret') || '';

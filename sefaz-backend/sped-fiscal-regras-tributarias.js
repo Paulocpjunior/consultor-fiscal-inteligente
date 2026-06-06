@@ -164,10 +164,111 @@ export function aplicarRegrasTributarias(parsed) {
         }
     }
 
+    // R8: C190 totalizador x soma dos C170 por (CST_ICMS, CFOP, ALIQ_ICMS).
+    // E o erro que mais aparece em SPED editado a mao: contador muda VL_ITEM
+    // de um C170 mas esquece de regerar o C190. PVA rejeita transmissao.
+    verificarTotalizadoresC190(linhas, add);
+
     const resumo = { erros: 0, avisos: 0, porRegra: {} };
     for (const a of achados) {
         if (a.severidade === 'erro') resumo.erros++; else resumo.avisos++;
         resumo.porRegra[a.regra] = (resumo.porRegra[a.regra] || 0) + 1;
     }
     return { achados, resumo };
+}
+
+// ─── R8: C190 totalizador x C170 (por documento) ───────────────────────────
+// Layout C190 (1-based no SPED, campos[N]):
+//   1=CST_ICMS, 2=CFOP, 3=ALIQ_ICMS, 4=VL_OPR, 5=VL_BC_ICMS, 6=VL_ICMS
+// O C190 agrupa as linhas C170 do MESMO documento (mesmo C100 pai) por
+// (CST_ICMS, CFOP, ALIQ_ICMS). Cada combinacao deve ter UM C190; e a soma
+// dos C170 daquela combinacao tem que bater VL_OPR/VL_BC/VL_ICMS do C190.
+function verificarTotalizadoresC190(linhas, add) {
+    const TOL = 0.02; // 2 centavos: tolera arredondamento natural do SPED.
+    let docIdx = null;
+    let docNum = null;
+    let c170Por = null;  // Map<chaveCombinacao, { vlOpr, vlBc, vlIcms, count }>
+    let c190Por = null;  // Map<chaveCombinacao, { idx, vlOpr, vlBc, vlIcms, count }>
+
+    const flush = () => {
+        if (!c170Por || !c190Por) return;
+        // Combinacoes que existem nos C170 mas faltam no C190 (totalizador esquecido).
+        for (const [k, t170] of c170Por) {
+            const t190 = c190Por.get(k);
+            if (!t190) {
+                add('C190_FALTANTE', 'erro', 'C190', docIdx,
+                    `Doc ${docNum}: combinacao ${k} aparece em ${t170.count} C170 mas nao tem C190 totalizador.`);
+                continue;
+            }
+            if (Math.abs(t190.vlOpr - t170.vlOpr) > TOL) {
+                add('C190_VL_OPR_DIVERGE', 'erro', 'C190', t190.idx,
+                    `Doc ${docNum} ${k}: C190 VL_OPR=${t190.vlOpr.toFixed(2)} != soma C170 VL_ITEM=${t170.vlOpr.toFixed(2)}.`);
+            }
+            if (Math.abs(t190.vlBc - t170.vlBc) > TOL) {
+                add('C190_VL_BC_DIVERGE', 'erro', 'C190', t190.idx,
+                    `Doc ${docNum} ${k}: C190 VL_BC_ICMS=${t190.vlBc.toFixed(2)} != soma C170 VL_BC_ICMS=${t170.vlBc.toFixed(2)}.`);
+            }
+            if (Math.abs(t190.vlIcms - t170.vlIcms) > TOL) {
+                add('C190_VL_ICMS_DIVERGE', 'erro', 'C190', t190.idx,
+                    `Doc ${docNum} ${k}: C190 VL_ICMS=${t190.vlIcms.toFixed(2)} != soma C170 VL_ICMS=${t170.vlIcms.toFixed(2)}.`);
+            }
+            if (t190.count > 1) {
+                add('C190_DUPLICADO', 'aviso', 'C190', t190.idx,
+                    `Doc ${docNum} ${k}: ${t190.count} C190 com a mesma combinacao (deveria ser 1).`);
+            }
+        }
+        // C190 sem C170 correspondente.
+        for (const [k, t190] of c190Por) {
+            if (!c170Por.has(k)) {
+                add('C190_SEM_C170', 'erro', 'C190', t190.idx,
+                    `Doc ${docNum}: C190 ${k} sem nenhum C170 correspondente.`);
+            }
+        }
+    };
+
+    for (const l of linhas) {
+        if (l.tipo === 'C100') {
+            flush();
+            docIdx = l.idx;
+            docNum = l.campos[7] || '?';
+            c170Por = new Map();
+            c190Por = new Map();
+            continue;
+        }
+        if (l.tipo === 'C170' && c170Por) {
+            const c = l.campos;
+            const cst = String(c[9] || '');
+            const cfop = String(c[10] || '');
+            const aliq = aliqNum(c[13]);
+            const key = `${cst}|${cfop}|${aliq != null ? aliq.toFixed(2) : '0.00'}`;
+            const acc = c170Por.get(key) || { vlOpr: 0, vlBc: 0, vlIcms: 0, count: 0 };
+            acc.vlOpr += num(c[6]);   // VL_ITEM
+            acc.vlBc += num(c[12]);   // VL_BC_ICMS
+            acc.vlIcms += num(c[14]); // VL_ICMS
+            acc.count++;
+            c170Por.set(key, acc);
+            continue;
+        }
+        if (l.tipo === 'C190' && c190Por) {
+            const c = l.campos;
+            const cst = String(c[1] || '');
+            const cfop = String(c[2] || '');
+            const aliq = aliqNum(c[3]);
+            const key = `${cst}|${cfop}|${aliq != null ? aliq.toFixed(2) : '0.00'}`;
+            const prev = c190Por.get(key);
+            // C190 e supostamente UNICO por combinacao no doc. Acumula pra detectar
+            // duplicidade, mas usa os valores do PRIMEIRO pra comparar (PVA olha cada
+            // declaracao isoladamente).
+            if (prev) {
+                prev.count++;
+            } else {
+                c190Por.set(key, {
+                    idx: l.idx, count: 1,
+                    vlOpr: num(c[4]), vlBc: num(c[5]), vlIcms: num(c[6]),
+                });
+            }
+            continue;
+        }
+    }
+    flush();
 }

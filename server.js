@@ -36,6 +36,15 @@ import recuperacaoRouter from './sefaz-backend/recuperacao-tributaria-routes.js'
 import nfpComplianceRouter from './sefaz-backend/nfp-compliance-routes.js';
 import dpIntegrationRouter from './sefaz-backend/dp-integration-routes.js';
 import sharepointAutoSyncRouter from './sefaz-backend/sharepoint-auto-sync.js';
+import efdReinfRouter from './sefaz-backend/efd-reinf-routes.js';
+import minhaAgendaRouter from './sefaz-backend/minha-agenda-routes.js';
+import diagnosticoDocsFiscaisRouter from './sefaz-backend/diagnostico-docs-fiscais-routes.js';
+import simplesSublimiteRouter from './sefaz-backend/simples-sublimite-routes.js';
+import diagnosticoCadastrosRouter from './sefaz-backend/diagnostico-cadastros-routes.js';
+import certMonitorRouter from './sefaz-backend/cert-monitor-routes.js';
+import diagnosticoConfigRouter from './sefaz-backend/diagnostico-config-routes.js';
+import healthConsolidadoRouter from './sefaz-backend/health-consolidado-routes.js';
+import healthAlertaCronRouter from './sefaz-backend/health-alerta-cron.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -158,6 +167,17 @@ app.use('/api/admin/recuperacao', recuperacaoRouter);
 app.use('/api/admin/nfp-compliance', nfpComplianceRouter);
 app.use('/api/dp-integration', dpIntegrationRouter);
 app.use('/api/admin/sharepoint', sharepointAutoSyncRouter);
+app.use('/api/admin/efd-reinf', efdReinfRouter);
+app.use('/api/admin/minha-agenda', minhaAgendaRouter);
+app.use('/api/admin/diagnostico-docs-fiscais', diagnosticoDocsFiscaisRouter);
+app.use('/api/admin/simples-sublimite', simplesSublimiteRouter);
+app.use('/api/admin/diagnostico-cadastros', diagnosticoCadastrosRouter);
+app.use('/api/admin/cert-monitor', certMonitorRouter);
+app.use('/api/admin/diagnostico-config', diagnosticoConfigRouter);
+app.use('/api/admin/health-consolidado', healthConsolidadoRouter);
+// O cron e chamado pelo Cloud Scheduler com header X-Cron-Secret — fica fora
+// do prefixo /api/admin pra preservar o padrao dos outros crons.
+app.use('/api/internal/cron', healthAlertaCronRouter);
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Modelos centralizados em env vars — trocar de versao = atualizar o secret no
@@ -1755,6 +1775,49 @@ app.get('/api/admin/dashboard-ceo/kpis', requireAdmin, async (req, res) => {
             if (!tem) apuracoesPendentes++;
         });
 
+        // ── Cobertura PGDAS-D (mês anterior — quem não emitiu?)
+        // Importa o helper testado pra calcular o mês anterior corretamente.
+        const { ultimasCompetencias } = await import('./sefaz-backend/competencias-helper.js');
+        const mesAnterior = ultimasCompetencias(1)[0];
+        const dasMesAnteriorPorEmpresa = new Set();
+        dasSnap.forEach(d => {
+            const x = d.data();
+            if (x.competencia === mesAnterior) dasMesAnteriorPorEmpresa.add(x.empresaId);
+        });
+        let pgdasMesAnteriorPendentes = 0;
+        simplesAtivos.forEach(d => {
+            if (!dasMesAnteriorPorEmpresa.has(d.id)) pgdasMesAnteriorPendentes++;
+        });
+
+        // ── Cobertura DCTFWeb (mês anterior — quem não transmitiu?)
+        const dctfwebSnap = await fetchAllDocs(db.collection('dctfweb_declaracoes'), { label: 'dctfweb_declaracoes/ceo' });
+        const [anoAntStr, mesAntStr] = (mesAnterior || '').split('-');
+        const anoAnt = Number(anoAntStr), mesAnt = Number(mesAntStr);
+        const dctfwebMesAnteriorAtivos = new Set();
+        dctfwebSnap.forEach(d => {
+            const x = d.data();
+            if (x.anoPA === anoAnt && x.mesPA === mesAnt && x.situacao === 'ATIVA' && (!x.categoria || x.categoria === 'GERAL_MENSAL')) {
+                dctfwebMesAnteriorAtivos.add(x.empresaId);
+            }
+        });
+        let dctfwebMesAnteriorPendentes = 0;
+        lucroAtivos.forEach(d => {
+            if (!dctfwebMesAnteriorAtivos.has(d.id)) dctfwebMesAnteriorPendentes++;
+        });
+
+        // ── Sublimite Simples (RBT12 perto/passou de R$ 3,6M ou R$ 4,8M)
+        const { calcularRbt12, classificarRbt12 } = await import('./sefaz-backend/simples-sublimite-helper.js');
+        let sublimiteUltrapassou = 0, sublimiteCritico = 0, tetoUltrapassou = 0, tetoCritico = 0;
+        simplesAtivos.forEach(d => {
+            const e = d.data();
+            const { rbt12 } = calcularRbt12(e.faturamentoManual || {});
+            const c = classificarRbt12(rbt12);
+            if (c.teto.faixa === 'ultrapassou') tetoUltrapassou++;
+            else if (c.teto.faixa === 'critico') tetoCritico++;
+            if (c.sublimite.faixa === 'ultrapassou') sublimiteUltrapassou++;
+            else if (c.sublimite.faixa === 'critico') sublimiteCritico++;
+        });
+
         return res.json({
             timestamp: new Date().toISOString(),
             totalEmpresas,
@@ -1774,6 +1837,20 @@ app.get('/api/admin/dashboard-ceo/kpis', requireAdmin, async (req, res) => {
             },
             apuracoes: {
                 pendentes: apuracoesPendentes,
+            },
+            // ── Novos KPIs do dia ──
+            cobertura: {
+                mesAnterior,
+                pgdasPendentes: pgdasMesAnteriorPendentes,
+                pgdasTotal: simplesAtivos.length,
+                dctfwebPendentes: dctfwebMesAnteriorPendentes,
+                dctfwebTotal: lucroAtivos.length,
+            },
+            sublimite: {
+                tetoUltrapassou,
+                tetoCritico,
+                sublimiteUltrapassou,
+                sublimiteCritico,
             },
         });
     } catch (err) {

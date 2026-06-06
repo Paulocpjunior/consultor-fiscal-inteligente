@@ -123,6 +123,30 @@ class MockProvider {
         return { apuracaoMit: { tributos: [], total: 0 }, fonte: 'mock' };
     }
 
+    async consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' } = {}) {
+        const cnpj = String(empresaCnpj || '').replace(/\D/g, '');
+        const seed = hashCnpj(empresaCnpj);
+        const inss = (500 + (seed % 2000)).toFixed(2); // ponto decimal (igual real)
+        // XML no shape REAL do CONSXMLDECLARACAO (ProcDctf > CreditoTributarioApurado).
+        // Inclui 1 retencao Reinf (INSS 1162) + 1 debito proprio (patronal 1138,
+        // que o normalizador deve IGNORAR) — exercita o filtro por codReceita.
+        const xml = `<?xml version="1.0" encoding="utf-8"?>`
+            + `<ProcDctf xmlns="http://www.serpro.gov.br/dctf/v1"><ConteudoDeclaracao>`
+            + `<DctfXml versao="3.0"><A000-DadosIdentificadoresContribuinte>`
+            + `<inscContrib>${cnpj}</inscContrib><perApuracao>${String(mesPA).padStart(2,'0')}${anoPA}</perApuracao>`
+            + `<categoriaDCTF>40</categoriaDCTF><A050-CreditosTributariosApurados>`
+            + `<CreditoTributarioApurado><codReceita>113801</codReceita>`
+            + `<ctDescricaoTributo>CP PATRONAL - EMPREGADOS/AVULSOS</ctDescricaoTributo>`
+            + `<ctValor>1000.00</ctValor><saldoaPagar>1000.00</saldoaPagar></CreditoTributarioApurado>`
+            + `<CreditoTributarioApurado><codReceita>116201</codReceita>`
+            + `<ctDescricaoTributo>CP PATRONAL - RETENCAO LEI 9.711/98</ctDescricaoTributo>`
+            + `<ctValor>${inss}</ctValor><ctCnpj>03222111000130</ctCnpj>`
+            + `<saldoaPagar>${inss}</saldoaPagar></CreditoTributarioApurado>`
+            + `</A050-CreditosTributariosApurados></A000-DadosIdentificadoresContribuinte>`
+            + `</DctfXml></ConteudoDeclaracao></ProcDctf>`;
+        return { xml, categoria, anoPA, mesPA, fonte: 'mock' };
+    }
+
     async consultarApuracoesAno({ anoPA }) {
         return { ano: anoPA, apuracoes: [], fonte: 'mock' };
     }
@@ -278,6 +302,25 @@ class SerproProvider {
         });
         const d = safeJsonParse(r.dados) || {};
         return { apuracaoMit: d.apuracao || d, fonte: 'serpro' };
+    }
+
+    async consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
+        const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        const r = await invokeIntegraContador({
+            idSistema: 'DCTFWEB',
+            idServico: 'CONSXMLDECLARACAO',
+            contribuinteCnpj: cnpj,
+            acao: 'Consultar',
+            dados: { categoria, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2, '0') },
+        });
+        const d = safeJsonParse(r.dados) || {};
+        // SERPRO pode devolver o XML cru (string) OU base64 (XMLByteArrayBase64).
+        let xml = d.xml || d.XMLDeclaracao || d.declaracaoXml || '';
+        const b64 = d.XMLByteArrayBase64 || d.xmlBase64;
+        if (!xml && b64) {
+            try { xml = Buffer.from(b64, 'base64').toString('utf8'); } catch { xml = ''; }
+        }
+        return { xml, _raw: d, categoria, anoPA, mesPA, fonte: 'serpro' };
     }
 
     async consultarApuracoesAno({ empresaCnpj, anoPA }) {

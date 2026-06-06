@@ -111,7 +111,7 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
         });
     } catch (e) {
         console.error('[nfse-nac-dfe/sync-cron-now]', e);
-        return res.status(500).json({ error: e.message });
+        if (!res.headersSent) return res.status(500).json({ error: 'Falha interna' });
     }
 });
 
@@ -238,6 +238,7 @@ router.get('/resumo', requireAuth, async (_req, res) => {
         let nfse = 0, eventos = 0, valorTotal = 0;
         snap.docs.forEach((d) => {
             const x = d.data();
+            if (x._merged_into) return; // ignora docs marcados como duplicata
             if (x.tipo === 'nfseNacional') { nfse++; valorTotal += x.valorServico || 0; }
             else eventos++;
         });
@@ -248,6 +249,163 @@ router.get('/resumo', requireAuth, async (_req, res) => {
         });
     } catch (e) {
         return res.status(500).json({ error: e.message });
+    }
+});
+
+// ── GET /cobertura ────────────────────────────────────────────────────────
+// Lista TODAS as empresas (simples + lucro) com status de captura ADN. Pra cada
+// empresa: ativo (flag), ultNSU/ultimaSync (do state), totalDocs (nfse + eventos
+// nacionais ja capturados). Sumariza % de cobertura no topo. So admin.
+router.get('/cobertura', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
+        const db = fa().firestore();
+        const colNames = [
+            { col: process.env.SIMPLES_COLLECTION || 'simples_empresas', fonte: 'simples' },
+            { col: process.env.LUCRO_COLLECTION || 'lucro_empresas', fonte: 'lucro' },
+        ];
+        const empresas = [];
+        for (const { col, fonte } of colNames) {
+            try {
+                const snap = await db.collection(col).get();
+                snap.forEach((doc) => {
+                    const d = doc.data();
+                    if (d._merged_into) return; // perdedor de merge
+                    const cnpj = (d.cnpj || '').replace(/\D/g, '');
+                    if (cnpj.length !== 14) return;
+                    empresas.push({
+                        id: doc.id,
+                        cnpj,
+                        nome: d.razaoSocial || d.nome || '',
+                        fonte,
+                        ativo: d.nfseNacionalDfeAtivo === true,
+                        alteradoPor: d.nfseNacionalDfeAlteradoPor || null,
+                        alteradoEm: d.nfseNacionalDfeAlteradoEm?.toDate?.()?.toISOString?.() || null,
+                    });
+                });
+            } catch (e) {
+                console.warn(`[nfse-nac-dfe/cobertura] coleção ${col} indisponível:`, e.message);
+            }
+        }
+        // Dedup por CNPJ (empresa pode estar em ambas as coleções)
+        const mapa = new Map();
+        for (const e of empresas) if (!mapa.has(e.cnpj)) mapa.set(e.cnpj, e);
+        const lista = Array.from(mapa.values());
+
+        // State (ultNSU/ultimaSync) por empresa
+        const stateRefs = lista.map((e) => db.collection('nfse_nacional_dfe_state').doc(e.cnpj));
+        const stateSnaps = stateRefs.length ? await db.getAll(...stateRefs) : [];
+        const stateMap = new Map();
+        stateSnaps.forEach((s) => {
+            if (s.exists) {
+                const sd = s.data();
+                stateMap.set(s.id, {
+                    ultNSU: sd.ultNSU || null,
+                    ultimaSync: sd.ultimaSync?.toDate?.()?.toISOString?.() || sd.ultimaSync || null,
+                    maxNSU: sd.maxNSU || null,
+                });
+            }
+        });
+        lista.forEach((e) => { e.state = stateMap.get(e.cnpj) || null; });
+
+        const total = lista.length;
+        const ativas = lista.filter((e) => e.ativo).length;
+        const comCaptura = lista.filter((e) => e.state && e.state.ultimaSync).length;
+        return res.json({
+            total, ativas, inativas: total - ativas, comCaptura,
+            percentualAtivas: total ? Math.round((ativas / total) * 100) : 0,
+            percentualCaptura: total ? Math.round((comCaptura / total) * 100) : 0,
+            empresas: lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || '')),
+        });
+    } catch (e) {
+        console.error('[nfse-nac-dfe/cobertura]', e);
+        return res.status(500).json({ error: 'Falha interna' });
+    }
+});
+
+// ── POST /toggle-bulk ─────────────────────────────────────────────────────
+// Liga/desliga ADN pra uma LISTA de empresas de uma vez. Body:
+//   { cnpjs: string[], ativo: boolean }
+// Resposta: { atualizados, naoEncontrados, falhas }. So admin.
+router.post('/toggle-bulk', requireAuth, express.json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
+        const { cnpjs, ativo } = req.body || {};
+        if (!Array.isArray(cnpjs) || cnpjs.length === 0) {
+            return res.status(400).json({ error: 'cnpjs (array) obrigatorio' });
+        }
+        if (cnpjs.length > 2000) return res.status(400).json({ error: 'Máximo 2000 CNPJs por chamada.' });
+        if (typeof ativo !== 'boolean') return res.status(400).json({ error: 'campo "ativo" boolean obrigatório' });
+
+        const db = fa().firestore();
+        const atualizados = [];
+        const naoEncontrados = [];
+        const falhas = [];
+
+        // Normaliza/valida cada CNPJ; quem nao tiver 14 digitos ja vai pra naoEncontrados.
+        const cnpjsValidos = [];
+        for (const cnpjRaw of cnpjs) {
+            const cnpj = String(cnpjRaw || '').replace(/\D/g, '');
+            if (cnpj.length !== 14) naoEncontrados.push(cnpjRaw);
+            else cnpjsValidos.push(cnpj);
+        }
+
+        // Loteia em chunks de 10 (limite do where('in')) e procura nas 2 colecoes.
+        // Mapa cnpj -> { ref, colecao } pra atualizar no batch depois.
+        const docPorCnpj = new Map();
+        for (let i = 0; i < cnpjsValidos.length; i += 10) {
+            const chunk = cnpjsValidos.slice(i, i + 10);
+            for (const col of ['simples_empresas', 'lucro_empresas']) {
+                try {
+                    const snap = await db.collection(col).where('cnpj', 'in', chunk).get();
+                    snap.forEach((doc) => {
+                        const d = doc.data();
+                        const c = String(d.cnpj || '').replace(/\D/g, '');
+                        if (c.length === 14 && !docPorCnpj.has(c)) docPorCnpj.set(c, { ref: doc.ref, colecao: col });
+                    });
+                } catch (e) {
+                    // Falha de query nao silencia — registra cada CNPJ do chunk como falha
+                    for (const c of chunk) falhas.push({ cnpj: c, erro: e.message });
+                }
+            }
+        }
+
+        // CNPJs validos mas sem doc -> naoEncontrados
+        for (const c of cnpjsValidos) {
+            if (!docPorCnpj.has(c) && !falhas.some((f) => f.cnpj === c)) naoEncontrados.push(c);
+        }
+
+        // Atualiza em batches de 500 (limite Firestore).
+        const entries = Array.from(docPorCnpj.entries());
+        for (let i = 0; i < entries.length; i += 500) {
+            const batch = db.batch();
+            const slice = entries.slice(i, i + 500);
+            for (const [, { ref }] of slice) {
+                batch.update(ref, {
+                    nfseNacionalDfeAtivo: ativo,
+                    nfseNacionalDfeAlteradoPor: req.user.email,
+                    nfseNacionalDfeAlteradoEm: admin.firestore.FieldValue.serverTimestamp(),
+                });
+            }
+            try {
+                await batch.commit();
+                for (const [c, { colecao }] of slice) atualizados.push({ cnpj: c, colecao });
+            } catch (e) {
+                for (const [c] of slice) falhas.push({ cnpj: c, erro: e.message });
+            }
+        }
+
+        return res.json({
+            ativo,
+            total: cnpjs.length,
+            atualizados: atualizados.length,
+            naoEncontrados: naoEncontrados.length,
+            falhas: falhas.length,
+            detalhes: { atualizados, naoEncontrados, falhas },
+        });
+    } catch (e) {
+        console.error('[nfse-nac-dfe/toggle-bulk]', e);
+        return res.status(500).json({ error: 'Falha interna' });
     }
 });
 

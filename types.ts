@@ -15,7 +15,21 @@ export enum SearchType {
   CAIXA_POSTAL = 'Caixa Postal',
   DAS_SIMPLES = 'DAS Simples Nacional',
   DCTFWEB = 'DCTFWeb',
+  EFD_REINF = 'EFD-Reinf × DCTFWeb',
   NFSE_NACIONAL = 'NFS-e Nacional',
+  NFSE_NAC_COBERTURA = 'Cobertura ADN (NFS-e Nac.)',
+  DAS_COBERTURA_PGDAS = 'Cobertura PGDAS-D',
+  DCTFWEB_COBERTURA = 'Cobertura DCTFWeb',
+  CAIXA_POSTAL_RADAR = 'Radar fiscal (e-CAC)',
+  MINHA_AGENDA = 'Minha Agenda Fiscal',
+  RECUPERACAO_PRAZOS = 'Prazos de Prescrição',
+  VENCIMENTOS_SEMANA = 'Vencimentos da Semana',
+  DIAGNOSTICO_DOCS = 'Diagnóstico Docs Fiscais',
+  SIMPLES_SUBLIMITE = 'Sublimite Simples',
+  DIAGNOSTICO_CADASTROS = 'Cadastros Incompletos',
+  CERT_MONITOR = 'Certificados Digitais',
+  DIAGNOSTICO_CONFIG = 'Configurações Operacionais',
+  SAUDE_GERAL = 'Saúde Geral',
   DASHBOARD_CEO = 'Dashboard CEO',
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
@@ -763,6 +777,21 @@ export interface DashboardCeoKpis {
     };
     apuracoes: {
         pendentes: number;
+    };
+    /** Cobertura PGDAS-D / DCTFWeb no mês anterior (quem não emitiu/transmitiu) */
+    cobertura?: {
+        mesAnterior: string;
+        pgdasPendentes: number;
+        pgdasTotal: number;
+        dctfwebPendentes: number;
+        dctfwebTotal: number;
+    };
+    /** Empresas Simples em risco de sair do regime por RBT12 */
+    sublimite?: {
+        tetoUltrapassou: number;
+        tetoCritico: number;
+        sublimiteUltrapassou: number;
+        sublimiteCritico: number;
     };
 }
 

@@ -71,6 +71,12 @@ export async function aplicarRegrasTributarias(parsed: ParseResult): Promise<Reg
     return mod.aplicarRegrasTributarias(parsed);
 }
 
+/** Motor de regras tributarias EFD Contribuicoes (CST PIS/COFINS, aliquotas, BC). */
+export async function aplicarRegrasContribuicoes(parsed: ParseResult): Promise<RegrasTributariasResult> {
+    const mod = await import('../sefaz-backend/sped-contrib-regras-tributarias.js' as any);
+    return mod.aplicarRegrasContribuicoes(parsed);
+}
+
 export interface RecuperacaoMonofasico {
     aplicavel: boolean;
     itens: { idx: number; numItem: string; codItem: string; ncm: string; cstPis: string; cstCofins: string; vlPis: number; vlCofins: number }[];
@@ -82,6 +88,75 @@ export interface RecuperacaoMonofasico {
 export async function analisarRecuperacaoMonofasico(parsed: ParseResult): Promise<RecuperacaoMonofasico> {
     const mod = await import('../sefaz-backend/sped-contrib-recuperacao.js' as any);
     return mod.analisarRecuperacaoMonofasico(parsed);
+}
+
+export interface AchadoCruzamento {
+    tipo: 'DIVERGENCIA_VALOR' | 'SO_FISCAL' | 'SO_CONTRIB';
+    severidade: 'erro' | 'aviso';
+    chave: string; numDoc: string;
+    vlFiscal: number; vlContrib: number; diferenca: number; mensagem: string;
+}
+export interface CruzamentoObrigacoes {
+    aplicavel: boolean; motivo?: string;
+    resumo: {
+        totalFiscal: number; totalContrib: number; emAmbos: number;
+        soFiscal: number; soContrib: number; divergenciasValor: number;
+        semChaveFiscal: number; semChaveContrib: number;
+    };
+    achados: AchadoCruzamento[];
+}
+
+/** Cruza SPED Fiscal × SPED Contribuicoes (mesma empresa/competencia) por C100. */
+export async function cruzarObrigacoes(a: ParseResult, b: ParseResult): Promise<CruzamentoObrigacoes> {
+    const mod = await import('../sefaz-backend/sped-cruzamento-obrigacoes.js' as any);
+    return mod.cruzarSpedFiscalContrib(a, b);
+}
+
+export interface NfeCapturada {
+    chave: string; numero: string; status: string | null;
+    valorTotal: number; direcao: string | null; modelo?: string | null; dataEmissao?: string | null;
+}
+export interface AchadoCapturados {
+    tipo: 'NAO_ESCRITURADA' | 'SEM_CAPTURA' | 'DIVERGENCIA_VALOR' | 'SEM_VALOR_CAPTURADO';
+    severidade: 'erro' | 'aviso';
+    chave: string; numDoc: string;
+    vlSped: number; vlCapturado: number; diferenca: number;
+    direcao: string | null; mensagem: string;
+}
+export interface CruzamentoCapturados {
+    aplicavel: boolean; motivo?: string;
+    resumo: {
+        totalSped: number; totalCapturadas: number; emAmbos: number;
+        naoEscrituradas: number; semCaptura: number;
+        semValorCapturado: number; divergenciasValor: number;
+        descartadasCapturadas: number; ignoradosSped: number;
+    };
+    achados: AchadoCapturados[];
+}
+
+/** Cruza SPED Fiscal × NF-e capturadas no sistema. */
+export async function cruzarComCapturadas(parsed: ParseResult, capturadas: NfeCapturada[]): Promise<CruzamentoCapturados> {
+    const mod = await import('../sefaz-backend/sped-cruzamento-xml-capturados.js' as any);
+    return mod.cruzarSpedComCapturadas(parsed, capturadas);
+}
+
+export interface ConciliacaoFaturamento {
+    aplicavel: boolean; motivo?: string;
+    totalSpedSaida: number;
+    faturamentoDeclarado: number;
+    diferenca: number;
+    diferencaPct: number;
+    severidade: 'ok' | 'aviso' | 'erro';
+    sentido: 'sped-maior' | 'declarado-maior' | 'ok';
+    resumoSped: { qtdSaida: number; qtdEntrada: number; totalEntrada: number; ignorados: number };
+}
+
+/** Concilia faturamento de saída do SPED contra valor declarado pelo contador. */
+export async function conciliarFaturamento(
+    parsed: ParseResult, faturamentoDeclarado: number,
+): Promise<ConciliacaoFaturamento> {
+    const mod = await import('../sefaz-backend/sped-conciliacao-faturamento.js' as any);
+    return mod.conciliarFaturamento(parsed, faturamentoDeclarado);
 }
 
 /**
