@@ -150,8 +150,95 @@ export function aplicarRegrasContribuicoes(parsed) {
         }
     }
 
+    // R9: M210 (PIS) e M610 (COFINS) — BC do totalizador vs soma C170 por CST.
+    // Conservador: BC totalizador MENOR que soma C170 da mesma CST -> erro
+    // (faltou item). BC MAIOR -> aviso (pode ter A170/F100 servico/financeira).
+    verificarTotalizadoresContrib(parsed.linhas || [], achados);
+
     const resumo = sumarizar(achados);
     return { achados, resumo };
+}
+
+function verificarTotalizadoresContrib(linhas, achados) {
+    const TOL = 0.02;
+    const add = (regra, severidade, registro, idx, mensagem) =>
+        achados.push({ regra, severidade, registro, idx, mensagem });
+
+    // 1) Soma C170 por CST_PIS e por CST_COFINS.
+    const bcPisPorCst = new Map();    // cst -> { bc, vl, count }
+    const bcCofinsPorCst = new Map();
+    for (const l of linhas) {
+        if (l.tipo !== 'C170') continue;
+        const c = l.campos;
+        const cstPis = String(c[C170.CST_PIS] || '').padStart(2, '0');
+        const cstCofins = String(c[C170.CST_COFINS] || '').padStart(2, '0');
+        if (cstPis) {
+            const acc = bcPisPorCst.get(cstPis) || { bc: 0, vl: 0, count: 0 };
+            acc.bc += num(c[C170.VL_BC_PIS]);
+            acc.vl += num(c[C170.VL_PIS]);
+            acc.count++;
+            bcPisPorCst.set(cstPis, acc);
+        }
+        if (cstCofins) {
+            const acc = bcCofinsPorCst.get(cstCofins) || { bc: 0, vl: 0, count: 0 };
+            acc.bc += num(c[C170.VL_BC_COFINS]);
+            acc.vl += num(c[C170.VL_COFINS]);
+            acc.count++;
+            bcCofinsPorCst.set(cstCofins, acc);
+        }
+    }
+
+    // 2) M210 e M610 por CST.
+    const m210PorCst = new Map();  // cst -> { idx, vlBcCont, vlContApur }
+    const m610PorCst = new Map();
+    for (const l of linhas) {
+        const c = l.campos;
+        if (l.tipo === 'M210') {
+            const cst = String(c[1] || '').padStart(2, '0');
+            m210PorCst.set(cst, { idx: l.idx, vlBcCont: num(c[3]), vlContApur: num(c[10]) });
+        } else if (l.tipo === 'M610') {
+            const cst = String(c[1] || '').padStart(2, '0');
+            m610PorCst.set(cst, { idx: l.idx, vlBcCont: num(c[3]), vlContApur: num(c[10]) });
+        }
+    }
+
+    // 3) Reconciliacao PIS.
+    for (const [cst, soma] of bcPisPorCst) {
+        if (soma.bc <= TOL) continue; // CST sem BC nao gera totalizador (CST 04/06/07/...)
+        const m = m210PorCst.get(cst);
+        if (!m) {
+            add('M210_FALTANTE', 'erro', 'M210', null,
+                `CST_PIS ${cst} aparece em ${soma.count} C170 (BC soma ${soma.bc.toFixed(2)}) mas sem M210 totalizador.`);
+            continue;
+        }
+        const dif = m.vlBcCont - soma.bc;
+        if (dif < -TOL) {
+            add('M210_BC_MENOR_QUE_C170', 'erro', 'M210', m.idx,
+                `CST_PIS ${cst}: M210 VL_BC_CONT=${m.vlBcCont.toFixed(2)} MENOR que soma C170 VL_BC_PIS=${soma.bc.toFixed(2)} (faltam itens no totalizador).`);
+        } else if (dif > TOL) {
+            add('M210_BC_MAIOR_QUE_C170', 'aviso', 'M210', m.idx,
+                `CST_PIS ${cst}: M210 VL_BC_CONT=${m.vlBcCont.toFixed(2)} MAIOR que soma C170 VL_BC_PIS=${soma.bc.toFixed(2)}. Confere se ha A170/F100.`);
+        }
+    }
+
+    // 4) Reconciliacao COFINS.
+    for (const [cst, soma] of bcCofinsPorCst) {
+        if (soma.bc <= TOL) continue;
+        const m = m610PorCst.get(cst);
+        if (!m) {
+            add('M610_FALTANTE', 'erro', 'M610', null,
+                `CST_COFINS ${cst} aparece em ${soma.count} C170 (BC soma ${soma.bc.toFixed(2)}) mas sem M610 totalizador.`);
+            continue;
+        }
+        const dif = m.vlBcCont - soma.bc;
+        if (dif < -TOL) {
+            add('M610_BC_MENOR_QUE_C170', 'erro', 'M610', m.idx,
+                `CST_COFINS ${cst}: M610 VL_BC_CONT=${m.vlBcCont.toFixed(2)} MENOR que soma C170 VL_BC_COFINS=${soma.bc.toFixed(2)} (faltam itens).`);
+        } else if (dif > TOL) {
+            add('M610_BC_MAIOR_QUE_C170', 'aviso', 'M610', m.idx,
+                `CST_COFINS ${cst}: M610 VL_BC_CONT=${m.vlBcCont.toFixed(2)} MAIOR que soma C170 VL_BC_COFINS=${soma.bc.toFixed(2)}. Confere se ha A170/F100.`);
+        }
+    }
 }
 
 function sumarizar(achados) {
