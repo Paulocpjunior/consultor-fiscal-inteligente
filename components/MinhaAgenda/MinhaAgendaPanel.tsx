@@ -12,12 +12,15 @@ import { getMinhaAgenda, type MinhaAgendaResposta, type EmpresaAgenda } from '..
 
 interface Props { onShowToast?: (msg: string) => void; }
 
+// IMPORTANTE: faixas DEVEM bater com sefaz-backend/minha-agenda-score.js
+// (constantes FAIXA_CRITICO=70, FAIXA_ALTO=40, FAIXA_MEDIO=15). Backend usa
+// FAIXA_CRITICO pra contar `riscoCritico` — se mexer aqui, mexa lá tb.
 function scoreCor(score: number): string {
-    if (score >= 70) return 'var(--danger)';
-    if (score >= 40) return '#ea580c';
-    if (score >= 15) return 'var(--warning)';
-    if (score > 0) return 'var(--text-muted)';
-    return 'var(--success)';
+    if (score >= 70) return 'var(--danger)';     // CRÍTICO
+    if (score >= 40) return '#ea580c';           // ALTO (laranja)
+    if (score >= 15) return 'var(--warning)';    // MÉDIO (amarelo)
+    if (score > 0) return 'var(--text-muted)';   // BAIXO
+    return 'var(--success)';                     // OK
 }
 function exportarCsv(lista: EmpresaAgenda[]) {
     const headers = ['Score', 'Faixa', 'Empresa', 'CNPJ', 'Regime', 'PGDAS gaps', 'DCTFWeb gaps', 'Msgs crít.', 'Msgs altas', 'Pendências'];
@@ -93,7 +96,7 @@ const MinhaAgendaPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
                         <Kpi label="Empresas na carteira" value={String(data.totalEmpresas)} />
                         <Kpi label="Com risco" value={String(data.empresasComRisco)} accent={data.empresasComRisco > 0 ? 'warning' : 'success'} />
-                        <Kpi label="Risco CRÍTICO (≥50)" value={String(data.riscoCritico)} accent={data.riscoCritico > 0 ? 'danger' : 'success'} />
+                        <Kpi label="Risco CRÍTICO (≥70)" value={String(data.riscoCritico)} accent={data.riscoCritico > 0 ? 'danger' : 'success'} />
                         <Kpi label="Usuário" value={data.usuario.role === 'admin' ? 'admin (tudo)' : data.usuario.email.split('@')[0]} />
                     </div>
                 )}

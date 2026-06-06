@@ -78,3 +78,21 @@ export const _pesos = {
     PESO_MSG_MEDIA, CAP_MSG_MEDIA,
     CAP_TOTAL,
 };
+
+// ─── Faixas de severidade (UNICA FONTE DE VERDADE) ─────────────────────────
+// Antes desta exportacao, o backend contava "riscoCritico" em score>=50 mas a
+// UI so pintava vermelho em score>=70 — inconsistencia que confundia o usuario
+// (KPI "3 criticos" mas lista mostrava itens laranjas).
+export const FAIXA_CRITICO = 70;
+export const FAIXA_ALTO = 40;
+export const FAIXA_MEDIO = 15;
+// 0 = OK, 1..14 = BAIXO
+
+/** Classifica um score 0-100 em faixa. */
+export function faixaDoScore(score) {
+    if (score >= FAIXA_CRITICO) return 'critico';
+    if (score >= FAIXA_ALTO) return 'alto';
+    if (score >= FAIXA_MEDIO) return 'medio';
+    if (score > 0) return 'baixo';
+    return 'ok';
+}

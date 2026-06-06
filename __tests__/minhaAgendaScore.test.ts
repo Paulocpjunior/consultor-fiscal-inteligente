@@ -3,7 +3,7 @@
  * de TODOS os colaboradores. Qualquer mudança nos pesos quebra esse teste.
  */
 // @ts-expect-error — módulo .js puro
-import { calcularScoreAgenda, _pesos } from '../sefaz-backend/minha-agenda-score.js';
+import { calcularScoreAgenda, faixaDoScore, FAIXA_CRITICO, FAIXA_ALTO, FAIXA_MEDIO, _pesos } from '../sefaz-backend/minha-agenda-score.js';
 
 describe('calcularScoreAgenda — caso base "tudo zero"', () => {
     it('Simples sem nada → score 0, sem pendências', () => {
@@ -119,5 +119,33 @@ describe('calcularScoreAgenda — pesos exportados (sanidade)', () => {
         const max = _pesos.CAP_PGDAS + _pesos.CAP_MSG_CRITICA + _pesos.CAP_MSG_ALTA + _pesos.CAP_MSG_MEDIA;
         expect(max).toBeGreaterThanOrEqual(100);
         expect(_pesos.CAP_TOTAL).toBe(100);
+    });
+});
+
+describe('faixaDoScore — única fonte de verdade backend/UI', () => {
+    it('0 → ok (sem risco)', () => {
+        expect(faixaDoScore(0)).toBe('ok');
+    });
+    it('1..14 → baixo', () => {
+        expect(faixaDoScore(1)).toBe('baixo');
+        expect(faixaDoScore(14)).toBe('baixo');
+    });
+    it('15..39 → medio', () => {
+        expect(faixaDoScore(15)).toBe('medio');
+        expect(faixaDoScore(39)).toBe('medio');
+    });
+    it('40..69 → alto', () => {
+        expect(faixaDoScore(40)).toBe('alto');
+        expect(faixaDoScore(69)).toBe('alto');
+    });
+    it('70..100 → critico', () => {
+        expect(faixaDoScore(70)).toBe('critico');
+        expect(faixaDoScore(100)).toBe('critico');
+    });
+
+    it('FAIXA_CRITICO = 70 (UI vermelho = backend riscoCritico — coerente)', () => {
+        expect(FAIXA_CRITICO).toBe(70);
+        expect(FAIXA_ALTO).toBe(40);
+        expect(FAIXA_MEDIO).toBe(15);
     });
 });

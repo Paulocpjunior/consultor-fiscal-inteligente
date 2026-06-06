@@ -17,7 +17,7 @@ import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { getCnpjsDaCarteira, getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { ultimasCompetencias as ultimasCompetenciasHelper } from './competencias-helper.js';
-import { calcularScoreAgenda } from './minha-agenda-score.js';
+import { calcularScoreAgenda, FAIXA_CRITICO } from './minha-agenda-score.js';
 
 const router = express.Router();
 
@@ -199,7 +199,7 @@ router.get('/', requireAuth, async (req, res) => {
         resultado.sort((a, b) => b.score - a.score || (a.nome || '').localeCompare(b.nome || ''));
 
         const empresasComRisco = resultado.filter((e) => e.score > 0).length;
-        const riscoCritico = resultado.filter((e) => e.score >= 50).length;
+        const riscoCritico = resultado.filter((e) => e.score >= FAIXA_CRITICO).length;
 
         return res.json({
             usuario: { uid: req.user.uid, email: req.user.email, role: req.user.role },
