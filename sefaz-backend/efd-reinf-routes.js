@@ -33,6 +33,17 @@ router.post('/analisar', requireAdmin, express.json({ limit: '20mb' }), async (r
         if (xmls.length > 500) {
             return res.status(400).json({ error: 'Máximo de 500 eventos por chamada.' });
         }
+        // Teto por item: evita 1 XML único de 20MB bloquear o event loop no DOMParser.
+        const MAX_XML_BYTES = 1_000_000;
+        for (let i = 0; i < xmls.length; i++) {
+            const x = xmls[i];
+            if (typeof x !== 'string') {
+                return res.status(400).json({ error: `xmls[${i}] nao e string.` });
+            }
+            if (Buffer.byteLength(x, 'utf8') > MAX_XML_BYTES) {
+                return res.status(413).json({ error: `xmls[${i}] excede ${MAX_XML_BYTES} bytes.` });
+            }
+        }
 
         const parsed = [];
         const eventos = [];
@@ -67,7 +78,7 @@ router.post('/analisar', requireAdmin, express.json({ limit: '20mb' }), async (r
         });
     } catch (e) {
         console.error('[efd-reinf/analisar]', e);
-        return res.status(500).json({ error: e.message });
+        return res.status(500).json({ error: "Falha interna" });
     }
 });
 

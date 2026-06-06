@@ -113,7 +113,17 @@ export function cruzarSpedComCapturadas(parsedSped, nfesCapturadas, opts = {}) {
         } else {
             emAmbos++;
             const dif = round2(s.vlDoc - x.valor);
-            if (x.valor > 0 && Math.abs(dif) > tol) {
+            if (x.valor === 0) {
+                // XML capturado sem valor (parser nao extraiu vNF, ou doc legado):
+                // NAO conseguimos comparar — aviso explicito em vez de "tudo certo".
+                achados.push({
+                    tipo: 'SEM_VALOR_CAPTURADO', severidade: 'aviso', chave,
+                    numDoc: s.numDoc || x.numDoc,
+                    vlSped: s.vlDoc, vlCapturado: 0, diferenca: 0,
+                    direcao: x.direcao,
+                    mensagem: `NF-e ${s.numDoc || x.numDoc}: XML capturado sem valor — comparacao indisponivel.`,
+                });
+            } else if (Math.abs(dif) > tol) {
                 divergenciasValor++;
                 achados.push({
                     tipo: 'DIVERGENCIA_VALOR', severidade: 'erro', chave,
@@ -143,6 +153,7 @@ export function cruzarSpedComCapturadas(parsedSped, nfesCapturadas, opts = {}) {
             emAmbos,
             naoEscrituradas: achados.filter(a => a.tipo === 'NAO_ESCRITURADA').length,
             semCaptura: achados.filter(a => a.tipo === 'SEM_CAPTURA').length,
+            semValorCapturado: achados.filter(a => a.tipo === 'SEM_VALOR_CAPTURADO').length,
             divergenciasValor,
             descartadasCapturadas: X.descartadas,
             ignoradosSped: S.ignorados,

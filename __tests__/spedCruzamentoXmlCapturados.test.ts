@@ -96,10 +96,13 @@ describe('cruzarSpedComCapturadas — variações de shape e guardas', () => {
         expect(r.resumo.emAmbos).toBe(1);
     });
 
-    it('valor=0 no XML não dispara DIVERGENCIA_VALOR (dado incompleto)', () => {
+    it('valor=0 no XML vira aviso SEM_VALOR_CAPTURADO (não vira "tudo certo")', () => {
         const r = cruzarSpedComCapturadas(sped, [{ chave: chave(10), valorTotal: 0, status: 'autorizado' }]);
         expect(r.resumo.divergenciasValor).toBe(0);
         expect(r.resumo.emAmbos).toBe(1);
+        expect(r.resumo.semValorCapturado).toBe(1);
+        const a = r.achados.find((x: any) => x.tipo === 'SEM_VALOR_CAPTURADO');
+        expect(a.severidade).toBe('aviso');
     });
 
     it('SPED Contribuições -> não aplicável (engine só roda contra Fiscal)', () => {

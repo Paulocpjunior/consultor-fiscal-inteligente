@@ -129,6 +129,34 @@ export async function conferirReinfDctfweb(
         };
     }
 
+    // Eventos com competências/contribuintes mistos: NÃO cruzar (geraria divergência fake).
+    // O backend já alerta em consolidacao.alertas; aqui abortamos o cruzamento.
+    const competenciasUnicas = new Set(analise.eventos.filter(e => e.perApur).map(e => e.perApur));
+    const contribuintesUnicos = new Set(analise.eventos.filter(e => e.contribuinte?.nrInsc).map(e => e.contribuinte.nrInsc));
+    if (competenciasUnicas.size > 1 || contribuintesUnicos.size > 1) {
+        const motivos: string[] = [];
+        if (competenciasUnicas.size > 1) motivos.push(`competências misturadas (${Array.from(competenciasUnicas).join(', ')})`);
+        if (contribuintesUnicos.size > 1) motivos.push(`contribuintes misturados (${Array.from(contribuintesUnicos).join(', ')})`);
+        return {
+            resultado: null,
+            dctfwebLido: false,
+            motivoDctfweb: `Eventos com ${motivos.join(' e ')}: suba apenas eventos de UMA empresa + UM período por vez.`,
+            retencoesReinf, consolidacaoReinf: consolidacao, eventos: analise.eventos,
+            camposUsadosDctfweb: [],
+        };
+    }
+
+    // Competência deve ser YYYY-MM (mensal). R-4099/R-2099 anuais (YYYY) não cruzam com DCTFWeb.
+    if (!/^\d{4}-\d{2}$/.test(competencia)) {
+        return {
+            resultado: null,
+            dctfwebLido: false,
+            motivoDctfweb: `Competência "${competencia}" não é mensal (YYYY-MM). DCTFWeb consulta mensal — eventos anuais (R-4099/R-2099) não cruzam aqui.`,
+            retencoesReinf, consolidacaoReinf: consolidacao, eventos: analise.eventos,
+            camposUsadosDctfweb: [],
+        };
+    }
+
     const dctfweb = await getRetencaoDctfweb(cnpj, competencia);
     if (!dctfweb.lido) {
         return {

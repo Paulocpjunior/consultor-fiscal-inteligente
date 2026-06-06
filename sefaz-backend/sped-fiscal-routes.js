@@ -8,7 +8,8 @@
 import express from 'express';
 import admin from 'firebase-admin';
 import { coletarDadosEmpresa, montarBlocos } from './sped-fiscal-orchestrator.js';
-import { requireAdmin } from './require-admin.js';
+import { requireAdmin, requireAuth } from './require-admin.js';
+import { podeAcessarEmpresaId } from './carteira-auth.js';
 import { validarSpedFiscal } from './sped-fiscal-validador.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
@@ -128,11 +129,13 @@ router.get('/validar', requireAdmin, express.json({ limit: '10mb' }), (req, res)
 // Lista NF-e capturadas da empresa na competencia — base do cruzamento
 // SPED Fiscal × XML capturados. Devolve so o essencial pro front (chave,
 // numero, status, valor, direcao), nunca o XML inteiro.
-router.get('/nfes-capturadas', requireAdmin, async (req, res) => {
+router.get('/nfes-capturadas', requireAuth, async (req, res) => {
     try {
         const { empresaId, competencia } = req.query;
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
         if (!competencia) return res.status(400).json({ error: 'competencia obrigatoria (YYYY-MM)' });
+        const carteira = await podeAcessarEmpresaId(req.user, empresaId);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
 
         const db = fa().firestore();
         const q = db.collection('documentos_fiscais')
@@ -182,7 +185,7 @@ function tratarErro(e, res) {
         });
     }
     console.error('[sped-fiscal]', e);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: "Falha interna" });
 }
 
 export default router;

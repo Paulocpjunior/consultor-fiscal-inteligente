@@ -111,7 +111,7 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
         });
     } catch (e) {
         console.error('[nfse-nac-dfe/sync-cron-now]', e);
-        return res.status(500).json({ error: e.message });
+        if (!res.headersSent) return res.status(500).json({ error: 'Falha interna' });
     }
 });
 
@@ -318,7 +318,7 @@ router.get('/cobertura', requireAuth, async (req, res) => {
         });
     } catch (e) {
         console.error('[nfse-nac-dfe/cobertura]', e);
-        return res.status(500).json({ error: e.message });
+        return res.status(500).json({ error: 'Falha interna' });
     }
 });
 
@@ -341,31 +341,59 @@ router.post('/toggle-bulk', requireAuth, express.json(), async (req, res) => {
         const naoEncontrados = [];
         const falhas = [];
 
+        // Normaliza/valida cada CNPJ; quem nao tiver 14 digitos ja vai pra naoEncontrados.
+        const cnpjsValidos = [];
         for (const cnpjRaw of cnpjs) {
             const cnpj = String(cnpjRaw || '').replace(/\D/g, '');
-            if (cnpj.length !== 14) { naoEncontrados.push(cnpjRaw); continue; }
-            let achou = false;
+            if (cnpj.length !== 14) naoEncontrados.push(cnpjRaw);
+            else cnpjsValidos.push(cnpj);
+        }
+
+        // Loteia em chunks de 10 (limite do where('in')) e procura nas 2 colecoes.
+        // Mapa cnpj -> { ref, colecao } pra atualizar no batch depois.
+        const docPorCnpj = new Map();
+        for (let i = 0; i < cnpjsValidos.length; i += 10) {
+            const chunk = cnpjsValidos.slice(i, i + 10);
             for (const col of ['simples_empresas', 'lucro_empresas']) {
                 try {
-                    const snap = await db.collection(col).where('cnpj', '==', cnpj).limit(1).get();
-                    if (!snap.empty) {
-                        await snap.docs[0].ref.update({
-                            nfseNacionalDfeAtivo: ativo,
-                            nfseNacionalDfeAlteradoPor: req.user.email,
-                            nfseNacionalDfeAlteradoEm: admin.firestore.FieldValue.serverTimestamp(),
-                        });
-                        atualizados.push({ cnpj, colecao: col });
-                        achou = true;
-                        break;
-                    }
+                    const snap = await db.collection(col).where('cnpj', 'in', chunk).get();
+                    snap.forEach((doc) => {
+                        const d = doc.data();
+                        const c = String(d.cnpj || '').replace(/\D/g, '');
+                        if (c.length === 14 && !docPorCnpj.has(c)) docPorCnpj.set(c, { ref: doc.ref, colecao: col });
+                    });
                 } catch (e) {
-                    falhas.push({ cnpj, erro: e.message });
-                    achou = true;
-                    break;
+                    // Falha de query nao silencia — registra cada CNPJ do chunk como falha
+                    for (const c of chunk) falhas.push({ cnpj: c, erro: e.message });
                 }
             }
-            if (!achou) naoEncontrados.push(cnpj);
         }
+
+        // CNPJs validos mas sem doc -> naoEncontrados
+        for (const c of cnpjsValidos) {
+            if (!docPorCnpj.has(c) && !falhas.some((f) => f.cnpj === c)) naoEncontrados.push(c);
+        }
+
+        // Atualiza em batches de 500 (limite Firestore).
+        const entries = Array.from(docPorCnpj.entries());
+        for (let i = 0; i < entries.length; i += 500) {
+            const batch = db.batch();
+            const slice = entries.slice(i, i + 500);
+            for (const [, { ref }] of slice) {
+                batch.update(ref, {
+                    nfseNacionalDfeAtivo: ativo,
+                    nfseNacionalDfeAlteradoPor: req.user.email,
+                    nfseNacionalDfeAlteradoEm: admin.firestore.FieldValue.serverTimestamp(),
+                });
+            }
+            try {
+                await batch.commit();
+                for (const [c, { colecao }] of slice) atualizados.push({ cnpj: c, colecao });
+            } catch (e) {
+                for (const [c] of slice) falhas.push({ cnpj: c, erro: e.message });
+            }
+        }
+
         return res.json({
             ativo,
             total: cnpjs.length,
@@ -376,7 +404,7 @@ router.post('/toggle-bulk', requireAuth, express.json(), async (req, res) => {
         });
     } catch (e) {
         console.error('[nfse-nac-dfe/toggle-bulk]', e);
-        return res.status(500).json({ error: e.message });
+        return res.status(500).json({ error: 'Falha interna' });
     }
 });
 

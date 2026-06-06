@@ -21,11 +21,13 @@ const tipoCor: Record<string, string> = {
     NAO_ESCRITURADA: 'var(--danger)',
     DIVERGENCIA_VALOR: 'var(--danger)',
     SEM_CAPTURA: 'var(--warning)',
+    SEM_VALOR_CAPTURADO: 'var(--warning)',
 };
 const tipoLabel: Record<string, string> = {
     NAO_ESCRITURADA: 'NÃO escriturada',
     DIVERGENCIA_VALOR: 'Valor diverge',
     SEM_CAPTURA: 'Sem captura',
+    SEM_VALOR_CAPTURADO: 'XML sem valor',
 };
 
 function getCompetenciaAtual() {

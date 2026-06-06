@@ -11,12 +11,12 @@
  */
 
 import React, { useState } from 'react';
-import { parseSped, exportarXlsx, aplicarEdicoesXlsx, validarEstrutura, aplicarRegrasTributarias, analisarRecuperacaoMonofasico, type ValidacaoSped, type RegrasTributariasResult, type RecuperacaoMonofasico } from '../../services/spedFiscalExcelEditor';
+import { parseSped, exportarXlsx, aplicarEdicoesXlsx, validarEstrutura, aplicarRegrasTributarias, aplicarRegrasContribuicoes, analisarRecuperacaoMonofasico, type ValidacaoSped, type RegrasTributariasResult, type RecuperacaoMonofasico } from '../../services/spedFiscalExcelEditor';
 
 type Status =
     | { fase: 'idle' }
     | { fase: 'analisando' }
-    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }>; validacao: ValidacaoSped; regras: RegrasTributariasResult; recuperacao: RecuperacaoMonofasico }
+    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }>; validacao: ValidacaoSped; regras: RegrasTributariasResult; regrasContrib: RegrasTributariasResult; recuperacao: RecuperacaoMonofasico }
     | { fase: 'aplicando' }
     | { fase: 'erro'; mensagem: string };
 
@@ -41,6 +41,7 @@ const EditarViaExcel: React.FC = () => {
             const parsed = await parseSped(txt);
             const validacao = await validarEstrutura(parsed);
             const regras = await aplicarRegrasTributarias(parsed);
+            const regrasContrib = await aplicarRegrasContribuicoes(parsed);
             const recuperacao = await analisarRecuperacaoMonofasico(parsed);
             setStatus({
                 fase: 'pronto-edicao',
@@ -52,6 +53,7 @@ const EditarViaExcel: React.FC = () => {
                 mismatch: parsed.resumo.layoutMismatch || {},
                 validacao,
                 regras,
+                regrasContrib,
                 recuperacao,
             });
         } catch (err: any) {
@@ -177,6 +179,30 @@ const EditarViaExcel: React.FC = () => {
                                             </li>
                                         ))}
                                         {status.regras.achados.length > 30 && <li>… +{status.regras.achados.length - 30}</li>}
+                                    </ul>
+                                </div>
+                            )
+                        )}
+
+                        {/* Análise tributária Contribuições (CST PIS/COFINS × alíquotas) — só EFD Contribuições. */}
+                        {!status.regrasContrib.resumo.naoAplicavel && (
+                            (status.regrasContrib.resumo.erros + status.regrasContrib.resumo.avisos) === 0 ? (
+                                <div className="mb-3 p-2 rounded border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 text-[11px] text-emerald-800 dark:text-emerald-300">
+                                    ✓ Análise PIS/COFINS: nenhuma inconsistência CST/alíquota/BC encontrada.
+                                </div>
+                            ) : (
+                                <div className="mb-3 p-2 rounded border border-orange-300 bg-orange-50 dark:bg-orange-900/20 text-[11px] text-orange-800 dark:text-orange-300">
+                                    <b>🔎 Análise PIS/COFINS: {status.regrasContrib.resumo.erros} erro(s) · {status.regrasContrib.resumo.avisos} aviso(s)</b>
+                                    {' '}(CST/alíquota/BC):
+                                    <ul className="mt-1 list-disc list-inside max-h-40 overflow-auto">
+                                        {status.regrasContrib.achados.slice(0, 30).map((a, i) => (
+                                            <li key={i}>
+                                                <span className={a.severidade === 'erro' ? 'font-bold text-red-600 dark:text-red-400' : ''}>
+                                                    [{a.severidade}] {a.registro} · {a.mensagem}
+                                                </span>
+                                            </li>
+                                        ))}
+                                        {status.regrasContrib.achados.length > 30 && <li>… +{status.regrasContrib.achados.length - 30}</li>}
                                     </ul>
                                 </div>
                             )

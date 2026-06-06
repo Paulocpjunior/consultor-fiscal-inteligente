@@ -65,11 +65,14 @@ const r2 = (n) => Math.round(n * 100) / 100;
 function localName(node) {
     return (node.localName || String(node.nodeName || '').replace(/^.*:/, ''));
 }
+// Pega texto do filho DIRETO com aquele localName (nao desce na arvore — evita
+// pegar tag homonima de um <CreditoTributarioApurado> herdado/aninhado).
 function childText(el, tag) {
-    const all = el.getElementsByTagName('*');
-    for (let i = 0; i < all.length; i++) {
-        if (localName(all[i]) === tag) {
-            return String(all[i].textContent || '').trim();
+    const childNodes = el.childNodes || [];
+    for (let i = 0; i < childNodes.length; i++) {
+        const c = childNodes[i];
+        if (c.nodeType === 1 && localName(c) === tag) {
+            return String(c.textContent || '').trim();
         }
     }
     return '';

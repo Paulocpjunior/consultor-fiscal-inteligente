@@ -71,6 +71,12 @@ export async function aplicarRegrasTributarias(parsed: ParseResult): Promise<Reg
     return mod.aplicarRegrasTributarias(parsed);
 }
 
+/** Motor de regras tributarias EFD Contribuicoes (CST PIS/COFINS, aliquotas, BC). */
+export async function aplicarRegrasContribuicoes(parsed: ParseResult): Promise<RegrasTributariasResult> {
+    const mod = await import('../sefaz-backend/sped-contrib-regras-tributarias.js' as any);
+    return mod.aplicarRegrasContribuicoes(parsed);
+}
+
 export interface RecuperacaoMonofasico {
     aplicavel: boolean;
     itens: { idx: number; numItem: string; codItem: string; ncm: string; cstPis: string; cstCofins: string; vlPis: number; vlCofins: number }[];
@@ -111,7 +117,7 @@ export interface NfeCapturada {
     valorTotal: number; direcao: string | null; modelo?: string | null; dataEmissao?: string | null;
 }
 export interface AchadoCapturados {
-    tipo: 'NAO_ESCRITURADA' | 'SEM_CAPTURA' | 'DIVERGENCIA_VALOR';
+    tipo: 'NAO_ESCRITURADA' | 'SEM_CAPTURA' | 'DIVERGENCIA_VALOR' | 'SEM_VALOR_CAPTURADO';
     severidade: 'erro' | 'aviso';
     chave: string; numDoc: string;
     vlSped: number; vlCapturado: number; diferenca: number;
@@ -121,7 +127,8 @@ export interface CruzamentoCapturados {
     aplicavel: boolean; motivo?: string;
     resumo: {
         totalSped: number; totalCapturadas: number; emAmbos: number;
-        naoEscrituradas: number; semCaptura: number; divergenciasValor: number;
+        naoEscrituradas: number; semCaptura: number;
+        semValorCapturado: number; divergenciasValor: number;
         descartadasCapturadas: number; ignoradosSped: number;
     };
     achados: AchadoCapturados[];
