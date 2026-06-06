@@ -23,6 +23,7 @@ export enum SearchType {
   CAIXA_POSTAL_RADAR = 'Radar fiscal (e-CAC)',
   MINHA_AGENDA = 'Minha Agenda Fiscal',
   RECUPERACAO_PRAZOS = 'Prazos de Prescrição',
+  VENCIMENTOS_SEMANA = 'Vencimentos da Semana',
   DASHBOARD_CEO = 'Dashboard CEO',
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',

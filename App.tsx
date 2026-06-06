@@ -55,6 +55,7 @@ const CoberturaDctfwebPanel = lazy(() => import('./components/DCTFWeb/CoberturaD
 const RadarCriticasPanel = lazy(() => import('./components/CaixaPostal/RadarCriticasPanel'));
 const MinhaAgendaPanel = lazy(() => import('./components/MinhaAgenda/MinhaAgendaPanel'));
 const PrazosPrescricaoPanel = lazy(() => import('./components/RecuperacaoTributaria/PrazosPrescricaoPanel'));
+const VencimentosSemanaPanel = lazy(() => import('./components/Vencimentos/VencimentosSemanaPanel'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
 const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
@@ -88,6 +89,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CAIXA_POSTAL_RADAR]: "Radar fiscal (e-CAC) — mensagens não lidas classificadas por risco real (intimações, malha, exclusão Simples, autos de infração) ordenadas por urgência.",
     [SearchType.MINHA_AGENDA]: "Minha Agenda Fiscal — consolidado por carteira: PGDAS-D / DCTFWeb pendentes + caixa postal crítica em UM lugar, priorizado por risco (0-100).",
     [SearchType.RECUPERACAO_PRAZOS]: "Prazos de Prescrição — para cada oportunidade de recuperação tributária, mostra quanto falta pra expirar (5 anos CTN art 168). URGENTE = ≤90 dias.",
+    [SearchType.VENCIMENTOS_SEMANA]: "Vencimentos da Semana — obrigações fiscais que vencem nos próximos 7 dias (ou estão atrasadas), filtradas pela sua carteira. Visão do dia-a-dia.",
     [SearchType.CARTEIRA]: "Carteira de Clientes — atribuição de empresas a colaboradores responsáveis (somente administradores).",
     [SearchType.AGENTES_A3]: "Agentes A3 — gerenciar API keys do agente local cfi-a3 e marcar empresas como A3 (somente administradores).",
     [SearchType.NFSE_NACIONAL]: "NFS-e Nacional (CGSN 189/2026) — emissão e gestão de notas de serviço no padrão nacional, obrigatório set/2026.",
@@ -1251,6 +1253,16 @@ const App: React.FC = () => {
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <PrazosPrescricaoPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.VENCIMENTOS_SEMANA && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <VencimentosSemanaPanel
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>
