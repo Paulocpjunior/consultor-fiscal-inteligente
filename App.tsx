@@ -61,6 +61,7 @@ const SublimitePanel = lazy(() => import('./components/SimplesSublimite/Sublimit
 const CadastrosPanel = lazy(() => import('./components/Diagnostico/CadastrosPanel'));
 const CertMonitorPanel = lazy(() => import('./components/CertMonitor/CertMonitorPanel'));
 const ConfigPanel = lazy(() => import('./components/Diagnostico/ConfigPanel'));
+const SaudeGeralPanel = lazy(() => import('./components/Saude/SaudeGeralPanel'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
 const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
@@ -100,6 +101,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.DIAGNOSTICO_CADASTROS]: "Cadastros Incompletos — empresas com UF/IBGE/anexo/CNAE faltando que bloqueiam o SPED ou cálculo do DAS (somente administradores).",
     [SearchType.CERT_MONITOR]: "Certificados Digitais — monitora vencimento dos certs (S&P + por empresa). Cert vencido = SERPRO/SEFAZ/e-CAC param sem aviso.",
     [SearchType.DIAGNOSTICO_CONFIG]: "Configurações Operacionais — detecta env vars faltando (SERPRO/SharePoint/CRON_SECRET/etc) e modos operacionais incorretos. Só admin, sem expor valores.",
+    [SearchType.SAUDE_GERAL]: "Saúde Geral — agrega os 4 diagnósticos (cadastros + documentos + certs + configs) numa única tela. Status global OK/MÉDIO/ALTO/CRÍTICO/DEGRADADO.",
     [SearchType.CARTEIRA]: "Carteira de Clientes — atribuição de empresas a colaboradores responsáveis (somente administradores).",
     [SearchType.AGENTES_A3]: "Agentes A3 — gerenciar API keys do agente local cfi-a3 e marcar empresas como A3 (somente administradores).",
     [SearchType.NFSE_NACIONAL]: "NFS-e Nacional (CGSN 189/2026) — emissão e gestão de notas de serviço no padrão nacional, obrigatório set/2026.",
@@ -1323,6 +1325,16 @@ const App: React.FC = () => {
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <ConfigPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.SAUDE_GERAL && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <SaudeGeralPanel
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>

@@ -43,6 +43,7 @@ import simplesSublimiteRouter from './sefaz-backend/simples-sublimite-routes.js'
 import diagnosticoCadastrosRouter from './sefaz-backend/diagnostico-cadastros-routes.js';
 import certMonitorRouter from './sefaz-backend/cert-monitor-routes.js';
 import diagnosticoConfigRouter from './sefaz-backend/diagnostico-config-routes.js';
+import healthConsolidadoRouter from './sefaz-backend/health-consolidado-routes.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -172,6 +173,7 @@ app.use('/api/admin/simples-sublimite', simplesSublimiteRouter);
 app.use('/api/admin/diagnostico-cadastros', diagnosticoCadastrosRouter);
 app.use('/api/admin/cert-monitor', certMonitorRouter);
 app.use('/api/admin/diagnostico-config', diagnosticoConfigRouter);
+app.use('/api/admin/health-consolidado', healthConsolidadoRouter);
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Modelos centralizados em env vars — trocar de versao = atualizar o secret no
