@@ -156,6 +156,109 @@ router.get('/mit/historico', requireAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /cobertura?meses=6
+// Pra cada empresa Lucro Presumido/Real ativa, lista as competencias dos
+// ultimos N meses onde NAO ha DCTFWeb transmitida (situacao=='ATIVA').
+// Mesmo conceito do /das/cobertura-pgdas, mas pra Lucro. So admin.
+router.get('/cobertura', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
+        const meses = Math.min(Math.max(Number(req.query.meses || 6), 1), 24);
+        const competencias = ultimasCompetenciasDctfweb(meses); // [{anoPA,mesPA,label}]
+
+        if (admin.apps.length === 0) {
+            admin.initializeApp({ credential: admin.credential.applicationDefault() });
+        }
+        const db = admin.firestore();
+
+        // 1. Empresas Lucro ativas
+        const lucroSnap = await db.collection('lucro_empresas').get();
+        const empresas = [];
+        lucroSnap.forEach((doc) => {
+            const d = doc.data();
+            if (d._merged_into) return;
+            const cnpj = (d.cnpj || '').replace(/\D/g, '');
+            if (cnpj.length !== 14) return;
+            empresas.push({ id: doc.id, cnpj, nome: d.razaoSocial || d.nome || '' });
+        });
+
+        // 2. DCTFWeb dos ultimos meses (loteia por anoPA — geralmente sao 1-2 anos)
+        const anos = Array.from(new Set(competencias.map((c) => c.anoPA)));
+        const declMap = new Map(); // empresaId|YYYY-MM -> { situacao, valor }
+        for (const ano of anos) {
+            try {
+                const snap = await db.collection('dctfweb_declaracoes').where('anoPA', '==', ano).get();
+                snap.forEach((d) => {
+                    const x = d.data();
+                    if (!x.empresaId || x.mesPA == null) return;
+                    // So conta GERAL_MENSAL (categoria principal — a obrigacao mensal mesmo)
+                    if (x.categoria && x.categoria !== 'GERAL_MENSAL') return;
+                    const label = `${x.anoPA}-${String(x.mesPA).padStart(2, '0')}`;
+                    const k = `${x.empresaId}|${label}`;
+                    // Prioriza ATIVA sobre EM_ANDAMENTO se houver mais de um doc
+                    const prev = declMap.get(k);
+                    if (!prev || (x.situacao === 'ATIVA' && prev.situacao !== 'ATIVA')) {
+                        declMap.set(k, { situacao: x.situacao || 'EM_ANDAMENTO', valor: x.valorTotal || 0 });
+                    }
+                });
+            } catch (e) {
+                console.warn('[dctfweb/cobertura] ano', ano, 'falhou:', e.message);
+            }
+        }
+
+        // 3. Matriz empresa x competencia
+        const resultado = [];
+        let totalGaps = 0;
+        let totalEmAndamento = 0;
+        for (const emp of empresas) {
+            const mesesArr = competencias.map((c) => {
+                const k = `${emp.id}|${c.label}`;
+                const decl = declMap.get(k);
+                if (!decl) return { competencia: c.label, transmitido: false };
+                return {
+                    competencia: c.label, transmitido: true,
+                    situacao: decl.situacao, valor: decl.valor,
+                };
+            });
+            const gaps = mesesArr.filter((m) => !m.transmitido).length;
+            const emAndamento = mesesArr.filter((m) => m.transmitido && m.situacao === 'EM_ANDAMENTO').length;
+            totalGaps += gaps;
+            totalEmAndamento += emAndamento;
+            resultado.push({ id: emp.id, cnpj: emp.cnpj, nome: emp.nome, gaps, emAndamento, meses: mesesArr });
+        }
+        resultado.sort((a, b) => (b.gaps - a.gaps) || (b.emAndamento - a.emAndamento) || (a.nome || '').localeCompare(b.nome || ''));
+
+        return res.json({
+            mesesAnalisados: competencias.length,
+            competencias: competencias.map((c) => c.label),
+            totalEmpresas: empresas.length,
+            empresasComGap: resultado.filter((e) => e.gaps > 0).length,
+            totalGaps,
+            totalEmAndamento,
+            empresas: resultado,
+        });
+    } catch (e) {
+        console.error('[dctfweb/cobertura]', e);
+        return res.status(500).json({ error: 'Falha interna' });
+    }
+});
+
+function ultimasCompetenciasDctfweb(n) {
+    const out = [];
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1); // mes atual ainda nao venceu
+    for (let i = 0; i < n; i++) {
+        out.push({
+            anoPA: d.getFullYear(),
+            mesPA: d.getMonth() + 1,
+            label: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        });
+        d.setMonth(d.getMonth() - 1);
+    }
+    return out;
+}
+
 router.post('/cron', async (req, res) => {
     const headerSecret = req.header('X-Cron-Secret') || '';
     if (!CRON_SECRET || headerSecret !== CRON_SECRET) return res.status(403).json({ erro: 'cron secret invalido' });
