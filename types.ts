@@ -21,6 +21,7 @@ export enum SearchType {
   DAS_COBERTURA_PGDAS = 'Cobertura PGDAS-D',
   DCTFWEB_COBERTURA = 'Cobertura DCTFWeb',
   CAIXA_POSTAL_RADAR = 'Radar fiscal (e-CAC)',
+  MINHA_AGENDA = 'Minha Agenda Fiscal',
   DASHBOARD_CEO = 'Dashboard CEO',
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
