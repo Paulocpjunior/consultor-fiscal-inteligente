@@ -251,6 +251,135 @@ router.get('/resumo', requireAuth, async (_req, res) => {
     }
 });
 
+// ── GET /cobertura ────────────────────────────────────────────────────────
+// Lista TODAS as empresas (simples + lucro) com status de captura ADN. Pra cada
+// empresa: ativo (flag), ultNSU/ultimaSync (do state), totalDocs (nfse + eventos
+// nacionais ja capturados). Sumariza % de cobertura no topo. So admin.
+router.get('/cobertura', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
+        const db = fa().firestore();
+        const colNames = [
+            { col: process.env.SIMPLES_COLLECTION || 'simples_empresas', fonte: 'simples' },
+            { col: process.env.LUCRO_COLLECTION || 'lucro_empresas', fonte: 'lucro' },
+        ];
+        const empresas = [];
+        for (const { col, fonte } of colNames) {
+            try {
+                const snap = await db.collection(col).get();
+                snap.forEach((doc) => {
+                    const d = doc.data();
+                    if (d._merged_into) return; // perdedor de merge
+                    const cnpj = (d.cnpj || '').replace(/\D/g, '');
+                    if (cnpj.length !== 14) return;
+                    empresas.push({
+                        id: doc.id,
+                        cnpj,
+                        nome: d.razaoSocial || d.nome || '',
+                        fonte,
+                        ativo: d.nfseNacionalDfeAtivo === true,
+                        alteradoPor: d.nfseNacionalDfeAlteradoPor || null,
+                        alteradoEm: d.nfseNacionalDfeAlteradoEm?.toDate?.()?.toISOString?.() || null,
+                    });
+                });
+            } catch (e) {
+                console.warn(`[nfse-nac-dfe/cobertura] coleção ${col} indisponível:`, e.message);
+            }
+        }
+        // Dedup por CNPJ (empresa pode estar em ambas as coleções)
+        const mapa = new Map();
+        for (const e of empresas) if (!mapa.has(e.cnpj)) mapa.set(e.cnpj, e);
+        const lista = Array.from(mapa.values());
+
+        // State (ultNSU/ultimaSync) por empresa
+        const stateRefs = lista.map((e) => db.collection('nfse_nacional_dfe_state').doc(e.cnpj));
+        const stateSnaps = stateRefs.length ? await db.getAll(...stateRefs) : [];
+        const stateMap = new Map();
+        stateSnaps.forEach((s) => {
+            if (s.exists) {
+                const sd = s.data();
+                stateMap.set(s.id, {
+                    ultNSU: sd.ultNSU || null,
+                    ultimaSync: sd.ultimaSync?.toDate?.()?.toISOString?.() || sd.ultimaSync || null,
+                    maxNSU: sd.maxNSU || null,
+                });
+            }
+        });
+        lista.forEach((e) => { e.state = stateMap.get(e.cnpj) || null; });
+
+        const total = lista.length;
+        const ativas = lista.filter((e) => e.ativo).length;
+        const comCaptura = lista.filter((e) => e.state && e.state.ultimaSync).length;
+        return res.json({
+            total, ativas, inativas: total - ativas, comCaptura,
+            percentualAtivas: total ? Math.round((ativas / total) * 100) : 0,
+            percentualCaptura: total ? Math.round((comCaptura / total) * 100) : 0,
+            empresas: lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || '')),
+        });
+    } catch (e) {
+        console.error('[nfse-nac-dfe/cobertura]', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// ── POST /toggle-bulk ─────────────────────────────────────────────────────
+// Liga/desliga ADN pra uma LISTA de empresas de uma vez. Body:
+//   { cnpjs: string[], ativo: boolean }
+// Resposta: { atualizados, naoEncontrados, falhas }. So admin.
+router.post('/toggle-bulk', requireAuth, express.json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
+        const { cnpjs, ativo } = req.body || {};
+        if (!Array.isArray(cnpjs) || cnpjs.length === 0) {
+            return res.status(400).json({ error: 'cnpjs (array) obrigatorio' });
+        }
+        if (cnpjs.length > 2000) return res.status(400).json({ error: 'Máximo 2000 CNPJs por chamada.' });
+        if (typeof ativo !== 'boolean') return res.status(400).json({ error: 'campo "ativo" boolean obrigatório' });
+
+        const db = fa().firestore();
+        const atualizados = [];
+        const naoEncontrados = [];
+        const falhas = [];
+
+        for (const cnpjRaw of cnpjs) {
+            const cnpj = String(cnpjRaw || '').replace(/\D/g, '');
+            if (cnpj.length !== 14) { naoEncontrados.push(cnpjRaw); continue; }
+            let achou = false;
+            for (const col of ['simples_empresas', 'lucro_empresas']) {
+                try {
+                    const snap = await db.collection(col).where('cnpj', '==', cnpj).limit(1).get();
+                    if (!snap.empty) {
+                        await snap.docs[0].ref.update({
+                            nfseNacionalDfeAtivo: ativo,
+                            nfseNacionalDfeAlteradoPor: req.user.email,
+                            nfseNacionalDfeAlteradoEm: admin.firestore.FieldValue.serverTimestamp(),
+                        });
+                        atualizados.push({ cnpj, colecao: col });
+                        achou = true;
+                        break;
+                    }
+                } catch (e) {
+                    falhas.push({ cnpj, erro: e.message });
+                    achou = true;
+                    break;
+                }
+            }
+            if (!achou) naoEncontrados.push(cnpj);
+        }
+        return res.json({
+            ativo,
+            total: cnpjs.length,
+            atualizados: atualizados.length,
+            naoEncontrados: naoEncontrados.length,
+            falhas: falhas.length,
+            detalhes: { atualizados, naoEncontrados, falhas },
+        });
+    } catch (e) {
+        console.error('[nfse-nac-dfe/toggle-bulk]', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 // ── POST /toggle/:cnpj ────────────────────────────────────────────────────
 // Liga/desliga captura NFSe Nacional pra uma empresa. Só admin.
 router.post('/toggle/:cnpj', requireAuth, express.json(), async (req, res) => {
