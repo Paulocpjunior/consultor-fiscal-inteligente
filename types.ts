@@ -774,6 +774,21 @@ export interface DashboardCeoKpis {
     apuracoes: {
         pendentes: number;
     };
+    /** Cobertura PGDAS-D / DCTFWeb no mês anterior (quem não emitiu/transmitiu) */
+    cobertura?: {
+        mesAnterior: string;
+        pgdasPendentes: number;
+        pgdasTotal: number;
+        dctfwebPendentes: number;
+        dctfwebTotal: number;
+    };
+    /** Empresas Simples em risco de sair do regime por RBT12 */
+    sublimite?: {
+        tetoUltrapassou: number;
+        tetoCritico: number;
+        sublimiteUltrapassou: number;
+        sublimiteCritico: number;
+    };
 }
 
 export interface DashboardCeoInsights {

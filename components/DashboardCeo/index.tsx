@@ -191,6 +191,51 @@ const DashboardCeo: React.FC<Props> = ({ currentUser, onShowToast, onNavigateTo 
                         </div>
                     </div>
 
+                    {/* ─── KPIs novos: cobertura PGDAS/DCTFWeb + sublimite ──── */}
+                    {(kpis.cobertura || kpis.sublimite) && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {kpis.cobertura && (
+                                <>
+                                    <div className="p-4 rounded-lg border-2 border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700">
+                                        <div className="text-xs text-slate-500 mb-1">📋 PGDAS-D (ref. {kpis.cobertura.mesAnterior})</div>
+                                        <div className="text-3xl font-bold text-amber-700 dark:text-amber-400">
+                                            {kpis.cobertura.pgdasPendentes}<span className="text-base font-normal text-slate-500">/{kpis.cobertura.pgdasTotal}</span>
+                                        </div>
+                                        <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                                            Simples sem PGDAS no mês anterior
+                                        </div>
+                                    </div>
+                                    <div className="p-4 rounded-lg border-2 border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700">
+                                        <div className="text-xs text-slate-500 mb-1">📋 DCTFWeb (ref. {kpis.cobertura.mesAnterior})</div>
+                                        <div className="text-3xl font-bold text-amber-700 dark:text-amber-400">
+                                            {kpis.cobertura.dctfwebPendentes}<span className="text-base font-normal text-slate-500">/{kpis.cobertura.dctfwebTotal}</span>
+                                        </div>
+                                        <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                                            Lucro sem DCTFWeb no mês anterior
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                            {kpis.sublimite && (
+                                <div className={`p-4 rounded-lg border-2 ${
+                                    kpis.sublimite.tetoUltrapassou > 0 || kpis.sublimite.sublimiteUltrapassou > 0
+                                        ? 'border-red-300 bg-red-50 dark:bg-red-900/20 dark:border-red-700'
+                                        : (kpis.sublimite.tetoCritico + kpis.sublimite.sublimiteCritico) > 0
+                                            ? 'border-orange-300 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-700'
+                                            : 'border-slate-200 bg-white dark:bg-slate-800'
+                                }`}>
+                                    <div className="text-xs text-slate-500 mb-1">⚠ SUBLIMITE Simples</div>
+                                    <div className="text-3xl font-bold text-red-700 dark:text-red-400">
+                                        {kpis.sublimite.tetoUltrapassou + kpis.sublimite.sublimiteUltrapassou}
+                                    </div>
+                                    <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                                        ultrapassaram + {kpis.sublimite.tetoCritico + kpis.sublimite.sublimiteCritico} em estado crítico
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Painel de Acao */}
                     <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
                         <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">

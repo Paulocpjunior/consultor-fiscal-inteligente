@@ -1763,6 +1763,49 @@ app.get('/api/admin/dashboard-ceo/kpis', requireAdmin, async (req, res) => {
             if (!tem) apuracoesPendentes++;
         });
 
+        // ── Cobertura PGDAS-D (mês anterior — quem não emitiu?)
+        // Importa o helper testado pra calcular o mês anterior corretamente.
+        const { ultimasCompetencias } = await import('./sefaz-backend/competencias-helper.js');
+        const mesAnterior = ultimasCompetencias(1)[0];
+        const dasMesAnteriorPorEmpresa = new Set();
+        dasSnap.forEach(d => {
+            const x = d.data();
+            if (x.competencia === mesAnterior) dasMesAnteriorPorEmpresa.add(x.empresaId);
+        });
+        let pgdasMesAnteriorPendentes = 0;
+        simplesAtivos.forEach(d => {
+            if (!dasMesAnteriorPorEmpresa.has(d.id)) pgdasMesAnteriorPendentes++;
+        });
+
+        // ── Cobertura DCTFWeb (mês anterior — quem não transmitiu?)
+        const dctfwebSnap = await fetchAllDocs(db.collection('dctfweb_declaracoes'), { label: 'dctfweb_declaracoes/ceo' });
+        const [anoAntStr, mesAntStr] = (mesAnterior || '').split('-');
+        const anoAnt = Number(anoAntStr), mesAnt = Number(mesAntStr);
+        const dctfwebMesAnteriorAtivos = new Set();
+        dctfwebSnap.forEach(d => {
+            const x = d.data();
+            if (x.anoPA === anoAnt && x.mesPA === mesAnt && x.situacao === 'ATIVA' && (!x.categoria || x.categoria === 'GERAL_MENSAL')) {
+                dctfwebMesAnteriorAtivos.add(x.empresaId);
+            }
+        });
+        let dctfwebMesAnteriorPendentes = 0;
+        lucroAtivos.forEach(d => {
+            if (!dctfwebMesAnteriorAtivos.has(d.id)) dctfwebMesAnteriorPendentes++;
+        });
+
+        // ── Sublimite Simples (RBT12 perto/passou de R$ 3,6M ou R$ 4,8M)
+        const { calcularRbt12, classificarRbt12 } = await import('./sefaz-backend/simples-sublimite-helper.js');
+        let sublimiteUltrapassou = 0, sublimiteCritico = 0, tetoUltrapassou = 0, tetoCritico = 0;
+        simplesAtivos.forEach(d => {
+            const e = d.data();
+            const { rbt12 } = calcularRbt12(e.faturamentoManual || {});
+            const c = classificarRbt12(rbt12);
+            if (c.teto.faixa === 'ultrapassou') tetoUltrapassou++;
+            else if (c.teto.faixa === 'critico') tetoCritico++;
+            if (c.sublimite.faixa === 'ultrapassou') sublimiteUltrapassou++;
+            else if (c.sublimite.faixa === 'critico') sublimiteCritico++;
+        });
+
         return res.json({
             timestamp: new Date().toISOString(),
             totalEmpresas,
@@ -1782,6 +1825,20 @@ app.get('/api/admin/dashboard-ceo/kpis', requireAdmin, async (req, res) => {
             },
             apuracoes: {
                 pendentes: apuracoesPendentes,
+            },
+            // ── Novos KPIs do dia ──
+            cobertura: {
+                mesAnterior,
+                pgdasPendentes: pgdasMesAnteriorPendentes,
+                pgdasTotal: simplesAtivos.length,
+                dctfwebPendentes: dctfwebMesAnteriorPendentes,
+                dctfwebTotal: lucroAtivos.length,
+            },
+            sublimite: {
+                tetoUltrapassou,
+                tetoCritico,
+                sublimiteUltrapassou,
+                sublimiteCritico,
             },
         });
     } catch (err) {
