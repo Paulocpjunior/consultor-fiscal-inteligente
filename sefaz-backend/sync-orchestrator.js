@@ -76,10 +76,14 @@ async function persisteUltNSU(cnpj, ultNSU, info = {}) {
   }, { merge: true });
 }
 
-// Carrega UF da empresa (de dadosFiscais.uf) consultando coleções
-// simples_empresas e lucro_empresas (tenta as duas).
-async function carregarUfEmpresa(empresaId, empresaCnpj) {
-  if (!empresaId) return null;
+// Carrega flags da empresa (uf + procuracaoEcacAtiva) consultando
+// simples_empresas e lucro_empresas (tenta as duas). procuracaoEcacAtiva
+// libera o fallback pro cert do escritorio quando a empresa nao tem A1
+// proprio — captura via DistDFe e feita assinando com cert da S&P e
+// passando o CNPJ da empresa como <distDFeInt><CNPJ>; SEFAZ valida a
+// procuracao no e-CAC do escritorio.
+async function carregarFlagsEmpresa(empresaId, empresaCnpj) {
+  if (!empresaId) return { uf: null, procuracaoEcacAtiva: false };
   const db = fa().firestore();
   for (const col of ['simples_empresas', 'lucro_empresas']) {
     try {
@@ -89,7 +93,10 @@ async function carregarUfEmpresa(empresaId, empresaCnpj) {
         // Cadastro canonico: dadosFiscais.uf. Fallback ao top-level pra
         // cobrir docs legados onde a UF foi gravada como d.uf direto.
         const uf = d.dadosFiscais?.uf || d.uf;
-        if (uf) return String(uf).trim().toUpperCase();
+        return {
+          uf: uf ? String(uf).trim().toUpperCase() : null,
+          procuracaoEcacAtiva: d.procuracaoEcacAtiva === true,
+        };
       }
     } catch (e) {
       console.warn(`[sync-orchestrator] erro lendo ${col}/${empresaId}:`, e.message);
@@ -99,16 +106,16 @@ async function carregarUfEmpresa(empresaId, empresaCnpj) {
   // o escritorio tinha que cadastrar UF=SP pra si mesmo manualmente, o
   // que e ridiculo (S&P Assessoria Contabil esta literalmente em SP).
   const cnpjNum = String(empresaCnpj || '').replace(/\D/g, '');
-  if (cnpjNum === CNPJ_ESCRITORIO) return 'SP';
-  return null;
+  if (cnpjNum === CNPJ_ESCRITORIO) return { uf: 'SP', procuracaoEcacAtiva: false };
+  return { uf: null, procuracaoEcacAtiva: false };
 }
 
 export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor, resetNSU = false }) {
   const cnpjNum = String(empresaCnpj).replace(/\D/g, '');
   if (cnpjNum.length !== 14) return { ok: false, motivo: `CNPJ inválido: ${empresaCnpj}` };
 
-  // Carrega UF da empresa — necessária pro envelope cUFAutor.
-  const uf = await carregarUfEmpresa(empresaId, cnpjNum);
+  // Carrega UF + procuracaoEcacAtiva da empresa.
+  const { uf, procuracaoEcacAtiva } = await carregarFlagsEmpresa(empresaId, cnpjNum);
   if (!uf) {
     return {
       ok: false,
@@ -141,53 +148,73 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
   } catch (e) {
     console.warn(`[sync-orchestrator] erro carregando cert empresa ${empresaId}:`, e.message);
   }
-  // Fallback APENAS pra propria S&P: cert dela vive no Secret Manager,
-  // nao em empresas_certificados. Sem isso, NFe de entrada do escritorio
-  // (compras, materiais, etc) nunca eram baixadas. Nao aplicar pra outras
-  // empresas com procuracao e-CAC sem discussao — multiplicaria 6x o
-  // volume diario de DistDFe contra a quota do IP do Cloud Run.
-  if (!certOverride && cnpjNum === CNPJ_ESCRITORIO) {
+  // Fallback pro cert do escritorio (Secret Manager). Vale em 2 casos:
+  //  1. Empresa E a S&P (cert dela vive no Secret Manager, nao em
+  //     empresas_certificados). Sem isso, NFe de entrada do escritorio
+  //     nunca era baixada.
+  //  2. Empresa-cliente sem A1 proprio MAS com procuracaoEcacAtiva=true.
+  //     A consulta DistDFe e feita assinando com cert da S&P e passando
+  //     o CNPJ da empresa como <distDFeInt><CNPJ>; SEFAZ valida no e-CAC
+  //     que a S&P tem procuracao ativa pra esse CNPJ e libera os XMLs.
+  //     Quota: ~74 empresas com procuracao ativa hoje; cron noturno = 74
+  //     requests/dia adicionais por UF, dentro do limite SEFAZ (1/min por
+  //     CNPJ consultor por UF). Aceito explicitamente — gap real era ter
+  //     empresa com procuracao ativa MAS captura NFe bloqueada (caso
+  //     FASTWELD e ~73 outras).
+  const viaProcuracao = !certOverride && cnpjNum !== CNPJ_ESCRITORIO && procuracaoEcacAtiva;
+  const ehEscritorio = !certOverride && cnpjNum === CNPJ_ESCRITORIO;
+  if (viaProcuracao || ehEscritorio) {
     try {
       const escritorio = await loadCertificate();
       certOverride = {
         pfxBuffer: escritorio.pfxBuffer,
         password: escritorio.password,
-        cnpj: cnpjNum,           // pro sanity check de CNPJ-Base mais abaixo
-        notAfter: null,           // desconhecido aqui, nao usado no fluxo
+        // Marca origem do cert (escritorio) pro sanity check abaixo
+        // pular o mismatch de CNPJ-Base, que e esperado quando se usa
+        // procuracao (cert S&P assinando consulta de outro CNPJ).
+        cnpj: CNPJ_ESCRITORIO,
+        notAfter: null,
         fingerprint: null,
+        viaProcuracao,
       };
-      console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} cert=escritorio (S&P, fallback Secret Manager)`);
+      const motivo = viaProcuracao ? 'procuracao e-CAC' : 'S&P fallback Secret Manager';
+      console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} cert=escritorio (${motivo})`);
     } catch (e) {
       console.warn(`[sync-orchestrator] falha carregando cert do escritorio: ${e.message}`);
     }
   }
   if (!certOverride) {
-    console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} SEM cert próprio — aguardando upload`);
+    console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} SEM cert próprio e SEM procuração e-CAC ativa — aguardando upload`);
     // Libera o lock pra não ficar reservado por 1h
     try {
       await fa().firestore().collection('sefaz_locks').doc(cnpjNum).delete();
     } catch (e) { /* lock já foi liberado ou erro: ignora */ }
     return {
       ok: false,
-      motivo: 'Empresa aguardando cert A1 próprio. Suba o certificado pela tela Empresas Monitoradas → coluna Certificado.',
+      motivo: 'Empresa aguardando cert A1 próprio (ou marque procuração e-CAC como ativa no cadastro). Suba o certificado pela tela Empresas Monitoradas → coluna Certificado.',
       semCert: true,
     };
   }
-  // Sanity check: CNPJ-Base do cert tem que bater com o CNPJ consultado.
-  const certCnpjBase = String(certOverride.cnpj || '').replace(/\D/g, '').slice(0, 8);
-  const empresaCnpjBase = cnpjNum.slice(0, 8);
-  if (certCnpjBase && empresaCnpjBase !== certCnpjBase) {
-    console.warn(`[sync-orchestrator] empresa=${empresaId} cert tem CNPJ-Base ${certCnpjBase}, esperado ${empresaCnpjBase}`);
-    try {
-      await fa().firestore().collection('sefaz_locks').doc(cnpjNum).delete();
-    } catch (e) {}
-    return {
-      ok: false,
-      motivo: `CNPJ-Base do cert (${certCnpjBase}) difere do CNPJ da empresa (${empresaCnpjBase}). Suba o cert A1 correto dessa empresa.`,
-      certInvalido: true,
-    };
+  // Sanity check de CNPJ-Base. So roda quando o cert e PROPRIO da empresa
+  // (uploaded via Empresas Monitoradas). Quando vem do escritorio por
+  // procuracao, o mismatch e esperado — cert da S&P assinando consulta
+  // de outro CNPJ — entao pulamos.
+  if (!certOverride.viaProcuracao) {
+    const certCnpjBase = String(certOverride.cnpj || '').replace(/\D/g, '').slice(0, 8);
+    const empresaCnpjBase = cnpjNum.slice(0, 8);
+    if (certCnpjBase && empresaCnpjBase !== certCnpjBase) {
+      console.warn(`[sync-orchestrator] empresa=${empresaId} cert tem CNPJ-Base ${certCnpjBase}, esperado ${empresaCnpjBase}`);
+      try {
+        await fa().firestore().collection('sefaz_locks').doc(cnpjNum).delete();
+      } catch (e) {}
+      return {
+        ok: false,
+        motivo: `CNPJ-Base do cert (${certCnpjBase}) difere do CNPJ da empresa (${empresaCnpjBase}). Suba o cert A1 correto dessa empresa.`,
+        certInvalido: true,
+      };
+    }
   }
-  console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} cert=empresa`);
+  console.log(`[sync-orchestrator] empresa=${empresaId} cnpj=${cnpjNum} cert=${certOverride.viaProcuracao ? 'escritorio_via_procuracao' : 'empresa'}`);
 
   // Detalhe por documento processado — exposto no retorno pra debug fino
   // (qual chave veio, qual o status, qual o erro). Sem isso era impossivel
