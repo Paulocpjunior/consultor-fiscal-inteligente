@@ -15,6 +15,10 @@ import { formatCnpjCpf } from '../../services/xmlParserService';
 export interface OpcaoEmpresa {
     cnpj: string;
     nome: string;
+    /** false = empresa cadastrada mas sem XMLs capturados (cert expirado,
+     *  procuração inativa etc). Marcada visualmente pra usuário entender
+     *  por que filtrar por ela retorna lista vazia. */
+    temXmls?: boolean;
 }
 
 interface Props {
@@ -146,25 +150,36 @@ const EmpresaFilterCombobox: React.FC<Props> = ({ opcoes, valor, onChange, class
                     {opcoesFiltradas.length === 0 && (
                         <li className="px-3 py-2 text-slate-400">Nenhuma empresa encontrada.</li>
                     )}
-                    {opcoesFiltradas.slice(0, 200).map((o, i) => (
-                        <li
-                            key={o.cnpj}
-                            onMouseDown={() => selecionar(o.cnpj)}
-                            onMouseEnter={() => setHighlight(i)}
-                            className={`px-3 py-1.5 cursor-pointer ${
-                                i === highlight
-                                    ? 'bg-blue-100 dark:bg-blue-900/40'
-                                    : 'hover:bg-slate-100 dark:hover:bg-slate-700'
-                            }`}
-                        >
-                            <div className="font-medium text-slate-700 dark:text-slate-200">
-                                {o.nome}
-                            </div>
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                                {formatCnpjCpf(o.cnpj)}
-                            </div>
-                        </li>
-                    ))}
+                    {opcoesFiltradas.slice(0, 200).map((o, i) => {
+                        const semXmls = o.temXmls === false;
+                        return (
+                            <li
+                                key={o.cnpj}
+                                onMouseDown={() => selecionar(o.cnpj)}
+                                onMouseEnter={() => setHighlight(i)}
+                                className={`px-3 py-1.5 cursor-pointer ${
+                                    i === highlight
+                                        ? 'bg-blue-100 dark:bg-blue-900/40'
+                                        : 'hover:bg-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                                title={semXmls ? 'Empresa cadastrada mas sem XMLs capturados — verifique certificado/procuração em Status por Empresa' : undefined}
+                            >
+                                <div className={`font-medium flex items-center gap-2 ${
+                                    semXmls ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200'
+                                }`}>
+                                    <span className="truncate">{o.nome}</span>
+                                    {semXmls && (
+                                        <span className="text-[9px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0">
+                                            sem XMLs
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                                    {formatCnpjCpf(o.cnpj)}
+                                </div>
+                            </li>
+                        );
+                    })}
                     {opcoesFiltradas.length > 200 && (
                         <li className="px-3 py-2 text-slate-400 text-center">
                             +{opcoesFiltradas.length - 200} resultados. Refine a busca.
