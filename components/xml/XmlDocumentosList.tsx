@@ -1,7 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getView } from '../../services/xmlDocumentoView';
 import type { User, DocumentoFiscal } from '../../types';
-import { listDocumentos, applyDocumentosFilters, type ListDocumentosFilters } from '../../services/xmlFiscalService';
+import {
+    listDocumentos,
+    applyDocumentosFilters,
+    getEmpresasDisponiveis,
+    type ListDocumentosFilters,
+    type EmpresaXmlOption,
+} from '../../services/xmlFiscalService';
 import NFeStatusCell from './NFeStatusCell';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
 import EmpresaFilterCombobox from './EmpresaFilterCombobox';
@@ -21,6 +27,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     // (busca/direção/competência/tipo/status/origem) roda em memoria via useMemo
     // a cada tecla, sem rede.
     const [allDocs, setAllDocs] = useState<DocumentoFiscal[]>([]);
+    const [catalogoEmpresas, setCatalogoEmpresas] = useState<EmpresaXmlOption[]>([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<ListDocumentosFilters>({});
     const [busca, setBusca] = useState('');
@@ -32,8 +39,20 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         setLoading(true);
         // listDocumentos sem filtros = busca todos os docs visiveis ao usuario
         // (ja aplica createdBy pra colaborador, allow-all pra admin).
-        listDocumentos(currentUser, {})
-            .then(list => { if (alive) { setAllDocs(list); setLoading(false); } });
+        // Em paralelo: catalogo completo de empresas (simples + lucro). Necessario
+        // pra mostrar no combobox empresas SEM XMLs capturados (cert expirado,
+        // procuracao inativa) — caso real: FASTWELD aparece em "Status por
+        // Empresa" mas sumia daqui porque o dropdown vinha so de allDocs.
+        Promise.all([
+            listDocumentos(currentUser, {}),
+            getEmpresasDisponiveis(currentUser),
+        ]).then(([docs, empresas]) => {
+            if (alive) {
+                setAllDocs(docs);
+                setCatalogoEmpresas(empresas);
+                setLoading(false);
+            }
+        });
         return () => { alive = false; };
     }, [currentUser, refreshKey]);
 
@@ -48,39 +67,55 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         return Array.from(set).sort().reverse();
     }, [docs]);
 
-    // Lista de empresas distintas (CNPJ → nome) pro combobox. Olha `allDocs`
-    // (nao `docs` filtrado) pra dropdown nao "encolher" quando filtra empresa.
+    // Lista de empresas distintas (CNPJ → nome) pro combobox. Combina:
+    //  1. CATALOGO COMPLETO (simples_empresas + lucro_empresas) — fonte de
+    //     verdade. Inclui empresas cadastradas SEM XMLs (cert expirado etc).
+    //     Marcadas com `temXmls=false` pro usuário entender o gap.
+    //  2. CNPJs presentes em allDocs — pode haver XML capturado de empresa
+    //     ainda não cadastrada formalmente (raro, mas acontece em importação
+    //     manual antes do cadastro).
     //
     // Estratégia de nome (em ordem de preferência):
-    //  1. empresaNome (campo já populado)
-    //  2. Nome do emitente — quando a empresa É o emitente (direcao=saida)
-    //  3. Nome do destinatário/tomador — quando a empresa É o dest (direcao=entrada)
-    // Sem fallback, ficaria só o CNPJ aparecendo duas vezes (que é o que o
-    // Paulo viu na tela: "05049535000170 — 05.049.535/0001-70").
+    //  1. nome do catálogo (cadastro oficial)
+    //  2. empresaNome (campo já populado no doc)
+    //  3. Nome do emitente — quando a empresa É o emitente (direcao=saida)
+    //  4. Nome do destinatário/tomador — quando a empresa É o dest (direcao=entrada)
     const empresasDropdown = useMemo(() => {
-        const map = new Map<string, string>();
         const normCnpj = (s: any) => String(s ?? '').replace(/\D/g, '');
 
+        // Set de CNPJs que aparecem em pelo menos um documento capturado.
+        const cnpjsComDocs = new Set<string>();
+        for (const d of allDocs) {
+            const c = normCnpj(d.empresaCnpj);
+            if (c.length === 14) cnpjsComDocs.add(c);
+        }
+
+        // 1. Semeia com o catalogo (nome oficial do cadastro).
+        const map = new Map<string, string>();
+        for (const emp of catalogoEmpresas) {
+            const cnpj = normCnpj(emp.cnpj);
+            if (cnpj.length !== 14) continue;
+            if (emp.nome) map.set(cnpj, emp.nome);
+        }
+
+        // 2. Mescla com nomes derivados dos docs (fallback pra CNPJs sem
+        //    cadastro OU pra completar nomes vazios).
         for (const d of allDocs) {
             const cnpj = normCnpj(d.empresaCnpj);
             if (cnpj.length !== 14) continue;
 
-            // Se já tem nome bom (≠ CNPJ raw), mantém.
             const atual = map.get(cnpj);
+            // Se já tem nome bom (≠ CNPJ raw), mantém.
             if (atual && atual !== cnpj && !/^\d+$/.test(atual)) continue;
 
-            // Tenta o melhor nome
             let nome = d.empresaNome || '';
             if (!nome) {
                 const e = d as any;
                 if (d.direcao === 'saida') {
-                    // Empresa emitiu — usa nome dela do bloco emitente/prestador
                     nome = e.emitente?.nome || e.prestador?.nome || '';
                 } else if (d.direcao === 'entrada') {
-                    // Empresa recebeu — usa nome do destinatario/tomador
                     nome = e.destinatario?.nome || e.tomador?.nome || '';
                 }
-                // Se ainda vazio, vê se algum dos blocos tem CNPJ batendo com empresaCnpj
                 if (!nome) {
                     for (const bloco of [e.emitente, e.prestador, e.destinatario, e.tomador]) {
                         if (bloco && normCnpj(bloco.cnpj) === cnpj && bloco.nome) {
@@ -95,15 +130,29 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         }
 
         return Array.from(map.entries())
-            .map(([cnpj, nome]) => ({ cnpj, nome }))
+            .map(([cnpj, nome]) => ({
+                cnpj,
+                nome,
+                temXmls: cnpjsComDocs.has(cnpj),
+            }))
             .sort((a, b) => {
-                // Empresas com nome de verdade primeiro; CNPJs sem nome no fim
+                // Empresas com XMLs primeiro (fluxo principal), depois sem XMLs.
+                if (a.temXmls !== b.temXmls) return a.temXmls ? -1 : 1;
+                // Empresas com nome de verdade antes de CNPJ-only.
                 const aTemNome = !/^\d+$/.test(a.nome);
                 const bTemNome = !/^\d+$/.test(b.nome);
                 if (aTemNome !== bTemNome) return aTemNome ? -1 : 1;
                 return a.nome.localeCompare(b.nome);
             });
-    }, [allDocs]);
+    }, [allDocs, catalogoEmpresas]);
+
+    // Empresa selecionada no combobox — usado pra mostrar hint quando a empresa
+    // existe no cadastro mas nao tem XMLs capturados (caso FASTWELD).
+    const empresaSelecionadaInfo = useMemo(() => {
+        if (!filters.empresaCnpj) return null;
+        const cnpj = filters.empresaCnpj.replace(/\D/g, '');
+        return empresasDropdown.find(e => e.cnpj === cnpj) || null;
+    }, [filters.empresaCnpj, empresasDropdown]);
 
     // Slug dos filtros ativos pra usar no nome do arquivo exportado.
     // Ex: 'todos' (sem filtro) ou 'entrada-2026-05-autorizado'.
@@ -504,7 +553,18 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                 {loading ? (
                     <p className="text-center text-xs text-slate-400 py-6">Carregando...</p>
                 ) : docs.length === 0 ? (
-                    <p className="text-center text-xs text-slate-400 py-6">Nenhum documento encontrado.</p>
+                    empresaSelecionadaInfo && empresaSelecionadaInfo.temXmls === false ? (
+                        <div className="text-center py-6 px-4">
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                                <strong>{empresaSelecionadaInfo.nome}</strong> não tem XMLs capturados.
+                            </p>
+                            <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                                Verifique certificado e procuração na aba <strong>📋 Status por Empresa</strong>.
+                            </p>
+                        </div>
+                    ) : (
+                        <p className="text-center text-xs text-slate-400 py-6">Nenhum documento encontrado.</p>
+                    )
                 ) : (
                     <div ref={tableRef} className="overflow-x-auto max-h-[520px]">
                         <table className="w-full text-xs">
