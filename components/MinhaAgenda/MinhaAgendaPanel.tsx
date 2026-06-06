@@ -9,19 +9,12 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { getMinhaAgenda, type MinhaAgendaResposta, type EmpresaAgenda } from '../../services/minhaAgendaService';
+import { faixaDoScoreUi, FAIXA_LABEL, FAIXA_COR } from '../../services/agendaScoreUi';
 
 interface Props { onShowToast?: (msg: string) => void; }
 
-// IMPORTANTE: faixas DEVEM bater com sefaz-backend/minha-agenda-score.js
-// (constantes FAIXA_CRITICO=70, FAIXA_ALTO=40, FAIXA_MEDIO=15). Backend usa
-// FAIXA_CRITICO pra contar `riscoCritico` — se mexer aqui, mexa lá tb.
-function scoreCor(score: number): string {
-    if (score >= 70) return 'var(--danger)';     // CRÍTICO
-    if (score >= 40) return '#ea580c';           // ALTO (laranja)
-    if (score >= 15) return 'var(--warning)';    // MÉDIO (amarelo)
-    if (score > 0) return 'var(--text-muted)';   // BAIXO
-    return 'var(--success)';                     // OK
-}
+// Faixas centralizadas em services/agendaScoreUi.ts (espelho do backend).
+const scoreCor = (score: number) => FAIXA_COR[faixaDoScoreUi(score)];
 function exportarCsv(lista: EmpresaAgenda[]) {
     const headers = ['Score', 'Faixa', 'Empresa', 'CNPJ', 'Regime', 'PGDAS gaps', 'DCTFWeb gaps', 'Msgs crít.', 'Msgs altas', 'Pendências'];
     const rows = lista.map((e) => [
@@ -46,13 +39,7 @@ function exportarCsv(lista: EmpresaAgenda[]) {
     document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-function scoreLabel(score: number): string {
-    if (score >= 70) return 'CRÍTICO';
-    if (score >= 40) return 'ALTO';
-    if (score >= 15) return 'MÉDIO';
-    if (score > 0) return 'BAIXO';
-    return 'OK';
-}
+const scoreLabel = (score: number) => FAIXA_LABEL[faixaDoScoreUi(score)];
 
 const MinhaAgendaPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
     const [meses, setMeses] = useState(3);
