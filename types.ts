@@ -25,6 +25,7 @@ export enum SearchType {
   RECUPERACAO_PRAZOS = 'Prazos de Prescrição',
   VENCIMENTOS_SEMANA = 'Vencimentos da Semana',
   DIAGNOSTICO_DOCS = 'Diagnóstico Docs Fiscais',
+  SIMPLES_SUBLIMITE = 'Sublimite Simples',
   DASHBOARD_CEO = 'Dashboard CEO',
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
