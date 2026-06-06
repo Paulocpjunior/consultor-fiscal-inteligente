@@ -22,6 +22,7 @@ export enum SearchType {
   DCTFWEB_COBERTURA = 'Cobertura DCTFWeb',
   CAIXA_POSTAL_RADAR = 'Radar fiscal (e-CAC)',
   MINHA_AGENDA = 'Minha Agenda Fiscal',
+  RECUPERACAO_PRAZOS = 'Prazos de Prescrição',
   DASHBOARD_CEO = 'Dashboard CEO',
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
