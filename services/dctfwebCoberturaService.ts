@@ -34,6 +34,9 @@ export interface CoberturaDctfwebResposta {
     empresasComGap: number;
     totalGaps: number;
     totalEmAndamento: number;
+    /** true se algum ano Firestore falhou — evita "falso vermelho" na UI */
+    degraded?: boolean;
+    anosFalhos?: number[];
     empresas: EmpresaCoberturaDctfweb[];
 }
 

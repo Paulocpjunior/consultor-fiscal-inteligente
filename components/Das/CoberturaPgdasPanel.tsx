@@ -97,6 +97,12 @@ const CoberturaPgdasPanel: React.FC<Props> = ({ onShowToast }) => {
                 </div>
             )}
 
+            {data?.degraded && (
+                <div className="p-3 rounded-xl text-sm" style={{ background: 'var(--warning-soft)', border: '1px solid var(--warning-soft-border)', borderLeft: '4px solid var(--warning)', color: 'var(--text-secondary)' }}>
+                    <b style={{ color: 'var(--warning)' }}>⚠ Leitura parcial.</b> {data.competenciasIncompletas?.length || 0} competência(s) não puderam ser lidas no Firestore: <span className="font-mono">{(data.competenciasIncompletas || []).join(', ')}</span>. As células dessas colunas podem mostrar "não transmitido" sem ser real — recarregue ou ignore-as.
+                </div>
+            )}
+
             {/* Legend */}
             {data && (
                 <div className="flex gap-4 text-xs px-2" style={{ color: 'var(--text-muted)' }}>

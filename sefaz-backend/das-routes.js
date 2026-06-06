@@ -86,6 +86,7 @@ router.get('/cobertura-pgdas', requireAuth, async (req, res) => {
 
         // 2. DAS emitidos das competencias relevantes (chunks de 10 — limite do 'in')
         const dasMap = new Map(); // empresaId|competencia -> { valor, statusPagamento }
+        const chunksFalhos = []; // competencias cujo chunk falhou — UI mostra "leitura parcial"
         for (let i = 0; i < competencias.length; i += 10) {
             const chunk = competencias.slice(i, i + 10);
             try {
@@ -99,6 +100,7 @@ router.get('/cobertura-pgdas', requireAuth, async (req, res) => {
                     }
                 });
             } catch (e) {
+                chunksFalhos.push(...chunk);
                 console.warn('[das/cobertura-pgdas] chunk', chunk, 'falhou:', e.message);
             }
         }
@@ -132,6 +134,10 @@ router.get('/cobertura-pgdas', requireAuth, async (req, res) => {
             empresasComGap: resultado.filter((e) => e.gaps > 0).length,
             totalGaps,
             totalVencidos,
+            // honesto: se algum chunk de mes falhou, marca degraded e lista
+            // as competencias que ficaram sem leitura — UI evita "falso vermelho"
+            degraded: chunksFalhos.length > 0,
+            competenciasIncompletas: Array.from(new Set(chunksFalhos)),
             empresas: resultado,
         });
     } catch (e) {

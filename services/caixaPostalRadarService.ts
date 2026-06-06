@@ -91,7 +91,17 @@ function calcularRisco(m: MensagemClassificada): number {
     return Math.min(100, baseUrg + idade + prazoBonus);
 }
 
-export async function getRadarCaixaPostal(): Promise<MensagemClassificada[]> {
+export interface RadarResposta {
+    mensagens: MensagemClassificada[];
+    /** Total bruto retornado pelo backend antes de cortar */
+    totalBruto: number;
+    /** true se a lista foi truncada — UI mostra "exibindo X de N" */
+    truncado: boolean;
+}
+
+const LIMITE_CLIENTE = 500;
+
+export async function getRadarCaixaPostal(): Promise<RadarResposta> {
     const headers = await authHeader();
     const res = await fetch('/api/admin/caixa-postal/mensagens?naoLidas=true', { headers });
     if (!res.ok) {
@@ -99,8 +109,10 @@ export async function getRadarCaixaPostal(): Promise<MensagemClassificada[]> {
         throw new Error(err.error || `HTTP ${res.status}`);
     }
     const raw: MensagemRaw[] = await res.json();
+    const totalBruto = raw.length;
     const agora = new Date();
-    return raw.map((m): MensagemClassificada => {
+    // Classifica TODAS pra poder ordenar por risco (mas paga o custo só uma vez).
+    const classificadas = raw.map((m): MensagemClassificada => {
         const dataEnvio = parseDate(m.dataEnvio);
         const prazo = parseDate(m.prazoResposta);
         const urgencia = classificarUrgencia(m.categoria);
@@ -112,6 +124,11 @@ export async function getRadarCaixaPostal(): Promise<MensagemClassificada[]> {
         base.riscoCalculado = calcularRisco(base);
         return base;
     }).sort((a, b) => b.riscoCalculado - a.riscoCalculado);
+    return {
+        mensagens: classificadas.slice(0, LIMITE_CLIENTE),
+        totalBruto,
+        truncado: totalBruto > LIMITE_CLIENTE,
+    };
 }
 
 export { categoriaLabel };

@@ -18,6 +18,7 @@ import {
 import { getDctfwebMode } from './dctfweb-provider.js';
 import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
 import { requireAdmin, requireAuth } from './require-admin.js';
+import { fetchAllDocs } from './firestore-paginate.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 const router = express.Router();
@@ -185,14 +186,19 @@ router.get('/cobertura', requireAuth, async (req, res) => {
         // 2. DCTFWeb dos ultimos meses (loteia por anoPA — geralmente sao 1-2 anos)
         const anos = Array.from(new Set(competencias.map((c) => c.anoPA)));
         const declMap = new Map(); // empresaId|YYYY-MM -> { situacao, valor }
+        const anosFalhos = [];
         for (const ano of anos) {
             try {
-                const snap = await db.collection('dctfweb_declaracoes').where('anoPA', '==', ano).get();
-                snap.forEach((d) => {
+                // Pagina com fetchAllDocs (default 500/batch) — evita estourar reads
+                const docs = await fetchAllDocs(
+                    db.collection('dctfweb_declaracoes').where('anoPA', '==', ano),
+                    { label: 'dctfweb/cobertura' },
+                );
+                for (const d of docs) {
                     const x = d.data();
-                    if (!x.empresaId || x.mesPA == null) return;
+                    if (!x.empresaId || x.mesPA == null) continue;
                     // So conta GERAL_MENSAL (categoria principal — a obrigacao mensal mesmo)
-                    if (x.categoria && x.categoria !== 'GERAL_MENSAL') return;
+                    if (x.categoria && x.categoria !== 'GERAL_MENSAL') continue;
                     const label = `${x.anoPA}-${String(x.mesPA).padStart(2, '0')}`;
                     const k = `${x.empresaId}|${label}`;
                     // Prioriza ATIVA sobre EM_ANDAMENTO se houver mais de um doc
@@ -200,8 +206,9 @@ router.get('/cobertura', requireAuth, async (req, res) => {
                     if (!prev || (x.situacao === 'ATIVA' && prev.situacao !== 'ATIVA')) {
                         declMap.set(k, { situacao: x.situacao || 'EM_ANDAMENTO', valor: x.valorTotal || 0 });
                     }
-                });
+                }
             } catch (e) {
+                anosFalhos.push(ano);
                 console.warn('[dctfweb/cobertura] ano', ano, 'falhou:', e.message);
             }
         }
@@ -235,6 +242,10 @@ router.get('/cobertura', requireAuth, async (req, res) => {
             empresasComGap: resultado.filter((e) => e.gaps > 0).length,
             totalGaps,
             totalEmAndamento,
+            // honesto: se algum ano falhou ler, marca degraded pra UI nao mostrar
+            // falso "nao transmitido" sem aviso
+            degraded: anosFalhos.length > 0,
+            anosFalhos,
             empresas: resultado,
         });
     } catch (e) {

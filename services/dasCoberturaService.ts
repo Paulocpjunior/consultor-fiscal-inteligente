@@ -36,6 +36,9 @@ export interface CoberturaPgdasResposta {
     empresasComGap: number;
     totalGaps: number;
     totalVencidos: number;
+    /** true se algum chunk Firestore falhou — evita "falso vermelho" na UI */
+    degraded?: boolean;
+    competenciasIncompletas?: string[];
     empresas: EmpresaCoberturaPgdas[];
 }
 

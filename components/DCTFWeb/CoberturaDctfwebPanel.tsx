@@ -89,6 +89,12 @@ const CoberturaDctfwebPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) =
                 </div>
             )}
 
+            {data?.degraded && (
+                <div className="p-3 rounded-xl text-sm" style={{ background: 'var(--warning-soft)', border: '1px solid var(--warning-soft-border)', borderLeft: '4px solid var(--warning)', color: 'var(--text-secondary)' }}>
+                    <b style={{ color: 'var(--warning)' }}>⚠ Leitura parcial.</b> Ano(s) com falha no Firestore: <span className="font-mono">{(data.anosFalhos || []).join(', ')}</span>. Competências desses anos podem aparecer como "não transmitida" sem ser real — recarregue.
+                </div>
+            )}
+
             {data && (
                 <div className="flex gap-4 text-xs px-2" style={{ color: 'var(--text-muted)' }}>
                     <span className="flex items-center gap-1"><Cell mes={{ competencia: '', transmitido: true, situacao: 'ATIVA' }} mini /> Transmitida (ATIVA)</span>

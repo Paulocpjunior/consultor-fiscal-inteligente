@@ -19,6 +19,30 @@ function scoreCor(score: number): string {
     if (score > 0) return 'var(--text-muted)';
     return 'var(--success)';
 }
+function exportarCsv(lista: EmpresaAgenda[]) {
+    const headers = ['Score', 'Faixa', 'Empresa', 'CNPJ', 'Regime', 'PGDAS gaps', 'DCTFWeb gaps', 'Msgs crít.', 'Msgs altas', 'Pendências'];
+    const rows = lista.map((e) => [
+        e.score,
+        scoreLabel(e.score),
+        (e.nome || '').replace(/[;\n\r]/g, ' '),
+        e.cnpj,
+        e.regime,
+        e.pgdas?.gaps ?? '',
+        e.dctfweb?.gaps ?? '',
+        e.mensagens.criticas,
+        e.mensagens.altas,
+        e.pendencias.join(' | ').replace(/[;\n\r]/g, ' '),
+    ].join(';'));
+    const csv = [headers.join(';'), ...rows].join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `minha-agenda-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
 function scoreLabel(score: number): string {
     if (score >= 70) return 'CRÍTICO';
     if (score >= 40) return 'ALTO';
@@ -98,6 +122,11 @@ const MinhaAgendaPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                     className="px-3 py-2 text-xs font-bold rounded-lg"
                     style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}>
                     {loading ? 'Carregando…' : 'Recarregar'}
+                </button>
+                <button onClick={() => exportarCsv(lista)} disabled={!lista.length}
+                    className="px-3 py-2 text-xs font-bold rounded-lg disabled:opacity-40"
+                    style={{ background: 'var(--success)', color: '#fff', border: '1px solid var(--success)' }}>
+                    ⬇ Exportar CSV
                 </button>
             </div>
 

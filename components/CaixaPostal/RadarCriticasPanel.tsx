@@ -8,7 +8,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    getRadarCaixaPostal, type MensagemClassificada, type Urgencia,
+    getRadarCaixaPostal, type MensagemClassificada, type Urgencia, type RadarResposta,
     categoriaLabel,
 } from '../../services/caixaPostalRadarService';
 
@@ -26,6 +26,7 @@ const urgLabel: Record<Urgencia, string> = {
 
 const RadarCriticasPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
     const [data, setData] = useState<MensagemClassificada[]>([]);
+    const [meta, setMeta] = useState<{ totalBruto: number; truncado: boolean } | null>(null);
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
     const [filtro, setFiltro] = useState<Urgencia | 'todas' | 'acao'>('acao');
@@ -33,7 +34,11 @@ const RadarCriticasPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
 
     const carregar = async () => {
         setLoading(true); setErro(null);
-        try { setData(await getRadarCaixaPostal()); }
+        try {
+            const r: RadarResposta = await getRadarCaixaPostal();
+            setData(r.mensagens);
+            setMeta({ totalBruto: r.totalBruto, truncado: r.truncado });
+        }
         catch (e: any) { setErro(e?.message || 'Falha ao carregar'); }
         finally { setLoading(false); }
     };
@@ -75,7 +80,7 @@ const RadarCriticasPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                     <Kpi label="Críticas" value={String(counts.critica)} accent="danger" />
                     <Kpi label="Altas" value={String(counts.alta)} accent={counts.alta > 0 ? 'warning' : 'success'} />
                     <Kpi label="Médias" value={String(counts.media)} />
-                    <Kpi label="Total não lidas" value={String(data.length)} />
+                    <Kpi label="Total não lidas" value={String(meta?.totalBruto ?? data.length)} />
                 </div>
             </div>
 
@@ -102,6 +107,12 @@ const RadarCriticasPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
 
             {erro && (
                 <div className="p-3 rounded-xl text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)' }}>{erro}</div>
+            )}
+
+            {meta?.truncado && (
+                <div className="p-3 rounded-xl text-sm" style={{ background: 'var(--warning-soft)', border: '1px solid var(--warning-soft-border)', borderLeft: '4px solid var(--warning)', color: 'var(--text-secondary)' }}>
+                    <b style={{ color: 'var(--warning)' }}>⚠ Exibindo as 500 mensagens de maior risco</b> (de {meta.totalBruto} total). Foque nas críticas/altas; use a busca pra empresa específica.
+                </div>
             )}
 
             <div className="space-y-2">
