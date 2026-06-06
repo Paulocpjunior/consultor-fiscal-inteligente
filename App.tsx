@@ -50,6 +50,7 @@ const DasDashboard = lazy(() => import('./components/Das'));
 const DCTFWebDashboard = lazy(() => import('./components/DCTFWeb'));
 const ConferirReinfDctfweb = lazy(() => import('./components/EfdReinf/ConferirReinfDctfweb'));
 const CoberturaAdnPanel = lazy(() => import('./components/NfseNacional/CoberturaAdnPanel'));
+const CoberturaPgdasPanel = lazy(() => import('./components/Das/CoberturaPgdasPanel'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
 const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
@@ -78,6 +79,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.DCTFWEB]: "DCTFWeb — Declaração de Débitos e Créditos Tributários Federais Previdenciários (empresas Lucro Presumido/Real), com transmissão, DARF e MIT.",
     [SearchType.EFD_REINF]: "EFD-Reinf × DCTFWeb — confere as retenções declaradas na EFD-Reinf (INSS/IRRF/CSRF) contra o débito consolidado na DCTFWeb.",
     [SearchType.NFSE_NAC_COBERTURA]: "Cobertura ADN (NFS-e Nac.) — diagnóstico e habilitação em massa da captura nacional de NFS-e por empresa (somente administradores).",
+    [SearchType.DAS_COBERTURA_PGDAS]: "Cobertura PGDAS-D — heatmap por empresa × mês mostrando quais Simples NÃO tiveram DAS emitido (gera autuação automática).",
     [SearchType.CARTEIRA]: "Carteira de Clientes — atribuição de empresas a colaboradores responsáveis (somente administradores).",
     [SearchType.AGENTES_A3]: "Agentes A3 — gerenciar API keys do agente local cfi-a3 e marcar empresas como A3 (somente administradores).",
     [SearchType.NFSE_NACIONAL]: "NFS-e Nacional (CGSN 189/2026) — emissão e gestão de notas de serviço no padrão nacional, obrigatório set/2026.",
@@ -1191,6 +1193,16 @@ const App: React.FC = () => {
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CoberturaAdnPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.DAS_COBERTURA_PGDAS && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <CoberturaPgdasPanel
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>

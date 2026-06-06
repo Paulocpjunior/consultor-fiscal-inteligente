@@ -18,6 +18,7 @@ export enum SearchType {
   EFD_REINF = 'EFD-Reinf × DCTFWeb',
   NFSE_NACIONAL = 'NFS-e Nacional',
   NFSE_NAC_COBERTURA = 'Cobertura ADN (NFS-e Nac.)',
+  DAS_COBERTURA_PGDAS = 'Cobertura PGDAS-D',
   DASHBOARD_CEO = 'Dashboard CEO',
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
