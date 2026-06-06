@@ -142,4 +142,51 @@ describe('applyDocumentosFilters — outros filtros', () => {
         // chave-fp.
         expect(filtra({ direcao: 'saida' })).toEqual(['carlezzo', 'chave-fp'].sort());
     });
+
+    describe('filtro empresaCnpj — match exato (dropdown explícito)', () => {
+        // Dos 7 fixtures, 4 têm empresaCnpj=S&P (braslimpo/amil/pluxee/carlezzo).
+        // Outros 3 (hs/spa/chave-fp) têm CNPJs diferentes.
+        const SP_DOCS = ['amil', 'braslimpo', 'carlezzo', 'pluxee'].sort();
+
+        it('CNPJ S&P pega TODOS os 4 docs com empresaCnpj=S&P', () => {
+            expect(filtra({ empresaCnpj: SP })).toEqual(SP_DOCS);
+        });
+
+        it('exclui empresas diferentes (HS PROJETOS, SPA, XYZ)', () => {
+            const r = filtra({ empresaCnpj: SP });
+            expect(r).not.toContain('hs');
+            expect(r).not.toContain('spa');
+            expect(r).not.toContain('chave-fp');
+        });
+
+        it('CNPJ inexistente → array vazio', () => {
+            expect(filtra({ empresaCnpj: '00000000000000' })).toHaveLength(0);
+        });
+
+        it('CNPJ formatado (com . / -) bate igual ao raw', () => {
+            const formatado = '44.388.152/0001-89';
+            expect(filtra({ empresaCnpj: formatado })).toEqual(SP_DOCS);
+        });
+
+        it('outra empresa (HS PROJETOS) só traz seus docs', () => {
+            expect(filtra({ empresaCnpj: '22222222000122' })).toEqual(['hs']);
+        });
+
+        it('empresaCnpj + status combinam (AND)', () => {
+            // S&P + apenas cancelado → só 'amil' no fixture tem cancelado.
+            expect(filtra({ empresaCnpj: SP, status: 'cancelado' as any })).toEqual(['amil']);
+        });
+
+        it('empresaCnpj + busca textual combinam (AND)', () => {
+            // Restringe a S&P + busca pelo emitente da PLUXEE.
+            const r = filtra({ empresaCnpj: SP, busca: 'pluxee' });
+            expect(r).toContain('pluxee');
+            expect(r).not.toContain('braslimpo');
+        });
+
+        it('vazio/undefined não filtra', () => {
+            expect(filtra({ empresaCnpj: undefined }).length).toBe(docs.length);
+            expect(filtra({ empresaCnpj: '' }).length).toBe(docs.length);
+        });
+    });
 });

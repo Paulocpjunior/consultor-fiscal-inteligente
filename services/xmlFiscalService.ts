@@ -442,6 +442,7 @@ export async function registrarErro(input: ErroInput): Promise<void> {
 
 export interface ListDocumentosFilters {
     empresaId?: string;
+    empresaCnpj?: string;        // match exato no campo empresaCnpj do doc
     direcao?: 'entrada' | 'saida';
     competencia?: string;        // YYYY-MM
     competenciaInicio?: string;
