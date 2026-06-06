@@ -103,6 +103,35 @@ describe('applyDocumentosFilters — busca textual por token (PR #45)', () => {
     it('prefixo ≥4 chars: "BRASLI" acha BRASLIMPO', () => {
         expect(filtra({ busca: 'BRASLI' })).toEqual(['braslimpo']);
     });
+
+    it('SUBSTRING ≥4 chars: "LIMPO" (meio do token) acha BRASLIMPO', () => {
+        // Antes do PR: nameTokens.some(t => t.startsWith("limpo")) → false (não é prefixo).
+        // Agora: nameTokens.some(t => t.includes("limpo")) → true (substring).
+        expect(filtra({ busca: 'LIMPO' })).toEqual(['braslimpo']);
+    });
+
+    it('SUBSTRING ≥4 chars: "asse" (meio) acha S&P ASSESSORIA', () => {
+        // 'assessoria' contém 'asse' — pra direção entrada, traz S&P (3 docs).
+        const r = filtra({ busca: 'asse', direcao: 'entrada' });
+        // amil/pluxee tem empresaNome=S&P ASSESSORIA CONTABIL; carlezzo é saida.
+        expect(r).toContain('amil');
+        expect(r).toContain('pluxee');
+    });
+
+    it('SUBSTRING NÃO atravessa tokens (palavras separadas)', () => {
+        // "soriaco" abrange final de "assessoria" + início de "contabil" — não deve achar,
+        // porque tokens são separados por espaço e match é dentro de UM token.
+        expect(filtra({ busca: 'soriaco' })).toEqual([]);
+    });
+
+    it('<4 chars continua exato: "spa" NÃO acha BRASLIMPO/S&P', () => {
+        // Garante que a regra anti-falso-positivo (PR #45) ainda funciona.
+        // "spa" em <4 só bate token literal "spa" → bate o doc id='spa' (S.P.A. SAUDE).
+        const r = filtra({ busca: 'spa' });
+        expect(r).not.toContain('braslimpo');
+        expect(r).not.toContain('amil');
+        expect(r).toContain('spa'); // "S.P.A. SAUDE" tem token "spa"
+    });
 });
 
 describe('applyDocumentosFilters — fallback CNPJ→nome (PR #46)', () => {

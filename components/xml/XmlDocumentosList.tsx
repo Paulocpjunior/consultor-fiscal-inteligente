@@ -4,6 +4,7 @@ import type { User, DocumentoFiscal } from '../../types';
 import { listDocumentos, applyDocumentosFilters, type ListDocumentosFilters } from '../../services/xmlFiscalService';
 import NFeStatusCell from './NFeStatusCell';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
+import EmpresaFilterCombobox from './EmpresaFilterCombobox';
 
 interface Props {
     currentUser: User;
@@ -47,23 +48,61 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         return Array.from(set).sort().reverse();
     }, [docs]);
 
-    // Lista de empresas distintas (CNPJ → nome) pro dropdown. Olha `allDocs`
+    // Lista de empresas distintas (CNPJ → nome) pro combobox. Olha `allDocs`
     // (nao `docs` filtrado) pra dropdown nao "encolher" quando filtra empresa.
+    //
+    // Estratégia de nome (em ordem de preferência):
+    //  1. empresaNome (campo já populado)
+    //  2. Nome do emitente — quando a empresa É o emitente (direcao=saida)
+    //  3. Nome do destinatário/tomador — quando a empresa É o dest (direcao=entrada)
+    // Sem fallback, ficaria só o CNPJ aparecendo duas vezes (que é o que o
+    // Paulo viu na tela: "05049535000170 — 05.049.535/0001-70").
     const empresasDropdown = useMemo(() => {
         const map = new Map<string, string>();
+        const normCnpj = (s: any) => String(s ?? '').replace(/\D/g, '');
+
         for (const d of allDocs) {
-            const cnpj = (d.empresaCnpj || '').replace(/\D/g, '');
+            const cnpj = normCnpj(d.empresaCnpj);
             if (cnpj.length !== 14) continue;
-            // Prioriza primeiro nome encontrado; se ja tem, mantem
-            if (!map.has(cnpj)) map.set(cnpj, d.empresaNome || cnpj);
-            else if (!map.get(cnpj)?.match(/^\d+$/) === false && d.empresaNome) {
-                // Se mapa tem so CNPJ e doc tem nome, troca
-                map.set(cnpj, d.empresaNome);
+
+            // Se já tem nome bom (≠ CNPJ raw), mantém.
+            const atual = map.get(cnpj);
+            if (atual && atual !== cnpj && !/^\d+$/.test(atual)) continue;
+
+            // Tenta o melhor nome
+            let nome = d.empresaNome || '';
+            if (!nome) {
+                const e = d as any;
+                if (d.direcao === 'saida') {
+                    // Empresa emitiu — usa nome dela do bloco emitente/prestador
+                    nome = e.emitente?.nome || e.prestador?.nome || '';
+                } else if (d.direcao === 'entrada') {
+                    // Empresa recebeu — usa nome do destinatario/tomador
+                    nome = e.destinatario?.nome || e.tomador?.nome || '';
+                }
+                // Se ainda vazio, vê se algum dos blocos tem CNPJ batendo com empresaCnpj
+                if (!nome) {
+                    for (const bloco of [e.emitente, e.prestador, e.destinatario, e.tomador]) {
+                        if (bloco && normCnpj(bloco.cnpj) === cnpj && bloco.nome) {
+                            nome = bloco.nome;
+                            break;
+                        }
+                    }
+                }
             }
+
+            map.set(cnpj, nome || cnpj);
         }
+
         return Array.from(map.entries())
             .map(([cnpj, nome]) => ({ cnpj, nome }))
-            .sort((a, b) => a.nome.localeCompare(b.nome));
+            .sort((a, b) => {
+                // Empresas com nome de verdade primeiro; CNPJs sem nome no fim
+                const aTemNome = !/^\d+$/.test(a.nome);
+                const bTemNome = !/^\d+$/.test(b.nome);
+                if (aTemNome !== bTemNome) return aTemNome ? -1 : 1;
+                return a.nome.localeCompare(b.nome);
+            });
     }, [allDocs]);
 
     // Slug dos filtros ativos pra usar no nome do arquivo exportado.
@@ -371,24 +410,17 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3">
                 <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
                     <input
-                        placeholder="Buscar (nº, chave, emit/dest)"
+                        placeholder="Buscar (nº, chave, contraparte)"
                         className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"
                         value={busca}
                         onChange={(e) => setBusca(e.target.value)}
+                        title='Busca em número/chave/nome da contraparte (emit/dest/prestador/tomador). Pra filtrar por EMPRESA dona, use o campo ao lado.'
                     />
-                    <select
-                        className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"
-                        value={filters.empresaCnpj || ''}
-                        onChange={(e) => setFilters(f => ({ ...f, empresaCnpj: e.target.value || undefined }))}
-                        title="Filtra por empresa dona do XML (campo empresaCnpj)"
-                    >
-                        <option value="">Empresa ({empresasDropdown.length})</option>
-                        {empresasDropdown.map(e => (
-                            <option key={e.cnpj} value={e.cnpj}>
-                                {e.nome} — {formatCnpjCpf(e.cnpj)}
-                            </option>
-                        ))}
-                    </select>
+                    <EmpresaFilterCombobox
+                        opcoes={empresasDropdown}
+                        valor={filters.empresaCnpj}
+                        onChange={(cnpj) => setFilters(f => ({ ...f, empresaCnpj: cnpj }))}
+                    />
                     <select
                         className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"
                         value={filters.tipoDoc || ''}
