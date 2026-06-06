@@ -145,8 +145,10 @@ router.get('/nfes-capturadas', requireAuth, async (req, res) => {
 
         const nfes = [];
         let descartadas = 0;
+        let perdedoresMerge = 0;
         for (const d of snap) {
             const doc = d.data();
+            if (doc._merged_into) { perdedoresMerge++; continue; }
             const chave = String(doc.chave || doc.chaveAcesso || '').replace(/\D/g, '');
             if (chave.length !== 44) { descartadas++; continue; }
             nfes.push({
@@ -159,7 +161,7 @@ router.get('/nfes-capturadas', requireAuth, async (req, res) => {
                 dataEmissao: doc.dataEmissao || doc.dhEmi || null,
             });
         }
-        return res.json({ empresaId, competencia, total: nfes.length, descartadas, nfes });
+        return res.json({ empresaId, competencia, total: nfes.length, descartadas, perdedoresMerge, nfes });
     } catch (e) {
         return tratarErro(e, res);
     }

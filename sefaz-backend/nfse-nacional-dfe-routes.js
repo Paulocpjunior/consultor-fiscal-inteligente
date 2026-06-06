@@ -238,6 +238,7 @@ router.get('/resumo', requireAuth, async (_req, res) => {
         let nfse = 0, eventos = 0, valorTotal = 0;
         snap.docs.forEach((d) => {
             const x = d.data();
+            if (x._merged_into) return; // ignora docs marcados como duplicata
             if (x.tipo === 'nfseNacional') { nfse++; valorTotal += x.valorServico || 0; }
             else eventos++;
         });

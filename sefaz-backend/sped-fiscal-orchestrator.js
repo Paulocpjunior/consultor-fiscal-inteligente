@@ -98,6 +98,8 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
             .map(d => ({ id: d.id, ...d.data() }))
             .filter(n => n.competencia >= periodoInicio && n.competencia <= periodoFim);
     }
+    // Ignora docs marcados como duplicata (vencedor do merge fica na lista).
+    notas = notas.filter(n => !n._merged_into);
 
     // ─── 4. Extrai participantes unicos (entrada + saida) ───
     const participantesMap = new Map();
