@@ -106,6 +106,33 @@ export async function cruzarObrigacoes(a: ParseResult, b: ParseResult): Promise<
     return mod.cruzarSpedFiscalContrib(a, b);
 }
 
+export interface NfeCapturada {
+    chave: string; numero: string; status: string | null;
+    valorTotal: number; direcao: string | null; modelo?: string | null; dataEmissao?: string | null;
+}
+export interface AchadoCapturados {
+    tipo: 'NAO_ESCRITURADA' | 'SEM_CAPTURA' | 'DIVERGENCIA_VALOR';
+    severidade: 'erro' | 'aviso';
+    chave: string; numDoc: string;
+    vlSped: number; vlCapturado: number; diferenca: number;
+    direcao: string | null; mensagem: string;
+}
+export interface CruzamentoCapturados {
+    aplicavel: boolean; motivo?: string;
+    resumo: {
+        totalSped: number; totalCapturadas: number; emAmbos: number;
+        naoEscrituradas: number; semCaptura: number; divergenciasValor: number;
+        descartadasCapturadas: number; ignoradosSped: number;
+    };
+    achados: AchadoCapturados[];
+}
+
+/** Cruza SPED Fiscal × NF-e capturadas no sistema. */
+export async function cruzarComCapturadas(parsed: ParseResult, capturadas: NfeCapturada[]): Promise<CruzamentoCapturados> {
+    const mod = await import('../sefaz-backend/sped-cruzamento-xml-capturados.js' as any);
+    return mod.cruzarSpedComCapturadas(parsed, capturadas);
+}
+
 /**
  * Exporta o SPED parseado pra XLSX editavel.
  * - 1 aba "Resumo" com contagem por tipo.

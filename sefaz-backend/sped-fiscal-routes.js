@@ -6,9 +6,18 @@
 // ============================================================================
 
 import express from 'express';
+import admin from 'firebase-admin';
 import { coletarDadosEmpresa, montarBlocos } from './sped-fiscal-orchestrator.js';
 import { requireAdmin } from './require-admin.js';
 import { validarSpedFiscal } from './sped-fiscal-validador.js';
+import { fetchAllDocs } from './firestore-paginate.js';
+
+function fa() {
+    if (!admin.apps.length) {
+        admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    }
+    return admin;
+}
 
 const router = express.Router();
 
@@ -110,6 +119,44 @@ router.get('/validar', requireAdmin, express.json({ limit: '10mb' }), (req, res)
         }
         const resultado = validarSpedFiscal(txt);
         return res.json(resultado);
+    } catch (e) {
+        return tratarErro(e, res);
+    }
+});
+
+// GET /nfes-capturadas?empresaId=X&competencia=YYYY-MM
+// Lista NF-e capturadas da empresa na competencia — base do cruzamento
+// SPED Fiscal × XML capturados. Devolve so o essencial pro front (chave,
+// numero, status, valor, direcao), nunca o XML inteiro.
+router.get('/nfes-capturadas', requireAdmin, async (req, res) => {
+    try {
+        const { empresaId, competencia } = req.query;
+        if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
+        if (!competencia) return res.status(400).json({ error: 'competencia obrigatoria (YYYY-MM)' });
+
+        const db = fa().firestore();
+        const q = db.collection('documentos_fiscais')
+            .where('empresaId', '==', empresaId)
+            .where('competencia', '==', competencia);
+        const snap = await fetchAllDocs(q, { label: 'sped-fiscal/nfes-capturadas' });
+
+        const nfes = [];
+        let descartadas = 0;
+        for (const d of snap) {
+            const doc = d.data();
+            const chave = String(doc.chave || doc.chaveAcesso || '').replace(/\D/g, '');
+            if (chave.length !== 44) { descartadas++; continue; }
+            nfes.push({
+                chave,
+                numero: doc.numero || doc.nNF || '',
+                status: doc.status || null,
+                valorTotal: Number(doc.valorTotal ?? doc.vNF ?? 0) || 0,
+                direcao: doc.direcao || null,
+                modelo: doc.modelo || doc.mod || null,
+                dataEmissao: doc.dataEmissao || doc.dhEmi || null,
+            });
+        }
+        return res.json({ empresaId, competencia, total: nfes.length, descartadas, nfes });
     } catch (e) {
         return tratarErro(e, res);
     }
