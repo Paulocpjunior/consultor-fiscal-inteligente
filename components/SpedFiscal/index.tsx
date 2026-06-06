@@ -21,6 +21,7 @@ const AnaliseConferencia = lazy(() => import('./AnaliseConferencia'));
 const EditarViaExcel = lazy(() => import('./EditarViaExcel'));
 const CruzarObrigacoes = lazy(() => import('./CruzarObrigacoes'));
 const CruzarComCapturadas = lazy(() => import('./CruzarComCapturadas'));
+const ConciliarFaturamento = lazy(() => import('./ConciliarFaturamento'));
 
 interface Props {
     currentUser: User | null;
@@ -50,7 +51,7 @@ function getTrimestreFromCompetencia(comp: string): { inicio: string; fim: strin
     return { inicio: fmt(mesInicio), fim: fmt(mesFim) };
 }
 
-type SpedTab = 'gerar' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml';
+type SpedTab = 'gerar' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
 
 /** Renderiza bloco de mensagem (reutilizado por ambas abas) */
 function MensagemBlock({ mensagem }: { mensagem: MensagemRetorno }) {
@@ -463,6 +464,17 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         >
                             SPED × Capturadas
                         </button>
+                        <button
+                            onClick={() => setSpedTab('conciliar')}
+                            className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
+                            style={{
+                                background: spedTab === 'conciliar' ? 'var(--accent)' : 'var(--bg-card)',
+                                color: spedTab === 'conciliar' ? '#fff' : 'var(--text-muted)',
+                                border: `1px solid ${spedTab === 'conciliar' ? 'var(--accent)' : 'var(--border-default)'}`,
+                            }}
+                        >
+                            SPED × Declarado
+                        </button>
                     </div>
                     <span
                         className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full"
@@ -496,6 +508,12 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {spedTab === 'cruzar-xml' && (
                 <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
                     <CruzarComCapturadas currentUser={currentUser} />
+                </Suspense>
+            )}
+
+            {spedTab === 'conciliar' && (
+                <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
+                    <ConciliarFaturamento currentUser={currentUser} />
                 </Suspense>
             )}
 

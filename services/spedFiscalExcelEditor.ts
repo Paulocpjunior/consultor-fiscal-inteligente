@@ -140,6 +140,25 @@ export async function cruzarComCapturadas(parsed: ParseResult, capturadas: NfeCa
     return mod.cruzarSpedComCapturadas(parsed, capturadas);
 }
 
+export interface ConciliacaoFaturamento {
+    aplicavel: boolean; motivo?: string;
+    totalSpedSaida: number;
+    faturamentoDeclarado: number;
+    diferenca: number;
+    diferencaPct: number;
+    severidade: 'ok' | 'aviso' | 'erro';
+    sentido: 'sped-maior' | 'declarado-maior' | 'ok';
+    resumoSped: { qtdSaida: number; qtdEntrada: number; totalEntrada: number; ignorados: number };
+}
+
+/** Concilia faturamento de saída do SPED contra valor declarado pelo contador. */
+export async function conciliarFaturamento(
+    parsed: ParseResult, faturamentoDeclarado: number,
+): Promise<ConciliacaoFaturamento> {
+    const mod = await import('../sefaz-backend/sped-conciliacao-faturamento.js' as any);
+    return mod.conciliarFaturamento(parsed, faturamentoDeclarado);
+}
+
 /**
  * Exporta o SPED parseado pra XLSX editavel.
  * - 1 aba "Resumo" com contagem por tipo.
