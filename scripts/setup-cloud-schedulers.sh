@@ -148,6 +148,17 @@ upsert_job \
     "/api/admin/sefaz/cert-alerta-cron" \
     "Alerta por email quando certificado (escritorio ou empresa) esta vencendo"
 
+# Resumo diario das capturas NFe via procuracao e-CAC.
+# Roda 9h BRT (1h depois do cron noturno de NFe terminar) e dispara email
+# com KPIs + tabela por empresa + acoes sugeridas pra erros (cStat 280/593/etc).
+# Util pra detectar quais das 74 empresas com procuracao=true REALMENTE
+# tem procuracao ativa no e-CAC (cStat=280 = procuracao nao cadastrada).
+upsert_job \
+    "captura-resumo-diario" \
+    "0 9 * * 1-5" \
+    "/api/admin/sefaz/captura-resumo-cron" \
+    "Resumo diario por email das capturas NFe via procuracao e-CAC"
+
 # ─── Verifica ──────────────────────────────────────────────────────────────
 echo ""
 echo "═══ Jobs ativos em $REGION ═══"

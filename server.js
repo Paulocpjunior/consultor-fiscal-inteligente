@@ -9,6 +9,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import sefazCertRouter from './sefaz-backend/cert-manager.js';
 import sefazCertAlertaCronRouter from './sefaz-backend/cert-alerta-cron.js';
+import sefazCapturaResumoCronRouter from './sefaz-backend/captura-resumo-cron.js';
 import sefazSyncRouter from './sefaz-backend/sync-routes.js';
 import { fetchAllDocs } from './sefaz-backend/firestore-paginate.js';
 import empresaStatusRouter from './sefaz-backend/empresa-status-routes.js';
@@ -144,6 +145,7 @@ app.use('/api/admin/sefaz/sync-one', sefazLimiter);
 // ── Routers (montados DEPOIS do middleware de segurança/limite) ─────────
 app.use('/api/admin/sefaz', sefazCertRouter);
 app.use('/api/admin/sefaz', sefazCertAlertaCronRouter);
+app.use('/api/admin/sefaz', sefazCapturaResumoCronRouter);
 app.use('/api/admin/sefaz', sefazSyncRouter);
 app.use('/api/admin/sefaz', empresaStatusRouter);
 app.use('/api/admin/vencimentos', vencimentosRouter);
