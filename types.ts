@@ -20,6 +20,7 @@ export enum SearchType {
   NFSE_NAC_COBERTURA = 'Cobertura ADN (NFS-e Nac.)',
   DAS_COBERTURA_PGDAS = 'Cobertura PGDAS-D',
   DCTFWEB_COBERTURA = 'Cobertura DCTFWeb',
+  CAIXA_POSTAL_RADAR = 'Radar fiscal (e-CAC)',
   DASHBOARD_CEO = 'Dashboard CEO',
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',

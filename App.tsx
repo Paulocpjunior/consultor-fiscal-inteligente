@@ -52,6 +52,7 @@ const ConferirReinfDctfweb = lazy(() => import('./components/EfdReinf/ConferirRe
 const CoberturaAdnPanel = lazy(() => import('./components/NfseNacional/CoberturaAdnPanel'));
 const CoberturaPgdasPanel = lazy(() => import('./components/Das/CoberturaPgdasPanel'));
 const CoberturaDctfwebPanel = lazy(() => import('./components/DCTFWeb/CoberturaDctfwebPanel'));
+const RadarCriticasPanel = lazy(() => import('./components/CaixaPostal/RadarCriticasPanel'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
 const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
@@ -82,6 +83,7 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.NFSE_NAC_COBERTURA]: "Cobertura ADN (NFS-e Nac.) — diagnóstico e habilitação em massa da captura nacional de NFS-e por empresa (somente administradores).",
     [SearchType.DAS_COBERTURA_PGDAS]: "Cobertura PGDAS-D — heatmap por empresa × mês mostrando quais Simples NÃO tiveram DAS emitido (gera autuação automática).",
     [SearchType.DCTFWEB_COBERTURA]: "Cobertura DCTFWeb — heatmap por empresa Lucro × mês mostrando quais NÃO transmitiram a DCTFWeb (gera autuação automática).",
+    [SearchType.CAIXA_POSTAL_RADAR]: "Radar fiscal (e-CAC) — mensagens não lidas classificadas por risco real (intimações, malha, exclusão Simples, autos de infração) ordenadas por urgência.",
     [SearchType.CARTEIRA]: "Carteira de Clientes — atribuição de empresas a colaboradores responsáveis (somente administradores).",
     [SearchType.AGENTES_A3]: "Agentes A3 — gerenciar API keys do agente local cfi-a3 e marcar empresas como A3 (somente administradores).",
     [SearchType.NFSE_NACIONAL]: "NFS-e Nacional (CGSN 189/2026) — emissão e gestão de notas de serviço no padrão nacional, obrigatório set/2026.",
@@ -1215,6 +1217,16 @@ const App: React.FC = () => {
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CoberturaDctfwebPanel
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.CAIXA_POSTAL_RADAR && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <RadarCriticasPanel
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>
