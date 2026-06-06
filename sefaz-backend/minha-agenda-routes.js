@@ -17,6 +17,7 @@ import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { getCnpjsDaCarteira, getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { ultimasCompetencias as ultimasCompetenciasHelper } from './competencias-helper.js';
+import { calcularScoreAgenda } from './minha-agenda-score.js';
 
 const router = express.Router();
 
@@ -147,51 +148,50 @@ router.get('/', requireAuth, async (req, res) => {
             }
         }
 
-        // 6. Calcula risco por empresa
+        // 6. Calcula risco por empresa (logica pura em minha-agenda-score.js)
         const resultado = lista.map((emp) => {
-            const pendencias = [];
-            let score = 0;
-
-            // PGDAS gaps (Simples)
+            // PGDAS gaps (so Simples) — mantem detalhes da competencia pra UI
             let pgdas = null;
+            let pgdasGaps = 0;
             if (emp.regime === 'simples') {
                 const transmitidas = pgdasPorEmp.get(emp.id) || new Set();
-                const gaps = competencias.filter((c) => !transmitidas.has(c));
-                pgdas = { gaps: gaps.length, gapsCompetencias: gaps };
-                if (gaps.length > 0) {
-                    score += Math.min(40, gaps.length * 15); // 1 gap = 15, cap 40
-                    pendencias.push(`PGDAS-D pendente: ${gaps.join(', ')}`);
-                }
+                const gapsArr = competencias.filter((c) => !transmitidas.has(c));
+                pgdas = { gaps: gapsArr.length, gapsCompetencias: gapsArr };
+                pgdasGaps = gapsArr.length;
             }
-            // DCTFWeb gaps (Lucro)
+            // DCTFWeb gaps (so Lucro)
             let dctfweb = null;
+            let dctfwebGaps = 0;
             if (emp.regime === 'lucro') {
                 const transmitidas = dctfwebPorEmp.get(emp.id) || new Set();
-                const gaps = competencias.filter((c) => !transmitidas.has(c));
-                dctfweb = { gaps: gaps.length, gapsCompetencias: gaps };
-                if (gaps.length > 0) {
-                    score += Math.min(40, gaps.length * 15);
-                    pendencias.push(`DCTFWeb pendente: ${gaps.join(', ')}`);
-                }
+                const gapsArr = competencias.filter((c) => !transmitidas.has(c));
+                dctfweb = { gaps: gapsArr.length, gapsCompetencias: gapsArr };
+                dctfwebGaps = gapsArr.length;
             }
             // Mensagens
             const msg = msgPorCnpj.get(emp.cnpj) || { criticas: 0, altas: 0, medias: 0, baixas: 0, total: 0 };
-            if (msg.criticas > 0) {
-                score += Math.min(50, msg.criticas * 25);
-                pendencias.push(`${msg.criticas} mensagem(ns) CRÍTICA(s) não lida(s)`);
-            }
-            if (msg.altas > 0) {
-                score += Math.min(20, msg.altas * 10);
-                pendencias.push(`${msg.altas} mensagem(ns) ALTA(s) não lida(s)`);
-            }
-            if (msg.medias > 0) {
-                score += Math.min(10, msg.medias * 3);
-            }
-            score = Math.min(100, score);
+
+            const { score, pendencias } = calcularScoreAgenda({
+                regime: emp.regime,
+                pgdasGaps, dctfwebGaps,
+                msgCriticas: msg.criticas, msgAltas: msg.altas, msgMedias: msg.medias,
+            });
+
+            // Enriquecimento da pendencia "PGDAS/DCTFWeb": usa o array com as
+            // competencias especificas (helper so reporta a quantidade).
+            const pendenciasDetalhadas = pendencias.map((p) => {
+                if (p.startsWith('PGDAS-D pendente') && pgdas?.gapsCompetencias.length) {
+                    return `PGDAS-D pendente: ${pgdas.gapsCompetencias.join(', ')}`;
+                }
+                if (p.startsWith('DCTFWeb pendente') && dctfweb?.gapsCompetencias.length) {
+                    return `DCTFWeb pendente: ${dctfweb.gapsCompetencias.join(', ')}`;
+                }
+                return p;
+            });
 
             return {
                 id: emp.id, cnpj: emp.cnpj, nome: emp.nome, regime: emp.regime,
-                score, pendencias,
+                score, pendencias: pendenciasDetalhadas,
                 pgdas, dctfweb, mensagens: msg,
             };
         });
