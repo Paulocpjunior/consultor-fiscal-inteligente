@@ -28,6 +28,7 @@ export enum SearchType {
   SIMPLES_SUBLIMITE = 'Sublimite Simples',
   DIAGNOSTICO_CADASTROS = 'Cadastros Incompletos',
   CERT_MONITOR = 'Certificados Digitais',
+  DIAGNOSTICO_CONFIG = 'Configurações Operacionais',
   DASHBOARD_CEO = 'Dashboard CEO',
   ANOMALIAS = 'Detector de Anomalias',
   SIMULADOR_IBS_CBS = 'Simulador IBS/CBS',
