@@ -22,7 +22,7 @@ import { SearchType, type SearchResult, type ComparisonResult, type FavoriteItem
 import { fetchFiscalData, fetchComparison, fetchSimilarServices } from './services/geminiService';
 import * as simplesService from './services/simplesNacionalService';
 import * as authService from './services/authService';
-import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon, ScaleIcon, ShieldIcon } from './components/Icons';
+import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon, ScaleIcon, ShieldIcon, BriefcaseIcon, UserGroupIcon, RocketIcon, GlobeIcon, NewspaperIcon, ChatBubbleIcon } from './components/Icons';
 // (FiscalObligationsDashboard, Tarefas, CalendarioFiscal agora dentro de ObrigacoesETarefas)
 import { runInitialSync } from './services/cloudSyncService';
 import { requestNotificationPermission } from './services/notificacoesService';
@@ -112,6 +112,71 @@ const searchDescriptions: Record<SearchType, string> = {
     [SearchType.RECUPERACAO_TRIBUTARIA]: "Recuperação Tributária — identifica impostos pagos a maior e oportunidades de restituição/compensação.",
     [SearchType.NFP_PRO_CLOUD]: "Consulta de situação fiscal: débitos, certidões, obrigações, parcelamentos e plano de ação. Acesso restrito a administradores.",
 };
+
+// ── Menu agrupado por gênero ────────────────────────────────────────────────
+// Cada card tem ícone próprio + cor do grupo, e os grupos têm título. Resolve
+// o "layout que foi se perdendo": antes era um grid plano de 38 itens sem
+// símbolos. As sub-abas consolidadas (ex: Cobertura, Prazos) NÃO aparecem
+// aqui — vivem dentro dos hubs. `label` sobrescreve o nome do enum quando o
+// card é um hub-mãe (ex: SAUDE_GERAL → "Diagnóstico & Saúde").
+interface MenuCard {
+    type: SearchType;
+    label?: string;
+    Icon: React.FC<{ className?: string }>;
+    adminOnly?: boolean;
+}
+interface MenuGrupo { titulo: string; cor: string; cards: MenuCard[]; }
+
+const MENU_GRUPOS: MenuGrupo[] = [
+    {
+        titulo: 'Consultas', cor: '#2563eb', cards: [
+            { type: SearchType.CFOP, Icon: TagIcon },
+            { type: SearchType.NCM, Icon: DocumentTextIcon },
+            { type: SearchType.SERVICO, Icon: BuildingIcon },
+            { type: SearchType.REFORMA_TRIBUTARIA, Icon: NewspaperIcon },
+            { type: SearchType.SIMULADOR_IBS_CBS, Icon: CalculatorIcon },
+        ],
+    },
+    {
+        titulo: 'Regimes & Apuração', cor: '#7c3aed', cards: [
+            { type: SearchType.SIMPLES_NACIONAL, Icon: CalculatorIcon },
+            { type: SearchType.LUCRO_PRESUMIDO_REAL, Icon: BuildingIcon },
+            { type: SearchType.ANALISADOR_REGIME, Icon: ScaleIcon },
+        ],
+    },
+    {
+        titulo: 'Documentos Fiscais', cor: '#16a34a', cards: [
+            { type: SearchType.IMPORTA_XML, label: 'Central de Documentos Fiscais', Icon: DownloadIcon },
+            { type: SearchType.SPED_FISCAL, label: 'SPED Fiscal', Icon: DocumentTextIcon },
+            { type: SearchType.ANALISE_RELATORIO_SAGE, label: 'Análise SAGE', Icon: DocumentTextIcon },
+            { type: SearchType.ANALISE_CREDITOS, Icon: CalculatorIcon },
+            { type: SearchType.EMISSAO_TRIBUTOS, Icon: RocketIcon },
+        ],
+    },
+    {
+        titulo: 'Vencimentos & Guias', cor: '#d97706', cards: [
+            { type: SearchType.OBRIGACOES_FISCAIS, label: 'Vencimentos & Obrigações', Icon: CalendarIcon },
+            { type: SearchType.DAS_SIMPLES, Icon: CalculatorIcon },
+            { type: SearchType.DCTFWEB, Icon: DocumentTextIcon },
+            { type: SearchType.NFSE_NACIONAL, Icon: GlobeIcon },
+            { type: SearchType.CAIXA_POSTAL, Icon: ChatBubbleIcon },
+        ],
+    },
+    {
+        titulo: 'Fiscalização & Recuperação', cor: '#0891b2', cards: [
+            { type: SearchType.SAUDE_GERAL, label: 'Diagnóstico & Saúde', Icon: ShieldIcon },
+            { type: SearchType.RECUPERACAO_TRIBUTARIA, Icon: ScaleIcon },
+            { type: SearchType.NFP_PRO_CLOUD, label: 'Consulta Situação Fiscal', Icon: SearchIcon, adminOnly: true },
+        ],
+    },
+    {
+        titulo: 'Gestão', cor: '#475569', cards: [
+            { type: SearchType.DASHBOARD_CEO, Icon: RocketIcon },
+            { type: SearchType.CARTEIRA, Icon: UserGroupIcon },
+            { type: SearchType.AGENTES_A3, Icon: BriefcaseIcon },
+        ],
+    },
+];
 
 const App: React.FC = () => {
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -665,6 +730,27 @@ const App: React.FC = () => {
 
     const selectedEmpresa = simplesEmpresas.find(e => e.id === selectedSimplesEmpresaId);
 
+    // Seleção de card do menu — reseta estado de busca e trata casos especiais
+    // (Simples carrega dados; Lucro limpa empresa). Único handler pra todos os
+    // cards (antes era repetido inline em cada botão).
+    const selecionarTipo = (type: SearchType) => {
+        setSearchType(type);
+        setResult(null);
+        setQuery1('');
+        setQuery2('');
+        setError(null);
+        setValidationErrors({});
+        setUserNotes('');
+        if (type === SearchType.SIMPLES_NACIONAL) {
+            setSimplesView('dashboard');
+            setSimplesEmpresaToEdit(null);
+            loadSimplesData(currentUser);
+        }
+        if (type === SearchType.LUCRO_PRESUMIDO_REAL) {
+            setSelectedLucroEmpresaId(null);
+        }
+    };
+
     return (
         <div className="min-h-screen transition-colors bg-slate-50 dark:bg-[var(--bg-page)]" style={{fontFamily:"'DM Sans',sans-serif"}}>
             <div className="container mx-auto px-4 max-w-screen-2xl">
@@ -702,176 +788,44 @@ const App: React.FC = () => {
                                 />
                             </Suspense>
                         </ErrorBoundary>
-                        {/* Search Type Selection Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
-                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL && t !== SearchType.NFP_PRO_CLOUD
-                                // Sub-abas do Diagnóstico & Saúde: somem do grid raiz, viram
-                                // sub-abas dentro do card SAUDE_GERAL (DiagnosticoHub).
-                                && t !== SearchType.DIAGNOSTICO_DOCS && t !== SearchType.DIAGNOSTICO_CADASTROS
-                                && t !== SearchType.CERT_MONITOR && t !== SearchType.DIAGNOSTICO_CONFIG
-                                && t !== SearchType.ANOMALIAS
-                                // Sub-abas de Vencimentos & Obrigações: viram sub-abas
-                                // dentro do card OBRIGACOES_FISCAIS (VencimentosHub).
-                                && t !== SearchType.MINHA_AGENDA && t !== SearchType.VENCIMENTOS_SEMANA
-                                // Sub-abas de DCTFWeb: viram sub-abas dentro do card
-                                // DCTFWEB (DctfwebHub).
-                                && t !== SearchType.EFD_REINF && t !== SearchType.DCTFWEB_COBERTURA
-                                // DAS (card DAS_SIMPLES): cobertura PGDAS-D + sublimite.
-                                && t !== SearchType.DAS_COBERTURA_PGDAS && t !== SearchType.SIMPLES_SUBLIMITE
-                                // NFS-e Nacional (card NFSE_NACIONAL): cobertura ADN.
-                                && t !== SearchType.NFSE_NAC_COBERTURA
-                                // Recuperação (card RECUPERACAO_TRIBUTARIA): prazos de prescrição.
-                                && t !== SearchType.RECUPERACAO_PRAZOS
-                                // Caixa Postal (card CAIXA_POSTAL): radar e-CAC.
-                                && t !== SearchType.CAIXA_POSTAL_RADAR
-                            ).map((type) => (
-                                <button
-                                    key={type}
-                                    onClick={() => {
-                                        setSearchType(type);
-                                        setResult(null);
-                                        setQuery1('');
-                                        setQuery2('');
-                                        setError(null);
-                                        setValidationErrors({});
-                                        setUserNotes('');
-                                        if (type === SearchType.SIMPLES_NACIONAL) {
-                                            setSimplesView('dashboard');
-                                            setSimplesEmpresaToEdit(null);
-                                            loadSimplesData(currentUser);
-                                        }
-                                        if (type === SearchType.LUCRO_PRESUMIDO_REAL) {
-                                            setSelectedLucroEmpresaId(null);
-                                        }
-                                    }}
-                                    className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
-                                    style={{
-                                        background: searchType === type ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
-                                        border: searchType === type ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
-                                        color: searchType === type ? 'var(--text-primary)' : 'var(--text-muted)',
-                                        transform: searchType === type ? 'scale(1.05)' : 'scale(1)'
-                                    }}
-                                >
-                                    <div className="mb-2">
-                                        {type === SearchType.CFOP && <TagIcon className="w-5 h-5" />}
-                                        {type === SearchType.NCM && <DocumentTextIcon className="w-5 h-5" />}
-                                        {type === SearchType.SERVICO && <BuildingIcon className="w-5 h-5" />}
-                                        {type === SearchType.REFORMA_TRIBUTARIA && <CalculatorIcon className="w-5 h-5" />}
-                                        {type === SearchType.SIMPLES_NACIONAL && <CalculatorIcon className="w-5 h-5" />}
-                                        {type === SearchType.LUCRO_PRESUMIDO_REAL && <BuildingIcon className="w-5 h-5" />}
-                                        {type === SearchType.OBRIGACOES_FISCAIS && <CalendarIcon className="w-5 h-5" />}
-                                        {type === SearchType.RECUPERACAO_TRIBUTARIA && <ScaleIcon className="w-5 h-5" />}
-                                        {type === SearchType.SAUDE_GERAL && <ShieldIcon className="w-5 h-5" />}
+                        {/* Menu agrupado por gênero — ícone + cor por grupo, seções com título.
+                            Config em MENU_GRUPOS (module-level). Sub-abas consolidadas
+                            não aparecem aqui (vivem dentro dos hubs). */}
+                        <div className="space-y-4 mb-4">
+                            {MENU_GRUPOS.map((grupo) => {
+                                const cards = grupo.cards.filter(c => !c.adminOnly || currentUser.role === 'admin');
+                                if (cards.length === 0) return null;
+                                return (
+                                    <div key={grupo.titulo}>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="inline-block h-4 w-1 rounded" style={{ background: grupo.cor }} />
+                                            <h3 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{grupo.titulo}</h3>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2">
+                                            {cards.map(({ type, label, Icon }) => {
+                                                const ativo = searchType === type;
+                                                return (
+                                                    <button
+                                                        key={type}
+                                                        onClick={() => selecionarTipo(type)}
+                                                        title={searchDescriptions[type] || (label ?? type)}
+                                                        className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl transition-all duration-200"
+                                                        style={{
+                                                            background: ativo ? grupo.cor : 'var(--bg-elevated)',
+                                                            border: `1px solid ${ativo ? grupo.cor : 'var(--border-default)'}`,
+                                                            color: ativo ? '#fff' : 'var(--text-muted)',
+                                                            transform: ativo ? 'scale(1.04)' : 'scale(1)',
+                                                        }}
+                                                    >
+                                                        <span style={{ color: ativo ? '#fff' : grupo.cor }}><Icon className="w-5 h-5" /></span>
+                                                        <span className="text-xs font-bold text-center leading-tight">{label ?? type}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                    <span className="text-xs font-bold text-center leading-tight">
-                                        {/* Cards-mãe que fundem várias abas em sub-abas internas. */}
-                                        {type === SearchType.SAUDE_GERAL ? 'Diagnóstico & Saúde'
-                                            : type === SearchType.OBRIGACOES_FISCAIS ? 'Vencimentos & Obrigações'
-                                            : type}
-                                    </span>
-                                </button>
-                            ))}
-                            {/* Consulta Situação Fiscal — somente admin */}
-                            {currentUser.role === 'admin' && (
-                            <button
-                                onClick={() => {
-                                    setSearchType(SearchType.NFP_PRO_CLOUD);
-                                    setResult(null);
-                                    setQuery1('');
-                                    setQuery2('');
-                                    setError(null);
-                                    setValidationErrors({});
-                                    setUserNotes('');
-                                }}
-                                className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
-                                style={{
-                                    background: searchType === SearchType.NFP_PRO_CLOUD ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
-                                    border: searchType === SearchType.NFP_PRO_CLOUD ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
-                                    color: searchType === SearchType.NFP_PRO_CLOUD ? 'var(--text-primary)' : 'var(--text-muted)',
-                                    transform: searchType === SearchType.NFP_PRO_CLOUD ? 'scale(1.05)' : 'scale(1)'
-                                }}
-                            >
-                                <div className="mb-2 relative">
-                                    <DocumentTextIcon className="w-5 h-5" />
-                                    <svg className="w-3 h-3 absolute -top-1 -right-1" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--warning, #f59e0b)' }}>
-                                        <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clipRule="evenodd" />
-                                    </svg>
-                                </div>
-                                <span className="text-xs font-bold text-center leading-tight">Consulta Situação Fiscal</span>
-                            </button>
-                            )}
-                            {/* Importa XML */}
-                            <button
-                                onClick={() => {
-                                    setSearchType(SearchType.IMPORTA_XML);
-                                    setResult(null);
-                                    setQuery1('');
-                                    setQuery2('');
-                                    setError(null);
-                                    setValidationErrors({});
-                                    setUserNotes('');
-                                }}
-                                className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
-                                style={{
-                                    background: searchType === SearchType.IMPORTA_XML ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
-                                    border: searchType === SearchType.IMPORTA_XML ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
-                                    color: searchType === SearchType.IMPORTA_XML ? 'var(--text-primary)' : 'var(--text-muted)',
-                                    transform: searchType === SearchType.IMPORTA_XML ? 'scale(1.05)' : 'scale(1)'
-                                }}
-                            >
-                                <div className="mb-2">
-                                    <DownloadIcon className="w-5 h-5" />
-                                </div>
-                                <span className="text-xs font-bold text-center leading-tight">Central de Documentos Fiscais</span>
-                            </button>
-                            {/* Análise Relatório SAGE */}
-                            <button
-                                onClick={() => {
-                                    setSearchType(SearchType.ANALISE_RELATORIO_SAGE);
-                                    setResult(null);
-                                    setQuery1('');
-                                    setQuery2('');
-                                    setError(null);
-                                    setValidationErrors({});
-                                    setUserNotes('');
-                                }}
-                                className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
-                                style={{
-                                    background: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
-                                    border: searchType === SearchType.ANALISE_RELATORIO_SAGE ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
-                                    color: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'var(--text-primary)' : 'var(--text-muted)',
-                                    transform: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'scale(1.05)' : 'scale(1)'
-                                }}
-                            >
-                                <div className="mb-2">
-                                    <DocumentTextIcon className="w-5 h-5" />
-                                </div>
-                                <span className="text-xs font-bold text-center leading-tight">Análise SAGE</span>
-                            </button>
-                            {/* SPED Fiscal */}
-                            <button
-                                onClick={() => {
-                                    setSearchType(SearchType.SPED_FISCAL);
-                                    setResult(null);
-                                    setQuery1('');
-                                    setQuery2('');
-                                    setError(null);
-                                    setValidationErrors({});
-                                    setUserNotes('');
-                                }}
-                                className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
-                                style={{
-                                    background: searchType === SearchType.SPED_FISCAL ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
-                                    border: searchType === SearchType.SPED_FISCAL ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
-                                    color: searchType === SearchType.SPED_FISCAL ? 'var(--text-primary)' : 'var(--text-muted)',
-                                    transform: searchType === SearchType.SPED_FISCAL ? 'scale(1.05)' : 'scale(1)'
-                                }}
-                            >
-                                <div className="mb-2">
-                                    <DocumentTextIcon className="w-5 h-5" />
-                                </div>
-                                <span className="text-xs font-bold text-center leading-tight">SPED Fiscal</span>
-                            </button>
+                                );
+                            })}
                         </div>
 
                         {/* Standard Search Views (CFOP, NCM, Serviço, Simples, Lucro, Obrigações) */}
