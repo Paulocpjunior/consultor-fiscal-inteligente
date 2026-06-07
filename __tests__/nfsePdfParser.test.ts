@@ -76,8 +76,38 @@ Código de Tributação Nacional
 Descrição do Serviço
 Servicos prest. de fornecimento de dados e informacoes.
 TRIBUTAÇÃO MUNICIPAL
+Tributação do ISSQN
+Operação Tributável
 Valor do Serviço
 R$ 1.956,03
+Desconto Incondicionado
+-
+BC ISSQN
+R$ 1.956,03
+Alíquota Aplicada
+2,00%
+Retenção do ISSQN
+Não Retido
+ISSQN Apurado
+R$ 39,12
+TRIBUTAÇÃO FEDERAL
+IRRF
+R$ 29,34
+Contribuição Previdenciária - Retida
+-
+Contribuições Sociais - Retidas
+R$ 90,95
+PIS - Débito Apuração Própria
+R$ 32,27
+COFINS - Débito Apuração Própria
+R$ 148,66
+VALOR TOTAL DA NFS-E
+Valor do Serviço
+R$ 1.956,03
+Total das Retenções Federais
+R$ 120,29
+Valor Líquido da NFS-e
+R$ 1.835,74
 `.trim();
 
 // ─── Fixture 2: NFSe Municipal Guarulhos (Ginfes) ──────────────────────────
@@ -181,6 +211,54 @@ describe('parseNfseFromText — extrai CNPJ de 3 padroes diferentes', () => {
 
     it('rejeita PDF que nao eh NFSe', () => {
         expect(() => parseNfseFromText('isto e qualquer outro documento sem palavras-chave')).toThrow();
+    });
+});
+
+describe('parseNfseFromText — DANFSe v1.0 SERASA: extrai TODOS os campos', () => {
+    // Bug reportado: tela "Validar dados extraidos" mostrava CNPJ correto
+    // mas NUMERO/SERIE/DATA/COD_SERVICO/CHAVE/VALORES todos zerados pq
+    // labels do DANFSe v1.0 sao distintos dos do ABRASF e do Ginfes.
+    let r: ReturnType<typeof parseNfseFromText>;
+    beforeAll(() => { r = parseNfseFromText(TXT_DANFSE_SERASA); });
+
+    it('extrai numero (699598)', () => {
+        expect(r.numero).toBe('699598');
+    });
+    it('extrai data emissao (11/05/2026)', () => {
+        expect(r.dataEmissao).toContain('11/05/2026');
+    });
+    it('extrai competencia (10/05/2026)', () => {
+        expect(r.competencia).toBe('10/05/2026');
+    });
+    it('extrai chave de acesso (50 digitos)', () => {
+        expect(r.chaveAcesso).toBe('35489062262173620009306000000069959826059725169509');
+    });
+    it('extrai codigo de servico via "Codigo de Tributacao Nacional" (17.01.01)', () => {
+        expect(r.codigoServico).toBe('17.01.01');
+    });
+    it('extrai valor do servico (1956.03)', () => {
+        expect(r.valorServicos).toBe(1956.03);
+    });
+    it('extrai base de calculo via "BC ISSQN" (1956.03)', () => {
+        expect(r.baseCalculo).toBe(1956.03);
+    });
+    it('extrai aliquota ISS via "Aliquota Aplicada" (2)', () => {
+        expect(r.aliquotaIss).toBe(2);
+    });
+    it('extrai valor ISS via "ISSQN Apurado" (39.12)', () => {
+        expect(r.valorIss).toBe(39.12);
+    });
+    it('extrai valor PIS via "PIS - Debito Apuracao Propria" (32.27)', () => {
+        expect(r.valorPis).toBe(32.27);
+    });
+    it('extrai valor COFINS via "COFINS - Debito Apuracao Propria" (148.66)', () => {
+        expect(r.valorCofins).toBe(148.66);
+    });
+    it('extrai valor IRRF via label sozinho (29.34)', () => {
+        expect(r.valorIrrf).toBe(29.34);
+    });
+    it('extrai valor liquido (1835.74)', () => {
+        expect(r.valorLiquido).toBe(1835.74);
     });
 });
 
