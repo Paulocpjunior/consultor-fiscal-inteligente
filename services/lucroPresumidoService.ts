@@ -3,6 +3,7 @@ import { LucroPresumidoEmpresa, FichaFinanceiraRegistro, User } from '../types';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
+import { validarCnpj } from './validadorDocumento';
 import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, deleteDoc, limit as fbLimit } from 'firebase/firestore';
 
 const STORAGE_KEY_LUCRO_EMPRESAS = 'lucro_presumido_empresas';
@@ -82,6 +83,9 @@ export const saveEmpresa = async (empresa: any, userId: string): Promise<LucroPr
     // Trava de unicidade — SO em cadastro novo (sem id). Preserva re-saves
     // de empresas ja existentes (fluxo atual usa saveEmpresa pra update tambem).
     if (!empresa.id) {
+        if (!validarCnpj(empresa.cnpj || '')) {
+            throw new Error(`CNPJ invalido: "${empresa.cnpj || ''}". Verifique os digitos.`);
+        }
         const check = await verificarCnpjDuplicado(empresa.cnpj || '');
         if (check.duplicado) {
             throw new Error(mensagemCnpjDuplicado(empresa.cnpj || '', check));

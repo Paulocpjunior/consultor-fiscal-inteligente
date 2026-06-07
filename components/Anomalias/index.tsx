@@ -5,6 +5,7 @@
 import React, { useEffect, useState } from 'react';
 import type { User, AnomaliasGlobalResponse, AnomaliasEmpresa, AnomaliaDetectada, AnomaliaIaResponse } from '../../types';
 import { getAnomaliasTodas, explicarAnomaliaIa, tipoLabel, severidadeBadge } from '../../services/anomaliasService';
+import SafeMarkdown from '../SafeMarkdown';
 
 interface Props {
     currentUser: User | null;
@@ -51,12 +52,9 @@ const AnomaliasView: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
     };
 
-    const renderMarkdown = (text: string) => {
-        return text.split(/\n\n+/).map((b, i) => {
-            const html = b.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
-            return <p key={i} className="mb-3 last:mb-0 text-slate-700 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: html }} />;
-        });
-    };
+    const renderMarkdown = (text: string) => (
+        <SafeMarkdown text={text} className="mb-3 last:mb-0 text-slate-700 dark:text-slate-300" />
+    );
 
     const resultadosFiltrados = data?.resultados.filter(r =>
         filtroSeveridade === 'all' || r.severidadeMax === filtroSeveridade

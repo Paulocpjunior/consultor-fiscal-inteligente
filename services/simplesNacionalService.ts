@@ -9,6 +9,7 @@ import { parsePgdasExtrato } from './pgdasPdfParser';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
+import { validarCnpj } from './validadorDocumento';
 import {
     collection, getDocs, doc, setDoc, getDoc,
     query, where, deleteDoc, limit as fbLimit
@@ -122,6 +123,11 @@ export const saveEmpresa = async (
     nome: string, cnpj: string, cnae: string, anexo: string,
     atividadesSecundarias: any[], userId: string, dataAbertura?: string
 ): Promise<SimplesNacionalEmpresa> => {
+    // Valida DV do CNPJ (suporta alfanumerico - IN RFB 2.229/2024).
+    if (!validarCnpj(cnpj)) {
+        throw new Error(`CNPJ invalido: "${cnpj}". Verifique os digitos.`);
+    }
+
     // Trava de unicidade — bloqueia cadastro de CNPJ ja existente em
     // simples_empresas OU lucro_empresas (regra: unicidade global entre regimes).
     const check = await verificarCnpjDuplicado(cnpj);

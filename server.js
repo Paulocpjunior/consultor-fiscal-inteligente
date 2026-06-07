@@ -102,11 +102,15 @@ app.use(cors({
 // como o router respondia primeiro, esses 3 NUNCA rodavam pras rotas da API
 // (a superficie inteira, incluindo SEFAZ, ficava SEM rate limit nem headers
 // de seguranca). Movido pra ca, antes dos mounts, pra valer de verdade.
+// CSP endurecida: scriptSrc SEM 'unsafe-inline' (vetor XSS principal).
+// styleSrc mantem 'unsafe-inline' pois React injeta inline styles em runtime
+// e impacto de XSS via CSS e bem menor que via script. Tailwind CDN removido
+// (build-time desde o switch pra @tailwindcss/postcss; nao usamos mais a CDN).
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com", "https://www.gstatic.com", "https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com"],
+            scriptSrc: ["'self'", "https://apis.google.com", "https://www.gstatic.com", "https://cdnjs.cloudflare.com"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
             imgSrc: ["'self'", "data:", "https:"],

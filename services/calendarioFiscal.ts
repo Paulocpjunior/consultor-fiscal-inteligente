@@ -10,11 +10,12 @@
  *   - FGTS Digital      -> dia 20 do mes seguinte
  *   - SPED Fiscal (EFD) -> dia 25 do SEGUNDO mes seguinte
  *
- * Se vencer em sabado/domingo, antecipa pra sexta. Feriado nacional nao
- * eh detectado (raro precisar pra essas obrigacoes mensais).
+ * Se cair em sabado/domingo/feriado nacional, PRORROGA para o proximo
+ * dia util (regra CGSN/RFB - LC 123/2006, IN RFB 2.005/2021).
  */
 
 import type { RegimeSugerido } from './xmlFiscalService';
+import { prorrogarParaDiaUtil } from './feriadosNacionais';
 
 export type Obrigacao = 'DAS' | 'DCTFWEB' | 'FGTS' | 'SPED';
 
@@ -47,18 +48,8 @@ export const OBRIGACOES_POR_REGIME: Record<string, RegraObrigacao[]> = {
 };
 
 /**
- * Antecipa data pra sexta se cair sabado/domingo.
- * 0 = domingo, 6 = sabado.
- */
-function anteciparFimDeSemana(d: Date): Date {
-    const dia = d.getDay();
-    if (dia === 6) d.setDate(d.getDate() - 1);       // sabado -> sexta
-    else if (dia === 0) d.setDate(d.getDate() - 2);  // domingo -> sexta
-    return d;
-}
-
-/**
  * Calcula a data de vencimento real de uma obrigacao para uma competencia.
+ * Se cair em fim de semana ou feriado nacional, PRORROGA para proximo dia util.
  *
  * @param competencia string MM/AAAA (ex: "04/2026")
  * @param regra regra do calendario (mesesApos + diaVencimento)
@@ -75,7 +66,7 @@ export function calcularVencimento(competencia: string, regra: RegraObrigacao): 
     // mes do vencimento = mes da competencia + mesesApos
     // (em JS, Date usa mes 0..11; ajuste)
     const dataBase = new Date(ano, mes - 1 + regra.mesesApos, regra.diaVencimento);
-    return anteciparFimDeSemana(dataBase);
+    return prorrogarParaDiaUtil(dataBase);
 }
 
 /**
