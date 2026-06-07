@@ -20,8 +20,33 @@ const STORAGE_KEY_EMPRESAS  = 'simples_nacional_empresas';
 const STORAGE_KEY_NOTAS     = 'simples_nacional_notas';
 const MASTER_ADMIN_EMAIL    = 'junior@spassessoriacontabil.com.br';
 
-// ─── TABELAS (inalteradas) ────────────────────────────────────────────────────
-export const ANEXOS_TABELAS: any = {
+// ─── TABELAS (tipadas - LC 123/2006 com LC 155/2016 e LC 192/2022) ────────────
+
+/** Chave de anexo do Simples Nacional. */
+export type AnexoKey = 'I' | 'II' | 'III' | 'IV' | 'V';
+
+/** Faixa de receita do Anexo (limite, aliquota nominal, parcela a deduzir). */
+export interface FaixaSimples {
+    limite: number;     // teto de RBT12 em R$
+    aliquota: number;   // em %
+    parcela: number;    // parcela a deduzir em R$
+}
+
+/**
+ * Reparticao percentual dos tributos dentro do DAS por anexo e faixa.
+ * Soma 100% por faixa (descontando tributos que nao se aplicam ao anexo).
+ *
+ * Chaves de tributo:
+ *   IRPJ, CSLL, COFINS, PIS, CPP - todas as faixas/anexos
+ *   ICMS    - apenas Anexos I e II (mercadoria)
+ *   IPI     - apenas Anexo II (industria)
+ *   ISS     - apenas Anexos III, IV, V (servico)
+ */
+export type TributoSimples = 'IRPJ' | 'CSLL' | 'COFINS' | 'PIS' | 'CPP' | 'ICMS' | 'IPI' | 'ISS';
+export type ReparticaoFaixa = Partial<Record<TributoSimples, number>>;
+export type FaixaIndex = 0 | 1 | 2 | 3 | 4 | 5;
+
+export const ANEXOS_TABELAS: Record<AnexoKey, FaixaSimples[]> = {
     "I":  [{ limite: 180000,  aliquota: 4,    parcela: 0      }, { limite: 360000,  aliquota: 7.3,  parcela: 5940   }, { limite: 720000,  aliquota: 9.5,  parcela: 13860  }, { limite: 1800000, aliquota: 10.7, parcela: 22500  }, { limite: 3600000, aliquota: 14.3, parcela: 87300  }, { limite: 4800000, aliquota: 19,   parcela: 378000 }],
     "II": [{ limite: 180000,  aliquota: 4.5,  parcela: 0      }, { limite: 360000,  aliquota: 7.8,  parcela: 5940   }, { limite: 720000,  aliquota: 10,   parcela: 13860  }, { limite: 1800000, aliquota: 11.2, parcela: 22500  }, { limite: 3600000, aliquota: 14.7, parcela: 85500  }, { limite: 4800000, aliquota: 30,   parcela: 720000 }],
     "III":[{ limite: 180000,  aliquota: 6,    parcela: 0      }, { limite: 360000,  aliquota: 11.2, parcela: 9360   }, { limite: 720000,  aliquota: 13.5, parcela: 17640  }, { limite: 1800000, aliquota: 16,   parcela: 35640  }, { limite: 3600000, aliquota: 21,   parcela: 125640 }, { limite: 4800000, aliquota: 33,   parcela: 648000 }],
@@ -29,7 +54,7 @@ export const ANEXOS_TABELAS: any = {
     "V":  [{ limite: 180000,  aliquota: 15.5, parcela: 0      }, { limite: 360000,  aliquota: 18,   parcela: 4500   }, { limite: 720000,  aliquota: 19.5, parcela: 9900   }, { limite: 1800000, aliquota: 20.5, parcela: 17100  }, { limite: 3600000, aliquota: 23,   parcela: 62100  }, { limite: 4800000, aliquota: 30.5, parcela: 540000 }]
 };
 
-export const REPARTICAO_IMPOSTOS: any = {
+export const REPARTICAO_IMPOSTOS: Record<AnexoKey, Record<FaixaIndex, ReparticaoFaixa>> = {
     "I": {
         0: { IRPJ: 5.50,  CSLL: 3.50,  COFINS: 12.74, PIS: 2.76, CPP: 41.50, ICMS: 34.00 },
         1: { IRPJ: 5.50,  CSLL: 3.50,  COFINS: 12.74, PIS: 2.76, CPP: 41.50, ICMS: 34.00 },
@@ -586,7 +611,7 @@ export const calcularResumoEmpresa = (
         if (anexoAplicado === 'V' && fator_r >= 0.28) anexoAplicado = 'III';
         else if (anexoAplicado === 'III_V') anexoAplicado = fator_r >= 0.28 ? 'III' : 'V';
 
-        const tabela = ANEXOS_TABELAS[anexoAplicado];
+        const tabela = ANEXOS_TABELAS[anexoAplicado as AnexoKey];
         if (!tabela) return;
 
         // Em início de atividade, usa RBT12 proporcionalizado para enquadramento e alíquota.
@@ -604,14 +629,16 @@ export const calcularResumoEmpresa = (
             : tabela[0].aliquota;
 
         let percentualReducao = 0;
-        const reparticao = REPARTICAO_IMPOSTOS[anexoAplicado]?.[Math.min(faixaIndex, 5)];
+        const faixaIdxClamped = Math.max(0, Math.min(faixaIndex, 5)) as FaixaIndex;
+        const reparticao = REPARTICAO_IMPOSTOS[anexoAplicado as AnexoKey]?.[faixaIdxClamped];
         if (reparticao) {
             if (item.isImune) {
                 if (reparticao.ICMS) percentualReducao += reparticao.ICMS;
                 if (reparticao.IPI)  percentualReducao += reparticao.IPI;
             } else if (item.isExterior) {
-                ['PIS','COFINS','ISS','ICMS','IPI'].forEach(t => {
-                    if (reparticao[t]) percentualReducao += reparticao[t];
+                (['PIS','COFINS','ISS','ICMS','IPI'] as const).forEach(t => {
+                    const v = reparticao[t];
+                    if (v) percentualReducao += v;
                 });
             } else {
                 if (item.issRetido || item.isSup) {
@@ -729,7 +756,8 @@ function calcularAlertasFaturamento(
 export const calcularDiscriminacaoImpostos = (
     anexo: string, faixaIndex: number, valorDas: number
 ) => {
-    const dist = REPARTICAO_IMPOSTOS[anexo]?.[Math.min(faixaIndex, 5)];
+    const faixaClamped = Math.max(0, Math.min(faixaIndex, 5)) as FaixaIndex;
+    const dist = REPARTICAO_IMPOSTOS[anexo as AnexoKey]?.[faixaClamped];
     if (!dist || valorDas === 0) return {};
     return Object.fromEntries(
         Object.entries(dist).map(([imp, pct]) => [imp, valorDas * ((pct as number) / 100)])
