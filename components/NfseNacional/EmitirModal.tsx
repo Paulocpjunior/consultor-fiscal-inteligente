@@ -5,6 +5,7 @@
 import React, { useEffect, useState } from 'react';
 import type { User, SimplesNacionalEmpresa, NbsCodigo } from '../../types';
 import { emitirNfse, getNbsCodigos, formatBRL } from '../../services/nfseNacionalService';
+import { useConfirm } from '../dialog/DialogProvider';
 
 interface Props {
     empresa: SimplesNacionalEmpresa;
@@ -14,6 +15,7 @@ interface Props {
 }
 
 const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToast }) => {
+    const confirm = useConfirm();
     const [nbsCodigos, setNbsCodigos] = useState<NbsCodigo[]>([]);
     const [emitindo, setEmitindo] = useState(false);
 
@@ -58,16 +60,21 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
             return onShowToast(`Alíquota ${aliquotaNum}% excede o máximo legal de 5% (LC 116/03 art. 8º II).`);
         }
         if (aliquotaNum > 0 && aliquotaNum < 2) {
-            const ok = window.confirm(
-                `Alíquota ${aliquotaNum}% está abaixo do piso constitucional de 2% (EC 37/02 art. 88). ` +
-                `Só é válida se houver benefício formal do município pra este serviço. Continuar?`
-            );
+            const ok = await confirm({
+                title: `Alíquota ${aliquotaNum}% abaixo do piso constitucional`,
+                message: 'O piso é 2% (EC 37/02 art. 88). Só é válida se houver benefício formal do município pra este serviço.',
+                variant: 'warning',
+                confirmLabel: 'Continuar',
+            });
             if (!ok) return;
         }
         if (aliquotaNum === 0) {
-            const ok = window.confirm(
-                'Alíquota zero — só é válida com isenção/imunidade formal do município. Continuar?'
-            );
+            const ok = await confirm({
+                title: 'Alíquota zero',
+                message: 'Só é válida com isenção/imunidade formal do município. Continuar?',
+                variant: 'warning',
+                confirmLabel: 'Continuar',
+            });
             if (!ok) return;
         }
 

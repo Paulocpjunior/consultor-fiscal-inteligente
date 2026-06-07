@@ -6,6 +6,7 @@ import LoadingSpinner from './LoadingSpinner';
 import NfseSpAdminPanel from './NfseSpAdminPanel';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
+import { useConfirm } from './dialog/DialogProvider';
 import { emitirDasRegular } from '../services/dasService';
 import { mapPgdasPayload } from '../services/pgdasMapper';
 import EmitirNfseModal from './NfseNacional/EmitirModal';
@@ -59,9 +60,10 @@ const CurrencyInput: React.FC<{ value: number; onChange: (val: number) => void; 
     );
 };
 
-const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({ 
-    empresa, notas, onBack, onImport, onUpdateFolha12, onSaveFaturamentoManual, onUpdateEmpresa, onShowClienteView, onShowToast, currentUser 
+const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
+    empresa, notas, onBack, onImport, onUpdateFolha12, onSaveFaturamentoManual, onUpdateEmpresa, onShowClienteView, onShowToast, currentUser
 }) => {
+    const confirm = useConfirm();
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
     const [isCfopCorrelacaoModalOpen, setIsCfopCorrelacaoModalOpen] = useState(false);
@@ -268,11 +270,18 @@ if (filialServico > 0) {
             return;
         }
         const competencia = `${mesApuracao.getFullYear()}-${String(mesApuracao.getMonth() + 1).padStart(2, '0')}`;
-        const ok = window.confirm(
-            `Emitir DAS Regular para ${empresa.nome}?\n\n` +
-            `Competência: ${competencia}\n` +
-            `Valor: R\$ ${resumo.das_mensal.toFixed(2).replace('.', ',')}`
-        );
+        const ok = await confirm({
+            title: 'Emitir DAS Regular?',
+            message: (
+                <>
+                    Empresa: <b>{empresa.nome}</b><br />
+                    Competência: <b>{competencia}</b><br />
+                    Valor: <b>R$ {resumo.das_mensal.toFixed(2).replace('.', ',')}</b>
+                </>
+            ),
+            variant: 'info',
+            confirmLabel: 'Emitir',
+        });
         if (!ok) return;
 
         setEmitindoDas(true);

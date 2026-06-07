@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { LucroPresumidoEmpresa, User, FichaFinanceiraRegistro, LucroInput, ItemFinanceiroAvulso } from '../types';
 import * as lucroPresumidoService from '../services/lucroPresumidoService';
 import { fetchCnpjFromBrasilAPI } from '../services/externalApiService';
+import { useConfirm } from './dialog/DialogProvider';
 import { calcularLucro } from '../services/lucroService';
 import ConferirDctfwebModal from './DCTFWeb/ConferirDctfwebModal';
 import { DownloadIcon, ArrowLeftIcon, BuildingIcon, PencilIcon, InfoIcon } from './Icons';
@@ -120,6 +121,7 @@ interface LucroPresumidoRealDashboardProps {
 }
 
 const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = ({ currentUser, externalSelectedId, onAddToHistory }) => {
+    const confirm = useConfirm();
     const [empresas, setEmpresas] = useState<LucroPresumidoEmpresa[]>([]);
     const [selectedEmpresaId, setSelectedEmpresaId] = useState<string | null>(null);
     const [selectedFichaId, setSelectedFichaId] = useState<string | null>(null);
@@ -529,7 +531,14 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     };
 
     const handleDeleteCompany = async (id: string) => {
-        if (!window.confirm('Tem certeza que deseja excluir esta empresa?')) return;
+        const empresa = empresas.find(e => e.id === id);
+        const ok = await confirm({
+            title: empresa ? `Excluir "${empresa.nome}"?` : 'Excluir empresa?',
+            message: 'Esta ação não pode ser desfeita.',
+            variant: 'danger',
+            confirmLabel: 'Excluir',
+        });
+        if (!ok) return;
         try {
             await lucroPresumidoService.deleteEmpresa(id);
             loadEmpresas();
