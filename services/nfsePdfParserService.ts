@@ -139,11 +139,25 @@ function parsePartie(block: string): NfsePdfParticipante {
     }
     const ieMatch = block.match(/Inscri[c\u00e7][a\u00e3]o\s+Municipal\s*:?\s*(\d+)/i);
     if (ieMatch) p.inscricaoMunicipal = ieMatch[1];
-    const nomeEmpresarialMatch = block.match(/Nome\s+empresarial\s*:?\s*([^\n]+)/i);
-    if (nomeEmpresarialMatch) p.nome = nomeEmpresarialMatch[1].trim();
-    else {
-        const nomeMatch = block.match(/Nome\s*:?\s*([^\n]+)/i);
-        if (nomeMatch) p.nome = nomeMatch[1].trim();
+    // Nome aparece em formatos distintos por padrao:
+    //  DANFSe v1.0       : "Nome / Nome Empresarial\nFASTWELD INDUSTRIA..."
+    //  ABRASF (Publica)  : "Nome empresarial: FASTWELD..."
+    //  Ginfes (Guarulhos): "Raz\u00e3o Social/Nome FASTWELD IND. E COM. LTDA"
+    //
+    // Tenta na ordem do mais especifico pro mais generico pra evitar pegar
+    // o nome do CAMPO em vez do valor (ex.: "Nome:" sem valor na linha).
+    const nomeRegexes: RegExp[] = [
+        /Nome\s*\/\s*Nome\s+Empresarial[\s:]*\n?\s*([^\n]+)/i,        // DANFSe v1.0
+        /Raz[a\u00e3]o\s+Social\s*\/\s*Nome\s*[:]?\s*([^\n]+)/i,      // Ginfes
+        /Nome\s+Empresarial\s*:?\s*([^\n]+)/i,                         // ABRASF
+        /Raz[a\u00e3]o\s+Social\s*:?\s*([^\n]+)/i,                    // generico
+        /Nome\s*:?\s*([^\n]+)/i,                                       // ultimo fallback
+    ];
+    for (const r of nomeRegexes) {
+        const m = block.match(r);
+        const val = m?.[1]?.trim();
+        // "-" eh placeholder do DANFSe pra campos vazios; ignora
+        if (val && val !== '-' && val.length > 1) { p.nome = val; break; }
     }
     const fantasiaMatch = block.match(/Nome\s+fantasia\s*:?\s*([^\n]+)/i);
     if (fantasiaMatch) p.nomeFantasia = fantasiaMatch[1].trim();
@@ -171,7 +185,15 @@ export async function parseNfsePdf(file: File): Promise<NfsePdfParsed> {
             'Nao foi possivel extrair texto do PDF. Pode ser uma NFSe digitalizada (imagem) — nao suportado.',
         );
     }
+    return parseNfseFromText(text);
+}
 
+/**
+ * Parsing puro — recebe o texto bruto extraido do PDF e devolve a estrutura.
+ * Separado pra ser testavel sem precisar de pdfjs-dist no jest (que so roda
+ * em jsdom com Worker mockado).
+ */
+export function parseNfseFromText(text: string): NfsePdfParsed {
     const upperText = text.toUpperCase();
     if (
         !upperText.includes('NFS-E') &&
@@ -204,19 +226,44 @@ export async function parseNfsePdf(file: File): Promise<NfsePdfParsed> {
     const chaveAcessoMatch = text.match(/(?:chave\s*de?\s*acesso|chave\s*nacional)[\s:]*?(\d{40,50})/i);
     const chaveAcesso = chaveAcessoMatch ? chaveAcessoMatch[1] : '';
 
-    // Blocos de Prestador / Tomador
-    const idxPrestador =
-        text.indexOf('PRESTADOR DE SERVI\u00c7OS') >= 0
-            ? text.indexOf('PRESTADOR DE SERVI\u00c7OS')
-            : text.indexOf('PRESTADOR DE SERVICOS');
-    const idxTomador =
-        text.indexOf('TOMADOR DE SERVI\u00c7OS') >= 0
-            ? text.indexOf('TOMADOR DE SERVI\u00c7OS')
-            : text.indexOf('TOMADOR DE SERVICOS');
-    const idxDisc =
-        text.indexOf('DISCRIMINA\u00c7\u00c3O DOS SERVI\u00c7OS') >= 0
-            ? text.indexOf('DISCRIMINA\u00c7\u00c3O DOS SERVI\u00c7OS')
-            : text.indexOf('DISCRIMINACAO DOS SERVICOS');
+    // Blocos de Prestador / Tomador.
+    //
+    // Cada padrao de DANFSe/NFSe usa labels diferentes:
+    //  - ABRASF padrao (Publica/SC)         : "PRESTADOR DE SERVI\u00c7OS" + "TOMADOR DE SERVI\u00c7OS" + "DISCRIMINA\u00c7\u00c3O DOS SERVI\u00c7OS"
+    //  - DANFSe v1.0 (gov.br/nfse nacional) : "EMITENTE DA NFS-e" + "TOMADOR DO SERVI\u00c7O" + "SERVI\u00c7O PRESTADO"
+    //  - Ginfes/municipios SP (Guarulhos)   : "Dados do Prestador de Servi\u00e7os" + "Dados do Tomador de Servi\u00e7os" + "Discrimina\u00e7\u00e3o dos Servi\u00e7os"
+    //
+    // findFirstIndex pega o PRIMEIRO label que matcha (case-insensitive).
+    // Sem esse fallback, PDFs reais da S&P (SERASA nacional, CONCEITO Guarulhos)
+    // tinham os 2 blocos vazios -> CNPJ ficava em branco -> matchNfseEmpresa
+    // rejeitava com "CNPJ (vazio) nao corresponde a empresa selecionada".
+    const findFirstIndex = (haystack: string, needles: string[]): number => {
+        const lower = haystack.toLowerCase();
+        for (const n of needles) {
+            const idx = lower.indexOf(n.toLowerCase());
+            if (idx >= 0) return idx;
+        }
+        return -1;
+    };
+    const idxPrestador = findFirstIndex(text, [
+        'PRESTADOR DE SERVI\u00c7OS', 'PRESTADOR DE SERVICOS',
+        'EMITENTE DA NFS-e', 'EMITENTE DA NFSE',
+        'Dados do Prestador',
+    ]);
+    const idxTomador = findFirstIndex(text, [
+        'TOMADOR DE SERVI\u00c7OS', 'TOMADOR DE SERVICOS',
+        'TOMADOR DO SERVI\u00c7O', 'TOMADOR DO SERVICO',
+        'Dados do Tomador',
+    ]);
+    const idxDisc = findFirstIndex(text, [
+        'DISCRIMINA\u00c7\u00c3O DOS SERVI\u00c7OS', 'DISCRIMINACAO DOS SERVICOS',
+        'SERVI\u00c7O PRESTADO', 'SERVICO PRESTADO',
+        'Discrimina\u00e7\u00e3o dos Servi\u00e7os',
+        // Fallback: tributa\u00e7\u00e3o municipal vem logo depois do bloco do tomador
+        // no DANFSe nacional, antes da discrimina\u00e7\u00e3o propriamente dita.
+        'TRIBUTA\u00c7\u00c3O MUNICIPAL', 'TRIBUTACAO MUNICIPAL',
+        'C\u00f3digo do Servi\u00e7o', 'Codigo do Servico',
+    ]);
 
     const blockPrestador = idxPrestador >= 0 && idxTomador > idxPrestador ? text.slice(idxPrestador, idxTomador) : '';
     const blockTomador = idxTomador >= 0 && idxDisc > idxTomador ? text.slice(idxTomador, idxDisc) : '';
