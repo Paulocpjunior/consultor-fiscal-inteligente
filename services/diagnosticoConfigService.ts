@@ -7,8 +7,10 @@ async function authHeader(): Promise<Record<string, string>> {
     return { Authorization: `Bearer ${await u.getIdToken()}` };
 }
 
-export type CriticidadeConfig = 'critico' | 'alto' | 'medio';
-export type TipoAchado = 'env_vazia' | 'modo_inadequado' | 'flag_indefinida';
+// 'informativo' = env vazia mas codigo tem default funcionando.
+// Listado pra admin saber que pode customizar, mas NAO bloqueia produto.
+export type CriticidadeConfig = 'critico' | 'alto' | 'medio' | 'informativo';
+export type TipoAchado = 'env_vazia' | 'env_via_default' | 'modo_inadequado' | 'flag_indefinida';
 
 export interface AchadoConfig {
     tipo: TipoAchado;
@@ -27,6 +29,7 @@ export interface DiagnosticoConfigResposta {
         criticos: number;
         altos: number;
         medios: number;
+        informativos?: number;
         ambiente: string;
     };
     achados: AchadoConfig[];

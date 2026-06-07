@@ -6,24 +6,54 @@
 import { diagnosticarConfig, CONFIGS_MONITORADAS, MODOS_OPERACIONAIS } from '../sefaz-backend/diagnostico-config-helper.js';
 
 describe('diagnosticarConfig — env totalmente vazia', () => {
-    it('todas as configs críticas são reportadas em prod', () => {
+    it('configs críticas SEM defaultRuntime são reportadas em prod', () => {
         const { resumo, achados } = diagnosticarConfig({}, 'prod');
-        // criticos = SERPRO_KEY/SECRET/CNPJ + SEFAZ_CRON_SECRET + STORAGE_BUCKET = 5
+        // SERPRO_KEY/SECRET/CNPJ + SEFAZ_CRON_SECRET = 4 criticos sem fallback.
+        // STORAGE_BUCKET tem defaultRuntime ('consultorfiscalapp.firebasestorage.app')
+        // entao vai como 'informativo', NAO 'critico' — corrige falso positivo
+        // que assustava o admin (XMLs sobem ok via default).
         const criticos = achados.filter((a: any) => a.criticidade === 'critico').map((a: any) => a.chave);
         expect(criticos).toContain('SERPRO_CONSUMER_KEY');
         expect(criticos).toContain('SERPRO_CONSUMER_SECRET');
         expect(criticos).toContain('SERPRO_CONTRATANTE_CNPJ');
         expect(criticos).toContain('SEFAZ_CRON_SECRET');
-        expect(criticos).toContain('STORAGE_BUCKET');
-        expect(resumo.criticos).toBe(5);
+        expect(criticos).not.toContain('STORAGE_BUCKET'); // mudou pra informativo
+        expect(resumo.criticos).toBe(4);
     });
 
-    it('todos os altos são reportados (sharepoint + gateway + 5 modos em prod)', () => {
+    it('STORAGE_BUCKET vazio vira informativo com nota do default', () => {
+        const { achados } = diagnosticarConfig({}, 'prod');
+        const sb = achados.find((a: any) => a.chave === 'STORAGE_BUCKET');
+        expect(sb).toBeTruthy();
+        expect(sb.criticidade).toBe('informativo');
+        expect(sb.tipo).toBe('env_via_default');
+        expect(sb.impacto).toContain('consultorfiscalapp.firebasestorage.app');
+    });
+
+    it('HEALTH_ALERT_TO vazio vira informativo (usa GRAPH_REMETENTE)', () => {
+        const { achados } = diagnosticarConfig({}, 'prod');
+        const h = achados.find((a: any) => a.chave === 'HEALTH_ALERT_TO');
+        expect(h).toBeTruthy();
+        expect(h.criticidade).toBe('informativo');
+        expect(h.impacto).toContain('GRAPH_REMETENTE');
+    });
+
+    it('CONTADOR_* (sem default) continua medio — gap real', () => {
+        const { achados } = diagnosticarConfig({}, 'prod');
+        const crc = achados.find((a: any) => a.chave === 'CONTADOR_CRC');
+        expect(crc.criticidade).toBe('medio');
+        expect(crc.tipo).toBe('env_vazia');
+    });
+
+    it('todos os altos são reportados (sharepoint + gateway)', () => {
         const { resumo } = diagnosticarConfig({}, 'prod');
-        // SHAREPOINT_* (4) + FISCAL_GATEWAY_TOKEN = 5 altos vazios
-        // + 5 modos operacionais default já = serpro, então NÃO reportam em prod
-        // Mas se env vazia, os modos default kick in com valor 'serpro' = ok em prod
         expect(resumo.altos).toBeGreaterThanOrEqual(5);
+    });
+
+    it('resumo expõe count de informativos', () => {
+        const { resumo } = diagnosticarConfig({}, 'prod');
+        // STORAGE_BUCKET + HEALTH_ALERT_TO = 2 informativos quando env vazia
+        expect(resumo.informativos).toBe(2);
     });
 });
 
