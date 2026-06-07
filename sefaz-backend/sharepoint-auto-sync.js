@@ -18,6 +18,7 @@ import express from 'express';
 import admin from 'firebase-admin';
 import { DOMParser } from '@xmldom/xmldom';
 import crypto from 'crypto';
+import { validarXmlSeguro, XmlInseguroError } from './xml-seguranca.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -51,6 +52,15 @@ function extractChaveFromId(id) {
 }
 
 function parseXmlServer(xmlText) {
+    try {
+        validarXmlSeguro(xmlText);
+    } catch (e) {
+        if (e instanceof XmlInseguroError) {
+            console.warn('[sharepoint-auto-sync] XML rejeitado:', e.motivo);
+            return null;
+        }
+        throw e;
+    }
     const parser = new DOMParser({
         errorHandler: { warning: () => {}, error: () => {}, fatalError: () => {} },
     });

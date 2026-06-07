@@ -64,7 +64,13 @@ const upload = multer({
 //   - cert: arquivo .pfx (binary)
 //   - password: senha do .pfx (string)
 //   - empresaId: id da empresa
-router.post('/upload', requireAuth, upload.single('cert'), requireCarteira, async (req, res) => {
+//
+// AUDITORIA 06/2026: troca requireCarteira -> requireAdmin no UPLOAD.
+// Antes, qualquer colaborador da carteira podia SOBRESCREVER o .pfx da
+// empresa (perde acesso ate o admin reuplodar). Visualizacao (GET /info,
+// POST /test) continua com requireCarteira - so a operacao destrutiva
+// virou admin-only. Em paralelo, GET /list e DELETE ja eram admin.
+router.post('/upload', requireAdmin, upload.single('cert'), async (req, res) => {
     try {
         const { empresaId, password } = req.body || {};
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });

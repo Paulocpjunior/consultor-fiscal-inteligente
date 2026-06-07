@@ -145,9 +145,21 @@ const sefazLimiter = rateLimit({
     skip: isCronRequest,
     message: { error: 'Muitas consultas à SEFAZ em pouco tempo. Aguarde ~1 minuto.' },
 });
+
+// Anti-enumeracao em /cnpj-lookup. Antes esse endpoint nao tinha limite
+// dedicado e qualquer colaborador podia varrer CNPJs (LGPD). 20/min/IP cobre
+// uso humano normal (cadastro de empresa pontual) e bloqueia varredura.
+const cnpjLookupLimiter = rateLimit({
+    windowMs: 60_000, max: 20,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    keyGenerator: (req) => (req.user?.uid ? `u:${req.user.uid}` : req.ip),
+    message: { error: 'Muitas consultas CNPJ em pouco tempo. Aguarde ~1 minuto.' },
+});
 app.use('/api/', apiLimiter);
 app.use('/api/admin/sefaz/consulta-nfe-por-chave', sefazLimiter);
 app.use('/api/admin/sefaz/sync-one', sefazLimiter);
+app.use('/api/admin/cnpj-lookup', cnpjLookupLimiter);
 
 // ── Routers (montados DEPOIS do middleware de segurança/limite) ─────────
 app.use('/api/admin/sefaz', sefazCertRouter);

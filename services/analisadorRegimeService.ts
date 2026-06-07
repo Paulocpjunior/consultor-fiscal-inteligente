@@ -1,3 +1,5 @@
+import { aliquotasReformaPorAno } from './reformaTributariaConfig';
+
 export type AtividadeTipo = 'comercio' | 'industria' | 'servicos_simples' | 'servicos_fator_r' | 'servicos_especiais' | 'servicos_gerais';
 export type RegimeTipo = 'simples' | 'presumido' | 'real';
 
@@ -180,6 +182,16 @@ export function analisarRegimes(e: EntradaCalculo): ResultadoAnalise {
     if (e.folhaPagamentoMensal / e.receitaBrutaMensal < 0.20 &&
         (e.atividade === 'servicos_especiais' || e.atividade === 'servicos_fator_r')) {
         alertas.push('Folha baixa para servicos — verifique Fator R.');
+    }
+
+    // Alerta de Reforma Tributaria (LC 214/2025) por ano corrente.
+    const reforma = aliquotasReformaPorAno(new Date().getFullYear());
+    if (reforma.fase === 'teste-2026') {
+        alertas.push('REFORMA TRIBUTARIA - fase de teste 2026: CBS 0,9% + IBS 0,1% compensados com PIS/COFINS. Registro obrigatorio mesmo com debito liquido zero.');
+    } else if (reforma.fase === 'cbs-2027') {
+        alertas.push('REFORMA TRIBUTARIA - 2027: PIS/COFINS EXTINTOS, CBS plena (~8,8%). Recalcule projecoes - regime tributario pode mudar.');
+    } else if (reforma.fase === 'transicao-ibs') {
+        alertas.push(`REFORMA TRIBUTARIA - transicao IBS ano ${reforma.ano}: ICMS/ISS a ${(reforma.fatorIcmsIss * 100).toFixed(0)}% da aliquota original; IBS subindo proporcionalmente.`);
     }
 
     return { resultados: todos, melhorOpcao: melhor?.regime || 'presumido', economiaAnual: econAno, percentualEconomia: econPct, alertas };
