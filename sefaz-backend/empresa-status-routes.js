@@ -423,6 +423,36 @@ router.post('/empresa-toggle-flag', requireAuth, express.json(), async (req, res
     }
 });
 
+// ─── Resetar lock SEFAZ de uma empresa ────────────────────────────────────
+// Sync-orchestrator marca lock de 1h por CNPJ pra evitar disparos
+// concorrentes. Quando admin precisa testar de novo dentro da janela
+// (ex: ajustou procuracao e quer rodar sem esperar a janela vencer),
+// esse endpoint apaga o doc sefaz_locks/{cnpj}. Próximo disparo do
+// orchestrator vai criar o lock de novo.
+router.post('/empresa-reset-lock', requireAuth, express.json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores' });
+        }
+        const { cnpj } = req.body || {};
+        const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
+        if (cnpjLimpo.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });
+
+        const db = fa().firestore();
+        const ref = db.collection('sefaz_locks').doc(cnpjLimpo);
+        const snap = await ref.get();
+        if (!snap.exists) {
+            return res.json({ ok: true, cnpj: cnpjLimpo, hadLock: false, msg: 'Empresa já estava sem lock ativo' });
+        }
+        await ref.delete();
+        console.log(`[empresa-reset-lock] cnpj=${cnpjLimpo} por=${req.user.email}`);
+        return res.json({ ok: true, cnpj: cnpjLimpo, hadLock: true, msg: 'Lock resetado — próximo disparo recria.' });
+    } catch (e) {
+        console.error('[empresa-reset-lock] erro:', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 // ─── Auto-preencher UF via BrasilAPI ───────────────────────────────────────
 // Itera empresas sem dadosFiscais.uf e busca o estado via BrasilAPI a partir
 // do CNPJ. Resolve em massa o motivo "UF não cadastrada" sem trabalho manual.
