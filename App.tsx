@@ -44,32 +44,30 @@ const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocu
 const SpedFiscal = lazy(() => import('./components/SpedFiscal'));
 const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
 const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
-const CaixaPostalDashboard = lazy(() => import('./components/CaixaPostal'));
+// Hubs que fundem cada gênero num só card (sub-abas internas):
+//  - CaixaPostalHub: Caixa Postal + Radar e-CAC
+//  - DasHub: DAS + Cobertura PGDAS-D + Sublimite
+//  - NfseNacionalHub: NFS-e Nacional + Cobertura ADN
+//  - RecuperacaoHub: Recuperação Tributária + Prazos de Prescrição
+const CaixaPostalHub = lazy(() => import('./components/CaixaPostal/CaixaPostalHub'));
 const CaixaPostalAlerta = lazy(() => import('./components/CaixaPostal/AlertaPopup'));
 const CronCapturaBanner = lazy(() => import('./components/CronCapturaBanner'));
 const VencimentosBanner = lazy(() => import('./components/VencimentosBanner'));
-const DasDashboard = lazy(() => import('./components/Das'));
+const DasHub = lazy(() => import('./components/Das/DasHub'));
 // DctfwebHub funde DCTFWeb + EFD-Reinf×DCTFWeb + Cobertura DCTFWeb num só card.
 const DctfwebHub = lazy(() => import('./components/DCTFWeb/DctfwebHub'));
-const CoberturaAdnPanel = lazy(() => import('./components/NfseNacional/CoberturaAdnPanel'));
-const CoberturaPgdasPanel = lazy(() => import('./components/Das/CoberturaPgdasPanel'));
-// CoberturaDctfwebPanel agora vive dentro do DctfwebHub (sub-aba).
-const RadarCriticasPanel = lazy(() => import('./components/CaixaPostal/RadarCriticasPanel'));
-// MinhaAgendaPanel e VencimentosSemanaPanel agora vivem dentro do VencimentosHub.
-const PrazosPrescricaoPanel = lazy(() => import('./components/RecuperacaoTributaria/PrazosPrescricaoPanel'));
-const SublimitePanel = lazy(() => import('./components/SimplesSublimite/SublimitePanel'));
 // Hub que funde as 6 abas de diagnóstico (Saúde/Docs/Cadastros/Certificados/
 // Config/Anomalias) num só card com sub-abas internas. Os 6 painéis são
 // importados DENTRO do hub agora — não mais soltos aqui.
 const DiagnosticoHub = lazy(() => import('./components/Diagnostico/DiagnosticoHub'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
-const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
+const NfseNacionalHub = lazy(() => import('./components/NfseNacional/NfseNacionalHub'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
 // AnomaliasView agora vive dentro do DiagnosticoHub (sub-aba).
 const SimuladorReforma = lazy(() => import('./components/SimuladorReforma'));
 const TaxEmissionDashboard = lazy(() => import('./components/TaxEmission'));
-const RecuperacaoTributaria = lazy(() => import('./components/RecuperacaoTributaria'));
+const RecuperacaoHub = lazy(() => import('./components/RecuperacaoTributaria/RecuperacaoHub'));
 const NfpProCloud = lazy(() => import('./components/NfpProCloud'));
 
 const searchDescriptions: Record<SearchType, string> = {
@@ -713,6 +711,14 @@ const App: React.FC = () => {
                                 // Sub-abas de DCTFWeb: viram sub-abas dentro do card
                                 // DCTFWEB (DctfwebHub).
                                 && t !== SearchType.EFD_REINF && t !== SearchType.DCTFWEB_COBERTURA
+                                // DAS (card DAS_SIMPLES): cobertura PGDAS-D + sublimite.
+                                && t !== SearchType.DAS_COBERTURA_PGDAS && t !== SearchType.SIMPLES_SUBLIMITE
+                                // NFS-e Nacional (card NFSE_NACIONAL): cobertura ADN.
+                                && t !== SearchType.NFSE_NAC_COBERTURA
+                                // Recuperação (card RECUPERACAO_TRIBUTARIA): prazos de prescrição.
+                                && t !== SearchType.RECUPERACAO_PRAZOS
+                                // Caixa Postal (card CAIXA_POSTAL): radar e-CAC.
+                                && t !== SearchType.CAIXA_POSTAL_RADAR
                             ).map((type) => (
                                 <button
                                     key={type}
@@ -1191,10 +1197,11 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
+                        {/* Caixa Postal — hub que funde Caixa Postal + Radar e-CAC. */}
                         {searchType === SearchType.CAIXA_POSTAL && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <CaixaPostalDashboard
+                                <CaixaPostalHub
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
@@ -1202,10 +1209,11 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
+                        {/* DAS Simples — hub que funde Painel DAS + Cobertura PGDAS-D + Sublimite. */}
                         {searchType === SearchType.DAS_SIMPLES && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <DasDashboard
+                                <DasHub
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
@@ -1227,63 +1235,14 @@ const App: React.FC = () => {
 
                         {/* EFD_REINF agora é sub-aba do DctfwebHub. */}
 
-                        {searchType === SearchType.NFSE_NAC_COBERTURA && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <CoberturaAdnPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.DAS_COBERTURA_PGDAS && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <CoberturaPgdasPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {/* DCTFWEB_COBERTURA agora é sub-aba do DctfwebHub. */}
-
-                        {searchType === SearchType.CAIXA_POSTAL_RADAR && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <RadarCriticasPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {/* MINHA_AGENDA e VENCIMENTOS_SEMANA agora são sub-abas do
-                            VencimentosHub (card OBRIGACOES_FISCAIS). */}
-
-                        {searchType === SearchType.RECUPERACAO_PRAZOS && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <PrazosPrescricaoPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {/* DIAGNOSTICO_DOCS/CADASTROS/CERT_MONITOR/CONFIG/ANOMALIAS:
-                            agora são sub-abas dentro do DiagnosticoHub (card SAUDE_GERAL). */}
-
-                        {searchType === SearchType.SIMPLES_SUBLIMITE && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <SublimitePanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
+                        {/* Sub-abas consolidadas em hubs:
+                            NFSE_NAC_COBERTURA → NfseNacionalHub
+                            DAS_COBERTURA_PGDAS + SIMPLES_SUBLIMITE → DasHub
+                            DCTFWEB_COBERTURA → DctfwebHub
+                            CAIXA_POSTAL_RADAR → CaixaPostalHub
+                            MINHA_AGENDA + VENCIMENTOS_SEMANA → VencimentosHub
+                            RECUPERACAO_PRAZOS → RecuperacaoHub
+                            DIAGNOSTICO_DOCS/CADASTROS/CERT_MONITOR/CONFIG/ANOMALIAS → DiagnosticoHub */}
 
                         {searchType === SearchType.SAUDE_GERAL && (
                             <ErrorBoundary>
@@ -1319,10 +1278,11 @@ const App: React.FC = () => {
                         )}
 
 
+                        {/* NFS-e Nacional — hub que funde Painel + Cobertura ADN. */}
                         {searchType === SearchType.NFSE_NACIONAL && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <NfseNacionalDashboard
+                                <NfseNacionalHub
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
@@ -1371,11 +1331,12 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
+                        {/* Recuperação — hub que funde Recuperação Tributária + Prazos de Prescrição. */}
                         {searchType === SearchType.RECUPERACAO_TRIBUTARIA && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <RecuperacaoTributaria
-                                    currentUser={currentUser ?? null}
+                                <RecuperacaoHub
+                                    currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
