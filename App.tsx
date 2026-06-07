@@ -37,7 +37,9 @@ const ComparisonDisplay = lazy(() => import('./components/ComparisonDisplay'));
 const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDisplay'));
 const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumidoRealDashboard'));
 const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
-const ObrigacoesETarefas = lazy(() => import('./components/ObrigacoesETarefas'));
+// VencimentosHub funde Obrigações&Tarefas + Minha Agenda + Vencimentos da
+// Semana num só card (mesmo grupo: prazos derivados do regime/cadastro).
+const VencimentosHub = lazy(() => import('./components/Vencimentos/VencimentosHub'));
 const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocumentosFiscais'));
 const SpedFiscal = lazy(() => import('./components/SpedFiscal'));
 const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
@@ -53,9 +55,8 @@ const CoberturaAdnPanel = lazy(() => import('./components/NfseNacional/Cobertura
 const CoberturaPgdasPanel = lazy(() => import('./components/Das/CoberturaPgdasPanel'));
 const CoberturaDctfwebPanel = lazy(() => import('./components/DCTFWeb/CoberturaDctfwebPanel'));
 const RadarCriticasPanel = lazy(() => import('./components/CaixaPostal/RadarCriticasPanel'));
-const MinhaAgendaPanel = lazy(() => import('./components/MinhaAgenda/MinhaAgendaPanel'));
+// MinhaAgendaPanel e VencimentosSemanaPanel agora vivem dentro do VencimentosHub.
 const PrazosPrescricaoPanel = lazy(() => import('./components/RecuperacaoTributaria/PrazosPrescricaoPanel'));
-const VencimentosSemanaPanel = lazy(() => import('./components/Vencimentos/VencimentosSemanaPanel'));
 const SublimitePanel = lazy(() => import('./components/SimplesSublimite/SublimitePanel'));
 // Hub que funde as 6 abas de diagnóstico (Saúde/Docs/Cadastros/Certificados/
 // Config/Anomalias) num só card com sub-abas internas. Os 6 painéis são
@@ -706,6 +707,9 @@ const App: React.FC = () => {
                                 && t !== SearchType.DIAGNOSTICO_DOCS && t !== SearchType.DIAGNOSTICO_CADASTROS
                                 && t !== SearchType.CERT_MONITOR && t !== SearchType.DIAGNOSTICO_CONFIG
                                 && t !== SearchType.ANOMALIAS
+                                // Sub-abas de Vencimentos & Obrigações: viram sub-abas
+                                // dentro do card OBRIGACOES_FISCAIS (VencimentosHub).
+                                && t !== SearchType.MINHA_AGENDA && t !== SearchType.VENCIMENTOS_SEMANA
                             ).map((type) => (
                                 <button
                                     key={type}
@@ -746,8 +750,10 @@ const App: React.FC = () => {
                                         {type === SearchType.SAUDE_GERAL && <ShieldIcon className="w-5 h-5" />}
                                     </div>
                                     <span className="text-xs font-bold text-center leading-tight">
-                                        {/* SAUDE_GERAL agora é o card-mãe do Diagnóstico (6 sub-abas). */}
-                                        {type === SearchType.SAUDE_GERAL ? 'Diagnóstico & Saúde' : type}
+                                        {/* Cards-mãe que fundem várias abas em sub-abas internas. */}
+                                        {type === SearchType.SAUDE_GERAL ? 'Diagnóstico & Saúde'
+                                            : type === SearchType.OBRIGACOES_FISCAIS ? 'Vencimentos & Obrigações'
+                                            : type}
                                     </span>
                                 </button>
                             ))}
@@ -1133,13 +1139,18 @@ const App: React.FC = () => {
                         )}
 
                         {/* Obrigações & Tarefas (Dashboard + Kanban + Calendário) */}
+                        {/* Vencimentos & Obrigações — hub que funde Obrigações&Tarefas +
+                            Minha Agenda + Vencimentos da Semana (mesmo grupo: prazos
+                            derivados do regime/cadastro de cada empresa). */}
                         {searchType === SearchType.OBRIGACOES_FISCAIS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <ObrigacoesETarefas
-                                    currentUser={currentUser ?? null}
+                                <VencimentosHub
+                                    currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Central de Documentos Fiscais (XML) */}
@@ -1260,30 +1271,13 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
-                        {searchType === SearchType.MINHA_AGENDA && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <MinhaAgendaPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
+                        {/* MINHA_AGENDA e VENCIMENTOS_SEMANA agora são sub-abas do
+                            VencimentosHub (card OBRIGACOES_FISCAIS). */}
 
                         {searchType === SearchType.RECUPERACAO_PRAZOS && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <PrazosPrescricaoPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.VENCIMENTOS_SEMANA && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <VencimentosSemanaPanel
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>
