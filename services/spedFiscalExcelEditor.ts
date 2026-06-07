@@ -77,6 +77,23 @@ export async function aplicarRegrasContribuicoes(parsed: ParseResult): Promise<R
     return mod.aplicarRegrasContribuicoes(parsed);
 }
 
+export interface AjusteC190 {
+    registro: string; idx: number; doc: string; combinacao: string;
+    campo: string; de: string; para: string; mensagem: string;
+}
+export interface CorrecaoC190 {
+    edicoes: SpedEdicao[];
+    ajustes: AjusteC190[];
+    resumo: { c190Corrigidos: number; camposAjustados: number };
+}
+
+/** Auto-corrige totalizadores C190 a partir dos C170 (EFD ICMS/IPI). Devolve
+ *  edicoes pra reconstruir + lista de ajustes (de/para) pra exibir. */
+export async function corrigirC190(parsed: ParseResult): Promise<CorrecaoC190> {
+    const mod = await import('../sefaz-backend/sped-fiscal-c190-autofix.js' as any);
+    return mod.corrigirC190(parsed);
+}
+
 export interface RecuperacaoMonofasico {
     aplicavel: boolean;
     itens: { idx: number; numItem: string; codItem: string; ncm: string; cstPis: string; cstCofins: string; vlPis: number; vlCofins: number }[];

@@ -11,12 +11,12 @@
  */
 
 import React, { useState } from 'react';
-import { parseSped, exportarXlsx, aplicarEdicoesXlsx, validarEstrutura, aplicarRegrasTributarias, aplicarRegrasContribuicoes, analisarRecuperacaoMonofasico, type ValidacaoSped, type RegrasTributariasResult, type RecuperacaoMonofasico } from '../../services/spedFiscalExcelEditor';
+import { parseSped, exportarXlsx, aplicarEdicoesXlsx, reconstruirSped, validarEstrutura, aplicarRegrasTributarias, aplicarRegrasContribuicoes, analisarRecuperacaoMonofasico, corrigirC190, type ValidacaoSped, type RegrasTributariasResult, type RecuperacaoMonofasico, type CorrecaoC190 } from '../../services/spedFiscalExcelEditor';
 
 type Status =
     | { fase: 'idle' }
     | { fase: 'analisando' }
-    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }>; validacao: ValidacaoSped; regras: RegrasTributariasResult; regrasContrib: RegrasTributariasResult; recuperacao: RecuperacaoMonofasico }
+    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }>; validacao: ValidacaoSped; regras: RegrasTributariasResult; regrasContrib: RegrasTributariasResult; recuperacao: RecuperacaoMonofasico; correcaoC190: CorrecaoC190 }
     | { fase: 'aplicando' }
     | { fase: 'erro'; mensagem: string };
 
@@ -43,6 +43,7 @@ const EditarViaExcel: React.FC = () => {
             const regras = await aplicarRegrasTributarias(parsed);
             const regrasContrib = await aplicarRegrasContribuicoes(parsed);
             const recuperacao = await analisarRecuperacaoMonofasico(parsed);
+            const correcaoC190 = await corrigirC190(parsed);
             setStatus({
                 fase: 'pronto-edicao',
                 nomeOriginal: file.name,
@@ -55,6 +56,7 @@ const EditarViaExcel: React.FC = () => {
                 regras,
                 regrasContrib,
                 recuperacao,
+                correcaoC190,
             });
         } catch (err: any) {
             setStatus({ fase: 'erro', mensagem: err?.message || 'Falha ao ler SPED' });
@@ -96,6 +98,34 @@ const EditarViaExcel: React.FC = () => {
             setStatus(s => s.fase === 'aplicando' ? { fase: 'idle' } : s);
         } catch (err: any) {
             setStatus({ fase: 'erro', mensagem: err?.message || 'Falha ao aplicar edições' });
+        }
+    };
+
+    // Auto-correção C190: aplica as edicoes calculadas no upload, valida e baixa.
+    const baixarComC190Corrigido = async () => {
+        if (status.fase !== 'pronto-edicao') return;
+        const { correcaoC190 } = status;
+        if (!correcaoC190 || correcaoC190.edicoes.length === 0) return;
+        setStatus({ fase: 'aplicando' });
+        try {
+            const parsed = await parseSped(status.conteudoOriginal);
+            const spedNovo = await reconstruirSped(parsed, correcaoC190.edicoes);
+            // Sanity-check: o arquivo corrigido tem que continuar válido.
+            const parsedNovo = await parseSped(spedNovo);
+            const valNovo = await validarEstrutura(parsedNovo);
+            if (!valNovo.valido) {
+                setStatus({
+                    fase: 'erro',
+                    mensagem: 'O SPED com C190 corrigido ficou inválido — NÃO foi baixado. Erros: '
+                        + valNovo.erros.slice(0, 5).join(' · '),
+                });
+                return;
+            }
+            const nome = status.nomeOriginal.replace(/\.txt$/i, '') + '.c190-corrigido.txt';
+            downloadBlob(new Blob([spedNovo], { type: 'text/plain' }), nome);
+            setStatus(s => s.fase === 'aplicando' ? { fase: 'idle' } : s);
+        } catch (err: any) {
+            setStatus({ fase: 'erro', mensagem: err?.message || 'Falha ao corrigir C190' });
         }
     };
 
@@ -206,6 +236,33 @@ const EditarViaExcel: React.FC = () => {
                                     </ul>
                                 </div>
                             )
+                        )}
+
+                        {/* Auto-correção C190 (totalizador) — só EFD ICMS/IPI.
+                            Recalcula VL_OPR/VL_BC/VL_ICMS do C190 a partir da soma
+                            dos C170, com aviso de/para de cada ajuste. */}
+                        {status.correcaoC190.resumo.c190Corrigidos > 0 && (
+                            <div className="mb-3 p-3 rounded border border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-[11px] text-blue-900 dark:text-blue-200">
+                                <b>🔧 Auto-ajuste disponível: {status.correcaoC190.resumo.c190Corrigidos} C190 totalizador(es) divergente(s)</b>
+                                {' '}({status.correcaoC190.resumo.camposAjustados} campo(s) a corrigir, recalculados da soma dos C170):
+                                <ul className="mt-1 list-disc list-inside max-h-40 overflow-auto font-mono text-[10px]">
+                                    {status.correcaoC190.ajustes.slice(0, 30).map((a, i) => (
+                                        <li key={i}>{a.mensagem}</li>
+                                    ))}
+                                    {status.correcaoC190.ajustes.length > 30 && <li>… +{status.correcaoC190.ajustes.length - 30}</li>}
+                                </ul>
+                                <button
+                                    onClick={baixarComC190Corrigido}
+                                    className="mt-2 px-3 py-1.5 text-[11px] font-bold rounded-lg"
+                                    style={{ background: '#2563eb', color: '#fff' }}
+                                >
+                                    ⬇ Baixar SPED com C190 corrigido
+                                </button>
+                                <p className="mt-1.5 text-[10px] opacity-80">
+                                    Corrige só os totalizadores C190 (Bloco 9 recalculado junto). Os C170 (itens)
+                                    ficam intactos — eles são a fonte. Confira antes de transmitir.
+                                </p>
+                            </div>
                         )}
 
                         {/* Recuperação PIS/COFINS monofásico — só EFD Contribuições. */}
