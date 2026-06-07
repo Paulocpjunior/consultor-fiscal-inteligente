@@ -22,6 +22,13 @@ import { faixaDeVencimento, urgenciaFaixa, diasAteVencimento } from './cert-venc
 
 const router = express.Router();
 
+// CNPJ do escritorio (S&P). O cert dele aparece como 'sefaz_global' (lido do
+// Secret Manager via sefaz_certificados/atual — fonte autoritativa). Se houver
+// um cert per-empresa cadastrado com o mesmo CNPJ (upload errado na tela
+// per-empresa), NAO listamos de novo — evita a S&P aparecer 2x com datas
+// conflitantes no monitor.
+const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
+
 function fa() {
     if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
     return admin;
@@ -66,6 +73,8 @@ router.get('/', requireAuth, async (req, res) => {
         try {
             const lista = await listCertsEmpresas();
             for (const c of (lista || [])) {
+                // Pula cert per-empresa do escritorio — ja exibido como sefaz_global.
+                if (String(c.cnpj || '').replace(/\D/g, '') === CNPJ_ESCRITORIO) continue;
                 const dias = diasAteVencimento(c.notAfter, agora);
                 const faixa = faixaDeVencimento(dias);
                 const u = urgenciaFaixa(faixa);

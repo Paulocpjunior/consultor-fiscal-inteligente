@@ -54,7 +54,15 @@ const validityColor = (dias: number) => {
   return 'text-emerald-600 dark:text-emerald-400';
 };
 
+// CNPJ do escritorio (S&P). O cert dele NAO mora aqui (empresas_certificados)
+// e sim no Secret Manager via tela Configuracoes > Certificado Digital. Subir
+// por esta tela per-empresa cria um cert "fantasma" que a captura real,
+// manifesto e o monitor de vencimento NAO enxergam — foi exatamente o gap
+// reportado (cert novo subido aqui, monitor seguia mostrando o antigo vencido).
+const CNPJ_ESCRITORIO = ((import.meta as any).env?.VITE_CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
+
 const CertificadoEmpresaUpload: React.FC<Props> = ({ empresaId, empresaNome, empresaCnpj, onChange }) => {
+  const ehEscritorio = empresaCnpj.replace(/\D/g, '') === CNPJ_ESCRITORIO;
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -198,6 +206,40 @@ const CertificadoEmpresaUpload: React.FC<Props> = ({ empresaId, empresaNome, emp
 
   const cnpjCertBate = info?.cnpj && info.cnpj.replace(/\D/g, '') === empresaCnpj.replace(/\D/g, '');
   const dias = info ? diasAteVencimento(info.notAfter) : 0;
+
+  // Bloqueio do escritorio: o cert da S&P vive no Secret Manager, nao aqui.
+  // Subir por esta tela nao afeta captura/manifesto/monitor — e armadilha.
+  if (ehEscritorio) {
+    return (
+      <div className="space-y-4">
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          <strong>Empresa:</strong> {empresaNome} ({empresaCnpj})
+        </div>
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-800 rounded-lg p-4 text-sm text-amber-800 dark:text-amber-200 space-y-2">
+          <p className="font-bold">⚠ Esta é a S&P (escritório) — não suba o certificado aqui.</p>
+          <p>
+            O certificado do escritório é gerenciado no <strong>Secret Manager</strong>, não nesta
+            tela per-empresa. Subir aqui cria um cert que a <strong>captura real</strong>,
+            o <strong>manifesto</strong> e o <strong>monitor de vencimento</strong> NÃO enxergam.
+          </p>
+          <p>
+            Use a aba <strong>Central de Documentos Fiscais → Configurações → Certificado Digital</strong>
+            {' '}(ou Saúde Geral → Certificado do escritório) para enviar o .pfx da S&P. Lá ele vai pro
+            Secret Manager e atualiza tudo: captura, manifesto e o monitor.
+          </p>
+          {info && (
+            <p className="text-xs pt-1 border-t border-amber-200 dark:border-amber-800">
+              Há um cert per-empresa cadastrado aqui (vence {formatDateBR(info.notAfter)}). Pode
+              <button onClick={handleDelete} className="mx-1 underline font-semibold hover:text-amber-900 dark:hover:text-amber-100">
+                removê-lo
+              </button>
+              para evitar confusão — ele não é usado pela captura do escritório.
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
