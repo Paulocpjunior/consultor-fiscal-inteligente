@@ -53,6 +53,8 @@ const CaixaPostalHub = lazy(() => import('./components/CaixaPostal/CaixaPostalHu
 const CaixaPostalAlerta = lazy(() => import('./components/CaixaPostal/AlertaPopup'));
 const CronCapturaBanner = lazy(() => import('./components/CronCapturaBanner'));
 const VencimentosBanner = lazy(() => import('./components/VencimentosBanner'));
+// Countdown pro marco CBS/IBS (Reforma Tributária) — 01/08/2026.
+const ReformaCountdownBanner = lazy(() => import('./components/ReformaCountdownBanner'));
 const DasHub = lazy(() => import('./components/Das/DasHub'));
 // DctfwebHub funde DCTFWeb + EFD-Reinf×DCTFWeb + Cobertura DCTFWeb num só card.
 const DctfwebHub = lazy(() => import('./components/DCTFWeb/DctfwebHub'));
@@ -681,6 +683,9 @@ const App: React.FC = () => {
                     <main className="flex-grow min-w-0">
                         <ErrorBoundary>
                             <Suspense fallback={null}>
+                                <ReformaCountdownBanner
+                                    onIrParaReforma={() => setSearchType(SearchType.SIMULADOR_IBS_CBS)}
+                                />
                                 <VencimentosBanner
                                     currentUser={currentUser}
                                     onClickIrTarefas={() => setSearchType(SearchType.OBRIGACOES_FISCAIS)}
