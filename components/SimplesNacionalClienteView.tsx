@@ -83,26 +83,38 @@ const SimplesNacionalClienteView: React.FC<SimplesNacionalClienteViewProps> = ({
 
             const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
+            const { drawBig4Cover, drawBig4Disclaimer } = await import('../services/reportTemplate');
+            drawBig4Cover(pdf, {
+                titulo: 'Resumo Simples Nacional',
+                subtitulo: 'Apuração mensal para o cliente',
+                cliente: empresa.nome,
+                periodo: mesApuracao.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }),
+            });
+            pdf.addPage();
+
             const imgProps = pdf.getImageProperties(imgData);
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pageHeight = pdf.internal.pageSize.getHeight();
             const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
-            
+
             let heightLeft = imgHeight;
             let position = 0;
 
-            // Primeira página
+            // Primeira página de conteúdo
             pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
             heightLeft -= pageHeight;
 
-            // Demais páginas
+            // Demais páginas de conteúdo
             while (heightLeft > 0) {
                 position -= pageHeight; // Move a imagem para cima exatamente a altura da página anterior
                 pdf.addPage();
                 pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
                 heightLeft -= pageHeight;
             }
-            
+
+            pdf.addPage();
+            drawBig4Disclaimer(pdf, 18);
+
             const filename = `resumo-simples-${empresa.nome.replace(/[^a-zA-Z0-9]/g, '-')}-${mesApuracao.toISOString().slice(0,7)}.pdf`;
             pdf.save(filename);
         } catch (e) {

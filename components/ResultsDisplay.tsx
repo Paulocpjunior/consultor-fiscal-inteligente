@@ -55,20 +55,24 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ result, error, onStartC
                 format: 'a4'
             });
 
+            const { drawBig4Cover, drawBig4Disclaimer } = await import('../services/reportTemplate');
+            drawBig4Cover(pdf, {
+                titulo: 'Consulta Fiscal — Análise por IA',
+                subtitulo: result.query,
+                periodo: new Date().toLocaleDateString('pt-BR'),
+            });
+            pdf.addPage();
+
             const imgProps = pdf.getImageProperties(imgData);
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-            
+
             let heightLeft = pdfHeight;
             let position = 0;
             const pageHeight = pdf.internal.pageSize.getHeight();
 
-            pdf.setFontSize(10);
-            pdf.setTextColor(100);
-            pdf.text('Consultor Fiscal Inteligente - Análise Gerada por IA', 10, 10);
-
-            pdf.addImage(imgData, 'PNG', 0, position + 15, pdfWidth, pdfHeight);
-            heightLeft -= (pageHeight - 15);
+            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+            heightLeft -= pageHeight;
 
             while (heightLeft > 0) {
                 position = heightLeft - pdfHeight;
@@ -76,15 +80,18 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ result, error, onStartC
                 pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
                 heightLeft -= pageHeight;
             }
-            
+
+            pdf.addPage();
+            drawBig4Disclaimer(pdf, 18);
+
             const pageCount = pdf.getNumberOfPages();
-            for(let i = 1; i <= pageCount; i++) {
+            for(let i = 2; i <= pageCount; i++) {
                 pdf.setPage(i);
                 pdf.setFontSize(8);
                 pdf.setTextColor(150);
-                pdf.text(`Página ${i} de ${pageCount}`, pdf.internal.pageSize.getWidth() - 30, pdf.internal.pageSize.getHeight() - 10);
+                pdf.text(`Página ${i - 1} de ${pageCount - 1}`, pdf.internal.pageSize.getWidth() - 30, pdf.internal.pageSize.getHeight() - 10);
             }
-            
+
             pdf.save(`consulta-${result.query.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`);
         } catch (e) {
             console.error("Erro ao exportar PDF:", e);

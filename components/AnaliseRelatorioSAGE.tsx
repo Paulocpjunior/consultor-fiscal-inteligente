@@ -374,18 +374,38 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                         </div>
                     </div>
 
-                    {/* Botão de exportação */}
-                    <div className="flex justify-end">
+                    {/* Botões de exportação:
+                        - PDF Big4 → relatório FINAL pro cliente (não-manipulável).
+                        - XLSX bruto → trabalho interno do colaborador. */}
+                    <div className="flex justify-end gap-2">
                         <button
                             onClick={() => exportarAnalise(analise)}
                             className="px-4 py-2 rounded-lg text-xs font-bold transition-colors"
                             style={{
-                                background: 'var(--accent-soft)',
-                                border: '1px solid var(--accent-soft-border)',
-                                color: 'var(--accent)',
+                                background: 'var(--bg-elevated)',
+                                border: '1px solid var(--border-default)',
+                                color: 'var(--text-secondary)',
                             }}
+                            title="Planilha XLSX bruta pra trabalho interno (manipulável). NÃO entregar ao cliente."
                         >
-                            ⬇ Exportar análise (XLSX)
+                            ⬇ XLSX bruto (interno)
+                        </button>
+                        <button
+                            onClick={async () => {
+                                const { gerarPdfAnaliseSage } = await import('../services/sageReportPdf');
+                                const blob = await gerarPdfAnaliseSage({ analise });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `analise-sage-${new Date().toISOString().slice(0, 10)}.pdf`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            }}
+                            className="px-4 py-2 rounded-lg text-xs font-bold transition-colors text-white"
+                            style={{ background: '#0F172A' }}
+                            title="Relatório final padrão Big4 pro cliente (não-manipulável)."
+                        >
+                            ⬇ Relatório PDF (cliente)
                         </button>
                     </div>
 

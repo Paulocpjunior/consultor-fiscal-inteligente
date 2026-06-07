@@ -219,10 +219,19 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         setExporting('pdf');
         try {
             const { default: jsPDF } = await import('jspdf');
+            const { drawBig4Cover, drawBig4Disclaimer } = await import('../../services/reportTemplate');
             const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
             const W = pdf.internal.pageSize.getWidth();   // 297
             const H = pdf.internal.pageSize.getHeight();  // 210
             const M = 10;                                  // margem
+
+            // Capa Big4 (padrão S&P) — primeira página antes do conteúdo de tabelas.
+            drawBig4Cover(pdf, {
+                titulo: 'Central de Documentos Fiscais',
+                subtitulo: 'Relatório · XMLs NFe (Entrada/Saída)',
+                periodo: filters.competencia || (filtroSlug.includes('-') ? filtroSlug : undefined),
+            });
+            pdf.addPage(); // página de conteúdo começa aqui
             const colorBrand: [number, number, number] = [30, 64, 175];    // sp-blue (#1E40AF, --accent do index.css)
             const colorOk: [number, number, number]    = [16, 122, 87];    // verde semantico pra 'autorizado'
             const colorMuted: [number, number, number] = [100, 116, 139]; // slate-500
@@ -439,11 +448,19 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
             pdf.text(`Totalizando ${totalDocsRender} documentos`, tableX, y + 3);
             pdf.text(fmtBRL(valorTotal), W - M, y + 3, { align: 'right' });
 
+            // Página final: disclaimer Big4
+            pdf.addPage();
+            pageNum++;
+            drawHeader();
+            drawBig4Disclaimer(pdf, 26);
+
             // ─── Atualiza rodapés com o total de páginas ───────────────────
-            const totalPages = pageNum;
-            for (let p = 1; p <= totalPages; p++) {
-                pdf.setPage(p);
-                drawFooter(p, totalPages);
+            // Capa é a página 1 (sem rodapé). Páginas de conteúdo começam em 2
+            // e são numeradas "1..N" (pageNum) no rodapé.
+            const totalPagesConteudo = pageNum;
+            for (let pConteudo = 1; pConteudo <= totalPagesConteudo; pConteudo++) {
+                pdf.setPage(pConteudo + 1); // +1 pula a capa
+                drawFooter(pConteudo, totalPagesConteudo);
             }
 
             pdf.save(`xmls-${filtroSlug}-${new Date().toISOString().slice(0, 10)}.pdf`);

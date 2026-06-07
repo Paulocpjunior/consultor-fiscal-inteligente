@@ -51,6 +51,109 @@ export interface ReportMeta {
     rodape?: string;
 }
 
+// ─── Funcoes standalone (podem ser usadas por relatorios que NAO querem o
+// setup completo — ex: XML/Retencoes que ja tinham proprio header/footer e
+// so precisam ganhar capa Big4 + disclaimer no final). ─────────────────────
+
+/** Desenha capa institucional na PAGINA ATUAL do PDF (substitui conteudo). */
+export function drawBig4Cover(pdf: any, meta: ReportMeta): void {
+    const W = pdf.internal.pageSize.getWidth();
+    const H = pdf.internal.pageSize.getHeight();
+    const M = 18;
+
+    pdf.setFillColor(...SP_COLORS.navyDeep);
+    pdf.rect(0, 0, W, H, 'F');
+    pdf.setFillColor(...SP_COLORS.gold);
+    pdf.rect(0, 0, 4, H, 'F');
+
+    pdf.setTextColor(...SP_COLORS.gold);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(10);
+    pdf.text('S&P ASSESSORIA CONTABIL', M, 30);
+
+    pdf.setTextColor(...SP_COLORS.slate400);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(7);
+    pdf.text('RELATORIO TECNICO CONFIDENCIAL', M, 36);
+
+    pdf.setTextColor(...SP_COLORS.white);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(28);
+    const tituloLinhas = pdf.splitTextToSize(meta.titulo, W - 2 * M);
+    pdf.text(tituloLinhas, M, H / 2 - 20);
+
+    if (meta.subtitulo) {
+        pdf.setTextColor(...SP_COLORS.gold);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(13);
+        pdf.text(meta.subtitulo, M, H / 2 - 5);
+    }
+
+    const infoY = H / 2 + 25;
+    pdf.setTextColor(...SP_COLORS.slate400);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+    pdf.text('CLIENTE', M, infoY);
+    pdf.text('PERIODO', M + 75, infoY);
+    pdf.text('EMITIDO EM', M + 130, infoY);
+
+    pdf.setTextColor(...SP_COLORS.white);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    const clienteTxt = meta.cliente || '—';
+    const clienteLinhas = pdf.splitTextToSize(clienteTxt, 70);
+    pdf.text(clienteLinhas, M, infoY + 6);
+    if (meta.clienteCnpj) {
+        pdf.setTextColor(...SP_COLORS.slate400);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.text(meta.clienteCnpj, M, infoY + 6 + clienteLinhas.length * 5);
+    }
+
+    pdf.setTextColor(...SP_COLORS.white);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.text(meta.periodo || '—', M + 75, infoY + 6);
+
+    const dt = (meta.emitidoEm || new Date()).toLocaleDateString('pt-BR');
+    pdf.text(dt, M + 130, infoY + 6);
+
+    pdf.setTextColor(...SP_COLORS.slate400);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(7);
+    pdf.text(
+        'Documento gerado automaticamente. As informacoes refletem a simulacao com dados informados pelo usuario e nao substituem parecer formal de profissional habilitado.',
+        M, H - 18, { maxWidth: W - 2 * M },
+    );
+}
+
+/** Desenha titulo de secao + paragrafo de disclaimer formal a partir de Y. */
+export function drawBig4Disclaimer(pdf: any, yStart: number): number {
+    const W = pdf.internal.pageSize.getWidth();
+    const M = 18;
+
+    pdf.setFillColor(...SP_COLORS.gold);
+    pdf.rect(M, yStart, 1.2, 6, 'F');
+    pdf.setTextColor(...SP_COLORS.slate900);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(12);
+    pdf.text('Disclaimer e Notas Tecnicas', M + 4, yStart + 5);
+    let y = yStart + 9;
+
+    pdf.setTextColor(...SP_COLORS.slate600);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+    const txt =
+        'Este relatorio foi gerado por sistema com base nos dados informados pelo usuario na competencia indicada na capa. ' +
+        'As simulacoes consideram a legislacao vigente na data de emissao, incluindo as alteracoes da LC 214/2025 (Reforma Tributaria) ' +
+        'quando aplicaveis ao periodo. Variacoes na receita real, regimes especiais, beneficios fiscais nao informados e operacoes ' +
+        'atipicas podem alterar significativamente os valores apurados. As informacoes sao referenciais e nao substituem ' +
+        'analise individualizada por contador responsavel.';
+    const linhas = pdf.splitTextToSize(txt, W - 2 * M);
+    pdf.text(linhas, M, y);
+    return y + linhas.length * (8 * 0.45);
+}
+
 /**
  * Setup do PDF — desenha capa institucional e devolve API com helpers
  * (drawHeader, drawFooter, addSection, addTable, addKpiCards, etc).
@@ -70,81 +173,9 @@ export function setupReport(pdf: any, meta: ReportMeta) {
     };
 
     // ─── CAPA ──────────────────────────────────────────────────────────────
-    const drawCover = () => {
-        // Fundo navy
-        setColor('fill', SP_COLORS.navyDeep);
-        pdf.rect(0, 0, W, H, 'F');
+    // Delega pra funcao standalone (mesmo codigo, sem duplicacao).
+    const drawCover = () => drawBig4Cover(pdf, meta);
 
-        // Faixa lateral gold
-        setColor('fill', SP_COLORS.gold);
-        pdf.rect(0, 0, 4, H, 'F');
-
-        // Selo S&P
-        setColor('text', SP_COLORS.gold);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(10);
-        pdf.text('S&P ASSESSORIA CONTABIL', M, 30);
-
-        // Linha de aviso confidencial
-        setColor('text', SP_COLORS.slate400);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(7);
-        pdf.text('RELATORIO TECNICO CONFIDENCIAL', M, 36);
-
-        // Titulo principal (multi-linha se precisar)
-        setColor('text', SP_COLORS.white);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(28);
-        const tituloLinhas = pdf.splitTextToSize(meta.titulo, W - 2 * M);
-        pdf.text(tituloLinhas, M, H / 2 - 20);
-
-        // Subtitulo
-        if (meta.subtitulo) {
-            setColor('text', SP_COLORS.gold);
-            pdf.setFont('helvetica', 'normal');
-            pdf.setFontSize(13);
-            pdf.text(meta.subtitulo, M, H / 2 - 5);
-        }
-
-        // Bloco de info (cliente / periodo / data)
-        const infoY = H / 2 + 25;
-        setColor('text', SP_COLORS.slate400);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(8);
-        pdf.text('CLIENTE', M, infoY);
-        pdf.text('PERIODO', M + 75, infoY);
-        pdf.text('EMITIDO EM', M + 130, infoY);
-
-        setColor('text', SP_COLORS.white);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(11);
-        const clienteTxt = meta.cliente || '—';
-        const clienteLinhas = pdf.splitTextToSize(clienteTxt, 70);
-        pdf.text(clienteLinhas, M, infoY + 6);
-        if (meta.clienteCnpj) {
-            setColor('text', SP_COLORS.slate400);
-            pdf.setFont('helvetica', 'normal');
-            pdf.setFontSize(8);
-            pdf.text(meta.clienteCnpj, M, infoY + 6 + clienteLinhas.length * 5);
-        }
-
-        setColor('text', SP_COLORS.white);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(11);
-        pdf.text(meta.periodo || '—', M + 75, infoY + 6);
-
-        const dt = (meta.emitidoEm || new Date()).toLocaleDateString('pt-BR');
-        pdf.text(dt, M + 130, infoY + 6);
-
-        // Rodape capa
-        setColor('text', SP_COLORS.slate400);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(7);
-        pdf.text(
-            'Documento gerado automaticamente. As informacoes refletem a simulacao com dados informados pelo usuario e nao substituem parecer formal de profissional habilitado.',
-            M, H - 18, { maxWidth: W - 2 * M },
-        );
-    };
 
     // ─── HEADER de paginas internas ────────────────────────────────────────
     const drawHeader = () => {
@@ -211,17 +242,9 @@ export function setupReport(pdf: any, meta: ReportMeta) {
         return y + linhas.length * (size * 0.45);
     };
 
-    /** Disclaimer formal — usar no fim do relatorio. */
+    /** Disclaimer formal — delega pra funcao standalone. */
     const disclaimer = (y: number): number => {
-        let cur = sectionTitle('Disclaimer e Notas Tecnicas', y, SP_COLORS.gold);
-        cur = paragraph(
-            'Este relatorio foi gerado por sistema com base nos dados informados pelo usuario na competencia indicada na capa. ' +
-            'As simulacoes consideram a legislacao vigente na data de emissao, incluindo as alteracoes da LC 214/2025 (Reforma Tributaria) ' +
-            'quando aplicaveis ao periodo. Variacoes na receita real, regimes especiais, beneficios fiscais nao informados e operacoes ' +
-            'atipicas podem alterar significativamente os valores apurados. As recomendacoes de regime tributario sao referenciais ' +
-            'e nao substituem analise individualizada por contador responsavel.',
-            cur, { size: 8 },
-        );
+        let cur = drawBig4Disclaimer(pdf, y);
         return cur + 3;
     };
 

@@ -123,6 +123,7 @@ const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
         setExportandoPDF(true);
         try {
             const { jsPDF } = await import('jspdf');
+            const { drawBig4Cover, drawBig4Disclaimer } = await import('../services/reportTemplate');
             const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
             const W = pdf.internal.pageSize.getWidth();
             const H = pdf.internal.pageSize.getHeight();
@@ -137,6 +138,12 @@ const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
                 pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
                 pdf.text('Gerado em: ' + now, W - m - 40, 10);
             };
+            // Capa Big4 → primeira página
+            drawBig4Cover(pdf, {
+                titulo: 'Auditoria de Retenções',
+                subtitulo: 'NFS-e Município de São Paulo',
+            });
+            pdf.addPage();
             drawHeader();
             let y = 24;
             const checkPage = (h: number) => { if (y + h > H - 12) { pdf.addPage(); drawHeader(); y = 24; } };
@@ -234,6 +241,11 @@ const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
             pdf.setFillColor(2, 0, 38); pdf.rect(m, y - 3, W - m * 2, 10, 'F');
             pdf.setTextColor(255, 255, 255); pdf.setFontSize(10); pdf.setFont('helvetica', 'bold');
             pdf.text(`TOTAL RETIDO: R$ ${brl(resumo.totalRetido)}`, m + 2, y + 4);
+
+            // Página final com disclaimer Big4
+            pdf.addPage();
+            drawHeader();
+            drawBig4Disclaimer(pdf, 26);
 
             const filename = `auditoria-retencoes-nfse-sp-${new Date().toISOString().slice(0, 10)}.pdf`;
             pdf.save(filename);

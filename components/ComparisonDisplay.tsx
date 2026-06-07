@@ -34,11 +34,19 @@ const ComparisonDisplay: React.FC<{ result: ComparisonResult | null }> = ({ resu
             const imgData = canvas.toDataURL('image/png');
 
             const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-            
+
+            const { drawBig4Cover, drawBig4Disclaimer } = await import('../services/reportTemplate');
+            drawBig4Cover(pdf, {
+                titulo: 'Comparativo Tributário — Análise por IA',
+                subtitulo: `${result.result1.query}  ×  ${result.result2.query}`,
+                periodo: new Date().toLocaleDateString('pt-BR'),
+            });
+            pdf.addPage();
+
             const imgProps = pdf.getImageProperties(imgData);
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-            
+
             let heightLeft = pdfHeight;
             let position = 0;
             const pageHeight = pdf.internal.pageSize.getHeight();
@@ -52,6 +60,9 @@ const ComparisonDisplay: React.FC<{ result: ComparisonResult | null }> = ({ resu
                 pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
                 heightLeft -= pageHeight;
             }
+
+            pdf.addPage();
+            drawBig4Disclaimer(pdf, 18);
 
             const filename = `comparativo-${result.result1.query.replace(/[^a-zA-Z0-9]/g, '-')}-vs-${result.result2.query.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
             pdf.save(filename);

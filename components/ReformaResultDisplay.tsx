@@ -90,10 +90,18 @@ const ReformaResultDisplay: React.FC<ReformaResultDisplayProps> = ({ result, isF
 
             const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
+            const { drawBig4Cover, drawBig4Disclaimer } = await import('../services/reportTemplate');
+            drawBig4Cover(pdf, {
+                titulo: 'Análise de Impacto — Reforma Tributária',
+                subtitulo: result.query,
+                periodo: new Date().toLocaleDateString('pt-BR'),
+            });
+            pdf.addPage();
+
             const imgProps = pdf.getImageProperties(imgData);
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-            
+
             let heightLeft = pdfHeight;
             let position = 0;
             const pageHeight = pdf.internal.pageSize.getHeight();
@@ -107,7 +115,10 @@ const ReformaResultDisplay: React.FC<ReformaResultDisplayProps> = ({ result, isF
                 pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
                 heightLeft -= pageHeight;
             }
-            
+
+            pdf.addPage();
+            drawBig4Disclaimer(pdf, 18);
+
             pdf.save(`reforma-tributaria-${result.query.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`);
         } catch (e) {
             console.error("Erro ao exportar PDF:", e);
