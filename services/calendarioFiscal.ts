@@ -66,8 +66,8 @@ function anteciparFimDeSemana(d: Date): Date {
  */
 export function calcularVencimento(competencia: string, regra: RegraObrigacao): Date {
     const [mesStr, anoStr] = competencia.split('/');
-    const mes = parseInt(mesStr, 10);   // 1..12
-    const ano = parseInt(anoStr, 10);
+    const mes = parseInt(mesStr || '', 10);   // 1..12
+    const ano = parseInt(anoStr || '', 10);
     if (isNaN(mes) || isNaN(ano)) {
         throw new Error(`competencia invalida: "${competencia}"`);
     }

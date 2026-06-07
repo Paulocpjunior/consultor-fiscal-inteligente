@@ -51,6 +51,12 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      - name: Type check strict (noUncheckedIndexedAccess)
+        # Subset opt-in (tsconfig.strict.json). Migracao incremental:
+        # arquivo migrado -> entra no include do tsconfig.strict.json.
+        # Issue #101 trackeia ate cobrir 100% do codebase.
+        run: npm run lint:strict
+
       - name: Unit tests
         run: npm test -- --runInBand
 

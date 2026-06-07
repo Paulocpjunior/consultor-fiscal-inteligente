@@ -288,7 +288,7 @@ function detectarTributoEmTexto(texto: string, tributoRegex: RegExp): TributoRet
                 trechoEvidencia: trecho.trim().slice(0, 120),
             };
         }
-        const valor = parseValorBR(m[2]);
+        const valor = parseValorBR(m[2] || '');
         if (valor > 0) {
             return {
                 retido: true, valor,
@@ -369,7 +369,7 @@ export function parseCsvNfseSp(texto: string): LinhaNfseCsv[] {
         return out.map(s => s.trim());
     };
 
-    const header = splitLinha(linhas[0]).map(h => h.toLowerCase());
+    const header = splitLinha(linhas[0] || '').map(h => h.toLowerCase());
     const idx = {
         direcao: header.findIndex(h => h.startsWith('direç') || h.startsWith('direc')),
         numero: header.findIndex(h => h.startsWith('número') || h.startsWith('numero')),
@@ -386,7 +386,7 @@ export function parseCsvNfseSp(texto: string): LinhaNfseCsv[] {
 
     const out: LinhaNfseCsv[] = [];
     for (let i = 1; i < linhas.length; i++) {
-        const cols = splitLinha(linhas[i]);
+        const cols = splitLinha(linhas[i] || '');
         if (cols.length < 5) continue;
         out.push({
             direcao: cols[idx.direcao] || '',

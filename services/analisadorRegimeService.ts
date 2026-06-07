@@ -11,7 +11,13 @@ const AV=[{l:180000,a:15.50,pd:0},{l:360000,a:18.00,pd:4500},{l:720000,a:19.50,p
 const PIRPJ:Record<AtividadeTipo,number>={comercio:.08,industria:.08,servicos_simples:.32,servicos_fator_r:.32,servicos_especiais:.32,servicos_gerais:.32};
 const PCSLL:Record<AtividadeTipo,number>={comercio:.12,industria:.12,servicos_simples:.32,servicos_fator_r:.32,servicos_especiais:.32,servicos_gerais:.32};
 function tabela(a:AtividadeTipo,f:number,rba:number){if(a==='comercio')return{tab:AI,obs:[]};if(a==='industria')return{tab:AII,obs:[]};if(a==='servicos_simples')return{tab:AIII,obs:[]};if(a==='servicos_gerais')return{tab:AIV,obs:[]};const fr=(f*12)/Math.max(rba,1);if(fr>=.28)return{tab:AIII,obs:[`Fator R=${(fr*100).toFixed(1)}% >= 28% -> Anexo III`]};return{tab:AV,obs:[`Fator R=${(fr*100).toFixed(1)}% < 28% -> Anexo V`]};}
-function alqEf(rba:number,tab:{l:number;a:number;pd:number}[]){const fx=tab.find(f=>rba<=f.l)||tab[tab.length-1];if(fx.pd===0&&fx.a===tab[0].a)return fx.a/100;return(rba*(fx.a/100)-fx.pd)/rba;}
+function alqEf(rba:number,tab:{l:number;a:number;pd:number}[]){
+    const fx=tab.find(f=>rba<=f.l)||tab[tab.length-1];
+    const f0=tab[0];
+    if(!fx||!f0) return 0;
+    if(fx.pd===0&&fx.a===f0.a)return fx.a/100;
+    return(rba*(fx.a/100)-fx.pd)/rba;
+}
 export function calcularSimples(e:EntradaCalculo):ResultadoRegime{if(e.receitaBrutaAcumulada12>4800000)return{regime:'simples',label:'Simples Nacional',impostoMensal:0,aliquotaEfetiva:0,detalhamento:{},observacoes:['Receita acima do limite de R$ 4,8M. Vedado ao Simples.'],recomendado:false};const{tab,obs}=tabela(e.atividade,e.folhaPagamentoMensal,e.receitaBrutaAcumulada12);const ae=alqEf(e.receitaBrutaAcumulada12,tab);const das=e.receitaBrutaMensal*ae;return{regime:'simples',label:'Simples Nacional',impostoMensal:das,aliquotaEfetiva:ae*100,detalhamento:{'DAS (unificado)':das},observacoes:obs};}
 export function calcularLucroPresumido(e:EntradaCalculo):ResultadoRegime{const bI=e.receitaBrutaMensal*PIRPJ[e.atividade],bC=e.receitaBrutaMensal*PCSLL[e.atividade];const irpj=bI*.15,adicIRPJ=Math.max(0,bI-20000)*.10,csll=bC*.09,pis=e.receitaBrutaMensal*.0065,cofins=e.receitaBrutaMensal*.03;const sv=['servicos_simples','servicos_fator_r','servicos_especiais','servicos_gerais'].includes(e.atividade);const iss=sv?e.receitaBrutaMensal*(e.issAliquota/100):0,icms=sv?0:e.receitaBrutaMensal*.12;const total=irpj+adicIRPJ+csll+pis+cofins+iss+icms;return{regime:'presumido',label:'Lucro Presumido',impostoMensal:total,aliquotaEfetiva:(total/e.receitaBrutaMensal)*100,detalhamento:{'IRPJ 15%':irpj,'IRPJ Adicional 10%':adicIRPJ,'CSLL 9%':csll,'PIS 0,65%':pis,'COFINS 3%':cofins,...(iss>0?{['ISS '+e.issAliquota+'%']:iss}:{}),...(icms>0?{'ICMS est.':icms}:{})},observacoes:sv?[]:['ICMS estimado 12% — verifique aliquota real.']};}
 export function calcularLucroReal(e:EntradaCalculo):ResultadoRegime{const lucro=e.receitaBrutaMensal-e.custosMercadorias-e.despesasDedutiveis-e.folhaPagamentoMensal;const irpj=lucro>0?lucro*.15:0,adicIRPJ=lucro>0?Math.max(0,lucro-20000)*.10:0,csll=lucro>0?lucro*.09:0;const pis=Math.max(0,e.receitaBrutaMensal*.0165-e.creditosPisCofins*.179),cofins=Math.max(0,e.receitaBrutaMensal*.076-e.creditosPisCofins*.821);const sv=['servicos_simples','servicos_fator_r','servicos_especiais','servicos_gerais'].includes(e.atividade);const iss=sv?e.receitaBrutaMensal*(e.issAliquota/100):0,icms=sv?0:e.receitaBrutaMensal*.12;const total=irpj+adicIRPJ+csll+pis+cofins+iss+icms;return{regime:'real',label:'Lucro Real',impostoMensal:total,aliquotaEfetiva:(total/e.receitaBrutaMensal)*100,detalhamento:{'IRPJ 15%':irpj,'IRPJ Adicional 10%':adicIRPJ,'CSLL 9%':csll,'PIS ncum 1,65%':pis,'COFINS ncum 7,6%':cofins,...(iss>0?{['ISS '+e.issAliquota+'%']:iss}:{}),...(icms>0?{'ICMS est.':icms}:{})},observacoes:lucro<=0?['Prejuizo: IRPJ/CSLL zerados.']:[]};}
@@ -22,7 +28,7 @@ export function analisarRegimes(e: EntradaCalculo): ResultadoAnalise {
     if (todos[0]) todos[0].recomendado = true;
     const melhor = todos[0], pior = todos[todos.length - 1];
     const econAno = pior && melhor ? (pior.impostoMensal - melhor.impostoMensal) * 12 : 0;
-    const econPct = pior && pior.impostoMensal > 0 ? ((pior.impostoMensal - melhor.impostoMensal) / pior.impostoMensal) * 100 : 0;
+    const econPct = pior && melhor && pior.impostoMensal > 0 ? ((pior.impostoMensal - melhor.impostoMensal) / pior.impostoMensal) * 100 : 0;
 
     // Alertas de faturamento — LC 123/2006. Antes era um unico alerta confuso
     // que disparava em R$ 3,6M mas dizia "proximo ao limite de R$ 4,8M",

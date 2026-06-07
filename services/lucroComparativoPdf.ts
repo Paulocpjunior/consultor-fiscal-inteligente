@@ -281,9 +281,11 @@ function renderApuracao(pdf: any, result: any, y: number, M: number, W: number):
             [(d.observacao || '').slice(0, 20), 'left'],
         ];
         cels.forEach((cel, ci) => {
-            const tx = cel[1] === 'right' ? cx + cols[ci].w - 2 : cx;
+            const col = cols[ci];
+            if (!col) return;
+            const tx = cel[1] === 'right' ? cx + col.w - 2 : cx;
             pdf.text(cel[0], tx, y + 3.5, { align: cel[1] });
-            cx += cols[ci].w;
+            cx += col.w;
         });
         y += rowH;
     });
@@ -359,7 +361,9 @@ function renderComparativoImpostos(pdf: any, comp: ComparativoLucro, y: number, 
             [menor, 'center'],
         ];
         cels.forEach((cel, ci) => {
-            const tx = cel[1] === 'right' ? cx + cols[ci].w - 2 : cel[1] === 'center' ? cx + cols[ci].w / 2 : cx;
+            const col = cols[ci];
+            if (!col) return;
+            const tx = cel[1] === 'right' ? cx + col.w - 2 : cel[1] === 'center' ? cx + col.w / 2 : cx;
             // Colore "Menor" em verde, "Maior" em vermelho na coluna Diferenca.
             if (ci === 3 && Math.abs(dif) >= 0.01) {
                 pdf.setTextColor(...(dif < 0 ? SP_COLORS.danger : SP_COLORS.success));
@@ -370,7 +374,7 @@ function renderComparativoImpostos(pdf: any, comp: ComparativoLucro, y: number, 
             pdf.text(cel[0], tx, y + 3.5, { align: cel[1] });
             pdf.setTextColor(...SP_COLORS.slate900);
             pdf.setFont('helvetica', 'normal');
-            cx += cols[ci].w;
+            cx += col.w;
         });
         y += rowH;
         i++;

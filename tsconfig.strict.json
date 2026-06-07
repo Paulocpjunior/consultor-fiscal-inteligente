@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true
+  },
+  "include": [
+    "vite-env.d.ts",
+    "services/calendarioFiscal.ts",
+    "services/calendarioService.ts",
+    "services/retencoesNfseAnalyzer.ts",
+    "services/analisadorRegimeService.ts",
+    "services/lucroService.ts",
+    "services/lucroComparativoPdf.ts",
+    "services/lucroPresumidoService.ts",
+    "services/simplesNacionalService.ts",
+    "services/xmlParserService.ts",
+    "services/firestorePaginate.ts",
+    "services/pgdasPdfParser.ts",
+    "services/firebaseConfig.ts",
+    "types.ts"
+  ]
+}
