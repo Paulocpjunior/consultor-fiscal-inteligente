@@ -49,11 +49,11 @@ const CaixaPostalAlerta = lazy(() => import('./components/CaixaPostal/AlertaPopu
 const CronCapturaBanner = lazy(() => import('./components/CronCapturaBanner'));
 const VencimentosBanner = lazy(() => import('./components/VencimentosBanner'));
 const DasDashboard = lazy(() => import('./components/Das'));
-const DCTFWebDashboard = lazy(() => import('./components/DCTFWeb'));
-const ConferirReinfDctfweb = lazy(() => import('./components/EfdReinf/ConferirReinfDctfweb'));
+// DctfwebHub funde DCTFWeb + EFD-Reinf×DCTFWeb + Cobertura DCTFWeb num só card.
+const DctfwebHub = lazy(() => import('./components/DCTFWeb/DctfwebHub'));
 const CoberturaAdnPanel = lazy(() => import('./components/NfseNacional/CoberturaAdnPanel'));
 const CoberturaPgdasPanel = lazy(() => import('./components/Das/CoberturaPgdasPanel'));
-const CoberturaDctfwebPanel = lazy(() => import('./components/DCTFWeb/CoberturaDctfwebPanel'));
+// CoberturaDctfwebPanel agora vive dentro do DctfwebHub (sub-aba).
 const RadarCriticasPanel = lazy(() => import('./components/CaixaPostal/RadarCriticasPanel'));
 // MinhaAgendaPanel e VencimentosSemanaPanel agora vivem dentro do VencimentosHub.
 const PrazosPrescricaoPanel = lazy(() => import('./components/RecuperacaoTributaria/PrazosPrescricaoPanel'));
@@ -710,6 +710,9 @@ const App: React.FC = () => {
                                 // Sub-abas de Vencimentos & Obrigações: viram sub-abas
                                 // dentro do card OBRIGACOES_FISCAIS (VencimentosHub).
                                 && t !== SearchType.MINHA_AGENDA && t !== SearchType.VENCIMENTOS_SEMANA
+                                // Sub-abas de DCTFWeb: viram sub-abas dentro do card
+                                // DCTFWEB (DctfwebHub).
+                                && t !== SearchType.EFD_REINF && t !== SearchType.DCTFWEB_COBERTURA
                             ).map((type) => (
                                 <button
                                     key={type}
@@ -1210,10 +1213,11 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
+                        {/* DCTFWeb — hub que funde Painel + Cobertura + EFD-Reinf×DCTFWeb. */}
                         {searchType === SearchType.DCTFWEB && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <DCTFWebDashboard
+                                <DctfwebHub
                                     currentUser={currentUser}
                                     onShowToast={setToastMessage}
                                 />
@@ -1221,15 +1225,7 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
-                        {searchType === SearchType.EFD_REINF && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <ConferirReinfDctfweb
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
+                        {/* EFD_REINF agora é sub-aba do DctfwebHub. */}
 
                         {searchType === SearchType.NFSE_NAC_COBERTURA && (
                             <ErrorBoundary>
@@ -1251,15 +1247,7 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
-                        {searchType === SearchType.DCTFWEB_COBERTURA && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <CoberturaDctfwebPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
+                        {/* DCTFWEB_COBERTURA agora é sub-aba do DctfwebHub. */}
 
                         {searchType === SearchType.CAIXA_POSTAL_RADAR && (
                             <ErrorBoundary>
