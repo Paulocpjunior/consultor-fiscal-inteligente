@@ -186,11 +186,14 @@ export const calcularCotasDisponiveis = (valorImposto: number, periodo: 'Mensal'
         numeroCotas: numCotas,
         valorPrimeiraCota: valorCota,
         valorDemaisCotas: valorCota,
+        // Lei 9.430/96 art. 5o §2o: 1a cota sem juros. Demais ganham SELIC
+        // acumulada do(s) mes(es) anterior(es) + 1% no mes do pagamento.
+        // Labels antigos diziam "Juros 1%" puro (errado).
         vencimentos: [
             'Quota Única ou 1ª Quota (Sem Juros)',
-            '2ª Quota (Juros 1%)',
-            '3ª Quota (Juros 1% + SELIC)'
-        ]
+            '2ª Quota (SELIC do mes anterior + 1% no mes do pagamento)',
+            '3ª Quota (SELIC acumulada 2 meses + 1% no mes do pagamento)',
+        ],
     };
 };
 
