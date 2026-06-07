@@ -1473,11 +1473,38 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                         >
                             <PencilIcon className="w-4 h-4" /> Editar Competência
                         </button>
-                        <button 
+                        <button
                             className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition-colors"
                             onClick={() => window.print()}
+                            title="Imprime via navegador o relatório de apuração do regime atual (HTML→PDF)"
                         >
-                            <DownloadIcon className="w-4 h-4" /> Gerar PDF
+                            <DownloadIcon className="w-4 h-4" /> Imprimir (regime atual)
+                        </button>
+                        <button
+                            className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900 transition-colors"
+                            onClick={async () => {
+                                // Gera PDF profissional Presumido × Real com capa, sumário,
+                                // apuração lado a lado e disclaimer (padrão Big4).
+                                const { compararRegimes, gerarPdfComparativoLucro } =
+                                    await import('../services/lucroComparativoPdf');
+                                const comp = compararRegimes(_inputRelatorio);
+                                const blob = await gerarPdfComparativoLucro({
+                                    input: _inputRelatorio,
+                                    comparativo: comp,
+                                    cliente: selectedEmpresa?.nome,
+                                    clienteCnpj: selectedEmpresa?.cnpj,
+                                    periodo: mesExtenso,
+                                });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `comparativo-lucro-${selectedEmpresa?.nome?.replace(/\W+/g, '-').toLowerCase() || 'cliente'}-${selectedFicha.mesReferencia}.pdf`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            }}
+                            title="Gera PDF profissional Presumido × Real com capa, sumário executivo, apuração lado a lado e recomendação. Pronto pra levar à reunião com o cliente."
+                        >
+                            <DownloadIcon className="w-4 h-4" /> Comparativo P × R (PDF)
                         </button>
                     </div>
                 </div>
