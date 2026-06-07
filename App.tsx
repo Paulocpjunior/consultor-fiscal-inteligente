@@ -1336,6 +1336,7 @@ const App: React.FC = () => {
                             <Suspense fallback={<LoadingSpinner />}>
                                 <SaudeGeralPanel
                                     onShowToast={setToastMessage}
+                                    onNavegar={(destino) => { setSearchType(destino); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                                 />
                             </Suspense>
                             </ErrorBoundary>
