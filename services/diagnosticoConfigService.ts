@@ -8,9 +8,10 @@ async function authHeader(): Promise<Record<string, string>> {
 }
 
 // 'informativo' = env vazia mas codigo tem default funcionando.
-// Listado pra admin saber que pode customizar, mas NAO bloqueia produto.
-export type CriticidadeConfig = 'critico' | 'alto' | 'medio' | 'informativo';
-export type TipoAchado = 'env_vazia' | 'env_via_default' | 'modo_inadequado' | 'flag_indefinida';
+// 'opcional'    = gate de feature opcional (SharePoint/gateway) — so importa
+//                 se a empresa usa aquela integracao. Nao bloqueia.
+export type CriticidadeConfig = 'critico' | 'alto' | 'medio' | 'informativo' | 'opcional';
+export type TipoAchado = 'env_vazia' | 'env_via_default' | 'env_opcional' | 'modo_inadequado' | 'flag_indefinida';
 
 export interface AchadoConfig {
     tipo: TipoAchado;
@@ -30,6 +31,7 @@ export interface DiagnosticoConfigResposta {
         altos: number;
         medios: number;
         informativos?: number;
+        opcionais?: number;
         ambiente: string;
     };
     achados: AchadoConfig[];

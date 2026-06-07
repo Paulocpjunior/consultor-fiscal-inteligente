@@ -68,13 +68,20 @@ export const CONFIGS_MONITORADAS = [
     { chave: 'GRAPH_CLIENT_SECRET', categoria: 'sharepoint', criticidade: 'alto',
         descricao: 'Client secret do app no Azure AD',
         impacto: 'SharePoint sync de XMLs não roda' },
-    { chave: 'SHAREPOINT_HOST', categoria: 'sharepoint', criticidade: 'alto',
+    // SHAREPOINT_HOST so importa se a empresa usa o sync de XML via SharePoint.
+    // GRAPH_* (acima) sao usados TAMBEM pra email (cert-alerta, captura-resumo,
+    // que funcionam). Logo, GRAPH_* setado != SharePoint em uso. Marcamos
+    // opcional pra nao alarmar quem usa SharePoint apenas pra email.
+    { chave: 'SHAREPOINT_HOST', categoria: 'sharepoint', criticidade: 'alto', opcional: true,
         descricao: 'Host do SharePoint (ex.: empresa.sharepoint.com)',
-        impacto: 'SharePoint sync não localiza o site' },
+        impacto: 'SharePoint sync de XMLs não roda (só importa se você usa essa via de importação)' },
     // ── Gateway interno
-    { chave: 'FISCAL_GATEWAY_TOKEN', categoria: 'integracao', criticidade: 'alto',
+    // FISCAL_GATEWAY_TOKEN protege o endpoint /internal/plano-contas, consumido
+    // por um sistema CONTABIL externo. Se nao ha integracao contabil ativa,
+    // nao precisa. Opcional pra nao alarmar quem nao usa.
+    { chave: 'FISCAL_GATEWAY_TOKEN', categoria: 'integracao', criticidade: 'alto', opcional: true,
         descricao: 'Token compartilhado entre fiscal e contábil',
-        impacto: 'Endpoint /internal/plano-contas retorna 401' },
+        impacto: 'Endpoint /internal/plano-contas retorna 401 (só importa se há sistema contábil externo integrado)' },
     // ── Contador (dados do SPED)
     { chave: 'CONTADOR_CRC', categoria: 'contador', criticidade: 'medio',
         descricao: 'CRC do contador responsável',
@@ -122,8 +129,7 @@ export function diagnosticarConfig(env, ambiente = 'prod') {
         const valor = e[c.chave];
         if (!valor || String(valor).trim() === '') {
             // Se tem defaultRuntime, a feature NAO esta quebrada — esta
-            // rodando no fallback. Rebaixa criticidade pra 'informativo'
-            // e ajusta impacto pra refletir realidade.
+            // rodando no fallback. Rebaixa criticidade pra 'informativo'.
             if (c.defaultRuntime) {
                 achados.push({
                     tipo: 'env_via_default',
@@ -132,6 +138,17 @@ export function diagnosticarConfig(env, ambiente = 'prod') {
                     criticidade: 'informativo',
                     descricao: c.descricao,
                     impacto: `Usando default do código: "${c.defaultRuntime}". Setar a env var só se quiser customizar.`,
+                });
+            } else if (c.opcional) {
+                // Gate de feature opcional (SharePoint sync, gateway contabil).
+                // Nao alarma — so importa se a empresa USA aquela integracao.
+                achados.push({
+                    tipo: 'env_opcional',
+                    chave: c.chave,
+                    categoria: c.categoria,
+                    criticidade: 'opcional',
+                    descricao: c.descricao,
+                    impacto: c.impacto,
                 });
             } else {
                 achados.push({
@@ -182,6 +199,9 @@ export function diagnosticarConfig(env, ambiente = 'prod') {
         medios: achados.filter((a) => a.criticidade === 'medio').length,
         // Informativos: vars sem env mas com default no codigo (nao bloqueia).
         informativos: achados.filter((a) => a.criticidade === 'informativo').length,
+        // Opcionais: gates de feature opcional (SharePoint, gateway contabil)
+        // que so importam se a empresa usa aquela integracao.
+        opcionais: achados.filter((a) => a.criticidade === 'opcional').length,
         ambiente,
     };
 

@@ -45,9 +45,25 @@ describe('diagnosticarConfig — env totalmente vazia', () => {
         expect(crc.tipo).toBe('env_vazia');
     });
 
-    it('todos os altos são reportados (sharepoint + gateway)', () => {
-        const { resumo } = diagnosticarConfig({}, 'prod');
-        expect(resumo.altos).toBeGreaterThanOrEqual(5);
+    it('GRAPH_* (email+sharepoint) continuam ALTO — email é essencial', () => {
+        const { achados } = diagnosticarConfig({}, 'prod');
+        const altos = achados.filter((a: any) => a.criticidade === 'alto').map((a: any) => a.chave);
+        expect(altos).toContain('GRAPH_TENANT_ID');
+        expect(altos).toContain('GRAPH_CLIENT_ID');
+        expect(altos).toContain('GRAPH_CLIENT_SECRET');
+        // SHAREPOINT_HOST e FISCAL_GATEWAY_TOKEN saíram de alto pra opcional
+        expect(altos).not.toContain('SHAREPOINT_HOST');
+        expect(altos).not.toContain('FISCAL_GATEWAY_TOKEN');
+    });
+
+    it('SHAREPOINT_HOST e FISCAL_GATEWAY_TOKEN viram OPCIONAL', () => {
+        const { achados, resumo } = diagnosticarConfig({}, 'prod');
+        const sh = achados.find((a: any) => a.chave === 'SHAREPOINT_HOST');
+        const gw = achados.find((a: any) => a.chave === 'FISCAL_GATEWAY_TOKEN');
+        expect(sh.criticidade).toBe('opcional');
+        expect(sh.tipo).toBe('env_opcional');
+        expect(gw.criticidade).toBe('opcional');
+        expect(resumo.opcionais).toBe(2);
     });
 
     it('resumo expõe count de informativos', () => {

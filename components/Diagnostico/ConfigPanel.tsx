@@ -19,12 +19,15 @@ const critCor: Record<CriticidadeConfig, string> = {
     medio: 'var(--warning)',
     // 'informativo' = env vazia mas codigo tem default rodando (ex: STORAGE_BUCKET)
     informativo: 'var(--text-muted)',
+    // 'opcional' = gate de feature opcional (SharePoint/gateway) — azul calmo
+    opcional: '#0ea5e9',
 };
 const critLabel: Record<CriticidadeConfig, string> = {
     critico: 'CRÍTICO',
     alto: 'ALTO',
     medio: 'MÉDIO',
     informativo: 'INFO (default OK)',
+    opcional: 'OPCIONAL',
 };
 
 const ConfigPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
@@ -70,11 +73,12 @@ const ConfigPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                 </p>
 
                 {data && (
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mt-4">
+                    <div className="grid grid-cols-2 md:grid-cols-7 gap-3 mt-4">
                         <Kpi label="Total verificadas" value={String(data.resumo.total)} />
                         <Kpi label="Críticas faltando" value={String(data.resumo.criticos)} accent={data.resumo.criticos > 0 ? 'danger' : 'success'} />
                         <Kpi label="Altas faltando" value={String(data.resumo.altos)} accent={data.resumo.altos > 0 ? 'warning' : 'success'} />
                         <Kpi label="Médias faltando" value={String(data.resumo.medios)} />
+                        <Kpi label="Opcionais" value={String((data.resumo as any).opcionais ?? 0)} />
                         <Kpi label="Info (default OK)" value={String((data.resumo as any).informativos ?? 0)} />
                         <Kpi label="Ambiente" value={data.ambiente.toUpperCase()} />
                     </div>
@@ -83,7 +87,7 @@ const ConfigPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
 
             <div className="p-4 rounded-xl flex flex-wrap items-center gap-3" style={card}>
                 <div className="flex gap-1 text-xs">
-                    {(['todas', 'critico', 'alto', 'medio', 'informativo'] as const).map(f => (
+                    {(['todas', 'critico', 'alto', 'medio', 'opcional', 'informativo'] as const).map(f => (
                         <button key={f} onClick={() => setFiltro(f as any)}
                             className="px-3 py-2 rounded-lg font-bold transition-colors"
                             style={{ background: filtro === f ? 'var(--accent)' : 'var(--bg-card)', color: filtro === f ? '#fff' : 'var(--text-muted)', border: `1px solid ${filtro === f ? 'var(--accent)' : 'var(--border-default)'}` }}>
