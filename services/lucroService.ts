@@ -539,7 +539,14 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
 
     const icmsVendas = input.icmsVendas || 0;
     const basePisCofins = Math.max(0, receitaLiquida - icmsVendas - (input.faturamentoMonofasico || 0));
-    const baseCredito = input.despesasDedutiveis + extraBaseCredito;
+    // Base de credito PIS/COFINS no Lucro Real - Lei 10.637/02 art. 3 e Lei 10.833/03 art. 3.
+    // Se o front separou (despesasGeramCreditoPisCofins definido), usa o campo
+    // segregado. Caso contrario, cai em despesasDedutiveis com SUBTRACAO da folha
+    // (art. 3 §2 I veda credito sobre mao-de-obra PF). Compat temporaria; quando
+    // toda a base migrar para o campo segregado, removemos o fallback.
+    const baseCredito = (input.despesasGeramCreditoPisCofins !== undefined)
+        ? input.despesasGeramCreditoPisCofins + extraBaseCredito
+        : Math.max(0, input.despesasDedutiveis - (input.folhaPagamento || 0)) + extraBaseCredito;
 
     // Saldos credores do mês anterior (abate débito atual)
     const saldoAbatidoPis = input.saldoCredorPis || 0;

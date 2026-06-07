@@ -553,6 +553,14 @@ export interface LucroInput {
     receitaFinanceira: number;
     despesasOperacionais: number;
     despesasDedutiveis: number;
+    /**
+     * Base de credito PIS/COFINS no Lucro Real (apenas Lei 10.637/02 art. 3 e
+     * Lei 10.833/03 art. 3 - aluguel PJ, energia, insumos, depreciacao etc).
+     * NAO incluir folha de salario (vedacao art. 3 §2 I), aluguel PF, mao-de-obra PF.
+     * Se nao informado, cai em `despesasDedutiveis` por compat — porem isso
+     * MAJORA credito indevidamente. Migracao: front passa a separar.
+     */
+    despesasGeramCreditoPisCofins?: number;
     folhaPagamento: number;
     custoMercadoriaVendida: number;
     issConfig: IssConfig;

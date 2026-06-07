@@ -38,6 +38,14 @@ const OBRIGACAO_LABEL: Record<ObrigacaoTarefa, string> = {
     DCTFWEB: 'DCTFWeb',
     FGTS: 'FGTS Digital',
     SPED: 'SPED Fiscal',
+    INSS_CPP: 'INSS Patronal',
+    PIS_COFINS: 'PIS/COFINS',
+    EFD_CONTRIB: 'EFD-Contribuicoes',
+    IRPJ_TRIM: 'IRPJ Trimestral',
+    CSLL_TRIM: 'CSLL Trimestral',
+    DEFIS: 'DEFIS',
+    ECF: 'ECF',
+    ECD: 'ECD',
     OUTRA: 'Outra',
 };
 

@@ -328,21 +328,18 @@ function ultimoDiaMes(ano, mes) {
     return new Date(ano, mes, 0).getDate();
 }
 
+import { ehDiaUtil } from './feriados-nacionais.js';
+
 /**
  * Recebe ano/mes (1-12)/dia e devolve string YYYY-MM-DD ajustada para o
- * proximo dia util quando a data cai em sabado/domingo. Default fiscal:
- * POSTERGAR (mais seguro).
+ * proximo dia util quando a data cai em sabado/domingo/feriado nacional.
+ * Default fiscal: POSTERGAR (mais seguro - regra CGSN/RFB pra DAS/DCTFWeb/etc).
  */
 export function ajustarDiaUtil(ano, mes, dia, modo = 'postergar') {
     let d = new Date(ano, mes - 1, dia);
-    if (modo === 'antecipar') {
-        while (d.getDay() === 0 || d.getDay() === 6) {
-            d.setDate(d.getDate() - 1);
-        }
-    } else {
-        while (d.getDay() === 0 || d.getDay() === 6) {
-            d.setDate(d.getDate() + 1);
-        }
+    const passo = modo === 'antecipar' ? -1 : 1;
+    while (!ehDiaUtil(d)) {
+        d.setDate(d.getDate() + passo);
     }
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');

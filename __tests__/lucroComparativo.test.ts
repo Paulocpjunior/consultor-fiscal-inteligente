@@ -42,12 +42,16 @@ describe('compararRegimes — escolha de regime vencedor', () => {
 
     it('comércio com margem baixa → Real vence', () => {
         // Faturamento R$ 500k, despesas R$ 490k → margem 2% < presunção 8%.
+        // despesasGeramCreditoPisCofins separado da folha: folha NAO gera credito
+        // (Lei 10.637/02 art. 3 §2 I). Aqui R$ 300k de despesas geram credito
+        // PIS/COFINS (aluguel PJ, insumos, energia etc).
         const r = compararRegimes({
             ...inputBase,
             faturamentoComercio: 500_000,
             despesasOperacionais: 490_000,
             folhaPagamento: 50_000,
             despesasDedutiveis: 200_000,
+            despesasGeramCreditoPisCofins: 300_000,
         });
         expect(r.vencedor).toBe('Real');
         expect(r.real.totalImpostos).toBeLessThan(r.presumido.totalImpostos);
