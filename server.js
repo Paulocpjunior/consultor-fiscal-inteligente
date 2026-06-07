@@ -207,10 +207,21 @@ const cnpjLookupLimiter = rateLimit({
     keyGenerator: (req) => (req.user?.uid ? `u:${req.user.uid}` : req.ip),
     message: { error: 'Muitas consultas CNPJ em pouco tempo. Aguarde ~1 minuto.' },
 });
+// Anti-brute-force em /api/agent/* (validacao de API key). Sem limite dedicado
+// um atacante consegue testar milhares de keys/min sob o limite global de 120/min.
+// 10/min/IP eh suficiente pra uso legitimo (n8n/Zapier publicam mensagens com
+// intervalo grande) e duro pra brute force (chave SHA-256 = 2^256 espaco).
+const agentLimiter = rateLimit({
+    windowMs: 60_000, max: 10,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    message: { error: 'Muitas tentativas de autenticacao. Aguarde 1 minuto.' },
+});
 app.use('/api/', apiLimiter);
 app.use('/api/admin/sefaz/consulta-nfe-por-chave', sefazLimiter);
 app.use('/api/admin/sefaz/sync-one', sefazLimiter);
 app.use('/api/admin/cnpj-lookup', cnpjLookupLimiter);
+app.use('/api/agent', agentLimiter);
 
 // ── Routers (montados DEPOIS do middleware de segurança/limite) ─────────
 app.use('/api/admin/sefaz', sefazCertRouter);

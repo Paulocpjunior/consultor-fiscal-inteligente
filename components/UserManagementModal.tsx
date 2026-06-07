@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { User, AccessLog } from '../types';
 import * as authService from '../services/authService';
 import { CloseIcon, UserGroupIcon, TrashIcon, UserIcon } from './Icons';
@@ -27,16 +27,27 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     const [isLoading, setIsLoading] = useState(false);
     const confirm = useConfirm();
     const prompt = usePrompt();
+    // Guard que evita setState apos unmount/fechar modal mid-flight do fetch.
+    // Antes, abrir/fechar rapido o modal podia atualizar state em componente
+    // ja desmontado (React 18 warning + memory leak).
+    const aliveRef = useRef(true);
 
     const isAdmin = currentUserRole === 'admin';
+
+    useEffect(() => {
+        aliveRef.current = true;
+        return () => { aliveRef.current = false; };
+    }, []);
 
     const loadUsers = async () => {
         setIsLoading(true);
         setError(null);
         try {
             const fetchedUsers = await authService.getAllUsers();
+            if (!aliveRef.current) return;
             setUsers(Array.isArray(fetchedUsers) ? fetchedUsers : []);
         } catch (err: any) {
+            if (!aliveRef.current) return;
             const m = err?.message || 'Erro ao carregar usuários.';
             if (m.includes('PERMISSION_DENIED')) {
                 setError('Apenas administradores podem listar todos os usuários. Solicite a um admin que te promova.');
@@ -45,7 +56,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
             }
             setUsers([]);
         } finally {
-            setIsLoading(false);
+            if (aliveRef.current) setIsLoading(false);
         }
     };
 
@@ -54,8 +65,10 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
         setError(null);
         try {
             const fetchedLogs = await authService.getRecentLogs(100);
+            if (!aliveRef.current) return;
             setLogs(Array.isArray(fetchedLogs) ? fetchedLogs : []);
         } catch (err: any) {
+            if (!aliveRef.current) return;
             const m = err?.message || 'Erro ao carregar logs.';
             if (m.includes('PERMISSION_DENIED')) {
                 setError('Apenas administradores podem ler logs de acesso.');
@@ -64,7 +77,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
             }
             setLogs([]);
         } finally {
-            setIsLoading(false);
+            if (aliveRef.current) setIsLoading(false);
         }
     };
 

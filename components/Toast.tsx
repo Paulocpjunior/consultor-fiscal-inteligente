@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { AnimatedCheckIcon } from './Icons';
 
 interface ToastProps {
@@ -8,10 +8,17 @@ interface ToastProps {
 }
 
 const Toast: React.FC<ToastProps> = ({ message, onClose, duration = 3000 }) => {
+    // onClose vem como funcao inline do parent. Se incluido nas deps do effect,
+    // todo render do parent reseta o setTimeout - toast pode nunca fechar
+    // sozinho em apps com state global re-renderizando. Travamos via ref para
+    // que o effect dispare apenas uma vez por mount.
+    const onCloseRef = useRef(onClose);
+    onCloseRef.current = onClose;
+
     useEffect(() => {
-        const timer = setTimeout(onClose, duration);
+        const timer = setTimeout(() => onCloseRef.current(), duration);
         return () => clearTimeout(timer);
-    }, [onClose, duration]);
+    }, [duration]);
 
     return (
         <div className="fixed bottom-4 right-4 bg-white dark:bg-slate-800 border border-green-100 dark:border-green-900/30 shadow-lg rounded-lg p-4 flex items-center gap-3 animate-fade-in z-[100] max-w-sm" role="status" aria-live="polite">
