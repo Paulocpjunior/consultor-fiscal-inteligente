@@ -262,7 +262,10 @@ function montarHtml({ empresas, desdeMs, agoraMs }) {
 </body></html>`;
 }
 
-router.get('/captura-resumo-cron', requireCronAuth, async (req, res) => {
+// Cloud Scheduler bate via POST (--http-method=POST nos jobs do
+// setup-cloud-schedulers.sh). Mantemos consistente com os demais crons
+// (cert-alerta-cron, sefaz-cron-noturno, etc). Body vazio = {}.
+router.post('/captura-resumo-cron', requireCronAuth, async (req, res) => {
   try {
     const dados = await coletarDados();
     if (dados.empresas.length === 0) {
