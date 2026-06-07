@@ -5,6 +5,7 @@
 
 import express from 'express';
 import multer from 'multer';
+import admin from 'firebase-admin';
 import {
     uploadCertEmpresa,
     loadCertEmpresa,
@@ -16,6 +17,32 @@ import { requireAdmin, requireAuth } from './require-admin.js';
 import { podeAcessarEmpresaId } from './carteira-auth.js';
 
 const router = express.Router();
+
+// CNPJ do escritorio (S&P). O cert dele vive no Secret Manager (cert-manager.js
+// → sefaz_certificados/atual), NAO em empresas_certificados. Subir por esta
+// rota per-empresa cria um cert que a captura real, manifesto e monitor de
+// vencimento nao usam — gap reportado: cert novo subido aqui, monitor seguia
+// mostrando o antigo. Bloqueamos no backend tambem (defesa em profundidade
+// alem do guard de UI).
+const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
+
+function fa() {
+    if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    return admin;
+}
+
+// Resolve o CNPJ de uma empresa pelo id (simples_empresas | lucro_empresas).
+async function cnpjDaEmpresa(empresaId) {
+    if (!empresaId) return null;
+    const db = fa().firestore();
+    for (const col of ['simples_empresas', 'lucro_empresas']) {
+        try {
+            const snap = await db.collection(col).doc(empresaId).get();
+            if (snap.exists) return String(snap.data()?.cnpj || '').replace(/\D/g, '');
+        } catch { /* tenta a proxima colecao */ }
+    }
+    return null;
+}
 
 // Middleware: usado APOS requireAuth. Garante que admin OU colaborador-com-
 // a-empresa-na-carteira pode acessar a rota. Pega empresaId de req.params
@@ -43,6 +70,19 @@ router.post('/upload', requireAuth, upload.single('cert'), requireCarteira, asyn
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
         if (!password) return res.status(400).json({ error: 'password obrigatoria' });
         if (!req.file?.buffer) return res.status(400).json({ error: 'arquivo cert ausente' });
+
+        // Bloqueia upload per-empresa do escritorio (S&P). O cert dele deve ir
+        // pro Secret Manager via POST /api/admin/sefaz/cert. Aqui criaria um
+        // cert fantasma fora do radar da captura/manifesto/monitor.
+        const cnpjEmp = await cnpjDaEmpresa(empresaId);
+        if (cnpjEmp && cnpjEmp === CNPJ_ESCRITORIO) {
+            return res.status(400).json({
+                ok: false,
+                error: 'Este é o certificado do escritório (S&P). Envie-o pela aba ' +
+                       'Configurações → Certificado Digital (vai pro Secret Manager e atualiza ' +
+                       'captura, manifesto e o monitor de vencimento). Upload per-empresa não é usado pra S&P.',
+            });
+        }
 
         const result = await uploadCertEmpresa(empresaId, req.file.buffer, password, {
             email: req.user.email,
