@@ -22,7 +22,7 @@ import { SearchType, type SearchResult, type ComparisonResult, type FavoriteItem
 import { fetchFiscalData, fetchComparison, fetchSimilarServices } from './services/geminiService';
 import * as simplesService from './services/simplesNacionalService';
 import * as authService from './services/authService';
-import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon, ScaleIcon } from './components/Icons';
+import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon, ScaleIcon, ShieldIcon } from './components/Icons';
 // (FiscalObligationsDashboard, Tarefas, CalendarioFiscal agora dentro de ObrigacoesETarefas)
 import { runInitialSync } from './services/cloudSyncService';
 import { requestNotificationPermission } from './services/notificacoesService';
@@ -56,17 +56,16 @@ const RadarCriticasPanel = lazy(() => import('./components/CaixaPostal/RadarCrit
 const MinhaAgendaPanel = lazy(() => import('./components/MinhaAgenda/MinhaAgendaPanel'));
 const PrazosPrescricaoPanel = lazy(() => import('./components/RecuperacaoTributaria/PrazosPrescricaoPanel'));
 const VencimentosSemanaPanel = lazy(() => import('./components/Vencimentos/VencimentosSemanaPanel'));
-const DiagnosticoDocsFiscaisPanel = lazy(() => import('./components/Diagnostico/DocsFiscaisPanel'));
 const SublimitePanel = lazy(() => import('./components/SimplesSublimite/SublimitePanel'));
-const CadastrosPanel = lazy(() => import('./components/Diagnostico/CadastrosPanel'));
-const CertMonitorPanel = lazy(() => import('./components/CertMonitor/CertMonitorPanel'));
-const ConfigPanel = lazy(() => import('./components/Diagnostico/ConfigPanel'));
-const SaudeGeralPanel = lazy(() => import('./components/Saude/SaudeGeralPanel'));
+// Hub que funde as 6 abas de diagnóstico (Saúde/Docs/Cadastros/Certificados/
+// Config/Anomalias) num só card com sub-abas internas. Os 6 painéis são
+// importados DENTRO do hub agora — não mais soltos aqui.
+const DiagnosticoHub = lazy(() => import('./components/Diagnostico/DiagnosticoHub'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
 const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
-const AnomaliasView = lazy(() => import('./components/Anomalias'));
+// AnomaliasView agora vive dentro do DiagnosticoHub (sub-aba).
 const SimuladorReforma = lazy(() => import('./components/SimuladorReforma'));
 const TaxEmissionDashboard = lazy(() => import('./components/TaxEmission'));
 const RecuperacaoTributaria = lazy(() => import('./components/RecuperacaoTributaria'));
@@ -701,7 +700,13 @@ const App: React.FC = () => {
                         </ErrorBoundary>
                         {/* Search Type Selection Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
-                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL && t !== SearchType.NFP_PRO_CLOUD).map((type) => (
+                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL && t !== SearchType.NFP_PRO_CLOUD
+                                // Sub-abas do Diagnóstico & Saúde: somem do grid raiz, viram
+                                // sub-abas dentro do card SAUDE_GERAL (DiagnosticoHub).
+                                && t !== SearchType.DIAGNOSTICO_DOCS && t !== SearchType.DIAGNOSTICO_CADASTROS
+                                && t !== SearchType.CERT_MONITOR && t !== SearchType.DIAGNOSTICO_CONFIG
+                                && t !== SearchType.ANOMALIAS
+                            ).map((type) => (
                                 <button
                                     key={type}
                                     onClick={() => {
@@ -738,8 +743,12 @@ const App: React.FC = () => {
                                         {type === SearchType.LUCRO_PRESUMIDO_REAL && <BuildingIcon className="w-5 h-5" />}
                                         {type === SearchType.OBRIGACOES_FISCAIS && <CalendarIcon className="w-5 h-5" />}
                                         {type === SearchType.RECUPERACAO_TRIBUTARIA && <ScaleIcon className="w-5 h-5" />}
+                                        {type === SearchType.SAUDE_GERAL && <ShieldIcon className="w-5 h-5" />}
                                     </div>
-                                    <span className="text-xs font-bold text-center leading-tight">{type}</span>
+                                    <span className="text-xs font-bold text-center leading-tight">
+                                        {/* SAUDE_GERAL agora é o card-mãe do Diagnóstico (6 sub-abas). */}
+                                        {type === SearchType.SAUDE_GERAL ? 'Diagnóstico & Saúde' : type}
+                                    </span>
                                 </button>
                             ))}
                             {/* Consulta Situação Fiscal — somente admin */}
@@ -1281,15 +1290,8 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
-                        {searchType === SearchType.DIAGNOSTICO_DOCS && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <DiagnosticoDocsFiscaisPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
+                        {/* DIAGNOSTICO_DOCS/CADASTROS/CERT_MONITOR/CONFIG/ANOMALIAS:
+                            agora são sub-abas dentro do DiagnosticoHub (card SAUDE_GERAL). */}
 
                         {searchType === SearchType.SIMPLES_SUBLIMITE && (
                             <ErrorBoundary>
@@ -1301,42 +1303,12 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
-                        {searchType === SearchType.DIAGNOSTICO_CADASTROS && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <CadastrosPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.CERT_MONITOR && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <CertMonitorPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.DIAGNOSTICO_CONFIG && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <ConfigPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
                         {searchType === SearchType.SAUDE_GERAL && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <SaudeGeralPanel
+                                <DiagnosticoHub
+                                    currentUser={currentUser}
                                     onShowToast={setToastMessage}
-                                    onNavegar={(destino) => { setSearchType(destino); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                                 />
                             </Suspense>
                             </ErrorBoundary>
@@ -1393,16 +1365,7 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
-                        {searchType === SearchType.ANOMALIAS && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <AnomaliasView
-                                    currentUser={currentUser ?? null}
-                                    onShowToast={(msg) => setToastMessage(msg)}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
+                        {/* ANOMALIAS agora é sub-aba do DiagnosticoHub (card SAUDE_GERAL). */}
 
                         {searchType === SearchType.SIMULADOR_IBS_CBS && (
                             <ErrorBoundary>
