@@ -92,7 +92,10 @@ function parseValor(s: string | undefined): number {
 }
 
 function findAfter(text: string, label: string, maxChars = 200): string {
-    const idx = text.indexOf(label);
+    // Busca case-insensitive — DANFSe v1.0 escreve "Data e Hora da emissão"
+    // (minúscula) e ABRASF escreve "Data e Hora da Emissão" (capital).
+    // Sem case-insensitive, cada padrao quebrava o outro.
+    const idx = text.toLowerCase().indexOf(label.toLowerCase());
     if (idx === -1) return '';
     return text.slice(idx + label.length, idx + label.length + maxChars);
 }
@@ -204,26 +207,42 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     }
 
     // Cabecalho
+    // DANFSe v1.0 (gov.br/nfse) tem labels separados em linhas distintas:
+    //  "Número da NFS-e\n699598"  / "Série da DPS\n1"
+    // ABRASF padrao usa formato "NNNNNN / S" inline.
     let numero = '';
     let serie = '';
-    const numSerieMatch = text.match(/(\d{6,})\s*\/\s*(\w+)/);
-    if (numSerieMatch) {
-        numero = numSerieMatch[1];
-        serie = numSerieMatch[2];
+    const numNfseMatch = text.match(/N[uú]mero\s+da\s+NFS-?e\s*\n?\s*(\d+)/i);
+    if (numNfseMatch) numero = numNfseMatch[1];
+    const serieDpsMatch = text.match(/S[eé]rie\s+(?:da\s+(?:DPS|NFS-?e)|do\s+RPS)\s*\n?\s*(\w+)/i);
+    if (serieDpsMatch) serie = serieDpsMatch[1];
+    if (!numero) {
+        // Fallback ABRASF: "699598 / 1"
+        const numSerieMatch = text.match(/(\d{6,})\s*\/\s*(\w+)/);
+        if (numSerieMatch) { numero = numSerieMatch[1]; serie = serie || numSerieMatch[2]; }
     }
 
+    // Data: DANFSe usa "Data e Hora da emissão da NFS-e\n11/05/2026 14:31:31"
+    // (minusculo em "emissão" e tem " da NFS-e" no meio). findAfter agora eh
+    // case-insensitive entao "Data e Hora da Emissão" pega a forma do DANFSe.
     const dataEmissao = findValueByLabel(
         text,
-        ['Data e Hora da Emissao', 'Data e Hora da Emissão', 'Data de Emissao', 'Data de Emissão'],
+        ['Data e Hora da Emissão', 'Data e Hora da Emissao', 'Data de Emissão', 'Data de Emissao'],
         /(\d{2}\/\d{2}\/\d{4}(?:\s+\d{2}:\d{2}(?::\d{2})?)?)/,
     );
-    const competencia = findValueByLabel(text, ['Competencia', 'Competência'], /(\d{1,2}\/\d{4})/);
+    // Competencia: DANFSe = "Competência da NFS-e\n10/05/2026" (DD/MM/YYYY);
+    // ABRASF tradicional = "Competência: MM/YYYY". Aceita os 2.
+    const competencia = findValueByLabel(text, ['Competência', 'Competencia'], /(\d{1,2}\/\d{2,4}(?:\/\d{2,4})?)/);
     const codigoVerificacao = findValueByLabel(
         text,
-        ['Codigo de Verificacao', 'Código de Verificação'],
+        ['Código de Verificação', 'Codigo de Verificacao'],
         /([A-Z0-9-]{6,})/,
     );
-    const chaveAcessoMatch = text.match(/(?:chave\s*de?\s*acesso|chave\s*nacional)[\s:]*?(\d{40,50})/i);
+    // Chave: DANFSe = "Chave de Acesso da NFS-e\n3548906..." (50 digitos).
+    // ABRASF tradicional varia. Aceita label "da NFS-e" como variante.
+    const chaveAcessoMatch =
+        text.match(/Chave\s*(?:de\s+Acesso|Nacional)(?:\s+da\s+NFS-?e)?[\s:]*\n?\s*(\d{40,50})/i)
+        || text.match(/(?:chave\s*de?\s*acesso|chave\s*nacional)[\s:]*?(\d{40,50})/i);
     const chaveAcesso = chaveAcessoMatch ? chaveAcessoMatch[1] : '';
 
     // Blocos de Prestador / Tomador.
@@ -272,7 +291,11 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     const tomador = parsePartie(blockTomador);
 
     // Servico
-    const codigoServicoMatch = text.match(/C[oó]digo\s+do\s+Servi[cç]o[\s:]*\n?\s*([\d.]+)/i);
+    // DANFSe v1.0 usa "Código de Tributação Nacional\n17.01.01 - ..."
+    // ABRASF tradicional usa "Código do Serviço\n01.05" ou similar.
+    // Codigo pode ter ponto E hifen ('17.01.01' ou '17-01-01').
+    const codigoServicoMatch =
+        text.match(/C[oó]digo\s+(?:do\s+Servi[cç]o|de\s+Tributa[cç][aã]o\s+(?:Nacional|Municipal))[\s:]*\n?\s*([\d.\-/]+)/i);
     const codigoServico = codigoServicoMatch ? codigoServicoMatch[1] : '';
     const discBlock =
         idxDisc >= 0
@@ -291,32 +314,45 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     const naturezaOperacao = naturezaMatch ? naturezaMatch[1].trim() : '';
 
     // Valores
-    const numPattern = /([\d.]+,\d{2})/;
+    // numPattern aceita "R$" opcional antes do valor (DANFSe v1.0 escreve
+    // "R$ 1.956,03" depois do label, ABRASF as vezes so o numero).
+    const numPattern = /R?\$?\s*([\d.]+,\d{2})/;
     const valorServicos = parseValor(
-        findValueByLabel(text, ['Valor Servicos', 'Valor Serviços', 'VALOR TOTAL DO SERVI'], numPattern),
+        findValueByLabel(text, ['Valor do Serviço', 'Valor do Servico', 'Valor Servicos', 'Valor Serviços', 'VALOR TOTAL DO SERVI'], numPattern),
     );
-    const baseCalculo = parseValor(findValueByLabel(text, ['Base de Calculo', 'Base de Cálculo'], numPattern));
+    const baseCalculo = parseValor(findValueByLabel(text, ['Base de Cálculo', 'Base de Calculo', 'BC ISSQN'], numPattern));
 
-    const aliquotaIssMatch = text.match(/Al[i\u00ed]quota\s+ISS\s*([\d,]+)\s*%?/i);
+    // DANFSe v1.0 usa "Al\u00edquota Aplicada\n2,00%" (linha separada);
+    // ABRASF inline "Al\u00edquota ISS 2%".
+    const aliquotaIssMatch = text.match(/Al[i\u00ed]quota\s+(?:ISS|Aplicada)[\s:]*\n?\s*([\d,]+)\s*%?/i);
     const aliquotaIss = aliquotaIssMatch ? parseValor(aliquotaIssMatch[1]) : 0;
 
-    const valorIssRetido = parseValor(findValueByLabel(text, ['Valor ISS retido'], numPattern));
-    const valorIssMatch = text.match(/Valor\s+ISS(?!\s+retido)[\s\S]{0,80}?([\d.]+,\d{2})/i);
+    const valorIssRetido = parseValor(findValueByLabel(text, ['Valor ISS retido', 'ISS Retido'], numPattern));
+    // ISSQN Apurado (DANFSe) ou "Valor ISS" (ABRASF). Bypassa "Valor ISS retido"
+    // com lookahead negativo.
+    const valorIssMatch = text.match(/(?:ISSQN\s+Apurado|Valor\s+ISS(?!\s+retido))[\s\S]{0,80}?([\d.]+,\d{2})/i);
     const valorIss = valorIssMatch ? parseValor(valorIssMatch[1]) : 0;
 
-    const valorPis = parseValor(findValueByLabel(text, ['Valor PIS'], numPattern));
-    const valorCofins = parseValor(findValueByLabel(text, ['Valor COFINS'], numPattern));
-    const valorInss = parseValor(findValueByLabel(text, ['Valor INSS'], numPattern));
-    const valorIrrf = parseValor(findValueByLabel(text, ['Valor IRRF', 'Valor IR'], numPattern));
-    const valorCsll = parseValor(findValueByLabel(text, ['Valor CSLL'], numPattern));
+    // Tributos federais: DANFSe v1.0 escreve "PIS - Débito Apuração Própria",
+    // "COFINS - Débito Apuração Própria" e "Contribuição Previdenciária - Retida".
+    const valorPis = parseValor(findValueByLabel(text, ['PIS - Débito Apuração Própria', 'PIS - Debito Apuracao Propria', 'Valor PIS'], numPattern));
+    const valorCofins = parseValor(findValueByLabel(text, ['COFINS - Débito Apuração Própria', 'COFINS - Debito Apuracao Propria', 'Valor COFINS'], numPattern));
+    const valorInss = parseValor(findValueByLabel(text, ['Contribuição Previdenciária - Retida', 'Contribuicao Previdenciaria - Retida', 'Valor INSS'], numPattern));
+    // DANFSe escreve "IRRF" sozinho como label. Precisa boundary (^ ou \n)
+    // pra nao casar "IRRF" no meio de outro texto. Fallback pra "Valor IRRF".
+    const valorIrrfStr =
+        findValueByLabel(text, ['Valor IRRF', 'Valor IR'], numPattern)
+        || (text.match(/(?:^|\n)IRRF\s*\n\s*R?\$?\s*([\d.]+,\d{2})/i)?.[1] ?? '');
+    const valorIrrf = parseValor(valorIrrfStr);
+    const valorCsll = parseValor(findValueByLabel(text, ['Valor CSLL', 'CSLL'], numPattern));
     const valorOutrasRetencoes = parseValor(
-        findValueByLabel(text, ['Outras retencoes', 'Outras retenções'], numPattern),
+        findValueByLabel(text, ['Outras retenções', 'Outras retencoes'], numPattern),
     );
-    const valorDeducoes = parseValor(findValueByLabel(text, ['Valor deducoes', 'Valor deduções'], numPattern));
-    const valorDescIncondicional = parseValor(findValueByLabel(text, ['Desconto incondicional'], numPattern));
-    const valorDescCondicional = parseValor(findValueByLabel(text, ['Desconto condicional'], numPattern));
+    const valorDeducoes = parseValor(findValueByLabel(text, ['Total Deduções', 'Total Deducoes', 'Valor deduções', 'Valor deducoes'], numPattern));
+    const valorDescIncondicional = parseValor(findValueByLabel(text, ['Desconto Incondicionado', 'Desconto Incondicional', 'Desconto incondicional'], numPattern));
+    const valorDescCondicional = parseValor(findValueByLabel(text, ['Desconto Condicionado', 'Desconto Condicional', 'Desconto condicional'], numPattern));
     const valorLiquido = parseValor(
-        findValueByLabel(text, ['Valor liquido da NFS-e', 'Valor líquido da NFS-e', 'Valor liquido', 'Valor líquido'], numPattern),
+        findValueByLabel(text, ['Valor Líquido da NFS-e', 'Valor Liquido da NFS-e', 'Valor Líquido', 'Valor liquido'], numPattern),
     );
 
     const municipioEmissorMatch = text.match(/MUNIC[I\u00cd]PIO\s+DE\s+([A-Z\u00c0-\u00dc\s]+)/i);
