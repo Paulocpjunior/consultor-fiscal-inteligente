@@ -19,7 +19,15 @@ export interface EmpresaStatusCaptura {
     certValido: boolean;
     certVenceEm: string | null;
     usaCertEscritorio: boolean;
+    /** Inferida: true se (flag bruta=true) OU (tem cert A1/A3 próprio).
+     *  Pra UI mostrar "ativa" amigável, mas atenção: captura via Cloud Run
+     *  PRECISA da flag bruta=true (procuração real no e-CAC), pois cert A3
+     *  não roda no Cloud Run mesmo sendo próprio. */
     procuracaoEcacAtiva: boolean;
+    /** Valor cru do campo no Firestore (procuracaoEcacAtiva no doc da empresa).
+     *  Esse é o que o cron e o orchestrator usam — se for false, captura
+     *  via cert do escritório (procuração) NÃO é tentada. */
+    procuracaoEcacFlagBruta: boolean;
     ccmSp: string;
     nfseSpAutorizado: boolean;
     nfseNacionalDfeAtivo: boolean;

@@ -159,7 +159,10 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     const d = diasAteVencimento(e.certVenceEm);
                     return d !== null && d < 30;
                 }
-                case 'sem-procuracao': return !e.procuracaoEcacAtiva;
+                // Usa flag BRUTA pra filtro: empresa sem procuração REAL marcada
+                // no e-CAC. Cert A1/A3 próprio não conta — A3 não roda no Cloud Run
+                // e o cron sempre olha esse campo bruto.
+                case 'sem-procuracao': return !e.procuracaoEcacFlagBruta;
                 case 'sem-ccmsp': return !e.nfseSpAutorizado;
                 case 'nfse-nac-inativa': return !e.nfseNacionalDfeAtivo;
                 case 'sem-responsavel': return !e.responsaveis || e.responsaveis.length === 0;
@@ -360,17 +363,36 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                     </td>
                                     <td className="px-2 py-1.5 text-center">
                                         {isAdmin ? (
-                                            <button
-                                                disabled={togglingCnpj === e.cnpj + '-procuracaoEcacAtiva'}
-                                                onClick={() => handleToggle(e.cnpj, 'procuracaoEcacAtiva', e.procuracaoEcacAtiva)}
-                                                className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                                                    e.procuracaoEcacAtiva ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300'
-                                                } hover:opacity-80 disabled:opacity-50`}
-                                            >
-                                                {togglingCnpj === e.cnpj + '-procuracaoEcacAtiva' ? '…' : e.procuracaoEcacAtiva ? '✓ ativa' : '✗ inativa'}
-                                            </button>
+                                            <>
+                                                <button
+                                                    disabled={togglingCnpj === e.cnpj + '-procuracaoEcacAtiva'}
+                                                    onClick={() => handleToggle(e.cnpj, 'procuracaoEcacAtiva', e.procuracaoEcacFlagBruta)}
+                                                    title="Marque APENAS se a procuração e-CAC está realmente cadastrada na Receita (e-CAC) pra captura via cert do escritório. Cert A1/A3 próprio NÃO substitui — A3 não roda no Cloud Run."
+                                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                                                        e.procuracaoEcacFlagBruta ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300'
+                                                    } hover:opacity-80 disabled:opacity-50`}
+                                                >
+                                                    {togglingCnpj === e.cnpj + '-procuracaoEcacAtiva' ? '…' : e.procuracaoEcacFlagBruta ? '✓ marcada' : '✗ não marcada'}
+                                                </button>
+                                                {/* Inferida = true (cert A1/A3 próprio autoriza) mas flag bruta = false.
+                                                    Mostra anotação pra admin entender por que a empresa aparece como ok
+                                                    em outras telas mesmo sem procuração marcada. */}
+                                                {!e.procuracaoEcacFlagBruta && e.procuracaoEcacAtiva && (
+                                                    <div
+                                                        className="text-[9px] text-gray-500 mt-0.5 italic"
+                                                        title={`Cert ${e.tipoCert} próprio. Pra NFSe Nacional já autoriza; pra NFe DistDFe via Cloud Run NÃO substitui — A3 precisa cfi-a3 local OU marque procuração se houver de verdade.`}
+                                                    >
+                                                        ○ inferida ({e.tipoCert} próprio)
+                                                    </div>
+                                                )}
+                                            </>
                                         ) : (
-                                            <Pill ok={e.procuracaoEcacAtiva} label={e.procuracaoEcacAtiva ? 'ativa' : 'inativa'} />
+                                            <>
+                                                <Pill ok={e.procuracaoEcacFlagBruta} label={e.procuracaoEcacFlagBruta ? 'marcada' : 'não marcada'} />
+                                                {!e.procuracaoEcacFlagBruta && e.procuracaoEcacAtiva && (
+                                                    <div className="text-[9px] text-gray-500 mt-0.5 italic">○ inferida ({e.tipoCert})</div>
+                                                )}
+                                            </>
                                         )}
                                     </td>
                                     <td className="px-2 py-1.5 text-center">
