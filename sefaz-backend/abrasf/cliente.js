@@ -17,6 +17,7 @@
 import https from 'https';
 import { configMunicipio } from './config-municipios.js';
 import { envelopeSoap, soapActionHeader, montarConsultarServicoTomado, montarConsultarServicoPrestado } from './envelope-builder.js';
+import { assinarXmlAbrasf } from './xml-signer.js';
 
 const HTTP_TIMEOUT_MS = 60_000;
 const MAX_RETRIES = 3;
@@ -44,7 +45,7 @@ export async function consultarNfse(opts) {
         ? 'ConsultarNfseServicoPrestado'
         : 'ConsultarNfseServicoTomado';
 
-    const payload = opts.tipo === 'prestado'
+    let payload = opts.tipo === 'prestado'
         ? montarConsultarServicoPrestado({
             cnpjPrestador: opts.cnpj,
             inscricaoMunicipal: opts.inscricaoMunicipal,
@@ -60,17 +61,25 @@ export async function consultarNfse(opts) {
             pagina: opts.pagina,
         });
 
+    // Assinatura XML-DSig quando o municipio exige
+    // Algoritmo + xpath vem da config (default: assina root do envio com SHA-1)
+    if ((config.exigeAuth || '').includes('wsdsig')) {
+        if (!opts.pfxBuffer || !opts.pfxPassword) {
+            throw new Error(`${config.nome}/${config.uf} exige assinatura XML-DSig mas pfxBuffer/pfxPassword nao foram fornecidos`);
+        }
+        payload = assinarXmlAbrasf({
+            xml: payload,
+            pfxBuffer: opts.pfxBuffer,
+            pfxPassword: opts.pfxPassword,
+            referenciaXPath: opts.referenciaXPath || "/*",
+            algoritmo: config.algoritmoAssinatura || 'sha1',
+        });
+    }
+
     // Formato do envelope SOAP - tenta da config, depois heuristica por versao
     const formato = opts.formato
         || config.soapFormato
         || (config.versao === 'abrasf-2.04' ? 'soap12-padrao' : 'soap11-padrao');
-
-    // Assinatura XML-DSig (TODO): por ora, alerta se a config exige
-    if ((config.exigeAuth || '').includes('wsdsig')) {
-        if (!opts._aceitaSemAssinatura) {
-            throw new Error(`${config.nome}/${config.uf} exige assinatura XML-DSig - ainda nao implementada. Use opts._aceitaSemAssinatura=true em testes.`);
-        }
-    }
 
     const envelope = envelopeSoap({ formato, payloadAbrasf: payload, operacao });
     const action = soapActionHeader(config, operacao);

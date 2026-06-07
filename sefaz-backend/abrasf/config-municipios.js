@@ -19,7 +19,7 @@
 // Cada municipio publica o WSDL. Conferir versao do schema (ABRASF) na URL.
 
 export const MUNICIPIOS_ABRASF = {
-    // Barueri/SP - sistema Megasoft NFSe v2.03
+    // Barueri/SP - sistema Megasoft NFSe v2.03 - assina consultas com SHA-1
     // Doc: https://www.barueri.sp.gov.br/nfse (consultar TI da Prefeitura)
     '3505708': {
         codIBGE: '3505708',
@@ -30,6 +30,8 @@ export const MUNICIPIOS_ABRASF = {
         soapAction: 'http://www.abrasf.org.br/nfse/ConsultarNfseServicoTomado',
         exigeIM: true,
         exigeAuth: 'mTLS+wsdsig',
+        algoritmoAssinatura: 'sha1',
+        soapFormato: 'soap11-cdata',
         tipoPagina: 'pagina',
         maxDias: 90,
         ambiente: 'producao',
@@ -46,13 +48,14 @@ export const MUNICIPIOS_ABRASF = {
         soapAction: 'http://www.abrasf.org.br/nfse/ConsultarNfseServicoTomado',
         exigeIM: true,
         exigeAuth: 'mTLS+wsdsig',
+        algoritmoAssinatura: 'sha1',
+        soapFormato: 'soap11-cdata',
         tipoPagina: 'pagina',
         maxDias: 90,
         ambiente: 'producao',
     },
 
-    // Curitiba/PR - ABRASF v2.04
-    // Doc: https://www.curitiba.pr.gov.br/iss
+    // Curitiba/PR - ABRASF v2.04, SHA-256
     '4106902': {
         codIBGE: '4106902',
         nome: 'Curitiba',
@@ -62,6 +65,76 @@ export const MUNICIPIOS_ABRASF = {
         soapAction: 'http://www.abrasf.org.br/nfse/ConsultarNfseServicoTomado',
         exigeIM: true,
         exigeAuth: 'wsdsig',
+        algoritmoAssinatura: 'sha256',
+        soapFormato: 'soap12-padrao',
+        tipoPagina: 'pagina',
+        maxDias: 60,
+        ambiente: 'producao',
+    },
+
+    // Campinas/SP - ABRASF v2.03, sistema Govbr/ISSCampinas
+    '3509502': {
+        codIBGE: '3509502',
+        nome: 'Campinas',
+        uf: 'SP',
+        wsdl: 'https://issdigital.campinas.sp.gov.br/Notas/NotaFiscalServicos.svc',
+        versao: 'abrasf-2.03',
+        soapAction: 'http://www.abrasf.org.br/nfse/ConsultarNfseServicoTomado',
+        exigeIM: true,
+        exigeAuth: 'mTLS+wsdsig',
+        algoritmoAssinatura: 'sha1',
+        soapFormato: 'soap11-cdata',
+        tipoPagina: 'pagina',
+        maxDias: 60,
+        ambiente: 'producao',
+    },
+
+    // Porto Alegre/RS - ABRASF v2.04
+    '4314902': {
+        codIBGE: '4314902',
+        nome: 'Porto Alegre',
+        uf: 'RS',
+        wsdl: 'https://nfse.portoalegre.rs.gov.br/Services/NotaFiscalServicos.svc',
+        versao: 'abrasf-2.04',
+        soapAction: 'http://www.abrasf.org.br/nfse/ConsultarNfseServicoTomado',
+        exigeIM: true,
+        exigeAuth: 'mTLS+wsdsig',
+        algoritmoAssinatura: 'sha1',
+        soapFormato: 'soap11-cdata',
+        tipoPagina: 'pagina',
+        maxDias: 60,
+        ambiente: 'producao',
+    },
+
+    // Recife/PE - ABRASF v2.03
+    '2611606': {
+        codIBGE: '2611606',
+        nome: 'Recife',
+        uf: 'PE',
+        wsdl: 'https://nfse.recife.pe.gov.br/Services/NotaFiscalServicos.svc',
+        versao: 'abrasf-2.03',
+        soapAction: 'http://www.abrasf.org.br/nfse/ConsultarNfseServicoTomado',
+        exigeIM: true,
+        exigeAuth: 'mTLS+wsdsig',
+        algoritmoAssinatura: 'sha1',
+        soapFormato: 'soap11-cdata',
+        tipoPagina: 'pagina',
+        maxDias: 90,
+        ambiente: 'producao',
+    },
+
+    // Fortaleza/CE - ABRASF v2.03
+    '2304400': {
+        codIBGE: '2304400',
+        nome: 'Fortaleza',
+        uf: 'CE',
+        wsdl: 'https://iss.fortaleza.ce.gov.br/grpfor-iss/services/NotaFiscalServicos',
+        versao: 'abrasf-2.03',
+        soapAction: 'http://www.abrasf.org.br/nfse/ConsultarNfseServicoTomado',
+        exigeIM: true,
+        exigeAuth: 'mTLS+wsdsig',
+        algoritmoAssinatura: 'sha1',
+        soapFormato: 'soap11-cdata',
         tipoPagina: 'pagina',
         maxDias: 60,
         ambiente: 'producao',

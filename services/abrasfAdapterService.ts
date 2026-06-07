@@ -84,3 +84,33 @@ export async function syncTodas(
     }
     return res.json();
 }
+
+// ─── Diagnostico ─────────────────────────────────────────────────────────
+
+export interface DiagnosticoItem {
+    ok: boolean;
+    item: string;
+    detalhe: string;
+}
+
+export interface DiagnosticoResposta {
+    cnpj: string;
+    cadastrada: boolean;
+    empresa?: { id: string; nome: string; colecao: string };
+    checklist: DiagnosticoItem[];
+    conclusao: string;
+}
+
+/**
+ * Dado o CNPJ do cliente (tomador), faz checklist completo de por que
+ * uma NFSe esperada nao chegou. Cobre Padrao Nacional + ABRASF.
+ */
+export async function diagnosticarCaptura(cnpj: string): Promise<DiagnosticoResposta> {
+    const limpo = (cnpj || '').replace(/\D/g, '');
+    const res = await fetch(`${BASE}/diagnostico/${limpo}`, { headers: await authHeader() });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+}
