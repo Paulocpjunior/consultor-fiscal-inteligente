@@ -18,6 +18,7 @@ import {
     fetchEmpresasStatusCaptura,
     toggleEmpresaFlag,
     autoPreencherUf,
+    resetLockSefaz,
     exportarEmpresasCsv,
     type EmpresaStatusCaptura,
     type EmpresaStatusResumo,
@@ -67,6 +68,26 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [togglingCnpj, setTogglingCnpj] = useState<string | null>(null);
     const [autoUfRunning, setAutoUfRunning] = useState(false);
     const [capturandoCnpj, setCapturandoCnpj] = useState<string | null>(null);
+    const [resetandoLockCnpj, setResetandoLockCnpj] = useState<string | null>(null);
+
+    const handleResetLock = async (emp: EmpresaStatusCaptura) => {
+        if (!isAdmin) return;
+        if (!confirm(`Apagar lock SEFAZ de ${emp.nome}?\n\nO lock impede sync na mesma janela de 1h.\nApós resetar, próximo disparo (manual ou cron) vai recriar.`)) return;
+        setResetandoLockCnpj(emp.cnpj);
+        try {
+            const r = await resetLockSefaz(emp.cnpj);
+            if (r.ok) {
+                setUltimaCaptura(prev => ({
+                    ...prev,
+                    [emp.cnpj]: { ok: true, msg: `🔓 ${r.msg || 'Lock resetado'}` },
+                }));
+            } else {
+                alert(`Erro: ${r.error}`);
+            }
+        } finally {
+            setResetandoLockCnpj(null);
+        }
+    };
     const [ultimaCaptura, setUltimaCaptura] = useState<Record<string, { ok: boolean; msg: string; docs?: DfeDocProcessado[] }>>({});
     const isAdmin = currentUser.role === 'admin';
 
@@ -448,6 +469,14 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                     title="Zera o cursor NSU e reprocessa ~90 dias — use quando uma nota sumiu (passou do cursor)"
                                                 >
                                                     {capturandoCnpj === e.cnpj ? '⏳…' : '⟲ Recapturar do zero'}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleResetLock(e)}
+                                                    disabled={resetandoLockCnpj === e.cnpj || capturandoCnpj === e.cnpj}
+                                                    className="px-2 py-1 text-[10px] font-semibold bg-slate-600 hover:bg-slate-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
+                                                    title="Apaga o lock SEFAZ de 1h dessa empresa — útil pra rerun imediato após ajuste de procuração/cert"
+                                                >
+                                                    {resetandoLockCnpj === e.cnpj ? '⏳…' : '🔓 Reset lock'}
                                                 </button>
                                             </div>
                                             {ultimaCaptura[e.cnpj] && (
