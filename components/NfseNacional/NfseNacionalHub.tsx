@@ -13,18 +13,20 @@ import type { User } from '../../types';
 const NfseNacionalDashboard = lazy(() => import('./index'));
 const CoberturaAdnPanel = lazy(() => import('./CoberturaAdnPanel'));
 const MunicipiosCarteiraPanel = lazy(() => import('./MunicipiosCarteiraPanel'));
+const AbrasfAdapterPanel = lazy(() => import('./AbrasfAdapterPanel'));
 
 interface Props {
     currentUser: User;
     onShowToast?: (msg: string) => void;
 }
 
-type SubTab = 'painel' | 'cobertura' | 'municipios';
+type SubTab = 'painel' | 'cobertura' | 'municipios' | 'abrasf';
 
 const SUBTABS: Array<{ id: SubTab; label: string }> = [
     { id: 'painel', label: '📊 Painel NFS-e Nacional' },
     { id: 'cobertura', label: '🛡️ Cobertura ADN' },
     { id: 'municipios', label: '📍 Municípios da carteira' },
+    { id: 'abrasf', label: '🧪 Adapter ABRASF (BETA)' },
 ];
 
 const NfseNacionalHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
@@ -45,6 +47,7 @@ const NfseNacionalHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     {sub === 'painel' && <NfseNacionalDashboard currentUser={currentUser} onShowToast={onShowToast} />}
                     {sub === 'cobertura' && <CoberturaAdnPanel onShowToast={onShowToast} />}
                     {sub === 'municipios' && <MunicipiosCarteiraPanel onShowToast={onShowToast} />}
+                    {sub === 'abrasf' && <AbrasfAdapterPanel onShowToast={onShowToast} />}
                 </Suspense>
             </ErrorBoundary>
         </div>
