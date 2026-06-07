@@ -76,3 +76,49 @@ export async function toggleAdnBulk(cnpjs: string[], ativo: boolean): Promise<To
     }
     return res.json();
 }
+
+// ─── Municipios (Caminho A: acelerar uso do Padrao Nacional) ─────────────
+
+export interface MunicipioCobertura {
+    uf: string;
+    municipio: string;
+    codMunIBGE: string;
+    qtdEmpresas: number;
+    qtdAdnAtivo: number;
+    qtdComCcm: number;
+    qtdComIe: number;
+    qtdComNfse: number;
+    totalNfse: number;
+}
+
+export interface MunicipiosResposta {
+    total: number;
+    totalAdn: number;
+    percentualAdn: number;
+    municipiosDistintos: number;
+    municipios: MunicipioCobertura[];
+}
+
+export async function getMunicipiosCarteira(): Promise<MunicipiosResposta> {
+    const headers = await authHeader();
+    const res = await fetch('/api/admin/nfse-nacional-dfe/municipios', { headers });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+}
+
+export async function toggleAdnPorMunicipio(
+    uf: string, municipio: string, ativo: boolean
+): Promise<ToggleBulkResposta> {
+    const headers = { ...(await authHeader()), 'Content-Type': 'application/json' };
+    const res = await fetch('/api/admin/nfse-nacional-dfe/toggle-bulk-por-municipio', {
+        method: 'POST', headers, body: JSON.stringify({ uf, municipio, ativo }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+}
