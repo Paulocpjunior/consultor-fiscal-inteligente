@@ -791,17 +791,19 @@ const App: React.FC = () => {
                         {/* Menu agrupado por gênero — ícone + cor por grupo, seções com título.
                             Config em MENU_GRUPOS (module-level). Sub-abas consolidadas
                             não aparecem aqui (vivem dentro dos hubs). */}
-                        <div className="space-y-4 mb-4">
+                        <div className="space-y-2 mb-3">
                             {MENU_GRUPOS.map((grupo) => {
                                 const cards = grupo.cards.filter(c => !c.adminOnly || currentUser.role === 'admin');
                                 if (cards.length === 0) return null;
                                 return (
                                     <div key={grupo.titulo}>
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className="inline-block h-4 w-1 rounded" style={{ background: grupo.cor }} />
-                                            <h3 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{grupo.titulo}</h3>
+                                        <div className="flex items-center gap-1.5 mb-1">
+                                            <span className="inline-block h-3 w-1 rounded" style={{ background: grupo.cor }} />
+                                            <h3 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{grupo.titulo}</h3>
                                         </div>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2">
+                                        {/* Card compacto horizontal: ícone + rótulo lado a lado, baixo.
+                                            Mais colunas por linha pra reduzir altura (era empilhado/grande). */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5">
                                             {cards.map(({ type, label, Icon }) => {
                                                 const ativo = searchType === type;
                                                 return (
@@ -809,16 +811,15 @@ const App: React.FC = () => {
                                                         key={type}
                                                         onClick={() => selecionarTipo(type)}
                                                         title={searchDescriptions[type] || (label ?? type)}
-                                                        className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl transition-all duration-200"
+                                                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg transition-all duration-150"
                                                         style={{
                                                             background: ativo ? grupo.cor : 'var(--bg-elevated)',
                                                             border: `1px solid ${ativo ? grupo.cor : 'var(--border-default)'}`,
-                                                            color: ativo ? '#fff' : 'var(--text-muted)',
-                                                            transform: ativo ? 'scale(1.04)' : 'scale(1)',
+                                                            color: ativo ? '#fff' : 'var(--text-secondary)',
                                                         }}
                                                     >
-                                                        <span style={{ color: ativo ? '#fff' : grupo.cor }}><Icon className="w-5 h-5" /></span>
-                                                        <span className="text-xs font-bold text-center leading-tight">{label ?? type}</span>
+                                                        <span className="flex-shrink-0" style={{ color: ativo ? '#fff' : grupo.cor }}><Icon className="w-4 h-4" /></span>
+                                                        <span className="text-[11px] font-semibold text-left leading-tight line-clamp-2">{label ?? type}</span>
                                                     </button>
                                                 );
                                             })}
