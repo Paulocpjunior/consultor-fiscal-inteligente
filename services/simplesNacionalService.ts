@@ -512,7 +512,20 @@ export const calcularResumoEmpresa = (
         }
     }
 
-    let fator_r = rbt12Global > 0 ? empresa.folha12 / rbt12Global : 0;
+    // Folha dos ultimos 12 meses para Fator R (LC 123/06 art. 18 §5o-M).
+    // Preferencia: serie mensal `folhaMensal` (janela movel correta).
+    // Fallback: `folha12` (valor unico legado).
+    let folha12Calculada = 0;
+    if (empresa.folhaMensal && Object.keys(empresa.folhaMensal).length > 0) {
+        for (let i = 0; i < 12; i++) {
+            const d = new Date(dataInicioRBT12.getFullYear(), dataInicioRBT12.getMonth() + i, 1);
+            const k = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+            folha12Calculada += empresa.folhaMensal[k] || 0;
+        }
+    } else {
+        folha12Calculada = empresa.folha12 || 0;
+    }
+    let fator_r = rbt12Global > 0 ? folha12Calculada / rbt12Global : 0;
     if (options?.fatorRManual != null && !isNaN(options.fatorRManual))
         fator_r = options.fatorRManual;
 
@@ -645,7 +658,7 @@ export const calcularResumoEmpresa = (
         aliq_nom: tabelaPrincipal ? tabelaPrincipal[faixaIndexPrincipal].aliquota : 0,
         aliq_eff: aliq_eff_global, das: dasTotal * 12, das_mensal: dasTotal, mensal,
         historico_simulado, anexo_efetivo: empresa.anexo, fator_r,
-        folha_12: empresa.folha12, ultrapassou_sublimite: rbt12Global > 3600000,
+        folha_12: folha12Calculada, ultrapassou_sublimite: rbt12Global > 3600000,
         faixa_index: faixaIndexPrincipal, detalhamento_anexos: detalhamentoAnexos,
         totalMercadoInterno, totalMercadoExterno,
         alertas_faturamento: calcularAlertasFaturamento(

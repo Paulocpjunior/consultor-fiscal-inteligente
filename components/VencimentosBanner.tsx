@@ -6,7 +6,7 @@
  * pra forçar email + push imediato (cron normal roda 08h BRT).
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
     fetchResumoVencimentos,
     dispararCronVencimentos,
@@ -39,26 +39,33 @@ const VencimentosBanner: React.FC<Props> = ({ currentUser, onClickIrTarefas }) =
     const [dismissed, setDismissed] = useState(() => sessionStorage.getItem(DISMISS_KEY) === '1');
     const [disparando, setDisparando] = useState(false);
     const isAdmin = currentUser?.role === 'admin';
+    // Guard que evita setState apos unmount (fetch que termina depois do componente desmontar)
+    const aliveRef = useRef(true);
 
     const carregar = useCallback(async () => {
         if (!currentUser) return;
         setLoading(true);
         try {
             const r = await fetchResumoVencimentos();
+            if (!aliveRef.current) return;
             setResumo(r.resumo);
             setProximas(r.proximas);
         } catch {
             // silencioso — banner não bloqueia app
         } finally {
-            setLoading(false);
+            if (aliveRef.current) setLoading(false);
         }
     }, [currentUser]);
 
     useEffect(() => {
         if (!currentUser) return;
+        aliveRef.current = true;
         carregar();
         const interval = setInterval(carregar, 5 * 60 * 1000); // 5 min
-        return () => clearInterval(interval);
+        return () => {
+            aliveRef.current = false;
+            clearInterval(interval);
+        };
     }, [carregar, currentUser]);
 
     if (!currentUser || !resumo || dismissed) return null;

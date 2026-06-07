@@ -110,13 +110,16 @@ const CronCapturaBanner: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // Polling every 5 minutes to detect new cron runs
     useEffect(() => {
         if (!currentUser) return;
+        // Guard que evita setState quando o componente desmonta entre o
+        // fetch e a chegada da resposta (race condition).
+        let cancelled = false;
 
         const poll = async () => {
             // Don't poll if the tab is hidden
             if (document.visibilityState !== 'visible') return;
 
             const newData = await fetchCronStatus();
-            if (!newData) return;
+            if (cancelled || !newData) return;
 
             const newTsMs = getTimestampMs(newData.executadoEm);
 
@@ -175,6 +178,7 @@ const CronCapturaBanner: React.FC<Props> = ({ currentUser, onShowToast }) => {
         document.addEventListener('visibilitychange', handleVisibility);
 
         return () => {
+            cancelled = true;
             clearInterval(interval);
             document.removeEventListener('visibilitychange', handleVisibility);
         };
