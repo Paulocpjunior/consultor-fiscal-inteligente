@@ -12,20 +12,20 @@ interface State {
 }
 
 class ErrorBoundary extends React.Component<Props, State> {
-  state: State = { hasError: false, error: null };
+  override state: State = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  override componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     // Reporta ao Sentry SE inicializado (services/sentry.ts faz no-op
     // quando VITE_SENTRY_DSN nao esta setada). Antes: stack trace ia so
     // pro console do navegador do colaborador — invisivel em producao.
     captureException(error, { componentStack: errorInfo.componentStack });
   }
 
-  render() {
+  override render() {
     if (this.state.hasError) {
       return this.props.fallback || (
         <div className="p-6 m-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800">

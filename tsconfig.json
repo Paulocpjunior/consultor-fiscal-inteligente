@@ -9,6 +9,8 @@
     "allowSyntheticDefaultImports": true,
     "ignoreDeprecations": "5.0",
     "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
