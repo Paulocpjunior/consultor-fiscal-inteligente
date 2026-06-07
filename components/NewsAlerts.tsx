@@ -105,7 +105,9 @@ const NewsAlerts: React.FC = () => {
                     </>
                 ) : (
                     alerts.map((alert, index) => (
-                        <AlertCard key={index} alert={alert} />
+                        // Source URL eh estavel quando presente; fallback titulo+index
+                        // pra evitar key={index} puro (causa re-mount em refetch reordenado).
+                        <AlertCard key={alert.source || `${alert.title}-${index}`} alert={alert} />
                     ))
                 )}
             </div>

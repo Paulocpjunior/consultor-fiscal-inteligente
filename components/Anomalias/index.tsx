@@ -159,7 +159,7 @@ const AnomaliasView: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         </div>
                         <div className="mt-2 flex gap-1 flex-wrap">
                             {r.anomalias.slice(0, 3).map((a, i) => (
-                                <span key={i} className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
+                                <span key={`${a.tipo}-${a.competencia}-${i}`} className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
                                     {tipoLabel(a.tipo)}
                                 </span>
                             ))}
@@ -181,7 +181,7 @@ const AnomaliasView: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
                         <div className="flex-1 overflow-y-auto p-5 space-y-3">
                             {empresaAberta.anomalias.map((a, i) => (
-                                <div key={i} className={`rounded-lg border p-3 cursor-pointer ${anomaliaAtiva === a ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-sky-300'}`}
+                                <div key={`${a.tipo}-${a.competencia}-${i}`} className={`rounded-lg border p-3 cursor-pointer ${anomaliaAtiva === a ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-sky-300'}`}
                                      onClick={() => explicar(a)}>
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${severidadeBadge(a.severidade)}`}>
