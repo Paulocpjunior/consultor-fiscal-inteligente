@@ -94,6 +94,25 @@ export async function corrigirC190(parsed: ParseResult): Promise<CorrecaoC190> {
     return mod.corrigirC190(parsed);
 }
 
+export interface AjusteFormato {
+    registro: string; idx: number; campo: string;
+    regra: 'TRIM_CODIGO' | 'DECIMAL_PONTO';
+    de: string; para: string; mensagem: string;
+}
+export interface CorrecaoFormato {
+    edicoes: SpedEdicao[];
+    ajustes: AjusteFormato[];
+    resumo: { linhasAjustadas: number; camposAjustados: number; porRegra: Record<string, number> };
+}
+
+/** Auto-corrige FORMATO de campos: espacos em codigos (NCM/CFOP/CST) +
+ *  ponto decimal -> virgula em valores monetarios. So normaliza forma, nao
+ *  muda semantica. Resolve o motivo #1 de SPED rejeitado pelo PVA. */
+export async function corrigirFormato(parsed: ParseResult): Promise<CorrecaoFormato> {
+    const mod = await import('../sefaz-backend/sped-fiscal-format-autofix.js' as any);
+    return mod.corrigirFormato(parsed);
+}
+
 export interface RecuperacaoMonofasico {
     aplicavel: boolean;
     itens: { idx: number; numItem: string; codItem: string; ncm: string; cstPis: string; cstCofins: string; vlPis: number; vlCofins: number }[];
