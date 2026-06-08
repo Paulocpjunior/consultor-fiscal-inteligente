@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
     listarTarefas,
     criarTarefaManual,
@@ -13,6 +13,7 @@ import {
 } from '../services/tarefasService';
 import { getEmpresasParaPerfilCliente, type EmpresaPerfilOption } from '../services/xmlFiscalService';
 import { listarCarteiras, type VinculoCarteira } from '../services/carteiraService';
+import { autoGerarTarefasParaCompetencia } from '../services/tarefasAutoGerar';
 import type { User } from '../types';
 
 interface TarefasProps {
@@ -105,7 +106,15 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
         return Array.from(map.entries()).map(([uid, nome]) => ({ uid, nome }));
     }, [carteira]);
 
-    // Carrega tarefas conforme filtros
+    // Memoriza competencias ja auto-geradas nesta sessao pra evitar
+    // chamadas repetidas ao Firestore quando o useEffect dispara
+    // por outros motivos (mudanca de filtroStatus etc).
+    const competenciasGeradas = useRef<Set<string>>(new Set());
+
+    // Carrega tarefas conforme filtros. Antes de listar, auto-gera tarefas
+    // da competencia (idempotente — `criarTarefaAutomatica` checa duplicata
+    // por empresaId+obrigacao+competencia). Roda uma vez por competencia
+    // por sessao pra nao saturar o Firestore.
     useEffect(() => {
         let ativo = true;
         setCarregando(true);
@@ -122,14 +131,30 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
         if (filtroResp === 'sem_dono')      filtros.responsavel = null;
         else if (filtroResp !== 'todos')    filtros.responsavel = filtroResp;
 
-        listarTarefas(filtros).then(list => {
-            if (ativo) {
-                setTarefas(list);
-                setCarregando(false);
+        const carregar = async () => {
+            if (filtroCompetencia && currentUser && !competenciasGeradas.current.has(filtroCompetencia)) {
+                competenciasGeradas.current.add(filtroCompetencia);
+                try {
+                    const stats = await autoGerarTarefasParaCompetencia(currentUser, filtroCompetencia);
+                    if (stats.criadas > 0) {
+                        console.info(
+                            `[tarefas] auto-gerou ${stats.criadas} tarefa(s) para ${filtroCompetencia} ` +
+                            `(${stats.jaExistiam} ja existiam, ${stats.empresasProcessadas} empresas, ${stats.erros} erros).`,
+                        );
+                    }
+                } catch (e) {
+                    console.warn('[tarefas] auto-gerar falhou:', e);
+                }
             }
-        });
+            if (!ativo) return;
+            const list = await listarTarefas(filtros);
+            if (!ativo) return;
+            setTarefas(list);
+            setCarregando(false);
+        };
+        carregar();
         return () => { ativo = false; };
-    }, [filtroResp, filtroEmpresa, filtroStatus, filtroObrigacao, filtroCompetencia, versao]);
+    }, [filtroResp, filtroEmpresa, filtroStatus, filtroObrigacao, filtroCompetencia, versao, currentUser]);
 
     // Helpers
     const formataData = (d: Date | null | undefined) => {
