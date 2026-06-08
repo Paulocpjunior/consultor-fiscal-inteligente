@@ -116,3 +116,62 @@ export const btnStyleSave: React.CSSProperties = {
     fontSize: '0.85rem',
     cursor: 'pointer',
 };
+
+// ─── Mini-componentes compartilhados ──────────────────────────────────────
+
+export const DashCard: React.FC<{ title: string; value: string; sub: string; color: string }> = ({ title, value, sub, color }) => (
+    <div style={{ padding: '1rem', borderRadius: '12px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>{title}</span>
+        <span style={{ fontSize: '1.5rem', fontWeight: 700, color }}>{value}</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{sub}</span>
+    </div>
+);
+
+// ─── Render Helpers (compartilhados entre tabs) ────────────────────────────
+
+export function esferaIcon(esf: NfpEsfera): string {
+    if (esf === 'federal') return '\u{1F3DB}'; // classical building
+    if (esf === 'estadual') return '\u{1F3E2}'; // office building
+    return '\u{1F3E0}'; // house
+}
+
+export function renderEsferaSectionHeader(esf: NfpEsfera, sublabel?: string): React.ReactNode {
+    const labels: Record<NfpEsfera, string> = { federal: 'Federal', estadual: 'Estadual', municipal: 'Municipal' };
+    return (
+        <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            padding: '0.5rem 0', marginTop: '0.75rem', marginBottom: '0.25rem',
+            borderBottom: '1px solid var(--border-subtle)',
+        }}>
+            <span style={{ fontSize: '1.1rem' }}>{esferaIcon(esf)}</span>
+            <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{labels[esf]}</span>
+            {sublabel && (
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 400 }}>({sublabel})</span>
+            )}
+        </div>
+    );
+}
+
+export function renderFonteBadge(tipo: 'automatico' | 'manual' | 'serpro' | 'consulta_publica'): React.ReactNode {
+    const labelMap: Record<string, string> = {
+        automatico: 'SERPRO', serpro: 'SERPRO',
+        consulta_publica: 'Portal Publico', manual: 'Manual',
+    };
+    const colorMap: Record<string, string> = {
+        automatico: 'var(--accent)', serpro: 'var(--accent)',
+        consulta_publica: 'var(--text-muted)', manual: '#e67e22',
+    };
+    const label = labelMap[tipo] || tipo;
+    const color = colorMap[tipo] || 'var(--text-muted)';
+    return (
+        <span style={{
+            padding: '1px 8px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 600,
+            background: color + '18',
+            color: color,
+            border: `1px solid ${color}33`,
+            whiteSpace: 'nowrap' as const,
+        }}>
+            {label}
+        </span>
+    );
+}

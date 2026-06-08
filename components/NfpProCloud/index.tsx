@@ -42,9 +42,12 @@ import ObrigacoesTab from './ObrigacoesTab';
 import ParcelamentosTab from './ParcelamentosTab';
 import AcoesTab from './AcoesTab';
 import PlanoAcaoTab from './PlanoAcaoTab';
+import TaxProfileCard from './TaxProfileCard';
+import DashboardTab from './DashboardTab';
 import {
     OBRIGACOES_BASE, CERTIDOES_BASE, uid, formatCurrency, gravityColor, certidaoColor, certidaoLabel,
     cardStyle, inputStyle, labelSmall, btnStyle, btnStyleSave,
+    renderEsferaSectionHeader, renderFonteBadge,
 } from './_common';
 
 interface Props {
@@ -327,126 +330,12 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     // ─── Esfera Section Helpers ────────────────────────────────────────────
 
-    const esferaIcon = (esf: NfpEsfera) => {
-        if (esf === 'federal') return '\u{1F3DB}'; // classical building
-        if (esf === 'estadual') return '\u{1F3E2}'; // office building
-        return '\u{1F3E0}'; // house
-    };
 
-    const renderEsferaSectionHeader = (esf: NfpEsfera, sublabel?: string) => {
-        const labels: Record<NfpEsfera, string> = { federal: 'Federal', estadual: 'Estadual', municipal: 'Municipal' };
-        return (
-            <div style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                padding: '0.5rem 0', marginTop: '0.75rem', marginBottom: '0.25rem',
-                borderBottom: '1px solid var(--border-subtle)',
-            }}>
-                <span style={{ fontSize: '1.1rem' }}>{esferaIcon(esf)}</span>
-                <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{labels[esf]}</span>
-                {sublabel && (
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 400 }}>({sublabel})</span>
-                )}
-            </div>
-        );
-    };
 
-    const renderFonteBadge = (tipo: 'automatico' | 'manual' | 'serpro' | 'consulta_publica') => {
-        const labelMap: Record<string, string> = {
-            automatico: 'SERPRO', serpro: 'SERPRO',
-            consulta_publica: 'Portal Publico', manual: 'Manual',
-        };
-        const colorMap: Record<string, string> = {
-            automatico: 'var(--accent)', serpro: 'var(--accent)',
-            consulta_publica: 'var(--text-muted)', manual: '#e67e22',
-        };
-        const label = labelMap[tipo] || tipo;
-        const color = colorMap[tipo] || 'var(--text-muted)';
-        return (
-            <span style={{
-                padding: '1px 8px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 600,
-                background: color + '18',
-                color: color,
-                border: `1px solid ${color}33`,
-                whiteSpace: 'nowrap' as const,
-            }}>
-                {label}
-            </span>
-        );
-    };
 
     // ─── Render Helpers ─────────────────────────────────────────────────────
 
-    const renderTaxProfileCard = () => {
-        if (!taxProfile) return null;
-
-        const regimeBadgeColors: Record<RegimeTributario, string> = {
-            simples_nacional: 'var(--success)',
-            lucro_presumido: 'var(--accent)',
-            lucro_real: '#9333ea',
-            mei: 'var(--text-muted)',
-        };
-        const badgeColor = regimeBadgeColors[taxProfile.regime] || 'var(--text-muted)';
-
-        return (
-            <div style={{
-                ...cardStyle, marginBottom: '1rem',
-                borderLeft: `4px solid ${badgeColor}`,
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-                    <span style={{
-                        padding: '3px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
-                        background: badgeColor + '22', color: badgeColor,
-                        border: `1px solid ${badgeColor}44`,
-                    }}>
-                        {regimeLabel(taxProfile.regime)}
-                    </span>
-                    <span style={{
-                        padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600,
-                        background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-                        border: '1px solid var(--border-default)',
-                    }}>
-                        {atividadeLabel(taxProfile.atividadeTipo)}
-                    </span>
-                    {taxProfile.cnae && (
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                            CNAE {taxProfile.cnae}{taxProfile.descricaoCnae ? ` - ${taxProfile.descricaoCnae}` : ''}
-                        </span>
-                    )}
-                </div>
-
-                {taxProfile.impostosAplicaveis.length > 0 && (
-                    <div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>
-                            Impostos Aplicaveis
-                        </span>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.4rem' }}>
-                            {taxProfile.impostosAplicaveis.map((imp, i) => (
-                                <span key={i} title={imp.aliquotaBase || ''} style={{
-                                    padding: '2px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 500,
-                                    background: imp.esfera === 'federal' ? 'var(--accent)11' : imp.esfera === 'estadual' ? 'var(--warning)11' : 'var(--success)11',
-                                    color: imp.esfera === 'federal' ? 'var(--accent)' : imp.esfera === 'estadual' ? 'var(--warning)' : 'var(--success)',
-                                    border: `1px solid ${imp.esfera === 'federal' ? 'var(--accent)' : imp.esfera === 'estadual' ? 'var(--warning)' : 'var(--success)'}33`,
-                                    cursor: imp.aliquotaBase ? 'help' : 'default',
-                                }}>
-                                    {imp.nome}{imp.aliquotaBase ? ` (${imp.aliquotaBase})` : ''}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {taxProfile.observacoes.length > 0 && (
-                    <div style={{ marginTop: '0.5rem' }}>
-                        {taxProfile.observacoes.map((obs, i) => (
-                            <p key={i} style={{ margin: '2px 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                {obs}
-                            </p>
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
-    };
+    const renderTaxProfileCard = () => <TaxProfileCard taxProfile={taxProfile} />;
 
     const exportarRelatorioPdf = useCallback(async () => {
         if (!analise) return;
@@ -468,55 +357,13 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             setExportingPdf(false);
         }
     }, [analise, taxaSelic, taxProfile, onShowToast]);
-    const renderDashboard = () => {
-        if (!analise) return <p style={{ color: 'var(--text-muted)' }}>Selecione uma empresa e inicie uma análise na aba "Análise".</p>;
-        const debitosAbertos = analise.debitos.filter(d => d.status === 'aberto');
-        const certNeg = analise.certidoes.filter(c => c.status === 'negativa').length;
-        const certPos = analise.certidoes.filter(c => c.status === 'positiva').length;
-        const certPEN = analise.certidoes.filter(c => c.status === 'positiva_efeitos_negativa').length;
-        const certIndisp = analise.certidoes.filter(c => c.status === 'indisponivel' || c.status === 'nao_consultada').length;
-        const obrigPend = analise.obrigacoes.filter(o => o.status === 'pendente' || o.status === 'atrasada').length;
-        const acoesAtivas = analise.acoes.filter(a => a.status === 'em_andamento').length;
-        const planoAlta = analise.planoAcao.filter(p => p.gravidade === 'alta' && p.status !== 'concluida').length;
-
-        return (
-            <div>
-                {(analise as any)?._serproMock && (
-                    <div style={{
-                        padding: '10px 16px', marginBottom: '1rem', borderRadius: '8px',
-                        background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)',
-                        color: 'var(--warning)', fontSize: '0.85rem', fontWeight: 600,
-                    }}>
-                        DADOS SIMULADOS — SERPRO em modo teste (DRY_RUN). Os valores exibidos nao correspondem a situacao real da empresa.
-                    </div>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-                    <button
-                        onClick={exportarRelatorioPdf}
-                        disabled={exportingPdf}
-                        style={{
-                            ...btnStyleSave,
-                            opacity: exportingPdf ? 0.6 : 1,
-                            cursor: exportingPdf ? 'not-allowed' : 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                        }}
-                    >
-                        {exportingPdf ? 'Gerando PDF...' : 'Exportar Relatorio PDF'}
-                    </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
-                    <DashCard title="Débitos Abertos" value={String(debitosAbertos.length)} sub={formatCurrency(debitosAbertos.reduce((s, d) => s + (d.valorAtualizado || d.valorOriginal), 0))} color="var(--danger)" />
-                    <DashCard title="Certidões Negativas" value={`${certNeg}/${analise.certidoes.length}`} sub={certPos > 0 ? `${certPos} positiva(s)` : certIndisp > 0 ? `${certIndisp} indisponivel(is)` : certPEN > 0 ? `${certPEN} PEN` : 'Sem impedimentos'} color={certPos > 0 ? 'var(--danger)' : certIndisp > 0 ? 'var(--text-muted)' : 'var(--success)'} />
-                    <DashCard title="Obrigações Pendentes" value={String(obrigPend)} sub={`de ${analise.obrigacoes.length} totais`} color={obrigPend > 0 ? 'var(--warning)' : 'var(--success)'} />
-                    <DashCard title="Ações em Andamento" value={String(acoesAtivas)} sub={`de ${analise.acoes.length} totais`} color={acoesAtivas > 0 ? 'var(--warning)' : 'var(--success)'} />
-                    <DashCard title="Plano de Ação (Alta)" value={String(planoAlta)} sub={`de ${analise.planoAcao.length} itens`} color={planoAlta > 0 ? 'var(--danger)' : 'var(--success)'} />
-                    <DashCard title="Parcelamentos Ativos" value={String(analise.parcelamentos.filter(p => p.status === 'ativo').length)} sub={formatCurrency(analise.parcelamentos.filter(p => p.status === 'ativo').reduce((s, p) => s + p.valorTotal, 0))} color="var(--accent)" />
-                </div>
-            </div>
-        );
-    };
+    const renderDashboard = () => (
+        <DashboardTab
+            analise={analise}
+            exportingPdf={exportingPdf}
+            onExportPdf={exportarRelatorioPdf}
+        />
+    );
 
     const renderDebitos = () => analise && (
         <DebitosTab
@@ -1028,13 +875,6 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
 // ─── Dashboard Card Component ────────────────────────────────────────────────
 
-const DashCard: React.FC<{ title: string; value: string; sub: string; color: string }> = ({ title, value, sub, color }) => (
-    <div style={{ padding: '1rem', borderRadius: '12px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>{title}</span>
-        <span style={{ fontSize: '1.5rem', fontWeight: 700, color }}>{value}</span>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{sub}</span>
-    </div>
-);
 
 // ─── Shared Styles ───────────────────────────────────────────────────────────
 
