@@ -10,8 +10,7 @@ import TaxAlerts from './components/TaxAlerts';
 import NewsAlerts from './components/NewsAlerts';
 import ReformaNews from './components/ReformaNews';
 import FavoritesSidebar from './components/FavoritesSidebar';
-import SimplesNacionalDashboard from './components/SimplesNacionalDashboard';
-import SimplesNacionalNovaEmpresa from './components/SimplesNacionalNovaEmpresa';
+import SimplesNacionalSection from './components/sections/SimplesNacionalSection';
 import InitialStateDisplay from './components/InitialStateDisplay';
 import SimilarServicesDisplay from './components/SimilarServicesDisplay';
 import AccessLogsModal from './components/AccessLogsModal';
@@ -34,8 +33,6 @@ import { safeStorage } from './services/safeStorage';
 // ✅ REMOVIDO: import { onAuthStateChanged } from 'firebase/auth';
 // Ambos encapsulados em authService.subscribeAuthState
 
-const SimplesNacionalDetalhe = lazy(() => import('./components/SimplesNacionalDetalhe'));
-const SimplesNacionalClienteView = lazy(() => import('./components/SimplesNacionalClienteView'));
 const ResultsDisplay = lazy(() => import('./components/ResultsDisplay'));
 const ComparisonDisplay = lazy(() => import('./components/ComparisonDisplay'));
 const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDisplay'));
@@ -896,71 +893,24 @@ const App: React.FC = () => {
 
                         {/* Simples Nacional Views */}
                         {searchType === SearchType.SIMPLES_NACIONAL && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                {simplesView === 'dashboard' && (
-                                    <SimplesNacionalDashboard
-                                        empresas={simplesEmpresas}
-                                        notas={simplesNotas}
-                                        onSelectEmpresa={(id, view) => { setSelectedSimplesEmpresaId(id); setSimplesView(view); }}
-                                        onAddNew={() => { setSimplesEmpresaToEdit(null); setSimplesView('nova'); }}
-                                        onEdit={(empresa) => { setSimplesEmpresaToEdit(empresa); setSimplesView('nova'); }}
-                                        onDelete={async (empresa) => {
-                                            const ok = await confirm({
-                                                title: `Excluir empresa "${empresa.nome}"?`,
-                                                message: `CNPJ ${empresa.cnpj}. Essa ação não pode ser desfeita.`,
-                                                variant: 'danger',
-                                                confirmLabel: 'Excluir',
-                                            });
-                                            if (!ok) return;
-                                            try {
-                                                await simplesService.deleteEmpresa(empresa.id);
-                                                setSimplesEmpresas(prev => prev.filter(e => e.id !== empresa.id));
-                                                if (currentUser) authService.logAction(currentUser.id, currentUser.name, 'delete_empresa', empresa.nome);
-                                                setToastMessage(`Empresa "${empresa.nome}" excluída.`);
-                                            } catch (err: any) {
-                                                const msg = err?.code === 'permission-denied'
-                                                    ? 'Sem permissão para excluir esta empresa (só admin ou criador).'
-                                                    : (err?.message || 'Erro ao excluir empresa.');
-                                                setToastMessage(msg);
-                                                console.error('[deleteEmpresa Simples]', err);
-                                            }
-                                        }}
-                                        onShowToast={(msg) => setToastMessage(msg)}
-                                        currentUser={currentUser}
-                                    />
-                                )}
-                                {simplesView === 'nova' && (
-                                    <SimplesNacionalNovaEmpresa
-                                        onSave={handleSaveSimplesEmpresa}
-                                        onCancel={() => { setSimplesView('dashboard'); setSimplesEmpresaToEdit(null); }}
-                                        onShowToast={(msg) => setToastMessage(msg)}
-                                        initialData={simplesEmpresaToEdit}
-                                    />
-                                )}
-                                {simplesView === 'detalhe' && selectedEmpresa && (
-                                    <SimplesNacionalDetalhe
-                                        empresa={selectedEmpresa}
-                                        notas={simplesNotas[selectedEmpresa.id] || []}
-                                        onBack={() => setSimplesView('dashboard')}
-                                        onImport={handleImportNotas}
-                                        onUpdateFolha12={handleUpdateFolha12}
-                                        onSaveFaturamentoManual={handleSaveFaturamentoManual}
-                                        onUpdateEmpresa={handleUpdateEmpresa}
-                                        onShowClienteView={() => setSimplesView('cliente')}
-                                        onShowToast={(msg) => setToastMessage(msg)}
-                                        currentUser={currentUser}
-                                    />
-                                )}
-                                {simplesView === 'cliente' && selectedEmpresa && (
-                                    <SimplesNacionalClienteView
-                                        empresa={selectedEmpresa}
-                                        notas={simplesNotas[selectedEmpresa.id] || []}
-                                        onBack={() => setSimplesView('dashboard')}
-                                    />
-                                )}
-                            </Suspense>
-                            </ErrorBoundary>
+                            <SimplesNacionalSection
+                                simplesView={simplesView}
+                                setSimplesView={setSimplesView}
+                                simplesEmpresas={simplesEmpresas}
+                                setSimplesEmpresas={setSimplesEmpresas}
+                                simplesNotas={simplesNotas}
+                                selectedEmpresa={selectedEmpresa}
+                                setSelectedSimplesEmpresaId={setSelectedSimplesEmpresaId}
+                                simplesEmpresaToEdit={simplesEmpresaToEdit}
+                                setSimplesEmpresaToEdit={setSimplesEmpresaToEdit}
+                                currentUser={currentUser}
+                                setToastMessage={setToastMessage}
+                                onSaveSimplesEmpresa={handleSaveSimplesEmpresa}
+                                onImportNotas={handleImportNotas}
+                                onUpdateFolha12={handleUpdateFolha12}
+                                onSaveFaturamentoManual={handleSaveFaturamentoManual}
+                                onUpdateEmpresa={handleUpdateEmpresa}
+                            />
                         )}
 
                         {/* Lucro Presumido View */}
