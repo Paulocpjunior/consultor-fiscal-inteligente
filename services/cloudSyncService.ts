@@ -72,18 +72,24 @@ async function syncCollection(
     counter.total = items.length;
     if (items.length === 0 || !db) return;
 
-    for (const item of items) {
+    // Pool de concorrencia. Sem isso, com N=500 empresas no localStorage o
+    // login do admin ficava ~50s (cada item: 1 getDoc + 1 setDoc sequencial).
+    // Com pool=10, mesmo cenario fica em ~5s e nao bloqueia o boot da UI.
+    const CONCURRENCY = 10;
+    let cursor = 0;
+
+    const processarItem = async (item: any) => {
         try {
             if (!item || !item.id) {
                 counter.errors++;
-                continue;
+                return;
             }
 
-            const ref = doc(db, collectionName, String(item.id));
+            const ref = doc(db!, collectionName, String(item.id));
             const snap = await getDoc(ref);
             if (snap.exists()) {
                 counter.skipped++;
-                continue;
+                return;
             }
 
             // Garante createdBy = uid (regra exige). Mantem se item ja tinha.
@@ -98,8 +104,24 @@ async function syncCollection(
             counter.errors++;
             console.warn(`[cloudSync] erro em ${collectionName}/${item?.id}:`, err?.message);
         }
+    };
+
+    async function worker(): Promise<void> {
+        while (cursor < items.length) {
+            const i = cursor++;
+            await processarItem(items[i]);
+        }
     }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 }
+
+// Guard em memoria pra evitar re-sync no mesmo carregamento da pagina
+// (ex: subscribeAuthState pode disparar varias vezes durante o boot,
+// principalmente em Firefox/Safari com auth persistido). NAO eh por uid --
+// se trocar de conta na mesma aba, queremos re-sync.
+let syncEmAndamento = false;
+let syncFeitoNestaSessao = false;
 
 /**
  * Sincroniza dados locais com Firestore na primeira vez que o usuario loga.
@@ -108,6 +130,7 @@ async function syncCollection(
 export async function runInitialSync(user: User | null): Promise<SyncStats | null> {
     if (!user) return null;
     if (!isFirebaseConfigured || !db || !auth?.currentUser) return null;
+    if (syncEmAndamento || syncFeitoNestaSessao) return null;
 
     const uid = auth.currentUser.uid;
     const flagKey = FLAG_PREFIX + uid;
@@ -117,17 +140,25 @@ export async function runInitialSync(user: User | null): Promise<SyncStats | nul
     // que ficaram so em localStorage). Colaborador mantem o gate da flag.
     if (!isAdmin && localStorage.getItem(flagKey) === '1') return null;
 
+    // Early-return: se localStorage nao tem nada local, nao adianta rodar o
+    // sync (nada a enviar). Garante que admin com tudo na nuvem nao paga o
+    // custo de checar getDoc x500 a cada login.
+    const lucroLocal = readLocalArray('lucro_presumido_empresas');
+    const simplesLocal = readLocalArray('simples_nacional_empresas');
+    const notasLocal = readLocalNotas();
+    if (lucroLocal.length === 0 && simplesLocal.length === 0 && notasLocal.length === 0) {
+        syncFeitoNestaSessao = true;
+        return null;
+    }
+
     const stats: SyncStats = {
         lucroEmpresas: newCounter(),
         simplesEmpresas: newCounter(),
         simplesNotas: newCounter(),
     };
 
+    syncEmAndamento = true;
     try {
-        const lucroLocal = readLocalArray('lucro_presumido_empresas');
-        const simplesLocal = readLocalArray('simples_nacional_empresas');
-        const notasLocal = readLocalNotas();
-
         await syncCollection('lucro_empresas', lucroLocal, uid, stats.lucroEmpresas);
         await syncCollection('simples_empresas', simplesLocal, uid, stats.simplesEmpresas);
         await syncCollection('simples_notas', notasLocal, uid, stats.simplesNotas);
@@ -149,10 +180,13 @@ export async function runInitialSync(user: User | null): Promise<SyncStats | nul
             );
         }
 
+        syncFeitoNestaSessao = true;
         return stats;
     } catch (err: any) {
         console.warn('[cloudSync] falha no sync inicial:', err?.message);
         return null;
+    } finally {
+        syncEmAndamento = false;
     }
 }
 
