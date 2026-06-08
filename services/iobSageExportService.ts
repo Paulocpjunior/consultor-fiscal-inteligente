@@ -119,8 +119,17 @@ interface RegistroPrep {
 
 // ─── Construtores de registros por DocumentoFiscal ────────────────────────
 
+// Helper que substitui LAYOUT.XYZ por L('XYZ') quando o registro precisa
+// existir obrigatoriamente. Sob noUncheckedIndexedAccess, LAYOUT[k] retorna
+// RecordSpec | undefined; o helper rejeita undefined com throw informativo.
+const L = (key: string): import('./iobSageLayout').RecordSpec => {
+    const s = LAYOUT[key];
+    if (!s) throw new Error(`[iobSage] LAYOUT '${key}' nao encontrado`);
+    return s;
+};
+
 function buildE001(numeroEmpresa: number): string {
-    return buildRecord(LAYOUT.E001, {
+    return buildRecord(L('E001'), {
         'NÚMERO DA EMPRESA': numeroEmpresa,
         'VERSÃO LAYOUT': LAYOUT_VERSION,
         'CONTROLE DO SISTEMA': 0,
@@ -141,7 +150,7 @@ function buildE010(d: DocumentoFiscal): string {
     const isCliente = d.direcao === 'saida';
     const isFornecedor = d.direcao === 'entrada';
 
-    return buildRecord(LAYOUT.E010, {
+    return buildRecord(L('E010'), {
         'CÓDIGO DO CLIENTE/FORNECEDOR': codigoParticipante(part.cnpjCpf),
         'NOME': sanitizeTexto(part.nome).slice(0, 100),
         'DATA DE INCLUSÃO': new Date(d.importadoEm),
@@ -178,7 +187,7 @@ function buildE010(d: DocumentoFiscal): string {
 
 function buildE020(item: DocumentoFiscalItem, dataInclusao: Date): string {
     const uCom = sanitizeTexto(item.uCom || 'UN').slice(0, 6) || 'UN';
-    return buildRecord(LAYOUT.E020, {
+    return buildRecord(L('E020'), {
         'CÓDIGO DO PRODUTO/SERVIÇO': codigoProduto(item.cProd),
         'DESCRIÇÃO DO PRODUTO/SERVIÇO': sanitizeTexto(item.xProd).slice(0, 60),
         'DATA DA INCLUSÃO DO PRODUTO/SERVIÇO': dataInclusao,
@@ -254,7 +263,7 @@ function buildE200(d: DocumentoFiscal): string {
         : d.status === 'inutilizado' ? 5
         : 0;
 
-    return buildRecord(LAYOUT.E200, {
+    return buildRecord(L('E200'), {
         'ENTRADAS OU SAÍDAS': c.es,
         'ESPÉCIE N.F.': c.especie,
         'SÉRIE N.F.': c.serie,
@@ -318,7 +327,7 @@ function buildE201sFromDoc(d: DocumentoFiscal): string[] {
         // Aliquota efetiva: ICMS / base. Se sem base, deixa zero.
         const aliquota = sumProd > 0 && sumICMS > 0 ? (sumICMS / sumProd) * 100 : 0;
 
-        linhas.push(buildRecord(LAYOUT.E201, {
+        linhas.push(buildRecord(L('E201'), {
             'ENTRADAS OU SAÍDAS': c.es,
             'ESPÉCIE N.F.': c.especie,
             'SÉRIE N.F': c.serie,
@@ -357,7 +366,7 @@ function buildE201sFromDoc(d: DocumentoFiscal): string[] {
 
 function buildE221(d: DocumentoFiscal): string {
     const c = commonNF(d);
-    return buildRecord(LAYOUT.E221, {
+    return buildRecord(L('E221'), {
         'ENTRADAS OU SAÍDAS': c.es,
         'ESPÉCIE N.F.': c.especie,
         'SÉRIE N.F.': c.serie,
@@ -381,7 +390,7 @@ function buildE222sFromDoc(d: DocumentoFiscal): string[] {
     const c = commonNF(d);
     return (d.itens || []).map((it, idx) => {
         const aliquota = it.vProd > 0 && it.vICMS > 0 ? (it.vICMS / it.vProd) * 100 : 0;
-        return buildRecord(LAYOUT.E222, {
+        return buildRecord(L('E222'), {
             'ENTRADAS OU SAÍDAS': c.es,
             'ESPÉCIE N.F.': c.especie,
             'SÉRIE N.F.': c.serie,
@@ -423,7 +432,7 @@ function buildE222sFromDoc(d: DocumentoFiscal): string[] {
 function buildE342(d: DocumentoFiscal): string | null {
     if (!d.chave || d.chave.length !== 44) return null;
     const c = commonNF(d);
-    return buildRecord(LAYOUT.E342, {
+    return buildRecord(L('E342'), {
         'ENTRADAS OU SAÍDAS': c.es,
         'ESPÉCIE N.F.': c.especie,
         'SÉRIE N.F.': c.serie,

@@ -108,7 +108,7 @@ export const syncUserFromAuth = async (firebaseUser: FirebaseUser): Promise<User
 
     const fallbackUser: User = {
         id:         firebaseUser.uid,
-        name:       firebaseUser.displayName || cleanEmail.split('@')[0],
+        name:       firebaseUser.displayName || cleanEmail.split('@')[0] || cleanEmail,
         email:      cleanEmail,
         role:       isMaster ? 'admin' : 'colaborador',
         isVerified: true

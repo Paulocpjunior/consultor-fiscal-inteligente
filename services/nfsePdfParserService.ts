@@ -149,17 +149,17 @@ function parsePartie(block: string): NfsePdfParticipante {
         // Exige label "CNPJ" perto pra reduzir falso positivo.
         const cnpjDigitosMatch = block.match(/(?:CNPJ|CGC)[\s\S]{0,40}?(\d{14})/i)
             || block.match(/(?<!\d)(\d{14})(?!\d)/);
-        if (cnpjDigitosMatch) {
+        if (cnpjDigitosMatch && cnpjDigitosMatch[1]) {
             const d = cnpjDigitosMatch[1];
             p.cnpj = `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
         } else {
             // Fallback CPF (pessoa fisica)
             const cpfPontuadoMatch = block.match(/(\d{3}\.\d{3}\.\d{3}-\d{2})/);
-            if (cpfPontuadoMatch) p.cnpj = cpfPontuadoMatch[1];
+            if (cpfPontuadoMatch && cpfPontuadoMatch[1]) p.cnpj = cpfPontuadoMatch[1];
         }
     }
     const ieMatch = block.match(/Inscri[c\u00e7][a\u00e3]o\s+Municipal\s*:?\s*(\d+)/i);
-    if (ieMatch) p.inscricaoMunicipal = ieMatch[1];
+    if (ieMatch && ieMatch[1]) p.inscricaoMunicipal = ieMatch[1];
     // Nome aparece em formatos distintos por padrao:
     //  DANFSe v1.0       : "Nome / Nome Empresarial\nFASTWELD INDUSTRIA..."
     //  ABRASF (Publica)  : "Nome empresarial: FASTWELD..."
@@ -181,21 +181,21 @@ function parsePartie(block: string): NfsePdfParticipante {
         if (val && val !== '-' && val.length > 1) { p.nome = val; break; }
     }
     const fantasiaMatch = block.match(/Nome\s+fantasia\s*:?\s*([^\n]+)/i);
-    if (fantasiaMatch) p.nomeFantasia = fantasiaMatch[1].trim();
+    if (fantasiaMatch && fantasiaMatch[1]) p.nomeFantasia = fantasiaMatch[1].trim();
     const enderecoMatch = block.match(/Endere[c\u00e7]o\s*:?\s*([^\n]+)/i);
-    if (enderecoMatch) p.endereco = enderecoMatch[1].trim();
+    if (enderecoMatch && enderecoMatch[1]) p.endereco = enderecoMatch[1].trim();
     const bairroMatch = block.match(/Bairro\s*:?\s*([^\n]+)/i);
-    if (bairroMatch) p.bairro = bairroMatch[1].trim();
+    if (bairroMatch && bairroMatch[1]) p.bairro = bairroMatch[1].trim();
     const municipioMatch = block.match(/Munic[i\u00ed]pio\s*:?\s*([^\n]+?)(?:\s+UF\s*:|\n|$)/i);
-    if (municipioMatch) p.municipio = municipioMatch[1].trim();
+    if (municipioMatch && municipioMatch[1]) p.municipio = municipioMatch[1].trim();
     const ufMatch = block.match(/UF\s*:?\s*([A-Z]{2})/);
-    if (ufMatch) p.uf = ufMatch[1];
+    if (ufMatch && ufMatch[1]) p.uf = ufMatch[1];
     const cepMatch = block.match(/CEP\s*:?\s*(\d{5}-?\d{3})/i);
-    if (cepMatch) p.cep = cepMatch[1];
+    if (cepMatch && cepMatch[1]) p.cep = cepMatch[1];
     const emailMatch = block.match(/E-?mail\s*:?\s*([^\s\n]+@[^\s\n]+)/i);
-    if (emailMatch) p.email = emailMatch[1];
+    if (emailMatch && emailMatch[1]) p.email = emailMatch[1];
     const foneMatch = block.match(/Fone\s*:?\s*([\d\s\-()]+)/i);
-    if (foneMatch) p.telefone = foneMatch[1].trim();
+    if (foneMatch && foneMatch[1]) p.telefone = foneMatch[1].trim();
     return p;
 }
 
@@ -231,13 +231,13 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     let numero = '';
     let serie = '';
     const numNfseMatch = text.match(/N[uú]mero\s+da\s+NFS-?e\s*\n?\s*(\d+)/i);
-    if (numNfseMatch) numero = numNfseMatch[1];
+    if (numNfseMatch?.[1]) numero = numNfseMatch[1];
     const serieDpsMatch = text.match(/S[eé]rie\s+(?:da\s+(?:DPS|NFS-?e)|do\s+RPS)\s*\n?\s*(\w+)/i);
-    if (serieDpsMatch) serie = serieDpsMatch[1];
+    if (serieDpsMatch?.[1]) serie = serieDpsMatch[1];
     if (!numero) {
         // Fallback ABRASF: "699598 / 1"
         const numSerieMatch = text.match(/(\d{6,})\s*\/\s*(\w+)/);
-        if (numSerieMatch) { numero = numSerieMatch[1]; serie = serie || numSerieMatch[2]; }
+        if (numSerieMatch?.[1]) { numero = numSerieMatch[1]; serie = serie || numSerieMatch[2] || ''; }
     }
 
     // Data: DANFSe usa "Data e Hora da emissão da NFS-e\n11/05/2026 14:31:31"
@@ -261,7 +261,7 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     const chaveAcessoMatch =
         text.match(/Chave\s*(?:de\s+Acesso|Nacional)(?:\s+da\s+NFS-?e)?[\s:]*\n?\s*(\d{40,50})/i)
         || text.match(/(?:chave\s*de?\s*acesso|chave\s*nacional)[\s:]*?(\d{40,50})/i);
-    const chaveAcesso = chaveAcessoMatch ? chaveAcessoMatch[1] : '';
+    const chaveAcesso = chaveAcessoMatch?.[1] || '';
 
     // Blocos de Prestador / Tomador.
     //
@@ -314,7 +314,7 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     // Codigo pode ter ponto E hifen ('17.01.01' ou '17-01-01').
     const codigoServicoMatch =
         text.match(/C[oó]digo\s+(?:do\s+Servi[cç]o|de\s+Tributa[cç][aã]o\s+(?:Nacional|Municipal))[\s:]*\n?\s*([\d.\-/]+)/i);
-    const codigoServico = codigoServicoMatch ? codigoServicoMatch[1] : '';
+    const codigoServico = codigoServicoMatch?.[1] || '';
     const discBlock =
         idxDisc >= 0
             ? text.slice(
@@ -329,7 +329,7 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
         .trim()
         .slice(0, 2000);
     const naturezaMatch = text.match(/Natureza\s+de\s+Opera[c\u00e7][a\u00e3]o\s*\n?\s*([^\n]+)/i);
-    const naturezaOperacao = naturezaMatch ? naturezaMatch[1].trim() : '';
+    const naturezaOperacao = naturezaMatch?.[1] ? naturezaMatch[1].trim() : '';
 
     // Valores
     // numPattern aceita "R$" opcional antes do valor (DANFSe v1.0 escreve
@@ -374,10 +374,10 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     );
 
     const municipioEmissorMatch = text.match(/MUNIC[I\u00cd]PIO\s+DE\s+([A-Z\u00c0-\u00dc\s]+)/i);
-    const municipioEmissor = municipioEmissorMatch ? municipioEmissorMatch[1].trim() : '';
+    const municipioEmissor = municipioEmissorMatch?.[1] ? municipioEmissorMatch[1].trim() : '';
 
     const localPrestacaoMatch = text.match(/Local\s+da\s+presta[c\u00e7][a\u00e3]o\s+do\s+servi[c\u00e7]o[\s:]*\n?\s*([^\n]+)/i);
-    const municipioPrestacao = localPrestacaoMatch ? localPrestacaoMatch[1].trim() : prestador.municipio;
+    const municipioPrestacao = localPrestacaoMatch?.[1] ? localPrestacaoMatch[1].trim() : (prestador.municipio || '');
 
     return {
         numero, serie, competencia, dataEmissao, codigoVerificacao,
@@ -424,7 +424,7 @@ export function matchNfseEmpresa(
             if (todosCnpjs.length > 0) {
                 // Estrategia: ABRASF normalmente lista PRESTADOR antes de TOMADOR.
                 // Posicao do alvo nos digitos vs posicao do primeiro outro CNPJ.
-                const idxOutro = textoLimpo.indexOf(todosCnpjs[0]);
+                const idxOutro = textoLimpo.indexOf(todosCnpjs[0] || '');
                 const direcao: 'entrada' | 'saida' = idxAlvo > idxOutro ? 'entrada' : 'saida';
                 return { ok: true, direcao };
             }

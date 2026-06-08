@@ -120,7 +120,7 @@ export function buildRecord(spec: RecordSpec, values: Record<string, unknown>): 
   }
 
   const line = parts.join('');
-  const expected = spec.campos[spec.campos.length - 1].posicao_final;
+  const expected = spec.campos[spec.campos.length - 1]?.posicao_final ?? 0;
   if (line.length !== expected) {
     throw new Error(
       `[Folhamatic] Linha ${spec.registro} com tamanho inválido: ` +

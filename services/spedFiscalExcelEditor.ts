@@ -222,6 +222,7 @@ export async function exportarXlsx(parsed: ParseResult, nomeArquivo: string): Pr
     // Uma aba por tipo editavel
     for (const tipo of Object.keys(parsed.editaveis).sort()) {
         const itens = parsed.editaveis[tipo];
+        if (!itens) continue;
         const cols = await colunasDoTipo(tipo, parsed.tipoSped);
         if (!cols || !itens.length) continue;
         const header = ['_idx_NAO_MEXER', ...cols];
@@ -260,6 +261,7 @@ export async function lerXlsx(arrayBuffer: ArrayBuffer, tipoSped: TipoSped = 'fi
     for (const sheetName of wb.SheetNames) {
         if (sheetName === 'Resumo' || sheetName === 'Outros (preservados)') continue;
         const ws = wb.Sheets[sheetName];
+        if (!ws) continue;
         const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, raw: false, defval: '' });
         if (!rows.length) continue;
         const header = (rows[0] || []).map((c: any) => String(c).trim());
