@@ -623,10 +623,11 @@ export const calcularResumoEmpresa = (
         if (rbtParaEnquadramento === 0) faixaIndex = 0;
         const faixa = tabela[faixaIndex];
 
-        let aliq_eff_item = rbtParaEnquadramento > 0
+        const tabFirst = tabela[0];
+        let aliq_eff_item = rbtParaEnquadramento > 0 && faixa
             ? (((rbtParaEnquadramento * faixa.aliquota / 100) - faixa.parcela)
                / rbtParaEnquadramento) * 100
-            : tabela[0].aliquota;
+            : (tabFirst ? tabFirst.aliquota : 0);
 
         let percentualReducao = 0;
         const faixaIdxClamped = Math.max(0, Math.min(faixaIndex, 5)) as FaixaIndex;
@@ -659,7 +660,7 @@ export const calcularResumoEmpresa = (
         detalhamentoAnexos.push({
             cnae: item.cnae, anexo: anexoAplicado as any,
             anexoOriginal, faturamento: item.valor,
-            aliquotaNominal: faixa.aliquota, aliquotaEfetiva: aliq_final,
+            aliquotaNominal: faixa?.aliquota ?? 0, aliquotaEfetiva: aliq_final,
             valorDas: valorDasItem, issRetido: item.issRetido, icmsSt: item.icmsSt,
             isMonofasico: item.isMonofasico, isImune: item.isImune, isExterior: item.isExterior
         });
@@ -682,7 +683,7 @@ export const calcularResumoEmpresa = (
         inicioAtividade, mesesAtividade,
         rbt12pInterno: inicioAtividade ? rbt12pInterno : undefined,
         rbt12pExterno: inicioAtividade ? rbt12pExterno : undefined,
-        aliq_nom: tabelaPrincipal ? tabelaPrincipal[faixaIndexPrincipal].aliquota : 0,
+        aliq_nom: tabelaPrincipal && tabelaPrincipal[faixaIndexPrincipal] ? tabelaPrincipal[faixaIndexPrincipal]!.aliquota : 0,
         aliq_eff: aliq_eff_global, das: dasTotal * 12, das_mensal: dasTotal, mensal,
         historico_simulado, anexo_efetivo: empresa.anexo, fator_r,
         folha_12: folha12Calculada, ultrapassou_sublimite: rbt12Global > 3600000,

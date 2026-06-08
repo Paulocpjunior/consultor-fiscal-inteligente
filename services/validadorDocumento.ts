@@ -32,7 +32,10 @@ function caractereParaValor(c: string): number {
 function calcularDvCnpj(base: string, pesos: ReadonlyArray<number>): number {
     let soma = 0;
     for (let i = 0; i < pesos.length; i++) {
-        soma += caractereParaValor(base[i]) * pesos[i];
+        const ch = base[i];
+        const peso = pesos[i];
+        if (ch === undefined || peso === undefined) continue;
+        soma += caractereParaValor(ch) * peso;
     }
     const resto = soma % 11;
     return resto < 2 ? 0 : 11 - resto;
@@ -53,7 +56,7 @@ export function validarCnpj(cnpj: string): boolean {
 
     const dv1Esperado = calcularDvCnpj(c.slice(0, 12), PESOS_CNPJ_DV1);
     const dv2Esperado = calcularDvCnpj(c.slice(0, 13), PESOS_CNPJ_DV2);
-    return dv1Esperado === parseInt(c[12], 10) && dv2Esperado === parseInt(c[13], 10);
+    return dv1Esperado === parseInt(c[12] || '', 10) && dv2Esperado === parseInt(c[13] || '', 10);
 }
 
 /**
@@ -67,14 +70,19 @@ export function validarCpf(cpf: string): boolean {
 
     const calc = (base: string, pesos: ReadonlyArray<number>) => {
         let soma = 0;
-        for (let i = 0; i < pesos.length; i++) soma += parseInt(base[i], 10) * pesos[i];
+        for (let i = 0; i < pesos.length; i++) {
+            const ch = base[i];
+            const peso = pesos[i];
+            if (ch === undefined || peso === undefined) continue;
+            soma += parseInt(ch, 10) * peso;
+        }
         const resto = soma % 11;
         return resto < 2 ? 0 : 11 - resto;
     };
 
     const dv1 = calc(c.slice(0, 9), PESOS_CPF_DV1);
     const dv2 = calc(c.slice(0, 10), PESOS_CPF_DV2);
-    return dv1 === parseInt(c[9], 10) && dv2 === parseInt(c[10], 10);
+    return dv1 === parseInt(c[9] || '', 10) && dv2 === parseInt(c[10] || '', 10);
 }
 
 /**
