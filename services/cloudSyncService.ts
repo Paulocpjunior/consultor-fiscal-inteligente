@@ -28,6 +28,7 @@ interface CounterStats {
 interface SyncStats {
     lucroEmpresas: CounterStats;
     simplesEmpresas: CounterStats;
+    simplesNotas: CounterStats;
 }
 
 const newCounter = (): CounterStats => ({ total: 0, uploaded: 0, skipped: 0, errors: 0 });
@@ -38,6 +39,22 @@ const readLocalArray = <T>(key: string): T[] => {
         if (!raw) return [];
         const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
+const readLocalNotas = (): any[] => {
+    try {
+        const raw = localStorage.getItem('simples_nacional_notas');
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return [];
+        const out: any[] = [];
+        Object.values(parsed).forEach((arr: any) => {
+            if (Array.isArray(arr)) arr.forEach(n => out.push(n));
+        });
+        return out;
     } catch {
         return [];
     }
@@ -94,32 +111,42 @@ export async function runInitialSync(user: User | null): Promise<SyncStats | nul
 
     const uid = auth.currentUser.uid;
     const flagKey = FLAG_PREFIX + uid;
+    const isAdmin = user.role === 'admin';
 
-    if (localStorage.getItem(flagKey) === '1') return null;
+    // Admin sempre re-sincroniza (cobre empresas criadas APOS o primeiro sync
+    // que ficaram so em localStorage). Colaborador mantem o gate da flag.
+    if (!isAdmin && localStorage.getItem(flagKey) === '1') return null;
 
     const stats: SyncStats = {
         lucroEmpresas: newCounter(),
         simplesEmpresas: newCounter(),
+        simplesNotas: newCounter(),
     };
 
     try {
         const lucroLocal = readLocalArray('lucro_presumido_empresas');
         const simplesLocal = readLocalArray('simples_nacional_empresas');
+        const notasLocal = readLocalNotas();
 
         await syncCollection('lucro_empresas', lucroLocal, uid, stats.lucroEmpresas);
         await syncCollection('simples_empresas', simplesLocal, uid, stats.simplesEmpresas);
+        await syncCollection('simples_notas', notasLocal, uid, stats.simplesNotas);
 
         localStorage.setItem(flagKey, '1');
 
-        const total = stats.lucroEmpresas.uploaded + stats.simplesEmpresas.uploaded;
+        const total = stats.lucroEmpresas.uploaded + stats.simplesEmpresas.uploaded + stats.simplesNotas.uploaded;
         if (total > 0) {
             console.info(
-                `[cloudSync] ${total} empresa(s) sincronizada(s) -> cloud. ` +
-                `Lucro: ${stats.lucroEmpresas.uploaded} novas / ${stats.lucroEmpresas.skipped} ja existiam / ${stats.lucroEmpresas.total} total. ` +
-                `Simples: ${stats.simplesEmpresas.uploaded} novas / ${stats.simplesEmpresas.skipped} ja existiam / ${stats.simplesEmpresas.total} total.`,
+                `[cloudSync] +${total} item(s) -> cloud. ` +
+                `Lucro empresas: +${stats.lucroEmpresas.uploaded} (${stats.lucroEmpresas.skipped} existiam de ${stats.lucroEmpresas.total}). ` +
+                `Simples empresas: +${stats.simplesEmpresas.uploaded} (${stats.simplesEmpresas.skipped} existiam de ${stats.simplesEmpresas.total}). ` +
+                `Simples notas: +${stats.simplesNotas.uploaded} (${stats.simplesNotas.skipped} existiam de ${stats.simplesNotas.total}).`,
             );
         } else {
-            console.info('[cloudSync] nada a sincronizar.');
+            console.info(
+                `[cloudSync] nada novo. ` +
+                `Locais: Lucro ${stats.lucroEmpresas.total}, Simples ${stats.simplesEmpresas.total} empresas, ${stats.simplesNotas.total} notas.`,
+            );
         }
 
         return stats;
