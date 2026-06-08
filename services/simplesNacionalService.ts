@@ -8,8 +8,6 @@ import { extractDocumentData, extractPgdasDataFromPdf } from './geminiService';
 import { parsePgdasExtrato } from './pgdasPdfParser';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
-import { getEmpresasDoColaborador } from './carteiraService';
-import { isModoEscritorioAberto } from './visibilidadeEscritorio';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
 import {

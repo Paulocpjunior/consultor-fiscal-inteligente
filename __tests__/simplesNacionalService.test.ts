@@ -17,10 +17,6 @@ jest.mock('../services/firebaseConfig', () => ({
     auth: null,
     isFirebaseConfigured: false,
 }));
-// visibilidadeEscritorio usa import.meta.env (Vite) que jest nao consegue parsear.
-jest.mock('../services/visibilidadeEscritorio', () => ({
-    isModoEscritorioAberto: () => false,
-}));
 jest.mock('firebase/firestore', () => ({
     collection: jest.fn(),
     getDocs: jest.fn(),

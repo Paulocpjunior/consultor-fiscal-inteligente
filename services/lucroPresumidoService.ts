@@ -2,8 +2,6 @@
 import { LucroPresumidoEmpresa, FichaFinanceiraRegistro, User } from '../types';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
-import { getEmpresasDoColaborador } from './carteiraService';
-import { isModoEscritorioAberto } from './visibilidadeEscritorio';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
 import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, deleteDoc, limit as fbLimit } from 'firebase/firestore';

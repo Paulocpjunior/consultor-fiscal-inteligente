@@ -23,8 +23,6 @@ import {
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured, isFirebaseStorageConfigured } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
-import { getEmpresasDoColaborador } from './carteiraService';
-import { isModoEscritorioAberto } from './visibilidadeEscritorio';
 import {
     parseNFeXml,
     matchCompanyAndDirection,

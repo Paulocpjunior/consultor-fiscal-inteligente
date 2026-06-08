@@ -9,7 +9,6 @@ interface ImportMetaEnv {
     readonly VITE_FIREBASE_APP_ID?: string;
     readonly VITE_GEMINI_API_KEY?: string;
     readonly VITE_API_BASE_URL?: string;
-    readonly VITE_VISIBILIDADE_ABERTA?: string;
     readonly DEV?: boolean;
     readonly PROD?: boolean;
     readonly MODE?: string;
