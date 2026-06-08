@@ -59,6 +59,8 @@ import {
 } from '../services/creditConfigService';
 import { mesclarInvoicesEFiltrarOcultos } from '../services/analiseCreditoMerge';
 import { gerarEfiscalPdf, gerarExtratoPdf, baixarBlob } from '../services/analiseCreditoPdf';
+import { useFornecedoresNotasOcultos } from '../hooks/useFornecedoresNotasOcultos';
+import { useCategoriasCredito } from '../hooks/useCategoriasCredito';
 import type { EmpresaPerfilOption } from '../services/xmlFiscalService';
 import type { User } from '../types';
 
@@ -144,132 +146,33 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
   const [invoicesVersao, setInvoicesVersao] = useState(0);
   const [modalInvoiceAberto, setModalInvoiceAberto] = useState(false);
 
-  // Categorias customizadas (Firestore). 11 fixas + estas.
-  const [categoriasCustom, setCategoriasCustom] = useState<CategoriaCustom[]>([]);
-  const [categoriasVersao, setCategoriasVersao] = useState(0);
-  const [modalCategoriasAberto, setModalCategoriasAberto] = useState(false);
-
-  useEffect(() => {
-    let ativo = true;
-    listarCustom().then(list => {
-      if (ativo) setCategoriasCustom(list);
-    });
-    return () => { ativo = false; };
-  }, [categoriasVersao]);
-
-  // Categorias marcadas como nao-creditaveis para a empresa selecionada.
-  // Items nessas categorias tem base 0 (no agrupamento e no baseTotal).
-  // Persistido em empresa_credito_config/{empresaId}.
-  const [categoriasNaoCreditaveis, setCategoriasNaoCreditaveis] = useState<Set<string>>(new Set());
-
-  // ── Exclusao local de fornecedores (some so nessa sessao) ───────────────
-  // Versao 1 (local, nao persistido): o usuario clica lixeira -> modal ->
-  // confirma -> CNPJ vai pra Set -> fornecedor some da listagem E do calculo
-  // de credito. Ao recarregar o PDF, fornecedor volta a aparecer.
-  //
-  // Evolucao possivel (versao 2): persistir como regra na empresa via
-  // collection `fornecedores_ocultos` no Firestore. Ai a regra dura entre
-  // sessoes. Nao implementado nesta versao.
-  const [fornecedoresOcultos, setFornecedoresOcultos] = useState<Set<string>>(new Set());
-  const [confirmandoExclusao, setConfirmandoExclusao] = useState<
-    { cnpj: string; razaoSocial: string; qtdNotas: number; somaValorNf: number } | null
-  >(null);
   // Normaliza CNPJ (so digitos) para chave consistente no Set
   const cnpjKey = (c: string) => (c || '').replace(/\D+/g, '');
 
-  // ── Exclusao PERSISTIDA (regra "sempre nessa empresa") ──────────────────
-  // Carregado do Firestore (collection `fornecedores_ocultos`) quando a
-  // empresa muda. Modal oferece DOIS botoes:
-  //   - "So desta vez" -> vai pro Set local (fornecedoresOcultos acima)
-  //   - "Sempre nessa empresa" -> grava no Firestore E aparece aqui
-  // O calculo de credito (useMemo abaixo) usa a UNIAO dos dois Sets.
-  const [fornecedoresOcultosPersistidos, setFornecedoresOcultosPersistidos] = useState<Set<string>>(new Set());
-  const [salvandoExclusaoPersistida, setSalvandoExclusaoPersistida] = useState(false);
+  // Fornecedores + Notas ocultos -- estado consolidado num hook.
+  const {
+    fornecedoresOcultos, setFornecedoresOcultos,
+    fornecedoresOcultosPersistidos, setFornecedoresOcultosPersistidos,
+    fornecedoresOcultosEfetivos,
+    salvandoExclusaoPersistida, setSalvandoExclusaoPersistida,
+    confirmandoExclusao, setConfirmandoExclusao,
+    notasOcultas, setNotasOcultas,
+    notasOcultasPersistidas, setNotasOcultasPersistidas,
+    notasOcultasEfetivas,
+    confirmandoExclusaoNf, setConfirmandoExclusaoNf,
+    salvandoExclusaoNfPersistida, setSalvandoExclusaoNfPersistida,
+  } = useFornecedoresNotasOcultos(empresaSel?.id);
 
-  useEffect(() => {
-    if (!empresaSel?.id) {
-      setFornecedoresOcultosPersistidos(new Set());
-      return;
-    }
-    let alive = true;
-    listarOcultos(empresaSel.id)
-      .then(set => { if (alive) setFornecedoresOcultosPersistidos(set); })
-      .catch(e => console.error('[AnaliseCredito] listarOcultos:', e));
-    return () => { alive = false; };
-  }, [empresaSel?.id]);
-
-  // Uniao Local + Persistido — eh isso que o calculo de credito usa.
-  const fornecedoresOcultosEfetivos = useMemo(() => {
-    const s = new Set<string>(fornecedoresOcultos);
-    for (const k of fornecedoresOcultosPersistidos) s.add(k);
-    return s;
-  }, [fornecedoresOcultos, fornecedoresOcultosPersistidos]);
-
-  // ── Exclusao por NF INDIVIDUAL (granularidade fina) ─────────────────────
-  // Diferente da exclusao por FORNECEDOR (acima, que zera TODAS as NFs do
-  // CNPJ): aqui o usuario clica lixeira numa NF especifica dentro da tabela
-  // aninhada de Categoria. Chave: nfChave(cnpj, numero, serie).
-  //
-  // Caso de uso: prestador legitimo, mas UMA NF nao deve entrar (cancelada,
-  // duplicada, reembolsada). Adicionar nova NF do mesmo CNPJ via
-  // "Adicionar invoice manual" funciona — a nova tem chave diferente.
-  const [notasOcultas, setNotasOcultas] = useState<Set<string>>(new Set());
-  const [notasOcultasPersistidas, setNotasOcultasPersistidas] = useState<Set<string>>(new Set());
-  const [confirmandoExclusaoNf, setConfirmandoExclusaoNf] = useState<
-    { cnpj: string; razaoSocial: string; numero: string; serie: string; emissao: string; valorNf: number } | null
-  >(null);
-  const [salvandoExclusaoNfPersistida, setSalvandoExclusaoNfPersistida] = useState(false);
-
-  useEffect(() => {
-    if (!empresaSel?.id) {
-      setNotasOcultasPersistidas(new Set());
-      return;
-    }
-    let alive = true;
-    listarNotasOcultas(empresaSel.id)
-      .then(s => { if (alive) setNotasOcultasPersistidas(s); })
-      .catch(e => console.error('[AnaliseCredito] listarNotasOcultas:', e));
-    return () => { alive = false; };
-  }, [empresaSel?.id]);
-
-  const notasOcultasEfetivas = useMemo(() => {
-    const s = new Set<string>(notasOcultas);
-    for (const k of notasOcultasPersistidas) s.add(k);
-    return s;
-  }, [notasOcultas, notasOcultasPersistidas]);
-  const [salvandoCategoriaCredito, setSalvandoCategoriaCredito] = useState<string | null>(null);
-
-  useEffect(() => {
-    let ativo = true;
-    if (!empresaSel?.id) { setCategoriasNaoCreditaveis(new Set()); return; }
-    carregarCreditConfig(empresaSel.id).then(cfg => {
-      if (ativo) setCategoriasNaoCreditaveis(new Set(cfg.categoriasNaoCreditaveis));
-    });
-    return () => { ativo = false; };
-  }, [empresaSel?.id]);
-
-  const toggleCategoriaCredito = useCallback(async (categoria: string) => {
-    if (!empresaSel?.id) return;
-    if (categoria === 'SEM_CATEGORIA') return;  // sempre nao-creditavel, nao da pra mexer
-    const novo = new Set(categoriasNaoCreditaveis);
-    if (novo.has(categoria)) novo.delete(categoria);
-    else novo.add(categoria);
-    setCategoriasNaoCreditaveis(novo);  // otimista
-    setSalvandoCategoriaCredito(categoria);
-    const r = await salvarCreditConfig(empresaSel.id, Array.from(novo));
-    setSalvandoCategoriaCredito(null);
-    if (!r.ok) {
-      // rollback em caso de falha
-      setCategoriasNaoCreditaveis(categoriasNaoCreditaveis);
-      setErro('Erro ao salvar config de crédito: ' + (r.error || 'desconhecido'));
-    }
-  }, [empresaSel?.id, categoriasNaoCreditaveis]);
-
-  // Todas as opcoes de categoria do dropdown (11 fixas + custom, ordenadas A-Z).
-  const todasCategorias = useMemo(() => {
-    const customNomes = categoriasCustom.map(c => c.nome);
-    return [...CATEGORIAS_CREDITO, ...customNomes].sort((a, b) => a.localeCompare(b));
-  }, [categoriasCustom]);
+  // Categorias custom + nao-creditaveis + helpers consolidados num hook.
+  const {
+    categoriasCustom, setCategoriasCustom,
+    categoriasVersao, setCategoriasVersao,
+    modalCategoriasAberto, setModalCategoriasAberto,
+    categoriasNaoCreditaveis,
+    salvandoCategoriaCredito,
+    toggleCategoriaCredito,
+    todasCategorias,
+  } = useCategoriasCredito(empresaSel?.id, setErro);
 
   const periodoNormalizado = useMemo(
     () => efiscal ? normalizarPeriodo(efiscal.periodo) : '',
