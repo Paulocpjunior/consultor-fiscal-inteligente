@@ -59,6 +59,7 @@ import {
   carregarCreditConfig,
   salvarCreditConfig,
 } from '../services/creditConfigService';
+import { mesclarInvoicesEFiltrarOcultos } from '../services/analiseCreditoMerge';
 import type { EmpresaPerfilOption } from '../services/xmlFiscalService';
 import type { User } from '../types';
 
@@ -686,150 +687,17 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     if (!efiscal || !empresaSel) return null;
     const regCalc = regimeParaCalculo(empresaSel.regimeSugerido);
 
-    // 1. Separa invoices manuais em DOIS grupos:
-    //    A) SEM categoria: agregam normalmente por CNPJ junto com o PDF
-    //       (classificacao automatica pela razao social).
-    //    B) COM categoria fixada: cada uma vira um "fornecedor sintetico"
-    //       isolado. Necessario pra invoices estrangeiras (CNPJ 0..0) onde
-    //       um override por CNPJ vazaria pra outras empresas no mesmo CNPJ.
-    //
-    // Chave sintetica: `${cnpjDigits}__inv__${id.slice(-8)}` — preserva o
-    // CNPJ original visualmente mas garante unicidade no fornMap/catPorCnpj.
-    const invoicesSemCat = invoicesManuais.filter(im => !im.categoria);
-    const invoicesComCat = invoicesManuais.filter(im => !!im.categoria);
-
-    // Mapa de chave sintetica -> categoria fixada (usado como override extra)
-    const overridesSinteticos = new Map<string, string>(overrides);
-    for (const im of invoicesComCat) {
-      const k = `${(im.cnpjCpf || '').replace(/\D+/g, '')}__inv__${im.id.slice(-8)}`;
-      overridesSinteticos.set(k, im.categoria as string);
-    }
-
-    // 2. converte invoices manuais em EfiscalNf
-    //    Invoices SEM categoria mantem o cnpjCpf real (agregam por CNPJ).
-    //    Invoices COM categoria recebem cnpjCpf SINTETICO (isolam por id).
-    const notasManuaisSemCat = invoicesSemCat.map(im => ({
-      emissao: im.emissao || '',
-      numero: im.numero || '',
-      serie: im.serie || '',
-      cnpjCpf: im.cnpjCpf,
-      razaoSocial: im.razaoSocial,
-      valorNf: Number(im.valorNf) || 0,
-      baseCalculo: Number(im.baseCalculo) || 0,
-      aliquota: Number(im.aliquota) || 0,
-      valorIss: Number(im.valorIss) || 0,
-      issRetido: Number(im.issRetido) || 0,
-      pagina: 0,
-    }));
-    const notasManuaisComCat = invoicesComCat.map(im => {
-      const cnpjSint = `${(im.cnpjCpf || '').replace(/\D+/g, '')}__inv__${im.id.slice(-8)}`;
-      return {
-        emissao: im.emissao || '',
-        numero: im.numero || '',
-        serie: im.serie || '',
-        cnpjCpf: cnpjSint,
-        razaoSocial: im.razaoSocial,
-        valorNf: Number(im.valorNf) || 0,
-        baseCalculo: Number(im.baseCalculo) || 0,
-        aliquota: Number(im.aliquota) || 0,
-        valorIss: Number(im.valorIss) || 0,
-        issRetido: Number(im.issRetido) || 0,
-        pagina: 0,
-      };
+    // Merge invoices manuais + filtros de ocultos extraido para
+    // services/analiseCreditoMerge.ts. Logica era ~150 linhas inline aqui;
+    // agora eh testavel sem render. Documentacao das regras de negocio
+    // (chave sintetica __inv__, desconto de NFs individuais, etc) vive la.
+    const { fornFiltrados, notasFiltradas, overridesSinteticos } = mesclarInvoicesEFiltrarOcultos({
+      efiscal,
+      invoicesManuais,
+      overrides,
+      fornecedoresOcultos: fornecedoresOcultosEfetivos,
+      notasOcultas: notasOcultasEfetivas,
     });
-    const notasMescladas = [...efiscal.notas, ...notasManuaisSemCat, ...notasManuaisComCat];
-
-    // 3. reagrupa fornecedores
-    //    a) Comeca com os do PDF (CNPJ real)
-    //    b) Soma invoices SEM categoria por CNPJ (1 CNPJ = 1 linha)
-    //    c) Adiciona invoices COM categoria como fornecedores INDIVIDUAIS
-    //       (cada uma com chave sintetica, 1 invoice = 1 linha)
-    const fornMap = new Map<string, typeof efiscal.fornecedores[number]>();
-    const soDigF = (s: string) => (s || '').replace(/\D+/g, '');
-    for (const f of efiscal.fornecedores) {
-      fornMap.set(soDigF(f.cnpjCpf), { ...f });
-    }
-    for (const im of invoicesSemCat) {
-      const k = soDigF(im.cnpjCpf);
-      const existente = fornMap.get(k);
-      if (existente) {
-        existente.qtdNotas += 1;
-        existente.somaValorNf += Number(im.valorNf) || 0;
-        existente.somaBaseCalculo += Number(im.baseCalculo) || 0;
-        existente.somaValorIss += Number(im.valorIss) || 0;
-        existente.somaIssRetido += Number(im.issRetido) || 0;
-      } else {
-        fornMap.set(k, {
-          cnpjCpf: im.cnpjCpf,
-          razaoSocial: im.razaoSocial,
-          qtdNotas: 1,
-          somaValorNf: Number(im.valorNf) || 0,
-          somaBaseCalculo: Number(im.baseCalculo) || 0,
-          somaValorIss: Number(im.valorIss) || 0,
-          somaIssRetido: Number(im.issRetido) || 0,
-        });
-      }
-    }
-    for (const im of invoicesComCat) {
-      const cnpjSint = `${soDigF(im.cnpjCpf)}__inv__${im.id.slice(-8)}`;
-      // Cada invoice com categoria sempre vira UM fornecedor proprio
-      // (chave unica via id da invoice).
-      fornMap.set(cnpjSint, {
-        cnpjCpf: cnpjSint,
-        razaoSocial: im.razaoSocial,
-        qtdNotas: 1,
-        somaValorNf: Number(im.valorNf) || 0,
-        somaBaseCalculo: Number(im.baseCalculo) || 0,
-        somaValorIss: Number(im.valorIss) || 0,
-        somaIssRetido: Number(im.issRetido) || 0,
-      });
-    }
-    const fornMesclados = Array.from(fornMap.values());
-
-    // Aplica filtro de ocultos. Dois sistemas combinados:
-    //   1. FORNECEDOR oculto (CNPJ inteiro): some todas NFs desse CNPJ.
-    //   2. NF INDIVIDUAL oculta (cnpj+numero+serie): some so essa NF.
-    // Ambos sistemas: UNIAO de local + persistido (Firestore).
-    //
-    // IMPORTANTE: calcularCreditoEfiscal soma a base por FORNECEDOR
-    // (f.somaValorNf agregado), nao iterando NFs. Entao quando excluimos
-    // UMA NF individual, precisamos DESCONTAR seus valores dos totais
-    // agregados do fornecedor afetado — senao a base nao muda (so o
-    // contador de NFs muda visualmente, dando a impressao de bug).
-    const fornFiltrados = fornMesclados
-      .filter(f => !fornecedoresOcultosEfetivos.has(cnpjKey(f.cnpjCpf)))
-      .map(f => {
-        if (notasOcultasEfetivas.size === 0) return f;
-        // Quais NFs deste fornecedor estao ocultas?
-        const ocultasDoForn = notasMescladas.filter(n =>
-          cnpjKey(n.cnpjCpf) === cnpjKey(f.cnpjCpf) &&
-          notasOcultasEfetivas.has(nfChave(n.cnpjCpf, n.numero, n.serie || ''))
-        );
-        if (ocultasDoForn.length === 0) return f;
-        // Desconta os valores das NFs ocultas dos totais agregados.
-        let dValorNf = 0, dBaseCalc = 0, dValorIss = 0, dIssRet = 0;
-        for (const n of ocultasDoForn) {
-          dValorNf  += Number(n.valorNf)    || 0;
-          dBaseCalc += Number(n.baseCalculo)|| 0;
-          dValorIss += Number(n.valorIss)   || 0;
-          dIssRet   += Number(n.issRetido)  || 0;
-        }
-        return {
-          ...f,
-          qtdNotas:        Math.max(0, f.qtdNotas        - ocultasDoForn.length),
-          somaValorNf:     Math.max(0, f.somaValorNf     - dValorNf),
-          somaBaseCalculo: Math.max(0, f.somaBaseCalculo - dBaseCalc),
-          somaValorIss:    Math.max(0, f.somaValorIss    - dValorIss),
-          somaIssRetido:   Math.max(0, f.somaIssRetido   - dIssRet),
-        };
-      })
-      // Se sobrou fornecedor sem nenhuma NF (todas excluidas individualmente),
-      // remove pra nao poluir a tabela.
-      .filter(f => f.qtdNotas > 0);
-    const notasFiltradas = notasMescladas.filter(n =>
-      !fornecedoresOcultosEfetivos.has(cnpjKey(n.cnpjCpf)) &&
-      !notasOcultasEfetivas.has(nfChave(n.cnpjCpf, n.numero, n.serie || ''))
-    );
 
     return calcularCreditoEfiscal(fornFiltrados, regCalc, notasFiltradas, overridesSinteticos, categoriasNaoCreditaveis);
   }, [efiscal, empresaSel, overrides, invoicesManuais, categoriasNaoCreditaveis, fornecedoresOcultosEfetivos, notasOcultasEfetivas]);
