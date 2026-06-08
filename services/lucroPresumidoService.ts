@@ -55,10 +55,7 @@ export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresu
                     .filter(doc => !(doc.data() as any)._merged_into)
                     .map(doc => ({ id: doc.id, ...doc.data() } as LucroPresumidoEmpresa));
 
-                if (!isMasterAdmin && !isModoEscritorioAberto()) {
-                    const carteiraIds = new Set(await getEmpresasDoColaborador(uid));
-                    cloudEmpresas = cloudEmpresas.filter(e => e.createdBy === uid || carteiraIds.has(e.id));
-                }
+                // VISIBILIDADE ABERTA: todos veem todas. Temporaria ate carteira.
                 
                 // Se conseguiu buscar da nuvem, atualiza o cache local (apenas para modo offline)
                 if (cloudEmpresas.length > 0) {

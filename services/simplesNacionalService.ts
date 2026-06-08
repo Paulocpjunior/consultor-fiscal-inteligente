@@ -132,12 +132,10 @@ export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEm
                 .filter(d => !(d.data() as any)._merged_into)
                 .map(d => ({ id: d.id, ...d.data() } as SimplesNacionalEmpresa));
 
-            // Modo escritorio aberto: colaborador ve TUDO (temporario, ate
-            // carteira ficar 100% atribuida -- ver visibilidadeEscritorio.ts).
-            if (!isMaster && !isModoEscritorioAberto()) {
-                const carteiraIds = new Set(await getEmpresasDoColaborador(uid));
-                cloudEmpresas = cloudEmpresas.filter(e => e.createdBy === uid || carteiraIds.has(e.id));
-            }
+            // VISIBILIDADE ABERTA: todos veem todas. Decisao temporaria
+            // ate a Carteira de Clientes ficar atribuida (#104).
+            // Para restaurar o filtro: voltar ao bloco
+            //   if (!isMaster) { ...filter por createdBy || carteira... }
 
             // Atualiza cache local
             const local = getLocalEmpresas();
@@ -271,12 +269,7 @@ export const getAllNotas = async (
             const snaps = await fetchAllDocs('simples_notas', []);
             cloudNotas = snaps.map(d =>
                 ({ id: d.id, ...d.data() } as SimplesNacionalNota));
-            if (!isMaster && !isModoEscritorioAberto()) {
-                const carteiraIds = new Set(await getEmpresasDoColaborador(uid));
-                cloudNotas = cloudNotas.filter(n =>
-                    (n as any).createdBy === uid || carteiraIds.has(n.empresaId)
-                );
-            }
+            // VISIBILIDADE ABERTA: todos veem todas as notas. Decisao temporaria.
         } catch { /* silent */ }
     }
 

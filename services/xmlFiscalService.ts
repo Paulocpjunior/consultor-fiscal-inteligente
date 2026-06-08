@@ -112,20 +112,13 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
         // Antes filtrava so por createdBy -- colaborador nao via empresa
         // atribuida via carteira quando outro colega criava (bug reportado
         // 06/2026).
-        const abertoColab = !isMaster && isModoEscritorioAberto();
-        const [simplesSnap, lucroSnap, carteiraIdsArr] = await Promise.all([
+        // VISIBILIDADE ABERTA: todos veem todas (Simples + Lucro). Temporaria.
+        const [simplesSnap, lucroSnap] = await Promise.all([
             fetchAllDocs('simples_empresas', []),
             fetchAllDocs('lucro_empresas', []),
-            !isMaster && uid && !abertoColab ? getEmpresasDoColaborador(uid) : Promise.resolve([] as string[]),
         ]);
-        const carteiraIds = new Set(carteiraIdsArr);
 
-        const podeVer = (createdBy?: string | null, id?: string): boolean => {
-            if (isMaster || abertoColab) return true;
-            if (uid && createdBy === uid) return true;
-            if (id && carteiraIds.has(id)) return true;
-            return false;
-        };
+        const podeVer = (_createdBy?: string | null, _id?: string): boolean => true;
 
         // 23/05: filtra perdedores do merge de duplicatas
         const simples: EmpresaXmlOption[] = simplesSnap
@@ -502,12 +495,7 @@ export async function listDocumentos(
         // documentos_fiscais permite limit <=5000 nas rules; usa pagina maior.
         const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000 });
         docs = snaps.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
-        if (!isMaster && uid && !isModoEscritorioAberto()) {
-            const carteiraIds = new Set(await getEmpresasDoColaborador(uid));
-            docs = docs.filter(d =>
-                (d as any).createdBy === uid || (d.empresaId && carteiraIds.has(d.empresaId))
-            );
-        }
+        // VISIBILIDADE ABERTA: todos veem todos os documentos. Temporaria.
     } catch (err: any) {
         console.warn('listDocumentos:', err?.message);
         return [];
