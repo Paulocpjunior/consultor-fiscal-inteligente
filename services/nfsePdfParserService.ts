@@ -134,11 +134,29 @@ function parsePartie(block: string): NfsePdfParticipante {
     const p = empty();
     if (!block) return p;
 
-    const cnpjMatch = block.match(/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/);
-    if (cnpjMatch) p.cnpj = cnpjMatch[1];
-    else {
-        const cpfMatch = block.match(/(\d{3}\.\d{3}\.\d{3}-\d{2})/);
-        if (cpfMatch) p.cnpj = cpfMatch[1];
+    // CNPJ pode aparecer em VARIOS formatos:
+    //  - Pontuado:           02.942.184/0001-34
+    //  - Pontuado parcial:   02.942.184 / 0001-34   (com espacos)
+    //  - Sem pontuacao:      02942184000134
+    // E o label varia ("CNPJ:", "CNPJ/CPF:", "CPF/CNPJ", as vezes so o numero).
+    // Procura em ordem: pontuado -> pontuado-com-espacos -> 14-digitos.
+    const cnpjPontuadoMatch = block.match(/(\d{2})\s*\.\s*(\d{3})\s*\.\s*(\d{3})\s*\/\s*(\d{4})\s*-\s*(\d{2})/);
+    if (cnpjPontuadoMatch) {
+        // Normaliza: remove espacos extras mas mantem pontuacao canonica
+        p.cnpj = `${cnpjPontuadoMatch[1]}.${cnpjPontuadoMatch[2]}.${cnpjPontuadoMatch[3]}/${cnpjPontuadoMatch[4]}-${cnpjPontuadoMatch[5]}`;
+    } else {
+        // Sem pontuacao: 14 digitos consecutivos (cuidado pra nao casar com CEP+telefone)
+        // Exige label "CNPJ" perto pra reduzir falso positivo.
+        const cnpjDigitosMatch = block.match(/(?:CNPJ|CGC)[\s\S]{0,40}?(\d{14})/i)
+            || block.match(/(?<!\d)(\d{14})(?!\d)/);
+        if (cnpjDigitosMatch) {
+            const d = cnpjDigitosMatch[1];
+            p.cnpj = `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
+        } else {
+            // Fallback CPF (pessoa fisica)
+            const cpfPontuadoMatch = block.match(/(\d{3}\.\d{3}\.\d{3}-\d{2})/);
+            if (cpfPontuadoMatch) p.cnpj = cpfPontuadoMatch[1];
+        }
     }
     const ieMatch = block.match(/Inscri[c\u00e7][a\u00e3]o\s+Municipal\s*:?\s*(\d+)/i);
     if (ieMatch) p.inscricaoMunicipal = ieMatch[1];
@@ -389,9 +407,36 @@ export function matchNfseEmpresa(
     if (prest === alvo) return { ok: true, direcao: 'saida' };
     if (toma === alvo) return { ok: true, direcao: 'entrada' };
 
+    // Fallback: alguns PDFs municipais nao seguem os labels esperados, o
+    // findFirstIndex nao acha blockPrestador/blockTomador e os CNPJs ficam
+    // vazios mesmo estando presentes no texto. Escanear o rawText e procurar
+    // o CNPJ da empresa diretamente — se aparecer, ainda da pra inferir
+    // direcao pela posicao relativa (quem aparece antes provavelmente eh o
+    // prestador no layout ABRASF).
+    if (parsed.rawText && (!prest || !toma)) {
+        const textoLimpo = parsed.rawText.replace(/\D/g, '');
+        const idxAlvo = textoLimpo.indexOf(alvo);
+        if (idxAlvo >= 0) {
+            // Procura QUALQUER outro CNPJ no texto bruto (com ou sem pontuacao)
+            const todosCnpjs = (parsed.rawText.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}|\d{14}/g) || [])
+                .map(s => s.replace(/\D/g, ''))
+                .filter(d => d.length === 14 && d !== alvo);
+            if (todosCnpjs.length > 0) {
+                // Estrategia: ABRASF normalmente lista PRESTADOR antes de TOMADOR.
+                // Posicao do alvo nos digitos vs posicao do primeiro outro CNPJ.
+                const idxOutro = textoLimpo.indexOf(todosCnpjs[0]);
+                const direcao: 'entrada' | 'saida' = idxAlvo > idxOutro ? 'entrada' : 'saida';
+                return { ok: true, direcao };
+            }
+            // Encontrou alvo mas nao outro CNPJ - aceita como entrada por default
+            // (cliente eh provavelmente o tomador em PDF que ele mesmo guarda).
+            return { ok: true, direcao: 'entrada' };
+        }
+    }
+
     return {
         ok: false,
         direcao: 'entrada',
-        motivo: `CNPJ ${parsed.prestador.cnpj || parsed.tomador.cnpj || '(vazio)'} nao corresponde a empresa selecionada (${cnpjEmpresa}).`,
+        motivo: `CNPJ ${parsed.prestador.cnpj || parsed.tomador.cnpj || '(vazio)'} nao corresponde a empresa selecionada (${cnpjEmpresa}). Confira se o PDF eh da NFSe correta ou se o layout do municipio esta suportado.`,
     };
 }

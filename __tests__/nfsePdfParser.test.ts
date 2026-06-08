@@ -280,3 +280,89 @@ describe('matchNfseEmpresa — integracao com fixtures reais', () => {
         expect(m.motivo).toContain('99999999999999');
     });
 });
+
+// ─── Casos de borda: CNPJ sem pontuacao + labels nao reconhecidos ──────────
+describe('parseNfseFromText — formatos variados de CNPJ', () => {
+    it('aceita CNPJ pontuado com espacos extras (02. 942. 184 / 0001 - 34)', () => {
+        const texto = `
+NFS-e Prefeitura Municipal
+Numero 1
+PRESTADOR DE SERVIÇOS
+Razão Social: SERASA S.A.
+CNPJ: 62. 173. 620 / 0093 - 06
+TOMADOR DE SERVIÇOS
+Razão Social: FASTWELD INDUSTRIA E COMERCIO LTDA
+CNPJ: 02. 942. 184 / 0001 - 34
+DISCRIMINAÇÃO DOS SERVIÇOS
+Servico
+`.trim();
+        const r = parseNfseFromText(texto);
+        expect(r.prestador.cnpj).toBe('62.173.620/0093-06');
+        expect(r.tomador.cnpj).toBe('02.942.184/0001-34');
+    });
+
+    it('aceita CNPJ sem pontuacao (62173620009306)', () => {
+        const texto = `
+NFS-e Prefeitura Municipal
+Numero 1
+PRESTADOR DE SERVIÇOS
+Razão Social: SERASA S.A.
+CNPJ: 62173620009306
+TOMADOR DE SERVIÇOS
+Razão Social: FASTWELD
+CNPJ/CPF: 02942184000134
+DISCRIMINAÇÃO DOS SERVIÇOS
+Servico
+`.trim();
+        const r = parseNfseFromText(texto);
+        // Parser deve NORMALIZAR para formato pontuado canonico
+        expect(r.prestador.cnpj).toBe('62.173.620/0093-06');
+        expect(r.tomador.cnpj).toBe('02.942.184/0001-34');
+    });
+});
+
+describe('matchNfseEmpresa — fallback rawText (PDFs municipais nao reconhecidos)', () => {
+    const participanteVazio = () => ({
+        cnpj: '', nome: '', inscricaoMunicipal: '', nomeFantasia: '',
+        endereco: '', bairro: '', municipio: '', uf: '', cep: '',
+        email: '', telefone: '',
+    });
+    const parsedComRawText = (rawText: string) => ({
+        numero: '1', serie: '1', competencia: '', dataEmissao: '', codigoVerificacao: '',
+        municipioPrestacao: '', chaveAcesso: '', codigoServico: '', discriminacao: '',
+        naturezaOperacao: '',
+        prestador: participanteVazio(),
+        tomador:   participanteVazio(),
+        valorServicos: 0, baseCalculo: 0, aliquotaIss: 0, valorIss: 0, valorIssRetido: 0,
+        valorPis: 0, valorCofins: 0, valorInss: 0, valorIrrf: 0, valorCsll: 0,
+        valorOutrasRetencoes: 0, valorDeducoes: 0,
+        valorDescIncondicional: 0, valorDescCondicional: 0, valorLiquido: 0,
+        municipioEmissor: '',
+        rawText,
+    });
+
+    it('quando blockPrestador/blockTomador vazios mas CNPJ esta no rawText, infere direcao', () => {
+        // PDF municipal com layout nao mapeado. findFirstIndex falha, prestador
+        // e tomador ficam vazios, mas o CNPJ da empresa aparece no rawText.
+        // Fallback permite importacao em vez de rejeitar.
+        const parsed = parsedComRawText('NOTA FISCAL\n62173620009306 SERASA\n02942184000134 FASTWELD\n');
+        const m = matchNfseEmpresa(parsed, SP_FASTWELD);
+        expect(m.ok).toBe(true);
+        // FASTWELD aparece DEPOIS do outro CNPJ → tomador → entrada
+        expect(m.direcao).toBe('entrada');
+    });
+
+    it('quando empresa eh o PRIMEIRO CNPJ no rawText, infere saida', () => {
+        const parsed = parsedComRawText('NOTA FISCAL\n02942184000134 FASTWELD\n62173620009306 CLIENTE\n');
+        const m = matchNfseEmpresa(parsed, SP_FASTWELD);
+        expect(m.ok).toBe(true);
+        expect(m.direcao).toBe('saida');
+    });
+
+    it('fallback NAO ativa quando CNPJ nao esta no rawText (rejeicao correta)', () => {
+        const parsed = parsedComRawText('NOTA FISCAL\n11111111000111 EMPRESA A\n22222222000222 EMPRESA B\n');
+        const m = matchNfseEmpresa(parsed, SP_FASTWELD);
+        expect(m.ok).toBe(false);
+        expect(m.motivo).toContain(SP_FASTWELD);
+    });
+});
