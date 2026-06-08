@@ -176,10 +176,12 @@ export const updateEmpresa = async (
     // ── Local cache ──
     const local = getLocalEmpresas();
     const idx = local.findIndex(e => e.id === id);
-    if (idx !== -1) {
-        local[idx] = { ...local[idx], ...data };
+    const existente = idx !== -1 ? local[idx] : null;
+    if (existente) {
+        const atualizada = { ...existente, ...data };
+        local[idx] = atualizada;
         saveLocalEmpresas(local);
-        return local[idx];
+        return atualizada;
     }
     return null;
 };
@@ -233,8 +235,8 @@ export const getAllNotas = async (
 
     const result: Record<string, SimplesNacionalNota[]> = {};
     noteMap.forEach(note => {
-        if (!result[note.empresaId]) result[note.empresaId] = [];
-        result[note.empresaId].push(note);
+        const arr = result[note.empresaId] || (result[note.empresaId] = []);
+        arr.push(note);
     });
     return result;
 };
@@ -248,6 +250,7 @@ const parseXmlNfe = (xmlContent: string): any[] => {
         const nfeNodes = xmlDoc.getElementsByTagName('infNFe');
         for (let i = 0; i < nfeNodes.length; i++) {
             const n    = nfeNodes[i];
+            if (!n) continue;
             const dhEmi = n.getElementsByTagName('dhEmi')[0]?.textContent ||
                           n.getElementsByTagName('dEmi')[0]?.textContent;
             const vNF   = n.getElementsByTagName('vNF')[0]?.textContent;
@@ -517,9 +520,9 @@ export const calcularResumoEmpresa = (
                 if (key === 'icms_vendas') return;
                 const parts = key.split('::');
                 let cnaeCode = '', anexoCode = '';
-                if (parts.length >= 4) { cnaeCode = parts[2]; anexoCode = parts[3]; }
+                if (parts.length >= 4) { cnaeCode = parts[2] || ''; anexoCode = parts[3] || ''; }
                 else if (key.startsWith('filial_')) {
-                    const tipo = key.split('_')[1];
+                    const tipo = key.split('_')[1] || '';
                     cnaeCode = `Filial ${tipo.charAt(0).toUpperCase()+tipo.slice(1)}`;
                     if (tipo === 'comercio') anexoCode = 'I';
                     else if (tipo === 'industria') anexoCode = 'II';
@@ -527,7 +530,7 @@ export const calcularResumoEmpresa = (
                         ? (fator_r >= 0.28 ? 'III' : 'V') : empresa.anexo;
                 } else {
                     const s = key.split('_');
-                    if (s.length >= 2) { cnaeCode = s[0]; anexoCode = s[1]; }
+                    if (s.length >= 2) { cnaeCode = s[0] || ''; anexoCode = s[1] || ''; }
                 }
                 if (typeof value === 'object' && value !== null) {
                     const item = value as SimplesDetalheItem;

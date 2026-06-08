@@ -74,7 +74,7 @@ function extrairPares(janela: string): Map<string, number> {
     let m: RegExpExecArray | null;
     while ((m = re.exec(janela)) !== null) {
         const periodo = `${m[1]}/${m[2]}`;
-        const valor = parseValorBR(m[3]);
+        const valor = parseValorBR(m[3] || '');
         out.set(periodo, (out.get(periodo) || 0) + valor);
     }
     return out;
@@ -121,7 +121,7 @@ export async function parsePgdasExtrato(file: File): Promise<PgdasParseResult> {
         || texto.match(/anteriores ao PA\s*\(?RBT12\)?[\s\S]{0,200}?((?:\d{1,3}(?:\.\d{3})*|\d+),\d{2})/i);
     let rbt12Declarado: number | null = null;
     if (rbt12Match) {
-        const candidato = rbt12Match[3] || rbt12Match[1];
+        const candidato = rbt12Match[3] || rbt12Match[1] || '';
         rbt12Declarado = parseValorBR(candidato);
     }
 

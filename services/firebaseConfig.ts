@@ -17,9 +17,10 @@ export const isFirebaseConfigured = true;
 export const isFirebaseStorageConfigured =
   isFirebaseConfigured && !!firebaseConfig.storageBucket;
 
-const app: FirebaseApp = getApps().length === 0
+const apps = getApps();
+const app: FirebaseApp = apps.length === 0
   ? initializeApp(firebaseConfig)
-  : getApps()[0];
+  : (apps[0] as FirebaseApp);
 
 const auth: Auth = getAuth(app);
 const db: Firestore = getFirestore(app);

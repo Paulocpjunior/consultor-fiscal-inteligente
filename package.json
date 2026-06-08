@@ -12,9 +12,10 @@
     "preview": "vite preview",
     "start": "node server.js",
     "lint": "tsc --noEmit",
+    "lint:strict": "tsc --noEmit -p tsconfig.strict.json",
     "test": "jest",
     "typecheck": "tsc --noEmit",
-    "precommit": "npm run typecheck"
+    "precommit": "npm run typecheck && npm run lint:strict"
   },
   "keywords": [],
   "author": "",

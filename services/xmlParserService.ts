@@ -28,7 +28,7 @@ function getTextContent(el: Element | null | undefined, tag: string): string {
     if (!el) return '';
     const found = el.getElementsByTagName(tag);
     if (found.length === 0) return '';
-    return found[0].textContent?.trim() || '';
+    return found[0]?.textContent?.trim() || '';
 }
 
 function num(v: string | undefined | null): number {
@@ -90,7 +90,7 @@ export function classificarPorCfop(itens: { cfop: string }[], direcao: Direcao):
         const d = cfop.replace(/\D/g, '');
         if (d.length < 4) { contagem.outro++; continue; }
         const primeiro = d[0];
-        const grupo = parseInt(d[1], 10);
+        const grupo = parseInt(d[1] || '', 10);
         const isEntrada = primeiro === '1' || primeiro === '2' || primeiro === '3';
 
         if (grupo === 4) contagem.devolucao++;
@@ -185,6 +185,7 @@ export function parseNFeXml(xmlText: string): ParsedXml {
 
     for (let i = 0; i < detElements.length; i++) {
         const det = detElements[i];
+        if (!det) continue;
         const prod = det.getElementsByTagName('prod')[0];
         const icms = det.getElementsByTagName('ICMS')[0];
         const ipi = det.getElementsByTagName('IPI')[0];

@@ -149,10 +149,12 @@ export const updateEmpresa = async (id: string, data: Partial<LucroPresumidoEmpr
     // 2. Update Local
     const localEmpresas = getLocalEmpresas();
     const index = localEmpresas.findIndex(e => e.id === id);
-    if (index !== -1) {
-        localEmpresas[index] = { ...localEmpresas[index], ...data };
+    const existente = index !== -1 ? localEmpresas[index] : null;
+    if (existente) {
+        const atualizada = { ...existente, ...data };
+        localEmpresas[index] = atualizada;
         saveLocalEmpresas(localEmpresas);
-        return localEmpresas[index];
+        return atualizada;
     }
 
     return null;
@@ -209,10 +211,11 @@ export const addFichaFinanceira = async (empresaId: string, registro: FichaFinan
                 
                 const localEmpresas = getLocalEmpresas();
                 const idx = localEmpresas.findIndex(e => e.id === empresaId);
-                if (idx !== -1) {
-                    localEmpresas[idx].fichaFinanceira = fichaAtualizada;
+                const empLocal = idx !== -1 ? localEmpresas[idx] : null;
+                if (empLocal) {
+                    empLocal.fichaFinanceira = fichaAtualizada;
                     saveLocalEmpresas(localEmpresas);
-                    return localEmpresas[idx];
+                    return empLocal;
                 }
                 return { ...empresaData, fichaFinanceira: fichaAtualizada };
             }
@@ -226,15 +229,16 @@ export const addFichaFinanceira = async (empresaId: string, registro: FichaFinan
     // 2. Fallback Local
     const localEmpresas = getLocalEmpresas();
     const index = localEmpresas.findIndex(e => e.id === empresaId);
-    
-    if (index !== -1) {
-        const currentFicha = localEmpresas[index].fichaFinanceira || [];
+    const empresa = index !== -1 ? localEmpresas[index] : null;
+
+    if (empresa) {
+        const currentFicha = empresa.fichaFinanceira || [];
         const fichaAtualizada = currentFicha.filter(f => f.mesReferencia !== registro.mesReferencia);
         fichaAtualizada.push(registro);
-        
-        localEmpresas[index].fichaFinanceira = fichaAtualizada;
+
+        empresa.fichaFinanceira = fichaAtualizada;
         saveLocalEmpresas(localEmpresas);
-        return localEmpresas[index];
+        return empresa;
     }
 
     return null;
