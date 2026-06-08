@@ -17,6 +17,14 @@
 
 const FLAG_RAW = import.meta.env.VITE_VISIBILIDADE_ABERTA;
 
+// Diagnostico de boot: imprime UMA vez o que Vite gravou. Crucial pra
+// distinguir "flag desligada" de "variavel nao chegou no build".
+//   undefined  -> Variable nao foi passada pelo Docker/Workflow (config)
+//   ""         -> Variable existe mas vazia
+//   "1"        -> Ligada
+//   outra      -> Setada com valor invalido
+console.info('[visibilidade] VITE_VISIBILIDADE_ABERTA =', JSON.stringify(FLAG_RAW));
+
 let avisoLogado = false;
 
 export function isModoEscritorioAberto(): boolean {
