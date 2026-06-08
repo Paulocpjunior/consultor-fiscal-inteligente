@@ -90,7 +90,7 @@ jobs:
             --min-instances 0 \
             --max-instances 10 \
             --no-cpu-throttling \
-            --update-env-vars=GRAPH_CLIENT_ID=59fd4ec9-37bd-472c-9fa7-373461dffd50,GRAPH_TENANT_ID=8b8254a4-9a63-4c2d-81a2-577942081943,GRAPH_REMETENTE=junior@spassessoriacontabil.com.br,DAS_MODE=serpro,DARF_MODE=serpro,DCTFWEB_MODE=serpro,CAIXA_POSTAL_MODE=serpro,NFSE_NAC_MODE=serpro,SERPRO_CONTRATANTE_CNPJ=44388152000189,EMISSAO_BLOQUEADA=true,NFSE_NAC_EMISSAO_AMB=homologacao \
+            --update-env-vars=GRAPH_CLIENT_ID=59fd4ec9-37bd-472c-9fa7-373461dffd50,GRAPH_TENANT_ID=8b8254a4-9a63-4c2d-81a2-577942081943,GRAPH_REMETENTE=junior@spassessoriacontabil.com.br,DAS_MODE=serpro,DARF_MODE=serpro,DCTFWEB_MODE=serpro,CAIXA_POSTAL_MODE=serpro,NFSE_NAC_MODE=serpro,SERPRO_CONTRATANTE_CNPJ=44388152000189,EMISSAO_BLOQUEADA=false,EMISSAO_BLOQUEADA_DARF=true,EMISSAO_BLOQUEADA_DCTFWEB=true,EMISSAO_BLOQUEADA_NFSE_NAC=true,NFSE_NAC_EMISSAO_AMB=homologacao \
             --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,GRAPH_CLIENT_SECRET=graph-client-secret:latest,SERPRO_CONSUMER_KEY=serpro-consumer-key:latest,SERPRO_CONSUMER_SECRET=serpro-consumer-secret:latest,SEFAZ_CRON_SECRET=sefaz-cron-secret:latest
 
       - name: Deploy Firestore & Storage rules
