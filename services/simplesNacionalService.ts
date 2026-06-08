@@ -9,6 +9,7 @@ import { parsePgdasExtrato } from './pgdasPdfParser';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
 import { getEmpresasDoColaborador } from './carteiraService';
+import { isModoEscritorioAberto } from './visibilidadeEscritorio';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
 import {
@@ -131,7 +132,9 @@ export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEm
                 .filter(d => !(d.data() as any)._merged_into)
                 .map(d => ({ id: d.id, ...d.data() } as SimplesNacionalEmpresa));
 
-            if (!isMaster) {
+            // Modo escritorio aberto: colaborador ve TUDO (temporario, ate
+            // carteira ficar 100% atribuida -- ver visibilidadeEscritorio.ts).
+            if (!isMaster && !isModoEscritorioAberto()) {
                 const carteiraIds = new Set(await getEmpresasDoColaborador(uid));
                 cloudEmpresas = cloudEmpresas.filter(e => e.createdBy === uid || carteiraIds.has(e.id));
             }
@@ -268,7 +271,7 @@ export const getAllNotas = async (
             const snaps = await fetchAllDocs('simples_notas', []);
             cloudNotas = snaps.map(d =>
                 ({ id: d.id, ...d.data() } as SimplesNacionalNota));
-            if (!isMaster) {
+            if (!isMaster && !isModoEscritorioAberto()) {
                 const carteiraIds = new Set(await getEmpresasDoColaborador(uid));
                 cloudNotas = cloudNotas.filter(n =>
                     (n as any).createdBy === uid || carteiraIds.has(n.empresaId)

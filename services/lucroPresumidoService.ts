@@ -3,6 +3,7 @@ import { LucroPresumidoEmpresa, FichaFinanceiraRegistro, User } from '../types';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
 import { getEmpresasDoColaborador } from './carteiraService';
+import { isModoEscritorioAberto } from './visibilidadeEscritorio';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
 import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, deleteDoc, limit as fbLimit } from 'firebase/firestore';
@@ -54,7 +55,7 @@ export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresu
                     .filter(doc => !(doc.data() as any)._merged_into)
                     .map(doc => ({ id: doc.id, ...doc.data() } as LucroPresumidoEmpresa));
 
-                if (!isMasterAdmin) {
+                if (!isMasterAdmin && !isModoEscritorioAberto()) {
                     const carteiraIds = new Set(await getEmpresasDoColaborador(uid));
                     cloudEmpresas = cloudEmpresas.filter(e => e.createdBy === uid || carteiraIds.has(e.id));
                 }
