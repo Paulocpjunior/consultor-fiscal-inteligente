@@ -8,6 +8,7 @@ import { extractDocumentData, extractPgdasDataFromPdf } from './geminiService';
 import { parsePgdasExtrato } from './pgdasPdfParser';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
+import { getEmpresasDoColaborador } from './carteiraService';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
 import {
@@ -121,10 +122,19 @@ export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEm
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
             const uid = auth.currentUser.uid;
-            const snaps = await fetchAllDocs('simples_empresas', isMaster ? [] : [where('createdBy', '==', uid)]);
-            const cloudEmpresas = snaps
+            // Admin: lista tudo. Colaborador: lista tudo (rules permitem) e filtra
+            // no cliente por createdBy OU pelo vinculo em `carteiras` -- senao
+            // colaborador so via empresa que ele mesmo criou, mesmo estando
+            // atribuido a outras via carteira (bug reportado 06/2026).
+            const snaps = await fetchAllDocs('simples_empresas', []);
+            let cloudEmpresas = snaps
                 .filter(d => !(d.data() as any)._merged_into)
                 .map(d => ({ id: d.id, ...d.data() } as SimplesNacionalEmpresa));
+
+            if (!isMaster) {
+                const carteiraIds = new Set(await getEmpresasDoColaborador(uid));
+                cloudEmpresas = cloudEmpresas.filter(e => e.createdBy === uid || carteiraIds.has(e.id));
+            }
 
             // Atualiza cache local
             const local = getLocalEmpresas();
