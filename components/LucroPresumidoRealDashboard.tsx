@@ -11,16 +11,11 @@ import NewCompanyView from './LucroPresumidoReal/NewCompanyView';
 import DetailsView from './LucroPresumidoReal/DetailsView';
 import NewFichaView from './LucroPresumidoReal/NewFichaView';
 import ReportView from './LucroPresumidoReal/ReportView';
-import { convertFichaToInput, getRetencoesAcumuladasTrimestre } from './LucroPresumidoReal/fichaCalc';
+import { getRetencoesAcumuladasTrimestre } from './LucroPresumidoReal/fichaCalc';
 import LoadingSpinner from './LoadingSpinner';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 import NfseSpAdminPanel from './NfseSpAdminPanel';
-
-// convertFichaToInput + getRetencoesAcumuladasTrimestre vivem em
-// ./LucroPresumidoReal/fichaCalc.ts (compartilhados com ReportView).
-// CurrencyInput + ToggleSwitch vivem em ./LucroPresumidoReal/inputs.tsx
-// e sao consumidos por NewFichaView.
 
 interface LucroPresumidoRealDashboardProps {
     currentUser: User | null;
@@ -610,16 +605,6 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
 
     const selectedFicha = useMemo(() => selectedEmpresa?.fichaFinanceira.find(f => f.id === selectedFichaId), [selectedEmpresa, selectedFichaId]);
 
-    const renderList = () => (
-        <ListView
-            empresas={empresas}
-            currentUser={currentUser}
-            onNovaEmpresa={() => setView('new_company')}
-            onAbrir={(id) => { setSelectedEmpresaId(id); setView('details'); }}
-            onExcluir={handleDeleteCompany}
-        />
-    );
-
     const renderNewCompany = () => (
         <NewCompanyView
             newCnpj={newCnpj}
@@ -729,26 +714,30 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         );
     };
 
-    const renderReport = () => {
-        if (!selectedFicha || !selectedEmpresa) return null;
-        return (
-            <ReportView
-                ficha={selectedFicha}
-                empresa={selectedEmpresa}
-                onVoltar={() => setView("details")}
-                onEditar={handleEditFicha}
-            />
-        );
-    };
     if (loading) return <LoadingSpinner />;
 
     return (
         <div className="pb-10">
-            {view === 'list' && renderList()}
+            {view === 'list' && (
+                <ListView
+                    empresas={empresas}
+                    currentUser={currentUser}
+                    onNovaEmpresa={() => setView('new_company')}
+                    onAbrir={(id) => { setSelectedEmpresaId(id); setView('details'); }}
+                    onExcluir={handleDeleteCompany}
+                />
+            )}
             {view === 'new_company' && renderNewCompany()}
             {view === 'details' && renderDetails()}
             {view === 'new_ficha' && renderNewFicha()}
-            {view === 'report' && renderReport()}
+            {view === 'report' && selectedFicha && selectedEmpresa && (
+                <ReportView
+                    ficha={selectedFicha}
+                    empresa={selectedEmpresa}
+                    onVoltar={() => setView("details")}
+                    onEditar={handleEditFicha}
+                />
+            )}
 
             {selectedEmpresa && (
                 <>
