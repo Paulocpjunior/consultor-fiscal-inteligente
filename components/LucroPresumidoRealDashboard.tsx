@@ -6,6 +6,9 @@ import { fetchCnpjFromBrasilAPI } from '../services/externalApiService';
 import { calcularLucro } from '../services/lucroService';
 import ConferirDctfwebModal from './DCTFWeb/ConferirDctfwebModal';
 import { PlusIcon, CalculatorIcon, DownloadIcon, TrashIcon, ArrowLeftIcon, SaveIcon, UserIcon, BuildingIcon, PencilIcon, CloseIcon, TagIcon, BriefcaseIcon, ShieldIcon, InfoIcon } from './Icons';
+import ListView from './LucroPresumidoReal/ListView';
+import NewCompanyView from './LucroPresumidoReal/NewCompanyView';
+import DetailsView from './LucroPresumidoReal/DetailsView';
 import LoadingSpinner from './LoadingSpinner';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
@@ -732,106 +735,32 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const selectedFicha = useMemo(() => selectedEmpresa?.fichaFinanceira.find(f => f.id === selectedFichaId), [selectedEmpresa, selectedFichaId]);
 
     const renderList = () => (
-        <div className="space-y-6 animate-fade-in">
-             <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Lucro Presumido e Real</h2>
-                    <p className="mt-1 text-slate-500 dark:text-slate-400">Gestão de fichas financeiras e cálculo de impostos.</p>
-                </div>
-                <button
-                    onClick={() => setView('new_company')}
-                    className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-700 transition-colors"
-                >
-                    <PlusIcon className="w-5 h-5" /> Nova Empresa
-                </button>
-            </div>
-
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden">
-                <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
-                    <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-slate-300">
-                        <tr>
-                            <th className="px-6 py-3">Empresa</th>
-                            <th className="px-6 py-3">CNPJ</th>
-                            <th className="px-6 py-3">Regime Padrão</th>
-                            <th className="px-6 py-3 text-right">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {empresas.map(emp => (
-                            <tr key={emp.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{emp.nome}</td>
-                                <td className="px-6 py-4 font-mono">{emp.cnpj}</td>
-                                <td className="px-6 py-4">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${emp.regimePadrao === 'Real' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                        {emp.regimePadrao || 'Presumido'}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 text-right flex justify-end gap-2">
-                                    <button onClick={() => { setSelectedEmpresaId(emp.id); setView('details'); }} className="text-sky-600 hover:text-sky-800 font-medium">Abrir</button>
-                                    {currentUser?.role === 'admin' && (
-                                        <button onClick={() => handleDeleteCompany(emp.id)} className="text-red-500 hover:text-red-700" title="Excluir empresa (admin)"><TrashIcon className="w-4 h-4" /></button>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                        {empresas.length === 0 && (
-                            <tr>
-                                <td colSpan={4} className="px-6 py-8 text-center text-slate-500">Nenhuma empresa cadastrada.</td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        <ListView
+            empresas={empresas}
+            currentUser={currentUser}
+            onNovaEmpresa={() => setView('new_company')}
+            onAbrir={(id) => { setSelectedEmpresaId(id); setView('details'); }}
+            onExcluir={handleDeleteCompany}
+        />
     );
 
     const renderNewCompany = () => (
-        <div className="max-w-xl mx-auto bg-white dark:bg-slate-800 p-8 rounded-lg shadow-sm animate-fade-in">
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-6">Nova Empresa</h2>
-            <form onSubmit={handleSaveNewCompany} className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">CNPJ</label>
-                    <div className="mt-1 flex gap-2">
-                        <input 
-                            type="text" 
-                            value={newCnpj} 
-                            onChange={e => setNewCnpj(e.target.value)} 
-                            placeholder="00.000.000/0001-00"
-                            required 
-                            className="flex-grow p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-500 font-mono" 
-                        />
-                        <button
-                            type="button"
-                            onClick={handleCnpjVerification}
-                            disabled={isCnpjLoading}
-                            className="btn-press flex-shrink-0 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-wait"
-                        >
-                            {isCnpjLoading ? '...' : 'Verificar Receita'}
-                        </button>
-                    </div>
-                    {cnpjError && <p className="mt-1 text-xs text-red-500">{cnpjError}</p>}
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Razão Social</label>
-                    <input type="text" value={newName} onChange={e => setNewName(e.target.value)} required className="w-full mt-1 p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-500" />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">CNAE Principal (Opcional)</label>
-                    <input type="text" value={newCnae} onChange={e => setNewCnae(e.target.value)} className="w-full mt-1 p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-500" />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Regime Tributário Padrão</label>
-                    <select value={newRegime} onChange={e => setNewRegime(e.target.value as any)} className="w-full mt-1 p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-500">
-                        <option value="Presumido">Lucro Presumido</option>
-                        <option value="Real">Lucro Real</option>
-                    </select>
-                </div>
-                <div className="flex justify-end gap-3 pt-4">
-                    <button type="button" onClick={() => setView('list')} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg font-medium text-slate-700 dark:text-slate-300">Cancelar</button>
-                    <button type="submit" disabled={loading} className="px-4 py-2 bg-sky-600 text-white rounded-lg font-bold hover:bg-sky-700">{loading ? 'Salvando...' : 'Salvar Empresa'}</button>
-                </div>
-            </form>
-        </div>
+        <NewCompanyView
+            newCnpj={newCnpj}
+            newName={newName}
+            newCnae={newCnae}
+            newRegime={newRegime as 'Presumido' | 'Real'}
+            isCnpjLoading={isCnpjLoading}
+            cnpjError={cnpjError}
+            loading={loading}
+            onChangeCnpj={setNewCnpj}
+            onChangeName={setNewName}
+            onChangeCnae={setNewCnae}
+            onChangeRegime={setNewRegime}
+            onVerificarCnpj={handleCnpjVerification}
+            onSubmit={handleSaveNewCompany}
+            onCancelar={() => setView('list')}
+        />
     );
 
     const renderNewFicha = () => (
@@ -1351,79 +1280,26 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const renderDetails = () => {
         if (!selectedEmpresa) return null;
         return (
-            <div className="space-y-6 animate-fade-in">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><ArrowLeftIcon className="w-5 h-5" /></button>
-                        <div>
-                            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{selectedEmpresa.nome}</h2>
-                            <p className="text-slate-500 dark:text-slate-400 font-mono text-sm">{selectedEmpresa.cnpj}</p>
-                        </div>
-                    </div>
-                    <button onClick={() => setIsDadosFiscaisModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Dados fiscais para SPED, DCTFWeb e outras obrigacoes">
-                        <BuildingIcon className="w-5 h-5" />
-                        Dados Fiscais
-                    </button>
-                    <button onClick={() => setIsCfopCorrelacaoModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Correlacao automatica/manual de CFOPs no SPED Fiscal">
-                        🔄 Correlacao CFOP
-                    </button>
-                </div>
-
-                {/* NFSe SP — mesmo painel do Simples, agora tambem pro Lucro (admin) */}
-                {currentUser?.role === 'admin' && (
-                    <NfseSpAdminPanel
-                        empresaId={selectedEmpresa.id}
-                        colecao="lucro_empresas"
-                        ccmSpAtual={selectedEmpresa.dadosFiscais?.ccmSp || selectedEmpresa.ccmSp}
-                        nfseSpAutorizadoEmAtual={selectedEmpresa.nfseSpAutorizadoEm}
-                        onSalvarConfig={async ({ ccmSp, nfseSpAutorizadoEm }) => {
-                            // Cadastro unico: grava ccmSp em dadosFiscais (spread do
-                            // existente pra preservar uf/IE) + a data de autorizacao.
-                            await lucroPresumidoService.updateEmpresa(selectedEmpresa.id, {
-                                dadosFiscais: { ...selectedEmpresa.dadosFiscais, ccmSp },
-                                nfseSpAutorizadoEm,
-                            });
-                            const atualizadas = await lucroPresumidoService.getEmpresas(currentUser);
-                            setEmpresas(atualizadas);
-                        }}
-                        onShowToast={showToast}
-                    />
-                )}
-
-                <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                            <CalculatorIcon className="w-5 h-5 text-sky-600" />
-                            Fichas Financeiras (Competências)
-                        </h3>
-                         <button 
-                            onClick={handleCreateNewFicha}
-                            className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition-colors"
-                        >
-                            <PlusIcon className="w-4 h-4" /> Nova Competência
-                        </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {selectedEmpresa.fichaFinanceira && selectedEmpresa.fichaFinanceira.length > 0 ? selectedEmpresa.fichaFinanceira.map(ficha => (
-                             <div key={ficha.id} onClick={() => { setSelectedFichaId(ficha.id); setView('report'); }} className="cursor-pointer bg-slate-50 dark:bg-slate-700/50 p-4 rounded-lg border border-slate-200 dark:border-slate-600 hover:border-sky-400 transition-all">
-                                <div className="flex justify-between items-start mb-2">
-                                    <span className="font-bold text-slate-800 dark:text-white capitalize">{new Date(ficha.mesReferencia + '-02').toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</span>
-                                    <span className={`text-xs px-2 py-0.5 rounded-full ${ficha.periodoApuracao === 'Trimestral' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' : 'bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-300'}`}>
-                                        {ficha.periodoApuracao || 'Mensal'}
-                                    </span>
-                                </div>
-                                <div className="space-y-1 text-sm text-slate-600 dark:text-slate-400">
-                                    <div className="flex justify-between"><span>Faturamento:</span> <span className="font-mono text-slate-900 dark:text-slate-200 font-bold">{ficha.faturamentoMesTotal.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span></div>
-                                    <div className="flex justify-between"><span>Impostos:</span> <span className="font-mono">{ficha.totalImpostos.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span></div>
-                                </div>
-                             </div>
-                        )) : (
-                            <p className="text-slate-500 col-span-3 text-center py-4">Nenhuma ficha financeira registrada.</p>
-                        )}
-                    </div>
-                </div>
-            </div>
+            <DetailsView
+                empresa={selectedEmpresa}
+                currentUser={currentUser}
+                onVoltar={() => setView('list')}
+                onAbrirDadosFiscais={() => setIsDadosFiscaisModalOpen(true)}
+                onAbrirCorrelacaoCfop={() => setIsCfopCorrelacaoModalOpen(true)}
+                onCriarNovaFicha={handleCreateNewFicha}
+                onAbrirFicha={(fichaId) => { setSelectedFichaId(fichaId); setView('report'); }}
+                onSalvarNfseSpConfig={async ({ ccmSp, nfseSpAutorizadoEm }) => {
+                    // Cadastro unico: grava ccmSp em dadosFiscais (spread do
+                    // existente pra preservar uf/IE) + a data de autorizacao.
+                    await lucroPresumidoService.updateEmpresa(selectedEmpresa.id, {
+                        dadosFiscais: { ...selectedEmpresa.dadosFiscais, ccmSp },
+                        nfseSpAutorizadoEm: nfseSpAutorizadoEm || undefined,
+                    });
+                    const atualizadas = await lucroPresumidoService.getEmpresas(currentUser);
+                    setEmpresas(atualizadas);
+                }}
+                onShowToast={showToast}
+            />
         );
     };
 
