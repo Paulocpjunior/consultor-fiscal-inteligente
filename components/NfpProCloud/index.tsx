@@ -39,6 +39,9 @@ import CertificadoEmpresaUpload from '../CertificadoEmpresaUpload';
 import CertidoesTab from './CertidoesTab';
 import DebitosTab from './DebitosTab';
 import ObrigacoesTab from './ObrigacoesTab';
+import ParcelamentosTab from './ParcelamentosTab';
+import AcoesTab from './AcoesTab';
+import PlanoAcaoTab from './PlanoAcaoTab';
 import {
     OBRIGACOES_BASE, CERTIDOES_BASE, uid, formatCurrency, gravityColor, certidaoColor, certidaoLabel,
     cardStyle, inputStyle, labelSmall, btnStyle, btnStyleSave,
@@ -555,175 +558,32 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         />
     );
 
-    const renderParcelamentos = () => {
-        if (!analise) return null;
+    const renderParcelamentos = () => analise && (
+        <ParcelamentosTab
+            analise={analise}
+            selectedEmpresaId={selectedEmpresaId}
+            updateAnalise={updateAnalise}
+            saveAnalise={saveAnalise}
+        />
+    );
 
-        const addParcelamento = () => {
-            const novo: NfpParcelamento = {
-                id: uid(), empresaId: selectedEmpresaId, esfera: 'federal',
-                programa: '', valorTotal: 0, parcelas: 1, parcelasPagas: 0, valorParcela: 0, status: 'ativo', dataInicio: new Date().toISOString().slice(0, 10),
-            };
-            updateAnalise({ parcelamentos: [...analise.parcelamentos, novo] });
-        };
+    const renderAcoes = () => analise && (
+        <AcoesTab
+            analise={analise}
+            selectedEmpresaId={selectedEmpresaId}
+            updateAnalise={updateAnalise}
+            saveAnalise={saveAnalise}
+        />
+    );
 
-        const updateParc = (id: string, patch: Partial<NfpParcelamento>) => {
-            updateAnalise({ parcelamentos: analise.parcelamentos.map(p => p.id === id ? { ...p, ...patch } : p) });
-        };
-
-        const removeParc = (id: string) => {
-            updateAnalise({ parcelamentos: analise.parcelamentos.filter(p => p.id !== id) });
-        };
-
-        return (
-            <div>
-                <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
-                    <button onClick={addParcelamento} style={btnStyle}>+ Adicionar</button>
-                    <button onClick={() => saveAnalise(analise)} style={btnStyleSave}>Salvar</button>
-                </div>
-                {analise.parcelamentos.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Nenhum parcelamento.</p>}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {analise.parcelamentos.map(p => {
-                        const pct = p.parcelas > 0 ? Math.round((p.parcelasPagas / p.parcelas) * 100) : 0;
-                        return (
-                            <div key={p.id} style={cardStyle}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'center' }}>
-                                    <input placeholder="Programa" value={p.programa} onChange={e => updateParc(p.id, { programa: e.target.value })} style={inputStyle} />
-                                    <select value={p.status} onChange={e => updateParc(p.id, { status: e.target.value as any })} style={inputStyle}>
-                                        <option value="ativo">Ativo</option><option value="inadimplente">Inadimplente</option><option value="quitado">Quitado</option><option value="cancelado">Cancelado</option>
-                                    </select>
-                                    <select value={p.esfera} onChange={e => updateParc(p.id, { esfera: e.target.value as NfpEsfera })} style={inputStyle}>
-                                        <option value="federal">Federal</option><option value="estadual">Estadual</option><option value="municipal">Municipal</option>
-                                    </select>
-                                    <button onClick={() => removeParc(p.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.2rem' }}>x</button>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                    <label style={labelSmall}>Valor Total<input type="number" value={p.valorTotal} onChange={e => updateParc(p.id, { valorTotal: Number(e.target.value) })} style={inputStyle} /></label>
-                                    <label style={labelSmall}>Parcelas<input type="number" value={p.parcelas} onChange={e => updateParc(p.id, { parcelas: Number(e.target.value) })} style={inputStyle} /></label>
-                                    <label style={labelSmall}>Pagas<input type="number" value={p.parcelasPagas} onChange={e => updateParc(p.id, { parcelasPagas: Number(e.target.value) })} style={inputStyle} /></label>
-                                    <label style={labelSmall}>Valor Parcela<input type="number" value={p.valorParcela} onChange={e => updateParc(p.id, { valorParcela: Number(e.target.value) })} style={inputStyle} /></label>
-                                </div>
-                                <div style={{ marginTop: '0.5rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'var(--border-default)' }}>
-                                            <div style={{ width: `${pct}%`, height: '100%', borderRadius: '4px', background: pct === 100 ? 'var(--success)' : 'var(--accent)', transition: 'width 0.3s' }} />
-                                        </div>
-                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', minWidth: '45px' }}>{pct}%</span>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-        );
-    };
-
-    const renderAcoes = () => {
-        if (!analise) return null;
-
-        const addAcao = () => {
-            const nova: NfpAcaoJudicial = {
-                id: uid(), empresaId: selectedEmpresaId, tipo: 'tributaria', descricao: '', status: 'em_andamento',
-            };
-            updateAnalise({ acoes: [...analise.acoes, nova] });
-        };
-
-        const updateAcao = (id: string, patch: Partial<NfpAcaoJudicial>) => {
-            updateAnalise({ acoes: analise.acoes.map(a => a.id === id ? { ...a, ...patch } : a) });
-        };
-
-        const removeAcao = (id: string) => {
-            updateAnalise({ acoes: analise.acoes.filter(a => a.id !== id) });
-        };
-
-        return (
-            <div>
-                <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
-                    <button onClick={addAcao} style={btnStyle}>+ Adicionar</button>
-                    <button onClick={() => saveAnalise(analise)} style={btnStyleSave}>Salvar</button>
-                </div>
-                {analise.acoes.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Nenhuma ação judicial registrada.</p>}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {analise.acoes.map(a => (
-                        <div key={a.id} style={cardStyle}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'center' }}>
-                                <input placeholder="Descrição" value={a.descricao} onChange={e => updateAcao(a.id, { descricao: e.target.value })} style={inputStyle} />
-                                <select value={a.tipo} onChange={e => updateAcao(a.id, { tipo: e.target.value as NfpTipoAcao })} style={inputStyle}>
-                                    <option value="civil">Civil</option><option value="trabalhista">Trabalhista</option><option value="tributaria">Tributária</option><option value="criminal">Criminal</option>
-                                </select>
-                                <select value={a.status} onChange={e => updateAcao(a.id, { status: e.target.value as any })} style={inputStyle}>
-                                    <option value="em_andamento">Em andamento</option><option value="encerrada">Encerrada</option><option value="arquivada">Arquivada</option>
-                                </select>
-                                <button onClick={() => removeAcao(a.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.2rem' }}>x</button>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                <label style={labelSmall}>Numero<input value={a.numero || ''} onChange={e => updateAcao(a.id, { numero: e.target.value })} style={inputStyle} /></label>
-                                <label style={labelSmall}>Vara<input value={a.vara || ''} onChange={e => updateAcao(a.id, { vara: e.target.value })} style={inputStyle} /></label>
-                                <label style={labelSmall}>Valor Causa<input type="number" value={a.valorCausa || 0} onChange={e => updateAcao(a.id, { valorCausa: Number(e.target.value) })} style={inputStyle} /></label>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        );
-    };
-
-    const renderPlanoAcao = () => {
-        if (!analise) return null;
-
-        const sorted = [...analise.planoAcao].sort((a, b) => {
-            const order: Record<NfpGravidade, number> = { alta: 0, media: 1, baixa: 2 };
-            return order[a.gravidade] - order[b.gravidade];
-        });
-
-        const addPlano = () => {
-            const novo: NfpPlanoAcao = {
-                id: uid(), empresaId: selectedEmpresaId, descricao: '', gravidade: 'media', esfera: 'federal', status: 'pendente',
-            };
-            updateAnalise({ planoAcao: [...analise.planoAcao, novo] });
-        };
-
-        const updatePlano = (id: string, patch: Partial<NfpPlanoAcao>) => {
-            updateAnalise({ planoAcao: analise.planoAcao.map(p => p.id === id ? { ...p, ...patch } : p) });
-        };
-
-        const removePlano = (id: string) => {
-            updateAnalise({ planoAcao: analise.planoAcao.filter(p => p.id !== id) });
-        };
-
-        return (
-            <div>
-                <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
-                    <button onClick={addPlano} style={btnStyle}>+ Adicionar</button>
-                    <button onClick={() => saveAnalise(analise)} style={btnStyleSave}>Salvar</button>
-                </div>
-                {sorted.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Nenhum item no plano de acao.</p>}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {sorted.map(p => (
-                        <div key={p.id} style={{ ...cardStyle, borderLeft: `4px solid ${gravityColor(p.gravidade)}` }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'center' }}>
-                                <input placeholder="Descrição da ação" value={p.descricao} onChange={e => updatePlano(p.id, { descricao: e.target.value })} style={inputStyle} />
-                                <select value={p.gravidade} onChange={e => updatePlano(p.id, { gravidade: e.target.value as NfpGravidade })} style={inputStyle}>
-                                    <option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option>
-                                </select>
-                                <select value={p.esfera} onChange={e => updatePlano(p.id, { esfera: e.target.value as NfpEsfera })} style={inputStyle}>
-                                    <option value="federal">Federal</option><option value="estadual">Estadual</option><option value="municipal">Municipal</option>
-                                </select>
-                                <select value={p.status} onChange={e => updatePlano(p.id, { status: e.target.value as any })} style={inputStyle}>
-                                    <option value="pendente">Pendente</option><option value="em_andamento">Em andamento</option><option value="concluida">Concluída</option>
-                                </select>
-                                <button onClick={() => removePlano(p.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.2rem' }}>x</button>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                <label style={labelSmall}>Prazo<input type="date" value={p.prazo || ''} onChange={e => updatePlano(p.id, { prazo: e.target.value })} style={inputStyle} /></label>
-                                <label style={labelSmall}>Responsável<input value={p.responsavel || ''} onChange={e => updatePlano(p.id, { responsavel: e.target.value })} style={inputStyle} /></label>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        );
-    };
+    const renderPlanoAcao = () => analise && (
+        <PlanoAcaoTab
+            analise={analise}
+            selectedEmpresaId={selectedEmpresaId}
+            updateAnalise={updateAnalise}
+            saveAnalise={saveAnalise}
+        />
+    );
 
     const handleAnaliseReal = useCallback(async () => {
         if (!activeCnpj) return;
