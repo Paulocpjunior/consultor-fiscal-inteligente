@@ -2,6 +2,7 @@
 import { LucroPresumidoEmpresa, FichaFinanceiraRegistro, User } from '../types';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
+import { getEmpresasDoColaborador } from './carteiraService';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
 import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, deleteDoc, limit as fbLimit } from 'firebase/firestore';
@@ -41,14 +42,22 @@ export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresu
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
             const uid = auth.currentUser.uid;
-            
+
             try {
-                // Se for Admin/Junior, busca TUDO. Se for colaborador, só os seus.
-                const snaps = await fetchAllDocs('lucro_empresas', isMasterAdmin ? [] : [where('createdBy', '==', uid)]);
-                // 23/05: filtra perdedores do merge de duplicatas
-                const cloudEmpresas = snaps
+                // Admin/Junior: busca TUDO. Colaborador: busca TUDO (rules
+                // permitem) e filtra no cliente por createdBy OU vinculo em
+                // carteiras. Antes filtrava so por createdBy -- colaborador nao
+                // via empresa atribuida via carteira quando outro colega criava
+                // (bug reportado 06/2026, mesma raiz do Simples).
+                const snaps = await fetchAllDocs('lucro_empresas', []);
+                let cloudEmpresas = snaps
                     .filter(doc => !(doc.data() as any)._merged_into)
                     .map(doc => ({ id: doc.id, ...doc.data() } as LucroPresumidoEmpresa));
+
+                if (!isMasterAdmin) {
+                    const carteiraIds = new Set(await getEmpresasDoColaborador(uid));
+                    cloudEmpresas = cloudEmpresas.filter(e => e.createdBy === uid || carteiraIds.has(e.id));
+                }
                 
                 // Se conseguiu buscar da nuvem, atualiza o cache local (apenas para modo offline)
                 if (cloudEmpresas.length > 0) {

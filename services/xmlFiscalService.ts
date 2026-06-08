@@ -23,6 +23,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured, isFirebaseStorageConfigured } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
+import { getEmpresasDoColaborador } from './carteiraService';
 import {
     parseNFeXml,
     matchCompanyAndDirection,
@@ -104,28 +105,41 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
     const isMaster = isMasterUser(user);
     const uid = auth?.currentUser?.uid;
 
-    const buildConstraints = (): QueryConstraint[] =>
-        (!isMaster && uid) ? [where('createdBy', '==', uid)] : [];
-
     try {
-        const [simplesSnap, lucroSnap] = await Promise.all([
-            fetchAllDocs('simples_empresas', buildConstraints()),
-            fetchAllDocs('lucro_empresas', buildConstraints()),
+        // Admin/Junior: busca tudo. Colaborador: busca tudo (rules permitem)
+        // e filtra no cliente por createdBy OU vinculo em `carteiras`.
+        // Antes filtrava so por createdBy -- colaborador nao via empresa
+        // atribuida via carteira quando outro colega criava (bug reportado
+        // 06/2026).
+        const [simplesSnap, lucroSnap, carteiraIdsArr] = await Promise.all([
+            fetchAllDocs('simples_empresas', []),
+            fetchAllDocs('lucro_empresas', []),
+            !isMaster && uid ? getEmpresasDoColaborador(uid) : Promise.resolve([] as string[]),
         ]);
+        const carteiraIds = new Set(carteiraIdsArr);
+
+        const podeVer = (createdBy?: string | null, id?: string): boolean => {
+            if (isMaster) return true;
+            if (uid && createdBy === uid) return true;
+            if (id && carteiraIds.has(id)) return true;
+            return false;
+        };
 
         // 23/05: filtra perdedores do merge de duplicatas
         const simples: EmpresaXmlOption[] = simplesSnap
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
-            const data = d.data() as SimplesNacionalEmpresa;
-            return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples', uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
-        });
+                const data = d.data() as SimplesNacionalEmpresa;
+                return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
+            })
+            .filter(e => podeVer(e.createdBy, e.id));
         const lucro: EmpresaXmlOption[] = lucroSnap
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
-            const data = d.data() as LucroPresumidoEmpresa;
-            return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro', uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
-        });
+                const data = d.data() as LucroPresumidoEmpresa;
+                return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
+            })
+            .filter(e => podeVer(e.createdBy, e.id));
 
         return dedupEmpresas([...simples, ...lucro]);
     } catch (err: any) {
