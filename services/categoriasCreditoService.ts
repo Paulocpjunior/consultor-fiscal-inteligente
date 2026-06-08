@@ -87,7 +87,7 @@ export async function criarCategoria(
         ));
         if (!snap.empty) {
             const d = snap.docs[0];
-            return { ok: true, id: d.id, nome: norm, jaExistia: true };
+            if (d) return { ok: true, id: d.id, nome: norm, jaExistia: true };
         }
         const ref = await addDoc(collection(db, COLLECTION), {
             nome: norm,

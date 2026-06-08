@@ -187,7 +187,9 @@ const parseDataPagto = (raw: string, anoRef: number): string => {
   // formato completo dd/mm/yyyy ou dd/mm/yy
   const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
   if (m1) {
-    let [, d, mm, y] = m1;
+    const d = m1[1] || '';
+    const mm = m1[2] || '';
+    let y = m1[3] || '';
     if (y.length === 2) y = `20${y}`;
     return `${y}-${mm.padStart(2,'0')}-${d.padStart(2,'0')}`;
   }
@@ -198,7 +200,8 @@ const parseDataPagto = (raw: string, anoRef: number): string => {
   };
   const m2 = s.toLowerCase().match(/^(\d{1,2})[-\/\s]([a-zç]{3})/);
   if (m2) {
-    const [, d, mmAbr] = m2;
+    const d = m2[1] || '';
+    const mmAbr = m2[2] || '';
     const mm = meses[mmAbr.replace('ç','c')];
     if (mm) return `${anoRef}-${mm}-${d.padStart(2,'0')}`;
   }
@@ -215,7 +218,8 @@ const detectarMesAno = (row: string[]): { mes: number; ano: number } | null => {
   for (const nomeM of Object.keys(map)) {
     const re = new RegExp(`\\b${nomeM}\\s+(\\d{4})\\b`);
     const m = texto.match(re);
-    if (m) return { mes: map[nomeM], ano: parseInt(m[1], 10) };
+    const mesNum = map[nomeM];
+    if (m && mesNum !== undefined) return { mes: mesNum, ano: parseInt(m[1] || '', 10) };
   }
   return null;
 };
@@ -271,7 +275,7 @@ export const parseExtratoConciliacao = (csvText: string): LancamentoExtrato[] =>
     const detMes = detectarMesAno(row);
     if (detMes) { mesRef = detMes.mes; anoRef = detMes.ano; continue; }
     // Cabeçalho da tabela ("Número;Status;TIPO DESPESA;…")
-    if (norm(row[1]).toUpperCase() === 'STATUS') continue;
+    if (norm(row[1] || '').toUpperCase() === 'STATUS') continue;
     // Banner informativo ("DEMONSTRATIVO…")
     if (texto.includes('DEMONSTRATIVO DA MOVIMENTA')) continue;
     // Subtotal diário: campo DESCRIÇÃO começa com "Pagamentos em"

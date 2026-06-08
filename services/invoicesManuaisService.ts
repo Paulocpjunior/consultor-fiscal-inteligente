@@ -83,14 +83,14 @@ export function normalizarPeriodo(periodo: string): string {
     // Tenta achar dd/mm/aaaa ou mm/aaaa
     const m = periodo.match(/(\d{1,2})\/(\d{4})/);
     if (m) {
-        const mes = m[1].padStart(2, '0');
-        return `${mes}/${m[2]}`;
+        const mes = (m[1] || '').padStart(2, '0');
+        return `${mes}/${m[2] || ''}`;
     }
     // Tenta dd/mm/aaaa a dd/mm/aaaa — pega o primeiro mes
     const m2 = periodo.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (m2) {
-        const mes = m2[2].padStart(2, '0');
-        return `${mes}/${m2[3]}`;
+        const mes = (m2[2] || '').padStart(2, '0');
+        return `${mes}/${m2[3] || ''}`;
     }
     return periodo;
 }

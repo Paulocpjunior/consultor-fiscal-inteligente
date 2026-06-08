@@ -113,9 +113,9 @@ export function tipoCor(t: string): string {
 function parseDataBR(s: string): Date {
     const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (!m) return new Date(s);
-    const ano = parseInt(m[1], 10);
-    const mes = parseInt(m[2], 10);
-    const dia = parseInt(m[3], 10);
+    const ano = parseInt(m[1] || '', 10);
+    const mes = parseInt(m[2] || '', 10);
+    const dia = parseInt(m[3] || '', 10);
     return new Date(ano, mes - 1, dia, 0, 0, 0, 0);
 }
 

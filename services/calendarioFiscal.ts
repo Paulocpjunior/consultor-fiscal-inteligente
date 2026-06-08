@@ -149,7 +149,7 @@ export function calcularVencimento(competencia: string, regra: RegraObrigacao): 
  * Trimestres: 1T=03, 2T=06, 3T=09, 4T=12.
  */
 export function competenciaFechaTrimestre(competencia: string): boolean {
-    const mes = parseInt(competencia.split('/')[0], 10);
+    const mes = parseInt(competencia.split('/')[0] || '', 10);
     return mes === 3 || mes === 6 || mes === 9 || mes === 12;
 }
 
@@ -158,7 +158,7 @@ export function competenciaFechaTrimestre(competencia: string): boolean {
  * pra decidir disparo de obrigacoes anuais (ECF, ECD, DEFIS).
  */
 export function competenciaFechaAno(competencia: string): boolean {
-    return parseInt(competencia.split('/')[0], 10) === 12;
+    return parseInt(competencia.split('/')[0] || '', 10) === 12;
 }
 
 /**

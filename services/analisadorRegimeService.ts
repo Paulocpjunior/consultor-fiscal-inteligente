@@ -70,7 +70,9 @@ function tabela(a: AtividadeTipo, f: number, rba: number) {
 
 function alqEf(rba: number, tab: { l: number; a: number; pd: number }[]) {
     const fx = tab.find(f => rba <= f.l) || tab[tab.length - 1];
-    if (fx.pd === 0 && fx.a === tab[0].a) return fx.a / 100;
+    const f0 = tab[0];
+    if (!fx || !f0) return 0;
+    if (fx.pd === 0 && fx.a === f0.a) return fx.a / 100;
     return (rba * (fx.a / 100) - fx.pd) / rba;
 }
 
@@ -158,7 +160,7 @@ export function analisarRegimes(e: EntradaCalculo): ResultadoAnalise {
     if (todos[0]) todos[0].recomendado = true;
     const melhor = todos[0], pior = todos[todos.length - 1];
     const econAno = pior && melhor ? (pior.impostoMensal - melhor.impostoMensal) * 12 : 0;
-    const econPct = pior && pior.impostoMensal > 0 ? ((pior.impostoMensal - melhor.impostoMensal) / pior.impostoMensal) * 100 : 0;
+    const econPct = pior && melhor && pior.impostoMensal > 0 ? ((pior.impostoMensal - melhor.impostoMensal) / pior.impostoMensal) * 100 : 0;
 
     // Alertas de faturamento — LC 123/2006. Antes era um unico alerta confuso
     // que disparava em R$ 3,6M mas dizia "proximo ao limite de R$ 4,8M",

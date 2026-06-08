@@ -138,13 +138,13 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
         const txt = l.tokens.map(t => t.str).join(' ');
         const mEmp = txt.match(/Empresa:\s*(\d+)\s*-\s*(.+?)\s+Data:/i);
         if (mEmp && !empresaCodigo) {
-            empresaCodigo = mEmp[1];
-            empresaNome = mEmp[2].trim();
+            empresaCodigo = mEmp[1] || '';
+            empresaNome = (mEmp[2] || '').trim();
         }
         const mCnpj = txt.match(/C\.?N\.?P\.?J\.?\.?:\s*(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/i);
-        if (mCnpj && !empresaCnpj) empresaCnpj = mCnpj[1];
+        if (mCnpj && !empresaCnpj) empresaCnpj = mCnpj[1] || '';
         const mPer = txt.match(/Per[ií]odo:\s*(\d{2}\/\d{2}\/\d{4})\s*[áa]\s*(\d{2}\/\d{2}\/\d{4})/i);
-        if (mPer && !periodo) periodo = `${mPer[1]} a ${mPer[2]}`;
+        if (mPer && !periodo) periodo = `${mPer[1] || ''} a ${mPer[2] || ''}`;
     }
 
     const notas: EfiscalNf[] = [];
@@ -152,9 +152,12 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
 
     for (let i = 0; i < linhas.length; i++) {
         const linha = linhas[i];
+        if (!linha) continue;
         const toks = linha.tokens;
         if (toks.length === 0) continue;
-        const primeiro = toks[0].str;
+        const primeiroTok = toks[0];
+        if (!primeiroTok) continue;
+        const primeiro = primeiroTok.str;
 
         if (!DATA_RE.test(primeiro)) {
             const temValorNaColuna = toks.some(t => colunaPorX(t.x1) && VALOR_RE.test(t.str));
@@ -178,6 +181,7 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
         const razaoTokens: string[] = [];
         for (let j = 1; j < toks.length; j++) {
             const t = toks[j];
+            if (!t) continue;
             const s = t.str;
             if (CNPJ_CPF_RE.test(s) && t.x0 >= 205 && t.x0 <= 295) { nf.cnpjCpf = s; continue; }
             if (/^\d{6,}$/.test(s) && t.x0 >= 50 && t.x0 <= 110 && !nf.numero) { nf.numero = s; continue; }
@@ -197,7 +201,8 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
         const prox = linhas[i + 1];
         if (prox && prox.pagina === linha.pagina) {
             const proxToks = prox.tokens;
-            const proxSemData = proxToks.length > 0 && !DATA_RE.test(proxToks[0].str);
+            const proxFirst = proxToks[0];
+            const proxSemData = !!proxFirst && !DATA_RE.test(proxFirst.str);
             const proxSoRazao = proxToks.every(t => t.x0 >= 290 && t.x0 <= 460);
             if (proxSemData && proxSoRazao && proxToks.length > 0) {
                 for (const t of proxToks) razaoTokens.push(t.str);
