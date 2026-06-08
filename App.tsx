@@ -11,6 +11,7 @@ import NewsAlerts from './components/NewsAlerts';
 import ReformaNews from './components/ReformaNews';
 import FavoritesSidebar from './components/FavoritesSidebar';
 import SimplesNacionalSection from './components/sections/SimplesNacionalSection';
+import MenuPrincipal from './components/sections/MenuPrincipal';
 import InitialStateDisplay from './components/InitialStateDisplay';
 import SimilarServicesDisplay from './components/SimilarServicesDisplay';
 import AccessLogsModal from './components/AccessLogsModal';
@@ -648,46 +649,11 @@ const App: React.FC = () => {
                                 />
                             </Suspense>
                         </ErrorBoundary>
-                        {/* Menu agrupado por gênero — ícone + cor por grupo, seções com título.
-                            Config em MENU_GRUPOS (module-level). Sub-abas consolidadas
-                            não aparecem aqui (vivem dentro dos hubs). */}
-                        <div className="space-y-2 mb-3">
-                            {MENU_GRUPOS.map((grupo) => {
-                                const cards = grupo.cards.filter(c => !c.adminOnly || currentUser.role === 'admin');
-                                if (cards.length === 0) return null;
-                                return (
-                                    <div key={grupo.titulo}>
-                                        <div className="flex items-center gap-1.5 mb-1">
-                                            <span className="inline-block h-3 w-1 rounded" style={{ background: grupo.cor }} />
-                                            <h3 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{grupo.titulo}</h3>
-                                        </div>
-                                        {/* Card compacto horizontal: ícone + rótulo lado a lado, baixo.
-                                            Mais colunas por linha pra reduzir altura (era empilhado/grande). */}
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5">
-                                            {cards.map(({ type, label, Icon }) => {
-                                                const ativo = searchType === type;
-                                                return (
-                                                    <button
-                                                        key={type}
-                                                        onClick={() => selecionarTipo(type)}
-                                                        title={searchDescriptions[type] || (label ?? type)}
-                                                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg transition-all duration-150"
-                                                        style={{
-                                                            background: ativo ? grupo.cor : 'var(--bg-elevated)',
-                                                            border: `1px solid ${ativo ? grupo.cor : 'var(--border-default)'}`,
-                                                            color: ativo ? '#fff' : 'var(--text-secondary)',
-                                                        }}
-                                                    >
-                                                        <span className="flex-shrink-0" style={{ color: ativo ? '#fff' : grupo.cor }}><Icon className="w-4 h-4" /></span>
-                                                        <span className="text-[11px] font-semibold text-left leading-tight line-clamp-2">{label ?? type}</span>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                        <MenuPrincipal
+                            currentUser={currentUser}
+                            searchType={searchType}
+                            onSelecionar={selecionarTipo}
+                        />
 
                         {/* Standard Search Views (CFOP, NCM, Serviço, Simples, Lucro, Obrigações) */}
                         {[SearchType.CFOP, SearchType.NCM, SearchType.SERVICO, SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) && (
