@@ -37,8 +37,10 @@ import {
 
 import CertificadoEmpresaUpload from '../CertificadoEmpresaUpload';
 import CertidoesTab from './CertidoesTab';
+import DebitosTab from './DebitosTab';
+import ObrigacoesTab from './ObrigacoesTab';
 import {
-    CERTIDOES_BASE, uid, formatCurrency, gravityColor, certidaoColor, certidaoLabel,
+    OBRIGACOES_BASE, CERTIDOES_BASE, uid, formatCurrency, gravityColor, certidaoColor, certidaoLabel,
     cardStyle, inputStyle, labelSmall, btnStyle, btnStyleSave,
 } from './_common';
 
@@ -60,25 +62,6 @@ const TABS: { key: Tab; label: string }[] = [
     { key: 'analise', label: 'Análise' },
 ];
 
-const OBRIGACOES_BASE = [
-    // Federal
-    { nome: 'DEFIS', sigla: 'DEFIS', esfera: 'federal' as NfpEsfera, periodicidade: 'anual' as const },
-    { nome: 'ECD', sigla: 'ECD', esfera: 'federal' as NfpEsfera, periodicidade: 'anual' as const },
-    { nome: 'ECF', sigla: 'ECF', esfera: 'federal' as NfpEsfera, periodicidade: 'anual' as const },
-    { nome: 'SPED Fiscal', sigla: 'EFD', esfera: 'federal' as NfpEsfera, periodicidade: 'mensal' as const },
-    { nome: 'SPED Contribuições', sigla: 'EFD-C', esfera: 'federal' as NfpEsfera, periodicidade: 'mensal' as const },
-    { nome: 'eSocial', sigla: 'eSocial', esfera: 'federal' as NfpEsfera, periodicidade: 'mensal' as const },
-    { nome: 'FGTS Digital', sigla: 'FGTS', esfera: 'federal' as NfpEsfera, periodicidade: 'mensal' as const },
-    { nome: 'DCTFWeb', sigla: 'DCTFWeb', esfera: 'federal' as NfpEsfera, periodicidade: 'mensal' as const },
-    { nome: 'DIRF', sigla: 'DIRF', esfera: 'federal' as NfpEsfera, periodicidade: 'anual' as const },
-    { nome: 'RAIS', sigla: 'RAIS', esfera: 'federal' as NfpEsfera, periodicidade: 'anual' as const },
-    // Estadual
-    { nome: 'GIA', sigla: 'GIA', esfera: 'estadual' as NfpEsfera, periodicidade: 'mensal' as const },
-    { nome: 'DeSTDA', sigla: 'DeSTDA', esfera: 'estadual' as NfpEsfera, periodicidade: 'mensal' as const },
-    { nome: 'SINTEGRA', sigla: 'SINTEGRA', esfera: 'estadual' as NfpEsfera, periodicidade: 'mensal' as const },
-    // Municipal
-    { nome: 'ISS Digital', sigla: 'ISS', esfera: 'municipal' as NfpEsfera, periodicidade: 'mensal' as const },
-];
 
 
 /** Aplica máscara XX.XXX.XXX/XXXX-XX ao digitar. */
@@ -532,227 +515,32 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         );
     };
 
-    const renderDebitos = () => {
-        if (!analise) return null;
-        const debitos = nfpService.atualizarDebitosSelic(analise.debitos, taxaSelic);
+    const renderDebitos = () => analise && (
+        <DebitosTab
+            analise={analise}
+            activeEmpresaId={activeEmpresaId}
+            activeUf={activeUf}
+            activeMunicipio={activeMunicipio}
+            taxaSelic={taxaSelic}
+            setTaxaSelic={setTaxaSelic}
+            setAnalise={setAnalise}
+            updateAnalise={updateAnalise}
+            saveAnalise={saveAnalise}
+            renderEsferaSectionHeader={renderEsferaSectionHeader}
+        />
+    );
 
-        const addDebito = (esfera: NfpEsfera = 'federal') => {
-            const novo: NfpDebito = {
-                id: uid(), empresaId: activeEmpresaId, esfera,
-                orgao: '', descricao: '', valorOriginal: 0, dataVencimento: new Date().toISOString().slice(0, 10), status: 'aberto',
-            };
-            const updated = { ...analise, debitos: [...analise.debitos, novo] };
-            setAnalise(updated);
-        };
-
-        const removeDebito = (id: string) => {
-            const updated = { ...analise, debitos: analise.debitos.filter(d => d.id !== id) };
-            setAnalise(updated);
-        };
-
-        const updateDebito = (id: string, patch: Partial<NfpDebito>) => {
-            const updated = { ...analise, debitos: analise.debitos.map(d => d.id === id ? { ...d, ...patch } : d) };
-            setAnalise(updated);
-        };
-
-        // Determine fonte: debitos from SERPRO analysis have orgao 'Receita Federal' or 'PGFN'
-        const getDebitoFonte = (d: NfpDebito): 'automatico' | 'manual' => {
-            if (d.esfera === 'federal' && (d.orgao === 'Receita Federal' || d.orgao === 'PGFN')) return 'automatico';
-            return 'manual';
-        };
-
-        const renderDebitoFonteBadge = (fonte: 'automatico' | 'manual') => {
-            const isAuto = fonte === 'automatico';
-            return (
-                <span style={{
-                    padding: '1px 8px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 600,
-                    background: isAuto ? 'var(--accent)18' : 'var(--text-muted)18',
-                    color: isAuto ? 'var(--accent)' : 'var(--text-muted)',
-                    border: `1px solid ${isAuto ? 'var(--accent)' : 'var(--text-muted)'}33`,
-                    whiteSpace: 'nowrap' as const,
-                }}>
-                    {isAuto ? 'SERPRO' : 'Manual'}
-                </span>
-            );
-        };
-
-        const renderDebitoCard = (d: NfpDebito) => (
-            <div key={d.id} style={cardStyle}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto auto', gap: '0.5rem', alignItems: 'center' }}>
-                    <input placeholder="Descricao" value={d.descricao} onChange={e => updateDebito(d.id, { descricao: e.target.value })} style={inputStyle} />
-                    <select value={d.esfera} onChange={e => updateDebito(d.id, { esfera: e.target.value as NfpEsfera })} style={inputStyle}>
-                        <option value="federal">Federal</option><option value="estadual">Estadual</option><option value="municipal">Municipal</option>
-                    </select>
-                    <select value={d.status} onChange={e => updateDebito(d.id, { status: e.target.value as NfpStatusDebito })} style={inputStyle}>
-                        <option value="aberto">Aberto</option><option value="parcelado">Parcelado</option><option value="em_analise">Em analise</option><option value="quitado">Quitado</option><option value="prescrito">Prescrito</option>
-                    </select>
-                    {renderDebitoFonteBadge(getDebitoFonte(d))}
-                    <button onClick={() => removeDebito(d.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.2rem' }}>x</button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    <label style={labelSmall}>Orgao<input value={d.orgao} onChange={e => updateDebito(d.id, { orgao: e.target.value })} style={inputStyle} /></label>
-                    <label style={labelSmall}>Valor Original<input type="number" value={d.valorOriginal} onChange={e => updateDebito(d.id, { valorOriginal: Number(e.target.value) })} style={inputStyle} /></label>
-                    <label style={labelSmall}>Vencimento<input type="date" value={d.dataVencimento} onChange={e => updateDebito(d.id, { dataVencimento: e.target.value })} style={inputStyle} /></label>
-                    <div style={labelSmall}>Valor Atualizado<div style={{ fontWeight: 700, color: 'var(--danger)', marginTop: '4px' }}>{formatCurrency(d.valorAtualizado || d.valorOriginal)}</div></div>
-                </div>
-            </div>
-        );
-
-        const federais = debitos.filter(d => d.esfera === 'federal');
-        const estaduais = debitos.filter(d => d.esfera === 'estadual');
-        const municipais = debitos.filter(d => d.esfera === 'municipal');
-
-        return (
-            <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                    <label style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                        Taxa Selic (% a.a.):
-                        <input type="number" value={taxaSelic} onChange={e => setTaxaSelic(Number(e.target.value))} step="0.01"
-                            style={{ marginLeft: '0.5rem', width: '80px', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-default)', background: 'var(--bg-card)', color: 'var(--text-primary)' }} />
-                    </label>
-                    <button onClick={() => addDebito('federal')} style={btnStyle}>+ Adicionar Debito</button>
-                    <button onClick={() => { updateAnalise({ debitos: analise.debitos }); saveAnalise({ ...analise, debitos: analise.debitos }); }} style={btnStyleSave}>Salvar</button>
-                </div>
-                {debitos.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Nenhum debito registrado.</p>}
-
-                {federais.length > 0 && (
-                    <>
-                        {renderEsferaSectionHeader('federal')}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                            {federais.map(renderDebitoCard)}
-                        </div>
-                    </>
-                )}
-
-                {estaduais.length > 0 && (
-                    <>
-                        {renderEsferaSectionHeader('estadual', activeUf || undefined)}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                            {estaduais.map(renderDebitoCard)}
-                        </div>
-                    </>
-                )}
-
-                {municipais.length > 0 && (
-                    <>
-                        {renderEsferaSectionHeader('municipal', activeMunicipio || undefined)}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                            {municipais.map(renderDebitoCard)}
-                        </div>
-                    </>
-                )}
-            </div>
-        );
-    };
-
-    const renderObrigacoes = () => {
-        if (!analise) return null;
-
-        const updateObrigacao = (id: string, patch: Partial<NfpObrigacao>) => {
-            updateAnalise({ obrigacoes: analise.obrigacoes.map(o => o.id === id ? { ...o, ...patch } : o) });
-        };
-
-        const removeObrigacao = (id: string) => {
-            updateAnalise({ obrigacoes: analise.obrigacoes.filter(o => o.id !== id) });
-        };
-
-        const addObrigacao = () => {
-            const nova: NfpObrigacao = {
-                id: uid(), empresaId: activeEmpresaId, nome: '', sigla: '',
-                esfera: 'federal', periodicidade: 'mensal', status: 'nao_verificada',
-            };
-            updateAnalise({ obrigacoes: [...analise.obrigacoes, nova] });
-        };
-
-        const isCustomObrigacao = (o: NfpObrigacao): boolean => {
-            return !OBRIGACOES_BASE.some(b => b.sigla === o.sigla && b.esfera === o.esfera);
-        };
-
-        const statusBadge = (s: NfpStatusObrigacao) => {
-            const colors: Record<NfpStatusObrigacao, string> = {
-                entregue: 'var(--success)', pendente: 'var(--warning)', atrasada: 'var(--danger)', dispensada: 'var(--text-muted)', nao_verificada: 'var(--border-default)',
-            };
-            return <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, background: colors[s] + '22', color: colors[s], border: `1px solid ${colors[s]}44` }}>{s.replace('_', ' ')}</span>;
-        };
-
-        const renderObrigacaoCard = (o: NfpObrigacao) => {
-            const custom = isCustomObrigacao(o);
-            return (
-                <div key={o.id} style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            {custom ? (
-                                <>
-                                    <input placeholder="Sigla" value={o.sigla} onChange={e => updateObrigacao(o.id, { sigla: e.target.value })}
-                                        style={{ ...inputStyle, width: '80px', fontWeight: 700 }} />
-                                    <input placeholder="Nome" value={o.nome} onChange={e => updateObrigacao(o.id, { nome: e.target.value })}
-                                        style={{ ...inputStyle, width: '160px', fontSize: '0.85rem' }} />
-                                </>
-                            ) : (
-                                <>
-                                    <strong style={{ color: 'var(--text-primary)' }}>{o.sigla}</strong>
-                                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{o.nome} ({o.periodicidade})</span>
-                                </>
-                            )}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            {statusBadge(o.status)}
-                            <select value={o.status} onChange={e => updateObrigacao(o.id, { status: e.target.value as NfpStatusObrigacao })} style={{ ...inputStyle, width: 'auto', fontSize: '0.8rem' }}>
-                                <option value="entregue">Entregue</option><option value="pendente">Pendente</option><option value="atrasada">Atrasada</option><option value="dispensada">Dispensada</option><option value="nao_verificada">Nao verificada</option>
-                            </select>
-                            {custom && (
-                                <button onClick={() => removeObrigacao(o.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.2rem' }}>x</button>
-                            )}
-                        </div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                        <label style={labelSmall}>Competencia<input value={o.competencia || ''} onChange={e => updateObrigacao(o.id, { competencia: e.target.value })} placeholder="MM/AAAA" style={inputStyle} /></label>
-                        <label style={labelSmall}>Data Entrega<input type="date" value={o.dataEntrega || ''} onChange={e => updateObrigacao(o.id, { dataEntrega: e.target.value })} style={inputStyle} /></label>
-                    </div>
-                </div>
-            );
-        };
-
-        const federais = analise.obrigacoes.filter(o => o.esfera === 'federal');
-        const estaduais = analise.obrigacoes.filter(o => o.esfera === 'estadual');
-        const municipais = analise.obrigacoes.filter(o => o.esfera === 'municipal');
-
-        return (
-            <div>
-                <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
-                    <button onClick={addObrigacao} style={btnStyle}>+ Adicionar Obrigacao</button>
-                    <button onClick={() => saveAnalise(analise)} style={btnStyleSave}>Salvar</button>
-                </div>
-
-                {federais.length > 0 && (
-                    <>
-                        {renderEsferaSectionHeader('federal')}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                            {federais.map(renderObrigacaoCard)}
-                        </div>
-                    </>
-                )}
-
-                {estaduais.length > 0 && (
-                    <>
-                        {renderEsferaSectionHeader('estadual', activeUf || undefined)}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                            {estaduais.map(renderObrigacaoCard)}
-                        </div>
-                    </>
-                )}
-
-                {municipais.length > 0 && (
-                    <>
-                        {renderEsferaSectionHeader('municipal', activeMunicipio || undefined)}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                            {municipais.map(renderObrigacaoCard)}
-                        </div>
-                    </>
-                )}
-            </div>
-        );
-    };
+    const renderObrigacoes = () => analise && (
+        <ObrigacoesTab
+            analise={analise}
+            activeEmpresaId={activeEmpresaId}
+            activeUf={activeUf}
+            activeMunicipio={activeMunicipio}
+            updateAnalise={updateAnalise}
+            saveAnalise={saveAnalise}
+            renderEsferaSectionHeader={renderEsferaSectionHeader}
+        />
+    );
 
     const renderCertidoes = () => analise && (
         <CertidoesTab

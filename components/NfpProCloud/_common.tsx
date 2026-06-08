@@ -8,6 +8,26 @@
 import React from 'react';
 import type { NfpEsfera, NfpStatusCertidao, NfpGravidade } from '../../types';
 
+export const OBRIGACOES_BASE = [
+    // Federal
+    { nome: 'DEFIS', sigla: 'DEFIS', esfera: 'federal' as NfpEsfera, periodicidade: 'anual' as const },
+    { nome: 'ECD', sigla: 'ECD', esfera: 'federal' as NfpEsfera, periodicidade: 'anual' as const },
+    { nome: 'ECF', sigla: 'ECF', esfera: 'federal' as NfpEsfera, periodicidade: 'anual' as const },
+    { nome: 'SPED Fiscal', sigla: 'EFD', esfera: 'federal' as NfpEsfera, periodicidade: 'mensal' as const },
+    { nome: 'SPED Contribuições', sigla: 'EFD-C', esfera: 'federal' as NfpEsfera, periodicidade: 'mensal' as const },
+    { nome: 'eSocial', sigla: 'eSocial', esfera: 'federal' as NfpEsfera, periodicidade: 'mensal' as const },
+    { nome: 'FGTS Digital', sigla: 'FGTS', esfera: 'federal' as NfpEsfera, periodicidade: 'mensal' as const },
+    { nome: 'DCTFWeb', sigla: 'DCTFWeb', esfera: 'federal' as NfpEsfera, periodicidade: 'mensal' as const },
+    { nome: 'DIRF', sigla: 'DIRF', esfera: 'federal' as NfpEsfera, periodicidade: 'anual' as const },
+    { nome: 'RAIS', sigla: 'RAIS', esfera: 'federal' as NfpEsfera, periodicidade: 'anual' as const },
+    // Estadual
+    { nome: 'GIA', sigla: 'GIA', esfera: 'estadual' as NfpEsfera, periodicidade: 'mensal' as const },
+    { nome: 'DeSTDA', sigla: 'DeSTDA', esfera: 'estadual' as NfpEsfera, periodicidade: 'mensal' as const },
+    { nome: 'SINTEGRA', sigla: 'SINTEGRA', esfera: 'estadual' as NfpEsfera, periodicidade: 'mensal' as const },
+    // Municipal
+    { nome: 'ISS Digital', sigla: 'ISS', esfera: 'municipal' as NfpEsfera, periodicidade: 'mensal' as const },
+];
+
 export const CERTIDOES_BASE = [
     // Federal (Automático via SERPRO)
     { orgao: 'Receita Federal / PGFN', tipo: 'CND Federal', esfera: 'federal' as NfpEsfera, fonte: 'automatico' as const },
