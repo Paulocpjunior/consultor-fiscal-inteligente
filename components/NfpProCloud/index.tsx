@@ -36,6 +36,11 @@ import {
 } from '../../services/nfpTaxRulesEngine';
 
 import CertificadoEmpresaUpload from '../CertificadoEmpresaUpload';
+import CertidoesTab from './CertidoesTab';
+import {
+    CERTIDOES_BASE, uid, formatCurrency, gravityColor, certidaoColor, certidaoLabel,
+    cardStyle, inputStyle, labelSmall, btnStyle, btnStyleSave,
+} from './_common';
 
 interface Props {
     currentUser: User | null;
@@ -75,45 +80,6 @@ const OBRIGACOES_BASE = [
     { nome: 'ISS Digital', sigla: 'ISS', esfera: 'municipal' as NfpEsfera, periodicidade: 'mensal' as const },
 ];
 
-const CERTIDOES_BASE = [
-    // Federal (Automático via SERPRO)
-    { orgao: 'Receita Federal / PGFN', tipo: 'CND Federal', esfera: 'federal' as NfpEsfera, fonte: 'automatico' as const },
-    { orgao: 'Caixa Econômica Federal', tipo: 'CRF (FGTS)', esfera: 'federal' as NfpEsfera, fonte: 'automatico' as const },
-    { orgao: 'Justiça do Trabalho (TST)', tipo: 'CNDT (Trabalhista)', esfera: 'federal' as NfpEsfera, fonte: 'automatico' as const },
-    // Estadual (Manual)
-    { orgao: 'Sefaz Estadual (ICMS)', tipo: 'CND Estadual', esfera: 'estadual' as NfpEsfera, fonte: 'manual' as const },
-    // Municipal (Manual)
-    { orgao: 'Prefeitura Municipal (ISS)', tipo: 'CND Municipal', esfera: 'municipal' as NfpEsfera, fonte: 'manual' as const },
-];
-
-function uid(): string {
-    return Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
-}
-
-function formatCurrency(v: number): string {
-    return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-function gravityColor(g: NfpGravidade): string {
-    if (g === 'alta') return 'var(--danger)';
-    if (g === 'media') return 'var(--warning)';
-    return 'var(--accent)';
-}
-
-function certidaoColor(status: NfpStatusCertidao): string {
-    if (status === 'negativa') return 'var(--success)';
-    if (status === 'positiva_efeitos_negativa') return 'var(--warning)';
-    if (status === 'positiva') return 'var(--danger)';
-    return 'var(--text-muted)';
-}
-
-function certidaoLabel(status: NfpStatusCertidao): string {
-    if (status === 'negativa') return 'Negativa';
-    if (status === 'positiva_efeitos_negativa') return 'Positiva c/ Efeitos Negativa';
-    if (status === 'positiva') return 'Positiva';
-    if (status === 'indisponivel') return 'Indisponível';
-    return 'Não consultada';
-}
 
 /** Aplica máscara XX.XXX.XXX/XXXX-XX ao digitar. */
 function applyCnpjMask(raw: string): string {
@@ -788,175 +754,18 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         );
     };
 
-    const renderCertidoes = () => {
-        if (!analise) return null;
-
-        const updateCertidao = (id: string, patch: Partial<NfpCertidao>) => {
-            updateAnalise({ certidoes: analise.certidoes.map(c => c.id === id ? { ...c, ...patch } : c) });
-        };
-
-        const removeCertidao = (id: string) => {
-            updateAnalise({ certidoes: analise.certidoes.filter(c => c.id !== id) });
-        };
-
-        const addCertidao = () => {
-            const nova: NfpCertidao = {
-                id: uid(), empresaId: activeEmpresaId, esfera: 'federal',
-                orgao: '', tipo: '', status: 'nao_consultada',
-            };
-            updateAnalise({ certidoes: [...analise.certidoes, nova] });
-        };
-
-        // Determine the fonte badge: use the certidão's own fonte field, or infer from base list
-        const getCertidaoFonte = (c: NfpCertidao): 'serpro' | 'consulta_publica' | 'manual' => {
-            if (c.fonte) return c.fonte;
-            const base = CERTIDOES_BASE.find(b => b.tipo === c.tipo && b.esfera === c.esfera);
-            return base?.fonte === 'automatico' ? 'serpro' : 'manual';
-        };
-
-        const downloadPdf = (c: NfpCertidao) => {
-            if (!c.pdfBase64) return;
-            const byteChars = atob(c.pdfBase64);
-            const byteArray = new Uint8Array(byteChars.length);
-            for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-            const blob = new Blob([byteArray], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${c.tipo.replace(/[^a-zA-Z0-9]/g, '_')}_${(c.numeroCertidao || 'certidao')}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        };
-
-        const isCustomCertidao = (c: NfpCertidao): boolean => {
-            return !CERTIDOES_BASE.some(b => b.tipo === c.tipo && b.esfera === c.esfera);
-        };
-
-        const renderCertidaoCard = (c: NfpCertidao) => (
-            <div key={c.id} style={cardStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        {isCustomCertidao(c) ? (
-                            <input placeholder="Tipo" value={c.tipo} onChange={e => updateCertidao(c.id, { tipo: e.target.value })}
-                                style={{ ...inputStyle, width: 'auto', fontWeight: 700 }} />
-                        ) : (
-                            <strong style={{ color: 'var(--text-primary)' }}>{c.tipo}</strong>
-                        )}
-                        {isCustomCertidao(c) ? (
-                            <input placeholder="Orgao" value={c.orgao} onChange={e => updateCertidao(c.id, { orgao: e.target.value })}
-                                style={{ ...inputStyle, width: 'auto', fontSize: '0.85rem' }} />
-                        ) : (
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{c.orgao}</span>
-                        )}
-                        {renderFonteBadge(getCertidaoFonte(c))}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <span style={{ padding: '2px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: certidaoColor(c.status) + '22', color: certidaoColor(c.status), border: `1px solid ${certidaoColor(c.status)}44` }}>
-                            {certidaoLabel(c.status)}
-                        </span>
-                        <select value={c.status} onChange={e => updateCertidao(c.id, { status: e.target.value as NfpStatusCertidao })} style={{ ...inputStyle, width: 'auto', fontSize: '0.8rem' }}>
-                            <option value="negativa">Negativa</option><option value="positiva_efeitos_negativa">Positiva c/ Efeitos Negativa</option><option value="positiva">Positiva</option><option value="indisponivel">Indisponivel</option><option value="nao_consultada">Nao consultada</option>
-                        </select>
-                        {c.pdfBase64 && (
-                            <button onClick={() => downloadPdf(c)} title="Baixar PDF da certidao" style={{ background: 'var(--accent)14', border: `1px solid var(--accent)44`, borderRadius: '8px', padding: '2px 10px', cursor: 'pointer', color: 'var(--accent)', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                Baixar PDF
-                            </button>
-                        )}
-                        {isCustomCertidao(c) && (
-                            <button onClick={() => removeCertidao(c.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.2rem' }}>x</button>
-                        )}
-                    </div>
-                </div>
-                {/* Numero da certidao */}
-                {c.numeroCertidao && (
-                    <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        Certidao n.{'º'} <strong>{c.numeroCertidao}</strong>
-                    </div>
-                )}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    <label style={labelSmall}>Data Emissao<input type="date" value={c.dataEmissao || ''} onChange={e => updateCertidao(c.id, { dataEmissao: e.target.value })} style={inputStyle} /></label>
-                    <label style={labelSmall}>Validade<input type="date" value={c.dataValidade || ''} onChange={e => updateCertidao(c.id, { dataValidade: e.target.value })} style={inputStyle} /></label>
-                    <label style={labelSmall}>Data Consulta<input type="date" value={c.dataConsulta || ''} onChange={e => updateCertidao(c.id, { dataConsulta: e.target.value })} style={inputStyle} /></label>
-                </div>
-                {(c.status === 'positiva' || c.status === 'positiva_efeitos_negativa') && (
-                    <div style={{ marginTop: '0.5rem' }}>
-                        <input placeholder="Motivo do impedimento" value={c.motivoImpedimento || ''} onChange={e => updateCertidao(c.id, { motivoImpedimento: e.target.value })}
-                            style={{ ...inputStyle, width: '100%' }} />
-                    </div>
-                )}
-                {(c.status === 'nao_consultada') && getCertidaoFonte(c) === 'manual' && (
-                    <div style={{ marginTop: '0.5rem', fontSize: '0.78rem', color: '#e67e22', fontStyle: 'italic' }}>
-                        {c.motivoImpedimento || 'Consulta manual necessaria — acesse o portal do orgao emissor.'}
-                    </div>
-                )}
-                {(c.status === 'indisponivel' || c.status === 'nao_consultada') && c.portalUrl && (
-                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <a
-                            href={c.portalUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-                                padding: '4px 12px', borderRadius: '8px',
-                                background: 'var(--accent)14', border: '1px solid var(--accent)44',
-                                color: 'var(--accent)', fontSize: '0.78rem', fontWeight: 600,
-                                textDecoration: 'none', cursor: 'pointer',
-                            }}
-                        >
-                            Consultar no Portal Oficial →
-                        </a>
-                        {c.motivoImpedimento && (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                {c.motivoImpedimento}
-                            </span>
-                        )}
-                    </div>
-                )}
-            </div>
-        );
-
-        const federais = analise.certidoes.filter(c => c.esfera === 'federal');
-        const estaduais = analise.certidoes.filter(c => c.esfera === 'estadual');
-        const municipais = analise.certidoes.filter(c => c.esfera === 'municipal');
-
-        return (
-            <div>
-                <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
-                    <button onClick={addCertidao} style={btnStyle}>+ Adicionar Certidao</button>
-                    <button onClick={() => saveAnalise(analise)} style={btnStyleSave}>Salvar</button>
-                </div>
-
-                {federais.length > 0 && (
-                    <>
-                        {renderEsferaSectionHeader('federal')}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                            {federais.map(renderCertidaoCard)}
-                        </div>
-                    </>
-                )}
-
-                {estaduais.length > 0 && (
-                    <>
-                        {renderEsferaSectionHeader('estadual', activeUf || undefined)}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                            {estaduais.map(renderCertidaoCard)}
-                        </div>
-                    </>
-                )}
-
-                {municipais.length > 0 && (
-                    <>
-                        {renderEsferaSectionHeader('municipal', activeMunicipio || undefined)}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                            {municipais.map(renderCertidaoCard)}
-                        </div>
-                    </>
-                )}
-            </div>
-        );
-    };
+    const renderCertidoes = () => analise && (
+        <CertidoesTab
+            analise={analise}
+            activeEmpresaId={activeEmpresaId}
+            activeUf={activeUf}
+            activeMunicipio={activeMunicipio}
+            updateAnalise={updateAnalise}
+            saveAnalise={saveAnalise}
+            renderEsferaSectionHeader={renderEsferaSectionHeader}
+            renderFonteBadge={renderFonteBadge}
+        />
+    );
 
     const renderParcelamentos = () => {
         if (!analise) return null;
@@ -1581,51 +1390,5 @@ const DashCard: React.FC<{ title: string; value: string; sub: string; color: str
 
 // ─── Shared Styles ───────────────────────────────────────────────────────────
 
-const cardStyle: React.CSSProperties = {
-    padding: '1rem',
-    borderRadius: '10px',
-    background: 'var(--bg-card)',
-    border: '1px solid var(--border-subtle)',
-};
-
-const inputStyle: React.CSSProperties = {
-    padding: '6px 10px',
-    borderRadius: '6px',
-    border: '1px solid var(--border-default)',
-    background: 'var(--bg-elevated)',
-    color: 'var(--text-primary)',
-    fontSize: '0.85rem',
-    width: '100%',
-};
-
-const labelSmall: React.CSSProperties = {
-    fontSize: '0.75rem',
-    color: 'var(--text-muted)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-};
-
-const btnStyle: React.CSSProperties = {
-    padding: '8px 16px',
-    borderRadius: '8px',
-    border: '1px solid var(--accent)',
-    background: 'transparent',
-    color: 'var(--accent)',
-    fontWeight: 600,
-    fontSize: '0.85rem',
-    cursor: 'pointer',
-};
-
-const btnStyleSave: React.CSSProperties = {
-    padding: '8px 16px',
-    borderRadius: '8px',
-    border: 'none',
-    background: 'var(--accent)',
-    color: '#fff',
-    fontWeight: 600,
-    fontSize: '0.85rem',
-    cursor: 'pointer',
-};
 
 export default NfpProCloud;
