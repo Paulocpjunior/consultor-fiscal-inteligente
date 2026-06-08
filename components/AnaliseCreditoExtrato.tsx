@@ -61,6 +61,7 @@ import { mesclarInvoicesEFiltrarOcultos } from '../services/analiseCreditoMerge'
 import { gerarEfiscalPdf, gerarExtratoPdf, baixarBlob } from '../services/analiseCreditoPdf';
 import { useFornecedoresNotasOcultos } from '../hooks/useFornecedoresNotasOcultos';
 import { useCategoriasCredito } from '../hooks/useCategoriasCredito';
+import { useOverridesInvoices } from '../hooks/useOverridesInvoices';
 import type { EmpresaPerfilOption } from '../services/xmlFiscalService';
 import type { User } from '../types';
 
@@ -126,24 +127,11 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     [empresas, empresaSelId],
   );
 
-  // Regras manuais CNPJ->categoria da empresa selecionada (tabela Firestore).
-  // Sobrepoem a classificacao automatica. Recarregadas quando a empresa muda.
-  const [overrides, setOverrides] = useState<Map<string, TipoDespesaCredito>>(new Map());
-  const [overridesVersao, setOverridesVersao] = useState(0);
+  // Periodo normalizado MM/AAAA do PDF efiscal carregado
+  // -- precisa antes do hook abaixo que depende dele.
 
-  useEffect(() => {
-    let ativo = true;
-    if (!empresaSel?.id) { setOverrides(new Map()); return; }
-    carregarRegras(empresaSel.id).then(mapa => {
-      if (ativo) setOverrides(mapa);
-    });
-    return () => { ativo = false; };
-  }, [empresaSel?.id, overridesVersao]);
-
-  // Invoices lancadas manualmente (Firestore: invoices_manuais).
-  // Filtradas por empresa + periodo normalizado (MM/AAAA) do PDF.
-  const [invoicesManuais, setInvoicesManuais] = useState<InvoiceManual[]>([]);
-  const [invoicesVersao, setInvoicesVersao] = useState(0);
+  // Overrides CNPJ->categoria + invoices manuais (Firestore)
+  // consolidados num hook que recarrega quando empresa/periodo muda.
   const [modalInvoiceAberto, setModalInvoiceAberto] = useState(false);
 
   // Normaliza CNPJ (so digitos) para chave consistente no Set
@@ -179,14 +167,12 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     [efiscal],
   );
 
-  useEffect(() => {
-    let ativo = true;
-    if (!empresaSel?.id || !periodoNormalizado) { setInvoicesManuais([]); return; }
-    listarInvoicesManuais(empresaSel.id, periodoNormalizado).then(list => {
-      if (ativo) setInvoicesManuais(list);
-    });
-    return () => { ativo = false; };
-  }, [empresaSel?.id, periodoNormalizado, invoicesVersao]);
+  // Overrides CNPJ->categoria + invoices manuais (consolidados em hook)
+  const {
+    overrides, setOverrides, overridesVersao, setOverridesVersao,
+    invoicesManuais, setInvoicesManuais, invoicesVersao, setInvoicesVersao,
+  } = useOverridesInvoices(empresaSel?.id, periodoNormalizado);
+
 
   // Salva (ou troca) a categoria de um fornecedor na tabela CNPJ->categoria
   // da empresa. Apos salvar, recarrega os overrides -> credito recalcula.
