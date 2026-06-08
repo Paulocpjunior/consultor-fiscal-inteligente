@@ -44,6 +44,7 @@ import AcoesTab from './AcoesTab';
 import PlanoAcaoTab from './PlanoAcaoTab';
 import TaxProfileCard from './TaxProfileCard';
 import DashboardTab from './DashboardTab';
+import AnaliseTab from './AnaliseTab';
 import {
     OBRIGACOES_BASE, CERTIDOES_BASE, uid, formatCurrency, gravityColor, certidaoColor, certidaoLabel,
     cardStyle, inputStyle, labelSmall, btnStyle, btnStyleSave,
@@ -547,88 +548,25 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
     }, [activeCnpj, activeEmpresaId, analise, createEmptyAnalise, currentUser, fonteAnalise, prospectMode, saveAnalise, onShowToast]);
 
-    const renderAnalise = () => {
-        const canStart = hasActiveSelection;
-        const canStartReal = hasActiveSelection && !!activeCnpj && !analiseRealLoading;
-
-        return (
-            <div>
-                <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-                    Inicie uma nova análise de compliance para {prospectMode ? 'o prospect' : 'a empresa selecionada'}.
-                    Escolha a fonte dos dados e clique em "Iniciar Análise".
-                </p>
-
-                {prospectMode && (
-                    <span style={{
-                        display: 'inline-block', marginBottom: '1rem', padding: '3px 10px',
-                        borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
-                        background: 'var(--accent)22', color: 'var(--accent)',
-                        border: '1px solid var(--accent)44',
-                    }}>
-                        Modo Prospect
-                    </span>
-                )}
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '500px' }}>
-                    <label style={labelSmall}>
-                        Fonte de Dados
-                        <select value={fonteAnalise} onChange={e => setFonteAnalise(e.target.value as any)} style={{ ...inputStyle, width: '100%', marginTop: '4px' }}>
-                            <option value="certificado_escritorio">Certificado Digital do Escritorio</option>
-                            <option value="certificado_cliente">Certificado Digital do Cliente</option>
-                            <option value="offline">Offline (lancamento manual)</option>
-                        </select>
-                    </label>
-
-                    {/* Certificate upload for prospect mode */}
-                    {prospectMode && prospectData && fonteAnalise === 'certificado_cliente' && (
-                        <div style={{ ...cardStyle, borderLeft: '4px solid var(--accent)' }}>
-                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
-                                Upload do Certificado Digital A1 (necessario para analise real via SEFAZ)
-                            </p>
-                            <CertificadoEmpresaUpload
-                                empresaId={`prospect_${prospectData.cnpj}`}
-                                empresaNome={prospectData.nomeFantasia || prospectData.razaoSocial}
-                                empresaCnpj={prospectData.cnpj}
-                            />
-                        </div>
-                    )}
-
-                    <button
-                        disabled={!canStart}
-                        onClick={() => {
-                            const nova = createEmptyAnalise();
-                            setAnalise(nova);
-                            if (!prospectMode) saveAnalise(nova);
-                            setTab('dashboard');
-                        }}
-                        style={{ ...btnStyle, opacity: canStart ? 1 : 0.5 }}
-                    >
-                        Iniciar Analise
-                    </button>
-                    <button
-                        disabled={!canStartReal}
-                        onClick={handleAnaliseReal}
-                        style={{
-                            ...btnStyleSave,
-                            opacity: canStartReal ? 1 : 0.5,
-                        }}
-                    >
-                        {analiseRealLoading ? 'Consultando SERPRO...' : 'Iniciar Analise Real'}
-                    </button>
-                    {analiseRealLoading && (
-                        <p style={{ color: 'var(--accent)', fontSize: '0.85rem' }}>
-                            Consultando situacao fiscal, divida ativa, certidoes, obrigacoes e parcelamentos via SERPRO...
-                        </p>
-                    )}
-                    {analise && (
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                            Ultima analise: {new Date(analise.dataAnalise).toLocaleDateString('pt-BR')} por {analise.analisadoPor} (fonte: {analise.fonte})
-                        </p>
-                    )}
-                </div>
-            </div>
-        );
-    };
+    const renderAnalise = () => (
+        <AnaliseTab
+            hasActiveSelection={hasActiveSelection}
+            activeCnpj={activeCnpj}
+            analise={analise}
+            fonteAnalise={fonteAnalise}
+            setFonteAnalise={setFonteAnalise}
+            prospectMode={prospectMode}
+            prospectData={prospectData}
+            analiseRealLoading={analiseRealLoading}
+            onIniciarAnalise={() => {
+                const nova = createEmptyAnalise();
+                setAnalise(nova);
+                if (!prospectMode) saveAnalise(nova);
+                setTab("dashboard");
+            }}
+            onIniciarAnaliseReal={handleAnaliseReal}
+        />
+    );
 
     // ─── Main Render ────────────────────────────────────────────────────────
 
