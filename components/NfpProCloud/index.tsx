@@ -437,102 +437,22 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         if (!activeCnpj) return;
         setAnaliseRealLoading(true);
         try {
-            const resp = await nfpService.analisarEmpresaCompleta(activeCnpj, taxProfile?.regime || prospectRegime || 'lucro_presumido', activeUf || undefined);
-            // Create or update analysis from SERPRO response
-            const base = analise || createEmptyAnalise();
-
-            // Populate debitos from situacaoFiscal + dividaAtiva
-            const debitos: NfpDebito[] = [];
-            if (resp.situacaoFiscal?.ok && resp.situacaoFiscal.debitos) {
-                for (const d of resp.situacaoFiscal.debitos) {
-                    debitos.push({
-                        id: uid(), empresaId: activeEmpresaId, esfera: 'federal' as NfpEsfera,
-                        orgao: 'Receita Federal', descricao: d.tributo || d.descricao || 'Débito Federal',
-                        valorOriginal: Number(d.valorOriginal || 0), dataVencimento: d.competencia || new Date().toISOString().slice(0, 10),
-                        status: (d.status === 'quitado' ? 'quitado' : 'aberto') as NfpStatusDebito,
-                    });
-                }
-            }
-            if (resp.dividaAtiva?.ok && resp.dividaAtiva.inscricoes) {
-                for (const i of resp.dividaAtiva.inscricoes) {
-                    debitos.push({
-                        id: uid(), empresaId: activeEmpresaId, esfera: 'federal' as NfpEsfera,
-                        orgao: 'PGFN', descricao: `Dívida Ativa ${i.numero || ''}`.trim(),
-                        valorOriginal: Number(i.valorConsolidado || 0), dataVencimento: i.dataInscricao || new Date().toISOString().slice(0, 10),
-                        status: 'aberto' as NfpStatusDebito,
-                    });
-                }
-            }
-
-            // Populate certidoes — map SERPRO response (which uses esfera 'fgts'/'trabalhista')
-            // to our CERTIDOES_BASE (which uses esfera 'federal' for all federal-scope CNDs)
-            const certidoes: NfpCertidao[] = CERTIDOES_BASE.map(c => {
-                const match = resp.certidoes?.certidoes?.find((rc: any) => {
-                    const esf = String(rc.esfera || '').toLowerCase();
-                    if (c.esfera === 'federal' && c.tipo.includes('CND Federal') && esf === 'federal') return true;
-                    if (c.esfera === 'estadual' && esf === 'estadual') return true;
-                    if (c.tipo.includes('CNDT') && esf === 'trabalhista') return true;
-                    if (c.tipo.includes('FGTS') && esf === 'fgts') return true;
-                    return false;
-                });
-                return {
-                    id: uid(), empresaId: activeEmpresaId, esfera: c.esfera,
-                    orgao: match?.orgao || c.orgao, tipo: match?.tipo || c.tipo,
-                    status: (match?.status as NfpStatusCertidao) || 'nao_consultada',
-                    dataValidade: match?.validade || undefined,
-                    dataEmissao: match?.dataEmissao || undefined,
-                    numeroCertidao: match?.numero || undefined,
-                    motivoImpedimento: match?.motivo || undefined,
-                    pdfBase64: match?.pdfBase64 || undefined,
-                    fonte: (match?.fonte || undefined) as any,
-                    portalUrl: match?.portalUrl || undefined,
-                    dataConsulta: match ? new Date().toISOString().slice(0, 10) : undefined,
-                };
-            });
-
-            // Populate obrigacoes
-            const obrigacoes: NfpObrigacao[] = OBRIGACOES_BASE.map(o => {
-                const match = resp.obrigacoes?.obrigacoes?.find((ro: any) =>
-                    (ro.sigla || '').toUpperCase() === o.sigla.toUpperCase()
-                );
-                return {
-                    id: uid(), empresaId: activeEmpresaId,
-                    nome: o.nome, sigla: o.sigla, esfera: o.esfera, periodicidade: o.periodicidade,
-                    status: (match?.status as NfpStatusObrigacao) || 'nao_verificada',
-                    competencia: match?.competencia || undefined,
-                };
-            });
-
-            // Populate parcelamentos
-            const parcelamentos: NfpParcelamento[] = [];
-            if (resp.parcelamentos?.ok && resp.parcelamentos.parcelamentos) {
-                for (const p of resp.parcelamentos.parcelamentos) {
-                    parcelamentos.push({
-                        id: uid(), empresaId: activeEmpresaId, esfera: 'federal' as NfpEsfera,
-                        programa: p.programa || '', valorTotal: Number(p.valorTotal || 0),
-                        parcelas: Number(p.parcelas || 0), parcelasPagas: Number(p.parcelasPagas || 0),
-                        valorParcela: p.parcelas > 0 ? Math.round((p.valorTotal / p.parcelas) * 100) / 100 : 0,
-                        status: (p.status || 'ativo') as any, dataInicio: p.dataInicio || new Date().toISOString().slice(0, 10),
-                    });
-                }
-            }
-
-            const updated: NfpAnaliseEmpresa = {
-                ...base,
-                dataAnalise: new Date().toISOString(),
+            const resp = await nfpService.analisarEmpresaCompleta(
+                activeCnpj,
+                taxProfile?.regime || prospectRegime || 'lucro_presumido',
+                activeUf || undefined,
+            );
+            const { mapearRespostaSerpro } = await import('../../services/nfpAnaliseSerpro');
+            const { updated, isMock } = mapearRespostaSerpro({
+                resp,
+                baseAnalise: analise || createEmptyAnalise(),
+                activeEmpresaId,
                 analisadoPor: currentUser?.name || '',
-                fonte: fonteAnalise,
-                debitos: debitos.length > 0 ? debitos : base.debitos,
-                certidoes: resp.certidoes?.ok ? certidoes : base.certidoes,
-                obrigacoes: resp.obrigacoes?.ok ? obrigacoes : base.obrigacoes,
-                parcelamentos: parcelamentos.length > 0 ? parcelamentos : base.parcelamentos,
-            };
-
-            const isMock = resp.situacaoFiscal?.fonte === 'mock' || resp.certidoes?.fonte === 'mock';
-            if (isMock) {
-                (updated as any)._serproMock = true;
-            }
-
+                fonteAnalise,
+                certidoesBase: CERTIDOES_BASE,
+                obrigacoesBase: OBRIGACOES_BASE,
+                uid,
+            });
             setAnalise(updated);
             if (!prospectMode) {
                 await saveAnalise(updated);
@@ -546,7 +466,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         } finally {
             setAnaliseRealLoading(false);
         }
-    }, [activeCnpj, activeEmpresaId, analise, createEmptyAnalise, currentUser, fonteAnalise, prospectMode, saveAnalise, onShowToast]);
+    }, [activeCnpj, activeEmpresaId, activeUf, analise, createEmptyAnalise, currentUser, fonteAnalise, prospectMode, prospectRegime, saveAnalise, taxProfile, onShowToast]);
 
     const renderAnalise = () => (
         <AnaliseTab
