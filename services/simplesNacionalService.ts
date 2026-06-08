@@ -117,42 +117,28 @@ const saveLocalEmpresas = (e: SimplesNacionalEmpresa[]) =>
 // ─── EMPRESAS ─────────────────────────────────────────────────────────────────
 export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEmpresa[]> => {
     if (!user) return [];
-    const isMaster = user.role === 'admin' || user.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
 
-    // ── Cloud-first ──
+    let cloudEmpresas: SimplesNacionalEmpresa[] = [];
+
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
-            const uid = auth.currentUser.uid;
-            // Admin: lista tudo. Colaborador: lista tudo (rules permitem) e filtra
-            // no cliente por createdBy OU pelo vinculo em `carteiras` -- senao
-            // colaborador so via empresa que ele mesmo criou, mesmo estando
-            // atribuido a outras via carteira (bug reportado 06/2026).
             const snaps = await fetchAllDocs('simples_empresas', []);
-            let cloudEmpresas = snaps
+            cloudEmpresas = snaps
                 .filter(d => !(d.data() as any)._merged_into)
                 .map(d => ({ id: d.id, ...d.data() } as SimplesNacionalEmpresa));
-
-            // VISIBILIDADE ABERTA: todos veem todas. Decisao temporaria
-            // ate a Carteira de Clientes ficar atribuida (#104).
-            // Para restaurar o filtro: voltar ao bloco
-            //   if (!isMaster) { ...filter por createdBy || carteira... }
-
-            // Atualiza cache local
-            const local = getLocalEmpresas();
-            const merged = [...cloudEmpresas];
-            local.forEach(l => { if (!merged.find(c => c.id === l.id)) merged.push(l); });
-            saveLocalEmpresas(merged);
-
-            return cloudEmpresas;
+            console.info('[Simples] cloud retornou', cloudEmpresas.length, 'empresas');
         } catch (err: any) {
-            if (err.code !== 'permission-denied' && err.code !== 'failed-precondition')
-                console.debug('getEmpresas (Simples) cloud error:', err.message);
+            // Visivel pro admin DevTools -- antes era console.debug invisivel.
+            console.error('[Simples] erro buscando empresas no Firestore:', err?.code, err?.message);
         }
     }
 
-    // ── Local fallback ──
+    // SEMPRE faz merge cloud + local pra nunca sumir empresa do cache.
     const local = getLocalEmpresas();
-    return isMaster ? local : local.filter(e => e.createdBy === user.id || !e.createdBy);
+    const merged = [...cloudEmpresas];
+    local.forEach(l => { if (!merged.find(c => c.id === l.id)) merged.push(l); });
+    saveLocalEmpresas(merged);
+    return merged;
 };
 
 export const saveEmpresa = async (

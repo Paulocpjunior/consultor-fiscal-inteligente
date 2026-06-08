@@ -36,54 +36,27 @@ const saveLocalEmpresas = (empresas: LucroPresumidoEmpresa[]) => {
 
 export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresumidoEmpresa[]> => {
     if (!currentUser) return [];
-    
-    const isMasterAdmin = currentUser.role === 'admin' || currentUser.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
 
-    // 1. Tenta buscar da Nuvem (Prioridade)
+    let cloudEmpresas: LucroPresumidoEmpresa[] = [];
+
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
-            const uid = auth.currentUser.uid;
-
-            try {
-                // Admin/Junior: busca TUDO. Colaborador: busca TUDO (rules
-                // permitem) e filtra no cliente por createdBy OU vinculo em
-                // carteiras. Antes filtrava so por createdBy -- colaborador nao
-                // via empresa atribuida via carteira quando outro colega criava
-                // (bug reportado 06/2026, mesma raiz do Simples).
-                const snaps = await fetchAllDocs('lucro_empresas', []);
-                let cloudEmpresas = snaps
-                    .filter(doc => !(doc.data() as any)._merged_into)
-                    .map(doc => ({ id: doc.id, ...doc.data() } as LucroPresumidoEmpresa));
-
-                // VISIBILIDADE ABERTA: todos veem todas. Temporaria ate carteira.
-                
-                // Se conseguiu buscar da nuvem, atualiza o cache local (apenas para modo offline)
-                if (cloudEmpresas.length > 0) {
-                    const local = getLocalEmpresas();
-                    const merged = [...cloudEmpresas];
-                    local.forEach(l => {
-                        if (!merged.find(c => c.id === l.id)) merged.push(l);
-                    });
-                    saveLocalEmpresas(merged);
-                    return cloudEmpresas;
-                }
-            } catch (err: any) {
-                if (err.code !== 'permission-denied' && err.code !== 'failed-precondition') {
-                    console.debug("Firebase fetch warning (Lucro):", err.message);
-                }
-            }
-        } catch (e: any) {
-            // Silently ignore main query errors
+            const snaps = await fetchAllDocs('lucro_empresas', []);
+            cloudEmpresas = snaps
+                .filter(doc => !(doc.data() as any)._merged_into)
+                .map(doc => ({ id: doc.id, ...doc.data() } as LucroPresumidoEmpresa));
+            console.info('[Lucro] cloud retornou', cloudEmpresas.length, 'empresas');
+        } catch (err: any) {
+            console.error('[Lucro] erro buscando empresas no Firestore:', err?.code, err?.message);
         }
     }
 
-    // 2. Fallback Local (Se nuvem falhar ou não configurada)
+    // SEMPRE merge cloud + local. Sem filtro de createdBy/carteira -- visibilidade aberta.
     const localEmpresas = getLocalEmpresas();
-
-    if (!isMasterAdmin) {
-        return localEmpresas.filter(e => e.createdBy === currentUser.id || !e.createdBy);
-    }
-    return localEmpresas;
+    const merged = [...cloudEmpresas];
+    localEmpresas.forEach(l => { if (!merged.find(c => c.id === l.id)) merged.push(l); });
+    saveLocalEmpresas(merged);
+    return merged;
 };
 
 export const saveEmpresa = async (empresa: any, userId: string): Promise<LucroPresumidoEmpresa> => {
