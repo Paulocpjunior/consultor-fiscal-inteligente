@@ -484,7 +484,11 @@ export async function listDocumentos(
     const uid = auth?.currentUser?.uid;
 
     const constraints: QueryConstraint[] = [];
-    if (!isMaster && uid) constraints.push(where('createdBy', '==', uid));
+    // Admin: busca tudo (com filtro opcional de empresa). Colaborador: busca
+    // tudo (rules permitem) e filtra no cliente por createdBy OU empresa em
+    // carteira. Antes filtrava so por createdBy -- colaborador nao via doc
+    // de empresa atribuida via carteira quando outro colega importou (mesmo
+    // padrao corrigido no #120 pra empresas).
     if (filters.empresaId) constraints.push(where('empresaId', '==', filters.empresaId));
     // NÃO usamos orderBy aqui: Firestore exclui docs que não têm o campo.
     // Ordenação fica em memória com fallbacks (ver abaixo).
@@ -496,6 +500,12 @@ export async function listDocumentos(
         // documentos_fiscais permite limit <=5000 nas rules; usa pagina maior.
         const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000 });
         docs = snaps.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
+        if (!isMaster && uid) {
+            const carteiraIds = new Set(await getEmpresasDoColaborador(uid));
+            docs = docs.filter(d =>
+                (d as any).createdBy === uid || (d.empresaId && carteiraIds.has(d.empresaId))
+            );
+        }
     } catch (err: any) {
         console.warn('listDocumentos:', err?.message);
         return [];

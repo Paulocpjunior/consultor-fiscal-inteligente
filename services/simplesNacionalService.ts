@@ -261,9 +261,19 @@ export const getAllNotas = async (
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
             const uid = auth.currentUser.uid;
-            const snaps = await fetchAllDocs('simples_notas', isMaster ? [] : [where('createdBy', '==', uid)]);
+            // Admin: busca tudo. Colaborador: busca tudo (rules permitem) e
+            // filtra no cliente. Ve nota se foi criada por ele OU se eh de
+            // empresa atribuida a ele via carteira (mesmo bug das empresas
+            // que arrumamos no PR #120 -- antes filtrava so por createdBy).
+            const snaps = await fetchAllDocs('simples_notas', []);
             cloudNotas = snaps.map(d =>
                 ({ id: d.id, ...d.data() } as SimplesNacionalNota));
+            if (!isMaster) {
+                const carteiraIds = new Set(await getEmpresasDoColaborador(uid));
+                cloudNotas = cloudNotas.filter(n =>
+                    (n as any).createdBy === uid || carteiraIds.has(n.empresaId)
+                );
+            }
         } catch { /* silent */ }
     }
 
