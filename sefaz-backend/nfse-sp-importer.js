@@ -10,6 +10,7 @@
  */
 
 import { DOMParser } from '@xmldom/xmldom';
+import { validarXmlSeguro } from './xml-seguranca.js';
 
 const text = (parent, tag) => parent.getElementsByTagName(tag)[0]?.textContent?.trim() || '';
 const num = (parent, tag) => {
@@ -18,6 +19,7 @@ const num = (parent, tag) => {
 };
 
 export function parseNfseSpXml(xmlString) {
+    validarXmlSeguro(xmlString);
     const doc = new DOMParser({
         errorHandler: { warning: () => {}, error: () => {}, fatalError: (e) => { throw e; } },
     }).parseFromString(xmlString, 'text/xml');

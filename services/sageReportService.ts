@@ -175,7 +175,7 @@ function parseSituacaoCell(cell: any): { codigo: string; raw: string } {
     const raw = String(cell).trim();
     // Formatos comuns: "00 - Regular", "02-Cancelada", "00", "Regular"
     const matchCod = raw.match(/^\s*(\d{1,2})/);
-    const codigo = matchCod ? matchCod[1].padStart(2, '0') : '';
+    const codigo = matchCod?.[1] ? matchCod[1].padStart(2, '0') : '';
     return { codigo, raw };
 }
 
@@ -275,7 +275,7 @@ export async function parseSageXlsx(file: File): Promise<SageNota[]> {
 function getText(el: Element | Document, tag: string): string {
     const found = (el as Element).getElementsByTagName(tag);
     if (found.length === 0) return '';
-    return found[0].textContent?.trim() || '';
+    return found[0]?.textContent?.trim() || '';
 }
 
 function parseSingleXml(xmlText: string, fileName: string): SageNota | null {
@@ -402,7 +402,10 @@ function detectarGaps(notas: SageNota[], opts: DetectarGapsOptions = {}): GapNum
 
     const gaps: GapNumeracao[] = [];
     grupos.forEach((arr, key) => {
-        const [sentido, cnpj, serie] = key.split('::');
+        const parts = key.split('::');
+        const sentido = parts[0] || '';
+        const cnpj = parts[1] || '';
+        const serie = parts[2] || '';
         const nums = Array.from(new Set(arr.map((n) => n.numero!).filter((n) => n > 0))).sort((a, b) => a - b);
         if (nums.length < 2) return;
 
@@ -414,6 +417,7 @@ function detectarGaps(notas: SageNota[], opts: DetectarGapsOptions = {}): GapNum
         for (let i = 1; i < nums.length; i++) {
             const prev = nums[i - 1];
             const cur = nums[i];
+            if (prev === undefined || cur === undefined) continue;
             const tamanho = cur - prev - 1;
             if (tamanho <= 0) continue;
 
@@ -423,7 +427,7 @@ function detectarGaps(notas: SageNota[], opts: DetectarGapsOptions = {}): GapNum
             gaps.push({
                 sentido: sentido as DocSentido,
                 cnpj: cnpj === 'ALL' ? '' : cnpj,
-                razaoSocial: arr[0].razaoSocial || '',
+                razaoSocial: arr[0]?.razaoSocial || '',
                 serie,
                 de: prev + 1,
                 ate: cur - 1,

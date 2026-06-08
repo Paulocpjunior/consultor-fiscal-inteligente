@@ -5,6 +5,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AnaliseRetencoesNfseSP from './AnaliseRetencoesNfseSP';
+import { useConfirm } from './dialog/DialogProvider';
 import {
   parseExtratoConciliacao,
   classificar,
@@ -40,7 +41,6 @@ import {
 } from '../services/notasOcultasService';
 import {
   listarInvoicesManuais,
-  adicionarInvoice,
   removerInvoice,
   atualizarCategoriaInvoice,
   normalizarPeriodo,
@@ -49,16 +49,19 @@ import {
 } from '../services/invoicesManuaisService';
 import {
   listarCustom,
-  criarCategoria,
-  renomearCategoria,
-  removerCategoria,
-  contarFornecedoresNaCategoria,
   type CategoriaCustom,
 } from '../services/categoriasCreditoService';
+import ModalInvoiceManual from './AnaliseCredito/ModalInvoiceManual';
+import ModalGerenciarCategorias from './AnaliseCredito/ModalGerenciarCategorias';
 import {
   carregarCreditConfig,
   salvarCreditConfig,
 } from '../services/creditConfigService';
+import { mesclarInvoicesEFiltrarOcultos } from '../services/analiseCreditoMerge';
+import { gerarEfiscalPdf, gerarExtratoPdf, baixarBlob } from '../services/analiseCreditoPdf';
+import { useFornecedoresNotasOcultos } from '../hooks/useFornecedoresNotasOcultos';
+import { useCategoriasCredito } from '../hooks/useCategoriasCredito';
+import { useOverridesInvoices } from '../hooks/useOverridesInvoices';
 import type { EmpresaPerfilOption } from '../services/xmlFiscalService';
 import type { User } from '../types';
 
@@ -70,350 +73,6 @@ const brl = (n: number) =>
   n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 
-// ════════════════════════════════════════════════════════════════════
-// Modal: Cadastrar invoice manual (E-Fiscal)
-// ════════════════════════════════════════════════════════════════════
-interface ModalInvoiceManualProps {
-  empresaId: string;
-  periodoNormalizado: string;
-  onFechar: () => void;
-  onSalvo: () => void;
-}
-
-function ModalInvoiceManual({
-  empresaId, periodoNormalizado, onFechar, onSalvo,
-}: ModalInvoiceManualProps): React.ReactElement {
-  const [emissao, setEmissao] = useState('');
-  const [numero, setNumero] = useState('');
-  const [serie, setSerie] = useState('');
-  const [cnpjCpf, setCnpjCpf] = useState('');
-  const [razaoSocial, setRazaoSocial] = useState('');
-  const [valorNf, setValorNf] = useState('');
-  const [baseCalculo, setBaseCalculo] = useState('');
-  const [aliquota, setAliquota] = useState('');
-  const [valorIss, setValorIss] = useState('');
-  const [issRetido, setIssRetido] = useState('');
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErroLocal] = useState<string | null>(null);
-
-  // "1.234,56" -> 1234.56 (vazio -> 0)
-  const parseBR = (s: string): number => {
-    if (!s) return 0;
-    const limpo = s.trim().replace(/\./g, '').replace(',', '.');
-    const n = parseFloat(limpo);
-    return isNaN(n) ? 0 : n;
-  };
-
-  const podeSalvar = cnpjCpf.trim() && razaoSocial.trim() && baseCalculo.trim();
-
-  const salvar = async () => {
-    setErroLocal(null);
-    if (!podeSalvar) {
-      setErroLocal('CNPJ, Razão Social e Base de Cálculo são obrigatórios.');
-      return;
-    }
-    setSalvando(true);
-    const r = await adicionarInvoice({
-      empresaId,
-      periodo: periodoNormalizado,
-      emissao: emissao.trim(),
-      numero: numero.trim(),
-      serie: serie.trim(),
-      cnpjCpf: cnpjCpf.trim(),
-      razaoSocial: razaoSocial.trim(),
-      valorNf: parseBR(valorNf) || parseBR(baseCalculo),
-      baseCalculo: parseBR(baseCalculo),
-      aliquota: parseBR(aliquota),
-      valorIss: parseBR(valorIss),
-      issRetido: parseBR(issRetido),
-    });
-    setSalvando(false);
-    if (r.ok) {
-      onSalvo();
-      onFechar();
-    } else {
-      setErroLocal('Erro ao salvar: ' + (r.error || 'desconhecido'));
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onFechar}>
-      <div
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-800 dark:text-gray-100">Adicionar invoice manual</h3>
-          <button onClick={onFechar} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
-        </div>
-
-        <div className="px-5 py-4 space-y-3">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Período: <strong>{periodoNormalizado}</strong>. A invoice manual entra no cálculo do crédito como uma NF normal.
-          </p>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className="text-xs text-gray-600 dark:text-gray-300">Emissão</label>
-              <input value={emissao} onChange={e => setEmissao(e.target.value)} placeholder="dd/mm/aaaa"
-                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-600 dark:text-gray-300">Número</label>
-              <input value={numero} onChange={e => setNumero(e.target.value)}
-                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-600 dark:text-gray-300">Série</label>
-              <input value={serie} onChange={e => setSerie(e.target.value)}
-                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className="text-xs text-gray-600 dark:text-gray-300">CNPJ/CPF *</label>
-              <input value={cnpjCpf} onChange={e => setCnpjCpf(e.target.value)} placeholder="00.000.000/0000-00"
-                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 font-mono bg-white dark:bg-gray-700" />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-gray-600 dark:text-gray-300">Razão Social *</label>
-              <input value={razaoSocial} onChange={e => setRazaoSocial(e.target.value)}
-                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs text-gray-600 dark:text-gray-300">Valor NF (R$)</label>
-              <input value={valorNf} onChange={e => setValorNf(e.target.value)} placeholder="0,00"
-                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-right bg-white dark:bg-gray-700" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-600 dark:text-gray-300">Base de Cálculo (R$) *</label>
-              <input value={baseCalculo} onChange={e => setBaseCalculo(e.target.value)} placeholder="0,00"
-                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-right bg-white dark:bg-gray-700 font-semibold" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className="text-xs text-gray-600 dark:text-gray-300">Alíquota (%)</label>
-              <input value={aliquota} onChange={e => setAliquota(e.target.value)} placeholder="0,00"
-                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-right bg-white dark:bg-gray-700" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-600 dark:text-gray-300">Valor ISS (R$)</label>
-              <input value={valorIss} onChange={e => setValorIss(e.target.value)} placeholder="0,00"
-                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-right bg-white dark:bg-gray-700" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-600 dark:text-gray-300">ISS Retido (R$)</label>
-              <input value={issRetido} onChange={e => setIssRetido(e.target.value)} placeholder="0,00"
-                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-right bg-white dark:bg-gray-700" />
-            </div>
-          </div>
-
-          {erro && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded p-2 text-xs text-red-700 dark:text-red-300">
-              {erro}
-            </div>
-          )}
-
-          <p className="text-[11px] text-gray-400">
-            * obrigatorio. Use vírgula como separador decimal (ex: 1.234,56).
-          </p>
-        </div>
-
-        <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
-          <button onClick={onFechar}
-            className="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
-            Cancelar
-          </button>
-          <button onClick={salvar} disabled={!podeSalvar || salvando}
-            className="px-3 py-1.5 text-sm rounded bg-amber-600 hover:bg-amber-700 text-white font-semibold disabled:opacity-50">
-            {salvando ? 'Salvando...' : 'Adicionar'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-// ════════════════════════════════════════════════════════════════════
-// Modal: Gerenciar categorias customizadas
-// ════════════════════════════════════════════════════════════════════
-interface ModalGerenciarCategoriasProps {
-  onFechar: () => void;
-  onMudou: () => void;
-}
-
-function ModalGerenciarCategorias({ onFechar, onMudou }: ModalGerenciarCategoriasProps): React.ReactElement {
-  const [custom, setCustom] = useState<CategoriaCustom[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [nova, setNova] = useState('');
-  const [criando, setCriando] = useState(false);
-  const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [editandoNome, setEditandoNome] = useState('');
-  const [usados, setUsados] = useState<Record<string, number>>({});  // id -> contagem
-  const [erro, setErroLocal] = useState<string | null>(null);
-
-  const recarregar = useCallback(async () => {
-    setCarregando(true);
-    const list = await listarCustom();
-    setCustom(list);
-    // calcula uso pra cada custom (em paralelo)
-    const counts: Record<string, number> = {};
-    await Promise.all(list.map(async cat => {
-      counts[cat.id] = await contarFornecedoresNaCategoria(cat.nome);
-    }));
-    setUsados(counts);
-    setCarregando(false);
-  }, []);
-
-  useEffect(() => { recarregar(); }, [recarregar]);
-
-  const adicionar = async () => {
-    setErroLocal(null);
-    if (!nova.trim()) return;
-    setCriando(true);
-    const r = await criarCategoria(nova);
-    setCriando(false);
-    if (r.ok) {
-      setNova('');
-      if (r.jaExistia) setErroLocal(`Categoria "${r.nome}" ja existia — reutilizada.`);
-      await recarregar();
-      onMudou();
-    } else {
-      setErroLocal(r.error || 'Erro ao criar');
-    }
-  };
-
-  const salvarEdicao = async (id: string) => {
-    setErroLocal(null);
-    if (!editandoNome.trim()) { setEditandoId(null); return; }
-    const r = await renomearCategoria(id, editandoNome);
-    if (r.ok) {
-      setEditandoId(null);
-      await recarregar();
-      onMudou();
-    } else {
-      setErroLocal(r.error || 'Erro ao renomear');
-    }
-  };
-
-  const apagar = async (cat: CategoriaCustom) => {
-    setErroLocal(null);
-    if (!confirm(`Apagar categoria "${cat.nome}"?`)) return;
-    const r = await removerCategoria(cat.id, cat.nome);
-    if (r.ok) {
-      await recarregar();
-      onMudou();
-    } else if (r.bloqueado) {
-      setErroLocal(`${r.usados} fornecedor(es) ainda usam essa categoria. Reclassifique antes de apagar.`);
-    } else {
-      setErroLocal(r.error || 'Erro ao apagar');
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onFechar}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-800 dark:text-gray-100">Gerenciar categorias</h3>
-          <button onClick={onFechar} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
-        </div>
-
-        <div className="px-5 py-4 space-y-4">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            As 11 categorias padrao (MEDICINA, TI, etc.) sao imutaveis. Voce pode adicionar, renomear e apagar suas proprias categorias.
-          </p>
-
-          {/* Adicionar nova */}
-          <div className="flex gap-2">
-            <input
-              value={nova}
-              onChange={e => setNova(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') adicionar(); }}
-              placeholder="Ex: MARKETING, TREINAMENTO..."
-              className="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700"
-            />
-            <button
-              onClick={adicionar}
-              disabled={criando || !nova.trim()}
-              className="px-3 py-1.5 text-sm rounded bg-teal-600 hover:bg-teal-700 text-white font-semibold disabled:opacity-50"
-            >
-              {criando ? 'Adicionando...' : '+ Adicionar'}
-            </button>
-          </div>
-
-          {erro && (
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded p-2 text-xs text-amber-800 dark:text-amber-200">
-              {erro}
-            </div>
-          )}
-
-          {/* Lista das custom */}
-          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-            <div className="px-3 py-2 bg-gray-50 dark:bg-gray-900/50 text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">
-              Categorias customizadas {custom.length > 0 && `(${custom.length})`}
-            </div>
-            {carregando ? (
-              <p className="p-3 text-xs text-gray-400">Carregando...</p>
-            ) : custom.length === 0 ? (
-              <p className="p-3 text-xs text-gray-400">Nenhuma categoria customizada ainda. Adicione uma acima.</p>
-            ) : (
-              <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                {custom.map(cat => (
-                  <li key={cat.id} className="px-3 py-2 flex items-center gap-2 text-sm">
-                    {editandoId === cat.id ? (
-                      <>
-                        <input
-                          value={editandoNome}
-                          onChange={e => setEditandoNome(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') salvarEdicao(cat.id); }}
-                          className="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700"
-                          autoFocus
-                        />
-                        <button onClick={() => salvarEdicao(cat.id)} className="text-teal-600 hover:text-teal-800 text-xs font-semibold">salvar</button>
-                        <button onClick={() => setEditandoId(null)} className="text-gray-400 hover:text-gray-600 text-xs">cancelar</button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="flex-1 text-gray-800 dark:text-gray-200 font-medium">{cat.nome}</span>
-                        <span className="text-[11px] text-gray-400">
-                          {usados[cat.id] > 0 ? `${usados[cat.id]} usado(s)` : 'nao usado'}
-                        </span>
-                        <button
-                          onClick={() => { setEditandoId(cat.id); setEditandoNome(cat.nome); }}
-                          className="text-blue-600 hover:text-blue-800 text-xs"
-                          title="Renomear"
-                        >✏️</button>
-                        <button
-                          onClick={() => apagar(cat)}
-                          disabled={usados[cat.id] > 0}
-                          className="text-red-600 hover:text-red-800 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
-                          title={usados[cat.id] > 0 ? `${usados[cat.id]} fornecedor(es) usam esta categoria` : 'Apagar'}
-                        >🗑️</button>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-
-        <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end">
-          <button onClick={onFechar} className="px-3 py-1.5 text-sm rounded bg-gray-600 hover:bg-gray-700 text-white font-semibold">
-            Fechar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 const BadgeConfianca: React.FC<{ c: LancamentoExtrato['confianca'] }> = ({ c }) => {
   const cfg: Record<LancamentoExtrato['confianca'], { bg: string; label: string }> = {
@@ -448,6 +107,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
   currentUser = null,
   empresas = [],
 }) => {
+  const confirm = useConfirm();
   const [arquivo, setArquivo]       = useState<File | null>(null);
   const [lancamentos, setLancamentos] = useState<LancamentoExtrato[]>([]);
   const [erro, setErro]             = useState<string | null>(null);
@@ -467,166 +127,52 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     [empresas, empresaSelId],
   );
 
-  // Regras manuais CNPJ->categoria da empresa selecionada (tabela Firestore).
-  // Sobrepoem a classificacao automatica. Recarregadas quando a empresa muda.
-  const [overrides, setOverrides] = useState<Map<string, TipoDespesaCredito>>(new Map());
-  const [overridesVersao, setOverridesVersao] = useState(0);
+  // Periodo normalizado MM/AAAA do PDF efiscal carregado
+  // -- precisa antes do hook abaixo que depende dele.
 
-  useEffect(() => {
-    let ativo = true;
-    if (!empresaSel?.id) { setOverrides(new Map()); return; }
-    carregarRegras(empresaSel.id).then(mapa => {
-      if (ativo) setOverrides(mapa);
-    });
-    return () => { ativo = false; };
-  }, [empresaSel?.id, overridesVersao]);
-
-  // Invoices lancadas manualmente (Firestore: invoices_manuais).
-  // Filtradas por empresa + periodo normalizado (MM/AAAA) do PDF.
-  const [invoicesManuais, setInvoicesManuais] = useState<InvoiceManual[]>([]);
-  const [invoicesVersao, setInvoicesVersao] = useState(0);
+  // Overrides CNPJ->categoria + invoices manuais (Firestore)
+  // consolidados num hook que recarrega quando empresa/periodo muda.
   const [modalInvoiceAberto, setModalInvoiceAberto] = useState(false);
 
-  // Categorias customizadas (Firestore). 11 fixas + estas.
-  const [categoriasCustom, setCategoriasCustom] = useState<CategoriaCustom[]>([]);
-  const [categoriasVersao, setCategoriasVersao] = useState(0);
-  const [modalCategoriasAberto, setModalCategoriasAberto] = useState(false);
-
-  useEffect(() => {
-    let ativo = true;
-    listarCustom().then(list => {
-      if (ativo) setCategoriasCustom(list);
-    });
-    return () => { ativo = false; };
-  }, [categoriasVersao]);
-
-  // Categorias marcadas como nao-creditaveis para a empresa selecionada.
-  // Items nessas categorias tem base 0 (no agrupamento e no baseTotal).
-  // Persistido em empresa_credito_config/{empresaId}.
-  const [categoriasNaoCreditaveis, setCategoriasNaoCreditaveis] = useState<Set<string>>(new Set());
-
-  // ── Exclusao local de fornecedores (some so nessa sessao) ───────────────
-  // Versao 1 (local, nao persistido): o usuario clica lixeira -> modal ->
-  // confirma -> CNPJ vai pra Set -> fornecedor some da listagem E do calculo
-  // de credito. Ao recarregar o PDF, fornecedor volta a aparecer.
-  //
-  // Evolucao possivel (versao 2): persistir como regra na empresa via
-  // collection `fornecedores_ocultos` no Firestore. Ai a regra dura entre
-  // sessoes. Nao implementado nesta versao.
-  const [fornecedoresOcultos, setFornecedoresOcultos] = useState<Set<string>>(new Set());
-  const [confirmandoExclusao, setConfirmandoExclusao] = useState<
-    { cnpj: string; razaoSocial: string; qtdNotas: number; somaValorNf: number } | null
-  >(null);
   // Normaliza CNPJ (so digitos) para chave consistente no Set
   const cnpjKey = (c: string) => (c || '').replace(/\D+/g, '');
 
-  // ── Exclusao PERSISTIDA (regra "sempre nessa empresa") ──────────────────
-  // Carregado do Firestore (collection `fornecedores_ocultos`) quando a
-  // empresa muda. Modal oferece DOIS botoes:
-  //   - "So desta vez" -> vai pro Set local (fornecedoresOcultos acima)
-  //   - "Sempre nessa empresa" -> grava no Firestore E aparece aqui
-  // O calculo de credito (useMemo abaixo) usa a UNIAO dos dois Sets.
-  const [fornecedoresOcultosPersistidos, setFornecedoresOcultosPersistidos] = useState<Set<string>>(new Set());
-  const [salvandoExclusaoPersistida, setSalvandoExclusaoPersistida] = useState(false);
+  // Fornecedores + Notas ocultos -- estado consolidado num hook.
+  const {
+    fornecedoresOcultos, setFornecedoresOcultos,
+    fornecedoresOcultosPersistidos, setFornecedoresOcultosPersistidos,
+    fornecedoresOcultosEfetivos,
+    salvandoExclusaoPersistida, setSalvandoExclusaoPersistida,
+    confirmandoExclusao, setConfirmandoExclusao,
+    notasOcultas, setNotasOcultas,
+    notasOcultasPersistidas, setNotasOcultasPersistidas,
+    notasOcultasEfetivas,
+    confirmandoExclusaoNf, setConfirmandoExclusaoNf,
+    salvandoExclusaoNfPersistida, setSalvandoExclusaoNfPersistida,
+  } = useFornecedoresNotasOcultos(empresaSel?.id);
 
-  useEffect(() => {
-    if (!empresaSel?.id) {
-      setFornecedoresOcultosPersistidos(new Set());
-      return;
-    }
-    let alive = true;
-    listarOcultos(empresaSel.id)
-      .then(set => { if (alive) setFornecedoresOcultosPersistidos(set); })
-      .catch(e => console.error('[AnaliseCredito] listarOcultos:', e));
-    return () => { alive = false; };
-  }, [empresaSel?.id]);
-
-  // Uniao Local + Persistido — eh isso que o calculo de credito usa.
-  const fornecedoresOcultosEfetivos = useMemo(() => {
-    const s = new Set<string>(fornecedoresOcultos);
-    for (const k of fornecedoresOcultosPersistidos) s.add(k);
-    return s;
-  }, [fornecedoresOcultos, fornecedoresOcultosPersistidos]);
-
-  // ── Exclusao por NF INDIVIDUAL (granularidade fina) ─────────────────────
-  // Diferente da exclusao por FORNECEDOR (acima, que zera TODAS as NFs do
-  // CNPJ): aqui o usuario clica lixeira numa NF especifica dentro da tabela
-  // aninhada de Categoria. Chave: nfChave(cnpj, numero, serie).
-  //
-  // Caso de uso: prestador legitimo, mas UMA NF nao deve entrar (cancelada,
-  // duplicada, reembolsada). Adicionar nova NF do mesmo CNPJ via
-  // "Adicionar invoice manual" funciona — a nova tem chave diferente.
-  const [notasOcultas, setNotasOcultas] = useState<Set<string>>(new Set());
-  const [notasOcultasPersistidas, setNotasOcultasPersistidas] = useState<Set<string>>(new Set());
-  const [confirmandoExclusaoNf, setConfirmandoExclusaoNf] = useState<
-    { cnpj: string; razaoSocial: string; numero: string; serie: string; emissao: string; valorNf: number } | null
-  >(null);
-  const [salvandoExclusaoNfPersistida, setSalvandoExclusaoNfPersistida] = useState(false);
-
-  useEffect(() => {
-    if (!empresaSel?.id) {
-      setNotasOcultasPersistidas(new Set());
-      return;
-    }
-    let alive = true;
-    listarNotasOcultas(empresaSel.id)
-      .then(s => { if (alive) setNotasOcultasPersistidas(s); })
-      .catch(e => console.error('[AnaliseCredito] listarNotasOcultas:', e));
-    return () => { alive = false; };
-  }, [empresaSel?.id]);
-
-  const notasOcultasEfetivas = useMemo(() => {
-    const s = new Set<string>(notasOcultas);
-    for (const k of notasOcultasPersistidas) s.add(k);
-    return s;
-  }, [notasOcultas, notasOcultasPersistidas]);
-  const [salvandoCategoriaCredito, setSalvandoCategoriaCredito] = useState<string | null>(null);
-
-  useEffect(() => {
-    let ativo = true;
-    if (!empresaSel?.id) { setCategoriasNaoCreditaveis(new Set()); return; }
-    carregarCreditConfig(empresaSel.id).then(cfg => {
-      if (ativo) setCategoriasNaoCreditaveis(new Set(cfg.categoriasNaoCreditaveis));
-    });
-    return () => { ativo = false; };
-  }, [empresaSel?.id]);
-
-  const toggleCategoriaCredito = useCallback(async (categoria: string) => {
-    if (!empresaSel?.id) return;
-    if (categoria === 'SEM_CATEGORIA') return;  // sempre nao-creditavel, nao da pra mexer
-    const novo = new Set(categoriasNaoCreditaveis);
-    if (novo.has(categoria)) novo.delete(categoria);
-    else novo.add(categoria);
-    setCategoriasNaoCreditaveis(novo);  // otimista
-    setSalvandoCategoriaCredito(categoria);
-    const r = await salvarCreditConfig(empresaSel.id, Array.from(novo));
-    setSalvandoCategoriaCredito(null);
-    if (!r.ok) {
-      // rollback em caso de falha
-      setCategoriasNaoCreditaveis(categoriasNaoCreditaveis);
-      setErro('Erro ao salvar config de crédito: ' + (r.error || 'desconhecido'));
-    }
-  }, [empresaSel?.id, categoriasNaoCreditaveis]);
-
-  // Todas as opcoes de categoria do dropdown (11 fixas + custom, ordenadas A-Z).
-  const todasCategorias = useMemo(() => {
-    const customNomes = categoriasCustom.map(c => c.nome);
-    return [...CATEGORIAS_CREDITO, ...customNomes].sort((a, b) => a.localeCompare(b));
-  }, [categoriasCustom]);
+  // Categorias custom + nao-creditaveis + helpers consolidados num hook.
+  const {
+    categoriasCustom, setCategoriasCustom,
+    categoriasVersao, setCategoriasVersao,
+    modalCategoriasAberto, setModalCategoriasAberto,
+    categoriasNaoCreditaveis,
+    salvandoCategoriaCredito,
+    toggleCategoriaCredito,
+    todasCategorias,
+  } = useCategoriasCredito(empresaSel?.id, setErro);
 
   const periodoNormalizado = useMemo(
     () => efiscal ? normalizarPeriodo(efiscal.periodo) : '',
     [efiscal],
   );
 
-  useEffect(() => {
-    let ativo = true;
-    if (!empresaSel?.id || !periodoNormalizado) { setInvoicesManuais([]); return; }
-    listarInvoicesManuais(empresaSel.id, periodoNormalizado).then(list => {
-      if (ativo) setInvoicesManuais(list);
-    });
-    return () => { ativo = false; };
-  }, [empresaSel?.id, periodoNormalizado, invoicesVersao]);
+  // Overrides CNPJ->categoria + invoices manuais (consolidados em hook)
+  const {
+    overrides, setOverrides, overridesVersao, setOverridesVersao,
+    invoicesManuais, setInvoicesManuais, invoicesVersao, setInvoicesVersao,
+  } = useOverridesInvoices(empresaSel?.id, periodoNormalizado);
+
 
   // Salva (ou troca) a categoria de um fornecedor na tabela CNPJ->categoria
   // da empresa. Apos salvar, recarrega os overrides -> credito recalcula.
@@ -686,150 +232,17 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     if (!efiscal || !empresaSel) return null;
     const regCalc = regimeParaCalculo(empresaSel.regimeSugerido);
 
-    // 1. Separa invoices manuais em DOIS grupos:
-    //    A) SEM categoria: agregam normalmente por CNPJ junto com o PDF
-    //       (classificacao automatica pela razao social).
-    //    B) COM categoria fixada: cada uma vira um "fornecedor sintetico"
-    //       isolado. Necessario pra invoices estrangeiras (CNPJ 0..0) onde
-    //       um override por CNPJ vazaria pra outras empresas no mesmo CNPJ.
-    //
-    // Chave sintetica: `${cnpjDigits}__inv__${id.slice(-8)}` — preserva o
-    // CNPJ original visualmente mas garante unicidade no fornMap/catPorCnpj.
-    const invoicesSemCat = invoicesManuais.filter(im => !im.categoria);
-    const invoicesComCat = invoicesManuais.filter(im => !!im.categoria);
-
-    // Mapa de chave sintetica -> categoria fixada (usado como override extra)
-    const overridesSinteticos = new Map<string, string>(overrides);
-    for (const im of invoicesComCat) {
-      const k = `${(im.cnpjCpf || '').replace(/\D+/g, '')}__inv__${im.id.slice(-8)}`;
-      overridesSinteticos.set(k, im.categoria as string);
-    }
-
-    // 2. converte invoices manuais em EfiscalNf
-    //    Invoices SEM categoria mantem o cnpjCpf real (agregam por CNPJ).
-    //    Invoices COM categoria recebem cnpjCpf SINTETICO (isolam por id).
-    const notasManuaisSemCat = invoicesSemCat.map(im => ({
-      emissao: im.emissao || '',
-      numero: im.numero || '',
-      serie: im.serie || '',
-      cnpjCpf: im.cnpjCpf,
-      razaoSocial: im.razaoSocial,
-      valorNf: Number(im.valorNf) || 0,
-      baseCalculo: Number(im.baseCalculo) || 0,
-      aliquota: Number(im.aliquota) || 0,
-      valorIss: Number(im.valorIss) || 0,
-      issRetido: Number(im.issRetido) || 0,
-      pagina: 0,
-    }));
-    const notasManuaisComCat = invoicesComCat.map(im => {
-      const cnpjSint = `${(im.cnpjCpf || '').replace(/\D+/g, '')}__inv__${im.id.slice(-8)}`;
-      return {
-        emissao: im.emissao || '',
-        numero: im.numero || '',
-        serie: im.serie || '',
-        cnpjCpf: cnpjSint,
-        razaoSocial: im.razaoSocial,
-        valorNf: Number(im.valorNf) || 0,
-        baseCalculo: Number(im.baseCalculo) || 0,
-        aliquota: Number(im.aliquota) || 0,
-        valorIss: Number(im.valorIss) || 0,
-        issRetido: Number(im.issRetido) || 0,
-        pagina: 0,
-      };
+    // Merge invoices manuais + filtros de ocultos extraido para
+    // services/analiseCreditoMerge.ts. Logica era ~150 linhas inline aqui;
+    // agora eh testavel sem render. Documentacao das regras de negocio
+    // (chave sintetica __inv__, desconto de NFs individuais, etc) vive la.
+    const { fornFiltrados, notasFiltradas, overridesSinteticos } = mesclarInvoicesEFiltrarOcultos({
+      efiscal,
+      invoicesManuais,
+      overrides,
+      fornecedoresOcultos: fornecedoresOcultosEfetivos,
+      notasOcultas: notasOcultasEfetivas,
     });
-    const notasMescladas = [...efiscal.notas, ...notasManuaisSemCat, ...notasManuaisComCat];
-
-    // 3. reagrupa fornecedores
-    //    a) Comeca com os do PDF (CNPJ real)
-    //    b) Soma invoices SEM categoria por CNPJ (1 CNPJ = 1 linha)
-    //    c) Adiciona invoices COM categoria como fornecedores INDIVIDUAIS
-    //       (cada uma com chave sintetica, 1 invoice = 1 linha)
-    const fornMap = new Map<string, typeof efiscal.fornecedores[number]>();
-    const soDigF = (s: string) => (s || '').replace(/\D+/g, '');
-    for (const f of efiscal.fornecedores) {
-      fornMap.set(soDigF(f.cnpjCpf), { ...f });
-    }
-    for (const im of invoicesSemCat) {
-      const k = soDigF(im.cnpjCpf);
-      const existente = fornMap.get(k);
-      if (existente) {
-        existente.qtdNotas += 1;
-        existente.somaValorNf += Number(im.valorNf) || 0;
-        existente.somaBaseCalculo += Number(im.baseCalculo) || 0;
-        existente.somaValorIss += Number(im.valorIss) || 0;
-        existente.somaIssRetido += Number(im.issRetido) || 0;
-      } else {
-        fornMap.set(k, {
-          cnpjCpf: im.cnpjCpf,
-          razaoSocial: im.razaoSocial,
-          qtdNotas: 1,
-          somaValorNf: Number(im.valorNf) || 0,
-          somaBaseCalculo: Number(im.baseCalculo) || 0,
-          somaValorIss: Number(im.valorIss) || 0,
-          somaIssRetido: Number(im.issRetido) || 0,
-        });
-      }
-    }
-    for (const im of invoicesComCat) {
-      const cnpjSint = `${soDigF(im.cnpjCpf)}__inv__${im.id.slice(-8)}`;
-      // Cada invoice com categoria sempre vira UM fornecedor proprio
-      // (chave unica via id da invoice).
-      fornMap.set(cnpjSint, {
-        cnpjCpf: cnpjSint,
-        razaoSocial: im.razaoSocial,
-        qtdNotas: 1,
-        somaValorNf: Number(im.valorNf) || 0,
-        somaBaseCalculo: Number(im.baseCalculo) || 0,
-        somaValorIss: Number(im.valorIss) || 0,
-        somaIssRetido: Number(im.issRetido) || 0,
-      });
-    }
-    const fornMesclados = Array.from(fornMap.values());
-
-    // Aplica filtro de ocultos. Dois sistemas combinados:
-    //   1. FORNECEDOR oculto (CNPJ inteiro): some todas NFs desse CNPJ.
-    //   2. NF INDIVIDUAL oculta (cnpj+numero+serie): some so essa NF.
-    // Ambos sistemas: UNIAO de local + persistido (Firestore).
-    //
-    // IMPORTANTE: calcularCreditoEfiscal soma a base por FORNECEDOR
-    // (f.somaValorNf agregado), nao iterando NFs. Entao quando excluimos
-    // UMA NF individual, precisamos DESCONTAR seus valores dos totais
-    // agregados do fornecedor afetado — senao a base nao muda (so o
-    // contador de NFs muda visualmente, dando a impressao de bug).
-    const fornFiltrados = fornMesclados
-      .filter(f => !fornecedoresOcultosEfetivos.has(cnpjKey(f.cnpjCpf)))
-      .map(f => {
-        if (notasOcultasEfetivas.size === 0) return f;
-        // Quais NFs deste fornecedor estao ocultas?
-        const ocultasDoForn = notasMescladas.filter(n =>
-          cnpjKey(n.cnpjCpf) === cnpjKey(f.cnpjCpf) &&
-          notasOcultasEfetivas.has(nfChave(n.cnpjCpf, n.numero, n.serie || ''))
-        );
-        if (ocultasDoForn.length === 0) return f;
-        // Desconta os valores das NFs ocultas dos totais agregados.
-        let dValorNf = 0, dBaseCalc = 0, dValorIss = 0, dIssRet = 0;
-        for (const n of ocultasDoForn) {
-          dValorNf  += Number(n.valorNf)    || 0;
-          dBaseCalc += Number(n.baseCalculo)|| 0;
-          dValorIss += Number(n.valorIss)   || 0;
-          dIssRet   += Number(n.issRetido)  || 0;
-        }
-        return {
-          ...f,
-          qtdNotas:        Math.max(0, f.qtdNotas        - ocultasDoForn.length),
-          somaValorNf:     Math.max(0, f.somaValorNf     - dValorNf),
-          somaBaseCalculo: Math.max(0, f.somaBaseCalculo - dBaseCalc),
-          somaValorIss:    Math.max(0, f.somaValorIss    - dValorIss),
-          somaIssRetido:   Math.max(0, f.somaIssRetido   - dIssRet),
-        };
-      })
-      // Se sobrou fornecedor sem nenhuma NF (todas excluidas individualmente),
-      // remove pra nao poluir a tabela.
-      .filter(f => f.qtdNotas > 0);
-    const notasFiltradas = notasMescladas.filter(n =>
-      !fornecedoresOcultosEfetivos.has(cnpjKey(n.cnpjCpf)) &&
-      !notasOcultasEfetivas.has(nfChave(n.cnpjCpf, n.numero, n.serie || ''))
-    );
 
     return calcularCreditoEfiscal(fornFiltrados, regCalc, notasFiltradas, overridesSinteticos, categoriasNaoCreditaveis);
   }, [efiscal, empresaSel, overrides, invoicesManuais, categoriasNaoCreditaveis, fornecedoresOcultosEfetivos, notasOcultasEfetivas]);
@@ -948,142 +361,8 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
   const exportarEfiscalPdf = async () => {
     if (!efiscal) return;
     try {
-      const { jsPDF } = await import('jspdf');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const W = pdf.internal.pageSize.getWidth();
-      const H = pdf.internal.pageSize.getHeight();
-      const m = 12;
-      const now = new Date().toLocaleDateString('pt-BR');
-
-      const drawHeader = () => {
-        pdf.setFillColor(2, 0, 38); pdf.rect(0, 0, W, 16, 'F');
-        pdf.setTextColor(255, 255, 255); pdf.setFontSize(11); pdf.setFont('helvetica', 'bold');
-        pdf.text('SP Contabil - Analise de Creditos PIS/COFINS (Servicos Tomados)', m, 10);
-        pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
-        pdf.text('Gerado em: ' + now, W - m - 38, 10);
-      };
-      drawHeader();
-      let y = 24;
-      const checkPage = (h: number) => { if (y + h > H - 12) { pdf.addPage(); drawHeader(); y = 24; } };
-
-      // ── Dados da empresa ──
-      pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
-      pdf.text(`${efiscal.empresaCodigo} - ${efiscal.empresaNome}`, m, y); y += 5;
-      pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(80, 80, 80);
-      pdf.text(`CNPJ: ${efiscal.empresaCnpj}   Periodo: ${efiscal.periodo}   NFs: ${efiscal.notas.length}   Fornecedores: ${efiscal.fornecedores.length}`, m, y);
-      y += 8;
-
-      // ── Card de credito ──
-      if (credito) {
-        checkPage(28);
-        if (credito.geraCredito) {
-          pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
-          pdf.text('CREDITO PIS/COFINS - ' + credito.aliquota.label, m, y); y += 5;
-          const kpis = [
-            ['Base de Calculo', 'R$ ' + brl(credito.baseTotal)],
-            [`Credito PIS (${(credito.aliquota.pis*100).toFixed(2)}%)`, 'R$ ' + brl(credito.creditoPis)],
-            [`Credito COFINS (${(credito.aliquota.cofins*100).toFixed(2)}%)`, 'R$ ' + brl(credito.creditoCofins)],
-            ['Credito Total', 'R$ ' + brl(credito.creditoTotal)],
-          ];
-          const kW = (W - m * 2) / 4;
-          kpis.forEach((k, i) => {
-            const x = m + i * kW;
-            pdf.setFillColor(240, 245, 255); pdf.rect(x, y - 4, kW - 2, 14, 'F');
-            pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(80, 80, 80);
-            pdf.text(k[0], x + 2, y + 1);
-            pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
-            pdf.text(k[1], x + 2, y + 7);
-          });
-          y += 20;
-        } else {
-          pdf.setFillColor(255, 248, 220); pdf.rect(m, y - 4, W - m * 2, 16, 'F');
-          pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(140, 100, 0);
-          pdf.text('Empresa optante pelo Simples Nacional', m + 3, y + 2);
-          pdf.setFontSize(7); pdf.setFont('helvetica', 'normal');
-          pdf.text('Nao gera credito de PIS/COFINS sobre servicos tomados - recolhimento ocorre no DAS.', m + 3, y + 8);
-          y += 20;
-        }
-      }
-
-      // ── Distribuicao por categoria (resumo) ──
-      if (credito && credito.categorias.length > 0) {
-        checkPage(14);
-        pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
-        pdf.text('DISTRIBUICAO POR CATEGORIA', m, y); y += 2;
-        pdf.setDrawColor(200, 200, 200); pdf.line(m, y, W - m, y); y += 5;
-
-        pdf.setFillColor(245, 245, 245); pdf.rect(m, y - 3, W - m * 2, 6, 'F');
-        pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(80, 80, 80);
-        pdf.text('CATEGORIA', m + 2, y + 1);
-        pdf.text('FORNEC.', m + 80, y + 1);
-        pdf.text('NFs', m + 105, y + 1);
-        pdf.text('BASE DE CALCULO', W - m - 40, y + 1);
-        y += 6;
-        for (const cat of credito.categorias) {
-          checkPage(6);
-          const label = cat.categoria === 'SEM_CATEGORIA' ? 'Sem categoria' : String(cat.categoria);
-          pdf.setFont('helvetica', 'normal'); pdf.setTextColor(50, 50, 50); pdf.setFontSize(7);
-          pdf.text(label, m + 2, y);
-          pdf.text(String(cat.qtdFornecedores), m + 80, y);
-          pdf.text(String(cat.qtdNotas), m + 105, y);
-          pdf.text('R$ ' + brl(cat.somaBaseCalculo), W - m - 40, y);
-          y += 5;
-        }
-        y += 4;
-      }
-
-      // ── NFs detalhadas por grupo ──
-      if (credito && credito.categorias.length > 0) {
-        for (const cat of credito.categorias) {
-          if (cat.notas.length === 0) continue;
-          checkPage(16);
-          const label = cat.categoria === 'SEM_CATEGORIA' ? 'Sem categoria' : String(cat.categoria);
-          pdf.setFillColor(225, 235, 255); pdf.rect(m, y - 4, W - m * 2, 9, 'F');
-          pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
-          pdf.text(label + '  (' + cat.notas.length + ' NFs)', m + 2, y + 1);
-          pdf.setTextColor(60, 60, 60);
-          pdf.text('Base: R$ ' + brl(cat.somaBaseCalculo), W - m - 45, y + 1);
-          y += 11;
-
-          checkPage(7);
-          pdf.setFillColor(245, 245, 245); pdf.rect(m + 2, y - 3, W - m * 2 - 4, 5, 'F');
-          pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(90, 90, 90);
-          pdf.text('EMISSAO', m + 4, y);
-          pdf.text('NUMERO', m + 22, y);
-          pdf.text('CNPJ/CPF', m + 42, y);
-          pdf.text('RAZAO SOCIAL', m + 78, y);
-          pdf.text('VALOR NF', W - m - 48, y);
-          pdf.text('BASE CALC.', W - m - 24, y);
-          y += 5;
-          for (const nf of cat.notas) {
-            checkPage(5);
-            pdf.setFont('helvetica', 'normal'); pdf.setTextColor(60, 60, 60); pdf.setFontSize(6);
-            pdf.text(String(nf.emissao || '-'), m + 4, y);
-            pdf.text(String(nf.numero || '-').slice(0, 12), m + 22, y);
-            pdf.text(String(nf.cnpjCpf || '-'), m + 42, y);
-            pdf.text(String(nf.razaoSocial || '-').slice(0, 30), m + 78, y);
-            pdf.text('R$ ' + brl(nf.valorNf), W - m - 48, y);
-            pdf.text('R$ ' + brl(nf.baseCalculo), W - m - 24, y);
-            y += 4;
-          }
-          y += 4;
-        }
-      }
-
-      // ── Rodape ──
-      const totalPaginas = pdf.getNumberOfPages();
-      for (let p = 1; p <= totalPaginas; p++) {
-        pdf.setPage(p);
-        pdf.setFontSize(6); pdf.setTextColor(150, 150, 150);
-        pdf.text('Classificacao automatica por categoria - revise antes de enviar ao cliente.', m, H - 4);
-        pdf.text(`Pagina ${p}/${totalPaginas}`, W - m - 16, H - 4);
-      }
-
-      const blob = pdf.output('blob');
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `Analise_Creditos_${efiscal.empresaCodigo}_${new Date().toISOString().slice(0,10)}.pdf`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      const blob = await gerarEfiscalPdf(efiscal, credito);
+      baixarBlob(blob, `Analise_Creditos_${efiscal.empresaCodigo}_${new Date().toISOString().slice(0,10)}.pdf`);
     } catch (e) {
       console.error(e);
       setErro('Erro ao gerar PDF: ' + (e instanceof Error ? e.message : 'desconhecido'));
@@ -1112,106 +391,18 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     if (lancamentos.length === 0) return;
     setExportandoPDF(true);
     try {
-      const { jsPDF } = await import('jspdf');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const W = pdf.internal.pageSize.getWidth();
-      const H = pdf.internal.pageSize.getHeight();
-      const m = 12;
-      const now = new Date().toLocaleDateString('pt-BR');
-
-      const drawHeader = () => {
-        pdf.setFillColor(2, 0, 38); pdf.rect(0, 0, W, 16, 'F');
-        pdf.setTextColor(255, 255, 255); pdf.setFontSize(11); pdf.setFont('helvetica', 'bold');
-        pdf.text('SP Contabil - Credito PIS/COFINS (Extrato de Conciliacao)', m, 10);
-        pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
-        pdf.text('Gerado em: ' + now, W - m - 40, 10);
-      };
-      drawHeader();
-      let y = 24;
-      const checkPage = (h: number) => { if (y + h > H - 12) { pdf.addPage(); drawHeader(); y = 24; } };
-
-      pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
-      pdf.text('RESUMO DE CREDITOS PIS/COFINS', m, y); y += 6;
-      const kpis = [
-        ['Base de Credito', 'R$ ' + brl(baseCreditos)],
-        ['Credito PIS (1,65%)', 'R$ ' + brl(creditoPis)],
-        ['Credito COFINS (7,60%)', 'R$ ' + brl(creditoCofins)],
-        ['Credito Total', 'R$ ' + brl(creditoTotal)],
-      ];
-      const kW = (W - m * 2) / 4;
-      kpis.forEach((k, i) => {
-        const x = m + i * kW;
-        pdf.setFillColor(240, 245, 255); pdf.rect(x, y - 4, kW - 2, 14, 'F');
-        pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(80, 80, 80);
-        pdf.text(k[0], x + 2, y + 1);
-        pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
-        pdf.text(k[1], x + 2, y + 7);
+      const blob = await gerarExtratoPdf({
+        lancamentos,
+        categoriasCredito: CATEGORIAS_CREDITO,
+        baseCreditos, creditoPis, creditoCofins, creditoTotal,
       });
-      y += 20;
-
-      checkPage(10);
-      pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
-      pdf.text('DETALHAMENTO POR CATEGORIA E FORNECEDOR', m, y); y += 2;
-      pdf.setDrawColor(200, 200, 200); pdf.line(m, y, W - m, y); y += 5;
-
-      const porCategoria: Record<string, LancamentoExtrato[]> = {};
-      for (const l of lancamentos) {
-        if (l.categoriaSugerida === null) continue;
-        (porCategoria[l.categoriaSugerida] ??= []).push(l);
-      }
-
-      for (const cat of CATEGORIAS_CREDITO) {
-        const itens = porCategoria[cat];
-        if (!itens || itens.length === 0) continue;
-        const subtotal = itens.reduce((s, i) => s + i.valor, 0);
-
-        checkPage(16);
-        pdf.setFillColor(225, 235, 255); pdf.rect(m, y - 4, W - m * 2, 12, 'F');
-        pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(2, 0, 38);
-        pdf.text(cat, m + 2, y + 1);
-        pdf.setTextColor(60, 60, 60);
-        pdf.text('Total: R$ ' + brl(subtotal) + '  (' + itens.length + ' lanc.)', W - m - 60, y + 1);
-        y += 14;
-
-        checkPage(8);
-        pdf.setFillColor(245, 245, 245); pdf.rect(m + 2, y - 3, W - m * 2 - 4, 6, 'F');
-        pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(80, 80, 80);
-        pdf.text('DATA', m + 4, y + 1);
-        pdf.text('FORNECEDOR', m + 22, y + 1);
-        pdf.text('DESCRICAO', m + 80, y + 1);
-        pdf.text('VALOR', W - m - 22, y + 1);
-        y += 6;
-
-        for (const it of itens) {
-          checkPage(6);
-          pdf.setFont('helvetica', 'normal'); pdf.setTextColor(50, 50, 50); pdf.setFontSize(7);
-          pdf.text(String(it.data || '-').substring(0, 10), m + 4, y);
-          pdf.text(String(it.favorecido || '-').substring(0, 35), m + 22, y);
-          pdf.text(String(it.descricao || '-').substring(0, 42), m + 80, y);
-          pdf.text('R$ ' + brl(it.valor), W - m - 22, y);
-          y += 5;
-        }
-        y += 3;
-        pdf.setDrawColor(230, 230, 230); pdf.line(m, y, W - m, y); y += 4;
-      }
-
-      checkPage(14);
-      pdf.setFillColor(2, 0, 38); pdf.rect(m, y - 3, W - m * 2, 10, 'F');
-      pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
-      pdf.text('TOTAL GERAL - BASE DE CREDITO', m + 2, y + 3);
-      pdf.text('R$ ' + brl(baseCreditos), W - m - 40, y + 3);
-      y += 14;
-
-      pdf.setFontSize(6); pdf.setTextColor(150, 150, 150);
-      pdf.text('Classificacao automatica com base em regras. Revise antes de enviar ao cliente.', m, H - 4);
-
-      const blob = pdf.output('blob');
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'relatorio_creditos_pis_cofins_' + new Date().toISOString().slice(0, 10) + '.pdf';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    } catch (e) { console.error(e); setErro('Erro ao gerar PDF: ' + (e instanceof Error ? e.message : 'desconhecido')); }
-    finally { setExportandoPDF(false); }
+      baixarBlob(blob, 'relatorio_creditos_pis_cofins_' + new Date().toISOString().slice(0, 10) + '.pdf');
+    } catch (e) {
+      console.error(e);
+      setErro('Erro ao gerar PDF: ' + (e instanceof Error ? e.message : 'desconhecido'));
+    } finally {
+      setExportandoPDF(false);
+    }
   };
 
   const exportarRelatorio = async () => {
@@ -1643,7 +834,13 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                         <td className="px-2 py-1 text-right">
                           <button
                             onClick={async () => {
-                              if (!confirm('Remover esta invoice manual?')) return;
+                              const ok = await confirm({
+                                title: 'Remover invoice manual?',
+                                message: 'Esta ação remove o lançamento manual desta empresa.',
+                                variant: 'danger',
+                                confirmLabel: 'Remover',
+                              });
+                              if (!ok) return;
                               const r = await removerInvoice(im.id);
                               if (r.ok) setInvoicesVersao(v => v + 1);
                               else setErro('Erro ao remover: ' + (r.error || ''));
@@ -1814,10 +1011,12 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                     setNotasOcultas(new Set());
                     const totalPersistidos = fornecedoresOcultosPersistidos.size + notasOcultasPersistidas.size;
                     if (totalPersistidos > 0 && empresaSel?.id) {
-                      const ok = window.confirm(
-                        `Tambem restaurar ${totalPersistidos} regra(s) persistente(s)?\n` +
-                        `(isso apaga as regras do Firestore — sera reversivel apenas excluindo de novo).`
-                      );
+                      const ok = await confirm({
+                        title: `Restaurar ${totalPersistidos} regra(s) persistente(s)?`,
+                        message: 'Isso apaga as regras do Firestore — reversível apenas excluindo de novo.',
+                        variant: 'warning',
+                        confirmLabel: 'Restaurar',
+                      });
                       if (ok) {
                         if (fornecedoresOcultosPersistidos.size > 0) {
                           const r = await restaurarTodosOcultos(empresaSel.id);

@@ -28,6 +28,7 @@ interface CounterStats {
 interface SyncStats {
     lucroEmpresas: CounterStats;
     simplesEmpresas: CounterStats;
+    simplesNotas: CounterStats;
 }
 
 const newCounter = (): CounterStats => ({ total: 0, uploaded: 0, skipped: 0, errors: 0 });
@@ -38,6 +39,22 @@ const readLocalArray = <T>(key: string): T[] => {
         if (!raw) return [];
         const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
+const readLocalNotas = (): any[] => {
+    try {
+        const raw = localStorage.getItem('simples_nacional_notas');
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return [];
+        const out: any[] = [];
+        Object.values(parsed).forEach((arr: any) => {
+            if (Array.isArray(arr)) arr.forEach(n => out.push(n));
+        });
+        return out;
     } catch {
         return [];
     }
@@ -55,18 +72,24 @@ async function syncCollection(
     counter.total = items.length;
     if (items.length === 0 || !db) return;
 
-    for (const item of items) {
+    // Pool de concorrencia. Sem isso, com N=500 empresas no localStorage o
+    // login do admin ficava ~50s (cada item: 1 getDoc + 1 setDoc sequencial).
+    // Com pool=10, mesmo cenario fica em ~5s e nao bloqueia o boot da UI.
+    const CONCURRENCY = 10;
+    let cursor = 0;
+
+    const processarItem = async (item: any) => {
         try {
             if (!item || !item.id) {
                 counter.errors++;
-                continue;
+                return;
             }
 
-            const ref = doc(db, collectionName, String(item.id));
+            const ref = doc(db!, collectionName, String(item.id));
             const snap = await getDoc(ref);
             if (snap.exists()) {
                 counter.skipped++;
-                continue;
+                return;
             }
 
             // Garante createdBy = uid (regra exige). Mantem se item ja tinha.
@@ -81,8 +104,24 @@ async function syncCollection(
             counter.errors++;
             console.warn(`[cloudSync] erro em ${collectionName}/${item?.id}:`, err?.message);
         }
+    };
+
+    async function worker(): Promise<void> {
+        while (cursor < items.length) {
+            const i = cursor++;
+            await processarItem(items[i]);
+        }
     }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 }
+
+// Guard em memoria pra evitar re-sync no mesmo carregamento da pagina
+// (ex: subscribeAuthState pode disparar varias vezes durante o boot,
+// principalmente em Firefox/Safari com auth persistido). NAO eh por uid --
+// se trocar de conta na mesma aba, queremos re-sync.
+let syncEmAndamento = false;
+let syncFeitoNestaSessao = false;
 
 /**
  * Sincroniza dados locais com Firestore na primeira vez que o usuario loga.
@@ -91,41 +130,63 @@ async function syncCollection(
 export async function runInitialSync(user: User | null): Promise<SyncStats | null> {
     if (!user) return null;
     if (!isFirebaseConfigured || !db || !auth?.currentUser) return null;
+    if (syncEmAndamento || syncFeitoNestaSessao) return null;
 
     const uid = auth.currentUser.uid;
     const flagKey = FLAG_PREFIX + uid;
+    const isAdmin = user.role === 'admin';
 
-    if (localStorage.getItem(flagKey) === '1') return null;
+    // Admin sempre re-sincroniza (cobre empresas criadas APOS o primeiro sync
+    // que ficaram so em localStorage). Colaborador mantem o gate da flag.
+    if (!isAdmin && localStorage.getItem(flagKey) === '1') return null;
+
+    // Early-return: se localStorage nao tem nada local, nao adianta rodar o
+    // sync (nada a enviar). Garante que admin com tudo na nuvem nao paga o
+    // custo de checar getDoc x500 a cada login.
+    const lucroLocal = readLocalArray('lucro_presumido_empresas');
+    const simplesLocal = readLocalArray('simples_nacional_empresas');
+    const notasLocal = readLocalNotas();
+    if (lucroLocal.length === 0 && simplesLocal.length === 0 && notasLocal.length === 0) {
+        syncFeitoNestaSessao = true;
+        return null;
+    }
 
     const stats: SyncStats = {
         lucroEmpresas: newCounter(),
         simplesEmpresas: newCounter(),
+        simplesNotas: newCounter(),
     };
 
+    syncEmAndamento = true;
     try {
-        const lucroLocal = readLocalArray('lucro_presumido_empresas');
-        const simplesLocal = readLocalArray('simples_nacional_empresas');
-
         await syncCollection('lucro_empresas', lucroLocal, uid, stats.lucroEmpresas);
         await syncCollection('simples_empresas', simplesLocal, uid, stats.simplesEmpresas);
+        await syncCollection('simples_notas', notasLocal, uid, stats.simplesNotas);
 
         localStorage.setItem(flagKey, '1');
 
-        const total = stats.lucroEmpresas.uploaded + stats.simplesEmpresas.uploaded;
+        const total = stats.lucroEmpresas.uploaded + stats.simplesEmpresas.uploaded + stats.simplesNotas.uploaded;
         if (total > 0) {
             console.info(
-                `[cloudSync] ${total} empresa(s) sincronizada(s) -> cloud. ` +
-                `Lucro: ${stats.lucroEmpresas.uploaded} novas / ${stats.lucroEmpresas.skipped} ja existiam / ${stats.lucroEmpresas.total} total. ` +
-                `Simples: ${stats.simplesEmpresas.uploaded} novas / ${stats.simplesEmpresas.skipped} ja existiam / ${stats.simplesEmpresas.total} total.`,
+                `[cloudSync] +${total} item(s) -> cloud. ` +
+                `Lucro empresas: +${stats.lucroEmpresas.uploaded} (${stats.lucroEmpresas.skipped} existiam de ${stats.lucroEmpresas.total}). ` +
+                `Simples empresas: +${stats.simplesEmpresas.uploaded} (${stats.simplesEmpresas.skipped} existiam de ${stats.simplesEmpresas.total}). ` +
+                `Simples notas: +${stats.simplesNotas.uploaded} (${stats.simplesNotas.skipped} existiam de ${stats.simplesNotas.total}).`,
             );
         } else {
-            console.info('[cloudSync] nada a sincronizar.');
+            console.info(
+                `[cloudSync] nada novo. ` +
+                `Locais: Lucro ${stats.lucroEmpresas.total}, Simples ${stats.simplesEmpresas.total} empresas, ${stats.simplesNotas.total} notas.`,
+            );
         }
 
+        syncFeitoNestaSessao = true;
         return stats;
     } catch (err: any) {
         console.warn('[cloudSync] falha no sync inicial:', err?.message);
         return null;
+    } finally {
+        syncEmAndamento = false;
     }
 }
 

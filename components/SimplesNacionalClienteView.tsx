@@ -49,7 +49,14 @@ const SimplesNacionalClienteView: React.FC<SimplesNacionalClienteViewProps> = ({
     }, [resumo]);
 
     const percentuaisImpostos = useMemo(() => {
-        return simplesService.REPARTICAO_IMPOSTOS[resumo.anexo_efetivo]?.[Math.min(resumo.faixa_index, 5)] || {};
+        // anexo_efetivo pode vir como 'III_V' quando o cnae aceita ambos (Fator R).
+        // REPARTICAO_IMPOSTOS so tem chaves I..V — resolve III_V usando fator_r
+        // do resumo antes de indexar (>= 28% -> III; < 28% -> V).
+        const anexoIdx = resumo.anexo_efetivo === 'III_V'
+            ? (resumo.fator_r >= 0.28 ? 'III' : 'V')
+            : resumo.anexo_efetivo;
+        const faixaClamped = Math.max(0, Math.min(resumo.faixa_index, 5)) as 0 | 1 | 2 | 3 | 4 | 5;
+        return simplesService.REPARTICAO_IMPOSTOS[anexoIdx as simplesService.AnexoKey]?.[faixaClamped] || {};
     }, [resumo]);
 
     const handleExportPDF = async () => {
@@ -476,7 +483,7 @@ const SimplesNacionalClienteView: React.FC<SimplesNacionalClienteViewProps> = ({
                                     </thead>
                                     <tbody>
                                         {Object.entries(discriminacaoImpostos).map(([imposto, valor], index) => {
-                                             const percentual = percentuaisImpostos[imposto] || 0;
+                                             const percentual = (percentuaisImpostos as Record<string, number | undefined>)[imposto] || 0;
                                              return (
                                                 <tr key={imposto} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                                                     <td className="px-6 py-3 font-medium text-slate-900 dark:text-white">

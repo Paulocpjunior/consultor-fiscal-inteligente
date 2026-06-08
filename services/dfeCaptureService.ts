@@ -4,6 +4,7 @@
 
 import { getAuth } from 'firebase/auth';
 import type { User, XmlCaptura, EmpresaXmlConfig } from '../types';
+import { interpretarCstat } from './cstatHelper';
 
 export interface DfeCaptureRequest {
     empresa: EmpresaXmlConfig;
@@ -97,16 +98,19 @@ export async function captureFromSefaz(req: DfeCaptureRequest): Promise<DfeCaptu
         if (!res.ok) {
             return { sucesso: false, motivo: data.error || data.motivo || `Falha HTTP ${res.status}`, itens: [] };
         }
-        // Monta motivo verboso: SEFAZ cStat + qty + NSU. Sem isso fica
-        // dificil saber se '0 novos' significa 'NSU em dia' ou 'cert errado'.
-        // Lista de codigos: https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=tW+YMyk/50s=
+        // Monta motivo verboso: SEFAZ cStat + qty + NSU + AÇÃO acionável.
+        // Antes ficava só "cStat=593 Rejeicao: CNPJ-Base..." e ninguém
+        // sabia que precisava cadastrar procuração no e-CAC. Agora o
+        // interpretarCstat traduz pra ação prática.
         const cStatLabel = data.cStat ? `cStat=${data.cStat}` : '';
         const xMotivo = data.xMotivo ? ` ${data.xMotivo}` : '';
         const nsu = data.ultNSU ? ` · NSU agora=${data.ultNSU}` : '';
         const pag = data.paginas ? ` · ${data.paginas} pág` : '';
+        const cInfo = data.cStat ? interpretarCstat(data.cStat, data.xMotivo) : null;
+        const acao = cInfo?.acao ? ` ⚠ ${cInfo.acao}` : '';
         return {
             sucesso: true,
-            motivo: `${data.novosXmls || 0} novos · ${data.duplicados || 0} dup · ${data.erros || 0} erros${cStatLabel ? ` · ${cStatLabel}${xMotivo}` : ''}${nsu}${pag}`,
+            motivo: `${data.novosXmls || 0} novos · ${data.duplicados || 0} dup · ${data.erros || 0} erros${cStatLabel ? ` · ${cStatLabel}${xMotivo}` : ''}${nsu}${pag}${acao}`,
             itens: [],
             novosXmls: data.novosXmls,
             duplicados: data.duplicados,

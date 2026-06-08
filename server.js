@@ -9,6 +9,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import sefazCertRouter from './sefaz-backend/cert-manager.js';
 import sefazCertAlertaCronRouter from './sefaz-backend/cert-alerta-cron.js';
+import sefazCapturaResumoCronRouter from './sefaz-backend/captura-resumo-cron.js';
 import sefazSyncRouter from './sefaz-backend/sync-routes.js';
 import { fetchAllDocs } from './sefaz-backend/firestore-paginate.js';
 import empresaStatusRouter from './sefaz-backend/empresa-status-routes.js';
@@ -32,6 +33,8 @@ import notificacoesRouter from './sefaz-backend/notificacoes-routes.js';
 import agentRouter from './sefaz-backend/agent-routes.js';
 import agentAdminRouter from './sefaz-backend/agent-admin-routes.js';
 import nfseNacionalDfeRouter from './sefaz-backend/nfse-nacional-dfe-routes.js';
+import abrasfRouter from './sefaz-backend/abrasf/routes.js';
+import abrasfDiagnosticoRouter from './sefaz-backend/abrasf/diagnostico-routes.js';
 import recuperacaoRouter from './sefaz-backend/recuperacao-tributaria-routes.js';
 import nfpComplianceRouter from './sefaz-backend/nfp-compliance-routes.js';
 import dpIntegrationRouter from './sefaz-backend/dp-integration-routes.js';
@@ -46,8 +49,60 @@ import diagnosticoConfigRouter from './sefaz-backend/diagnostico-config-routes.j
 import healthConsolidadoRouter from './sefaz-backend/health-consolidado-routes.js';
 import healthAlertaCronRouter from './sefaz-backend/health-alerta-cron.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
+import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sanitize-error.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+/**
+ * Validacao por magic-bytes do arquivo enviado em /analise-creditos/upload.
+ * Bloqueia upload de binario malicioso disfarcado de XLSX/XML (ex: zip-bomb
+ * em .xlsx, PDF executavel renomeado, etc).
+ *
+ * Magic bytes:
+ *   - XLSX/XLS modernos: PK\x03\x04 (ZIP) — 50 4B 03 04
+ *   - XLS antigo: D0 CF 11 E0 A1 B1 1A E1 (OLE compound)
+ *   - XML: comeca com '<?xml' ou '<' apos BOM opcional
+ */
+function validarMagicBytes(buffer, nomeOriginal) {
+    if (!buffer || buffer.length < 4) return { ok: false, motivo: 'arquivo vazio' };
+    const nome = (nomeOriginal || '').toLowerCase();
+    const b = buffer;
+
+    // XLSX (ZIP) - 50 4B 03 04 / 50 4B 05 06 / 50 4B 07 08
+    if (nome.endsWith('.xlsx')) {
+        if (b[0] !== 0x50 || b[1] !== 0x4B) return { ok: false, motivo: 'XLSX invalido (sem PK)' };
+        return { ok: true };
+    }
+    // XLS antigo (OLE compound)
+    if (nome.endsWith('.xls')) {
+        const ole = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+        if (b.length < 8 || ole.some((byte, i) => b[i] !== byte)) {
+            // Aceita variante moderna salva como XLSX
+            if (b[0] === 0x50 && b[1] === 0x4B) return { ok: true };
+            return { ok: false, motivo: 'XLS invalido (sem assinatura OLE)' };
+        }
+        return { ok: true };
+    }
+    // XML - skip BOM (EF BB BF) se houver
+    if (nome.endsWith('.xml')) {
+        let i = 0;
+        if (b[0] === 0xEF && b[1] === 0xBB && b[2] === 0xBF) i = 3;
+        // Aceita <?xml ou < direto
+        if (b[i] === 0x3C) return { ok: true };
+        return { ok: false, motivo: 'XML invalido (nao comeca com <)' };
+    }
+    // CSV/TXT: sem magic-bytes especifico, aceita ASCII printavel nos primeiros bytes
+    if (nome.endsWith('.csv') || nome.endsWith('.txt')) {
+        // Rejeita arquivo que pareca binario (muitos bytes nulos ou > 0x7F nao-UTF8)
+        let nulos = 0;
+        for (let j = 0; j < Math.min(512, b.length); j++) {
+            if (b[j] === 0x00) nulos++;
+        }
+        if (nulos > 5) return { ok: false, motivo: 'CSV/TXT contem bytes binarios' };
+        return { ok: true };
+    }
+    return { ok: false, motivo: `extensao nao suportada: "${nome}"` };
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -98,11 +153,15 @@ app.use(cors({
 // como o router respondia primeiro, esses 3 NUNCA rodavam pras rotas da API
 // (a superficie inteira, incluindo SEFAZ, ficava SEM rate limit nem headers
 // de seguranca). Movido pra ca, antes dos mounts, pra valer de verdade.
+// CSP endurecida: scriptSrc SEM 'unsafe-inline' (vetor XSS principal).
+// styleSrc mantem 'unsafe-inline' pois React injeta inline styles em runtime
+// e impacto de XSS via CSS e bem menor que via script. Tailwind CDN removido
+// (build-time desde o switch pra @tailwindcss/postcss; nao usamos mais a CDN).
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com", "https://www.gstatic.com", "https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com"],
+            scriptSrc: ["'self'", "https://apis.google.com", "https://www.gstatic.com", "https://cdnjs.cloudflare.com"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
             imgSrc: ["'self'", "data:", "https:"],
@@ -137,13 +196,37 @@ const sefazLimiter = rateLimit({
     skip: isCronRequest,
     message: { error: 'Muitas consultas à SEFAZ em pouco tempo. Aguarde ~1 minuto.' },
 });
+
+// Anti-enumeracao em /cnpj-lookup. Antes esse endpoint nao tinha limite
+// dedicado e qualquer colaborador podia varrer CNPJs (LGPD). 20/min/IP cobre
+// uso humano normal (cadastro de empresa pontual) e bloqueia varredura.
+const cnpjLookupLimiter = rateLimit({
+    windowMs: 60_000, max: 20,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    keyGenerator: (req) => (req.user?.uid ? `u:${req.user.uid}` : req.ip),
+    message: { error: 'Muitas consultas CNPJ em pouco tempo. Aguarde ~1 minuto.' },
+});
+// Anti-brute-force em /api/agent/* (validacao de API key). Sem limite dedicado
+// um atacante consegue testar milhares de keys/min sob o limite global de 120/min.
+// 10/min/IP eh suficiente pra uso legitimo (n8n/Zapier publicam mensagens com
+// intervalo grande) e duro pra brute force (chave SHA-256 = 2^256 espaco).
+const agentLimiter = rateLimit({
+    windowMs: 60_000, max: 10,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    message: { error: 'Muitas tentativas de autenticacao. Aguarde 1 minuto.' },
+});
 app.use('/api/', apiLimiter);
 app.use('/api/admin/sefaz/consulta-nfe-por-chave', sefazLimiter);
 app.use('/api/admin/sefaz/sync-one', sefazLimiter);
+app.use('/api/admin/cnpj-lookup', cnpjLookupLimiter);
+app.use('/api/agent', agentLimiter);
 
 // ── Routers (montados DEPOIS do middleware de segurança/limite) ─────────
 app.use('/api/admin/sefaz', sefazCertRouter);
 app.use('/api/admin/sefaz', sefazCertAlertaCronRouter);
+app.use('/api/admin/sefaz', sefazCapturaResumoCronRouter);
 app.use('/api/admin/sefaz', sefazSyncRouter);
 app.use('/api/admin/sefaz', empresaStatusRouter);
 app.use('/api/admin/vencimentos', vencimentosRouter);
@@ -162,6 +245,8 @@ app.use('/api/admin/notificacoes', notificacoesRouter);
 app.use('/api/admin/agent', agentAdminRouter);
 app.use('/api/agent', agentRouter);
 app.use('/api/admin/nfse-nacional-dfe', nfseNacionalDfeRouter);
+app.use('/api/admin/abrasf', abrasfRouter);
+app.use('/api/admin/abrasf', abrasfDiagnosticoRouter);
 app.use('/api/internal/plano-contas', planoContasBridgeRouter);
 app.use('/api/admin/recuperacao', recuperacaoRouter);
 app.use('/api/admin/nfp-compliance', nfpComplianceRouter);
@@ -269,7 +354,7 @@ app.post('/api/fiscal/query', requireAuth, requireAI, async (req, res) => {
         return res.json({ text: response.text ?? '', candidates: response.candidates || [] });
     } catch (err) {
         console.error('Erro Gemini:', err?.message);
-        return res.status(500).json({ error: err?.message || 'Erro IA' });
+        return respondeErro(res, err, 'Erro IA');
     }
 });
 
@@ -285,7 +370,7 @@ app.post('/api/fiscal/multimodal', requireAuth, requireAI, async (req, res) => {
         });
         return res.json({ text: response.text ?? '', candidates: response.candidates || [] });
     } catch (err) {
-        return res.status(500).json({ error: err?.message || 'Erro' });
+        return respondeErro(res, err, 'Erro');
     }
 });
 
@@ -436,7 +521,7 @@ app.get('/api/admin/das/previsao/:empresaId', requireAdmin, async (req, res) => 
         });
     } catch (err) {
         console.error('[das/previsao]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -485,7 +570,7 @@ Use **negrito** nos pontos-chave. Direto, sem rodeios.`;
         });
     } catch (err) {
         console.error('[das/previsao-ia]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -583,7 +668,7 @@ app.get('/api/admin/empresa-contato/:cnpj', requireAdmin, async (req, res) => {
         });
     } catch (err) {
         console.error('[empresa-contato]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -702,7 +787,7 @@ app.get('/api/admin/das/anomalias/:empresaId', requireAdmin, async (req, res) =>
         });
     } catch (err) {
         console.error('[das/anomalias]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -745,7 +830,7 @@ app.get('/api/admin/das/anomalias-todas', requireAdmin, async (req, res) => {
         });
     } catch (err) {
         console.error('[das/anomalias-todas]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -783,7 +868,7 @@ Use **negrito** nos pontos-chave. Seja direto, sem rodeios.`;
         });
     } catch (err) {
         console.error('[das/anomalia-explicar]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -857,7 +942,7 @@ ${canal === 'whatsapp' ? 'Comece direto sem assunto.' : 'Comece com ASSUNTO: ...
         });
     } catch (err) {
         console.error('[das/cobranca-ia]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -911,7 +996,7 @@ app.get('/api/admin/sharepoint/list-drives', requireAdmin, async (req, res) => {
         return res.json({ ok: true, drives });
     } catch (err) {
         console.error('[sharepoint/list-drives]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -923,7 +1008,7 @@ app.get('/api/admin/sharepoint/list-root', requireAdmin, async (req, res) => {
         return res.json({ ok: true, items });
     } catch (err) {
         console.error('[sharepoint/list-root]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -976,7 +1061,7 @@ app.get('/api/admin/sharepoint/check-folder', requireAdmin, async (req, res) => 
         });
     } catch (err) {
         console.error('[sharepoint/check-folder]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -995,7 +1080,7 @@ app.get('/api/admin/sharepoint/empresa-folder', requireAdmin, async (req, res) =
         });
     } catch (err) {
         console.error('[sharepoint/empresa-folder]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -1015,7 +1100,7 @@ app.post('/api/admin/sharepoint/upload-xml', requireAdmin, async (req, res) => {
         return res.json({ ok: true, ...result });
     } catch (err) {
         console.error('[sharepoint/upload-xml]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -1039,7 +1124,7 @@ app.post('/api/admin/sharepoint/upload-relatorio', requireAdmin, async (req, res
         return res.json({ ok: true, ...result, sizeBytes: buf.length });
     } catch (err) {
         console.error('[sharepoint/upload-relatorio]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -1058,7 +1143,7 @@ app.get('/api/admin/sharepoint/sync-dry-run', requireAdmin, async (req, res) => 
         return res.json({ ok: true, ...stats });
     } catch (err) {
         console.error('[sharepoint/sync-dry-run]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -1079,7 +1164,7 @@ app.post('/api/admin/sharepoint/sync-empresa', requireAdmin, async (req, res) =>
         return res.json({ ok: true, ...stats });
     } catch (err) {
         console.error('[sharepoint/sync-empresa]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -1098,7 +1183,7 @@ app.post('/api/admin/sharepoint/sync-all', requireAdmin, async (req, res) => {
         return res.json({ ok: true, ...stats });
     } catch (err) {
         console.error('[sharepoint/sync-all]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -1138,7 +1223,7 @@ app.get('/api/admin/sharepoint/sync-log', requireAdmin, async (req, res) => {
         return res.json({ ok: true, logs });
     } catch (err) {
         console.error('[sharepoint/sync-log]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -1150,7 +1235,7 @@ app.delete('/api/admin/sharepoint/cleanup-test', requireAdmin, async (req, res) 
         return res.json({ ok: true, ...result });
     } catch (err) {
         console.error('[sharepoint/cleanup-test]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -1163,7 +1248,7 @@ app.get('/api/admin/sharepoint/list-folder', requireAdmin, async (req, res) => {
         return res.json({ ok: true, path, items });
     } catch (err) {
         console.error('[sharepoint/list-folder]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -1175,7 +1260,7 @@ app.get('/api/admin/sharepoint/list-permissions', requireAdmin, async (req, res)
         return res.json({ ok: true, perms });
     } catch (err) {
         console.error('[sharepoint/list-permissions]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -1347,7 +1432,7 @@ app.post('/api/admin/simulador-ibs-cbs', requireAdmin, async (req, res) => {
         });
     } catch (err) {
         console.error('[simulador-ibs-cbs]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -1391,7 +1476,7 @@ Use **negrito** nos pontos-chave. Seja direto, sem rodeios. Nao invente numeros 
         });
     } catch (err) {
         console.error('[simulador-ibs-cbs-explicar]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -1471,7 +1556,7 @@ Responda APENAS o JSON, sem markdown, sem comentarios.`;
             const txtExt = (respExt.text || '').trim().replace(/^```json|```$/g, '').trim();
             extraido = JSON.parse(txtExt);
         } catch (e) {
-            return res.status(500).json({ error: 'Falha ao extrair PGDAS: ' + e.message });
+            return respondeErro(res, e, 'extrair-pgdas');
         }
 
         // 3. Localiza o calculo correspondente do app pela competencia
@@ -1558,7 +1643,7 @@ Responda APENAS o JSON, sem markdown, sem comentarios.`;
         });
     } catch (err) {
         console.error('[pgdas/conferir]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -1600,7 +1685,7 @@ Use **negrito** nos pontos-chave. Sem rodeios.`;
         });
     } catch (err) {
         console.error('[pgdas/conferir-explicar]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -1697,7 +1782,7 @@ app.get('/api/admin/calendario/:ano/:mes', requireAuthOrColab, async (req, res) 
         });
     } catch (err) {
         console.error('[calendario]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -1855,7 +1940,7 @@ app.get('/api/admin/dashboard-ceo/kpis', requireAdmin, async (req, res) => {
         });
     } catch (err) {
         console.error('[dashboard-ceo/kpis]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -2002,7 +2087,7 @@ app.get('/api/admin/dashboard-ceo/acoes', requireAdmin, async (req, res) => {
         });
     } catch (err) {
         console.error('[dashboard-ceo/acoes]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -2054,7 +2139,7 @@ dos KPIs — assuma que o CEO ja viu.`;
         });
     } catch (err) {
         console.error('[dashboard-ceo/insights]', err);
-        return res.status(500).json({ error: err.message });
+        return respondeErro(res, err);
     }
 });
 
@@ -2369,11 +2454,21 @@ app.post('/api/analise-creditos/manual', requireAuth, async (req, res) => {
         if (!Array.isArray(notas)||!notas.length||!perfilCliente)
             return res.status(400).json({ erro:'Dados incompletos' });
         return res.json({ resultado: calcularResultado(notas, perfilCliente.regime) });
-    } catch(err) { return res.status(500).json({ erro: err.message||'Erro interno' }); }
+    } catch(err) {
+        const { error, requestId } = sanitizeError(err);
+        console.error('[analise-creditos/manual]', requestId, err);
+        return res.status(500).json({ erro: error, requestId });
+    }
 });
 app.post('/api/analise-creditos/upload', requireAuth, upload.single('arquivo'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ erro:'Arquivo não enviado' });
+        // Validacao magic-bytes ANTES de processar (anti zip-bomb / binario disfarcado)
+        const mb = validarMagicBytes(req.file.buffer, req.file.originalname);
+        if (!mb.ok) {
+            console.warn('[upload] arquivo rejeitado magic-bytes:', mb.motivo, 'nome=', req.file.originalname);
+            return res.status(400).json({ erro: `Arquivo invalido: ${mb.motivo}` });
+        }
         const perfil = JSON.parse(req.body.perfil||'{}');
         const nome2=req.file.originalname.toLowerCase();const regime=perfil.regime||'LUCRO_REAL_SERVICOS';if(nome2.endsWith('.xlsx')||nome2.endsWith('.xls')){
             // Detector especifico: fatura Itau Empresas Mastercard (cabecalho longo, valor em col K)
@@ -2398,7 +2493,11 @@ const conteudo = req.file.buffer.toString('utf-8');
         }
         if (!notas.length) return res.status(400).json({ erro:'Nenhuma nota encontrada no arquivo' });
         return res.json({ resultado: calcularResultado(notas, regime) });
-    } catch(err) { return res.status(500).json({ erro: err.message||'Erro ao processar arquivo' }); }
+    } catch(err) {
+        const { error, requestId } = sanitizeError(err);
+        console.error('[analise-creditos/upload]', requestId, err);
+        return res.status(500).json({ erro: error, requestId });
+    }
 });
 // ────────────────────────────────────────────────────────────────────────────
 app.use(express.static(join(__dirname, 'dist'), {
@@ -2438,7 +2537,7 @@ app.post('/api/admin/sharepoint/cron-alertas', express.json(), async (req, res) 
         return res.json(r);
     } catch (err) {
         console.error('[sharepoint/cron-alertas]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -2459,7 +2558,7 @@ app.post('/api/tarefas/cron-mensal', express.json(), async (req, res) => {
         return res.json({ ok: true, ...r });
     } catch (err) {
         console.error('[tarefas/cron-mensal]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -2478,7 +2577,7 @@ app.post('/api/tarefas/aplicar-carteira', express.json(), async (req, res) => {
         return res.json({ ok: true, ...r });
     } catch (err) {
         console.error('[tarefas/aplicar-carteira]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
 
@@ -2499,8 +2598,13 @@ app.post('/api/tarefas/gerar-empresa', express.json(), async (req, res) => {
         return res.json({ ok: true, ...r });
     } catch (err) {
         console.error('[tarefas/gerar-empresa]', err);
-        return res.status(500).json({ ok: false, error: err.message });
+        return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });
+
+// Middleware global de erro: catch-all pra erros nao tratados (next(err)) e
+// throws sincronos em handlers (Express 5). Sanitiza msg antes de devolver
+// ao cliente. PRECISA ser o ultimo middleware registrado.
+app.use(errorMiddleware);
 
 app.listen(PORT, () => console.log('Servidor rodando na porta ' + PORT));

@@ -188,13 +188,27 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             console.warn('[empresa-status-routes] falha lendo cert do escritorio:', e.message);
         }
 
+        // CNPJ-Base esperado do cert do escritorio (44388152). Usado pro
+        // sanity check do cert global no Secret Manager (detecta upload
+        // errado de outro CNPJ).
+        const CNPJ_ESCRITORIO_BASE = CNPJ_ESCRITORIO.slice(0, 8);
+        // O cert do escritorio pode estar quebrado ou indisponivel — nesses
+        // casos a captura via procuracao tambem nao serve.
+        const certEscritorioUtilizavel = !certEscritorioErro
+            && (!cnpjBaseCertEscritorio || cnpjBaseCertEscritorio === CNPJ_ESCRITORIO_BASE);
+
+        const fmtDataBr = (iso) => {
+            if (!iso) return null;
+            try { return new Date(iso).toLocaleDateString('pt-BR'); }
+            catch { return null; }
+        };
+
         for (const emp of empresasMap.values()) {
             const cert = certsMap.get(emp.id);
             let tipoCert = 'nenhum';
             let certUploaded = false;
             let certValido = false;
             let certVenceEm = null;
-            let usaCertEscritorio = false;
 
             // A propria empresa do escritorio (S&P) tem o cert dela no Secret
             // Manager (carregado por loadCertificate()), NAO em empresas_certificados.
@@ -218,45 +232,71 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 tipoCert = 'A1';
                 certUploaded = true;
                 certValido = true;
-            } else {
-                // Sem cert próprio — pode usar o cert do escritório se houver procuração
-                if (emp.procuracaoEcacAtiva) {
-                    tipoCert = 'escritorio';
-                    usaCertEscritorio = true;
-                    certValido = true; // assume escritório válido (verificar separado)
-                }
             }
 
-            // Empresa com cert A1/A3 próprio NÃO precisa de procuração e-CAC
-            // separada — o cert já autoriza. A flag só importa quando usa cert
-            // do escritório. Pra UI mostrar verde, inferimos como ativa.
+            // ── Capacidade real de captura NFe ──────────────────────────────
+            // Caminhos validos no Cloud Run hoje:
+            //  a) Cert A1 PROPRIO valido (cert.tipoCert='A1', notAfter no futuro)
+            //  b) Procuracao e-CAC ativa + cert do escritorio utilizavel
+            //     (assina com cert S&P, passa CNPJ da empresa no envelope)
+            //  c) Empresa E a S&P (cert global serve direto)
+            // A3 nao roda no Cloud Run (precisa de cfi-a3 local). Procuracao
+            // SUBSTITUI a necessidade de cert proprio.
+            const temA1ProprioValido = tipoCert === 'A1' && certValido && !ehEscritorio;
+            const podeUsarCertEscritorio = certEscritorioUtilizavel
+                && (ehEscritorio || emp.procuracaoEcacAtiva);
+            const usaCertEscritorio = !temA1ProprioValido && podeUsarCertEscritorio;
+            // Pra UI: tipoCert reflete o REAL caminho. Se empresa sem cert
+            // proprio mas com procuracao ativa, vira 'escritorio'.
+            if (tipoCert === 'nenhum' && usaCertEscritorio && !ehEscritorio) {
+                tipoCert = 'escritorio';
+            }
+
             const procuracaoInferida = emp.procuracaoEcacAtiva || (tipoCert === 'A1' || tipoCert === 'A3');
 
-            // Cálculo de capacidade de captura
             const motivosBloqueio = [];
 
-            // a) NFe DistDFe: precisa cert válido + UF cadastrada + cert-base bater
-            // O mismatch CNPJ-Base só importa quando usa cert do escritório (cert
-            // global) ou quando a empresa É o escritório. Empresas com cert próprio
-            // já são validadas pelo sanity check do sync-orchestrator.
-            const empresaCnpjBase = String(emp.cnpj || '').slice(0, 8);
-            const certBaseMismatch = (usaCertEscritorio || emp.cnpj === CNPJ_ESCRITORIO)
-                && cnpjBaseCertEscritorio
-                && cnpjBaseCertEscritorio !== empresaCnpjBase;
-            const capturaNfeOk = certValido && emp.capturarSefaz && !!emp.uf && !certBaseMismatch;
+            // capturaNfeOk: precisa um caminho valido + uf + flag manual.
+            const capturaNfeOk = emp.capturarSefaz && !!emp.uf
+                && (temA1ProprioValido || usaCertEscritorio);
+
+            // Mensagens de bloqueio (ordem importa — A3 vem antes de "expirado"
+            // porque A3 bloqueia independente de data).
             if (!emp.capturarSefaz) motivosBloqueio.push('Captura SEFAZ desativada manualmente');
             else if (!emp.uf) motivosBloqueio.push('UF não cadastrada (preencha dadosFiscais.uf, ex: SP)');
-            else if (tipoCert === 'nenhum') motivosBloqueio.push('Sem certificado A1/A3 e sem procuração e-CAC');
-            else if (!certValido && certUploaded) motivosBloqueio.push(`Certificado ${tipoCert} expirado em ${certVenceEm}`);
-            else if (tipoCert === 'A3') motivosBloqueio.push('Tipo A3 — captura via agente local cfi-a3, não pelo Cloud Run');
-            else if (certBaseMismatch) {
-                motivosBloqueio.push(
-                    `Cert do escritório no Secret Manager é de outro CNPJ-Base (${cnpjBaseCertEscritorio}) — esperado ${empresaCnpjBase}. ` +
-                    `SEFAZ rejeita com cStat=593. Suba o .pfx correto via 'Empresas Monitoradas → Certificado'.`
-                );
+            else if (capturaNfeOk) {
+                // Caminho A1 proprio E nao usa escritorio? nenhum motivo.
+                // Se vai via escritorio, nao e bloqueio — e info. Sem push.
             }
-            if (certEscritorioErro && (usaCertEscritorio || emp.cnpj === CNPJ_ESCRITORIO)) {
-                motivosBloqueio.push(`Cert do escritório indisponível: ${certEscritorioErro}`);
+            else if (tipoCert === 'A3') {
+                // A3 + procuracao ja teria caido em capturaNfeOk via escritorio.
+                // Se chegou aqui, e A3 sem procuracao ou cert escritorio offline.
+                if (emp.procuracaoEcacAtiva && !certEscritorioUtilizavel) {
+                    motivosBloqueio.push('Procuração e-CAC ativa, mas cert do escritório está indisponível (ver Configurações > Certificado Digital)');
+                } else {
+                    motivosBloqueio.push('Tipo A3 sem procuração e-CAC — Cloud Run não roda A3 (precisa cfi-a3 local) ou ative procuração e-CAC pra capturar via cert do escritório');
+                }
+            }
+            else if (!certValido && certUploaded) {
+                // Cert proprio invalido (geralmente A1 vencido). Se tem procuracao,
+                // ja foi por usaCertEscritorio — nao chegaria aqui. Sem procuracao,
+                // bloqueia.
+                const dataBr = fmtDataBr(certVenceEm);
+                if (dataBr) motivosBloqueio.push(`Certificado ${tipoCert} expirado em ${dataBr} — renove ou ative procuração e-CAC`);
+                else motivosBloqueio.push(`Certificado ${tipoCert} sem data de validade no cadastro — recadastre o .pfx ou ative procuração e-CAC`);
+            }
+            else if (tipoCert === 'nenhum') {
+                motivosBloqueio.push('Sem certificado A1/A3 e sem procuração e-CAC ativa');
+            }
+            else if (!certEscritorioUtilizavel && (ehEscritorio || emp.procuracaoEcacAtiva)) {
+                if (certEscritorioErro) {
+                    motivosBloqueio.push(`Cert do escritório indisponível: ${certEscritorioErro}`);
+                } else if (cnpjBaseCertEscritorio && cnpjBaseCertEscritorio !== CNPJ_ESCRITORIO_BASE) {
+                    motivosBloqueio.push(
+                        `Cert do escritório no Secret Manager é de outro CNPJ-Base (${cnpjBaseCertEscritorio}) — esperado ${CNPJ_ESCRITORIO_BASE}. ` +
+                        `SEFAZ rejeita com cStat=593. Suba o .pfx correto da S&P no Secret Manager.`
+                    );
+                }
             }
 
             // b) NFSe SP: precisa ccmSp + autorização do contador no portal SP
@@ -379,6 +419,36 @@ router.post('/empresa-toggle-flag', requireAuth, express.json(), async (req, res
         return res.json({ ok: true, cnpj: cnpjLimpo, campo, valor, atualizadas });
     } catch (e) {
         console.error('[empresa-toggle-flag] erro:', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── Resetar lock SEFAZ de uma empresa ────────────────────────────────────
+// Sync-orchestrator marca lock de 1h por CNPJ pra evitar disparos
+// concorrentes. Quando admin precisa testar de novo dentro da janela
+// (ex: ajustou procuracao e quer rodar sem esperar a janela vencer),
+// esse endpoint apaga o doc sefaz_locks/{cnpj}. Próximo disparo do
+// orchestrator vai criar o lock de novo.
+router.post('/empresa-reset-lock', requireAuth, express.json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores' });
+        }
+        const { cnpj } = req.body || {};
+        const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
+        if (cnpjLimpo.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });
+
+        const db = fa().firestore();
+        const ref = db.collection('sefaz_locks').doc(cnpjLimpo);
+        const snap = await ref.get();
+        if (!snap.exists) {
+            return res.json({ ok: true, cnpj: cnpjLimpo, hadLock: false, msg: 'Empresa já estava sem lock ativo' });
+        }
+        await ref.delete();
+        console.log(`[empresa-reset-lock] cnpj=${cnpjLimpo} por=${req.user.email}`);
+        return res.json({ ok: true, cnpj: cnpjLimpo, hadLock: true, msg: 'Lock resetado — próximo disparo recria.' });
+    } catch (e) {
+        console.error('[empresa-reset-lock] erro:', e);
         return res.status(500).json({ error: e.message });
     }
 });

@@ -16,10 +16,17 @@
 //   EMISSAO_BLOQUEADA (kill-switch)
 //
 // Niveis:
-//   critico  feature inteira nao funciona (SERPRO_*, SEFAZ_CRON_SECRET)
-//   alto     feature em modo degradado (mock em prod, sem SENTRY)
-//   medio    informativo desejavel ausente (CONTADOR_*, GEMINI_MODEL_PRO)
-//   ok       tudo configurado
+//   critico     feature inteira nao funciona (SERPRO_*, SEFAZ_CRON_SECRET)
+//   alto        feature em modo degradado (mock em prod, sem SENTRY)
+//   medio       informativo desejavel ausente (CONTADOR_*)
+//   informativo configurado via DEFAULT do codigo, nao bloqueia (STORAGE_BUCKET,
+//               HEALTH_ALERT_TO). Lista pro admin saber que esta funcionando
+//               em fallback mas pode setar valor explicito.
+//   ok          tudo configurado
+//
+// IMPORTANTE: 'defaultRuntime' indica que a chave tem fallback no codigo da
+// app — se a env var for vazia, NAO eh bug e nao bloqueia produto. So vira
+// 'informativo' pro admin enxergar que pode customizar.
 // ============================================================================
 
 /**
@@ -42,7 +49,13 @@ export const CONFIGS_MONITORADAS = [
         descricao: 'Secret compartilhado com Cloud Scheduler',
         impacto: 'TODOS os crons noturnos (caixa-postal, DCTFWeb, DAS, NFS-e nac) falham com 403' },
     // ── Storage
+    // STORAGE_BUCKET tem default no codigo: '${PROJECT_ID}.firebasestorage.app'
+    // (consultorfiscalapp.firebasestorage.app). Sem env var, app usa default
+    // e tudo funciona — comprovado: XMLs estao sendo capturados e PDFs
+    // subindo normalmente em prod. So marca como informativo pra admin
+    // saber que pode trocar de bucket se quiser.
     { chave: 'STORAGE_BUCKET', categoria: 'firebase', criticidade: 'critico',
+        defaultRuntime: 'consultorfiscalapp.firebasestorage.app',
         descricao: 'Bucket de armazenamento Firebase',
         impacto: 'Upload de .pfx e download de XMLs falha' },
     // ── SharePoint
@@ -55,13 +68,20 @@ export const CONFIGS_MONITORADAS = [
     { chave: 'GRAPH_CLIENT_SECRET', categoria: 'sharepoint', criticidade: 'alto',
         descricao: 'Client secret do app no Azure AD',
         impacto: 'SharePoint sync de XMLs não roda' },
-    { chave: 'SHAREPOINT_HOST', categoria: 'sharepoint', criticidade: 'alto',
+    // SHAREPOINT_HOST so importa se a empresa usa o sync de XML via SharePoint.
+    // GRAPH_* (acima) sao usados TAMBEM pra email (cert-alerta, captura-resumo,
+    // que funcionam). Logo, GRAPH_* setado != SharePoint em uso. Marcamos
+    // opcional pra nao alarmar quem usa SharePoint apenas pra email.
+    { chave: 'SHAREPOINT_HOST', categoria: 'sharepoint', criticidade: 'alto', opcional: true,
         descricao: 'Host do SharePoint (ex.: empresa.sharepoint.com)',
-        impacto: 'SharePoint sync não localiza o site' },
+        impacto: 'SharePoint sync de XMLs não roda (só importa se você usa essa via de importação)' },
     // ── Gateway interno
-    { chave: 'FISCAL_GATEWAY_TOKEN', categoria: 'integracao', criticidade: 'alto',
+    // FISCAL_GATEWAY_TOKEN protege o endpoint /internal/plano-contas, consumido
+    // por um sistema CONTABIL externo. Se nao ha integracao contabil ativa,
+    // nao precisa. Opcional pra nao alarmar quem nao usa.
+    { chave: 'FISCAL_GATEWAY_TOKEN', categoria: 'integracao', criticidade: 'alto', opcional: true,
         descricao: 'Token compartilhado entre fiscal e contábil',
-        impacto: 'Endpoint /internal/plano-contas retorna 401' },
+        impacto: 'Endpoint /internal/plano-contas retorna 401 (só importa se há sistema contábil externo integrado)' },
     // ── Contador (dados do SPED)
     { chave: 'CONTADOR_CRC', categoria: 'contador', criticidade: 'medio',
         descricao: 'CRC do contador responsável',
@@ -72,7 +92,11 @@ export const CONFIGS_MONITORADAS = [
     { chave: 'CONTADOR_CPF', categoria: 'contador', criticidade: 'medio',
         descricao: 'CPF do contador responsável',
         impacto: 'SPED gerado sem CPF do responsável' },
+    // HEALTH_ALERT_TO tem default no codigo: usa GRAPH_REMETENTE (junior@spassessoriacontabil.com.br).
+    // Sem env var, alerta noturno ainda chega — so num email so. Marcar
+    // como informativo evita falso alarme no painel.
     { chave: 'HEALTH_ALERT_TO', categoria: 'alertas', criticidade: 'medio',
+        defaultRuntime: 'GRAPH_REMETENTE (junior@spassessoriacontabil.com.br)',
         descricao: 'Destinatário do alerta noturno health-consolidado',
         impacto: 'Email vai pro GRAPH_REMETENTE (Paulo) por default — sem destinatário dedicado' },
 ];
@@ -104,14 +128,38 @@ export function diagnosticarConfig(env, ambiente = 'prod') {
     for (const c of CONFIGS_MONITORADAS) {
         const valor = e[c.chave];
         if (!valor || String(valor).trim() === '') {
-            achados.push({
-                tipo: 'env_vazia',
-                chave: c.chave,
-                categoria: c.categoria,
-                criticidade: c.criticidade,
-                descricao: c.descricao,
-                impacto: c.impacto,
-            });
+            // Se tem defaultRuntime, a feature NAO esta quebrada — esta
+            // rodando no fallback. Rebaixa criticidade pra 'informativo'.
+            if (c.defaultRuntime) {
+                achados.push({
+                    tipo: 'env_via_default',
+                    chave: c.chave,
+                    categoria: c.categoria,
+                    criticidade: 'informativo',
+                    descricao: c.descricao,
+                    impacto: `Usando default do código: "${c.defaultRuntime}". Setar a env var só se quiser customizar.`,
+                });
+            } else if (c.opcional) {
+                // Gate de feature opcional (SharePoint sync, gateway contabil).
+                // Nao alarma — so importa se a empresa USA aquela integracao.
+                achados.push({
+                    tipo: 'env_opcional',
+                    chave: c.chave,
+                    categoria: c.categoria,
+                    criticidade: 'opcional',
+                    descricao: c.descricao,
+                    impacto: c.impacto,
+                });
+            } else {
+                achados.push({
+                    tipo: 'env_vazia',
+                    chave: c.chave,
+                    categoria: c.categoria,
+                    criticidade: c.criticidade,
+                    descricao: c.descricao,
+                    impacto: c.impacto,
+                });
+            }
         }
     }
 
@@ -149,6 +197,11 @@ export function diagnosticarConfig(env, ambiente = 'prod') {
         criticos: achados.filter((a) => a.criticidade === 'critico').length,
         altos: achados.filter((a) => a.criticidade === 'alto').length,
         medios: achados.filter((a) => a.criticidade === 'medio').length,
+        // Informativos: vars sem env mas com default no codigo (nao bloqueia).
+        informativos: achados.filter((a) => a.criticidade === 'informativo').length,
+        // Opcionais: gates de feature opcional (SharePoint, gateway contabil)
+        // que so importam se a empresa usa aquela integracao.
+        opcionais: achados.filter((a) => a.criticidade === 'opcional').length,
         ambiente,
     };
 

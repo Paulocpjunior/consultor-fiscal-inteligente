@@ -189,6 +189,9 @@ router.post('/cert-alerta-cron', requireCronAuth, async (req, res) => {
     try {
       const certs = await listCertsEmpresas();
       for (const c of certs) {
+        // Cert per-empresa do escritorio ja foi avaliado acima como cert do
+        // escritorio (sefaz_certificados/atual). Pula pra nao alertar 2x.
+        if (String(c.cnpj || '').replace(/\D/g, '') === CNPJ_ESCRITORIO) continue;
         try {
           const ref = db.collection('empresas_certificados').doc(c.empresaId);
           const snap = await ref.get();

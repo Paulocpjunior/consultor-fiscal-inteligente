@@ -103,7 +103,7 @@ const ReformaNews: React.FC = () => {
                     </>
                 ) : (
                     alerts.map((alert, index) => (
-                        <AlertCard key={index} alert={alert} />
+                        <AlertCard key={alert.source || `${alert.title}-${index}`} alert={alert} />
                     ))
                 )}
             </div>

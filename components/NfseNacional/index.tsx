@@ -12,6 +12,7 @@ import {
     formatBRL, formatChave, statusBadgeClass,
 } from '../../services/nfseNacionalService';
 import { baixarDanfse } from '../../services/danfseGenerator';
+import { usePrompt } from '../dialog/DialogProvider';
 
 interface Props {
     currentUser: User | null;
@@ -19,6 +20,7 @@ interface Props {
 }
 
 const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
+    const prompt = usePrompt();
     const [resumo, setResumo] = useState<NfseNacResumo | null>(null);
     const [docs, setDocs] = useState<NfseNacionalEmitida[]>([]);
     const [loading, setLoading] = useState(false);
@@ -45,8 +47,14 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
     useEffect(() => { carregar(); }, [filtroStatus]);
 
     const handleCancelar = async (nfse: NfseNacionalEmitida) => {
-        const motivo = window.prompt('Motivo do cancelamento:', 'erro de digitacao');
-        if (!motivo) return;
+        const motivo = await prompt({
+            title: 'Cancelar NFS-e',
+            message: `Informe o motivo do cancelamento da NFS-e ${nfse.numero}.`,
+            defaultValue: 'erro de digitação',
+            placeholder: 'Motivo do cancelamento',
+            confirmLabel: 'Cancelar NFS-e',
+        });
+        if (!motivo || !motivo.trim()) return;
         try {
             await cancelarNfse(currentUser, nfse.chave, motivo);
             await carregar();

@@ -14,6 +14,7 @@ import {
     getCoberturaAdn, toggleAdnEmpresa, toggleAdnBulk,
     type CoberturaResposta, type EmpresaCobertura,
 } from '../../services/nfseNacionalCoberturaService';
+import { useConfirm } from '../dialog/DialogProvider';
 
 interface Props {
     onShowToast?: (msg: string) => void;
@@ -29,6 +30,7 @@ const fmtDate = (iso: string | null) => {
 type Filtro = 'todas' | 'ativas' | 'inativas' | 'sem-captura';
 
 const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
+    const confirm = useConfirm();
     const [data, setData] = useState<CoberturaResposta | null>(null);
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
@@ -79,12 +81,18 @@ const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
         if (!data) return;
         const cnpjs = data.empresas.filter((e) => !e.ativo).map((e) => e.cnpj);
         if (!cnpjs.length) { onShowToast?.('Todas as empresas já estão habilitadas.'); return; }
-        const ok = window.confirm(
-            `Habilitar captura ADN em ${cnpjs.length} empresa(s) inativa(s)?\n\n`
-            + `IMPORTANTE: a ADN exige procuração eletrônica registrada na Receita pra cada CNPJ. `
-            + `Empresas sem procuração ficarão habilitadas mas vão falhar no cron — sem perda de dados, `
-            + `só log de erro. Confirma?`,
-        );
+        const ok = await confirm({
+            title: `Habilitar ADN em ${cnpjs.length} empresa(s)?`,
+            message: (
+                <>
+                    A ADN exige procuração eletrônica registrada na Receita pra cada CNPJ.
+                    Empresas sem procuração ficarão habilitadas mas vão falhar no cron —
+                    sem perda de dados, só log de erro.
+                </>
+            ),
+            variant: 'warning',
+            confirmLabel: 'Habilitar',
+        });
         if (!ok) return;
         setAcaoEmCurso('bulk');
         try {

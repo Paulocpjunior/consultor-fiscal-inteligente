@@ -9,6 +9,7 @@ import { parsePgdasExtrato } from './pgdasPdfParser';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
+import { validarCnpj } from './validadorDocumento';
 import {
     collection, getDocs, doc, setDoc, getDoc,
     query, where, deleteDoc, limit as fbLimit
@@ -19,8 +20,33 @@ const STORAGE_KEY_EMPRESAS  = 'simples_nacional_empresas';
 const STORAGE_KEY_NOTAS     = 'simples_nacional_notas';
 const MASTER_ADMIN_EMAIL    = 'junior@spassessoriacontabil.com.br';
 
-// ─── TABELAS (inalteradas) ────────────────────────────────────────────────────
-export const ANEXOS_TABELAS: any = {
+// ─── TABELAS (tipadas - LC 123/2006 com LC 155/2016 e LC 192/2022) ────────────
+
+/** Chave de anexo do Simples Nacional. */
+export type AnexoKey = 'I' | 'II' | 'III' | 'IV' | 'V';
+
+/** Faixa de receita do Anexo (limite, aliquota nominal, parcela a deduzir). */
+export interface FaixaSimples {
+    limite: number;     // teto de RBT12 em R$
+    aliquota: number;   // em %
+    parcela: number;    // parcela a deduzir em R$
+}
+
+/**
+ * Reparticao percentual dos tributos dentro do DAS por anexo e faixa.
+ * Soma 100% por faixa (descontando tributos que nao se aplicam ao anexo).
+ *
+ * Chaves de tributo:
+ *   IRPJ, CSLL, COFINS, PIS, CPP - todas as faixas/anexos
+ *   ICMS    - apenas Anexos I e II (mercadoria)
+ *   IPI     - apenas Anexo II (industria)
+ *   ISS     - apenas Anexos III, IV, V (servico)
+ */
+export type TributoSimples = 'IRPJ' | 'CSLL' | 'COFINS' | 'PIS' | 'CPP' | 'ICMS' | 'IPI' | 'ISS';
+export type ReparticaoFaixa = Partial<Record<TributoSimples, number>>;
+export type FaixaIndex = 0 | 1 | 2 | 3 | 4 | 5;
+
+export const ANEXOS_TABELAS: Record<AnexoKey, FaixaSimples[]> = {
     "I":  [{ limite: 180000,  aliquota: 4,    parcela: 0      }, { limite: 360000,  aliquota: 7.3,  parcela: 5940   }, { limite: 720000,  aliquota: 9.5,  parcela: 13860  }, { limite: 1800000, aliquota: 10.7, parcela: 22500  }, { limite: 3600000, aliquota: 14.3, parcela: 87300  }, { limite: 4800000, aliquota: 19,   parcela: 378000 }],
     "II": [{ limite: 180000,  aliquota: 4.5,  parcela: 0      }, { limite: 360000,  aliquota: 7.8,  parcela: 5940   }, { limite: 720000,  aliquota: 10,   parcela: 13860  }, { limite: 1800000, aliquota: 11.2, parcela: 22500  }, { limite: 3600000, aliquota: 14.7, parcela: 85500  }, { limite: 4800000, aliquota: 30,   parcela: 720000 }],
     "III":[{ limite: 180000,  aliquota: 6,    parcela: 0      }, { limite: 360000,  aliquota: 11.2, parcela: 9360   }, { limite: 720000,  aliquota: 13.5, parcela: 17640  }, { limite: 1800000, aliquota: 16,   parcela: 35640  }, { limite: 3600000, aliquota: 21,   parcela: 125640 }, { limite: 4800000, aliquota: 33,   parcela: 648000 }],
@@ -28,7 +54,7 @@ export const ANEXOS_TABELAS: any = {
     "V":  [{ limite: 180000,  aliquota: 15.5, parcela: 0      }, { limite: 360000,  aliquota: 18,   parcela: 4500   }, { limite: 720000,  aliquota: 19.5, parcela: 9900   }, { limite: 1800000, aliquota: 20.5, parcela: 17100  }, { limite: 3600000, aliquota: 23,   parcela: 62100  }, { limite: 4800000, aliquota: 30.5, parcela: 540000 }]
 };
 
-export const REPARTICAO_IMPOSTOS: any = {
+export const REPARTICAO_IMPOSTOS: Record<AnexoKey, Record<FaixaIndex, ReparticaoFaixa>> = {
     "I": {
         0: { IRPJ: 5.50,  CSLL: 3.50,  COFINS: 12.74, PIS: 2.76, CPP: 41.50, ICMS: 34.00 },
         1: { IRPJ: 5.50,  CSLL: 3.50,  COFINS: 12.74, PIS: 2.76, CPP: 41.50, ICMS: 34.00 },
@@ -89,39 +115,39 @@ const saveLocalEmpresas = (e: SimplesNacionalEmpresa[]) =>
 // ─── EMPRESAS ─────────────────────────────────────────────────────────────────
 export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEmpresa[]> => {
     if (!user) return [];
-    const isMaster = user.role === 'admin' || user.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
 
-    // ── Cloud-first ──
+    let cloudEmpresas: SimplesNacionalEmpresa[] = [];
+
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
-            const uid = auth.currentUser.uid;
-            const snaps = await fetchAllDocs('simples_empresas', isMaster ? [] : [where('createdBy', '==', uid)]);
-            const cloudEmpresas = snaps
+            const snaps = await fetchAllDocs('simples_empresas', []);
+            cloudEmpresas = snaps
                 .filter(d => !(d.data() as any)._merged_into)
                 .map(d => ({ id: d.id, ...d.data() } as SimplesNacionalEmpresa));
-
-            // Atualiza cache local
-            const local = getLocalEmpresas();
-            const merged = [...cloudEmpresas];
-            local.forEach(l => { if (!merged.find(c => c.id === l.id)) merged.push(l); });
-            saveLocalEmpresas(merged);
-
-            return cloudEmpresas;
+            console.info('[Simples] cloud retornou', cloudEmpresas.length, 'empresas');
         } catch (err: any) {
-            if (err.code !== 'permission-denied' && err.code !== 'failed-precondition')
-                console.debug('getEmpresas (Simples) cloud error:', err.message);
+            // Visivel pro admin DevTools -- antes era console.debug invisivel.
+            console.error('[Simples] erro buscando empresas no Firestore:', err?.code, err?.message);
         }
     }
 
-    // ── Local fallback ──
+    // SEMPRE faz merge cloud + local pra nunca sumir empresa do cache.
     const local = getLocalEmpresas();
-    return isMaster ? local : local.filter(e => e.createdBy === user.id || !e.createdBy);
+    const merged = [...cloudEmpresas];
+    local.forEach(l => { if (!merged.find(c => c.id === l.id)) merged.push(l); });
+    saveLocalEmpresas(merged);
+    return merged;
 };
 
 export const saveEmpresa = async (
     nome: string, cnpj: string, cnae: string, anexo: string,
     atividadesSecundarias: any[], userId: string, dataAbertura?: string
 ): Promise<SimplesNacionalEmpresa> => {
+    // Valida DV do CNPJ (suporta alfanumerico - IN RFB 2.229/2024).
+    if (!validarCnpj(cnpj)) {
+        throw new Error(`CNPJ invalido: "${cnpj}". Verifique os digitos.`);
+    }
+
     // Trava de unicidade — bloqueia cadastro de CNPJ ja existente em
     // simples_empresas OU lucro_empresas (regra: unicidade global entre regimes).
     const check = await verificarCnpjDuplicado(cnpj);
@@ -176,10 +202,12 @@ export const updateEmpresa = async (
     // ── Local cache ──
     const local = getLocalEmpresas();
     const idx = local.findIndex(e => e.id === id);
-    if (idx !== -1) {
-        local[idx] = { ...local[idx], ...data };
+    const existente = idx !== -1 ? local[idx] : null;
+    if (existente) {
+        const atualizada = { ...existente, ...data };
+        local[idx] = atualizada;
         saveLocalEmpresas(local);
-        return local[idx];
+        return atualizada;
     }
     return null;
 };
@@ -218,9 +246,14 @@ export const getAllNotas = async (
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
             const uid = auth.currentUser.uid;
-            const snaps = await fetchAllDocs('simples_notas', isMaster ? [] : [where('createdBy', '==', uid)]);
+            // Admin: busca tudo. Colaborador: busca tudo (rules permitem) e
+            // filtra no cliente. Ve nota se foi criada por ele OU se eh de
+            // empresa atribuida a ele via carteira (mesmo bug das empresas
+            // que arrumamos no PR #120 -- antes filtrava so por createdBy).
+            const snaps = await fetchAllDocs('simples_notas', []);
             cloudNotas = snaps.map(d =>
                 ({ id: d.id, ...d.data() } as SimplesNacionalNota));
+            // VISIBILIDADE ABERTA: todos veem todas as notas. Decisao temporaria.
         } catch { /* silent */ }
     }
 
@@ -233,8 +266,8 @@ export const getAllNotas = async (
 
     const result: Record<string, SimplesNacionalNota[]> = {};
     noteMap.forEach(note => {
-        if (!result[note.empresaId]) result[note.empresaId] = [];
-        result[note.empresaId].push(note);
+        const arr = result[note.empresaId] || (result[note.empresaId] = []);
+        arr.push(note);
     });
     return result;
 };
@@ -248,6 +281,7 @@ const parseXmlNfe = (xmlContent: string): any[] => {
         const nfeNodes = xmlDoc.getElementsByTagName('infNFe');
         for (let i = 0; i < nfeNodes.length; i++) {
             const n    = nfeNodes[i];
+            if (!n) continue;
             const dhEmi = n.getElementsByTagName('dhEmi')[0]?.textContent ||
                           n.getElementsByTagName('dEmi')[0]?.textContent;
             const vNF   = n.getElementsByTagName('vNF')[0]?.textContent;
@@ -503,7 +537,20 @@ export const calcularResumoEmpresa = (
         }
     }
 
-    let fator_r = rbt12Global > 0 ? empresa.folha12 / rbt12Global : 0;
+    // Folha dos ultimos 12 meses para Fator R (LC 123/06 art. 18 §5o-M).
+    // Preferencia: serie mensal `folhaMensal` (janela movel correta).
+    // Fallback: `folha12` (valor unico legado).
+    let folha12Calculada = 0;
+    if (empresa.folhaMensal && Object.keys(empresa.folhaMensal).length > 0) {
+        for (let i = 0; i < 12; i++) {
+            const d = new Date(dataInicioRBT12.getFullYear(), dataInicioRBT12.getMonth() + i, 1);
+            const k = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+            folha12Calculada += empresa.folhaMensal[k] || 0;
+        }
+    } else {
+        folha12Calculada = empresa.folha12 || 0;
+    }
+    let fator_r = rbt12Global > 0 ? folha12Calculada / rbt12Global : 0;
     if (options?.fatorRManual != null && !isNaN(options.fatorRManual))
         fator_r = options.fatorRManual;
 
@@ -517,9 +564,9 @@ export const calcularResumoEmpresa = (
                 if (key === 'icms_vendas') return;
                 const parts = key.split('::');
                 let cnaeCode = '', anexoCode = '';
-                if (parts.length >= 4) { cnaeCode = parts[2]; anexoCode = parts[3]; }
+                if (parts.length >= 4) { cnaeCode = parts[2] || ''; anexoCode = parts[3] || ''; }
                 else if (key.startsWith('filial_')) {
-                    const tipo = key.split('_')[1];
+                    const tipo = key.split('_')[1] || '';
                     cnaeCode = `Filial ${tipo.charAt(0).toUpperCase()+tipo.slice(1)}`;
                     if (tipo === 'comercio') anexoCode = 'I';
                     else if (tipo === 'industria') anexoCode = 'II';
@@ -527,7 +574,7 @@ export const calcularResumoEmpresa = (
                         ? (fator_r >= 0.28 ? 'III' : 'V') : empresa.anexo;
                 } else {
                     const s = key.split('_');
-                    if (s.length >= 2) { cnaeCode = s[0]; anexoCode = s[1]; }
+                    if (s.length >= 2) { cnaeCode = s[0] || ''; anexoCode = s[1] || ''; }
                 }
                 if (typeof value === 'object' && value !== null) {
                     const item = value as SimplesDetalheItem;
@@ -564,7 +611,7 @@ export const calcularResumoEmpresa = (
         if (anexoAplicado === 'V' && fator_r >= 0.28) anexoAplicado = 'III';
         else if (anexoAplicado === 'III_V') anexoAplicado = fator_r >= 0.28 ? 'III' : 'V';
 
-        const tabela = ANEXOS_TABELAS[anexoAplicado];
+        const tabela = ANEXOS_TABELAS[anexoAplicado as AnexoKey];
         if (!tabela) return;
 
         // Em início de atividade, usa RBT12 proporcionalizado para enquadramento e alíquota.
@@ -576,20 +623,23 @@ export const calcularResumoEmpresa = (
         if (rbtParaEnquadramento === 0) faixaIndex = 0;
         const faixa = tabela[faixaIndex];
 
-        let aliq_eff_item = rbtParaEnquadramento > 0
+        const tabFirst = tabela[0];
+        let aliq_eff_item = rbtParaEnquadramento > 0 && faixa
             ? (((rbtParaEnquadramento * faixa.aliquota / 100) - faixa.parcela)
                / rbtParaEnquadramento) * 100
-            : tabela[0].aliquota;
+            : (tabFirst ? tabFirst.aliquota : 0);
 
         let percentualReducao = 0;
-        const reparticao = REPARTICAO_IMPOSTOS[anexoAplicado]?.[Math.min(faixaIndex, 5)];
+        const faixaIdxClamped = Math.max(0, Math.min(faixaIndex, 5)) as FaixaIndex;
+        const reparticao = REPARTICAO_IMPOSTOS[anexoAplicado as AnexoKey]?.[faixaIdxClamped];
         if (reparticao) {
             if (item.isImune) {
                 if (reparticao.ICMS) percentualReducao += reparticao.ICMS;
                 if (reparticao.IPI)  percentualReducao += reparticao.IPI;
             } else if (item.isExterior) {
-                ['PIS','COFINS','ISS','ICMS','IPI'].forEach(t => {
-                    if (reparticao[t]) percentualReducao += reparticao[t];
+                (['PIS','COFINS','ISS','ICMS','IPI'] as const).forEach(t => {
+                    const v = reparticao[t];
+                    if (v) percentualReducao += v;
                 });
             } else {
                 if (item.issRetido || item.isSup) {
@@ -610,7 +660,7 @@ export const calcularResumoEmpresa = (
         detalhamentoAnexos.push({
             cnae: item.cnae, anexo: anexoAplicado as any,
             anexoOriginal, faturamento: item.valor,
-            aliquotaNominal: faixa.aliquota, aliquotaEfetiva: aliq_final,
+            aliquotaNominal: faixa?.aliquota ?? 0, aliquotaEfetiva: aliq_final,
             valorDas: valorDasItem, issRetido: item.issRetido, icmsSt: item.icmsSt,
             isMonofasico: item.isMonofasico, isImune: item.isImune, isExterior: item.isExterior
         });
@@ -633,10 +683,10 @@ export const calcularResumoEmpresa = (
         inicioAtividade, mesesAtividade,
         rbt12pInterno: inicioAtividade ? rbt12pInterno : undefined,
         rbt12pExterno: inicioAtividade ? rbt12pExterno : undefined,
-        aliq_nom: tabelaPrincipal ? tabelaPrincipal[faixaIndexPrincipal].aliquota : 0,
+        aliq_nom: tabelaPrincipal && tabelaPrincipal[faixaIndexPrincipal] ? tabelaPrincipal[faixaIndexPrincipal]!.aliquota : 0,
         aliq_eff: aliq_eff_global, das: dasTotal * 12, das_mensal: dasTotal, mensal,
         historico_simulado, anexo_efetivo: empresa.anexo, fator_r,
-        folha_12: empresa.folha12, ultrapassou_sublimite: rbt12Global > 3600000,
+        folha_12: folha12Calculada, ultrapassou_sublimite: rbt12Global > 3600000,
         faixa_index: faixaIndexPrincipal, detalhamento_anexos: detalhamentoAnexos,
         totalMercadoInterno, totalMercadoExterno,
         alertas_faturamento: calcularAlertasFaturamento(
@@ -707,7 +757,8 @@ function calcularAlertasFaturamento(
 export const calcularDiscriminacaoImpostos = (
     anexo: string, faixaIndex: number, valorDas: number
 ) => {
-    const dist = REPARTICAO_IMPOSTOS[anexo]?.[Math.min(faixaIndex, 5)];
+    const faixaClamped = Math.max(0, Math.min(faixaIndex, 5)) as FaixaIndex;
+    const dist = REPARTICAO_IMPOSTOS[anexo as AnexoKey]?.[faixaClamped];
     if (!dist || valorDas === 0) return {};
     return Object.fromEntries(
         Object.entries(dist).map(([imp, pct]) => [imp, valorDas * ((pct as number) / 100)])

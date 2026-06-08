@@ -11,12 +11,12 @@
  */
 
 import React, { useState } from 'react';
-import { parseSped, exportarXlsx, aplicarEdicoesXlsx, validarEstrutura, aplicarRegrasTributarias, aplicarRegrasContribuicoes, analisarRecuperacaoMonofasico, type ValidacaoSped, type RegrasTributariasResult, type RecuperacaoMonofasico } from '../../services/spedFiscalExcelEditor';
+import { parseSped, exportarXlsx, aplicarEdicoesXlsx, reconstruirSped, validarEstrutura, aplicarRegrasTributarias, aplicarRegrasContribuicoes, analisarRecuperacaoMonofasico, corrigirC190, corrigirFormato, type ValidacaoSped, type RegrasTributariasResult, type RecuperacaoMonofasico, type CorrecaoC190, type CorrecaoFormato } from '../../services/spedFiscalExcelEditor';
 
 type Status =
     | { fase: 'idle' }
     | { fase: 'analisando' }
-    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }>; validacao: ValidacaoSped; regras: RegrasTributariasResult; regrasContrib: RegrasTributariasResult; recuperacao: RecuperacaoMonofasico }
+    | { fase: 'pronto-edicao'; nomeOriginal: string; conteudoOriginal: string; resumo: Record<string, number>; totalLinhas: number; tipoSped: string; mismatch: Record<string, { esperado: number; real: number }>; validacao: ValidacaoSped; regras: RegrasTributariasResult; regrasContrib: RegrasTributariasResult; recuperacao: RecuperacaoMonofasico; correcaoC190: CorrecaoC190; correcaoFormato: CorrecaoFormato }
     | { fase: 'aplicando' }
     | { fase: 'erro'; mensagem: string };
 
@@ -43,6 +43,8 @@ const EditarViaExcel: React.FC = () => {
             const regras = await aplicarRegrasTributarias(parsed);
             const regrasContrib = await aplicarRegrasContribuicoes(parsed);
             const recuperacao = await analisarRecuperacaoMonofasico(parsed);
+            const correcaoC190 = await corrigirC190(parsed);
+            const correcaoFormato = await corrigirFormato(parsed);
             setStatus({
                 fase: 'pronto-edicao',
                 nomeOriginal: file.name,
@@ -55,6 +57,8 @@ const EditarViaExcel: React.FC = () => {
                 regras,
                 regrasContrib,
                 recuperacao,
+                correcaoC190,
+                correcaoFormato,
             });
         } catch (err: any) {
             setStatus({ fase: 'erro', mensagem: err?.message || 'Falha ao ler SPED' });
@@ -97,6 +101,48 @@ const EditarViaExcel: React.FC = () => {
         } catch (err: any) {
             setStatus({ fase: 'erro', mensagem: err?.message || 'Falha ao aplicar edições' });
         }
+    };
+
+    // Aplica uma lista de edicoes pre-calculada (C190, formato, etc), valida e baixa.
+    // Generico pra evitar duplicar o pipeline pra cada autofix.
+    const aplicarEBaixar = async (
+        edicoes: { idx: number; campos: string[] }[],
+        sufixoNome: string,
+        labelErro: string,
+    ) => {
+        if (status.fase !== 'pronto-edicao') return;
+        if (edicoes.length === 0) return;
+        const ctx = status;
+        setStatus({ fase: 'aplicando' });
+        try {
+            const parsed = await parseSped(ctx.conteudoOriginal);
+            const spedNovo = await reconstruirSped(parsed, edicoes);
+            const parsedNovo = await parseSped(spedNovo);
+            const valNovo = await validarEstrutura(parsedNovo);
+            if (!valNovo.valido) {
+                setStatus({
+                    fase: 'erro',
+                    mensagem: `O SPED com ${labelErro} ficou inválido — NÃO foi baixado. Erros: `
+                        + valNovo.erros.slice(0, 5).join(' · '),
+                });
+                return;
+            }
+            const nome = ctx.nomeOriginal.replace(/\.txt$/i, '') + sufixoNome;
+            downloadBlob(new Blob([spedNovo], { type: 'text/plain' }), nome);
+            setStatus(s => s.fase === 'aplicando' ? { fase: 'idle' } : s);
+        } catch (err: any) {
+            setStatus({ fase: 'erro', mensagem: err?.message || `Falha ao corrigir ${labelErro}` });
+        }
+    };
+
+    const baixarComC190Corrigido = () => {
+        if (status.fase !== 'pronto-edicao') return;
+        aplicarEBaixar(status.correcaoC190.edicoes, '.c190-corrigido.txt', 'C190 corrigido');
+    };
+
+    const baixarComFormatoCorrigido = () => {
+        if (status.fase !== 'pronto-edicao') return;
+        aplicarEBaixar(status.correcaoFormato.edicoes, '.formato-corrigido.txt', 'formato corrigido');
     };
 
     return (
@@ -206,6 +252,62 @@ const EditarViaExcel: React.FC = () => {
                                     </ul>
                                 </div>
                             )
+                        )}
+
+                        {/* Auto-correção C190 (totalizador) — só EFD ICMS/IPI.
+                            Recalcula VL_OPR/VL_BC/VL_ICMS do C190 a partir da soma
+                            dos C170, com aviso de/para de cada ajuste. */}
+                        {status.correcaoC190.resumo.c190Corrigidos > 0 && (
+                            <div className="mb-3 p-3 rounded border border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-[11px] text-blue-900 dark:text-blue-200">
+                                <b>🔧 Auto-ajuste disponível: {status.correcaoC190.resumo.c190Corrigidos} C190 totalizador(es) divergente(s)</b>
+                                {' '}({status.correcaoC190.resumo.camposAjustados} campo(s) a corrigir, recalculados da soma dos C170):
+                                <ul className="mt-1 list-disc list-inside max-h-40 overflow-auto font-mono text-[10px]">
+                                    {status.correcaoC190.ajustes.slice(0, 30).map((a, i) => (
+                                        <li key={i}>{a.mensagem}</li>
+                                    ))}
+                                    {status.correcaoC190.ajustes.length > 30 && <li>… +{status.correcaoC190.ajustes.length - 30}</li>}
+                                </ul>
+                                <button
+                                    onClick={baixarComC190Corrigido}
+                                    className="mt-2 px-3 py-1.5 text-[11px] font-bold rounded-lg"
+                                    style={{ background: '#2563eb', color: '#fff' }}
+                                >
+                                    ⬇ Baixar SPED com C190 corrigido
+                                </button>
+                                <p className="mt-1.5 text-[10px] opacity-80">
+                                    Corrige só os totalizadores C190 (Bloco 9 recalculado junto). Os C170 (itens)
+                                    ficam intactos — eles são a fonte. Confira antes de transmitir.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Auto-correção de FORMATO: espaços em NCM/CFOP/CST, ponto decimal
+                            em valores monetários. Resolve o motivo #1 de SPED rejeitado pelo
+                            PVA. Conservador: não muda semântica, só forma. */}
+                        {status.correcaoFormato.resumo.camposAjustados > 0 && (
+                            <div className="mb-3 p-3 rounded border border-teal-400 bg-teal-50 dark:bg-teal-900/20 text-[11px] text-teal-900 dark:text-teal-200">
+                                <b>🧹 Normalização de formato disponível: {status.correcaoFormato.resumo.linhasAjustadas} linha(s), {status.correcaoFormato.resumo.camposAjustados} campo(s)</b>
+                                {' '}({Object.entries(status.correcaoFormato.resumo.porRegra)
+                                    .map(([r, n]) => `${r === 'TRIM_CODIGO' ? 'espaços em código' : 'ponto decimal'}: ${n}`)
+                                    .join(' · ')}):
+                                <ul className="mt-1 list-disc list-inside max-h-40 overflow-auto font-mono text-[10px]">
+                                    {status.correcaoFormato.ajustes.slice(0, 30).map((a, i) => (
+                                        <li key={i}>{a.mensagem}</li>
+                                    ))}
+                                    {status.correcaoFormato.ajustes.length > 30 && <li>… +{status.correcaoFormato.ajustes.length - 30}</li>}
+                                </ul>
+                                <button
+                                    onClick={baixarComFormatoCorrigido}
+                                    className="mt-2 px-3 py-1.5 text-[11px] font-bold rounded-lg"
+                                    style={{ background: '#0d9488', color: '#fff' }}
+                                >
+                                    ⬇ Baixar SPED com formato corrigido
+                                </button>
+                                <p className="mt-1.5 text-[10px] opacity-80">
+                                    Só normaliza FORMATO (espaços, vírgula decimal). Não muda CFOP, CST,
+                                    NCM nem valores. Bloco 9 recalculado junto. Pode combinar com C190 (rode um, depois suba o resultado pra rodar o outro).
+                                </p>
+                            </div>
                         )}
 
                         {/* Recuperação PIS/COFINS monofásico — só EFD Contribuições. */}

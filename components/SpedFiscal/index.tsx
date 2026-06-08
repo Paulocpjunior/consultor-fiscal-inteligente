@@ -28,14 +28,9 @@ interface Props {
     onShowToast?: (msg: string) => void;
 }
 
-type Escopo = 'mensal' | 'trimestral';
+import MensagemBlock, { type MensagemRetorno } from './MensagemBlock';
 
-interface MensagemRetorno {
-    tipo: 'info' | 'warning' | 'error' | 'success';
-    titulo: string;
-    detalhes?: string;
-    extras?: { label: string; value: string }[];
-}
+type Escopo = 'mensal' | 'trimestral';
 
 function getCompetenciaAtual(): string {
     const d = new Date();
@@ -53,63 +48,7 @@ function getTrimestreFromCompetencia(comp: string): { inicio: string; fim: strin
 
 type SpedTab = 'gerar' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
 
-/** Renderiza bloco de mensagem (reutilizado por ambas abas) */
-function MensagemBlock({ mensagem }: { mensagem: MensagemRetorno }) {
-    return (
-        <div
-            className="p-4 rounded-xl flex items-start gap-3 animate-fade-in"
-            style={{
-                background:
-                    mensagem.tipo === 'success' ? 'rgba(34,197,94,0.1)' :
-                    mensagem.tipo === 'error' ? 'rgba(239,68,68,0.1)' :
-                    mensagem.tipo === 'warning' ? 'var(--warning-soft)' :
-                    'rgba(91,127,255,0.1)',
-                border: `1px solid ${
-                    mensagem.tipo === 'success' ? 'rgba(34,197,94,0.3)' :
-                    mensagem.tipo === 'error' ? 'rgba(239,68,68,0.3)' :
-                    mensagem.tipo === 'warning' ? 'var(--warning-soft-border)' :
-                    'rgba(91,127,255,0.3)'
-                }`,
-                borderLeft: `4px solid ${
-                    mensagem.tipo === 'success' ? 'var(--success)' :
-                    mensagem.tipo === 'error' ? 'var(--danger)' :
-                    mensagem.tipo === 'warning' ? 'var(--warning)' :
-                    'var(--accent)'
-                }`,
-            }}
-        >
-            <div className="flex-1">
-                <p className="text-sm font-bold" style={{
-                    color: mensagem.tipo === 'success' ? 'var(--success)' :
-                           mensagem.tipo === 'error' ? 'var(--danger)' :
-                           mensagem.tipo === 'warning' ? 'var(--warning)' :
-                           'var(--accent)',
-                }}>
-                    {mensagem.titulo}
-                </p>
-                {mensagem.detalhes && (
-                    <p className="text-xs mt-1.5" style={{ color: 'var(--text-secondary)' }}>
-                        {mensagem.detalhes}
-                    </p>
-                )}
-                {mensagem.extras && (
-                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {mensagem.extras.map(e => (
-                            <div key={e.label} className="p-2 rounded" style={{ background: 'var(--bg-card)' }}>
-                                <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-                                    {e.label}
-                                </p>
-                                <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-                                    {e.value}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
+// MensagemBlock vive em ./MensagemBlock.tsx (reutilizado pelas abas).
 
 const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [spedTab, setSpedTab] = useState<SpedTab>('gerar');

@@ -12,8 +12,9 @@
  *
  * Regras de busca:
  *  - termo numérico (só dígitos)  -> CNPJ substring | número exato | chave (≥15 chars)
- *  - termo textual <4 chars       -> token EXATO  (evita "sp" casar "spa"/"hsprojetos")
- *  - termo textual ≥4 chars       -> token PREFIX (permite "brasli" achar "braslimpo")
+ *  - termo textual <4 chars       -> token EXATO     (evita "sp" casar "spa"/"hsprojetos")
+ *  - termo textual ≥4 chars       -> token SUBSTRING (permite "limpo" achar "braslimpo",
+ *                                                     "auto" achar "autopecas")
  */
 
 import type { DocumentoFiscal } from '../types';
@@ -27,6 +28,10 @@ export interface DocumentosFiltroMem {
     status?: DocumentoFiscal['status'];
     origem?: string;
     tipoDoc?: string;
+    /** CNPJ da EMPRESA dona do XML (so digitos ou formatado). Match exato no
+     *  campo `empresaCnpj` do doc — diferente do `busca`, que tambem casa em
+     *  emitente/destinatario. Util pro dropdown explicito de empresa. */
+    empresaCnpj?: string;
     busca?: string;
 }
 
@@ -92,6 +97,12 @@ export function applyDocumentosFilters(
 
         if (filters.status && d.status !== filters.status) return false;
         if (filters.origem && d.origem !== filters.origem) return false;
+        if (filters.empresaCnpj) {
+            const alvo = norm(filters.empresaCnpj);
+            // Match exato — usuario escolheu UMA empresa especifica do dropdown.
+            // Diferente do `busca`, que faz substring em emitente/destinatario.
+            if (!alvo || empresaCnpjN !== alvo) return false;
+        }
         if (filters.tipoDoc) {
             const t = String((d as any).tipoDoc || d.tipo || '').toLowerCase();
             if (t !== filters.tipoDoc.toLowerCase()) return false;
@@ -133,7 +144,7 @@ export function applyDocumentosFilters(
                 ];
                 const nameMatch = term.length < 4
                     ? nameTokens.some(t => t === term)            // <4: exato (evita "sp"→"spa")
-                    : nameTokens.some(t => t.startsWith(term));   // ≥4: prefixo (brasli→braslimpo)
+                    : nameTokens.some(t => t.includes(term));     // ≥4: substring (limpo→braslimpo, auto→autopecas)
                 // Tambem permite achar pelo numero/chave/CNPJ digitados como texto
                 const numeroN = norm(d.numero);
                 const chaveN = norm(d.chave);

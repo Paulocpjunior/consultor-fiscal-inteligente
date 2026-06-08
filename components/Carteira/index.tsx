@@ -3,7 +3,7 @@
  * Lista as empresas via getEmpresasParaPerfilCliente (fonte canônica) e os
  * colaboradores via getAllUsers. Cada vínculo vira um doc na coleção `carteiras`.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import type { User } from '../../types';
 import { getEmpresasParaPerfilCliente, type EmpresaPerfilOption } from '../../services/xmlFiscalService';
 import { getAllUsers } from '../../services/authService';
@@ -32,6 +32,10 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     const isAdmin = currentUser.role === 'admin';
 
+    // Guard contra setState apos unmount (3 fetches em paralelo - troca de aba
+    // rapida deixava state stale e gerava warning React 18).
+    const aliveRef = useRef(true);
+
     const carregar = async () => {
         setLoading(true);
         try {
@@ -40,19 +44,23 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 getAllUsers(),
                 listarCarteiras(currentUser),
             ]);
+            if (!aliveRef.current) return;
             setEmpresas(emp);
             setColaboradores(usrs);
             setVinculos(vincs);
         } catch (err: any) {
+            if (!aliveRef.current) return;
             onShowToast?.('Falha ao carregar carteira: ' + (err?.message || 'erro'));
         } finally {
-            setLoading(false);
+            if (aliveRef.current) setLoading(false);
         }
     };
 
     useEffect(() => {
+        aliveRef.current = true;
         if (isAdmin) carregar();
         else setLoading(false);
+        return () => { aliveRef.current = false; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

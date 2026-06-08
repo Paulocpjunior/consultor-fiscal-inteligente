@@ -77,6 +77,42 @@ export async function aplicarRegrasContribuicoes(parsed: ParseResult): Promise<R
     return mod.aplicarRegrasContribuicoes(parsed);
 }
 
+export interface AjusteC190 {
+    registro: string; idx: number; doc: string; combinacao: string;
+    campo: string; de: string; para: string; mensagem: string;
+}
+export interface CorrecaoC190 {
+    edicoes: SpedEdicao[];
+    ajustes: AjusteC190[];
+    resumo: { c190Corrigidos: number; camposAjustados: number };
+}
+
+/** Auto-corrige totalizadores C190 a partir dos C170 (EFD ICMS/IPI). Devolve
+ *  edicoes pra reconstruir + lista de ajustes (de/para) pra exibir. */
+export async function corrigirC190(parsed: ParseResult): Promise<CorrecaoC190> {
+    const mod = await import('../sefaz-backend/sped-fiscal-c190-autofix.js' as any);
+    return mod.corrigirC190(parsed);
+}
+
+export interface AjusteFormato {
+    registro: string; idx: number; campo: string;
+    regra: 'TRIM_CODIGO' | 'DECIMAL_PONTO';
+    de: string; para: string; mensagem: string;
+}
+export interface CorrecaoFormato {
+    edicoes: SpedEdicao[];
+    ajustes: AjusteFormato[];
+    resumo: { linhasAjustadas: number; camposAjustados: number; porRegra: Record<string, number> };
+}
+
+/** Auto-corrige FORMATO de campos: espacos em codigos (NCM/CFOP/CST) +
+ *  ponto decimal -> virgula em valores monetarios. So normaliza forma, nao
+ *  muda semantica. Resolve o motivo #1 de SPED rejeitado pelo PVA. */
+export async function corrigirFormato(parsed: ParseResult): Promise<CorrecaoFormato> {
+    const mod = await import('../sefaz-backend/sped-fiscal-format-autofix.js' as any);
+    return mod.corrigirFormato(parsed);
+}
+
 export interface RecuperacaoMonofasico {
     aplicavel: boolean;
     itens: { idx: number; numItem: string; codItem: string; ncm: string; cstPis: string; cstCofins: string; vlPis: number; vlCofins: number }[];
@@ -186,6 +222,7 @@ export async function exportarXlsx(parsed: ParseResult, nomeArquivo: string): Pr
     // Uma aba por tipo editavel
     for (const tipo of Object.keys(parsed.editaveis).sort()) {
         const itens = parsed.editaveis[tipo];
+        if (!itens) continue;
         const cols = await colunasDoTipo(tipo, parsed.tipoSped);
         if (!cols || !itens.length) continue;
         const header = ['_idx_NAO_MEXER', ...cols];
@@ -224,6 +261,7 @@ export async function lerXlsx(arrayBuffer: ArrayBuffer, tipoSped: TipoSped = 'fi
     for (const sheetName of wb.SheetNames) {
         if (sheetName === 'Resumo' || sheetName === 'Outros (preservados)') continue;
         const ws = wb.Sheets[sheetName];
+        if (!ws) continue;
         const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, raw: false, defval: '' });
         if (!rows.length) continue;
         const header = (rows[0] || []).map((c: any) => String(c).trim());

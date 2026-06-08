@@ -93,7 +93,7 @@ export async function getRetencaoDctfweb(
 ): Promise<RetencaoDctfwebResposta> {
     const [ano, mes] = competencia.split('-');
     const headers = await authHeader();
-    const qs = new URLSearchParams({ empresaCnpj: empresaCnpj.replace(/\D/g, ''), anoPA: ano, mesPA: String(Number(mes)) });
+    const qs = new URLSearchParams({ empresaCnpj: empresaCnpj.replace(/\D/g, ''), anoPA: ano || '', mesPA: String(Number(mes || '0')) });
     const res = await fetch(`/api/admin/dctfweb/retencao-normalizada?${qs}`, { headers });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));

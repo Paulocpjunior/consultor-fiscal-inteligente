@@ -3,6 +3,7 @@ import { LucroPresumidoEmpresa, FichaFinanceiraRegistro, User } from '../types';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
+import { validarCnpj } from './validadorDocumento';
 import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, deleteDoc, limit as fbLimit } from 'firebase/firestore';
 
 const STORAGE_KEY_LUCRO_EMPRESAS = 'lucro_presumido_empresas';
@@ -33,55 +34,36 @@ const saveLocalEmpresas = (empresas: LucroPresumidoEmpresa[]) => {
 
 export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresumidoEmpresa[]> => {
     if (!currentUser) return [];
-    
-    const isMasterAdmin = currentUser.role === 'admin' || currentUser.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
 
-    // 1. Tenta buscar da Nuvem (Prioridade)
+    let cloudEmpresas: LucroPresumidoEmpresa[] = [];
+
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
-            const uid = auth.currentUser.uid;
-            
-            try {
-                // Se for Admin/Junior, busca TUDO. Se for colaborador, só os seus.
-                const snaps = await fetchAllDocs('lucro_empresas', isMasterAdmin ? [] : [where('createdBy', '==', uid)]);
-                // 23/05: filtra perdedores do merge de duplicatas
-                const cloudEmpresas = snaps
-                    .filter(doc => !(doc.data() as any)._merged_into)
-                    .map(doc => ({ id: doc.id, ...doc.data() } as LucroPresumidoEmpresa));
-                
-                // Se conseguiu buscar da nuvem, atualiza o cache local (apenas para modo offline)
-                if (cloudEmpresas.length > 0) {
-                    const local = getLocalEmpresas();
-                    const merged = [...cloudEmpresas];
-                    local.forEach(l => {
-                        if (!merged.find(c => c.id === l.id)) merged.push(l);
-                    });
-                    saveLocalEmpresas(merged);
-                    return cloudEmpresas;
-                }
-            } catch (err: any) {
-                if (err.code !== 'permission-denied' && err.code !== 'failed-precondition') {
-                    console.debug("Firebase fetch warning (Lucro):", err.message);
-                }
-            }
-        } catch (e: any) {
-            // Silently ignore main query errors
+            const snaps = await fetchAllDocs('lucro_empresas', []);
+            cloudEmpresas = snaps
+                .filter(doc => !(doc.data() as any)._merged_into)
+                .map(doc => ({ id: doc.id, ...doc.data() } as LucroPresumidoEmpresa));
+            console.info('[Lucro] cloud retornou', cloudEmpresas.length, 'empresas');
+        } catch (err: any) {
+            console.error('[Lucro] erro buscando empresas no Firestore:', err?.code, err?.message);
         }
     }
 
-    // 2. Fallback Local (Se nuvem falhar ou não configurada)
+    // SEMPRE merge cloud + local. Sem filtro de createdBy/carteira -- visibilidade aberta.
     const localEmpresas = getLocalEmpresas();
-
-    if (!isMasterAdmin) {
-        return localEmpresas.filter(e => e.createdBy === currentUser.id || !e.createdBy);
-    }
-    return localEmpresas;
+    const merged = [...cloudEmpresas];
+    localEmpresas.forEach(l => { if (!merged.find(c => c.id === l.id)) merged.push(l); });
+    saveLocalEmpresas(merged);
+    return merged;
 };
 
 export const saveEmpresa = async (empresa: any, userId: string): Promise<LucroPresumidoEmpresa> => {
     // Trava de unicidade — SO em cadastro novo (sem id). Preserva re-saves
     // de empresas ja existentes (fluxo atual usa saveEmpresa pra update tambem).
     if (!empresa.id) {
+        if (!validarCnpj(empresa.cnpj || '')) {
+            throw new Error(`CNPJ invalido: "${empresa.cnpj || ''}". Verifique os digitos.`);
+        }
         const check = await verificarCnpjDuplicado(empresa.cnpj || '');
         if (check.duplicado) {
             throw new Error(mensagemCnpjDuplicado(empresa.cnpj || '', check));
@@ -149,10 +131,12 @@ export const updateEmpresa = async (id: string, data: Partial<LucroPresumidoEmpr
     // 2. Update Local
     const localEmpresas = getLocalEmpresas();
     const index = localEmpresas.findIndex(e => e.id === id);
-    if (index !== -1) {
-        localEmpresas[index] = { ...localEmpresas[index], ...data };
+    const existente = index !== -1 ? localEmpresas[index] : null;
+    if (existente) {
+        const atualizada = { ...existente, ...data };
+        localEmpresas[index] = atualizada;
         saveLocalEmpresas(localEmpresas);
-        return localEmpresas[index];
+        return atualizada;
     }
 
     return null;
@@ -209,10 +193,11 @@ export const addFichaFinanceira = async (empresaId: string, registro: FichaFinan
                 
                 const localEmpresas = getLocalEmpresas();
                 const idx = localEmpresas.findIndex(e => e.id === empresaId);
-                if (idx !== -1) {
-                    localEmpresas[idx].fichaFinanceira = fichaAtualizada;
+                const empLocal = idx !== -1 ? localEmpresas[idx] : null;
+                if (empLocal) {
+                    empLocal.fichaFinanceira = fichaAtualizada;
                     saveLocalEmpresas(localEmpresas);
-                    return localEmpresas[idx];
+                    return empLocal;
                 }
                 return { ...empresaData, fichaFinanceira: fichaAtualizada };
             }
@@ -226,15 +211,16 @@ export const addFichaFinanceira = async (empresaId: string, registro: FichaFinan
     // 2. Fallback Local
     const localEmpresas = getLocalEmpresas();
     const index = localEmpresas.findIndex(e => e.id === empresaId);
-    
-    if (index !== -1) {
-        const currentFicha = localEmpresas[index].fichaFinanceira || [];
+    const empresa = index !== -1 ? localEmpresas[index] : null;
+
+    if (empresa) {
+        const currentFicha = empresa.fichaFinanceira || [];
         const fichaAtualizada = currentFicha.filter(f => f.mesReferencia !== registro.mesReferencia);
         fichaAtualizada.push(registro);
-        
-        localEmpresas[index].fichaFinanceira = fichaAtualizada;
+
+        empresa.fichaFinanceira = fichaAtualizada;
         saveLocalEmpresas(localEmpresas);
-        return localEmpresas[index];
+        return empresa;
     }
 
     return null;

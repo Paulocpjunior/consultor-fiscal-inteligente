@@ -105,8 +105,23 @@ export function tipoCor(t: string): string {
     return map[t] || 'bg-slate-100 text-slate-800';
 }
 
+/**
+ * Faz parse de data ISO ("YYYY-MM-DD" ou "YYYY-MM-DDTHH:mm:ss") interpretando
+ * no fuso de Brasilia (UTC-3). Sem isso, `new Date("2026-08-01")` vira UTC e
+ * em BRT cai em 2026-07-31 21h, causando alerta "vence hoje" um dia adiantado.
+ */
+function parseDataBR(s: string): Date {
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return new Date(s);
+    const ano = parseInt(m[1] || '', 10);
+    const mes = parseInt(m[2] || '', 10);
+    const dia = parseInt(m[3] || '', 10);
+    return new Date(ano, mes - 1, dia, 0, 0, 0, 0);
+}
+
 export function diasAteVencimento(vencimento: string): number {
-    const hoje = new Date(new Date().toISOString().slice(0, 10));
-    const venc = new Date(vencimento);
+    const agora = new Date();
+    const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0, 0);
+    const venc = parseDataBR(vencimento);
     return Math.floor((venc.getTime() - hoje.getTime()) / 86400000);
 }

@@ -131,8 +131,9 @@ export async function getTitularDaEmpresa(
             where('papel', '==', 'principal'),
             fbLimit(10),
         ));
-        if (snap.empty) return null;
-        const d = snap.docs[0].data();
+        const first = snap.docs[0];
+        if (!first) return null;
+        const d = first.data();
         return { uid: d.colaboradorUid, nome: d.colaboradorNome || '' };
     } catch (e) {
         console.error('[tarefas] getTitular:', e);
@@ -251,8 +252,9 @@ export async function criarTarefaAutomatica(params: {
             where('competencia', '==', params.competencia),
             fbLimit(1),
         ));
-        if (!dup.empty) {
-            return { ok: true, id: dup.docs[0].id, jaExistia: true };
+        const dupFirst = dup.docs[0];
+        if (dupFirst) {
+            return { ok: true, id: dupFirst.id, jaExistia: true };
         }
 
         const vencimento = calcularVencimento(params.competencia, params.regra);

@@ -13,11 +13,12 @@
  * Botão "Exportar CSV" pra usar como to-do list operacional.
  */
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
     fetchEmpresasStatusCaptura,
     toggleEmpresaFlag,
     autoPreencherUf,
+    resetLockSefaz,
     exportarEmpresasCsv,
     type EmpresaStatusCaptura,
     type EmpresaStatusResumo,
@@ -67,6 +68,26 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [togglingCnpj, setTogglingCnpj] = useState<string | null>(null);
     const [autoUfRunning, setAutoUfRunning] = useState(false);
     const [capturandoCnpj, setCapturandoCnpj] = useState<string | null>(null);
+    const [resetandoLockCnpj, setResetandoLockCnpj] = useState<string | null>(null);
+
+    const handleResetLock = async (emp: EmpresaStatusCaptura) => {
+        if (!isAdmin) return;
+        if (!confirm(`Apagar lock SEFAZ de ${emp.nome}?\n\nO lock impede sync na mesma janela de 1h.\nApós resetar, próximo disparo (manual ou cron) vai recriar.`)) return;
+        setResetandoLockCnpj(emp.cnpj);
+        try {
+            const r = await resetLockSefaz(emp.cnpj);
+            if (r.ok) {
+                setUltimaCaptura(prev => ({
+                    ...prev,
+                    [emp.cnpj]: { ok: true, msg: `🔓 ${r.msg || 'Lock resetado'}` },
+                }));
+            } else {
+                alert(`Erro: ${r.error}`);
+            }
+        } finally {
+            setResetandoLockCnpj(null);
+        }
+    };
     const [ultimaCaptura, setUltimaCaptura] = useState<Record<string, { ok: boolean; msg: string; docs?: DfeDocProcessado[] }>>({});
     const isAdmin = currentUser.role === 'admin';
 
@@ -110,7 +131,10 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
             const r = await autoPreencherUf();
             if (r.ok) {
                 alert('Auto-preenchimento iniciado em background. Aguarde 1-3 min e clique em "Atualizar" pra ver o resultado.');
-                setTimeout(load, 60000);
+                if (autoUfTimeoutRef.current) clearTimeout(autoUfTimeoutRef.current);
+                autoUfTimeoutRef.current = setTimeout(() => {
+                    if (aliveRef.current) load();
+                }, 60000);
             } else {
                 alert(`Erro: ${r.error}`);
             }
@@ -119,20 +143,34 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
         }
     };
 
+    // Guard contra setState apos unmount + cleanup do setTimeout em handleAutoUf
+    const aliveRef = useRef(true);
+    const autoUfTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const load = useCallback(async () => {
         setLoading(true);
         setErro(null);
         try {
             const d = await fetchEmpresasStatusCaptura();
-            setData(d);
+            if (aliveRef.current) setData(d);
         } catch (e: any) {
-            setErro(e.message || 'Falha ao carregar');
+            if (aliveRef.current) setErro(e.message || 'Falha ao carregar');
         } finally {
-            setLoading(false);
+            if (aliveRef.current) setLoading(false);
         }
     }, []);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        aliveRef.current = true;
+        load();
+        return () => {
+            aliveRef.current = false;
+            if (autoUfTimeoutRef.current) {
+                clearTimeout(autoUfTimeoutRef.current);
+                autoUfTimeoutRef.current = null;
+            }
+        };
+    }, [load]);
 
     const empresasFiltradas = useMemo(() => {
         if (!data) return [];
@@ -159,7 +197,10 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     const d = diasAteVencimento(e.certVenceEm);
                     return d !== null && d < 30;
                 }
-                case 'sem-procuracao': return !e.procuracaoEcacAtiva;
+                // Usa flag BRUTA pra filtro: empresa sem procuração REAL marcada
+                // no e-CAC. Cert A1/A3 próprio não conta — A3 não roda no Cloud Run
+                // e o cron sempre olha esse campo bruto.
+                case 'sem-procuracao': return !e.procuracaoEcacFlagBruta;
                 case 'sem-ccmsp': return !e.nfseSpAutorizado;
                 case 'nfse-nac-inativa': return !e.nfseNacionalDfeAtivo;
                 case 'sem-responsavel': return !e.responsaveis || e.responsaveis.length === 0;
@@ -360,17 +401,36 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                     </td>
                                     <td className="px-2 py-1.5 text-center">
                                         {isAdmin ? (
-                                            <button
-                                                disabled={togglingCnpj === e.cnpj + '-procuracaoEcacAtiva'}
-                                                onClick={() => handleToggle(e.cnpj, 'procuracaoEcacAtiva', e.procuracaoEcacAtiva)}
-                                                className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                                                    e.procuracaoEcacAtiva ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300'
-                                                } hover:opacity-80 disabled:opacity-50`}
-                                            >
-                                                {togglingCnpj === e.cnpj + '-procuracaoEcacAtiva' ? '…' : e.procuracaoEcacAtiva ? '✓ ativa' : '✗ inativa'}
-                                            </button>
+                                            <>
+                                                <button
+                                                    disabled={togglingCnpj === e.cnpj + '-procuracaoEcacAtiva'}
+                                                    onClick={() => handleToggle(e.cnpj, 'procuracaoEcacAtiva', e.procuracaoEcacFlagBruta)}
+                                                    title="Marque APENAS se a procuração e-CAC está realmente cadastrada na Receita (e-CAC) pra captura via cert do escritório. Cert A1/A3 próprio NÃO substitui — A3 não roda no Cloud Run."
+                                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                                                        e.procuracaoEcacFlagBruta ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300'
+                                                    } hover:opacity-80 disabled:opacity-50`}
+                                                >
+                                                    {togglingCnpj === e.cnpj + '-procuracaoEcacAtiva' ? '…' : e.procuracaoEcacFlagBruta ? '✓ marcada' : '✗ não marcada'}
+                                                </button>
+                                                {/* Inferida = true (cert A1/A3 próprio autoriza) mas flag bruta = false.
+                                                    Mostra anotação pra admin entender por que a empresa aparece como ok
+                                                    em outras telas mesmo sem procuração marcada. */}
+                                                {!e.procuracaoEcacFlagBruta && e.procuracaoEcacAtiva && (
+                                                    <div
+                                                        className="text-[9px] text-gray-500 mt-0.5 italic"
+                                                        title={`Cert ${e.tipoCert} próprio. Pra NFSe Nacional já autoriza; pra NFe DistDFe via Cloud Run NÃO substitui — A3 precisa cfi-a3 local OU marque procuração se houver de verdade.`}
+                                                    >
+                                                        ○ inferida ({e.tipoCert} próprio)
+                                                    </div>
+                                                )}
+                                            </>
                                         ) : (
-                                            <Pill ok={e.procuracaoEcacAtiva} label={e.procuracaoEcacAtiva ? 'ativa' : 'inativa'} />
+                                            <>
+                                                <Pill ok={e.procuracaoEcacFlagBruta} label={e.procuracaoEcacFlagBruta ? 'marcada' : 'não marcada'} />
+                                                {!e.procuracaoEcacFlagBruta && e.procuracaoEcacAtiva && (
+                                                    <div className="text-[9px] text-gray-500 mt-0.5 italic">○ inferida ({e.tipoCert})</div>
+                                                )}
+                                            </>
                                         )}
                                     </td>
                                     <td className="px-2 py-1.5 text-center">
@@ -426,6 +486,14 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                     title="Zera o cursor NSU e reprocessa ~90 dias — use quando uma nota sumiu (passou do cursor)"
                                                 >
                                                     {capturandoCnpj === e.cnpj ? '⏳…' : '⟲ Recapturar do zero'}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleResetLock(e)}
+                                                    disabled={resetandoLockCnpj === e.cnpj || capturandoCnpj === e.cnpj}
+                                                    className="px-2 py-1 text-[10px] font-semibold bg-slate-600 hover:bg-slate-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
+                                                    title="Apaga o lock SEFAZ de 1h dessa empresa — útil pra rerun imediato após ajuste de procuração/cert"
+                                                >
+                                                    {resetandoLockCnpj === e.cnpj ? '⏳…' : '🔓 Reset lock'}
                                                 </button>
                                             </div>
                                             {ultimaCaptura[e.cnpj] && (

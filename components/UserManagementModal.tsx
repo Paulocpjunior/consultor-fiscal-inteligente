@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { User, AccessLog } from '../types';
 import * as authService from '../services/authService';
 import { CloseIcon, UserGroupIcon, TrashIcon, UserIcon } from './Icons';
+import { useConfirm, usePrompt } from './dialog/DialogProvider';
 
 interface UserManagementModalProps {
     isOpen: boolean;
@@ -24,16 +25,29 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const confirm = useConfirm();
+    const prompt = usePrompt();
+    // Guard que evita setState apos unmount/fechar modal mid-flight do fetch.
+    // Antes, abrir/fechar rapido o modal podia atualizar state em componente
+    // ja desmontado (React 18 warning + memory leak).
+    const aliveRef = useRef(true);
 
     const isAdmin = currentUserRole === 'admin';
+
+    useEffect(() => {
+        aliveRef.current = true;
+        return () => { aliveRef.current = false; };
+    }, []);
 
     const loadUsers = async () => {
         setIsLoading(true);
         setError(null);
         try {
             const fetchedUsers = await authService.getAllUsers();
+            if (!aliveRef.current) return;
             setUsers(Array.isArray(fetchedUsers) ? fetchedUsers : []);
         } catch (err: any) {
+            if (!aliveRef.current) return;
             const m = err?.message || 'Erro ao carregar usuários.';
             if (m.includes('PERMISSION_DENIED')) {
                 setError('Apenas administradores podem listar todos os usuários. Solicite a um admin que te promova.');
@@ -42,7 +56,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
             }
             setUsers([]);
         } finally {
-            setIsLoading(false);
+            if (aliveRef.current) setIsLoading(false);
         }
     };
 
@@ -51,8 +65,10 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
         setError(null);
         try {
             const fetchedLogs = await authService.getRecentLogs(100);
+            if (!aliveRef.current) return;
             setLogs(Array.isArray(fetchedLogs) ? fetchedLogs : []);
         } catch (err: any) {
+            if (!aliveRef.current) return;
             const m = err?.message || 'Erro ao carregar logs.';
             if (m.includes('PERMISSION_DENIED')) {
                 setError('Apenas administradores podem ler logs de acesso.');
@@ -61,7 +77,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
             }
             setLogs([]);
         } finally {
-            setIsLoading(false);
+            if (aliveRef.current) setIsLoading(false);
         }
     };
 
@@ -74,11 +90,17 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     }, [isOpen, tab]);
 
     const handleResetPassword = async (userId: string, userName: string) => {
-        if (!window.confirm(`Resetar senha de "${userName}" para "123456"?`)) return;
+        const ok = await confirm({
+            title: 'Resetar senha',
+            message: `Resetar senha de "${userName}" para a senha padrão?`,
+            variant: 'warning',
+            confirmLabel: 'Resetar',
+        });
+        if (!ok) return;
         try {
             const success = await authService.resetUserPassword(userId);
             setMsg(success
-                ? { text: `Senha de ${userName} resetada para 123456.`, type: 'success' }
+                ? { text: `Senha de ${userName} resetada.`, type: 'success' }
                 : { text: 'Erro ao resetar senha.', type: 'error' });
         } catch (e: any) {
             setMsg({ text: e?.message || 'Erro ao resetar senha.', type: 'error' });
@@ -86,7 +108,13 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     };
 
     const handleDeleteUser = async (userId: string, userName: string) => {
-        if (!window.confirm(`ATENÇÃO: Excluir o usuário "${userName}"? Esta ação não pode ser desfeita.`)) return;
+        const ok = await confirm({
+            title: `Excluir usuário "${userName}"?`,
+            message: 'Esta ação não pode ser desfeita.',
+            variant: 'danger',
+            confirmLabel: 'Excluir',
+        });
+        if (!ok) return;
         try {
             const success = await authService.deleteUser(userId);
             if (success) {
@@ -103,10 +131,15 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     const handleToggleRole = async (user: User) => {
         const novoRole = user.role === 'admin' ? 'colaborador' : 'admin';
         const acao = novoRole === 'admin' ? 'promover a admin' : 'rebaixar para colaborador';
-        if (!window.confirm(`Tem certeza que deseja ${acao} "${user.name}"?`)) return;
+        const ok = await confirm({
+            title: `${acao.charAt(0).toUpperCase() + acao.slice(1)}?`,
+            message: `Tem certeza que deseja ${acao} "${user.name}"?`,
+            variant: novoRole === 'admin' ? 'warning' : 'info',
+        });
+        if (!ok) return;
         try {
-            const ok = await authService.setUserRole(user.id, novoRole);
-            if (ok) {
+            const result = await authService.setUserRole(user.id, novoRole);
+            if (result) {
                 setMsg({
                     text: `${user.name} agora é ${novoRole === 'admin' ? 'administrador' : 'colaborador'}.`,
                     type: 'success',
@@ -121,10 +154,13 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     };
 
     const handleEditName = async (user: User) => {
-        const novoNome = window.prompt(
-            `Editar nome do usuário com email ${user.email}:`,
-            user.name,
-        );
+        const novoNome = await prompt({
+            title: 'Editar nome',
+            message: `E-mail: ${user.email}`,
+            defaultValue: user.name,
+            placeholder: 'Nome completo',
+            confirmLabel: 'Salvar',
+        });
         if (novoNome === null) return;
         const trimmed = novoNome.trim();
         if (!trimmed || trimmed === user.name) return;

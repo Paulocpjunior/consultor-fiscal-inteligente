@@ -5,6 +5,7 @@
 import React, { useEffect, useState } from 'react';
 import type { User, AnomaliasGlobalResponse, AnomaliasEmpresa, AnomaliaDetectada, AnomaliaIaResponse } from '../../types';
 import { getAnomaliasTodas, explicarAnomaliaIa, tipoLabel, severidadeBadge } from '../../services/anomaliasService';
+import SafeMarkdown from '../SafeMarkdown';
 
 interface Props {
     currentUser: User | null;
@@ -36,6 +37,20 @@ const AnomaliasView: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     useEffect(() => { carregar(); }, []);
 
+    // Esc fecha o modal de detalhe (a11y).
+    useEffect(() => {
+        if (!empresaAberta) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setEmpresaAberta(null);
+                setAnomaliaAtiva(null);
+                setAnalise(null);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [empresaAberta]);
+
     const explicar = async (a: AnomaliaDetectada) => {
         if (!empresaAberta) return;
         setAnomaliaAtiva(a);
@@ -51,12 +66,9 @@ const AnomaliasView: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
     };
 
-    const renderMarkdown = (text: string) => {
-        return text.split(/\n\n+/).map((b, i) => {
-            const html = b.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
-            return <p key={i} className="mb-3 last:mb-0 text-slate-700 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: html }} />;
-        });
-    };
+    const renderMarkdown = (text: string) => (
+        <SafeMarkdown text={text} className="mb-3 last:mb-0 text-slate-700 dark:text-slate-300" />
+    );
 
     const resultadosFiltrados = data?.resultados.filter(r =>
         filtroSeveridade === 'all' || r.severidadeMax === filtroSeveridade
@@ -161,7 +173,7 @@ const AnomaliasView: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         </div>
                         <div className="mt-2 flex gap-1 flex-wrap">
                             {r.anomalias.slice(0, 3).map((a, i) => (
-                                <span key={i} className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
+                                <span key={`${a.tipo}-${a.competencia}-${i}`} className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
                                     {tipoLabel(a.tipo)}
                                 </span>
                             ))}
@@ -170,12 +182,18 @@ const AnomaliasView: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 ))}
             </div>
 
-            {/* Modal detalhe da empresa */}
+            {/* Modal detalhe da empresa - a11y: dialog + Esc para fechar */}
             {empresaAberta && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={() => { setEmpresaAberta(null); setAnomaliaAtiva(null); setAnalise(null); }}>
+                <div
+                    className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]"
+                    onClick={() => { setEmpresaAberta(null); setAnomaliaAtiva(null); setAnalise(null); }}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="anomalias-modal-titulo"
+                >
                     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
                         <div className="p-5 border-b border-slate-200 dark:border-slate-700">
-                            <h3 className="text-lg font-bold">🔍 {empresaAberta.empresaNome}</h3>
+                            <h3 id="anomalias-modal-titulo" className="text-lg font-bold">🔍 {empresaAberta.empresaNome}</h3>
                             <p className="text-xs text-slate-500 mt-1">
                                 {empresaAberta.qtdAnomalias} anomalia(s) detectada(s) — clique numa pra IA explicar
                             </p>
@@ -183,7 +201,7 @@ const AnomaliasView: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
                         <div className="flex-1 overflow-y-auto p-5 space-y-3">
                             {empresaAberta.anomalias.map((a, i) => (
-                                <div key={i} className={`rounded-lg border p-3 cursor-pointer ${anomaliaAtiva === a ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-sky-300'}`}
+                                <div key={`${a.tipo}-${a.competencia}-${i}`} className={`rounded-lg border p-3 cursor-pointer ${anomaliaAtiva === a ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-sky-300'}`}
                                      onClick={() => explicar(a)}>
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${severidadeBadge(a.severidade)}`}>

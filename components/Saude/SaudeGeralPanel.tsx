@@ -7,8 +7,15 @@
  */
 import React, { useEffect, useState } from 'react';
 import { getHealthConsolidado, type HealthConsolidadoResposta, type StatusGlobal } from '../../services/healthConsolidadoService';
+import { SearchType } from '../../types';
 
-interface Props { onShowToast?: (msg: string) => void; }
+interface Props {
+    onShowToast?: (msg: string) => void;
+    /** Callback pro App.tsx trocar de aba — usado nos botões "Ver detalhes"
+     *  de cada seção. Sem isso o painel vira beco sem saída: usuário vê
+     *  N críticos mas não tem como descer ao detalhe. */
+    onNavegar?: (destino: SearchType) => void;
+}
 
 const statusCor: Record<StatusGlobal, string> = {
     ok: 'var(--success)',
@@ -25,7 +32,7 @@ const statusLabel: Record<StatusGlobal, string> = {
     degraded: 'DEGRADADO',
 };
 
-const SaudeGeralPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
+const SaudeGeralPanel: React.FC<Props> = ({ onShowToast: _onShowToast, onNavegar }) => {
     const [data, setData] = useState<HealthConsolidadoResposta | null>(null);
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
@@ -75,7 +82,12 @@ const SaudeGeralPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
             {data && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Cadastros */}
-                    <SecaoCard titulo="📋 Cadastros" cor={data.secoes.cadastros?.criticos ? 'var(--danger)' : 'var(--success)'} card={card}>
+                    <SecaoCard
+                        titulo="📋 Cadastros"
+                        cor={data.secoes.cadastros?.criticos ? 'var(--danger)' : 'var(--success)'}
+                        card={card}
+                        detalhes={onNavegar ? () => onNavegar(SearchType.DIAGNOSTICO_CADASTROS) : undefined}
+                    >
                         {data.secoes.cadastros ? (
                             <Linhas linhas={[
                                 ['Total empresas', String(data.secoes.cadastros.total)],
@@ -88,7 +100,12 @@ const SaudeGeralPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                     </SecaoCard>
 
                     {/* Documentos */}
-                    <SecaoCard titulo="📄 Documentos fiscais" cor={(data.secoes.documentos?.semChave || 0) > 0 ? '#ea580c' : 'var(--success)'} card={card}>
+                    <SecaoCard
+                        titulo="📄 Documentos fiscais"
+                        cor={(data.secoes.documentos?.semChave || 0) > 0 ? '#ea580c' : 'var(--success)'}
+                        card={card}
+                        detalhes={onNavegar ? () => onNavegar(SearchType.DIAGNOSTICO_DOCS) : undefined}
+                    >
                         {data.secoes.documentos ? (
                             <Linhas linhas={[
                                 ['Total docs', String(data.secoes.documentos.total)],
@@ -103,7 +120,12 @@ const SaudeGeralPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                     </SecaoCard>
 
                     {/* Certificados */}
-                    <SecaoCard titulo="🔐 Certificados digitais" cor={(data.secoes.certificados?.expirados || 0) > 0 ? 'var(--danger)' : 'var(--success)'} card={card}>
+                    <SecaoCard
+                        titulo="🔐 Certificados digitais"
+                        cor={(data.secoes.certificados?.expirados || 0) > 0 ? 'var(--danger)' : 'var(--success)'}
+                        card={card}
+                        detalhes={onNavegar ? () => onNavegar(SearchType.CERT_MONITOR) : undefined}
+                    >
                         {data.secoes.certificados ? (
                             <Linhas linhas={[
                                 ['Total certs', String(data.secoes.certificados.total)],
@@ -117,7 +139,12 @@ const SaudeGeralPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                     </SecaoCard>
 
                     {/* Configurações */}
-                    <SecaoCard titulo="⚙ Configurações operacionais" cor={(data.secoes.configuracoes?.criticos || 0) > 0 ? 'var(--danger)' : 'var(--success)'} card={card}>
+                    <SecaoCard
+                        titulo="⚙ Configurações operacionais"
+                        cor={(data.secoes.configuracoes?.criticos || 0) > 0 ? 'var(--danger)' : 'var(--success)'}
+                        card={card}
+                        detalhes={onNavegar ? () => onNavegar(SearchType.DIAGNOSTICO_CONFIG) : undefined}
+                    >
                         {data.secoes.configuracoes ? (
                             <Linhas linhas={[
                                 ['Total verificadas', String(data.secoes.configuracoes.total)],
@@ -150,10 +177,29 @@ const SaudeGeralPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
     );
 };
 
-function SecaoCard({ titulo, cor, card, children }: { titulo: string; cor: string; card: React.CSSProperties; children: React.ReactNode }) {
+function SecaoCard({ titulo, cor, card, children, detalhes }: {
+    titulo: string;
+    cor: string;
+    card: React.CSSProperties;
+    children: React.ReactNode;
+    /** Quando informado, mostra botão "Ver detalhes →" no cabeçalho. */
+    detalhes?: () => void;
+}) {
     return (
         <div className="p-4 rounded-xl" style={{ ...card, borderLeft: `4px solid ${cor}` }}>
-            <h3 className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--text-secondary)' }}>{titulo}</h3>
+            <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>{titulo}</h3>
+                {detalhes && (
+                    <button
+                        onClick={detalhes}
+                        className="text-[11px] font-bold px-2.5 py-1 rounded transition-colors hover:opacity-80"
+                        style={{ background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--accent-soft-border, transparent)' }}
+                        title="Abre a aba específica com a lista detalhada e filtros"
+                    >
+                        Ver detalhes →
+                    </button>
+                )}
+            </div>
             {children}
         </div>
     );

@@ -4,13 +4,14 @@ import Footer from './components/Footer';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
+import { useConfirm } from './components/dialog/DialogProvider';
 import UpdateBanner from './components/UpdateBanner';
 import TaxAlerts from './components/TaxAlerts';
 import NewsAlerts from './components/NewsAlerts';
 import ReformaNews from './components/ReformaNews';
 import FavoritesSidebar from './components/FavoritesSidebar';
-import SimplesNacionalDashboard from './components/SimplesNacionalDashboard';
-import SimplesNacionalNovaEmpresa from './components/SimplesNacionalNovaEmpresa';
+import SimplesNacionalSection from './components/sections/SimplesNacionalSection';
+import MenuPrincipal from './components/sections/MenuPrincipal';
 import InitialStateDisplay from './components/InitialStateDisplay';
 import SimilarServicesDisplay from './components/SimilarServicesDisplay';
 import AccessLogsModal from './components/AccessLogsModal';
@@ -22,101 +23,65 @@ import { SearchType, type SearchResult, type ComparisonResult, type FavoriteItem
 import { fetchFiscalData, fetchComparison, fetchSimilarServices } from './services/geminiService';
 import * as simplesService from './services/simplesNacionalService';
 import * as authService from './services/authService';
-import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, InfoIcon, CalendarIcon, DownloadIcon, ScaleIcon } from './components/Icons';
+import { InfoIcon, SearchIcon, CalculatorIcon } from './components/Icons';
+import { MENU_GRUPOS, searchDescriptions } from './config/menuConfig';
+import { getFriendlyErrorMessage } from './services/errorTranslation';
 // (FiscalObligationsDashboard, Tarefas, CalendarioFiscal agora dentro de ObrigacoesETarefas)
 import { runInitialSync } from './services/cloudSyncService';
 import { requestNotificationPermission } from './services/notificacoesService';
+import { safeStorage } from './services/safeStorage';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
 // ✅ REMOVIDO: import { onAuthStateChanged } from 'firebase/auth';
 // Ambos encapsulados em authService.subscribeAuthState
 
-const SimplesNacionalDetalhe = lazy(() => import('./components/SimplesNacionalDetalhe'));
-const SimplesNacionalClienteView = lazy(() => import('./components/SimplesNacionalClienteView'));
 const ResultsDisplay = lazy(() => import('./components/ResultsDisplay'));
 const ComparisonDisplay = lazy(() => import('./components/ComparisonDisplay'));
 const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDisplay'));
 const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumidoRealDashboard'));
 const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
-const ObrigacoesETarefas = lazy(() => import('./components/ObrigacoesETarefas'));
+// VencimentosHub funde Obrigações&Tarefas + Minha Agenda + Vencimentos da
+// Semana num só card (mesmo grupo: prazos derivados do regime/cadastro).
+const VencimentosHub = lazy(() => import('./components/Vencimentos/VencimentosHub'));
 const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocumentosFiscais'));
 const SpedFiscal = lazy(() => import('./components/SpedFiscal'));
 const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
 const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
-const CaixaPostalDashboard = lazy(() => import('./components/CaixaPostal'));
+// Hubs que fundem cada gênero num só card (sub-abas internas):
+//  - CaixaPostalHub: Caixa Postal + Radar e-CAC
+//  - DasHub: DAS + Cobertura PGDAS-D + Sublimite
+//  - NfseNacionalHub: NFS-e Nacional + Cobertura ADN
+//  - RecuperacaoHub: Recuperação Tributária + Prazos de Prescrição
+const CaixaPostalHub = lazy(() => import('./components/CaixaPostal/CaixaPostalHub'));
 const CaixaPostalAlerta = lazy(() => import('./components/CaixaPostal/AlertaPopup'));
 const CronCapturaBanner = lazy(() => import('./components/CronCapturaBanner'));
 const VencimentosBanner = lazy(() => import('./components/VencimentosBanner'));
-const DasDashboard = lazy(() => import('./components/Das'));
-const DCTFWebDashboard = lazy(() => import('./components/DCTFWeb'));
-const ConferirReinfDctfweb = lazy(() => import('./components/EfdReinf/ConferirReinfDctfweb'));
-const CoberturaAdnPanel = lazy(() => import('./components/NfseNacional/CoberturaAdnPanel'));
-const CoberturaPgdasPanel = lazy(() => import('./components/Das/CoberturaPgdasPanel'));
-const CoberturaDctfwebPanel = lazy(() => import('./components/DCTFWeb/CoberturaDctfwebPanel'));
-const RadarCriticasPanel = lazy(() => import('./components/CaixaPostal/RadarCriticasPanel'));
-const MinhaAgendaPanel = lazy(() => import('./components/MinhaAgenda/MinhaAgendaPanel'));
-const PrazosPrescricaoPanel = lazy(() => import('./components/RecuperacaoTributaria/PrazosPrescricaoPanel'));
-const VencimentosSemanaPanel = lazy(() => import('./components/Vencimentos/VencimentosSemanaPanel'));
-const DiagnosticoDocsFiscaisPanel = lazy(() => import('./components/Diagnostico/DocsFiscaisPanel'));
-const SublimitePanel = lazy(() => import('./components/SimplesSublimite/SublimitePanel'));
-const CadastrosPanel = lazy(() => import('./components/Diagnostico/CadastrosPanel'));
-const CertMonitorPanel = lazy(() => import('./components/CertMonitor/CertMonitorPanel'));
-const ConfigPanel = lazy(() => import('./components/Diagnostico/ConfigPanel'));
-const SaudeGeralPanel = lazy(() => import('./components/Saude/SaudeGeralPanel'));
+// Countdown pro marco CBS/IBS (Reforma Tributária) — 01/08/2026.
+const ReformaCountdownBanner = lazy(() => import('./components/ReformaCountdownBanner'));
+const DasHub = lazy(() => import('./components/Das/DasHub'));
+// DctfwebHub funde DCTFWeb + EFD-Reinf×DCTFWeb + Cobertura DCTFWeb num só card.
+const DctfwebHub = lazy(() => import('./components/DCTFWeb/DctfwebHub'));
+// Hub que funde as 6 abas de diagnóstico (Saúde/Docs/Cadastros/Certificados/
+// Config/Anomalias) num só card com sub-abas internas. Os 6 painéis são
+// importados DENTRO do hub agora — não mais soltos aqui.
+const DiagnosticoHub = lazy(() => import('./components/Diagnostico/DiagnosticoHub'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
-const NfseNacionalDashboard = lazy(() => import('./components/NfseNacional'));
+const NfseNacionalHub = lazy(() => import('./components/NfseNacional/NfseNacionalHub'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
-const AnomaliasView = lazy(() => import('./components/Anomalias'));
+// AnomaliasView agora vive dentro do DiagnosticoHub (sub-aba).
 const SimuladorReforma = lazy(() => import('./components/SimuladorReforma'));
 const TaxEmissionDashboard = lazy(() => import('./components/TaxEmission'));
-const RecuperacaoTributaria = lazy(() => import('./components/RecuperacaoTributaria'));
+const RecuperacaoHub = lazy(() => import('./components/RecuperacaoTributaria/RecuperacaoHub'));
 const NfpProCloud = lazy(() => import('./components/NfpProCloud'));
 
-const searchDescriptions: Record<SearchType, string> = {
-    [SearchType.CFOP]: "Consulte códigos de operação e entenda a aplicação e tributação.",
-    [SearchType.NCM]: "Classificação fiscal de mercadorias e incidência de impostos (IPI, ICMS).",
-    [SearchType.SERVICO]: "Análise de retenção de ISS, local de incidência e alíquotas.",
-    [SearchType.REFORMA_TRIBUTARIA]: "Simule o impacto da Reforma Tributária (IBS/CBS) para sua atividade.",
-    [SearchType.SIMPLES_NACIONAL]: "Gestão de empresas do Simples, cálculo de DAS e Fator R.",
-    [SearchType.LUCRO_PRESUMIDO_REAL]: "Ficha Financeira e Cadastro para Lucro Presumido/Real.",
-    [SearchType.OBRIGACOES_FISCAIS]: "Acompanhamento de obrigações, vencimentos e alertas fiscais.",
-    [SearchType.IMPORTA_XML]: "Central de Documentos Fiscais — importação de XMLs/PDFs (NFSe), captura, dashboards e relatórios.",
-    [SearchType.ANALISE_RELATORIO_SAGE]: "Analise relatórios SAGE (XLSX/XML) e identifique gaps, canceladas, denegadas e segregação E/S.",
-    [SearchType.ANALISADOR_REGIME]: "Compare cenários de tributação (Simples, Lucro Presumido, Lucro Real) e identifique o regime mais vantajoso.",
-    [SearchType.ANALISE_CREDITOS]: "Análise de créditos PIS/COFINS, conciliação bancária e mapeamento por categoria fiscal.",
-    [SearchType.SPED_FISCAL]: "Geração do arquivo SPED Fiscal (EFD ICMS/IPI) — escrituração digital mensal.",
-    [SearchType.CAIXA_POSTAL]: "Caixa Postal e-CAC — mensagens da Receita Federal por empresa (intimações, malha fiscal, comunicados).",
-    [SearchType.DAS_SIMPLES]: "DAS Simples Nacional — emissão regular (com PGDAS-D) e avulso, controle de pagamentos por empresa.",
-    [SearchType.DCTFWEB]: "DCTFWeb — Declaração de Débitos e Créditos Tributários Federais Previdenciários (empresas Lucro Presumido/Real), com transmissão, DARF e MIT.",
-    [SearchType.EFD_REINF]: "EFD-Reinf × DCTFWeb — confere as retenções declaradas na EFD-Reinf (INSS/IRRF/CSRF) contra o débito consolidado na DCTFWeb.",
-    [SearchType.NFSE_NAC_COBERTURA]: "Cobertura ADN (NFS-e Nac.) — diagnóstico e habilitação em massa da captura nacional de NFS-e por empresa (somente administradores).",
-    [SearchType.DAS_COBERTURA_PGDAS]: "Cobertura PGDAS-D — heatmap por empresa × mês mostrando quais Simples NÃO tiveram DAS emitido (gera autuação automática).",
-    [SearchType.DCTFWEB_COBERTURA]: "Cobertura DCTFWeb — heatmap por empresa Lucro × mês mostrando quais NÃO transmitiram a DCTFWeb (gera autuação automática).",
-    [SearchType.CAIXA_POSTAL_RADAR]: "Radar fiscal (e-CAC) — mensagens não lidas classificadas por risco real (intimações, malha, exclusão Simples, autos de infração) ordenadas por urgência.",
-    [SearchType.MINHA_AGENDA]: "Minha Agenda Fiscal — consolidado por carteira: PGDAS-D / DCTFWeb pendentes + caixa postal crítica em UM lugar, priorizado por risco (0-100).",
-    [SearchType.RECUPERACAO_PRAZOS]: "Prazos de Prescrição — para cada oportunidade de recuperação tributária, mostra quanto falta pra expirar (5 anos CTN art 168). URGENTE = ≤90 dias.",
-    [SearchType.VENCIMENTOS_SEMANA]: "Vencimentos da Semana — obrigações fiscais que vencem nos próximos 7 dias (ou estão atrasadas), filtradas pela sua carteira. Visão do dia-a-dia.",
-    [SearchType.DIAGNOSTICO_DOCS]: "Diagnóstico Docs Fiscais — varredura de saúde das NF-e capturadas: notas sem chave/competência/direção/valor, chaves duplicadas em 2+ docs (somente administradores).",
-    [SearchType.SIMPLES_SUBLIMITE]: "Alerta de sublimite Simples — calcula RBT12 de cada empresa Simples e classifica contra teto (R$ 4,8M) e sublimite ICMS/ISS (R$ 3,6M). Risco de exclusão automática.",
-    [SearchType.DIAGNOSTICO_CADASTROS]: "Cadastros Incompletos — empresas com UF/IBGE/anexo/CNAE faltando que bloqueiam o SPED ou cálculo do DAS (somente administradores).",
-    [SearchType.CERT_MONITOR]: "Certificados Digitais — monitora vencimento dos certs (S&P + por empresa). Cert vencido = SERPRO/SEFAZ/e-CAC param sem aviso.",
-    [SearchType.DIAGNOSTICO_CONFIG]: "Configurações Operacionais — detecta env vars faltando (SERPRO/SharePoint/CRON_SECRET/etc) e modos operacionais incorretos. Só admin, sem expor valores.",
-    [SearchType.SAUDE_GERAL]: "Saúde Geral — agrega os 4 diagnósticos (cadastros + documentos + certs + configs) numa única tela. Status global OK/MÉDIO/ALTO/CRÍTICO/DEGRADADO.",
-    [SearchType.CARTEIRA]: "Carteira de Clientes — atribuição de empresas a colaboradores responsáveis (somente administradores).",
-    [SearchType.AGENTES_A3]: "Agentes A3 — gerenciar API keys do agente local cfi-a3 e marcar empresas como A3 (somente administradores).",
-    [SearchType.NFSE_NACIONAL]: "NFS-e Nacional (CGSN 189/2026) — emissão e gestão de notas de serviço no padrão nacional, obrigatório set/2026.",
-    [SearchType.DASHBOARD_CEO]: "Dashboard CEO — visão executiva unificada com KPIs e recomendações da IA.",
-    [SearchType.ANOMALIAS]: "Detector de Anomalias — análise estatística + IA detecta irregularidades no DAS de cada empresa.",
-    [SearchType.SIMULADOR_IBS_CBS]: "Simulador IBS/CBS — projeção da carga tributária 2026-2033 sob a Reforma Tributária (LC 214/2025).",
-    [SearchType.EMISSAO_TRIBUTOS]: "Central de Emissões — emissão unificada de DAS (Simples) e DARF (IRPJ/CSLL/PIS/COFINS para Presumido e Real) com controle de pagamento.",
-    [SearchType.RECUPERACAO_TRIBUTARIA]: "Recuperação Tributária — identifica impostos pagos a maior e oportunidades de restituição/compensação.",
-    [SearchType.NFP_PRO_CLOUD]: "Consulta de situação fiscal: débitos, certidões, obrigações, parcelamentos e plano de ação. Acesso restrito a administradores.",
-};
 
 const App: React.FC = () => {
+    const confirm = useConfirm();
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
         if (typeof window !== 'undefined') {
-            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            const stored = safeStorage.getItem('theme');
+            const preferDark = stored == null && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (stored === 'dark' || preferDark) {
                 document.documentElement.classList.add('dark');
                 return 'dark';
             }
@@ -191,11 +156,8 @@ const App: React.FC = () => {
     // sincroniza automaticamente em qualquer dispositivo sem relogar.
     useEffect(() => {
         try {
-            const storedFavorites = localStorage.getItem('fiscal-consultant-favorites');
-            if (storedFavorites) setFavorites(JSON.parse(storedFavorites));
-
-            const storedHistory = localStorage.getItem('fiscal-consultant-history');
-            if (storedHistory) setHistory(JSON.parse(storedHistory));
+            setFavorites(safeStorage.getJSON<FavoriteItem[]>('fiscal-consultant-favorites', []));
+            setHistory(safeStorage.getJSON<HistoryItem[]>('fiscal-consultant-history', []));
 
             const unsubscribe = authService.subscribeAuthState((user) => {
                 setCurrentUser(user);
@@ -215,10 +177,10 @@ const App: React.FC = () => {
     useEffect(() => {
         if (theme === 'dark') {
             document.documentElement.classList.add('dark');
-            localStorage.theme = 'dark';
+            safeStorage.setItem('theme', 'dark');
         } else {
             document.documentElement.classList.remove('dark');
-            localStorage.theme = 'light';
+            safeStorage.setItem('theme', 'light');
         }
     }, [theme]);
 
@@ -287,12 +249,12 @@ const App: React.FC = () => {
     const handleHistoryRemove = (id: string) => {
         const newHistory = history.filter(item => item.id !== id);
         setHistory(newHistory);
-        localStorage.setItem('fiscal-consultant-history', JSON.stringify(newHistory));
+        safeStorage.setJSON('fiscal-consultant-history', newHistory);
     };
 
     const handleHistoryClear = () => {
         setHistory([]);
-        localStorage.removeItem('fiscal-consultant-history');
+        safeStorage.removeItem('fiscal-consultant-history');
     };
 
     const addHistory = (item: Omit<HistoryItem, 'id' | 'timestamp'>) => {
@@ -303,7 +265,7 @@ const App: React.FC = () => {
         };
         setHistory(prev => {
             const updatedHistory = [newHistoryItem, ...prev].slice(0, 50);
-            localStorage.setItem('fiscal-consultant-history', JSON.stringify(updatedHistory));
+            safeStorage.setJSON('fiscal-consultant-history', updatedHistory);
             return updatedHistory;
         });
     };
@@ -322,7 +284,7 @@ const App: React.FC = () => {
 
     const saveFavorites = (newFavorites: FavoriteItem[]) => {
         setFavorites(newFavorites);
-        localStorage.setItem('fiscal-consultant-favorites', JSON.stringify(newFavorites));
+        safeStorage.setJSON('fiscal-consultant-favorites', newFavorites);
     };
 
     const handleToggleFavorite = () => {
@@ -343,42 +305,6 @@ const App: React.FC = () => {
         saveFavorites(newFavorites);
     };
 
-    const getFriendlyErrorMessage = (error: any): string => {
-        const message = error?.message || '';
-
-        if (message.includes('429') || message.includes('Quota exceeded')) {
-            return "Limite de consultas excedido (Erro 429). A IA está sobrecarregada ou sua cota acabou. Por favor, aguarde alguns instantes antes de tentar novamente.";
-        }
-        if (message.includes('503') || message.includes('Service Unavailable')) {
-            return "O serviço de IA está temporariamente indisponível (Erro 503). Isso geralmente é passageiro. Tente novamente em alguns minutos.";
-        }
-        if (message.includes('400') || message.includes('Invalid argument')) {
-            return "A consulta parece inválida ou incompleta (Erro 400). Verifique os dados digitados e tente novamente.";
-        }
-        if (message.includes('405') || message.includes('Not Allowed')) {
-            return "Erro de comunicação com o serviço de IA (Erro 405). O modelo pode não estar disponível. Tente novamente em alguns instantes.";
-        }
-        if (message.includes('500')) {
-            return "Erro interno no servidor da IA (Erro 500). Por favor, tente novamente.";
-        }
-        if (message.includes('Failed to fetch')) {
-            return "Erro de conexão. Verifique sua internet e tente novamente.";
-        }
-        if (message.includes('pattern') || message.includes('DOMException')) {
-            return "Erro ao conectar com a API. Verifique se a chave da API (VITE_GEMINI_API_KEY) está configurada corretamente no arquivo .env.";
-        }
-        if (message.includes('invalid characters') || message.includes('API Key contains')) {
-            return "A chave da API contém caracteres inválidos. Verifique o valor de VITE_GEMINI_API_KEY no arquivo .env.";
-        }
-        if (message.includes('process is not defined') || message.includes('GEMINI_API_KEY') || message.includes('API Key must be set')) {
-            return "A chave da API do Gemini não foi configurada. Por favor, configure a variável VITE_GEMINI_API_KEY no arquivo .env.";
-        }
-        if (message.includes('filtro de segurança') || message.includes('SAFETY')) {
-            return "A consulta foi bloqueada pelo filtro de segurança da IA. Tente reformular sua pergunta.";
-        }
-
-        return message || "Ocorreu um erro inesperado ao comunicar com a API.";
-    };
 
     const validateInputs = (q1: string, q2?: string) => {
         const errors: Record<string, string> = {};
@@ -665,6 +591,27 @@ const App: React.FC = () => {
 
     const selectedEmpresa = simplesEmpresas.find(e => e.id === selectedSimplesEmpresaId);
 
+    // Seleção de card do menu — reseta estado de busca e trata casos especiais
+    // (Simples carrega dados; Lucro limpa empresa). Único handler pra todos os
+    // cards (antes era repetido inline em cada botão).
+    const selecionarTipo = (type: SearchType) => {
+        setSearchType(type);
+        setResult(null);
+        setQuery1('');
+        setQuery2('');
+        setError(null);
+        setValidationErrors({});
+        setUserNotes('');
+        if (type === SearchType.SIMPLES_NACIONAL) {
+            setSimplesView('dashboard');
+            setSimplesEmpresaToEdit(null);
+            loadSimplesData(currentUser);
+        }
+        if (type === SearchType.LUCRO_PRESUMIDO_REAL) {
+            setSelectedLucroEmpresaId(null);
+        }
+    };
+
     return (
         <div className="min-h-screen transition-colors bg-slate-50 dark:bg-[var(--bg-page)]" style={{fontFamily:"'DM Sans',sans-serif"}}>
             <div className="container mx-auto px-4 max-w-screen-2xl">
@@ -683,6 +630,9 @@ const App: React.FC = () => {
                     <main className="flex-grow min-w-0">
                         <ErrorBoundary>
                             <Suspense fallback={null}>
+                                <ReformaCountdownBanner
+                                    onIrParaReforma={() => setSearchType(SearchType.SIMULADOR_IBS_CBS)}
+                                />
                                 <VencimentosBanner
                                     currentUser={currentUser}
                                     onClickIrTarefas={() => setSearchType(SearchType.OBRIGACOES_FISCAIS)}
@@ -699,151 +649,11 @@ const App: React.FC = () => {
                                 />
                             </Suspense>
                         </ErrorBoundary>
-                        {/* Search Type Selection Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-4">
-                            {Object.values(SearchType).filter(t => t !== SearchType.IMPORTA_XML && t !== SearchType.ANALISE_RELATORIO_SAGE && t !== SearchType.SPED_FISCAL && t !== SearchType.NFP_PRO_CLOUD).map((type) => (
-                                <button
-                                    key={type}
-                                    onClick={() => {
-                                        setSearchType(type);
-                                        setResult(null);
-                                        setQuery1('');
-                                        setQuery2('');
-                                        setError(null);
-                                        setValidationErrors({});
-                                        setUserNotes('');
-                                        if (type === SearchType.SIMPLES_NACIONAL) {
-                                            setSimplesView('dashboard');
-                                            setSimplesEmpresaToEdit(null);
-                                            loadSimplesData(currentUser);
-                                        }
-                                        if (type === SearchType.LUCRO_PRESUMIDO_REAL) {
-                                            setSelectedLucroEmpresaId(null);
-                                        }
-                                    }}
-                                    className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
-                                    style={{
-                                        background: searchType === type ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
-                                        border: searchType === type ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
-                                        color: searchType === type ? 'var(--text-primary)' : 'var(--text-muted)',
-                                        transform: searchType === type ? 'scale(1.05)' : 'scale(1)'
-                                    }}
-                                >
-                                    <div className="mb-2">
-                                        {type === SearchType.CFOP && <TagIcon className="w-5 h-5" />}
-                                        {type === SearchType.NCM && <DocumentTextIcon className="w-5 h-5" />}
-                                        {type === SearchType.SERVICO && <BuildingIcon className="w-5 h-5" />}
-                                        {type === SearchType.REFORMA_TRIBUTARIA && <CalculatorIcon className="w-5 h-5" />}
-                                        {type === SearchType.SIMPLES_NACIONAL && <CalculatorIcon className="w-5 h-5" />}
-                                        {type === SearchType.LUCRO_PRESUMIDO_REAL && <BuildingIcon className="w-5 h-5" />}
-                                        {type === SearchType.OBRIGACOES_FISCAIS && <CalendarIcon className="w-5 h-5" />}
-                                        {type === SearchType.RECUPERACAO_TRIBUTARIA && <ScaleIcon className="w-5 h-5" />}
-                                    </div>
-                                    <span className="text-xs font-bold text-center leading-tight">{type}</span>
-                                </button>
-                            ))}
-                            {/* Consulta Situação Fiscal — somente admin */}
-                            {currentUser.role === 'admin' && (
-                            <button
-                                onClick={() => {
-                                    setSearchType(SearchType.NFP_PRO_CLOUD);
-                                    setResult(null);
-                                    setQuery1('');
-                                    setQuery2('');
-                                    setError(null);
-                                    setValidationErrors({});
-                                    setUserNotes('');
-                                }}
-                                className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
-                                style={{
-                                    background: searchType === SearchType.NFP_PRO_CLOUD ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
-                                    border: searchType === SearchType.NFP_PRO_CLOUD ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
-                                    color: searchType === SearchType.NFP_PRO_CLOUD ? 'var(--text-primary)' : 'var(--text-muted)',
-                                    transform: searchType === SearchType.NFP_PRO_CLOUD ? 'scale(1.05)' : 'scale(1)'
-                                }}
-                            >
-                                <div className="mb-2 relative">
-                                    <DocumentTextIcon className="w-5 h-5" />
-                                    <svg className="w-3 h-3 absolute -top-1 -right-1" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--warning, #f59e0b)' }}>
-                                        <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clipRule="evenodd" />
-                                    </svg>
-                                </div>
-                                <span className="text-xs font-bold text-center leading-tight">Consulta Situação Fiscal</span>
-                            </button>
-                            )}
-                            {/* Importa XML */}
-                            <button
-                                onClick={() => {
-                                    setSearchType(SearchType.IMPORTA_XML);
-                                    setResult(null);
-                                    setQuery1('');
-                                    setQuery2('');
-                                    setError(null);
-                                    setValidationErrors({});
-                                    setUserNotes('');
-                                }}
-                                className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
-                                style={{
-                                    background: searchType === SearchType.IMPORTA_XML ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
-                                    border: searchType === SearchType.IMPORTA_XML ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
-                                    color: searchType === SearchType.IMPORTA_XML ? 'var(--text-primary)' : 'var(--text-muted)',
-                                    transform: searchType === SearchType.IMPORTA_XML ? 'scale(1.05)' : 'scale(1)'
-                                }}
-                            >
-                                <div className="mb-2">
-                                    <DownloadIcon className="w-5 h-5" />
-                                </div>
-                                <span className="text-xs font-bold text-center leading-tight">Central de Documentos Fiscais</span>
-                            </button>
-                            {/* Análise Relatório SAGE */}
-                            <button
-                                onClick={() => {
-                                    setSearchType(SearchType.ANALISE_RELATORIO_SAGE);
-                                    setResult(null);
-                                    setQuery1('');
-                                    setQuery2('');
-                                    setError(null);
-                                    setValidationErrors({});
-                                    setUserNotes('');
-                                }}
-                                className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
-                                style={{
-                                    background: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
-                                    border: searchType === SearchType.ANALISE_RELATORIO_SAGE ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
-                                    color: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'var(--text-primary)' : 'var(--text-muted)',
-                                    transform: searchType === SearchType.ANALISE_RELATORIO_SAGE ? 'scale(1.05)' : 'scale(1)'
-                                }}
-                            >
-                                <div className="mb-2">
-                                    <DocumentTextIcon className="w-5 h-5" />
-                                </div>
-                                <span className="text-xs font-bold text-center leading-tight">Análise SAGE</span>
-                            </button>
-                            {/* SPED Fiscal */}
-                            <button
-                                onClick={() => {
-                                    setSearchType(SearchType.SPED_FISCAL);
-                                    setResult(null);
-                                    setQuery1('');
-                                    setQuery2('');
-                                    setError(null);
-                                    setValidationErrors({});
-                                    setUserNotes('');
-                                }}
-                                className="flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200"
-                                style={{
-                                    background: searchType === SearchType.SPED_FISCAL ? 'var(--accent-soft-border)' : 'var(--bg-elevated)',
-                                    border: searchType === SearchType.SPED_FISCAL ? '1px solid var(--accent-soft-border)' : '1px solid var(--border-default)',
-                                    color: searchType === SearchType.SPED_FISCAL ? 'var(--text-primary)' : 'var(--text-muted)',
-                                    transform: searchType === SearchType.SPED_FISCAL ? 'scale(1.05)' : 'scale(1)'
-                                }}
-                            >
-                                <div className="mb-2">
-                                    <DocumentTextIcon className="w-5 h-5" />
-                                </div>
-                                <span className="text-xs font-bold text-center leading-tight">SPED Fiscal</span>
-                            </button>
-                        </div>
+                        <MenuPrincipal
+                            currentUser={currentUser}
+                            searchType={searchType}
+                            onSelecionar={selecionarTipo}
+                        />
 
                         {/* Standard Search Views (CFOP, NCM, Serviço, Simples, Lucro, Obrigações) */}
                         {[SearchType.CFOP, SearchType.NCM, SearchType.SERVICO, SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) && (
@@ -1049,65 +859,24 @@ const App: React.FC = () => {
 
                         {/* Simples Nacional Views */}
                         {searchType === SearchType.SIMPLES_NACIONAL && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                {simplesView === 'dashboard' && (
-                                    <SimplesNacionalDashboard
-                                        empresas={simplesEmpresas}
-                                        notas={simplesNotas}
-                                        onSelectEmpresa={(id, view) => { setSelectedSimplesEmpresaId(id); setSimplesView(view); }}
-                                        onAddNew={() => { setSimplesEmpresaToEdit(null); setSimplesView('nova'); }}
-                                        onEdit={(empresa) => { setSimplesEmpresaToEdit(empresa); setSimplesView('nova'); }}
-                                        onDelete={async (empresa) => {
-                                            if (!window.confirm(`Excluir empresa "${empresa.nome}" (CNPJ ${empresa.cnpj})?\n\nEssa ação não pode ser desfeita.`)) return;
-                                            try {
-                                                await simplesService.deleteEmpresa(empresa.id);
-                                                setSimplesEmpresas(prev => prev.filter(e => e.id !== empresa.id));
-                                                if (currentUser) authService.logAction(currentUser.id, currentUser.name, 'delete_empresa', empresa.nome);
-                                                setToastMessage(`Empresa "${empresa.nome}" excluída.`);
-                                            } catch (err: any) {
-                                                const msg = err?.code === 'permission-denied'
-                                                    ? 'Sem permissão para excluir esta empresa (só admin ou criador).'
-                                                    : (err?.message || 'Erro ao excluir empresa.');
-                                                setToastMessage(msg);
-                                                console.error('[deleteEmpresa Simples]', err);
-                                            }
-                                        }}
-                                        onShowToast={(msg) => setToastMessage(msg)}
-                                        currentUser={currentUser}
-                                    />
-                                )}
-                                {simplesView === 'nova' && (
-                                    <SimplesNacionalNovaEmpresa
-                                        onSave={handleSaveSimplesEmpresa}
-                                        onCancel={() => { setSimplesView('dashboard'); setSimplesEmpresaToEdit(null); }}
-                                        onShowToast={(msg) => setToastMessage(msg)}
-                                        initialData={simplesEmpresaToEdit}
-                                    />
-                                )}
-                                {simplesView === 'detalhe' && selectedEmpresa && (
-                                    <SimplesNacionalDetalhe
-                                        empresa={selectedEmpresa}
-                                        notas={simplesNotas[selectedEmpresa.id] || []}
-                                        onBack={() => setSimplesView('dashboard')}
-                                        onImport={handleImportNotas}
-                                        onUpdateFolha12={handleUpdateFolha12}
-                                        onSaveFaturamentoManual={handleSaveFaturamentoManual}
-                                        onUpdateEmpresa={handleUpdateEmpresa}
-                                        onShowClienteView={() => setSimplesView('cliente')}
-                                        onShowToast={(msg) => setToastMessage(msg)}
-                                        currentUser={currentUser}
-                                    />
-                                )}
-                                {simplesView === 'cliente' && selectedEmpresa && (
-                                    <SimplesNacionalClienteView
-                                        empresa={selectedEmpresa}
-                                        notas={simplesNotas[selectedEmpresa.id] || []}
-                                        onBack={() => setSimplesView('dashboard')}
-                                    />
-                                )}
-                            </Suspense>
-                            </ErrorBoundary>
+                            <SimplesNacionalSection
+                                simplesView={simplesView}
+                                setSimplesView={setSimplesView}
+                                simplesEmpresas={simplesEmpresas}
+                                setSimplesEmpresas={setSimplesEmpresas}
+                                simplesNotas={simplesNotas}
+                                selectedEmpresa={selectedEmpresa}
+                                setSelectedSimplesEmpresaId={setSelectedSimplesEmpresaId}
+                                simplesEmpresaToEdit={simplesEmpresaToEdit}
+                                setSimplesEmpresaToEdit={setSimplesEmpresaToEdit}
+                                currentUser={currentUser}
+                                setToastMessage={setToastMessage}
+                                onSaveSimplesEmpresa={handleSaveSimplesEmpresa}
+                                onImportNotas={handleImportNotas}
+                                onUpdateFolha12={handleUpdateFolha12}
+                                onSaveFaturamentoManual={handleSaveFaturamentoManual}
+                                onUpdateEmpresa={handleUpdateEmpresa}
+                            />
                         )}
 
                         {/* Lucro Presumido View */}
@@ -1124,13 +893,18 @@ const App: React.FC = () => {
                         )}
 
                         {/* Obrigações & Tarefas (Dashboard + Kanban + Calendário) */}
+                        {/* Vencimentos & Obrigações — hub que funde Obrigações&Tarefas +
+                            Minha Agenda + Vencimentos da Semana (mesmo grupo: prazos
+                            derivados do regime/cadastro de cada empresa). */}
                         {searchType === SearchType.OBRIGACOES_FISCAIS && (
+                            <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <ObrigacoesETarefas
-                                    currentUser={currentUser ?? null}
+                                <VencimentosHub
+                                    currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>
+                            </ErrorBoundary>
                         )}
 
                         {/* Central de Documentos Fiscais (XML) */}
@@ -1168,10 +942,11 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
+                        {/* Caixa Postal — hub que funde Caixa Postal + Radar e-CAC. */}
                         {searchType === SearchType.CAIXA_POSTAL && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <CaixaPostalDashboard
+                                <CaixaPostalHub
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
@@ -1179,10 +954,11 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
+                        {/* DAS Simples — hub que funde Painel DAS + Cobertura PGDAS-D + Sublimite. */}
                         {searchType === SearchType.DAS_SIMPLES && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <DasDashboard
+                                <DasHub
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
@@ -1190,10 +966,11 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
+                        {/* DCTFWeb — hub que funde Painel + Cobertura + EFD-Reinf×DCTFWeb. */}
                         {searchType === SearchType.DCTFWEB && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <DCTFWebDashboard
+                                <DctfwebHub
                                     currentUser={currentUser}
                                     onShowToast={setToastMessage}
                                 />
@@ -1201,140 +978,22 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
-                        {searchType === SearchType.EFD_REINF && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <ConferirReinfDctfweb
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
+                        {/* EFD_REINF agora é sub-aba do DctfwebHub. */}
 
-                        {searchType === SearchType.NFSE_NAC_COBERTURA && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <CoberturaAdnPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.DAS_COBERTURA_PGDAS && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <CoberturaPgdasPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.DCTFWEB_COBERTURA && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <CoberturaDctfwebPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.CAIXA_POSTAL_RADAR && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <RadarCriticasPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.MINHA_AGENDA && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <MinhaAgendaPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.RECUPERACAO_PRAZOS && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <PrazosPrescricaoPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.VENCIMENTOS_SEMANA && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <VencimentosSemanaPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.DIAGNOSTICO_DOCS && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <DiagnosticoDocsFiscaisPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.SIMPLES_SUBLIMITE && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <SublimitePanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.DIAGNOSTICO_CADASTROS && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <CadastrosPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.CERT_MONITOR && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <CertMonitorPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.DIAGNOSTICO_CONFIG && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <ConfigPanel
-                                    onShowToast={setToastMessage}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
+                        {/* Sub-abas consolidadas em hubs:
+                            NFSE_NAC_COBERTURA → NfseNacionalHub
+                            DAS_COBERTURA_PGDAS + SIMPLES_SUBLIMITE → DasHub
+                            DCTFWEB_COBERTURA → DctfwebHub
+                            CAIXA_POSTAL_RADAR → CaixaPostalHub
+                            MINHA_AGENDA + VENCIMENTOS_SEMANA → VencimentosHub
+                            RECUPERACAO_PRAZOS → RecuperacaoHub
+                            DIAGNOSTICO_DOCS/CADASTROS/CERT_MONITOR/CONFIG/ANOMALIAS → DiagnosticoHub */}
 
                         {searchType === SearchType.SAUDE_GERAL && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <SaudeGeralPanel
+                                <DiagnosticoHub
+                                    currentUser={currentUser}
                                     onShowToast={setToastMessage}
                                 />
                             </Suspense>
@@ -1364,10 +1023,11 @@ const App: React.FC = () => {
                         )}
 
 
+                        {/* NFS-e Nacional — hub que funde Painel + Cobertura ADN. */}
                         {searchType === SearchType.NFSE_NACIONAL && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <NfseNacionalDashboard
+                                <NfseNacionalHub
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
@@ -1392,16 +1052,7 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
-                        {searchType === SearchType.ANOMALIAS && (
-                            <ErrorBoundary>
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <AnomaliasView
-                                    currentUser={currentUser ?? null}
-                                    onShowToast={(msg) => setToastMessage(msg)}
-                                />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
+                        {/* ANOMALIAS agora é sub-aba do DiagnosticoHub (card SAUDE_GERAL). */}
 
                         {searchType === SearchType.SIMULADOR_IBS_CBS && (
                             <ErrorBoundary>
@@ -1425,11 +1076,12 @@ const App: React.FC = () => {
                             </ErrorBoundary>
                         )}
 
+                        {/* Recuperação — hub que funde Recuperação Tributária + Prazos de Prescrição. */}
                         {searchType === SearchType.RECUPERACAO_TRIBUTARIA && (
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
-                                <RecuperacaoTributaria
-                                    currentUser={currentUser ?? null}
+                                <RecuperacaoHub
+                                    currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>

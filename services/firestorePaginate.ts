@@ -45,7 +45,7 @@ export async function fetchAllDocs(
         if (snap.empty) break;
         out.push(...snap.docs);
         if (snap.size < batchSize) break;
-        last = snap.docs[snap.docs.length - 1];
+        last = snap.docs[snap.docs.length - 1] || null;
     }
     if (out.length >= maxDocs) {
         console.warn(`[fetchAllDocs] ${collectionName}: teto de ${maxDocs} docs atingido — pode haver mais.`);

@@ -92,7 +92,10 @@ function parseValor(s: string | undefined): number {
 }
 
 function findAfter(text: string, label: string, maxChars = 200): string {
-    const idx = text.indexOf(label);
+    // Busca case-insensitive — DANFSe v1.0 escreve "Data e Hora da emissão"
+    // (minúscula) e ABRASF escreve "Data e Hora da Emissão" (capital).
+    // Sem case-insensitive, cada padrao quebrava o outro.
+    const idx = text.toLowerCase().indexOf(label.toLowerCase());
     if (idx === -1) return '';
     return text.slice(idx + label.length, idx + label.length + maxChars);
 }
@@ -131,36 +134,68 @@ function parsePartie(block: string): NfsePdfParticipante {
     const p = empty();
     if (!block) return p;
 
-    const cnpjMatch = block.match(/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/);
-    if (cnpjMatch) p.cnpj = cnpjMatch[1];
-    else {
-        const cpfMatch = block.match(/(\d{3}\.\d{3}\.\d{3}-\d{2})/);
-        if (cpfMatch) p.cnpj = cpfMatch[1];
+    // CNPJ pode aparecer em VARIOS formatos:
+    //  - Pontuado:           02.942.184/0001-34
+    //  - Pontuado parcial:   02.942.184 / 0001-34   (com espacos)
+    //  - Sem pontuacao:      02942184000134
+    // E o label varia ("CNPJ:", "CNPJ/CPF:", "CPF/CNPJ", as vezes so o numero).
+    // Procura em ordem: pontuado -> pontuado-com-espacos -> 14-digitos.
+    const cnpjPontuadoMatch = block.match(/(\d{2})\s*\.\s*(\d{3})\s*\.\s*(\d{3})\s*\/\s*(\d{4})\s*-\s*(\d{2})/);
+    if (cnpjPontuadoMatch) {
+        // Normaliza: remove espacos extras mas mantem pontuacao canonica
+        p.cnpj = `${cnpjPontuadoMatch[1]}.${cnpjPontuadoMatch[2]}.${cnpjPontuadoMatch[3]}/${cnpjPontuadoMatch[4]}-${cnpjPontuadoMatch[5]}`;
+    } else {
+        // Sem pontuacao: 14 digitos consecutivos (cuidado pra nao casar com CEP+telefone)
+        // Exige label "CNPJ" perto pra reduzir falso positivo.
+        const cnpjDigitosMatch = block.match(/(?:CNPJ|CGC)[\s\S]{0,40}?(\d{14})/i)
+            || block.match(/(?<!\d)(\d{14})(?!\d)/);
+        if (cnpjDigitosMatch && cnpjDigitosMatch[1]) {
+            const d = cnpjDigitosMatch[1];
+            p.cnpj = `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
+        } else {
+            // Fallback CPF (pessoa fisica)
+            const cpfPontuadoMatch = block.match(/(\d{3}\.\d{3}\.\d{3}-\d{2})/);
+            if (cpfPontuadoMatch && cpfPontuadoMatch[1]) p.cnpj = cpfPontuadoMatch[1];
+        }
     }
     const ieMatch = block.match(/Inscri[c\u00e7][a\u00e3]o\s+Municipal\s*:?\s*(\d+)/i);
-    if (ieMatch) p.inscricaoMunicipal = ieMatch[1];
-    const nomeEmpresarialMatch = block.match(/Nome\s+empresarial\s*:?\s*([^\n]+)/i);
-    if (nomeEmpresarialMatch) p.nome = nomeEmpresarialMatch[1].trim();
-    else {
-        const nomeMatch = block.match(/Nome\s*:?\s*([^\n]+)/i);
-        if (nomeMatch) p.nome = nomeMatch[1].trim();
+    if (ieMatch && ieMatch[1]) p.inscricaoMunicipal = ieMatch[1];
+    // Nome aparece em formatos distintos por padrao:
+    //  DANFSe v1.0       : "Nome / Nome Empresarial\nFASTWELD INDUSTRIA..."
+    //  ABRASF (Publica)  : "Nome empresarial: FASTWELD..."
+    //  Ginfes (Guarulhos): "Raz\u00e3o Social/Nome FASTWELD IND. E COM. LTDA"
+    //
+    // Tenta na ordem do mais especifico pro mais generico pra evitar pegar
+    // o nome do CAMPO em vez do valor (ex.: "Nome:" sem valor na linha).
+    const nomeRegexes: RegExp[] = [
+        /Nome\s*\/\s*Nome\s+Empresarial[\s:]*\n?\s*([^\n]+)/i,        // DANFSe v1.0
+        /Raz[a\u00e3]o\s+Social\s*\/\s*Nome\s*[:]?\s*([^\n]+)/i,      // Ginfes
+        /Nome\s+Empresarial\s*:?\s*([^\n]+)/i,                         // ABRASF
+        /Raz[a\u00e3]o\s+Social\s*:?\s*([^\n]+)/i,                    // generico
+        /Nome\s*:?\s*([^\n]+)/i,                                       // ultimo fallback
+    ];
+    for (const r of nomeRegexes) {
+        const m = block.match(r);
+        const val = m?.[1]?.trim();
+        // "-" eh placeholder do DANFSe pra campos vazios; ignora
+        if (val && val !== '-' && val.length > 1) { p.nome = val; break; }
     }
     const fantasiaMatch = block.match(/Nome\s+fantasia\s*:?\s*([^\n]+)/i);
-    if (fantasiaMatch) p.nomeFantasia = fantasiaMatch[1].trim();
+    if (fantasiaMatch && fantasiaMatch[1]) p.nomeFantasia = fantasiaMatch[1].trim();
     const enderecoMatch = block.match(/Endere[c\u00e7]o\s*:?\s*([^\n]+)/i);
-    if (enderecoMatch) p.endereco = enderecoMatch[1].trim();
+    if (enderecoMatch && enderecoMatch[1]) p.endereco = enderecoMatch[1].trim();
     const bairroMatch = block.match(/Bairro\s*:?\s*([^\n]+)/i);
-    if (bairroMatch) p.bairro = bairroMatch[1].trim();
+    if (bairroMatch && bairroMatch[1]) p.bairro = bairroMatch[1].trim();
     const municipioMatch = block.match(/Munic[i\u00ed]pio\s*:?\s*([^\n]+?)(?:\s+UF\s*:|\n|$)/i);
-    if (municipioMatch) p.municipio = municipioMatch[1].trim();
+    if (municipioMatch && municipioMatch[1]) p.municipio = municipioMatch[1].trim();
     const ufMatch = block.match(/UF\s*:?\s*([A-Z]{2})/);
-    if (ufMatch) p.uf = ufMatch[1];
+    if (ufMatch && ufMatch[1]) p.uf = ufMatch[1];
     const cepMatch = block.match(/CEP\s*:?\s*(\d{5}-?\d{3})/i);
-    if (cepMatch) p.cep = cepMatch[1];
+    if (cepMatch && cepMatch[1]) p.cep = cepMatch[1];
     const emailMatch = block.match(/E-?mail\s*:?\s*([^\s\n]+@[^\s\n]+)/i);
-    if (emailMatch) p.email = emailMatch[1];
+    if (emailMatch && emailMatch[1]) p.email = emailMatch[1];
     const foneMatch = block.match(/Fone\s*:?\s*([\d\s\-()]+)/i);
-    if (foneMatch) p.telefone = foneMatch[1].trim();
+    if (foneMatch && foneMatch[1]) p.telefone = foneMatch[1].trim();
     return p;
 }
 
@@ -171,7 +206,15 @@ export async function parseNfsePdf(file: File): Promise<NfsePdfParsed> {
             'Nao foi possivel extrair texto do PDF. Pode ser uma NFSe digitalizada (imagem) — nao suportado.',
         );
     }
+    return parseNfseFromText(text);
+}
 
+/**
+ * Parsing puro — recebe o texto bruto extraido do PDF e devolve a estrutura.
+ * Separado pra ser testavel sem precisar de pdfjs-dist no jest (que so roda
+ * em jsdom com Worker mockado).
+ */
+export function parseNfseFromText(text: string): NfsePdfParsed {
     const upperText = text.toUpperCase();
     if (
         !upperText.includes('NFS-E') &&
@@ -182,41 +225,82 @@ export async function parseNfsePdf(file: File): Promise<NfsePdfParsed> {
     }
 
     // Cabecalho
+    // DANFSe v1.0 (gov.br/nfse) tem labels separados em linhas distintas:
+    //  "Número da NFS-e\n699598"  / "Série da DPS\n1"
+    // ABRASF padrao usa formato "NNNNNN / S" inline.
     let numero = '';
     let serie = '';
-    const numSerieMatch = text.match(/(\d{6,})\s*\/\s*(\w+)/);
-    if (numSerieMatch) {
-        numero = numSerieMatch[1];
-        serie = numSerieMatch[2];
+    const numNfseMatch = text.match(/N[uú]mero\s+da\s+NFS-?e\s*\n?\s*(\d+)/i);
+    if (numNfseMatch?.[1]) numero = numNfseMatch[1];
+    const serieDpsMatch = text.match(/S[eé]rie\s+(?:da\s+(?:DPS|NFS-?e)|do\s+RPS)\s*\n?\s*(\w+)/i);
+    if (serieDpsMatch?.[1]) serie = serieDpsMatch[1];
+    if (!numero) {
+        // Fallback ABRASF: "699598 / 1"
+        const numSerieMatch = text.match(/(\d{6,})\s*\/\s*(\w+)/);
+        if (numSerieMatch?.[1]) { numero = numSerieMatch[1]; serie = serie || numSerieMatch[2] || ''; }
     }
 
+    // Data: DANFSe usa "Data e Hora da emissão da NFS-e\n11/05/2026 14:31:31"
+    // (minusculo em "emissão" e tem " da NFS-e" no meio). findAfter agora eh
+    // case-insensitive entao "Data e Hora da Emissão" pega a forma do DANFSe.
     const dataEmissao = findValueByLabel(
         text,
-        ['Data e Hora da Emissao', 'Data e Hora da Emissão', 'Data de Emissao', 'Data de Emissão'],
+        ['Data e Hora da Emissão', 'Data e Hora da Emissao', 'Data de Emissão', 'Data de Emissao'],
         /(\d{2}\/\d{2}\/\d{4}(?:\s+\d{2}:\d{2}(?::\d{2})?)?)/,
     );
-    const competencia = findValueByLabel(text, ['Competencia', 'Competência'], /(\d{1,2}\/\d{4})/);
+    // Competencia: DANFSe = "Competência da NFS-e\n10/05/2026" (DD/MM/YYYY);
+    // ABRASF tradicional = "Competência: MM/YYYY". Aceita os 2.
+    const competencia = findValueByLabel(text, ['Competência', 'Competencia'], /(\d{1,2}\/\d{2,4}(?:\/\d{2,4})?)/);
     const codigoVerificacao = findValueByLabel(
         text,
-        ['Codigo de Verificacao', 'Código de Verificação'],
+        ['Código de Verificação', 'Codigo de Verificacao'],
         /([A-Z0-9-]{6,})/,
     );
-    const chaveAcessoMatch = text.match(/(?:chave\s*de?\s*acesso|chave\s*nacional)[\s:]*?(\d{40,50})/i);
-    const chaveAcesso = chaveAcessoMatch ? chaveAcessoMatch[1] : '';
+    // Chave: DANFSe = "Chave de Acesso da NFS-e\n3548906..." (50 digitos).
+    // ABRASF tradicional varia. Aceita label "da NFS-e" como variante.
+    const chaveAcessoMatch =
+        text.match(/Chave\s*(?:de\s+Acesso|Nacional)(?:\s+da\s+NFS-?e)?[\s:]*\n?\s*(\d{40,50})/i)
+        || text.match(/(?:chave\s*de?\s*acesso|chave\s*nacional)[\s:]*?(\d{40,50})/i);
+    const chaveAcesso = chaveAcessoMatch?.[1] || '';
 
-    // Blocos de Prestador / Tomador
-    const idxPrestador =
-        text.indexOf('PRESTADOR DE SERVI\u00c7OS') >= 0
-            ? text.indexOf('PRESTADOR DE SERVI\u00c7OS')
-            : text.indexOf('PRESTADOR DE SERVICOS');
-    const idxTomador =
-        text.indexOf('TOMADOR DE SERVI\u00c7OS') >= 0
-            ? text.indexOf('TOMADOR DE SERVI\u00c7OS')
-            : text.indexOf('TOMADOR DE SERVICOS');
-    const idxDisc =
-        text.indexOf('DISCRIMINA\u00c7\u00c3O DOS SERVI\u00c7OS') >= 0
-            ? text.indexOf('DISCRIMINA\u00c7\u00c3O DOS SERVI\u00c7OS')
-            : text.indexOf('DISCRIMINACAO DOS SERVICOS');
+    // Blocos de Prestador / Tomador.
+    //
+    // Cada padrao de DANFSe/NFSe usa labels diferentes:
+    //  - ABRASF padrao (Publica/SC)         : "PRESTADOR DE SERVI\u00c7OS" + "TOMADOR DE SERVI\u00c7OS" + "DISCRIMINA\u00c7\u00c3O DOS SERVI\u00c7OS"
+    //  - DANFSe v1.0 (gov.br/nfse nacional) : "EMITENTE DA NFS-e" + "TOMADOR DO SERVI\u00c7O" + "SERVI\u00c7O PRESTADO"
+    //  - Ginfes/municipios SP (Guarulhos)   : "Dados do Prestador de Servi\u00e7os" + "Dados do Tomador de Servi\u00e7os" + "Discrimina\u00e7\u00e3o dos Servi\u00e7os"
+    //
+    // findFirstIndex pega o PRIMEIRO label que matcha (case-insensitive).
+    // Sem esse fallback, PDFs reais da S&P (SERASA nacional, CONCEITO Guarulhos)
+    // tinham os 2 blocos vazios -> CNPJ ficava em branco -> matchNfseEmpresa
+    // rejeitava com "CNPJ (vazio) nao corresponde a empresa selecionada".
+    const findFirstIndex = (haystack: string, needles: string[]): number => {
+        const lower = haystack.toLowerCase();
+        for (const n of needles) {
+            const idx = lower.indexOf(n.toLowerCase());
+            if (idx >= 0) return idx;
+        }
+        return -1;
+    };
+    const idxPrestador = findFirstIndex(text, [
+        'PRESTADOR DE SERVI\u00c7OS', 'PRESTADOR DE SERVICOS',
+        'EMITENTE DA NFS-e', 'EMITENTE DA NFSE',
+        'Dados do Prestador',
+    ]);
+    const idxTomador = findFirstIndex(text, [
+        'TOMADOR DE SERVI\u00c7OS', 'TOMADOR DE SERVICOS',
+        'TOMADOR DO SERVI\u00c7O', 'TOMADOR DO SERVICO',
+        'Dados do Tomador',
+    ]);
+    const idxDisc = findFirstIndex(text, [
+        'DISCRIMINA\u00c7\u00c3O DOS SERVI\u00c7OS', 'DISCRIMINACAO DOS SERVICOS',
+        'SERVI\u00c7O PRESTADO', 'SERVICO PRESTADO',
+        'Discrimina\u00e7\u00e3o dos Servi\u00e7os',
+        // Fallback: tributa\u00e7\u00e3o municipal vem logo depois do bloco do tomador
+        // no DANFSe nacional, antes da discrimina\u00e7\u00e3o propriamente dita.
+        'TRIBUTA\u00c7\u00c3O MUNICIPAL', 'TRIBUTACAO MUNICIPAL',
+        'C\u00f3digo do Servi\u00e7o', 'Codigo do Servico',
+    ]);
 
     const blockPrestador = idxPrestador >= 0 && idxTomador > idxPrestador ? text.slice(idxPrestador, idxTomador) : '';
     const blockTomador = idxTomador >= 0 && idxDisc > idxTomador ? text.slice(idxTomador, idxDisc) : '';
@@ -225,8 +309,12 @@ export async function parseNfsePdf(file: File): Promise<NfsePdfParsed> {
     const tomador = parsePartie(blockTomador);
 
     // Servico
-    const codigoServicoMatch = text.match(/C[oó]digo\s+do\s+Servi[cç]o[\s:]*\n?\s*([\d.]+)/i);
-    const codigoServico = codigoServicoMatch ? codigoServicoMatch[1] : '';
+    // DANFSe v1.0 usa "Código de Tributação Nacional\n17.01.01 - ..."
+    // ABRASF tradicional usa "Código do Serviço\n01.05" ou similar.
+    // Codigo pode ter ponto E hifen ('17.01.01' ou '17-01-01').
+    const codigoServicoMatch =
+        text.match(/C[oó]digo\s+(?:do\s+Servi[cç]o|de\s+Tributa[cç][aã]o\s+(?:Nacional|Municipal))[\s:]*\n?\s*([\d.\-/]+)/i);
+    const codigoServico = codigoServicoMatch?.[1] || '';
     const discBlock =
         idxDisc >= 0
             ? text.slice(
@@ -241,42 +329,55 @@ export async function parseNfsePdf(file: File): Promise<NfsePdfParsed> {
         .trim()
         .slice(0, 2000);
     const naturezaMatch = text.match(/Natureza\s+de\s+Opera[c\u00e7][a\u00e3]o\s*\n?\s*([^\n]+)/i);
-    const naturezaOperacao = naturezaMatch ? naturezaMatch[1].trim() : '';
+    const naturezaOperacao = naturezaMatch?.[1] ? naturezaMatch[1].trim() : '';
 
     // Valores
-    const numPattern = /([\d.]+,\d{2})/;
+    // numPattern aceita "R$" opcional antes do valor (DANFSe v1.0 escreve
+    // "R$ 1.956,03" depois do label, ABRASF as vezes so o numero).
+    const numPattern = /R?\$?\s*([\d.]+,\d{2})/;
     const valorServicos = parseValor(
-        findValueByLabel(text, ['Valor Servicos', 'Valor Serviços', 'VALOR TOTAL DO SERVI'], numPattern),
+        findValueByLabel(text, ['Valor do Serviço', 'Valor do Servico', 'Valor Servicos', 'Valor Serviços', 'VALOR TOTAL DO SERVI'], numPattern),
     );
-    const baseCalculo = parseValor(findValueByLabel(text, ['Base de Calculo', 'Base de Cálculo'], numPattern));
+    const baseCalculo = parseValor(findValueByLabel(text, ['Base de Cálculo', 'Base de Calculo', 'BC ISSQN'], numPattern));
 
-    const aliquotaIssMatch = text.match(/Al[i\u00ed]quota\s+ISS\s*([\d,]+)\s*%?/i);
+    // DANFSe v1.0 usa "Al\u00edquota Aplicada\n2,00%" (linha separada);
+    // ABRASF inline "Al\u00edquota ISS 2%".
+    const aliquotaIssMatch = text.match(/Al[i\u00ed]quota\s+(?:ISS|Aplicada)[\s:]*\n?\s*([\d,]+)\s*%?/i);
     const aliquotaIss = aliquotaIssMatch ? parseValor(aliquotaIssMatch[1]) : 0;
 
-    const valorIssRetido = parseValor(findValueByLabel(text, ['Valor ISS retido'], numPattern));
-    const valorIssMatch = text.match(/Valor\s+ISS(?!\s+retido)[\s\S]{0,80}?([\d.]+,\d{2})/i);
+    const valorIssRetido = parseValor(findValueByLabel(text, ['Valor ISS retido', 'ISS Retido'], numPattern));
+    // ISSQN Apurado (DANFSe) ou "Valor ISS" (ABRASF). Bypassa "Valor ISS retido"
+    // com lookahead negativo.
+    const valorIssMatch = text.match(/(?:ISSQN\s+Apurado|Valor\s+ISS(?!\s+retido))[\s\S]{0,80}?([\d.]+,\d{2})/i);
     const valorIss = valorIssMatch ? parseValor(valorIssMatch[1]) : 0;
 
-    const valorPis = parseValor(findValueByLabel(text, ['Valor PIS'], numPattern));
-    const valorCofins = parseValor(findValueByLabel(text, ['Valor COFINS'], numPattern));
-    const valorInss = parseValor(findValueByLabel(text, ['Valor INSS'], numPattern));
-    const valorIrrf = parseValor(findValueByLabel(text, ['Valor IRRF', 'Valor IR'], numPattern));
-    const valorCsll = parseValor(findValueByLabel(text, ['Valor CSLL'], numPattern));
+    // Tributos federais: DANFSe v1.0 escreve "PIS - Débito Apuração Própria",
+    // "COFINS - Débito Apuração Própria" e "Contribuição Previdenciária - Retida".
+    const valorPis = parseValor(findValueByLabel(text, ['PIS - Débito Apuração Própria', 'PIS - Debito Apuracao Propria', 'Valor PIS'], numPattern));
+    const valorCofins = parseValor(findValueByLabel(text, ['COFINS - Débito Apuração Própria', 'COFINS - Debito Apuracao Propria', 'Valor COFINS'], numPattern));
+    const valorInss = parseValor(findValueByLabel(text, ['Contribuição Previdenciária - Retida', 'Contribuicao Previdenciaria - Retida', 'Valor INSS'], numPattern));
+    // DANFSe escreve "IRRF" sozinho como label. Precisa boundary (^ ou \n)
+    // pra nao casar "IRRF" no meio de outro texto. Fallback pra "Valor IRRF".
+    const valorIrrfStr =
+        findValueByLabel(text, ['Valor IRRF', 'Valor IR'], numPattern)
+        || (text.match(/(?:^|\n)IRRF\s*\n\s*R?\$?\s*([\d.]+,\d{2})/i)?.[1] ?? '');
+    const valorIrrf = parseValor(valorIrrfStr);
+    const valorCsll = parseValor(findValueByLabel(text, ['Valor CSLL', 'CSLL'], numPattern));
     const valorOutrasRetencoes = parseValor(
-        findValueByLabel(text, ['Outras retencoes', 'Outras retenções'], numPattern),
+        findValueByLabel(text, ['Outras retenções', 'Outras retencoes'], numPattern),
     );
-    const valorDeducoes = parseValor(findValueByLabel(text, ['Valor deducoes', 'Valor deduções'], numPattern));
-    const valorDescIncondicional = parseValor(findValueByLabel(text, ['Desconto incondicional'], numPattern));
-    const valorDescCondicional = parseValor(findValueByLabel(text, ['Desconto condicional'], numPattern));
+    const valorDeducoes = parseValor(findValueByLabel(text, ['Total Deduções', 'Total Deducoes', 'Valor deduções', 'Valor deducoes'], numPattern));
+    const valorDescIncondicional = parseValor(findValueByLabel(text, ['Desconto Incondicionado', 'Desconto Incondicional', 'Desconto incondicional'], numPattern));
+    const valorDescCondicional = parseValor(findValueByLabel(text, ['Desconto Condicionado', 'Desconto Condicional', 'Desconto condicional'], numPattern));
     const valorLiquido = parseValor(
-        findValueByLabel(text, ['Valor liquido da NFS-e', 'Valor líquido da NFS-e', 'Valor liquido', 'Valor líquido'], numPattern),
+        findValueByLabel(text, ['Valor Líquido da NFS-e', 'Valor Liquido da NFS-e', 'Valor Líquido', 'Valor liquido'], numPattern),
     );
 
     const municipioEmissorMatch = text.match(/MUNIC[I\u00cd]PIO\s+DE\s+([A-Z\u00c0-\u00dc\s]+)/i);
-    const municipioEmissor = municipioEmissorMatch ? municipioEmissorMatch[1].trim() : '';
+    const municipioEmissor = municipioEmissorMatch?.[1] ? municipioEmissorMatch[1].trim() : '';
 
     const localPrestacaoMatch = text.match(/Local\s+da\s+presta[c\u00e7][a\u00e3]o\s+do\s+servi[c\u00e7]o[\s:]*\n?\s*([^\n]+)/i);
-    const municipioPrestacao = localPrestacaoMatch ? localPrestacaoMatch[1].trim() : prestador.municipio;
+    const municipioPrestacao = localPrestacaoMatch?.[1] ? localPrestacaoMatch[1].trim() : (prestador.municipio || '');
 
     return {
         numero, serie, competencia, dataEmissao, codigoVerificacao,
@@ -306,9 +407,36 @@ export function matchNfseEmpresa(
     if (prest === alvo) return { ok: true, direcao: 'saida' };
     if (toma === alvo) return { ok: true, direcao: 'entrada' };
 
+    // Fallback: alguns PDFs municipais nao seguem os labels esperados, o
+    // findFirstIndex nao acha blockPrestador/blockTomador e os CNPJs ficam
+    // vazios mesmo estando presentes no texto. Escanear o rawText e procurar
+    // o CNPJ da empresa diretamente — se aparecer, ainda da pra inferir
+    // direcao pela posicao relativa (quem aparece antes provavelmente eh o
+    // prestador no layout ABRASF).
+    if (parsed.rawText && (!prest || !toma)) {
+        const textoLimpo = parsed.rawText.replace(/\D/g, '');
+        const idxAlvo = textoLimpo.indexOf(alvo);
+        if (idxAlvo >= 0) {
+            // Procura QUALQUER outro CNPJ no texto bruto (com ou sem pontuacao)
+            const todosCnpjs = (parsed.rawText.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}|\d{14}/g) || [])
+                .map(s => s.replace(/\D/g, ''))
+                .filter(d => d.length === 14 && d !== alvo);
+            if (todosCnpjs.length > 0) {
+                // Estrategia: ABRASF normalmente lista PRESTADOR antes de TOMADOR.
+                // Posicao do alvo nos digitos vs posicao do primeiro outro CNPJ.
+                const idxOutro = textoLimpo.indexOf(todosCnpjs[0] || '');
+                const direcao: 'entrada' | 'saida' = idxAlvo > idxOutro ? 'entrada' : 'saida';
+                return { ok: true, direcao };
+            }
+            // Encontrou alvo mas nao outro CNPJ - aceita como entrada por default
+            // (cliente eh provavelmente o tomador em PDF que ele mesmo guarda).
+            return { ok: true, direcao: 'entrada' };
+        }
+    }
+
     return {
         ok: false,
         direcao: 'entrada',
-        motivo: `CNPJ ${parsed.prestador.cnpj || parsed.tomador.cnpj || '(vazio)'} nao corresponde a empresa selecionada (${cnpjEmpresa}).`,
+        motivo: `CNPJ ${parsed.prestador.cnpj || parsed.tomador.cnpj || '(vazio)'} nao corresponde a empresa selecionada (${cnpjEmpresa}). Confira se o PDF eh da NFSe correta ou se o layout do municipio esta suportado.`,
     };
 }

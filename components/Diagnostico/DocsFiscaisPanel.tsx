@@ -14,6 +14,7 @@ import {
     type DiagnosticoResposta, type AmostraDoc, type AmostraDuplicada,
     type MergeDuplicatasResposta,
 } from '../../services/diagnosticoDocsFiscaisService';
+import { useConfirm } from '../dialog/DialogProvider';
 
 interface Props { onShowToast?: (msg: string) => void; }
 
@@ -36,6 +37,7 @@ const problemaImpacto: Record<string, string> = {
 };
 
 const DocsFiscaisPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
+    const confirm = useConfirm();
     const [empresaId, setEmpresaId] = useState('');
     const [data, setData] = useState<DiagnosticoResposta | null>(null);
     const [loading, setLoading] = useState(false);
@@ -47,12 +49,18 @@ const DocsFiscaisPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
     const rodarMerge = async (dryRun: boolean) => {
         if (!data) return;
         if (!dryRun) {
-            const ok = window.confirm(
-                `Marcar ${data.problemas.duplicada.count - data.problemas.duplicada.amostras.filter((a: any) => a.docIds).length}+ docs como _merged_into?\n\n`
-                + `IMPORTANTE: NÃO deleta nada — só seta o flag _merged_into nos perdedores `
-                + `(vencedor = mais recente). Cruzamentos podem ser atualizados depois pra filtrar esses docs.\n\n`
-                + `Confirma?`,
-            );
+            const qtd = data.problemas.duplicada.count - data.problemas.duplicada.amostras.filter((a: any) => a.docIds).length;
+            const ok = await confirm({
+                title: `Marcar ${qtd}+ docs como _merged_into?`,
+                message: (
+                    <>
+                        <b>NÃO deleta nada</b> — só seta o flag <code>_merged_into</code> nos perdedores
+                        (vencedor = mais recente). Cruzamentos podem ser atualizados depois pra filtrar esses docs.
+                    </>
+                ),
+                variant: 'warning',
+                confirmLabel: 'Marcar',
+            });
             if (!ok) return;
         }
         setMergeBusy(true);

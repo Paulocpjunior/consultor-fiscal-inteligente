@@ -104,28 +104,35 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
     const isMaster = isMasterUser(user);
     const uid = auth?.currentUser?.uid;
 
-    const buildConstraints = (): QueryConstraint[] =>
-        (!isMaster && uid) ? [where('createdBy', '==', uid)] : [];
-
     try {
+        // Admin/Junior: busca tudo. Colaborador: busca tudo (rules permitem)
+        // e filtra no cliente por createdBy OU vinculo em `carteiras`.
+        // Antes filtrava so por createdBy -- colaborador nao via empresa
+        // atribuida via carteira quando outro colega criava (bug reportado
+        // 06/2026).
+        // VISIBILIDADE ABERTA: todos veem todas (Simples + Lucro). Temporaria.
         const [simplesSnap, lucroSnap] = await Promise.all([
-            fetchAllDocs('simples_empresas', buildConstraints()),
-            fetchAllDocs('lucro_empresas', buildConstraints()),
+            fetchAllDocs('simples_empresas', []),
+            fetchAllDocs('lucro_empresas', []),
         ]);
+
+        const podeVer = (_createdBy?: string | null, _id?: string): boolean => true;
 
         // 23/05: filtra perdedores do merge de duplicatas
         const simples: EmpresaXmlOption[] = simplesSnap
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
-            const data = d.data() as SimplesNacionalEmpresa;
-            return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples', uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
-        });
+                const data = d.data() as SimplesNacionalEmpresa;
+                return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
+            })
+            .filter(e => podeVer(e.createdBy, e.id));
         const lucro: EmpresaXmlOption[] = lucroSnap
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
-            const data = d.data() as LucroPresumidoEmpresa;
-            return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro', uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
-        });
+                const data = d.data() as LucroPresumidoEmpresa;
+                return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
+            })
+            .filter(e => podeVer(e.createdBy, e.id));
 
         return dedupEmpresas([...simples, ...lucro]);
     } catch (err: any) {
@@ -442,6 +449,7 @@ export async function registrarErro(input: ErroInput): Promise<void> {
 
 export interface ListDocumentosFilters {
     empresaId?: string;
+    empresaCnpj?: string;        // match exato no campo empresaCnpj do doc
     direcao?: 'entrada' | 'saida';
     competencia?: string;        // YYYY-MM
     competenciaInicio?: string;
@@ -469,7 +477,11 @@ export async function listDocumentos(
     const uid = auth?.currentUser?.uid;
 
     const constraints: QueryConstraint[] = [];
-    if (!isMaster && uid) constraints.push(where('createdBy', '==', uid));
+    // Admin: busca tudo (com filtro opcional de empresa). Colaborador: busca
+    // tudo (rules permitem) e filtra no cliente por createdBy OU empresa em
+    // carteira. Antes filtrava so por createdBy -- colaborador nao via doc
+    // de empresa atribuida via carteira quando outro colega importou (mesmo
+    // padrao corrigido no #120 pra empresas).
     if (filters.empresaId) constraints.push(where('empresaId', '==', filters.empresaId));
     // NÃO usamos orderBy aqui: Firestore exclui docs que não têm o campo.
     // Ordenação fica em memória com fallbacks (ver abaixo).
@@ -481,6 +493,7 @@ export async function listDocumentos(
         // documentos_fiscais permite limit <=5000 nas rules; usa pagina maior.
         const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000 });
         docs = snaps.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
+        // VISIBILIDADE ABERTA: todos veem todos os documentos. Temporaria.
     } catch (err: any) {
         console.warn('listDocumentos:', err?.message);
         return [];

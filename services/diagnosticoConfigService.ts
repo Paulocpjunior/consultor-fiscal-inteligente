@@ -7,8 +7,11 @@ async function authHeader(): Promise<Record<string, string>> {
     return { Authorization: `Bearer ${await u.getIdToken()}` };
 }
 
-export type CriticidadeConfig = 'critico' | 'alto' | 'medio';
-export type TipoAchado = 'env_vazia' | 'modo_inadequado' | 'flag_indefinida';
+// 'informativo' = env vazia mas codigo tem default funcionando.
+// 'opcional'    = gate de feature opcional (SharePoint/gateway) — so importa
+//                 se a empresa usa aquela integracao. Nao bloqueia.
+export type CriticidadeConfig = 'critico' | 'alto' | 'medio' | 'informativo' | 'opcional';
+export type TipoAchado = 'env_vazia' | 'env_via_default' | 'env_opcional' | 'modo_inadequado' | 'flag_indefinida';
 
 export interface AchadoConfig {
     tipo: TipoAchado;
@@ -27,6 +30,8 @@ export interface DiagnosticoConfigResposta {
         criticos: number;
         altos: number;
         medios: number;
+        informativos?: number;
+        opcionais?: number;
         ambiente: string;
     };
     achados: AchadoConfig[];

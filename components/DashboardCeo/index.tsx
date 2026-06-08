@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react';
 import type { User, DashboardCeoKpis, DashboardCeoInsights, AcoesResponse, AcaoPendente, SearchType } from '../../types';
 import { getKpis, getInsights, getAcoes, urgenciaBadgeClass, urgenciaIcon, tipoIcon, formatBRL } from '../../services/dashboardCeoService';
 import CobrancaModal from '../Das/CobrancaModal';
+import SafeMarkdown from '../SafeMarkdown';
 
 interface Props {
     currentUser: User | null;
@@ -75,16 +76,9 @@ const DashboardCeo: React.FC<Props> = ({ currentUser, onShowToast, onNavigateTo 
     }, [kpis]);
 
     // ─── Render insights formatados (parse markdown simples) ──────────────
-    const renderInsights = (text: string) => {
-        // Quebra por linhas, transforma **negrito** em <strong>
-        const blocks = text.split(/\n\n+/);
-        return blocks.map((b, i) => {
-            const html = b
-                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\n/g, '<br/>');
-            return <p key={i} className="mb-3 last:mb-0 text-slate-700 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: html }} />;
-        });
-    };
+    const renderInsights = (text: string) => (
+        <SafeMarkdown text={text} className="mb-3 last:mb-0 text-slate-700 dark:text-slate-300" />
+    );
 
     return (
         <div className="space-y-6">
