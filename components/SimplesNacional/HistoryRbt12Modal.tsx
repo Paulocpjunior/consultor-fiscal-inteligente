@@ -10,6 +10,7 @@
  */
 import React from 'react';
 import { PlusIcon } from '../Icons';
+import CurrencyInput from './CurrencyInput';
 
 interface Props {
     mesApuracao: Date;
@@ -17,12 +18,11 @@ interface Props {
     setManualRbtHistory: React.Dispatch<React.SetStateAction<Record<string, number>>>;
     onSalvar: () => void;
     onFechar: () => void;
-    CurrencyInput: React.FC<{ value: number; onChange: (val: number) => void; className?: string }>;
 }
 
 const HistoryRbt12Modal: React.FC<Props> = ({
     mesApuracao, manualRbtHistory, setManualRbtHistory,
-    onSalvar, onFechar, CurrencyInput,
+    onSalvar, onFechar,
 }) => (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[60] animate-fade-in" onClick={onFechar}>
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
