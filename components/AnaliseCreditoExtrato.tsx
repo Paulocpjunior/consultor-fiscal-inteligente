@@ -5,6 +5,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AnaliseRetencoesNfseSP from './AnaliseRetencoesNfseSP';
+import { useConfirm } from './dialog/DialogProvider';
 import {
   parseExtratoConciliacao,
   classificar,
@@ -103,6 +104,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
   currentUser = null,
   empresas = [],
 }) => {
+  const confirm = useConfirm();
   const [arquivo, setArquivo]       = useState<File | null>(null);
   const [lancamentos, setLancamentos] = useState<LancamentoExtrato[]>([]);
   const [erro, setErro]             = useState<string | null>(null);
@@ -943,7 +945,13 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                         <td className="px-2 py-1 text-right">
                           <button
                             onClick={async () => {
-                              if (!confirm('Remover esta invoice manual?')) return;
+                              const ok = await confirm({
+                                title: 'Remover invoice manual?',
+                                message: 'Esta ação remove o lançamento manual desta empresa.',
+                                variant: 'danger',
+                                confirmLabel: 'Remover',
+                              });
+                              if (!ok) return;
                               const r = await removerInvoice(im.id);
                               if (r.ok) setInvoicesVersao(v => v + 1);
                               else setErro('Erro ao remover: ' + (r.error || ''));
@@ -1114,10 +1122,12 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                     setNotasOcultas(new Set());
                     const totalPersistidos = fornecedoresOcultosPersistidos.size + notasOcultasPersistidas.size;
                     if (totalPersistidos > 0 && empresaSel?.id) {
-                      const ok = window.confirm(
-                        `Tambem restaurar ${totalPersistidos} regra(s) persistente(s)?\n` +
-                        `(isso apaga as regras do Firestore — sera reversivel apenas excluindo de novo).`
-                      );
+                      const ok = await confirm({
+                        title: `Restaurar ${totalPersistidos} regra(s) persistente(s)?`,
+                        message: 'Isso apaga as regras do Firestore — reversível apenas excluindo de novo.',
+                        variant: 'warning',
+                        confirmLabel: 'Restaurar',
+                      });
                       if (ok) {
                         if (fornecedoresOcultosPersistidos.size > 0) {
                           const r = await restaurarTodosOcultos(empresaSel.id);

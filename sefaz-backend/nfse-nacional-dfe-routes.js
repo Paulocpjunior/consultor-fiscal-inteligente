@@ -323,6 +323,180 @@ router.get('/cobertura', requireAuth, async (req, res) => {
     }
 });
 
+// ── GET /municipios ───────────────────────────────────────────────────────
+// Agrega empresas da carteira por (UF, municipio) com:
+//   qtdEmpresas, qtdAdnAtivo, qtdComCcm, qtdComIe, qtdComNfse, totalNfse
+//
+// Serve pra priorizar Caminho A (acelerar uso do Padrao Nacional):
+//   - Cidades grandes c/ baixo % ADN -> habilitar em massa.
+//   - Cidades sem nenhuma NFSe capturada -> ou nao tem servico OU captura
+//     nao funciona (investigar).
+// So admin.
+router.get('/municipios', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
+        const db = fa().firestore();
+
+        // Carrega empresas
+        const colNames = ['simples_empresas', 'lucro_empresas'];
+        const empresas = new Map();   // dedup por CNPJ
+        for (const col of colNames) {
+            try {
+                const snap = await db.collection(col).get();
+                snap.forEach((doc) => {
+                    const d = doc.data();
+                    if (d._merged_into) return;
+                    const cnpj = (d.cnpj || '').replace(/\D/g, '');
+                    if (cnpj.length !== 14) return;
+                    if (empresas.has(cnpj)) return;
+                    const df = d.dadosFiscais || {};
+                    empresas.set(cnpj, {
+                        id: doc.id,
+                        cnpj,
+                        nome: d.razaoSocial || d.nome || '',
+                        uf: (df.uf || d.uf || '').toString().trim().toUpperCase(),
+                        municipio: (df.municipioNome || df.municipio || d.municipio || '').toString().trim(),
+                        codMunIBGE: (df.codMunIBGE || '').toString().trim(),
+                        ccm: (df.ccmSp || d.ccmSp || '').toString().trim(),
+                        ie: (df.inscricaoEstadual || '').toString().trim(),
+                        adnAtivo: d.nfseNacionalDfeAtivo === true,
+                    });
+                });
+            } catch (e) {
+                console.warn(`[municipios] colecao ${col} indisponivel:`, e.message);
+            }
+        }
+
+        // Conta NFSe capturadas por empresa
+        const nfsePorEmp = new Map();
+        try {
+            const snap = await db.collection('documentos_fiscais').where('tipo', 'in', ['NFSe', 'nfse']).get();
+            snap.forEach((doc) => {
+                const x = doc.data();
+                const cnpj = (x.empresaCnpj || '').replace(/\D/g, '');
+                if (!cnpj) return;
+                nfsePorEmp.set(cnpj, (nfsePorEmp.get(cnpj) || 0) + 1);
+            });
+        } catch (e) {
+            console.warn('[municipios] documentos_fiscais indisponivel:', e.message);
+        }
+
+        // Agrupa por (UF, municipio)
+        const grupos = new Map();
+        for (const emp of empresas.values()) {
+            const uf = emp.uf || '?';
+            const mun = emp.municipio || '?';
+            const key = `${uf}|${mun}`;
+            if (!grupos.has(key)) {
+                grupos.set(key, {
+                    uf, municipio: mun, codMunIBGE: emp.codMunIBGE,
+                    qtdEmpresas: 0, qtdAdnAtivo: 0, qtdComCcm: 0, qtdComIe: 0,
+                    qtdComNfse: 0, totalNfse: 0,
+                });
+            }
+            const g = grupos.get(key);
+            g.qtdEmpresas++;
+            if (emp.adnAtivo) g.qtdAdnAtivo++;
+            if (emp.ccm) g.qtdComCcm++;
+            if (emp.ie) g.qtdComIe++;
+            const qNfse = nfsePorEmp.get(emp.cnpj) || 0;
+            if (qNfse > 0) g.qtdComNfse++;
+            g.totalNfse += qNfse;
+            // Preserve primeiro codIBGE encontrado se nao existir no grupo
+            if (!g.codMunIBGE && emp.codMunIBGE) g.codMunIBGE = emp.codMunIBGE;
+        }
+
+        const municipios = [...grupos.values()].sort((a, b) => b.qtdEmpresas - a.qtdEmpresas);
+        const total = empresas.size;
+        const totalAdn = [...empresas.values()].filter(e => e.adnAtivo).length;
+
+        return res.json({
+            total,
+            totalAdn,
+            percentualAdn: total ? Math.round(100 * totalAdn / total) : 0,
+            municipiosDistintos: municipios.length,
+            municipios,
+        });
+    } catch (e) {
+        console.error('[municipios]', e);
+        return res.status(500).json({ error: 'Falha interna' });
+    }
+});
+
+// ── POST /toggle-bulk-por-municipio ───────────────────────────────────────
+// Liga/desliga ADN pra TODAS empresas de um (uf, municipio). Body:
+//   { uf: string, municipio: string, ativo: boolean }
+// Util pra "habilitar ADN em todas empresas de Campinas".
+router.post('/toggle-bulk-por-municipio', requireAuth, express.json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
+        const { uf, municipio, ativo } = req.body || {};
+        if (!uf || !municipio || typeof ativo !== 'boolean') {
+            return res.status(400).json({ error: 'uf, municipio e ativo sao obrigatorios' });
+        }
+        const ufUp = String(uf).trim().toUpperCase();
+        const munNorm = String(municipio).trim();
+        const db = fa().firestore();
+
+        // Busca CNPJs nas duas colecoes filtrando por dadosFiscais.uf
+        const cnpjs = new Set();
+        for (const col of ['simples_empresas', 'lucro_empresas']) {
+            try {
+                const snap = await db.collection(col).get();
+                snap.forEach((doc) => {
+                    const d = doc.data();
+                    if (d._merged_into) return;
+                    const cnpj = (d.cnpj || '').replace(/\D/g, '');
+                    if (cnpj.length !== 14) return;
+                    const df = d.dadosFiscais || {};
+                    const ufEmp = (df.uf || d.uf || '').toString().trim().toUpperCase();
+                    const munEmp = (df.municipioNome || df.municipio || d.municipio || '').toString().trim();
+                    if (ufEmp === ufUp && munEmp === munNorm) cnpjs.add(cnpj);
+                });
+            } catch (e) {
+                console.warn(`[bulk-municipio] colecao ${col} falhou:`, e.message);
+            }
+        }
+
+        if (cnpjs.size === 0) {
+            return res.json({ ativo, total: 0, atualizados: 0, naoEncontrados: 0, falhas: 0 });
+        }
+
+        // Chama o handler de toggle-bulk internamente (mesma logica)
+        req.body = { cnpjs: [...cnpjs], ativo };
+        // Reusa rota seguinte? Mais simples: replica a logica de update.
+        let atualizados = 0;
+        let falhas = 0;
+        for (const cnpj of cnpjs) {
+            try {
+                let achou = false;
+                for (const col of ['simples_empresas', 'lucro_empresas']) {
+                    const q = await db.collection(col).where('cnpj', '==', cnpj).limit(1).get();
+                    if (!q.empty) {
+                        achou = true;
+                        await q.docs[0].ref.update({
+                            nfseNacionalDfeAtivo: ativo,
+                            nfseNacionalDfeAlteradoPor: req.user?.email || req.user?.uid || 'admin',
+                            nfseNacionalDfeAlteradoEm: new Date(),
+                        });
+                    }
+                }
+                if (achou) atualizados++;
+            } catch (e) {
+                console.warn(`[bulk-municipio] cnpj ${cnpj} falhou:`, e.message);
+                falhas++;
+            }
+        }
+        return res.json({
+            ativo, total: cnpjs.size, atualizados,
+            naoEncontrados: cnpjs.size - atualizados - falhas, falhas,
+        });
+    } catch (e) {
+        console.error('[bulk-municipio]', e);
+        return res.status(500).json({ error: 'Falha interna' });
+    }
+});
+
 // ── POST /toggle-bulk ─────────────────────────────────────────────────────
 // Liga/desliga ADN pra uma LISTA de empresas de uma vez. Body:
 //   { cnpjs: string[], ativo: boolean }

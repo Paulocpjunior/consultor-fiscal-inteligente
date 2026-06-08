@@ -4,6 +4,7 @@ import Footer from './components/Footer';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
+import { useConfirm } from './components/dialog/DialogProvider';
 import UpdateBanner from './components/UpdateBanner';
 import TaxAlerts from './components/TaxAlerts';
 import NewsAlerts from './components/NewsAlerts';
@@ -179,6 +180,7 @@ const MENU_GRUPOS: MenuGrupo[] = [
 ];
 
 const App: React.FC = () => {
+    const confirm = useConfirm();
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
         if (typeof window !== 'undefined') {
             if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -1043,7 +1045,13 @@ const App: React.FC = () => {
                                         onAddNew={() => { setSimplesEmpresaToEdit(null); setSimplesView('nova'); }}
                                         onEdit={(empresa) => { setSimplesEmpresaToEdit(empresa); setSimplesView('nova'); }}
                                         onDelete={async (empresa) => {
-                                            if (!window.confirm(`Excluir empresa "${empresa.nome}" (CNPJ ${empresa.cnpj})?\n\nEssa ação não pode ser desfeita.`)) return;
+                                            const ok = await confirm({
+                                                title: `Excluir empresa "${empresa.nome}"?`,
+                                                message: `CNPJ ${empresa.cnpj}. Essa ação não pode ser desfeita.`,
+                                                variant: 'danger',
+                                                confirmLabel: 'Excluir',
+                                            });
+                                            if (!ok) return;
                                             try {
                                                 await simplesService.deleteEmpresa(empresa.id);
                                                 setSimplesEmpresas(prev => prev.filter(e => e.id !== empresa.id));
