@@ -14,6 +14,9 @@ jest.mock('../services/firebaseConfig', () => ({
     auth: null,
     isFirebaseConfigured: false,
 }));
+jest.mock('../services/visibilidadeEscritorio', () => ({
+    isModoEscritorioAberto: () => false,
+}));
 jest.mock('firebase/firestore', () => ({
     collection: jest.fn(), getDocs: jest.fn(), doc: jest.fn(),
     setDoc: jest.fn(), getDoc: jest.fn(), query: jest.fn(),
