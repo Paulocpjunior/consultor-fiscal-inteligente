@@ -134,8 +134,16 @@ export function validarRetencoesLinha(
         }
     }
 
-    // 3) IRRF: alíquota deve ser uma das usuais
+    // 3) IRRF: alíquota deve ser uma das usuais + piso de dispensa R$ 10
+    //         (Lei 9.430/96 art. 67 - dispensada retencao inferior a R$ 10,00).
     if (analise.irrf.retido && analise.irrf.valor > 0) {
+        if (analise.irrf.valor < 10) {
+            incs.push({
+                severidade: 'alerta',
+                codigo: 'IRRF_ABAIXO_PISO',
+                mensagem: `IRRF retido R$ ${analise.irrf.valor.toFixed(2)} - DISPENSADO pelo art. 67 da Lei 9.430/96 (retencoes inferiores a R$ 10,00 nao sao recolhidas).`,
+            });
+        }
         const aliq = analise.irrf.valor / valor;
         const usual = ALIQUOTAS_IRRF_USUAIS.some(a => Math.abs(aliq - a) <= 0.001);
         if (!usual) {
@@ -145,6 +153,16 @@ export function validarRetencoesLinha(
                 mensagem: `IRRF a ${(aliq * 100).toFixed(2)}% (usual: 1%, 1,5% ou 4,8%).`,
             });
         }
+    }
+
+    // 3b) CSRF (PIS+COFINS+CSLL): piso R$ 10 (Lei 13.137/2015 art. 24).
+    //     Antes era R$ 10 no agregado; lei agora isenta retencao quando valor < R$ 10.
+    if ((analise.pis.retido || analise.cofins.retido || analise.csll.retido) && csrfRetido > 0 && csrfRetido < 10) {
+        incs.push({
+            severidade: 'alerta',
+            codigo: 'CSRF_ABAIXO_PISO',
+            mensagem: `CSRF total R$ ${csrfRetido.toFixed(2)} - DISPENSADO pela Lei 13.137/2015 (retencoes < R$ 10,00).`,
+        });
     }
 
     // 4) Cruzamento com Simples — só aplica em notas Recebidas (eu sou tomador,

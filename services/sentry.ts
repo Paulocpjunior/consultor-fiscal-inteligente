@@ -87,13 +87,44 @@ export function captureException(err: unknown, context?: Record<string, unknown>
 }
 
 /**
- * Define identidade do usuario logado pra correlacionar erros.
+ * Hash determinístico curto (SHA-256 truncado). Usado pra ofuscar e-mail no
+ * Sentry mantendo correlação entre eventos. Reversibilidade nao eh objetivo;
+ * a meta eh atender LGPD (e-mail eh PII).
+ */
+async function hashCurto(s: string): Promise<string> {
+    try {
+        const enc = new TextEncoder().encode(s.toLowerCase().trim());
+        const buf = await crypto.subtle.digest('SHA-256', enc);
+        return Array.from(new Uint8Array(buf))
+            .slice(0, 6)
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
+    } catch {
+        return 'anon';
+    }
+}
+
+/**
+ * Define identidade do usuario logado pra correlacionar erros sem expor PII.
+ * Envia apenas UID + hash do dominio do email (LGPD-safe).
  * Chamar apos login. Passar `null` no logout.
  */
-export function setUser(user: { id?: string; email?: string } | null) {
+export async function setUser(user: { id?: string; email?: string } | null) {
     if (!_initialized) return;
     try {
-        Sentry.setUser(user || null);
+        if (!user) {
+            Sentry.setUser(null);
+            return;
+        }
+        // E-mail completo NAO vai pra rede - so o dominio (uso em troubleshoot
+        // de "qual escritorio teve o problema") e um hash curto do local-part.
+        const partes = (user.email || '').split('@');
+        const dominio = partes[1] || 'unknown';
+        const localPartHash = partes[0] ? await hashCurto(partes[0]) : 'anon';
+        Sentry.setUser({
+            id: user.id,
+            username: `${localPartHash}@${dominio}`,
+        });
     } catch {
         /* swallow */
     }

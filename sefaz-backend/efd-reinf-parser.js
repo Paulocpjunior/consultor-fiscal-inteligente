@@ -21,6 +21,7 @@
 // ============================================================================
 
 import { DOMParser } from '@xmldom/xmldom';
+import { validarXmlSeguro, XmlInseguroError } from './xml-seguranca.js';
 
 // Token do schema (segmento apos /schemas/ na URI do namespace) -> codigo Reinf.
 // So os que temos confianca. Verificados contra arquivo real marcados com ✓.
@@ -189,8 +190,10 @@ export function parseEventoReinf(xml) {
     const observacoes = [];
     let doc;
     try {
-        doc = new DOMParser({ errorHandler: () => {} }).parseFromString(String(xml || ''), 'text/xml');
+        const xmlSeguro = validarXmlSeguro(String(xml || ''));
+        doc = new DOMParser({ errorHandler: () => {} }).parseFromString(xmlSeguro, 'text/xml');
     } catch (e) {
+        if (e instanceof XmlInseguroError) return erro(e.message);
         return erro('XML ilegivel: ' + e.message);
     }
     const evento = doc && acharEvento(doc);

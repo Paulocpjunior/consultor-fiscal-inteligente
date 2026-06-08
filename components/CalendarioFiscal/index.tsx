@@ -189,7 +189,7 @@ const CalendarioFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             </div>
                             <div className="bg-white dark:bg-slate-800 divide-y divide-slate-100 dark:divide-slate-700">
                                 {lista.map((o, i) => (
-                                    <div key={i} className="p-3 flex items-start gap-3">
+                                    <div key={`${o.empresaCnpj || ''}-${o.tipo}-${o.vencimento || i}`} className="p-3 flex items-start gap-3">
                                         <span className={`text-xs font-bold px-2 py-0.5 rounded ${tipoCor(o.tipo)} flex-shrink-0`}>
                                             {tipoIcon(o.tipo)} {o.tipo}
                                         </span>

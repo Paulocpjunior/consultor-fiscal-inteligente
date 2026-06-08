@@ -97,10 +97,10 @@ function calcularAliquotaEfetivaEsperada(
     rbt12: number,
     anexo: string
 ): number {
-    const tabela = ANEXOS_TABELAS[anexo];
+    const tabela = ANEXOS_TABELAS[anexo as keyof typeof ANEXOS_TABELAS];
     if (!tabela || rbt12 === 0) return tabela[0].aliquota;
 
-    let faixaIdx = tabela.findIndex((f: any) => rbt12 <= f.limite);
+    let faixaIdx = tabela.findIndex(f => rbt12 <= f.limite);
     if (faixaIdx === -1 && rbt12 > 0) faixaIdx = tabela.length - 1;
     if (rbt12 === 0) faixaIdx = 0;
     const faixa = tabela[faixaIdx];
@@ -139,7 +139,7 @@ describe('simplesNacionalService', () => {
     // ========================================================================
     describe('ANEXOS_TABELAS', () => {
         it('should have 6 faixas for each of the 5 Anexos', () => {
-            ['I', 'II', 'III', 'IV', 'V'].forEach(anexo => {
+            (['I', 'II', 'III', 'IV', 'V'] as const).forEach(anexo => {
                 expect(ANEXOS_TABELAS[anexo]).toHaveLength(6);
             });
         });
@@ -601,12 +601,12 @@ describe('simplesNacionalService', () => {
             const disc = calcularDiscriminacaoImpostos('I', 0, valorDas);
 
             const rep = REPARTICAO_IMPOSTOS['I'][0];
-            expect(disc.IRPJ).toBeCloseTo(valorDas * rep.IRPJ / 100, 2);
-            expect(disc.CSLL).toBeCloseTo(valorDas * rep.CSLL / 100, 2);
-            expect(disc.COFINS).toBeCloseTo(valorDas * rep.COFINS / 100, 2);
-            expect(disc.PIS).toBeCloseTo(valorDas * rep.PIS / 100, 2);
-            expect(disc.CPP).toBeCloseTo(valorDas * rep.CPP / 100, 2);
-            expect(disc.ICMS).toBeCloseTo(valorDas * rep.ICMS / 100, 2);
+            expect(disc.IRPJ).toBeCloseTo(valorDas * rep.IRPJ! / 100, 2);
+            expect(disc.CSLL).toBeCloseTo(valorDas * rep.CSLL! / 100, 2);
+            expect(disc.COFINS).toBeCloseTo(valorDas * rep.COFINS! / 100, 2);
+            expect(disc.PIS).toBeCloseTo(valorDas * rep.PIS! / 100, 2);
+            expect(disc.CPP).toBeCloseTo(valorDas * rep.CPP! / 100, 2);
+            expect(disc.ICMS).toBeCloseTo(valorDas * rep.ICMS! / 100, 2);
 
             // Sum of all parts should equal the total DAS
             const total = Object.values(disc).reduce((s: number, v) => s + (v as number), 0);
@@ -621,7 +621,7 @@ describe('simplesNacionalService', () => {
         it('caps faixa index at 5', () => {
             const disc = calcularDiscriminacaoImpostos('I', 999, 1000);
             const rep = REPARTICAO_IMPOSTOS['I'][5];
-            expect(disc.IRPJ).toBeCloseTo(1000 * rep.IRPJ / 100, 2);
+            expect(disc.IRPJ).toBeCloseTo(1000 * rep.IRPJ! / 100, 2);
         });
     });
 

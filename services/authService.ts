@@ -20,9 +20,19 @@ const STORAGE_KEY_LOGS     = 'app_access_logs';        // cache local de logs
 const REQUIRED_DOMAIN      = '@spassessoriacontabil.com.br';
 const MASTER_ADMIN_EMAIL   = 'junior@spassessoriacontabil.com.br';
 
+// Modo local (somente dev, sem Firebase configurado). Em prod, isFirebaseConfigured
+// eh sempre true (envs obrigatorias - vide firebaseConfig.ts), entao esse caminho
+// nunca executa. Aqui apenas removemos a senha hardcoded "123456" que ficava no
+// bundle final - quem precisar de modo local em dev define explicitamente.
+const LOCAL_MODE_HABILITADO = (import.meta as any).env?.VITE_AUTH_LOCAL_MODE === '1';
+const LOCAL_MASTER_PASSWORD: string = (import.meta as any).env?.VITE_AUTH_LOCAL_MASTER_PASSWORD || '';
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const normalizeEmail  = (email: string) => email.trim().toLowerCase();
 const preparePassword = (pwd: string)   => pwd.trim();
+// btoa eh codificacao (NAO hash) - so existe pra evitar senha em texto claro no
+// localStorage do colaborador. Reversivel trivialmente, vide DevTools. Aceitavel
+// SO porque modo local nao roda em prod.
 const encodePasswordForLocalStorage = (pwd: string) => { try { return btoa(pwd); } catch { return pwd; } };
 
 /** Cache local só para suporte offline */
@@ -224,12 +234,15 @@ export const login = async (
     // ── Modo local ──
     const users = getLocalUsers();
 
-    // Auto-seed local do Master Admin
-    if (cleanEmail === normalizeEmail(MASTER_ADMIN_EMAIL) &&
+    // Auto-seed local do Master Admin (so se modo local explicitamente habilitado
+    // E senha master vier de env - sem default hardcoded "123456" no bundle).
+    if (LOCAL_MODE_HABILITADO &&
+        LOCAL_MASTER_PASSWORD &&
+        cleanEmail === normalizeEmail(MASTER_ADMIN_EMAIL) &&
         !users.find(u => normalizeEmail(u.email) === cleanEmail)) {
         const master: any = {
             id: crypto.randomUUID(), name: 'Administrador Master', email: cleanEmail,
-            role: 'admin', passwordHash: encodePasswordForLocalStorage('123456'), isVerified: true
+            role: 'admin', passwordHash: encodePasswordForLocalStorage(LOCAL_MASTER_PASSWORD), isVerified: true
         };
         users.push(master);
         saveLocalUsers(users);
@@ -364,9 +377,13 @@ export const deleteUser = async (userId: string): Promise<boolean> => {
 
 export const resetUserPassword = async (userId: string): Promise<boolean> => {
     if (isFirebaseConfigured) return true; // requer backend/email p/ outro usuário
+    if (!LOCAL_MODE_HABILITADO || !LOCAL_MASTER_PASSWORD) return false;
     const users = getLocalUsers();
     const idx = users.findIndex(u => u.id === userId);
-    if (idx !== -1) { users[idx].passwordHash = encodePasswordForLocalStorage('123456'); saveLocalUsers(users); }
+    if (idx !== -1) {
+        users[idx].passwordHash = encodePasswordForLocalStorage(LOCAL_MASTER_PASSWORD);
+        saveLocalUsers(users);
+    }
     return idx !== -1;
 };
 

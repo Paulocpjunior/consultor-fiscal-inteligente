@@ -3,6 +3,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { DialogProvider } from './components/dialog/DialogProvider';
+import ErrorBoundary from './components/ErrorBoundary';
 import { initSentry } from './services/sentry';
 import './index.css';
 
@@ -18,11 +19,14 @@ if (!rootElement) {
 const root = createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    {/* DialogProvider fornece useConfirm/usePrompt globalmente. Substitui
-        window.confirm/prompt por dialog acessivel com Esc/Enter, trap de
-        foco e role=alertdialog (a11y). */}
-    <DialogProvider>
-      <App />
-    </DialogProvider>
+    {/* ErrorBoundary RAIZ: pega erros do proprio App.tsx (login, header, providers).
+        Sem ele, erro no boot mostra tela branca e nao reporta ao Sentry.
+        DialogProvider por dentro fornece useConfirm/usePrompt globalmente
+        (a11y, role=alertdialog, Esc/Enter, trap de foco). */}
+    <ErrorBoundary>
+      <DialogProvider>
+        <App />
+      </DialogProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

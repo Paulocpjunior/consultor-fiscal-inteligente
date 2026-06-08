@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import type { User, SimulacaoReforma, SimuladorIaResponse, RegimeReforma } from '../../types';
 import { simular, explicarSimulacao, formatBRL } from '../../services/simuladorReformaService';
+import SafeMarkdown from '../SafeMarkdown';
 
 interface Props {
     currentUser: User | null;
@@ -51,12 +52,9 @@ const SimuladorReforma: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
     };
 
-    const renderMarkdown = (text: string) => {
-        return text.split(/\n\n+/).map((b, i) => {
-            const html = b.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
-            return <p key={i} className="mb-3 last:mb-0 text-slate-700 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: html }} />;
-        });
-    };
+    const renderMarkdown = (text: string) => (
+        <SafeMarkdown text={text} className="mb-3 last:mb-0 text-slate-700 dark:text-slate-300" />
+    );
 
     const cargaMax = resultado ? Math.max(...resultado.projecoes.map(p => p.cargaTotal)) : 1;
 

@@ -197,7 +197,19 @@ export interface SimplesNacionalEmpresa {
     cnae: string;
     anexo: SimplesNacionalAnexo;
     atividadesSecundarias?: SimplesNacionalAtividade[];
+    /**
+     * (LEGADO) Folha total dos ultimos 12 meses como valor unico. Mantido pra
+     * compat com empresas antigas. NOVO: folhaMensal por competencia eh
+     * preferencial - Fator R correto depende de janela movel de 12 meses
+     * (LC 123/06 art. 18 §5o-M), nao de valor congelado.
+     * Quando folhaMensal estiver presente, o calculo usa a janela movel.
+     */
     folha12: number;
+    /**
+     * Folha de pagamento por competencia (chave "YYYY-MM"). Permite calcular
+     * Fator R correto sobre os 12 meses anteriores a cada PA.
+     */
+    folhaMensal?: Record<string, number>;
     faturamentoManual?: Record<string, number>;
     /** Regime de apuracao Simples Nacional. Default 'competencia'. */
     regimeApuracao?: 'competencia' | 'caixa';
@@ -553,6 +565,14 @@ export interface LucroInput {
     receitaFinanceira: number;
     despesasOperacionais: number;
     despesasDedutiveis: number;
+    /**
+     * Base de credito PIS/COFINS no Lucro Real (apenas Lei 10.637/02 art. 3 e
+     * Lei 10.833/03 art. 3 - aluguel PJ, energia, insumos, depreciacao etc).
+     * NAO incluir folha de salario (vedacao art. 3 §2 I), aluguel PF, mao-de-obra PF.
+     * Se nao informado, cai em `despesasDedutiveis` por compat — porem isso
+     * MAJORA credito indevidamente. Migracao: front passa a separar.
+     */
+    despesasGeramCreditoPisCofins?: number;
     folhaPagamento: number;
     custoMercadoriaVendida: number;
     issConfig: IssConfig;

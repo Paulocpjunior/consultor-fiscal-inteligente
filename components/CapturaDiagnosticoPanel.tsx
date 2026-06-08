@@ -12,7 +12,7 @@
  * Lê de /api/admin/sefaz/captura-diagnostico.
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
     fetchCapturaDiagnostico,
     forcarCapturaAgora,
@@ -172,24 +172,30 @@ const CapturaDiagnosticoPanel: React.FC<Props> = ({ currentUser }) => {
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
     const isAdmin = currentUser.role === 'admin';
+    // Guard contra setState apos unmount
+    const aliveRef = useRef(true);
 
     const load = useCallback(async () => {
         setLoading(true);
         setErro(null);
         try {
             const d = await fetchCapturaDiagnostico();
-            setData(d);
+            if (aliveRef.current) setData(d);
         } catch (e: any) {
-            setErro(e.message || 'Falha ao carregar diagnóstico');
+            if (aliveRef.current) setErro(e.message || 'Falha ao carregar diagnóstico');
         } finally {
-            setLoading(false);
+            if (aliveRef.current) setLoading(false);
         }
     }, []);
 
     useEffect(() => {
+        aliveRef.current = true;
         load();
         const interval = setInterval(load, 60000); // refresh a cada 1min
-        return () => clearInterval(interval);
+        return () => {
+            aliveRef.current = false;
+            clearInterval(interval);
+        };
     }, [load]);
 
     if (loading && !data) {

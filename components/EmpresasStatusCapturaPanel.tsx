@@ -13,7 +13,7 @@
  * Botão "Exportar CSV" pra usar como to-do list operacional.
  */
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
     fetchEmpresasStatusCaptura,
     toggleEmpresaFlag,
@@ -131,7 +131,10 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
             const r = await autoPreencherUf();
             if (r.ok) {
                 alert('Auto-preenchimento iniciado em background. Aguarde 1-3 min e clique em "Atualizar" pra ver o resultado.');
-                setTimeout(load, 60000);
+                if (autoUfTimeoutRef.current) clearTimeout(autoUfTimeoutRef.current);
+                autoUfTimeoutRef.current = setTimeout(() => {
+                    if (aliveRef.current) load();
+                }, 60000);
             } else {
                 alert(`Erro: ${r.error}`);
             }
@@ -140,20 +143,34 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
         }
     };
 
+    // Guard contra setState apos unmount + cleanup do setTimeout em handleAutoUf
+    const aliveRef = useRef(true);
+    const autoUfTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const load = useCallback(async () => {
         setLoading(true);
         setErro(null);
         try {
             const d = await fetchEmpresasStatusCaptura();
-            setData(d);
+            if (aliveRef.current) setData(d);
         } catch (e: any) {
-            setErro(e.message || 'Falha ao carregar');
+            if (aliveRef.current) setErro(e.message || 'Falha ao carregar');
         } finally {
-            setLoading(false);
+            if (aliveRef.current) setLoading(false);
         }
     }, []);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        aliveRef.current = true;
+        load();
+        return () => {
+            aliveRef.current = false;
+            if (autoUfTimeoutRef.current) {
+                clearTimeout(autoUfTimeoutRef.current);
+                autoUfTimeoutRef.current = null;
+            }
+        };
+    }, [load]);
 
     const empresasFiltradas = useMemo(() => {
         if (!data) return [];

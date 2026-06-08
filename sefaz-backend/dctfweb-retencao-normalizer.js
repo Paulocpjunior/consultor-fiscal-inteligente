@@ -32,6 +32,7 @@
 // ============================================================================
 
 import { DOMParser } from '@xmldom/xmldom';
+import { validarXmlSeguro } from './xml-seguranca.js';
 
 // codReceita (raiz = 4 primeiros digitos) -> familia de retencao da Reinf.
 const RECEITA_RAIZ_FAMILIA = {
@@ -87,7 +88,8 @@ function extrairCreditos(entrada) {
     if (typeof entrada !== 'string') return null; // shape nao suportado
     let doc;
     try {
-        doc = new DOMParser({ errorHandler: () => {} }).parseFromString(entrada, 'text/xml');
+        const xmlSeguro = validarXmlSeguro(entrada);
+        doc = new DOMParser({ errorHandler: () => {} }).parseFromString(xmlSeguro, 'text/xml');
     } catch {
         return null;
     }

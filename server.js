@@ -53,6 +53,57 @@ import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sa
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+/**
+ * Validacao por magic-bytes do arquivo enviado em /analise-creditos/upload.
+ * Bloqueia upload de binario malicioso disfarcado de XLSX/XML (ex: zip-bomb
+ * em .xlsx, PDF executavel renomeado, etc).
+ *
+ * Magic bytes:
+ *   - XLSX/XLS modernos: PK\x03\x04 (ZIP) — 50 4B 03 04
+ *   - XLS antigo: D0 CF 11 E0 A1 B1 1A E1 (OLE compound)
+ *   - XML: comeca com '<?xml' ou '<' apos BOM opcional
+ */
+function validarMagicBytes(buffer, nomeOriginal) {
+    if (!buffer || buffer.length < 4) return { ok: false, motivo: 'arquivo vazio' };
+    const nome = (nomeOriginal || '').toLowerCase();
+    const b = buffer;
+
+    // XLSX (ZIP) - 50 4B 03 04 / 50 4B 05 06 / 50 4B 07 08
+    if (nome.endsWith('.xlsx')) {
+        if (b[0] !== 0x50 || b[1] !== 0x4B) return { ok: false, motivo: 'XLSX invalido (sem PK)' };
+        return { ok: true };
+    }
+    // XLS antigo (OLE compound)
+    if (nome.endsWith('.xls')) {
+        const ole = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+        if (b.length < 8 || ole.some((byte, i) => b[i] !== byte)) {
+            // Aceita variante moderna salva como XLSX
+            if (b[0] === 0x50 && b[1] === 0x4B) return { ok: true };
+            return { ok: false, motivo: 'XLS invalido (sem assinatura OLE)' };
+        }
+        return { ok: true };
+    }
+    // XML - skip BOM (EF BB BF) se houver
+    if (nome.endsWith('.xml')) {
+        let i = 0;
+        if (b[0] === 0xEF && b[1] === 0xBB && b[2] === 0xBF) i = 3;
+        // Aceita <?xml ou < direto
+        if (b[i] === 0x3C) return { ok: true };
+        return { ok: false, motivo: 'XML invalido (nao comeca com <)' };
+    }
+    // CSV/TXT: sem magic-bytes especifico, aceita ASCII printavel nos primeiros bytes
+    if (nome.endsWith('.csv') || nome.endsWith('.txt')) {
+        // Rejeita arquivo que pareca binario (muitos bytes nulos ou > 0x7F nao-UTF8)
+        let nulos = 0;
+        for (let j = 0; j < Math.min(512, b.length); j++) {
+            if (b[j] === 0x00) nulos++;
+        }
+        if (nulos > 5) return { ok: false, motivo: 'CSV/TXT contem bytes binarios' };
+        return { ok: true };
+    }
+    return { ok: false, motivo: `extensao nao suportada: "${nome}"` };
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const app = express();
@@ -102,11 +153,15 @@ app.use(cors({
 // como o router respondia primeiro, esses 3 NUNCA rodavam pras rotas da API
 // (a superficie inteira, incluindo SEFAZ, ficava SEM rate limit nem headers
 // de seguranca). Movido pra ca, antes dos mounts, pra valer de verdade.
+// CSP endurecida: scriptSrc SEM 'unsafe-inline' (vetor XSS principal).
+// styleSrc mantem 'unsafe-inline' pois React injeta inline styles em runtime
+// e impacto de XSS via CSS e bem menor que via script. Tailwind CDN removido
+// (build-time desde o switch pra @tailwindcss/postcss; nao usamos mais a CDN).
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com", "https://www.gstatic.com", "https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com"],
+            scriptSrc: ["'self'", "https://apis.google.com", "https://www.gstatic.com", "https://cdnjs.cloudflare.com"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
             imgSrc: ["'self'", "data:", "https:"],
@@ -141,9 +196,32 @@ const sefazLimiter = rateLimit({
     skip: isCronRequest,
     message: { error: 'Muitas consultas à SEFAZ em pouco tempo. Aguarde ~1 minuto.' },
 });
+
+// Anti-enumeracao em /cnpj-lookup. Antes esse endpoint nao tinha limite
+// dedicado e qualquer colaborador podia varrer CNPJs (LGPD). 20/min/IP cobre
+// uso humano normal (cadastro de empresa pontual) e bloqueia varredura.
+const cnpjLookupLimiter = rateLimit({
+    windowMs: 60_000, max: 20,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    keyGenerator: (req) => (req.user?.uid ? `u:${req.user.uid}` : req.ip),
+    message: { error: 'Muitas consultas CNPJ em pouco tempo. Aguarde ~1 minuto.' },
+});
+// Anti-brute-force em /api/agent/* (validacao de API key). Sem limite dedicado
+// um atacante consegue testar milhares de keys/min sob o limite global de 120/min.
+// 10/min/IP eh suficiente pra uso legitimo (n8n/Zapier publicam mensagens com
+// intervalo grande) e duro pra brute force (chave SHA-256 = 2^256 espaco).
+const agentLimiter = rateLimit({
+    windowMs: 60_000, max: 10,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    message: { error: 'Muitas tentativas de autenticacao. Aguarde 1 minuto.' },
+});
 app.use('/api/', apiLimiter);
 app.use('/api/admin/sefaz/consulta-nfe-por-chave', sefazLimiter);
 app.use('/api/admin/sefaz/sync-one', sefazLimiter);
+app.use('/api/admin/cnpj-lookup', cnpjLookupLimiter);
+app.use('/api/agent', agentLimiter);
 
 // ── Routers (montados DEPOIS do middleware de segurança/limite) ─────────
 app.use('/api/admin/sefaz', sefazCertRouter);
@@ -2385,6 +2463,12 @@ app.post('/api/analise-creditos/manual', requireAuth, async (req, res) => {
 app.post('/api/analise-creditos/upload', requireAuth, upload.single('arquivo'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ erro:'Arquivo não enviado' });
+        // Validacao magic-bytes ANTES de processar (anti zip-bomb / binario disfarcado)
+        const mb = validarMagicBytes(req.file.buffer, req.file.originalname);
+        if (!mb.ok) {
+            console.warn('[upload] arquivo rejeitado magic-bytes:', mb.motivo, 'nome=', req.file.originalname);
+            return res.status(400).json({ erro: `Arquivo invalido: ${mb.motivo}` });
+        }
         const perfil = JSON.parse(req.body.perfil||'{}');
         const nome2=req.file.originalname.toLowerCase();const regime=perfil.regime||'LUCRO_REAL_SERVICOS';if(nome2.endsWith('.xlsx')||nome2.endsWith('.xls')){
             // Detector especifico: fatura Itau Empresas Mastercard (cabecalho longo, valor em col K)

@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import type { User, PgdasConferirResponse, PgdasDivergencia, PgdasExplicarResponse } from '../../types';
 import { conferirPgdas, explicarDivergencia, severidadeBadge, formatBRL } from '../../services/pgdasConferirService';
+import SafeMarkdown from '../SafeMarkdown';
 
 interface Props {
     empresaId: string;
@@ -63,12 +64,9 @@ const ConferirModal: React.FC<Props> = ({ empresaId, empresaNome, currentUser, o
         }
     };
 
-    const renderMarkdown = (text: string) => {
-        return text.split(/\n\n+/).map((b, i) => {
-            const html = b.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
-            return <p key={i} className="mb-2 last:mb-0 text-sm text-slate-700 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: html }} />;
-        });
-    };
+    const renderMarkdown = (text: string) => (
+        <SafeMarkdown text={text} className="mb-2 last:mb-0 text-sm text-slate-700 dark:text-slate-300" />
+    );
 
     const fmtCampo = (campo: string, v: any) => {
         if (v === null || v === undefined) return '—';

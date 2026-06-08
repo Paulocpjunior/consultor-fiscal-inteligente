@@ -27,6 +27,7 @@ import { BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon, In
 // (FiscalObligationsDashboard, Tarefas, CalendarioFiscal agora dentro de ObrigacoesETarefas)
 import { runInitialSync } from './services/cloudSyncService';
 import { requestNotificationPermission } from './services/notificacoesService';
+import { safeStorage } from './services/safeStorage';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
 // ✅ REMOVIDO: import { onAuthStateChanged } from 'firebase/auth';
 // Ambos encapsulados em authService.subscribeAuthState
@@ -183,7 +184,9 @@ const App: React.FC = () => {
     const confirm = useConfirm();
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
         if (typeof window !== 'undefined') {
-            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            const stored = safeStorage.getItem('theme');
+            const preferDark = stored == null && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (stored === 'dark' || preferDark) {
                 document.documentElement.classList.add('dark');
                 return 'dark';
             }
@@ -258,11 +261,8 @@ const App: React.FC = () => {
     // sincroniza automaticamente em qualquer dispositivo sem relogar.
     useEffect(() => {
         try {
-            const storedFavorites = localStorage.getItem('fiscal-consultant-favorites');
-            if (storedFavorites) setFavorites(JSON.parse(storedFavorites));
-
-            const storedHistory = localStorage.getItem('fiscal-consultant-history');
-            if (storedHistory) setHistory(JSON.parse(storedHistory));
+            setFavorites(safeStorage.getJSON<FavoriteItem[]>('fiscal-consultant-favorites', []));
+            setHistory(safeStorage.getJSON<HistoryItem[]>('fiscal-consultant-history', []));
 
             const unsubscribe = authService.subscribeAuthState((user) => {
                 setCurrentUser(user);
@@ -282,10 +282,10 @@ const App: React.FC = () => {
     useEffect(() => {
         if (theme === 'dark') {
             document.documentElement.classList.add('dark');
-            localStorage.theme = 'dark';
+            safeStorage.setItem('theme', 'dark');
         } else {
             document.documentElement.classList.remove('dark');
-            localStorage.theme = 'light';
+            safeStorage.setItem('theme', 'light');
         }
     }, [theme]);
 
@@ -354,12 +354,12 @@ const App: React.FC = () => {
     const handleHistoryRemove = (id: string) => {
         const newHistory = history.filter(item => item.id !== id);
         setHistory(newHistory);
-        localStorage.setItem('fiscal-consultant-history', JSON.stringify(newHistory));
+        safeStorage.setJSON('fiscal-consultant-history', newHistory);
     };
 
     const handleHistoryClear = () => {
         setHistory([]);
-        localStorage.removeItem('fiscal-consultant-history');
+        safeStorage.removeItem('fiscal-consultant-history');
     };
 
     const addHistory = (item: Omit<HistoryItem, 'id' | 'timestamp'>) => {
@@ -370,7 +370,7 @@ const App: React.FC = () => {
         };
         setHistory(prev => {
             const updatedHistory = [newHistoryItem, ...prev].slice(0, 50);
-            localStorage.setItem('fiscal-consultant-history', JSON.stringify(updatedHistory));
+            safeStorage.setJSON('fiscal-consultant-history', updatedHistory);
             return updatedHistory;
         });
     };
@@ -389,7 +389,7 @@ const App: React.FC = () => {
 
     const saveFavorites = (newFavorites: FavoriteItem[]) => {
         setFavorites(newFavorites);
-        localStorage.setItem('fiscal-consultant-favorites', JSON.stringify(newFavorites));
+        safeStorage.setJSON('fiscal-consultant-favorites', newFavorites);
     };
 
     const handleToggleFavorite = () => {
