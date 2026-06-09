@@ -84,6 +84,62 @@ const CFOP_DESCRICOES: Record<string, string> = {
     '1924': 'Entrada para industrialização por conta e ordem do adquirente da mercadoria, quando esta não transitar pelo estabelecimento do adquirente.',
 };
 
+const SERVICO_LC116_DESCRICOES: Record<string, { descricao: string; grupo: string; observacoes?: string[] }> = {
+    '1.01': { descricao: 'Análise e desenvolvimento de sistemas.', grupo: 'Serviços de informática e congêneres' },
+    '1.02': { descricao: 'Programação.', grupo: 'Serviços de informática e congêneres' },
+    '1.03': { descricao: 'Processamento, armazenamento ou hospedagem de dados, textos, imagens, vídeos, páginas eletrônicas, aplicativos e sistemas de informação.', grupo: 'Serviços de informática e congêneres' },
+    '1.04': { descricao: 'Elaboração de programas de computadores, inclusive jogos eletrônicos.', grupo: 'Serviços de informática e congêneres' },
+    '1.05': { descricao: 'Licenciamento ou cessão de direito de uso de programas de computação.', grupo: 'Serviços de informática e congêneres' },
+    '1.06': { descricao: 'Assessoria e consultoria em informática.', grupo: 'Serviços de informática e congêneres' },
+    '1.07': { descricao: 'Suporte técnico em informática, inclusive instalação, configuração e manutenção de programas de computação e bancos de dados.', grupo: 'Serviços de informática e congêneres' },
+    '3.05': { descricao: 'Cessão de andaimes, palcos, coberturas e outras estruturas de uso temporário.', grupo: 'Serviços prestados mediante locação, cessão de direito de uso e congêneres' },
+    '4.01': {
+        descricao: 'Medicina e biomedicina.',
+        grupo: 'Serviços de saúde, assistência médica e congêneres',
+        observacoes: [
+            'Para clínicas, profissionais de saúde e sociedades uniprofissionais, valide inscrição municipal, regime de ISS fixo/SUP e regras locais.',
+            'Não confundir item LC 116 com CNAE: o CNAE define enquadramento cadastral; o item de serviço orienta a NFS-e e o ISS.',
+        ],
+    },
+    '4.02': { descricao: 'Análises clínicas, patologia, eletricidade médica, radioterapia, quimioterapia, ultrassonografia, ressonância magnética, radiologia, tomografia e congêneres.', grupo: 'Serviços de saúde, assistência médica e congêneres' },
+    '4.03': { descricao: 'Hospitais, clínicas, laboratórios, sanatórios, manicômios, casas de saúde, prontos-socorros, ambulatórios e congêneres.', grupo: 'Serviços de saúde, assistência médica e congêneres' },
+    '7.02': { descricao: 'Execução, por administração, empreitada ou subempreitada, de obras de construção civil, hidráulica ou elétrica e congêneres.', grupo: 'Serviços relativos a engenharia, arquitetura, geologia, urbanismo, construção civil e congêneres' },
+    '10.05': { descricao: 'Agenciamento, corretagem ou intermediação de bens móveis ou imóveis.', grupo: 'Serviços de intermediação e congêneres' },
+    '14.01': { descricao: 'Lubrificação, limpeza, lustração, revisão, carga e recarga, conserto, restauração, blindagem, manutenção e conservação de máquinas, veículos, aparelhos, equipamentos e congêneres.', grupo: 'Serviços relativos a bens de terceiros' },
+    '17.01': { descricao: 'Assessoria ou consultoria de qualquer natureza, não contida em outros itens da lista.', grupo: 'Serviços de apoio técnico, administrativo, jurídico, contábil, comercial e congêneres' },
+    '17.05': { descricao: 'Fornecimento de mão de obra, mesmo em caráter temporário, inclusive por empregados ou trabalhadores avulsos.', grupo: 'Serviços de apoio técnico, administrativo, jurídico, contábil, comercial e congêneres' },
+    '17.19': { descricao: 'Contabilidade, inclusive serviços técnicos e auxiliares.', grupo: 'Serviços de apoio técnico, administrativo, jurídico, contábil, comercial e congêneres' },
+};
+
+const SERVICO_GRUPOS: Record<string, string> = {
+    '1': 'Serviços de informática e congêneres',
+    '3': 'Serviços prestados mediante locação, cessão de direito de uso e congêneres',
+    '4': 'Serviços de saúde, assistência médica e congêneres',
+    '7': 'Serviços relativos a engenharia, arquitetura, geologia, urbanismo, construção civil e congêneres',
+    '10': 'Serviços de intermediação e congêneres',
+    '14': 'Serviços relativos a bens de terceiros',
+    '17': 'Serviços de apoio técnico, administrativo, jurídico, contábil, comercial e congêneres',
+};
+
+function normalizarCodigoServico(query: string): string | null {
+    const raw = (query || '').trim();
+    if (!raw) return null;
+    const explicit = raw.match(/^0?(\d{1,2})\s*[\.,/-]\s*(\d{2})$/);
+    if (explicit) {
+        const grupo = Number(explicit[1]);
+        if (!Number.isInteger(grupo) || grupo < 1 || grupo > 40) return null;
+        return `${grupo}.${explicit[2]}`;
+    }
+
+    const digits = raw.replace(/\D/g, '');
+    if (!/^\d{3,4}$/.test(digits)) return null;
+    const grupoDigits = digits.length === 3 ? digits.slice(0, 1) : digits.slice(0, 2);
+    const itemDigits = digits.slice(-2);
+    const grupo = Number(grupoDigits);
+    if (!Number.isInteger(grupo) || grupo < 1 || grupo > 40) return null;
+    return `${grupo}.${itemDigits}`;
+}
+
 function consultaCfopLocal(query: string, context?: SearchResult['context']): SearchResult | null {
     const codigo = (query || '').replace(/\D/g, '');
     if (codigo.length !== 4) return null;
@@ -138,6 +194,61 @@ function consultaCfopLocal(query: string, context?: SearchResult['context']): Se
     };
 }
 
+function consultaServicoLocal(query: string, context?: SearchResult['context'], municipio?: string, alias?: string, regimeTributario?: string): SearchResult | null {
+    const codigo = normalizarCodigoServico(query);
+    if (!codigo) return null;
+
+    const grupoCodigo = codigo.split('.')[0];
+    const item = SERVICO_LC116_DESCRICOES[codigo];
+    const grupo = item?.grupo || (grupoCodigo ? SERVICO_GRUPOS[grupoCodigo] : undefined) || 'Grupo LC 116 não classificado no catálogo local';
+    const descricao = item?.descricao
+        || 'Item válido em formato LC 116/ISS, mas a descrição específica ainda não está cadastrada no catálogo local. Confirme a redação na lista anexa da LC 116/2003 e na tabela municipal.';
+    const aliquota = context?.aliquotaIss
+        ? `${context.aliquotaIss}% informada no contexto`
+        : 'definida pelo município, normalmente dentro do intervalo legal de 2% a 5%';
+    const contexto = [
+        municipio ? `- Município/prestação informado: ${municipio}` : '',
+        alias ? `- Tomador informado: ${alias}` : '',
+        regimeTributario ? `- Regime informado: ${regimeTributario}` : '',
+        context?.aliquotaIss ? `- ISS informado: ${context.aliquotaIss}%` : '',
+        context?.aliquotaPisCofins ? `- PIS/COFINS informado: ${context.aliquotaPisCofins}%` : '',
+        context?.userNotes ? `- Observações: ${context.userNotes}` : '',
+    ].filter(Boolean);
+
+    return {
+        query: codigo,
+        timestamp: Date.now(),
+        context,
+        sources: [
+            { web: { uri: 'https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp116.htm', title: 'Lei Complementar nº 116/2003 - lista de serviços' } },
+        ],
+        text: [
+            `## Serviço LC 116/ISS ${codigo}`,
+            '',
+            `**Descrição:** ${descricao}`,
+            `**Grupo:** ${grupo}`,
+            '',
+            '## Incidência de ISS',
+            '- Serviço enquadrado na lista anexa da LC 116/2003, sujeito a ISS quando houver prestação onerosa.',
+            `- Alíquota: ${aliquota}. Confirme sempre a lei municipal, código de tributação local e eventual regra de retenção/substituição.`,
+            '- Local de recolhimento: regra geral no município do estabelecimento prestador; valide exceções do art. 3º da LC 116/2003 e regras específicas do município.',
+            '',
+            '## Pontos de atenção',
+            '- Informe na NFS-e o item da lista, o código municipal de tributação, município de prestação e retenção do ISS quando aplicável.',
+            '- Retenções federais (IRRF, PIS, COFINS, CSLL e INSS) dependem do tipo de tomador, natureza do serviço, valor e regime tributário.',
+            '- No Simples Nacional, não presuma anexo apenas pelo item de serviço: avalie CNAE, atividade efetiva, Fator R e regras de ISS retido.',
+            ...(item?.observacoes ? ['', '## Observações específicas', ...item.observacoes.map(o => `- ${o}`)] : []),
+            ...(contexto.length ? ['', '## Contexto informado', ...contexto] : []),
+            '',
+            '## Checklist operacional',
+            '- Conferir se o código LC 116 bate com a descrição da atividade na NFS-e.',
+            '- Validar alíquota/código municipal na prefeitura do prestador.',
+            '- Conferir se o tomador exige retenção de ISS e se há responsabilidade tributária local.',
+            '- Para saúde/profissionais liberais, verificar tratamento de sociedade uniprofissional/SUP, quando existir no município.',
+        ].join('\n'),
+    };
+}
+
 export const fetchFiscalData = async (type: SearchType, query: string, municipio?: string, alias?: string, responsavel?: string, cnae?: string, regimeTributario?: string, reformaQuery?: string, aliquotaIcms?: string, aliquotaPisCofins?: string, aliquotaIss?: string, userNotes?: string): Promise<SearchResult> => {
     let ctx = [];
     if (municipio) ctx.push(`Município: ${municipio}`); if (alias) ctx.push(`Tomador: ${alias}`);
@@ -147,6 +258,10 @@ export const fetchFiscalData = async (type: SearchType, query: string, municipio
     const context = { aliquotaIcms, aliquotaPisCofins, aliquotaIss, userNotes };
     if (type === SearchType.CFOP) {
         const local = consultaCfopLocal(query, context);
+        if (local) return local;
+    }
+    if (type === SearchType.SERVICO) {
+        const local = consultaServicoLocal(query, context, municipio, alias, regimeTributario);
         if (local) return local;
     }
     const ctxInfo = ctx.length > 0 ? `\nCONSIDERE: ${ctx.join('; ')}.` : '';
