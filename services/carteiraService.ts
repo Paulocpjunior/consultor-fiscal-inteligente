@@ -21,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import type { User } from '../types';
+import { vinculoPertenceAoUsuario } from './visibilidadeCarteira';
 
 const COLLECTION = 'carteiras';
 
@@ -68,7 +69,7 @@ export async function listarCarteiras(user: User | null): Promise<VinculoCarteir
         const isAdmin = user.role === 'admin';
         const uid = auth?.currentUser?.uid;
         if (isAdmin || !uid) return todos;
-        return todos.filter(v => v.colaboradorUid === uid);
+        return todos.filter(v => vinculoPertenceAoUsuario(v, user, uid));
     } catch (err: any) {
         console.warn('listarCarteiras:', err?.message);
         return [];

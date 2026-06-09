@@ -36,7 +36,9 @@ import { applyDocumentosFilters } from './xmlDocumentosFilter';
 import {
     podeVerDocumentoPorCarteira,
     podeVerEmpresaPorCarteira,
-    normalizaCnpj,
+    montaCarteiraScope,
+    vinculoPertenceAoUsuario,
+    type CarteiraVinculoLike,
     type CarteiraScope,
 } from './visibilidadeCarteira';
 import type {
@@ -71,16 +73,10 @@ async function getCarteiraScope(user: User): Promise<CarteiraScope | null> {
     if (!uid || !db) return { uid, empresaIds: new Set(), empresaCnpjs: new Set() };
 
     try {
-        const snap = await getDocs(query(
-            collection(db, 'carteiras'),
-            where('colaboradorUid', '==', uid),
-            fbLimit(500),
-        ));
-        return {
-            uid,
-            empresaIds: new Set(snap.docs.map(d => String((d.data() as any).empresaId || '')).filter(Boolean)),
-            empresaCnpjs: new Set(snap.docs.map(d => normalizaCnpj((d.data() as any).empresaCnpj)).filter(Boolean)),
-        };
+        const snap = await getDocs(query(collection(db, 'carteiras'), fbLimit(500)));
+        const todosVinculos: CarteiraVinculoLike[] = snap.docs.map(d => d.data() as any);
+        const meusVinculos = todosVinculos.filter(v => vinculoPertenceAoUsuario(v, user, uid));
+        return montaCarteiraScope(uid, meusVinculos, !snap.empty);
     } catch (err: any) {
         console.warn('getCarteiraScope:', err?.message);
         return { uid, empresaIds: new Set(), empresaCnpjs: new Set() };

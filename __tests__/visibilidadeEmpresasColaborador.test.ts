@@ -15,7 +15,13 @@
  * apenas a logica do filtro (extraida pra forma isolada).
  */
 
-import { podeVerDocumentoPorCarteira, podeVerEmpresaPorCarteira, type CarteiraScope } from '../services/visibilidadeCarteira';
+import {
+    montaCarteiraScope,
+    podeVerDocumentoPorCarteira,
+    podeVerEmpresaPorCarteira,
+    vinculoPertenceAoUsuario,
+    type CarteiraScope,
+} from '../services/visibilidadeCarteira';
 
 type Empresa = { id: string; cnpj?: string | null; createdBy?: string | null };
 
@@ -94,5 +100,27 @@ describe('Visibilidade de empresas pra colaborador', () => {
         expect(podeVerDocumentoPorCarteira({ empresaCnpj: '02.986.671/0001-07', createdBy: UID_OUTRO }, scope)).toBe(true);
         expect(podeVerDocumentoPorCarteira({ empresaId: 'e9', importadoPor: UID_COLAB }, scope)).toBe(true);
         expect(podeVerDocumentoPorCarteira({ empresaId: 'e9', createdBy: UID_OUTRO }, scope)).toBe(false);
+    });
+
+    it('carteira global vazia mantém visibilidade aberta legada', () => {
+        expect(montaCarteiraScope(UID_COLAB, [], false)).toBeNull();
+    });
+
+    it('colaborador sem vinculo de carteira nao fica bloqueado com zero empresas', () => {
+        expect(montaCarteiraScope(UID_COLAB, [], true)).toBeNull();
+    });
+
+    it('carteira configurada passa a restringir pelo vinculo do usuário', () => {
+        const scope = montaCarteiraScope(UID_COLAB, [{ empresaId: 'e2', empresaCnpj: '02.986.671/0001-07' }], true);
+        expect(scope).not.toBeNull();
+        expect(scope?.empresaIds.has('e2')).toBe(true);
+        expect(scope?.empresaCnpjs.has('02986671000107')).toBe(true);
+    });
+
+    it('aceita vinculo legado por nome ou email quando UID mudou', () => {
+        const user = { id: 'uid-novo', name: 'Valéria Alves', email: 'valeria@spassessoriacontabil.com.br' };
+        expect(vinculoPertenceAoUsuario({ colaboradorUid: 'uid-antigo', colaboradorNome: 'valeria alves' }, user)).toBe(true);
+        expect(vinculoPertenceAoUsuario({ colaboradorUid: 'uid-antigo', colaboradorEmail: 'VALERIA@SPASSESSORIACONTABIL.COM.BR' }, user)).toBe(true);
+        expect(vinculoPertenceAoUsuario({ colaboradorUid: 'uid-antigo', colaboradorNome: 'outro usuario' }, user)).toBe(false);
     });
 });
