@@ -33,6 +33,12 @@ import {
 } from './xmlParserService';
 import { uploadXml, deleteXml } from './xmlStorageService';
 import { applyDocumentosFilters } from './xmlDocumentosFilter';
+import {
+    podeVerDocumentoPorCarteira,
+    podeVerEmpresaPorCarteira,
+    normalizaCnpj,
+    type CarteiraScope,
+} from './visibilidadeCarteira';
 import type {
     DocumentoFiscal,
     XmlCaptura,
@@ -58,6 +64,28 @@ const sanitize = (obj: any) => JSON.parse(JSON.stringify(obj, (_k, v) => v === u
 const isMasterUser = (user: User | null | undefined): boolean =>
     !!user && (user.role === 'admin' ||
         user.email?.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase());
+
+async function getCarteiraScope(user: User): Promise<CarteiraScope | null> {
+    if (isMasterUser(user)) return null;
+    const uid = auth?.currentUser?.uid ?? user.id;
+    if (!uid || !db) return { uid, empresaIds: new Set(), empresaCnpjs: new Set() };
+
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'carteiras'),
+            where('colaboradorUid', '==', uid),
+            fbLimit(500),
+        ));
+        return {
+            uid,
+            empresaIds: new Set(snap.docs.map(d => String((d.data() as any).empresaId || '')).filter(Boolean)),
+            empresaCnpjs: new Set(snap.docs.map(d => normalizaCnpj((d.data() as any).empresaCnpj)).filter(Boolean)),
+        };
+    } catch (err: any) {
+        console.warn('getCarteiraScope:', err?.message);
+        return { uid, empresaIds: new Set(), empresaCnpjs: new Set() };
+    }
+}
 
 // ─── Erros tipados ──────────────────────────────────────────────────────────
 
@@ -101,22 +129,13 @@ function dedupEmpresas(list: EmpresaXmlOption[]): EmpresaXmlOption[] {
 
 export async function getEmpresasDisponiveis(user: User | null): Promise<EmpresaXmlOption[]> {
     if (!user || !isFirebaseConfigured || !db) return [];
-    const isMaster = isMasterUser(user);
-    const uid = auth?.currentUser?.uid;
 
     try {
-        // Admin/Junior: busca tudo. Colaborador: busca tudo (rules permitem)
-        // e filtra no cliente por createdBy OU vinculo em `carteiras`.
-        // Antes filtrava so por createdBy -- colaborador nao via empresa
-        // atribuida via carteira quando outro colega criava (bug reportado
-        // 06/2026).
-        // VISIBILIDADE ABERTA: todos veem todas (Simples + Lucro). Temporaria.
+        const scope = await getCarteiraScope(user);
         const [simplesSnap, lucroSnap] = await Promise.all([
             fetchAllDocs('simples_empresas', []),
             fetchAllDocs('lucro_empresas', []),
         ]);
-
-        const podeVer = (_createdBy?: string | null, _id?: string): boolean => true;
 
         // 23/05: filtra perdedores do merge de duplicatas
         const simples: EmpresaXmlOption[] = simplesSnap
@@ -125,14 +144,14 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
                 const data = d.data() as SimplesNacionalEmpresa;
                 return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
             })
-            .filter(e => podeVer(e.createdBy, e.id));
+            .filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
         const lucro: EmpresaXmlOption[] = lucroSnap
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
                 const data = d.data() as LucroPresumidoEmpresa;
                 return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
             })
-            .filter(e => podeVer(e.createdBy, e.id));
+            .filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
 
         return dedupEmpresas([...simples, ...lucro]);
     } catch (err: any) {
@@ -185,10 +204,8 @@ function dedupPerfilOptions(list: EmpresaPerfilOption[]): EmpresaPerfilOption[] 
 export async function getEmpresasParaPerfilCliente(user: User | null): Promise<EmpresaPerfilOption[]> {
     if (!user || !isFirebaseConfigured || !db) return [];
 
-    // Seletor de empresa da Analise de Creditos / Carteira: TODOS os
-    // usuarios logados veem TODAS as empresas (sem filtro por createdBy).
-    // O Firestore ja garante isso com `allow list: if isSignedIn()`.
     try {
+        const scope = await getCarteiraScope(user);
         const [simplesSnap, lucroSnap] = await Promise.all([
             fetchAllDocs('simples_empresas'),
             fetchAllDocs('lucro_empresas'),
@@ -210,7 +227,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 ccmSp: data.dadosFiscais?.ccmSp || data.ccmSp,
                 createdBy: data.createdBy,
             };
-        });
+        }).filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
         const lucro: EmpresaPerfilOption[] = lucroSnap
             .filter(d => !(d.data() as any)._merged_into)
             .map(d => {
@@ -226,7 +243,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 ccmSp: data.dadosFiscais?.ccmSp || data.ccmSp,
                 createdBy: data.createdBy,
             };
-        });
+        }).filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
 
         return dedupPerfilOptions([...simples, ...lucro]);
     } catch (err: any) {
@@ -473,8 +490,7 @@ export async function listDocumentos(
     filters: ListDocumentosFilters = {},
 ): Promise<DocumentoFiscal[]> {
     if (!user || !isFirebaseConfigured || !db) return [];
-    const isMaster = isMasterUser(user);
-    const uid = auth?.currentUser?.uid;
+    const scope = await getCarteiraScope(user);
 
     const constraints: QueryConstraint[] = [];
     // Admin: busca tudo (com filtro opcional de empresa). Colaborador: busca
@@ -493,7 +509,7 @@ export async function listDocumentos(
         // documentos_fiscais permite limit <=5000 nas rules; usa pagina maior.
         const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000 });
         docs = snaps.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
-        // VISIBILIDADE ABERTA: todos veem todos os documentos. Temporaria.
+        if (scope) docs = docs.filter(d => podeVerDocumentoPorCarteira(d, scope));
     } catch (err: any) {
         console.warn('listDocumentos:', err?.message);
         return [];

@@ -338,6 +338,17 @@ app.get('/health', async (_req, res) => {
     res.json(checks);
 });
 
+function isGeminiQuotaError(err) {
+    const raw = err instanceof Error ? `${err.message || ''}\n${err.stack || ''}` : String(err || '');
+    return /RESOURCE_EXHAUSTED|prepayment credits|quota exceeded|billing|429/i.test(raw);
+}
+
+function respondeGeminiQuota(res) {
+    return res.status(429).json({
+        error: 'Limite de créditos/cota da IA esgotado. Consultas determinísticas de CFOP continuam funcionando; para análises por IA, recarregue créditos ou configure faturamento no Google AI Studio.',
+    });
+}
+
 app.post('/api/fiscal/query', requireAuth, requireAI, async (req, res) => {
     const { prompt, model, temperature, googleSearch } = req.body;
     if (!prompt) return res.status(400).json({ error: 'prompt obrigatorio' });
@@ -354,6 +365,7 @@ app.post('/api/fiscal/query', requireAuth, requireAI, async (req, res) => {
         return res.json({ text: response.text ?? '', candidates: response.candidates || [] });
     } catch (err) {
         console.error('Erro Gemini:', err?.message);
+        if (isGeminiQuotaError(err)) return respondeGeminiQuota(res);
         return respondeErro(res, err, 'Erro IA');
     }
 });
@@ -370,6 +382,7 @@ app.post('/api/fiscal/multimodal', requireAuth, requireAI, async (req, res) => {
         });
         return res.json({ text: response.text ?? '', candidates: response.candidates || [] });
     } catch (err) {
+        if (isGeminiQuotaError(err)) return respondeGeminiQuota(res);
         return respondeErro(res, err, 'Erro');
     }
 });

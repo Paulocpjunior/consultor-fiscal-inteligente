@@ -1,6 +1,7 @@
 
 import { SearchType, type SearchResult, type GroundingSource, type ComparisonResult, type NewsAlert, type SimilarService, type CnaeSuggestion, type SimplesNacionalEmpresa, type SimplesNacionalResumo, CnaeTaxDetail } from '../types';
 import { auth } from './firebaseConfig';
+import { classificarCfop, ehCfopDeEntrada } from './cfopClassifier';
 
 interface ProxyResponse { text: string; candidates?: any[]; }
 
@@ -68,12 +69,86 @@ const safeJsonParse = (str: string) => {
     return JSON.parse(s);
 };
 
+const CFOP_CATEGORY_LABEL: Record<string, string> = {
+    compra: 'Compra / entrada',
+    venda: 'Venda / saída',
+    servico_prestado: 'Serviço prestado',
+    servico_tomado: 'Serviço tomado',
+    devolucao: 'Devolução',
+    transferencia: 'Transferência',
+    remessa: 'Remessa / retorno',
+    outro: 'Outra operação',
+};
+
+const CFOP_DESCRICOES: Record<string, string> = {
+    '1924': 'Entrada para industrialização por conta e ordem do adquirente da mercadoria, quando esta não transitar pelo estabelecimento do adquirente.',
+};
+
+function consultaCfopLocal(query: string, context?: SearchResult['context']): SearchResult | null {
+    const codigo = (query || '').replace(/\D/g, '');
+    if (codigo.length !== 4) return null;
+    if (!/^[123567]\d{3}$/.test(codigo)) {
+        return {
+            query,
+            timestamp: Date.now(),
+            context,
+            text: [
+                `## CFOP ${codigo}`,
+                '',
+                '**Status:** código inválido para CFOP.',
+                '',
+                'CFOP deve ter 4 dígitos e iniciar por 1, 2, 3, 5, 6 ou 7.',
+            ].join('\n'),
+        };
+    }
+
+    const categoria = classificarCfop(codigo) || (ehCfopDeEntrada(codigo) ? 'compra' : 'venda');
+    const direcao = ehCfopDeEntrada(codigo) ? 'Entrada' : 'Saída';
+    const descricao = CFOP_DESCRICOES[codigo]
+        || 'Descrição específica não cadastrada no catálogo local. Use a categoria operacional abaixo como triagem e confirme a descrição oficial na tabela CFOP vigente.';
+    const contexto = context && (context.aliquotaIcms || context.aliquotaPisCofins || context.aliquotaIss || context.userNotes)
+        ? [
+            '',
+            '## Contexto informado',
+            context.aliquotaIcms ? `- ICMS informado: ${context.aliquotaIcms}%` : '',
+            context.aliquotaPisCofins ? `- PIS/COFINS informado: ${context.aliquotaPisCofins}%` : '',
+            context.aliquotaIss ? `- ISS informado: ${context.aliquotaIss}%` : '',
+            context.userNotes ? `- Observações: ${context.userNotes}` : '',
+        ].filter(Boolean).join('\n')
+        : '';
+
+    return {
+        query,
+        timestamp: Date.now(),
+        context,
+        text: [
+            `## CFOP ${codigo}`,
+            '',
+            `**Descrição:** ${descricao}`,
+            '',
+            `**Direção:** ${direcao}`,
+            `**Categoria operacional:** ${CFOP_CATEGORY_LABEL[categoria] || categoria}`,
+            '',
+            '## Orientação fiscal',
+            '- Use este retorno local para triagem imediata quando a IA estiver indisponível.',
+            '- Confira CST, finalidade da NF-e, natureza da operação e regra estadual antes de escriturar.',
+            '- Em operações de remessa/retorno ou industrialização, valide se há vínculo com nota de origem e se o CFOP está na perspectiva correta do emitente/destinatário.',
+            contexto,
+        ].filter(Boolean).join('\n'),
+    };
+}
+
 export const fetchFiscalData = async (type: SearchType, query: string, municipio?: string, alias?: string, responsavel?: string, cnae?: string, regimeTributario?: string, reformaQuery?: string, aliquotaIcms?: string, aliquotaPisCofins?: string, aliquotaIss?: string, userNotes?: string): Promise<SearchResult> => {
     let ctx = [];
     if (municipio) ctx.push(`Município: ${municipio}`); if (alias) ctx.push(`Tomador: ${alias}`);
     if (regimeTributario) ctx.push(`Regime: ${regimeTributario}`); if (aliquotaIcms) ctx.push(`ICMS: ${aliquotaIcms}%`);
     if (aliquotaPisCofins) ctx.push(`PIS/COFINS: ${aliquotaPisCofins}%`); if (aliquotaIss) ctx.push(`ISS: ${aliquotaIss}%`);
     if (userNotes) ctx.push(`Notas: ${userNotes}`);
+    const context = { aliquotaIcms, aliquotaPisCofins, aliquotaIss, userNotes };
+    if (type === SearchType.CFOP) {
+        const local = consultaCfopLocal(query, context);
+        if (local) return local;
+    }
     const ctxInfo = ctx.length > 0 ? `\nCONSIDERE: ${ctx.join('; ')}.` : '';
     const prompt = `Analise "${query}" no contexto de ${type}.${ctxInfo}\n1. Detalhes tributários, base legal, retenções.\n2. AO FINAL inclua JSON IBPT:\n\`\`\`json\n{"ibpt":{"nacional":0,"importado":0,"estadual":0,"municipal":0}}\n\`\`\``;
     const useSearch = [SearchType.REFORMA_TRIBUTARIA, SearchType.SERVICO, SearchType.CFOP, SearchType.NCM].includes(type);
@@ -86,7 +161,7 @@ export const fetchFiscalData = async (type: SearchType, query: string, municipio
         if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
             sources = response.candidates[0].groundingMetadata.groundingChunks.filter((c: any) => c.web).map((c: any) => ({ web: { uri: c.web.uri, title: c.web.title } }));
         }
-        return { text, sources, query, timestamp: Date.now(), context: { aliquotaIcms, aliquotaPisCofins, aliquotaIss, userNotes }, ibpt: ibptData };
+        return { text, sources, query, timestamp: Date.now(), context, ibpt: ibptData };
     } catch (e: any) { throw e; }
 };
 
@@ -174,4 +249,3 @@ export const extractPgdasDataFromPdf = async (base64Pdf: string): Promise<any> =
         return safeJsonParse(r.text || '[]');
     } catch { return []; }
 };
-
