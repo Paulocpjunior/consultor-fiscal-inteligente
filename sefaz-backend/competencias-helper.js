@@ -10,6 +10,28 @@
 // data determinista. Sem ele, usa o relogio do sistema.
 // ============================================================================
 
+const TZ_BR = 'America/Sao_Paulo';
+
+function anoMesBrt(date) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: TZ_BR,
+        year: 'numeric',
+        month: '2-digit',
+    }).formatToParts(date);
+    const year = Number(parts.find(p => p.type === 'year')?.value);
+    const month = Number(parts.find(p => p.type === 'month')?.value);
+    return { year, month };
+}
+
+function recuarMes(year, month) {
+    if (month > 1) return { year, month: month - 1 };
+    return { year: year - 1, month: 12 };
+}
+
+function labelCompetencia(year, month) {
+    return `${year}-${String(month).padStart(2, '0')}`;
+}
+
 /**
  * Retorna as N ultimas competencias mensais, em ordem decrescente (mais
  * recente primeiro), comecando do MES ANTERIOR ao informado.
@@ -22,11 +44,11 @@ export function ultimasCompetencias(n, agoraIso) {
     if (!Number.isFinite(n) || n < 1) return [];
     const ref = agoraIso ? new Date(agoraIso) : new Date();
     const out = [];
-    const d = new Date(ref.getFullYear(), ref.getMonth(), 1); // 1o dia do mes atual
-    d.setMonth(d.getMonth() - 1); // recua p/ mes anterior
+    const atual = anoMesBrt(ref);
+    let { year, month } = recuarMes(atual.year, atual.month);
     for (let i = 0; i < n; i++) {
-        out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-        d.setMonth(d.getMonth() - 1);
+        out.push(labelCompetencia(year, month));
+        ({ year, month } = recuarMes(year, month));
     }
     return out;
 }
@@ -39,15 +61,15 @@ export function ultimasCompetenciasComAnoMes(n, agoraIso) {
     if (!Number.isFinite(n) || n < 1) return [];
     const ref = agoraIso ? new Date(agoraIso) : new Date();
     const out = [];
-    const d = new Date(ref.getFullYear(), ref.getMonth(), 1);
-    d.setMonth(d.getMonth() - 1);
+    const atual = anoMesBrt(ref);
+    let { year, month } = recuarMes(atual.year, atual.month);
     for (let i = 0; i < n; i++) {
         out.push({
-            anoPA: d.getFullYear(),
-            mesPA: d.getMonth() + 1,
-            label: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+            anoPA: year,
+            mesPA: month,
+            label: labelCompetencia(year, month),
         });
-        d.setMonth(d.getMonth() - 1);
+        ({ year, month } = recuarMes(year, month));
     }
     return out;
 }
