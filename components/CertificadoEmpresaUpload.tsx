@@ -54,6 +54,21 @@ const validityColor = (dias: number) => {
   return 'text-emerald-600 dark:text-emerald-400';
 };
 
+const erroHttp = async (res: Response): Promise<string> => {
+  try {
+    const data = await res.json();
+    if (data?.error) return data.error;
+    if (data?.motivo) return data.motivo;
+  } catch { /* resposta sem JSON */ }
+  if (res.status === 429) {
+    return 'Muitas requisições em pouco tempo. Aguarde alguns instantes e tente novamente.';
+  }
+  if (res.status === 403) {
+    return 'Seu usuário não tem permissão para gerenciar o certificado desta empresa.';
+  }
+  return `HTTP ${res.status}`;
+};
+
 // CNPJ do escritorio (S&P). O cert dele NAO mora aqui (empresas_certificados)
 // e sim no Secret Manager via tela Configuracoes > Certificado Digital. Subir
 // por esta tela per-empresa cria um cert "fantasma" que a captura real,
@@ -94,7 +109,7 @@ const CertificadoEmpresaUpload: React.FC<Props> = ({ empresaId, empresaNome, emp
       if (res.status === 404) {
         setInfo(null);
       } else if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+        throw new Error(await erroHttp(res));
       } else {
         const data = await res.json();
         setInfo(data?.exists === false ? null : data);
@@ -176,7 +191,7 @@ const CertificadoEmpresaUpload: React.FC<Props> = ({ empresaId, empresaNome, emp
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error(await erroHttp(res));
       setInfo(null);
       setSuccess('Certificado removido');
       onChange?.();
@@ -196,6 +211,7 @@ const CertificadoEmpresaUpload: React.FC<Props> = ({ empresaId, empresaNome, emp
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || data?.motivo || (await erroHttp(res)));
       setTestResult({ ok: !!data.ok, cStat: data.cStat, xMotivo: data.xMotivo });
     } catch (e: any) {
       setError(e.message || 'Falha no teste');

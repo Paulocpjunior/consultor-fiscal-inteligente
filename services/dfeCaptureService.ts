@@ -150,15 +150,35 @@ export async function getSefazState(cnpj: string): Promise<SefazState | null> {
     }
 }
 
+let sefazWindowCache: { expiresAt: number; value: Promise<SefazWindow | null> } | null = null;
+const SEFAZ_WINDOW_CACHE_MS = 30_000;
+
 export async function getSefazWindow(): Promise<SefazWindow | null> {
+    const now = Date.now();
+    if (sefazWindowCache && now < sefazWindowCache.expiresAt) {
+        return sefazWindowCache.value;
+    }
+
+    sefazWindowCache = {
+        expiresAt: now + SEFAZ_WINDOW_CACHE_MS,
+        value: (async () => {
+            try {
+                const token = await getToken();
+                const res = await fetch('/api/admin/sefaz/window', {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (!res.ok) return null;
+                return await res.json();
+            } catch {
+                return null;
+            }
+        })(),
+    };
+
     try {
-        const token = await getToken();
-        const res = await fetch('/api/admin/sefaz/window', {
-            headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (!res.ok) return null;
-        return await res.json();
+        return await sefazWindowCache.value;
     } catch {
+        sefazWindowCache = null;
         return null;
     }
 }

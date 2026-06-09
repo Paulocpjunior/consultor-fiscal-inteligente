@@ -180,11 +180,21 @@ const isCronRequest = (req) => {
     const header = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
     return !!secret && header === secret;
 };
+const rateLimitKey = (req) => {
+    const auth = req.headers.authorization || '';
+    return auth ? `auth:${auth.slice(-48)}` : req.ip;
+};
 // Limite geral anti-flood em toda a API.
 const apiLimiter = rateLimit({
-    windowMs: 60_000, max: 120,
+    windowMs: 60_000, max: 600,
     standardHeaders: true, legacyHeaders: false,
-    skip: isCronRequest,
+    keyGenerator: rateLimitKey,
+    skip: (req) => {
+        if (isCronRequest(req)) return true;
+        const url = req.originalUrl || '';
+        return url.startsWith('/api/admin/cert-empresa')
+            || url.startsWith('/api/admin/sefaz/window');
+    },
     message: { error: 'Muitas requisições em pouco tempo. Aguarde um momento.' },
 });
 // Limite RIGOROSO nas rotas que consultam a SEFAZ on-demand: cada hit =
@@ -217,6 +227,21 @@ const agentLimiter = rateLimit({
     skip: isCronRequest,
     message: { error: 'Muitas tentativas de autenticacao. Aguarde 1 minuto.' },
 });
+const certEmpresaLimiter = rateLimit({
+    windowMs: 60_000, max: 80,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    keyGenerator: rateLimitKey,
+    message: { error: 'Muitas operações de certificado em pouco tempo. Aguarde alguns instantes.' },
+});
+const sefazWindowLimiter = rateLimit({
+    windowMs: 60_000, max: 600,
+    standardHeaders: true, legacyHeaders: false,
+    skip: isCronRequest,
+    message: { error: 'Muitas consultas de status da janela SEFAZ. Aguarde alguns instantes.' },
+});
+app.use('/api/admin/cert-empresa', certEmpresaLimiter);
+app.use('/api/admin/sefaz/window', sefazWindowLimiter);
 app.use('/api/', apiLimiter);
 app.use('/api/admin/sefaz/consulta-nfe-por-chave', sefazLimiter);
 app.use('/api/admin/sefaz/sync-one', sefazLimiter);
