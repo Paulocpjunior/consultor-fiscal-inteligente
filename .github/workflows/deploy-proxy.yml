@@ -40,7 +40,7 @@ jobs:
       - name: Proxy syntax check
         run: |
           fail=0
-          for f in $(find proxy-backend -name '*.js'); do
+          for f in $(find proxy-backend -path '*/node_modules' -prune -o -name '*.js' -print); do
             node --check "$f" || { echo "::error file=$f::Erro de sintaxe"; fail=1; }
           done
           if [ "$fail" -ne 0 ]; then
