@@ -14,6 +14,7 @@ import { loadCertificate } from './secret-loader.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
 import { importarXmlSefaz } from './xml-importer.js';
 import { withCronHeartbeat, listarCronsOrfaos } from './cron-heartbeat.js';
+import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibility.js';
 
 const router = express.Router();
 
@@ -728,19 +729,18 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       }
     }
 
-    // NFSe Nacional ADN: conta empresas com nfseNacionalDfeAtivo === true. Antes
-    // contava docs em nfse_nacional_dfe_state, que so populam APOS primeira sync —
-    // mostrava 0 mesmo com admin tendo habilitado empresas.
+    // NFSe Nacional ADN: conta elegibilidade REAL. A flag ativa sem A1 proprio
+    // gerava 258+ falhas E2243 por usar cert do escritorio em CNPJ de outra raiz.
     async function elegiveisNfseNacional() {
       try {
-        let total = 0;
-        for (const col of ['simples_empresas', 'lucro_empresas']) {
-          const snap = await db.collection(col).get();
-          snap.forEach(doc => {
-            if (doc.data().nfseNacionalDfeAtivo === true) total++;
-          });
-        }
-        return { total, travadas: null };
+        const { resumo } = await listarElegibilidadeNfseNacionalDfe();
+        return {
+          total: resumo.elegiveis,
+          travadas: null,
+          bloqueadas: resumo.bloqueadas,
+          totalAtivas: resumo.totalAtivas,
+          bloqueiosPorMotivo: resumo.bloqueiosPorMotivo,
+        };
       } catch (e) {
         return { erro: e.message };
       }

@@ -26,7 +26,13 @@ export interface CapturaStatus {
     endpointCron: string;
     schedulerEsperado: string;
     ultimoCron: CronLog | null | { erro: string };
-    state: { total: number; travadas: number | null } | { erro: string };
+    state: {
+        total: number;
+        travadas: number | null;
+        bloqueadas?: number | null;
+        totalAtivas?: number | null;
+        bloqueiosPorMotivo?: Record<string, number>;
+    } | { erro: string };
     docsUltimos7d: number | null;
 }
 

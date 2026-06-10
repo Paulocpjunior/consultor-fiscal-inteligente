@@ -15,6 +15,7 @@
 import express from 'express';
 import admin from 'firebase-admin';
 import { sincronizarEmpresaNfseNacionalDfe, limparLocksOrfaos } from './nfse-nacional-dfe-orchestrator.js';
+import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibility.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth, requireAdmin } from './require-admin.js';
 
@@ -80,10 +81,12 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
         res.json({ ok: true, motivo: 'Captura NFSe Nacional iniciada em background' });
         setImmediate(async () => {
             const inicio = Date.now();
-            let sucessos = 0, falhas = 0, totalNovos = 0, total = 0;
+            let sucessos = 0, falhas = 0, totalNovos = 0, total = 0, bloqueadasPorCadastro = 0, totalAtivas = 0;
             try {
                 const empresas = await listarEmpresasParaCron();
                 total = empresas.length;
+                bloqueadasPorCadastro = empresas._bloqueadasPorCadastro || 0;
+                totalAtivas = empresas._totalAtivas || total;
                 for (const emp of empresas) {
                     try {
                         const r = await sincronizarEmpresaNfseNacionalDfe({
@@ -102,9 +105,9 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
                     executadoEm: admin.firestore.FieldValue.serverTimestamp(),
                     duracaoMs: Date.now() - inicio,
                     fonte: 'admin-manual',
-                    totalEmpresas: total, sucessos, falhas, totalNovos,
+                    totalEmpresas: total, totalAtivas, bloqueadasPorCadastro, sucessos, falhas, totalNovos,
                 });
-                console.log(`[nfse-nac-dfe/sync-cron-now] ok — ${sucessos}/${total} sucessos, ${totalNovos} novos`);
+                console.log(`[nfse-nac-dfe/sync-cron-now] ok — ${sucessos}/${total} sucessos, ${falhas} falhas, ${bloqueadasPorCadastro} bloqueadas, ${totalNovos} novos`);
             } catch (e) {
                 console.error('[nfse-nac-dfe/sync-cron-now] erro fatal:', e);
             }
@@ -123,7 +126,7 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
         const inicio = Date.now();
         const fonte = req.cron?.source || 'unknown';
         console.log('[nfse-nac-dfe/sync-cron] início — fonte:', fonte);
-        let sucessos = 0, falhas = 0, totalNovos = 0, totalEmpresas = 0;
+        let sucessos = 0, falhas = 0, totalNovos = 0, totalEmpresas = 0, bloqueadasPorCadastro = 0, totalAtivas = 0;
         let erroFatal = null;
         try {
             // Cleanup de locks orfaos antes do batch — cobre caso raro de
@@ -138,7 +141,9 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
             }
             const empresas = await listarEmpresasParaCron();
             totalEmpresas = empresas.length;
-            console.log(`[nfse-nac-dfe/sync-cron] ${empresas.length} empresas elegíveis`);
+            bloqueadasPorCadastro = empresas._bloqueadasPorCadastro || 0;
+            totalAtivas = empresas._totalAtivas || totalEmpresas;
+            console.log(`[nfse-nac-dfe/sync-cron] ${empresas.length} empresas elegíveis (${bloqueadasPorCadastro} bloqueadas por cadastro de ${totalAtivas} ativas)`);
             for (const emp of empresas) {
                 try {
                     const r = await sincronizarEmpresaNfseNacionalDfe({
@@ -154,7 +159,7 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
                 }
             }
             const dur = Date.now() - inicio;
-            console.log(`[nfse-nac-dfe/sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos, ${dur}ms`);
+            console.log(`[nfse-nac-dfe/sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${falhas} falhas, ${bloqueadasPorCadastro} bloqueadas, ${totalNovos} novos, ${dur}ms`);
         } catch (e) {
             erroFatal = e.message;
             console.error('[nfse-nac-dfe/sync-cron] erro fatal:', e);
@@ -164,7 +169,7 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
                 executadoEm: admin.firestore.FieldValue.serverTimestamp(),
                 duracaoMs: Date.now() - inicio,
                 fonte,
-                totalEmpresas, sucessos, falhas, totalNovos,
+                totalEmpresas, totalAtivas, bloqueadasPorCadastro, sucessos, falhas, totalNovos,
                 erroFatal,
             });
         } catch (logErr) {
@@ -174,33 +179,20 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
 });
 
 // Lista empresas elegíveis pra captura NFSe Nacional.
-// MVP v1: todas as empresas com nfseNacionalDfeAtivo=true. Default = false.
-// (Diferente do SEFAZ que é ativo por default — aqui o admin precisa
-// habilitar pra evitar chamadas a ADN sem procuração registrada.)
+// Regra atual: flag ADN ativa + A1 proprio valido (ou a propria S&P com cert
+// global). A ADN retorna E2243 quando tentamos usar cert do escritorio para
+// CNPJ de outra raiz, entao esses casos ficam bloqueados por cadastro.
 async function listarEmpresasParaCron() {
-    const db = fa().firestore();
-    const empresas = [];
-    const colNames = [
-        process.env.SIMPLES_COLLECTION || 'simples_empresas',
-        process.env.LUCRO_COLLECTION || 'lucro_empresas',
-    ];
-    for (const colName of colNames) {
-        try {
-            const snap = await db.collection(colName).get();
-            snap.forEach((doc) => {
-                const d = doc.data();
-                if (d.nfseNacionalDfeAtivo !== true) return;
-                const cnpj = (d.cnpj || '').replace(/\D/g, '');
-                if (cnpj.length !== 14) return;
-                empresas.push({ id: doc.id, cnpj, nome: d.razaoSocial || d.nome || '', fonte: colName });
-            });
-        } catch (e) {
-            console.warn(`[nfse-nac-dfe/sync-cron] coleção ${colName} indisponível:`, e.message);
-        }
+    const { empresas, resumo } = await listarElegibilidadeNfseNacionalDfe();
+    if (resumo.bloqueadas > 0) {
+        console.log(`[nfse-nac-dfe/sync-cron] pulando ${resumo.bloqueadas} empresa(s) bloqueadas por cadastro ADN`);
+        Object.entries(resumo.bloqueiosPorMotivo || {}).slice(0, 5).forEach(([motivo, count]) => {
+            console.log(`[nfse-nac-dfe/sync-cron] bloqueio ADN ${count}x — ${motivo}`);
+        });
     }
-    const map = new Map();
-    empresas.forEach((e) => { if (!map.has(e.cnpj)) map.set(e.cnpj, e); });
-    return Array.from(map.values());
+    empresas._bloqueadasPorCadastro = resumo.bloqueadas;
+    empresas._totalAtivas = resumo.totalAtivas;
+    return empresas;
 }
 
 // ── GET /state/:cnpj ──────────────────────────────────────────────────────

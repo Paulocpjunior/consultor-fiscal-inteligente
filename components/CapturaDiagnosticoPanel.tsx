@@ -65,6 +65,7 @@ const CardCaptura: React.FC<{
     const cor = statusColor(ultimoMs);
     const stateOk = status.state && 'total' in status.state;
     const stateTotal = stateOk ? (status.state as any).total : null;
+    const stateTotalAtivas = stateOk ? (status.state as any).totalAtivas : null;
     const stateTravadas = stateOk ? (status.state as any).travadas : null;
     // bloqueadas = empresas sem cert A1/A3 nem procuracao e-CAC. Sao puladas
     // pelo cron (nao tentam capturar) — exibimos separado pra nao confundir
@@ -127,6 +128,9 @@ const CardCaptura: React.FC<{
                     <span className="opacity-80">Empresas elegíveis:</span>
                     <span className="font-mono">
                         {stateTotal ?? '—'}
+                        {stateTotalAtivas !== null && stateTotalAtivas !== undefined && stateTotalAtivas !== stateTotal && (
+                            <span className="opacity-70 ml-1">/ {stateTotalAtivas} ativas</span>
+                        )}
                         {stateTravadas !== null && stateTravadas !== undefined && stateTravadas > 0 && (
                             <span className="text-red-700 ml-2">({stateTravadas} travadas &gt;7d)</span>
                         )}

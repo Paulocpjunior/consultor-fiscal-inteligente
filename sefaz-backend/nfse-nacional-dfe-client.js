@@ -25,6 +25,7 @@ import https from 'node:https';
 import { loadCertificate } from './secret-loader.js';
 import { loadCertEmpresa } from './cert-storage.js';
 
+const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 const TP_AMB = process.env.NFSE_NAC_AMB || 'producao'; // 'producao' | 'homologacao'
 const HOST_PROD = 'adn.nfse.gov.br';
 const HOST_HOMOL = 'adn.producaorestrita.nfse.gov.br';
@@ -42,7 +43,8 @@ function host() {
  * Retorna { pfxBuffer, password } pra usar no https.Agent.
  * Preferência: cert da empresa (se houver) → cert do escritório (fallback).
  */
-async function obterCertParaConsulta(empresaId) {
+async function obterCertParaConsulta(empresaId, empresaCnpj) {
+    const cnpjNum = String(empresaCnpj || '').replace(/\D/g, '');
     // 1ª tentativa: cert específico da empresa
     if (empresaId) {
         try {
@@ -51,10 +53,18 @@ async function obterCertParaConsulta(empresaId) {
                 return { pfx: empCert.pfxBuffer, password: empCert.password, fonte: 'empresa' };
             }
         } catch (e) {
-            // Sem cert da empresa — segue para cert do escritório
+            throw new Error(`Certificado A1 da empresa invalido/indisponivel para ADN: ${e.message}`);
         }
     }
-    // 2ª tentativa: cert do escritório (SP Assessoria) com procuração
+
+    if (cnpjNum.slice(0, 8) !== CNPJ_ESCRITORIO.slice(0, 8)) {
+        throw new Error(
+            'NFSe Nacional ADN exige certificado A1 proprio da empresa. ' +
+            'O certificado do escritorio nao pode consultar CNPJ de outra raiz (ADN retorna E2243).'
+        );
+    }
+
+    // Fallback permitido somente para a propria S&P, cujo CNPJ bate com o cert.
     const escritorio = await loadCertificate();
     return { pfx: escritorio.pfxBuffer, password: escritorio.password, fonte: 'escritorio' };
 }
@@ -148,7 +158,7 @@ export async function consultarDFe({ empresaId, empresaCnpj, nsu = '0', tipoNSU 
         };
     }
 
-    const cert = await obterCertParaConsulta(empresaId);
+    const cert = await obterCertParaConsulta(empresaId, cnpjNum);
     const { statusCode, body } = await getAdn(path, cert);
 
     // Não foi 200 — retorna pra orquestrador decidir o que fazer
@@ -206,7 +216,7 @@ export async function consultarEventos({ empresaId, chaveAcesso }) {
         console.log(`[nfse-nac-dfe DRY-RUN] GET /NFSe/${chaveAcesso}/Eventos`);
         return { ok: true, eventos: [] };
     }
-    const cert = await obterCertParaConsulta(empresaId);
+    const cert = await obterCertParaConsulta(empresaId, null);
     const path = `/NFSe/${encodeURIComponent(chaveAcesso)}/Eventos`;
     const { statusCode, body } = await getAdn(path, cert);
     if (statusCode !== 200) {

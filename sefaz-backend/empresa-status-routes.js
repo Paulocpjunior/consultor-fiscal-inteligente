@@ -304,10 +304,24 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             if (!emp.ccmSp) motivosBloqueio.push('NFSe SP: falta Inscrição Municipal (ccmSp)');
             else if (!emp.nfseSpAutorizadoEm) motivosBloqueio.push('NFSe SP: falta autorização do escritório no portal nfe.prefeitura.sp.gov.br');
 
-            // c) NFSe Nacional: precisa flag + procuração e-CAC (ou cert próprio que já autoriza)
-            const capturaNfseNacionalOk = emp.nfseNacionalDfeAtivo && procuracaoInferida;
-            if (!procuracaoInferida) motivosBloqueio.push('NFSe Nacional: falta procuração e-CAC pro escritório (ou cert A1 próprio)');
-            else if (!emp.nfseNacionalDfeAtivo) motivosBloqueio.push('NFSe Nacional: flag nfseNacionalDfeAtivo desabilitada');
+            // c) NFSe Nacional ADN: a consulta DFe exige A1 proprio da mesma
+            // raiz CNPJ (ou a propria S&P com cert global). Procuracao/cert do
+            // escritorio vinha gerando E2243 em massa: CNPJ base divergente.
+            const capturaNfseNacionalOk = emp.nfseNacionalDfeAtivo
+                && (temA1ProprioValido || ehEscritorio);
+            if (!emp.nfseNacionalDfeAtivo) {
+                motivosBloqueio.push('NFSe Nacional: flag nfseNacionalDfeAtivo desabilitada');
+            } else if (!capturaNfseNacionalOk) {
+                if (tipoCert === 'A3') {
+                    motivosBloqueio.push('NFSe Nacional ADN: Cloud Run exige A1 próprio; A3 precisa fluxo/agente local específico');
+                } else if (usaCertEscritorio || emp.procuracaoEcacAtiva) {
+                    motivosBloqueio.push('NFSe Nacional ADN: certificado do escritório/procuração não basta para DFe; cadastre A1 próprio da empresa (evita E2243)');
+                } else if (certUploaded && !certValido) {
+                    motivosBloqueio.push('NFSe Nacional ADN: certificado A1 próprio vencido ou sem validade; renove/reenvie o .pfx');
+                } else {
+                    motivosBloqueio.push('NFSe Nacional ADN: falta certificado A1 próprio da empresa');
+                }
+            }
 
             const state = stateMap.get(emp.cnpj);
 

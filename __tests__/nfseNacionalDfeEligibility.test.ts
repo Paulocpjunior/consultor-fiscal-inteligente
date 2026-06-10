@@ -1,0 +1,73 @@
+// @ts-expect-error modulo JS puro
+import { classificarElegibilidadeAdn } from '../sefaz-backend/nfse-nacional-dfe-eligibility.js';
+
+const NOW = Date.parse('2026-06-10T12:00:00Z');
+
+function empresa(overrides: any = {}) {
+    return {
+        cnpj: '12345678000190',
+        nfseNacionalDfeAtivo: true,
+        ...overrides,
+    };
+}
+
+function cert(overrides: any = {}) {
+    return {
+        tipoCert: 'A1',
+        cnpj: '12345678000190',
+        storagePath: 'certs/empresa.pfx.enc',
+        passwordEnc: 'abc',
+        notAfter: '2027-01-01T00:00:00.000Z',
+        ...overrides,
+    };
+}
+
+describe('classificarElegibilidadeAdn', () => {
+    it('bloqueia empresa ativa sem A1 proprio para evitar E2243 com cert do escritorio', () => {
+        const r = classificarElegibilidadeAdn({ empresa: empresa(), cert: null, nowMs: NOW });
+
+        expect(r.elegivel).toBe(false);
+        expect(r.motivo).toContain('A1 proprio');
+        expect(r.motivo).toContain('E2243');
+    });
+
+    it('libera empresa com A1 proprio valido e mesma raiz CNPJ', () => {
+        const r = classificarElegibilidadeAdn({ empresa: empresa(), cert: cert(), nowMs: NOW });
+
+        expect(r.elegivel).toBe(true);
+        expect(r.tipoCert).toBe('A1');
+    });
+
+    it('bloqueia A1 de outra raiz CNPJ', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: empresa(),
+            cert: cert({ cnpj: '87654321000190' }),
+            nowMs: NOW,
+        });
+
+        expect(r.elegivel).toBe(false);
+        expect(r.motivo).toContain('CNPJ-base diferente');
+    });
+
+    it('bloqueia certificado A3 no Cloud Run', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: empresa(),
+            cert: cert({ tipoCert: 'A3' }),
+            nowMs: NOW,
+        });
+
+        expect(r.elegivel).toBe(false);
+        expect(r.motivo).toContain('A3');
+    });
+
+    it('libera a propria S&P para usar o certificado global', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: empresa({ cnpj: '44388152000189' }),
+            cert: null,
+            nowMs: NOW,
+        });
+
+        expect(r.elegivel).toBe(true);
+        expect(r.tipoCert).toBe('escritorio');
+    });
+});
