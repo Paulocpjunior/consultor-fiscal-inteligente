@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { User, DasEmitido, DasResumo, DasStatusPagamento, SimplesNacionalEmpresa } from '../../types';
 import {
     getResumoDas, listarDas, marcarDasPago, emitirDasAvulso,
-    formatBRL, formatBarras, statusBadgeClass, statusLabel,
+    formatBRL, formatBarras, parseValorMoedaBr, statusBadgeClass, statusLabel,
 } from '../../services/dasService';
 import { getEmpresas as getEmpresasSimples } from '../../services/simplesNacionalService';
 
@@ -72,8 +72,8 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const handleEmitirAvulso = async () => {
         const empresa = empresas.find(e => e.id === novoEmpresaId);
         if (!empresa) return onShowToast?.('Selecione uma empresa');
-        const valor = parseFloat(novoValor.replace(',', '.'));
-        if (!valor || valor < 10) return onShowToast?.('Valor minimo R$ 10,00');
+        const valor = parseValorMoedaBr(novoValor);
+        if (!valor || valor < 10) return onShowToast?.('Valor mínimo R$ 10,00');
 
         setEmitindo(true);
         try {

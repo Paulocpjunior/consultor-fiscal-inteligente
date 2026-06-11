@@ -22,6 +22,7 @@ import {
     montarDadosDeclaracaoPgdas,
     normalizarValoresDevidosPgdas,
 } from './pgdas-utils.js';
+import { assertValorMinimoDas } from './das-valor-utils.js';
 
 const PGDAS_VALOR_TOLERANCIA = Number(process.env.PGDAS_VALOR_TOLERANCIA || '0.05');
 
@@ -67,11 +68,11 @@ class MockProvider {
      * @returns {object} { numeroDocumento, codigoBarras, vencimento, valor, pdfUrl, fonte }
      */
     async gerarDas(req) {
-        const { empresaCnpj, competencia, valor, tipo = 'regular' } = req;
+        const { empresaCnpj, competencia, tipo = 'regular' } = req;
+        const valor = assertValorMinimoDas(req.valor);
         if (!empresaCnpj || !competencia || !valor) {
             throw new Error('empresaCnpj, competencia e valor obrigatorios');
         }
-        if (valor < 10) throw new Error('Valor minimo R$ 10,00');
 
         const numero = `MOCK-${competencia.replace('-', '')}-${empresaCnpj.slice(-4)}-${Date.now().toString().slice(-6)}`;
         return {
@@ -270,11 +271,11 @@ class SerproProvider {
      * Custo: R$ 0,80/DAS (a partir 01/2025).
      */
     async gerarDas(req) {
-        const { empresaCnpj, competencia, valor, tipo = 'regular' } = req;
+        const { empresaCnpj, competencia, tipo = 'regular' } = req;
+        const valor = assertValorMinimoDas(req.valor);
         if (!empresaCnpj || !competencia || !valor) {
             throw new Error('empresaCnpj, competencia e valor obrigatorios');
         }
-        if (valor < 10) throw new Error('Valor minimo R$ 10,00');
 
         const periodoApuracao = String(competencia).replace(/\D/g, '').slice(0, 6);
 

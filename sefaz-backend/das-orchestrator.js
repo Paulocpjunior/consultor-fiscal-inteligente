@@ -8,6 +8,7 @@ import { getDasProvider, getDasMode } from './das-provider.js';
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
 import { calcularMultaDarf } from './multa-calculator.js';
+import { assertValorMinimoDas } from './das-valor-utils.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -26,10 +27,11 @@ function fa() {
  */
 export async function emitirDasRegular(req) {
     assertEmissaoLiberada('DAS');
-    const { empresaId, empresaCnpj, empresaNome, competencia, valor, dadosPgdas } = req;
-    if (!empresaId || !empresaCnpj || !competencia || !valor) {
+    const { empresaId, empresaCnpj, empresaNome, competencia, dadosPgdas } = req;
+    if (!empresaId || !empresaCnpj || !competencia || req.valor == null || req.valor === '') {
         throw new Error('Campos obrigatorios: empresaId, empresaCnpj, competencia, valor');
     }
+    const valor = assertValorMinimoDas(req.valor);
 
     const provider = getDasProvider();
     const mode = getDasMode();
@@ -69,10 +71,11 @@ export async function emitirDasRegular(req) {
  */
 export async function emitirDasAvulso(req) {
     assertEmissaoLiberada('DAS');
-    const { empresaId, empresaCnpj, empresaNome, competencia, valor, descricao } = req;
-    if (!empresaId || !empresaCnpj || !competencia || !valor) {
+    const { empresaId, empresaCnpj, empresaNome, competencia, descricao } = req;
+    if (!empresaId || !empresaCnpj || !competencia || req.valor == null || req.valor === '') {
         throw new Error('Campos obrigatorios: empresaId, empresaCnpj, competencia, valor');
     }
+    const valor = assertValorMinimoDas(req.valor);
 
     const provider = getDasProvider();
     const mode = getDasMode();

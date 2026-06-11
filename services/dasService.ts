@@ -82,6 +82,40 @@ export async function marcarDasPago(user: User | null, docId: string, dataPagame
 }
 
 // Helpers de display
+export function parseValorMoedaBr(value: string | number | null | undefined): number {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    const raw = String(value ?? '').trim();
+    if (!raw) return 0;
+    const cleaned = raw.replace(/[^\d,.-]/g, '');
+    if (!cleaned) return 0;
+
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+    if (lastComma >= 0 && lastDot >= 0) {
+        const decimalSep = lastComma > lastDot ? ',' : '.';
+        const thousandSep = decimalSep === ',' ? '.' : ',';
+        const normalized = cleaned
+            .replace(new RegExp(`\\${thousandSep}`, 'g'), '')
+            .replace(decimalSep, '.');
+        const n = Number(normalized);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    if (lastComma >= 0) {
+        const n = Number(cleaned.replace(/\./g, '').replace(',', '.'));
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    const dotMatches = cleaned.match(/\./g) || [];
+    if (dotMatches.length > 1) {
+        const n = Number(cleaned.replace(/\./g, ''));
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : 0;
+}
+
 export function formatBRL(v: number): string {
     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
