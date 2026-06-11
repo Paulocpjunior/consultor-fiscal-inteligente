@@ -1,12 +1,13 @@
 # Runbook — Go-Live Produção Oficial
 
 Procedimento sequenciado pra colocar o app em produção fiscal **oficial** de
-forma controlada. A ideia central: **read-only primeiro, emissão depois — uma
-operação por vez, cada uma validada antes de liberar.**
+forma controlada. A ideia central: **read-only primeiro, emissão depois — sem
+deixar o produto em estado misto no go-live oficial.**
 
 > Regra de ouro: **emitir/transmitir é ato legal vinculante** (e custa dinheiro:
-> R$ 0,80/DAS etc). Nunca libere um tipo de emissão sem ter validado pelo menos
-> uma vez em homologação/smoke.
+> R$ 0,80/DAS etc). Antes de liberar emissão no produto, valide o caminho com
+> smoke/homologação/piloto; depois libere de forma coerente, sem DAS ativo e
+> NFS-e Nacional/DARF/DCTFWeb bloqueados por kill-switch.
 
 ---
 
@@ -55,11 +56,15 @@ o cron noturno completa (`GET /api/admin/sefaz/sync-cron-health` sem órfãos).
 
 ---
 
-## Fase 2 — Validar e liberar emissão, UMA por vez
+## Fase 2 — Validar e liberar emissão de forma coordenada
 
-Para cada tipo, o ciclo é: **validar → liberar → monitorar → próximo**.
+Valide os caminhos críticos antes do go-live, mas a configuração oficial não
+deve deixar um tipo de emissão liberado e outro artificialmente bloqueado. A
+experiência do usuário precisa ser coerente: ou emissão está em read-only, ou o
+produto está liberado para emitir e os erros passam a ser erros reais do Fisco,
+certificado, procuração, schema ou autorização.
 
-### 2.1 SERPRO — confirmar parse antes de liberar DAS/DARF/DCTFWeb
+### 2.1 SERPRO — confirmar parse antes do go-live
 
 Os providers DAS/DARF têm `TODO[SERPRO_REAL]` (nomes de campo do response
 supostos). Rode o smoke pra capturar o response real:
@@ -67,40 +72,27 @@ supostos). Rode o smoke pra capturar o response real:
 node sefaz-backend/scripts/serpro-smoke.js <cnpj-cliente> <YYYYMM>
 ```
 (ver `docs/serpro-smoke-test.md`). Me devolva os JSONs → ajusto os parsers se
-algum campo divergir. **Só então libere.**
+algum campo divergir. **Só então faça o go-live de emissão.**
 
-### 2.2 Liberar DAS
-```
-remover/zerar EMISSAO_BLOQUEADA   (ou setar EMISSAO_BLOQUEADA=false)
-EMISSAO_BLOQUEADA_DARF=true
-EMISSAO_BLOQUEADA_DCTFWEB=true
-EMISSAO_BLOQUEADA_NFSE_NAC=true
-```
-Resultado: só DAS liberado. Emita 1 DAS real de uma empresa-piloto, confira o
-documento (código de barras, valor, vencimento). OK? Segue.
+### 2.2 NFS-e Nacional
 
-### 2.3 Liberar DARF
-```
-EMISSAO_BLOQUEADA_DARF=false   (remover)
-```
-Emita 1 DARF piloto. Confira.
-
-### 2.4 Liberar DCTFWeb
-```
-EMISSAO_BLOQUEADA_DCTFWEB=false   (remover)
-```
-Transmita 1 declaração piloto. ⚠️ Transmissão é vinculante — escolha uma
-empresa/competência que realmente precisa transmitir.
-
-### 2.5 NFS-e Nacional (mais novo — extra cuidado)
-
-Nunca foi validado contra o SEFIN real. Procedimento em `docs/nfse-nacional-emissao.md`:
+Procedimento técnico em `docs/nfse-nacional-emissao.md`:
 1. `NFSE_NAC_EMISSAO_DRY_RUN=1` + `NFSE_NAC_EMISSAO_AMB=homologacao` — emite "dry",
-   retorna o XML assinado sem enviar. Me devolva pra auditar.
-2. Tira `DRY_RUN`, mantém `homologacao` — primeiro envio real contra produção
-   restrita. Se SEFIN retornar 4xx de schema, ajustamos 1-2 campos.
-3. Passou em homologação → `NFSE_NAC_EMISSAO_AMB=producao`.
-4. Só então: `EMISSAO_BLOQUEADA_NFSE_NAC=false`.
+   retorna o XML assinado sem enviar.
+2. Tira `DRY_RUN`, mantém `homologacao` — primeiro envio contra produção restrita.
+3. Passou em homologação → `NFSE_NAC_EMISSAO_AMB=producao` para emissão oficial.
+
+### 2.3 Liberar emissão no produto
+```
+EMISSAO_BLOQUEADA=false
+EMISSAO_BLOQUEADA_DAS=false
+EMISSAO_BLOQUEADA_DARF=false
+EMISSAO_BLOQUEADA_DCTFWEB=false
+EMISSAO_BLOQUEADA_NFSE_NAC=false
+```
+Depois disso, faça pilotos reais e monitore Sentry/logs/Cloud Run. Se algum
+tipo falhar, trate como erro de integração/cadastro; não deixe o produto em
+estado seletivo onde um botão emite e outro bate em kill-switch.
 
 ---
 
@@ -119,6 +111,8 @@ Tudo via env var no Cloud Run (sem redeploy de código):
 - Ausente ou ≠ `"true"` = **liberado** (default — não muda comportamento).
 - Consultas/captura **nunca** são afetadas pelo guard.
 - Estado atual: `GET /api/admin/emission/guard-status`.
+- Política de produção normal: não usar bloqueio seletivo como estado final.
+  Sub-switch por tipo é freio emergencial/temporário, não configuração de go-live.
 
 **Como freio de incidente:** se algo der errado em produção (emissão errada,
 SEFAZ retornando lixo), set `EMISSAO_BLOQUEADA=true` e o app vira read-only na
@@ -142,7 +136,7 @@ hora, sem derrubar a captura.
 | Captura DF-e | leitura | baixo | nenhum (sempre on) |
 | Consulta SERPRO | leitura | baixo | nenhum |
 | Conferências | leitura | baixo | nenhum |
-| Emitir DAS | escrita | médio (R$ + parse TODO) | smoke + EMISSAO_BLOQUEADA_DAS |
-| Emitir DARF | escrita | médio (parse TODO) | smoke + EMISSAO_BLOQUEADA_DARF |
-| Transmitir DCTFWeb | escrita | **alto** (declaração vinculante) | piloto + EMISSAO_BLOQUEADA_DCTFWEB |
-| Emitir NFS-e Nacional | escrita | **alto** (novo, não validado) | dry-run → homolog → prod |
+| Emitir DAS | escrita | médio (R$ + parse TODO) | smoke + emissão global |
+| Emitir DARF | escrita | médio (parse TODO) | smoke + emissão global |
+| Transmitir DCTFWeb | escrita | **alto** (declaração vinculante) | piloto + emissão global |
+| Emitir NFS-e Nacional | escrita | **alto** (novo, não validado) | dry-run → homolog → prod + emissão global |
