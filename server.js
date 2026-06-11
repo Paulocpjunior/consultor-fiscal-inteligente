@@ -50,6 +50,7 @@ import healthConsolidadoRouter from './sefaz-backend/health-consolidado-routes.j
 import healthAlertaCronRouter from './sefaz-backend/health-alerta-cron.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 import { podeAcessarCnpj } from './sefaz-backend/carteira-auth.js';
+import { enviarEmail } from './sefaz-backend/graph-provider.js';
 import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sanitize-error.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -1000,6 +1001,113 @@ ${canal === 'whatsapp' ? 'Comece direto sem assunto.' : 'Comece com ASSUNTO: ...
         });
     } catch (err) {
         console.error('[das/cobranca-ia]', err);
+        return respondeErro(res, err);
+    }
+});
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function textoParaHtml(texto) {
+    return escapeHtml(texto).replace(/\n/g, '<br>');
+}
+
+function limparBase64Pdf(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    return raw.includes(',') ? (raw.split(',').pop() || '').replace(/\s/g, '') : raw.replace(/\s/g, '');
+}
+
+// POST /api/admin/das/enviar-cliente
+// Envia e-mail real via Microsoft Graph. WhatsApp continua manual por wa.me.
+app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
+    try {
+        const {
+            dasId, empresaCnpj, empresaNome, competencia, valor, vencimento,
+            emailDest, assunto, mensagem, pdfBase64, pdfFileName,
+        } = req.body || {};
+        if (!empresaCnpj || !empresaNome) return res.status(400).json({ error: 'empresaCnpj e empresaNome obrigatorios' });
+        if (!emailDest || !String(emailDest).includes('@')) return res.status(400).json({ error: 'E-mail do cliente invalido ou ausente' });
+        if (!mensagem) return res.status(400).json({ error: 'Mensagem obrigatoria' });
+
+        const acesso = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.error });
+
+        const pdfLimpo = limparBase64Pdf(pdfBase64);
+        if (pdfLimpo && pdfLimpo.length > 4_000_000) {
+            return res.status(413).json({ error: 'PDF muito grande para envio por e-mail automatico' });
+        }
+
+        const remetente = process.env.GRAPH_REMETENTE || process.env.NOTIF_REMETENTE_EMAIL || 'junior@spassessoriacontabil.com.br';
+        const anexos = pdfLimpo ? [{
+            name: pdfFileName || `das_${String(empresaCnpj).replace(/\D/g, '')}_${competencia || 'competencia'}.pdf`,
+            contentType: 'application/pdf',
+            contentBytes: pdfLimpo,
+        }] : [];
+        const assuntoFinal = assunto || `DAS Simples Nacional - ${empresaNome}`;
+        const corpoHtml = [
+            `<p>${textoParaHtml(mensagem)}</p>`,
+            '<hr>',
+            '<p style="font-size:12px;color:#64748b">',
+            `Enviado pelo Consultor Fiscal Inteligente em ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.`,
+            pdfLimpo ? ' PDF do DAS anexado.' : ' PDF nao estava disponivel no retorno SERPRO.',
+            '</p>',
+        ].join('');
+
+        const envio = await enviarEmail({
+            remetente,
+            para: emailDest,
+            assunto: assuntoFinal,
+            corpoHtml,
+            anexos,
+        });
+        if (!envio.ok) return res.status(502).json({ error: envio.error || 'Falha ao enviar e-mail' });
+
+        try {
+            const adminMod = (await import('firebase-admin')).default;
+            if (!adminMod.apps.length) {
+                adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+            }
+            const db = adminMod.firestore();
+            const log = {
+                dasId: dasId || null,
+                empresaCnpj: String(empresaCnpj).replace(/\D/g, ''),
+                empresaNome,
+                competencia: competencia || null,
+                valor: Number(valor || 0),
+                vencimento: vencimento || null,
+                canal: 'email',
+                para: emailDest,
+                assunto: assuntoFinal,
+                anexouPdf: Boolean(pdfLimpo),
+                enviadoPor: req.user?.email || req.user?.uid || null,
+                enviadoEm: adminMod.firestore.FieldValue.serverTimestamp(),
+            };
+            await db.collection('das_envios_cliente').add(log);
+            if (dasId) {
+                await db.collection('das_emitidos').doc(dasId).set({
+                    ultimoEnvioCliente: {
+                        canal: 'email',
+                        para: emailDest,
+                        anexouPdf: Boolean(pdfLimpo),
+                        enviadoPor: req.user?.email || req.user?.uid || null,
+                        enviadoEm: new Date().toISOString(),
+                    },
+                }, { merge: true });
+            }
+        } catch (logErr) {
+            console.warn('[das/enviar-cliente] envio OK, log falhou:', logErr.message);
+        }
+
+        return res.json({ ok: true, canal: 'email', para: emailDest, anexouPdf: Boolean(pdfLimpo) });
+    } catch (err) {
+        console.error('[das/enviar-cliente]', err);
         return respondeErro(res, err);
     }
 });

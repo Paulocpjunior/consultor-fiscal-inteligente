@@ -23,6 +23,7 @@ import {
     normalizarValoresDevidosPgdas,
 } from './pgdas-utils.js';
 import { assertValorMinimoDas } from './das-valor-utils.js';
+import { normalizarRespostaDasSerpro } from './das-response-normalizer.js';
 
 const PGDAS_VALOR_TOLERANCIA = Number(process.env.PGDAS_VALOR_TOLERANCIA || '0.05');
 
@@ -287,19 +288,17 @@ class SerproProvider {
             dados: { periodoApuracao },
         });
 
-        const d = result.dados || {};
-        // TODO[SERPRO_REAL]: confirmar campos exatos do response na primeira
-        // chamada real. Os nomes abaixo são esperados mas podem variar.
+        const d = normalizarRespostaDasSerpro(result, valor);
         return {
-            numeroDocumento: d.numeroDocumento || d.numeroDarf || '',
-            codigoBarras: d.codigoBarras || d.linhaDigitavel || '',
-            vencimento: d.dataVencimento || d.vencimento || '',
-            valor: d.valorTotal || valor,
-            pdfUrl: null,  // PDF vem como base64 no campo docArrecadacaoPdfB64
-            pdfBase64: d.docArrecadacaoPdfB64 || d.pdfBase64 || null,
+            numeroDocumento: d.numeroDocumento || '',
+            codigoBarras: d.codigoBarras || '',
+            vencimento: d.vencimento || '',
+            valor: d.valor || valor,
+            pdfUrl: d.pdfUrl,
+            pdfBase64: d.pdfBase64,
             fonte: 'serpro',
             tipo,
-            _raw: d,
+            _raw: d._raw,
         };
     }
 }

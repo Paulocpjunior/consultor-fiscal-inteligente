@@ -7,9 +7,10 @@
 import React, { useEffect, useState } from 'react';
 import { getAuth } from 'firebase/auth';
 import type { User } from '../../types';
-import { getCobrancaIa, formatBRL, formatBarras } from '../../services/dasService';
+import { getCobrancaIa, formatBRL, formatBarras, enviarDasCliente } from '../../services/dasService';
 
 interface DasInfo {
+    id?: string;
     empresaCnpj: string;
     empresaNome: string;
     competencia?: string;
@@ -36,11 +37,13 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
     const [assunto, setAssunto] = useState('');
     const [mensagem, setMensagem] = useState('');
     const [loading, setLoading] = useState(false);
+    const [enviando, setEnviando] = useState(false);
     const [loadingDados, setLoadingDados] = useState(true);
     const [modelo, setModelo] = useState('');
 
     const assinante = currentUser?.name || currentUser?.email?.split('@')[0] || 'Equipe SP Contábil';
     const temPdf = !!(dasInfo.pdfBase64 || dasInfo.pdfUrl);
+    const pdfFileName = `das_${String(dasInfo.empresaCnpj || '').replace(/\D/g, '')}_${dasInfo.competencia || 'competencia'}.pdf`;
 
     // Busca contato da empresa (email + telefone) ao abrir
     useEffect(() => {
@@ -156,10 +159,30 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
     const enviar = () => {
         if (!mensagem) { onShowToast('Gere a mensagem primeiro.'); return; }
         if (canal === 'email') {
-            const to = emailDest || '';
-            const subj = encodeURIComponent(assunto || `Cobrança DAS - ${dasInfo.empresaNome}`);
-            const body = encodeURIComponent(mensagem);
-            window.location.href = `mailto:${to}?subject=${subj}&body=${body}`;
+            if (!emailDest || !emailDest.includes('@')) {
+                onShowToast('Informe o e-mail do cliente.');
+                return;
+            }
+            setEnviando(true);
+            enviarDasCliente(currentUser, {
+                dasId: dasInfo.id,
+                empresaCnpj: dasInfo.empresaCnpj,
+                empresaNome: dasInfo.empresaNome,
+                competencia: dasInfo.competencia,
+                valor: dasInfo.valor,
+                vencimento: dasInfo.vencimento,
+                emailDest,
+                assunto: assunto || `DAS Simples Nacional - ${dasInfo.empresaNome}`,
+                mensagem,
+                pdfBase64: dasInfo.pdfBase64,
+                pdfFileName,
+            }).then((r) => {
+                onShowToast(`E-mail enviado para ${r.para}${r.anexouPdf ? ' com PDF anexado' : ''}.`);
+            }).catch((e: any) => {
+                onShowToast(`Erro ao enviar e-mail: ${e.message}`);
+            }).finally(() => {
+                setEnviando(false);
+            });
         } else {
             // WhatsApp: limpa formatacao do telefone
             const tel = (telefoneDest || '').replace(/\D/g, '');
@@ -259,9 +282,11 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                     </div>
 
                     <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
-                        {temPdf
-                            ? 'PDF disponível no detalhe da guia. Baixe e anexe antes de enviar, quando o canal permitir.'
-                            : 'PDF nao retornado pelo SERPRO para esta guia. A mensagem usa os dados estruturados disponiveis.'}
+                        {dasInfo.pdfBase64
+                            ? 'PDF disponível e será anexado automaticamente no envio por e-mail.'
+                            : temPdf
+                                ? 'PDF disponível no detalhe da guia. Baixe e anexe antes de enviar, quando o canal permitir.'
+                                : 'PDF nao retornado pelo SERPRO para esta guia. A mensagem usa os dados estruturados disponiveis.'}
                         {dasInfo.codigoBarras && (
                             <span className="block mt-1 font-mono">Codigo de barras incluido na mensagem.</span>
                         )}
@@ -317,9 +342,12 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                             </button>
                             <button
                                 onClick={enviar}
+                                disabled={enviando}
                                 className={`btn-press px-4 py-2 font-bold rounded-lg text-white ${canal === 'email' ? 'bg-sky-600 hover:bg-sky-700' : 'bg-green-600 hover:bg-green-700'}`}
                             >
-                                {canal === 'email' ? '✉️ Abrir email' : '💬 Abrir WhatsApp'}
+                                {canal === 'email'
+                                    ? (enviando ? 'Enviando...' : 'Enviar email')
+                                    : '💬 Abrir WhatsApp'}
                             </button>
                         </>
                     )}

@@ -67,9 +67,10 @@ async function getAccessToken() {
  * @param {string|string[]} p.para  destinatário(s)
  * @param {string} p.assunto
  * @param {string} p.corpoHtml  corpo em HTML
+ * @param {Array<{name: string, contentType: string, contentBytes: string}>} [p.anexos]
  * @returns {Promise<{ok: boolean, error?: string}>}
  */
-export async function enviarEmail({ remetente, para, assunto, corpoHtml }) {
+export async function enviarEmail({ remetente, para, assunto, corpoHtml, anexos = [] }) {
     try {
         const token = await getAccessToken();
 
@@ -88,6 +89,14 @@ export async function enviarEmail({ remetente, para, assunto, corpoHtml }) {
                 subject: assunto,
                 body: { contentType: 'HTML', content: corpoHtml },
                 toRecipients: destinatarios,
+                attachments: anexos
+                    .filter(a => a?.contentBytes && a?.name)
+                    .map(a => ({
+                        '@odata.type': '#microsoft.graph.fileAttachment',
+                        name: a.name,
+                        contentType: a.contentType || 'application/octet-stream',
+                        contentBytes: a.contentBytes,
+                    })),
             },
             saveToSentItems: true,
         };

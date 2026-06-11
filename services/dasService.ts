@@ -186,6 +186,20 @@ export interface CobrancaIaResponse {
     geradoEm: string;
 }
 
+export interface EnviarDasClienteRequest {
+    dasId?: string;
+    empresaCnpj: string;
+    empresaNome: string;
+    competencia?: string;
+    valor: number;
+    vencimento?: string;
+    emailDest: string;
+    assunto?: string;
+    mensagem: string;
+    pdfBase64?: string | null;
+    pdfFileName?: string;
+}
+
 export async function getCobrancaIa(user: User | null, req: CobrancaIaRequest): Promise<CobrancaIaResponse> {
     const res = await fetch('/api/admin/das/cobranca-ia', {
         method: 'POST',
@@ -195,6 +209,19 @@ export async function getCobrancaIa(user: User | null, req: CobrancaIaRequest): 
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(err.error || `getCobrancaIa: ${res.status}`);
+    }
+    return res.json();
+}
+
+export async function enviarDasCliente(user: User | null, req: EnviarDasClienteRequest): Promise<{ ok: boolean; para: string; anexouPdf: boolean }> {
+    const res = await fetch('/api/admin/das/enviar-cliente', {
+        method: 'POST',
+        headers: await authHeaders(user),
+        body: JSON.stringify(req),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `enviarDasCliente: ${res.status}`);
     }
     return res.json();
 }
