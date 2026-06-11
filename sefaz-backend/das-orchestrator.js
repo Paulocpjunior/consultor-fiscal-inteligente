@@ -9,6 +9,7 @@ import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
 import { calcularMultaDarf } from './multa-calculator.js';
 import { assertValorMinimoDas } from './das-valor-utils.js';
+import { criarErroDuplicidadeDas, encontrarConflitoDasAvulso } from './das-duplicidade-utils.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -77,11 +78,21 @@ export async function emitirDasAvulso(req) {
     }
     const valor = assertValorMinimoDas(req.valor);
 
+    const db = fa().firestore();
+    const existentesSnap = await db.collection(COLLECTION)
+        .where('empresaId', '==', empresaId)
+        .limit(1000)
+        .get();
+    const existentes = existentesSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(d => d.competencia === competencia);
+    const conflito = encontrarConflitoDasAvulso(existentes, { competencia, valor });
+    if (conflito) throw criarErroDuplicidadeDas(conflito);
+
     const provider = getDasProvider();
     const mode = getDasMode();
     const das = await provider.gerarDas({ empresaCnpj, competencia, valor, tipo: 'avulso' });
 
-    const db = fa().firestore();
     const docId = `${empresaCnpj}_${competencia}_avulso_${Date.now()}`.replace(/[^a-zA-Z0-9_-]/g, '_');
     const payload = {
         empresaId,

@@ -35,28 +35,66 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [novoDescricao, setNovoDescricao] = useState('');
     const [emitindo, setEmitindo] = useState(false);
 
-    const carregar = async () => {
+    const carregar = async (overrides: { status?: DasStatusPagamento | ''; empresaId?: string } = {}) => {
         setLoading(true);
         try {
+            const statusFiltro = overrides.status !== undefined ? overrides.status : filtroStatus;
+            const empresaFiltro = overrides.empresaId !== undefined ? overrides.empresaId : filtroEmpresa;
             const [r, d, e] = await Promise.all([
                 getResumoDas(currentUser),
                 listarDas(currentUser, {
-                    status: filtroStatus || undefined,
-                    empresaId: filtroEmpresa || undefined,
+                    status: statusFiltro || undefined,
+                    empresaId: empresaFiltro || undefined,
                 }),
                 getEmpresasSimples(currentUser),
             ]);
             setResumo(r);
             setDocs(d);
             setEmpresas(e);
+            return { resumo: r, docs: d, empresas: e };
         } catch (err: any) {
             onShowToast?.(`Erro: ${err.message}`);
+            return null;
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => { carregar(); }, [filtroStatus, filtroEmpresa]);
+
+    const valorEmCentavos = (valor: number): number => Math.round((Number(valor) || 0) * 100);
+    const cnpjLimpo = (cnpj: string): string => String(cnpj || '').replace(/\D/g, '');
+
+    const temDuplicidade = (doc: DasEmitido, lista: DasEmitido[] = docs): boolean => {
+        const chaveCnpj = cnpjLimpo(doc.empresaCnpj);
+        const chaveValor = valorEmCentavos(doc.valor);
+        return lista.some(outro => (
+            outro.id !== doc.id
+            && cnpjLimpo(outro.empresaCnpj) === chaveCnpj
+            && outro.competencia === doc.competencia
+            && valorEmCentavos(outro.valor) === chaveValor
+        ));
+    };
+
+    const encontrarConflitoAvulso = (existentes: DasEmitido[], valor: number): DasEmitido | null => {
+        return existentes.find(doc => {
+            const statusAtivo = doc.statusPagamento === 'pendente' || doc.statusPagamento === 'vencido';
+            const valorIgual = valorEmCentavos(doc.valor) === valorEmCentavos(valor);
+            if (doc.tipo === 'regular' && statusAtivo) return true;
+            if (doc.tipo === 'regular' && valorIgual) return true;
+            if (doc.tipo === 'avulso' && statusAtivo && valorIgual) return true;
+            return false;
+        }) || null;
+    };
+
+    const focarGuia = async (doc: DasEmitido, mensagem?: string) => {
+        const status = doc.statusPagamento || 'pendente';
+        setFiltroEmpresa(doc.empresaId);
+        setFiltroStatus(status);
+        setSelecionado(doc);
+        await carregar({ empresaId: doc.empresaId, status });
+        if (mensagem) onShowToast?.(mensagem);
+    };
 
     const handleMarcarPago = async (doc: DasEmitido) => {
         try {
@@ -77,7 +115,21 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
         setEmitindo(true);
         try {
-            await emitirDasAvulso(currentUser, {
+            const existentes = await listarDas(currentUser, {
+                empresaId: empresa.id,
+                competencia: novoCompetencia,
+            });
+            const conflito = encontrarConflitoAvulso(existentes, valor);
+            if (conflito) {
+                setMostrarFormAvulso(false);
+                await focarGuia(
+                    conflito,
+                    `Ja existe DAS ${conflito.tipo} ${statusLabel(conflito.statusPagamento)} para esta competencia. Abri a guia existente.`
+                );
+                return;
+            }
+
+            const emitido = await emitirDasAvulso(currentUser, {
                 empresaId: empresa.id,
                 empresaCnpj: empresa.cnpj,
                 empresaNome: empresa.nome,
@@ -89,8 +141,10 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
             setNovoEmpresaId('');
             setNovoValor('');
             setNovoDescricao('');
-            await carregar();
-            onShowToast?.('DAS Avulso emitido com sucesso');
+            await focarGuia(
+                emitido,
+                `DAS Avulso emitido e aberto em Painel DAS > ${statusLabel(emitido.statusPagamento)}.`
+            );
         } catch (e: any) {
             onShowToast?.(`Erro: ${e.message}`);
         } finally {
@@ -260,7 +314,17 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 >
                                     <td className="px-4 py-2">{d.empresaNome}</td>
                                     <td className="px-4 py-2 font-mono text-xs">{d.competencia}</td>
-                                    <td className="px-4 py-2 capitalize">{d.tipo}</td>
+                                    <td className="px-4 py-2">
+                                        <span className="capitalize">{d.tipo}</span>
+                                        {temDuplicidade(d) && (
+                                            <span
+                                                className="ml-2 px-2 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] font-bold"
+                                                title="Existe outra guia com mesma empresa, competencia e valor."
+                                            >
+                                                Duplicidade
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="px-4 py-2 text-right font-mono">
                                         {formatBRL(d.valor)}
                                         {d.statusPagamento === 'vencido' && d.multaEstimada && (
@@ -311,6 +375,16 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         </div>
 
                         <div className="p-6 space-y-4">
+                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+                                Salvo em Painel DAS / {statusLabel(selecionado.statusPagamento)} · ID interno {selecionado.id}
+                            </div>
+
+                            {temDuplicidade(selecionado) && (
+                                <div className="rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                                    Possivel duplicidade: existe outra guia com a mesma empresa, competencia e valor.
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-2 gap-4 text-sm">
                                 <div>
                                     <div className="text-xs text-slate-500">Valor</div>
@@ -325,18 +399,24 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             <div>
                                 <div className="text-xs text-slate-500 mb-1">Número do documento</div>
                                 <div className="font-mono text-sm bg-slate-50 dark:bg-slate-900/40 px-3 py-2 rounded">
-                                    {selecionado.numeroDocumento}
+                                    {selecionado.numeroDocumento || 'Nao retornado pelo SERPRO'}
                                 </div>
                             </div>
 
                             <div>
                                 <div className="text-xs text-slate-500 mb-1">Código de barras (clique pra copiar)</div>
-                                <button
-                                    onClick={() => copiarBarras(selecionado.codigoBarras)}
-                                    className="w-full font-mono text-sm bg-slate-50 dark:bg-slate-900/40 px-3 py-2 rounded text-left hover:bg-slate-100 dark:hover:bg-slate-700"
-                                >
-                                    {formatBarras(selecionado.codigoBarras)}
-                                </button>
+                                {selecionado.codigoBarras ? (
+                                    <button
+                                        onClick={() => copiarBarras(selecionado.codigoBarras)}
+                                        className="w-full font-mono text-sm bg-slate-50 dark:bg-slate-900/40 px-3 py-2 rounded text-left hover:bg-slate-100 dark:hover:bg-slate-700"
+                                    >
+                                        {formatBarras(selecionado.codigoBarras)}
+                                    </button>
+                                ) : (
+                                    <div className="font-mono text-sm bg-slate-50 dark:bg-slate-900/40 px-3 py-2 rounded text-slate-500">
+                                        Nao retornado pelo SERPRO
+                                    </div>
+                                )}
                             </div>
 
                             {selecionado.descricao && (

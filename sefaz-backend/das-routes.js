@@ -34,6 +34,9 @@ function errorPayload(err) {
     if (err.valorSerpro != null) payload.valorSerpro = err.valorSerpro;
     if (err.valorApp != null) payload.valorApp = err.valorApp;
     if (err.diferenca != null) payload.diferenca = err.diferenca;
+    if (err.dasExistenteId) payload.dasExistenteId = err.dasExistenteId;
+    if (err.dasExistenteTipo) payload.dasExistenteTipo = err.dasExistenteTipo;
+    if (err.dasExistenteStatus) payload.dasExistenteStatus = err.dasExistenteStatus;
     return payload;
 }
 
