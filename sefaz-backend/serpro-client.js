@@ -85,14 +85,86 @@ const DRY_RUN = process.env.SERPRO_DRY_RUN === '1';
 // ─── Token cache em memória ───────────────────────────────────────────────
 let tokenCache = { token: null, expiresAt: 0 };
 
+function parseMaybeJson(value) {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (!trimmed) return value;
+    try { return JSON.parse(trimmed); }
+    catch { return value; }
+}
+
+function parseSerproBody(body) {
+    const parsed = parseMaybeJson(body);
+    if (parsed && typeof parsed === 'object' && typeof parsed.dados === 'string') {
+        return { ...parsed, dados: parseMaybeJson(parsed.dados) };
+    }
+    return parsed;
+}
+
+function normalizeSerproMessage(msg) {
+    if (!msg) return null;
+    if (typeof msg === 'string') return { texto: msg };
+    if (typeof msg !== 'object') return { texto: String(msg) };
+    const texto = msg.texto || msg.mensagem || msg.message || msg.descricao || msg.detail || '';
+    const codigo = msg.codigo || msg.code || msg.codMensagem || msg.id || '';
+    if (!texto && !codigo) return null;
+    return { codigo, texto: texto || codigo };
+}
+
+function extractSerproMessages(parsed) {
+    const body = parseSerproBody(parsed);
+    const candidates = [
+        body?.mensagens,
+        body?.messages,
+        body?.erros,
+        body?.errors,
+        body?.dados?.mensagens,
+        body?.dados?.messages,
+        body?.dados?.erros,
+        body?.dados?.errors,
+    ];
+    const messages = [];
+    for (const candidate of candidates) {
+        if (!candidate) continue;
+        const list = Array.isArray(candidate) ? candidate : [candidate];
+        for (const item of list) {
+            const normalized = normalizeSerproMessage(item);
+            if (normalized) messages.push(normalized);
+        }
+    }
+    return messages;
+}
+
+function formatSerproBusinessMessage(status, body) {
+    const parsed = parseSerproBody(body);
+    const messages = extractSerproMessages(parsed);
+    if (messages.length > 0) {
+        return `SERPRO ${status}: ${messages.map((m) => (
+            m.codigo ? `${m.codigo} - ${m.texto}` : m.texto
+        )).join('; ')}`;
+    }
+    return `SERPRO ${status}: requisicao recusada por regra de negocio. Consulte o log estruturado da chamada.`;
+}
+
+function maskCnpj(cnpj) {
+    const clean = String(cnpj || '').replace(/\D/g, '');
+    if (clean.length !== 14) return '';
+    return `${clean.slice(0, 2)}**********${clean.slice(-2)}`;
+}
+
 // Erro de negocio do SERPRO (4xx que nao seja 401/429): retry NAO resolve.
 // Sinaliza ao loop de retry que deve abortar imediatamente.
 class SerproBusinessError extends Error {
     constructor(status, body) {
-        super(`SERPRO ${status}: ${String(body).slice(0, 500)}`);
+        super(formatSerproBusinessMessage(status, body));
         this.name = 'SerproBusinessError';
         this.status = status;
+        this.httpStatus = status;
+        this.code = 'SERPRO_BUSINESS_ERROR';
         this.serproBody = body;
+        this.serproResponse = parseSerproBody(body);
+        this.serproMessages = extractSerproMessages(this.serproResponse);
+        this.serproMessage = this.message;
     }
 }
 
@@ -287,8 +359,18 @@ export async function invokeIntegraContador(req) {
             if (!res.ok) {
                 // Erro de negócio (400, 403, etc): retry NÃO resolve.
                 // Lança SerproBusinessError — o catch abaixo aborta o loop.
-                log('error', 'business_error', { status: res.status, body: bodyTxt.slice(0, 500) });
-                throw new SerproBusinessError(res.status, bodyTxt.slice(0, 500));
+                const parsedBody = parseSerproBody(bodyTxt);
+                const mensagens = extractSerproMessages(parsedBody);
+                log('error', 'business_error', {
+                    status: res.status,
+                    idSistema,
+                    idServico,
+                    acao,
+                    contribuinteCnpj: maskCnpj(cnpjLimpo),
+                    mensagens,
+                    bodyPreview: mensagens.length ? undefined : bodyTxt.slice(0, 500),
+                });
+                throw new SerproBusinessError(res.status, bodyTxt);
             }
 
             const body = JSON.parse(bodyTxt);

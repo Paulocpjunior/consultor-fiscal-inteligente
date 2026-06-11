@@ -21,6 +21,22 @@ const router = express.Router();
 
 // requireAdmin agora vem do middleware compartilhado (verifyIdToken)
 
+function errorPayload(err) {
+    const payload = {
+        error: err.message || 'Falha ao processar DAS',
+        code: err.code,
+    };
+    if (Array.isArray(err.serproMessages) && err.serproMessages.length > 0) {
+        payload.serproMessages = err.serproMessages;
+        payload.error = err.serproMessage || payload.error;
+    }
+    if (err.status) payload.serproStatus = err.status;
+    if (err.valorSerpro != null) payload.valorSerpro = err.valorSerpro;
+    if (err.valorApp != null) payload.valorApp = err.valorApp;
+    if (err.diferenca != null) payload.diferenca = err.diferenca;
+    return payload;
+}
+
 router.get('/status', (_req, res) => {
     res.json({ mode: getDasMode(), ok: true });
 });
@@ -42,12 +58,12 @@ router.get('/listar', requireAuth, async (req, res) => {
 
 router.post('/emitir-regular', requireAdmin, express.json(), async (req, res) => {
     try { res.json(await emitirDasRegular(req.body)); }
-    catch (err) { res.status(err.httpStatus || 400).json({ error: err.message, code: err.code }); }
+    catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
 
 router.post('/emitir-avulso', requireAdmin, express.json(), async (req, res) => {
     try { res.json(await emitirDasAvulso(req.body)); }
-    catch (err) { res.status(err.httpStatus || 400).json({ error: err.message, code: err.code }); }
+    catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
 
 router.post('/marcar-pago', requireAdmin, express.json(), async (req, res) => {

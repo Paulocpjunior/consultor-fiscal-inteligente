@@ -16,6 +16,14 @@
 const MODE = process.env.DAS_MODE || 'serpro';
 
 import { invokeIntegraContador } from './serpro-client.js';
+import {
+    assertValorPgdasCompativel,
+    extrairDeclaracaoTransmitidaPgdas,
+    montarDadosDeclaracaoPgdas,
+    normalizarValoresDevidosPgdas,
+} from './pgdas-utils.js';
+
+const PGDAS_VALOR_TOLERANCIA = Number(process.env.PGDAS_VALOR_TOLERANCIA || '0.05');
 
 // Helpers ─────────────────────────────────────────────────────────────────
 function calcularDigitoBarras(c44) {
@@ -178,34 +186,79 @@ class SerproProvider {
                 valorFixoIss: null,
                 receitasBrutasAnteriores: [],
                 estabelecimentos: [{ cnpjCompleto: cnpjLimpo, atividades: [] }],
-                folhaSalario12m: null,
             };
         }
 
-        const dados = {
-            cnpjCompleto: cnpjLimpo,
+        const dadosValidacao = montarDadosDeclaracaoPgdas({
+            cnpjLimpo,
             pa,
-            indicadorTransmissao: true,
-            indicadorComparacao: true,
+            transmitir: false,
             declaracao,
-        };
+        });
+
+        const validacao = await invokeIntegraContador({
+            idSistema: 'PGDASD',
+            idServico: 'TRANSDECLARACAO11',
+            contribuinteCnpj: cnpjLimpo,
+            acao: 'Declarar',
+            dados: dadosValidacao,
+        });
+
+        if (validacao?.dados?._dryRun) {
+            return {
+                ok: true,
+                recibo: `DRY-PGDAS-${String(competencia).replace(/\D/g, '')}-${cnpjLimpo.slice(-4)}`,
+                numeroDeclaracao: '',
+                tipoDeclaracao,
+                transmitidoEm: new Date().toISOString(),
+                valorDeclarado: valor,
+                fonte: 'serpro-dry-run',
+                _raw: validacao.dados,
+            };
+        }
+
+        const valoresParaComparacao = normalizarValoresDevidosPgdas(validacao);
+        if (!valoresParaComparacao.length && (Number(valor) || 0) > 0) {
+            const err = new Error(
+                'SERPRO validou a declaracao, mas nao devolveu valores devidos para comparacao. ' +
+                'Nenhuma declaracao foi transmitida; tente novamente ou confira a apuracao no PGDAS-D.'
+            );
+            err.code = 'PGDAS_SEM_VALORES_COMPARACAO';
+            err.httpStatus = 502;
+            throw err;
+        }
+
+        assertValorPgdasCompativel({
+            valorLocal: valor,
+            valoresDevidos: valoresParaComparacao,
+            tolerancia: PGDAS_VALOR_TOLERANCIA,
+        });
+
+        const dadosTransmissao = montarDadosDeclaracaoPgdas({
+            cnpjLimpo,
+            pa,
+            transmitir: true,
+            declaracao,
+            valoresParaComparacao,
+        });
 
         const result = await invokeIntegraContador({
             idSistema: 'PGDASD',
             idServico: 'TRANSDECLARACAO11',
             contribuinteCnpj: cnpjLimpo,
             acao: 'Declarar',
-            dados,
+            dados: dadosTransmissao,
         });
 
-        const d = result.dados || {};
+        const d = extrairDeclaracaoTransmitidaPgdas(result) || result.dados || {};
         return {
             ok: true,
-            recibo: d.numeroRecibo || d.recibo || d.numeroDeclaracao || '',
-            numeroDeclaracao: d.numeroDeclaracao || '',
+            recibo: d.numeroRecibo || d.recibo || d.numeroDeclaracao || d.idDeclaracao || '',
+            numeroDeclaracao: d.numeroDeclaracao || d.idDeclaracao || '',
             tipoDeclaracao,
-            transmitidoEm: d.dataTransmissao || new Date().toISOString(),
+            transmitidoEm: d.dataTransmissao || d.dataHoraTransmissao || new Date().toISOString(),
             valorDeclarado: valor,
+            valorSerpro: valoresParaComparacao.reduce((sum, item) => sum + item.valor, 0),
             fonte: 'serpro',
             _raw: d,
         };

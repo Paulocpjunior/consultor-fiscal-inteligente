@@ -5,16 +5,16 @@
  * em payload PGDAS-D do SERPRO (idServico TRANSDECLARACAO11).
  *
  * Especificacao SERPRO:
- * https://apicenter.estaleiro.serpro.gov.br/documentacao/api-integra-contador/pt/cenarios_trial/cenarios_pgdasd/
+ * https://apicenter.estaleiro.serpro.gov.br/documentacao/api-integra-contador/pt/solucoes/integra-sn/pgdasd/servicos/entregar_declaracao_mensal_entrada/
  *
- * Decisoes simplificadoras (1a versao):
- * - Estabelecimento unico = matriz (CNPJ raiz). Filiais ficam pra refinamento futuro.
- * - Atividades agregadas em comercio (idAtividade=1), industria (idAtividade=2),
- *   servicos (idAtividade=3). Detalhamento por CNAE/anexo fica pra refinamento.
- * - Receitas internas vs externas usam totalMercadoInterno/Externo do resumo.
+ * Decisoes:
+ * - Estabelecimento unico = matriz (CNPJ raiz). Filiais entram agregadas por
+ *   tipo de atividade, mantendo a mesma regra usada na apuracao da tela.
+ * - Atividades usam os ids oficiais do dominio PGDAS-D (comercio 1/2/3,
+ *   industria 4/5/6, servicos 10-18/29-31 conforme anexo/ISS/exterior).
+ * - Campos enviados em receitasAtividade seguem o schema oficial; valores
+ *   nulos ou nomes legados nao sao enviados.
  * - tipoDeclaracao e setado pelo backend apos consultar se ja existe declaracao.
- *
- * Quando SERPRO retornar erro de campo faltando, refinamos esse mapper.
  */
 import type { SimplesNacionalEmpresa, SimplesNacionalResumo } from '../types';
 
@@ -55,13 +55,16 @@ export interface PgdasPayload {
                 valorAtividade: number;
                 receitasAtividade: Array<{
                     valor: number;
-                    municipioISS: number | null;
-                    ufICMS: string | null;
-                    qualificacaoTributaria: number;
+                    codigoOutroMunicipio?: string;
+                    outraUf?: string;
+                    qualificacoesTributarias?: Array<{
+                        codigoTributo: number;
+                        id: number;
+                    }>;
                 }>;
             }>;
         }>;
-        folhaSalario12m: number | null;
+        folhasSalario?: Array<{ pa: number; valor: number }>;
     };
     // tipoDeclaracao e setado pelo backend
     _competencia: string;  // YYYY-MM original
@@ -87,6 +90,97 @@ function parseValorBr(s: string): number {
     return isNaN(n) ? 0 : n;
 }
 
+function round2(n: number): number {
+    return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+function anexoFromKey(key: string, fallback: SimplesNacionalEmpresa['anexo']): SimplesNacionalEmpresa['anexo'] {
+    const parts = key.split('::');
+    const maybeAnexo = parts.length >= 4 ? (parts[3] ?? '') : '';
+    return (['I', 'II', 'III', 'IV', 'V', 'III_V'].includes(maybeAnexo)
+        ? maybeAnexo
+        : fallback) as SimplesNacionalEmpresa['anexo'];
+}
+
+function resolveAnexoEfetivo(
+    anexo: SimplesNacionalEmpresa['anexo'],
+    fatorR: number,
+): SimplesNacionalEmpresa['anexo'] {
+    if (anexo === 'III_V') return fatorR >= 0.28 ? 'III' : 'V';
+    if (anexo === 'V' && fatorR >= 0.28) return 'III';
+    return anexo;
+}
+
+function idAtividadePgdas(
+    anexoOriginal: SimplesNacionalEmpresa['anexo'],
+    state: Pick<CnaeInputState, 'issRetido' | 'icmsSt' | 'isMonofasico' | 'isExterior'>,
+    fatorR: number,
+): number {
+    const anexo = resolveAnexoEfetivo(anexoOriginal, fatorR);
+    const temStOuMono = state.icmsSt || state.isMonofasico;
+
+    if (anexo === 'I') {
+        if (state.isExterior) return 3;
+        return temStOuMono ? 2 : 1;
+    }
+
+    if (anexo === 'II') {
+        if (state.isExterior) return 6;
+        return temStOuMono ? 5 : 4;
+    }
+
+    if (anexo === 'IV') {
+        if (state.isExterior) return 31;
+        return state.issRetido ? 18 : 17;
+    }
+
+    if (anexo === 'V') {
+        if (state.isExterior) return 29;
+        return state.issRetido ? 12 : 11;
+    }
+
+    // Anexo III sem fator R: ISS devido ao proprio municipio por padrao.
+    if (state.isExterior) return 30;
+    return state.issRetido ? 15 : 14;
+}
+
+function serviceFallbackAnexo(empresa: SimplesNacionalEmpresa): SimplesNacionalEmpresa['anexo'] {
+    const anexo = resolveAnexoEfetivo(empresa.anexo, 0);
+    return ['III', 'IV', 'V'].includes(anexo) ? anexo : 'III';
+}
+
+type ReceitaAtividade = PgdasPayload['declaracao']['estabelecimentos'][0]['atividades'][0]['receitasAtividade'][0];
+type AtividadePgdas = PgdasPayload['declaracao']['estabelecimentos'][0]['atividades'][0];
+
+function addAtividade(
+    grupos: Map<number, AtividadePgdas>,
+    idAtividade: number,
+    valor: number,
+    receita: ReceitaAtividade = { valor },
+) {
+    const valorArredondado = round2(valor);
+    if (valorArredondado <= 0) return;
+
+    const existente = grupos.get(idAtividade);
+    const receitaFinal = { ...receita, valor: round2(receita.valor) };
+    if (existente) {
+        const receitaExistente = existente.receitasAtividade[0];
+        if (!receitaExistente) {
+            existente.receitasAtividade.push(receitaFinal);
+            existente.valorAtividade = round2(existente.valorAtividade + valorArredondado);
+            return;
+        }
+        existente.valorAtividade = round2(existente.valorAtividade + valorArredondado);
+        receitaExistente.valor = round2(receitaExistente.valor + receitaFinal.valor);
+        return;
+    }
+    grupos.set(idAtividade, {
+        idAtividade,
+        valorAtividade: valorArredondado,
+        receitasAtividade: [receitaFinal],
+    });
+}
+
 export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
     const { empresa, resumo, mesApuracao, faturamentoPorCnae, filialComercio, filialIndustria, filialServico, icmsVendas } = input;
 
@@ -95,69 +189,44 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
     const competencia = `${mesApuracao.getFullYear()}-${String(mesApuracao.getMonth() + 1).padStart(2, '0')}`;
     const regime = empresa.regimeApuracao || 'competencia';
 
-    // Receitas agregadas por tipo (atividade)
-    let totalComercio = filialComercio || 0;
-    let totalIndustria = filialIndustria || 0;
-    let totalServico = filialServico || 0;
+    const grupos = new Map<number, AtividadePgdas>();
     let totalExterno = 0;
+    let totalInterno = 0;
 
-    // CNAE itens: classifica por anexo
-    const cnaeAtividades: Array<{ valor: number; isExterior: boolean; issRetido: boolean }> = [];
     Object.entries(faturamentoPorCnae).forEach(([key, state]) => {
-        const v = parseValorBr(state.valor);
-        if (state.isExterior) {
-            totalExterno += v;
-        } else {
-            // Por simplicidade, classifica como servico (Anexo III) por default
-            // Refinamento futuro: usar empresa.atividades pra mapear CNAE -> anexo
-            totalServico += v;
-        }
-        cnaeAtividades.push({ valor: v, isExterior: state.isExterior, issRetido: state.issRetido });
+        const valor = round2(parseValorBr(state.valor));
+        if (valor <= 0) return;
+        const anexo = anexoFromKey(key, empresa.anexo);
+        const idAtividade = idAtividadePgdas(anexo, state, resumo.fator_r || 0);
+        addAtividade(grupos, idAtividade, valor);
+        if (state.isExterior) totalExterno = round2(totalExterno + valor);
+        else totalInterno = round2(totalInterno + valor);
     });
 
-    const receitaInternaPa = totalComercio + totalIndustria + totalServico;
+    const filialComercioSafe = round2(filialComercio || 0);
+    const filialIndustriaSafe = round2(filialIndustria || 0);
+    const filialServicoSafe = round2(filialServico || 0);
 
-    // Atividades do estabelecimento matriz
-    const atividades: PgdasPayload['declaracao']['estabelecimentos'][0]['atividades'] = [];
-    const ufEmpresa = empresa.dadosFiscais?.uf || '';
-    const codMunIBGE = empresa.dadosFiscais?.codMunIBGE ? Number(empresa.dadosFiscais.codMunIBGE) : null;
+    if (filialComercioSafe > 0) {
+        addAtividade(grupos, 1, filialComercioSafe);
+        totalInterno = round2(totalInterno + filialComercioSafe);
+    }
+    if (filialIndustriaSafe > 0) {
+        addAtividade(grupos, 4, filialIndustriaSafe);
+        totalInterno = round2(totalInterno + filialIndustriaSafe);
+    }
+    if (filialServicoSafe > 0) {
+        const idAtividade = idAtividadePgdas(
+            serviceFallbackAnexo(empresa),
+            { issRetido: true, icmsSt: false, isMonofasico: false, isExterior: false },
+            resumo.fator_r || 0,
+        );
+        addAtividade(grupos, idAtividade, filialServicoSafe);
+        totalInterno = round2(totalInterno + filialServicoSafe);
+    }
 
-    if (totalComercio > 0) {
-        atividades.push({
-            idAtividade: 1,
-            valorAtividade: totalComercio,
-            receitasAtividade: [{
-                valor: totalComercio,
-                municipioISS: null,
-                ufICMS: ufEmpresa,
-                qualificacaoTributaria: 1,  // 1 = sem ST/monofasica
-            }],
-        });
-    }
-    if (totalIndustria > 0) {
-        atividades.push({
-            idAtividade: 2,
-            valorAtividade: totalIndustria,
-            receitasAtividade: [{
-                valor: totalIndustria,
-                municipioISS: null,
-                ufICMS: ufEmpresa,
-                qualificacaoTributaria: 1,
-            }],
-        });
-    }
-    if (totalServico > 0) {
-        atividades.push({
-            idAtividade: 3,
-            valorAtividade: totalServico,
-            receitasAtividade: [{
-                valor: totalServico,
-                municipioISS: codMunIBGE,
-                ufICMS: null,
-                qualificacaoTributaria: 1,
-            }],
-        });
-    }
+    const atividades = Array.from(grupos.values())
+        .sort((a, b) => a.idAtividade - b.idAtividade);
 
     // Historico 12 meses anteriores (faturamentoManual)
     const fatManual = empresa.faturamentoManual || {};
@@ -169,24 +238,42 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         const keyMmYyyy = `${String(mes).padStart(2, '0')}-${ano}`;
         const keyYyyyMm = `${ano}-${String(mes).padStart(2, '0')}`;
         const valorInterno = fatManual[keyMmYyyy] || fatManual[keyYyyyMm] || 0;
-        receitasBrutasAnteriores.push({ pa: paAnt, valorInterno, valorExterno: 0 });
+        receitasBrutasAnteriores.push({ pa: paAnt, valorInterno: round2(valorInterno), valorExterno: 0 });
+    }
+
+    const declaracao: PgdasPayload['declaracao'] = {
+        receitaPaCompetenciaInterno: regime === 'competencia' ? totalInterno : 0,
+        receitaPaCompetenciaExterno: regime === 'competencia' ? totalExterno : 0,
+        receitaPaCaixaInterno: regime === 'caixa' ? totalInterno : null,
+        receitaPaCaixaExterno: regime === 'caixa' ? totalExterno : null,
+        valorFixoIcms: icmsVendas > 0 ? round2(icmsVendas) : null,
+        valorFixoIss: null,
+        receitasBrutasAnteriores,
+        estabelecimentos: [{
+            cnpjCompleto: cnpjLimpo,
+            atividades,
+        }],
+    };
+
+    const folhasSalario = Object.entries(empresa.folhaMensal || {})
+        .map(([competenciaFolha, valor]) => {
+            const match = competenciaFolha.match(/^(\d{4})-(\d{2})$/);
+            if (!match) return null;
+            return {
+                pa: Number(`${match[1]}${match[2]}`),
+                valor: round2(Number(valor) || 0),
+            };
+        })
+        .filter((item): item is { pa: number; valor: number } => !!item && item.valor > 0 && item.pa < pa)
+        .sort((a, b) => b.pa - a.pa)
+        .slice(0, 12)
+        .sort((a, b) => a.pa - b.pa);
+    if (folhasSalario.length > 0) {
+        declaracao.folhasSalario = folhasSalario;
     }
 
     return {
-        declaracao: {
-            receitaPaCompetenciaInterno: regime === 'competencia' ? receitaInternaPa : 0,
-            receitaPaCompetenciaExterno: regime === 'competencia' ? totalExterno : 0,
-            receitaPaCaixaInterno: regime === 'caixa' ? receitaInternaPa : null,
-            receitaPaCaixaExterno: regime === 'caixa' ? totalExterno : null,
-            valorFixoIcms: icmsVendas > 0 ? icmsVendas : null,
-            valorFixoIss: null,
-            receitasBrutasAnteriores,
-            estabelecimentos: [{
-                cnpjCompleto: cnpjLimpo,
-                atividades,
-            }],
-            folhaSalario12m: empresa.folha12 || null,
-        },
+        declaracao,
         _competencia: competencia,
         _cnpjLimpo: cnpjLimpo,
     };
