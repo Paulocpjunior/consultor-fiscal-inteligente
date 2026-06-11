@@ -42,12 +42,12 @@ router.get('/listar', requireAuth, async (req, res) => {
 
 router.post('/emitir-regular', requireAdmin, express.json(), async (req, res) => {
     try { res.json(await emitirDasRegular(req.body)); }
-    catch (err) { res.status(400).json({ error: err.message }); }
+    catch (err) { res.status(err.httpStatus || 400).json({ error: err.message, code: err.code }); }
 });
 
 router.post('/emitir-avulso', requireAdmin, express.json(), async (req, res) => {
     try { res.json(await emitirDasAvulso(req.body)); }
-    catch (err) { res.status(400).json({ error: err.message }); }
+    catch (err) { res.status(err.httpStatus || 400).json({ error: err.message, code: err.code }); }
 });
 
 router.post('/marcar-pago', requireAdmin, express.json(), async (req, res) => {

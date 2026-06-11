@@ -30,6 +30,19 @@ describe('assertEmissaoLiberada', () => {
         }
     });
 
+    it('erro global informa EMISSAO_BLOQUEADA, não a flag específica do tipo', () => {
+        process.env.EMISSAO_BLOQUEADA = 'true';
+        try {
+            assertEmissaoLiberada('DAS');
+            throw new Error('deveria ter lançado');
+        } catch (e: any) {
+            expect(e).toBeInstanceOf(EmissaoBloqueadaError);
+            expect(e.envVar).toBe('EMISSAO_BLOQUEADA');
+            expect(e.message).toContain('EMISSAO_BLOQUEADA=true');
+            expect(e.message).not.toContain('EMISSAO_BLOQUEADA_DAS=true');
+        }
+    });
+
     it('bloqueio por tipo afeta só aquele tipo', () => {
         process.env.EMISSAO_BLOQUEADA_DAS = 'true';
         expect(() => assertEmissaoLiberada('DAS')).toThrow(/BLOQUEADA/);
@@ -47,6 +60,7 @@ describe('assertEmissaoLiberada', () => {
             expect(e.code).toBe('EMISSAO_BLOQUEADA');
             expect(e.httpStatus).toBe(423);
             expect(e.tipo).toBe('NFSE_NAC');
+            expect(e.envVar).toBe('EMISSAO_BLOQUEADA_NFSE_NAC');
         }
     });
 

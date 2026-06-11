@@ -20,13 +20,14 @@
 // ============================================================================
 
 export class EmissaoBloqueadaError extends Error {
-    constructor(tipo) {
+    constructor(tipo, envVar = `EMISSAO_BLOQUEADA_${tipo}`) {
         super(
-            `Emissão ${tipo} está BLOQUEADA (kill-switch EMISSAO_BLOQUEADA${tipo ? '_' + tipo : ''}=true). ` +
+            `Emissão ${tipo} está BLOQUEADA (kill-switch ${envVar}=true). ` +
             `Operação de leitura/consulta segue normal. Libere a emissão deste tipo no Cloud Run quando validada.`
         );
         this.name = 'EmissaoBloqueadaError';
         this.tipo = tipo;
+        this.envVar = envVar;
         this.code = 'EMISSAO_BLOQUEADA';
         this.httpStatus = 423; // Locked
     }
@@ -51,8 +52,9 @@ export function assertEmissaoLiberada(tipo) {
     const tudoBloqueado = process.env.EMISSAO_BLOQUEADA === 'true';
     const tipoBloqueado = process.env[`EMISSAO_BLOQUEADA_${t}`] === 'true';
     if (tudoBloqueado || tipoBloqueado) {
-        console.warn(`[emissao-guard] BLOQUEADO ${t} (tudo=${tudoBloqueado} tipo=${tipoBloqueado})`);
-        throw new EmissaoBloqueadaError(t);
+        const envVar = tudoBloqueado ? 'EMISSAO_BLOQUEADA' : `EMISSAO_BLOQUEADA_${t}`;
+        console.warn(`[emissao-guard] BLOQUEADO ${t} por ${envVar} (tudo=${tudoBloqueado} tipo=${tipoBloqueado})`);
+        throw new EmissaoBloqueadaError(t, envVar);
     }
 }
 
