@@ -105,6 +105,67 @@ describe('mapPgdasPayload', () => {
         expect(payload.declaracao.receitaPaCompetenciaInterno).toBe(3000);
     });
 
+    it('inclui qualificacao tributaria para receita com ICMS ST no Anexo I', () => {
+        const payload = mapPgdasPayload({
+            empresa: { ...baseEmpresa, anexo: 'I', cnpj: '43.212.877/0001-59' },
+            resumo: { ...baseResumo, fator_r: 0, das_mensal: 2170.41 },
+            mesApuracao: new Date(2026, 4, 1),
+            faturamentoPorCnae: {
+                'principal::0::4789099::I': { ...emptyState, valor: '28.920,50' },
+                'extra::1781197058850::4789099::I': { ...emptyState, valor: '5.069,15', icmsSt: true },
+            },
+            filialComercio: 0,
+            filialIndustria: 0,
+            filialServico: 0,
+            icmsVendas: 0,
+        });
+
+        const atividades = payload.declaracao.estabelecimentos[0].atividades;
+        expect(atividades.map(a => a.idAtividade)).toEqual([1, 2]);
+        expect(payload.declaracao.receitaPaCompetenciaInterno).toBe(33989.65);
+        expect(atividades[1]).toMatchObject({
+            idAtividade: 2,
+            valorAtividade: 5069.15,
+            receitasAtividade: [{
+                valor: 5069.15,
+                qualificacoesTributarias: [{ codigoTributo: 1007, id: 8 }],
+            }],
+        });
+    });
+
+    it('mantem parcelas distintas quando receitas do mesmo idAtividade tem qualificacoes diferentes', () => {
+        const payload = mapPgdasPayload({
+            empresa: { ...baseEmpresa, anexo: 'I' },
+            resumo: { ...baseResumo, fator_r: 0 },
+            mesApuracao: new Date(2026, 4, 1),
+            faturamentoPorCnae: {
+                'extra::1::4789099::I': { ...emptyState, valor: '1.000,00', icmsSt: true },
+                'extra::2::4789099::I': { ...emptyState, valor: '2.000,00', isMonofasico: true },
+            },
+            filialComercio: 0,
+            filialIndustria: 0,
+            filialServico: 0,
+            icmsVendas: 0,
+        });
+
+        const atividade = payload.declaracao.estabelecimentos[0].atividades[0];
+        expect(atividade.idAtividade).toBe(2);
+        expect(atividade.valorAtividade).toBe(3000);
+        expect(atividade.receitasAtividade).toEqual([
+            {
+                valor: 1000,
+                qualificacoesTributarias: [{ codigoTributo: 1007, id: 8 }],
+            },
+            {
+                valor: 2000,
+                qualificacoesTributarias: [
+                    { codigoTributo: 1004, id: 9 },
+                    { codigoTributo: 1005, id: 9 },
+                ],
+            },
+        ]);
+    });
+
     it('separa receita de servico para exterior no idAtividade 30 e no total externo', () => {
         const payload = mapPgdasPayload({
             empresa: baseEmpresa,

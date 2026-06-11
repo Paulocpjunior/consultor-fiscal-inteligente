@@ -94,6 +94,11 @@ function round2(n: number): number {
     return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+function assinaturaReceita(receita: ReceitaAtividade): string {
+    const { valor: _valor, ...semValor } = receita;
+    return JSON.stringify(semValor);
+}
+
 function anexoFromKey(key: string, fallback: SimplesNacionalEmpresa['anexo']): SimplesNacionalEmpresa['anexo'] {
     const parts = key.split('::');
     const maybeAnexo = parts.length >= 4 ? (parts[3] ?? '') : '';
@@ -164,14 +169,15 @@ function addAtividade(
     const existente = grupos.get(idAtividade);
     const receitaFinal = { ...receita, valor: round2(receita.valor) };
     if (existente) {
-        const receitaExistente = existente.receitasAtividade[0];
-        if (!receitaExistente) {
-            existente.receitasAtividade.push(receitaFinal);
-            existente.valorAtividade = round2(existente.valorAtividade + valorArredondado);
+        existente.valorAtividade = round2(existente.valorAtividade + valorArredondado);
+        const assinaturaFinal = assinaturaReceita(receitaFinal);
+        const receitaExistente = existente.receitasAtividade
+            .find((item) => assinaturaReceita(item) === assinaturaFinal);
+        if (receitaExistente) {
+            receitaExistente.valor = round2(receitaExistente.valor + receitaFinal.valor);
             return;
         }
-        existente.valorAtividade = round2(existente.valorAtividade + valorArredondado);
-        receitaExistente.valor = round2(receitaExistente.valor + receitaFinal.valor);
+        existente.receitasAtividade.push(receitaFinal);
         return;
     }
     grupos.set(idAtividade, {
@@ -179,6 +185,32 @@ function addAtividade(
         valorAtividade: valorArredondado,
         receitasAtividade: [receitaFinal],
     });
+}
+
+function montarReceitaAtividade(
+    state: Pick<CnaeInputState, 'issRetido' | 'icmsSt' | 'isMonofasico'>,
+    valor: number,
+): ReceitaAtividade {
+    const qualificacoesTributarias: ReceitaAtividade['qualificacoesTributarias'] = [];
+
+    if (state.icmsSt) {
+        qualificacoesTributarias.push({ codigoTributo: 1007, id: 8 });
+    }
+    if (state.isMonofasico) {
+        qualificacoesTributarias.push(
+            { codigoTributo: 1004, id: 9 },
+            { codigoTributo: 1005, id: 9 },
+        );
+    }
+    if (state.issRetido) {
+        qualificacoesTributarias.push({ codigoTributo: 1010, id: 11 });
+    }
+
+    const receita: ReceitaAtividade = { valor };
+    if (qualificacoesTributarias.length > 0) {
+        receita.qualificacoesTributarias = qualificacoesTributarias;
+    }
+    return receita;
 }
 
 export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
@@ -198,7 +230,7 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         if (valor <= 0) return;
         const anexo = anexoFromKey(key, empresa.anexo);
         const idAtividade = idAtividadePgdas(anexo, state, resumo.fator_r || 0);
-        addAtividade(grupos, idAtividade, valor);
+        addAtividade(grupos, idAtividade, valor, montarReceitaAtividade(state, valor));
         if (state.isExterior) totalExterno = round2(totalExterno + valor);
         else totalInterno = round2(totalInterno + valor);
     });
