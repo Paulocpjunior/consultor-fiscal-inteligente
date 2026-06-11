@@ -49,6 +49,7 @@ import diagnosticoConfigRouter from './sefaz-backend/diagnostico-config-routes.j
 import healthConsolidadoRouter from './sefaz-backend/health-consolidado-routes.js';
 import healthAlertaCronRouter from './sefaz-backend/health-alerta-cron.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
+import { podeAcessarCnpj } from './sefaz-backend/carteira-auth.js';
 import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sanitize-error.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -675,10 +676,12 @@ function normalizeCnpjWs(raw, cnpj) {
 }
 
 // ─── Empresa: contato (email + telefone) ──────────────────────────────────
-app.get('/api/admin/empresa-contato/:cnpj', requireAdmin, async (req, res) => {
+app.get('/api/admin/empresa-contato/:cnpj', requireAuth, async (req, res) => {
     try {
         const cnpjLimpo = (req.params.cnpj || '').replace(/\D/g, '');
         if (!cnpjLimpo) return res.json({ email: '', telefone: '' });
+        const acesso = await podeAcessarCnpj(req.user, cnpjLimpo);
+        if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.error });
 
         const adminMod = (await import('firebase-admin')).default;
         if (!adminMod.apps.length) {
@@ -913,16 +916,26 @@ Use **negrito** nos pontos-chave. Seja direto, sem rodeios.`;
 // ─── Cobranca DAS via IA ───────────────────────────────────────────────────
 // POST /api/admin/das/cobranca-ia
 // Gera draft de email/whatsapp pro cliente. NUNCA envia automaticamente.
-app.post('/api/admin/das/cobranca-ia', requireAdmin, requireAI, async (req, res) => {
+app.post('/api/admin/das/cobranca-ia', requireAuth, requireAI, async (req, res) => {
     try {
-        const { empresaNome, valor, competencia, vencimento, diasAtraso, tom, assinante, canal } = req.body;
+        const {
+            empresaCnpj, empresaNome, valor, competencia, vencimento, diasAtraso,
+            tom, assinante, canal, numeroDocumento, codigoBarras, hasPdf,
+        } = req.body;
         if (!empresaNome || !valor) {
             return res.status(400).json({ error: 'empresaNome e valor obrigatorios' });
         }
+        if (empresaCnpj || req.user?.role !== 'admin') {
+            const acesso = await podeAcessarCnpj(req.user, empresaCnpj);
+            if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.error });
+        }
 
+        const emAtraso = Number(diasAtraso || 0) > 0;
         const tomMsg = tom === 'firme'
-            ? 'tom profissional, direto e firme. Sem rodeios. Mencione consequencias do atraso (juros 0,33% ao dia + multa 20% conforme legislacao).'
-            : 'tom cordial, profissional e empatico. Reconheca que pode ter havido motivo. Convide a regularizacao sem ameacar.';
+            ? (emAtraso
+                ? 'tom profissional, direto e firme. Sem rodeios. Mencione consequencias do atraso (juros 0,33% ao dia + multa 20% conforme legislacao).'
+                : 'tom profissional, direto e firme. Sem rodeios. Trate como guia pendente de pagamento, sem afirmar atraso.')
+            : 'tom cordial, profissional e empatico. Convide a regularizacao sem ameacar.';
 
         const canalMsg = canal === 'whatsapp'
             ? 'mensagem de WhatsApp curta (200-400 caracteres). Use quebras de linha. Sem cumprimento formal de email. Sem assunto.'
@@ -931,14 +944,17 @@ app.post('/api/admin/das/cobranca-ia', requireAdmin, requireAI, async (req, res)
         const valorBR = `R$ ${(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
         const prompt = `Voce eh o assistente fiscal de uma contabilidade brasileira (SP Assessoria Contabil).
-Gere uma cobranca pro cliente cuja empresa esta com DAS Simples Nacional vencido.
+Gere uma mensagem pro cliente sobre DAS Simples Nacional ${emAtraso ? 'vencido' : 'pendente de pagamento'}.
 
 Dados:
 - Empresa: ${empresaNome}
 - Valor: ${valorBR}
 - Competencia (mes referencia): ${competencia || 'N/I'}
-- Vencimento original: ${vencimento || 'N/I'}
-- Dias em atraso: ${diasAtraso || 'N/I'} dias
+- Vencimento: ${vencimento || 'N/I'}
+- Dias em atraso: ${emAtraso ? diasAtraso : 0} dias
+- Numero do documento: ${numeroDocumento || 'nao retornado'}
+- Codigo de barras/linha digitavel: ${codigoBarras || 'nao retornado'}
+- PDF disponivel para o operador anexar: ${hasPdf ? 'sim' : 'nao'}
 - Assinante: ${assinante || 'Equipe SP Contabil'}
 
 Tom: ${tomMsg}
@@ -949,6 +965,10 @@ REGRAS IMPORTANTES:
 - NAO invente prazos, multas ou juros especificos alem dos padroes legais (0,33% dia + 20%).
 - NAO mencione bloqueios bancarios nem ameacas vagas.
 - NAO use emojis (mensagem profissional).
+- Se o DAS ainda nao venceu, nao trate como atraso e nao fale em juros/multa.
+- Se o codigo de barras foi informado, inclua exatamente uma vez no final da mensagem.
+- Se o codigo de barras nao foi informado, nao diga que o cliente ja consegue pagar sozinho com dados incompletos.
+- NAO diga que o PDF segue em anexo; o sistema abre o canal e o operador anexa manualmente quando aplicavel.
 - Se for email: monte um assunto curto e direto na PRIMEIRA linha, prefixado com 'ASSUNTO:' e o corpo nas linhas seguintes apos uma linha em branco.
 - Mencione o nome do cliente/empresa no corpo.
 - Seja claro sobre o que precisa ser feito (regularizar pagamento).

@@ -7,7 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { getAuth } from 'firebase/auth';
 import type { User } from '../../types';
-import { getCobrancaIa, formatBRL } from '../../services/dasService';
+import { getCobrancaIa, formatBRL, formatBarras } from '../../services/dasService';
 
 interface DasInfo {
     empresaCnpj: string;
@@ -15,6 +15,10 @@ interface DasInfo {
     competencia?: string;
     vencimento?: string;
     valor: number;
+    numeroDocumento?: string;
+    codigoBarras?: string;
+    pdfUrl?: string | null;
+    pdfBase64?: string | null;
 }
 
 interface Props {
@@ -36,6 +40,7 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
     const [modelo, setModelo] = useState('');
 
     const assinante = currentUser?.name || currentUser?.email?.split('@')[0] || 'Equipe SP Contábil';
+    const temPdf = !!(dasInfo.pdfBase64 || dasInfo.pdfUrl);
 
     // Busca contato da empresa (email + telefone) ao abrir
     useEffect(() => {
@@ -63,14 +68,72 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
         return Math.floor((hoje.getTime() - venc.getTime()) / 86400000);
     };
 
+    const resumoVencimento = () => {
+        if (!dasInfo.vencimento) return '';
+        const dias = calcularDiasAtraso();
+        if (dias > 0) return ` (venceu em ${dasInfo.vencimento}, ${dias} dias atrás)`;
+        if (dias === 0) return ` (vence hoje, ${dasInfo.vencimento})`;
+        return ` (vence em ${dasInfo.vencimento})`;
+    };
+
+    const montarModeloPadrao = () => {
+        const valor = formatBRL(dasInfo.valor);
+        const competencia = dasInfo.competencia || 'nao informada';
+        const vencimento = dasInfo.vencimento || 'nao informado';
+        const barras = dasInfo.codigoBarras ? formatBarras(dasInfo.codigoBarras) : '';
+        const numeroDoc = dasInfo.numeroDocumento || '';
+        const assuntoPadrao = `DAS Simples Nacional - ${dasInfo.empresaNome} - ${competencia}`;
+        const linhasPagamento = [
+            `Empresa: ${dasInfo.empresaNome}`,
+            `Competencia: ${competencia}`,
+            `Valor: ${valor}`,
+            `Vencimento: ${vencimento}`,
+            numeroDoc ? `Numero do documento: ${numeroDoc}` : '',
+            barras ? `Codigo de barras: ${barras}` : '',
+        ].filter(Boolean);
+
+        if (canal === 'whatsapp') {
+            return {
+                assunto: '',
+                mensagem: [
+                    `Ola, tudo bem?`,
+                    `Segue DAS Simples Nacional para regularizacao:`,
+                    ...linhasPagamento,
+                    `Qualquer duvida, fico a disposicao.`,
+                    assinante,
+                ].join('\n'),
+            };
+        }
+
+        return {
+            assunto: assuntoPadrao,
+            mensagem: [
+                `Ola, tudo bem?`,
+                ``,
+                `Segue orientacao para pagamento do DAS Simples Nacional:`,
+                ``,
+                ...linhasPagamento,
+                ``,
+                `Por gentileza, confirme o pagamento apos a regularizacao.`,
+                ``,
+                `Atenciosamente,`,
+                assinante,
+            ].join('\n'),
+        };
+    };
+
     const gerar = async () => {
         setLoading(true);
         try {
             const r = await getCobrancaIa(currentUser, {
+                empresaCnpj: dasInfo.empresaCnpj,
                 empresaNome: dasInfo.empresaNome,
                 valor: dasInfo.valor,
                 competencia: dasInfo.competencia,
                 vencimento: dasInfo.vencimento,
+                numeroDocumento: dasInfo.numeroDocumento,
+                codigoBarras: dasInfo.codigoBarras,
+                hasPdf: temPdf,
                 diasAtraso: calcularDiasAtraso(),
                 tom,
                 canal,
@@ -80,7 +143,11 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
             setMensagem(r.mensagem);
             setModelo(r.modelo);
         } catch (e: any) {
-            onShowToast(`Erro IA: ${e.message}`);
+            const fallback = montarModeloPadrao();
+            setAssunto(fallback.assunto);
+            setMensagem(fallback.mensagem);
+            setModelo('modelo-padrao');
+            onShowToast(`IA indisponivel (${e.message}). Usei modelo padrao para envio.`);
         } finally {
             setLoading(false);
         }
@@ -116,10 +183,10 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onClose}>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="p-5 border-b border-slate-200 dark:border-slate-700">
-                    <h3 className="text-lg font-bold">📨 Cobrança DAS — {dasInfo.empresaNome}</h3>
+                    <h3 className="text-lg font-bold">Enviar DAS ao cliente — {dasInfo.empresaNome}</h3>
                     <p className="text-xs text-slate-500 mt-1">
                         DAS de {dasInfo.competencia || '?'} no valor de <strong>{formatBRL(dasInfo.valor)}</strong>
-                        {dasInfo.vencimento && ` (venceu em ${dasInfo.vencimento}, ${calcularDiasAtraso()} dias atrás)`}
+                        {resumoVencimento()}
                     </p>
                 </div>
 
@@ -188,6 +255,15 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                             <p className="text-xs text-amber-600 mt-1">
                                 💡 Cadastre email/telefone em "Dados Fiscais" da empresa pra pré-preencher automaticamente.
                             </p>
+                        )}
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+                        {temPdf
+                            ? 'PDF disponível no detalhe da guia. Baixe e anexe antes de enviar, quando o canal permitir.'
+                            : 'PDF nao retornado pelo SERPRO para esta guia. A mensagem usa os dados estruturados disponiveis.'}
+                        {dasInfo.codigoBarras && (
+                            <span className="block mt-1 font-mono">Codigo de barras incluido na mensagem.</span>
                         )}
                     </div>
 

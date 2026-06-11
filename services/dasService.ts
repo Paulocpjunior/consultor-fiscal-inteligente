@@ -165,10 +165,14 @@ export async function getPrevisaoIa(user: User | null, dadosPrevisao: DasPrevisa
 // ─── Cobrança DAS via IA ───────────────────────────────────────────────────
 
 export interface CobrancaIaRequest {
+    empresaCnpj?: string;
     empresaNome: string;
     valor: number;
     competencia?: string;
     vencimento?: string;
+    numeroDocumento?: string;
+    codigoBarras?: string;
+    hasPdf?: boolean;
     diasAtraso?: number;
     tom: 'firme' | 'amigavel';
     canal: 'email' | 'whatsapp';

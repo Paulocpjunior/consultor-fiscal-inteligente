@@ -9,6 +9,7 @@ import {
     formatBRL, formatBarras, parseValorMoedaBr, statusBadgeClass, statusLabel,
 } from '../../services/dasService';
 import { getEmpresas as getEmpresasSimples } from '../../services/simplesNacionalService';
+import CobrancaModal from './CobrancaModal';
 
 interface Props {
     currentUser: User | null;
@@ -23,6 +24,7 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [filtroStatus, setFiltroStatus] = useState<DasStatusPagamento | ''>('');
     const [filtroEmpresa, setFiltroEmpresa] = useState('');
     const [selecionado, setSelecionado] = useState<DasEmitido | null>(null);
+    const [cobrancaDas, setCobrancaDas] = useState<DasEmitido | null>(null);
     const [mostrarFormAvulso, setMostrarFormAvulso] = useState(false);
 
     // Form avulso
@@ -167,6 +169,54 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
             () => onShowToast?.('Codigo de barras copiado'),
             () => onShowToast?.('Falha ao copiar')
         );
+    };
+
+    const nomeArquivoDas = (doc: DasEmitido): string => {
+        const cnpj = cnpjLimpo(doc.empresaCnpj) || 'empresa';
+        return `das_${cnpj}_${doc.competencia}_${doc.tipo}.pdf`;
+    };
+
+    const pdfBlobFromBase64 = (base64: string): Blob => {
+        const clean = base64.includes(',') ? base64.split(',').pop() || '' : base64;
+        const byteChars = atob(clean);
+        const bytes = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) {
+            bytes[i] = byteChars.charCodeAt(i);
+        }
+        return new Blob([bytes], { type: 'application/pdf' });
+    };
+
+    const abrirPdfDas = (doc: DasEmitido) => {
+        if (doc.pdfUrl) {
+            window.open(doc.pdfUrl, '_blank', 'noopener');
+            return;
+        }
+        if (!doc.pdfBase64) {
+            onShowToast?.('PDF nao retornado pelo SERPRO para esta guia.');
+            return;
+        }
+        const url = URL.createObjectURL(pdfBlobFromBase64(doc.pdfBase64));
+        window.open(url, '_blank', 'noopener');
+        window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    };
+
+    const baixarPdfDas = (doc: DasEmitido) => {
+        if (doc.pdfUrl) {
+            window.open(doc.pdfUrl, '_blank', 'noopener');
+            return;
+        }
+        if (!doc.pdfBase64) {
+            onShowToast?.('PDF nao retornado pelo SERPRO para esta guia.');
+            return;
+        }
+        const url = URL.createObjectURL(pdfBlobFromBase64(doc.pdfBase64));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = nomeArquivoDas(doc);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 60000);
     };
 
     return (
@@ -419,6 +469,30 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 )}
                             </div>
 
+                            <div>
+                                <div className="text-xs text-slate-500 mb-1">Guia em PDF</div>
+                                {selecionado.pdfBase64 || selecionado.pdfUrl ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            onClick={() => abrirPdfDas(selecionado)}
+                                            className="btn-press px-3 py-2 bg-sky-600 text-white text-sm font-bold rounded-lg hover:bg-sky-700"
+                                        >
+                                            Abrir PDF
+                                        </button>
+                                        <button
+                                            onClick={() => baixarPdfDas(selecionado)}
+                                            className="btn-press px-3 py-2 bg-slate-700 text-white text-sm font-bold rounded-lg hover:bg-slate-800"
+                                        >
+                                            Baixar PDF
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="text-sm bg-slate-50 dark:bg-slate-900/40 px-3 py-2 rounded text-slate-500">
+                                        PDF nao retornado pelo SERPRO. Use numero/codigo de barras quando disponivel ou consulte a guia no PGDAS-D.
+                                    </div>
+                                )}
+                            </div>
+
                             {selecionado.descricao && (
                                 <div>
                                     <div className="text-xs text-slate-500 mb-1">Descrição</div>
@@ -441,6 +515,12 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             >
                                 Fechar
                             </button>
+                            <button
+                                onClick={() => setCobrancaDas(selecionado)}
+                                className="btn-press px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700"
+                            >
+                                Enviar ao cliente
+                            </button>
                             {selecionado.statusPagamento !== 'pago' && (
                                 <button
                                     onClick={() => handleMarcarPago(selecionado)}
@@ -452,6 +532,15 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {cobrancaDas && (
+                <CobrancaModal
+                    dasInfo={cobrancaDas}
+                    currentUser={currentUser}
+                    onClose={() => setCobrancaDas(null)}
+                    onShowToast={(m) => onShowToast?.(m)}
+                />
             )}
         </div>
     );

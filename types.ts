@@ -668,6 +668,7 @@ export interface DasEmitido {
     codigoBarras: string;
     vencimento: string;           // YYYY-MM-DD
     pdfUrl?: string | null;
+    pdfBase64?: string | null;
     descricao?: string;            // só pra avulso
     pgdasRecibo?: string;
     pgdasTransmitidoEm?: string;
