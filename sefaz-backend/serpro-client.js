@@ -30,6 +30,7 @@
 
 import { Agent } from 'undici';
 import { loadCertificate } from './secret-loader.js';
+import { createSerproRetryableError } from './serpro-error-utils.js';
 
 const BASE_URL = process.env.SERPRO_BASE_URL || 'https://gateway.apiserpro.serpro.gov.br';
 const OAUTH_URL = process.env.SERPRO_OAUTH_URL || `${BASE_URL}/token`;
@@ -354,7 +355,22 @@ export async function invokeIntegraContador(req) {
             }
             // 429 / 5xx → retry
             if (res.status === 429 || res.status >= 500) {
-                throw new Error(`${res.status}: ${bodyTxt.slice(0, 200)}`);
+                const retryErr = createSerproRetryableError(res.status, bodyTxt, {
+                    idSistema,
+                    idServico,
+                    acao,
+                    contribuinteCnpj: maskCnpj(cnpjLimpo),
+                });
+                log('warn', 'upstream_retryable_error', {
+                    status: res.status,
+                    idSistema,
+                    idServico,
+                    acao,
+                    contribuinteCnpj: maskCnpj(cnpjLimpo),
+                    bodyHash: retryErr.serproBodyHash,
+                    bodyBytes: retryErr.serproBodyBytes,
+                });
+                throw retryErr;
             }
             if (!res.ok) {
                 // Erro de negócio (400, 403, etc): retry NÃO resolve.
@@ -393,10 +409,25 @@ export async function invokeIntegraContador(req) {
                 log('warn', 'invoke_business_abort', { status: err.status });
                 throw err;
             }
-            log('warn', 'invoke_attempt_failed', { attempt, error: err.message });
+            log('warn', 'invoke_attempt_failed', {
+                attempt,
+                idSistema,
+                idServico,
+                acao,
+                error: err.message,
+                code: err.code,
+                status: err.status,
+            });
         }
     }
-    log('error', 'invoke_exhausted_retries', { error: lastError?.message });
+    log('error', 'invoke_exhausted_retries', {
+        idSistema,
+        idServico,
+        acao,
+        error: lastError?.message,
+        code: lastError?.code,
+        status: lastError?.status,
+    });
     throw lastError || new Error('SERPRO: todas as tentativas falharam');
 }
 
