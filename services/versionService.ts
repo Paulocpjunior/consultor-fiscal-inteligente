@@ -61,7 +61,8 @@ export const useVersionCheck = (intervalMs: number = DEFAULT_INTERVAL_MS): Versi
     const [lastCheckedAt, setLastCheckedAt] = useState<Date | null>(null);
     const [dismissedRelease, setDismissedRelease] = useState<string | null>(() => {
         try {
-            return localStorage.getItem(DISMISS_KEY);
+            localStorage.removeItem(DISMISS_KEY);
+            return sessionStorage.getItem(DISMISS_KEY);
         } catch {
             return null;
         }
@@ -91,7 +92,7 @@ export const useVersionCheck = (intervalMs: number = DEFAULT_INTERVAL_MS): Versi
     const dismiss = useCallback(() => {
         if (!latest) return;
         try {
-            localStorage.setItem(DISMISS_KEY, latest.release);
+            sessionStorage.setItem(DISMISS_KEY, latest.release);
         } catch {
             // ignore
         }

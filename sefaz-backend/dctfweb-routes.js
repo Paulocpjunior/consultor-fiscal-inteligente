@@ -17,14 +17,12 @@ import {
 } from './dctfweb-orchestrator.js';
 import { getDctfwebMode } from './dctfweb-provider.js';
 import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
-import { requireAdmin, requireAuth } from './require-admin.js';
+import { requireAuth } from './require-admin.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { ultimasCompetenciasComAnoMes as ultimasCompetenciasComAnoMesHelper } from './competencias-helper.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 const router = express.Router();
-
-// requireAdmin agora vem do middleware compartilhado (verifyIdToken)
 
 router.get('/status', (_req, res) => res.json({ mode: getDctfwebMode(), ok: true }));
 
@@ -46,26 +44,32 @@ router.get('/declaracoes', requireAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/sincronizar', requireAdmin, express.json(), async (req, res) => {
+router.post('/sincronizar', requireAuth, express.json(), async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, categoria } = req.body || {};
         if (!empresaId || !empresaCnpj) return res.status(400).json({ error: 'empresaId+empresaCnpj' });
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await sincronizarEmpresa(empresaId, empresaCnpj, { anoPA, mesPA, categoria }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/transmitir', requireAdmin, express.json(), async (req, res) => {
+router.post('/transmitir', requireAuth, express.json(), async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, categoria } = req.body || {};
         if (!empresaId || !empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaId+empresaCnpj+anoPA+mesPA' });
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await transmitirDeclaracao({ empresaId, empresaCnpj, anoPA, mesPA, categoria }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/gerar-darf', requireAdmin, express.json(), async (req, res) => {
+router.post('/gerar-darf', requireAuth, express.json(), async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, categoria, emAndamento } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await gerarDarf({ empresaId, empresaCnpj, anoPA, mesPA, categoria, emAndamento: !!emAndamento }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -88,10 +92,12 @@ router.get('/recibo', requireAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/mit/encerrar', requireAdmin, express.json(), async (req, res) => {
+router.post('/mit/encerrar', requireAuth, express.json(), async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, dadosApuracaoMit } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await encerrarApuracaoMit({ empresaId, empresaCnpj, anoPA, mesPA, dadosApuracaoMit }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
