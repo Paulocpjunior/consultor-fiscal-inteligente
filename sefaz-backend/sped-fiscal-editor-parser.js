@@ -153,19 +153,22 @@ export function parseSpedFiscalParaEdicao(text) {
     const tipoSped = detectarTipoSped(new Set(Object.keys(registrosPorTipo)));
     const LAYOUT = layoutDe(tipoSped);
 
-    // 2a passada: indexa + marca editaveis SO quando a contagem de campos do
-    // layout BATE com a linha real. REDE DE SEGURANCA: se nao bater (layout
-    // errado/versao diferente), o registro vira read-only (round-trip preserva)
-    // em vez de corromper na reconstrucao.
+    // 2a passada: indexa + marca editaveis. Quando faltam apenas campos finais
+    // opcionais (caso comum: C190 sem COD_OBS final), preenche em branco para
+    // permitir edicao segura e normalizar ao reconstruir. Se houver campos a
+    // mais, o registro vira read-only para evitar corromper leiaute novo.
     for (const { campos, tipo, original } of parsedLinhas) {
         linhas.push({ idx, tipo, campos, original });
         const layout = LAYOUT[tipo];
         if (layout) {
             const camposReais = campos.length - 1; // exclui o tipo (campo 0)
-            if (camposReais === layout.length) {
+            const aceitaCampoFinalOmitido = tipoSped === 'fiscal' && tipo === 'C190' && camposReais === layout.length - 1;
+            if (camposReais === layout.length || aceitaCampoFinalOmitido) {
+                const camposParaEditar = campos.slice();
+                while (camposParaEditar.length < layout.length + 1) camposParaEditar.push('');
                 const camposNomeados = {};
                 for (let i = 0; i < layout.length; i++) {
-                    camposNomeados[layout[i]] = campos[i + 1] || '';
+                    camposNomeados[layout[i]] = camposParaEditar[i + 1] || '';
                 }
                 if (!editaveis[tipo]) editaveis[tipo] = [];
                 editaveis[tipo].push({ idx, campos: camposNomeados });

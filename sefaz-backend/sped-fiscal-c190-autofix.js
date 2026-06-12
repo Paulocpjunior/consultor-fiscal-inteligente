@@ -14,10 +14,11 @@
 // (de/para por campo) pra exibir como aviso ao usuario.
 //
 // Conservador de proposito:
-//  - So corrige C190 que JA EXISTE e cujo valor diverge alem da tolerancia.
-//  - NAO cria C190 faltante (isso muda estrutura — fica como aviso do R8).
-//  - So mexe nos 3 campos que o R8 valida (VL_OPR, VL_BC_ICMS, VL_ICMS).
-//    Campos de ST/IPI/RED_BC ficam intactos (nao sao somados do C170 aqui).
+//  - Corrige C190 que JA EXISTE e cujo valor diverge alem da tolerancia.
+//  - Cria C190 faltante quando ha C170 correspondente no mesmo C100.
+//  - Em C190 existente, so mexe nos 3 campos que o R8 valida
+//    (VL_OPR, VL_BC_ICMS, VL_ICMS). Campos de ST/IPI/RED_BC ficam intactos.
+//  - Em C190 criado, preenche tambem ST/IPI quando constarem dos C170.
 //  - C170 e a FONTE DE VERDADE (item a item); C190 e derivado.
 //
 // Layout C190 (campos[N], 0-based onde [0]='C190'):
@@ -48,23 +49,57 @@ function fmtValor(n) {
 /**
  * @param {{ tipoSped?:string, linhas: Array<{idx:number,tipo:string,campos:string[]}> }} parsed
  * @returns {{
- *   edicoes: Array<{idx:number, campos:string[]}>,
+ *   edicoes: Array<{idx?:number, insertAfterIdx?:number, campos:string[]}>,
  *   ajustes: Array<{registro:string, idx:number, doc:string, combinacao:string, campo:string, de:string, para:string, mensagem:string}>,
- *   resumo: { c190Corrigidos:number, camposAjustados:number }
+ *   resumo: { c190Corrigidos:number, c190Criados:number, camposAjustados:number }
  * }}
  */
 export function corrigirC190(parsed) {
-    const out = { edicoes: [], ajustes: [], resumo: { c190Corrigidos: 0, camposAjustados: 0 } };
+    const out = { edicoes: [], ajustes: [], resumo: { c190Corrigidos: 0, c190Criados: 0, camposAjustados: 0 } };
     if (!parsed || !Array.isArray(parsed.linhas)) return out;
     // C190/C170 sao do EFD ICMS/IPI. Em Contribuicoes nao se aplica.
     if (parsed.tipoSped && parsed.tipoSped !== 'fiscal') return out;
 
     let docNum = null;
-    let c170Por = null;   // Map<chave, {vlOpr, vlBc, vlIcms}>
+    let c170Por = null;   // Map<chave, totais dos C170>
     let c190Linhas = null; // Array<{idx, campos, chave}>
+    let lastC170Idx = null;
+    let lastC190Idx = null;
 
     const flush = () => {
         if (!c170Por || !c190Linhas) return;
+        const chavesC190 = new Set(c190Linhas.map(c190 => c190.chave));
+        const insertAfterIdx = Math.max(lastC170Idx ?? -1, lastC190Idx ?? -1);
+        for (const [chave, t170] of c170Por) {
+            if (chavesC190.has(chave) || insertAfterIdx < 0) continue;
+            const campos = [
+                'C190',
+                t170.cst,
+                t170.cfop,
+                t170.aliqTexto,
+                fmtValor(t170.vlOpr),
+                fmtValor(t170.vlBc),
+                fmtValor(t170.vlIcms),
+                fmtValor(t170.vlBcSt),
+                fmtValor(t170.vlIcmsSt),
+                '0,00',
+                fmtValor(t170.vlIpi),
+                '',
+            ];
+            out.edicoes.push({ insertAfterIdx, campos });
+            out.resumo.c190Criados++;
+            out.ajustes.push({
+                registro: 'C190',
+                idx: insertAfterIdx,
+                doc: docNum || '?',
+                combinacao: chave,
+                campo: 'REGISTRO',
+                de: '',
+                para: campos.join('|'),
+                mensagem: `Doc ${docNum} ${chave}: C190 faltante criado a partir da soma dos C170.`,
+            });
+        }
+
         for (const c190 of c190Linhas) {
             const t170 = c170Por.get(c190.chave);
             if (!t170) continue; // C190 sem C170: caso do R8 (nao corrige aqui)
@@ -114,6 +149,8 @@ export function corrigirC190(parsed) {
             docNum = l.campos[7] || '?';
             c170Por = new Map();
             c190Linhas = [];
+            lastC170Idx = null;
+            lastC190Idx = null;
             continue;
         }
         if (l.tipo === 'C170' && c170Por) {
@@ -122,11 +159,25 @@ export function corrigirC190(parsed) {
             const cfop = String(c[10] || '');
             const aliq = aliqNum(c[13]);
             const chave = `${cst}|${cfop}|${aliq != null ? aliq.toFixed(2) : '0.00'}`;
-            const acc = c170Por.get(chave) || { vlOpr: 0, vlBc: 0, vlIcms: 0 };
+            const acc = c170Por.get(chave) || {
+                cst,
+                cfop,
+                aliqTexto: aliq != null ? fmtValor(aliq) : '',
+                vlOpr: 0,
+                vlBc: 0,
+                vlIcms: 0,
+                vlBcSt: 0,
+                vlIcmsSt: 0,
+                vlIpi: 0,
+            };
             acc.vlOpr += num(c[6]);   // VL_ITEM
             acc.vlBc += num(c[12]);   // VL_BC_ICMS
             acc.vlIcms += num(c[14]); // VL_ICMS
+            acc.vlBcSt += num(c[15]); // VL_BC_ICMS_ST
+            acc.vlIcmsSt += num(c[17]); // VL_ICMS_ST
+            acc.vlIpi += num(c[23]); // VL_IPI
             c170Por.set(chave, acc);
+            lastC170Idx = l.idx;
             continue;
         }
         if (l.tipo === 'C190' && c190Linhas) {
@@ -136,6 +187,7 @@ export function corrigirC190(parsed) {
             const aliq = aliqNum(c[3]);
             const chave = `${cst}|${cfop}|${aliq != null ? aliq.toFixed(2) : '0.00'}`;
             c190Linhas.push({ idx: l.idx, campos: c, chave });
+            lastC190Idx = l.idx;
             continue;
         }
     }

@@ -106,7 +106,7 @@ const EditarViaExcel: React.FC = () => {
     // Aplica uma lista de edicoes pre-calculada (C190, formato, etc), valida e baixa.
     // Generico pra evitar duplicar o pipeline pra cada autofix.
     const aplicarEBaixar = async (
-        edicoes: { idx: number; campos: string[] }[],
+        edicoes: { idx?: number; insertAfterIdx?: number; campos: string[] }[],
         sufixoNome: string,
         labelErro: string,
     ) => {
@@ -257,10 +257,10 @@ const EditarViaExcel: React.FC = () => {
                         {/* Auto-correção C190 (totalizador) — só EFD ICMS/IPI.
                             Recalcula VL_OPR/VL_BC/VL_ICMS do C190 a partir da soma
                             dos C170, com aviso de/para de cada ajuste. */}
-                        {status.correcaoC190.resumo.c190Corrigidos > 0 && (
+                        {((status.correcaoC190.resumo.c190Corrigidos || 0) + (status.correcaoC190.resumo.c190Criados || 0)) > 0 && (
                             <div className="mb-3 p-3 rounded border border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-[11px] text-blue-900 dark:text-blue-200">
-                                <b>🔧 Auto-ajuste disponível: {status.correcaoC190.resumo.c190Corrigidos} C190 totalizador(es) divergente(s)</b>
-                                {' '}({status.correcaoC190.resumo.camposAjustados} campo(s) a corrigir, recalculados da soma dos C170):
+                                <b>🔧 Auto-ajuste disponível: {status.correcaoC190.resumo.c190Corrigidos || 0} C190 divergente(s) · {status.correcaoC190.resumo.c190Criados || 0} C190 faltante(s)</b>
+                                {' '}({status.correcaoC190.ajustes.length} ação(ões) de correção/criação, recalculadas da soma dos C170):
                                 <ul className="mt-1 list-disc list-inside max-h-40 overflow-auto font-mono text-[10px]">
                                     {status.correcaoC190.ajustes.slice(0, 30).map((a, i) => (
                                         <li key={i}>{a.mensagem}</li>
@@ -275,7 +275,7 @@ const EditarViaExcel: React.FC = () => {
                                     ⬇ Baixar SPED com C190 corrigido
                                 </button>
                                 <p className="mt-1.5 text-[10px] opacity-80">
-                                    Corrige só os totalizadores C190 (Bloco 9 recalculado junto). Os C170 (itens)
+                                    Corrige/cria os totalizadores C190 (Bloco 9 recalculado junto). Os C170 (itens)
                                     ficam intactos — eles são a fonte. Confira antes de transmitir.
                                 </p>
                             </div>

@@ -18,6 +18,7 @@
 /**
  * @typedef {Object} Edicao
  * @property {number} idx        indice (do parser) da linha a editar
+ * @property {number=} insertAfterIdx indice depois do qual inserir nova linha
  * @property {string[]} campos   campos NOVOS — 1-based: campos[0]=tipo (deve bater
  *                               com o tipo do registro original). NUNCA muda o tipo.
  */
@@ -31,26 +32,42 @@ export function reconstruirSped(parsed, edicoes = []) {
     if (!parsed || !Array.isArray(parsed.linhas)) {
         throw new Error('parsed invalido: faltam linhas');
     }
-    // Indexa edicoes por idx pra lookup O(1)
+    // Indexa edicoes por idx pra lookup O(1) e separa insercoes controladas
+    // (usadas para criar C190 faltante antes de recalcular o Bloco 9).
     const porIdx = new Map();
+    const insercoesPorAfterIdx = new Map();
     for (const e of edicoes) {
+        if (!Array.isArray(e.campos)) throw new Error(`edicao idx=${e?.idx}: campos deve ser array`);
+        if (typeof e?.insertAfterIdx === 'number') {
+            const tipo = e.campos[0];
+            if (!tipo) throw new Error(`insercao after=${e.insertAfterIdx}: tipo ausente`);
+            const lista = insercoesPorAfterIdx.get(e.insertAfterIdx) || [];
+            lista.push({ idx: -1, tipo, campos: e.campos });
+            insercoesPorAfterIdx.set(e.insertAfterIdx, lista);
+            continue;
+        }
         if (typeof e?.idx !== 'number') continue;
-        if (!Array.isArray(e.campos)) throw new Error(`edicao idx=${e.idx}: campos deve ser array`);
         porIdx.set(e.idx, e.campos);
     }
 
-    // 1) Aplica edicoes (preservando tipo original).
-    const linhas = parsed.linhas.map(l => {
+    // 1) Aplica edicoes e insercoes (preservando tipo original nas edicoes).
+    const linhas = [];
+    for (const l of parsed.linhas) {
         const ed = porIdx.get(l.idx);
-        if (!ed) return { ...l };
-        // Sanity: tipo no campo 0 nao pode mudar (estrutura SPED amarra
-        // por tipo de registro — trocar tipo invalida hierarquia).
-        if (ed[0] && ed[0] !== l.tipo) {
-            throw new Error(`edicao idx=${l.idx}: nao pode trocar tipo ${l.tipo} -> ${ed[0]}`);
+        if (!ed) {
+            linhas.push({ ...l });
+        } else {
+            // Sanity: tipo no campo 0 nao pode mudar (estrutura SPED amarra
+            // por tipo de registro — trocar tipo invalida hierarquia).
+            if (ed[0] && ed[0] !== l.tipo) {
+                throw new Error(`edicao idx=${l.idx}: nao pode trocar tipo ${l.tipo} -> ${ed[0]}`);
+            }
+            const campos = [l.tipo, ...ed.slice(1)];
+            linhas.push({ idx: l.idx, tipo: l.tipo, campos });
         }
-        const campos = [l.tipo, ...ed.slice(1)];
-        return { idx: l.idx, tipo: l.tipo, campos };
-    });
+        const insercoes = insercoesPorAfterIdx.get(l.idx);
+        if (insercoes) linhas.push(...insercoes);
+    }
 
     // 2) REMOVE registros antigos do Bloco 9 — vamos recriar (9001, 9900*, 9990, 9999)
     const linhasSemBloco9 = linhas.filter(l =>

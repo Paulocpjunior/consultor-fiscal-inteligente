@@ -99,7 +99,22 @@ describe('corrigirC190', () => {
         expect(r.ajustes[0].para).toBe('500,00');
     });
 
-    it('C190 sem C170 correspondente NÃO é corrigido (fica pro R8 apontar)', () => {
+    it('cria C190 faltante quando existe C170 sem totalizador', () => {
+        const parsed = mkParsed([
+            { tipo: 'C100', campos: ['', '', '', '', '', '', '777'] },
+            c170({ vlItem: '100,00', cst: '000', cfop: '5102', vlBc: '100,00', aliq: '18,00', vlIcms: '18,00' }),
+        ]);
+        const r = corrigirC190(parsed);
+        expect(r.resumo.c190Criados).toBe(1);
+        expect(r.resumo.c190Corrigidos).toBe(0);
+        expect(r.edicoes[0]).toMatchObject({
+            insertAfterIdx: 1,
+            campos: ['C190', '000', '5102', '18,00', '100,00', '100,00', '18,00', '0,00', '0,00', '0,00', '0,00', ''],
+        });
+        expect(r.ajustes[0].mensagem).toContain('C190 faltante criado');
+    });
+
+    it('C190 sem C170 correspondente não é corrigido, mas cria o totalizador faltante do C170 real', () => {
         const parsed = mkParsed([
             { tipo: 'C100', campos: ['', '', '', '', '', '', 'X'] },
             c170({ vlItem: '100,00', cst: '000', cfop: '5102', vlBc: '0', aliq: '18,00', vlIcms: '0' }),
@@ -108,6 +123,7 @@ describe('corrigirC190', () => {
         ]);
         const r = corrigirC190(parsed);
         expect(r.resumo.c190Corrigidos).toBe(0);
+        expect(r.resumo.c190Criados).toBe(1);
     });
 
     it('não aplica em SPED de Contribuições (C190 é EFD ICMS/IPI)', () => {

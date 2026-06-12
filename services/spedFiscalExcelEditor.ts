@@ -32,7 +32,7 @@ type ParseResult = {
         layoutMismatch: Record<string, { esperado: number; real: number }>;
     };
 };
-type SpedEdicao = { idx: number; campos: string[] };
+type SpedEdicao = { idx?: number; insertAfterIdx?: number; campos: string[] };
 
 export async function parseSped(text: string): Promise<ParseResult> {
     const mod = await import('../sefaz-backend/sped-fiscal-editor-parser.js' as any);
@@ -84,7 +84,7 @@ export interface AjusteC190 {
 export interface CorrecaoC190 {
     edicoes: SpedEdicao[];
     ajustes: AjusteC190[];
-    resumo: { c190Corrigidos: number; camposAjustados: number };
+    resumo: { c190Corrigidos: number; c190Criados?: number; camposAjustados: number };
 }
 
 /** Auto-corrige totalizadores C190 a partir dos C170 (EFD ICMS/IPI). Devolve

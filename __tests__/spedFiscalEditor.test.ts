@@ -55,6 +55,8 @@ describe('parseSpedFiscalParaEdicao', () => {
         expect(r.resumo.registrosPorTipo['C170']).toBe(1);
         expect(r.resumo.registrosPorTipo['9900']).toBe(17);
         expect(r.editaveis['C170']).toHaveLength(1);
+        expect(r.editaveis['C190']).toHaveLength(1);
+        expect(r.editaveis['C190'][0].campos.CFOP).toBe('5102');
         expect(r.editaveis['C170'][0].campos.CFOP).toBe('5102');
         expect(r.editaveis['C170'][0].campos.CST_ICMS).toBe('000');
         expect(r.editaveis['C170'][0].campos.NCM).toBeUndefined(); // NCM nao esta no C170 (esta no 0200)
@@ -79,6 +81,17 @@ describe('parseSpedFiscalParaEdicao', () => {
         const com = SPED_MINI + '\r\n\r\n\r\n';
         const r = parseSpedFiscalParaEdicao(com);
         expect(r.linhas.length).toBe(33); // mesma contagem
+    });
+
+    it('aceita C190 com COD_OBS final omitido e leva para aba editavel', () => {
+        const semCodObs = SPED_MINI.replace(
+            '|C190|000|5102|18,00|1000,00|1000,00|180,00|0,00|0,00|0,00|0,00||',
+            '|C190|000|5102|18,00|1000,00|1000,00|180,00|0,00|0,00|0,00|0,00|',
+        );
+        const r = parseSpedFiscalParaEdicao(semCodObs);
+        expect(r.editaveis['C190']).toHaveLength(1);
+        expect(r.editaveis['C190'][0].campos.COD_OBS).toBe('');
+        expect(r.resumo.layoutMismatch['C190']).toBeUndefined();
     });
 
     it('tiposEditaveis lista os layouts conhecidos', () => {
@@ -135,6 +148,18 @@ describe('reconstruirSped — round-trip', () => {
         const linhaC170 = out.split('\r\n').find((l: string) => l.startsWith('|C170|'));
         expect(linhaC170).toContain('|5101|');
         expect(linhaC170).not.toContain('|5102|');
+    });
+
+    it('COM INSERCAO: adiciona C190 e recalcula Bloco 9', () => {
+        const parsed = parseSpedFiscalParaEdicao(SPED_MINI);
+        const c170idx = parsed.editaveis['C170'][0].idx;
+        const out = reconstruirSped(parsed, [{
+            insertAfterIdx: c170idx,
+            campos: ['C190', '000', '5102', '18,00', '1000,00', '1000,00', '180,00', '0,00', '0,00', '0,00', '0,00', ''],
+        }]);
+        const lines = out.split('\r\n').filter(Boolean);
+        expect(lines.filter((l: string) => l.startsWith('|C190|'))).toHaveLength(2);
+        expect(lines.find((l: string) => l === '|9900|C190|2|')).toBeTruthy();
     });
 
     it('rejeita troca de tipo (campo 0)', () => {
