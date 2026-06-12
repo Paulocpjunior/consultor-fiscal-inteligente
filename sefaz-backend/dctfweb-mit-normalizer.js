@@ -1,8 +1,8 @@
 // ============================================================================
 // dctfweb-mit-normalizer.js  (PURO — sem io/firebase, testavel)
 //
-// Normaliza o response do CONSAPURACAOMIT (DCTFWeb / Modulo de Inclusao de
-// Tributos) num shape estavel { tributos: {IRPJ,CSLL,PIS,COFINS}, ... } pra
+// Normaliza o response oficial do MIT (LISTAAPURACOES317 + CONSAPURACAO316)
+// num shape estavel { tributos: {IRPJ,CSLL,PIS,COFINS}, ... } pra
 // cruzar contra a apuracao do app.
 //
 // HONESTIDADE sobre o shape do MIT:
@@ -14,7 +14,8 @@
 //     - tenta varios nomes de valor (valor/valorDebito/vlrDebito/valorPrincipal);
 //     - se NAO conseguir extrair NADA, retorna { lido: false, motivo } —
 //       NUNCA zeros falsos (que virariam divergencia fake no cruzamento).
-//   O serpro-smoke captura o CONSAPURACAOMIT real pra confirmar/ajustar.
+//   O serpro-smoke captura o LISTAAPURACOES317 real; o detalhe usa
+//   CONSAPURACAO316 com idApuracao pra confirmar/ajustar.
 //
 // Tabela de codigos de receita: informacao PUBLICA da RFB (nao inventada).
 // Codigos nao reconhecidos vao pra `outros` (reportados, nao descartados).
@@ -35,6 +36,17 @@ const CODIGO_FAMILIA = {
 };
 
 const FAMILIAS = ['IRPJ', 'CSLL', 'PIS', 'COFINS'];
+
+const GRUPO_MIT_FAMILIA = {
+    Irpj: 'IRPJ',
+    IRPJ: 'IRPJ',
+    Csll: 'CSLL',
+    CSLL: 'CSLL',
+    PisPasep: 'PIS',
+    PIS: 'PIS',
+    Cofins: 'COFINS',
+    COFINS: 'COFINS',
+};
 
 function familiaPorCodigo(codigo) {
     const c = String(codigo || '').replace(/\D/g, '').slice(0, 4);
@@ -68,6 +80,10 @@ function num(v) {
 // array de objetos que tenha cara de debito (tem codigo OU valor).
 function acharArrayDebitos(raw) {
     if (!raw || typeof raw !== 'object') return null;
+
+    const oficiais = extrairDebitosOficiais(raw);
+    if (oficiais?.length) return oficiais;
+
     const candidatasChaves = [
         'debitos', 'tributos', 'itens', 'creditosVinculados', 'apuracao',
         'debitosApurados', 'listaDebitos', 'tributosApurados', 'detalhamento',
@@ -93,12 +109,48 @@ function acharArrayDebitos(raw) {
     return null;
 }
 
+function extrairDebitosOficiais(raw) {
+    const bases = [
+        raw,
+        raw.apuracaoMit,
+        raw.apuracao,
+        raw.dados,
+        Array.isArray(raw.dadosApuracaoMit) ? raw.dadosApuracaoMit[0] : raw.dadosApuracaoMit,
+        Array.isArray(raw.dadosApuracaoMIT) ? raw.dadosApuracaoMIT[0] : raw.dadosApuracaoMIT,
+        Array.isArray(raw.DadosApuracaoMit) ? raw.DadosApuracaoMit[0] : raw.DadosApuracaoMit,
+        Array.isArray(raw.DadosApuracaoMIT) ? raw.DadosApuracaoMIT[0] : raw.DadosApuracaoMIT,
+    ].filter(Boolean);
+
+    for (const base of bases) {
+        const debitos = base?.Debitos || base?.debitos;
+        if (!debitos || typeof debitos !== 'object' || Array.isArray(debitos)) continue;
+        const out = [];
+        for (const [grupo, bloco] of Object.entries(debitos)) {
+            const familia = GRUPO_MIT_FAMILIA[grupo];
+            if (!familia || !bloco || typeof bloco !== 'object') continue;
+            for (const listaNome of ['ListaDebitos', 'listaDebitos', 'ListaDebitosAposEvento', 'listaDebitosAposEvento']) {
+                const lista = bloco[listaNome];
+                if (!Array.isArray(lista)) continue;
+                for (const item of lista) {
+                    if (item && typeof item === 'object') {
+                        out.push({ ...item, _familiaMit: familia, _grupoMit: grupo });
+                    }
+                }
+            }
+        }
+        if (out.length) return out;
+    }
+    return null;
+}
+
 function lerCodigo(item) {
-    return item.codigoReceita ?? item.codigo ?? item.cod ?? item.codReceita ?? item.codigoTributo ?? null;
+    return item.codigoReceita ?? item.codigo ?? item.cod ?? item.codReceita
+        ?? item.codigoTributo ?? item.CodigoDebito ?? item.codigoDebito ?? null;
 }
 function lerValor(item) {
     const cand = [item.valor, item.valorDebito, item.vlrDebito, item.valorPrincipal,
-                  item.vlr, item.valorTotal, item.valorApurado, item.principal];
+                  item.vlr, item.valorTotal, item.valorApurado, item.principal,
+                  item.ValorDebito, item.valorDebito];
     for (const c of cand) {
         if (c != null && c !== '') return num(c);
     }
@@ -129,7 +181,7 @@ export function normalizarApuracaoMit(apuracaoMit) {
     if (!debitos) {
         return {
             lido: false,
-            motivo: 'Nao encontrei array de debitos no response MIT. Estrutura diferente do esperado — rode o serpro-smoke (CONSAPURACAOMIT) e ajuste o normalizador.',
+            motivo: 'Nao encontrei debitos no response MIT. Estrutura diferente do esperado — rode o serpro-smoke (MIT/LISTAAPURACOES317) e consulte o detalhe (MIT/CONSAPURACAO316) para ajustar o normalizador.',
             tributos: { ...vazio }, outros: [], totalReconhecido: 0,
         };
     }
@@ -145,7 +197,7 @@ export function normalizarApuracaoMit(apuracaoMit) {
         const valor = lerValor(item);
         if (!valor) continue;
 
-        const familia = familiaPorCodigo(codigo) || familiaPorDescricao(desc);
+        const familia = item._familiaMit || familiaPorCodigo(codigo) || familiaPorDescricao(desc);
         if (familia && FAMILIAS.includes(familia)) {
             tributos[familia] += valor;
             reconhecido += valor;

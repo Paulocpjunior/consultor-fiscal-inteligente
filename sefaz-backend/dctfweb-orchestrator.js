@@ -145,17 +145,18 @@ export async function consultarRecibo({ empresaCnpj, anoPA, mesPA, categoria }) 
     return await provider.consultarRecibo({ empresaCnpj, anoPA, mesPA, categoria });
 }
 
-export async function encerrarApuracaoMit({ empresaId, empresaCnpj, anoPA, mesPA }) {
+export async function encerrarApuracaoMit({ empresaId, empresaCnpj, anoPA, mesPA, dadosApuracaoMit }) {
     assertEmissaoLiberada('DCTFWEB');
     const db = fa().firestore();
     const provider = getDctfwebProvider();
-    const r = await provider.encerrarApuracaoMit({ empresaCnpj, anoPA, mesPA });
+    const r = await provider.encerrarApuracaoMit({ empresaCnpj, anoPA, mesPA, dadosApuracaoMit });
 
     const docId = `${empresaCnpj}_${anoPA}${String(mesPA).padStart(2,'0')}_MIT`.replace(/[^a-zA-Z0-9_-]/g, '_');
     await db.collection(COLLECTION_MIT).doc(docId).set(sanitize({
         empresaId, empresaCnpj, anoPA, mesPA,
         statusEncerramento: r.statusEncerramento,
         protocolo: r.protocolo,
+        idApuracao: r.idApuracao,
         encerradoEm: new Date().toISOString(),
         fonte: r.fonte,
     }), { merge: true });

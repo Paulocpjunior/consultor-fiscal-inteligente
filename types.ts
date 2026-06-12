@@ -1536,6 +1536,10 @@ export type DctfwebMitStatus =
 
 export interface DctfwebMitApuracao {
     apuracaoMit: any;
+    apuracaoResumo?: any;
+    idApuracao?: number;
+    motivo?: string;
+    apuracoes?: any[];
     fonte: 'mock' | 'serpro';
 }
 
@@ -1543,6 +1547,8 @@ export interface DctfwebMitEncerramentoResult {
     ok: boolean;
     statusEncerramento: DctfwebMitStatus;
     protocolo: string;
+    idApuracao?: number | null;
+    avisosDctf?: string[];
     fonte: 'mock' | 'serpro';
     _raw?: any;
 }

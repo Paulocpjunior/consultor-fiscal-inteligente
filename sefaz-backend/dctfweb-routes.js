@@ -90,9 +90,9 @@ router.get('/recibo', requireAuth, async (req, res) => {
 
 router.post('/mit/encerrar', requireAdmin, express.json(), async (req, res) => {
     try {
-        const { empresaId, empresaCnpj, anoPA, mesPA } = req.body || {};
+        const { empresaId, empresaCnpj, anoPA, mesPA, dadosApuracaoMit } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
-        res.json(await encerrarApuracaoMit({ empresaId, empresaCnpj, anoPA, mesPA }));
+        res.json(await encerrarApuracaoMit({ empresaId, empresaCnpj, anoPA, mesPA, dadosApuracaoMit }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

@@ -93,14 +93,13 @@ const SERVICOS = [
         nota: 'Consulta DCTFWeb mensal do PA. Empresa Lucro/Real tipica.',
     },
     {
-        rotulo: 'DCTFWEB MIT — apuracao (tributos discriminados p/ cruzamento)',
-        idSistema: 'DCTFWEB',
-        idServico: 'CONSAPURACAOMIT',
+        rotulo: 'MIT — lista apuracoes do PA',
+        idSistema: 'MIT',
+        idServico: 'LISTAAPURACOES317',
         acao: 'Consultar',
-        dados: { anoPA: String(pa.slice(0, 4)), mesPA: String(pa.slice(4, 6)) },
-        nota: 'CRITICO p/ cruzamento DCTFWeb x apuracao. O shape deste response '
-            + 'define o dctfweb-mit-normalizer.js — confirme os campos de '
-            + 'codigo/valor/descricao dos debitos com este JSON.',
+        dados: { anoApuracao: Number(pa.slice(0, 4)), mesApuracao: Number(pa.slice(4, 6)) },
+        nota: 'Consulta de apuracoes MIT do periodo. Use o idApuracao retornado '
+            + 'para consultar detalhe via MIT/CONSAPURACAO316.',
     },
     {
         rotulo: 'DCTFWEB — XML da declaracao (retencao p/ cruzar com EFD-Reinf)',

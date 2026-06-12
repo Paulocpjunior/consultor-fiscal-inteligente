@@ -77,7 +77,8 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, compe
                             <p className="mt-2 text-xs text-slate-500">
                                 Os tributos apurados pelo app estão abaixo. A comparação só aparece quando o
                                 Emissor/SEFIN retorna a apuração MIT. Se isto persistir, o shape do response
-                                MIT pode diferir do esperado — rode o serpro-smoke (CONSAPURACAOMIT).
+                                MIT pode diferir do esperado — rode o serpro-smoke com MIT/LISTAAPURACOES317
+                                e consulte o detalhe com MIT/CONSAPURACAO316 usando o idApuracao.
                             </p>
                             <table className="w-full text-xs mt-3">
                                 <tbody>
@@ -145,7 +146,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, compe
                             <p className="mt-4 text-[10px] text-slate-400">
                                 Cruzamento por família de tributo (IRPJ/CSLL/PIS/COFINS). INSS patronal não é
                                 cruzado (o app não calcula INSS). Valores app = soma do detalhamento de
-                                calcularLucro; DCTFWeb = apuração MIT (CONSAPURACAOMIT) normalizada.
+                                calcularLucro; DCTFWeb = apuração MIT normalizada pelo fluxo oficial MIT.
                             </p>
                         </>
                     )}

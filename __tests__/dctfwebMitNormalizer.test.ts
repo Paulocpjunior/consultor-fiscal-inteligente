@@ -1,5 +1,7 @@
 /**
- * Testes do normalizador MIT (DCTFWeb). Como o shape REAL do CONSAPURACAOMIT
+ * Testes do normalizador MIT (DCTFWeb). O shape oficial do MIT vem via
+ * MIT/CONSAPURACAO316; o normalizador continua defensivo para payloads antigos
+ * e variações retornadas pelo SERPRO.
  * não é público sem cert, o normalizador é defensivo — estes testes travam o
  * comportamento esperado pra cada estrutura plausível + o caso "não consegui
  * ler" (que NUNCA pode virar zeros falsos).
@@ -80,6 +82,27 @@ describe('normalizarApuracaoMit — estruturas plausíveis', () => {
         expect(r.lido).toBe(true);
         expect(r.tributos.IRPJ).toBe(700);
     });
+
+    it('shape oficial MIT/CONSAPURACAO316 com Debitos por grupo', () => {
+        const raw = {
+            dadosApuracaoMit: [{
+                PeriodoApuracao: { MesApuracao: 5, AnoApuracao: 2026 },
+                DadosIniciais: { SemMovimento: false },
+                Debitos: {
+                    Irpj: { ListaDebitos: [{ IdDebito: 1, CodigoDebito: '159901', ValorDebito: 1000 }] },
+                    Csll: { ListaDebitos: [{ IdDebito: 2, CodigoDebito: '203001', ValorDebito: 450 }] },
+                    PisPasep: { ListaDebitos: [{ IdDebito: 3, CodigoDebito: '543401', ValorDebito: 65 }] },
+                    Cofins: { ListaDebitos: [{ IdDebito: 4, CodigoDebito: '585601', ValorDebito: 300 }] },
+                },
+            }],
+        };
+
+        const r = normalizarApuracaoMit(raw);
+        expect(r.lido).toBe(true);
+        expect(r.tributos).toEqual({ IRPJ: 1000, CSLL: 450, PIS: 65, COFINS: 300 });
+        expect(r.totalReconhecido).toBe(1815);
+        expect(r.outros).toHaveLength(0);
+    });
 });
 
 describe('normalizarApuracaoMit — honestidade (NUNCA zeros falsos)', () => {
@@ -92,7 +115,7 @@ describe('normalizarApuracaoMit — honestidade (NUNCA zeros falsos)', () => {
     it('sem array de débitos reconhecível → lido=false', () => {
         const r = normalizarApuracaoMit({ status: 'ENCERRADA', protocolo: 'X' });
         expect(r.lido).toBe(false);
-        expect(r.motivo).toMatch(/array de debitos/i);
+        expect(r.motivo).toMatch(/debitos no response MIT/i);
     });
 
     it('array existe mas sem valor extraível → lido=false (não retorna zeros)', () => {

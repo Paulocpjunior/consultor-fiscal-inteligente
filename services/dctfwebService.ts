@@ -152,6 +152,7 @@ export async function consultarRecibo(user: User | null, params: {
 export async function encerrarApuracaoMit(user: User | null, payload: {
     empresaId?: string; empresaCnpj: string;
     anoPA: number; mesPA: number;
+    dadosApuracaoMit?: any;
 }): Promise<DctfwebMitEncerramentoResult> {
     const res = await fetch(`${BASE}/mit/encerrar`, {
         method: 'POST',

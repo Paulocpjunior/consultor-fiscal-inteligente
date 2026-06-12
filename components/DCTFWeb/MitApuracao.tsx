@@ -20,8 +20,40 @@ interface Props {
     onShowToast?: (msg: string) => void;
 }
 
+function pickDadosApuracaoMit(input: any): any | null {
+    if (!input || typeof input !== 'object') return null;
+    if (input.PeriodoApuracao) return input;
+    const direct = input.dadosApuracaoMit ?? input.dadosApuracaoMIT ?? input.DadosApuracaoMit ?? input.DadosApuracaoMIT;
+    if (Array.isArray(direct)) return direct[0] || null;
+    if (direct && typeof direct === 'object') return direct;
+    const nested = input.apuracaoMit ?? input.apuracao ?? input.dados;
+    return nested && nested !== input ? pickDadosApuracaoMit(nested) : null;
+}
+
+function isDadosApuracaoMitCompleta(input: any): boolean {
+    const payload = pickDadosApuracaoMit(input);
+    if (!payload) return false;
+    const dadosIniciais = payload.DadosIniciais || payload.dadosIniciais;
+    if (!dadosIniciais) return false;
+    const semMovimento = dadosIniciais.SemMovimento ?? dadosIniciais.semMovimento;
+    if (semMovimento === true || semMovimento === 'true') return true;
+    return !!(payload.Debitos || payload.debitos);
+}
+
+function situacaoMitBloqueiaEncerramento(apuracao: any, resumo: any): boolean {
+    const situacao = Number(
+        resumo?.situacao
+        ?? resumo?.situacaoApuracao
+        ?? apuracao?.situacaoApuracao
+        ?? apuracao?.SituacaoApuracao
+    );
+    return situacao === 3 || situacao === 4;
+}
+
 const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }) => {
     const [apuracao, setApuracao] = useState<any>(null);
+    const [apuracaoResumo, setApuracaoResumo] = useState<any>(null);
+    const [apuracaoMotivo, setApuracaoMotivo] = useState<string | null>(null);
     const [status, setStatus] = useState<{ statusEncerramento: string; protocolo: string } | null>(null);
     const [historico, setHistorico] = useState<any[]>([]);
     const [loadingApur, setLoadingApur] = useState(false);
@@ -39,6 +71,8 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
                 mesPA: declaracao.mesPA,
             });
             setApuracao(r.apuracaoMit);
+            setApuracaoResumo(r.apuracaoResumo || null);
+            setApuracaoMotivo(r.motivo || null);
         } catch (err: any) {
             setError(`Apuração: ${err.message}`);
         } finally { setLoadingApur(false); }
@@ -66,6 +100,11 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
 
     const handleEncerrar = async () => {
         if (!user) return;
+        const dadosApuracaoMit = pickDadosApuracaoMit(apuracao);
+        if (!isDadosApuracaoMitCompleta(apuracao)) {
+            setError('Encerrar: não há apuração MIT completa carregada para transmitir. Primeiro gere/importe a apuração MIT com DadosIniciais e débitos.');
+            return;
+        }
         if (!confirm(`Encerrar apuração MIT de ${declaracao.empresaCnpj} ref ${formatPaLabel(declaracao.anoPA, declaracao.mesPA)}?`)) return;
         setLoadingEnc(true); setError(null);
         try {
@@ -74,6 +113,7 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
                 empresaCnpj: declaracao.empresaCnpj,
                 anoPA: declaracao.anoPA,
                 mesPA: declaracao.mesPA,
+                dadosApuracaoMit,
             });
             setStatus({ statusEncerramento: r.statusEncerramento, protocolo: r.protocolo });
             onShowToast?.(`Encerramento solicitado (${r.statusEncerramento}).`);
@@ -96,6 +136,9 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
             setError(`Status: ${err.message}`);
         }
     };
+
+    const dadosApuracaoMitCompleta = isDadosApuracaoMitCompleta(apuracao);
+    const encerramentoBloqueado = !dadosApuracaoMitCompleta || situacaoMitBloqueiaEncerramento(apuracao, apuracaoResumo);
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -127,7 +170,9 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
                             </pre>
                         )}
                         {!loadingApur && !apuracao && (
-                            <p className="text-sm text-slate-500">Sem dados de apuração.</p>
+                            <p className="text-sm text-slate-500">
+                                {apuracaoMotivo || 'Sem dados de apuração.'}
+                            </p>
                         )}
                     </div>
 
@@ -135,12 +180,19 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
                     <div className="bg-violet-50 border border-violet-200 rounded-lg p-4">
                         <h4 className="font-medium text-violet-800 mb-2">Encerramento MIT</h4>
                         <p className="text-sm text-violet-700 mb-3">
-                            Encerrar a apuração antes da transmissão da DCTFWeb. Operação assíncrona — após encerrar, verifique o status.
+                            Encerrar a apuração antes da transmissão da DCTFWeb. O SERPRO exige a apuração MIT completa; a operação é assíncrona.
                         </p>
+                        {encerramentoBloqueado && (
+                            <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                                {!dadosApuracaoMitCompleta
+                                    ? 'Encerramento indisponível: não há payload MIT completo para esta competência.'
+                                    : 'Encerramento indisponível: a apuração já está encerrada ou em processamento.'}
+                            </div>
+                        )}
                         <div className="flex gap-2">
                             <button
                                 onClick={handleEncerrar}
-                                disabled={loadingEnc}
+                                disabled={loadingEnc || encerramentoBloqueado}
                                 className="px-4 py-2 bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-50 text-sm"
                             >
                                 {loadingEnc ? 'Encerrando...' : 'Encerrar Apuração'}

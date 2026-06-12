@@ -9,10 +9,10 @@
 //   CONSRECIBO32                (/Consultar) recibo de transmissao (PDF)
 //   CONSXMLDECLARACAO           (/Consultar) XML
 //   GERARDARFANDAMENTO          (/Emitir)    DARF p/ declaracao em andamento
-//   ENCERRARAPURACAOMIT         (/Declarar)  encerra MIT
-//   CONSITUAENCERRAMENTOMIT     (/Consultar) status encerramento MIT
-//   CONSAPURACAOMIT             (/Consultar) detalhes apuracao MIT
-//   CONSAPURACAOPORANO          (/Consultar) historico anual MIT
+//   MIT / ENCAPURACAO314        (/Declarar)  encerra MIT
+//   MIT / SITUACAOENC315        (/Consultar) status encerramento MIT
+//   MIT / CONSAPURACAO316       (/Consultar) detalhes por idApuracao
+//   MIT / LISTAAPURACOES317     (/Consultar) historico anual/mensal MIT
 //
 // Custo SERPRO: ~R$ 0,75 por TRANSDEC/GERARDARF; demais ~R$ 0,06-0,40.
 // Troca via env DCTFWEB_MODE — sem rebuild.
@@ -40,6 +40,13 @@ export const DCTFWEB_CATEGORIAS = {
     MIT: 60,
 };
 
+export const MIT_SERVICOS = {
+    ENCERRAR_APURACAO: 'ENCAPURACAO314',
+    SITUACAO_ENCERRAMENTO: 'SITUACAOENC315',
+    CONSULTAR_APURACAO: 'CONSAPURACAO316',
+    LISTAR_APURACOES: 'LISTAAPURACOES317',
+};
+
 function safeJsonParse(s) {
     if (typeof s !== 'string') return s;
     try { return JSON.parse(s); } catch { return s; }
@@ -49,6 +56,75 @@ function hashCnpj(cnpj) {
     let h = 0;
     for (const c of String(cnpj || '')) h = (h * 31 + c.charCodeAt(0)) | 0;
     return Math.abs(h);
+}
+
+function asArray(value) {
+    if (!value) return [];
+    return Array.isArray(value) ? value : [value];
+}
+
+function pickApuracoes(dados) {
+    return asArray(
+        dados?.Apuracoes
+        || dados?.apuracoes
+        || dados?.ListaApuracoes
+        || dados?.listaApuracoes
+        || dados?.apApuracoes
+    );
+}
+
+function sameMitPeriod(item, anoPA, mesPA) {
+    const periodo = String(item?.periodoApuracao || item?.PeriodoApuracao || item?.periodo || '').replace(/\D/g, '');
+    if (periodo.length === 6) {
+        return periodo === `${anoPA}${String(mesPA).padStart(2, '0')}`;
+    }
+    const ano = Number(item?.anoApuracao ?? item?.AnoApuracao ?? item?.anoPA ?? item?.ano);
+    const mes = Number(item?.mesApuracao ?? item?.MesApuracao ?? item?.mesPA ?? item?.mes);
+    return ano === Number(anoPA) && mes === Number(mesPA);
+}
+
+function pickIdApuracao(item) {
+    return item?.idApuracao ?? item?.IdApuracao ?? item?.identEFD ?? item?.id;
+}
+
+function pickDadosApuracaoMit(input) {
+    if (!input || typeof input !== 'object') return null;
+    if (input.PeriodoApuracao) return input;
+
+    const direct = input.dadosApuracaoMit ?? input.dadosApuracaoMIT ?? input.DadosApuracaoMit ?? input.DadosApuracaoMIT;
+    if (Array.isArray(direct)) return direct[0] || null;
+    if (direct && typeof direct === 'object') return direct;
+
+    const nested = input.apuracaoMit ?? input.apuracao ?? input.dados;
+    if (nested && nested !== input) return pickDadosApuracaoMit(nested);
+    return null;
+}
+
+function ensureMitEncerramentoPayload({ dadosApuracaoMit, anoPA, mesPA }) {
+    const payload = pickDadosApuracaoMit(dadosApuracaoMit);
+    if (!payload) {
+        throw new Error(
+            'Encerramento MIT requer a apuracao completa (PeriodoApuracao, DadosIniciais e, quando houver movimento, Debitos). ' +
+            'A integracao nao pode transmitir MIT apenas com ano/mes.'
+        );
+    }
+    const dados = {
+        ...payload,
+        PeriodoApuracao: payload.PeriodoApuracao || {
+            MesApuracao: Number(mesPA),
+            AnoApuracao: Number(anoPA),
+        },
+    };
+    const dadosIniciais = dados.DadosIniciais || dados.dadosIniciais;
+    if (!dadosIniciais) {
+        throw new Error('Encerramento MIT requer DadosIniciais no payload oficial da apuracao.');
+    }
+    const semMovimento = dadosIniciais.SemMovimento ?? dadosIniciais.semMovimento;
+    const temDebitos = !!(dados.Debitos || dados.debitos);
+    if (semMovimento !== true && semMovimento !== 'true' && !temDebitos) {
+        throw new Error('Encerramento MIT com movimento requer Debitos no payload oficial da apuracao.');
+    }
+    return dados;
 }
 
 class MockProvider {
@@ -265,43 +341,78 @@ class SerproProvider {
         return { pdfBase64: d.PDFByteArrayBase64 || '', categoria: catCode, anoPA, mesPA, fonte: 'serpro' };
     }
 
-    async encerrarApuracaoMit({ empresaCnpj, anoPA, mesPA }) {
+    async encerrarApuracaoMit({ empresaCnpj, anoPA, mesPA, dadosApuracaoMit }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        const dados = ensureMitEncerramentoPayload({ dadosApuracaoMit, anoPA, mesPA });
         const r = await invokeIntegraContador({
-            idSistema: 'DCTFWEB',
-            idServico: 'ENCERRARAPURACAOMIT',
+            idSistema: 'MIT',
+            idServico: MIT_SERVICOS.ENCERRAR_APURACAO,
             contribuinteCnpj: cnpj,
             acao: 'Declarar',
-            dados: { anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
+            dados,
         });
         const d = safeJsonParse(r.dados) || {};
-        return { _raw: d, statusEncerramento: d.status || 'PROCESSANDO', protocolo: d.protocolo || '', fonte: 'serpro' };
+        return {
+            _raw: d,
+            idApuracao: d.idApuracao ?? d.IdApuracao ?? null,
+            statusEncerramento: d.statusEncerramento || d.status || 'PROCESSANDO',
+            protocolo: d.protocoloEncerramento || d.protocolo || '',
+            fonte: 'serpro',
+        };
     }
 
     async consultarStatusEncerramentoMit({ empresaCnpj, protocolo, anoPA, mesPA }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        if (!protocolo) {
+            throw new Error('Consultar situação do encerramento MIT requer protocoloEncerramento.');
+        }
         const r = await invokeIntegraContador({
-            idSistema: 'DCTFWEB',
-            idServico: 'CONSITUAENCERRAMENTOMIT',
+            idSistema: 'MIT',
+            idServico: MIT_SERVICOS.SITUACAO_ENCERRAMENTO,
             contribuinteCnpj: cnpj,
             acao: 'Consultar',
-            dados: protocolo ? { protocolo } : { anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
+            dados: { protocoloEncerramento: protocolo },
         });
         const d = safeJsonParse(r.dados) || {};
-        return { _raw: d, statusEncerramento: d.status || 'DESCONHECIDO', protocolo: d.protocolo || protocolo, fonte: 'serpro' };
+        return {
+            _raw: d,
+            idApuracao: d.idApuracao ?? d.IdApuracao ?? null,
+            situacaoApuracao: d.situacaoApuracao ?? d.SituacaoApuracao ?? null,
+            statusEncerramento: d.textoSituacao || d.statusEncerramento || d.status || 'DESCONHECIDO',
+            protocolo,
+            avisosDctf: d.avisosDctf || d.avisosDCTF || [],
+            fonte: 'serpro',
+        };
     }
 
     async consultarApuracaoMit({ empresaCnpj, anoPA, mesPA }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        const historico = await this.consultarApuracoesAno({ empresaCnpj: cnpj, anoPA, mesPA });
+        const apuracaoRef = (historico.apuracoes || []).find((x) => sameMitPeriod(x, anoPA, mesPA))
+            || (historico.apuracoes || [])[0];
+        const idApuracao = pickIdApuracao(apuracaoRef);
+        if (idApuracao == null || idApuracao === '') {
+            return {
+                apuracaoMit: null,
+                apuracoes: historico.apuracoes || [],
+                motivo: 'Nenhuma apuração MIT encontrada para a competência.',
+                fonte: 'serpro',
+            };
+        }
         const r = await invokeIntegraContador({
-            idSistema: 'DCTFWEB',
-            idServico: 'CONSAPURACAOMIT',
+            idSistema: 'MIT',
+            idServico: MIT_SERVICOS.CONSULTAR_APURACAO,
             contribuinteCnpj: cnpj,
             acao: 'Consultar',
-            dados: { anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
+            dados: { idApuracao: Number(idApuracao) },
         });
         const d = safeJsonParse(r.dados) || {};
-        return { apuracaoMit: d.apuracao || d, fonte: 'serpro' };
+        return {
+            apuracaoMit: d.apuracao || d.dadosApuracaoMit || d.dadosApuracaoMIT || d,
+            apuracaoResumo: apuracaoRef,
+            idApuracao: Number(idApuracao),
+            fonte: 'serpro',
+        };
     }
 
     async consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
@@ -323,17 +434,19 @@ class SerproProvider {
         return { xml, _raw: d, categoria, anoPA, mesPA, fonte: 'serpro' };
     }
 
-    async consultarApuracoesAno({ empresaCnpj, anoPA }) {
+    async consultarApuracoesAno({ empresaCnpj, anoPA, mesPA }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        const dados = { anoApuracao: Number(anoPA) };
+        if (mesPA) dados.mesApuracao = Number(mesPA);
         const r = await invokeIntegraContador({
-            idSistema: 'DCTFWEB',
-            idServico: 'CONSAPURACAOPORANO',
+            idSistema: 'MIT',
+            idServico: MIT_SERVICOS.LISTAR_APURACOES,
             contribuinteCnpj: cnpj,
             acao: 'Consultar',
-            dados: { anoPA: String(anoPA) },
+            dados,
         });
         const d = safeJsonParse(r.dados) || {};
-        return { ano: anoPA, apuracoes: d.apuracoes || [], fonte: 'serpro' };
+        return { ano: anoPA, mes: mesPA || null, apuracoes: pickApuracoes(d), _raw: d, fonte: 'serpro' };
     }
 }
 
