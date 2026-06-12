@@ -10,8 +10,11 @@ import {
     consultarDeclaracaoCompleta,
     consultarRecibo,
     gerarDarf,
+    createPdfObjectUrlFromBase64,
     downloadPdfFromBase64,
     formatPaLabel,
+    openPdfFromBase64,
+    revokePdfObjectUrl,
     situacaoLabel,
     situacaoColorClass,
 } from '../../services/dctfwebService';
@@ -24,6 +27,53 @@ interface Props {
 }
 
 type Tab = 'declaracao' | 'recibo' | 'darf';
+
+function formatCurrency(value?: number | null): string {
+    if (value == null || !Number.isFinite(value)) return 'Não retornado no resumo';
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+const PdfPreview: React.FC<{
+    pdfBase64: string;
+    filename: string;
+    title: string;
+}> = ({ pdfBase64, filename, title }) => {
+    const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        const url = createPdfObjectUrlFromBase64(pdfBase64);
+        setPdfUrl(url);
+        return () => revokePdfObjectUrl(url);
+    }, [pdfBase64]);
+
+    return (
+        <div>
+            {pdfUrl ? (
+                <iframe
+                    src={pdfUrl}
+                    className="w-full h-[500px] border rounded"
+                    title={title}
+                />
+            ) : (
+                <div className="text-center text-slate-500 py-12">Preparando PDF...</div>
+            )}
+            <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                    onClick={() => openPdfFromBase64(pdfBase64)}
+                    className="text-sm px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-800"
+                >
+                    Abrir em nova aba
+                </button>
+                <button
+                    onClick={() => downloadPdfFromBase64(pdfBase64, filename)}
+                    className="text-sm px-3 py-1 bg-sky-600 text-white rounded hover:bg-sky-700"
+                >
+                    Baixar PDF
+                </button>
+            </div>
+        </div>
+    );
+};
 
 const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }) => {
     const [tab, setTab] = useState<Tab>('declaracao');
@@ -100,20 +150,13 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                 </div>
             );
         }
+        const filename = `${filenamePrefix}_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`;
         return (
-            <div>
-                <iframe
-                    src={`data:application/pdf;base64,${pdfBase64}`}
-                    className="w-full h-[500px] border rounded"
-                    title="PDF"
-                />
-                <button
-                    onClick={() => downloadPdfFromBase64(pdfBase64, `${filenamePrefix}_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
-                    className="mt-2 text-sm px-3 py-1 bg-sky-600 text-white rounded hover:bg-sky-700"
-                >
-                    Baixar PDF
-                </button>
-            </div>
+            <PdfPreview
+                pdfBase64={pdfBase64}
+                filename={filename}
+                title={`${filenamePrefix} PDF`}
+            />
         );
     };
 
@@ -132,6 +175,24 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                             </span>
                         </div>
                         <button onClick={onClose} className="text-slate-500 hover:text-slate-800 text-xl">×</button>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                        <div className="rounded border bg-slate-50 p-3">
+                            <p className="text-xs text-slate-500">Valor do resumo SERPRO</p>
+                            <p className="mt-1 font-semibold text-slate-800">{formatCurrency(declaracao.valorTotal)}</p>
+                            {declaracao.valorTotal == null && (
+                                <p className="mt-1 text-xs text-slate-500">Valide pelo PDF da declaração abaixo.</p>
+                            )}
+                        </div>
+                        <div className="rounded border bg-slate-50 p-3">
+                            <p className="text-xs text-slate-500">Recibo</p>
+                            <p className="mt-1 font-mono text-xs text-slate-800">{declaracao.numeroRecibo || 'Não informado'}</p>
+                        </div>
+                        <div className="rounded border bg-slate-50 p-3">
+                            <p className="text-xs text-slate-500">Última sincronização</p>
+                            <p className="mt-1 text-slate-800">{declaracao.ultimaSincronizacao || 'Não informada'}</p>
+                        </div>
                     </div>
 
                     <div className="flex gap-1 mt-4 border-b">
@@ -188,12 +249,20 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                         </p>
                                     </div>
                                     {darfResult.pdfBase64 && (
-                                        <button
-                                            onClick={() => downloadPdfFromBase64(darfResult.pdfBase64, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
-                                            className="mt-2 text-sm px-3 py-1 bg-sky-600 text-white rounded hover:bg-sky-700"
-                                        >
-                                            Baixar PDF DARF
-                                        </button>
+                                        <div className="flex flex-wrap gap-2 pt-2">
+                                            <button
+                                                onClick={() => openPdfFromBase64(darfResult.pdfBase64)}
+                                                className="text-sm px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-800"
+                                            >
+                                                Abrir PDF DARF
+                                            </button>
+                                            <button
+                                                onClick={() => downloadPdfFromBase64(darfResult.pdfBase64, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
+                                                className="text-sm px-3 py-1 bg-sky-600 text-white rounded hover:bg-sky-700"
+                                            >
+                                                Baixar PDF DARF
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                             )}

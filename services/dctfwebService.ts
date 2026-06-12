@@ -204,14 +204,49 @@ export async function consultarApuracoesAno(user: User | null, params: {
 
 // ── Helpers de display ─────────────────────────────────────────────────────
 
+function cleanBase64(base64: string): string {
+    return base64.includes(',') ? base64.split(',').pop() || '' : base64;
+}
+
+export function pdfBlobFromBase64(base64: string): Blob {
+    const byteChars = atob(cleanBase64(base64));
+    const bytes = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) {
+        bytes[i] = byteChars.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: 'application/pdf' });
+}
+
+export function createPdfObjectUrlFromBase64(base64: string): string {
+    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        return URL.createObjectURL(pdfBlobFromBase64(base64));
+    }
+    return `data:application/pdf;base64,${cleanBase64(base64)}`;
+}
+
+export function revokePdfObjectUrl(url: string): void {
+    if (url.startsWith('blob:') && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(url);
+    }
+}
+
 export function downloadPdfFromBase64(base64: string, filename: string): void {
     if (!base64) return;
+    const url = createPdfObjectUrlFromBase64(base64);
     const link = document.createElement('a');
-    link.href = `data:application/pdf;base64,${base64}`;
+    link.href = url;
     link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.setTimeout(() => revokePdfObjectUrl(url), 60000);
+}
+
+export function openPdfFromBase64(base64: string): void {
+    if (!base64) return;
+    const url = createPdfObjectUrlFromBase64(base64);
+    window.open(url, '_blank', 'noopener');
+    window.setTimeout(() => revokePdfObjectUrl(url), 60000);
 }
 
 export function formatPaLabel(anoPA: number, mesPA: number): string {
