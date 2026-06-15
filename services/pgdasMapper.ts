@@ -116,6 +116,10 @@ function resolveAnexoEfetivo(
     return anexo;
 }
 
+function anexoExigeFolhaSalario(anexo: SimplesNacionalEmpresa['anexo']): boolean {
+    return anexo === 'III_V' || anexo === 'V';
+}
+
 function idAtividadePgdas(
     anexoOriginal: SimplesNacionalEmpresa['anexo'],
     state: Pick<CnaeInputState, 'issRetido' | 'icmsSt' | 'isMonofasico' | 'isExterior'>,
@@ -187,6 +191,40 @@ function addAtividade(
     });
 }
 
+function montarFolhasSalario(
+    empresa: SimplesNacionalEmpresa,
+    pa: number,
+    exigeFolhaSalario: boolean,
+): Array<{ pa: number; valor: number }> {
+    if (!exigeFolhaSalario) return [];
+
+    const pasAnteriores = new Set<number>();
+    for (let i = 1; i <= 12; i++) pasAnteriores.add(paAnterior(pa, i));
+
+    const folhasMensais = Object.entries(empresa.folhaMensal || {})
+        .map(([competenciaFolha, valor]) => {
+            const match = competenciaFolha.match(/^(\d{4})-(\d{2})$/);
+            if (!match) return null;
+            return {
+                pa: Number(`${match[1]}${match[2]}`),
+                valor: round2(Number(valor) || 0),
+            };
+        })
+        .filter((item): item is { pa: number; valor: number } =>
+            !!item && item.valor > 0 && pasAnteriores.has(item.pa)
+        )
+        .sort((a, b) => a.pa - b.pa);
+
+    if (folhasMensais.length > 0) return folhasMensais;
+
+    const folha12Legada = round2(empresa.folha12 || 0);
+    if (folha12Legada > 0) {
+        return [{ pa: paAnterior(pa, 1), valor: folha12Legada }];
+    }
+
+    return [];
+}
+
 function montarReceitaAtividade(
     state: Pick<CnaeInputState, 'issRetido' | 'icmsSt' | 'isMonofasico'>,
     valor: number,
@@ -224,12 +262,14 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
     const grupos = new Map<number, AtividadePgdas>();
     let totalExterno = 0;
     let totalInterno = 0;
+    let exigeFolhaSalario = false;
 
     Object.entries(faturamentoPorCnae).forEach(([key, state]) => {
         const valor = round2(parseValorBr(state.valor));
         if (valor <= 0) return;
         const anexo = anexoFromKey(key, empresa.anexo);
         const idAtividade = idAtividadePgdas(anexo, state, resumo.fator_r || 0);
+        if (anexoExigeFolhaSalario(anexo)) exigeFolhaSalario = true;
         addAtividade(grupos, idAtividade, valor, montarReceitaAtividade(state, valor));
         if (state.isExterior) totalExterno = round2(totalExterno + valor);
         else totalInterno = round2(totalInterno + valor);
@@ -248,6 +288,7 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         totalInterno = round2(totalInterno + filialIndustriaSafe);
     }
     if (filialServicoSafe > 0) {
+        if (anexoExigeFolhaSalario(empresa.anexo)) exigeFolhaSalario = true;
         const idAtividade = idAtividadePgdas(
             serviceFallbackAnexo(empresa),
             { issRetido: true, icmsSt: false, isMonofasico: false, isExterior: false },
@@ -287,19 +328,7 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         }],
     };
 
-    const folhasSalario = Object.entries(empresa.folhaMensal || {})
-        .map(([competenciaFolha, valor]) => {
-            const match = competenciaFolha.match(/^(\d{4})-(\d{2})$/);
-            if (!match) return null;
-            return {
-                pa: Number(`${match[1]}${match[2]}`),
-                valor: round2(Number(valor) || 0),
-            };
-        })
-        .filter((item): item is { pa: number; valor: number } => !!item && item.valor > 0 && item.pa < pa)
-        .sort((a, b) => b.pa - a.pa)
-        .slice(0, 12)
-        .sort((a, b) => a.pa - b.pa);
+    const folhasSalario = montarFolhasSalario(empresa, pa, exigeFolhaSalario);
     if (folhasSalario.length > 0) {
         declaracao.folhasSalario = folhasSalario;
     }

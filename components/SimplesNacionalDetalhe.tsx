@@ -288,7 +288,10 @@ if (filialServico > 0) {
         setEmitindoDas(true);
         try {
             const dadosPgdas = mapPgdasPayload({
-                empresa,
+                empresa: {
+                    ...empresa,
+                    folha12: folha12Input,
+                },
                 resumo,
                 mesApuracao,
                 faturamentoPorCnae,

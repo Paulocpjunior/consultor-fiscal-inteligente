@@ -86,6 +86,84 @@ describe('mapPgdasPayload', () => {
         expect(payload.declaracao.estabelecimentos[0].atividades[0].idAtividade).toBe(15);
     });
 
+    it('inclui folha do PA anterior quando atividade III_V exige Fator R e só há folha12 legada', () => {
+        const payload = mapPgdasPayload({
+            empresa: {
+                ...baseEmpresa,
+                anexo: 'III_V',
+                folha12: 50469.19,
+            },
+            resumo: {
+                ...baseResumo,
+                fator_r: 0.1376,
+                anexo_efetivo: 'V',
+                folha_12: 50469.19,
+            },
+            mesApuracao: new Date(2026, 4, 1),
+            faturamentoPorCnae: {
+                'principal::0::7311400::III_V': { ...emptyState, valor: '34.434,80' },
+            },
+            filialComercio: 0,
+            filialIndustria: 0,
+            filialServico: 0,
+            icmsVendas: 0,
+        });
+
+        expect(payload.declaracao.estabelecimentos[0].atividades[0].idAtividade).toBe(11);
+        expect(payload.declaracao.folhasSalario).toEqual([
+            { pa: 202604, valor: 50469.19 },
+        ]);
+    });
+
+    it('nao envia folha12 legada para Anexo III que nao exige Fator R', () => {
+        const payload = mapPgdasPayload({
+            empresa: { ...baseEmpresa, anexo: 'III', folha12: 50469.19 },
+            resumo: { ...baseResumo, fator_r: 0.1376, folha_12: 50469.19 },
+            mesApuracao: new Date(2026, 4, 1),
+            faturamentoPorCnae: {
+                'principal::0::9602501::III': { ...emptyState, valor: '34.434,80' },
+            },
+            filialComercio: 0,
+            filialIndustria: 0,
+            filialServico: 0,
+            icmsVendas: 0,
+        });
+
+        expect(payload.declaracao).not.toHaveProperty('folhasSalario');
+    });
+
+    it('usa folhaMensal da janela de 12 meses quando ela existe', () => {
+        const payload = mapPgdasPayload({
+            empresa: {
+                ...baseEmpresa,
+                anexo: 'III_V',
+                folha12: 999999,
+                folhaMensal: {
+                    '2026-05': 999,
+                    '2026-04': 10000,
+                    '2026-03': 9000,
+                    '2025-05': 8000,
+                    '2025-03': 7000,
+                },
+            },
+            resumo: { ...baseResumo, fator_r: 0.2, anexo_efetivo: 'V' },
+            mesApuracao: new Date(2026, 4, 1),
+            faturamentoPorCnae: {
+                'principal::0::7311400::III_V': { ...emptyState, valor: '34.434,80' },
+            },
+            filialComercio: 0,
+            filialIndustria: 0,
+            filialServico: 0,
+            icmsVendas: 0,
+        });
+
+        expect(payload.declaracao.folhasSalario).toEqual([
+            { pa: 202505, valor: 8000 },
+            { pa: 202603, valor: 9000 },
+            { pa: 202604, valor: 10000 },
+        ]);
+    });
+
     it('mapeia comercio e industria pelos ids oficiais do dominio PGDAS-D', () => {
         const payload = mapPgdasPayload({
             empresa: { ...baseEmpresa, anexo: 'I' },
