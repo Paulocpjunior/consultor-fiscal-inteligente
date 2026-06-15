@@ -671,6 +671,8 @@ export interface DasEmitido {
     pdfBase64?: string | null;
     descricao?: string;            // só pra avulso
     pgdasRecibo?: string;
+    pgdasNumeroDeclaracao?: string;
+    pgdasTipoDeclaracao?: 1 | 2;
     pgdasTransmitidoEm?: string;
     emitidoEm: string;
     modeUsado: 'mock' | 'serpro';

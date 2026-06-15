@@ -300,7 +300,7 @@ if (filialServico > 0) {
                 filialServico,
                 icmsVendas,
             });
-            await emitirDasRegular(currentUser ?? null, {
+            const dasEmitido = await emitirDasRegular(currentUser ?? null, {
                 empresaId: empresa.id,
                 empresaCnpj: empresa.cnpj,
                 empresaNome: empresa.nome,
@@ -308,7 +308,9 @@ if (filialServico > 0) {
                 valor: resumo.das_mensal,
                 dadosPgdas,
             });
-            onShowToast('DAS Regular emitido com sucesso! Veja em Central de DAS.');
+            onShowToast(dasEmitido.pgdasTipoDeclaracao === 2
+                ? 'DAS emitido com PGDAS retificador. Veja em Central de DAS.'
+                : 'DAS Regular emitido com sucesso! Veja em Central de DAS.');
         } catch (err: any) {
             onShowToast(`Erro ao emitir: ${err.message}`);
         } finally {

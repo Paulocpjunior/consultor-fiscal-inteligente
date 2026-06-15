@@ -28,6 +28,73 @@ import { normalizarRespostaDasSerpro } from './das-response-normalizer.js';
 const PGDAS_VALOR_TOLERANCIA = Number(process.env.PGDAS_VALOR_TOLERANCIA || '0.05');
 
 // Helpers ─────────────────────────────────────────────────────────────────
+function parseMaybeJson(value) {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (!trimmed) return value;
+    try { return JSON.parse(trimmed); }
+    catch { return value; }
+}
+
+function textoErroSerpro(err) {
+    const partes = [err?.message, err?.serproMessage];
+    const mensagens = Array.isArray(err?.serproMessages) ? err.serproMessages : [];
+    for (const msg of mensagens) {
+        partes.push(msg?.codigo, msg?.texto, msg?.mensagem, msg?.message);
+    }
+    return partes.filter(Boolean).join(' ');
+}
+
+export function inferirTipoDeclaracaoCorretoPgdas(err) {
+    const texto = textoErroSerpro(err);
+    if (!/MSG_ISN_041|tipo de declara/i.test(texto)) return null;
+
+    if (/correto\s*(?:é|e)\s*2\s*[-–]?\s*Retificadora/i.test(texto)
+        || /2\s*[-–]?\s*Retificadora/i.test(texto)) {
+        return 2;
+    }
+    if (/correto\s*(?:é|e)\s*1\s*[-–]?\s*Original/i.test(texto)
+        || /1\s*[-–]?\s*Original/i.test(texto)) {
+        return 1;
+    }
+    return null;
+}
+
+function findNumeroDeclaracaoPgdas(value, depth = 0) {
+    if (depth > 8 || value == null) return '';
+    const parsed = parseMaybeJson(value);
+
+    if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+            const found = findNumeroDeclaracaoPgdas(item, depth + 1);
+            if (found) return found;
+        }
+        return '';
+    }
+
+    if (typeof parsed !== 'object') return '';
+
+    for (const key of ['numeroDeclaracao', 'idDeclaracao']) {
+        const numero = parsed[key];
+        if (numero != null && String(numero).trim()) return String(numero).trim();
+    }
+
+    for (const key of ['dados', 'declaracaoTransmitida', 'declaracao', 'resultado', 'declaracoes', 'declaracoesTransmitidas']) {
+        if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+            const found = findNumeroDeclaracaoPgdas(parsed[key], depth + 1);
+            if (found) return found;
+        }
+    }
+    return '';
+}
+
+export function extrairNumeroDeclaracaoConsultaPgdas(result) {
+    const transmitida = extrairDeclaracaoTransmitidaPgdas(result);
+    const numeroTransmitida = findNumeroDeclaracaoPgdas(transmitida);
+    if (numeroTransmitida) return numeroTransmitida;
+    return findNumeroDeclaracaoPgdas(result?.dados ?? result);
+}
+
 function calcularDigitoBarras(c44) {
     // Calculo simplificado de DV — modulo 10 do FEBRABAN
     let soma = 0, peso = 2;
@@ -138,10 +205,10 @@ class SerproProvider {
                 acao: 'Consultar',
                 dados: { periodoApuracao: pa },
             });
-            const d = result.dados || {};
-            const dec = d.declaracao || d;
-            if (dec.numeroDeclaracao) return { existe: true, numeroDeclaracao: dec.numeroDeclaracao };
-            return { existe: false };
+            const numeroDeclaracao = extrairNumeroDeclaracaoConsultaPgdas(result);
+            if (numeroDeclaracao) return { existe: true, numeroDeclaracao };
+            const declaracao = extrairDeclaracaoTransmitidaPgdas(result);
+            return declaracao ? { existe: true, numeroDeclaracao: '' } : { existe: false };
         } catch (err) {
             // Se SERPRO retornar erro de negocio (404, nao encontrado, etc),
             // tratamos como "nao existe" — declaracao Original
@@ -151,6 +218,23 @@ class SerproProvider {
             // Outros erros sao propagados
             throw err;
         }
+    }
+
+    async validarDeclaracaoPgdas({ cnpjLimpo, pa, declaracao }) {
+        const dadosValidacao = montarDadosDeclaracaoPgdas({
+            cnpjLimpo,
+            pa,
+            transmitir: false,
+            declaracao,
+        });
+
+        return invokeIntegraContador({
+            idSistema: 'PGDASD',
+            idServico: 'TRANSDECLARACAO11',
+            contribuinteCnpj: cnpjLimpo,
+            acao: 'Declarar',
+            dados: dadosValidacao,
+        });
     }
 
     /**
@@ -169,7 +253,7 @@ class SerproProvider {
 
         // Detecta se ja existe declaracao -> Retificadora
         const consulta = await this.consultarDeclaracaoPa({ empresaCnpj: cnpjLimpo, competencia: pa });
-        const tipoDeclaracao = consulta.existe ? 2 : 1;
+        let tipoDeclaracao = consulta.existe ? 2 : 1;
 
         // Monta payload completo (com dadosPgdas) ou minimo (fallback)
         let declaracao;
@@ -191,20 +275,17 @@ class SerproProvider {
             };
         }
 
-        const dadosValidacao = montarDadosDeclaracaoPgdas({
-            cnpjLimpo,
-            pa,
-            transmitir: false,
-            declaracao,
-        });
+        let validacao;
+        try {
+            validacao = await this.validarDeclaracaoPgdas({ cnpjLimpo, pa, declaracao });
+        } catch (err) {
+            const tipoCorreto = inferirTipoDeclaracaoCorretoPgdas(err);
+            if (!tipoCorreto || tipoCorreto === tipoDeclaracao) throw err;
 
-        const validacao = await invokeIntegraContador({
-            idSistema: 'PGDASD',
-            idServico: 'TRANSDECLARACAO11',
-            contribuinteCnpj: cnpjLimpo,
-            acao: 'Declarar',
-            dados: dadosValidacao,
-        });
+            tipoDeclaracao = tipoCorreto;
+            declaracao = { ...declaracao, tipoDeclaracao };
+            validacao = await this.validarDeclaracaoPgdas({ cnpjLimpo, pa, declaracao });
+        }
 
         if (validacao?.dados?._dryRun) {
             return {
@@ -219,7 +300,7 @@ class SerproProvider {
             };
         }
 
-        const valoresParaComparacao = normalizarValoresDevidosPgdas(validacao);
+        let valoresParaComparacao = normalizarValoresDevidosPgdas(validacao);
         if (!valoresParaComparacao.length && (Number(valor) || 0) > 0) {
             const err = new Error(
                 'SERPRO validou a declaracao, mas nao devolveu valores devidos para comparacao. ' +
@@ -236,7 +317,7 @@ class SerproProvider {
             tolerancia: PGDAS_VALOR_TOLERANCIA,
         });
 
-        const dadosTransmissao = montarDadosDeclaracaoPgdas({
+        let dadosTransmissao = montarDadosDeclaracaoPgdas({
             cnpjLimpo,
             pa,
             transmitir: true,
@@ -244,13 +325,54 @@ class SerproProvider {
             valoresParaComparacao,
         });
 
-        const result = await invokeIntegraContador({
-            idSistema: 'PGDASD',
-            idServico: 'TRANSDECLARACAO11',
-            contribuinteCnpj: cnpjLimpo,
-            acao: 'Declarar',
-            dados: dadosTransmissao,
-        });
+        let result;
+        try {
+            result = await invokeIntegraContador({
+                idSistema: 'PGDASD',
+                idServico: 'TRANSDECLARACAO11',
+                contribuinteCnpj: cnpjLimpo,
+                acao: 'Declarar',
+                dados: dadosTransmissao,
+            });
+        } catch (err) {
+            const tipoCorreto = inferirTipoDeclaracaoCorretoPgdas(err);
+            if (!tipoCorreto || tipoCorreto === tipoDeclaracao) throw err;
+
+            tipoDeclaracao = tipoCorreto;
+            declaracao = { ...declaracao, tipoDeclaracao };
+            const novaValidacao = await this.validarDeclaracaoPgdas({ cnpjLimpo, pa, declaracao });
+            const novosValores = normalizarValoresDevidosPgdas(novaValidacao);
+            if (!novosValores.length && (Number(valor) || 0) > 0) {
+                const semValores = new Error(
+                    'SERPRO validou a declaracao, mas nao devolveu valores devidos para comparacao. ' +
+                    'Nenhuma declaracao foi transmitida; tente novamente ou confira a apuracao no PGDAS-D.'
+                );
+                semValores.code = 'PGDAS_SEM_VALORES_COMPARACAO';
+                semValores.httpStatus = 502;
+                throw semValores;
+            }
+            assertValorPgdasCompativel({
+                valorLocal: valor,
+                valoresDevidos: novosValores,
+                tolerancia: PGDAS_VALOR_TOLERANCIA,
+            });
+            valoresParaComparacao = novosValores;
+
+            dadosTransmissao = montarDadosDeclaracaoPgdas({
+                cnpjLimpo,
+                pa,
+                transmitir: true,
+                declaracao,
+                valoresParaComparacao,
+            });
+            result = await invokeIntegraContador({
+                idSistema: 'PGDASD',
+                idServico: 'TRANSDECLARACAO11',
+                contribuinteCnpj: cnpjLimpo,
+                acao: 'Declarar',
+                dados: dadosTransmissao,
+            });
+        }
 
         const d = extrairDeclaracaoTransmitidaPgdas(result) || result.dados || {};
         return {
