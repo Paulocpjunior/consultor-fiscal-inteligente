@@ -92,10 +92,15 @@ describe('SerproProvider MIT — catálogo oficial', () => {
         }));
     });
 
-    it('consultarApuracaoMit lista por competência e consulta detalhe por idApuracao', async () => {
+    it('consultarApuracaoMit usa histórico anual e consulta detalhe do PA correto por idApuracao', async () => {
         mockInvokeIntegraContador
             .mockResolvedValueOnce({
-                dados: { Apuracoes: [{ periodoApuracao: '202605', idApuracao: 789 }] },
+                dados: {
+                    Apuracoes: [
+                        { periodoApuracao: 202601, idApuracao: 111 },
+                        { periodoApuracao: '202605', idApuracao: 789 },
+                    ],
+                },
             })
             .mockResolvedValueOnce({
                 dados: {
@@ -114,11 +119,66 @@ describe('SerproProvider MIT — catálogo oficial', () => {
         expect(mockInvokeIntegraContador).toHaveBeenNthCalledWith(1, expect.objectContaining({
             idSistema: 'MIT',
             idServico: MIT_SERVICOS.LISTAR_APURACOES,
+            dados: { anoApuracao: 2026 },
         }));
         expect(mockInvokeIntegraContador).toHaveBeenNthCalledWith(2, expect.objectContaining({
             idSistema: 'MIT',
             idServico: MIT_SERVICOS.CONSULTAR_APURACAO,
             dados: { idApuracao: 789 },
+        }));
+    });
+
+    it('consultarApuracaoMit não usa apuração de outro mês quando o PA solicitado não existe', async () => {
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: {
+                Apuracoes: [
+                    { periodoApuracao: 202601, idApuracao: 111 },
+                    { periodoApuracao: 202602, idApuracao: 222 },
+                ],
+            },
+        });
+
+        const r = await provider.consultarApuracaoMit({
+            empresaCnpj: '51227692000146',
+            anoPA: 2026,
+            mesPA: 5,
+        });
+
+        expect(r.apuracaoMit).toBeNull();
+        expect(r.motivo).toMatch(/202605/);
+        expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(1);
+    });
+
+    it('consultarApuracaoMit reconhece PeriodoApuracao em objeto no histórico anual', async () => {
+        mockInvokeIntegraContador
+            .mockResolvedValueOnce({
+                dados: {
+                    Apuracoes: [{
+                        PeriodoApuracao: { AnoApuracao: 2026, MesApuracao: 5 },
+                        IdApuracao: 987,
+                    }],
+                },
+            })
+            .mockResolvedValueOnce({
+                dados: {
+                    dadosApuracaoMit: [{
+                        PeriodoApuracao: { MesApuracao: 5, AnoApuracao: 2026 },
+                        DadosIniciais: { SemMovimento: true },
+                    }],
+                },
+            });
+
+        const r = await provider.consultarApuracaoMit({
+            empresaCnpj: '51227692000146',
+            anoPA: 2026,
+            mesPA: 5,
+        });
+
+        expect(r.idApuracao).toBe(987);
+        expect(mockInvokeIntegraContador).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            idSistema: 'MIT',
+            idServico: MIT_SERVICOS.CONSULTAR_APURACAO,
+            dados: { idApuracao: 987 },
         }));
     });
 });

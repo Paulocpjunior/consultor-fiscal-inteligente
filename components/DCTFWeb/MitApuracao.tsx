@@ -139,6 +139,11 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
 
     const dadosApuracaoMitCompleta = isDadosApuracaoMitCompleta(apuracao);
     const encerramentoBloqueado = !dadosApuracaoMitCompleta || situacaoMitBloqueiaEncerramento(apuracao, apuracaoResumo);
+    const mensagemBloqueioEncerramento = !apuracao
+        ? (apuracaoMotivo || 'Encerramento indisponível: nenhuma apuração MIT foi carregada para esta competência.')
+        : (!dadosApuracaoMitCompleta
+            ? 'Encerramento indisponível: a apuração MIT foi encontrada, mas o SERPRO não retornou DadosIniciais e Débitos completos para retransmissão.'
+            : 'Encerramento indisponível: a apuração já está encerrada ou em processamento.');
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -184,9 +189,7 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
                         </p>
                         {encerramentoBloqueado && (
                             <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                                {!dadosApuracaoMitCompleta
-                                    ? 'Encerramento indisponível: não há payload MIT completo para esta competência.'
-                                    : 'Encerramento indisponível: a apuração já está encerrada ou em processamento.'}
+                                {mensagemBloqueioEncerramento}
                             </div>
                         )}
                         <div className="flex gap-2">

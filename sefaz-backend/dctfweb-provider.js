@@ -74,6 +74,15 @@ function pickApuracoes(dados) {
 }
 
 function sameMitPeriod(item, anoPA, mesPA) {
+    const periodoObj = (item?.PeriodoApuracao && typeof item.PeriodoApuracao === 'object')
+        ? item.PeriodoApuracao
+        : ((item?.periodoApuracao && typeof item.periodoApuracao === 'object') ? item.periodoApuracao : null);
+    if (periodoObj) {
+        const ano = Number(periodoObj.AnoApuracao ?? periodoObj.anoApuracao ?? periodoObj.anoPA ?? periodoObj.ano);
+        const mes = Number(periodoObj.MesApuracao ?? periodoObj.mesApuracao ?? periodoObj.mesPA ?? periodoObj.mes);
+        return ano === Number(anoPA) && mes === Number(mesPA);
+    }
+
     const periodo = String(item?.periodoApuracao || item?.PeriodoApuracao || item?.periodo || '').replace(/\D/g, '');
     if (periodo.length === 6) {
         return periodo === `${anoPA}${String(mesPA).padStart(2, '0')}`;
@@ -387,15 +396,18 @@ class SerproProvider {
 
     async consultarApuracaoMit({ empresaCnpj, anoPA, mesPA }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
-        const historico = await this.consultarApuracoesAno({ empresaCnpj: cnpj, anoPA, mesPA });
-        const apuracaoRef = (historico.apuracoes || []).find((x) => sameMitPeriod(x, anoPA, mesPA))
-            || (historico.apuracoes || [])[0];
+        const historico = await this.consultarApuracoesAno({ empresaCnpj: cnpj, anoPA });
+        const apuracoes = historico.apuracoes || [];
+        const apuracaoRef = apuracoes.find((x) => sameMitPeriod(x, anoPA, mesPA));
         const idApuracao = pickIdApuracao(apuracaoRef);
         if (idApuracao == null || idApuracao === '') {
+            const pa = `${anoPA}${String(mesPA).padStart(2, '0')}`;
             return {
                 apuracaoMit: null,
-                apuracoes: historico.apuracoes || [],
-                motivo: 'Nenhuma apuração MIT encontrada para a competência.',
+                apuracoes,
+                motivo: apuracoes.length > 0
+                    ? `Nenhuma apuração MIT encontrada para ${pa}. O histórico anual retornou ${apuracoes.length} apuração(ões), mas nenhuma desta competência.`
+                    : `Nenhuma apuração MIT encontrada para ${pa}.`,
                 fonte: 'serpro',
             };
         }
