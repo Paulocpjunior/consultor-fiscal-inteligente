@@ -524,6 +524,11 @@ const App: React.FC = () => {
                 setSimplesEmpresas(empresas);
                 setSimplesNotas(notas);
             }
+            if (result.faturamentoManual) {
+                setSimplesEmpresas(prev => prev.map(e =>
+                    e.id === empresaId ? { ...e, faturamentoManual: result.faturamentoManual } : e
+                ));
+            }
             if (currentUser) authService.logAction(currentUser.id, currentUser.name, 'import_notas', empresaId);
             setToastMessage(result.successCount > 0 ? `${result.successCount} registros importados com sucesso!` : "Nenhum dado importado.");
             return result;

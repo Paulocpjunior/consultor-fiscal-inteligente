@@ -345,6 +345,7 @@ export interface SimplesNacionalImportResult {
     successCount: number;
     failCount: number;
     errors: string[];
+    faturamentoManual?: Record<string, number>;
 }
 
 export interface SimplesItemCalculo {

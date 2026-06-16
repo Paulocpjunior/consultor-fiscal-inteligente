@@ -150,7 +150,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
 
         setManualRbtHistory(empresa.faturamentoManual || {});
 
-    }, [mesApuracao, empresa.id, empresa.faturamentoMensalDetalhado, empresa.cnae, empresa.anexo, empresa.atividadesSecundarias]);
+    }, [mesApuracao, empresa.id, empresa.faturamentoManual, empresa.faturamentoMensalDetalhado, empresa.cnae, empresa.anexo, empresa.atividadesSecundarias]);
 
     // Recalcula o Resumo em Tempo Real com base nos Inputs
     const resumo = useMemo(() => {
@@ -394,6 +394,9 @@ if (filialServico > 0) {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             const res = await onImport(empresa.id, file);
+            if (res.faturamentoManual) {
+                setManualRbtHistory(res.faturamentoManual);
+            }
             if (res.errors.length > 0) {
                 onShowToast(`Importação com avisos: ${res.errors[0]}`);
             } else {

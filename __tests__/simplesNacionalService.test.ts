@@ -42,11 +42,15 @@ jest.mock('../services/empresaUniquenessService', () => ({
 import {
     calcularResumoEmpresa,
     calcularDiscriminacaoImpostos,
+    parseAndSaveNotas,
     sugerirAnexoPorCnae,
     ANEXOS_TABELAS,
     REPARTICAO_IMPOSTOS,
 } from '../services/simplesNacionalService';
+import { parsePgdasExtrato } from '../services/pgdasPdfParser';
 import { SimplesNacionalEmpresa, SimplesNacionalAnexo } from '../types';
+
+const parsePgdasExtratoMock = parsePgdasExtrato as jest.MockedFunction<typeof parsePgdasExtrato>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -735,6 +739,53 @@ describe('simplesNacionalService', () => {
             expect(result.rbt12).toBe(120000);
             // But DAS is calculated on current month revenue
             expect(result.das_mensal).toBeGreaterThan(0);
+        });
+    });
+
+    // ========================================================================
+    // Regression: PGDAS import updates RBT12 history immediately
+    // ========================================================================
+    describe('parseAndSaveNotas - PGDAS-D import', () => {
+        beforeEach(() => {
+            localStorage.clear();
+            jest.clearAllMocks();
+        });
+
+        it('normaliza periodos e devolve faturamentoManual atualizado para a tela', async () => {
+            const empresa = criarEmpresa({
+                id: 'empresa-pgdas',
+                faturamentoManual: { '2025-01': 100 },
+            });
+            localStorage.setItem('simples_nacional_empresas', JSON.stringify([empresa]));
+            parsePgdasExtratoMock.mockResolvedValue({
+                historico: [
+                    { periodo: ' 05/2026 ', valor: 1234.56 },
+                    { periodo: '2026-04', valor: '2.000,10' as any },
+                    { periodo: '2026-03', valor: '2000.10' as any },
+                    { periodo: '7/2025', valor: 300 },
+                ],
+                rbt12Declarado: 5534.76,
+                rbt12Calculado: 5534.76,
+                bate: true,
+            });
+
+            const file = {
+                name: 'pgdas.pdf',
+                arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+            } as unknown as File;
+
+            const result = await parseAndSaveNotas('empresa-pgdas', file);
+            expect(result.successCount).toBe(4);
+            expect(result.faturamentoManual).toMatchObject({
+                '2025-01': 100,
+                '2025-07': 300,
+                '2026-03': 2000.10,
+                '2026-04': 2000.10,
+                '2026-05': 1234.56,
+            });
+
+            const stored = JSON.parse(localStorage.getItem('simples_nacional_empresas') || '[]');
+            expect(stored[0].faturamentoManual).toMatchObject(result.faturamentoManual || {});
         });
     });
 });

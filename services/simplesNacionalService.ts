@@ -105,6 +105,42 @@ const generateUUID = () =>
 
 const sanitizePayload = (obj: any) => JSON.parse(JSON.stringify(obj));
 
+const normalizarPeriodoPgdas = (periodo: unknown): string | null => {
+    const raw = String(periodo ?? '').trim();
+    if (!raw) return null;
+
+    const br = raw.match(/^(\d{1,2})\s*\/\s*(\d{4})$/);
+    if (br?.[1] && br[2]) {
+        const mes = br[1].padStart(2, '0');
+        if (Number(mes) >= 1 && Number(mes) <= 12) return `${br[2]}-${mes}`;
+    }
+
+    const iso = raw.match(/^(\d{4})-(\d{1,2})$/);
+    if (iso?.[1] && iso[2]) {
+        const mes = iso[2].padStart(2, '0');
+        if (Number(mes) >= 1 && Number(mes) <= 12) return `${iso[1]}-${mes}`;
+    }
+
+    return null;
+};
+
+const normalizarValorPgdas = (valor: unknown): number | null => {
+    if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null;
+    if (typeof valor !== 'string') return null;
+
+    const compactado = valor
+        .replace(/\s/g, '')
+        .replace(/^R\$/i, '');
+    const dotCount = (compactado.match(/\./g) || []).length;
+    const normalizado = compactado.includes(',')
+        ? compactado.replace(/\./g, '').replace(',', '.')
+        : dotCount > 1 || /^\d{1,3}\.\d{3}$/.test(compactado)
+            ? compactado.replace(/\./g, '')
+            : compactado;
+    const parsed = Number(normalizado);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
 const getLocalEmpresas = (): SimplesNacionalEmpresa[] => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY_EMPRESAS) || '[]'); }
     catch { return []; }
@@ -336,19 +372,20 @@ export const parseAndSaveNotas = async (
                     { id: 'temp', role: 'admin', name: '', email: '' } as any);
                 const emp = empresas.find(e => e.id === empresaId);
                 if (emp) {
-                    const hist = emp.faturamentoManual || {};
+                    const hist = { ...(emp.faturamentoManual || {}) };
                     let cnt = 0;
                     pgdasHistory.forEach((item: any) => {
-                        if (item.periodo && typeof item.valor === 'number') {
-                            let k = item.periodo;
-                            if (k.includes('/')) { const p = k.split('/'); k = `${p[1]}-${p[0]}`; }
-                            hist[k] = item.valor; cnt++;
+                        const k = normalizarPeriodoPgdas(item.periodo);
+                        const valor = normalizarValorPgdas(item.valor);
+                        if (k && valor !== null) {
+                            hist[k] = valor; cnt++;
                         }
                     });
                     if (cnt > 0) {
                         await updateEmpresa(empresaId, { faturamentoManual: hist });
                         return { successCount: cnt, failCount: 0,
-                                 errors: [`PGDAS processado! ${cnt} meses atualizados.`] };
+                                 errors: [`PGDAS processado! ${cnt} meses atualizados.`],
+                                 faturamentoManual: hist };
                     }
                 }
             }
