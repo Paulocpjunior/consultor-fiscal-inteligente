@@ -23,6 +23,20 @@ describe('fetchFiscalData — CFOP local', () => {
         expect(result.text).toContain('industrialização por conta e ordem');
         expect(result.text).toContain('Remessa / retorno');
     });
+
+    it('responde CFOP 5.106 com descricao especifica do catalogo local', async () => {
+        const fetchMock = jest.fn(() => Promise.reject(new Error('fetch nao deveria ser chamado')));
+        globalThis.fetch = fetchMock as any;
+
+        const result = await fetchFiscalData(SearchType.CFOP, '5.106');
+
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(result.text).toContain('CFOP 5106');
+        expect(result.text).toContain('Venda de mercadoria adquirida ou recebida de terceiros, que não deva por ele transitar');
+        expect(result.text).toContain('recinto alfandegado');
+        expect(result.text).not.toContain('Descrição específica não cadastrada');
+        expect(result.sources?.[0]?.web.uri).toContain('confaz.fazenda.gov.br');
+    });
 });
 
 describe('fetchFiscalData — Serviço/ISS local', () => {

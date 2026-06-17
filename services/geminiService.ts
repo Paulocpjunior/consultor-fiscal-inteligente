@@ -80,8 +80,16 @@ const CFOP_CATEGORY_LABEL: Record<string, string> = {
     outro: 'Outra operação',
 };
 
+const CFOP_FONTE_OFICIAL: GroundingSource = {
+    web: {
+        uri: 'https://www.confaz.fazenda.gov.br/legislacao/ajustes/sinief/copy_of_cfop_cvsn_70_nova',
+        title: 'CONFAZ - Tabela CFOP vigente',
+    },
+};
+
 const CFOP_DESCRICOES: Record<string, string> = {
     '1924': 'Entrada para industrialização por conta e ordem do adquirente da mercadoria, quando esta não transitar pelo estabelecimento do adquirente.',
+    '5106': 'Venda de mercadoria adquirida ou recebida de terceiros, que não deva por ele transitar. Classificam-se neste código as vendas de mercadorias adquiridas ou recebidas de terceiros para industrialização ou comercialização, armazenadas em depósito fechado, armazém geral ou outro, que não tenham sido objeto de qualquer processo industrial no estabelecimento sem que haja retorno ao estabelecimento depositante. Também se aplica às vendas de mercadorias importadas cuja saída ocorra do recinto alfandegado ou repartição alfandegária onde se processou o desembaraço aduaneiro, com destino ao comprador, sem transitar pelo estabelecimento do importador.',
 };
 
 const SERVICO_LC116_DESCRICOES: Record<string, { descricao: string; grupo: string; observacoes?: string[] }> = {
@@ -177,6 +185,7 @@ function consultaCfopLocal(query: string, context?: SearchResult['context']): Se
         query,
         timestamp: Date.now(),
         context,
+        sources: [CFOP_FONTE_OFICIAL],
         text: [
             `## CFOP ${codigo}`,
             '',
