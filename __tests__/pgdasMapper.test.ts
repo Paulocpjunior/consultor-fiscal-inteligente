@@ -164,6 +164,72 @@ describe('mapPgdasPayload', () => {
         ]);
     });
 
+    it('nao envia receitas anteriores a abertura em empresa com RBT12 proporcionalizado', () => {
+        const payload = mapPgdasPayload({
+            empresa: {
+                ...baseEmpresa,
+                anexo: 'I',
+                cnpj: '62.384.278/0001-67',
+                dataAbertura: '2025-08-01',
+                faturamentoManual: {
+                    '2025-07': 0,
+                    '2025-08': 0,
+                    '2025-09': 12000,
+                    '2026-04': 22000,
+                },
+            },
+            resumo: {
+                ...baseResumo,
+                inicioAtividade: true,
+                mesesAtividade: 9,
+                rbt12: 147658.57,
+            },
+            mesApuracao: new Date(2026, 4, 1),
+            faturamentoPorCnae: {
+                'principal::0::4520001::I': { ...emptyState, valor: '68.830,68' },
+            },
+            filialComercio: 0,
+            filialIndustria: 0,
+            filialServico: 0,
+            icmsVendas: 0,
+        });
+
+        const pas = payload.declaracao.receitasBrutasAnteriores.map(r => r.pa);
+        expect(pas).toHaveLength(9);
+        expect(pas).toEqual([
+            202604, 202603, 202602, 202601, 202512,
+            202511, 202510, 202509, 202508,
+        ]);
+        expect(pas).not.toContain(202507);
+        expect(pas).not.toContain(202506);
+        expect(pas).not.toContain(202505);
+    });
+
+    it('nao envia receitas anteriores no primeiro mes de atividade', () => {
+        const payload = mapPgdasPayload({
+            empresa: {
+                ...baseEmpresa,
+                anexo: 'I',
+                dataAbertura: '2026-05-10',
+            },
+            resumo: {
+                ...baseResumo,
+                inicioAtividade: true,
+                mesesAtividade: 0,
+            },
+            mesApuracao: new Date(2026, 4, 1),
+            faturamentoPorCnae: {
+                'principal::0::4520001::I': { ...emptyState, valor: '10.000,00' },
+            },
+            filialComercio: 0,
+            filialIndustria: 0,
+            filialServico: 0,
+            icmsVendas: 0,
+        });
+
+        expect(payload.declaracao.receitasBrutasAnteriores).toEqual([]);
+    });
+
     it('mapeia comercio e industria pelos ids oficiais do dominio PGDAS-D', () => {
         const payload = mapPgdasPayload({
             empresa: { ...baseEmpresa, anexo: 'I' },

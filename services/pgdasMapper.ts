@@ -83,6 +83,38 @@ function paAnterior(pa: number, mesesAtras: number): number {
     return Math.floor(totalMeses / 12) * 100 + (totalMeses % 12) + 1;
 }
 
+function diferencaMesesPaInclusiva(paInicio: number, paFim: number): number {
+    const anoInicio = Math.floor(paInicio / 100);
+    const mesInicio = paInicio % 100;
+    const anoFim = Math.floor(paFim / 100);
+    const mesFim = paFim % 100;
+    return (anoFim - anoInicio) * 12 + (mesFim - mesInicio) + 1;
+}
+
+function paInicioAtividade(empresa: SimplesNacionalEmpresa): number | null {
+    if (!empresa.dataAbertura) return null;
+    const data = new Date(`${empresa.dataAbertura}T00:00:00`);
+    if (isNaN(data.getTime())) return null;
+    return paFromDate(new Date(data.getFullYear(), data.getMonth(), 1));
+}
+
+function quantidadeMesesReceitasAnteriores(
+    empresa: SimplesNacionalEmpresa,
+    resumo: SimplesNacionalResumo,
+    pa: number,
+): number {
+    if (resumo.inicioAtividade && Number.isFinite(resumo.mesesAtividade)) {
+        return Math.max(0, Math.min(12, Math.floor(Number(resumo.mesesAtividade))));
+    }
+
+    const paInicio = paInicioAtividade(empresa);
+    if (!paInicio) return 12;
+
+    const paMesAnterior = paAnterior(pa, 1);
+    const mesesDesdeAbertura = diferencaMesesPaInclusiva(paInicio, paMesAnterior);
+    return Math.max(0, Math.min(12, mesesDesdeAbertura));
+}
+
 function parseValorBr(s: string): number {
     if (!s) return 0;
     const cleaned = String(s).replace(/\./g, '').replace(',', '.');
@@ -301,10 +333,13 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
     const atividades = Array.from(grupos.values())
         .sort((a, b) => a.idAtividade - b.idAtividade);
 
-    // Historico 12 meses anteriores (faturamentoManual)
+    // Histórico de receitas anteriores aceito pelo PGDAS-D. Para empresa em
+    // início de atividade, não envie meses anteriores à abertura/opção: o SERPRO
+    // rejeita com MSG_ISN_048 ("período desnecessário").
     const fatManual = empresa.faturamentoManual || {};
     const receitasBrutasAnteriores: PgdasPayload['declaracao']['receitasBrutasAnteriores'] = [];
-    for (let i = 1; i <= 12; i++) {
+    const mesesReceitasAnteriores = quantidadeMesesReceitasAnteriores(empresa, resumo, pa);
+    for (let i = 1; i <= mesesReceitasAnteriores; i++) {
         const paAnt = paAnterior(pa, i);
         const ano = Math.floor(paAnt / 100);
         const mes = paAnt % 100;
