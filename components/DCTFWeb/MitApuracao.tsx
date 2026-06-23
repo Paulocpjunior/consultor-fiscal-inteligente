@@ -12,6 +12,7 @@ import {
     consultarApuracoesAno,
     formatPaLabel,
 } from '../../services/dctfwebService';
+import { getMitEncerramentoEstado } from './mitApuracaoStatus';
 
 interface Props {
     declaracao: DctfwebDeclaracao;
@@ -38,16 +39,6 @@ function isDadosApuracaoMitCompleta(input: any): boolean {
     const semMovimento = dadosIniciais.SemMovimento ?? dadosIniciais.semMovimento;
     if (semMovimento === true || semMovimento === 'true') return true;
     return !!(payload.Debitos || payload.debitos);
-}
-
-function situacaoMitBloqueiaEncerramento(apuracao: any, resumo: any): boolean {
-    const situacao = Number(
-        resumo?.situacao
-        ?? resumo?.situacaoApuracao
-        ?? apuracao?.situacaoApuracao
-        ?? apuracao?.SituacaoApuracao
-    );
-    return situacao === 3 || situacao === 4;
 }
 
 const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }) => {
@@ -138,12 +129,26 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
     };
 
     const dadosApuracaoMitCompleta = isDadosApuracaoMitCompleta(apuracao);
-    const encerramentoBloqueado = !dadosApuracaoMitCompleta || situacaoMitBloqueiaEncerramento(apuracao, apuracaoResumo);
-    const mensagemBloqueioEncerramento = !apuracao
-        ? (apuracaoMotivo || 'Encerramento indisponível: nenhuma apuração MIT foi carregada para esta competência.')
-        : (!dadosApuracaoMitCompleta
-            ? 'Encerramento indisponível: a apuração MIT foi encontrada, mas o SERPRO não retornou DadosIniciais e Débitos completos para retransmissão.'
-            : 'Encerramento indisponível: a apuração já está encerrada ou em processamento.');
+    const estadoEncerramento = getMitEncerramentoEstado(apuracao, apuracaoResumo);
+    const encerramentoBloqueado = !dadosApuracaoMitCompleta || estadoEncerramento.bloqueiaEncerramento;
+    let mensagemBloqueioEncerramento = 'Encerramento indisponível para a situação retornada pelo SERPRO.';
+    if (!apuracao) {
+        mensagemBloqueioEncerramento = apuracaoMotivo || 'Encerramento indisponível: nenhuma apuração MIT foi carregada para esta competência.';
+    } else if (estadoEncerramento.encerrada) {
+        mensagemBloqueioEncerramento =
+            `MIT já encerrado${estadoEncerramento.dataEncerramentoLabel ? ` em ${estadoEncerramento.dataEncerramentoLabel}` : ''}. ` +
+            'Não é necessário encerrar novamente; siga com a transmissão ou sincronização da DCTFWeb.';
+    } else if (estadoEncerramento.emProcessamento) {
+        mensagemBloqueioEncerramento = 'Encerramento MIT em processamento no SERPRO. Aguarde alguns minutos e atualize a apuração antes de tentar transmitir a DCTFWeb.';
+    } else if (!dadosApuracaoMitCompleta) {
+        mensagemBloqueioEncerramento = 'Encerramento indisponível: a apuração MIT foi encontrada, mas o SERPRO não retornou DadosIniciais e Débitos completos para retransmissão.';
+    }
+    const botaoEncerrarLabel = estadoEncerramento.encerrada
+        ? 'MIT já encerrado'
+        : estadoEncerramento.emProcessamento
+            ? 'Aguardando SERPRO'
+            : (loadingEnc ? 'Encerrando...' : 'Encerrar Apuração');
+    const loadingRefresh = loadingApur || loadingHist;
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -188,8 +193,17 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
                             Encerrar a apuração antes da transmissão da DCTFWeb. O SERPRO exige a apuração MIT completa; a operação é assíncrona.
                         </p>
                         {encerramentoBloqueado && (
-                            <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                            <div className={`mb-3 rounded border p-3 text-sm ${
+                                estadoEncerramento.encerrada
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                    : 'border-amber-200 bg-amber-50 text-amber-800'
+                            }`}>
                                 {mensagemBloqueioEncerramento}
+                                {estadoEncerramento.situacao !== null && (
+                                    <span className="mt-1 block text-xs opacity-75">
+                                        Situação MIT SERPRO: {estadoEncerramento.situacao}
+                                    </span>
+                                )}
                             </div>
                         )}
                         <div className="flex gap-2">
@@ -198,7 +212,14 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
                                 disabled={loadingEnc || encerramentoBloqueado}
                                 className="px-4 py-2 bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-50 text-sm"
                             >
-                                {loadingEnc ? 'Encerrando...' : 'Encerrar Apuração'}
+                                {botaoEncerrarLabel}
+                            </button>
+                            <button
+                                onClick={() => { carregarApuracao(); carregarHistorico(); }}
+                                disabled={loadingRefresh}
+                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded disabled:opacity-50 text-sm"
+                            >
+                                {loadingRefresh ? 'Atualizando...' : 'Atualizar MIT'}
                             </button>
                             {status && (
                                 <button
