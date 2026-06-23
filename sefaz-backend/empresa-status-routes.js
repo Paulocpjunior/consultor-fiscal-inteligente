@@ -35,6 +35,23 @@ function fa() {
     return admin;
 }
 
+function limparCnpj(value) {
+    return String(value || '').replace(/\D/g, '');
+}
+
+async function buscarEmpresaDocsPorCnpj(db, cnpjLimpo) {
+    const encontrados = [];
+    for (const col of ['simples_empresas', 'lucro_empresas']) {
+        const snap = await db.collection(col).get();
+        snap.forEach((doc) => {
+            if (limparCnpj(doc.data()?.cnpj) === cnpjLimpo) {
+                encontrados.push({ col, doc });
+            }
+        });
+    }
+    return encontrados;
+}
+
 // Normaliza uma data que pode chegar em formatos diferentes para millis:
 //   - Timestamp do Firestore   (escrito pelo backend/cron)    -> .toMillis()
 //   - string ISO               (escrita pelo front via setDoc) -> Date.parse
@@ -78,7 +95,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             const snap = await db.collection(col).get();
             snap.forEach(doc => {
                 const d = doc.data();
-                const cnpj = (d.cnpj || '').replace(/\D/g, '');
+                const cnpj = limparCnpj(d.cnpj);
                 if (cnpj.length !== 14) return;
                 if (empresasMap.has(cnpj)) return; // dedup
                 if (cnpjsSet && !cnpjsSet.has(cnpj)) return; // filtra pela carteira
@@ -134,7 +151,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
         const carteirasSnap = await db.collection('carteiras').get();
         carteirasSnap.forEach(doc => {
             const d = doc.data();
-            const cnpj = (d.empresaCnpj || '').replace(/\D/g, '');
+            const cnpj = limparCnpj(d.empresaCnpj);
             if (!cnpj) return;
             if (!responsaveisMap.has(cnpj)) responsaveisMap.set(cnpj, []);
             responsaveisMap.get(cnpj).push({
@@ -262,8 +279,8 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
 
             // Mensagens de bloqueio (ordem importa — A3 vem antes de "expirado"
             // porque A3 bloqueia independente de data).
-            if (!emp.capturarSefaz) motivosBloqueio.push('Captura SEFAZ desativada manualmente');
-            else if (!emp.uf) motivosBloqueio.push('UF não cadastrada (preencha dadosFiscais.uf, ex: SP)');
+            if (!emp.capturarSefaz) motivosBloqueio.push('NFe: captura SEFAZ desativada no cadastro');
+            else if (!emp.uf) motivosBloqueio.push('NFe: UF não cadastrada. Preencha a UF nos dados fiscais da empresa.');
             else if (capturaNfeOk) {
                 // Caminho A1 proprio E nao usa escritorio? nenhum motivo.
                 // Se vai via escritorio, nao e bloqueio — e info. Sem push.
@@ -272,9 +289,9 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 // A3 + procuracao ja teria caido em capturaNfeOk via escritorio.
                 // Se chegou aqui, e A3 sem procuracao ou cert escritorio offline.
                 if (emp.procuracaoEcacAtiva && !certEscritorioUtilizavel) {
-                    motivosBloqueio.push('Procuração e-CAC ativa, mas cert do escritório está indisponível (ver Configurações > Certificado Digital)');
+                    motivosBloqueio.push('NFe: procuração e-CAC ativa, mas o certificado do escritório está indisponível. Verifique Configurações > Certificado Digital.');
                 } else {
-                    motivosBloqueio.push('Tipo A3 sem procuração e-CAC — Cloud Run não roda A3 (precisa cfi-a3 local) ou ative procuração e-CAC pra capturar via cert do escritório');
+                    motivosBloqueio.push('NFe: certificado A3 não roda na captura automática em nuvem. Use agente A3 local ou marque procuração e-CAC ativa.');
                 }
             }
             else if (!certValido && certUploaded) {
@@ -282,27 +299,27 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 // ja foi por usaCertEscritorio — nao chegaria aqui. Sem procuracao,
                 // bloqueia.
                 const dataBr = fmtDataBr(certVenceEm);
-                if (dataBr) motivosBloqueio.push(`Certificado ${tipoCert} expirado em ${dataBr} — renove ou ative procuração e-CAC`);
-                else motivosBloqueio.push(`Certificado ${tipoCert} sem data de validade no cadastro — recadastre o .pfx ou ative procuração e-CAC`);
+                if (dataBr) motivosBloqueio.push(`NFe: certificado ${tipoCert} expirado em ${dataBr}. Renove o certificado ou marque procuração e-CAC ativa.`);
+                else motivosBloqueio.push(`NFe: certificado ${tipoCert} sem data de validade no cadastro. Reenvie o .pfx ou marque procuração e-CAC ativa.`);
             }
             else if (tipoCert === 'nenhum') {
-                motivosBloqueio.push('Sem certificado A1/A3 e sem procuração e-CAC ativa');
+                motivosBloqueio.push('NFe: sem certificado A1/A3 próprio e sem procuração e-CAC ativa.');
             }
             else if (!certEscritorioUtilizavel && (ehEscritorio || emp.procuracaoEcacAtiva)) {
                 if (certEscritorioErro) {
-                    motivosBloqueio.push(`Cert do escritório indisponível: ${certEscritorioErro}`);
+                    motivosBloqueio.push(`NFe: certificado do escritório indisponível. Detalhe técnico: ${certEscritorioErro}`);
                 } else if (cnpjBaseCertEscritorio && cnpjBaseCertEscritorio !== CNPJ_ESCRITORIO_BASE) {
                     motivosBloqueio.push(
-                        `Cert do escritório no Secret Manager é de outro CNPJ-Base (${cnpjBaseCertEscritorio}) — esperado ${CNPJ_ESCRITORIO_BASE}. ` +
-                        `SEFAZ rejeita com cStat=593. Suba o .pfx correto da S&P no Secret Manager.`
+                        `NFe: certificado do escritório pertence a outro CNPJ-base (${cnpjBaseCertEscritorio}); esperado ${CNPJ_ESCRITORIO_BASE}. ` +
+                        `Suba o .pfx correto da S&P em Configurações > Certificado Digital.`
                     );
                 }
             }
 
             // b) NFSe SP: precisa ccmSp + autorização do contador no portal SP
             const capturaNfseSpOk = !!emp.ccmSp && !!emp.nfseSpAutorizadoEm;
-            if (!emp.ccmSp) motivosBloqueio.push('NFSe SP: falta Inscrição Municipal (ccmSp)');
-            else if (!emp.nfseSpAutorizadoEm) motivosBloqueio.push('NFSe SP: falta autorização do escritório no portal nfe.prefeitura.sp.gov.br');
+            if (!emp.ccmSp) motivosBloqueio.push('NFS-e SP: falta Inscrição Municipal (CCM) nos dados fiscais da empresa.');
+            else if (!emp.nfseSpAutorizadoEm) motivosBloqueio.push('NFS-e SP: falta autorizar o escritório no portal nfe.prefeitura.sp.gov.br.');
 
             // c) NFSe Nacional ADN: a consulta DFe exige A1 proprio da mesma
             // raiz CNPJ (ou a propria S&P com cert global). Procuracao/cert do
@@ -310,16 +327,16 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             const capturaNfseNacionalOk = emp.nfseNacionalDfeAtivo
                 && (temA1ProprioValido || ehEscritorio);
             if (!emp.nfseNacionalDfeAtivo) {
-                motivosBloqueio.push('NFSe Nacional: flag nfseNacionalDfeAtivo desabilitada');
+                motivosBloqueio.push('NFS-e Nacional ADN desativada no cadastro. Ative NFS-e Nacional para incluir esta empresa na captura ADN.');
             } else if (!capturaNfseNacionalOk) {
                 if (tipoCert === 'A3') {
-                    motivosBloqueio.push('NFSe Nacional ADN: Cloud Run exige A1 próprio; A3 precisa fluxo/agente local específico');
+                    motivosBloqueio.push('NFS-e Nacional ADN: a captura automática em nuvem exige A1 próprio; certificado A3 precisa de agente local específico.');
                 } else if (usaCertEscritorio || emp.procuracaoEcacAtiva) {
-                    motivosBloqueio.push('NFSe Nacional ADN: certificado do escritório/procuração não basta para DFe; cadastre A1 próprio da empresa (evita E2243)');
+                    motivosBloqueio.push('NFS-e Nacional ADN: procuração/certificado do escritório não basta para consultar DFe; cadastre A1 próprio da empresa.');
                 } else if (certUploaded && !certValido) {
-                    motivosBloqueio.push('NFSe Nacional ADN: certificado A1 próprio vencido ou sem validade; renove/reenvie o .pfx');
+                    motivosBloqueio.push('NFS-e Nacional ADN: certificado A1 próprio vencido ou sem validade; renove ou reenvie o .pfx.');
                 } else {
-                    motivosBloqueio.push('NFSe Nacional ADN: falta certificado A1 próprio da empresa');
+                    motivosBloqueio.push('NFS-e Nacional ADN: falta certificado A1 próprio da empresa.');
                 }
             }
 
@@ -405,7 +422,7 @@ router.post('/empresa-toggle-flag', requireAuth, express.json(), async (req, res
             return res.status(403).json({ error: 'Apenas administradores' });
         }
         const { cnpj, campo, valor } = req.body || {};
-        const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
+        const cnpjLimpo = limparCnpj(cnpj);
         if (cnpjLimpo.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });
         const FLAGS_PERMITIDAS = ['procuracaoEcacAtiva', 'nfseNacionalDfeAtivo', 'capturarSefaz'];
         if (!FLAGS_PERMITIDAS.includes(campo)) {
@@ -416,19 +433,23 @@ router.post('/empresa-toggle-flag', requireAuth, express.json(), async (req, res
         }
 
         const db = fa().firestore();
+        const encontrados = await buscarEmpresaDocsPorCnpj(db, cnpjLimpo);
         let atualizadas = 0;
-        for (const col of ['simples_empresas', 'lucro_empresas']) {
-            const snap = await db.collection(col).where('cnpj', '==', cnpjLimpo).limit(1).get();
-            for (const doc of snap.docs) {
-                await doc.ref.update({
-                    [campo]: valor,
-                    [`${campo}AlteradoEm`]: admin.firestore.FieldValue.serverTimestamp(),
-                    [`${campo}AlteradoPor`]: req.user.email,
-                });
-                atualizadas++;
-            }
+        for (const { doc } of encontrados) {
+            await doc.ref.update({
+                [campo]: valor,
+                [`${campo}AlteradoEm`]: admin.firestore.FieldValue.serverTimestamp(),
+                [`${campo}AlteradoPor`]: req.user.email,
+            });
+            atualizadas++;
         }
-        if (!atualizadas) return res.status(404).json({ error: 'Empresa não encontrada' });
+        if (!atualizadas) {
+            return res.status(404).json({
+                error: 'Não localizei esta empresa no cadastro atual. Atualize o painel e confira se o CNPJ ainda existe em Simples ou Lucro Presumido/Real.',
+                code: 'EMPRESA_NAO_ENCONTRADA',
+                cnpj: cnpjLimpo,
+            });
+        }
         console.log(`[empresa-toggle-flag] cnpj=${cnpjLimpo} ${campo}=${valor} por=${req.user.email}`);
         return res.json({ ok: true, cnpj: cnpjLimpo, campo, valor, atualizadas });
     } catch (e) {

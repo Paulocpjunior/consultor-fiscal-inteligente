@@ -20,6 +20,8 @@ import {
     autoPreencherUf,
     resetLockSefaz,
     exportarEmpresasCsv,
+    formatarErroAcaoStatusCaptura,
+    formatarMotivoBloqueioCaptura,
     type EmpresaStatusCaptura,
     type EmpresaStatusResumo,
     type FlagCampo,
@@ -69,21 +71,26 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [autoUfRunning, setAutoUfRunning] = useState(false);
     const [capturandoCnpj, setCapturandoCnpj] = useState<string | null>(null);
     const [resetandoLockCnpj, setResetandoLockCnpj] = useState<string | null>(null);
+    const [feedback, setFeedback] = useState<{ tipo: 'sucesso' | 'erro'; msg: string } | null>(null);
 
     const handleResetLock = async (emp: EmpresaStatusCaptura) => {
         if (!isAdmin) return;
         if (!confirm(`Apagar lock SEFAZ de ${emp.nome}?\n\nO lock impede sync na mesma janela de 1h.\nApós resetar, próximo disparo (manual ou cron) vai recriar.`)) return;
         setResetandoLockCnpj(emp.cnpj);
+        setFeedback(null);
         try {
             const r = await resetLockSefaz(emp.cnpj);
             if (r.ok) {
+                setFeedback({ tipo: 'sucesso', msg: `${emp.nome}: ${r.msg || 'lock resetado'}.` });
                 setUltimaCaptura(prev => ({
                     ...prev,
                     [emp.cnpj]: { ok: true, msg: `🔓 ${r.msg || 'Lock resetado'}` },
                 }));
             } else {
-                alert(`Erro: ${r.error}`);
+                setFeedback({ tipo: 'erro', msg: formatarErroAcaoStatusCaptura(r, emp, 'resetar o lock SEFAZ') });
             }
+        } catch (e: any) {
+            setFeedback({ tipo: 'erro', msg: formatarErroAcaoStatusCaptura(e?.message || 'falha inesperada', emp, 'resetar o lock SEFAZ') });
         } finally {
             setResetandoLockCnpj(null);
         }
@@ -127,17 +134,20 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
         if (!isAdmin) return;
         if (!confirm(`Auto-preencher UF de ${data?.resumo.semUf || 0} empresas via BrasilAPI? Roda em background, leva ~1-3 min.`)) return;
         setAutoUfRunning(true);
+        setFeedback(null);
         try {
             const r = await autoPreencherUf();
             if (r.ok) {
-                alert('Auto-preenchimento iniciado em background. Aguarde 1-3 min e clique em "Atualizar" pra ver o resultado.');
+                setFeedback({ tipo: 'sucesso', msg: 'Auto-preenchimento iniciado. Aguarde 1 a 3 minutos e clique em Atualizar.' });
                 if (autoUfTimeoutRef.current) clearTimeout(autoUfTimeoutRef.current);
                 autoUfTimeoutRef.current = setTimeout(() => {
                     if (aliveRef.current) load();
                 }, 60000);
             } else {
-                alert(`Erro: ${r.error}`);
+                setFeedback({ tipo: 'erro', msg: formatarErroAcaoStatusCaptura(r.error || 'falha ao auto-preencher UF', null, 'auto-preencher a UF') });
             }
+        } catch (e: any) {
+            setFeedback({ tipo: 'erro', msg: formatarErroAcaoStatusCaptura(e?.message || 'falha inesperada', null, 'auto-preencher a UF') });
         } finally {
             setAutoUfRunning(false);
         }
@@ -214,10 +224,18 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const handleToggle = async (cnpj: string, campo: FlagCampo, valorAtual: boolean) => {
         if (!isAdmin) return;
         setTogglingCnpj(cnpj + '-' + campo);
+        setFeedback(null);
+        const emp = data?.empresas.find(e => e.cnpj === cnpj) || null;
         try {
             const r = await toggleEmpresaFlag(cnpj, campo, !valorAtual);
-            if (r.ok) await load();
-            else alert(`Erro: ${r.error}`);
+            if (r.ok) {
+                setFeedback({ tipo: 'sucesso', msg: `${emp?.nome || 'Empresa'}: alteração salva.` });
+                await load();
+            } else {
+                setFeedback({ tipo: 'erro', msg: formatarErroAcaoStatusCaptura(r, emp, 'salvar a alteração') });
+            }
+        } catch (e: any) {
+            setFeedback({ tipo: 'erro', msg: formatarErroAcaoStatusCaptura(e?.message || 'falha inesperada', emp, 'salvar a alteração') });
         } finally {
             setTogglingCnpj(null);
         }
@@ -338,6 +356,29 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <button onClick={handleExportCsv} className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700">⬇ Exportar CSV</button>
                 </div>
             </div>
+
+            {feedback && (
+                <div
+                    className={`rounded-lg border px-3 py-2 text-sm ${
+                        feedback.tipo === 'sucesso'
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                            : 'bg-amber-50 border-amber-200 text-amber-900'
+                    }`}
+                    role="status"
+                >
+                    <div className="flex items-start justify-between gap-3">
+                        <span>{feedback.msg}</span>
+                        <button
+                            type="button"
+                            onClick={() => setFeedback(null)}
+                            className="text-xs opacity-70 hover:opacity-100"
+                            aria-label="Fechar mensagem"
+                        >
+                            fechar
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Tabela */}
             <div className="overflow-x-auto border rounded-lg">
@@ -464,7 +505,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                             <span className="text-green-700 text-xs">✓ Tudo OK</span>
                                         ) : (
                                             <ul className="text-[10px] text-red-700 space-y-0.5">
-                                                {e.motivosBloqueio.map((m, i) => <li key={i}>• {m}</li>)}
+                                                {e.motivosBloqueio.map((m, i) => <li key={i}>• {formatarMotivoBloqueioCaptura(m)}</li>)}
                                             </ul>
                                         )}
                                     </td>

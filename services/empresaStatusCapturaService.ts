@@ -67,6 +67,71 @@ export interface EmpresaStatusResponse {
     geradoEm: string;
 }
 
+export interface EmpresaStatusActionResult {
+    ok: boolean;
+    atualizadas?: number;
+    error?: string;
+    code?: string;
+    cnpj?: string;
+    status?: number;
+}
+
+function formatarCnpjDisplay(cnpj?: string | null): string {
+    const digits = (cnpj || '').replace(/\D/g, '');
+    return digits.length === 14
+        ? digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+        : (cnpj || '');
+}
+
+export function formatarMotivoBloqueioCaptura(motivo: string): string {
+    const raw = motivo || '';
+    if (/flag nfseNacionalDfeAtivo desabilitada/i.test(raw)) {
+        return 'NFS-e Nacional ADN desativada no cadastro. Ative NFS-e Nacional para incluir esta empresa na captura ADN.';
+    }
+    if (/NFSe SP: falta Inscrição Municipal \(ccmSp\)/i.test(raw)) {
+        return 'NFS-e SP: falta Inscrição Municipal (CCM) nos dados fiscais da empresa.';
+    }
+    if (/NFSe SP: falta autorização do escritório/i.test(raw)) {
+        return 'NFS-e SP: falta autorizar o escritório no portal nfe.prefeitura.sp.gov.br.';
+    }
+    if (/Tipo A3 sem procuração e-CAC/i.test(raw)) {
+        return 'NFe: certificado A3 não roda na captura automática em nuvem. Use agente A3 local ou marque procuração e-CAC ativa.';
+    }
+    if (/Sem certificado A1\/A3 e sem procuração e-CAC ativa/i.test(raw)) {
+        return 'NFe: sem certificado A1/A3 próprio e sem procuração e-CAC ativa.';
+    }
+    if (/UF não cadastrada/i.test(raw)) {
+        return 'NFe: UF não cadastrada. Preencha a UF nos dados fiscais da empresa.';
+    }
+    return raw
+        .replace(/\bNFSe\b/g, 'NFS-e')
+        .replace(/\bNFSe Nacional\b/g, 'NFS-e Nacional')
+        .replace(/\bNFSe SP\b/g, 'NFS-e SP')
+        .replace(/\bCloud Run\b/g, 'captura automática em nuvem');
+}
+
+export function formatarErroAcaoStatusCaptura(
+    erro: string | { error?: string; code?: string; cnpj?: string; status?: number } | null | undefined,
+    empresa?: Pick<EmpresaStatusCaptura, 'nome' | 'cnpj'> | null,
+    acao = 'salvar a alteração',
+): string {
+    const msg = typeof erro === 'string' ? erro : (erro?.error || '');
+    const code = typeof erro === 'string' ? '' : (erro?.code || '');
+    const cnpj = formatarCnpjDisplay((typeof erro === 'string' ? '' : erro?.cnpj) || empresa?.cnpj || '');
+    const nome = empresa?.nome || 'empresa selecionada';
+
+    if (code === 'EMPRESA_NAO_ENCONTRADA' || /empresa n[aã]o encontrada/i.test(msg)) {
+        return `Não consegui ${acao}: ${nome}${cnpj ? ` (${cnpj})` : ''} não foi localizada no cadastro atual. Atualize o painel e confira se o CNPJ ainda existe em Simples ou Lucro Presumido/Real.`;
+    }
+    if (/apenas administradores/i.test(msg)) {
+        return `Seu usuário não tem permissão para ${acao}. Faça login com perfil administrador.`;
+    }
+    if (/cnpj inv[aá]lido/i.test(msg)) {
+        return `Não consegui ${acao}: o CNPJ informado está inválido. Atualize o painel e tente novamente.`;
+    }
+    return `Não consegui ${acao}: ${msg || 'falha inesperada'}.`;
+}
+
 async function getToken(): Promise<string> {
     const u = getAuth().currentUser;
     if (!u) throw new Error('Sessão expirada');
@@ -87,7 +152,7 @@ export async function fetchEmpresasStatusCaptura(): Promise<EmpresaStatusRespons
 
 export type FlagCampo = 'procuracaoEcacAtiva' | 'nfseNacionalDfeAtivo' | 'capturarSefaz';
 
-export async function toggleEmpresaFlag(cnpj: string, campo: FlagCampo, valor: boolean): Promise<{ ok: boolean; atualizadas?: number; error?: string }> {
+export async function toggleEmpresaFlag(cnpj: string, campo: FlagCampo, valor: boolean): Promise<EmpresaStatusActionResult> {
     const token = await getToken();
     const res = await fetch('/api/admin/sefaz/empresa-toggle-flag', {
         method: 'POST',
@@ -95,7 +160,7 @@ export async function toggleEmpresaFlag(cnpj: string, campo: FlagCampo, valor: b
         body: JSON.stringify({ cnpj, campo, valor }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}`, code: data.code, cnpj: data.cnpj, status: res.status };
     return { ok: true, atualizadas: data.atualizadas };
 }
 
@@ -147,7 +212,7 @@ export function exportarEmpresasCsv(empresas: EmpresaStatusCaptura[]): string {
         e.capturaNfeOk ? 'sim' : 'NÃO',
         e.capturaNfseSpOk ? 'sim' : 'NÃO',
         e.capturaNfseNacionalOk ? 'sim' : 'NÃO',
-        `"${e.motivosBloqueio.join(' · ').replace(/"/g, '""')}"`,
+        `"${e.motivosBloqueio.map(formatarMotivoBloqueioCaptura).join(' · ').replace(/"/g, '""')}"`,
     ].join(','));
     return [headers.join(','), ...rows].join('\n');
 }
