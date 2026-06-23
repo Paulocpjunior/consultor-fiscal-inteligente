@@ -15,10 +15,12 @@ import {
     formatPaLabel,
     situacaoLabel,
     situacaoColorClass,
+    listarEmpresasDctfweb,
+    type DctfwebEmpresaOption,
 } from '../../services/dctfwebService';
 import DetalheDeclaracao from './DetalheDeclaracao';
 import MitApuracao from './MitApuracao';
-import { getEmpresasParaPerfilCliente, type EmpresaPerfilOption } from '../../services/xmlFiscalService';
+import { buildDctfwebEmpresaOptions, normalizarCnpjDctfweb } from './dctfwebEmpresaOptions';
 
 interface Props {
     currentUser: User | null;
@@ -46,26 +48,44 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [syncingEmpresa, setSyncingEmpresa] = useState<string | null>(null);
     const [transmitindo, setTransmitindo] = useState<string | null>(null);
 
-    // empresas cadastradas (fonte canonica unica: getEmpresasParaPerfilCliente)
-    const [empresas, setEmpresas] = useState<EmpresaPerfilOption[]>([]);
+    // Empresas Lucro Presumido/Real disponiveis para sincronizacao DCTFWeb.
+    const [empresas, setEmpresas] = useState<DctfwebEmpresaOption[]>([]);
+    const [empresasErro, setEmpresasErro] = useState<string | null>(null);
     const [empresaNovaSyncId, setEmpresaNovaSyncId] = useState<string>('');
 
     useEffect(() => {
-        let alivo = true;
-        if (!currentUser) { setEmpresas([]); return; }
-        getEmpresasParaPerfilCliente(currentUser)
-            .then(list => { if (alivo) setEmpresas(list); })
-            .catch(() => { if (alivo) setEmpresas([]); });
-        return () => { alivo = false; };
+        let ativo = true;
+        if (!currentUser) {
+            setEmpresas([]);
+            setEmpresasErro(null);
+            return;
+        }
+        listarEmpresasDctfweb(currentUser)
+            .then(list => {
+                if (!ativo) return;
+                setEmpresas(list || []);
+                setEmpresasErro(null);
+            })
+            .catch((err: any) => {
+                if (!ativo) return;
+                setEmpresas([]);
+                setEmpresasErro(err?.message || 'Falha ao carregar empresas');
+            });
+        return () => { ativo = false; };
     }, [currentUser]);
+
+    const empresasDctfwebOptions = useMemo(
+        () => buildDctfwebEmpresaOptions(empresas, declaracoes),
+        [empresas, declaracoes],
+    );
 
     // sincroniza uma empresa escolhida no dropdown, usando ano/mes dos filtros
     const handleSincronizarNova = async () => {
         if (!currentUser) return;
-        const emp = empresas.find(e => e.id === empresaNovaSyncId);
+        const emp = empresasDctfwebOptions.find(e => e.id === empresaNovaSyncId || normalizarCnpjDctfweb(e.cnpj) === empresaNovaSyncId);
         if (!emp) { onShowToast?.('Selecione uma empresa.'); return; }
         if (!mesFiltro) { onShowToast?.('Selecione o mes nos filtros para sincronizar.'); return; }
-        const cnpjLimpo = (emp.cnpj || '').replace(/\D/g, '');
+        const cnpjLimpo = normalizarCnpjDctfweb(emp.cnpj);
         setSyncingEmpresa(cnpjLimpo);
         try {
             await apiSincronizar(currentUser, {
@@ -237,8 +257,8 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         className="w-full border rounded px-2 py-1 text-sm"
                     >
                         <option value="">Todas as empresas</option>
-                        {empresas.map(emp => (
-                            <option key={emp.id} value={(emp.cnpj || '').replace(/\D/g, '')}>
+                        {empresasDctfwebOptions.map(emp => (
+                            <option key={emp.id} value={normalizarCnpjDctfweb(emp.cnpj)}>
                                 {emp.nome}
                             </option>
                         ))}
@@ -353,18 +373,26 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             className="w-full border rounded px-2 py-1 text-sm"
                         >
                             <option value="">Selecione a empresa...</option>
-                            {empresas.map(emp => (
+                            {empresasDctfwebOptions.map(emp => (
                                 <option key={emp.id} value={emp.id}>{emp.nome}</option>
                             ))}
+                            {empresasDctfwebOptions.length === 0 && (
+                                <option value="" disabled>Nenhuma empresa de Lucro disponivel</option>
+                            )}
                         </select>
                     </div>
                     <button
                         onClick={handleSincronizarNova}
-                        disabled={!empresaNovaSyncId || !!syncingEmpresa}
+                        disabled={!empresaNovaSyncId || !!syncingEmpresa || empresasDctfwebOptions.length === 0}
                         className="px-4 py-1.5 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700 disabled:opacity-50"
                     >
                         {syncingEmpresa ? 'Sincronizando...' : 'Sincronizar DCTFWeb'}
                     </button>
+                    {empresasErro && (
+                        <p className="text-xs text-amber-600 w-full">
+                            Cadastro completo indisponivel; exibindo empresas ja sincronizadas.
+                        </p>
+                    )}
                     <p className="text-xs text-slate-400 w-full">
                         Usa o Ano e o Mes selecionados nos filtros acima.
                     </p>

@@ -50,6 +50,23 @@ export async function getResumo(user: User | null): Promise<DctfwebResumo> {
     return res.json();
 }
 
+export interface DctfwebEmpresaOption {
+    id: string;
+    nome: string;
+    cnpj: string;
+    fonte: 'lucro';
+    regime?: string;
+}
+
+export async function listarEmpresasDctfweb(user: User | null): Promise<DctfwebEmpresaOption[]> {
+    const res = await fetch(`${BASE}/empresas`, { headers: await authHeaders(user) });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `listarEmpresasDctfweb: ${res.status}`);
+    }
+    return res.json();
+}
+
 export interface ListarFilters {
     empresaCnpj?: string;
     situacao?: 'EM_ANDAMENTO' | 'ATIVA';

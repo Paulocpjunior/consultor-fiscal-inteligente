@@ -11,7 +11,7 @@ jest.mock('firebase/auth', () => ({
 }));
 
 import {
-    getStatus, getResumo, listarDeclaracoes, sincronizarEmpresa,
+    getStatus, getResumo, listarEmpresasDctfweb, listarDeclaracoes, sincronizarEmpresa,
     transmitirDeclaracao, gerarDarf, consultarDeclaracaoCompleta,
     formatPaLabel, situacaoLabel, situacaoColorClass,
     downloadPdfFromBase64,
@@ -44,6 +44,15 @@ describe('dctfwebService - URL/headers', () => {
         fetchMock.mockReturnValue(okJson({ total: 5, pendentes: 2 }));
         const r = await getResumo(null);
         expect(r).toEqual({ total: 5, pendentes: 2 });
+    });
+
+    it('listarEmpresasDctfweb chama endpoint proprio de empresas Lucro', async () => {
+        fetchMock.mockReturnValue(okJson([{ id: 'l1', nome: 'Expert LTDA', cnpj: '11222333000181', fonte: 'lucro' }]));
+        const r = await listarEmpresasDctfweb(null);
+        expect(r).toHaveLength(1);
+        const [url, opts] = fetchMock.mock.calls[0];
+        expect(url).toBe('/api/admin/dctfweb/empresas');
+        expect(opts.headers.Authorization).toBe('Bearer TOK');
     });
 
     it('listarDeclaracoes serializa filtros em querystring', async () => {
@@ -93,6 +102,16 @@ describe('dctfwebService - erros', () => {
     it('listarDeclaracoes lanca em 500', async () => {
         fetchMock.mockReturnValue(errResp(500));
         await expect(listarDeclaracoes(null)).rejects.toThrow('listarDeclaracoes: 500');
+    });
+
+    it('listarEmpresasDctfweb propaga mensagem de erro do backend', async () => {
+        fetchMock.mockReturnValue(Promise.resolve({
+            ok: false,
+            status: 500,
+            statusText: 'X',
+            json: async () => ({ error: 'Falha ao listar empresas' }),
+        }));
+        await expect(listarEmpresasDctfweb(null)).rejects.toThrow('Falha ao listar empresas');
     });
 
     it('getStatus lanca em 503', async () => {

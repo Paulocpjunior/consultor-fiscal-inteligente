@@ -5,7 +5,7 @@
 
 import express from 'express';
 import admin from 'firebase-admin';
-import { podeAcessarCnpj } from './carteira-auth.js';
+import { getCnpjsDaCarteira, getEmpresaIdsDaCarteira, podeAcessarCnpj } from './carteira-auth.js';
 import {
     sincronizarEmpresa, sincronizarTodasLucro,
     listarDeclaracoes, transmitirDeclaracao, gerarDarf,
@@ -24,6 +24,53 @@ import { ultimasCompetenciasComAnoMes as ultimasCompetenciasComAnoMesHelper } fr
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 const router = express.Router();
 
+function limparCnpj(value) {
+    return String(value || '').replace(/\D/g, '');
+}
+
+function nomeEmpresaLucro(data) {
+    return data.razaoSocial || data.nome || data.nomeFantasia || '';
+}
+
+async function listarEmpresasDctfwebDisponiveis(user) {
+    if (admin.apps.length === 0) {
+        admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    }
+    const db = admin.firestore();
+    const [cnpjsCarteira, idsCarteira] = await Promise.all([
+        getCnpjsDaCarteira(user),
+        getEmpresaIdsDaCarteira(user),
+    ]);
+    const cnpjsSet = cnpjsCarteira ? new Set(cnpjsCarteira) : null;
+    const idsSet = idsCarteira ? new Set(idsCarteira) : null;
+    const docs = await fetchAllDocs(db.collection('lucro_empresas'), { label: 'dctfweb/empresas' });
+
+    return docs
+        .map((doc) => {
+            const data = doc.data() || {};
+            return {
+                id: doc.id,
+                nome: nomeEmpresaLucro(data),
+                cnpj: limparCnpj(data.cnpj),
+                fonte: 'lucro',
+                regime: data.regimePadrao || 'Presumido',
+                _merged_into: data._merged_into,
+            };
+        })
+        .filter((emp) => !emp._merged_into && emp.cnpj.length === 14)
+        .filter((emp) => {
+            if (!cnpjsSet && !idsSet) return true;
+            return !!(idsSet?.has(emp.id) || cnpjsSet?.has(emp.cnpj));
+        })
+        .map(({ _merged_into, ...emp }) => emp)
+        .sort((a, b) => (a.nome || a.cnpj).localeCompare(b.nome || b.cnpj));
+}
+
+async function cnpjsPermitidosParaListagem(user) {
+    const cnpjs = await getCnpjsDaCarteira(user);
+    return cnpjs ? new Set(cnpjs) : null;
+}
+
 router.get('/status', (_req, res) => res.json({ mode: getDctfwebMode(), ok: true }));
 
 router.get('/resumo', requireAuth, async (_req, res) => {
@@ -31,16 +78,33 @@ router.get('/resumo', requireAuth, async (_req, res) => {
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/declaracoes', requireAuth, async (req, res) => {
-    const carteira = await podeAcessarCnpj(req.user, req.query.empresaCnpj);
-    if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+router.get('/empresas', requireAuth, async (req, res) => {
     try {
-        res.json(await listarDeclaracoes({
-            empresaCnpj: req.query.empresaCnpj,
+        res.json(await listarEmpresasDctfwebDisponiveis(req.user));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/declaracoes', requireAuth, async (req, res) => {
+    try {
+        const empresaCnpj = limparCnpj(req.query.empresaCnpj);
+        if (empresaCnpj) {
+            const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+            if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+        }
+        const cnpjsPermitidos = empresaCnpj ? null : await cnpjsPermitidosParaListagem(req.user);
+        if (cnpjsPermitidos && cnpjsPermitidos.size === 0) return res.json([]);
+
+        const declaracoes = await listarDeclaracoes({
+            empresaCnpj: empresaCnpj || undefined,
             situacao: req.query.situacao,
             anoPA: req.query.anoPA ? Number(req.query.anoPA) : undefined,
             mesPA: req.query.mesPA ? Number(req.query.mesPA) : undefined,
-        }));
+        });
+        res.json(cnpjsPermitidos
+            ? declaracoes.filter((decl) => cnpjsPermitidos.has(limparCnpj(decl.empresaCnpj)))
+            : declaracoes);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

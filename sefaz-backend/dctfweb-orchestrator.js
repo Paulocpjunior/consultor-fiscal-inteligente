@@ -104,8 +104,8 @@ export async function listarDeclaracoes({ empresaCnpj, situacao, anoPA, mesPA } 
     if (situacao) q = q.where('situacao', '==', situacao);
     if (anoPA) q = q.where('anoPA', '==', anoPA);
     if (mesPA) q = q.where('mesPA', '==', mesPA);
-    const snap = await q.limit(500).get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    const docs = await fetchAllDocs(q, { label: 'dctfweb_declaracoes/listar' });
+    return docs.map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.anoPA - a.anoPA) || (b.mesPA - a.mesPA));
 }
 
