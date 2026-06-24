@@ -15,6 +15,7 @@
 import React, { useEffect, useState } from 'react';
 import AnaliseCreditoExtrato from './AnaliseCreditoExtrato';
 import { getEmpresasParaPerfilCliente, type EmpresaPerfilOption } from '../services/xmlFiscalService';
+import { listarEmpresasPerfilBackend } from '../services/empresasPerfilService';
 import type { User } from '../types';
 
 interface AnaliseCreditosProps {
@@ -23,16 +24,53 @@ interface AnaliseCreditosProps {
 
 const AnaliseCreditos: React.FC<AnaliseCreditosProps> = ({ currentUser }) => {
     const [empresas, setEmpresas] = useState<EmpresaPerfilOption[]>([]);
+    const [empresasLoading, setEmpresasLoading] = useState(false);
+    const [empresasErro, setEmpresasErro] = useState<string | null>(null);
 
     useEffect(() => {
         let vivo = true;
-        getEmpresasParaPerfilCliente(currentUser)
-            .then(list => { if (vivo) setEmpresas(list || []); })
-            .catch(() => { /* silencia: o sub-componente ja lida com lista vazia */ });
+        async function carregarEmpresas() {
+            if (!currentUser) {
+                setEmpresas([]);
+                setEmpresasErro(null);
+                setEmpresasLoading(false);
+                return;
+            }
+            setEmpresasLoading(true);
+            setEmpresasErro(null);
+            try {
+                const list = await listarEmpresasPerfilBackend(currentUser);
+                if (vivo) setEmpresas(list || []);
+            } catch (err: any) {
+                console.warn('listarEmpresasPerfilBackend:', err?.message);
+                try {
+                    const fallback = await getEmpresasParaPerfilCliente(currentUser);
+                    if (vivo) {
+                        setEmpresas(fallback || []);
+                        setEmpresasErro(err?.message || 'Falha ao carregar empresas pelo servidor.');
+                    }
+                } catch (fallbackErr: any) {
+                    if (vivo) {
+                        setEmpresas([]);
+                        setEmpresasErro(fallbackErr?.message || err?.message || 'Falha ao carregar empresas.');
+                    }
+                }
+            } finally {
+                if (vivo) setEmpresasLoading(false);
+            }
+        }
+        carregarEmpresas();
         return () => { vivo = false; };
     }, [currentUser]);
 
-    return <AnaliseCreditoExtrato currentUser={currentUser} empresas={empresas} />;
+    return (
+        <AnaliseCreditoExtrato
+            currentUser={currentUser}
+            empresas={empresas}
+            empresasLoading={empresasLoading}
+            empresasErro={empresasErro}
+        />
+    );
 };
 
 export default AnaliseCreditos;

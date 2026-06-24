@@ -101,11 +101,15 @@ const CardTotal: React.FC<{ label: string; valor: number; cor: string; qtde?: nu
 interface AnaliseCreditoExtratoProps {
   currentUser?: User | null;
   empresas?: EmpresaPerfilOption[];
+  empresasLoading?: boolean;
+  empresasErro?: string | null;
 }
 
 const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
   currentUser = null,
   empresas = [],
+  empresasLoading = false,
+  empresasErro = null,
 }) => {
   const confirm = useConfirm();
   const [arquivo, setArquivo]       = useState<File | null>(null);
@@ -516,9 +520,12 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
           <select
             value={empresaSelId}
             onChange={e => setEmpresaSelId(e.target.value)}
+            disabled={empresasLoading}
             className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
           >
-            <option value="">— Selecione a empresa antes de subir o PDF —</option>
+            <option value="">
+              {empresasLoading ? 'Carregando empresas...' : '— Selecione a empresa antes de subir o PDF —'}
+            </option>
             {[...empresas].sort((a,b) => a.nome.localeCompare(b.nome)).map(e => (
               <option key={e.id} value={e.id}>
                 {e.nome} ({e.cnpj}) · {e.regimeSugerido === 'SIMPLES' ? 'Simples'
@@ -526,9 +533,19 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
               </option>
             ))}
           </select>
-          {empresas.length === 0 && (
+          {empresasLoading && (
+            <p className="text-[11px] text-blue-500 mt-1">
+              Carregando empresas liberadas para o seu perfil...
+            </p>
+          )}
+          {!empresasLoading && empresasErro && (
             <p className="text-[11px] text-orange-500 mt-1">
-              Nenhuma empresa cadastrada encontrada. Cadastre a empresa primeiro.
+              Não foi possível carregar a lista completa de empresas. Atualize a página; se persistir, valide o perfil do usuário e os vínculos de carteira.
+            </p>
+          )}
+          {!empresasLoading && !empresasErro && empresas.length === 0 && (
+            <p className="text-[11px] text-orange-500 mt-1">
+              Nenhuma empresa disponível para este usuário. Confira se o cadastro existe e se a carteira/perfil está vinculado.
             </p>
           )}
         </div>
