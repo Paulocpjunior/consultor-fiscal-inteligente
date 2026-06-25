@@ -118,7 +118,7 @@ jobs:
         # Se falhar por permissao, conceda roles/firebaserules.admin
         # (+ datastore.indexAdmin p/ indexes) a SA do GCP_SA_KEY.
         run: |
-          npx --yes firebase-tools@latest deploy \
+          npx --yes firebase-tools@15.13.0 deploy \
             --only firestore:rules,firestore:indexes,storage \
             --project consultorfiscalapp \
             --non-interactive
