@@ -218,6 +218,15 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
     if (!user || !isFirebaseConfigured || !db) return [];
 
     try {
+        const backendList = await listarEmpresasPerfilBackend(user);
+        if (backendList.length > 0) {
+            return dedupPerfilOptions(backendList);
+        }
+    } catch (err: any) {
+        console.warn('getEmpresasParaPerfilCliente/backend:', err?.message);
+    }
+
+    try {
         const scope = await getCarteiraScope(user);
         const [simplesSnap, lucroSnap] = await Promise.all([
             fetchAllDocs('simples_empresas'),
