@@ -1,11 +1,12 @@
 /**
  * Carteira de Clientes — tela (só admin) para atribuir empresas a colaboradores.
- * Lista as empresas via getEmpresasParaPerfilCliente (fonte canônica) e os
+ * Lista as empresas pelo backend de perfil cliente e os
  * colaboradores via getAllUsers. Cada vínculo vira um doc na coleção `carteiras`.
  */
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import type { User } from '../../types';
 import { getEmpresasParaPerfilCliente, type EmpresaPerfilOption } from '../../services/xmlFiscalService';
+import { listarEmpresasPerfilBackend } from '../../services/empresasPerfilService';
 import { getAllUsers } from '../../services/authService';
 import {
     listarCarteiras,
@@ -29,6 +30,7 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [busca, setBusca] = useState('');
     const [soSemResp, setSoSemResp] = useState(false);
     const [salvando, setSalvando] = useState<string | null>(null);
+    const [erroEmpresas, setErroEmpresas] = useState<string | null>(null);
 
     const isAdmin = currentUser.role === 'admin';
 
@@ -38,14 +40,27 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     const carregar = async () => {
         setLoading(true);
+        setErroEmpresas(null);
         try {
-            const [emp, usrs, vincs] = await Promise.all([
-                getEmpresasParaPerfilCliente(currentUser),
+            const empresasPromise = listarEmpresasPerfilBackend(currentUser)
+                .then((list) => ({ list, erro: null as string | null }))
+                .catch(async (err: any) => {
+                    console.warn('listarEmpresasPerfilBackend/carteira:', err?.message);
+                    const fallback = await getEmpresasParaPerfilCliente(currentUser);
+                    return {
+                        list: fallback || [],
+                        erro: err?.message || 'Falha ao carregar empresas pelo servidor.',
+                    };
+                });
+
+            const [empresasResult, usrs, vincs] = await Promise.all([
+                empresasPromise,
                 getAllUsers(),
                 listarCarteiras(currentUser),
             ]);
             if (!aliveRef.current) return;
-            setEmpresas(emp);
+            setEmpresas(empresasResult.list);
+            setErroEmpresas(empresasResult.erro);
             setColaboradores(usrs);
             setVinculos(vincs);
         } catch (err: any) {
@@ -182,6 +197,18 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {!loading && (
                 <div className="text-xs text-slate-500 mb-2">
                     {empresasFiltradas.length} de {empresas.length} empresa(s)
+                </div>
+            )}
+
+            {!loading && erroEmpresas && (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+                    Não foi possível carregar a lista completa de empresas pelo servidor. A tela tentou uma consulta alternativa; se continuar zerada, valide o perfil admin e os vínculos de carteira.
+                </div>
+            )}
+
+            {!loading && !erroEmpresas && empresas.length === 0 && (
+                <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                    Nenhuma empresa disponível para atribuição. Confira se há cadastros ativos em Simples Nacional ou Lucro Presumido/Real.
                 </div>
             )}
 
