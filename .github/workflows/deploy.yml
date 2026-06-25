@@ -109,13 +109,15 @@ jobs:
             --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,GRAPH_CLIENT_SECRET=graph-client-secret:latest,SERPRO_CONSUMER_KEY=serpro-consumer-key:latest,SERPRO_CONSUMER_SECRET=serpro-consumer-secret:latest,SEFAZ_CRON_SECRET=sefaz-cron-secret:latest,SHAREPOINT_PROXY_TOKEN=sharepoint-proxy-token:latest
 
       - name: Deploy Firestore & Storage rules
+        continue-on-error: true
         # Publica firestore.rules + storage.rules + indexes usando a MESMA
         # service account do deploy (google-github-actions/auth exporta
         # GOOGLE_APPLICATION_CREDENTIALS, que o firebase-tools usa pra ADC).
         # ANTES: nada publicava as rules — firebase.json apontava pra
         # storage.rules inexistente e o pipeline só subia o Cloud Run.
         # Resultado: regras de Firestore/Storage podiam ficar defasadas em prod.
-        # Se falhar por permissao, conceda roles/firebaserules.admin
+        # Best-effort: nao deve derrubar o deploy da aplicacao quando o Firebase
+        # CLI/API oscilar. Se falhar por permissao, conceda roles/firebaserules.admin
         # (+ datastore.indexAdmin p/ indexes) a SA do GCP_SA_KEY.
         run: |
           for attempt in 1 2 3; do
