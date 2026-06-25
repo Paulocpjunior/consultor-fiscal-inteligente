@@ -150,7 +150,7 @@ const EditarViaExcel: React.FC = () => {
             <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 text-xs">
                 <b className="text-amber-800 dark:text-amber-200">Edição de SPED Fiscal via Excel — round-trip seguro</b>
                 <ul className="mt-2 list-disc list-inside space-y-1 text-amber-900 dark:text-amber-300/90">
-                    <li>Apenas tipos editáveis (0150, 0200, C100, C170, C190, E110, H010) ficam em abas com colunas nomeadas.</li>
+                    <li>Apenas tipos editáveis (0150, 0200, C100, C170, C190, E110, E210, E250, E310, E316, H010) ficam em abas com colunas nomeadas.</li>
                     <li>Demais tipos voltam <b>intactos</b> via aba "Outros (preservados)".</li>
                     <li>Bloco 9 (R9900/R9990/R9999) é <b>recalculado automaticamente</b> — não edite essa aba.</li>
                     <li>Não troque a coluna <code>_idx_NAO_MEXER</code> — é o vínculo entre Excel e SPED.</li>

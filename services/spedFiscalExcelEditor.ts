@@ -4,7 +4,7 @@
  * Pipeline UI do editor SPED Fiscal:
  *   SPED (.txt)
  *     → parseSpedFiscalParaEdicao (backend module, dynamic import)
- *     → exportarXlsx(): 1 aba por tipo editavel (C170, C190, E110...) + aba
+ *     → exportarXlsx(): 1 aba por tipo editavel (C170, C190, E110/E210/E250/E310/E316...) + aba
  *       "Resumo" + aba "Outros (preservados)" so-leitura
  *   ↓ (admin edita no Excel)
  *   XLSX corrigido
@@ -198,7 +198,7 @@ export async function conciliarFaturamento(
 /**
  * Exporta o SPED parseado pra XLSX editavel.
  * - 1 aba "Resumo" com contagem por tipo.
- * - 1 aba por tipo editavel (C170, C190, E110, etc) com colunas nomeadas + idx (somente leitura).
+ * - 1 aba por tipo editavel (C170, C190, E110/E210/E250/E310/E316, etc) com colunas nomeadas + idx (somente leitura).
  * - 1 aba "Outros (preservados)" com linhas dos tipos sem layout — read-only, round-trip mantem.
  */
 export async function exportarXlsx(parsed: ParseResult, nomeArquivo: string): Promise<Blob> {

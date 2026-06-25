@@ -45,6 +45,8 @@
 //         [35]=VL_COFINS
 //   C190: [0]='C190' [1]=CST_ICMS [2]=CFOP [3]=ALIQ_ICMS [4]=VL_OPR
 //         [5]=VL_BC_ICMS [6]=VL_ICMS [7]=VL_BC_ICMS_ST [8]=VL_ICMS_ST [9]=VL_RED_BC
+//   E210/E250: apuracao e obrigacoes de ICMS-ST
+//   E310/E316: apuracao e obrigacoes de DIFAL/FCP EC 87/15
 // ============================================================================
 
 // Campos de codigo por registro — indice 0-based no array `campos` (onde [0]=tipo).
@@ -54,6 +56,10 @@ const CAMPOS_CODIGO = {
     'C190': [1, 2],                          // CST_ICMS, CFOP
     '0150': [1],                             // COD_PART
     'C100': [9],                             // COD_SIT (situacao)
+    'E210': [1],                             // IND_MOV_ST
+    'E250': [1, 4],                          // COD_OR, COD_REC
+    'E310': [1],                             // IND_MOV_FCP_DIFAL
+    'E316': [1, 4],                          // COD_OR, COD_REC
 };
 
 // Campos de valor monetario por registro. SPED exige virgula decimal.
@@ -61,6 +67,10 @@ const CAMPOS_VALOR = {
     'C170': [6, 12, 14, 15, 17, 21, 23, 25, 29, 31, 35],
     'C190': [4, 5, 6, 7, 8, 9],
     'E110': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    'E210': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+    'E250': [2],
+    'E310': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+    'E316': [2],
     'E111': [4],                             // VL_AJ_APUR
     'E116': [3, 5],                          // VL_OR, VL_OR_DAR
     'H010': [3, 4, 5],                       // QTD, VL_UNIT, VL_ITEM
@@ -109,6 +119,10 @@ const NOME_CAMPO = {
     'C170': { 2: 'COD_ITEM', 6: 'VL_ITEM', 9: 'CST_ICMS', 10: 'CFOP', 12: 'VL_BC_ICMS', 14: 'VL_ICMS', 15: 'VL_BC_ICMS_ST', 17: 'VL_ICMS_ST', 19: 'CST_IPI', 21: 'VL_BC_IPI', 23: 'VL_IPI', 24: 'CST_PIS', 25: 'VL_BC_PIS', 29: 'VL_PIS', 30: 'CST_COFINS', 31: 'VL_BC_COFINS', 35: 'VL_COFINS' },
     'C190': { 1: 'CST_ICMS', 2: 'CFOP', 4: 'VL_OPR', 5: 'VL_BC_ICMS', 6: 'VL_ICMS', 7: 'VL_BC_ICMS_ST', 8: 'VL_ICMS_ST', 9: 'VL_RED_BC' },
     'E110': { 2: 'VL_TOT_DEBITOS', 3: 'VL_AJ_DEBITOS', 4: 'VL_TOT_AJ_DEBITOS', 5: 'VL_ESTORNOS_CRED', 6: 'VL_TOT_CREDITOS', 7: 'VL_AJ_CREDITOS', 8: 'VL_TOT_AJ_CREDITOS', 9: 'VL_ESTORNOS_DEB', 10: 'VL_SLD_CREDOR_ANT', 11: 'VL_SLD_APURADO', 12: 'VL_TOT_DED', 13: 'VL_ICMS_RECOLHER', 14: 'VL_SLD_CREDOR_TRANSPORTAR', 15: 'DEB_ESP' },
+    'E210': { 1: 'IND_MOV_ST', 2: 'VL_SLD_CRED_ANT_ST', 3: 'VL_DEVOL_ST', 4: 'VL_RESSARC_ST', 5: 'VL_OUT_CRED_ST', 6: 'VL_AJ_CREDITOS_ST', 7: 'VL_RETENCAO_ST', 8: 'VL_OUT_DEB_ST', 9: 'VL_AJ_DEBITOS_ST', 10: 'VL_SLD_DEV_ANT_ST', 11: 'VL_DEDUCOES_ST', 12: 'VL_ICMS_RECOL_ST', 13: 'VL_SLD_CRED_ST_TRANSPORTAR', 14: 'DEB_ESP_ST' },
+    'E250': { 1: 'COD_OR', 2: 'VL_OR', 4: 'COD_REC' },
+    'E310': { 1: 'IND_MOV_FCP_DIFAL', 2: 'VL_SLD_CRED_ANT_DIFAL', 3: 'VL_TOT_DEBITOS_DIFAL', 4: 'VL_OUT_DEB_DIFAL', 5: 'VL_TOT_CREDITOS_DIFAL', 6: 'VL_OUT_CRED_DIFAL', 7: 'VL_SLD_DEV_ANT_DIFAL', 8: 'VL_DEDUCOES_DIFAL', 9: 'VL_RECOL_DIFAL', 10: 'VL_SLD_CRED_TRANSPORTAR_DIFAL', 11: 'DEB_ESP_DIFAL', 12: 'VL_SLD_CRED_ANT_FCP', 13: 'VL_TOT_DEB_FCP', 14: 'VL_OUT_DEB_FCP', 15: 'VL_TOT_CRED_FCP', 16: 'VL_OUT_CRED_FCP', 17: 'VL_SLD_DEV_ANT_FCP', 18: 'VL_DEDUCOES_FCP', 19: 'VL_RECOL_FCP', 20: 'VL_SLD_CRED_TRANSPORTAR_FCP', 21: 'DEB_ESP_FCP' },
+    'E316': { 1: 'COD_OR', 2: 'VL_OR', 4: 'COD_REC' },
 };
 
 function nomeCampo(tipo, i) {

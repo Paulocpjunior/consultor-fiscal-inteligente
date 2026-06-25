@@ -119,6 +119,29 @@ describe('corrigirFormato — DECIMAL_PONTO', () => {
         expect(r.ajustes[0].registro).toBe('C190');
         expect(r.ajustes[0].campo).toBe('VL_OPR');
     });
+
+    it('corrige valores e códigos dos blocos E210/E250/E310/E316', () => {
+        const r = corrigirFormato(mkParsed([
+            { tipo: 'E210', campos: [' 1 ', '0', '0', '0', '0', '0', '7177.45', '0', '0', '7177.45', '0', '7177.45', '0', '0'] },
+            { tipo: 'E250', campos: [' 002 ', '7177.45', '22062026', '146 - 6', '', '', '', '', '052026'] },
+            { tipo: 'E310', campos: [' 1 ', '0', '773.64', '0', '0', '0', '773.64', '0', '773.64', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0'] },
+            { tipo: 'E316', campos: [' 000 ', '773.64', '18052026', '100102', '', '', '', '', '052026'] },
+        ]));
+
+        expect(r.resumo.linhasAjustadas).toBe(4);
+        expect(r.resumo.camposAjustados).toBe(13);
+        expect(r.resumo.porRegra.TRIM_CODIGO).toBe(5);
+        expect(r.resumo.porRegra.DECIMAL_PONTO).toBe(8);
+        expect(r.edicoes[0].campos[1]).toBe('1');
+        expect(r.edicoes[0].campos[7]).toBe('7177,45');
+        expect(r.edicoes[1].campos[1]).toBe('002');
+        expect(r.edicoes[1].campos[2]).toBe('7177,45');
+        expect(r.edicoes[1].campos[4]).toBe('146-6');
+        expect(r.edicoes[2].campos[3]).toBe('773,64');
+        expect(r.edicoes[2].campos[9]).toBe('773,64');
+        expect(r.edicoes[3].campos[1]).toBe('000');
+        expect(r.edicoes[3].campos[2]).toBe('773,64');
+    });
 });
 
 describe('corrigirFormato — combinado e edge cases', () => {

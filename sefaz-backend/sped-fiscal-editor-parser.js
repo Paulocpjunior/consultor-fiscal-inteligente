@@ -4,7 +4,8 @@
 // Parser SPED Fiscal focado em ROUND-TRIP seguro pra edicao: indexa TODAS as
 // linhas (nao descarta nada) preservando ordem original, e expoe um subset
 // dos campos COM NOMES amigaveis pros registros mais editados pelo contador
-// (0150, 0200, C100, C170, C190, E110, H010 — cobrem CFOP/CST/NCM/BC).
+// (0150, 0200, C100, C170, C190, E110/E210/E250/E310/E316, H010 —
+// cobrem CFOP/CST/NCM/BC e apuracoes ICMS/ST/DIFAL).
 //
 // Modulo PURO (sem io/firebase) — testavel direto.
 //
@@ -56,6 +57,34 @@ const LAYOUT_FISCAL = {
         'VL_TOT_CREDITOS', 'VL_AJ_CREDITOS', 'VL_TOT_AJ_CREDITOS', 'VL_ESTORNOS_DEB',
         'VL_SLD_CREDOR_ANT', 'VL_SLD_APURADO', 'VL_TOT_DED', 'VL_ICMS_RECOLHER',
         'VL_SLD_CREDOR_TRANSPORTAR', 'DEB_ESP',
+    ],
+    // Apuracao ICMS-ST
+    'E210': [
+        'IND_MOV_ST', 'VL_SLD_CRED_ANT_ST', 'VL_DEVOL_ST', 'VL_RESSARC_ST',
+        'VL_OUT_CRED_ST', 'VL_AJ_CREDITOS_ST', 'VL_RETENCAO_ST', 'VL_OUT_DEB_ST',
+        'VL_AJ_DEBITOS_ST', 'VL_SLD_DEV_ANT_ST', 'VL_DEDUCOES_ST',
+        'VL_ICMS_RECOL_ST', 'VL_SLD_CRED_ST_TRANSPORTAR', 'DEB_ESP_ST',
+    ],
+    // Obrigacoes ICMS-ST a recolher
+    'E250': [
+        'COD_OR', 'VL_OR', 'DT_VCTO', 'COD_REC', 'NUM_PROC',
+        'IND_PROC', 'PROC', 'TXT_COMPL', 'MES_REF',
+    ],
+    // Apuracao DIFAL/FCP EC 87/15
+    'E310': [
+        'IND_MOV_FCP_DIFAL', 'VL_SLD_CRED_ANT_DIFAL', 'VL_TOT_DEBITOS_DIFAL',
+        'VL_OUT_DEB_DIFAL', 'VL_TOT_CREDITOS_DIFAL', 'VL_OUT_CRED_DIFAL',
+        'VL_SLD_DEV_ANT_DIFAL', 'VL_DEDUCOES_DIFAL', 'VL_RECOL_DIFAL',
+        'VL_SLD_CRED_TRANSPORTAR_DIFAL', 'DEB_ESP_DIFAL',
+        'VL_SLD_CRED_ANT_FCP', 'VL_TOT_DEB_FCP', 'VL_OUT_DEB_FCP',
+        'VL_TOT_CRED_FCP', 'VL_OUT_CRED_FCP', 'VL_SLD_DEV_ANT_FCP',
+        'VL_DEDUCOES_FCP', 'VL_RECOL_FCP', 'VL_SLD_CRED_TRANSPORTAR_FCP',
+        'DEB_ESP_FCP',
+    ],
+    // Obrigacoes DIFAL/FCP a recolher
+    'E316': [
+        'COD_OR', 'VL_OR', 'DT_VCTO', 'COD_REC', 'NUM_PROC',
+        'IND_PROC', 'PROC', 'TXT_COMPL', 'MES_REF',
     ],
     // Bloco H — Inventario
     'H010': [
