@@ -118,10 +118,23 @@ jobs:
         # Se falhar por permissao, conceda roles/firebaserules.admin
         # (+ datastore.indexAdmin p/ indexes) a SA do GCP_SA_KEY.
         run: |
-          npx --yes firebase-tools@15.13.0 deploy \
-            --only firestore:rules,firestore:indexes,storage \
-            --project consultorfiscalapp \
-            --non-interactive
+          for attempt in 1 2 3; do
+            if npx --yes firebase-tools@15.13.0 deploy \
+              --only firestore:rules,firestore:indexes,storage \
+              --project consultorfiscalapp \
+              --non-interactive; then
+              exit 0
+            else
+              status=$?
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              exit "$status"
+            fi
+
+            echo "Firebase rules deploy falhou (tentativa $attempt/3); tentando novamente..."
+            sleep $((attempt * 20))
+          done
 
       - name: Show Service URL
         run: |
