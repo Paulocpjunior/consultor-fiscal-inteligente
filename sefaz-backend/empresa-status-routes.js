@@ -25,6 +25,7 @@ import { requireAuth } from './require-admin.js';
 import { getCnpjsDaCarteira } from './carteira-auth.js';
 import { loadCertificate } from './secret-loader.js';
 import { lookupCnpj } from './brasilapi-cache.js';
+import { classificarCapturaNfseNacionalAdn } from './empresa-status-helper.js';
 
 const router = express.Router();
 
@@ -240,6 +241,10 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                     const venceEm = new Date(cert.notAfter);
                     certValido = venceEm > agora;
                     certVenceEm = cert.notAfter;
+                } else if (tipoCert === 'A3') {
+                    // A3 pode ser cadastrado sem .pfx/notAfter no Cloud Run:
+                    // quem valida o certificado físico é o agente local.
+                    certValido = true;
                 }
             } else if (ehEscritorio) {
                 // Cert do escritorio vive em Secret Manager. Marca como A1 proprio.
@@ -257,9 +262,11 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             //  b) Procuracao e-CAC ativa + cert do escritorio utilizavel
             //     (assina com cert S&P, passa CNPJ da empresa no envelope)
             //  c) Empresa E a S&P (cert global serve direto)
-            // A3 nao roda no Cloud Run (precisa de cfi-a3 local). Procuracao
-            // SUBSTITUI a necessidade de cert proprio.
+            // A3 nao roda no Cloud Run, mas e caminho operacional valido via
+            // agente local cfi-a3. Procuracao SUBSTITUI a necessidade de cert
+            // proprio apenas para o caminho em nuvem com cert do escritorio.
             const temA1ProprioValido = tipoCert === 'A1' && certValido && !ehEscritorio;
+            const temA3Proprio = tipoCert === 'A3' && certUploaded;
             const podeUsarCertEscritorio = certEscritorioUtilizavel
                 && (ehEscritorio || emp.procuracaoEcacAtiva);
             const usaCertEscritorio = !temA1ProprioValido && podeUsarCertEscritorio;
@@ -275,24 +282,18 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
 
             // capturaNfeOk: precisa um caminho valido + uf + flag manual.
             const capturaNfeOk = emp.capturarSefaz && !!emp.uf
-                && (temA1ProprioValido || usaCertEscritorio);
+                && (temA1ProprioValido || temA3Proprio || usaCertEscritorio);
 
-            // Mensagens de bloqueio (ordem importa — A3 vem antes de "expirado"
-            // porque A3 bloqueia independente de data).
+            // Mensagens de bloqueio. A3 sem procuracao ativa e sem erro no cert
+            // do escritorio nao entra aqui: fica coberto pelo agente local.
             if (!emp.capturarSefaz) motivosBloqueio.push('NFe: captura SEFAZ desativada no cadastro');
             else if (!emp.uf) motivosBloqueio.push('NFe: UF não cadastrada. Preencha a UF nos dados fiscais da empresa.');
             else if (capturaNfeOk) {
                 // Caminho A1 proprio E nao usa escritorio? nenhum motivo.
                 // Se vai via escritorio, nao e bloqueio — e info. Sem push.
             }
-            else if (tipoCert === 'A3') {
-                // A3 + procuracao ja teria caido em capturaNfeOk via escritorio.
-                // Se chegou aqui, e A3 sem procuracao ou cert escritorio offline.
-                if (emp.procuracaoEcacAtiva && !certEscritorioUtilizavel) {
-                    motivosBloqueio.push('NFe: procuração e-CAC ativa, mas o certificado do escritório está indisponível. Verifique Configurações > Certificado Digital.');
-                } else {
-                    motivosBloqueio.push('NFe: certificado A3 não roda na captura automática em nuvem. Use agente A3 local ou marque procuração e-CAC ativa.');
-                }
+            else if (tipoCert === 'A3' && emp.procuracaoEcacAtiva && !certEscritorioUtilizavel) {
+                motivosBloqueio.push('NFe: procuração e-CAC ativa, mas o certificado do escritório está indisponível. Verifique Configurações > Certificado Digital.');
             }
             else if (!certValido && certUploaded) {
                 // Cert proprio invalido (geralmente A1 vencido). Se tem procuracao,
@@ -321,24 +322,23 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             if (!emp.ccmSp) motivosBloqueio.push('NFS-e SP: falta Inscrição Municipal (CCM) nos dados fiscais da empresa.');
             else if (!emp.nfseSpAutorizadoEm) motivosBloqueio.push('NFS-e SP: falta autorizar o escritório no portal nfe.prefeitura.sp.gov.br.');
 
-            // c) NFSe Nacional ADN: a consulta DFe exige A1 proprio da mesma
-            // raiz CNPJ (ou a propria S&P com cert global). Procuracao/cert do
-            // escritorio vinha gerando E2243 em massa: CNPJ base divergente.
-            const capturaNfseNacionalOk = emp.nfseNacionalDfeAtivo
-                && (temA1ProprioValido || ehEscritorio);
-            if (!emp.nfseNacionalDfeAtivo) {
-                motivosBloqueio.push('NFS-e Nacional ADN desativada no cadastro. Ative NFS-e Nacional para incluir esta empresa na captura ADN.');
-            } else if (!capturaNfseNacionalOk) {
-                if (tipoCert === 'A3') {
-                    motivosBloqueio.push('NFS-e Nacional ADN: a captura automática em nuvem exige A1 próprio; certificado A3 precisa de agente local específico.');
-                } else if (usaCertEscritorio || emp.procuracaoEcacAtiva) {
-                    motivosBloqueio.push('NFS-e Nacional ADN: procuração/certificado do escritório não basta para consultar DFe; cadastre A1 próprio da empresa.');
-                } else if (certUploaded && !certValido) {
-                    motivosBloqueio.push('NFS-e Nacional ADN: certificado A1 próprio vencido ou sem validade; renove ou reenvie o .pfx.');
-                } else {
-                    motivosBloqueio.push('NFS-e Nacional ADN: falta certificado A1 próprio da empresa.');
-                }
-            }
+            // c) NFSe Nacional ADN: no Cloud Run precisa A1 proprio da mesma
+            // raiz CNPJ (ou a propria S&P com cert global). A3 nao entra no
+            // cron em nuvem, mas conta como coberto no painel porque depende
+            // do agente local A3.
+            const nfseNacStatus = classificarCapturaNfseNacionalAdn({
+                nfseNacionalDfeAtivo: emp.nfseNacionalDfeAtivo,
+                temA1ProprioValido,
+                ehEscritorio,
+                tipoCert,
+                usaCertEscritorio,
+                procuracaoEcacAtiva: emp.procuracaoEcacAtiva,
+                certUploaded,
+                certValido,
+            });
+            const capturaNfseNacionalOk = nfseNacStatus.ok;
+            const capturaNfseNacionalVia = nfseNacStatus.via;
+            if (nfseNacStatus.motivo) motivosBloqueio.push(nfseNacStatus.motivo);
 
             const state = stateMap.get(emp.cnpj);
 
@@ -366,6 +366,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 capturaNfeOk,
                 capturaNfseSpOk,
                 capturaNfseNacionalOk,
+                capturaNfseNacionalVia,
                 motivosBloqueio,
                 // responsáveis na carteira de clientes (vazio = ninguém atribuído)
                 responsaveis: responsaveisMap.get(emp.cnpj) || [],

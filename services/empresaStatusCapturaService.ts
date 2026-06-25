@@ -35,6 +35,7 @@ export interface EmpresaStatusCaptura {
     capturaNfeOk: boolean;
     capturaNfseSpOk: boolean;
     capturaNfseNacionalOk: boolean;
+    capturaNfseNacionalVia?: 'cloud-a1' | 'a3-local' | 'inativa' | 'bloqueada';
     motivosBloqueio: string[];
     responsaveis: { nome: string; papel: 'principal' | 'backup' }[];
     ultimaSyncMs: number | null;

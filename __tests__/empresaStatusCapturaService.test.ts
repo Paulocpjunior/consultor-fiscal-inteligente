@@ -26,6 +26,7 @@ const empresaBase: EmpresaStatusCaptura = {
     capturaNfeOk: true,
     capturaNfseSpOk: false,
     capturaNfseNacionalOk: false,
+    capturaNfseNacionalVia: 'inativa',
     motivosBloqueio: ['NFSe Nacional: flag nfseNacionalDfeAtivo desabilitada'],
     responsaveis: [{ nome: 'sandra', papel: 'principal' }],
     ultimaSyncMs: null,

@@ -16,6 +16,8 @@ import admin from 'firebase-admin';
 import zlib from 'node:zlib';
 import { validarAgentKey } from './agent-keys-storage.js';
 import { importarXmlSefaz, registrarErroSefaz } from './xml-importer.js';
+import { importarDfeNfseNacional, registrarErroNfseNacionalDfe } from './nfse-nacional-dfe-importer.js';
+import { pareceNfseNacional } from './agent-xml-helper.js';
 
 const router = express.Router();
 
@@ -170,9 +172,9 @@ router.post('/upload-batch', requireAgentKey, express.json({ limit: '20mb' }), a
         let duplicados = 0;
         let erros = 0;
         for (const d of docs) {
+            let xml;
             try {
                 // SEFAZ entrega docZip = gzip(xml) em base64. Descomprime aqui.
-                let xml;
                 try {
                     const gzBuf = Buffer.from(d.xmlGzipBase64 || '', 'base64');
                     xml = zlib.gunzipSync(gzBuf).toString('utf-8');
@@ -180,27 +182,45 @@ router.post('/upload-batch', requireAgentKey, express.json({ limit: '20mb' }), a
                     throw new Error(`falha descomprimindo docZip nsu=${d.nsu}: ${e.message}`);
                 }
 
-                const result = await importarXmlSefaz({
-                    empresaId,
-                    empresaCnpj: cnpjNum,
-                    xml,
-                    schema: d.schema,
-                    nsu: d.nsu,
-                    capturadoPor,
-                });
+                const isNfseNacional = pareceNfseNacional(xml, d.schema);
+                const result = isNfseNacional
+                    ? await importarDfeNfseNacional({
+                        empresaId,
+                        empresaCnpj: cnpjNum,
+                        item: { nsu: d.nsu, schema: d.schema, xml },
+                        capturadoPor,
+                    })
+                    : await importarXmlSefaz({
+                        empresaId,
+                        empresaCnpj: cnpjNum,
+                        xml,
+                        schema: d.schema,
+                        nsu: d.nsu,
+                        capturadoPor,
+                    });
                 if (result?.status === 'duplicado') duplicados++;
                 else if (result?.status === 'erro') erros++;
                 else novos++;
             } catch (e) {
                 erros++;
                 try {
-                    await registrarErroSefaz({
-                        empresaId,
-                        empresaCnpj: cnpjNum,
-                        motivo: e.message,
-                        contexto: { nsu: d.nsu, schema: d.schema, fonte: 'agent-a3' },
-                        capturadoPor,
-                    });
+                    const contexto = { nsu: d.nsu, schema: d.schema, fonte: 'agent-a3' };
+                    if (typeof xml === 'string' && pareceNfseNacional(xml, d.schema)) {
+                        await registrarErroNfseNacionalDfe({
+                            empresaId,
+                            empresaCnpj: cnpjNum,
+                            motivo: e.message,
+                            contexto,
+                        });
+                    } else {
+                        await registrarErroSefaz({
+                            empresaId,
+                            empresaCnpj: cnpjNum,
+                            motivo: e.message,
+                            contexto,
+                            capturadoPor,
+                        });
+                    }
                 } catch (errReg) {
                     console.warn(`[agent-routes] falha registrando xml_erros (${cnpjNum} nsu=${d.nsu}):`, errReg.message);
                 }

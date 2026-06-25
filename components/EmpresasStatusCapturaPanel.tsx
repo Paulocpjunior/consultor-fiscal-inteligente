@@ -53,8 +53,8 @@ function diasAteVencimento(iso: string | null): number | null {
     } catch { return null; }
 }
 
-const Pill: React.FC<{ ok: boolean; label: string }> = ({ ok, label }) => (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+const Pill: React.FC<{ ok: boolean; label: string; title?: string }> = ({ ok, label, title }) => (
+    <span title={title} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
         ok ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'
     }`}>
         {ok ? '✓' : '✗'} {label}
@@ -208,8 +208,8 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     return d !== null && d < 30;
                 }
                 // Usa flag BRUTA pra filtro: empresa sem procuração REAL marcada
-                // no e-CAC. Cert A1/A3 próprio não conta — A3 não roda no Cloud Run
-                // e o cron sempre olha esse campo bruto.
+                // no e-CAC. Cert A1/A3 próprio não conta; A3 é coberto pelo
+                // agente local, e o cron em nuvem continua olhando a flag bruta.
                 case 'sem-procuracao': return !e.procuracaoEcacFlagBruta;
                 case 'sem-ccmsp': return !e.nfseSpAutorizado;
                 case 'nfse-nac-inativa': return !e.nfseNacionalDfeAtivo;
@@ -446,7 +446,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                 <button
                                                     disabled={togglingCnpj === e.cnpj + '-procuracaoEcacAtiva'}
                                                     onClick={() => handleToggle(e.cnpj, 'procuracaoEcacAtiva', e.procuracaoEcacFlagBruta)}
-                                                    title="Marque APENAS se a procuração e-CAC está realmente cadastrada na Receita (e-CAC) pra captura via cert do escritório. Cert A1/A3 próprio NÃO substitui — A3 não roda no Cloud Run."
+                                                    title="Marque APENAS se a procuração e-CAC está realmente cadastrada na Receita (e-CAC) pra captura via cert do escritório. Cert próprio não substitui essa procuração; A3 usa agente local."
                                                     className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
                                                         e.procuracaoEcacFlagBruta ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300'
                                                     } hover:opacity-80 disabled:opacity-50`}
@@ -459,7 +459,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                 {!e.procuracaoEcacFlagBruta && e.procuracaoEcacAtiva && (
                                                     <div
                                                         className="text-[9px] text-gray-500 mt-0.5 italic"
-                                                        title={`Cert ${e.tipoCert} próprio. Pra NFSe Nacional já autoriza; pra NFe DistDFe via Cloud Run NÃO substitui — A3 precisa cfi-a3 local OU marque procuração se houver de verdade.`}
+                                                        title={`Cert ${e.tipoCert} próprio. A1 autoriza captura em nuvem; A3 depende do agente local cfi-a3. Procuração e-CAC só marque quando existir de verdade no e-CAC.`}
                                                     >
                                                         ○ inferida ({e.tipoCert} próprio)
                                                     </div>
@@ -497,7 +497,13 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                         <div className="flex flex-col gap-1 items-center">
                                             <Pill ok={e.capturaNfeOk} label="NFe" />
                                             <Pill ok={e.capturaNfseSpOk} label="NFSe SP" />
-                                            <Pill ok={e.capturaNfseNacionalOk} label="NFSe Nac" />
+                                            <Pill
+                                                ok={e.capturaNfseNacionalOk}
+                                                label={e.capturaNfseNacionalVia === 'a3-local' ? 'NFSe Nac A3' : 'NFSe Nac'}
+                                                title={e.capturaNfseNacionalVia === 'a3-local'
+                                                    ? 'Coberta por certificado A3. Captura depende do agente local cfi-a3, fora do cron em nuvem.'
+                                                    : undefined}
+                                            />
                                         </div>
                                     </td>
                                     <td className="px-2 py-1.5">
