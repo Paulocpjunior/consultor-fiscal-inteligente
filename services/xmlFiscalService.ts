@@ -23,6 +23,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured, isFirebaseStorageConfigured } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
+import { listarEmpresasPerfilBackend } from './empresasPerfilService';
 import {
     parseNFeXml,
     matchCompanyAndDirection,
@@ -125,6 +126,22 @@ function dedupEmpresas(list: EmpresaXmlOption[]): EmpresaXmlOption[] {
 
 export async function getEmpresasDisponiveis(user: User | null): Promise<EmpresaXmlOption[]> {
     if (!user || !isFirebaseConfigured || !db) return [];
+
+    try {
+        const backendList = await listarEmpresasPerfilBackend(user);
+        if (backendList.length > 0) {
+            return dedupEmpresas(backendList.map(e => ({
+                id: e.id,
+                nome: e.nome,
+                cnpj: e.cnpj,
+                fonte: e.fonte,
+                uf: e.uf,
+                createdBy: e.createdBy,
+            })));
+        }
+    } catch (err: any) {
+        console.warn('getEmpresasDisponiveis/backend:', err?.message);
+    }
 
     try {
         const scope = await getCarteiraScope(user);
