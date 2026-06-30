@@ -35,6 +35,22 @@ export interface DocumentosFiltroMem {
     busca?: string;
 }
 
+export function getCompetenciaDocumento(
+    d: Pick<Partial<DocumentoFiscal>, 'competencia' | 'dhEmi'> | any,
+): string {
+    const competencia = String(d?.competencia || '').trim();
+    if (/^\d{4}-\d{2}$/.test(competencia)) return competencia;
+
+    const dhEmi = String(d?.dhEmi || '').trim();
+    const matchIso = dhEmi.match(/^(\d{4})-(\d{2})/);
+    if (matchIso) return `${matchIso[1]}-${matchIso[2]}`;
+
+    const matchBr = dhEmi.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (matchBr) return `${matchBr[3]}-${matchBr[2]}`;
+
+    return '';
+}
+
 export function applyDocumentosFilters(
     docs: DocumentoFiscal[],
     filters: DocumentosFiltroMem = {},
@@ -107,9 +123,10 @@ export function applyDocumentosFilters(
             const t = String((d as any).tipoDoc || d.tipo || '').toLowerCase();
             if (t !== filters.tipoDoc.toLowerCase()) return false;
         }
-        if (filters.competencia && d.competencia !== filters.competencia) return false;
-        if (filters.competenciaInicio && d.competencia < filters.competenciaInicio) return false;
-        if (filters.competenciaFim && d.competencia > filters.competenciaFim) return false;
+        const competenciaDoc = getCompetenciaDocumento(d);
+        if (filters.competencia && competenciaDoc !== filters.competencia) return false;
+        if (filters.competenciaInicio && (!competenciaDoc || competenciaDoc < filters.competenciaInicio)) return false;
+        if (filters.competenciaFim && (!competenciaDoc || competenciaDoc > filters.competenciaFim)) return false;
 
         // ── Busca textual / numérica ──────────────────────────────────────
         if (term) {

@@ -17,6 +17,7 @@ import admin from 'firebase-admin';
 import crypto from 'crypto';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import forge from 'node-forge';
+import { selecionarCertA1PorBase } from './cert-base-helper.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -170,6 +171,7 @@ export async function uploadCertEmpresa(empresaId, pfxBuffer, password, uploadIn
 
     const docData = {
         empresaId,
+        tipoCert: 'A1',
         storagePath,
         passwordEnc,
         subject: meta.subject,
@@ -217,6 +219,8 @@ export async function loadCertEmpresa(empresaId) {
     return {
         pfxBuffer,
         password,
+        empresaId,
+        tipoCert: data.tipoCert || 'A1',
         cnpj: data.cnpj,
         notAfter: data.notAfter,
         fingerprint: data.fingerprint,
@@ -260,6 +264,7 @@ export async function getCertInfoEmpresa(empresaId) {
     const d = snap.data();
     return {
         empresaId,
+        tipoCert: d.tipoCert || 'A1',
         cnpj: d.cnpj,
         subject: d.subject,
         issuer: d.issuer,
@@ -282,13 +287,53 @@ export async function listCertsEmpresas() {
         const d = s.data();
         lista.push({
             empresaId: s.id,
+            tipoCert: d.tipoCert || 'A1',
             cnpj: d.cnpj,
             subject: d.subject,
             notAfter: d.notAfter,
             fingerprint: d.fingerprint,
+            hasStoragePath: !!d.storagePath,
+            hasPasswordEnc: !!d.passwordEnc,
             uploadedAt: d.uploadedAt?.toDate?.()?.toISOString?.() || null,
             uploadedBy: d.uploadedBy,
         });
     });
     return lista;
+}
+
+export async function findCertInfoEmpresaPorCnpjBase(empresaCnpj, excludeEmpresaId = null) {
+    const snap = await getDb().collection(COLLECTION).get();
+    const certs = [];
+    snap.forEach(s => {
+        const d = s.data();
+        certs.push({
+            empresaId: s.id,
+            tipoCert: d.tipoCert || 'A1',
+            cnpj: d.cnpj,
+            subject: d.subject,
+            notAfter: d.notAfter,
+            fingerprint: d.fingerprint,
+            storagePath: d.storagePath,
+            passwordEnc: d.passwordEnc,
+            uploadedAt: d.uploadedAt?.toDate?.()?.toISOString?.() || null,
+            uploadedBy: d.uploadedBy,
+        });
+    });
+    const escolhido = selecionarCertA1PorBase(certs, empresaCnpj, Date.now(), excludeEmpresaId);
+    if (!escolhido) return null;
+    const { storagePath, passwordEnc, ...safe } = escolhido;
+    return safe;
+}
+
+export async function loadCertEmpresaPorCnpjBase(empresaCnpj, excludeEmpresaId = null) {
+    const info = await findCertInfoEmpresaPorCnpjBase(empresaCnpj, excludeEmpresaId);
+    if (!info?.empresaId) return null;
+    const cert = await loadCertEmpresa(info.empresaId);
+    if (!cert) return null;
+    return {
+        ...cert,
+        empresaIdFonte: info.empresaId,
+        cnpjFonte: info.cnpj,
+        viaCnpjBase: true,
+    };
 }

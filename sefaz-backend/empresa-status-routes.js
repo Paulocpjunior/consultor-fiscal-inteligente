@@ -26,6 +26,7 @@ import { getCnpjsDaCarteira } from './carteira-auth.js';
 import { loadCertificate } from './secret-loader.js';
 import { lookupCnpj } from './brasilapi-cache.js';
 import { classificarCapturaNfseNacionalAdn } from './empresa-status-helper.js';
+import { selecionarCertA1PorBase } from './cert-base-helper.js';
 
 const router = express.Router();
 
@@ -120,16 +121,23 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
 
         // 2. Lista todos os certs cadastrados
         const certsMap = new Map();
+        const certsMeta = [];
         const certsSnap = await db.collection('empresas_certificados').get();
         certsSnap.forEach(doc => {
             const d = doc.data();
-            certsMap.set(doc.id, {
+            const certMeta = {
+                empresaId: doc.id,
                 tipoCert: d.tipoCert || 'A1', // default A1 (subido via .pfx)
                 cnpjCert: (d.cnpj || '').replace(/\D/g, ''),
+                cnpj: (d.cnpj || '').replace(/\D/g, ''),
                 notAfter: d.notAfter || null,
                 fingerprint: d.fingerprint || null,
+                storagePath: d.storagePath || null,
+                passwordEnc: d.passwordEnc || null,
                 uploadedAt: d.uploadedAt?.toDate?.()?.toISOString?.() || null,
-            });
+            };
+            certsMeta.push(certMeta);
+            certsMap.set(doc.id, certMeta);
         });
 
         // 3. Estado de última captura por CNPJ
@@ -222,7 +230,8 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
         };
 
         for (const emp of empresasMap.values()) {
-            const cert = certsMap.get(emp.id);
+            let cert = certsMap.get(emp.id);
+            let usaA1MesmaRaiz = false;
             let tipoCert = 'nenhum';
             let certUploaded = false;
             let certValido = false;
@@ -254,59 +263,56 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 tipoCert = 'A1';
                 certUploaded = true;
                 certValido = true;
+            } else {
+                const certMesmaRaiz = selecionarCertA1PorBase(certsMeta, emp.cnpj, agora.getTime(), emp.id);
+                if (certMesmaRaiz) {
+                    cert = certMesmaRaiz;
+                    usaA1MesmaRaiz = true;
+                    certUploaded = true;
+                    tipoCert = 'A1-raiz';
+                    certValido = true;
+                    certVenceEm = certMesmaRaiz.notAfter || null;
+                }
             }
 
             // ── Capacidade real de captura NFe ──────────────────────────────
-            // Caminhos validos no Cloud Run hoje:
-            //  a) Cert A1 PROPRIO valido (cert.tipoCert='A1', notAfter no futuro)
-            //  b) Procuracao e-CAC ativa + cert do escritorio utilizavel
-            //     (assina com cert S&P, passa CNPJ da empresa no envelope)
-            //  c) Empresa E a S&P (cert global serve direto)
-            // A3 nao roda no Cloud Run, mas e caminho operacional valido via
-            // agente local cfi-a3. Procuracao SUBSTITUI a necessidade de cert
-            // proprio apenas para o caminho em nuvem com cert do escritorio.
+            // Caminhos validos:
+            //  a) Cert A1 proprio valido.
+            //  b) Cert A1 valido de outra empresa da mesma raiz CNPJ.
+            //  c) Empresa E a S&P (cert global serve direto).
+            //  d) A3 proprio via agente local cfi-a3.
+            // Procuracao e-CAC do escritorio nao substitui certificado na NFe
+            // Distribuicao DF-e; SEFAZ rejeita com cStat=593.
             const temA1ProprioValido = tipoCert === 'A1' && certValido && !ehEscritorio;
+            const temA1MesmaRaizValido = tipoCert === 'A1-raiz' && certValido && usaA1MesmaRaiz;
             const temA3Proprio = tipoCert === 'A3' && certUploaded;
-            const podeUsarCertEscritorio = certEscritorioUtilizavel
-                && (ehEscritorio || emp.procuracaoEcacAtiva);
+            const podeUsarCertEscritorio = certEscritorioUtilizavel && ehEscritorio;
             const usaCertEscritorio = !temA1ProprioValido && podeUsarCertEscritorio;
-            // Pra UI: tipoCert reflete o REAL caminho. Se empresa sem cert
-            // proprio mas com procuracao ativa, vira 'escritorio'.
-            if (tipoCert === 'nenhum' && usaCertEscritorio && !ehEscritorio) {
-                tipoCert = 'escritorio';
-            }
 
-            const procuracaoInferida = emp.procuracaoEcacAtiva || (tipoCert === 'A1' || tipoCert === 'A3');
+            const procuracaoInferida = emp.procuracaoEcacAtiva;
 
             const motivosBloqueio = [];
 
             // capturaNfeOk: precisa um caminho valido + uf + flag manual.
             const capturaNfeOk = emp.capturarSefaz && !!emp.uf
-                && (temA1ProprioValido || temA3Proprio || usaCertEscritorio);
+                && (temA1ProprioValido || temA1MesmaRaizValido || temA3Proprio || usaCertEscritorio);
 
-            // Mensagens de bloqueio. A3 sem procuracao ativa e sem erro no cert
-            // do escritorio nao entra aqui: fica coberto pelo agente local.
+            // Mensagens de bloqueio. A3 nao entra aqui: fica coberto pelo
+            // agente local.
             if (!emp.capturarSefaz) motivosBloqueio.push('NFe: captura SEFAZ desativada no cadastro');
             else if (!emp.uf) motivosBloqueio.push('NFe: UF não cadastrada. Preencha a UF nos dados fiscais da empresa.');
             else if (capturaNfeOk) {
-                // Caminho A1 proprio E nao usa escritorio? nenhum motivo.
-                // Se vai via escritorio, nao e bloqueio — e info. Sem push.
-            }
-            else if (tipoCert === 'A3' && emp.procuracaoEcacAtiva && !certEscritorioUtilizavel) {
-                motivosBloqueio.push('NFe: procuração e-CAC ativa, mas o certificado do escritório está indisponível. Verifique Configurações > Certificado Digital.');
+                // Caminho valido. Sem motivo.
             }
             else if (!certValido && certUploaded) {
-                // Cert proprio invalido (geralmente A1 vencido). Se tem procuracao,
-                // ja foi por usaCertEscritorio — nao chegaria aqui. Sem procuracao,
-                // bloqueia.
                 const dataBr = fmtDataBr(certVenceEm);
-                if (dataBr) motivosBloqueio.push(`NFe: certificado ${tipoCert} expirado em ${dataBr}. Renove o certificado ou marque procuração e-CAC ativa.`);
-                else motivosBloqueio.push(`NFe: certificado ${tipoCert} sem data de validade no cadastro. Reenvie o .pfx ou marque procuração e-CAC ativa.`);
+                if (dataBr) motivosBloqueio.push(`NFe: certificado ${tipoCert} expirado em ${dataBr}. Renove o certificado A1 ou use agente local A3.`);
+                else motivosBloqueio.push(`NFe: certificado ${tipoCert} sem data de validade no cadastro. Reenvie o .pfx A1 ou use agente local A3.`);
             }
             else if (tipoCert === 'nenhum') {
-                motivosBloqueio.push('NFe: sem certificado A1/A3 próprio e sem procuração e-CAC ativa.');
+                motivosBloqueio.push('NFe: sem certificado A1 próprio/mesma raiz CNPJ ou marcação A3. Procuração e-CAC do escritório não substitui certificado na consulta NFe DistDFe.');
             }
-            else if (!certEscritorioUtilizavel && (ehEscritorio || emp.procuracaoEcacAtiva)) {
+            else if (!certEscritorioUtilizavel && ehEscritorio) {
                 if (certEscritorioErro) {
                     motivosBloqueio.push(`NFe: certificado do escritório indisponível. Detalhe técnico: ${certEscritorioErro}`);
                 } else if (cnpjBaseCertEscritorio && cnpjBaseCertEscritorio !== CNPJ_ESCRITORIO_BASE) {
@@ -355,7 +361,8 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 certValido,
                 certVenceEm,
                 usaCertEscritorio,
-                // procuração / autorizações (inferida=true se tem cert A1/A3 próprio)
+                usaA1MesmaRaiz,
+                // procuração / autorizações (flag real do cadastro)
                 procuracaoEcacAtiva: procuracaoInferida,
                 procuracaoEcacFlagBruta: emp.procuracaoEcacAtiva,
                 ccmSp: emp.ccmSp,
@@ -380,7 +387,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             // Resumo
             resumo.total++;
             if (!emp.uf) resumo.semUf++;
-            if (tipoCert === 'A1') resumo.comCertA1++;
+            if (tipoCert === 'A1' || tipoCert === 'A1-raiz') resumo.comCertA1++;
             else if (tipoCert === 'A3') resumo.comCertA3++;
             else if (tipoCert === 'escritorio') resumo.usandoCertEscritorio++;
             else resumo.semCertNenhum++;

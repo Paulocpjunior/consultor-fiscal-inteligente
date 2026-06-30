@@ -47,7 +47,7 @@ const TABELA: Record<string, Omit<CstatInfo, 'cStat'>> = {
     '280': {
         titulo: 'Certificado inválido / expirado',
         categoria: 'erro',
-        acao: 'Renovar cert da S&P (Configurações > Certificado Digital) ou marcar procuração e-CAC se quiser usar cert do escritório.',
+        acao: 'Renovar o certificado A1 da empresa/mesma raiz CNPJ ou usar o agente A3 local.',
     },
     '281': {
         titulo: 'Certificado vencido',
@@ -60,12 +60,11 @@ const TABELA: Record<string, Omit<CstatInfo, 'cStat'>> = {
         acao: 'Cert do escritório no Secret Manager é de outro CNPJ. Subir o .pfx correto da S&P.',
     },
     '593': {
-        titulo: 'Procuração e-CAC ausente ou inválida',
+        titulo: 'Certificado não pertence à raiz CNPJ consultada',
         categoria: 'erro',
         acao:
-            'A empresa precisa cadastrar procuração no e-CAC da Receita: ' +
-            'cav.receita.fazenda.gov.br → Procurações → Cadastrar → procurador CNPJ 44.388.152/0001-89 (S&P) → ' +
-            'serviço "NFe Distribuição (DF-e)". ALTERNATIVA: subir cert A1 próprio dela em Empresas Monitoradas → Certificado.',
+            'Para NFe Distribuição (DF-e), use certificado A1 próprio ou de outra empresa da mesma raiz CNPJ. ' +
+            'Procuração e-CAC do escritório não substitui certificado neste serviço. Se a empresa usa A3, execute pelo agente local cfi-a3.',
     },
     '656': {
         titulo: 'Consumo indevido (rate-limit SEFAZ)',

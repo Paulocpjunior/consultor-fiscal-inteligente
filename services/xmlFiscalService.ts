@@ -33,7 +33,7 @@ import {
     XmlParseError,
 } from './xmlParserService';
 import { uploadXml, deleteXml } from './xmlStorageService';
-import { applyDocumentosFilters } from './xmlDocumentosFilter';
+import { applyDocumentosFilters, getCompetenciaDocumento } from './xmlDocumentosFilter';
 import {
     podeVerDocumentoPorCarteira,
     podeVerEmpresaPorCarteira,
@@ -747,7 +747,7 @@ export function summarize(docs: DocumentoFiscal[]): DashboardSummary {
             else seenChaves.add(d.chave);
         }
 
-        const comp = d.competencia || 'sem-competencia';
+        const comp = getCompetenciaDocumento(d) || 'sem-competencia';
         const c = out.porCompetencia[comp] ||= { entradas: 0, saidas: 0, valorEntradas: 0, valorSaidas: 0 };
         if (d.direcao === 'entrada') { c.entradas++; c.valorEntradas += valor; }
         else if (d.direcao === 'saida') { c.saidas++; c.valorSaidas += valor; }

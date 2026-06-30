@@ -8,6 +8,7 @@ import {
     type ListDocumentosFilters,
     type EmpresaXmlOption,
 } from '../../services/xmlFiscalService';
+import { getCompetenciaDocumento } from '../../services/xmlDocumentosFilter';
 import NFeStatusCell from './NFeStatusCell';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
 import EmpresaFilterCombobox from './EmpresaFilterCombobox';
@@ -18,6 +19,24 @@ interface Props {
     /** Quando muda, força recarregar a lista. */
     refreshKey?: number;
 }
+
+const formatCompetencia = (competencia: string): string => {
+    const m = competencia.match(/^(\d{4})-(\d{2})$/);
+    return m ? `${m[2]}/${m[1]}` : competencia;
+};
+
+const ultimasCompetencias = (meses = 24): string[] => {
+    const out: string[] = [];
+    const d = new Date();
+    d.setDate(1);
+    for (let i = 0; i < meses; i++) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        out.push(`${y}-${m}`);
+        d.setMonth(d.getMonth() - 1);
+    }
+    return out;
+};
 
 const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey }) => {
     // ANTES: cada tecla no campo "Buscar" disparava listDocumentos → fetchAllDocs
@@ -62,10 +81,19 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     );
 
     const competencias = useMemo(() => {
-        const set = new Set<string>();
-        docs.forEach(d => d.competencia && set.add(d.competencia));
+        const set = new Set<string>(ultimasCompetencias());
+        const filtrosBase: ListDocumentosFilters = {
+            ...filters,
+            direcao: undefined,
+            competencia: undefined,
+        };
+        const docsBase = applyDocumentosFilters(allDocs, { ...filtrosBase, busca });
+        docsBase.forEach(d => {
+            const comp = getCompetenciaDocumento(d);
+            if (comp) set.add(comp);
+        });
         return Array.from(set).sort().reverse();
-    }, [docs]);
+    }, [allDocs, filters, busca]);
 
     // Lista de empresas distintas (CNPJ → nome) pro combobox. Combina:
     //  1. CATALOGO COMPLETO (simples_empresas + lucro_empresas) — fonte de
@@ -177,7 +205,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         try {
             const headers = [
                 'Data', 'Empresa', 'CNPJ Empresa', 'Tipo', 'Número', 'Série',
-                'Direção', 'Contraparte', 'CNPJ Contraparte', 'Valor', 'Status',
+                'Direção', 'Competência', 'Contraparte', 'CNPJ Contraparte', 'Valor', 'Status',
             ];
             const escape = (v: string | number | undefined | null) => {
                 const s = (v ?? '').toString();
@@ -196,6 +224,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                     view.numero || '',
                     view.serie || '',
                     direcao,
+                    getCompetenciaDocumento(d),
                     contraparte.nome || '',
                     formatCnpjCpf(contraparte.cnpj || ''),
                     view.valores.total ?? 0,
@@ -497,7 +526,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                         onChange={(e) => setFilters(f => ({ ...f, competencia: e.target.value || undefined }))}
                     >
                         <option value="">Competência (todas)</option>
-                        {competencias.map(c => <option key={c} value={c}>{c}</option>)}
+                        {competencias.map(c => <option key={c} value={c}>{formatCompetencia(c)}</option>)}
                     </select>
                     <select
                         className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"

@@ -14,15 +14,14 @@ export interface EmpresaStatusCaptura {
     regime: 'simples' | 'lucro';
     fonte: 'simples_empresas' | 'lucro_empresas';
     uf: string;
-    tipoCert: 'A1' | 'A3' | 'escritorio' | 'nenhum';
+    tipoCert: 'A1' | 'A1-raiz' | 'A3' | 'escritorio' | 'nenhum';
     certUploaded: boolean;
     certValido: boolean;
     certVenceEm: string | null;
     usaCertEscritorio: boolean;
-    /** Inferida: true se (flag bruta=true) OU (tem cert A1/A3 próprio).
-     *  Pra UI mostrar "ativa" amigável, mas atenção: captura via Cloud Run
-     *  PRECISA da flag bruta=true (procuração real no e-CAC), pois cert A3
-     *  não roda no Cloud Run mesmo sendo próprio. */
+    usaA1MesmaRaiz?: boolean;
+    /** Valor operacional da procuração e-CAC no cadastro. Certificado próprio
+     *  não é tratado como procuração. */
     procuracaoEcacAtiva: boolean;
     /** Valor cru do campo no Firestore (procuracaoEcacAtiva no doc da empresa).
      *  Esse é o que o cron e o orchestrator usam — se for false, captura
@@ -96,10 +95,10 @@ export function formatarMotivoBloqueioCaptura(motivo: string): string {
         return 'NFS-e SP: falta autorizar o escritório no portal nfe.prefeitura.sp.gov.br.';
     }
     if (/Tipo A3 sem procuração e-CAC/i.test(raw)) {
-        return 'NFe: certificado A3 não roda na captura automática em nuvem. Use agente A3 local ou marque procuração e-CAC ativa.';
+        return 'NFe: certificado A3 roda pelo agente local. Para captura em nuvem, use A1 próprio ou A1 da mesma raiz CNPJ.';
     }
-    if (/Sem certificado A1\/A3 e sem procuração e-CAC ativa/i.test(raw)) {
-        return 'NFe: sem certificado A1/A3 próprio e sem procuração e-CAC ativa.';
+    if (/sem certificado A1 pr[oó]prio\/mesma raiz CNPJ/i.test(raw) || /Sem certificado A1\/A3 e sem procuração e-CAC ativa/i.test(raw)) {
+        return 'NFe: sem certificado A1 próprio/mesma raiz CNPJ ou marcação A3. Procuração e-CAC do escritório não substitui certificado na consulta NFe DistDFe.';
     }
     if (/UF não cadastrada/i.test(raw)) {
         return 'NFe: UF não cadastrada. Preencha a UF nos dados fiscais da empresa.';

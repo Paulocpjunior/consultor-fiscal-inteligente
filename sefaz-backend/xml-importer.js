@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 import { classificarTipoDoc } from './xml-tipo-doc.js';
+import { competenciaFromDhEmi, extrairParticipantesNfe } from './xml-metadata-helper.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -214,17 +215,11 @@ function extrairMetadados(xml, schema) {
   // O \D final ja tira as letras, mas o replace explicito documenta a intencao.
   if (chave) chave = chave.replace(/^(NFe|CTe|MDFe|ID)/i, '').replace(/\D/g, '');
 
-  const cnpjEmit = pickTag(xml, 'CNPJ') || null;
-  const cnpjDest = (() => {
-    const destBlock = pickTag(xml, 'dest');
-    if (destBlock) {
-      const m = destBlock.match(/<CNPJ[^>]*>([^<]+)<\/CNPJ>/i);
-      if (m) return m[1].trim();
-    }
-    return pickTag(xml, 'CNPJDest') || null;
-  })();
+  const participantes = extrairParticipantesNfe(xml);
+  const cnpjEmit = participantes.emitente.cnpj || pickTag(xml, 'CNPJEmit') || pickTag(xml, 'CNPJ') || null;
+  const cnpjDest = participantes.destinatario.cnpj || pickTag(xml, 'CNPJDest') || null;
 
-  const xNome = pickTag(xml, 'xNome') || null;
+  const xNome = participantes.emitente.nome || pickTag(xml, 'xNome') || null;
   const dhEmi = pickTag(xml, 'dhEmi') || pickTag(xml, 'dEmi') || pickTag(xml, 'dhEvento') || null;
   // Valor: NFe usa <vNF>; CTe usa <vTPrest> (valor total da prestacao);
   // MDFe nao tem valor financeiro (so carga). Sem o fallback, CT-e capturado
@@ -554,6 +549,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     cnpjDest: meta.cnpjDest?.replace(/\D/g, '') || null,
     xNomeEmit: meta.xNome,
     dhEmi: meta.dhEmi,
+    competencia: competenciaFromDhEmi(meta.dhEmi),
     valorTotal: meta.vNF,
     tpNF: meta.tpNF,
     tipoDoc: tipoDocFinal,

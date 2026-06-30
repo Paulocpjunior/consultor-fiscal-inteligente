@@ -51,7 +51,7 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
                 <p className="text-xs text-emerald-800 dark:text-emerald-300">
                     <strong>Captura SEFAZ ativa.</strong> Cron noturno automático às 02:00 BRT seg-sex.
                     Captura manual disponível das 07:00 às 20:00 BRT (botão verde abaixo).
-                    Cada empresa pode ter seu próprio certificado A1 (obrigatório para SEFAZ aceitar a consulta).
+                    Para NFe DistDFe, use A1 próprio, A1 de outra empresa da mesma raiz CNPJ, ou A3 pelo agente local.
                 </p>
             </div>
 

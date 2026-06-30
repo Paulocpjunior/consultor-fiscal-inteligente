@@ -50,13 +50,15 @@ const SefazSyncButton: React.FC<Props> = ({ empresa, currentUser, onSyncComplete
     useEffect(() => { loadInfo(); }, [empresa.cnpj]);
     useEffect(() => { setAtivoAtual(empresa.capturarSefaz !== false); }, [empresa.capturarSefaz]);
 
-    const handleSync = async () => {
+    const handleSync = async (resetNSU = false) => {
+        if (resetNSU && !confirm(`Recapturar ${empresa.nome} do início da janela SEFAZ?\n\nIsso zera o cursor NSU e reprocessa os DF-e disponíveis dos últimos ~90 dias. Use quando um XML não apareceu após ajuste de certificado.`)) return;
         setRunning(true);
         setResult(null);
         try {
             const r = await captureFromSefaz({
                 empresa: { id: empresa.id, cnpj: empresa.cnpj, nome: empresa.nome } as any,
                 user: currentUser,
+                resetNSU,
             });
             if (r.sucesso) {
                 const novos = r.novosXmls || 0;
@@ -99,6 +101,7 @@ const SefazSyncButton: React.FC<Props> = ({ empresa, currentUser, onSyncComplete
     const dentroDeJanela = windowInfo?.dentro ?? true;
     const lockAtivo = state?.lock?.ativo;
     const desabilitadoBotao = running || !dentroDeJanela || lockAtivo || !ativoAtual;
+    const desabilitadoRecaptura = running || !dentroDeJanela || !ativoAtual;
     const ultimaSync = state?.state?.ultimaSync;
     const ultNSU = state?.state?.ultNSU;
     const tooltip = !ativoAtual ? 'Captura desativada pelo admin'
@@ -115,7 +118,7 @@ const SefazSyncButton: React.FC<Props> = ({ empresa, currentUser, onSyncComplete
             <div className="flex items-center gap-2">
                 <button
                     type="button"
-                    onClick={handleSync}
+                    onClick={() => handleSync(false)}
                     disabled={desabilitadoBotao}
                     title={tooltip}
                     className={`text-xs font-medium px-3 py-1 rounded transition ${
@@ -126,6 +129,21 @@ const SefazSyncButton: React.FC<Props> = ({ empresa, currentUser, onSyncComplete
                 >
                     {running ? '⏳ Sincronizando...' : ativoAtual ? '↓ Sincronizar SEFAZ' : '⛔ Desativada'}
                 </button>
+                {isAdmin && ativoAtual && (
+                    <button
+                        type="button"
+                        onClick={() => handleSync(true)}
+                        disabled={desabilitadoRecaptura}
+                        title="Admin: zera NSU e recaptura os DF-e disponíveis dos últimos ~90 dias"
+                        className={`text-xs font-medium px-2 py-1 rounded transition ${
+                            desabilitadoRecaptura
+                                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                : 'bg-amber-500 hover:bg-amber-400 text-slate-900'
+                        }`}
+                    >
+                        ⟲ 90d
+                    </button>
+                )}
                 {isAdmin && (
                     <button
                         type="button"

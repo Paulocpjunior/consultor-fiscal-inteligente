@@ -67,7 +67,7 @@ const CardCaptura: React.FC<{
     const stateTotal = stateOk ? (status.state as any).total : null;
     const stateTotalAtivas = stateOk ? (status.state as any).totalAtivas : null;
     const stateTravadas = stateOk ? (status.state as any).travadas : null;
-    // bloqueadas = empresas sem cert A1/A3 nem procuracao e-CAC. Sao puladas
+    // bloqueadas = empresas sem A1 proprio/mesma raiz nem A3 local. Sao puladas
     // pelo cron (nao tentam capturar) — exibimos separado pra nao confundir
     // com "falhas" reais e pra contador ver o que precisa cadastrar.
     const stateBloqueadas = stateOk ? (status.state as any).bloqueadas : null;
@@ -138,7 +138,7 @@ const CardCaptura: React.FC<{
                 </div>
                 {stateBloqueadas !== null && stateBloqueadas !== undefined && stateBloqueadas > 0 && (
                     <div className="flex justify-between">
-                        <span className="opacity-80" title="Empresas sem cert A1/A3 e sem procuração e-CAC — admin precisa configurar antes de capturar">
+                        <span className="opacity-80" title="Empresas sem A1 próprio/mesma raiz CNPJ ou A3 local — admin precisa configurar antes de capturar">
                             🔒 Bloqueadas por cadastro:
                         </span>
                         <span className="font-mono text-amber-700">{stateBloqueadas}</span>

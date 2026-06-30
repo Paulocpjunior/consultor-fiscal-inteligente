@@ -5,7 +5,7 @@
  * mesmo escritório (S&P) e a mesma NFe (BRASLIMPO R$ 547,70). Cada teste aqui
  * trava um daqueles bugs pra ele não voltar.
  */
-import { applyDocumentosFilters } from '../services/xmlDocumentosFilter';
+import { applyDocumentosFilters, getCompetenciaDocumento } from '../services/xmlDocumentosFilter';
 
 const SP = '44388152000189';
 
@@ -19,6 +19,7 @@ const docs: any[] = [
         emitente: { nome: 'BRASLIMPO COMERCIAL LTDA', cnpj: '65833410000169' },
         numero: '1615949', chave: '35260565833410000169550000016159491663624193',
         direcao: 'entrada', tipo: 'NFe', tipoDoc: 'NFe', status: 'desconhecido', origem: 'sefaz',
+        dhEmi: '2026-05-14T10:20:00-03:00',
     },
     // NFSe reais da S&P (S&P é tomador) — empresaNome populado.
     {
@@ -164,6 +165,12 @@ describe('applyDocumentosFilters — outros filtros', () => {
 
     it('sem filtros → todos os docs', () => {
         expect(applyDocumentosFilters(docs, {}).length).toBe(docs.length);
+    });
+
+    it('filtro por competência usa dhEmi quando competencia não foi gravada', () => {
+        expect(getCompetenciaDocumento(docs[0])).toBe('2026-05');
+        expect(filtra({ competencia: '2026-05' })).toContain('braslimpo');
+        expect(filtra({ competencia: '2026-04' })).not.toContain('braslimpo');
     });
 
     it('direção sem busca usa a direção gravada no doc', () => {

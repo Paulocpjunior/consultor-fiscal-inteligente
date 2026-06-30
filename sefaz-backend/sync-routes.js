@@ -15,6 +15,7 @@ import { podeAcessarCnpj } from './carteira-auth.js';
 import { importarXmlSefaz } from './xml-importer.js';
 import { withCronHeartbeat, listarCronsOrfaos } from './cron-heartbeat.js';
 import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibility.js';
+import { certA1MetadataValido, selecionarCertA1PorBase } from './cert-base-helper.js';
 
 const router = express.Router();
 
@@ -295,18 +296,27 @@ async function listarEmpresasParaCron() {
   empresas.forEach(e => { if (!map.has(e.cnpj)) map.set(e.cnpj, e); });
 
   // Carrega certs uma vez (A1/A3) — fonte unica pra classificar acesso a SEFAZ.
-  // Antes so filtrava A3; agora cruza tambem com procuracaoEcacAtiva pra evitar
-  // tentar capturar empresas SEM cert proprio E SEM procuracao (bloqueadas
-  // por cadastro). Sem o filtro: 215+ empresas falhavam todo cron com
-  // "aguardando cert A1", poluindo o painel com 262 falhas todo dia.
+  // NFe DistDFe no Cloud Run exige A1 proprio ou A1 valido da mesma raiz CNPJ.
+  // Procuracao e-CAC do escritorio nao substitui certificado neste servico:
+  // SEFAZ retorna cStat=593 quando o CNPJ-base do cert difere do consultado.
   const certsPorId = new Map();
+  const certsMeta = [];
   const a3Ids = new Set();
   try {
     const certsSnap = await db.collection('empresas_certificados').get();
     certsSnap.forEach(d => {
       const c = d.data();
-      const tipoCert = c.tipoCert || 'A1';
-      certsPorId.set(d.id, tipoCert);
+      const certMeta = {
+        empresaId: d.id,
+        tipoCert: c.tipoCert || 'A1',
+        cnpj: c.cnpj,
+        notAfter: c.notAfter,
+        storagePath: c.storagePath,
+        passwordEnc: c.passwordEnc,
+      };
+      certsMeta.push(certMeta);
+      certsPorId.set(d.id, certMeta);
+      const tipoCert = certMeta.tipoCert;
       if (tipoCert === 'A3') a3Ids.add(d.id);
     });
     if (a3Ids.size > 0) {
@@ -317,40 +327,44 @@ async function listarEmpresasParaCron() {
   }
 
   let bloqueadasSemAcesso = 0;
-  let a3PuladoSemProcuracao = 0;
+  let a3PuladoCloud = 0;
+  let usandoA1MesmaRaiz = 0;
+  const nowMs = Date.now();
   const filtradas = Array.from(map.values()).filter(e => {
-    const tipoCert = certsPorId.get(e.id);
-    const temCertProprio = tipoCert === 'A1' || tipoCert === 'A3';
+    const certMeta = certsPorId.get(e.id);
+    const tipoCert = certMeta?.tipoCert;
+    const temA1Proprio = certA1MetadataValido(certMeta, nowMs);
+    const certMesmaRaiz = selecionarCertA1PorBase(certsMeta, e.cnpj, nowMs, e.id);
+    const temA1MesmaRaiz = !!certMesmaRaiz;
     const ehEscritorio = e.cnpj === CNPJ_ESCRITORIO;
-    // A3 so e capturavel no Cloud Run via fallback procuracao e-CAC
-    // (cert do escritorio assina, CNPJ da empresa no envelope). Sem
-    // procuracao, captura tem que rodar no agente cfi-a3 local.
-    if (a3Ids.has(e.id) && !e.procuracaoEcacAtiva) {
-      a3PuladoSemProcuracao++;
-      return false;
-    }
     // A propria S&P (escritorio) entra mesmo sem cert em empresas_certificados:
     // o cert dela vive em Secret Manager e o orquestrador (sync-orchestrator.js)
     // sabe fazer fallback via loadCertificate() quando o CNPJ bate. Sem essa
     // excecao aqui, nem chegava a tentar — caia em "sem acesso" e era pulada.
-    const temAcesso = temCertProprio || e.procuracaoEcacAtiva || ehEscritorio;
+    const temAcesso = temA1Proprio || temA1MesmaRaiz || ehEscritorio;
     if (!temAcesso) {
+      if (tipoCert === 'A3') a3PuladoCloud++;
       bloqueadasSemAcesso++;
       return false;
     }
+    if (!temA1Proprio && temA1MesmaRaiz) usandoA1MesmaRaiz++;
     return true;
   });
 
-  if (a3PuladoSemProcuracao > 0) {
-    console.log(`[sync-cron] pulando ${a3PuladoSemProcuracao} empresa(s) tipoCert=A3 SEM procuracao e-CAC (capturadas pelo agente local cfi-a3)`);
+  if (a3PuladoCloud > 0) {
+    console.log(`[sync-cron] pulando ${a3PuladoCloud} empresa(s) tipoCert=A3 sem A1 da mesma raiz (captura via agente local cfi-a3)`);
   }
   if (bloqueadasSemAcesso > 0) {
-    console.log(`[sync-cron] pulando ${bloqueadasSemAcesso} empresa(s) sem cert A1/A3 nem procuracao e-CAC (bloqueadas por cadastro — admin precisa configurar)`);
+    console.log(`[sync-cron] pulando ${bloqueadasSemAcesso} empresa(s) sem A1 proprio/mesma raiz para NFe DistDFe`);
+  }
+  if (usandoA1MesmaRaiz > 0) {
+    console.log(`[sync-cron] ${usandoA1MesmaRaiz} empresa(s) usando A1 de mesma raiz CNPJ`);
   }
   // Anexa contadores na lista pra orchestrator persistir no log + painel
   filtradas._bloqueadasSemAcesso = bloqueadasSemAcesso;
   filtradas._totalA3 = a3Ids.size;
-  filtradas._a3ViaProcuracao = a3Ids.size - a3PuladoSemProcuracao;
+  filtradas._a3ViaProcuracao = 0;
+  filtradas._usandoA1MesmaRaiz = usandoA1MesmaRaiz;
   return filtradas;
 }
 
@@ -775,30 +789,38 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
         }
 
         // Cruza com empresas_certificados pra classificar acesso a SEFAZ.
-        // Critério (mesmo do listarEmpresasParaCron):
-        //   elegivel = cert A1 proprio OU procuracao e-CAC ativa
-        //   bloqueada = sem cert E sem procuracao (admin precisa configurar)
+        // Criterio (mesmo do listarEmpresasParaCron):
+        //   elegivel = A1 proprio OU A1 valido da mesma raiz CNPJ OU escritorio
+        //   bloqueada = sem A1 para NFe DistDFe
         //   A3 = capturada por agente local cfi-a3, fora deste cron
         const certsPorId = new Map();
-        const a3Ids = new Set();
+        const certsMeta = [];
         try {
           const certsSnap = await db.collection('empresas_certificados').get();
           certsSnap.forEach(d => {
-            const tipoCert = d.data().tipoCert || 'A1';
-            certsPorId.set(d.id, tipoCert);
-            if (tipoCert === 'A3') a3Ids.add(d.id);
+            const c = d.data();
+            const certMeta = {
+              empresaId: d.id,
+              tipoCert: c.tipoCert || 'A1',
+              cnpj: c.cnpj,
+              notAfter: c.notAfter,
+              storagePath: c.storagePath,
+              passwordEnc: c.passwordEnc,
+            };
+            certsMeta.push(certMeta);
+            certsPorId.set(d.id, certMeta);
           });
         } catch (e) { /* sem certificados, segue sem filtrar */ }
 
         const elegiveis = new Map(); // cnpj -> id (de quem vai mesmo ser capturado)
         let bloqueadas = 0;
+        const nowMs = Date.now();
         for (const [cnpj, info] of candidatos) {
-          // A3 só fica fora se NÃO tem procuração e-CAC. Com procuração,
-          // captura via cert do escritório (mesmo caminho do novo orchestrator).
-          if (a3Ids.has(info.id) && !info.procuracaoEcacAtiva) continue;
-          const tipoCert = certsPorId.get(info.id);
-          const temCertProprio = tipoCert === 'A1' || tipoCert === 'A3';
-          if (temCertProprio || info.procuracaoEcacAtiva) {
+          const certMeta = certsPorId.get(info.id);
+          const temA1Proprio = certA1MetadataValido(certMeta, nowMs);
+          const temA1MesmaRaiz = !!selecionarCertA1PorBase(certsMeta, cnpj, nowMs, info.id);
+          const ehEscritorio = cnpj === CNPJ_ESCRITORIO;
+          if (temA1Proprio || temA1MesmaRaiz || ehEscritorio) {
             elegiveis.set(cnpj, info.id);
           } else {
             bloqueadas++;

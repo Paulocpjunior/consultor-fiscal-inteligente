@@ -1,16 +1,14 @@
 // ============================================================================
 // sefaz-backend/captura-resumo-cron.js  (ESM)
 // ----------------------------------------------------------------------------
-// Resumo diario por email das capturas NFe DistDFe — em especial pra
-// empresas que dependem do fluxo "procuracao e-CAC" (cert da S&P assinando
-// consulta pelo CNPJ do cliente). Ativado por feat #76.
+// Resumo diario por email das capturas NFe DistDFe.
 //
 // Conteudo do email:
 //  1. KPIs do dia anterior (24h): empresas tentadas, XMLs novos, erros
-//  2. Quebra por cStat: 137 (nada novo), 138 (ok), 280 (sem procuracao no
-//     e-CAC), 593 (cert/cnpj-base), 656 (rejeicao por consumo indevido)
-//  3. Tabela com TODAS as empresas que tem procuracaoEcacAtiva=true e
-//     STATUS individual: ultima sync, cStat, NSU, XMLs novos
+//  2. Quebra por cStat: 137 (nada novo), 138 (ok), 280 (cert invalido),
+//     593 (cert/cnpj-base), 656 (rejeicao por consumo indevido)
+//  3. Tabela com empresas monitoradas e STATUS individual: ultima sync,
+//     cStat, NSU, XMLs novos
 //  4. Acoes sugeridas pra erros recorrentes
 //
 // Auth: x-cron-secret (mesmo padrao dos demais crons).
@@ -53,10 +51,10 @@ const CSTAT_LABEL = {
   '137': { label: 'Nada novo (NSU em dia)', categoria: 'ok' },
   '138': { label: 'Documentos retornados', categoria: 'ok' },
   '252': { label: 'Ambiente inválido', categoria: 'erro', acao: 'Verificar SEFAZ_AMBIENTE=producao' },
-  '280': { label: 'Certificado/procuração inválido', categoria: 'erro', acao: 'Procuração e-CAC NÃO está ativa na Receita — desmarque procuracaoEcacAtiva ou peça pra empresa cadastrar a S&P como procuradora' },
-  '281': { label: 'Cert expirado', categoria: 'erro', acao: 'Renovar cert da S&P (Configurações > Certificado Digital)' },
-  '283': { label: 'Cert não pertence ao CNPJ consultor', categoria: 'erro', acao: 'Cert do escritório no Secret Manager é de outro CNPJ-Base' },
-  '593': { label: 'CNPJ-Base não autorizado', categoria: 'erro', acao: 'SEFAZ rejeita: CNPJ consultor não tem permissão pra esse CNPJ' },
+  '280': { label: 'Certificado inválido', categoria: 'erro', acao: 'Renovar A1 da empresa/mesma raiz CNPJ ou usar agente A3 local.' },
+  '281': { label: 'Cert expirado', categoria: 'erro', acao: 'Renovar A1 da empresa/mesma raiz CNPJ ou usar agente A3 local.' },
+  '283': { label: 'Cert não pertence ao CNPJ consultado', categoria: 'erro', acao: 'Subir A1 da mesma raiz CNPJ da empresa consultada.' },
+  '593': { label: 'CNPJ-Base do certificado divergente', categoria: 'erro', acao: 'Para NFe DistDFe, use A1 próprio/mesma raiz CNPJ. Procuração e-CAC do escritório não substitui certificado.' },
   '656': { label: 'Consumo indevido (rate-limit)', categoria: 'erro', acao: 'Reduzir frequência do cron OU intercalar requests' },
 };
 

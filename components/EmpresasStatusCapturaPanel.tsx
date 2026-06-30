@@ -208,8 +208,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     return d !== null && d < 30;
                 }
                 // Usa flag BRUTA pra filtro: empresa sem procuração REAL marcada
-                // no e-CAC. Cert A1/A3 próprio não conta; A3 é coberto pelo
-                // agente local, e o cron em nuvem continua olhando a flag bruta.
+                // no e-CAC. Cert A1/A3 próprio não conta como procuração.
                 case 'sem-procuracao': return !e.procuracaoEcacFlagBruta;
                 case 'sem-ccmsp': return !e.nfseSpAutorizado;
                 case 'nfse-nac-inativa': return !e.nfseNacionalDfeAtivo;
@@ -269,7 +268,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
             <div>
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">📋 Status de Captura por Empresa</h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Identifica empresas bloqueadas por cert A1/A3, procuração e-CAC ou autorização NFSe.
+                    Identifica empresas bloqueadas por A1/A3, UF, procuração e-CAC ou autorização NFSe.
                 </p>
             </div>
 
@@ -289,7 +288,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <div className="text-2xl font-bold text-yellow-900">{r.certVenceEm30d} / {r.certExpirado}</div>
                 </div>
                 <div className="bg-purple-50 border border-purple-300 rounded-lg p-3">
-                    <div className="text-xs text-purple-700 font-semibold">Sem cert + sem procuração</div>
+                    <div className="text-xs text-purple-700 font-semibold">Sem A1/A3 para captura</div>
                     <div className="text-2xl font-bold text-purple-900">{r.semCertNenhum}</div>
                 </div>
                 <div className="bg-orange-50 border border-orange-300 rounded-lg p-3">
@@ -429,6 +428,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                     <td className="px-2 py-1.5 text-center">
                                         <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border ${certCor}`}>
                                             {e.tipoCert === 'nenhum' ? '✗ sem cert' :
+                                             e.tipoCert === 'A1-raiz' ? 'A1 raiz' :
                                              e.tipoCert === 'escritorio' ? 'escritório' :
                                              e.tipoCert}
                                         </span>
@@ -446,22 +446,20 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                 <button
                                                     disabled={togglingCnpj === e.cnpj + '-procuracaoEcacAtiva'}
                                                     onClick={() => handleToggle(e.cnpj, 'procuracaoEcacAtiva', e.procuracaoEcacFlagBruta)}
-                                                    title="Marque APENAS se a procuração e-CAC está realmente cadastrada na Receita (e-CAC) pra captura via cert do escritório. Cert próprio não substitui essa procuração; A3 usa agente local."
+                                                    title="Marque APENAS se a procuração e-CAC está realmente cadastrada na Receita. Para NFe DistDFe, use A1 próprio/mesma raiz ou agente A3 local."
                                                     className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
                                                         e.procuracaoEcacFlagBruta ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300'
                                                     } hover:opacity-80 disabled:opacity-50`}
                                                 >
                                                     {togglingCnpj === e.cnpj + '-procuracaoEcacAtiva' ? '…' : e.procuracaoEcacFlagBruta ? '✓ marcada' : '✗ não marcada'}
                                                 </button>
-                                                {/* Inferida = true (cert A1/A3 próprio autoriza) mas flag bruta = false.
-                                                    Mostra anotação pra admin entender por que a empresa aparece como ok
-                                                    em outras telas mesmo sem procuração marcada. */}
+                                                {/* Compatibilidade com dados antigos que ainda venham inferidos. */}
                                                 {!e.procuracaoEcacFlagBruta && e.procuracaoEcacAtiva && (
                                                     <div
                                                         className="text-[9px] text-gray-500 mt-0.5 italic"
-                                                        title={`Cert ${e.tipoCert} próprio. A1 autoriza captura em nuvem; A3 depende do agente local cfi-a3. Procuração e-CAC só marque quando existir de verdade no e-CAC.`}
+                                                        title="Procuração e-CAC só deve ficar marcada quando existir de verdade no e-CAC."
                                                     >
-                                                        ○ inferida ({e.tipoCert} próprio)
+                                                        ○ inferida
                                                     </div>
                                                 )}
                                             </>
@@ -469,7 +467,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                             <>
                                                 <Pill ok={e.procuracaoEcacFlagBruta} label={e.procuracaoEcacFlagBruta ? 'marcada' : 'não marcada'} />
                                                 {!e.procuracaoEcacFlagBruta && e.procuracaoEcacAtiva && (
-                                                    <div className="text-[9px] text-gray-500 mt-0.5 italic">○ inferida ({e.tipoCert})</div>
+                                                    <div className="text-[9px] text-gray-500 mt-0.5 italic">○ inferida</div>
                                                 )}
                                             </>
                                         )}
@@ -538,7 +536,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                     onClick={() => handleResetLock(e)}
                                                     disabled={resetandoLockCnpj === e.cnpj || capturandoCnpj === e.cnpj}
                                                     className="px-2 py-1 text-[10px] font-semibold bg-slate-600 hover:bg-slate-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
-                                                    title="Apaga o lock SEFAZ de 1h dessa empresa — útil pra rerun imediato após ajuste de procuração/cert"
+                                                    title="Apaga o lock SEFAZ de 1h dessa empresa — útil pra rerun imediato após ajuste de certificado"
                                                 >
                                                     {resetandoLockCnpj === e.cnpj ? '⏳…' : '🔓 Reset lock'}
                                                 </button>
@@ -589,7 +587,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
             {isAdmin && (
                 <div className="text-xs text-gray-500 mt-2 p-3 bg-gray-50 rounded">
                     💡 Você é admin — pode ligar/desligar <strong>Procuração e-CAC</strong> e <strong>NFSe Nacional</strong> clicando nos botões.
-                    Pra subir certificado A1, vá em <strong>Empresas Monitoradas → coluna Certificado</strong>.
+                    Para NFe DistDFe, use <strong>A1 próprio/mesma raiz CNPJ</strong> ou <strong>agente A3 local</strong>. Pra subir certificado A1, vá em <strong>Empresas Monitoradas → coluna Certificado</strong>.
                 </div>
             )}
         </div>

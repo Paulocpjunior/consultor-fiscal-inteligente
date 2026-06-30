@@ -3,9 +3,9 @@
  *
  * Bug que motivou: tela mostrava 'cStat=593 Rejeicao: CNPJ-Base
  * consultado difere do CNPJ-Base do Certificado Digital' e o admin nao
- * sabia que precisava cadastrar procuracao no e-CAC. Esses testes
- * travam o mapeamento dos cStats mais frequentes pra nao quebrar
- * quando alguem editar a tabela.
+ * sabia que precisava usar A1 da mesma raiz CNPJ ou A3 local. Esses testes
+ * travam o mapeamento dos cStats mais frequentes pra nao quebrar quando
+ * alguem editar a tabela.
  */
 import { interpretarCstat, type CstatInfo } from '../services/cstatHelper';
 
@@ -22,20 +22,19 @@ describe('interpretarCstat — cStats mais frequentes', () => {
         expect(r.titulo).toMatch(/Documentos/);
     });
 
-    it('593: procuração e-CAC ausente → erro + ação cita e-CAC + cnpj da S&P', () => {
+    it('593: certificado de outra raiz CNPJ → erro + ação cita A1 da mesma raiz', () => {
         const r = interpretarCstat('593');
         expect(r.categoria).toBe('erro');
         expect(r.acao).toBeTruthy();
-        expect(r.acao!.toLowerCase()).toContain('e-cac');
-        expect(r.acao!).toContain('44.388.152/0001-89');
-        // Deve mencionar a alternativa (cert A1 próprio)
-        expect(r.acao!).toMatch(/A1.*pr[oó]prio/i);
+        expect(r.acao!).toMatch(/A1.*mesma raiz/i);
+        expect(r.acao!).toMatch(/A3.*agente local/i);
+        expect(r.acao!).toMatch(/Procura[cç][aã]o e-CAC.*n[aã]o substitui/i);
     });
 
-    it('280: cert inválido → erro + ação cita renovar ou marcar procuração', () => {
+    it('280: cert inválido → erro + ação cita renovar A1 ou A3 local', () => {
         const r = interpretarCstat('280');
         expect(r.categoria).toBe('erro');
-        expect(r.acao).toMatch(/renovar|procura/i);
+        expect(r.acao).toMatch(/renovar|A3 local/i);
     });
 
     it('656: rate-limit → atencao (não bloqueante)', () => {
