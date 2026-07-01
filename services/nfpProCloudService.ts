@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
+import { sanitizeForFirestore } from './firestoreSanitize';
 import type { User, NfpAnaliseEmpresa, NfpDebito } from '../types';
 
 const COLLECTION = 'nfp_analises';
@@ -56,11 +57,15 @@ export async function salvarAnalise(analise: NfpAnaliseEmpresa, user: User): Pro
     if (!auth?.currentUser) throw new Error('Usuário não autenticado');
 
     const docRef = doc(db, COLLECTION, analise.empresaId);
-    await setDoc(docRef, {
+    const payload = sanitizeForFirestore({
         ...analise,
         analisadoPor: user.name,
         analisadoPorUid: auth.currentUser.uid,
         dataAnalise: new Date().toISOString(),
+    });
+
+    await setDoc(docRef, {
+        ...payload,
         updatedAt: serverTimestamp(),
     }, { merge: true });
 
