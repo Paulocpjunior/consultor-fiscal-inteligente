@@ -71,6 +71,8 @@ const TABS: { key: Tab; label: string }[] = [
     { key: 'analise', label: 'Análise' },
 ];
 
+const EDITABLE_TABS: Tab[] = ['debitos', 'obrigacoes', 'certidoes', 'parcelamentos', 'acoes', 'plano'];
+
 
 
 /** Aplica máscara XX.XXX.XXX/XXXX-XX ao digitar. */
@@ -330,6 +332,23 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             planoAcao: [],
         };
     }, [activeEmpresaId, activeNome, activeCnpj, currentUser, fonteAnalise, taxProfile]);
+
+    const ensureDraftAnalise = useCallback(() => {
+        setAnalise(prev => prev || createEmptyAnalise());
+    }, [createEmptyAnalise]);
+
+    useEffect(() => {
+        if (!loading && hasActiveSelection && !analise && EDITABLE_TABS.includes(tab)) {
+            ensureDraftAnalise();
+        }
+    }, [analise, ensureDraftAnalise, hasActiveSelection, loading, tab]);
+
+    const handleTabChange = useCallback((nextTab: Tab) => {
+        setTab(nextTab);
+        if (hasActiveSelection && EDITABLE_TABS.includes(nextTab)) {
+            ensureDraftAnalise();
+        }
+    }, [ensureDraftAnalise, hasActiveSelection]);
 
     // ─── Esfera Section Helpers ────────────────────────────────────────────
 
@@ -706,7 +725,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 {TABS.map(t => (
                     <button
                         key={t.key}
-                        onClick={() => setTab(t.key)}
+                        onClick={() => handleTabChange(t.key)}
                         style={{
                             padding: '8px 14px',
                             fontSize: '0.85rem',
