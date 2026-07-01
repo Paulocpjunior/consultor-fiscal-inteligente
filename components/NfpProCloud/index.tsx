@@ -257,6 +257,14 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 setProspectRegime('lucro_presumido');
             }
 
+            const savedAnalise = await nfpService.getAnalise(`prospect_${cnpj}`).catch(() => null);
+            if (savedAnalise) {
+                setAnalise(savedAnalise);
+                setTab('dashboard');
+                onShowToast?.(`Empresa encontrada. Análise salva carregada para edição.`);
+                return;
+            }
+
             onShowToast?.(`Empresa encontrada: ${data.razaoSocial}`);
         } catch (e: any) {
             setProspectError(e?.message || 'Erro ao consultar CNPJ.');
@@ -463,9 +471,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             uid,
         });
         setAnalise(nova);
-        if (!prospectMode) {
-            await saveAnalise(nova);
-        }
+        await saveAnalise(nova);
         onShowToast?.(`Análise manual gerada com ${nova.planoAcao.length} item(ns) no plano de ação.`);
         setTab('dashboard');
     }, [activeEmpresaId, createEmptyAnalise, currentUser, prospectMode, saveAnalise, onShowToast]);
@@ -491,9 +497,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 uid,
             });
             setAnalise(updated);
-            if (!prospectMode) {
-                await saveAnalise(updated);
-            }
+            await saveAnalise(updated);
             onShowToast?.(isMock
                 ? 'Análise concluída com DADOS SIMULADOS (SERPRO em modo teste)'
                 : 'Análise real SERPRO concluída com sucesso');
@@ -518,7 +522,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             onIniciarAnalise={() => {
                 const nova = createEmptyAnalise();
                 setAnalise(nova);
-                if (!prospectMode) saveAnalise(nova);
+                saveAnalise(nova);
                 setTab("dashboard");
             }}
             onIniciarAnaliseReal={handleAnaliseReal}
