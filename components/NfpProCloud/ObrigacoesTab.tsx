@@ -81,6 +81,16 @@ const ObrigacoesTab: React.FC<Props> = ({
                     <label style={labelSmall}>Competencia<input value={o.competencia || ''} onChange={e => updateObrigacao(o.id, { competencia: e.target.value })} placeholder="MM/AAAA" style={inputStyle} /></label>
                     <label style={labelSmall}>Data Entrega<input type="date" value={o.dataEntrega || ''} onChange={e => updateObrigacao(o.id, { dataEntrega: e.target.value })} style={inputStyle} /></label>
                 </div>
+                <label style={labelSmall}>
+                    Observação / Pendência
+                    <textarea
+                        value={o.observacao || ''}
+                        onChange={e => updateObrigacao(o.id, { observacao: e.target.value })}
+                        placeholder="Ex.: Ausência do Bloco K nas competências 01/2026, 02/2026, 03/2026..."
+                        rows={2}
+                        style={{ ...inputStyle, resize: 'vertical', minHeight: '52px', lineHeight: 1.35 }}
+                    />
+                </label>
             </div>
         );
     };

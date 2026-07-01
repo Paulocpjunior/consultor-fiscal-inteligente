@@ -377,6 +377,15 @@ export async function gerarRelatorioPdfNfp(params: {
                 { text: o.competencia || '-', x: margin + 128, w: 26 },
                 { text: o.dataEntrega ? new Date(o.dataEntrega).toLocaleDateString('pt-BR') : '-', x: margin + 156, w: 26 },
             ]);
+            if (o.observacao) {
+                checkPage(10);
+                pdf.setFont('helvetica', 'italic');
+                pdf.setFontSize(7.5);
+                pdf.setTextColor(90, 90, 90);
+                const obsLines = pdf.splitTextToSize(`Obs.: ${o.observacao}`, contentW - 8);
+                pdf.text(obsLines, margin + 4, y);
+                y += Math.max(5, obsLines.length * 4);
+            }
         });
     }
 
