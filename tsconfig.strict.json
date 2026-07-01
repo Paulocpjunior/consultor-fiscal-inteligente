@@ -65,6 +65,7 @@
     "services/lucroService.ts",
     "services/manifestoService.ts",
     "services/minhaAgendaService.ts",
+    "services/nfpManualAnalysis.ts",
     "services/nfpProCloudPdf.ts",
     "services/nfpProCloudService.ts",
     "services/nfpTaxRulesEngine.ts",

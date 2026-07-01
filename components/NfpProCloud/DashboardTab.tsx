@@ -43,6 +43,15 @@ const DashboardTab: React.FC<Props> = ({ analise, exportingPdf, onExportPdf }) =
                     DADOS SIMULADOS — SERPRO em modo teste (DRY_RUN). Os valores exibidos nao correspondem a situacao real da empresa.
                 </div>
             )}
+            {analise.fonte === 'offline' && (
+                <div style={{
+                    padding: '10px 16px', marginBottom: '1rem', borderRadius: '8px',
+                    background: 'var(--accent)12', border: '1px solid var(--accent)44',
+                    color: 'var(--accent)', fontSize: '0.85rem', fontWeight: 600,
+                }}>
+                    Análise gerada por inclusão manual. Revise os dados nas abas antes de exportar o relatório.
+                </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
                 <button
                     onClick={onExportPdf}

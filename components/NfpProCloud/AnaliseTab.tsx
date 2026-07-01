@@ -16,6 +16,7 @@ import React from 'react';
 import type { NfpAnaliseEmpresa } from '../../types';
 import CertificadoEmpresaUpload from '../CertificadoEmpresaUpload';
 import { cardStyle, inputStyle, labelSmall, btnStyle, btnStyleSave } from './_common';
+import ManualSituacaoFiscalForm, { type NfpManualSituacaoFiscalPayload } from './ManualSituacaoFiscalForm';
 
 interface ProspectData {
     cnpj: string;
@@ -36,13 +37,14 @@ interface Props {
     analiseRealLoading: boolean;
     onIniciarAnalise: () => void;
     onIniciarAnaliseReal: () => Promise<void>;
+    onGerarAnaliseManual: (payload: NfpManualSituacaoFiscalPayload) => void;
 }
 
 const AnaliseTab: React.FC<Props> = ({
     hasActiveSelection, activeCnpj, analise,
     fonteAnalise, setFonteAnalise,
     prospectMode, prospectData, analiseRealLoading,
-    onIniciarAnalise, onIniciarAnaliseReal,
+    onIniciarAnalise, onIniciarAnaliseReal, onGerarAnaliseManual,
 }) => {
     const canStart = hasActiveSelection;
     const canStartReal = hasActiveSelection && !!activeCnpj && !analiseRealLoading;
@@ -65,7 +67,7 @@ const AnaliseTab: React.FC<Props> = ({
                 </span>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '500px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: fonteAnalise === 'offline' ? '100%' : '500px' }}>
                 <label style={labelSmall}>
                     Fonte de Dados
                     <select value={fonteAnalise} onChange={e => setFonteAnalise(e.target.value as FonteAnalise)} style={{ ...inputStyle, width: '100%', marginTop: '4px' }}>
@@ -88,27 +90,36 @@ const AnaliseTab: React.FC<Props> = ({
                     </div>
                 )}
 
-                <button
-                    disabled={!canStart}
-                    onClick={onIniciarAnalise}
-                    style={{ ...btnStyle, opacity: canStart ? 1 : 0.5 }}
-                >
-                    Iniciar Analise
-                </button>
-                <button
-                    disabled={!canStartReal}
-                    onClick={onIniciarAnaliseReal}
-                    style={{
-                        ...btnStyleSave,
-                        opacity: canStartReal ? 1 : 0.5,
-                    }}
-                >
-                    {analiseRealLoading ? 'Consultando SERPRO...' : 'Iniciar Analise Real'}
-                </button>
-                {analiseRealLoading && (
-                    <p style={{ color: 'var(--accent)', fontSize: '0.85rem' }}>
-                        Consultando situacao fiscal, divida ativa, certidoes, obrigacoes e parcelamentos via SERPRO...
-                    </p>
+                {fonteAnalise === 'offline' ? (
+                    <ManualSituacaoFiscalForm
+                        disabled={!canStart}
+                        onGerarAnaliseManual={onGerarAnaliseManual}
+                    />
+                ) : (
+                    <>
+                        <button
+                            disabled={!canStart}
+                            onClick={onIniciarAnalise}
+                            style={{ ...btnStyle, opacity: canStart ? 1 : 0.5 }}
+                        >
+                            Iniciar Analise
+                        </button>
+                        <button
+                            disabled={!canStartReal}
+                            onClick={onIniciarAnaliseReal}
+                            style={{
+                                ...btnStyleSave,
+                                opacity: canStartReal ? 1 : 0.5,
+                            }}
+                        >
+                            {analiseRealLoading ? 'Consultando SERPRO...' : 'Iniciar Analise Real'}
+                        </button>
+                        {analiseRealLoading && (
+                            <p style={{ color: 'var(--accent)', fontSize: '0.85rem' }}>
+                                Consultando situacao fiscal, divida ativa, certidoes, obrigacoes e parcelamentos via SERPRO...
+                            </p>
+                        )}
+                    </>
                 )}
                 {analise && (
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>

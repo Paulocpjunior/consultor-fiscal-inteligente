@@ -24,6 +24,7 @@ import type {
 } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import * as nfpService from '../../services/nfpProCloudService';
+import { criarAnaliseManual } from '../../services/nfpManualAnalysis';
 import { auth } from '../../services/firebaseConfig';
 import {
     gerarPerfilTributario,
@@ -45,6 +46,7 @@ import PlanoAcaoTab from './PlanoAcaoTab';
 import TaxProfileCard from './TaxProfileCard';
 import DashboardTab from './DashboardTab';
 import AnaliseTab from './AnaliseTab';
+import type { NfpManualSituacaoFiscalPayload } from './ManualSituacaoFiscalForm';
 import {
     OBRIGACOES_BASE, CERTIDOES_BASE, uid, formatCurrency, gravityColor, certidaoColor, certidaoLabel,
     cardStyle, inputStyle, labelSmall, btnStyle, btnStyleSave,
@@ -409,7 +411,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const renderParcelamentos = () => analise && (
         <ParcelamentosTab
             analise={analise}
-            selectedEmpresaId={selectedEmpresaId}
+            selectedEmpresaId={activeEmpresaId}
             updateAnalise={updateAnalise}
             saveAnalise={saveAnalise}
         />
@@ -418,7 +420,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const renderAcoes = () => analise && (
         <AcoesTab
             analise={analise}
-            selectedEmpresaId={selectedEmpresaId}
+            selectedEmpresaId={activeEmpresaId}
             updateAnalise={updateAnalise}
             saveAnalise={saveAnalise}
         />
@@ -427,11 +429,27 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const renderPlanoAcao = () => analise && (
         <PlanoAcaoTab
             analise={analise}
-            selectedEmpresaId={selectedEmpresaId}
+            selectedEmpresaId={activeEmpresaId}
             updateAnalise={updateAnalise}
             saveAnalise={saveAnalise}
         />
     );
+
+    const handleAnaliseManual = useCallback(async (payload: NfpManualSituacaoFiscalPayload) => {
+        const nova = criarAnaliseManual({
+            baseAnalise: createEmptyAnalise(),
+            activeEmpresaId,
+            analisadoPor: currentUser?.name || '',
+            ...payload,
+            uid,
+        });
+        setAnalise(nova);
+        if (!prospectMode) {
+            await saveAnalise(nova);
+        }
+        onShowToast?.(`Análise manual gerada com ${nova.planoAcao.length} item(ns) no plano de ação.`);
+        setTab('dashboard');
+    }, [activeEmpresaId, createEmptyAnalise, currentUser, prospectMode, saveAnalise, onShowToast]);
 
     const handleAnaliseReal = useCallback(async () => {
         if (!activeCnpj) return;
@@ -485,6 +503,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 setTab("dashboard");
             }}
             onIniciarAnaliseReal={handleAnaliseReal}
+            onGerarAnaliseManual={handleAnaliseManual}
         />
     );
 
