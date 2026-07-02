@@ -30,6 +30,12 @@ export interface PdfInconsistenciaManual {
     status: string;
     competencia?: string;
     detalhe: string;
+    evidencias?: PdfField[];
+}
+
+export interface PdfField {
+    label: string;
+    value: string;
 }
 
 const NAVY: Rgb = [17, 31, 52];
@@ -110,6 +116,35 @@ function statusLabel(value: string): string {
     return map[value] || value;
 }
 
+function periodicidadeLabel(value?: string): string {
+    const map: Record<string, string> = {
+        mensal: 'Mensal',
+        trimestral: 'Trimestral',
+        anual: 'Anual',
+        eventual: 'Eventual',
+    };
+    return value ? map[value] || value : '';
+}
+
+function tipoAcaoLabel(value?: string): string {
+    const map: Record<string, string> = {
+        civil: 'Civil',
+        trabalhista: 'Trabalhista',
+        tributaria: 'Tributária',
+        criminal: 'Criminal',
+    };
+    return value ? map[value] || value : '';
+}
+
+function certidaoFonteLabel(value?: string): string {
+    const map: Record<string, string> = {
+        serpro: 'SERPRO',
+        consulta_publica: 'Consulta pública',
+        manual: 'Manual',
+    };
+    return value ? map[value] || value : '';
+}
+
 function statusColor(status: string): Rgb {
     if (['aberto', 'positiva', 'atrasada', 'inadimplente', 'alta'].includes(status)) return RED;
     if (['parcelado', 'pendente', 'positiva_efeitos_negativa', 'em_andamento', 'media', 'em_analise'].includes(status)) return AMBER;
@@ -130,6 +165,29 @@ function normalizeText(value?: string): string {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
+function hasValue(value?: string | number | null): boolean {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'number') return Number.isFinite(value);
+    return normalizeText(value).length > 0;
+}
+
+function pdfField(label: string, value?: string | number | null, formatter?: (value: any) => string): PdfField | null {
+    if (!hasValue(value)) return null;
+    const formatted = formatter ? formatter(value) : String(value);
+    const clean = normalizeText(formatted);
+    if (!clean || clean === '-') return null;
+    return { label, value: clean };
+}
+
+function collectFields(fields: Array<PdfField | null>): PdfField[] {
+    return fields.filter((field): field is PdfField => !!field);
+}
+
+function currencyBR(value?: number | null): string {
+    const n = Number(value || 0);
+    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
 function atualizarDebitosSelicLocal(debitos: NfpDebito[], taxaSelicAnual: number): NfpDebito[] {
     const hoje = new Date();
     return debitos.map(d => {
@@ -147,51 +205,198 @@ function atualizarDebitosSelicLocal(debitos: NfpDebito[], taxaSelicAnual: number
     });
 }
 
+function addDaysISO(base: Date, days: number): string {
+    const d = new Date(base);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+}
+
+function inferirEsferaPendencia(categoria: string): NfpPlanoAcao['esfera'] {
+    const text = categoria.toLowerCase();
+    if (text.includes('estadual')) return 'estadual';
+    if (text.includes('municipal')) return 'municipal';
+    return 'federal';
+}
+
+function inferirGravidadePendencia(status: string): NfpPlanoAcao['gravidade'] {
+    const text = status.toLowerCase();
+    if (text.includes('positiva') || text.includes('atrasada') || text.includes('inadimplente') || text.includes('aberto')) return 'alta';
+    if (text.includes('pendente') || text.includes('não consultada') || text.includes('não verificada') || text.includes('em andamento')) return 'media';
+    return 'baixa';
+}
+
+export function montarPlanoAcaoRelatorioPdf(
+    analise: NfpAnaliseEmpresa,
+    pendencias: PdfInconsistenciaManual[],
+    hoje: Date = new Date(),
+): NfpPlanoAcao[] {
+    if (analise.planoAcao.length > 0) return analise.planoAcao;
+    return pendencias.map((p, idx) => {
+        const gravidade = inferirGravidadePendencia(p.status);
+        const prazoDias = gravidade === 'alta' ? 3 : gravidade === 'media' ? 7 : 15;
+        return {
+            id: `pdf_sugerido_${idx + 1}`,
+            empresaId: analise.empresaId,
+            descricao: `Validar e regularizar: ${p.titulo}`,
+            gravidade,
+            esfera: inferirEsferaPendencia(p.categoria),
+            prazo: addDaysISO(hoje, prazoDias),
+            responsavel: 'Equipe fiscal',
+            status: 'pendente',
+        };
+    });
+}
+
+export function montarCamposDebitoPdf(d: NfpDebito): PdfField[] {
+    return collectFields([
+        pdfField('Esfera', esferaLabel(d.esfera)),
+        pdfField('Órgão', d.orgao),
+        pdfField('Descrição', d.descricao),
+        pdfField('Valor original', d.valorOriginal, currencyBR),
+        pdfField('Valor atualizado', d.valorAtualizado, currencyBR),
+        pdfField('Vencimento', d.dataVencimento, formatDateBR),
+        pdfField('Data da atualização', d.dataAtualizacao, formatDateBR),
+        pdfField('Status', statusLabel(d.status)),
+        pdfField('Parcelamento vinculado', d.parcelamentoId),
+        pdfField('Observação / pendência', d.observacao),
+    ]);
+}
+
+export function montarCamposCertidaoPdf(c: NfpCertidao): PdfField[] {
+    return collectFields([
+        pdfField('Esfera', esferaLabel(c.esfera)),
+        pdfField('Órgão', c.orgao),
+        pdfField('Tipo', c.tipo),
+        pdfField('Status', statusLabel(c.status)),
+        pdfField('Data de emissão', c.dataEmissao, formatDateBR),
+        pdfField('Data de validade', c.dataValidade, formatDateBR),
+        pdfField('Data da consulta', c.dataConsulta, formatDateBR),
+        pdfField('Número da certidão', c.numeroCertidao),
+        pdfField('Motivo / observação', c.motivoImpedimento),
+        pdfField('Origem', certidaoFonteLabel(c.fonte)),
+        pdfField('Portal oficial', c.portalUrl),
+        pdfField('Documento', c.urlDocumento),
+        pdfField('PDF anexado', c.pdfBase64 ? 'Sim' : undefined),
+    ]);
+}
+
+export function montarCamposObrigacaoPdf(o: NfpObrigacao): PdfField[] {
+    return collectFields([
+        pdfField('Esfera', esferaLabel(o.esfera)),
+        pdfField('Sigla', o.sigla),
+        pdfField('Obrigação', o.nome),
+        pdfField('Periodicidade', periodicidadeLabel(o.periodicidade)),
+        pdfField('Competência', o.competencia),
+        pdfField('Prazo legal', o.prazoLegal, formatDateBR),
+        pdfField('Data de entrega', o.dataEntrega, formatDateBR),
+        pdfField('Status', statusLabel(o.status)),
+        pdfField('Observação / pendência', o.observacao),
+    ]);
+}
+
+export function montarCamposParcelamentoPdf(p: NfpParcelamento): PdfField[] {
+    return collectFields([
+        pdfField('Esfera', esferaLabel(p.esfera)),
+        pdfField('Programa', p.programa),
+        pdfField('Valor total', p.valorTotal, currencyBR),
+        pdfField('Quantidade de parcelas', p.parcelas),
+        pdfField('Parcelas pagas', p.parcelasPagas),
+        pdfField('Valor da parcela', p.valorParcela, currencyBR),
+        pdfField('Status', statusLabel(p.status)),
+        pdfField('Data de início', p.dataInicio, formatDateBR),
+        pdfField('Data de fim', p.dataFim, formatDateBR),
+    ]);
+}
+
+export function montarCamposAcaoPdf(a: NfpAcaoJudicial): PdfField[] {
+    return collectFields([
+        pdfField('Tipo', tipoAcaoLabel(a.tipo)),
+        pdfField('Número', a.numero),
+        pdfField('Vara', a.vara),
+        pdfField('Descrição', a.descricao),
+        pdfField('Valor da causa', a.valorCausa, currencyBR),
+        pdfField('Status', statusLabel(a.status)),
+        pdfField('Data de distribuição', a.dataDistribuicao, formatDateBR),
+        pdfField('Observação', a.observacao),
+    ]);
+}
+
+export function montarCamposPlanoAcaoPdf(p: NfpPlanoAcao): PdfField[] {
+    return collectFields([
+        pdfField('Gravidade', statusLabel(p.gravidade)),
+        pdfField('Descrição', p.descricao),
+        pdfField('Esfera', esferaLabel(p.esfera)),
+        pdfField('Prazo', p.prazo, formatDateBR),
+        pdfField('Responsável', p.responsavel),
+        pdfField('Status', statusLabel(p.status)),
+        pdfField('Tipo de ação', p.tipo ? tipoAcaoLabel(p.tipo) : undefined),
+    ]);
+}
+
 export function coletarInconsistenciasManuais(analise: NfpAnaliseEmpresa): PdfInconsistenciaManual[] {
     const itens: PdfInconsistenciaManual[] = [];
 
     analise.obrigacoes.forEach((o: NfpObrigacao) => {
         const detalhe = normalizeText(o.observacao);
-        if (!detalhe) return;
+        const requerAtencao = !['entregue', 'dispensada'].includes(o.status);
+        if (!detalhe && !requerAtencao) return;
         itens.push({
             titulo: `${o.sigla || 'Obrigação'} - ${o.nome || 'Obrigação acessória'}`,
             categoria: `Obrigação ${esferaLabel(o.esfera)}`,
             status: statusLabel(o.status),
             competencia: o.competencia,
-            detalhe,
+            detalhe: detalhe || `Obrigação com status ${statusLabel(o.status)}. Validar evidência, competência e regularização.`,
+            evidencias: montarCamposObrigacaoPdf(o),
         });
     });
 
     analise.debitos.forEach((d: NfpDebito) => {
         const detalhe = normalizeText(d.observacao);
-        if (!detalhe) return;
+        const requerAtencao = !['quitado', 'prescrito'].includes(d.status);
+        if (!detalhe && !requerAtencao) return;
         itens.push({
             titulo: d.descricao || 'Débito informado manualmente',
             categoria: `Débito ${esferaLabel(d.esfera)}`,
             status: statusLabel(d.status),
-            detalhe,
+            detalhe: detalhe || `Débito com status ${statusLabel(d.status)}. Conferir valor, vencimento e providência aplicável.`,
+            evidencias: montarCamposDebitoPdf(d),
         });
     });
 
     analise.certidoes.forEach((c: NfpCertidao) => {
         const detalhe = normalizeText(c.motivoImpedimento);
-        if (!detalhe && c.fonte !== 'manual') return;
+        const requerAtencao = c.status !== 'negativa' || c.fonte === 'manual';
+        if (!detalhe && !requerAtencao) return;
         itens.push({
             titulo: c.tipo || 'Certidão informada manualmente',
             categoria: `Certidão ${esferaLabel(c.esfera)}`,
             status: statusLabel(c.status),
-            detalhe: detalhe || 'Registro incluído manualmente para acompanhamento da situação fiscal.',
+            detalhe: detalhe || `Certidão com status ${statusLabel(c.status)}. Validar emissão, validade e documento comprobatório.`,
+            evidencias: montarCamposCertidaoPdf(c),
+        });
+    });
+
+    analise.parcelamentos.forEach((p: NfpParcelamento) => {
+        if (!['inadimplente', 'cancelado'].includes(p.status)) return;
+        itens.push({
+            titulo: p.programa || 'Parcelamento informado',
+            categoria: `Parcelamento ${esferaLabel(p.esfera)}`,
+            status: statusLabel(p.status),
+            detalhe: `Parcelamento com status ${statusLabel(p.status)}. Conferir parcelas, saldo e regularização.`,
+            evidencias: montarCamposParcelamentoPdf(p),
         });
     });
 
     analise.acoes.forEach((a: NfpAcaoJudicial) => {
         const detalhe = normalizeText(a.observacao);
-        if (!detalhe) return;
+        const requerAtencao = a.status === 'em_andamento';
+        if (!detalhe && !requerAtencao) return;
         itens.push({
             titulo: a.numero ? `Ação ${a.numero}` : a.descricao || 'Ação judicial',
             categoria: 'Ação judicial',
             status: statusLabel(a.status),
-            detalhe,
+            detalhe: detalhe || `Ação judicial com status ${statusLabel(a.status)}. Acompanhar andamento e providências.`,
+            evidencias: montarCamposAcaoPdf(a),
         });
     });
 
@@ -236,7 +441,7 @@ export function montarResumoTecnicoNfp(params: {
     if (certidoesRestritivas.length) alertas.push(`${certidoesRestritivas.length} certidão(ões) restritiva(s) ou não conclusiva(s)`);
     if (obrigacoesPendentes.length) alertas.push(`${obrigacoesPendentes.length} obrigação(ões) pendente(s), atrasada(s) ou não verificada(s)`);
     if (parcelamentosIrregulares.length) alertas.push(`${parcelamentosIrregulares.length} parcelamento(s) com atenção`);
-    if (inconsistenciasManuais.length) alertas.push(`${inconsistenciasManuais.length} inconsistência(s) documentada(s) manualmente`);
+    if (inconsistenciasManuais.length) alertas.push(`${inconsistenciasManuais.length} pendência(s), inconsistência(s) ou ponto(s) não conclusivo(s)`);
 
     if (alertas.length) {
         linhas.push(`Principais vetores de risco identificados: ${alertas.join('; ')}.`);
@@ -277,6 +482,7 @@ export async function gerarRelatorioPdfNfp(params: {
     const parcelAtivos = analise.parcelamentos.filter(p => p.status === 'ativo');
     const parcelIrregulares = analise.parcelamentos.filter(p => p.status === 'inadimplente' || p.status === 'cancelado');
     const inconsistenciasManuais = coletarInconsistenciasManuais(analise);
+    const planoAcaoRelatorio = montarPlanoAcaoRelatorioPdf(analise, inconsistenciasManuais);
 
     let semaforo: Semaforo = 'verde';
     if (debitosAbertos.length > 0 || certPos > 0 || obrigPend.some(o => o.status === 'atrasada') || parcelIrregulares.length > 0) semaforo = 'vermelho';
@@ -397,6 +603,43 @@ export async function gerarRelatorioPdfNfp(params: {
         y += 18;
     };
 
+    const drawDetailCard = (title: string, fields: PdfField[], accent: Rgb = BLUE, detail?: string) => {
+        const contentFields = fields.length > 0 ? fields : [{ label: 'Registro', value: 'Sem campos preenchidos.' }];
+        const fieldLayouts = contentFields.map(field => {
+            const valueLines = pdf.splitTextToSize(field.value, contentW - 58) as string[];
+            return { field, valueLines, height: Math.max(5, valueLines.length * 3.8 + 1.5) };
+        });
+        const detailLines = detail ? pdf.splitTextToSize(detail, contentW - 10) as string[] : [];
+        const boxH = Math.max(24, 12 + fieldLayouts.reduce((sum, item) => sum + item.height, 0) + (detailLines.length ? detailLines.length * 3.8 + 5 : 0));
+        checkPage(boxH + 5);
+        pdf.setFillColor(255, 255, 255);
+        pdf.setDrawColor(SOFT_BORDER[0], SOFT_BORDER[1], SOFT_BORDER[2]);
+        pdf.roundedRect(margin, y, contentW, boxH, 2, 2, 'FD');
+        pdf.setFillColor(accent[0], accent[1], accent[2]);
+        pdf.rect(margin, y, 1.8, boxH, 'F');
+
+        setText(INK, 8.5, 'bold');
+        pdf.text(pdf.splitTextToSize(title, contentW - 8).slice(0, 2), margin + 5, y + 6);
+        let innerY = y + 13;
+
+        fieldLayouts.forEach(({ field, valueLines, height }) => {
+            setText(MUTED, 7, 'bold');
+            pdf.text(`${field.label}:`, margin + 5, innerY, { maxWidth: 38 });
+            setText(INK, 7.5, 'normal');
+            pdf.text(valueLines, margin + 47, innerY);
+            innerY += height;
+        });
+
+        if (detailLines.length > 0) {
+            setText(AMBER, 7.2, 'bold');
+            pdf.text('Comentário técnico:', margin + 5, innerY + 1);
+            setText(INK, 7.4, 'normal');
+            pdf.text(detailLines, margin + 47, innerY + 1);
+        }
+
+        y += boxH + 4;
+    };
+
     // Capa
     pdf.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
     pdf.rect(0, 0, pageW, 112, 'F');
@@ -463,7 +706,7 @@ export async function gerarRelatorioPdfNfp(params: {
     const cardY2 = y;
     infoCard(margin, cardY2, cardW, cardH, 'Ações em andamento', String(acoesAtivas), `de ${analise.acoes.length} registro(s)`, acoesAtivas ? AMBER : GREEN);
     infoCard(margin + cardW + cardGap, cardY2, cardW, cardH, 'Parcelamentos ativos', String(parcelAtivos.length), fmtCurrency(parcelAtivos.reduce((s, p) => s + p.valorTotal, 0)), parcelIrregulares.length ? RED : BLUE);
-    infoCard(margin + (cardW + cardGap) * 2, cardY2, cardW, cardH, 'Pendências manuais', String(inconsistenciasManuais.length), 'Incluídas ou complementadas pela equipe', inconsistenciasManuais.length ? AMBER : GREEN);
+    infoCard(margin + (cardW + cardGap) * 2, cardY2, cardW, cardH, 'Pendências registradas', String(inconsistenciasManuais.length), 'Manuais, não conclusivas ou com alerta', inconsistenciasManuais.length ? AMBER : GREEN);
     y += cardH + 14;
 
     sectionTitle('Resumo técnico automatizado');
@@ -479,36 +722,28 @@ export async function gerarRelatorioPdfNfp(params: {
     if (certPos > 0) findings.push(`${certPos} certidão(ões) com status positivo foram identificadas e impedem conclusão de regularidade plena.`);
     else if (certNeg === analise.certidoes.length && analise.certidoes.length > 0) findings.push('As certidões registradas constam como negativas no escopo analisado.');
     if (obrigAlertas.length > 0) findings.push(`${obrigAlertas.length} obrigação(ões) acessória(s) estão pendentes, atrasadas ou não verificadas.`);
-    if (inconsistenciasManuais.length > 0) findings.push(`${inconsistenciasManuais.length} inconsistência(s) informada(s) manualmente foram incorporadas ao relatório.`);
+    if (inconsistenciasManuais.length > 0) findings.push(`${inconsistenciasManuais.length} pendência(s), inconsistência(s) ou ponto(s) não conclusivo(s) foram incorporados ao relatório.`);
     findings.forEach(f => paragraph(`- ${f}`, { indent: 2, color: INK, fontSize: 8.5 }));
 
     // Inconsistências manuais
     pdf.addPage();
     y = margin;
     drawPageHeader();
-    sectionTitle('Inconsistências e pendências informadas manualmente', 'Registros complementares inseridos pela equipe durante a análise. Estes itens fazem parte do dossiê e devem ser tratados no plano de ação.');
+    sectionTitle('Pendências, inconsistências e pontos não conclusivos', 'Registros preenchidos manualmente, itens com status não conclusivo e demais pontos que exigem validação ou evidência antes da conclusão de regularidade.');
     if (inconsistenciasManuais.length === 0) {
-        drawEmpty('Nenhuma inconsistência manual registrada.');
+        drawEmpty('Nenhuma pendência ou inconsistência registrada.');
     } else {
         inconsistenciasManuais.forEach((item, idx) => {
-            const boxLines = pdf.splitTextToSize(item.detalhe, contentW - 10) as string[];
-            const boxH = Math.max(24, 18 + boxLines.length * 4);
-            checkPage(boxH + 4);
-            pdf.setFillColor(SOFT_FILL[0], SOFT_FILL[1], SOFT_FILL[2]);
-            pdf.setDrawColor(SOFT_BORDER[0], SOFT_BORDER[1], SOFT_BORDER[2]);
-            pdf.roundedRect(margin, y, contentW, boxH, 2, 2, 'FD');
-            setText(INK, 8.5, 'bold');
-            pdf.text(`${idx + 1}. ${item.titulo}`, margin + 4, y + 6, { maxWidth: contentW - 8 });
-            setText(MUTED, 7.3, 'normal');
-            const meta = [
-                item.categoria,
-                `Status: ${item.status}`,
-                item.competencia ? `Competência: ${item.competencia}` : '',
-            ].filter(Boolean).join(' | ');
-            pdf.text(meta, margin + 4, y + 11, { maxWidth: contentW - 8 });
-            setText(INK, 7.8, 'normal');
-            pdf.text(boxLines, margin + 4, y + 18);
-            y += boxH + 4;
+            const evidenciasDetalhadas = (item.evidencias || [])
+                .filter(e => e.label !== 'Status' && e.label !== 'Competência');
+            const evidencias = [
+                { label: 'Categoria', value: item.categoria },
+                { label: 'Status', value: item.status },
+                ...(item.competencia ? [{ label: 'Competência', value: item.competencia }] : []),
+                ...evidenciasDetalhadas,
+            ];
+            const comentarioTecnico = evidencias.some(e => e.value === item.detalhe) ? undefined : item.detalhe;
+            drawDetailCard(`${idx + 1}. ${item.titulo}`, evidencias, AMBER, comentarioTecnico);
         });
     }
 
@@ -520,23 +755,9 @@ export async function gerarRelatorioPdfNfp(params: {
     if (debitos.length === 0) {
         drawEmpty('Nenhum débito registrado.');
     } else {
-        const dCols = [
-            { label: 'Esfera', x: margin, w: 20 },
-            { label: 'Órgão', x: margin + 22, w: 28 },
-            { label: 'Descrição', x: margin + 52, w: 54 },
-            { label: 'Original', x: margin + 108, w: 25 },
-            { label: 'Atualizado', x: margin + 135, w: 27 },
-            { label: 'Status', x: margin + 164, w: 22 },
-        ];
-        drawTableHeader(dCols);
-        debitos.forEach(d => drawTableRow([
-            { text: esferaLabel(d.esfera), x: margin, w: 20 },
-            { text: d.orgao || '-', x: margin + 22, w: 28 },
-            { text: d.descricao || '-', x: margin + 52, w: 54 },
-            { text: fmtCurrency(d.valorOriginal), x: margin + 108, w: 25 },
-            { text: fmtCurrency(d.valorAtualizado || d.valorOriginal), x: margin + 135, w: 27 },
-            { text: statusLabel(d.status), x: margin + 164, w: 22, color: statusColor(d.status), bold: true },
-        ]));
+        debitos.forEach((d, idx) => {
+            drawDetailCard(`${idx + 1}. ${d.descricao || 'Débito registrado'}`, montarCamposDebitoPdf(d), statusColor(d.status));
+        });
         hLine(y);
         y += 6;
         setText(INK, 8.5, 'bold');
@@ -554,23 +775,9 @@ export async function gerarRelatorioPdfNfp(params: {
     if (analise.certidoes.length === 0) {
         drawEmpty('Nenhuma certidão registrada.');
     } else {
-        const cCols = [
-            { label: 'Esfera', x: margin, w: 19 },
-            { label: 'Órgão', x: margin + 21, w: 37 },
-            { label: 'Tipo', x: margin + 60, w: 35 },
-            { label: 'Status', x: margin + 97, w: 39 },
-            { label: 'Validade', x: margin + 138, w: 22 },
-            { label: 'Impedimento', x: margin + 162, w: 25 },
-        ];
-        drawTableHeader(cCols);
-        analise.certidoes.forEach(c => drawTableRow([
-            { text: esferaLabel(c.esfera), x: margin, w: 19 },
-            { text: c.orgao || '-', x: margin + 21, w: 37 },
-            { text: c.tipo || '-', x: margin + 60, w: 35 },
-            { text: statusLabel(c.status), x: margin + 97, w: 39, color: statusColor(c.status), bold: true },
-            { text: formatDateBR(c.dataValidade), x: margin + 138, w: 22 },
-            { text: c.motivoImpedimento || '-', x: margin + 162, w: 25 },
-        ]));
+        analise.certidoes.forEach((c, idx) => {
+            drawDetailCard(`${idx + 1}. ${c.tipo || 'Certidão registrada'}`, montarCamposCertidaoPdf(c), statusColor(c.status));
+        });
     }
 
     // Obrigações
@@ -581,24 +788,9 @@ export async function gerarRelatorioPdfNfp(params: {
     if (analise.obrigacoes.length === 0) {
         drawEmpty('Nenhuma obrigação registrada.');
     } else {
-        const oCols = [
-            { label: 'Esfera', x: margin, w: 21 },
-            { label: 'Sigla', x: margin + 23, w: 23 },
-            { label: 'Nome', x: margin + 48, w: 48 },
-            { label: 'Status', x: margin + 98, w: 32 },
-            { label: 'Competência', x: margin + 132, w: 26 },
-            { label: 'Entrega', x: margin + 160, w: 24 },
-        ];
-        drawTableHeader(oCols);
-        analise.obrigacoes.forEach(o => {
-            drawTableRow([
-                { text: esferaLabel(o.esfera), x: margin, w: 21 },
-                { text: o.sigla || '-', x: margin + 23, w: 23, bold: true },
-                { text: o.nome || '-', x: margin + 48, w: 48 },
-                { text: statusLabel(o.status), x: margin + 98, w: 32, color: statusColor(o.status), bold: true },
-                { text: o.competencia || '-', x: margin + 132, w: 26 },
-                { text: formatDateBR(o.dataEntrega), x: margin + 160, w: 24 },
-            ]);
+        analise.obrigacoes.forEach((o, idx) => {
+            const title = `${idx + 1}. ${o.sigla || 'Obrigação'} - ${o.nome || 'Obrigação registrada'}`;
+            drawDetailCard(title, montarCamposObrigacaoPdf(o), statusColor(o.status));
         });
     }
 
@@ -608,25 +800,8 @@ export async function gerarRelatorioPdfNfp(params: {
         y = margin;
         drawPageHeader();
         sectionTitle('Parcelamentos', 'Consolidação dos parcelamentos registrados e respectivos status.');
-        const pCols = [
-            { label: 'Programa', x: margin, w: 50 },
-            { label: 'Esfera', x: margin + 52, w: 22 },
-            { label: 'Parcelas', x: margin + 76, w: 24 },
-            { label: 'Progresso', x: margin + 102, w: 25 },
-            { label: 'Valor total', x: margin + 130, w: 30 },
-            { label: 'Status', x: margin + 163, w: 22 },
-        ];
-        drawTableHeader(pCols);
-        analise.parcelamentos.forEach(p => {
-            const pct = p.parcelas > 0 ? Math.round((p.parcelasPagas / p.parcelas) * 100) : 0;
-            drawTableRow([
-                { text: p.programa || '-', x: margin, w: 50 },
-                { text: esferaLabel(p.esfera), x: margin + 52, w: 22 },
-                { text: `${p.parcelasPagas}/${p.parcelas}`, x: margin + 76, w: 24 },
-                { text: `${pct}%`, x: margin + 102, w: 25 },
-                { text: fmtCurrency(p.valorTotal), x: margin + 130, w: 30 },
-                { text: statusLabel(p.status), x: margin + 163, w: 22, color: statusColor(p.status), bold: true },
-            ]);
+        analise.parcelamentos.forEach((p, idx) => {
+            drawDetailCard(`${idx + 1}. ${p.programa || 'Parcelamento registrado'}`, montarCamposParcelamentoPdf(p), statusColor(p.status));
         });
     }
 
@@ -634,31 +809,19 @@ export async function gerarRelatorioPdfNfp(params: {
     pdf.addPage();
     y = margin;
     drawPageHeader();
-    sectionTitle('Plano de ação', 'Ações sugeridas para saneamento, ordenadas por criticidade.');
-    if (analise.planoAcao.length === 0) {
+    sectionTitle('Plano de ação', analise.planoAcao.length > 0
+        ? 'Ações salvas na análise, ordenadas por criticidade.'
+        : 'Ações sugeridas automaticamente a partir das pendências do relatório, ordenadas por criticidade.');
+    if (planoAcaoRelatorio.length === 0) {
         drawEmpty('Nenhuma ação registrada no plano.');
     } else {
-        const sorted = [...analise.planoAcao].sort((a: NfpPlanoAcao, b: NfpPlanoAcao) => {
+        const sorted = [...planoAcaoRelatorio].sort((a: NfpPlanoAcao, b: NfpPlanoAcao) => {
             const order: Record<string, number> = { alta: 0, media: 1, baixa: 2 };
             return (order[a.gravidade] ?? 2) - (order[b.gravidade] ?? 2);
         });
-        const aCols = [
-            { label: 'Gravidade', x: margin, w: 22 },
-            { label: 'Descrição', x: margin + 24, w: 74 },
-            { label: 'Esfera', x: margin + 100, w: 22 },
-            { label: 'Prazo', x: margin + 124, w: 24 },
-            { label: 'Responsável', x: margin + 150, w: 25 },
-            { label: 'Status', x: margin + 177, w: 12 },
-        ];
-        drawTableHeader(aCols);
-        sorted.forEach(a => drawTableRow([
-            { text: statusLabel(a.gravidade), x: margin, w: 22, color: statusColor(a.gravidade), bold: true },
-            { text: a.descricao || '-', x: margin + 24, w: 74 },
-            { text: esferaLabel(a.esfera), x: margin + 100, w: 22 },
-            { text: formatDateBR(a.prazo), x: margin + 124, w: 24 },
-            { text: a.responsavel || '-', x: margin + 150, w: 25 },
-            { text: statusLabel(a.status), x: margin + 177, w: 12, color: statusColor(a.status), bold: true },
-        ]));
+        sorted.forEach((a, idx) => {
+            drawDetailCard(`${idx + 1}. ${a.descricao || 'Ação do plano'}`, montarCamposPlanoAcaoPdf(a), statusColor(a.gravidade));
+        });
     }
 
     // Footer
