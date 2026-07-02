@@ -97,6 +97,22 @@ describe('nfpProCloudPdf helpers', () => {
         });
     });
 
+    it('aceita observação de obrigação salva com nomes legados de campo', () => {
+        const campos = montarCamposObrigacaoPdf({
+            id: 'obg_legacy',
+            empresaId: 'prospect_46317827000124',
+            nome: 'SPED Fiscal',
+            sigla: 'EFD',
+            esfera: 'federal',
+            periodicidade: 'mensal',
+            status: 'nao_verificada',
+            observacoes: 'Ausência do Bloco K informada no cadastro manual.',
+        } as any);
+
+        const mapa = Object.fromEntries(campos.map(c => [c.label, c.value]));
+        expect(mapa['Observação / pendência']).toBe('Ausência do Bloco K informada no cadastro manual.');
+    });
+
     it('monta resumo técnico citando pendências manuais e obrigações com alerta', () => {
         const analise = baseAnalise();
         const inconsistencias = [{

@@ -49,6 +49,38 @@ export interface MapearSerproOutput {
     isMock: boolean;
 }
 
+function normKey(value: string | undefined | null): string {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase();
+}
+
+function obrigacaoKey(o: Pick<NfpObrigacao | BaseObrigacao, 'esfera' | 'sigla' | 'nome'>): string {
+    return `${o.esfera}|${normKey(o.sigla) || normKey(o.nome)}`;
+}
+
+function findObrigacaoAnterior(
+    obrigacoes: NfpObrigacao[],
+    base: BaseObrigacao,
+    match?: any,
+): NfpObrigacao | undefined {
+    const baseSigla = normKey(base.sigla);
+    const baseNome = normKey(base.nome);
+    const matchSigla = normKey(match?.sigla);
+    const matchNome = normKey(match?.nome);
+    return obrigacoes.find(o => {
+        const sigla = normKey(o.sigla);
+        const nome = normKey(o.nome);
+        if (o.esfera === base.esfera && sigla && sigla === baseSigla) return true;
+        if (o.esfera === base.esfera && nome && nome === baseNome) return true;
+        if (matchSigla && sigla === matchSigla) return true;
+        if (matchNome && nome === matchNome) return true;
+        return false;
+    });
+}
+
 export function mapearRespostaSerpro(input: MapearSerproInput): MapearSerproOutput {
     const { resp, baseAnalise, activeEmpresaId, analisadoPor, fonteAnalise, certidoesBase, obrigacoesBase, uid } = input;
 
@@ -106,13 +138,27 @@ export function mapearRespostaSerpro(input: MapearSerproInput): MapearSerproOutp
         const match = resp.obrigacoes?.obrigacoes?.find((ro: any) =>
             (ro.sigla || '').toUpperCase() === o.sigla.toUpperCase()
         );
+        const anterior = findObrigacaoAnterior(baseAnalise.obrigacoes || [], o, match);
         return {
-            id: uid(), empresaId: activeEmpresaId,
+            id: anterior?.id || uid(), empresaId: activeEmpresaId,
             nome: o.nome, sigla: o.sigla, esfera: o.esfera, periodicidade: o.periodicidade,
-            status: (match?.status as NfpStatusObrigacao) || 'nao_verificada',
-            competencia: match?.competencia || undefined,
+            status: (match?.status as NfpStatusObrigacao) || anterior?.status || 'nao_verificada',
+            competencia: match?.competencia || anterior?.competencia || undefined,
+            dataEntrega: match?.dataEntrega || anterior?.dataEntrega || undefined,
+            prazoLegal: match?.prazoLegal || anterior?.prazoLegal || undefined,
+            observacao: match?.observacao || anterior?.observacao || undefined,
         };
     });
+    const obrigacoesKeys = new Set(obrigacoes.map(obrigacaoKey));
+    for (const anterior of baseAnalise.obrigacoes || []) {
+        const key = obrigacaoKey(anterior);
+        if (obrigacoesKeys.has(key)) continue;
+        obrigacoes.push({
+            ...anterior,
+            empresaId: activeEmpresaId,
+        });
+        obrigacoesKeys.add(key);
+    }
 
     // Populate parcelamentos
     const parcelamentos: NfpParcelamento[] = [];

@@ -165,6 +165,32 @@ function normalizeText(value?: string): string {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
+function textFromRecord(record: unknown, keys: string[]): string {
+    if (!record || typeof record !== 'object') return '';
+    const data = record as Record<string, unknown>;
+    for (const key of keys) {
+        const value = data[key];
+        if (typeof value !== 'string' && typeof value !== 'number') continue;
+        const text = normalizeText(String(value));
+        if (text) return text;
+    }
+    return '';
+}
+
+function observacaoObrigacao(o: NfpObrigacao): string {
+    return textFromRecord(o, [
+        'observacao',
+        'observacoes',
+        'observacaoPendencia',
+        'observacaoManual',
+        'pendencia',
+        'comentario',
+        'comentarioTecnico',
+        'motivo',
+        'motivoImpedimento',
+    ]);
+}
+
 function hasValue(value?: string | number | null): boolean {
     if (value === null || value === undefined) return false;
     if (typeof value === 'number') return Number.isFinite(value);
@@ -281,6 +307,7 @@ export function montarCamposCertidaoPdf(c: NfpCertidao): PdfField[] {
 }
 
 export function montarCamposObrigacaoPdf(o: NfpObrigacao): PdfField[] {
+    const observacao = observacaoObrigacao(o);
     return collectFields([
         pdfField('Esfera', esferaLabel(o.esfera)),
         pdfField('Sigla', o.sigla),
@@ -290,7 +317,7 @@ export function montarCamposObrigacaoPdf(o: NfpObrigacao): PdfField[] {
         pdfField('Prazo legal', o.prazoLegal, formatDateBR),
         pdfField('Data de entrega', o.dataEntrega, formatDateBR),
         pdfField('Status', statusLabel(o.status)),
-        pdfField('Observação / pendência', o.observacao),
+        pdfField('Observação / pendência', observacao),
     ]);
 }
 
@@ -337,7 +364,7 @@ export function coletarInconsistenciasManuais(analise: NfpAnaliseEmpresa): PdfIn
     const itens: PdfInconsistenciaManual[] = [];
 
     analise.obrigacoes.forEach((o: NfpObrigacao) => {
-        const detalhe = normalizeText(o.observacao);
+        const detalhe = observacaoObrigacao(o);
         const requerAtencao = !['entregue', 'dispensada'].includes(o.status);
         if (!detalhe && !requerAtencao) return;
         itens.push({
