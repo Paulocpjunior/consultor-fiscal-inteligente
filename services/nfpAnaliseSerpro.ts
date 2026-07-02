@@ -61,6 +61,30 @@ function obrigacaoKey(o: Pick<NfpObrigacao | BaseObrigacao, 'esfera' | 'sigla' |
     return `${o.esfera}|${normKey(o.sigla) || normKey(o.nome)}`;
 }
 
+function certidaoKey(c: Pick<NfpCertidao | BaseCertidao, 'esfera' | 'tipo' | 'orgao'>): string {
+    return `${c.esfera}|${normKey(c.tipo) || normKey(c.orgao)}`;
+}
+
+function findCertidaoAnterior(
+    certidoes: NfpCertidao[],
+    base: BaseCertidao,
+    match?: any,
+): NfpCertidao | undefined {
+    const baseTipo = normKey(base.tipo);
+    const baseOrgao = normKey(base.orgao);
+    const matchTipo = normKey(match?.tipo);
+    const matchOrgao = normKey(match?.orgao);
+    return certidoes.find(c => {
+        const tipo = normKey(c.tipo);
+        const orgao = normKey(c.orgao);
+        if (c.esfera === base.esfera && tipo && tipo === baseTipo) return true;
+        if (c.esfera === base.esfera && orgao && orgao === baseOrgao) return true;
+        if (matchTipo && tipo === matchTipo) return true;
+        if (matchOrgao && orgao === matchOrgao) return true;
+        return false;
+    });
+}
+
 function findObrigacaoAnterior(
     obrigacoes: NfpObrigacao[],
     base: BaseObrigacao,
@@ -118,20 +142,32 @@ export function mapearRespostaSerpro(input: MapearSerproInput): MapearSerproOutp
             if (c.tipo.includes('FGTS') && esf === 'fgts') return true;
             return false;
         });
+        const anterior = findCertidaoAnterior(baseAnalise.certidoes || [], c, match);
         return {
-            id: uid(), empresaId: activeEmpresaId, esfera: c.esfera,
+            id: anterior?.id || uid(), empresaId: activeEmpresaId, esfera: c.esfera,
             orgao: match?.orgao || c.orgao, tipo: match?.tipo || c.tipo,
-            status: (match?.status as NfpStatusCertidao) || 'nao_consultada',
-            dataValidade: match?.validade || undefined,
-            dataEmissao: match?.dataEmissao || undefined,
-            numeroCertidao: match?.numero || undefined,
-            motivoImpedimento: match?.motivo || undefined,
-            pdfBase64: match?.pdfBase64 || undefined,
-            fonte: (match?.fonte || undefined) as any,
-            portalUrl: match?.portalUrl || undefined,
-            dataConsulta: match ? new Date().toISOString().slice(0, 10) : undefined,
+            status: (match?.status as NfpStatusCertidao) || anterior?.status || 'nao_consultada',
+            dataValidade: match?.validade || match?.dataValidade || anterior?.dataValidade || undefined,
+            dataEmissao: match?.dataEmissao || match?.emissao || anterior?.dataEmissao || undefined,
+            numeroCertidao: match?.numero || match?.numeroCertidao || anterior?.numeroCertidao || undefined,
+            motivoImpedimento: match?.motivo || match?.motivoImpedimento || anterior?.motivoImpedimento || undefined,
+            pdfBase64: match?.pdfBase64 || anterior?.pdfBase64 || undefined,
+            fonte: (match?.fonte || anterior?.fonte || undefined) as any,
+            portalUrl: match?.portalUrl || anterior?.portalUrl || undefined,
+            urlDocumento: match?.urlDocumento || anterior?.urlDocumento || undefined,
+            dataConsulta: match ? new Date().toISOString().slice(0, 10) : anterior?.dataConsulta || undefined,
         };
     });
+    const certidoesKeys = new Set(certidoes.map(certidaoKey));
+    for (const anterior of baseAnalise.certidoes || []) {
+        const key = certidaoKey(anterior);
+        if (certidoesKeys.has(key)) continue;
+        certidoes.push({
+            ...anterior,
+            empresaId: activeEmpresaId,
+        });
+        certidoesKeys.add(key);
+    }
 
     // Populate obrigacoes
     const obrigacoes: NfpObrigacao[] = obrigacoesBase.map(o => {

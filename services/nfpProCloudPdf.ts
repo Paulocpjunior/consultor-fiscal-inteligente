@@ -191,6 +191,47 @@ function observacaoObrigacao(o: NfpObrigacao): string {
     ]);
 }
 
+function certidaoDataEmissao(c: NfpCertidao): string {
+    return textFromRecord(c, [
+        'dataEmissao',
+        'dataCertidao',
+        'dataExpedicao',
+        'emissao',
+        'expedicao',
+        'emitidaEm',
+    ]);
+}
+
+function certidaoDataValidade(c: NfpCertidao): string {
+    return textFromRecord(c, [
+        'dataValidade',
+        'validade',
+        'dataVencimento',
+        'vencimento',
+        'validaAte',
+    ]);
+}
+
+function certidaoNumero(c: NfpCertidao): string {
+    return textFromRecord(c, [
+        'numeroCertidao',
+        'numero',
+        'codigoCertidao',
+        'protocolo',
+    ]);
+}
+
+function certidaoMotivo(c: NfpCertidao): string {
+    return textFromRecord(c, [
+        'motivoImpedimento',
+        'motivo',
+        'observacao',
+        'observacoes',
+        'pendencia',
+        'comentario',
+    ]);
+}
+
 function hasValue(value?: string | number | null): boolean {
     if (value === null || value === undefined) return false;
     if (typeof value === 'number') return Number.isFinite(value);
@@ -289,16 +330,20 @@ export function montarCamposDebitoPdf(d: NfpDebito): PdfField[] {
 }
 
 export function montarCamposCertidaoPdf(c: NfpCertidao): PdfField[] {
+    const dataEmissao = certidaoDataEmissao(c);
+    const dataValidade = certidaoDataValidade(c);
+    const numero = certidaoNumero(c);
+    const motivo = certidaoMotivo(c);
     return collectFields([
         pdfField('Esfera', esferaLabel(c.esfera)),
         pdfField('Órgão', c.orgao),
         pdfField('Tipo', c.tipo),
         pdfField('Status', statusLabel(c.status)),
-        pdfField('Data de emissão', c.dataEmissao, formatDateBR),
-        pdfField('Data de validade', c.dataValidade, formatDateBR),
+        pdfField('Data de emissão', dataEmissao, formatDateBR),
+        pdfField('Data de validade', dataValidade, formatDateBR),
         pdfField('Data da consulta', c.dataConsulta, formatDateBR),
-        pdfField('Número da certidão', c.numeroCertidao),
-        pdfField('Motivo / observação', c.motivoImpedimento),
+        pdfField('Número da certidão', numero),
+        pdfField('Motivo / observação', motivo),
         pdfField('Origem', certidaoFonteLabel(c.fonte)),
         pdfField('Portal oficial', c.portalUrl),
         pdfField('Documento', c.urlDocumento),
@@ -391,7 +436,7 @@ export function coletarInconsistenciasManuais(analise: NfpAnaliseEmpresa): PdfIn
     });
 
     analise.certidoes.forEach((c: NfpCertidao) => {
-        const detalhe = normalizeText(c.motivoImpedimento);
+        const detalhe = certidaoMotivo(c);
         const requerAtencao = c.status !== 'negativa' || c.fonte === 'manual';
         if (!detalhe && !requerAtencao) return;
         itens.push({

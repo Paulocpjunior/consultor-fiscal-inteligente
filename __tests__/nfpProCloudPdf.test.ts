@@ -1,6 +1,7 @@
 import type { NfpAnaliseEmpresa } from '../types';
 import {
     coletarInconsistenciasManuais,
+    montarCamposCertidaoPdf,
     montarCamposObrigacaoPdf,
     montarPlanoAcaoRelatorioPdf,
     montarResumoTecnicoNfp,
@@ -111,6 +112,50 @@ describe('nfpProCloudPdf helpers', () => {
 
         const mapa = Object.fromEntries(campos.map(c => [c.label, c.value]));
         expect(mapa['Observação / pendência']).toBe('Ausência do Bloco K informada no cadastro manual.');
+    });
+
+    it('monta datas e observações manuais de certidão no PDF', () => {
+        const campos = montarCamposCertidaoPdf({
+            id: 'cert_1',
+            empresaId: 'prospect_46317827000124',
+            esfera: 'estadual',
+            orgao: 'Sefaz Estadual',
+            tipo: 'CND Estadual (ICMS)',
+            status: 'nao_consultada',
+            dataEmissao: '2026-07-01',
+            dataValidade: '2026-10-01',
+            dataConsulta: '2026-07-02',
+            motivoImpedimento: 'Certidão indicada manualmente pela equipe.',
+            fonte: 'manual',
+        });
+
+        const mapa = Object.fromEntries(campos.map(c => [c.label, c.value]));
+        expect(mapa).toMatchObject({
+            'Data de emissão': '01/07/2026',
+            'Data de validade': '01/10/2026',
+            'Data da consulta': '02/07/2026',
+            'Motivo / observação': 'Certidão indicada manualmente pela equipe.',
+            Origem: 'Manual',
+        });
+    });
+
+    it('aceita datas de certidão salvas com nomes legados de campo', () => {
+        const campos = montarCamposCertidaoPdf({
+            id: 'cert_legacy',
+            empresaId: 'prospect_46317827000124',
+            esfera: 'municipal',
+            orgao: 'Prefeitura Municipal',
+            tipo: 'CND Municipal',
+            status: 'nao_consultada',
+            dataCertidao: '2026-07-01',
+            validade: '2026-08-15',
+            observacao: 'Validação manual no portal municipal.',
+        } as any);
+
+        const mapa = Object.fromEntries(campos.map(c => [c.label, c.value]));
+        expect(mapa['Data de emissão']).toBe('01/07/2026');
+        expect(mapa['Data de validade']).toBe('15/08/2026');
+        expect(mapa['Motivo / observação']).toBe('Validação manual no portal municipal.');
     });
 
     it('monta resumo técnico citando pendências manuais e obrigações com alerta', () => {
