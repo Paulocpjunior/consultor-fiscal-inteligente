@@ -18,11 +18,13 @@
 import express from 'express';
 import admin from 'firebase-admin';
 import { enviarEmail, isGraphConfigured } from './graph-provider.js';
+import { parseDestinatarios } from './email-destinatarios-helper.js';
 
 const router = express.Router();
 
 const REMETENTE = process.env.GRAPH_REMETENTE || 'junior@spassessoriacontabil.com.br';
-const ALERTA_PARA = process.env.CAPTURA_RESUMO_TO || REMETENTE;
+// Aceita lista: CAPTURA_RESUMO_TO="a@sp.com.br, b@sp.com.br; c@sp.com.br"
+const ALERTA_PARA = parseDestinatarios(process.env.CAPTURA_RESUMO_TO, REMETENTE);
 const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 
 function fa() {

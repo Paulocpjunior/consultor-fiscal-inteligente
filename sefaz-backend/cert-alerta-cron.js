@@ -24,12 +24,13 @@ import express from 'express';
 import admin from 'firebase-admin';
 import { enviarEmail, isGraphConfigured } from './graph-provider.js';
 import { listCertsEmpresas } from './cert-storage.js';
+import { parseDestinatarios } from './email-destinatarios-helper.js';
 
 const router = express.Router();
 
 const REMETENTE = process.env.GRAPH_REMETENTE || 'junior@spassessoriacontabil.com.br';
-// Destinatário do alerta (default = própria caixa do remetente/admin).
-const ALERTA_PARA = process.env.CERT_ALERT_TO || REMETENTE;
+// Destinatário(s) do alerta — aceita lista com vírgula (default = caixa do remetente).
+const ALERTA_PARA = parseDestinatarios(process.env.CERT_ALERT_TO, REMETENTE);
 const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 
 function fa() {

@@ -21,11 +21,13 @@ import { faixaDeVencimento, diasAteVencimento } from './cert-vencimento-helper.j
 import { diagnosticarConfig } from './diagnostico-config-helper.js';
 import { listCertsEmpresas } from './cert-storage.js';
 import { fetchAllDocs } from './firestore-paginate.js';
+import { parseDestinatarios } from './email-destinatarios-helper.js';
 
 const router = express.Router();
 
 const REMETENTE = process.env.GRAPH_REMETENTE || 'junior@spassessoriacontabil.com.br';
-const DESTINATARIO = process.env.HEALTH_ALERT_TO || process.env.CERT_ALERT_TO || REMETENTE;
+// Aceita lista com vírgula; fallback CERT_ALERT_TO → remetente.
+const DESTINATARIO = parseDestinatarios(process.env.HEALTH_ALERT_TO || process.env.CERT_ALERT_TO, REMETENTE);
 const COLLECTION = 'health_alertas';
 const DOC_ID = 'atual';
 const REENVIO_MS = 24 * 60 * 60 * 1000; // 24h
