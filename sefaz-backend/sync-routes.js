@@ -16,6 +16,7 @@ import { importarXmlSefaz } from './xml-importer.js';
 import { withCronHeartbeat, listarCronsOrfaos } from './cron-heartbeat.js';
 import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibility.js';
 import { certA1MetadataValido, selecionarCertA1PorBase } from './cert-base-helper.js';
+import { umaPorRaizPorCiclo } from './raiz-throttle-helper.js';
 
 const router = express.Router();
 
@@ -360,12 +361,22 @@ async function listarEmpresasParaCron() {
   if (usandoA1MesmaRaiz > 0) {
     console.log(`[sync-cron] ${usandoA1MesmaRaiz} empresa(s) usando A1 de mesma raiz CNPJ`);
   }
+  // Anti-656 (caso VINATEX 02/07/2026): consultar 2+ CNPJs da mesma raiz na
+  // mesma janela de 1h gera "Consumo Indevido" nas consultas seguintes — a
+  // filial 0002 ficou com ultNSU=0 sem nunca capturar. Regra: 1 CNPJ por raiz
+  // por ciclo, rotação diária determinística (raiz-throttle-helper.js).
+  const { selecionadas, puladas } = umaPorRaizPorCiclo(filtradas);
+  if (puladas.length > 0) {
+    console.log(`[sync-cron] adiando ${puladas.length} empresa(s) da mesma raiz CNPJ pro(s) próximo(s) ciclo(s) (anti cStat=656): ${puladas.map(e => e.cnpj).join(', ')}`);
+  }
+
   // Anexa contadores na lista pra orchestrator persistir no log + painel
-  filtradas._bloqueadasSemAcesso = bloqueadasSemAcesso;
-  filtradas._totalA3 = a3Ids.size;
-  filtradas._a3ViaProcuracao = 0;
-  filtradas._usandoA1MesmaRaiz = usandoA1MesmaRaiz;
-  return filtradas;
+  selecionadas._bloqueadasSemAcesso = bloqueadasSemAcesso;
+  selecionadas._totalA3 = a3Ids.size;
+  selecionadas._a3ViaProcuracao = 0;
+  selecionadas._usandoA1MesmaRaiz = usandoA1MesmaRaiz;
+  selecionadas._adiadasMesmaRaiz = puladas.length;
+  return selecionadas;
 }
 
 router.get('/state/:cnpj', requireAuth, async (req, res) => {
