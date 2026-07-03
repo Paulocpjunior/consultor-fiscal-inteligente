@@ -167,6 +167,14 @@ export async function consultaDistDFeComCert({ cnpj, ultNSU = '0', certOverride 
     response = await postSefaz(envelope, cert.pfxBuffer, cert.password);
   } catch (err) {
     if (/PFX|passphrase|decode|handshake/i.test(String(err.message))) {
+      // Fallback de recarga SO vale pro cert do escritorio (certOverride null).
+      // Quando o A1 PROPRIO da empresa falha no TLS, recair no cert do
+      // escritorio garante cStat=593 pra cliente de outra raiz CNPJ — e o
+      // sefaz_state fica gravado como "sincronizado com 593", mascarando a
+      // causa real (PFX corrompido/senha errada). Melhor falhar explicito.
+      if (certOverride) {
+        throw new Error(`Certificado A1 da empresa falhou no TLS (PFX corrompido ou senha incorreta): ${err.message}. Re-envie o certificado da empresa.`);
+      }
       console.warn('[sefaz-client] erro de TLS, recarregando cert:', err.message);
       invalidateCertificateCache();
       cert = await loadCertificate(true);
@@ -229,6 +237,11 @@ export async function consultaNFePorChave({ chave, cnpjInteressado, uf, certOver
     response = await postSefaz(envelope, cert.pfxBuffer, cert.password);
   } catch (err) {
     if (/PFX|passphrase|decode|handshake/i.test(String(err.message))) {
+      // Mesma regra da consultaDistDFeComCert: nao trocar cert proprio da
+      // empresa pelo do escritorio no retry — gera 593 mascarado.
+      if (certOverride) {
+        throw new Error(`Certificado A1 da empresa falhou no TLS (PFX corrompido ou senha incorreta): ${err.message}. Re-envie o certificado da empresa.`);
+      }
       invalidateCertificateCache();
       cert = await loadCertificate(true);
       response = await postSefaz(envelope, cert.pfxBuffer, cert.password);

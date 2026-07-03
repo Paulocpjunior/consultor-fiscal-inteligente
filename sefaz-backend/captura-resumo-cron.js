@@ -23,8 +23,10 @@ import { parseDestinatarios } from './email-destinatarios-helper.js';
 const router = express.Router();
 
 const REMETENTE = process.env.GRAPH_REMETENTE || 'junior@spassessoriacontabil.com.br';
-// Aceita lista: CAPTURA_RESUMO_TO="a@sp.com.br, b@sp.com.br; c@sp.com.br"
-const ALERTA_PARA = parseDestinatarios(process.env.CAPTURA_RESUMO_TO, REMETENTE);
+// Aceita lista: CAPTURA_RESUMO_TO="a@sp.com.br, b@sp.com.br; c@sp.com.br".
+// Valores inválidos na env var (ex.: nome sem @) caem no destinatário padrão.
+const DESTINATARIO_PADRAO = 'alexandre@spassessoriacontabil.com.br';
+const ALERTA_PARA = parseDestinatarios(process.env.CAPTURA_RESUMO_TO, DESTINATARIO_PADRAO);
 const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 
 function fa() {
