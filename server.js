@@ -52,6 +52,7 @@ import empresasPerfilRouter from './sefaz-backend/empresas-perfil-routes.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 import { podeAcessarCnpj, getCnpjsDaCarteira } from './sefaz-backend/carteira-auth.js';
 import { enviarEmail } from './sefaz-backend/graph-provider.js';
+import { parseDestinatarios } from './sefaz-backend/email-destinatarios-helper.js';
 import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sanitize-error.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -1047,6 +1048,11 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
         }
 
         const remetente = process.env.GRAPH_REMETENTE || process.env.NOTIF_REMETENTE_EMAIL || 'junior@spassessoriacontabil.com.br';
+        // Copia automatica pro gestor em todo envio de DAS ao cliente.
+        // Configuravel via DAS_ENVIO_CC (lista separada por virgula); nao
+        // duplica quando o gestor ja e o proprio destinatario.
+        const copiaGestor = parseDestinatarios(process.env.DAS_ENVIO_CC, 'alexandre@spassessoriacontabil.com.br')
+            .filter(cc => cc.toLowerCase() !== String(emailDest).trim().toLowerCase());
         const anexos = pdfLimpo ? [{
             name: pdfFileName || `das_${String(empresaCnpj).replace(/\D/g, '')}_${competencia || 'competencia'}.pdf`,
             contentType: 'application/pdf',
@@ -1065,6 +1071,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
         const envio = await enviarEmail({
             remetente,
             para: emailDest,
+            cc: copiaGestor,
             assunto: assuntoFinal,
             corpoHtml,
             anexos,
@@ -1086,6 +1093,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
                 vencimento: vencimento || null,
                 canal: 'email',
                 para: emailDest,
+                copiaPara: copiaGestor,
                 assunto: assuntoFinal,
                 mensagem: String(mensagem).slice(0, 10_000),
                 anexouPdf: Boolean(pdfLimpo),
@@ -1098,6 +1106,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
                     ultimoEnvioCliente: {
                         canal: 'email',
                         para: emailDest,
+                        copiaPara: copiaGestor,
                         anexouPdf: Boolean(pdfLimpo),
                         enviadoPor: req.user?.email || req.user?.uid || null,
                         enviadoEm: new Date().toISOString(),
@@ -1108,7 +1117,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
             console.warn('[das/enviar-cliente] envio OK, log falhou:', logErr.message);
         }
 
-        return res.json({ ok: true, canal: 'email', para: emailDest, anexouPdf: Boolean(pdfLimpo) });
+        return res.json({ ok: true, canal: 'email', para: emailDest, copiaPara: copiaGestor, anexouPdf: Boolean(pdfLimpo) });
     } catch (err) {
         console.error('[das/enviar-cliente]', err);
         return respondeErro(res, err);
@@ -1150,6 +1159,7 @@ app.get('/api/admin/das/envios-cliente', requireAuth, async (req, res) => {
                     vencimento: x.vencimento || null,
                     canal: x.canal || 'email',
                     para: x.para || '',
+                    copiaPara: Array.isArray(x.copiaPara) ? x.copiaPara : [],
                     assunto: x.assunto || '',
                     mensagem: x.mensagem || null,
                     anexouPdf: Boolean(x.anexouPdf),

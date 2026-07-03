@@ -179,7 +179,8 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                 pdfBase64: dasInfo.pdfBase64,
                 pdfFileName,
             }).then((r) => {
-                onShowToast(`E-mail enviado para ${r.para}${r.anexouPdf ? ' com PDF anexado' : ''}.`);
+                const copia = r.copiaPara && r.copiaPara.length > 0 ? ` Cópia enviada a ${r.copiaPara.join(', ')}.` : '';
+                onShowToast(`E-mail enviado para ${r.para}${r.anexouPdf ? ' com PDF anexado' : ''}.${copia}`);
                 onEnviado?.();
             }).catch((e: any) => {
                 onShowToast(`Erro ao enviar e-mail: ${e.message}`);
@@ -292,6 +293,9 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                                 : 'PDF nao retornado pelo SERPRO para esta guia. A mensagem usa os dados estruturados disponiveis.'}
                         {dasInfo.codigoBarras && (
                             <span className="block mt-1 font-mono">Codigo de barras incluido na mensagem.</span>
+                        )}
+                        {canal === 'email' && (
+                            <span className="block mt-1">O gestor do escritório recebe cópia (CC) automática de todo envio.</span>
                         )}
                     </div>
 

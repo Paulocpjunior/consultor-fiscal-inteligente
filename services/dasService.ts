@@ -213,7 +213,7 @@ export async function getCobrancaIa(user: User | null, req: CobrancaIaRequest): 
     return res.json();
 }
 
-export async function enviarDasCliente(user: User | null, req: EnviarDasClienteRequest): Promise<{ ok: boolean; para: string; anexouPdf: boolean }> {
+export async function enviarDasCliente(user: User | null, req: EnviarDasClienteRequest): Promise<{ ok: boolean; para: string; copiaPara?: string[]; anexouPdf: boolean }> {
     const res = await fetch('/api/admin/das/enviar-cliente', {
         method: 'POST',
         headers: await authHeaders(user),

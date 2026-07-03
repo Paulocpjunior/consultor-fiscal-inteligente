@@ -543,6 +543,9 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                             ✉ Enviado para <strong className="font-mono">{selecionado.ultimoEnvioCliente.para}</strong> em {formatDataEnvio(selecionado.ultimoEnvioCliente.enviadoEm)}
                                             {selecionado.ultimoEnvioCliente.anexouPdf ? ' com PDF anexado' : ''}
                                             {selecionado.ultimoEnvioCliente.enviadoPor ? ` (por ${selecionado.ultimoEnvioCliente.enviadoPor})` : ''}.
+                                            {selecionado.ultimoEnvioCliente.copiaPara && selecionado.ultimoEnvioCliente.copiaPara.length > 0 && (
+                                                <> Cópia: <span className="font-mono">{selecionado.ultimoEnvioCliente.copiaPara.join(', ')}</span>.</>
+                                            )}
                                         </div>
                                         <button
                                             onClick={() => setHistoricoEnviosCnpj(cnpjLimpo(selecionado.empresaCnpj))}

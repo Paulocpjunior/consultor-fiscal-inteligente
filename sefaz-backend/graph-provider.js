@@ -65,12 +65,13 @@ async function getAccessToken() {
  * @param {object} p
  * @param {string} p.remetente  e-mail da caixa de origem (ex.: junior@spassessoriacontabil.com.br)
  * @param {string|string[]} p.para  destinatário(s)
+ * @param {string|string[]} [p.cc]  destinatário(s) em cópia
  * @param {string} p.assunto
  * @param {string} p.corpoHtml  corpo em HTML
  * @param {Array<{name: string, contentType: string, contentBytes: string}>} [p.anexos]
  * @returns {Promise<{ok: boolean, error?: string}>}
  */
-export async function enviarEmail({ remetente, para, assunto, corpoHtml, anexos = [] }) {
+export async function enviarEmail({ remetente, para, cc = [], assunto, corpoHtml, anexos = [] }) {
     try {
         const token = await getAccessToken();
 
@@ -82,6 +83,10 @@ export async function enviarEmail({ remetente, para, assunto, corpoHtml, anexos 
             return { ok: false, error: 'Nenhum destinatário informado' };
         }
 
+        const copias = (Array.isArray(cc) ? cc : [cc])
+            .filter(Boolean)
+            .map(addr => ({ emailAddress: { address: addr } }));
+
         // Graph: POST /users/{remetente}/sendMail
         const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(remetente)}/sendMail`;
         const payload = {
@@ -89,6 +94,7 @@ export async function enviarEmail({ remetente, para, assunto, corpoHtml, anexos 
                 subject: assunto,
                 body: { contentType: 'HTML', content: corpoHtml },
                 toRecipients: destinatarios,
+                ...(copias.length > 0 ? { ccRecipients: copias } : {}),
                 attachments: anexos
                     .filter(a => a?.contentBytes && a?.name)
                     .map(a => ({

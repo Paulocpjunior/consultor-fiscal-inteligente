@@ -701,6 +701,7 @@ export interface DasEmitido {
     ultimoEnvioCliente?: {
         canal: 'email';
         para: string;
+        copiaPara?: string[];
         anexouPdf: boolean;
         enviadoPor: string | null;
         enviadoEm: string;   // ISO
@@ -718,6 +719,7 @@ export interface DasEnvioCliente {
     vencimento: string | null;
     canal: 'email';
     para: string;
+    copiaPara?: string[];
     assunto: string;
     mensagem: string | null;
     anexouPdf: boolean;
