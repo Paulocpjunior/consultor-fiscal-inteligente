@@ -10,6 +10,7 @@ import {
 } from '../../services/dasService';
 import { getEmpresas as getEmpresasSimples } from '../../services/simplesNacionalService';
 import CobrancaModal from './CobrancaModal';
+import EnviosHistoricoModal from './EnviosHistoricoModal';
 
 interface Props {
     currentUser: User | null;
@@ -26,6 +27,8 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [selecionado, setSelecionado] = useState<DasEmitido | null>(null);
     const [cobrancaDas, setCobrancaDas] = useState<DasEmitido | null>(null);
     const [mostrarFormAvulso, setMostrarFormAvulso] = useState(false);
+    // null = fechado; '' = aberto sem filtro; 'NNNNNNNNNNNNNN' = aberto filtrado por CNPJ
+    const [historicoEnviosCnpj, setHistoricoEnviosCnpj] = useState<string | null>(null);
 
     // Form avulso
     const [novoEmpresaId, setNovoEmpresaId] = useState('');
@@ -66,6 +69,17 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     const valorEmCentavos = (valor: number): number => Math.round((Number(valor) || 0) * 100);
     const cnpjLimpo = (cnpj: string): string => String(cnpj || '').replace(/\D/g, '');
+
+    const formatDataEnvio = (iso: string, curto = false): string => {
+        try {
+            const d = new Date(iso);
+            return curto
+                ? d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                : d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+        } catch {
+            return iso;
+        }
+    };
 
     const temDuplicidade = (doc: DasEmitido, lista: DasEmitido[] = docs): boolean => {
         const chaveCnpj = cnpjLimpo(doc.empresaCnpj);
@@ -233,12 +247,20 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         )}
                     </p>
                 </div>
-                <button
-                    onClick={() => setMostrarFormAvulso(!mostrarFormAvulso)}
-                    className="btn-press px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700"
-                >
-                    {mostrarFormAvulso ? '✕ Cancelar' : '+ Emitir DAS Avulso'}
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setHistoricoEnviosCnpj('')}
+                        className="btn-press px-4 py-2 bg-slate-700 text-white font-bold rounded-lg hover:bg-slate-800"
+                    >
+                        📨 Histórico de envios
+                    </button>
+                    <button
+                        onClick={() => setMostrarFormAvulso(!mostrarFormAvulso)}
+                        className="btn-press px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700"
+                    >
+                        {mostrarFormAvulso ? '✕ Cancelar' : '+ Emitir DAS Avulso'}
+                    </button>
+                </div>
             </div>
 
             {/* Form de emissao avulsa */}
@@ -353,6 +375,7 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 <th className="px-4 py-2 font-medium text-right">Valor</th>
                                 <th className="px-4 py-2 font-medium">Vencimento</th>
                                 <th className="px-4 py-2 font-medium">Status</th>
+                                <th className="px-4 py-2 font-medium">Envio</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -391,6 +414,18 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                         <span className={`px-2 py-0.5 rounded text-xs ${statusBadgeClass(d.statusPagamento)}`}>
                                             {statusLabel(d.statusPagamento)}
                                         </span>
+                                    </td>
+                                    <td className="px-4 py-2">
+                                        {d.ultimoEnvioCliente ? (
+                                            <span
+                                                className="px-2 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 text-[10px] font-bold whitespace-nowrap"
+                                                title={`Enviado para ${d.ultimoEnvioCliente.para} em ${formatDataEnvio(d.ultimoEnvioCliente.enviadoEm)}${d.ultimoEnvioCliente.enviadoPor ? ` por ${d.ultimoEnvioCliente.enviadoPor}` : ''}${d.ultimoEnvioCliente.anexouPdf ? ' (PDF anexado)' : ''}`}
+                                            >
+                                                ✉ Enviado {formatDataEnvio(d.ultimoEnvioCliente.enviadoEm, true)}
+                                            </span>
+                                        ) : (
+                                            <span className="text-[10px] text-slate-400">—</span>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
@@ -500,6 +535,32 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 </div>
                             )}
 
+                            <div>
+                                <div className="text-xs text-slate-500 mb-1">Envio ao cliente</div>
+                                {selecionado.ultimoEnvioCliente ? (
+                                    <div className="rounded-lg border border-sky-200 dark:border-sky-900/60 bg-sky-50 dark:bg-sky-900/20 px-3 py-2 text-xs text-sky-800 dark:text-sky-200 space-y-1">
+                                        <div>
+                                            ✉ Enviado para <strong className="font-mono">{selecionado.ultimoEnvioCliente.para}</strong> em {formatDataEnvio(selecionado.ultimoEnvioCliente.enviadoEm)}
+                                            {selecionado.ultimoEnvioCliente.anexouPdf ? ' com PDF anexado' : ''}
+                                            {selecionado.ultimoEnvioCliente.enviadoPor ? ` (por ${selecionado.ultimoEnvioCliente.enviadoPor})` : ''}.
+                                            {selecionado.ultimoEnvioCliente.copiaPara && selecionado.ultimoEnvioCliente.copiaPara.length > 0 && (
+                                                <> Cópia oculta: <span className="font-mono">{selecionado.ultimoEnvioCliente.copiaPara.join(', ')}</span>.</>
+                                            )}
+                                        </div>
+                                        <button
+                                            onClick={() => setHistoricoEnviosCnpj(cnpjLimpo(selecionado.empresaCnpj))}
+                                            className="underline font-bold hover:text-sky-600"
+                                        >
+                                            Ver histórico completo desta empresa
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="text-sm bg-slate-50 dark:bg-slate-900/40 px-3 py-2 rounded text-slate-500">
+                                        Ainda não enviado ao cliente por e-mail.
+                                    </div>
+                                )}
+                            </div>
+
                             {selecionado.modeUsado === 'mock' && (
                                 <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
                                     ⓘ DAS gerado em modo TESTE — código de barras fictício, não pague no banco.
@@ -540,6 +601,17 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     currentUser={currentUser}
                     onClose={() => setCobrancaDas(null)}
                     onShowToast={(m) => onShowToast?.(m)}
+                    onEnviado={() => { carregar(); setSelecionado(null); }}
+                />
+            )}
+
+            {historicoEnviosCnpj !== null && (
+                <EnviosHistoricoModal
+                    currentUser={currentUser}
+                    empresas={empresas}
+                    cnpjInicial={historicoEnviosCnpj || undefined}
+                    onClose={() => setHistoricoEnviosCnpj(null)}
+                    onShowToast={onShowToast}
                 />
             )}
         </div>

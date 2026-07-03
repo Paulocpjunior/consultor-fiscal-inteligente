@@ -697,6 +697,34 @@ export interface DasEmitido {
         total: number;       // valor + multa + juros
         calculadoEm: string; // ISO YYYY-MM-DD
     };
+    /** Snapshot do último envio da guia ao cliente (email via Graph). */
+    ultimoEnvioCliente?: {
+        canal: 'email';
+        para: string;
+        copiaPara?: string[];
+        anexouPdf: boolean;
+        enviadoPor: string | null;
+        enviadoEm: string;   // ISO
+    };
+}
+
+/** Registro de envio de DAS ao cliente (coleção das_envios_cliente). */
+export interface DasEnvioCliente {
+    id: string;
+    dasId: string | null;
+    empresaCnpj: string;
+    empresaNome: string;
+    competencia: string | null;
+    valor: number;
+    vencimento: string | null;
+    canal: 'email';
+    para: string;
+    copiaPara?: string[];
+    assunto: string;
+    mensagem: string | null;
+    anexouPdf: boolean;
+    enviadoPor: string | null;
+    enviadoEm: string | null; // ISO
 }
 
 export interface DasResumo {
