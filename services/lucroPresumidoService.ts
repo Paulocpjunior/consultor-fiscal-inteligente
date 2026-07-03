@@ -111,24 +111,17 @@ export const saveEmpresa = async (empresa: any, userId: string): Promise<LucroPr
 
 export const updateEmpresa = async (id: string, data: Partial<LucroPresumidoEmpresa>): Promise<LucroPresumidoEmpresa | null> => {
     // 1. Update Cloud
+    // createdBy/createdByEmail nao sao alterados e falha na nuvem PROPAGA —
+    // mesmo conserto do simplesNacionalService (posse roubada a cada update +
+    // erro engolido faziam a edicao "salvar" so no localStorage e sumir no
+    // proximo refetch). Ver comentario detalhado la.
     if (isFirebaseConfigured && db && auth?.currentUser) {
-        try {
-            const docRef = doc(db, 'lucro_empresas', id);
-            const { id: _, createdBy: __, createdByEmail: ___, ...safeData } = data as any; 
-            
-            const payload = sanitizePayload({ 
-                ...safeData, 
-                createdBy: auth.currentUser.uid,
-                createdByEmail: auth.currentUser.email 
-            });
-            
-            await setDoc(docRef, payload, { merge: true });
-        } catch (e: any) { 
-            // Silent fallback
-        }
+        const docRef = doc(db, 'lucro_empresas', id);
+        const { id: _, createdBy: __, createdByEmail: ___, ...safeData } = data as any;
+        await setDoc(docRef, sanitizePayload(safeData), { merge: true });
     }
 
-    // 2. Update Local
+    // 2. Update Local (so apos sucesso na nuvem)
     const localEmpresas = getLocalEmpresas();
     const index = localEmpresas.findIndex(e => e.id === id);
     const existente = index !== -1 ? localEmpresas[index] : null;
