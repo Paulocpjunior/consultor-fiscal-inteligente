@@ -179,7 +179,7 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                 pdfBase64: dasInfo.pdfBase64,
                 pdfFileName,
             }).then((r) => {
-                const copia = r.copiaPara && r.copiaPara.length > 0 ? ` Cópia enviada a ${r.copiaPara.join(', ')}.` : '';
+                const copia = r.copiaPara && r.copiaPara.length > 0 ? ` Cópia oculta enviada a ${r.copiaPara.join(', ')}.` : '';
                 onShowToast(`E-mail enviado para ${r.para}${r.anexouPdf ? ' com PDF anexado' : ''}.${copia}`);
                 onEnviado?.();
             }).catch((e: any) => {
@@ -295,7 +295,7 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                             <span className="block mt-1 font-mono">Codigo de barras incluido na mensagem.</span>
                         )}
                         {canal === 'email' && (
-                            <span className="block mt-1">O gestor do escritório recebe cópia (CC) automática de todo envio.</span>
+                            <span className="block mt-1">O gestor do escritório recebe cópia oculta (BCC) automática de todo envio — o cliente não vê.</span>
                         )}
                     </div>
 

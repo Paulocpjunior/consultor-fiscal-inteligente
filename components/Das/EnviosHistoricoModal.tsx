@@ -139,7 +139,7 @@ const EnviosHistoricoModal: React.FC<Props> = ({ currentUser, empresas, cnpjInic
                                             <div><span className="text-slate-400">Vencimento:</span> {env.vencimento || '—'}</div>
                                             {env.copiaPara && env.copiaPara.length > 0 && (
                                                 <div className="md:col-span-2">
-                                                    <span className="text-slate-400">Cópia (CC):</span> <span className="font-mono">{env.copiaPara.join(', ')}</span>
+                                                    <span className="text-slate-400">Cópia oculta (BCC):</span> <span className="font-mono">{env.copiaPara.join(', ')}</span>
                                                 </div>
                                             )}
                                         </div>

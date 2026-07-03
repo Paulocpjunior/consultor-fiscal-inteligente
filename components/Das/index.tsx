@@ -544,7 +544,7 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                             {selecionado.ultimoEnvioCliente.anexouPdf ? ' com PDF anexado' : ''}
                                             {selecionado.ultimoEnvioCliente.enviadoPor ? ` (por ${selecionado.ultimoEnvioCliente.enviadoPor})` : ''}.
                                             {selecionado.ultimoEnvioCliente.copiaPara && selecionado.ultimoEnvioCliente.copiaPara.length > 0 && (
-                                                <> Cópia: <span className="font-mono">{selecionado.ultimoEnvioCliente.copiaPara.join(', ')}</span>.</>
+                                                <> Cópia oculta: <span className="font-mono">{selecionado.ultimoEnvioCliente.copiaPara.join(', ')}</span>.</>
                                             )}
                                         </div>
                                         <button

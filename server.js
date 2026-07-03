@@ -1048,10 +1048,11 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
         }
 
         const remetente = process.env.GRAPH_REMETENTE || process.env.NOTIF_REMETENTE_EMAIL || 'junior@spassessoriacontabil.com.br';
-        // Copia automatica pro gestor em todo envio de DAS ao cliente.
-        // Configuravel via DAS_ENVIO_CC (lista separada por virgula); nao
-        // duplica quando o gestor ja e o proprio destinatario.
-        const copiaGestor = parseDestinatarios(process.env.DAS_ENVIO_CC, 'alexandre@spassessoriacontabil.com.br')
+        // Copia oculta (BCC) automatica pro gestor em todo envio de DAS ao
+        // cliente — o cliente nao ve o endereco interno. Configuravel via
+        // DAS_ENVIO_BCC (lista separada por virgula; DAS_ENVIO_CC aceito por
+        // compatibilidade); nao duplica quando o gestor ja e o destinatario.
+        const copiaGestor = parseDestinatarios(process.env.DAS_ENVIO_BCC || process.env.DAS_ENVIO_CC, 'alexandre@spassessoriacontabil.com.br')
             .filter(cc => cc.toLowerCase() !== String(emailDest).trim().toLowerCase());
         const anexos = pdfLimpo ? [{
             name: pdfFileName || `das_${String(empresaCnpj).replace(/\D/g, '')}_${competencia || 'competencia'}.pdf`,
@@ -1071,7 +1072,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
         const envio = await enviarEmail({
             remetente,
             para: emailDest,
-            cc: copiaGestor,
+            bcc: copiaGestor,
             assunto: assuntoFinal,
             corpoHtml,
             anexos,
