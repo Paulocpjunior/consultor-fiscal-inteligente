@@ -27,9 +27,11 @@ interface Props {
     currentUser: User | null;
     onClose: () => void;
     onShowToast: (msg: string) => void;
+    /** Chamado apos envio de e-mail bem-sucedido (ex.: pra recarregar a listagem). */
+    onEnviado?: () => void;
 }
 
-const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowToast }) => {
+const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowToast, onEnviado }) => {
     const [tom, setTom] = useState<'firme' | 'amigavel'>('amigavel');
     const [canal, setCanal] = useState<'email' | 'whatsapp'>('email');
     const [emailDest, setEmailDest] = useState('');
@@ -178,6 +180,7 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                 pdfFileName,
             }).then((r) => {
                 onShowToast(`E-mail enviado para ${r.para}${r.anexouPdf ? ' com PDF anexado' : ''}.`);
+                onEnviado?.();
             }).catch((e: any) => {
                 onShowToast(`Erro ao enviar e-mail: ${e.message}`);
             }).finally(() => {

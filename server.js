@@ -50,7 +50,7 @@ import healthConsolidadoRouter from './sefaz-backend/health-consolidado-routes.j
 import healthAlertaCronRouter from './sefaz-backend/health-alerta-cron.js';
 import empresasPerfilRouter from './sefaz-backend/empresas-perfil-routes.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
-import { podeAcessarCnpj } from './sefaz-backend/carteira-auth.js';
+import { podeAcessarCnpj, getCnpjsDaCarteira } from './sefaz-backend/carteira-auth.js';
 import { enviarEmail } from './sefaz-backend/graph-provider.js';
 import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sanitize-error.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
@@ -1087,6 +1087,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
                 canal: 'email',
                 para: emailDest,
                 assunto: assuntoFinal,
+                mensagem: String(mensagem).slice(0, 10_000),
                 anexouPdf: Boolean(pdfLimpo),
                 enviadoPor: req.user?.email || req.user?.uid || null,
                 enviadoEm: adminMod.firestore.FieldValue.serverTimestamp(),
@@ -1110,6 +1111,59 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
         return res.json({ ok: true, canal: 'email', para: emailDest, anexouPdf: Boolean(pdfLimpo) });
     } catch (err) {
         console.error('[das/enviar-cliente]', err);
+        return respondeErro(res, err);
+    }
+});
+
+// GET /api/admin/das/envios-cliente?cnpj=&dasId=&limit=
+// Historico de envios de DAS ao cliente (coleção das_envios_cliente).
+// Admin ve tudo; colaborador ve apenas empresas da sua carteira.
+app.get('/api/admin/das/envios-cliente', requireAuth, async (req, res) => {
+    try {
+        const cnpjFiltro = String(req.query.cnpj || '').replace(/\D/g, '');
+        const dasIdFiltro = String(req.query.dasId || '').trim();
+        const limite = Math.min(Math.max(Number(req.query.limit || 200), 1), 500);
+
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) {
+            adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        }
+        const db = adminMod.firestore();
+
+        // Filtros com igualdade nao exigem indice composto; ordenacao em memoria.
+        let q = db.collection('das_envios_cliente');
+        if (cnpjFiltro) q = q.where('empresaCnpj', '==', cnpjFiltro);
+        if (dasIdFiltro) q = q.where('dasId', '==', dasIdFiltro);
+        const snap = await q.limit(500).get();
+
+        const cnpjsCarteira = await getCnpjsDaCarteira(req.user); // null = admin
+        const envios = snap.docs
+            .map(d => {
+                const x = d.data();
+                return {
+                    id: d.id,
+                    dasId: x.dasId || null,
+                    empresaCnpj: x.empresaCnpj || '',
+                    empresaNome: x.empresaNome || '',
+                    competencia: x.competencia || null,
+                    valor: Number(x.valor || 0),
+                    vencimento: x.vencimento || null,
+                    canal: x.canal || 'email',
+                    para: x.para || '',
+                    assunto: x.assunto || '',
+                    mensagem: x.mensagem || null,
+                    anexouPdf: Boolean(x.anexouPdf),
+                    enviadoPor: x.enviadoPor || null,
+                    enviadoEm: x.enviadoEm?.toDate?.()?.toISOString() || null,
+                };
+            })
+            .filter(e => cnpjsCarteira === null || cnpjsCarteira.includes(e.empresaCnpj))
+            .sort((a, b) => (b.enviadoEm || '').localeCompare(a.enviadoEm || ''))
+            .slice(0, limite);
+
+        return res.json({ envios, total: envios.length });
+    } catch (err) {
+        console.error('[das/envios-cliente]', err);
         return respondeErro(res, err);
     }
 });

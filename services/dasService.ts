@@ -2,7 +2,7 @@
  * services/dasService.ts
  * Cliente HTTP pra /api/admin/das.
  */
-import type { User, DasEmitido, DasResumo, DasStatusPagamento, DasPrevisaoResponse, DasPrevisaoIaResponse } from '../types';
+import type { User, DasEmitido, DasResumo, DasStatusPagamento, DasPrevisaoResponse, DasPrevisaoIaResponse, DasEnvioCliente } from '../types';
 
 import { getAuth } from 'firebase/auth';
 
@@ -224,4 +224,22 @@ export async function enviarDasCliente(user: User | null, req: EnviarDasClienteR
         throw new Error(err.error || `enviarDasCliente: ${res.status}`);
     }
     return res.json();
+}
+
+export async function listarEnviosDas(
+    user: User | null,
+    filters: { cnpj?: string; dasId?: string; limit?: number } = {}
+): Promise<DasEnvioCliente[]> {
+    const qs = new URLSearchParams();
+    if (filters.cnpj) qs.set('cnpj', filters.cnpj);
+    if (filters.dasId) qs.set('dasId', filters.dasId);
+    if (filters.limit) qs.set('limit', String(filters.limit));
+
+    const res = await fetch(`${BASE}/envios-cliente?${qs}`, { headers: await authHeaders(user) });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `listarEnviosDas: ${res.status}`);
+    }
+    const data = await res.json();
+    return data.envios || [];
 }
