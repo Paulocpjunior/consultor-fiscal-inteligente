@@ -224,18 +224,18 @@ export const updateEmpresa = async (
     id: string, data: Partial<SimplesNacionalEmpresa>
 ): Promise<SimplesNacionalEmpresa | null> => {
     // ── Cloud-first ──
+    // createdBy/createdByEmail NUNCA sao alterados aqui: sobrescrever com o
+    // usuario atual roubava a posse da empresa a cada edicao, e o erro de
+    // permissao era engolido (console.debug) — a apuracao "salvava" so no
+    // localStorage e sumia ao trocar de empresa, pois o refetch da nuvem
+    // vencia o cache (caso Carlos Eduardo, 03/07). Falha na nuvem agora
+    // propaga: sem gravacao fantasma, a UI mostra o erro real.
     if (isFirebaseConfigured && db && auth?.currentUser) {
-        try {
-            const { id: _, createdBy: __, createdByEmail: ___, ...safeData } = data as any;
-            await setDoc(doc(db, 'simples_empresas', id), sanitizePayload({
-                ...safeData,
-                createdBy: auth.currentUser.uid,
-                createdByEmail: auth.currentUser.email
-            }), { merge: true });
-        } catch (e: any) { console.debug('updateEmpresa cloud error:', e.message); }
+        const { id: _, createdBy: __, createdByEmail: ___, ...safeData } = data as any;
+        await setDoc(doc(db, 'simples_empresas', id), sanitizePayload(safeData), { merge: true });
     }
 
-    // ── Local cache ──
+    // ── Local cache (so apos sucesso na nuvem) ──
     const local = getLocalEmpresas();
     const idx = local.findIndex(e => e.id === id);
     const existente = idx !== -1 ? local[idx] : null;

@@ -86,7 +86,15 @@ service cloud.firestore {
       // filtragem nas rules, mas isso exigiria refatoracao do modelo.
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow update: if isOwnerOrAdmin(resource.data.createdBy);
+      // update: qualquer logado, SEM mudar o dono. Antes era
+      // isOwnerOrAdmin(createdBy) — colaborador da carteira que nao criou a
+      // empresa tinha o update rejeitado (permission-denied), o service
+      // engolia o erro e a apuracao "salva" sumia ao trocar de empresa
+      // (caso Carlos Eduardo, 03/07). Filtro por carteira segue no app,
+      // mesmo criterio do read acima. Doc legado sem createdBy segue editavel.
+      allow update: if isSignedIn()
+        && (!('createdBy' in resource.data)
+            || request.resource.data.createdBy == resource.data.createdBy);
       // delete: SO admin. Colaborador pode visualizar e editar, mas nao
       // excluir a empresa do cadastro. Antes era isOwnerOrAdmin, mas
       // colaborador que criou conseguia apagar — inconsistente com a UI
@@ -100,7 +108,10 @@ service cloud.firestore {
       // list: limite de query para evitar download massivo.
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow update: if isOwnerOrAdmin(resource.data.createdBy);
+      // update: qualquer logado, sem mudar o dono (ver simples_empresas).
+      allow update: if isSignedIn()
+        && (!('createdBy' in resource.data)
+            || request.resource.data.createdBy == resource.data.createdBy);
       // delete: SO admin (ver comentario em simples_empresas).
       allow delete: if isAdmin();
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;

@@ -376,9 +376,9 @@ if (filialServico > 0) {
             setSaveSuccess(true);
             onShowToast('Apuração salva com sucesso!');
             setTimeout(() => setSaveSuccess(false), 3000);
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            onShowToast('Erro ao salvar apuração.');
+            onShowToast(`Erro ao salvar apuração: ${error?.message || 'falha desconhecida'}. Os valores NÃO foram gravados.`);
         } finally {
             setIsSaving(false);
         }
