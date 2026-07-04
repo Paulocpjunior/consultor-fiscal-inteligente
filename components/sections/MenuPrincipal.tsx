@@ -3,14 +3,15 @@
  *
  * Renderiza o menu de cards agrupado por gênero (Consultas, Regimes,
  * Documentos Fiscais, Vencimentos, etc). Cada grupo tem cor própria e
- * titulo. Cards adminOnly só aparecem pra admin.
+ * titulo. Cards adminOnly aparecem pra admin ou pra colaborador com o
+ * módulo liberado individualmente (modulosPermitidos do perfil).
  *
  * Extraido do App.tsx (renderia inline, ~40 linhas com 2 maps aninhados).
  * Layout: 2/3/4/6 colunas conforme breakpoint, card compacto horizontal
  * (icone + label).
  */
 import React from 'react';
-import { MENU_GRUPOS, searchDescriptions } from '../../config/menuConfig';
+import { MENU_GRUPOS, searchDescriptions, podeAcessarCard } from '../../config/menuConfig';
 import { SearchType, type User } from '../../types';
 
 interface Props {
@@ -22,7 +23,7 @@ interface Props {
 const MenuPrincipal: React.FC<Props> = ({ currentUser, searchType, onSelecionar }) => (
     <div className="space-y-2 mb-3">
         {MENU_GRUPOS.map((grupo) => {
-            const cards = grupo.cards.filter(c => !c.adminOnly || currentUser.role === 'admin');
+            const cards = grupo.cards.filter(c => podeAcessarCard(currentUser, c));
             if (cards.length === 0) return null;
             return (
                 <div key={grupo.titulo}>

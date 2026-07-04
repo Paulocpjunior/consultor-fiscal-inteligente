@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { User, AccessLog } from '../types';
 import * as authService from '../services/authService';
+import { MODULOS_RESTRITOS } from '../config/menuConfig';
 import { CloseIcon, UserGroupIcon, TrashIcon, UserIcon } from './Icons';
 import { useConfirm, usePrompt } from './dialog/DialogProvider';
 
@@ -153,6 +154,46 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
         }
     };
 
+    /**
+     * Libera/revoga o acesso de um colaborador a um módulo restrito
+     * (adminOnly), ex.: Consulta Situação Fiscal. Grava a lista em
+     * users/{uid}.modulosPermitidos — só admin consegue (Firestore rules).
+     */
+    const handleToggleModulo = async (user: User, moduloType: string, moduloLabel: string) => {
+        const atuais = user.modulosPermitidos ?? [];
+        const temAcesso = atuais.includes(moduloType);
+        const ok = await confirm({
+            title: temAcesso ? 'Revogar acesso?' : 'Liberar acesso?',
+            message: `${temAcesso ? 'Revogar' : 'Liberar'} o acesso de "${user.name}" ao módulo "${moduloLabel}"?`,
+            variant: temAcesso ? 'warning' : 'info',
+            confirmLabel: temAcesso ? 'Revogar' : 'Liberar',
+        });
+        if (!ok) return;
+        const novos = temAcesso ? atuais.filter(m => m !== moduloType) : [...atuais, moduloType];
+        try {
+            const result = await authService.setUserModulos(user.id, novos);
+            if (result) {
+                const admin = authService.getCurrentUser();
+                if (admin) {
+                    authService.logAction(
+                        admin.id, admin.name,
+                        temAcesso ? 'revogou acesso a módulo' : 'liberou acesso a módulo',
+                        `${moduloLabel} — ${user.name} (${user.email})`,
+                    );
+                }
+                setMsg({
+                    text: `Acesso ao módulo "${moduloLabel}" ${temAcesso ? 'revogado de' : 'liberado para'} ${user.name}. O usuário verá o módulo no próximo login/refresh.`,
+                    type: 'success',
+                });
+                loadUsers();
+            } else {
+                setMsg({ text: 'Erro ao atualizar acesso ao módulo.', type: 'error' });
+            }
+        } catch (e: any) {
+            setMsg({ text: e?.message || 'Erro ao atualizar acesso ao módulo.', type: 'error' });
+        }
+    };
+
     const handleEditName = async (user: User) => {
         const novoNome = await prompt({
             title: 'Editar nome',
@@ -239,6 +280,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                     <th className="px-4 py-2">Nome</th>
                                     <th className="px-4 py-2">E-mail</th>
                                     <th className="px-4 py-2">Role</th>
+                                    <th className="px-4 py-2">Módulos restritos</th>
                                     <th className="px-4 py-2 text-center">Ações</th>
                                 </tr>
                             </thead>
@@ -261,6 +303,35 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                             }`}>
                                                 {user.role === 'admin' ? 'Administrador' : 'Colaborador'}
                                             </span>
+                                        </td>
+                                        <td className="px-4 py-2">
+                                            {user.role === 'admin' ? (
+                                                <span className="text-xs text-slate-400 italic">Todos (admin)</span>
+                                            ) : (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {MODULOS_RESTRITOS.map(mod => {
+                                                        const modLabel = mod.label ?? mod.type;
+                                                        const liberado = (user.modulosPermitidos ?? []).includes(mod.type);
+                                                        return (
+                                                            <button
+                                                                key={mod.type}
+                                                                disabled={!isAdmin}
+                                                                onClick={() => handleToggleModulo(user, mod.type, modLabel)}
+                                                                className={`text-xs font-semibold px-2 py-1 rounded-full border transition-colors ${
+                                                                    liberado
+                                                                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700 hover:bg-green-200'
+                                                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600 hover:bg-slate-200'
+                                                                } ${!isAdmin ? 'cursor-default opacity-70' : ''}`}
+                                                                title={isAdmin
+                                                                    ? (liberado ? `Clique para revogar o acesso a ${modLabel}` : `Clique para liberar o acesso a ${modLabel}`)
+                                                                    : `Apenas administradores podem alterar. ${liberado ? 'Acesso liberado.' : 'Sem acesso.'}`}
+                                                            >
+                                                                {liberado ? '✓ ' : ''}{modLabel}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-4 py-2 text-center">
                                             {user.email !== currentUserEmail && (
@@ -306,7 +377,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 ))}
                                 {users.length === 0 && !error && (
                                     <tr>
-                                        <td colSpan={4} className="px-4 py-8 text-center text-slate-400">Nenhum usuário encontrado.</td>
+                                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400">Nenhum usuário encontrado.</td>
                                     </tr>
                                 )}
                             </tbody>

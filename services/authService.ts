@@ -306,6 +306,35 @@ export const setUserRole = async (userId: string, role: 'admin' | 'colaborador')
 };
 
 /**
+ * Atualiza a lista de modulos restritos (adminOnly) liberados para um
+ * usuario especifico. So admin pode chamar — Firestore rules bloqueiam
+ * colaborador de alterar o proprio `modulosPermitidos` (anti auto-concessao).
+ * @param userId UID do usuario alvo
+ * @param modulos lista de SearchType liberados (ex.: ['Consulta Situação Fiscal'])
+ */
+export const setUserModulos = async (userId: string, modulos: string[]): Promise<boolean> => {
+    const clean = Array.from(new Set((modulos || []).filter(m => typeof m === 'string' && m.trim())));
+    if (!isFirebaseConfigured || !db) {
+        const users = getLocalUsers();
+        const idx = users.findIndex(u => u.id === userId);
+        if (idx === -1) return false;
+        users[idx].modulosPermitidos = clean;
+        saveLocalUsers(users);
+        return true;
+    }
+    try {
+        await setDoc(doc(db, 'users', userId), { modulosPermitidos: clean }, { merge: true });
+        return true;
+    } catch (e: any) {
+        console.warn('setUserModulos:', e.message);
+        if (e.code === 'permission-denied') {
+            throw new Error('PERMISSION_DENIED: Apenas administradores podem liberar módulos restritos.');
+        }
+        return false;
+    }
+};
+
+/**
  * Atualiza o display name (campo `name`) do usuario. So admin pode chamar
  * (rules em users.update já garantem isso). Email NAO eh editavel daqui:
  * o email vive no Firebase Auth + e duplicado no doc; alterar so o doc

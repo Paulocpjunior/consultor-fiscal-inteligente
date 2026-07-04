@@ -30,6 +30,9 @@ service cloud.firestore {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow create: if isSignedIn()
         && request.auth.uid == userId
+        // Perfil novo nao pode nascer com modulos restritos liberados
+        && (!('modulosPermitidos' in request.resource.data)
+            || request.resource.data.modulosPermitidos.size() == 0)
         && (
           // Perfil comum criado pelo proprio usuario nunca pode nascer admin.
           !('role' in request.resource.data)
@@ -43,13 +46,17 @@ service cloud.firestore {
         );
 
       // User pode atualizar proprio doc, MAS nao pode mudar a propria role
+      // nem se auto-conceder modulos restritos (modulosPermitidos)
       allow update: if (
         // Admin pode mudar qualquer coisa
         isAdmin()
       ) || (
         // User pode atualizar proprio doc, sem mudar a propria role
+        // nem a propria lista de modulos liberados
         request.auth.uid == userId
         && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)
+        && (!('modulosPermitidos' in request.resource.data)
+            || request.resource.data.modulosPermitidos == resource.data.get('modulosPermitidos', []))
       );
 
       // Apenas admin pode deletar usuarios

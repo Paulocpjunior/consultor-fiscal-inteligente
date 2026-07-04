@@ -12,7 +12,7 @@
  * enum quando o card e um hub-mae (ex: SAUDE_GERAL -> "Diagnostico & Saude").
  */
 import React from 'react';
-import { SearchType } from '../types';
+import { SearchType, type User } from '../types';
 import {
     BuildingIcon, CalculatorIcon, DocumentTextIcon, SearchIcon, TagIcon,
     CalendarIcon, DownloadIcon, ScaleIcon, ShieldIcon, BriefcaseIcon,
@@ -57,7 +57,7 @@ export const searchDescriptions: Record<SearchType, string> = {
     [SearchType.SIMULADOR_IBS_CBS]: 'Simulador IBS/CBS — projeção da carga tributária 2026-2033 sob a Reforma Tributária (LC 214/2025).',
     [SearchType.EMISSAO_TRIBUTOS]: 'Central de Emissões — emissão unificada de DAS (Simples) e DARF (IRPJ/CSLL/PIS/COFINS para Presumido e Real) com controle de pagamento.',
     [SearchType.RECUPERACAO_TRIBUTARIA]: 'Recuperação Tributária — identifica impostos pagos a maior e oportunidades de restituição/compensação.',
-    [SearchType.NFP_PRO_CLOUD]: 'Consulta de situação fiscal: débitos, certidões, obrigações, parcelamentos e plano de ação. Acesso restrito a administradores.',
+    [SearchType.NFP_PRO_CLOUD]: 'Consulta de situação fiscal: débitos, certidões, obrigações, parcelamentos e plano de ação. Acesso restrito — liberado pelo administrador.',
 };
 
 export interface MenuCard {
@@ -123,3 +123,23 @@ export const MENU_GRUPOS: MenuGrupo[] = [
         ],
     },
 ];
+
+/**
+ * Cards restritos (adminOnly) — o admin pode liberar acesso individual a
+ * colaboradores via Gerenciar Usuários (campo `modulosPermitidos` do perfil).
+ */
+export const MODULOS_RESTRITOS: MenuCard[] = MENU_GRUPOS
+    .flatMap(g => g.cards)
+    .filter(c => c.adminOnly);
+
+/**
+ * Admin acessa tudo; colaborador acessa card restrito apenas se o admin
+ * liberou o módulo (modulosPermitidos contém o SearchType do card).
+ */
+export const podeAcessarCard = (
+    user: Pick<User, 'role' | 'modulosPermitidos'>,
+    card: MenuCard,
+): boolean =>
+    !card.adminOnly
+    || user.role === 'admin'
+    || (user.modulosPermitidos ?? []).includes(card.type);
