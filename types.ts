@@ -113,6 +113,13 @@ export interface User {
     role: UserRole;
     isVerified?: boolean;
     passwordHash?: string; // Local storage legacy
+    /**
+     * Módulos restritos (adminOnly) liberados individualmente para este
+     * usuário pelo administrador. Valores = SearchType (ex.: 'Consulta
+     * Situação Fiscal'). Admin sempre acessa tudo, independente da lista.
+     * Só admin pode alterar (Firestore rules garantem).
+     */
+    modulosPermitidos?: string[];
 }
 
 export interface AccessLog {
