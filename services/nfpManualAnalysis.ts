@@ -111,6 +111,116 @@ function compactText(parts: Array<string | undefined | null>): string {
     return parts.map(p => (p || '').trim()).filter(Boolean).join(' - ');
 }
 
+export interface GerarPlanoAcaoInput {
+    empresaId: string;
+    debitos: NfpDebito[];
+    certidoes: NfpCertidao[];
+    obrigacoes: NfpObrigacao[];
+    parcelamentos: NfpParcelamento[];
+    acoes: NfpAcaoJudicial[];
+    uid: () => string;
+    hoje?: Date;
+}
+
+/**
+ * Gera o plano de ação a partir dos apontamentos de uma análise, seja ela
+ * preenchida manualmente pelo colaborador ou por varredura automática
+ * (SERPRO/certificado). Mesmas regras de gravidade e prazo nos dois fluxos,
+ * garantindo que o plano ofertado ao cliente não dependa da origem dos dados.
+ */
+export function gerarPlanoAcaoAutomatico(input: GerarPlanoAcaoInput): NfpPlanoAcao[] {
+    const hoje = input.hoje || new Date();
+    const planoAcao: NfpPlanoAcao[] = [];
+    const addPlano = (descricao: string, gravidade: NfpGravidade, esfera: NfpEsfera, prazoDias: number, tipo?: NfpTipoAcao) => {
+        planoAcao.push({
+            id: input.uid(),
+            empresaId: input.empresaId,
+            descricao,
+            gravidade,
+            esfera,
+            prazo: addDaysISO(hoje, prazoDias),
+            status: 'pendente',
+            tipo,
+        });
+    };
+
+    for (const d of input.debitos) {
+        if (d.status === 'quitado' || d.status === 'prescrito') continue;
+        const gravidade = gravidadeDebito(d, hoje);
+        const prazo = gravidade === 'alta' ? 3 : gravidade === 'media' ? 10 : 20;
+        addPlano(
+            compactText(['Regularizar débito', d.orgao, d.descricao, d.valorOriginal > 0 ? d.valorOriginal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : undefined]),
+            gravidade,
+            d.esfera,
+            prazo,
+        );
+    }
+
+    for (const c of input.certidoes) {
+        if (c.status === 'negativa' || c.status === 'nao_consultada') continue;
+        const gravidade = gravidadeCertidao(c.status);
+        const prazo = gravidade === 'alta' ? 3 : gravidade === 'media' ? 7 : 15;
+        addPlano(
+            compactText(['Tratar certidão', c.orgao, c.tipo, c.motivoImpedimento]),
+            gravidade,
+            c.esfera,
+            prazo,
+        );
+    }
+
+    for (const o of input.obrigacoes) {
+        if (o.status === 'entregue' || o.status === 'dispensada' || o.status === 'nao_verificada') continue;
+        const gravidade = gravidadeObrigacao(o.status);
+        const prazo = gravidade === 'alta' ? 2 : gravidade === 'media' ? 7 : 15;
+        addPlano(
+            compactText(['Regularizar obrigação', o.sigla, o.competencia, o.observacao]),
+            gravidade,
+            o.esfera,
+            prazo,
+        );
+    }
+
+    for (const p of input.parcelamentos) {
+        if (p.status === 'quitado' || p.status === 'ativo') continue;
+        addPlano(
+            compactText(['Regularizar parcelamento', p.programa, p.status]),
+            p.status === 'inadimplente' ? 'alta' : 'media',
+            p.esfera,
+            p.status === 'inadimplente' ? 3 : 10,
+        );
+    }
+
+    for (const a of input.acoes) {
+        if (a.status !== 'em_andamento') continue;
+        const gravidade: NfpGravidade = a.tipo === 'tributaria' || Number(a.valorCausa || 0) >= 50000 ? 'media' : 'baixa';
+        addPlano(
+            compactText(['Acompanhar ação judicial', a.numero, a.descricao]),
+            gravidade,
+            'federal',
+            gravidade === 'media' ? 15 : 30,
+            a.tipo,
+        );
+    }
+
+    return planoAcao;
+}
+
+/**
+ * Mescla o plano existente (itens criados/editados pelo colaborador) com os
+ * itens gerados automaticamente, sem duplicar pela descrição normalizada.
+ */
+export function mesclarPlanoAcao(existentes: NfpPlanoAcao[], gerados: NfpPlanoAcao[]): NfpPlanoAcao[] {
+    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+    const vistos = new Set(existentes.map(p => norm(p.descricao)));
+    const novos = gerados.filter(p => {
+        const key = norm(p.descricao);
+        if (vistos.has(key)) return false;
+        vistos.add(key);
+        return true;
+    });
+    return [...existentes, ...novos];
+}
+
 export function criarAnaliseManual(input: CriarAnaliseManualInput): NfpAnaliseEmpresa {
     const hoje = input.hoje || new Date();
 
@@ -176,77 +286,16 @@ export function criarAnaliseManual(input: CriarAnaliseManualInput): NfpAnaliseEm
         valorCausa: Number(a.valorCausa || 0) || undefined,
     }));
 
-    const planoAcao: NfpPlanoAcao[] = [];
-    const addPlano = (descricao: string, gravidade: NfpGravidade, esfera: NfpEsfera, prazoDias: number, tipo?: NfpTipoAcao) => {
-        planoAcao.push({
-            id: input.uid(),
-            empresaId: input.activeEmpresaId,
-            descricao,
-            gravidade,
-            esfera,
-            prazo: addDaysISO(hoje, prazoDias),
-            status: 'pendente',
-            tipo,
-        });
-    };
-
-    for (const d of debitos) {
-        if (d.status === 'quitado' || d.status === 'prescrito') continue;
-        const gravidade = gravidadeDebito(d, hoje);
-        const prazo = gravidade === 'alta' ? 3 : gravidade === 'media' ? 10 : 20;
-        addPlano(
-            compactText(['Regularizar débito', d.orgao, d.descricao, d.valorOriginal > 0 ? d.valorOriginal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : undefined]),
-            gravidade,
-            d.esfera,
-            prazo,
-        );
-    }
-
-    for (const c of certidoes) {
-        if (c.status === 'negativa') continue;
-        const gravidade = gravidadeCertidao(c.status);
-        const prazo = gravidade === 'alta' ? 3 : gravidade === 'media' ? 7 : 15;
-        addPlano(
-            compactText(['Tratar certidão', c.orgao, c.tipo, c.motivoImpedimento]),
-            gravidade,
-            c.esfera,
-            prazo,
-        );
-    }
-
-    for (const o of obrigacoes) {
-        if (o.status === 'entregue' || o.status === 'dispensada') continue;
-        const gravidade = gravidadeObrigacao(o.status);
-        const prazo = gravidade === 'alta' ? 2 : gravidade === 'media' ? 7 : 15;
-        addPlano(
-            compactText(['Regularizar obrigação', o.sigla, o.competencia, o.observacao]),
-            gravidade,
-            o.esfera,
-            prazo,
-        );
-    }
-
-    for (const p of parcelamentos) {
-        if (p.status === 'quitado' || p.status === 'ativo') continue;
-        addPlano(
-            compactText(['Regularizar parcelamento', p.programa, p.status]),
-            p.status === 'inadimplente' ? 'alta' : 'media',
-            p.esfera,
-            p.status === 'inadimplente' ? 3 : 10,
-        );
-    }
-
-    for (const a of acoes) {
-        if (a.status !== 'em_andamento') continue;
-        const gravidade: NfpGravidade = a.tipo === 'tributaria' || Number(a.valorCausa || 0) >= 50000 ? 'media' : 'baixa';
-        addPlano(
-            compactText(['Acompanhar ação judicial', a.numero, a.descricao]),
-            gravidade,
-            'federal',
-            gravidade === 'media' ? 15 : 30,
-            a.tipo,
-        );
-    }
+    const planoAcao = gerarPlanoAcaoAutomatico({
+        empresaId: input.activeEmpresaId,
+        debitos,
+        certidoes,
+        obrigacoes,
+        parcelamentos,
+        acoes,
+        uid: input.uid,
+        hoje,
+    });
 
     return {
         ...input.baseAnalise,

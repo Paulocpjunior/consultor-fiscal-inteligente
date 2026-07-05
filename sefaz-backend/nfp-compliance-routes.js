@@ -7,6 +7,7 @@
 import express from 'express';
 import { requireAuth } from './require-admin.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
+import { getCertInfoEmpresa } from './cert-storage.js';
 import {
     consultarSituacaoFiscal,
     consultarDividaAtiva,
@@ -24,7 +25,24 @@ router.use(express.json());
 // Toda rota nfp-compliance consome quota SERPRO (paga). Antes, qualquer
 // colaborador podia passar CNPJ arbitrario (incluindo nao-clientes) e queimar
 // quota sem dono identificado. Agora exige que o CNPJ pertenca a carteira do
-// user (admin segue irrestrito).
+// user (admin segue irrestrito) OU que o prospect tenha fornecido certificado
+// digital proprio (cadastrado em empresas_certificados como prospect_<cnpj>,
+// com CNPJ batendo e dentro da validade) — o cert do cliente e a autorizacao
+// dele pra varredura automatica.
+
+async function prospectComCertificadoValido(cnpj) {
+    try {
+        const info = await getCertInfoEmpresa(`prospect_${cnpj}`);
+        if (!info) return false;
+        const certCnpj = (info.cnpj || '').replace(/\D/g, '');
+        if (!certCnpj || certCnpj !== cnpj) return false;
+        if (info.notAfter && new Date(info.notAfter).getTime() < Date.now()) return false;
+        return true;
+    } catch (err) {
+        console.error('[nfp-compliance-routes] erro ao checar cert de prospect:', err?.message);
+        return false;
+    }
+}
 
 async function validarCnpj(req, res) {
     const cnpj = (req.body.cnpj || '').replace(/\D/g, '');
@@ -34,7 +52,10 @@ async function validarCnpj(req, res) {
     }
     const carteira = await podeAcessarCnpj(req.user, cnpj);
     if (!carteira.ok) {
-        res.status(carteira.status).json({ error: carteira.error });
+        if (await prospectComCertificadoValido(cnpj)) return cnpj;
+        res.status(carteira.status).json({
+            error: `${carteira.error}. Para analisar um prospect, faça o upload do certificado digital fornecido pelo cliente na aba Análise.`,
+        });
         return null;
     }
     return cnpj;

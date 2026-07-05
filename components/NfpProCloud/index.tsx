@@ -24,7 +24,8 @@ import type {
 } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import * as nfpService from '../../services/nfpProCloudService';
-import { criarAnaliseManual } from '../../services/nfpManualAnalysis';
+import { criarAnaliseManual, gerarPlanoAcaoAutomatico, mesclarPlanoAcao } from '../../services/nfpManualAnalysis';
+import { gerarAnaliseIA } from '../../services/nfpAnaliseIA';
 import { auth } from '../../services/firebaseConfig';
 import {
     gerarPerfilTributario,
@@ -108,6 +109,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // Análise tab state
     const [fonteAnalise, setFonteAnalise] = useState<'certificado_escritorio' | 'certificado_cliente' | 'offline'>('certificado_escritorio');
     const [analiseRealLoading, setAnaliseRealLoading] = useState(false);
+    const [analiseIALoading, setAnaliseIALoading] = useState(false);
 
     // Prospect mode state
     const [prospectMode, setProspectMode] = useState(false);
@@ -496,11 +498,23 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 obrigacoesBase: OBRIGACOES_BASE,
                 uid,
             });
+            // Plano de ação com as mesmas regras do fluxo manual — o plano
+            // ofertado ao cliente não depende da origem dos dados.
+            const planoGerado = gerarPlanoAcaoAutomatico({
+                empresaId: activeEmpresaId,
+                debitos: updated.debitos,
+                certidoes: updated.certidoes,
+                obrigacoes: updated.obrigacoes,
+                parcelamentos: updated.parcelamentos,
+                acoes: updated.acoes,
+                uid,
+            });
+            updated.planoAcao = mesclarPlanoAcao(updated.planoAcao || [], planoGerado);
             setAnalise(updated);
             await saveAnalise(updated);
             onShowToast?.(isMock
                 ? 'Análise concluída com DADOS SIMULADOS (SERPRO em modo teste)'
-                : 'Análise real SERPRO concluída com sucesso');
+                : `Varredura automática concluída — ${updated.planoAcao.length} item(ns) no plano de ação`);
             setTab('dashboard');
         } catch (e: any) {
             onShowToast?.('Erro na análise real: ' + (e?.message || 'desconhecido'));
@@ -508,6 +522,26 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             setAnaliseRealLoading(false);
         }
     }, [activeCnpj, activeEmpresaId, activeUf, analise, createEmptyAnalise, currentUser, fonteAnalise, prospectMode, prospectRegime, saveAnalise, taxProfile, onShowToast]);
+
+    const handleGerarAnaliseIA = useCallback(async () => {
+        if (!analise) return;
+        setAnaliseIALoading(true);
+        try {
+            const bloco = await gerarAnaliseIA(analise, {
+                regime: taxProfile ? regimeLabel(taxProfile.regime) : undefined,
+                atividade: prospectData?.cnaePrincipal?.descricao || undefined,
+                geradoPor: currentUser?.name || undefined,
+            });
+            const atualizada = { ...analise, analiseIA: bloco };
+            setAnalise(atualizada);
+            await saveAnalise(atualizada);
+            onShowToast?.('Análise da IA gerada com sucesso');
+        } catch (e: any) {
+            onShowToast?.('Erro ao gerar análise da IA: ' + (e?.message || 'desconhecido'));
+        } finally {
+            setAnaliseIALoading(false);
+        }
+    }, [analise, currentUser, prospectData, saveAnalise, taxProfile, onShowToast]);
 
     const renderAnalise = () => (
         <AnaliseTab
@@ -519,6 +553,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             prospectMode={prospectMode}
             prospectData={prospectData}
             analiseRealLoading={analiseRealLoading}
+            analiseIALoading={analiseIALoading}
             onIniciarAnalise={() => {
                 const nova = createEmptyAnalise();
                 setAnalise(nova);
@@ -527,6 +562,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             }}
             onIniciarAnaliseReal={handleAnaliseReal}
             onGerarAnaliseManual={handleAnaliseManual}
+            onGerarAnaliseIA={handleGerarAnaliseIA}
         />
     );
 
