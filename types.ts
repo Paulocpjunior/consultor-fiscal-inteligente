@@ -2054,6 +2054,16 @@ export interface NfpPlanoAcao {
     tipo?: NfpTipoAcao;
 }
 
+/** Parecer gerado por IA sobre a situação fiscal — mesmo formato nas duas
+ *  formas de trabalho (inclusão manual ou varredura com certificado). */
+export interface NfpAnaliseIA {
+    texto: string;
+    geradoEm: string;
+    geradoPor?: string;
+    /** Fonte dos dados no momento da geração (manual/automática). */
+    fonteDados?: 'certificado_escritorio' | 'certificado_cliente' | 'offline';
+}
+
 export interface NfpAnaliseEmpresa {
     empresaId: string;
     empresaNome: string;
@@ -2067,4 +2077,5 @@ export interface NfpAnaliseEmpresa {
     obrigacoes: NfpObrigacao[];
     acoes: NfpAcaoJudicial[];
     planoAcao: NfpPlanoAcao[];
+    analiseIA?: NfpAnaliseIA;
 }

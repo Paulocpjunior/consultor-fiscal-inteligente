@@ -1,5 +1,5 @@
-import type { NfpAnaliseEmpresa } from '../types';
-import { criarAnaliseManual } from '../services/nfpManualAnalysis';
+import type { NfpAnaliseEmpresa, NfpPlanoAcao } from '../types';
+import { criarAnaliseManual, gerarPlanoAcaoAutomatico, mesclarPlanoAcao } from '../services/nfpManualAnalysis';
 
 function baseAnalise(): NfpAnaliseEmpresa {
     return {
@@ -126,5 +126,75 @@ describe('criarAnaliseManual', () => {
         });
 
         expect(analise.planoAcao).toHaveLength(0);
+    });
+});
+
+describe('gerarPlanoAcaoAutomatico', () => {
+    it('gera plano com as mesmas regras do fluxo manual a partir de dados de varredura', () => {
+        const uid = makeUid();
+        const plano = gerarPlanoAcaoAutomatico({
+            empresaId: 'prospect_12345678000199',
+            hoje: new Date('2026-07-01T12:00:00.000Z'),
+            uid,
+            debitos: [{
+                id: 'd1', empresaId: 'prospect_12345678000199', esfera: 'federal',
+                orgao: 'PGFN', descricao: 'Dívida Ativa 123', valorOriginal: 50000,
+                dataVencimento: '2026-01-15', status: 'aberto',
+            }],
+            certidoes: [
+                {
+                    id: 'c1', empresaId: 'prospect_12345678000199', esfera: 'federal',
+                    orgao: 'RFB/PGFN', tipo: 'CND Federal', status: 'positiva',
+                },
+                {
+                    // não consultada não pode virar item de plano
+                    id: 'c2', empresaId: 'prospect_12345678000199', esfera: 'municipal',
+                    orgao: 'Prefeitura', tipo: 'CND Municipal', status: 'nao_consultada',
+                },
+            ],
+            obrigacoes: [
+                {
+                    id: 'o1', empresaId: 'prospect_12345678000199', esfera: 'federal',
+                    nome: 'DCTFWeb', sigla: 'DCTFWeb', periodicidade: 'mensal', status: 'atrasada',
+                },
+                {
+                    // não verificada não pode virar item de plano
+                    id: 'o2', empresaId: 'prospect_12345678000199', esfera: 'federal',
+                    nome: 'EFD-Contribuições', sigla: 'EFD', periodicidade: 'mensal', status: 'nao_verificada',
+                },
+            ],
+            parcelamentos: [],
+            acoes: [],
+        });
+
+        expect(plano).toHaveLength(3);
+        expect(plano.every(p => p.status === 'pendente')).toBe(true);
+        expect(plano.every(p => p.empresaId === 'prospect_12345678000199')).toBe(true);
+        const descricoes = plano.map(p => p.descricao).join('\n');
+        expect(descricoes).toContain('Regularizar débito - PGFN');
+        expect(descricoes).toContain('Tratar certidão - RFB/PGFN');
+        expect(descricoes).toContain('Regularizar obrigação - DCTFWeb');
+        expect(descricoes).not.toContain('CND Municipal');
+        // débito vencido/alto valor = alta gravidade, prazo +3 dias
+        const debitoItem = plano.find(p => p.descricao.startsWith('Regularizar débito'));
+        expect(debitoItem?.gravidade).toBe('alta');
+        expect(debitoItem?.prazo).toBe('2026-07-04');
+    });
+});
+
+describe('mesclarPlanoAcao', () => {
+    const item = (id: string, descricao: string): NfpPlanoAcao => ({
+        id, empresaId: 'e1', descricao, gravidade: 'media', esfera: 'federal', status: 'pendente',
+    });
+
+    it('preserva itens existentes e adiciona apenas gerados inéditos', () => {
+        const existentes = [item('a', 'Regularizar débito - PGFN')];
+        const gerados = [
+            item('b', 'regularizar débito - pgfn'),      // duplicado (case/acentos)
+            item('c', 'Tratar certidão - RFB'),
+            item('d', 'Tratar certidao - RFB'),           // duplicado do anterior
+        ];
+        const resultado = mesclarPlanoAcao(existentes, gerados);
+        expect(resultado.map(p => p.id)).toEqual(['a', 'c']);
     });
 });

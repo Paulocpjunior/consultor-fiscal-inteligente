@@ -896,6 +896,18 @@ export async function gerarRelatorioPdfNfp(params: {
         });
     }
 
+    // Análise da IA (quando gerada na aba Análise)
+    if (analise.analiseIA?.texto) {
+        pdf.addPage();
+        y = margin;
+        drawPageHeader();
+        sectionTitle('Análise da IA', `Parecer gerado em ${formatDateBR(analise.analiseIA.geradoEm)}${analise.analiseIA.geradoPor ? ` por ${analise.analiseIA.geradoPor}` : ''}.`);
+        for (const bloco of analise.analiseIA.texto.split(/\n{2,}/)) {
+            const texto = bloco.replace(/\s*\n\s*/g, ' ').trim();
+            if (texto) paragraph(texto);
+        }
+    }
+
     // Footer
     const totalPages = pdf.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
