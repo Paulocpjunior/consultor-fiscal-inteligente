@@ -491,8 +491,34 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
         console.error(`[sync-cron-now] exceção em ${emp.cnpj}:`, e.message);
       }
     }
+    // Mesma manifestação automática do cron noturno — sem ela, o admin que
+    // clica "Forçar captura agora" continuava vendo os resumos "Pendente"
+    // até a madrugada. Ciência agora; o procNFe completo vem na captura
+    // seguinte (forçar de novo em ~30min ou aguardar o cron).
+    let manifestacaoAuto = null;
+    try {
+      manifestacaoAuto = await manifestarPendentes({
+        tipo: 'ciencia',
+        limit: 100,
+        dryRun: false,
+        capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'cron-now-admin' },
+      });
+      console.log(`[sync-cron-now] manifestação automática: ${manifestacaoAuto.sucessos}/${manifestacaoAuto.total} ciência(s) aceitas, ${manifestacaoAuto.falhas} falhas`);
+    } catch (e) {
+      console.warn('[sync-cron-now] manifestação automática falhou:', e.message);
+      manifestacaoAuto = { erro: String(e.message || 'desconhecido').slice(0, 200) };
+    }
+
     console.log(`[sync-cron-now] fim — ${sucessos}/${empresas.length} ok, ${totalNovos} novos`);
-    return { totalEmpresas: empresas.length, sucessos, falhas, totalNovosXmls: totalNovos };
+    return {
+      totalEmpresas: empresas.length, sucessos, falhas, totalNovosXmls: totalNovos,
+      manifestacaoAuto: manifestacaoAuto ? {
+        total: manifestacaoAuto.total ?? 0,
+        sucessos: manifestacaoAuto.sucessos ?? 0,
+        falhas: manifestacaoAuto.falhas ?? 0,
+        erro: manifestacaoAuto.erro || null,
+      } : null,
+    };
   });
 });
 
