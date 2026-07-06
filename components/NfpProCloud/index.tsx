@@ -44,6 +44,7 @@ import DebitosTab from './DebitosTab';
 import ObrigacoesTab from './ObrigacoesTab';
 import ParcelamentosTab from './ParcelamentosTab';
 import AcoesTab from './AcoesTab';
+import TrabalhistaTab from './TrabalhistaTab';
 import PlanoAcaoTab from './PlanoAcaoTab';
 import TaxProfileCard from './TaxProfileCard';
 import DashboardTab from './DashboardTab';
@@ -60,7 +61,7 @@ interface Props {
     onShowToast?: (msg: string) => void;
 }
 
-type Tab = 'dashboard' | 'debitos' | 'obrigacoes' | 'certidoes' | 'parcelamentos' | 'acoes' | 'plano' | 'analise';
+type Tab = 'dashboard' | 'debitos' | 'obrigacoes' | 'certidoes' | 'parcelamentos' | 'acoes' | 'trabalhista' | 'plano' | 'analise';
 
 const TABS: { key: Tab; label: string }[] = [
     { key: 'dashboard', label: 'Dashboard' },
@@ -69,11 +70,12 @@ const TABS: { key: Tab; label: string }[] = [
     { key: 'certidoes', label: 'Certidões' },
     { key: 'parcelamentos', label: 'Parcelamentos' },
     { key: 'acoes', label: 'Ações Judiciais' },
+    { key: 'trabalhista', label: 'Trabalhista' },
     { key: 'plano', label: 'Plano de Ação' },
     { key: 'analise', label: 'Análise' },
 ];
 
-const EDITABLE_TABS: Tab[] = ['debitos', 'obrigacoes', 'certidoes', 'parcelamentos', 'acoes', 'plano'];
+const EDITABLE_TABS: Tab[] = ['debitos', 'obrigacoes', 'certidoes', 'parcelamentos', 'acoes', 'trabalhista', 'plano'];
 
 
 
@@ -353,6 +355,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             })),
             acoes: [],
             planoAcao: [],
+            apontamentosTrabalhistas: [],
         };
     }, [activeEmpresaId, activeNome, activeCnpj, currentUser, fonteAnalise, taxProfile]);
 
@@ -480,6 +483,15 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             analise={analise}
             selectedEmpresaId={activeEmpresaId}
             updateAnalise={updateAnalise}
+            saveAnalise={saveAnalise}
+        />
+    );
+
+    const renderTrabalhista = () => analise && (
+        <TrabalhistaTab
+            analise={analise}
+            activeEmpresaId={activeEmpresaId}
+            setAnalise={setAnalise}
             saveAnalise={saveAnalise}
         />
     );
@@ -833,6 +845,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     {tab === 'certidoes' && renderCertidoes()}
                     {tab === 'parcelamentos' && renderParcelamentos()}
                     {tab === 'acoes' && renderAcoes()}
+                    {tab === 'trabalhista' && renderTrabalhista()}
                     {tab === 'plano' && renderPlanoAcao()}
                     {tab === 'analise' && renderAnalise()}
                 </div>

@@ -31,6 +31,8 @@ const DashboardTab: React.FC<Props> = ({ analise, exportingPdf, onExportPdf }) =
     const obrigPend = analise.obrigacoes.filter(o => o.status === 'pendente' || o.status === 'atrasada').length;
     const acoesAtivas = analise.acoes.filter(a => a.status === 'em_andamento').length;
     const planoAlta = analise.planoAcao.filter(p => p.gravidade === 'alta' && p.status !== 'concluida').length;
+    const trabalhistas = analise.apontamentosTrabalhistas || [];
+    const trabPend = trabalhistas.filter(t => t.status !== 'regularizado').length;
 
     return (
         <div>
@@ -75,6 +77,7 @@ const DashboardTab: React.FC<Props> = ({ analise, exportingPdf, onExportPdf }) =
                 <DashCard title="Ações em Andamento" value={String(acoesAtivas)} sub={`de ${analise.acoes.length} totais`} color={acoesAtivas > 0 ? 'var(--warning)' : 'var(--success)'} />
                 <DashCard title="Plano de Ação (Alta)" value={String(planoAlta)} sub={`de ${analise.planoAcao.length} itens`} color={planoAlta > 0 ? 'var(--danger)' : 'var(--success)'} />
                 <DashCard title="Parcelamentos Ativos" value={String(analise.parcelamentos.filter(p => p.status === 'ativo').length)} sub={formatCurrency(analise.parcelamentos.filter(p => p.status === 'ativo').reduce((s, p) => s + p.valorTotal, 0))} color="var(--accent)" />
+                <DashCard title="Apontamentos Trabalhistas" value={String(trabPend)} sub={trabalhistas.length > 0 ? `de ${trabalhistas.length} apurados (Folha × eSocial)` : 'Nenhum apurado'} color={trabPend > 0 ? 'var(--danger)' : 'var(--success)'} />
             </div>
         </div>
     );
