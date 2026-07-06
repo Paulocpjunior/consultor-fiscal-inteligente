@@ -9,14 +9,15 @@ import {
     doc,
     getDoc,
     getDocs,
-    setDoc,
     query,
     limit as fbLimit,
+    runTransaction,
     serverTimestamp,
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { sanitizeForFirestore } from './firestoreSanitize';
+import { mesclarAnaliseComRemota } from './nfpAnaliseMerge';
 import type { User, NfpAnaliseEmpresa, NfpDebito } from '../types';
 
 const COLLECTION = 'nfp_analises';
@@ -50,26 +51,53 @@ export async function analisarEmpresaCompleta(cnpj: string, regime?: string, uf?
 
 /**
  * Salva (ou atualiza) a análise de uma empresa.
- * Retorna o docId utilizado (= empresaId).
+ *
+ * A análise é preenchida por vários colaboradores (departamentos) sobre o
+ * mesmo documento; gravar o estado local direto substituiria os arrays
+ * inteiros e o último a salvar apagaria os lançamentos dos demais. Por isso
+ * o salvamento roda em transação: lê a versão atual, mescla com o estado
+ * local (ver `mesclarAnaliseComRemota`) e grava o resultado.
+ *
+ * `baseline` é o snapshot que a tela carregou do servidor — é o que permite
+ * distinguir "removido de propósito nesta tela" de "lançado por outra pessoa
+ * depois do carregamento".
+ *
+ * Retorna a análise efetivamente gravada (já mesclada), para a tela
+ * atualizar seu estado com os dados dos demais colaboradores.
  */
-export async function salvarAnalise(analise: NfpAnaliseEmpresa, user: User): Promise<string> {
+export async function salvarAnalise(
+    analise: NfpAnaliseEmpresa,
+    user: User,
+    baseline?: NfpAnaliseEmpresa | null,
+): Promise<NfpAnaliseEmpresa> {
     if (!isFirebaseConfigured || !db) throw new Error('Firebase não configurado');
     if (!auth?.currentUser) throw new Error('Usuário não autenticado');
 
+    const uidAtual = auth.currentUser.uid;
     const docRef = doc(db, COLLECTION, analise.empresaId);
-    const payload = sanitizeForFirestore({
-        ...analise,
-        analisadoPor: user.name,
-        analisadoPorUid: auth.currentUser.uid,
-        dataAnalise: new Date().toISOString(),
+
+    const salva = await runTransaction(db, async tx => {
+        const snap = await tx.get(docRef);
+        const remota = snap.exists() ? (snap.data() as NfpAnaliseEmpresa) : null;
+        const mesclada: NfpAnaliseEmpresa = {
+            ...mesclarAnaliseComRemota(analise, remota, baseline),
+            analisadoPor: user.name,
+            dataAnalise: new Date().toISOString(),
+        };
+
+        const payload = sanitizeForFirestore({
+            ...mesclada,
+            analisadoPorUid: uidAtual,
+        });
+        tx.set(docRef, {
+            ...payload,
+            updatedAt: serverTimestamp(),
+        }, { merge: true });
+
+        return mesclada;
     });
 
-    await setDoc(docRef, {
-        ...payload,
-        updatedAt: serverTimestamp(),
-    }, { merge: true });
-
-    return analise.empresaId;
+    return salva;
 }
 
 /**
