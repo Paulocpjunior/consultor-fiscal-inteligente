@@ -15,6 +15,8 @@ interface SharePointLastSync {
     totalNovos?: number;
     totalDup?: number;
     totalErros?: number;
+    empresasComConfigIncompleta?: number;
+    erroFatal?: string | null;
     timestamp?: { _seconds: number };
 }
 
@@ -35,16 +37,35 @@ const SharePointAutoSyncStatusLine: React.FC<{ lastSync: SharePointLastSync | nu
     }
     const ageH = (Date.now() - ts) / 3600_000;
     const fresh = ageH < 48;
+    // Rodou recente ≠ funcionou: um run com erroFatal (proxy fora) ou com
+    // erros por empresa não pode aparecer verde — era assim que a falha do
+    // SharePoint passava despercebida até alguém entrar manualmente na aba.
+    const temErroFatal = !!lastSync.erroFatal;
+    const temErros = (lastSync.totalErros ?? 0) > 0;
+    const cor = temErroFatal ? 'text-red-600 dark:text-red-400'
+        : (!fresh || temErros) ? 'text-amber-600 dark:text-amber-400'
+        : 'text-emerald-600 dark:text-emerald-400';
+    const icone = temErroFatal ? '✗' : (!fresh || temErros) ? '⚠' : '✓';
     return (
         <p className="text-[11px] mt-2 pt-2 border-t border-slate-200 dark:border-slate-700" style={{ color: 'var(--text-muted)' }}>
             Auto-sync diário:
             {' '}
-            <span className={`font-semibold ${fresh ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                {fresh ? '✓' : '⚠'} {new Date(ts).toLocaleString('pt-BR')}
+            <span className={`font-semibold ${cor}`}>
+                {icone} {new Date(ts).toLocaleString('pt-BR')}
             </span>
             {' · '}
             {lastSync.totalNovos ?? 0} novos · {lastSync.totalDup ?? 0} dup · {lastSync.totalErros ?? 0} erros
             {' · comp '}{lastSync.competencia || '—'}
+            {temErroFatal && (
+                <>
+                    {' '}— <span className="text-red-700 dark:text-red-300 font-semibold">FALHOU: {lastSync.erroFatal}</span>
+                </>
+            )}
+            {!temErroFatal && (lastSync.empresasComConfigIncompleta ?? 0) > 0 && (
+                <>
+                    {' '}— <span className="text-amber-700 dark:text-amber-300">{lastSync.empresasComConfigIncompleta} empresa(s) com grupo/pasta não preenchidos (nada sincronizado para elas)</span>
+                </>
+            )}
             {!fresh && (
                 <>
                     {' '}— <span className="text-amber-700 dark:text-amber-300">parado há {Math.floor(ageH / 24)}d. Provável secret drift no Cloud Scheduler do job <code>sharepoint-auto-sync</code> (rotação 01/06 exigia atualização manual).</span>
@@ -336,7 +357,11 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
 // ─── Auto-Sync Config Panel ─────────────────────────────────────────────────
 
 interface AutoSyncStatus {
-    lastSync: { competencia: string; totalNovos: number; totalDup: number; totalErros: number; timestamp?: { _seconds: number } } | null;
+    lastSync: {
+        competencia: string; totalNovos: number; totalDup: number; totalErros: number;
+        empresasComConfigIncompleta?: number; erroFatal?: string | null;
+        timestamp?: { _seconds: number };
+    } | null;
     empresasAutoSync: { id: string; nome: string; cnpj: string; grupo: string; empresaPasta: string }[];
 }
 
@@ -440,7 +465,14 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                     {status?.lastSync && (
                         <div className="text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
                             <p>Última execução: <strong>{lastTs || '-'}</strong> — Competência: <strong>{status.lastSync.competencia}</strong></p>
-                            <p>{status.lastSync.totalNovos} novos, {status.lastSync.totalDup} duplicados, {status.lastSync.totalErros} erros</p>
+                            <p style={{ color: status.lastSync.totalErros > 0 ? 'var(--danger, #ef4444)' : undefined }}>
+                                {status.lastSync.totalNovos} novos, {status.lastSync.totalDup} duplicados, {status.lastSync.totalErros} erros
+                            </p>
+                            {status.lastSync.erroFatal && (
+                                <p className="font-semibold" style={{ color: 'var(--danger, #ef4444)' }}>
+                                    ✗ Última execução FALHOU: {status.lastSync.erroFatal}
+                                </p>
+                            )}
                         </div>
                     )}
 
@@ -449,13 +481,23 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                         <div>
                             <p className="text-[10px] font-bold uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Empresas com auto-sync</p>
                             <div className="space-y-1">
-                                {status.empresasAutoSync.map(e => (
+                                {status.empresasAutoSync.map(e => {
+                                    // Bolinha verde só com grupo E pasta preenchidos —
+                                    // sem eles o sync pula a empresa e nada é baixado.
+                                    const cfgOk = !!(e.grupo || '').trim() && !!(e.empresaPasta || '').trim();
+                                    return (
                                     <div key={e.id} className="flex items-center gap-2 text-xs py-0.5">
-                                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                                        <span className={`w-2 h-2 rounded-full ${cfgOk ? 'bg-emerald-500' : 'bg-red-500'}`} />
                                         <span style={{ color: 'var(--text-primary)' }}>{e.nome}</span>
                                         <span style={{ color: 'var(--text-muted)' }}>({e.grupo}/{e.empresaPasta})</span>
+                                        {!cfgOk && (
+                                            <span className="font-semibold" style={{ color: 'var(--danger, #ef4444)' }}>
+                                                ⚠ grupo/pasta não preenchidos — nada é sincronizado
+                                            </span>
+                                        )}
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

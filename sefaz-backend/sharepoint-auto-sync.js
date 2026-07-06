@@ -338,15 +338,55 @@ async function fetchFromProxy(path, body) {
     return resp.json();
 }
 
+// Health-check do proxy ANTES de iterar as empresas. Sem isso, um proxy fora
+// do ar (ou sem credenciais Graph) vira só um "erros: N" genérico por empresa
+// — ou, pior, um run 0/0/0 verde — e ninguém fica sabendo que a captura do
+// SharePoint parou. O motivo vai pro log como erroFatal e a UI mostra em
+// vermelho.
+async function checarProxySharePoint() {
+    try {
+        const resp = await fetch(`${PROXY_URL}/api/sharepoint/health`, {
+            headers: PROXY_TOKEN ? { Authorization: `Bearer ${PROXY_TOKEN}` } : {},
+        });
+        if (!resp.ok) {
+            return { ok: false, motivo: `Proxy SharePoint respondeu HTTP ${resp.status} no /health` };
+        }
+        const d = await resp.json().catch(() => ({}));
+        if (!d.configured) {
+            return { ok: false, motivo: 'Proxy SharePoint sem credenciais Graph (GRAPH_CLIENT_ID/TENANT/SECRET)' };
+        }
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, motivo: `Proxy SharePoint inacessível: ${e.message}` };
+    }
+}
+
 // ─── Sync logic ─────────────────────────────────────────────────────────────
 
 async function syncEmpresa(db, empresa, competencia) {
     const cfg = empresa.sharePointConfig;
     if (!cfg || !cfg.autoSyncEnabled) return null;
-    if (!cfg.grupo || !cfg.empresaPasta) return null;
+    // Config incompleta NÃO pode ser pulada em silêncio: a empresa aparece na
+    // lista de auto-sync, o run termina 0/0/0 verde e ninguém percebe que
+    // nada foi sincronizado. Devolve resultado com erro pra contar e exibir.
+    if (!cfg.grupo || !cfg.empresaPasta) {
+        return {
+            empresaId: empresa.id,
+            empresaNome: empresa.nome,
+            erro: 'Configuração incompleta: grupo/pasta do SharePoint não preenchidos',
+            configIncompleta: true,
+        };
+    }
 
     const cnpj = onlyDigits(empresa.cnpj);
-    if (!cnpj) return null;
+    if (!cnpj) {
+        return {
+            empresaId: empresa.id,
+            empresaNome: empresa.nome,
+            erro: 'Empresa sem CNPJ válido no cadastro',
+            configIncompleta: true,
+        };
+    }
 
     const [ano, mes] = competencia.split('-');
     const directions = ['SAÍDA', 'ENTRADA'];
@@ -486,6 +526,22 @@ router.post('/auto-sync', async (req, res) => {
             });
         }
 
+        // Proxy fora do ar / sem credenciais → registra a falha no log (a UI
+        // mostra em vermelho) em vez de produzir um run 0/0/0 aparentemente ok.
+        const saude = await checarProxySharePoint();
+        if (!saude.ok) {
+            console.error(`[auto-sync] abortado: ${saude.motivo}`);
+            await db.collection('sharepoint_sync_log').add({
+                competencia,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                empresasProcessadas: 0,
+                totalNovos: 0, totalDup: 0, totalErros: empresas.length,
+                erroFatal: saude.motivo,
+                results: [],
+            }).catch(() => {});
+            return res.status(502).json({ error: saude.motivo, competencia });
+        }
+
         console.log(`[auto-sync] Iniciando sync de ${empresas.length} empresa(s), competencia ${competencia}`);
 
         const results = [];
@@ -505,7 +561,10 @@ router.post('/auto-sync', async (req, res) => {
 
         const totalNovos = results.reduce((s, r) => s + (r.novos || 0), 0);
         const totalDup = results.reduce((s, r) => s + (r.duplicados || 0), 0);
-        const totalErros = results.reduce((s, r) => s + (r.erros || 0), 0);
+        // Empresa que falhou inteira (erro/config incompleta) também conta como
+        // erro — antes só os erros por arquivo entravam e a falha sumia do total.
+        const totalErros = results.reduce((s, r) => s + (r.erros || 0) + (r.erro ? 1 : 0), 0);
+        const empresasComConfigIncompleta = results.filter(r => r.configIncompleta).length;
 
         console.log(`[auto-sync] Concluido: ${totalNovos} novos, ${totalDup} duplicados, ${totalErros} erros`);
 
@@ -515,6 +574,8 @@ router.post('/auto-sync', async (req, res) => {
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
             empresasProcessadas: empresas.length,
             totalNovos, totalDup, totalErros,
+            empresasComConfigIncompleta,
+            erroFatal: null,
             results,
         });
 
@@ -524,6 +585,7 @@ router.post('/auto-sync', async (req, res) => {
             totalNovos,
             totalDup,
             totalErros,
+            empresasComConfigIncompleta,
             results,
         });
     } catch (err) {
@@ -559,10 +621,20 @@ router.post('/config', async (req, res) => {
             return res.status(400).json({ error: 'collection invalida' });
         }
 
+        // Auto-sync ativo com grupo/pasta vazios sincroniza nada em silêncio
+        // (era a causa do run diário 0/0/0 "verde") — rejeita na origem.
+        const grupoCfg = String(sharePointConfig.grupo || '').trim();
+        const pastaCfg = String(sharePointConfig.empresaPasta || '').trim();
+        if (sharePointConfig.autoSyncEnabled && (!grupoCfg || !pastaCfg)) {
+            return res.status(400).json({
+                error: 'Preencha Grupo (pasta) e Empresa (pasta) para ativar o auto-sync.',
+            });
+        }
+
         await fa().firestore().collection(collection).doc(empresaId).update({
             sharePointConfig: {
-                grupo: sharePointConfig.grupo || '',
-                empresaPasta: sharePointConfig.empresaPasta || '',
+                grupo: grupoCfg,
+                empresaPasta: pastaCfg,
                 autoSyncEnabled: Boolean(sharePointConfig.autoSyncEnabled),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 updatedBy: decoded.email || decoded.uid,
