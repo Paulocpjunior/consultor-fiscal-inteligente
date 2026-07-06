@@ -101,7 +101,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         <div>
                             <label className="block text-sm font-medium mb-1" style={{color:"var(--text-muted)"}}>E-mail Corporativo</label>
                             <input 
-                                type="email" 
+                                type="email"
+                                autoComplete="username"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full p-3 rounded-lg focus:outline-none font-normal" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}
@@ -113,7 +114,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         <div>
                             <label className="block text-sm font-medium mb-1" style={{color:"var(--text-muted)"}}>Senha</label>
                             <input 
-                                type="password" 
+                                type="password"
+                                autoComplete={isRegistering ? 'new-password' : 'current-password'}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="w-full p-3 rounded-lg focus:outline-none font-normal" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}

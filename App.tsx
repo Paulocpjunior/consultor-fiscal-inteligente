@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo, Suspense, laz
 import Header from './components/Header';
 import Footer from './components/Footer';
 import LoadingSpinner from './components/LoadingSpinner';
+import Logo from './components/Logo';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
 import { useConfirm } from './components/dialog/DialogProvider';
@@ -92,6 +93,11 @@ const App: React.FC = () => {
 
     // Auth State
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    // Enquanto o Firebase restaura a sessão persistida (onAuthStateChanged é
+    // assíncrono), currentUser ainda é null — sem esta flag a tela de login
+    // piscava, o navegador disparava o autofill de senha nela e o popup ficava
+    // "flutuando" sobre o app depois do auto-login.
+    const [isAuthResolved, setIsAuthResolved] = useState(false);
     const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
     const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
 
@@ -161,6 +167,7 @@ const App: React.FC = () => {
 
             const unsubscribe = authService.subscribeAuthState((user) => {
                 setCurrentUser(user);
+                setIsAuthResolved(true);
                 if (user) {
                     loadSimplesData(user);
                     runInitialSync(user); // fire-and-forget: sync localStorage -> Firestore
@@ -171,6 +178,7 @@ const App: React.FC = () => {
             return () => unsubscribe();
         } catch (e) {
             console.error("Initialization error", e);
+            setIsAuthResolved(true); // não deixa o app preso no splash em caso de erro
         }
     }, []);
 
@@ -579,6 +587,19 @@ const App: React.FC = () => {
         const code = searchType === SearchType.REFORMA_TRIBUTARIA ? reformaQuery : query1;
         return favorites.some(f => f.code === code && f.type === searchType);
     }, [favorites, searchType, query1, reformaQuery]);
+
+    // Splash enquanto a sessão persistida é restaurada: renderizar o LoginScreen
+    // aqui fazia o form piscar e o gerenciador de senhas do navegador abrir o
+    // autofill sobre uma tela que já ia sumir (auto-login sem confirmação).
+    if (!isAuthResolved) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{background:"var(--bg-page)"}}>
+                <Logo className="h-20 w-auto" />
+                <LoadingSpinner />
+                <p className="text-sm" style={{color:"var(--text-muted)"}}>Verificando sessão…</p>
+            </div>
+        );
+    }
 
     if (!currentUser) {
         return (
