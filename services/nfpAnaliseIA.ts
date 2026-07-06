@@ -78,6 +78,28 @@ export function montarPromptAnaliseIA(analise: NfpAnaliseEmpresa, opts: GerarAna
         linhas.push(`- [${a.tipo}] ${a.descricao}${a.numero ? ` — processo ${a.numero}` : ''}${a.valorCausa ? ` — valor da causa ${fmtBRL(a.valorCausa)}` : ''} — status: ${a.status}`);
     }
 
+    const trabalhistas = analise.apontamentosTrabalhistas || [];
+    const tipoTrabLabel: Record<string, string> = {
+        sem_registro: 'funcionário SEM REGISTRO',
+        registro_fora_prazo: 'registro efetivado FORA DO PRAZO',
+        outro: 'outra irregularidade',
+    };
+    const fonteTrabLabel: Record<string, string> = {
+        folha: 'Folha de Pagamentos',
+        esocial: 'eSocial',
+        manual: 'apuração manual',
+    };
+    linhas.push('');
+    linhas.push(`APONTAMENTOS TRABALHISTAS — FOLHA × E-SOCIAL (${trabalhistas.length}):`);
+    if (!trabalhistas.length) linhas.push('- nenhum apontamento trabalhista');
+    for (const t of trabalhistas) {
+        const datas = [
+            t.dataInicioTrabalho ? `início real dos trabalhos em ${t.dataInicioTrabalho}` : null,
+            t.dataRegistro ? `registro em ${t.dataRegistro}` : (t.tipo === 'sem_registro' ? 'sem registro até a data da análise' : null),
+        ].filter(Boolean).join(', ');
+        linhas.push(`- [gravidade ${t.gravidade}] ${t.funcionario || 'funcionário não identificado'}: ${tipoTrabLabel[t.tipo] || t.tipo}${datas ? ` — ${datas}` : ''} — fonte: ${fonteTrabLabel[t.fonte] || t.fonte} — status: ${t.status}${t.observacao ? ` — obs: ${t.observacao}` : ''}`);
+    }
+
     const plano = analise.planoAcao || [];
     linhas.push('');
     linhas.push(`PLANO DE AÇÃO PROPOSTO (${plano.length} itens):`);
@@ -89,7 +111,7 @@ export function montarPromptAnaliseIA(analise: NfpAnaliseEmpresa, opts: GerarAna
     linhas.push('');
     linhas.push('Estruture o parecer em:');
     linhas.push('1. Resumo executivo (2-3 frases sobre a saúde fiscal geral);');
-    linhas.push('2. Pontos críticos (riscos imediatos, ordenados por gravidade, com impacto prático — bloqueio de certidão, exclusão de regime, execução fiscal etc.);');
+    linhas.push('2. Pontos críticos (riscos imediatos, ordenados por gravidade, com impacto prático — bloqueio de certidão, exclusão de regime, execução fiscal, e riscos trabalhistas como autuação por funcionário sem registro, multas do eSocial e passivo trabalhista, quando houver apontamentos);');
     linhas.push('3. Recomendações (conectadas ao plano de ação proposto, com prioridades e próximos passos);');
     linhas.push('4. Oportunidades (parcelamentos, transações tributárias, recuperação de créditos, quando aplicável).');
     linhas.push('Seja objetivo, use linguagem acessível e NÃO invente dados que não estejam listados acima.');

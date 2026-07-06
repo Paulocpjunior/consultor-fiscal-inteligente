@@ -8,6 +8,7 @@
 import type {
     NfpAcaoJudicial,
     NfpAnaliseEmpresa,
+    NfpApontamentoTrabalhista,
     NfpCertidao,
     NfpDebito,
     NfpObrigacao,
@@ -390,6 +391,35 @@ export function montarCamposAcaoPdf(a: NfpAcaoJudicial): PdfField[] {
         pdfField('Status', statusLabel(a.status)),
         pdfField('Data de distribuição', a.dataDistribuicao, formatDateBR),
         pdfField('Observação', a.observacao),
+    ]);
+}
+
+export function montarCamposApontamentoTrabalhistaPdf(t: NfpApontamentoTrabalhista): PdfField[] {
+    const tipoLabel: Record<string, string> = {
+        sem_registro: 'Funcionário sem registro',
+        registro_fora_prazo: 'Registro efetivado fora do prazo',
+        outro: 'Outra irregularidade',
+    };
+    const fonteTrabLabel: Record<string, string> = {
+        folha: 'Folha de Pagamentos',
+        esocial: 'eSocial',
+        manual: 'Apuração manual',
+    };
+    const statusTrabLabel: Record<string, string> = {
+        pendente: 'Pendente',
+        em_regularizacao: 'Em regularização',
+        regularizado: 'Regularizado',
+    };
+    return collectFields([
+        pdfField('Funcionário', t.funcionario),
+        pdfField('CPF', t.cpf),
+        pdfField('Apontamento', tipoLabel[t.tipo] || t.tipo),
+        pdfField('Início real dos trabalhos', t.dataInicioTrabalho, formatDateBR),
+        pdfField('Data do registro', t.tipo === 'sem_registro' ? 'Sem registro' : t.dataRegistro, t.tipo === 'sem_registro' ? undefined : formatDateBR),
+        pdfField('Fonte da apuração', fonteTrabLabel[t.fonte] || t.fonte),
+        pdfField('Gravidade', statusLabel(t.gravidade)),
+        pdfField('Status', statusTrabLabel[t.status] || t.status),
+        pdfField('Observação', t.observacao),
     ]);
 }
 
@@ -874,6 +904,19 @@ export async function gerarRelatorioPdfNfp(params: {
         sectionTitle('Parcelamentos', 'Consolidação dos parcelamentos registrados e respectivos status.');
         analise.parcelamentos.forEach((p, idx) => {
             drawDetailCard(`${idx + 1}. ${p.programa || 'Parcelamento registrado'}`, montarCamposParcelamentoPdf(p), statusColor(p.status));
+        });
+    }
+
+    // Apontamentos trabalhistas (Folha × eSocial)
+    const apontamentosTrabalhistas = analise.apontamentosTrabalhistas || [];
+    if (apontamentosTrabalhistas.length > 0) {
+        pdf.addPage();
+        y = margin;
+        drawPageHeader();
+        sectionTitle('Apontamentos trabalhistas (Folha × eSocial)', 'Funcionários sem registro ou com registro efetivado fora do prazo, apurados no confronto entre a Folha de Pagamentos e o eSocial.');
+        apontamentosTrabalhistas.forEach((t, idx) => {
+            const cor = t.status === 'regularizado' ? statusColor('concluida') : statusColor(t.gravidade);
+            drawDetailCard(`${idx + 1}. ${t.funcionario || 'Funcionário não identificado'}`, montarCamposApontamentoTrabalhistaPdf(t), cor);
         });
     }
 

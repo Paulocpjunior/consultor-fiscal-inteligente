@@ -62,6 +62,29 @@ describe('montarPromptAnaliseIA', () => {
         expect(prompt).toContain('Resumo executivo');
     });
 
+    it('inclui os apontamentos trabalhistas (Folha × eSocial) no prompt', () => {
+        const analise = analiseBase('offline');
+        analise.apontamentosTrabalhistas = [
+            {
+                id: 't1', empresaId: analise.empresaId, funcionario: 'João da Silva',
+                tipo: 'sem_registro', dataInicioTrabalho: '2026-03-01',
+                fonte: 'folha', gravidade: 'alta', status: 'pendente',
+            },
+            {
+                id: 't2', empresaId: analise.empresaId, funcionario: 'Maria Souza',
+                tipo: 'registro_fora_prazo', dataInicioTrabalho: '2026-02-01', dataRegistro: '2026-04-15',
+                fonte: 'esocial', gravidade: 'media', status: 'em_regularizacao',
+            },
+        ];
+
+        const prompt = montarPromptAnaliseIA(analise);
+        expect(prompt).toContain('APONTAMENTOS TRABALHISTAS — FOLHA × E-SOCIAL (2)');
+        expect(prompt).toContain('João da Silva: funcionário SEM REGISTRO');
+        expect(prompt).toContain('sem registro até a data da análise');
+        expect(prompt).toContain('Maria Souza: registro efetivado FORA DO PRAZO');
+        expect(prompt).toContain('registro em 2026-04-15');
+    });
+
     it('gera o mesmo formato de prompt para varredura com certificado do cliente', () => {
         const manual = montarPromptAnaliseIA(analiseBase('offline'));
         const automatica = montarPromptAnaliseIA(analiseBase('certificado_cliente'));

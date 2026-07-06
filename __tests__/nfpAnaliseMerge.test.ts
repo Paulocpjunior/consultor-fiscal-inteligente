@@ -169,6 +169,26 @@ describe('mesclarAnaliseComRemota', () => {
         expect(merged.planoAcao).toHaveLength(1);
     });
 
+    it('mescla apontamentos trabalhistas de departamentos diferentes sem perder lançamentos', () => {
+        const apontamento = (id: string, funcionario: string) => ({
+            id, empresaId: EMPRESA, funcionario, tipo: 'sem_registro' as const,
+            fonte: 'folha' as const, gravidade: 'alta' as const, status: 'pendente' as const,
+        });
+        const baseline = baseAnalise();
+        const local = baseAnalise({ apontamentosTrabalhistas: [apontamento('t1', 'João')] });
+        const remota = baseAnalise({ apontamentosTrabalhistas: [apontamento('t2', 'Maria')] });
+
+        const merged = mesclarAnaliseComRemota(local, remota, baseline);
+        expect((merged.apontamentosTrabalhistas || []).map(t => t.id).sort()).toEqual(['t1', 't2']);
+    });
+
+    it('trata análises antigas sem o campo apontamentosTrabalhistas', () => {
+        const local = baseAnalise(); // sem o campo
+        const remota = baseAnalise(); // sem o campo
+        const merged = mesclarAnaliseComRemota(local, remota, null);
+        expect(merged.apontamentosTrabalhistas).toEqual([]);
+    });
+
     it('trata listas ausentes no documento remoto (docs antigos) sem quebrar', () => {
         const local = baseAnalise({ debitos: [debito('d1')] });
         const remota = { ...baseAnalise(), debitos: undefined, planoAcao: undefined } as unknown as NfpAnaliseEmpresa;

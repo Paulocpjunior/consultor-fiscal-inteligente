@@ -2054,6 +2054,30 @@ export interface NfpPlanoAcao {
     tipo?: NfpTipoAcao;
 }
 
+/** Tipo de irregularidade trabalhista apurada na folha/eSocial. */
+export type NfpTipoApontamentoTrabalhista = 'sem_registro' | 'registro_fora_prazo' | 'outro';
+export type NfpStatusApontamentoTrabalhista = 'pendente' | 'em_regularizacao' | 'regularizado';
+export type NfpFonteApontamentoTrabalhista = 'folha' | 'esocial' | 'manual';
+
+/** Apontamento trabalhista por funcionário — ex.: funcionário sem registro
+ *  ou registrado depois da data real de início dos trabalhos, identificado
+ *  no confronto Folha de Pagamentos × eSocial. */
+export interface NfpApontamentoTrabalhista {
+    id: string;
+    empresaId: string;
+    funcionario: string;
+    cpf?: string;
+    tipo: NfpTipoApontamentoTrabalhista;
+    /** Data real em que o funcionário começou a trabalhar. */
+    dataInicioTrabalho?: string;
+    /** Data em que o registro foi efetivado (vazio se sem registro). */
+    dataRegistro?: string;
+    fonte: NfpFonteApontamentoTrabalhista;
+    gravidade: NfpGravidade;
+    status: NfpStatusApontamentoTrabalhista;
+    observacao?: string;
+}
+
 /** Parecer gerado por IA sobre a situação fiscal — mesmo formato nas duas
  *  formas de trabalho (inclusão manual ou varredura com certificado). */
 export interface NfpAnaliseIA {
@@ -2077,5 +2101,7 @@ export interface NfpAnaliseEmpresa {
     obrigacoes: NfpObrigacao[];
     acoes: NfpAcaoJudicial[];
     planoAcao: NfpPlanoAcao[];
+    /** Opcional para compatibilidade com análises salvas antes da seção Trabalhista. */
+    apontamentosTrabalhistas?: NfpApontamentoTrabalhista[];
     analiseIA?: NfpAnaliseIA;
 }

@@ -78,6 +78,10 @@ export function mesclarAnaliseComRemota(
             local.planoAcao, remota.planoAcao, ids(baseline?.planoAcao),
             p => norm(p.descricao),
         ),
+        apontamentosTrabalhistas: mesclarLista(
+            local.apontamentosTrabalhistas, remota.apontamentosTrabalhistas,
+            ids(baseline?.apontamentosTrabalhistas),
+        ),
         analiseIA: local.analiseIA || remota.analiseIA,
     };
 }
