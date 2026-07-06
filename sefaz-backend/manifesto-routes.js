@@ -92,7 +92,10 @@ router.post('/manifest-pending', requireAdmin, async (req, res) => {
 
 router.post('/manifest-cron', authCron, async (req, res) => {
   try {
-    const dryRun = req.body?.dryRun !== false;
+    // Real por default — igual ao auto-manifest do sync-cron. dryRun só com
+    // opt-in explícito; o default antigo (dryRun=true com body vazio) fazia o
+    // scheduler "rodar com sucesso" sem manifestar nada.
+    const dryRun = req.body?.dryRun === true;
     const tipo = req.body?.tipo || 'ciencia';
     const limit = Math.min(parseInt(req.body?.limit || '100'), 500);
     const inicio = Date.now();

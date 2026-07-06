@@ -25,6 +25,19 @@ SA_EMAIL="${SA_EMAIL:-sefaz-capture-sa@consultorfiscalapp.iam.gserviceaccount.co
 SECRET_NAME="${SECRET_NAME:-sefaz-cron-secret}"
 TZ="America/Sao_Paulo"
 
+# ─── CPU sempre alocada no Cloud Run ────────────────────────────────────────
+# Os crons respondem 200 imediato e fazem TODO o trabalho em background
+# (setImmediate). Com CPU throttling (default), o Cloud Run corta a CPU após a
+# resposta e a captura noturna morre no meio sem retry — o attempt-deadline do
+# Scheduler não ajuda porque o 200 já foi devolvido. `--no-cpu-throttling`
+# mantém a CPU alocada entre requisições (incidente de 01/06/2026).
+echo "→ garantindo --no-cpu-throttling no serviço Cloud Run…"
+gcloud run services update consultor-fiscal-inteligente \
+    --no-cpu-throttling \
+    --region="$REGION" --project="$PROJECT_ID" --quiet \
+    && echo "✓ CPU sempre alocada" \
+    || echo "⚠ não foi possível atualizar o serviço (rode manualmente: gcloud run services update consultor-fiscal-inteligente --no-cpu-throttling --region=$REGION)"
+
 # ─── Pega o secret ─────────────────────────────────────────────────────────
 echo "→ lendo secret '$SECRET_NAME' do Secret Manager…"
 CRON_SECRET=$(gcloud secrets versions access latest --secret="$SECRET_NAME" --project="$PROJECT_ID")
@@ -94,11 +107,14 @@ upsert_job \
     "/api/admin/sefaz/sync-cron" \
     "Captura NFe DistDFe (entrada/saída) todas empresas elegíveis"
 
-upsert_job \
-    "nfsesp-cron-noturno" \
-    "0 3 * * 1-5" \
-    "/api/admin/sefaz/nfsesp-cron" \
-    "Captura NFSe SP (tomados + prestados) todas empresas com ccmSp"
+# WS SOAP legado da NFSe SP retorna erro 1102 desde a Reforma 2026 — o job
+# noturno era falha garantida poluindo nfsesp_cron_logs e mascarando falhas
+# reais. O caminho vigente é o portal CSV (nfsesp-portal-cron-noturno abaixo).
+echo "→ removendo job legado nfsesp-cron-noturno (WS 1102, substituído pelo portal CSV)…"
+gcloud scheduler jobs delete "nfsesp-cron-noturno" \
+    --location="$REGION" --project="$PROJECT_ID" --quiet 2>/dev/null \
+    && echo "  ✓ job legado removido" \
+    || echo "  ✓ job legado já não existe"
 
 upsert_job \
     "nfse-nacional-dfe-cron-noturno" \

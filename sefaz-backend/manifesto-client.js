@@ -19,7 +19,20 @@
 import https from 'https';
 import { SignedXml } from 'xml-crypto';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
-import { loadCertificate } from './secret-loader.js';
+import { loadCertificate, extrairPem } from './secret-loader.js';
+
+// Resolve o certificado usado na assinatura XMLDSIG e no mTLS.
+// certOverride = { pfxBuffer, password } (A1 da empresa destinatária, vindo do
+// cert-storage). Sem override, cai no cert do escritório (Secret Manager) —
+// válido SOMENTE quando o destinatário é o próprio escritório: a SEFAZ exige
+// que o CNPJ-base do certificado bata com o <CNPJ> autor do evento (cStat 593).
+async function resolverCert(certOverride) {
+  if (certOverride?.pfxBuffer) {
+    const { pemKey, pemCert } = extrairPem(certOverride.pfxBuffer, certOverride.password);
+    return { pemKey, pemCert, pkcs12: certOverride.pfxBuffer, password: certOverride.password };
+  }
+  return loadCertificate();
+}
 
 // ── Constantes SEFAZ ────────────────────────────────────────────────────────
 const SEFAZ_HOST = 'www.nfe.fazenda.gov.br';
@@ -97,8 +110,8 @@ export function montarInfEvento({ chNFe, cnpjDestinatario, tipo, nSeqEvento = 1,
 // ============================================================================
 // 2) Assina o <infEvento> com XMLDSIG (RSA-SHA1 + Exclusive C14N)
 // ============================================================================
-export async function assinarEvento(infEventoXml, idAttr) {
-  const cert = await loadCertificate();  // { pemCert, pemKey, pkcs12 }
+export async function assinarEvento(infEventoXml, idAttr, certOverride = null) {
+  const cert = await resolverCert(certOverride);  // { pemCert, pemKey, pkcs12, password }
 
   // xml-crypto v6 API
   const sig = new SignedXml({
@@ -130,8 +143,8 @@ export async function assinarEvento(infEventoXml, idAttr) {
 // ============================================================================
 // 3) Envia o lote SOAP pra SEFAZ Nacional
 // ============================================================================
-export async function enviarLoteSefaz(eventosAssinadosXml, idLote = null) {
-  const cert = await loadCertificate();
+export async function enviarLoteSefaz(eventosAssinadosXml, idLote = null, certOverride = null) {
+  const cert = await resolverCert(certOverride);
   const lote = idLote || String(Date.now()).slice(-15);  // máx 15 dígitos
 
   // Envelope envEvento (lote) — pode conter até 20 eventos numa única requisição
@@ -216,18 +229,18 @@ export function parseRetornoLote(soapResponse) {
 // ============================================================================
 // 5) Função pública: orquestra tudo (1 NFe por vez ou lote)
 // ============================================================================
-export async function manifestarNFe({ chNFe, cnpjDestinatario, tipo = 'ciencia', nSeqEvento = 1, xJustificativa = null, dryRun = false }) {
+export async function manifestarNFe({ chNFe, cnpjDestinatario, tipo = 'ciencia', nSeqEvento = 1, xJustificativa = null, dryRun = false, certOverride = null }) {
   // 1) Monta + 2) Assina
   const infEventoXml = montarInfEvento({ chNFe, cnpjDestinatario, tipo, nSeqEvento, xJustificativa });
   const idAttr = `ID${TIPOS_EVENTO[tipo].tpEvento}${chNFe}${String(nSeqEvento).padStart(2, '0')}`;
-  const eventoAssinado = await assinarEvento(infEventoXml, idAttr);
+  const eventoAssinado = await assinarEvento(infEventoXml, idAttr, certOverride);
 
   if (dryRun) {
     return { dryRun: true, eventoAssinado, idAttr, tipo, chNFe };
   }
 
   // 3) Envia
-  const soapResp = await enviarLoteSefaz(eventoAssinado);
+  const soapResp = await enviarLoteSefaz(eventoAssinado, null, certOverride);
 
   // 4) Parseia retorno
   const ret = parseRetornoLote(soapResp);

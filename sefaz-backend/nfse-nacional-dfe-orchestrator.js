@@ -177,6 +177,10 @@ export async function sincronizarEmpresaNfseNacionalDfe({ empresaId, empresaCnpj
             maxNSU = r.maxNSU || maxNSU;
 
             for (const item of lote) {
+                // O cursor NSU avança por cima do lote inteiro: item que falhou
+                // sem o XML bruto registrado seria irrecuperável (não há rota de
+                // reprocessamento consumindo nfse_nacional_dfe_erros ainda).
+                const xmlBrutoItem = item?.xml || item?.xmlGzipBase64 || null;
                 try {
                     const result = await importarDfeNfseNacional({
                         empresaId,
@@ -186,13 +190,22 @@ export async function sincronizarEmpresaNfseNacionalDfe({ empresaId, empresaCnpj
                     });
                     if (result.status === 'novo') novos++;
                     else if (result.status === 'duplicado') duplicados++;
-                    else erros++;
+                    else {
+                        erros++;
+                        await registrarErroNfseNacionalDfe({
+                            empresaId, empresaCnpj: cnpjNum,
+                            motivo: result.motivo || `import retornou status=${result.status}`,
+                            contexto: { nsu: item?.nsu, chave: result.chave || null },
+                            xmlBruto: xmlBrutoItem,
+                        });
+                    }
                 } catch (e) {
                     erros++;
                     await registrarErroNfseNacionalDfe({
                         empresaId, empresaCnpj: cnpjNum,
                         motivo: e.message,
                         contexto: { nsu: item?.nsu },
+                        xmlBruto: xmlBrutoItem,
                     });
                 }
             }
@@ -202,8 +215,12 @@ export async function sincronizarEmpresaNfseNacionalDfe({ empresaId, empresaCnpj
                 ultNSU = r.ultNSU;
             }
 
-            // Acabou: NSU bateu o máximo ou lote veio vazio
-            if (lote.length === 0 || (maxNSU && ultNSU >= maxNSU)) break;
+            // Acabou: NSU bateu o máximo ou lote veio vazio.
+            // Comparação NUMÉRICA — como string, "99" >= "100" é true e o loop
+            // pararia com documentos pendentes se o ADN devolver NSU sem zeros
+            // à esquerda.
+            const nsuNum = (v) => parseInt(String(v || '0').replace(/\D/g, ''), 10) || 0;
+            if (lote.length === 0 || (maxNSU && nsuNum(ultNSU) >= nsuNum(maxNSU))) break;
         }
 
         // Persiste cursor final

@@ -81,8 +81,10 @@ export function applyDocumentosFilters(
         const norm = (s: any) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
         // ── Blobs de CNPJ (reusados por busca E direção) ──────────────────
-        const destCnpjs = [e.destinatario?.cnpj, e.tomador?.cnpj, e.cnpjDest, e.cpfDest].map(norm).join(' ');
-        const emitCnpjs = [e.emitente?.cnpj, e.prestador?.cnpj, e.cnpjEmit].map(norm).join(' ');
+        // Os parsers gravam participante.cnpjCpf; docs SEFAZ têm os campos
+        // planos cnpjEmit/cnpjDest; '.cnpj' cobre payloads legados.
+        const destCnpjs = [e.destinatario?.cnpjCpf, e.destinatario?.cnpj, e.tomador?.cnpjCpf, e.tomador?.cnpj, e.cnpjDest, e.cpfDest].map(norm).join(' ');
+        const emitCnpjs = [e.emitente?.cnpjCpf, e.emitente?.cnpj, e.prestador?.cnpjCpf, e.prestador?.cnpj, e.cnpjEmit].map(norm).join(' ');
         const empresaCnpjN = norm(d.empresaCnpj);
         const cnpjBlob = [empresaCnpjN, destCnpjs, emitCnpjs].join(' ');
 

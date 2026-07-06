@@ -157,7 +157,14 @@ export async function importarDfeNfseNacional({ empresaId, empresaCnpj, item, ca
     }
 
     const db = fa().firestore();
-    const docId = meta.chave;
+    // Evento (cancelamento/substituição) NUNCA pode usar o docId/storagePath da
+    // própria nota: meta.chave do evento é a chNFSe da nota, e um set() com o
+    // mesmo id sobrescrevia tipo/xmlHash do doc e o XML original no Storage —
+    // a nota "sumia" do resumo e o cancelamento nunca virava status.
+    const ehEvento = tipo === 'evento';
+    const docId = ehEvento
+        ? `evt-${meta.chave}-${meta.tpEvento || 'evt'}-${meta.seq || '1'}`.slice(0, 140)
+        : meta.chave;
     const ref = db.collection(COLLECTION).doc(docId);
 
     // Idempotência: se já existe com mesmo hash, é duplicado
@@ -169,8 +176,10 @@ export async function importarDfeNfseNacional({ empresaId, empresaCnpj, item, ca
         }
     }
 
-    // Storage do XML bruto
-    const storagePath = buildStoragePath(empresaId, meta.chave, item.nsu);
+    // Storage do XML bruto (evento em path próprio, sem colidir com a nota)
+    let storagePath = ehEvento
+        ? `${STORAGE_PREFIX}/${empresaId}/${String(meta.chave).slice(0, 60)}-evt-${meta.tpEvento || 'evt'}-${meta.seq || '1'}.xml`
+        : buildStoragePath(empresaId, meta.chave, item.nsu);
     try {
         const bucket = admin.storage().bucket();
         await bucket.file(storagePath).save(xml, {
@@ -178,7 +187,16 @@ export async function importarDfeNfseNacional({ empresaId, empresaCnpj, item, ca
             metadata: { metadata: { empresaId, chave: meta.chave, tipo, nsu: item.nsu } },
         });
     } catch (e) {
+        // Sem o XML no Storage, o doc não pode apontar pra um path fantasma —
+        // o "XML bruto guardado pra reprocessamento" é premissa do parser v1.
         console.warn(`[nfse-nac-dfe importer] falha gravando XML em storage: ${e.message}`);
+        await registrarErroNfseNacionalDfe({
+            empresaId, empresaCnpj,
+            motivo: `Falha gravando XML no Storage: ${e.message}`,
+            contexto: { chave: meta.chave, nsu: item.nsu, tipo },
+            xmlBruto: xml,
+        });
+        storagePath = null;
     }
 
     // Persistência metadados
@@ -198,13 +216,41 @@ export async function importarDfeNfseNacional({ empresaId, empresaCnpj, item, ca
 
     await ref.set(payload, { merge: true });
 
+    // Reflete o evento na nota: anexa ao array eventos e, se for cancelamento
+    // (família 1011xx do padrão nacional: 101101 cancelamento, 101103
+    // cancelamento por substituição), marca status='cancelado'.
+    if (ehEvento) {
+        try {
+            const notaRef = db.collection(COLLECTION).doc(meta.chave);
+            const notaSnap = await notaRef.get();
+            if (notaSnap.exists) {
+                const eventos = notaSnap.data().eventos || [];
+                const jaTem = eventos.some(ev => ev.tpEvento === meta.tpEvento && String(ev.seq || '1') === String(meta.seq || '1'));
+                const update = {};
+                if (!jaTem) {
+                    update.eventos = [...eventos, {
+                        tpEvento: meta.tpEvento || null,
+                        seq: meta.seq || '1',
+                        dhEvento: meta.dh || null,
+                        justificativa: meta.justificativa || null,
+                        docIdEvento: docId,
+                    }];
+                }
+                if (/^1011/.test(String(meta.tpEvento || ''))) update.status = 'cancelado';
+                if (Object.keys(update).length) await notaRef.update(update);
+            }
+        } catch (e) {
+            console.warn(`[nfse-nac-dfe importer] falha refletindo evento na nota ${meta.chave}: ${e.message}`);
+        }
+    }
+
     return { status: 'novo', chave: meta.chave, tipo: meta.tipoDoc };
 }
 
 /**
  * Registra erro no log de captura (similar ao xml-importer SEFAZ).
  */
-export async function registrarErroNfseNacionalDfe({ empresaId, empresaCnpj, motivo, contexto }) {
+export async function registrarErroNfseNacionalDfe({ empresaId, empresaCnpj, motivo, contexto, xmlBruto = null }) {
     try {
         const db = fa().firestore();
         await db.collection('nfse_nacional_dfe_erros').add({
@@ -212,6 +258,10 @@ export async function registrarErroNfseNacionalDfe({ empresaId, empresaCnpj, mot
             empresaCnpj: String(empresaCnpj || '').replace(/\D/g, ''),
             motivo,
             contexto: contexto || null,
+            // Única cópia recuperável quando Storage falhou ou o cursor NSU
+            // avançou por cima do item (limite 1MB/doc do Firestore).
+            xmlBruto: xmlBruto ? String(xmlBruto).slice(0, 800_000) : null,
+            xmlBrutoTruncado: xmlBruto ? String(xmlBruto).length > 800_000 : null,
             registradoEm: admin.firestore.FieldValue.serverTimestamp(),
         });
     } catch (e) {

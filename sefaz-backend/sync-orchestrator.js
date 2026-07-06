@@ -224,7 +224,12 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
       xMotivoFinal = result.xMotivo;
 
       if (result.rateLimited) { rateLimited = true; break; }
-      if (result.cStat === '137') break;
+      if (result.cStat === '137') {
+        // NT DistDFe: mesmo sem documentos (137) a SEFAZ devolve ultNSU — deve
+        // ser armazenado pra não reconsumir o mesmo NSU no próximo disparo.
+        if (result.ultNSU) ultNSU = result.ultNSU;
+        break;
+      }
 
       if (result.cStat === '138' && result.xmls.length > 0) {
         for (const docZip of result.xmls) {
@@ -276,6 +281,11 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
                       cnpjDestinatario: cnpjNum,
                       tipo: 'ciencia',
                       capturadoPor: { ...capturadoPor, motivo: 'auto-pos-import-resNFe' },
+                      empresaId,
+                      // Reusa o A1 que acabou de consultar o DistDFe — mesma
+                      // exigência da SEFAZ: evento assinado pelo cert da raiz
+                      // CNPJ do destinatário (cert do escritório dá cStat 593).
+                      certOverride,
                     });
                   } catch (mfErr) {
                     console.warn(`[auto-manifestar] ${r.chave} falhou:`, mfErr.message);
@@ -299,6 +309,16 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
               erros++;
               documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'erro-import', motivo: r.motivo || JSON.stringify(r).slice(0, 200) });
               console.warn('[orchestrator] import retornou erro:', r);
+              // O cursor NSU avança mesmo com erro na página — sem gravar o
+              // XML bruto aqui, o documento fica irrecuperável (janela SEFAZ
+              // ~90 dias, só via resetNSU manual).
+              await registrarErroSefaz({
+                empresaId, empresaCnpj: cnpjNum,
+                motivo: r.motivo || 'import retornou erro',
+                contexto: { nsu: docZip.nsu, schema: docZip.schema, chave },
+                xmlBruto: docZip.xml,
+                capturadoPor,
+              });
             }
           } catch (e) {
             erros++;
@@ -307,6 +327,7 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
             await registrarErroSefaz({
               empresaId, empresaCnpj: cnpjNum,
               motivo: e.message, contexto: { nsu: docZip.nsu, schema: docZip.schema, chave },
+              xmlBruto: docZip.xml,
               capturadoPor,
             });
           }

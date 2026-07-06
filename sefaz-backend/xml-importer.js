@@ -470,7 +470,12 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   try {
     existing = await docRef.get();
   } catch (e) {
+    // Sem saber se o doc existe, seguir como "novo" é destrutivo: um resNFe
+    // reprocessado faria set() sem merge por cima de uma NFe completa e ainda
+    // sobrescreveria o procNFe no Storage (mesmo storagePath). Aborta — o
+    // chamador registra em xml_erros com o XML bruto e o doc volta na próxima.
     console.warn('[xml-importer] erro lendo doc existente:', e.message);
+    return { status: 'erro', chave: meta.chave, motivo: `Falha transitória lendo doc existente: ${e.message}` };
   }
 
   const existingData = existing?.exists ? existing.data() : null;
@@ -609,7 +614,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   };
 }
 
-export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor }) {
+export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor, xmlBruto = null }) {
   try {
     const db = fa().firestore();
     await db.collection('xml_erros').add({
@@ -618,6 +623,11 @@ export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, conte
       origem: 'sefaz',
       motivo,
       contexto: contexto || null,
+      // XML bruto do docZip que falhou: única cópia recuperável do documento,
+      // já que o cursor NSU avança mesmo com erro na página (janela SEFAZ ~90
+      // dias). Truncado pra caber no limite de 1MB/doc do Firestore.
+      xmlBruto: xmlBruto ? String(xmlBruto).slice(0, 800_000) : null,
+      xmlBrutoTruncado: xmlBruto ? String(xmlBruto).length > 800_000 : null,
       capturadoPor: capturadoPor || null,
       createdAt: fa().firestore.FieldValue.serverTimestamp(),
       createdBy: capturadoPor?.uid || null,

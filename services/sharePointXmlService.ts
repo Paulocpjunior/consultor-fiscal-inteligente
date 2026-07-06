@@ -19,6 +19,7 @@ export interface SharePointSyncResult {
     found: number;
     downloaded: number;
     errors: number;
+    errorDetails?: { file?: string; id?: string; error?: string }[];
     files: { name: string; content?: string; error?: string }[];
 }
 
@@ -83,7 +84,16 @@ export async function syncSharePointFolder(folderPath: string): Promise<SharePoi
         const err = await resp.json().catch(() => ({}));
         throw new Error(err.error || `Erro no sync (${resp.status})`);
     }
-    return resp.json();
+    const data = await resp.json();
+    // O proxy devolve errors como ARRAY de {file,id,error}; a UI espera número.
+    // Renderizar o array direto quebrava o React ("Objects are not valid as a
+    // React child") justamente quando havia falha de download pra mostrar.
+    const rawErrors = data?.errors;
+    return {
+        ...data,
+        errors: Array.isArray(rawErrors) ? rawErrors.length : (Number(rawErrors) || 0),
+        errorDetails: Array.isArray(rawErrors) ? rawErrors : undefined,
+    };
 }
 
 export function buildFolderPath(

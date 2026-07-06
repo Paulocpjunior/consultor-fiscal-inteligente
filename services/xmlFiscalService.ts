@@ -348,19 +348,30 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             // permission-denied: doc nao existe OU pertence a outro usuario.
             // Continua como se fosse novo.
         }
+        // Upgrade resumo→completa: a captura SEFAZ grava primeiro o resNFe
+        // (resumo ~531 bytes, sem itens/valor). Se o contador importa o XML
+        // completo manualmente, rejeitar como 'duplicado' descartava itens e
+        // totais pra sempre (mesmo bug já corrigido no xml-importer do backend).
+        let eventosPreservados: any[] | undefined;
         if (existing && existing.exists()) {
-            await registrarCaptura({
-                chave,
-                empresaId: empresa.id,
-                origem,
-                status: 'duplicado',
-                fileName,
-                tamanhoBytes: file.size,
-                user,
-                mensagem: 'Documento já importado anteriormente.',
-                documentoId: docId,
-            });
-            return { status: 'duplicado', existingId: docId, chave };
+            const exData = existing.data() as any;
+            const exResumo = /^res(NFe|NFCe)/.test(String(exData?.schema || '')) || exData?.temItens === false;
+            const exStub = exData?.eventosBeforeNFe === true;
+            if (!exResumo && !exStub) {
+                await registrarCaptura({
+                    chave,
+                    empresaId: empresa.id,
+                    origem,
+                    status: 'duplicado',
+                    fileName,
+                    tamanhoBytes: file.size,
+                    user,
+                    mensagem: 'Documento já importado anteriormente.',
+                    documentoId: docId,
+                });
+                return { status: 'duplicado', existingId: docId, chave };
+            }
+            eventosPreservados = exData?.eventos || undefined;
         }
 
         const upload = await uploadXml(empresa.id, chave, xmlText, fileName);
@@ -381,6 +392,7 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             storagePath: upload.storagePath,
             storageUrl: upload.storageUrl,
         });
+        if (eventosPreservados) (documento as any).eventos = eventosPreservados;
 
         try {
             await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, docId), sanitize(documento));
@@ -652,17 +664,50 @@ export async function getDocumentosByCnpjPeriodo(
     return results;
 }
 
+// O frontend grava 'timestamp'; o backend SEFAZ (xml-importer) grava
+// 'createdAt' (serverTimestamp). orderBy(campo) EXCLUI docs sem o campo —
+// com uma query só, todos os erros/capturas registrados pela captura SEFAZ
+// ficavam invisíveis na tela "Erros & Logs". Pra master, consulta as duas
+// ordenações e mescla; a data efetiva é timestamp || createdAt.
+function toMillis(v: any): number {
+    if (!v) return 0;
+    if (typeof v?.toMillis === 'function') return v.toMillis();
+    if (typeof v?.seconds === 'number') return v.seconds * 1000;
+    const t = typeof v === 'number' ? v : Date.parse(v);
+    return Number.isFinite(t) ? t : 0;
+}
+
+async function listComBackendMerge<T>(colName: string, user: User, max: number, escopoUsuario: boolean): Promise<T[]> {
+    const uid = auth?.currentUser?.uid ?? user.id;
+    const porCampo = async (campo: 'timestamp' | 'createdAt') => {
+        const constraints: QueryConstraint[] = [];
+        if (escopoUsuario && uid) constraints.push(where('usuarioId', '==', uid));
+        constraints.push(orderBy(campo, 'desc'));
+        constraints.push(fbLimit(max));
+        const snap = await getDocs(query(collection(db!, colName), ...constraints));
+        return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+    };
+    const [porTimestamp, porCreatedAt] = await Promise.all([
+        porCampo('timestamp').catch(() => [] as any[]),
+        // Docs do backend não têm usuarioId — a mescla de createdAt só se
+        // aplica ao master (sem where), onde a query simples dispensa índice.
+        escopoUsuario ? Promise.resolve([] as any[]) : porCampo('createdAt').catch(() => [] as any[]),
+    ]);
+    const vistos = new Set<string>();
+    const todos = [...porTimestamp, ...porCreatedAt].filter(d => {
+        if (vistos.has(d.id)) return false;
+        vistos.add(d.id);
+        return true;
+    });
+    todos.sort((a: any, b: any) => (toMillis(b.timestamp) || toMillis(b.createdAt)) - (toMillis(a.timestamp) || toMillis(a.createdAt)));
+    return todos.slice(0, max) as T[];
+}
+
 export async function listCapturas(user: User | null, max = 200): Promise<XmlCaptura[]> {
     if (!user || !isFirebaseConfigured || !db) return [];
     const isMaster = isMasterUser(user);
-    const uid = auth?.currentUser?.uid;
-    const constraints: QueryConstraint[] = [];
-    if (!isMaster && uid) constraints.push(where('usuarioId', '==', auth?.currentUser?.uid ?? user.id));
-    constraints.push(orderBy('timestamp', 'desc'));
-    constraints.push(fbLimit(max));
     try {
-        const snap = await getDocs(query(collection(db, COLLECTIONS.CAPTURAS), ...constraints));
-        return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as XmlCaptura));
+        return await listComBackendMerge<XmlCaptura>(COLLECTIONS.CAPTURAS, user, max, !isMaster);
     } catch (err: any) {
         console.warn('listCapturas:', err?.message);
         return [];
@@ -672,13 +717,8 @@ export async function listCapturas(user: User | null, max = 200): Promise<XmlCap
 export async function listErros(user: User | null, max = 200): Promise<XmlErro[]> {
     if (!user || !isFirebaseConfigured || !db) return [];
     const isMaster = isMasterUser(user);
-    const constraints: QueryConstraint[] = [];
-    if (!isMaster) constraints.push(where('usuarioId', '==', auth?.currentUser?.uid ?? user.id));
-    constraints.push(orderBy('timestamp', 'desc'));
-    constraints.push(fbLimit(max));
     try {
-        const snap = await getDocs(query(collection(db, COLLECTIONS.ERROS), ...constraints));
-        return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as XmlErro));
+        return await listComBackendMerge<XmlErro>(COLLECTIONS.ERROS, user, max, !isMaster);
     } catch (err: any) {
         console.warn('listErros:', err?.message);
         return [];

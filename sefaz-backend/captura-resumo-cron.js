@@ -80,21 +80,24 @@ function fmtMillisBr(ms) {
   return new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 }
 
-// Coleta dados das empresas com procuracaoEcacAtiva=true + estado de captura
+// Coleta dados das empresas monitoradas pela captura + estado de captura
 // + contagem de XMLs capturados nas ultimas 24h.
 async function coletarDados() {
   const db = fa().firestore();
   const agoraMs = Date.now();
   const desdeMs = agoraMs - 24 * 60 * 60 * 1000;
 
-  // 1. Empresas com procuracao ativa
+  // 1. Mesma populacao do cron de captura (sync-routes): toda empresa sem
+  // opt-out explicito (capturarSefaz === false). Filtrar por
+  // procuracaoEcacAtiva observava o universo ERRADO — procuracao nao serve
+  // pro DistDFe (que usa A1 da raiz CNPJ), e empresa capturada via A1 sem a
+  // flag ficava invisivel neste unico alerta diario da cadeia.
   const empresas = [];
   for (const col of ['simples_empresas', 'lucro_empresas']) {
-    const snap = await db.collection(col)
-      .where('procuracaoEcacAtiva', '==', true)
-      .get();
+    const snap = await db.collection(col).get();
     snap.forEach(doc => {
       const d = doc.data() || {};
+      if (d.capturarSefaz === false) return; // opt-out explicito
       const cnpj = (d.cnpj || '').replace(/\D/g, '');
       if (cnpj.length !== 14) return;
       if (empresas.some(e => e.cnpj === cnpj)) return; // dedup

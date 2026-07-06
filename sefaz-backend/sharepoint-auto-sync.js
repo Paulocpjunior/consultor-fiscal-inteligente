@@ -403,6 +403,14 @@ async function syncEmpresa(db, empresa, competencia) {
             continue;
         }
 
+        // Downloads que falharam no proxy vinham em syncResult.errors e eram
+        // totalmente ignorados — falha persistente num arquivo ficava invisível.
+        if (Array.isArray(syncResult.errors) && syncResult.errors.length > 0) {
+            summary.erros += syncResult.errors.length;
+            console.warn(`[auto-sync] ${empresa.nome} ${dir}: ${syncResult.errors.length} download(s) falharam:`,
+                syncResult.errors.map(e => e?.file || e?.id || '?').join(', '));
+        }
+
         if (!syncResult.files || syncResult.files.length === 0) continue;
         summary.total += syncResult.files.length;
 
@@ -415,9 +423,20 @@ async function syncEmpresa(db, empresa, competencia) {
 
                 const docId = parsed.chave;
                 const existingDoc = await db.collection('documentos_fiscais').doc(docId).get();
+                let eventosPreservados;
                 if (existingDoc.exists) {
-                    summary.duplicados++;
-                    continue;
+                    // Upgrade resumo→completa: o DistDFe grava primeiro o resNFe
+                    // (531 bytes, sem itens/valor). Se o XML completo chega via
+                    // SharePoint, rejeitar como 'duplicado' descartava itens e
+                    // totais pra sempre (mesmo bug já corrigido no xml-importer).
+                    const exData = existingDoc.data() || {};
+                    const exResumo = /^res(NFe|NFCe)/.test(String(exData.schema || '')) || exData.temItens === false;
+                    const exStub = exData.eventosBeforeNFe === true;
+                    if (!exResumo && !exStub) {
+                        summary.duplicados++;
+                        continue;
+                    }
+                    eventosPreservados = exData.eventos || undefined;
                 }
 
                 const xmlHash = sha256Hex(file.content);
@@ -444,6 +463,7 @@ async function syncEmpresa(db, empresa, competencia) {
                     destinatario: parsed.destinatario,
                     totais: parsed.totais,
                     itens: parsed.itens,
+                    eventos: eventosPreservados,
                     fileName: file.name,
                     tamanhoBytes: file.size || Buffer.byteLength(file.content, 'utf8'),
                     origem: 'sharepoint_auto',
@@ -503,8 +523,14 @@ router.post('/auto-sync', async (req, res) => {
 
         const db = fa().firestore();
         const now = new Date();
-        const competencia = req.body?.competencia ||
-            `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const compAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const compAnterior = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+        // Cron (sem body) varre mês ANTERIOR + atual: XMLs de junho depositados
+        // na pasta 06-XXXX nos primeiros dias de julho eram ignorados pra sempre
+        // quando só a competência corrente era sincronizada.
+        const competencias = req.body?.competencia ? [req.body.competencia] : [compAnterior, compAtual];
+        const competencia = competencias.join(',');
 
         // Read all empresas with auto-sync enabled
         const empresas = [];
@@ -545,17 +571,20 @@ router.post('/auto-sync', async (req, res) => {
         console.log(`[auto-sync] Iniciando sync de ${empresas.length} empresa(s), competencia ${competencia}`);
 
         const results = [];
-        for (const empresa of empresas) {
-            try {
-                const result = await syncEmpresa(db, empresa, competencia);
-                if (result) results.push(result);
-            } catch (err) {
-                console.error(`[auto-sync] erro em ${empresa.nome}:`, err.message);
-                results.push({
-                    empresaId: empresa.id,
-                    empresaNome: empresa.nome,
-                    erro: err.message,
-                });
+        for (const comp of competencias) {
+            for (const empresa of empresas) {
+                try {
+                    const result = await syncEmpresa(db, empresa, comp);
+                    if (result) results.push({ ...result, competencia: comp });
+                } catch (err) {
+                    console.error(`[auto-sync] erro em ${empresa.nome} (${comp}):`, err.message);
+                    results.push({
+                        empresaId: empresa.id,
+                        empresaNome: empresa.nome,
+                        competencia: comp,
+                        erro: err.message,
+                    });
+                }
             }
         }
 
