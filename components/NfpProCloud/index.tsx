@@ -584,6 +584,8 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             prospectData={prospectData}
             analiseRealLoading={analiseRealLoading}
             analiseIALoading={analiseIALoading}
+            exportingPdf={exportingPdf}
+            onExportPdf={exportarRelatorioPdf}
             onIniciarAnalise={() => {
                 const nova = createEmptyAnalise();
                 setAnalise(nova);
