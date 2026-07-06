@@ -846,8 +846,12 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           stateSnap.forEach(doc => {
             stateById.set(doc.id, doc.data().ultimaSync?.toMillis?.() ?? null);
           });
-          for (const id of elegiveis.values()) {
-            const ts = stateById.get(id);
+          // sefaz_state é chaveado por CNPJ (persisteUltNSU usa .doc(cnpjNum)).
+          // O lookup anterior usava o id do cadastro da empresa e NUNCA achava
+          // nada — 100% das elegíveis apareciam "travadas" mesmo com a captura
+          // rodando. Busca por CNPJ, com fallback no id pra docs legados.
+          for (const [cnpj, id] of elegiveis) {
+            const ts = stateById.get(cnpj) ?? stateById.get(id);
             if (!ts || ts < seteDias) travadas++;
           }
         } catch (e) { /* sem state, deixa travadas=0 */ }
@@ -857,17 +861,26 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       }
     }
 
-    async function docsRecentes(tipos) {
+    // Conta docs recentes por fonte. Cada importer grava tipo e data do seu
+    // jeito — a versão anterior consultava tipos que não existem no banco
+    // ('nfe', 'nfceCte', 'nfsesp' vs os reais 'NFe'/'NFCe'/'CTe'/'NFSe') e
+    // sempre num campo só, então o painel mostrava "—" pra tudo:
+    //   - xml-importer (DistDFe):        tipo 'NFe'|'NFCe'|'CTe'|'MDFe', createdAt Timestamp
+    //   - nfse-sp-importer:              tipo 'NFSe',        createdAt string ISO
+    //   - nfse-nacional-dfe-importer:    tipo 'nfseNacional', capturadoEm Timestamp
+    // `specs` = [{ tipo, campo, desde }] com o campo/tipo de valor que a fonte
+    // realmente grava.
+    async function docsRecentes(specs) {
       try {
         let total = 0;
-        for (const tipo of tipos) {
+        for (const { tipo, campo, desde } of specs) {
           const snap = await db.collection('documentos_fiscais')
             .where('tipo', '==', tipo)
-            .where('createdAt', '>=', new Date(seteDias))
+            .where(campo, '>=', desde)
             .count().get().catch(async () => {
               const s = await db.collection('documentos_fiscais')
                 .where('tipo', '==', tipo)
-                .where('createdAt', '>=', new Date(seteDias))
+                .where(campo, '>=', desde)
                 .limit(1000).get();
               return { data: () => ({ count: s.size }) };
             });
@@ -875,6 +888,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
         }
         return total;
       } catch (e) {
+        console.warn('[captura-diagnostico] docsRecentes falhou:', e.message);
         return null;
       }
     }
@@ -890,9 +904,20 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       elegiveisNfeReais(),
       elegiveisNfseSp(),
       elegiveisNfseNacional(),
-      docsRecentes(['nfe', 'nfceCte']),
-      docsRecentes(['nfsesp']),
-      docsRecentes(['nfseNacional']),
+      docsRecentes([
+        { tipo: 'NFe', campo: 'createdAt', desde: new Date(seteDias) },
+        { tipo: 'NFCe', campo: 'createdAt', desde: new Date(seteDias) },
+        { tipo: 'CTe', campo: 'createdAt', desde: new Date(seteDias) },
+        { tipo: 'MDFe', campo: 'createdAt', desde: new Date(seteDias) },
+      ]),
+      // nfse-sp-importer grava createdAt como string ISO — a comparação
+      // lexicográfica com outra string ISO funciona; Date não acharia nada.
+      docsRecentes([
+        { tipo: 'NFSe', campo: 'createdAt', desde: new Date(seteDias).toISOString() },
+      ]),
+      docsRecentes([
+        { tipo: 'nfseNacional', campo: 'capturadoEm', desde: new Date(seteDias) },
+      ]),
     ]);
 
     return res.json({
