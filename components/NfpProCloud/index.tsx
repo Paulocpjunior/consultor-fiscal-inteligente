@@ -4,7 +4,7 @@
  * Abas: Dashboard | Débitos | Obrigações | Certidões | Parcelamentos |
  *       Ações Judiciais | Plano de Ação | Análise
  */
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type {
     User,
     CnpjData,
@@ -24,6 +24,7 @@ import type {
 } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import * as nfpService from '../../services/nfpProCloudService';
+import { mesclarAnaliseComRemota } from '../../services/nfpAnaliseMerge';
 import { criarAnaliseManual, gerarPlanoAcaoAutomatico, mesclarPlanoAcao } from '../../services/nfpManualAnalysis';
 import { gerarAnaliseIA } from '../../services/nfpAnaliseIA';
 import { auth } from '../../services/firebaseConfig';
@@ -102,6 +103,10 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
     const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>('');
     const [analise, setAnalise] = useState<NfpAnaliseEmpresa | null>(null);
+    // Snapshot da análise como veio do servidor — baseline do merge
+    // colaborativo: distingue item removido nesta tela de item lançado por
+    // outro colaborador depois do carregamento.
+    const analiseBaselineRef = useRef<NfpAnaliseEmpresa | null>(null);
     const [loading, setLoading] = useState(false);
     const [taxaSelic, setTaxaSelic] = useState(13.25);
     const [exportingPdf, setExportingPdf] = useState(false);
@@ -128,11 +133,11 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     // Load analysis when empresa changes
     useEffect(() => {
-        if (!selectedEmpresaId) { setAnalise(null); return; }
+        if (!selectedEmpresaId) { setAnalise(null); analiseBaselineRef.current = null; return; }
         setLoading(true);
         nfpService.getAnalise(selectedEmpresaId)
-            .then(a => setAnalise(a))
-            .catch(() => setAnalise(null))
+            .then(a => { setAnalise(a); analiseBaselineRef.current = a; })
+            .catch(() => { setAnalise(null); analiseBaselineRef.current = null; })
             .finally(() => setLoading(false));
     }, [selectedEmpresaId]);
 
@@ -168,6 +173,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         } else {
             setSelectedEmpresaId('');
             setAnalise(null);
+            analiseBaselineRef.current = null;
         }
     }, [prospectMode]);
 
@@ -198,6 +204,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         setProspectError('');
         setProspectData(null);
         setAnalise(null);
+        analiseBaselineRef.current = null;
 
         try {
             const token = await auth?.currentUser?.getIdToken();
@@ -262,6 +269,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             const savedAnalise = await nfpService.getAnalise(`prospect_${cnpj}`).catch(() => null);
             if (savedAnalise) {
                 setAnalise(savedAnalise);
+                analiseBaselineRef.current = savedAnalise;
                 setTab('dashboard');
                 onShowToast?.(`Empresa encontrada. Análise salva carregada para edição.`);
                 return;
@@ -286,7 +294,12 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const saveAnalise = useCallback(async (a: NfpAnaliseEmpresa) => {
         if (!currentUser) return;
         try {
-            await nfpService.salvarAnalise(a, currentUser);
+            // O serviço mescla com a versão do servidor antes de gravar —
+            // lançamentos de outros colaboradores (departamentos) não são
+            // apagados. O retorno é a análise completa já mesclada.
+            const salva = await nfpService.salvarAnalise(a, currentUser, analiseBaselineRef.current);
+            analiseBaselineRef.current = salva;
+            setAnalise(salva);
             onShowToast?.('Análise salva com sucesso');
         } catch (e: any) {
             onShowToast?.('Erro ao salvar: ' + (e?.message || 'desconhecido'));
@@ -369,12 +382,28 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     const renderTaxProfileCard = () => <TaxProfileCard taxProfile={taxProfile} />;
 
+    /**
+     * Recarrega a versão salva no servidor e mescla com o estado local.
+     * Necessário antes de gerar PDF/Análise da IA: outros colaboradores
+     * podem ter lançado débitos/certidões/obrigações depois que esta tela
+     * carregou, e gerar só com o estado local omitiria esses dados.
+     */
+    const refreshAnaliseComRemota = useCallback(async (base: NfpAnaliseEmpresa): Promise<NfpAnaliseEmpresa> => {
+        const remota = await nfpService.getAnalise(base.empresaId).catch(() => null);
+        if (!remota) return base;
+        const completa = mesclarAnaliseComRemota(base, remota, analiseBaselineRef.current);
+        analiseBaselineRef.current = remota;
+        setAnalise(completa);
+        return completa;
+    }, []);
+
     const exportarRelatorioPdf = useCallback(async () => {
         if (!analise) return;
         setExportingPdf(true);
         try {
+            const completa = await refreshAnaliseComRemota(analise);
             const { gerarRelatorioPdfNfp } = await import("../../services/nfpProCloudPdf");
-            const { blob, nomeArquivo } = await gerarRelatorioPdfNfp({ analise, taxaSelic, taxProfile });
+            const { blob, nomeArquivo } = await gerarRelatorioPdfNfp({ analise: completa, taxaSelic, taxProfile });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
@@ -388,7 +417,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         } finally {
             setExportingPdf(false);
         }
-    }, [analise, taxaSelic, taxProfile, onShowToast]);
+    }, [analise, refreshAnaliseComRemota, taxaSelic, taxProfile, onShowToast]);
     const renderDashboard = () => (
         <DashboardTab
             analise={analise}
@@ -527,12 +556,13 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         if (!analise) return;
         setAnaliseIALoading(true);
         try {
-            const bloco = await gerarAnaliseIA(analise, {
+            const completa = await refreshAnaliseComRemota(analise);
+            const bloco = await gerarAnaliseIA(completa, {
                 regime: taxProfile ? regimeLabel(taxProfile.regime) : undefined,
                 atividade: prospectData?.cnaePrincipal?.descricao || undefined,
                 geradoPor: currentUser?.name || undefined,
             });
-            const atualizada = { ...analise, analiseIA: bloco };
+            const atualizada = { ...completa, analiseIA: bloco };
             setAnalise(atualizada);
             await saveAnalise(atualizada);
             onShowToast?.('Análise da IA gerada com sucesso');
@@ -541,7 +571,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         } finally {
             setAnaliseIALoading(false);
         }
-    }, [analise, currentUser, prospectData, saveAnalise, taxProfile, onShowToast]);
+    }, [analise, currentUser, prospectData, refreshAnaliseComRemota, saveAnalise, taxProfile, onShowToast]);
 
     const renderAnalise = () => (
         <AnaliseTab
@@ -554,6 +584,8 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             prospectData={prospectData}
             analiseRealLoading={analiseRealLoading}
             analiseIALoading={analiseIALoading}
+            exportingPdf={exportingPdf}
+            onExportPdf={exportarRelatorioPdf}
             onIniciarAnalise={() => {
                 const nova = createEmptyAnalise();
                 setAnalise(nova);

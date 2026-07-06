@@ -47,17 +47,19 @@ interface Props {
     prospectData: ProspectData | null;
     analiseRealLoading: boolean;
     analiseIALoading: boolean;
+    exportingPdf: boolean;
     onIniciarAnalise: () => void;
     onIniciarAnaliseReal: () => Promise<void>;
     onGerarAnaliseManual: (payload: NfpManualSituacaoFiscalPayload) => void;
     onGerarAnaliseIA: () => Promise<void>;
+    onExportPdf: () => void;
 }
 
 const AnaliseTab: React.FC<Props> = ({
     hasActiveSelection, activeCnpj, analise,
     fonteAnalise, setFonteAnalise,
-    prospectMode, prospectData, analiseRealLoading, analiseIALoading,
-    onIniciarAnalise, onIniciarAnaliseReal, onGerarAnaliseManual, onGerarAnaliseIA,
+    prospectMode, prospectData, analiseRealLoading, analiseIALoading, exportingPdf,
+    onIniciarAnalise, onIniciarAnaliseReal, onGerarAnaliseManual, onGerarAnaliseIA, onExportPdf,
 }) => {
     const canStart = hasActiveSelection;
 
@@ -230,13 +232,22 @@ const AnaliseTab: React.FC<Props> = ({
                 <div style={{ ...cardStyle, marginTop: '1.5rem', borderLeft: '4px solid #9333ea' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
                         <h3 style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '1rem', margin: 0 }}>Análise da IA</h3>
-                        <button
-                            onClick={onGerarAnaliseIA}
-                            disabled={analiseIALoading}
-                            style={{ ...btnStyleSave, opacity: analiseIALoading ? 0.5 : 1 }}
-                        >
-                            {analiseIALoading ? 'Gerando parecer...' : analise.analiseIA ? 'Atualizar Análise da IA' : 'Gerar Análise da IA'}
-                        </button>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button
+                                onClick={onExportPdf}
+                                disabled={exportingPdf}
+                                style={{ ...btnStyle, opacity: exportingPdf ? 0.5 : 1 }}
+                            >
+                                {exportingPdf ? 'Gerando PDF...' : 'Exportar Relatório PDF'}
+                            </button>
+                            <button
+                                onClick={onGerarAnaliseIA}
+                                disabled={analiseIALoading}
+                                style={{ ...btnStyleSave, opacity: analiseIALoading ? 0.5 : 1 }}
+                            >
+                                {analiseIALoading ? 'Gerando parecer...' : analise.analiseIA ? 'Atualizar Análise da IA' : 'Gerar Análise da IA'}
+                            </button>
+                        </div>
                     </div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
                         Parecer gerado sobre os apontamentos desta análise (débitos, certidões, obrigações,
