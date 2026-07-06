@@ -14,6 +14,7 @@ import { loadCertificate } from './secret-loader.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
 import { importarXmlSefaz } from './xml-importer.js';
 import { withCronHeartbeat, listarCronsOrfaos } from './cron-heartbeat.js';
+import { manifestarPendentes } from './manifesto-orchestrator.js';
 import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibility.js';
 import { certA1MetadataValido, selecionarCertA1PorBase } from './cert-base-helper.js';
 import { umaPorRaizPorCiclo } from './raiz-throttle-helper.js';
@@ -159,6 +160,25 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
         });
       }
     }
+    // Manifestação automática (ciência) dos resNFe que ficaram pendentes de
+    // execuções anteriores. Sem isso o resumo fica "Pendente" com R$ 0,00 pra
+    // sempre — a SEFAZ só libera o procNFe completo (valores, itens, data)
+    // depois da manifestação, que era manual (botão no painel admin). Erros
+    // por nota não derrubam o cron; o resumo vai pro log.
+    let manifestacaoAuto = null;
+    try {
+      manifestacaoAuto = await manifestarPendentes({
+        tipo: 'ciencia',
+        limit: 100,
+        dryRun: false,
+        capturadoPor: { uid: 'cron-system', email: 'cron@spassessoriacontabil', fonte: 'cron' },
+      });
+      console.log(`[sync-cron] manifestação automática: ${manifestacaoAuto.sucessos}/${manifestacaoAuto.total} ciência(s) aceitas, ${manifestacaoAuto.falhas} falhas`);
+    } catch (e) {
+      console.warn('[sync-cron] manifestação automática falhou:', e.message);
+      manifestacaoAuto = { erro: String(e.message || 'desconhecido').slice(0, 200) };
+    }
+
     console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);
     // Campos retornados aqui sao MERGED no log (junto com status='sucesso',
     // duracaoMs, finalizadoEm). Bloqueadas por cadastro (sem cert A1/A3 e sem
@@ -170,6 +190,12 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
       sucessos, falhas, totalNovosXmls: totalNovos,
       bloqueadasSemAcesso: empresas._bloqueadasSemAcesso || 0,
       totalA3: empresas._totalA3 || 0,
+      manifestacaoAuto: manifestacaoAuto ? {
+        total: manifestacaoAuto.total ?? 0,
+        sucessos: manifestacaoAuto.sucessos ?? 0,
+        falhas: manifestacaoAuto.falhas ?? 0,
+        erro: manifestacaoAuto.erro || null,
+      } : null,
       errosResumo,
     };
   });
@@ -257,7 +283,6 @@ router.post('/sync-targeted', requireCronAuth, express.json(), async (req, res) 
 
 async function listarEmpresasParaCron() {
   const db = fa().firestore();
-  const limite = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const empresas = [];
   // Collections REAIS:
   //   simples_empresas (services/simplesNacionalService.ts)
@@ -276,10 +301,12 @@ async function listarEmpresasParaCron() {
         if (d.capturarSefaz === false) return; // só pula se admin desativou explicitamente
         const cnpj = (d.cnpj || '').replace(/\D/g, '');
         if (cnpj.length !== 14) return;
-        if (d.ultimoAcessoXml) {
-          const ult = d.ultimoAcessoXml.toMillis ? d.ultimoAcessoXml.toMillis() : new Date(d.ultimoAcessoXml).getTime();
-          if (ult < limite.getTime()) return;
-        }
+        // NÃO pular por ultimoAcessoXml antigo. O filtro de 30 dias parava a
+        // captura em silêncio de qualquer empresa cujos XMLs ninguém abrisse
+        // por um mês — NFs emitidas contra o cliente deixavam de ser trazidas
+        // sem nenhum aviso (incidente da NF 175/Mister Totem contra o próprio
+        // escritório). Captura fiscal precisa ser contínua; desativação só
+        // explícita via capturarSefaz=false.
         empresas.push({
           id: doc.id,
           cnpj,
@@ -778,7 +805,6 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
     // (empresas removidas, A3, etc) com elegibilidade atual.
     async function elegiveisNfeReais() {
       try {
-        const limite30d = agora - 30 * 24 * 60 * 60 * 1000;
         const candidatos = new Map(); // cnpj -> { id, procuracaoEcacAtiva }
         for (const col of ['simples_empresas', 'lucro_empresas']) {
           try {
@@ -788,10 +814,8 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
               if (d.capturarSefaz === false) return;
               const cnpj = (d.cnpj || '').replace(/\D/g, '');
               if (cnpj.length !== 14) return;
-              if (d.ultimoAcessoXml) {
-                const ult = d.ultimoAcessoXml.toMillis?.() ?? new Date(d.ultimoAcessoXml).getTime();
-                if (ult < limite30d) return;
-              }
+              // Sem filtro por ultimoAcessoXml — espelha listarEmpresasParaCron,
+              // que não pula mais empresas por falta de acesso recente.
               if (!candidatos.has(cnpj)) {
                 candidatos.set(cnpj, { id: doc.id, procuracaoEcacAtiva: d.procuracaoEcacAtiva === true });
               }
