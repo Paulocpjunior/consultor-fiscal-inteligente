@@ -16,4 +16,9 @@ export function extrairModeloDebitosMit(apuracaoModelo: any): ModeloDebitosMit;
 export function montarDebitosMit(
     tributosApp: { IRPJ?: number; CSLL?: number; PIS?: number; COFINS?: number } | null | undefined,
     modelo: ModeloDebitosMit | null | undefined,
+    opts?: { apenasFamilias?: string[]; idInicial?: number },
 ): MontagemDebitosMit;
+
+export function maiorIdDebitoMit(debitos: any): number;
+
+export function mesclarDebitosMit(existentes: any, novos: any): Record<string, { ListaDebitos: any[] }>;

@@ -149,6 +149,34 @@ export function contarDebitosMit(debitos) {
     return total;
 }
 
+// Extrai da mensagem de erro do SERPRO os caminhos de campo recusados com
+// "campo não deve ser informado" (ex.: "DadosIniciais.RegimePisCofins").
+export function extrairCamposNaoInformaveis(mensagem) {
+    const out = [];
+    for (const m of String(mensagem || '').matchAll(/([A-Za-z][\w.]*)\s*:\s*campo n[ãa]o deve ser informado/gi)) {
+        out.push(m[1]);
+    }
+    return [...new Set(out)];
+}
+
+// Remove um campo aninhado por caminho pontuado ("DadosIniciais.RegimePisCofins").
+// Retorna true se o campo existia e foi removido.
+export function removerCampoPorCaminho(obj, caminho) {
+    const partes = String(caminho || '').split('.').filter(Boolean);
+    if (partes.length === 0) return false;
+    let alvo = obj;
+    for (let i = 0; i < partes.length - 1; i++) {
+        alvo = alvo?.[partes[i]];
+        if (!alvo || typeof alvo !== 'object') return false;
+    }
+    const ultima = partes[partes.length - 1];
+    if (alvo && typeof alvo === 'object' && Object.prototype.hasOwnProperty.call(alvo, ultima)) {
+        delete alvo[ultima];
+        return true;
+    }
+    return false;
+}
+
 function ensureMitEncerramentoPayload({ dadosApuracaoMit, anoPA, mesPA }) {
     const payload = pickDadosApuracaoMit(dadosApuracaoMit);
     if (!payload) {
@@ -396,20 +424,60 @@ class SerproProvider {
 
     async encerrarApuracaoMit({ empresaCnpj, anoPA, mesPA, dadosApuracaoMit }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
-        const dados = ensureMitEncerramentoPayload({ dadosApuracaoMit, anoPA, mesPA });
-        const r = await invokeIntegraContador({
-            idSistema: 'MIT',
-            idServico: MIT_SERVICOS.ENCERRAR_APURACAO,
-            contribuinteCnpj: cnpj,
-            acao: 'Declarar',
-            dados,
-        });
+        // Deep-copy: o loop abaixo pode REMOVER campos do payload e não deve
+        // mutar o objeto do chamador.
+        const dados = JSON.parse(JSON.stringify(
+            ensureMitEncerramentoPayload({ dadosApuracaoMit, anoPA, mesPA })
+        ));
+
+        // O CONSAPURACAO316 devolve campos que o ENCAPURACAO314 REJEITA
+        // conforme o regime — caso real 55070577000161 · 06/2026: apuração
+        // Lucro Presumido (TributacaoLucro=3) volta com
+        // DadosIniciais.RegimePisCofins, e o encerramento responde 400
+        // [EntradaIncorreta-MIT-MSG_0003] "campo não deve ser informado"
+        // (o regime PIS/COFINS só é informável no Lucro Real). Em vez de
+        // codificar o schema condicional do SERPRO (e errar), removemos
+        // exatamente o(s) campo(s) que ele apontar e retransmitimos —
+        // no máximo 4 rodadas pra nunca virar loop.
+        const camposRemovidos = [];
+        let r = null;
+        for (let tentativa = 0; tentativa < 4; tentativa++) {
+            try {
+                r = await invokeIntegraContador({
+                    idSistema: 'MIT',
+                    idServico: MIT_SERVICOS.ENCERRAR_APURACAO,
+                    contribuinteCnpj: cnpj,
+                    acao: 'Declarar',
+                    dados,
+                });
+                break;
+            } catch (e) {
+                const campos = extrairCamposNaoInformaveis(e?.message);
+                if (campos.length === 0) throw e;
+                let removeuAlgum = false;
+                for (const caminho of campos) {
+                    if (removerCampoPorCaminho(dados, caminho)) {
+                        camposRemovidos.push(caminho);
+                        removeuAlgum = true;
+                    }
+                }
+                if (!removeuAlgum) throw e; // campo apontado não existe no payload — não insistir
+                console.warn(`[encerrarApuracaoMit] SERPRO recusou campo(s) ${campos.join(', ')} — removido(s), retransmitindo (tentativa ${tentativa + 2})`);
+            }
+        }
+        if (!r) {
+            throw new Error(
+                `Encerramento MIT abortado: SERPRO seguiu recusando o payload mesmo após remover ${camposRemovidos.join(', ')}.`
+            );
+        }
+
         const d = safeJsonParse(r.dados) || {};
         return {
             _raw: d,
             idApuracao: d.idApuracao ?? d.IdApuracao ?? null,
             statusEncerramento: d.statusEncerramento || d.status || 'PROCESSANDO',
             protocolo: d.protocoloEncerramento || d.protocolo || '',
+            camposRemovidos: camposRemovidos.length > 0 ? camposRemovidos : undefined,
             fonte: 'serpro',
         };
     }

@@ -65,9 +65,12 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
         ? (['IRPJ', 'CSLL', 'PIS', 'COFINS'] as const).reduce((s, t) => s + (data.tributosApp[t] || 0), 0)
         : 0;
     // Oferece o preenchimento quando o app tem valores e o MIT está sem débitos
-    // (não lido por estar vazio OU lido com total zero). O backend revalida tudo.
-    const mitSemDebitos = !!data && totalApp > 0 && (
-        (!data.mitLido) || (data.resultado ? data.resultado.totalDctfweb === 0 : false)
+    // OU tem família apurada sem débito correspondente (modo complemento —
+    // caso PEC PRONTA: PIS/COFINS lançados, IRPJ/CSLL faltando). Débitos já
+    // lançados são SEMPRE preservados; o backend revalida tudo.
+    const mitPodePreencher = !!data && totalApp > 0 && (
+        (!data.mitLido)
+        || (data.resultado?.divergencias || []).some(d => d.status === 'sem-dctfweb')
     );
 
     const prepararMit = async () => {
@@ -95,9 +98,12 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
         if (!data || !mitProposta?.proposta) return;
         const p = mitProposta.proposta;
         const linhas = p.mapeamento.map(m => `${m.familia} (cód. ${m.codigo}): ${brl(m.valor)}`).join('\n');
+        const preservados = (p.jaDeclarados || []).length > 0
+            ? `\n\nJá lançados no MIT (preservados): ${(p.jaDeclarados || []).map(j => `${j.familia} ${brl(j.valor)}`).join(', ')}`
+            : '';
         if (!confirm(
             `Transmitir o encerramento do MIT ${competencia} de ${empresaNome || empresaCnpj} com os débitos abaixo?\n\n`
-            + `${linhas}\n\nTotal: ${brl(p.totalProposto)}\n\n`
+            + `${linhas}\n\nTotal a adicionar: ${brl(p.totalProposto)}${preservados}\n\n`
             + 'Os valores serão declarados à Receita Federal via SERPRO.'
         )) return;
         setMitTransmitindo(true);
@@ -224,15 +230,16 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                         está sem débitos (apuração criada vazia no e-CAC). Fluxo em
                         duas fases: proposta (códigos do mês-modelo × valores do
                         app) → confirmação explícita → transmissão do encerramento. */}
-                    {!loading && !erro && data && mitSemDebitos && (
+                    {!loading && !erro && data && mitPodePreencher && (
                         <div className="mt-4 p-4 rounded-lg border border-violet-200 bg-violet-50 dark:bg-violet-900/20 dark:border-violet-800">
                             <h4 className="font-bold text-sm text-violet-800 dark:text-violet-300">
                                 Preencher MIT com os valores do app
                             </h4>
                             <p className="text-xs text-violet-700 dark:text-violet-300 mt-1">
-                                A apuração MIT de {competencia} está sem débitos. O app pode montar os débitos
-                                com os valores apurados acima, usando os códigos de débito do último mês desta
-                                empresa no MIT, e transmitir o encerramento — com sua confirmação.
+                                Há tributo apurado no app sem débito correspondente no MIT de {competencia}. O app
+                                pode montar os débitos faltantes com os valores acima (códigos copiados do último
+                                mês desta empresa no MIT), <b>preservando os débitos já lançados</b>, e transmitir
+                                o encerramento — com sua confirmação.
                             </p>
 
                             {mitErro && (
@@ -260,7 +267,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                             <tr className="text-left text-violet-700 dark:text-violet-300 border-b border-violet-200 dark:border-violet-800">
                                                 <th className="py-1">Tributo</th>
                                                 <th className="py-1">Código de débito</th>
-                                                <th className="py-1 text-right">Valor a declarar</th>
+                                                <th className="py-1 text-right">Valor a adicionar</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -272,11 +279,17 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                                 </tr>
                                             ))}
                                             <tr>
-                                                <td className="py-1 font-bold" colSpan={2}>Total</td>
+                                                <td className="py-1 font-bold" colSpan={2}>Total a adicionar</td>
                                                 <td className="py-1 text-right font-mono font-bold">{brl(mitProposta.proposta.totalProposto)}</td>
                                             </tr>
                                         </tbody>
                                     </table>
+                                    {(mitProposta.proposta.jaDeclarados || []).length > 0 && (
+                                        <p className="text-[10px] text-violet-700 dark:text-violet-300 mt-1">
+                                            Já lançados no MIT e <b>preservados sem alteração</b>: {(mitProposta.proposta.jaDeclarados || [])
+                                                .map(j => `${j.familia} ${brl(j.valor)}`).join(' · ')}
+                                        </p>
+                                    )}
                                     <p className="text-[10px] text-violet-600 dark:text-violet-400 mt-1">
                                         Códigos copiados da apuração {mitProposta.proposta.modeloPeriodo || '—'} desta empresa no MIT.
                                         Confira antes de transmitir — os valores serão declarados à Receita Federal.

@@ -91,6 +91,65 @@ describe('SerproProvider MIT — catálogo oficial', () => {
         expect(mockInvokeIntegraContador).not.toHaveBeenCalled();
     });
 
+    it('encerrarApuracaoMit remove campo que o SERPRO recusa ("não deve ser informado") e retransmite', async () => {
+        // Caso real 55070577000161 · 06/2026 (Lucro Presumido): a consulta
+        // devolve DadosIniciais.RegimePisCofins, o encerramento rejeita.
+        mockInvokeIntegraContador
+            .mockRejectedValueOnce(new Error(
+                'SERPRO 400: [EntradaIncorreta-MIT-MSG_0003] - O Json contém dados inválidos - DadosIniciais.RegimePisCofins: campo não deve ser informado.'
+            ))
+            .mockResolvedValueOnce({ dados: { protocoloEncerramento: 'PROTO-RETRY', idApuracao: 700 } });
+
+        const r = await provider.encerrarApuracaoMit({
+            empresaCnpj: '55070577000161',
+            anoPA: 2026,
+            mesPA: 6,
+            dadosApuracaoMit: {
+                PeriodoApuracao: { MesApuracao: 6, AnoApuracao: 2026 },
+                DadosIniciais: { SemMovimento: false, QualificacaoPj: 1, TributacaoLucro: 3, RegimePisCofins: 2 },
+                Debitos: { Irpj: { ListaDebitos: [{ IdDebito: 1, CodigoDebito: '236201', ValorDebito: 100 }] } },
+            },
+        });
+
+        expect(r.protocolo).toBe('PROTO-RETRY');
+        expect(r.camposRemovidos).toEqual(['DadosIniciais.RegimePisCofins']);
+        expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(2);
+        const segundaChamada = mockInvokeIntegraContador.mock.calls[1][0];
+        expect(segundaChamada.dados.DadosIniciais.RegimePisCofins).toBeUndefined();
+        expect(segundaChamada.dados.DadosIniciais.TributacaoLucro).toBe(3); // demais campos intactos
+        expect(segundaChamada.dados.Debitos.Irpj.ListaDebitos).toHaveLength(1);
+    });
+
+    it('encerrarApuracaoMit NÃO insiste em erro sem padrão "não deve ser informado"', async () => {
+        mockInvokeIntegraContador.mockRejectedValueOnce(new Error('SERPRO 500: indisponível'));
+        await expect(provider.encerrarApuracaoMit({
+            empresaCnpj: '55070577000161',
+            anoPA: 2026,
+            mesPA: 6,
+            dadosApuracaoMit: {
+                PeriodoApuracao: { MesApuracao: 6, AnoApuracao: 2026 },
+                DadosIniciais: { SemMovimento: true },
+            },
+        })).rejects.toThrow(/500/);
+        expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(1);
+    });
+
+    it('encerrarApuracaoMit não entra em loop quando o campo apontado não existe no payload', async () => {
+        mockInvokeIntegraContador.mockRejectedValue(new Error(
+            'SERPRO 400: [MIT-MSG_0003] - DadosIniciais.CampoFantasma: campo não deve ser informado.'
+        ));
+        await expect(provider.encerrarApuracaoMit({
+            empresaCnpj: '55070577000161',
+            anoPA: 2026,
+            mesPA: 6,
+            dadosApuracaoMit: {
+                PeriodoApuracao: { MesApuracao: 6, AnoApuracao: 2026 },
+                DadosIniciais: { SemMovimento: true },
+            },
+        })).rejects.toThrow(/CampoFantasma/);
+        expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(1);
+    });
+
     it('encerrarApuracaoMit transmite quando há ao menos um débito real', async () => {
         mockInvokeIntegraContador.mockResolvedValue({
             dados: { protocoloEncerramento: 'PROTO-6', idApuracao: 606 },
