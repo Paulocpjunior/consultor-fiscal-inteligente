@@ -168,6 +168,34 @@ describe('SerproProvider MIT — catálogo oficial', () => {
         expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(1);
     });
 
+    it('transmitir/gerarDarf usam os idServico OFICIAIS do catálogo DCTFWEB (não os chutes antigos)', async () => {
+        // ICGERENCIADOR-052 de 07/07/2026: TRANSDECLARACAO11 (que é do PGDASD),
+        // GERARDOCUMENTOARRECADACAO12 e GERARDARFANDAMENTO não existem no
+        // catálogo DCTFWEB. Oficiais: TRANSDECLARACAO310 / GERARGUIA31 /
+        // GERARGUIAANDAMENTO313 / CONSXMLDECLARACAO38.
+        mockInvokeIntegraContador.mockResolvedValue({ dados: {} });
+
+        await provider.transmitirDeclaracao({ empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6 });
+        expect(mockInvokeIntegraContador).toHaveBeenLastCalledWith(expect.objectContaining({
+            idSistema: 'DCTFWEB', idServico: 'TRANSDECLARACAO310', acao: 'Declarar',
+        }));
+
+        await provider.gerarDarf({ empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6 });
+        expect(mockInvokeIntegraContador).toHaveBeenLastCalledWith(expect.objectContaining({
+            idServico: 'GERARGUIA31', acao: 'Emitir',
+        }));
+
+        await provider.gerarDarf({ empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6, emAndamento: true });
+        expect(mockInvokeIntegraContador).toHaveBeenLastCalledWith(expect.objectContaining({
+            idServico: 'GERARGUIAANDAMENTO313', acao: 'Emitir',
+        }));
+
+        await provider.consultarXmlDeclaracao({ empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6 });
+        expect(mockInvokeIntegraContador).toHaveBeenLastCalledWith(expect.objectContaining({
+            idServico: 'CONSXMLDECLARACAO38', acao: 'Consultar',
+        }));
+    });
+
     it('listarDeclaracoes traduz DCTFWEB-MG10 em _info amigável (aguardando transmissão), sem _erro', async () => {
         // Caso RADIO E TV 06/2026: declaração gerada pelo MIT ainda "Em
         // Andamento" — a consulta completa devolve MG10, que NÃO é erro.
