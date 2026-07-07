@@ -101,9 +101,12 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
         const preservados = (p.jaDeclarados || []).length > 0
             ? `\n\nJá lançados no MIT (preservados): ${(p.jaDeclarados || []).map(j => `${j.familia} ${brl(j.valor)}`).join(', ')}`
             : '';
+        const criacao = p.modo === 'criacao'
+            ? `\n\nA apuração ${competencia} NÃO existe no MIT — será CRIADA e encerrada com os dados iniciais copiados de ${p.modeloPeriodo || 'mês anterior'}.`
+            : '';
         if (!confirm(
             `Transmitir o encerramento do MIT ${competencia} de ${empresaNome || empresaCnpj} com os débitos abaixo?\n\n`
-            + `${linhas}\n\nTotal a adicionar: ${brl(p.totalProposto)}${preservados}\n\n`
+            + `${linhas}\n\nTotal a adicionar: ${brl(p.totalProposto)}${preservados}${criacao}\n\n`
             + 'Os valores serão declarados à Receita Federal via SERPRO.'
         )) return;
         setMitTransmitindo(true);
@@ -262,6 +265,17 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                 </div>
                             ) : mitProposta?.proposta ? (
                                 <div className="mt-3">
+                                    {mitProposta.proposta.modo === 'criacao' && (
+                                        <div className="mb-2 p-2 rounded border border-violet-300 bg-white/60 dark:bg-slate-800/40 text-xs text-violet-800 dark:text-violet-300">
+                                            <b>A apuração {competencia} não existe no MIT — será criada e encerrada agora.</b>{' '}
+                                            Dados iniciais copiados de {mitProposta.proposta.modeloPeriodo || '—'}
+                                            {mitProposta.proposta.dadosIniciaisResumo && (
+                                                <> (qualificação PJ {mitProposta.proposta.dadosIniciaisResumo.qualificacaoPj ?? '—'} ·
+                                                tributação {mitProposta.proposta.dadosIniciaisResumo.tributacaoLucro ?? '—'} ·
+                                                responsável CPF {mitProposta.proposta.dadosIniciaisResumo.cpfResponsavel || '—'})</>
+                                            )}.
+                                        </div>
+                                    )}
                                     <table className="w-full text-xs">
                                         <thead>
                                             <tr className="text-left text-violet-700 dark:text-violet-300 border-b border-violet-200 dark:border-violet-800">

@@ -207,53 +207,60 @@ export async function preencherEncerrarMit({
     }
     const paAlvo = `${anoPA}${String(mesPA).padStart(2, '0')}`;
 
-    // 1. Apuração-ALVO: precisa existir no MIT (criada no e-CAC), com
-    //    DadosIniciais, com movimento e SEM débitos já lançados.
+    // 1. Apuração-ALVO. Se NÃO existir no MIT, entra o modo CRIAÇÃO: o
+    //    ENCAPURACAO314 recebe a apuração completa (DadosIniciais + Debitos),
+    //    então criamos e encerramos numa tacada só — os DadosIniciais
+    //    (qualificação, tributação, responsável) vêm do mês-modelo da própria
+    //    empresa, que é o que o e-CAC reaproveitaria. Elimina a etapa manual
+    //    de "criar a apuração no e-CAC" (pedido do usuário, 07/07/2026 —
+    //    caso RADIO E TV IBIRAPUERA 06/2026).
     const alvo = await provider.consultarApuracaoMit({ empresaCnpj, anoPA, mesPA });
-    if (!alvo?.apuracaoMit) {
-        return { ok: false, etapa: 'alvo', motivo: alvo?.motivo || `Apuração MIT de ${paAlvo} não encontrada.` };
-    }
-    const alvoPayload = pickDadosApuracaoMit(alvo.apuracaoMit);
-    const dadosIniciais = alvoPayload?.DadosIniciais || alvoPayload?.dadosIniciais;
-    if (!alvoPayload || !dadosIniciais) {
-        return { ok: false, etapa: 'alvo', motivo: `Apuração MIT de ${paAlvo} encontrada, mas sem DadosIniciais no retorno do SERPRO.` };
-    }
-    const semMovimento = dadosIniciais.SemMovimento ?? dadosIniciais.semMovimento;
-    if (semMovimento === true || semMovimento === 'true') {
-        return {
-            ok: false, etapa: 'alvo',
-            motivo: `A apuração MIT de ${paAlvo} está marcada como Sem Movimento — não cabe preencher débitos. Encerre-a normalmente.`,
-        };
-    }
-    // Apuração já ENCERRADA (situação 3) exige retificação — fluxo diferente,
-    // fora do escopo do preenchimento automático. Em processamento (4): aguardar.
-    const situacaoAlvo = Number(
-        alvo.apuracaoResumo?.situacao ?? alvo.apuracaoResumo?.situacaoApuracao
-        ?? alvo.apuracaoMit?.situacaoApuracao ?? alvo.apuracaoMit?.situacao ?? NaN
-    );
-    if (situacaoAlvo === 3) {
-        return {
-            ok: false, etapa: 'alvo',
-            motivo: `A apuração MIT de ${paAlvo} já está ENCERRADA. Para alterar débitos, retifique a apuração no e-CAC (MIT) e depois use este fluxo.`,
-        };
-    }
-    if (situacaoAlvo === 4) {
-        return {
-            ok: false, etapa: 'alvo',
-            motivo: `A apuração MIT de ${paAlvo} está com encerramento em processamento no SERPRO — aguarde e atualize.`,
-        };
+    const modoCriacao = !alvo?.apuracaoMit;
+    let alvoPayload = null;
+
+    if (!modoCriacao) {
+        alvoPayload = pickDadosApuracaoMit(alvo.apuracaoMit);
+        const dadosIniciais = alvoPayload?.DadosIniciais || alvoPayload?.dadosIniciais;
+        if (!alvoPayload || !dadosIniciais) {
+            return { ok: false, etapa: 'alvo', motivo: `Apuração MIT de ${paAlvo} encontrada, mas sem DadosIniciais no retorno do SERPRO.` };
+        }
+        const semMovimento = dadosIniciais.SemMovimento ?? dadosIniciais.semMovimento;
+        if (semMovimento === true || semMovimento === 'true') {
+            return {
+                ok: false, etapa: 'alvo',
+                motivo: `A apuração MIT de ${paAlvo} está marcada como Sem Movimento — não cabe preencher débitos. Encerre-a normalmente.`,
+            };
+        }
+        // Apuração já ENCERRADA (situação 3) exige retificação — fluxo diferente,
+        // fora do escopo do preenchimento automático. Em processamento (4): aguardar.
+        const situacaoAlvo = Number(
+            alvo.apuracaoResumo?.situacao ?? alvo.apuracaoResumo?.situacaoApuracao
+            ?? alvo.apuracaoMit?.situacaoApuracao ?? alvo.apuracaoMit?.situacao ?? NaN
+        );
+        if (situacaoAlvo === 3) {
+            return {
+                ok: false, etapa: 'alvo',
+                motivo: `A apuração MIT de ${paAlvo} já está ENCERRADA. Para alterar débitos, retifique a apuração no e-CAC (MIT) e depois use este fluxo.`,
+            };
+        }
+        if (situacaoAlvo === 4) {
+            return {
+                ok: false, etapa: 'alvo',
+                motivo: `A apuração MIT de ${paAlvo} está com encerramento em processamento no SERPRO — aguarde e atualize.`,
+            };
+        }
     }
 
-    // Débitos já lançados NÃO bloqueiam mais: viram modo COMPLEMENTO — as
-    // famílias já declaradas são preservadas intactas e só as FALTANTES (com
-    // valor no app) são adicionadas. Caso real PEC PRONTA 06/2026: MIT com
-    // PIS/COFINS lançados e IRPJ/CSLL "Apurado, não declarado".
-    const debitosExistentes = alvoPayload.Debitos || alvoPayload.debitos || null;
+    // Débitos já lançados NÃO bloqueiam: viram modo COMPLEMENTO — as famílias
+    // já declaradas são preservadas intactas e só as FALTANTES (com valor no
+    // app) são adicionadas. Caso real PEC PRONTA 06/2026: MIT com PIS/COFINS
+    // lançados e IRPJ/CSLL "Apurado, não declarado".
+    const debitosExistentes = modoCriacao ? null : (alvoPayload.Debitos || alvoPayload.debitos || null);
     const debitosJaLancados = contarDebitosMit(debitosExistentes);
-    const normAlvo = normalizarApuracaoMit(alvo.apuracaoMit);
+    const normAlvo = modoCriacao ? null : normalizarApuracaoMit(alvo.apuracaoMit);
     const familiasDeclaradas = ['IRPJ', 'CSLL', 'PIS', 'COFINS']
-        .filter((f) => (normAlvo.lido && normAlvo.tributos[f] > 0));
-    if (debitosJaLancados > 0 && !normAlvo.lido) {
+        .filter((f) => (normAlvo?.lido && normAlvo.tributos[f] > 0));
+    if (debitosJaLancados > 0 && !normAlvo?.lido) {
         return {
             ok: false, etapa: 'alvo',
             motivo: `A apuração MIT de ${paAlvo} tem ${debitosJaLancados} débito(s) num formato que não consegui classificar por tributo — `
@@ -271,7 +278,7 @@ export async function preencherEncerrarMit({
                 : 'Nenhum tributo com valor > 0 na apuração do app — nada a declarar.',
         };
     }
-    const modoComplemento = debitosJaLancados > 0;
+    const modoComplemento = !modoCriacao && debitosJaLancados > 0;
 
     // 2. Apuração-MODELO: última apuração anterior da empresa com débitos.
     //    Tenta o ano corrente; se não houver anterior no ano, tenta o anterior.
@@ -295,6 +302,7 @@ export async function preencherEncerrarMit({
 
     let modelo = null;
     let modeloPeriodo = null;
+    let modeloDadosIniciais = null;
     for (const cand of candidatos.slice(0, 4)) {
         try {
             const det = await provider.consultarApuracaoMitPorId({ empresaCnpj, idApuracao: cand.id });
@@ -302,6 +310,12 @@ export async function preencherEncerrarMit({
             if (m.totalDebitos === 0) continue;
             modelo = m;
             modeloPeriodo = cand.periodo;
+            // No modo criação, os DadosIniciais do mês-modelo viram a base da
+            // nova apuração (qualificação/tributação/responsável são estáveis
+            // mês a mês; campos condicionais que o encerramento recusar são
+            // removidos automaticamente pelo retry do provider).
+            const payloadModelo = pickDadosApuracaoMit(det?.apuracaoMit);
+            modeloDadosIniciais = payloadModelo?.DadosIniciais || payloadModelo?.dadosIniciais || null;
             // Modelo ideal cobre todas as famílias FALTANTES; senão tenta o próximo.
             if (familiasFaltantes.every((f) => m.codigoPorFamilia[f])) break;
         } catch (e) {
@@ -316,6 +330,19 @@ export async function preencherEncerrarMit({
                 + 'a partir do próximo, o preenchimento automático usa esse mês como modelo.',
         };
     }
+    if (modoCriacao) {
+        if (!modeloDadosIniciais) {
+            return {
+                ok: false, etapa: 'modelo',
+                motivo: `A apuração de ${paAlvo} não existe no MIT e o mês-modelo (${modeloPeriodo}) não trouxe DadosIniciais completos `
+                    + 'para criá-la automaticamente. Crie a apuração no e-CAC (DCTFWeb → MIT) e clique em "Atualizar".',
+            };
+        }
+        alvoPayload = {
+            PeriodoApuracao: { MesApuracao: Number(mesPA), AnoApuracao: Number(anoPA) },
+            DadosIniciais: JSON.parse(JSON.stringify(modeloDadosIniciais)),
+        };
+    }
 
     // 3. Monta APENAS os débitos das famílias faltantes (códigos do modelo ×
     //    valores do app). Em modo complemento, a numeração de IdDebito continua
@@ -324,15 +351,24 @@ export async function preencherEncerrarMit({
         apenasFamilias: familiasFaltantes,
         idInicial: maiorIdDebitoMit(debitosExistentes) + 1,
     });
+    const di = alvoPayload.DadosIniciais || {};
     const proposta = {
         pa: paAlvo,
-        modo: modoComplemento ? 'complemento' : 'completo',
+        modo: modoCriacao ? 'criacao' : (modoComplemento ? 'complemento' : 'completo'),
         tributosApp: tributos,
         mapeamento: montagem.mapeamento,
         totalProposto: montagem.totalProposto,
         jaDeclarados: familiasDeclaradas.map((f) => ({ familia: f, valor: normAlvo.tributos[f] })),
         modeloPeriodo,
-        alvoIdApuracao: alvo.idApuracao ?? null,
+        alvoIdApuracao: alvo?.idApuracao ?? null,
+        // Resumo dos DadosIniciais que serão usados (conferência na UI —
+        // essencial no modo criação, onde a apuração inteira nasce daqui).
+        dadosIniciaisResumo: {
+            qualificacaoPj: di.QualificacaoPj ?? di.qualificacaoPj ?? null,
+            tributacaoLucro: di.TributacaoLucro ?? di.tributacaoLucro ?? null,
+            cpfResponsavel: di.ResponsavelApuracao?.CpfResponsavel
+                ?? di.responsavelApuracao?.cpfResponsavel ?? null,
+        },
     };
     if (!montagem.ok) {
         return { ok: false, etapa: 'montagem', motivo: montagem.erros.join(' '), proposta };

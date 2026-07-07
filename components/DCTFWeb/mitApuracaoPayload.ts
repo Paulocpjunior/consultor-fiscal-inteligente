@@ -15,6 +15,7 @@
 
 export function pickDadosApuracaoMit(input: any): any | null {
     if (!input || typeof input !== 'object') return null;
+    if (Array.isArray(input)) return pickDadosApuracaoMit(input[0]);
     if (input.PeriodoApuracao) return input;
     const direct = input.dadosApuracaoMit ?? input.dadosApuracaoMIT ?? input.DadosApuracaoMit ?? input.DadosApuracaoMIT;
     if (Array.isArray(direct)) return direct[0] || null;

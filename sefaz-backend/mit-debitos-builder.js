@@ -71,8 +71,9 @@ function familiaPorCodigo(codigo) {
  */
 export function extrairModeloDebitosMit(apuracaoModelo) {
     const out = { codigoPorFamilia: {}, totalDebitos: 0 };
-    const payload = apuracaoModelo && typeof apuracaoModelo === 'object' ? apuracaoModelo : null;
-    if (!payload) return out;
+    let payload = apuracaoModelo && typeof apuracaoModelo === 'object' ? apuracaoModelo : null;
+    if (Array.isArray(payload)) payload = payload[0] || null; // shape em array (CONSAPURACAO316)
+    if (!payload || typeof payload !== 'object') return out;
 
     // Acha o bloco Debitos em shapes conhecidos (direto ou aninhado).
     const bases = [
