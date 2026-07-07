@@ -19,6 +19,7 @@ import admin from 'firebase-admin';
 import { DOMParser } from '@xmldom/xmldom';
 import crypto from 'crypto';
 import { validarXmlSeguro, XmlInseguroError } from './xml-seguranca.js';
+import { competenciasAutoSync } from './sharepoint-competencia-helper.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -363,7 +364,7 @@ async function checarProxySharePoint() {
 
 // ─── Sync logic ─────────────────────────────────────────────────────────────
 
-async function syncEmpresa(db, empresa, competencia) {
+async function syncEmpresa(db, empresa, competencias) {
     const cfg = empresa.sharePointConfig;
     if (!cfg || !cfg.autoSyncEnabled) return null;
     // Config incompleta NÃO pode ser pulada em silêncio: a empresa aparece na
@@ -388,83 +389,101 @@ async function syncEmpresa(db, empresa, competencia) {
         };
     }
 
-    const [ano, mes] = competencia.split('-');
     const directions = ['SAÍDA', 'ENTRADA'];
-    const summary = { empresaId: empresa.id, empresaNome: empresa.nome, novos: 0, duplicados: 0, erros: 0, total: 0 };
+    const summary = {
+        empresaId: empresa.id, empresaNome: empresa.nome,
+        novos: 0, duplicados: 0, erros: 0, total: 0,
+        competencias: [...competencias],
+        // Motivo das primeiras falhas por pasta — sem isso o log só dizia
+        // "erros: 2" e era impossível saber se a pasta não existe, o proxy
+        // caiu ou um XML veio corrompido.
+        errosDetalhe: [],
+    };
 
-    for (const dir of directions) {
-        const folderPath = buildFolderPath(cfg.grupo, ano, mes, cfg.empresaPasta, dir);
-        let syncResult;
-        try {
-            syncResult = await fetchFromProxy('/api/sharepoint/sync', { folderPath });
-        } catch (err) {
-            console.warn(`[auto-sync] ${empresa.nome} ${dir}: ${err.message}`);
-            summary.erros++;
-            continue;
-        }
+    for (const competencia of competencias) {
+        const [ano, mes] = competencia.split('-');
 
-        if (!syncResult.files || syncResult.files.length === 0) continue;
-        summary.total += syncResult.files.length;
-
-        for (const file of syncResult.files) {
-            if (!file.content) { summary.erros++; continue; }
-
+        for (const dir of directions) {
+            const folderPath = buildFolderPath(cfg.grupo, ano, mes, cfg.empresaPasta, dir);
+            let syncResult;
             try {
-                const parsed = parseXmlServer(file.content);
-                if (!parsed || !parsed.chave) { summary.erros++; continue; }
-
-                const docId = parsed.chave;
-                const existingDoc = await db.collection('documentos_fiscais').doc(docId).get();
-                if (existingDoc.exists) {
-                    summary.duplicados++;
-                    continue;
-                }
-
-                const xmlHash = sha256Hex(file.content);
-                const direcao = classifyDirection(parsed, cnpj);
-
-                const documento = {
-                    id: docId,
-                    chave: parsed.chave,
-                    xmlHash,
-                    tipo: parsed.tipo,
-                    modelo: parsed.modelo,
-                    serie: parsed.serie,
-                    numero: parsed.numero,
-                    natOp: parsed.natOp,
-                    dhEmi: parsed.dhEmi,
-                    competencia: competenciaFromIso(parsed.dhEmi),
-                    direcao,
-                    categoriaOperacao: classifyCfop(parsed.itens, direcao),
-                    status: parsed.status,
-                    empresaId: empresa.id,
-                    empresaCnpj: cnpj,
-                    empresaNome: empresa.nome,
-                    emitente: parsed.emitente,
-                    destinatario: parsed.destinatario,
-                    totais: parsed.totais,
-                    itens: parsed.itens,
-                    fileName: file.name,
-                    tamanhoBytes: file.size || Buffer.byteLength(file.content, 'utf8'),
-                    origem: 'sharepoint_auto',
-                    importadoPor: 'system:auto-sync',
-                    importadoPorEmail: 'auto-sync@system',
-                    importadoEm: Date.now(),
-                    createdBy: 'system:auto-sync',
-                    createdByEmail: 'auto-sync@system',
-                };
-
-                // Remove undefined values (Firestore rejects them)
-                const clean = JSON.parse(JSON.stringify(documento));
-                await db.collection('documentos_fiscais').doc(docId).set(clean);
-                summary.novos++;
+                syncResult = await fetchFromProxy('/api/sharepoint/sync', { folderPath });
             } catch (err) {
-                console.warn(`[auto-sync] erro processando ${file.name}:`, err.message);
+                console.warn(`[auto-sync] ${empresa.nome} ${competencia} ${dir}: ${err.message}`);
                 summary.erros++;
+                if (summary.errosDetalhe.length < 6) {
+                    summary.errosDetalhe.push(`${competencia} ${dir}: ${err.message}`.slice(0, 200));
+                }
+                continue;
+            }
+
+            if (!syncResult.files || syncResult.files.length === 0) continue;
+            summary.total += syncResult.files.length;
+
+            for (const file of syncResult.files) {
+                if (!file.content) { summary.erros++; continue; }
+
+                try {
+                    const parsed = parseXmlServer(file.content);
+                    if (!parsed || !parsed.chave) { summary.erros++; continue; }
+
+                    const docId = parsed.chave;
+                    const existingDoc = await db.collection('documentos_fiscais').doc(docId).get();
+                    if (existingDoc.exists) {
+                        summary.duplicados++;
+                        continue;
+                    }
+
+                    const xmlHash = sha256Hex(file.content);
+                    const direcao = classifyDirection(parsed, cnpj);
+
+                    const documento = {
+                        id: docId,
+                        chave: parsed.chave,
+                        xmlHash,
+                        tipo: parsed.tipo,
+                        modelo: parsed.modelo,
+                        serie: parsed.serie,
+                        numero: parsed.numero,
+                        natOp: parsed.natOp,
+                        dhEmi: parsed.dhEmi,
+                        competencia: competenciaFromIso(parsed.dhEmi),
+                        direcao,
+                        categoriaOperacao: classifyCfop(parsed.itens, direcao),
+                        status: parsed.status,
+                        empresaId: empresa.id,
+                        empresaCnpj: cnpj,
+                        empresaNome: empresa.nome,
+                        emitente: parsed.emitente,
+                        destinatario: parsed.destinatario,
+                        totais: parsed.totais,
+                        itens: parsed.itens,
+                        fileName: file.name,
+                        tamanhoBytes: file.size || Buffer.byteLength(file.content, 'utf8'),
+                        origem: 'sharepoint_auto',
+                        importadoPor: 'system:auto-sync',
+                        importadoPorEmail: 'auto-sync@system',
+                        importadoEm: Date.now(),
+                        createdBy: 'system:auto-sync',
+                        createdByEmail: 'auto-sync@system',
+                    };
+
+                    // Remove undefined values (Firestore rejects them)
+                    const clean = JSON.parse(JSON.stringify(documento));
+                    await db.collection('documentos_fiscais').doc(docId).set(clean);
+                    summary.novos++;
+                } catch (err) {
+                    console.warn(`[auto-sync] erro processando ${file.name}:`, err.message);
+                    summary.erros++;
+                    if (summary.errosDetalhe.length < 6) {
+                        summary.errosDetalhe.push(`${file.name}: ${err.message}`.slice(0, 200));
+                    }
+                }
             }
         }
     }
 
+    if (summary.errosDetalhe.length === 0) delete summary.errosDetalhe;
     return summary;
 }
 
@@ -502,9 +521,17 @@ router.post('/auto-sync', async (req, res) => {
         }
 
         const db = fa().firestore();
-        const now = new Date();
-        const competencia = req.body?.competencia ||
-            `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        // Janela de competências: anterior + atual por padrão. Varredura só do
+        // mês corrente perdia os XMLs da competência anterior depositados após
+        // a virada (fechamento fiscal acontece nos primeiros dias do mês
+        // seguinte — caso J.N. VINATEX 06/2026 vazio em 07/07/2026). Dedup por
+        // chave torna a re-varredura idempotente. Competência explícita no
+        // body continua valendo sozinha.
+        const competencias = competenciasAutoSync(Date.now(), {
+            explicita: req.body?.competencia,
+            janelas: parseInt(process.env.SHAREPOINT_SYNC_JANELAS || '2', 10),
+        });
+        const competencia = competencias.join(' + '); // exibição/log (UI mostra string)
 
         // Read all empresas with auto-sync enabled
         const empresas = [];
@@ -522,6 +549,7 @@ router.post('/auto-sync', async (req, res) => {
             return res.json({
                 message: 'Nenhuma empresa com auto-sync habilitado.',
                 competencia,
+                competencias,
                 results: [],
             });
         }
@@ -533,21 +561,22 @@ router.post('/auto-sync', async (req, res) => {
             console.error(`[auto-sync] abortado: ${saude.motivo}`);
             await db.collection('sharepoint_sync_log').add({
                 competencia,
+                competencias,
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
                 empresasProcessadas: 0,
                 totalNovos: 0, totalDup: 0, totalErros: empresas.length,
                 erroFatal: saude.motivo,
                 results: [],
             }).catch(() => {});
-            return res.status(502).json({ error: saude.motivo, competencia });
+            return res.status(502).json({ error: saude.motivo, competencia, competencias });
         }
 
-        console.log(`[auto-sync] Iniciando sync de ${empresas.length} empresa(s), competencia ${competencia}`);
+        console.log(`[auto-sync] Iniciando sync de ${empresas.length} empresa(s), competencia(s) ${competencia}`);
 
         const results = [];
         for (const empresa of empresas) {
             try {
-                const result = await syncEmpresa(db, empresa, competencia);
+                const result = await syncEmpresa(db, empresa, competencias);
                 if (result) results.push(result);
             } catch (err) {
                 console.error(`[auto-sync] erro em ${empresa.nome}:`, err.message);
@@ -571,6 +600,7 @@ router.post('/auto-sync', async (req, res) => {
         // Log the sync run
         await db.collection('sharepoint_sync_log').add({
             competencia,
+            competencias,
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
             empresasProcessadas: empresas.length,
             totalNovos, totalDup, totalErros,
@@ -581,6 +611,7 @@ router.post('/auto-sync', async (req, res) => {
 
         return res.json({
             competencia,
+            competencias,
             empresasProcessadas: empresas.length,
             totalNovos,
             totalDup,
