@@ -96,6 +96,27 @@ function pickIdApuracao(item) {
     return item?.idApuracao ?? item?.IdApuracao ?? item?.identEFD ?? item?.id;
 }
 
+// Extrai o período (YYYYMM) de um item do histórico MIT — mesmos shapes que
+// sameMitPeriod entende. Usado pra mensagem diagnóstica ("períodos existentes")
+// quando a competência pedida não aparece.
+function mitPeriodoLabel(item) {
+    const periodoObj = (item?.PeriodoApuracao && typeof item.PeriodoApuracao === 'object')
+        ? item.PeriodoApuracao
+        : ((item?.periodoApuracao && typeof item.periodoApuracao === 'object') ? item.periodoApuracao : null);
+    if (periodoObj) {
+        const ano = Number(periodoObj.AnoApuracao ?? periodoObj.anoApuracao ?? periodoObj.anoPA ?? periodoObj.ano);
+        const mes = Number(periodoObj.MesApuracao ?? periodoObj.mesApuracao ?? periodoObj.mesPA ?? periodoObj.mes);
+        if (Number.isFinite(ano) && Number.isFinite(mes)) return `${ano}${String(mes).padStart(2, '0')}`;
+        return null;
+    }
+    const periodo = String(item?.periodoApuracao || item?.PeriodoApuracao || item?.periodo || '').replace(/\D/g, '');
+    if (periodo.length === 6) return periodo;
+    const ano = Number(item?.anoApuracao ?? item?.AnoApuracao ?? item?.anoPA ?? item?.ano);
+    const mes = Number(item?.mesApuracao ?? item?.MesApuracao ?? item?.mesPA ?? item?.mes);
+    if (Number.isFinite(ano) && Number.isFinite(mes)) return `${ano}${String(mes).padStart(2, '0')}`;
+    return null;
+}
+
 function pickDadosApuracaoMit(input) {
     if (!input || typeof input !== 'object') return null;
     if (input.PeriodoApuracao) return input;
@@ -398,16 +419,51 @@ class SerproProvider {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
         const historico = await this.consultarApuracoesAno({ empresaCnpj: cnpj, anoPA });
         const apuracoes = historico.apuracoes || [];
-        const apuracaoRef = apuracoes.find((x) => sameMitPeriod(x, anoPA, mesPA));
+        let apuracaoRef = apuracoes.find((x) => sameMitPeriod(x, anoPA, mesPA));
+
+        // Fallback dirigido ao MÊS. O catálogo SERPRO documenta LISTAAPURACOES317
+        // "por ano OU mês" — a consulta anual pode não trazer a competência
+        // pedida (ex.: apuração recém-criada/em edição). Caso real 07/07/2026:
+        // histórico 2026 voltou 7 apurações sem a 202606, e o painel travava o
+        // encerramento com "nenhuma apuração encontrada" sem tentar o mês.
+        let consultaMensalFalhou = null;
+        if (!apuracaoRef) {
+            try {
+                const doMes = await this.consultarApuracoesAno({ empresaCnpj: cnpj, anoPA, mesPA });
+                const apuracoesMes = doMes.apuracoes || [];
+                apuracaoRef = apuracoesMes.find((x) => sameMitPeriod(x, anoPA, mesPA));
+                // Agrega ao histórico devolvido (sem duplicar por idApuracao)
+                const idsConhecidos = new Set(apuracoes.map((x) => String(pickIdApuracao(x) ?? '')));
+                for (const item of apuracoesMes) {
+                    const id = String(pickIdApuracao(item) ?? '');
+                    if (!id || !idsConhecidos.has(id)) apuracoes.push(item);
+                }
+            } catch (e) {
+                consultaMensalFalhou = e?.message || String(e);
+                console.warn(`[dctfweb-provider] LISTAAPURACOES317 por mês falhou (${anoPA}-${mesPA}):`, consultaMensalFalhou);
+            }
+        }
+
         const idApuracao = pickIdApuracao(apuracaoRef);
         if (idApuracao == null || idApuracao === '') {
             const pa = `${anoPA}${String(mesPA).padStart(2, '0')}`;
+            const periodos = [...new Set(apuracoes.map(mitPeriodoLabel).filter(Boolean))].sort();
+            const partes = [
+                consultaMensalFalhou
+                    ? `Nenhuma apuração MIT encontrada para ${pa} no histórico anual (consulta por mês falhou: ${consultaMensalFalhou}).`
+                    : `Nenhuma apuração MIT encontrada para ${pa} (consultado por ano e por mês no SERPRO).`,
+            ];
+            if (periodos.length > 0) {
+                partes.push(`Períodos existentes no MIT: ${periodos.join(', ')}.`);
+            }
+            partes.push(
+                'A apuração desta competência ainda não foi criada no MIT — crie-a no e-CAC '
+                + '(DCTFWeb → Módulo de Inclusão de Tributos) e clique em "Atualizar MIT".'
+            );
             return {
                 apuracaoMit: null,
                 apuracoes,
-                motivo: apuracoes.length > 0
-                    ? `Nenhuma apuração MIT encontrada para ${pa}. O histórico anual retornou ${apuracoes.length} apuração(ões), mas nenhuma desta competência.`
-                    : `Nenhuma apuração MIT encontrada para ${pa}.`,
+                motivo: partes.join(' '),
                 fonte: 'serpro',
             };
         }
