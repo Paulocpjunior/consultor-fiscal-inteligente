@@ -1522,6 +1522,8 @@ export interface DctfwebDeclaracao {
     fonte?: 'mock' | 'serpro';
     ultimaSincronizacao?: string;
     _erro?: string | null;
+    /** Estado informativo (não-erro) — ex.: gerada pelo MIT, aguardando transmissão */
+    _info?: string | null;
 }
 
 export interface DctfwebResumo {

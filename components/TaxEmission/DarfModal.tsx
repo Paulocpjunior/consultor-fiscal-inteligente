@@ -133,6 +133,19 @@ const DarfModal: React.FC<Props> = ({ currentUser, empresas, onClose, onEmitido,
                 </div>
 
                 <div className="p-6 space-y-4">
+                    {/* Aviso DCTFWeb: os 4 tributos deste modal são exatamente os
+                        declarados na DCTFWeb — o DARF correto sai da declaração
+                        transmitida (vinculação automática do pagamento). Emissão
+                        avulsa aqui é pra recolhimentos FORA de declaração. Sem
+                        este aviso, o colaborador tentava emitir avulso (caso
+                        RADIO E TV 06/2026) e ainda tomava erro do catálogo. */}
+                    <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
+                        <b>Tributo declarado na DCTFWeb?</b> IRPJ/CSLL/PIS/COFINS apurados na DCTFWeb devem ter o
+                        DARF emitido pelo <b>Painel DCTFWeb</b> (linha da declaração transmitida → <b>Detalhe</b> → DARF) —
+                        ele sai vinculado à declaração e o pagamento se casa sozinho na Receita. Use esta emissão
+                        avulsa apenas para recolhimentos <b>fora de declaração</b> (complementos, diferenças, multas isoladas).
+                    </div>
+
                     {/* Empresa */}
                     <div>
                         <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Empresa</label>

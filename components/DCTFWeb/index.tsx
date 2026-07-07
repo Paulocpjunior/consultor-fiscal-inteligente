@@ -310,6 +310,9 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                     {d._erro && (
                                         <span className="ml-1 text-xs text-rose-600" title={d._erro}>⚠</span>
                                     )}
+                                    {!d._erro && d._info && (
+                                        <span className="ml-1 text-xs text-sky-600 cursor-help" title={d._info}>ℹ</span>
+                                    )}
                                 </td>
                                 <td className="px-4 py-2 text-right">
                                     {d.valorTotal != null ? `R$ ${d.valorTotal.toFixed(2)}` : '—'}

@@ -124,7 +124,26 @@ class SerproProvider {
         const payload = montarPayloadDarfSerpro(req);   // mesmo builder do preview
         const codigoReceita = payload.dados.codigoReceita;
 
-        const result = await invokeIntegraContador(payload);
+        let result;
+        try {
+            result = await invokeIntegraContador(payload);
+        } catch (err) {
+            // ICGERENCIADOR-052 = idSistema/idServico fora do catálogo da conta.
+            // O PAGTOWEB/EMITEDARF61 configurado é SUPOSTO (TODO[SERPRO_REAL]) —
+            // a emissão avulsa exige o produto SICALC contratado na Loja SERPRO.
+            // Sem esta tradução, o colaborador via o código cru e não sabia que
+            // o DARF de tributos DCTFWeb sai pelo Painel DCTFWeb (07/07/2026).
+            if (/ICGERENCIADOR-052/i.test(String(err?.message || ''))) {
+                throw new Error(
+                    'Emissão AVULSA de DARF via SERPRO não está habilitada nesta conta '
+                    + '(serviço PAGTOWEB/EMITEDARF61 inexistente no catálogo — requer o produto SICALC '
+                    + 'contratado na Loja SERPRO e ajuste de SERPRO_DARF_SISTEMA/SERPRO_DARF_SERVICO). '
+                    + 'Para tributos declarados na DCTFWeb (IRPJ/CSLL/PIS/COFINS do Lucro Presumido/Real), '
+                    + 'emita o DARF pelo Painel DCTFWeb: linha da declaração transmitida → Detalhe → DARF.'
+                );
+            }
+            throw err;
+        }
         const d = result.dados || {};
         return {
             numeroDocumento: d.numeroDocumento || d.numeroDarf || '',
