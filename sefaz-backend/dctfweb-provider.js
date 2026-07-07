@@ -130,6 +130,25 @@ function pickDadosApuracaoMit(input) {
     return null;
 }
 
+// Conta débitos REAIS no bloco Debitos do MIT. O shape oficial é
+// { Irpj: { ListaDebitos: [...] }, Csll: {...}, ... } — mas uma apuração
+// criada no e-CAC e ainda em edição volta com Debitos presente porém VAZIO
+// ({} ou grupos com ListaDebitos: []). Checar só a existência da chave
+// deixava o encerramento passar e o SERPRO devolvia 400
+// [EntradaIncorreta-MIT-MSG_0003] "Debitos: deve ser informado ao menos um
+// débito" (caso real 55070577000161 · 06/2026, 07/07/2026).
+function contarDebitosMit(debitos) {
+    if (!debitos) return 0;
+    if (Array.isArray(debitos)) return debitos.filter((d) => d && typeof d === 'object').length;
+    if (typeof debitos !== 'object') return 0;
+    let total = 0;
+    for (const valor of Object.values(debitos)) {
+        if (Array.isArray(valor)) total += valor.filter((d) => d && typeof d === 'object').length;
+        else if (valor && typeof valor === 'object') total += contarDebitosMit(valor);
+    }
+    return total;
+}
+
 function ensureMitEncerramentoPayload({ dadosApuracaoMit, anoPA, mesPA }) {
     const payload = pickDadosApuracaoMit(dadosApuracaoMit);
     if (!payload) {
@@ -150,9 +169,13 @@ function ensureMitEncerramentoPayload({ dadosApuracaoMit, anoPA, mesPA }) {
         throw new Error('Encerramento MIT requer DadosIniciais no payload oficial da apuracao.');
     }
     const semMovimento = dadosIniciais.SemMovimento ?? dadosIniciais.semMovimento;
-    const temDebitos = !!(dados.Debitos || dados.debitos);
+    const temDebitos = contarDebitosMit(dados.Debitos || dados.debitos) > 0;
     if (semMovimento !== true && semMovimento !== 'true' && !temDebitos) {
-        throw new Error('Encerramento MIT com movimento requer Debitos no payload oficial da apuracao.');
+        throw new Error(
+            'A apuracao MIT esta com movimento mas sem nenhum debito lancado. '
+            + 'Lance os debitos (IRPJ/CSLL/PIS/COFINS) no MIT do e-CAC — ou marque Sem Movimento — '
+            + 'e clique em "Atualizar MIT" antes de encerrar.'
+        );
     }
     return dados;
 }
