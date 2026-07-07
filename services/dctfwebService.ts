@@ -183,6 +183,48 @@ export async function encerrarApuracaoMit(user: User | null, payload: {
     return res.json();
 }
 
+// ── Preenchimento automático de débitos do MIT ─────────────────────────────
+// Duas fases: transmitir=false devolve a PROPOSTA (mapeamento família/código/
+// valor + período-modelo); transmitir=true monta de novo no servidor e
+// transmite o encerramento (ENCAPURACAO314) com log de auditoria.
+
+export interface MitPreencherProposta {
+    pa: string;
+    tributosApp: { IRPJ: number; CSLL: number; PIS: number; COFINS: number };
+    mapeamento: Array<{ familia: string; codigo: string; grupo: string; valor: number }>;
+    totalProposto: number;
+    modeloPeriodo: string | null;
+    alvoIdApuracao: number | null;
+}
+
+export interface MitPreencherResult {
+    ok: boolean;
+    transmitido?: boolean;
+    etapa?: 'alvo' | 'modelo' | 'montagem';
+    motivo?: string;
+    proposta?: MitPreencherProposta;
+    protocolo?: string;
+    statusEncerramento?: string;
+}
+
+export async function preencherEncerrarMit(user: User | null, payload: {
+    empresaId?: string; empresaCnpj: string;
+    anoPA: number; mesPA: number;
+    tributosApp: { IRPJ: number; CSLL: number; PIS: number; COFINS: number };
+    transmitir: boolean;
+}): Promise<MitPreencherResult> {
+    const res = await fetch(`${BASE}/mit/preencher-encerrar`, {
+        method: 'POST',
+        headers: await authHeaders(user),
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `preencherEncerrarMit: ${res.status}`);
+    }
+    return res.json();
+}
+
 export async function consultarStatusEncerramentoMit(user: User | null, params: {
     empresaCnpj: string; protocolo?: string; anoPA?: number; mesPA?: number;
 }): Promise<{ statusEncerramento: string; protocolo: string; fonte: 'mock' | 'serpro'; _raw?: any }> {

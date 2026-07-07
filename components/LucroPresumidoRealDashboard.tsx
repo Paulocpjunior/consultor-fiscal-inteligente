@@ -745,6 +745,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                     <ConferirDctfwebModal
                         empresaCnpj={selectedEmpresa.cnpj}
                         empresaNome={selectedEmpresa.nome}
+                        empresaId={selectedEmpresa.id}
                         competencia={fichaMes}
                         detalhamento={liveResults.detalhamento}
                         onClose={() => setConferirDctfwebAberto(false)}
