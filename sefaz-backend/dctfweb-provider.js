@@ -2,13 +2,16 @@
 // sefaz-backend/dctfweb-provider.js
 // Provider DCTFWeb — mock + SERPRO Integra Contador (idSistema=DCTFWEB).
 //
-// idServicos:
-//   TRANSDECLARACAO11           (/Declarar)  transmite declaracao em andamento
-//   GERARDOCUMENTOARRECADACAO12 (/Emitir)    gera DARF unificado
-//   CONSDECCOMPLETA33           (/Consultar) declaracao ATIVA (PDF)
+// idServicos (catálogo OFICIAL — confirmado 07/07/2026 após ICGERENCIADOR-052
+// na transmissão: os antigos TRANSDECLARACAO11/GERARDOCUMENTOARRECADACAO12/
+// GERARDARFANDAMENTO eram nomes copiados do PGDASD ou chutados e NÃO existem
+// no catálogo do sistema DCTFWEB):
+//   TRANSDECLARACAO310          (/Declarar)  transmite declaracao em andamento
+//   GERARGUIA31                 (/Emitir)    gera DARF da declaracao ATIVA
+//   GERARGUIAANDAMENTO313       (/Emitir)    DARF p/ declaracao em andamento
 //   CONSRECIBO32                (/Consultar) recibo de transmissao (PDF)
-//   CONSXMLDECLARACAO           (/Consultar) XML
-//   GERARDARFANDAMENTO          (/Emitir)    DARF p/ declaracao em andamento
+//   CONSDECCOMPLETA33           (/Consultar) declaracao ATIVA (PDF)
+//   CONSXMLDECLARACAO38         (/Consultar) XML
 //   MIT / ENCAPURACAO314        (/Declarar)  encerra MIT
 //   MIT / SITUACAOENC315        (/Consultar) status encerramento MIT
 //   MIT / CONSAPURACAO316       (/Consultar) detalhes por idApuracao
@@ -371,7 +374,7 @@ class SerproProvider {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
         const r = await invokeIntegraContador({
             idSistema: 'DCTFWEB',
-            idServico: 'TRANSDECLARACAO11',
+            idServico: 'TRANSDECLARACAO310',
             contribuinteCnpj: cnpj,
             acao: 'Declarar',
             dados: { categoria, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
@@ -389,7 +392,7 @@ class SerproProvider {
 
     async gerarDarf({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL', emAndamento = false }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
-        const idServico = emAndamento ? 'GERARDARFANDAMENTO' : 'GERARDOCUMENTOARRECADACAO12';
+        const idServico = emAndamento ? 'GERARGUIAANDAMENTO313' : 'GERARGUIA31';
         const r = await invokeIntegraContador({
             idSistema: 'DCTFWEB',
             idServico,
@@ -605,7 +608,7 @@ class SerproProvider {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
         const r = await invokeIntegraContador({
             idSistema: 'DCTFWEB',
-            idServico: 'CONSXMLDECLARACAO',
+            idServico: 'CONSXMLDECLARACAO38',
             contribuinteCnpj: cnpj,
             acao: 'Consultar',
             dados: { categoria, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2, '0') },
