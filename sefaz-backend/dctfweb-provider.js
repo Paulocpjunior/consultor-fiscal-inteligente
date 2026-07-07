@@ -22,6 +22,8 @@
 // ============================================================================
 
 import { invokeIntegraContador } from './serpro-client.js';
+import { loadCertificate } from './secret-loader.js';
+import { assinarXmlDctfwebBase64 } from './dctfweb-xml-signer.js';
 
 // Default 'serpro' (REAL). 'mock' só com DCTFWEB_MODE=mock explícito (dev local).
 // Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
@@ -372,12 +374,43 @@ class SerproProvider {
 
     async transmitirDeclaracao({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
+
+        // O TRANSDECLARACAO310 exige o XML da declaração ASSINADO digitalmente
+        // em base64 (erro DCTFWEB-MG07 / TRANS21_Xml_Assinado_Base64_Ausente
+        // sem ele — caso real 07/07/2026). Fluxo oficial:
+        //   1. CONSXMLDECLARACAO38 → XML da declaração em andamento
+        //   2. assinatura XMLDSig (e-CNPJ do escritório, procuração e-CAC)
+        //   3. TRANSDECLARACAO310 com dados.xmlAssinadoBase64
+        const consulta = await this.consultarXmlDeclaracao({ empresaCnpj: cnpj, anoPA, mesPA, categoria });
+        const xmlDeclaracao = String(consulta?.xml || '').trim();
+        if (!xmlDeclaracao) {
+            throw new Error(
+                `Transmissão DCTFWeb: o SERPRO não retornou o XML da declaração ${anoPA}-${String(mesPA).padStart(2, '0')} `
+                + '(CONSXMLDECLARACAO38 vazio). Confirme que a declaração está "Em andamento" e sincronize antes de transmitir.'
+            );
+        }
+
+        const cert = await loadCertificate();
+        if (!cert?.pemKey || !cert?.pemCert) {
+            throw new Error('Transmissão DCTFWeb: certificado A1 do escritório indisponível para assinar o XML da declaração.');
+        }
+        const xmlAssinadoBase64 = assinarXmlDctfwebBase64({
+            xml: xmlDeclaracao,
+            privateKeyPem: cert.pemKey,
+            certificatePem: cert.pemCert,
+        });
+
         const r = await invokeIntegraContador({
             idSistema: 'DCTFWEB',
             idServico: 'TRANSDECLARACAO310',
             contribuinteCnpj: cnpj,
             acao: 'Declarar',
-            dados: { categoria, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
+            dados: {
+                categoria,
+                anoPA: String(anoPA),
+                mesPA: String(mesPA).padStart(2, '0'),
+                xmlAssinadoBase64,
+            },
         });
         const d = safeJsonParse(r.dados) || {};
         return {

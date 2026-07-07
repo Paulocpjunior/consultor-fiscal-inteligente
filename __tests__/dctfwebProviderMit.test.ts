@@ -9,6 +9,15 @@ jest.mock('../sefaz-backend/serpro-client.js', () => ({
     invokeIntegraContador: mockInvokeIntegraContador,
 }));
 
+// Transmissão DCTFWeb assina o XML com o cert do escritório (Secret Manager)
+// — mocka o loader e o assinador pra manter o teste unitário.
+jest.mock('../sefaz-backend/secret-loader.js', () => ({
+    loadCertificate: jest.fn().mockResolvedValue({ pemKey: 'KEY', pemCert: 'CERT' }),
+}));
+jest.mock('../sefaz-backend/dctfweb-xml-signer.js', () => ({
+    assinarXmlDctfwebBase64: jest.fn().mockReturnValue('XML_ASSINADO_B64_FAKE'),
+}));
+
 // @ts-expect-error — modulo .js puro
 import { getDctfwebProvider, MIT_SERVICOS } from '../sefaz-backend/dctfweb-provider.js';
 
@@ -175,9 +184,16 @@ describe('SerproProvider MIT — catálogo oficial', () => {
         // GERARGUIAANDAMENTO313 / CONSXMLDECLARACAO38.
         mockInvokeIntegraContador.mockResolvedValue({ dados: {} });
 
+        // Transmissão: 1º consulta o XML (CONSXMLDECLARACAO38), 2º transmite
+        // com o XML assinado em base64 (TRANS21_Xml_Assinado_Base64 exigido).
+        mockInvokeIntegraContador.mockResolvedValueOnce({ dados: { xml: '<DeclaracaoDctfWeb/>' } });
         await provider.transmitirDeclaracao({ empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6 });
+        expect(mockInvokeIntegraContador).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            idSistema: 'DCTFWEB', idServico: 'CONSXMLDECLARACAO38', acao: 'Consultar',
+        }));
         expect(mockInvokeIntegraContador).toHaveBeenLastCalledWith(expect.objectContaining({
             idSistema: 'DCTFWEB', idServico: 'TRANSDECLARACAO310', acao: 'Declarar',
+            dados: expect.objectContaining({ xmlAssinadoBase64: 'XML_ASSINADO_B64_FAKE' }),
         }));
 
         await provider.gerarDarf({ empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6 });
@@ -194,6 +210,14 @@ describe('SerproProvider MIT — catálogo oficial', () => {
         expect(mockInvokeIntegraContador).toHaveBeenLastCalledWith(expect.objectContaining({
             idServico: 'CONSXMLDECLARACAO38', acao: 'Consultar',
         }));
+    });
+
+    it('transmitirDeclaracao falha claro quando a consulta do XML volta vazia', async () => {
+        mockInvokeIntegraContador.mockResolvedValueOnce({ dados: {} }); // sem xml
+        await expect(provider.transmitirDeclaracao({
+            empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6,
+        })).rejects.toThrow(/não retornou o XML/i);
+        expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(1); // não tenta transmitir
     });
 
     it('listarDeclaracoes traduz DCTFWEB-MG10 em _info amigável (aguardando transmissão), sem _erro', async () => {
