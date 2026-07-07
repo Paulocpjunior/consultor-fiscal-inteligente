@@ -72,6 +72,8 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj, opts = {}) {
             fonte: decl.fonte || mode,
             ultimaSincronizacao: new Date().toISOString(),
             _erro: decl._erro || null,
+            // Estado informativo (não-erro): ex. "aguardando transmissão" pós-MIT
+            _info: decl._info || null,
         });
 
         const existing = await ref.get();

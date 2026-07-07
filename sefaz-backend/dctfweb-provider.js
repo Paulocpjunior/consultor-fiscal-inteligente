@@ -340,6 +340,15 @@ class SerproProvider {
                 fonte: 'serpro',
             }];
         } catch (err) {
+            const msg = String(err?.message || '');
+            // DCTFWEB-MG10: "declaração mais recente em Andamento, incompatível
+            // com a funcionalidade — informe numeroReciboEntrega". NÃO é erro:
+            // é o estado normal de uma declaração gerada (ex.: pelo encerramento
+            // do MIT) e ainda não transmitida — recibo/PDF só existem depois da
+            // transmissão. Mostrar o texto cru do SERPRO como ⚠ assustava o
+            // colaborador (caso RADIO E TV 06/2026, 07/07/2026).
+            const aguardandoTransmissao = /DCTFWEB-MG10/i.test(msg)
+                || /Em Andamento.{0,40}incompat/i.test(msg);
             return [{
                 id: `${cnpj}_${ano}${String(mes).padStart(2,'0')}_${cat}`,
                 empresaCnpj: cnpj,
@@ -348,7 +357,11 @@ class SerproProvider {
                 anoPA: ano,
                 mesPA: mes,
                 situacao: 'EM_ANDAMENTO',
-                _erro: err.message,
+                _erro: aguardandoTransmissao ? null : msg,
+                _info: aguardandoTransmissao
+                    ? 'Declaração gerada (ex.: pelo encerramento do MIT) e aguardando transmissão. '
+                      + 'Clique em "Transmitir" — recibo, PDF e DARF ficam disponíveis depois.'
+                    : null,
                 fonte: 'serpro',
             }];
         }

@@ -168,6 +168,28 @@ describe('SerproProvider MIT — catálogo oficial', () => {
         expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(1);
     });
 
+    it('listarDeclaracoes traduz DCTFWEB-MG10 em _info amigável (aguardando transmissão), sem _erro', async () => {
+        // Caso RADIO E TV 06/2026: declaração gerada pelo MIT ainda "Em
+        // Andamento" — a consulta completa devolve MG10, que NÃO é erro.
+        mockInvokeIntegraContador.mockRejectedValueOnce(new Error(
+            'SERPRO 400: [EntradaIncorreta-DCTFWEB-MG10] - A declaração mais recente está na situação "Em Andamento", '
+            + 'incompatível com a execução da funcionalidade. Favor informar o "numeroReciboEntrega".'
+        ));
+        const r = await provider.listarDeclaracoes('09010732000137', { anoPA: 2026, mesPA: 6 });
+        expect(r).toHaveLength(1);
+        expect(r[0].situacao).toBe('EM_ANDAMENTO');
+        expect(r[0]._erro).toBeNull();
+        expect(r[0]._info).toMatch(/aguardando transmissão/i);
+        expect(r[0]._info).toMatch(/Transmitir/);
+    });
+
+    it('listarDeclaracoes mantém _erro para falhas que não são MG10', async () => {
+        mockInvokeIntegraContador.mockRejectedValueOnce(new Error('SERPRO 500: indisponível'));
+        const r = await provider.listarDeclaracoes('09010732000137', { anoPA: 2026, mesPA: 6 });
+        expect(r[0]._erro).toMatch(/500/);
+        expect(r[0]._info).toBeNull();
+    });
+
     it('consultarApuracoesAno usa MIT/LISTAAPURACOES317', async () => {
         mockInvokeIntegraContador.mockResolvedValue({
             dados: { Apuracoes: [{ periodoApuracao: '202605', idApuracao: 456 }] },
