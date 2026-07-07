@@ -190,9 +190,13 @@ export async function encerrarApuracaoMit(user: User | null, payload: {
 
 export interface MitPreencherProposta {
     pa: string;
+    /** 'completo' = MIT estava sem débitos; 'complemento' = só famílias faltantes adicionadas */
+    modo?: 'completo' | 'complemento';
     tributosApp: { IRPJ: number; CSLL: number; PIS: number; COFINS: number };
     mapeamento: Array<{ familia: string; codigo: string; grupo: string; valor: number }>;
     totalProposto: number;
+    /** Famílias já lançadas no MIT — preservadas sem alteração */
+    jaDeclarados?: Array<{ familia: string; valor: number }>;
     modeloPeriodo: string | null;
     alvoIdApuracao: number | null;
 }
@@ -205,6 +209,8 @@ export interface MitPreencherResult {
     proposta?: MitPreencherProposta;
     protocolo?: string;
     statusEncerramento?: string;
+    /** Campos que o SERPRO recusou ("não deve ser informado") e foram removidos na retransmissão */
+    camposRemovidos?: string[];
 }
 
 export async function preencherEncerrarMit(user: User | null, payload: {

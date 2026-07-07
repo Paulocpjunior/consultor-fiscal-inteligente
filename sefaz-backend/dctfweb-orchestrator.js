@@ -9,7 +9,10 @@ import {
     pickDadosApuracaoMit, contarDebitosMit, pickIdApuracao, mitPeriodoLabel,
 } from './dctfweb-provider.js';
 import { normalizarRetencaoDctfweb } from './dctfweb-retencao-normalizer.js';
-import { extrairModeloDebitosMit, montarDebitosMit } from './mit-debitos-builder.js';
+import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
+import {
+    extrairModeloDebitosMit, montarDebitosMit, mesclarDebitosMit, maiorIdDebitoMit,
+} from './mit-debitos-builder.js';
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
@@ -222,14 +225,53 @@ export async function preencherEncerrarMit({
             motivo: `A apuração MIT de ${paAlvo} está marcada como Sem Movimento — não cabe preencher débitos. Encerre-a normalmente.`,
         };
     }
-    const debitosJaLancados = contarDebitosMit(alvoPayload.Debitos || alvoPayload.debitos);
-    if (debitosJaLancados > 0) {
+    // Apuração já ENCERRADA (situação 3) exige retificação — fluxo diferente,
+    // fora do escopo do preenchimento automático. Em processamento (4): aguardar.
+    const situacaoAlvo = Number(
+        alvo.apuracaoResumo?.situacao ?? alvo.apuracaoResumo?.situacaoApuracao
+        ?? alvo.apuracaoMit?.situacaoApuracao ?? alvo.apuracaoMit?.situacao ?? NaN
+    );
+    if (situacaoAlvo === 3) {
         return {
             ok: false, etapa: 'alvo',
-            motivo: `A apuração MIT de ${paAlvo} já tem ${debitosJaLancados} débito(s) lançado(s). `
-                + 'Revise no e-CAC ou encerre normalmente — o preenchimento automático só cobre apuração vazia.',
+            motivo: `A apuração MIT de ${paAlvo} já está ENCERRADA. Para alterar débitos, retifique a apuração no e-CAC (MIT) e depois use este fluxo.`,
         };
     }
+    if (situacaoAlvo === 4) {
+        return {
+            ok: false, etapa: 'alvo',
+            motivo: `A apuração MIT de ${paAlvo} está com encerramento em processamento no SERPRO — aguarde e atualize.`,
+        };
+    }
+
+    // Débitos já lançados NÃO bloqueiam mais: viram modo COMPLEMENTO — as
+    // famílias já declaradas são preservadas intactas e só as FALTANTES (com
+    // valor no app) são adicionadas. Caso real PEC PRONTA 06/2026: MIT com
+    // PIS/COFINS lançados e IRPJ/CSLL "Apurado, não declarado".
+    const debitosExistentes = alvoPayload.Debitos || alvoPayload.debitos || null;
+    const debitosJaLancados = contarDebitosMit(debitosExistentes);
+    const normAlvo = normalizarApuracaoMit(alvo.apuracaoMit);
+    const familiasDeclaradas = ['IRPJ', 'CSLL', 'PIS', 'COFINS']
+        .filter((f) => (normAlvo.lido && normAlvo.tributos[f] > 0));
+    if (debitosJaLancados > 0 && !normAlvo.lido) {
+        return {
+            ok: false, etapa: 'alvo',
+            motivo: `A apuração MIT de ${paAlvo} tem ${debitosJaLancados} débito(s) num formato que não consegui classificar por tributo — `
+                + 'complemente manualmente no e-CAC para não arriscar duplicar débito.',
+        };
+    }
+    const familiasFaltantes = ['IRPJ', 'CSLL', 'PIS', 'COFINS']
+        .filter((f) => tributos[f] > 0 && !familiasDeclaradas.includes(f));
+    if (familiasFaltantes.length === 0) {
+        return {
+            ok: false, etapa: 'alvo',
+            motivo: debitosJaLancados > 0
+                ? `Todas as famílias com valor apurado no app já têm débito lançado no MIT de ${paAlvo}. `
+                + 'Se os VALORES divergirem, ajuste no e-CAC — este fluxo não altera débito existente. Senão, encerre normalmente.'
+                : 'Nenhum tributo com valor > 0 na apuração do app — nada a declarar.',
+        };
+    }
+    const modoComplemento = debitosJaLancados > 0;
 
     // 2. Apuração-MODELO: última apuração anterior da empresa com débitos.
     //    Tenta o ano corrente; se não houver anterior no ano, tenta o anterior.
@@ -253,7 +295,6 @@ export async function preencherEncerrarMit({
 
     let modelo = null;
     let modeloPeriodo = null;
-    const famComValor = Object.entries(tributos).filter(([, v]) => v > 0).map(([f]) => f);
     for (const cand of candidatos.slice(0, 4)) {
         try {
             const det = await provider.consultarApuracaoMitPorId({ empresaCnpj, idApuracao: cand.id });
@@ -261,8 +302,8 @@ export async function preencherEncerrarMit({
             if (m.totalDebitos === 0) continue;
             modelo = m;
             modeloPeriodo = cand.periodo;
-            // Modelo ideal cobre todas as famílias com valor; senão tenta o próximo.
-            if (famComValor.every((f) => m.codigoPorFamilia[f])) break;
+            // Modelo ideal cobre todas as famílias FALTANTES; senão tenta o próximo.
+            if (familiasFaltantes.every((f) => m.codigoPorFamilia[f])) break;
         } catch (e) {
             console.warn(`[preencherEncerrarMit] detalhe modelo ${cand.periodo} falhou:`, e.message);
         }
@@ -276,13 +317,20 @@ export async function preencherEncerrarMit({
         };
     }
 
-    // 3. Monta os débitos (códigos do modelo × valores do app)
-    const montagem = montarDebitosMit(tributos, modelo);
+    // 3. Monta APENAS os débitos das famílias faltantes (códigos do modelo ×
+    //    valores do app). Em modo complemento, a numeração de IdDebito continua
+    //    a partir dos débitos já lançados.
+    const montagem = montarDebitosMit(tributos, modelo, {
+        apenasFamilias: familiasFaltantes,
+        idInicial: maiorIdDebitoMit(debitosExistentes) + 1,
+    });
     const proposta = {
         pa: paAlvo,
+        modo: modoComplemento ? 'complemento' : 'completo',
         tributosApp: tributos,
         mapeamento: montagem.mapeamento,
         totalProposto: montagem.totalProposto,
+        jaDeclarados: familiasDeclaradas.map((f) => ({ familia: f, valor: normAlvo.tributos[f] })),
         modeloPeriodo,
         alvoIdApuracao: alvo.idApuracao ?? null,
     };
@@ -294,14 +342,17 @@ export async function preencherEncerrarMit({
         return { ok: true, transmitido: false, proposta };
     }
 
-    // 4. Transmite o encerramento com o payload alvo + débitos montados.
-    //    encerrarApuracaoMit (acima) valida o payload de novo, exige emissão
-    //    liberada e persiste o protocolo em dctfweb_mit_apuracoes.
+    // 4. Transmite o encerramento com o payload alvo + débitos (existentes
+    //    preservados + faltantes adicionados). encerrarApuracaoMit valida o
+    //    payload de novo, exige emissão liberada e persiste o protocolo.
     const payload = {
         ...alvoPayload,
         PeriodoApuracao: alvoPayload.PeriodoApuracao || { MesApuracao: Number(mesPA), AnoApuracao: Number(anoPA) },
-        Debitos: montagem.debitos,
+        Debitos: modoComplemento
+            ? mesclarDebitosMit(debitosExistentes, montagem.debitos)
+            : montagem.debitos,
     };
+    delete payload.debitos; // evita duplicar o bloco em shape minúsculo legado
     const r = await encerrarApuracaoMit({ empresaId, empresaCnpj, anoPA, mesPA, dadosApuracaoMit: payload });
 
     // Auditoria: quem transmitiu, quais valores, de onde vieram os códigos.
@@ -311,10 +362,13 @@ export async function preencherEncerrarMit({
             empresaId: empresaId || null,
             empresaCnpj,
             pa: paAlvo,
+            modo: proposta.modo,
             tributosApp: tributos,
             mapeamento: montagem.mapeamento,
+            jaDeclarados: proposta.jaDeclarados,
             totalProposto: montagem.totalProposto,
             modeloPeriodo,
+            camposRemovidos: r.camposRemovidos || null,
             protocolo: r.protocolo || null,
             statusEncerramento: r.statusEncerramento || null,
             transmitidoPor: usuario?.email || usuario?.uid || null,
@@ -324,7 +378,11 @@ export async function preencherEncerrarMit({
         console.warn('[preencherEncerrarMit] falha gravando auditoria:', e.message);
     }
 
-    return { ok: true, transmitido: true, proposta, protocolo: r.protocolo, statusEncerramento: r.statusEncerramento };
+    return {
+        ok: true, transmitido: true, proposta,
+        protocolo: r.protocolo, statusEncerramento: r.statusEncerramento,
+        camposRemovidos: r.camposRemovidos,
+    };
 }
 
 export async function consultarApuracaoMit({ empresaCnpj, anoPA, mesPA }) {

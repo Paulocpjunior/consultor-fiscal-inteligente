@@ -120,6 +120,10 @@ export function extrairModeloDebitosMit(apuracaoModelo) {
  *
  * @param {{IRPJ?:number,CSLL?:number,PIS?:number,COFINS?:number}} tributosApp
  * @param {{codigoPorFamilia: Record<string,{codigo:string,grupo:string}>}} modelo
+ * @param {{apenasFamilias?: string[], idInicial?: number}} [opts]
+ *        apenasFamilias — monta só estas famílias (modo COMPLEMENTO: famílias
+ *        que já têm débito no MIT ficam de fora e são preservadas).
+ *        idInicial — primeiro IdDebito (continua a numeração dos existentes).
  * @returns {{
  *   ok: boolean,
  *   erros: string[],
@@ -128,16 +132,18 @@ export function extrairModeloDebitosMit(apuracaoModelo) {
  *   totalProposto: number,
  * }}
  */
-export function montarDebitosMit(tributosApp, modelo) {
+export function montarDebitosMit(tributosApp, modelo, opts = {}) {
     const erros = [];
     const mapeamento = [];
     const debitos = {};
     let totalProposto = 0;
-    let idDebito = 1;
+    let idDebito = Math.max(1, Number(opts.idInicial) || 1);
+    const familiasAlvo = Array.isArray(opts.apenasFamilias) ? opts.apenasFamilias : null;
 
     const codigoPorFamilia = modelo?.codigoPorFamilia || {};
 
     for (const familia of FAMILIAS) {
+        if (familiasAlvo && !familiasAlvo.includes(familia)) continue;
         const valor = round2(tributosApp?.[familia]);
         if (valor < 0) {
             erros.push(`${familia}: valor negativo (${valor}) não pode ser declarado no MIT.`);
@@ -172,10 +178,55 @@ export function montarDebitosMit(tributosApp, modelo) {
     if (mapeamento.length === 0) {
         return {
             ok: false,
-            erros: ['Nenhum tributo com valor > 0 na apuração do app — nada a declarar. '
+            erros: [familiasAlvo
+                ? 'Nenhuma família faltante com valor > 0 na apuração do app — os débitos existentes no MIT já cobrem tudo.'
+                : 'Nenhum tributo com valor > 0 na apuração do app — nada a declarar. '
                 + 'Se a empresa não teve movimento, marque "Sem Movimento" na apuração MIT do e-CAC.'],
             debitos: null, mapeamento, totalProposto: 0,
         };
     }
     return { ok: true, erros: [], debitos, mapeamento, totalProposto };
+}
+
+/**
+ * Maior IdDebito presente num bloco Debitos existente (0 se não houver).
+ * Usado pra continuar a numeração ao COMPLEMENTAR uma apuração.
+ */
+export function maiorIdDebitoMit(debitos) {
+    let maior = 0;
+    if (!debitos || typeof debitos !== 'object') return maior;
+    const listas = Array.isArray(debitos) ? [debitos] : Object.values(debitos).flatMap((bloco) => {
+        if (Array.isArray(bloco)) return [bloco];
+        if (bloco && typeof bloco === 'object') {
+            return Object.values(bloco).filter(Array.isArray);
+        }
+        return [];
+    });
+    for (const lista of listas) {
+        for (const item of lista) {
+            const id = Number(item?.IdDebito ?? item?.idDebito);
+            if (Number.isFinite(id) && id > maior) maior = id;
+        }
+    }
+    return maior;
+}
+
+/**
+ * Mescla débitos NOVOS num bloco Debitos EXISTENTE, sem tocar nos itens já
+ * lançados (modo COMPLEMENTO — caso PEC PRONTA 06/2026: MIT com PIS/COFINS
+ * lançados e IRPJ/CSLL faltando). Grupos novos são criados; grupos existentes
+ * ganham os itens no fim da ListaDebitos.
+ */
+export function mesclarDebitosMit(existentes, novos) {
+    const out = JSON.parse(JSON.stringify(existentes && typeof existentes === 'object' && !Array.isArray(existentes) ? existentes : {}));
+    for (const [grupo, bloco] of Object.entries(novos || {})) {
+        const lista = bloco?.ListaDebitos || [];
+        if (!out[grupo] || typeof out[grupo] !== 'object') {
+            out[grupo] = { ListaDebitos: [] };
+        } else if (!Array.isArray(out[grupo].ListaDebitos)) {
+            out[grupo].ListaDebitos = [];
+        }
+        out[grupo].ListaDebitos.push(...lista);
+    }
+    return out;
 }

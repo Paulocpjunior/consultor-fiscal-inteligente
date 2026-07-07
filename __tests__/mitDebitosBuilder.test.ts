@@ -4,7 +4,9 @@
  * do app. Sem código de referência para família com valor → FALHA clara,
  * nunca chuta código de receita.
  */
-import { extrairModeloDebitosMit, montarDebitosMit } from '../sefaz-backend/mit-debitos-builder';
+import {
+    extrairModeloDebitosMit, montarDebitosMit, maiorIdDebitoMit, mesclarDebitosMit,
+} from '../sefaz-backend/mit-debitos-builder';
 
 const MODELO_MAIO = {
     dadosApuracaoMit: [{
@@ -90,5 +92,61 @@ describe('montarDebitosMit', () => {
         const r = montarDebitosMit({ IRPJ: 100.005 }, modelo);
         expect(r.ok).toBe(true);
         expect(r.debitos!.Irpj.ListaDebitos[0].ValorDebito).toBe(100.01);
+    });
+
+    it('modo complemento: apenasFamilias monta só as faltantes com IdDebito continuando', () => {
+        // Caso PEC PRONTA: PIS/COFINS já no MIT; adicionar só IRPJ/CSLL.
+        const r = montarDebitosMit(
+            { IRPJ: 45102.34, CSLL: 18396.84, PIS: 1376.14, COFINS: 6351.41 },
+            modelo,
+            { apenasFamilias: ['IRPJ', 'CSLL'], idInicial: 3 },
+        );
+        expect(r.ok).toBe(true);
+        expect(r.mapeamento.map(m => m.familia)).toEqual(['IRPJ', 'CSLL']);
+        expect(r.debitos!.PisPasep).toBeUndefined();
+        expect(r.debitos!.Irpj.ListaDebitos[0].IdDebito).toBe(3);
+        expect(r.debitos!.Csll.ListaDebitos[0].IdDebito).toBe(4);
+        expect(r.totalProposto).toBe(63499.18);
+    });
+
+    it('modo complemento sem faltantes → falha explicando que já está coberto', () => {
+        const r = montarDebitosMit({ IRPJ: 100 }, modelo, { apenasFamilias: [] });
+        expect(r.ok).toBe(false);
+        expect(r.erros.join(' ')).toMatch(/já cobrem/i);
+    });
+});
+
+describe('maiorIdDebitoMit / mesclarDebitosMit', () => {
+    const existentes = {
+        PisPasep: { ListaDebitos: [{ IdDebito: 1, CodigoDebito: '810901', ValorDebito: 1376.14 }] },
+        Cofins: { ListaDebitos: [{ IdDebito: 2, CodigoDebito: '217201', ValorDebito: 6351.41 }] },
+    };
+
+    it('maiorIdDebitoMit acha o maior id (0 quando vazio)', () => {
+        expect(maiorIdDebitoMit(existentes)).toBe(2);
+        expect(maiorIdDebitoMit({})).toBe(0);
+        expect(maiorIdDebitoMit(null)).toBe(0);
+    });
+
+    it('mesclarDebitosMit preserva os existentes intactos e adiciona os novos', () => {
+        const novos = {
+            Irpj: { ListaDebitos: [{ IdDebito: 3, CodigoDebito: '236201', ValorDebito: 45102.34 }] },
+        };
+        const out = mesclarDebitosMit(existentes, novos);
+        expect(out.PisPasep.ListaDebitos).toEqual(existentes.PisPasep.ListaDebitos);
+        expect(out.Cofins.ListaDebitos).toEqual(existentes.Cofins.ListaDebitos);
+        expect(out.Irpj.ListaDebitos[0].CodigoDebito).toBe('236201');
+        // não muta o objeto original
+        expect(existentes as any).not.toHaveProperty('Irpj');
+    });
+
+    it('mesclarDebitosMit acrescenta ao grupo existente sem sobrescrever', () => {
+        const out = mesclarDebitosMit(
+            { Irpj: { ListaDebitos: [{ IdDebito: 1, CodigoDebito: '236201', ValorDebito: 10 }] } },
+            { Irpj: { ListaDebitos: [{ IdDebito: 2, CodigoDebito: '236202', ValorDebito: 20 }] } },
+        );
+        expect(out.Irpj.ListaDebitos).toHaveLength(2);
+        expect(out.Irpj.ListaDebitos[0].ValorDebito).toBe(10);
+        expect(out.Irpj.ListaDebitos[1].ValorDebito).toBe(20);
     });
 });
