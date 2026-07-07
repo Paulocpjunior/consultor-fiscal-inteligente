@@ -72,6 +72,43 @@ describe('SerproProvider MIT — catálogo oficial', () => {
         expect(mockInvokeIntegraContador).not.toHaveBeenCalled();
     });
 
+    it('encerrarApuracaoMit barra apuração com movimento e Debitos VAZIO antes do SERPRO (caso MIT-MSG_0003)', async () => {
+        // Apuração criada no e-CAC, em edição: Debitos existe mas sem nenhum
+        // débito lançado. Antes o clique ia ao SERPRO e voltava 400
+        // [EntradaIncorreta-MIT-MSG_0003].
+        for (const debitosVazios of [{}, { Irpj: { ListaDebitos: [] } }, []]) {
+            await expect(provider.encerrarApuracaoMit({
+                empresaCnpj: '55070577000161',
+                anoPA: 2026,
+                mesPA: 6,
+                dadosApuracaoMit: {
+                    PeriodoApuracao: { MesApuracao: 6, AnoApuracao: 2026 },
+                    DadosIniciais: { SemMovimento: false, QualificacaoPj: 1 },
+                    Debitos: debitosVazios,
+                },
+            })).rejects.toThrow(/sem nenhum debito lancado/i);
+        }
+        expect(mockInvokeIntegraContador).not.toHaveBeenCalled();
+    });
+
+    it('encerrarApuracaoMit transmite quando há ao menos um débito real', async () => {
+        mockInvokeIntegraContador.mockResolvedValue({
+            dados: { protocoloEncerramento: 'PROTO-6', idApuracao: 606 },
+        });
+        const r = await provider.encerrarApuracaoMit({
+            empresaCnpj: '55070577000161',
+            anoPA: 2026,
+            mesPA: 6,
+            dadosApuracaoMit: {
+                PeriodoApuracao: { MesApuracao: 6, AnoApuracao: 2026 },
+                DadosIniciais: { SemMovimento: false, QualificacaoPj: 1 },
+                Debitos: { Irpj: { ListaDebitos: [{ CodigoDebito: '236201', ValorDebito: 1234.56 }] } },
+            },
+        });
+        expect(r.protocolo).toBe('PROTO-6');
+        expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(1);
+    });
+
     it('consultarApuracoesAno usa MIT/LISTAAPURACOES317', async () => {
         mockInvokeIntegraContador.mockResolvedValue({
             dados: { Apuracoes: [{ periodoApuracao: '202605', idApuracao: 456 }] },

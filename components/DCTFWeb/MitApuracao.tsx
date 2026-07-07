@@ -13,32 +13,13 @@ import {
     formatPaLabel,
 } from '../../services/dctfwebService';
 import { getMitEncerramentoEstado } from './mitApuracaoStatus';
+import { pickDadosApuracaoMit, analisarApuracaoMitParaEncerramento } from './mitApuracaoPayload';
 
 interface Props {
     declaracao: DctfwebDeclaracao;
     user: User | null;
     onClose: () => void;
     onShowToast?: (msg: string) => void;
-}
-
-function pickDadosApuracaoMit(input: any): any | null {
-    if (!input || typeof input !== 'object') return null;
-    if (input.PeriodoApuracao) return input;
-    const direct = input.dadosApuracaoMit ?? input.dadosApuracaoMIT ?? input.DadosApuracaoMit ?? input.DadosApuracaoMIT;
-    if (Array.isArray(direct)) return direct[0] || null;
-    if (direct && typeof direct === 'object') return direct;
-    const nested = input.apuracaoMit ?? input.apuracao ?? input.dados;
-    return nested && nested !== input ? pickDadosApuracaoMit(nested) : null;
-}
-
-function isDadosApuracaoMitCompleta(input: any): boolean {
-    const payload = pickDadosApuracaoMit(input);
-    if (!payload) return false;
-    const dadosIniciais = payload.DadosIniciais || payload.dadosIniciais;
-    if (!dadosIniciais) return false;
-    const semMovimento = dadosIniciais.SemMovimento ?? dadosIniciais.semMovimento;
-    if (semMovimento === true || semMovimento === 'true') return true;
-    return !!(payload.Debitos || payload.debitos);
 }
 
 const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }) => {
@@ -92,8 +73,9 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
     const handleEncerrar = async () => {
         if (!user) return;
         const dadosApuracaoMit = pickDadosApuracaoMit(apuracao);
-        if (!isDadosApuracaoMitCompleta(apuracao)) {
-            setError('Encerrar: não há apuração MIT completa carregada para transmitir. Primeiro gere/importe a apuração MIT com DadosIniciais e débitos.');
+        const analiseClick = analisarApuracaoMitParaEncerramento(apuracao);
+        if (!analiseClick.completa) {
+            setError(`Encerrar: ${analiseClick.motivo || 'não há apuração MIT completa carregada para transmitir.'}`);
             return;
         }
         if (!confirm(`Encerrar apuração MIT de ${declaracao.empresaCnpj} ref ${formatPaLabel(declaracao.anoPA, declaracao.mesPA)}?`)) return;
@@ -128,7 +110,8 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
         }
     };
 
-    const dadosApuracaoMitCompleta = isDadosApuracaoMitCompleta(apuracao);
+    const analiseEncerramento = analisarApuracaoMitParaEncerramento(apuracao);
+    const dadosApuracaoMitCompleta = analiseEncerramento.completa;
     const estadoEncerramento = getMitEncerramentoEstado(apuracao, apuracaoResumo);
     const encerramentoBloqueado = !dadosApuracaoMitCompleta || estadoEncerramento.bloqueiaEncerramento;
     let mensagemBloqueioEncerramento = 'Encerramento indisponível para a situação retornada pelo SERPRO.';
@@ -141,7 +124,11 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
     } else if (estadoEncerramento.emProcessamento) {
         mensagemBloqueioEncerramento = 'Encerramento MIT em processamento no SERPRO. Aguarde alguns minutos e atualize a apuração antes de tentar transmitir a DCTFWeb.';
     } else if (!dadosApuracaoMitCompleta) {
-        mensagemBloqueioEncerramento = 'Encerramento indisponível: a apuração MIT foi encontrada, mas o SERPRO não retornou DadosIniciais e Débitos completos para retransmissão.';
+        // Motivo específico (ex.: apuração em edição sem débitos lançados)
+        // vindo da análise do payload — antes era um texto genérico e o clique
+        // ia ao SERPRO só pra voltar 400 MIT-MSG_0003.
+        mensagemBloqueioEncerramento = analiseEncerramento.motivo
+            || 'Encerramento indisponível: a apuração MIT foi encontrada, mas o SERPRO não retornou DadosIniciais e Débitos completos para retransmissão.';
     }
     const botaoEncerrarLabel = estadoEncerramento.encerrada
         ? 'MIT já encerrado'
