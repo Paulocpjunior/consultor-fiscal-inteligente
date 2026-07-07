@@ -10,6 +10,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { temPermissaoEmissao, PERM_EMISSAO_TRIBUTOS } from './emissao-permissao.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -60,6 +61,51 @@ export async function requireAdmin(req, res, next) {
         next();
     } catch (e) {
         console.error('[require-admin] erro:', e.message);
+        return res.status(401).json({ error: 'Token invalido ou expirado' });
+    }
+}
+
+/**
+ * Express middleware pra rotas de EMISSAO de tributos (DAS/DARF/Central).
+ * Exige:
+ *   - header Authorization: Bearer <firebase-id-token> valido
+ *   - role 'admin' OU role 'colaborador' com PERM_EMISSAO_TRIBUTOS em
+ *     users/{uid}.modulosPermitidos (liberado por admin via Gerenciar
+ *     Usuarios — Firestore rules impedem auto-concessao).
+ */
+export async function requireEmissao(req, res, next) {
+    try {
+        const auth = req.headers.authorization || '';
+        const m = auth.match(/^Bearer\s+(.+)$/i);
+        if (!m) return res.status(401).json({ error: 'Token ausente' });
+
+        const decoded = await fa().auth().verifyIdToken(m[1]);
+        const userDoc = await fa().firestore()
+            .collection('users').doc(decoded.uid).get();
+        const dados = userDoc.exists ? userDoc.data() : null;
+        const role = dados ? dados.role : null;
+
+        if (!temPermissaoEmissao(role, dados ? dados.modulosPermitidos : null)) {
+            console.warn(
+                `[require-emissao] 403 — uid=${decoded.uid} email=${decoded.email || '?'} ` +
+                `docExists=${userDoc.exists} role=${JSON.stringify(role)}`,
+            );
+            return res.status(403).json({
+                error: 'Sem permissão para emissão de tributos',
+                motivo: !userDoc.exists
+                    ? 'Seu perfil nao foi encontrado em users/{uid} no Firestore. ' +
+                      'Faca logout/login pra recriar, ou peca pra um admin criar o doc.'
+                    : `Seu role atual e ${JSON.stringify(role)} sem a permissão ` +
+                      `"${PERM_EMISSAO_TRIBUTOS}". Peça a um administrador para ` +
+                      'liberá-la em Gerenciar Usuários (ou promovê-lo a admin).',
+                uid: decoded.uid,
+                email: decoded.email || null,
+            });
+        }
+        req.user = { uid: decoded.uid, role, email: decoded.email || null };
+        next();
+    } catch (e) {
+        console.error('[require-emissao] erro:', e.message);
         return res.status(401).json({ error: 'Token invalido ou expirado' });
     }
 }

@@ -5,7 +5,7 @@
 // ============================================================================
 
 import express from 'express';
-import { requireAdmin, requireAuth } from './require-admin.js';
+import { requireAuth, requireEmissao } from './require-admin.js';
 import admin from 'firebase-admin';
 import { ultimasCompetencias as ultimasCompetenciasHelper } from './competencias-helper.js';
 import {
@@ -21,7 +21,8 @@ const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 
 const router = express.Router();
 
-// requireAdmin agora vem do middleware compartilhado (verifyIdToken)
+// requireEmissao/requireAuth vem do middleware compartilhado (verifyIdToken).
+// Emissao: admin OU colaborador com permissao 'Central de Emissões' liberada.
 
 router.get('/status', (_req, res) => {
     res.json({ mode: getDasMode(), ok: true });
@@ -42,17 +43,17 @@ router.get('/listar', requireAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/emitir-regular', requireAdmin, express.json(), async (req, res) => {
+router.post('/emitir-regular', requireEmissao, express.json(), async (req, res) => {
     try { res.json(await emitirDasRegular(req.body)); }
     catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
 
-router.post('/emitir-avulso', requireAdmin, express.json(), async (req, res) => {
+router.post('/emitir-avulso', requireEmissao, express.json(), async (req, res) => {
     try { res.json(await emitirDasAvulso(req.body)); }
     catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
 
-router.post('/marcar-pago', requireAdmin, express.json(), async (req, res) => {
+router.post('/marcar-pago', requireEmissao, express.json(), async (req, res) => {
     try {
         const { docId, dataPagamento } = req.body;
         if (!docId) return res.status(400).json({ error: 'docId obrigatorio' });

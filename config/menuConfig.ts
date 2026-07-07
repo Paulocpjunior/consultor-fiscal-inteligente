@@ -133,6 +133,18 @@ export const MODULOS_RESTRITOS: MenuCard[] = MENU_GRUPOS
     .filter(c => c.adminOnly);
 
 /**
+ * Permissões funcionais — não escondem card do menu (continua visível a
+ * todos), mas o BACKEND as exige em ações sensíveis. Gravadas no mesmo
+ * campo `modulosPermitidos` do perfil e alternadas pelo admin em
+ * Gerenciar Usuários. Hoje: emissão de tributos — as rotas /emitir* de
+ * DAS/DARF/Central exigem admin OU esta permissão
+ * (sefaz-backend/require-admin.js + emissao-permissao.js).
+ */
+export const PERMISSOES_FUNCIONAIS: MenuCard[] = [
+    { type: SearchType.EMISSAO_TRIBUTOS, label: 'Emissão de Tributos (DAS/DARF)', Icon: RocketIcon },
+];
+
+/**
  * Admin acessa tudo; colaborador acessa card restrito apenas se o admin
  * liberou o módulo (modulosPermitidos contém o SearchType do card).
  */
