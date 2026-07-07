@@ -92,14 +92,14 @@ function sameMitPeriod(item, anoPA, mesPA) {
     return ano === Number(anoPA) && mes === Number(mesPA);
 }
 
-function pickIdApuracao(item) {
+export function pickIdApuracao(item) {
     return item?.idApuracao ?? item?.IdApuracao ?? item?.identEFD ?? item?.id;
 }
 
 // Extrai o período (YYYYMM) de um item do histórico MIT — mesmos shapes que
 // sameMitPeriod entende. Usado pra mensagem diagnóstica ("períodos existentes")
 // quando a competência pedida não aparece.
-function mitPeriodoLabel(item) {
+export function mitPeriodoLabel(item) {
     const periodoObj = (item?.PeriodoApuracao && typeof item.PeriodoApuracao === 'object')
         ? item.PeriodoApuracao
         : ((item?.periodoApuracao && typeof item.periodoApuracao === 'object') ? item.periodoApuracao : null);
@@ -117,7 +117,7 @@ function mitPeriodoLabel(item) {
     return null;
 }
 
-function pickDadosApuracaoMit(input) {
+export function pickDadosApuracaoMit(input) {
     if (!input || typeof input !== 'object') return null;
     if (input.PeriodoApuracao) return input;
 
@@ -137,7 +137,7 @@ function pickDadosApuracaoMit(input) {
 // deixava o encerramento passar e o SERPRO devolvia 400
 // [EntradaIncorreta-MIT-MSG_0003] "Debitos: deve ser informado ao menos um
 // débito" (caso real 55070577000161 · 06/2026, 07/07/2026).
-function contarDebitosMit(debitos) {
+export function contarDebitosMit(debitos) {
     if (!debitos) return 0;
     if (Array.isArray(debitos)) return debitos.filter((d) => d && typeof d === 'object').length;
     if (typeof debitos !== 'object') return 0;
@@ -490,6 +490,18 @@ class SerproProvider {
                 fonte: 'serpro',
             };
         }
+        const detalhe = await this.consultarApuracaoMitPorId({ empresaCnpj: cnpj, idApuracao });
+        return {
+            ...detalhe,
+            apuracaoResumo: apuracaoRef,
+        };
+    }
+
+    // Detalhe de UMA apuração MIT pelo idApuracao (CONSAPURACAO316). Usado
+    // pelo fluxo normal (acima) e pelo preenchimento automático de débitos,
+    // que precisa do detalhe do mês-modelo para copiar os códigos de débito.
+    async consultarApuracaoMitPorId({ empresaCnpj, idApuracao }) {
+        const cnpj = String(empresaCnpj).replace(/\D/g, '');
         const r = await invokeIntegraContador({
             idSistema: 'MIT',
             idServico: MIT_SERVICOS.CONSULTAR_APURACAO,
@@ -500,7 +512,6 @@ class SerproProvider {
         const d = safeJsonParse(r.dados) || {};
         return {
             apuracaoMit: d.apuracao || d.dadosApuracaoMit || d.dadosApuracaoMIT || d,
-            apuracaoResumo: apuracaoRef,
             idApuracao: Number(idApuracao),
             fonte: 'serpro',
         };

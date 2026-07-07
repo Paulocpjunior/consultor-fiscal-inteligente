@@ -76,8 +76,9 @@ export function analisarApuracaoMitParaEncerramento(input: any): AnaliseEncerram
             completa: false,
             totalDebitos: 0,
             motivo: 'A apuração MIT desta competência existe mas está SEM débitos lançados (em edição). '
-                + 'Lance os débitos (IRPJ/CSLL/PIS/COFINS) no MIT do e-CAC — ou marque "Sem Movimento" se for o caso — '
-                + 'e clique em "Atualizar MIT" para encerrar por aqui.',
+                + 'Preencha automaticamente com os valores do app em Lucro Presumido → sua empresa → '
+                + '"Conferir DCTFWeb" → "Preencher MIT com os valores do app" — ou lance os débitos '
+                + '(IRPJ/CSLL/PIS/COFINS) no MIT do e-CAC e clique em "Atualizar MIT".',
         };
     }
     return { completa: true, totalDebitos, motivo: null };

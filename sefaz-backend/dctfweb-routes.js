@@ -12,6 +12,7 @@ import {
     consultarDeclaracaoCompleta, consultarRecibo,
     encerrarApuracaoMit, consultarStatusEncerramentoMit,
     consultarApuracaoMit, consultarApuracoesAno,
+    preencherEncerrarMit,
     consultarRetencaoDctfwebNormalizada,
     getResumoGlobal,
 } from './dctfweb-orchestrator.js';
@@ -163,6 +164,32 @@ router.post('/mit/encerrar', requireAuth, express.json(), async (req, res) => {
         const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await encerrarApuracaoMit({ empresaId, empresaCnpj, anoPA, mesPA, dadosApuracaoMit }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Preenche os débitos do MIT com a apuração do APP e (opcionalmente) encerra.
+// Duas fases: transmitir=false devolve a PROPOSTA (família/código/valor,
+// período-modelo) pra tela de conferência; transmitir=true monta de novo no
+// servidor e transmite o ENCAPURACAO314, com log de auditoria. Os códigos de
+// débito vêm da última apuração anterior da própria empresa no MIT — nunca
+// são chutados de tabela.
+router.post('/mit/preencher-encerrar', requireAuth, express.json(), async (req, res) => {
+    try {
+        const { empresaId, empresaCnpj, anoPA, mesPA, tributosApp, transmitir } = req.body || {};
+        if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
+        if (!tributosApp || typeof tributosApp !== 'object') {
+            return res.status(400).json({ error: 'tributosApp {IRPJ,CSLL,PIS,COFINS} é obrigatório' });
+        }
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+        const r = await preencherEncerrarMit({
+            empresaId, empresaCnpj,
+            anoPA: Number(anoPA), mesPA: Number(mesPA),
+            tributosApp,
+            transmitir: transmitir === true,
+            usuario: { uid: req.user.uid, email: req.user.email },
+        });
+        res.json(r);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
