@@ -119,6 +119,7 @@ export function mitPeriodoLabel(item) {
 
 export function pickDadosApuracaoMit(input) {
     if (!input || typeof input !== 'object') return null;
+    if (Array.isArray(input)) return pickDadosApuracaoMit(input[0]);
     if (input.PeriodoApuracao) return input;
 
     const direct = input.dadosApuracaoMit ?? input.dadosApuracaoMIT ?? input.DadosApuracaoMit ?? input.DadosApuracaoMIT;
@@ -548,7 +549,9 @@ class SerproProvider {
                 partes.push(`Períodos existentes no MIT: ${periodos.join(', ')}.`);
             }
             partes.push(
-                'A apuração desta competência ainda não foi criada no MIT — crie-a no e-CAC '
+                'A apuração desta competência ainda não foi criada no MIT. Use o preenchimento automático '
+                + '(Lucro Presumido → empresa → Conferir DCTFWeb → "Preencher MIT com os valores do app"), '
+                + 'que cria e encerra a apuração com os dados do mês anterior — ou crie-a manualmente no e-CAC '
                 + '(DCTFWeb → Módulo de Inclusão de Tributos) e clique em "Atualizar MIT".'
             );
             return {

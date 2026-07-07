@@ -173,6 +173,8 @@ function lerDescricao(item) {
  */
 export function normalizarApuracaoMit(apuracaoMit) {
     const vazio = { IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0 };
+    // CONSAPURACAO316 pode devolver dadosApuracaoMit como ARRAY de 1 item.
+    if (Array.isArray(apuracaoMit)) apuracaoMit = apuracaoMit[0];
     if (!apuracaoMit || typeof apuracaoMit !== 'object') {
         return { lido: false, motivo: 'apuracaoMit ausente ou nao-objeto', tributos: { ...vazio }, outros: [], totalReconhecido: 0 };
     }

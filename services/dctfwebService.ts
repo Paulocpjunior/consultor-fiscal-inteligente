@@ -190,8 +190,10 @@ export async function encerrarApuracaoMit(user: User | null, payload: {
 
 export interface MitPreencherProposta {
     pa: string;
-    /** 'completo' = MIT estava sem débitos; 'complemento' = só famílias faltantes adicionadas */
-    modo?: 'completo' | 'complemento';
+    /** 'completo' = MIT estava sem débitos; 'complemento' = só famílias
+     *  faltantes adicionadas; 'criacao' = a apuração não existia e será
+     *  CRIADA (DadosIniciais copiados do mês-modelo) e encerrada. */
+    modo?: 'completo' | 'complemento' | 'criacao';
     tributosApp: { IRPJ: number; CSLL: number; PIS: number; COFINS: number };
     mapeamento: Array<{ familia: string; codigo: string; grupo: string; valor: number }>;
     totalProposto: number;
@@ -199,6 +201,12 @@ export interface MitPreencherProposta {
     jaDeclarados?: Array<{ familia: string; valor: number }>;
     modeloPeriodo: string | null;
     alvoIdApuracao: number | null;
+    /** Dados iniciais usados na transmissão (conferência — vital no modo criação) */
+    dadosIniciaisResumo?: {
+        qualificacaoPj: number | null;
+        tributacaoLucro: number | null;
+        cpfResponsavel: string | null;
+    };
 }
 
 export interface MitPreencherResult {
