@@ -309,6 +309,7 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
           + (input.acumuladoTrimestre.industria || 0)
           + (input.acumuladoTrimestre.servico || 0)
           + (input.acumuladoTrimestre.servicoHospitalar || 0)
+          + (input.acumuladoTrimestre.aluguel || 0)
         : 0;
 
     // Receita BRUTA do período de apuração para fins da majoração:
@@ -395,7 +396,9 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
     if (input.periodoApuracao === 'Trimestral' && input.acumuladoTrimestre) {
         baseCalculoIrpjComercio += input.acumuladoTrimestre.comercio;
         baseCalculoIrpjIndustria += input.acumuladoTrimestre.industria;
-        baseCalculoIrpjServico += input.acumuladoTrimestre.servico;
+        // Aluguel acumulado compõe a base de serviços (mesma presunção de 32%,
+        // igual ao tratamento do fatLocacao mensal dentro de fatServicoMesTotal)
+        baseCalculoIrpjServico += input.acumuladoTrimestre.servico + (input.acumuladoTrimestre.aluguel || 0);
         baseCalculoIrpjServicoHosp += (input.acumuladoTrimestre.servicoHospitalar || 0);
         baseCalculoReceitaFinanceira += input.acumuladoTrimestre.financeira;
         obsTrimestre = ` (Inclui Out/Nov/Dez)`;
