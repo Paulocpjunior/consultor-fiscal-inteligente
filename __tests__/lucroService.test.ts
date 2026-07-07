@@ -229,6 +229,35 @@ describe('lucroService', () => {
             expect(irpj!.valor).toBeCloseTo(34000, 2);
         });
 
+        it('trimestral: acumulado aluguel composes IRPJ/CSLL base (32% presuncao, same as servicos)', () => {
+            const input = criarInputBase({
+                faturamentoServico: 100000,
+                periodoApuracao: 'Trimestral',
+                acumuladoTrimestre: {
+                    comercio: 0,
+                    industria: 0,
+                    servico: 0,
+                    servicoHospitalar: 0,
+                    financeira: 0,
+                    aluguel: 200000, // 2 previous months of locacao
+                    mesesConsiderados: ['2025-01', '2025-02'],
+                },
+            });
+            const result = calcularLucro(input);
+
+            const irpj = findImposto(result, 'IRPJ');
+            // Total base trimestral = 100000 (servico mes) + 200000 (aluguel acum) = 300000
+            // Base IRPJ = 300000 * 0.32 = 96000
+            // IRPJ = 96000 * 0.15 = 14400 + adicional (96000 - 60000) * 0.10 = 3600 => 18000
+            expect(irpj!.baseCalculo).toBeCloseTo(96000, 2);
+            expect(irpj!.valor).toBeCloseTo(18000, 2);
+
+            const csll = findImposto(result, 'CSLL');
+            // Base CSLL = 300000 * 0.32 = 96000; CSLL = 96000 * 0.09 = 8640
+            expect(csll!.baseCalculo).toBeCloseTo(96000, 2);
+            expect(csll!.valor).toBeCloseTo(8640, 2);
+        });
+
         it('trimestral: no additional when base <= R$ 60k', () => {
             const input = criarInputBase({
                 faturamentoComercio: 100000,
