@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { User, AccessLog } from '../types';
 import * as authService from '../services/authService';
-import { MODULOS_RESTRITOS } from '../config/menuConfig';
+import { MODULOS_RESTRITOS, PERMISSOES_FUNCIONAIS } from '../config/menuConfig';
 import { CloseIcon, UserGroupIcon, TrashIcon, UserIcon } from './Icons';
 import { useConfirm, usePrompt } from './dialog/DialogProvider';
 
@@ -156,7 +156,9 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
     /**
      * Libera/revoga o acesso de um colaborador a um módulo restrito
-     * (adminOnly), ex.: Consulta Situação Fiscal. Grava a lista em
+     * (adminOnly, ex.: Consulta Situação Fiscal) ou a uma permissão
+     * funcional (ex.: Emissão de Tributos, exigida pelo backend nas rotas
+     * /emitir* de DAS/DARF). Grava a lista em
      * users/{uid}.modulosPermitidos — só admin consegue (Firestore rules).
      */
     const handleToggleModulo = async (user: User, moduloType: string, moduloLabel: string) => {
@@ -280,7 +282,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                     <th className="px-4 py-2">Nome</th>
                                     <th className="px-4 py-2">E-mail</th>
                                     <th className="px-4 py-2">Role</th>
-                                    <th className="px-4 py-2">Módulos restritos</th>
+                                    <th className="px-4 py-2">Permissões</th>
                                     <th className="px-4 py-2 text-center">Ações</th>
                                 </tr>
                             </thead>
@@ -309,7 +311,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                                 <span className="text-xs text-slate-400 italic">Todos (admin)</span>
                                             ) : (
                                                 <div className="flex flex-wrap gap-1">
-                                                    {MODULOS_RESTRITOS.map(mod => {
+                                                    {[...MODULOS_RESTRITOS, ...PERMISSOES_FUNCIONAIS].map(mod => {
                                                         const modLabel = mod.label ?? mod.type;
                                                         const liberado = (user.modulosPermitidos ?? []).includes(mod.type);
                                                         return (

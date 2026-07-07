@@ -5,7 +5,7 @@
 // ============================================================================
 
 import express from 'express';
-import { requireAdmin } from './require-admin.js';
+import { requireEmissao } from './require-admin.js';
 import {
     emitirDarf, listarDarfs, getResumoDarf,
     marcarPago, processarVencimentos,
@@ -20,22 +20,22 @@ router.get('/status', (_req, res) => {
     res.json({ mode: getDarfMode(), ok: true });
 });
 
-router.get('/codigos-receita', requireAdmin, (_req, res) => {
+router.get('/codigos-receita', requireEmissao, (_req, res) => {
     res.json(listarCodigos());
 });
 
-router.get('/sugerir-codigo', requireAdmin, (req, res) => {
+router.get('/sugerir-codigo', requireEmissao, (req, res) => {
     const { regime, tributo, periodicidade } = req.query;
     const sug = sugerirCodigoReceita(regime, tributo, periodicidade);
     res.json(sug || {});
 });
 
-router.get('/resumo', requireAdmin, async (_req, res) => {
+router.get('/resumo', requireEmissao, async (_req, res) => {
     try { res.json(await getResumoDarf()); }
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/listar', requireAdmin, async (req, res) => {
+router.get('/listar', requireEmissao, async (req, res) => {
     try {
         res.json(await listarDarfs({
             empresaId:   req.query.empresaId,
@@ -47,7 +47,7 @@ router.get('/listar', requireAdmin, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/emitir', requireAdmin, express.json(), async (req, res) => {
+router.post('/emitir', requireEmissao, express.json(), async (req, res) => {
     try { res.json(await emitirDarf(req.body)); }
     catch (err) { res.status(err.httpStatus || 400).json({ error: err.message, code: err.code }); }
 });
@@ -56,7 +56,7 @@ router.post('/emitir', requireAdmin, express.json(), async (req, res) => {
 // emitir o DARF — SEM enviar nada. Read-only, NAO passa pelo kill-switch.
 // Uso: validar o idServico (EMITEDARF61 e chute) + estrutura do payload contra
 // o catalogo da conta SERPRO ANTES de ligar a emissao real.
-router.post('/preview', requireAdmin, express.json(), (req, res) => {
+router.post('/preview', requireEmissao, express.json(), (req, res) => {
     try {
         const payload = montarPayloadDarfSerpro(req.body || {});
         res.json({
@@ -68,7 +68,7 @@ router.post('/preview', requireAdmin, express.json(), (req, res) => {
     } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
-router.post('/marcar-pago', requireAdmin, express.json(), async (req, res) => {
+router.post('/marcar-pago', requireEmissao, express.json(), async (req, res) => {
     try {
         const { docId, dataPagamento } = req.body;
         if (!docId) return res.status(400).json({ error: 'docId obrigatorio' });
