@@ -1,0 +1,129 @@
+# Deploy do APP PRINCIPAL (frontend + server.js + sefaz-backend) no Cloud Run.
+#
+# Antes o deploy era 100% manual (script 03-deploy.sh na máquina do admin),
+# o que deixava correções mescladas na main paradas sem publicar — e falhava
+# junto com o ambiente local (git lock, gcloud quebrado). Este workflow usa a
+# MESMA service account do deploy do proxy (secret GCP_SA_KEY).
+#
+# Config do frontend (VITE_*): resolvida por scripts/extract-prod-frontend-
+# config.mjs — GitHub Secrets têm prioridade; sem eles, extrai do bundle já
+# publicado (config web do Firebase é pública por design).
+#
+# O `gcloud run deploy` passa SÓ a imagem: env vars, secrets, memória, service
+# account e demais configs do serviço são PRESERVADOS da revisão atual.
+name: Deploy App Principal
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'proxy-backend/**'
+      - 'docs/**'
+      - '**.md'
+      - '.github/workflows/deploy-proxy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-app-principal
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: consultorfiscalapp
+  SERVICE_NAME: consultor-fiscal-inteligente
+  REGION: us-west1
+  IMAGE: us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/consultor-fiscal-inteligente
+  PROD_URL: https://consultor-fiscal-inteligente-631239634290.us-west1.run.app
+
+jobs:
+  deploy:
+    name: Build & Deploy App
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck + testes
+        run: |
+          npm run lint
+          npx jest --ci
+
+      - name: Resolver config do frontend (VITE_*)
+        env:
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_SENTRY_ENV: ${{ secrets.VITE_SENTRY_ENV }}
+        run: node scripts/extract-prod-frontend-config.mjs
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: consultorfiscalapp
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Build app Docker image
+        run: |
+          docker build \
+            --build-arg VITE_GEMINI_API_KEY="$VITE_GEMINI_API_KEY" \
+            --build-arg VITE_FIREBASE_API_KEY="$VITE_FIREBASE_API_KEY" \
+            --build-arg VITE_FIREBASE_AUTH_DOMAIN="$VITE_FIREBASE_AUTH_DOMAIN" \
+            --build-arg VITE_FIREBASE_PROJECT_ID="$VITE_FIREBASE_PROJECT_ID" \
+            --build-arg VITE_FIREBASE_STORAGE_BUCKET="$VITE_FIREBASE_STORAGE_BUCKET" \
+            --build-arg VITE_FIREBASE_MESSAGING_SENDER_ID="$VITE_FIREBASE_MESSAGING_SENDER_ID" \
+            --build-arg VITE_FIREBASE_APP_ID="$VITE_FIREBASE_APP_ID" \
+            --build-arg VITE_SENTRY_DSN="$VITE_SENTRY_DSN" \
+            --build-arg VITE_SENTRY_ENV="$VITE_SENTRY_ENV" \
+            -t ${{ env.IMAGE }}:${{ github.sha }} \
+            .
+
+      - name: Push image
+        run: docker push ${{ env.IMAGE }}:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image ${{ env.IMAGE }}:${{ github.sha }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --quiet
+
+      - name: Route traffic to latest
+        run: |
+          gcloud run services update-traffic ${{ env.SERVICE_NAME }} \
+            --to-latest \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --quiet
+
+      - name: Health check
+        run: |
+          sleep 5
+          echo "── /health ──"
+          curl -sSf "${{ env.PROD_URL }}/health"
+          echo ""
+          echo "── /version.json ──"
+          curl -sSf "${{ env.PROD_URL }}/version.json" || echo "(version.json indisponível)"
