@@ -104,12 +104,24 @@ jobs:
         run: docker push ${{ env.IMAGE }}:${{ github.sha }}
 
       - name: Deploy to Cloud Run
+        # Retry: o Cloud Run aborta com "ABORTED: Conflict for resource ...
+        # version was specified but current version is ..." quando outra
+        # operação tocou o serviço entre a leitura e a gravação (corrida
+        # transitória — caso real 08/07/2026). Repetir resolve.
         run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image ${{ env.IMAGE }}:${{ github.sha }} \
-            --platform managed \
-            --region ${{ env.REGION }} \
-            --quiet
+          for attempt in 1 2 3; do
+            if gcloud run deploy ${{ env.SERVICE_NAME }} \
+              --image ${{ env.IMAGE }}:${{ github.sha }} \
+              --platform managed \
+              --region ${{ env.REGION }} \
+              --quiet; then
+              exit 0
+            fi
+            echo "Deploy falhou (tentativa ${attempt}/3) — aguardando antes de repetir..."
+            sleep $((attempt * 15))
+          done
+          echo "Deploy falhou após 3 tentativas."
+          exit 1
 
       - name: Route traffic to latest
         run: |
