@@ -86,6 +86,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     const [darfResult, setDarfResult] = useState<DctfwebDarfResult | null>(null);
     const [darfsSeparados, setDarfsSeparados] = useState<DctfwebDarfsSeparadosResult | null>(null);
     const [loadingSeparados, setLoadingSeparados] = useState(false);
+    const [quotasTrimestrais, setQuotasTrimestrais] = useState<1 | 2 | 3>(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -147,11 +148,16 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
 
     const handleGerarDarfsSeparados = async () => {
         if (!user) return;
+        const infoQuotas = quotasTrimestrais > 1
+            ? `\n\nIRPJ/CSLL trimestrais em ${quotasTrimestrais} quotas — quota 1 no vencimento normal; `
+              + 'quotas 2/3 no último dia útil dos meses seguintes, com juros SELIC+1% calculados pelo SICALC.'
+            : '';
         if (!confirm(
             `Emitir guias separadas por vencimento para ${declaracao.empresaCnpj} ref ${formatPaLabel(declaracao.anoPA, declaracao.mesPA)}?\n\n`
             + 'Será emitido 1 DARF avulso por tributo da declaração (PIS/COFINS no dia 25 antecipado; '
-            + 'IRPJ/CSLL trimestrais no último dia útil do mês seguinte ao trimestre).\n\n'
-            + 'Custo SERPRO: 1 chamada SICALC por guia + consulta do XML da declaração.'
+            + 'IRPJ/CSLL trimestrais no último dia útil do mês seguinte ao trimestre).'
+            + infoQuotas
+            + '\n\nCusto SERPRO: 1 chamada SICALC por guia + consulta do XML da declaração.'
         )) return;
         setLoadingSeparados(true); setError(null);
         try {
@@ -160,6 +166,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                 anoPA: declaracao.anoPA,
                 mesPA: declaracao.mesPA,
                 categoria: declaracao.categoria,
+                quotasTrimestrais,
             });
             setDarfsSeparados(r);
             onShowToast?.(`${r.guias.length} guia(s) emitida(s).`);
@@ -356,13 +363,34 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                         </p>
                                     </div>
                                     {!darfsSeparados && (
-                                        <button
-                                            onClick={handleGerarDarfsSeparados}
-                                            disabled={loadingSeparados}
-                                            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 text-sm"
-                                        >
-                                            {loadingSeparados ? 'Emitindo guias...' : 'Emitir guias separadas'}
-                                        </button>
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <label className="text-sm text-slate-600 flex items-center gap-2">
+                                                IRPJ/CSLL trimestrais em:
+                                                <select
+                                                    value={quotasTrimestrais}
+                                                    onChange={(e) => setQuotasTrimestrais(Number(e.target.value) as 1 | 2 | 3)}
+                                                    className="border rounded px-2 py-1 text-sm"
+                                                >
+                                                    <option value={1}>Quota única</option>
+                                                    <option value={2}>2 quotas</option>
+                                                    <option value={3}>3 quotas</option>
+                                                </select>
+                                            </label>
+                                            <button
+                                                onClick={handleGerarDarfsSeparados}
+                                                disabled={loadingSeparados}
+                                                className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 text-sm"
+                                            >
+                                                {loadingSeparados ? 'Emitindo guias...' : 'Emitir guias separadas'}
+                                            </button>
+                                            {quotasTrimestrais > 1 && (
+                                                <p className="w-full text-xs text-slate-500">
+                                                    Quotas valem só para IRPJ/CSLL trimestrais acima de R$ 2.000 (mínimo
+                                                    R$ 1.000 por quota — Lei 9.430). Quotas 2 e 3 saem com juros SELIC+1%
+                                                    calculados pelo SICALC. PIS/COFINS não têm quota.
+                                                </p>
+                                            )}
+                                        </div>
                                     )}
                                     {darfsSeparados && Object.entries(darfsSeparados.grupos)
                                         .sort(([a], [b]) => a.localeCompare(b))
@@ -377,6 +405,11 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                             <div className="text-sm">
                                                                 <span className="font-mono text-xs text-slate-500 mr-2">{g.codigo}-{g.extensao}</span>
                                                                 <span className="text-slate-700">{g.descricao || 'DARF'}</span>
+                                                                {g.cota != null && (
+                                                                    <span className="ml-2 text-xs px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded">
+                                                                        quota {g.cota}/{g.totalCotas}
+                                                                    </span>
+                                                                )}
                                                                 <span className="ml-2 font-semibold">
                                                                     R$ {g.valor.toFixed(2)}
                                                                 </span>
@@ -384,6 +417,9 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                                     <span className="ml-2 text-xs text-amber-700">
                                                                         (principal R$ {g.valorPrincipal.toFixed(2)} + multa/juros)
                                                                     </span>
+                                                                )}
+                                                                {g.aviso && (
+                                                                    <span className="block text-xs text-amber-700 mt-0.5">{g.aviso}</span>
                                                                 )}
                                                             </div>
                                                             <div className="flex gap-2">
@@ -396,7 +432,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                                             Abrir PDF
                                                                         </button>
                                                                         <button
-                                                                            onClick={() => downloadPdfFromBase64(g.pdfBase64, `darf_${g.codigo}${g.extensao}_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
+                                                                            onClick={() => downloadPdfFromBase64(g.pdfBase64, `darf_${g.codigo}${g.extensao}${g.cota != null ? `_quota${g.cota}` : ''}_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
                                                                             className="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700"
                                                                         >
                                                                             Baixar

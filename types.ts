@@ -1587,6 +1587,11 @@ export interface DctfwebGuiaSeparada {
     codigo: string;
     extensao: string;
     descricao: string;
+    /** Quota do IRPJ/CSLL trimestral (1-3); null em quota única. */
+    cota: number | null;
+    totalCotas: number | null;
+    /** Aviso (ex.: valor não comportou o nº de quotas pedido). */
+    aviso?: string | null;
     valorPrincipal: number;
     valor: number;
     multa: number;
