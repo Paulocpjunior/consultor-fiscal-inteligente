@@ -1603,12 +1603,24 @@ export interface DctfwebGuiaSeparada {
     mensagens?: DctfwebMensagemSerpro[];
 }
 
+/** Total consolidado de uma data de vencimento (como o "Valor Total do
+ * Documento" da RFB — várias guias, mesma data de arrecadação). */
+export interface DctfwebResumoVencimento {
+    vencimento: string;            // YYYY-MM-DD
+    quantidade: number;
+    totalPrincipal: number;
+    total: number;
+    codigos: string[];
+}
+
 export interface DctfwebDarfsSeparadosResult {
     competencia: string;           // YYYY-MM
     categoria: DctfwebCategoria | string;
     guias: DctfwebGuiaSeparada[];
     /** guias agrupadas por vencimento (YYYY-MM-DD) */
     grupos: Record<string, DctfwebGuiaSeparada[]>;
+    /** total por data de vencimento, ordenado por data */
+    resumoPorVencimento: DctfwebResumoVencimento[];
     naoEmitidos: Array<{
         codigo: string; extensao: string; descricao: string;
         valor: number; motivo: string;
