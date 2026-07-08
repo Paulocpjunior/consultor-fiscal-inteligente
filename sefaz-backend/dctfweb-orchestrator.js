@@ -10,6 +10,7 @@ import {
 } from './dctfweb-provider.js';
 import { normalizarRetencaoDctfweb, extrairDebitosDctfweb } from './dctfweb-retencao-normalizer.js';
 import { getDarfProvider } from './darf-provider.js';
+import { calcularUltimoDiaUtil } from './calendario-obrigacoes.js';
 import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
 import {
     extrairModeloDebitosMit, montarDebitosMit, mesclarDebitosMit, maiorIdDebitoMit,
@@ -163,9 +164,37 @@ const RECEITAS_GUIA_SEPARADA = new Set([
     '2362', '2484',                           // IRPJ/CSLL estimativa mensal
     '8109', '2172', '6912', '5856',           // PIS/COFINS
 ]);
-const DARF_VALOR_MINIMO = 10; // R$ — DARF inferior a R$10 não pode ser emitido (RFB)
+const RECEITAS_TRIMESTRAIS_QUOTA = new Set(['2089', '0220', '2372', '6012']);
+const DARF_VALOR_MINIMO = 10;       // R$ — DARF inferior a R$10 não pode ser emitido (RFB)
+// Quotas do IRPJ/CSLL trimestral (Lei 9.430 art. 5º): até 3 quotas mensais,
+// nenhuma inferior a R$ 1.000 — logo só para débito acima de R$ 2.000.
+const QUOTA_VALOR_MINIMO = 1000;
 
-export async function gerarDarfsSeparados({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
+// Divide o débito em N quotas "iguais" em centavos — a 1ª quota absorve a
+// diferença de arredondamento (prática RFB).
+function dividirEmQuotas(valor, n) {
+    const totalCent = Math.round(valor * 100);
+    const base = Math.floor(totalCent / n);
+    const primeira = totalCent - base * (n - 1);
+    return Array.from({ length: n }, (_, i) => (i === 0 ? primeira : base) / 100);
+}
+
+// Vencimento da quota i (1..3) de um trimestre: último dia útil do i-ésimo
+// mês após o fim do trimestre (quota 1 = vencimento normal do tributo).
+function vencimentoQuotaTrimestral(anoPA, mesPA, cota) {
+    const trimestre = Math.floor((Number(mesPA) - 1) / 3) + 1;
+    let mes = trimestre * 3 + Number(cota);
+    let ano = Number(anoPA);
+    while (mes > 12) { mes -= 12; ano += 1; }
+    return calcularUltimoDiaUtil(ano, mes);
+}
+
+export async function gerarDarfsSeparados({
+    empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL',
+    // 1 (quota única, default), 2 ou 3 — aplica-se só aos débitos TRIMESTRAIS
+    // (IRPJ/CSLL); mensais (PIS/COFINS) não têm quota.
+    quotasTrimestrais = 1,
+} = {}) {
     assertEmissaoLiberada('DCTFWEB');
     const provider = getDctfwebProvider();
     const consulta = await provider.consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria });
@@ -181,6 +210,7 @@ export async function gerarDarfsSeparados({ empresaCnpj, anoPA, mesPA, categoria
     const darfProvider = getDarfProvider();
     const guias = [];
     const naoEmitidos = [];
+    const nQuotas = Math.min(3, Math.max(1, Number(quotasTrimestrais) || 1));
 
     for (const deb of ext.debitos) {
         if (!RECEITAS_GUIA_SEPARADA.has(deb.codigo)) {
@@ -191,30 +221,57 @@ export async function gerarDarfsSeparados({ empresaCnpj, anoPA, mesPA, categoria
             naoEmitidos.push({ ...deb, motivo: `DARF inferior a R$ ${DARF_VALOR_MINIMO},00 não pode ser emitido (RFB) — acumule com o período seguinte ou use o DARF unificado.` });
             continue;
         }
-        // observacao: o SICALC limita a 50 caracteres (EntradaIncorreta-SICALC
-        // "tamanho deve ser entre 0 e 50" — caso real 08/07/2026).
-        const r = await darfProvider.gerarDarf({
-            empresaCnpj,
-            competencia,
-            valor: deb.valor,
-            codigoReceita: deb.codigo,
-            codigoReceitaExtensao: deb.extensao,
-            observacao: `DCTFWeb ${String(mesPA).padStart(2, '0')}/${anoPA} ${deb.descricao}`.slice(0, 50),
-        });
-        guias.push({
-            codigo: deb.codigo,
-            extensao: deb.extensao,
-            descricao: deb.descricao,
-            valorPrincipal: deb.valor,
-            valor: r.valor,
-            multa: r.multa || 0,
-            juros: r.juros || 0,
-            vencimento: r.vencimento,
-            numeroDocumento: r.numeroDocumento || '',
-            codigoBarras: r.codigoBarras || '',
-            pdfBase64: r.pdfBase64 || '',
-            mensagens: r.mensagens || [],
-        });
+
+        // Quotas só para trimestrais e quando o valor comporta (Lei 9.430:
+        // nenhuma quota < R$ 1.000). Se não comportar, cai pra quota única
+        // com aviso — nunca falha silenciosamente.
+        let quotasDoDebito = 1;
+        let avisoQuota = null;
+        if (nQuotas > 1 && RECEITAS_TRIMESTRAIS_QUOTA.has(deb.codigo)) {
+            if (deb.valor / nQuotas >= QUOTA_VALOR_MINIMO) {
+                quotasDoDebito = nQuotas;
+            } else {
+                avisoQuota = `Valor não comporta ${nQuotas} quotas (mínimo R$ 1.000,00 por quota) — emitido em quota única.`;
+            }
+        }
+
+        const valores = dividirEmQuotas(deb.valor, quotasDoDebito);
+        for (let cota = 1; cota <= quotasDoDebito; cota++) {
+            const emQuotas = quotasDoDebito > 1;
+            // observacao: o SICALC limita a 50 caracteres (EntradaIncorreta-
+            // SICALC "tamanho deve ser entre 0 e 50" — caso real 08/07/2026).
+            const r = await darfProvider.gerarDarf({
+                empresaCnpj,
+                competencia,
+                valor: valores[cota - 1],
+                codigoReceita: deb.codigo,
+                codigoReceitaExtensao: deb.extensao,
+                ...(emQuotas ? {
+                    cota,
+                    // quota i vence no último dia útil do i-ésimo mês após o
+                    // trimestre; o SICALC calcula SELIC+1% das quotas 2/3.
+                    vencimento: vencimentoQuotaTrimestral(anoPA, mesPA, cota),
+                } : {}),
+                observacao: `DCTFWeb ${String(mesPA).padStart(2, '0')}/${anoPA} ${deb.descricao}`.slice(0, 50),
+            });
+            guias.push({
+                codigo: deb.codigo,
+                extensao: deb.extensao,
+                descricao: deb.descricao,
+                cota: emQuotas ? cota : null,
+                totalCotas: emQuotas ? quotasDoDebito : null,
+                aviso: avisoQuota,
+                valorPrincipal: valores[cota - 1],
+                valor: r.valor,
+                multa: r.multa || 0,
+                juros: r.juros || 0,
+                vencimento: r.vencimento,
+                numeroDocumento: r.numeroDocumento || '',
+                codigoBarras: r.codigoBarras || '',
+                pdfBase64: r.pdfBase64 || '',
+                mensagens: r.mensagens || [],
+            });
+        }
     }
 
     // Agrupa por vencimento — é assim que a UI apresenta (uma seção por data).

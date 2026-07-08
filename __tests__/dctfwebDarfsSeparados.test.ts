@@ -142,3 +142,94 @@ describe('gerarDarfsSeparados', () => {
             .rejects.toThrow(/sem débitos|não tem débitos/i);
     });
 });
+
+describe('gerarDarfsSeparados — quotas trimestrais (Lei 9.430 art. 5º)', () => {
+    beforeEach(() => mockInvokeIntegraContador.mockReset());
+
+    // Caso real 08/07/2026 (EDUARDO GUERRA HORTIFRUTI): IRPJ 1º tri/2026 de
+    // R$ 307.249,21 (IR + adicional somados no MIT) — pagável em 3 quotas.
+    function xmlIrpjGrande() {
+        return '<?xml version="1.0"?><ProcDctf><ConteudoDeclaracao id="I"><DctfXml>'
+            + '<A050><CreditoTributarioApurado><codReceita>208901</codReceita>'
+            + '<ctDescricaoTributo>IRPJ - LUCRO PRESUMIDO</ctDescricaoTributo>'
+            + '<ctValor>307249.21</ctValor><saldoaPagar>307249.21</saldoaPagar>'
+            + '</CreditoTributarioApurado>'
+            + '<CreditoTributarioApurado><codReceita>810902</codReceita>'
+            + '<ctDescricaoTributo>PIS - FATURAMENTO</ctDescricaoTributo>'
+            + '<ctValor>500.00</ctValor><saldoaPagar>500.00</saldoaPagar>'
+            + '</CreditoTributarioApurado></A050>'
+            + '</DctfXml></ConteudoDeclaracao></ProcDctf>';
+    }
+
+    it('3 quotas: divide em centavos (1ª absorve o resto), vencimentos nos últimos dias úteis, cota no payload', async () => {
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: { XMLStringBase64: Buffer.from(xmlIrpjGrande(), 'utf8').toString('base64') },
+        });
+        mockInvokeIntegraContador.mockResolvedValue({
+            dados: { consolidado: {}, darf: 'PDF', numeroDocumento: 'D' },
+        });
+
+        // competência 03/2026 (fim do 1º trimestre)
+        const r = await gerarDarfsSeparados({
+            empresaCnpj: '00005430000104', anoPA: 2026, mesPA: 3, quotasTrimestrais: 3,
+        });
+
+        const quotasIrpj = r.guias.filter((g: any) => g.codigo === '2089');
+        expect(quotasIrpj).toHaveLength(3);
+        // 307249.21 / 3 = 102416.4033... -> 102416.41 + 102416.40 + 102416.40
+        expect(quotasIrpj.map((g: any) => g.valorPrincipal)).toEqual([102416.41, 102416.40, 102416.40]);
+        expect(quotasIrpj.reduce((s: number, g: any) => s + g.valorPrincipal, 0)).toBeCloseTo(307249.21, 2);
+        expect(quotasIrpj.map((g: any) => `${g.cota}/${g.totalCotas}`)).toEqual(['1/3', '2/3', '3/3']);
+
+        // Vencimentos: abril 30 (qui), maio 31/05 é domingo -> 29/05, junho 30 (ter)
+        expect(quotasIrpj.map((g: any) => g.vencimento)).toEqual(['2026-04-30', '2026-05-29', '2026-06-30']);
+
+        // Payload SICALC leva a cota e o vencimento da quota
+        const chamadas = mockInvokeIntegraContador.mock.calls.map((c) => c[0])
+            .filter((c) => c.idSistema === 'SICALC' && c.dados.codigoReceita === '2089');
+        expect(chamadas.map((c) => c.dados.cota)).toEqual(['1', '2', '3']);
+        expect(chamadas[1].dados.vencimento).toBe('2026-05-29T00:00:00');
+        expect(chamadas[1].dados.tipoPA).toBe('TR');
+        expect(chamadas[1].dados.dataPA).toBe('01/2026');
+
+        // PIS mensal NÃO ganha quota (sai 1 guia, sem cota)
+        const pis = r.guias.filter((g: any) => g.codigo === '8109');
+        expect(pis).toHaveLength(1);
+        expect(pis[0].cota).toBeNull();
+        const chamadaPis = mockInvokeIntegraContador.mock.calls.map((c) => c[0])
+            .find((c) => c.dados?.codigoReceita === '8109');
+        expect(chamadaPis.dados.cota).toBeUndefined();
+    });
+
+    it('valor que não comporta as quotas cai pra quota única com aviso (mínimo R$1.000/quota)', async () => {
+        const xml = xmlIrpjGrande().replace(/307249\.21/g, '2500.00');
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: { XMLStringBase64: Buffer.from(xml, 'utf8').toString('base64') },
+        });
+        mockInvokeIntegraContador.mockResolvedValue({
+            dados: { consolidado: {}, darf: 'PDF', numeroDocumento: 'D' },
+        });
+        // 2500/3 = 833 < 1000 -> única com aviso; 2500/2 = 1250 ok seria 2
+        const r = await gerarDarfsSeparados({
+            empresaCnpj: '00005430000104', anoPA: 2026, mesPA: 3, quotasTrimestrais: 3,
+        });
+        const irpj = r.guias.filter((g: any) => g.codigo === '2089');
+        expect(irpj).toHaveLength(1);
+        expect(irpj[0].cota).toBeNull();
+        expect(irpj[0].aviso).toMatch(/quota única/i);
+    });
+
+    it('quota única (default) mantém o comportamento anterior', async () => {
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: { XMLStringBase64: Buffer.from(xmlIrpjGrande(), 'utf8').toString('base64') },
+        });
+        mockInvokeIntegraContador.mockResolvedValue({
+            dados: { consolidado: {}, darf: 'PDF', numeroDocumento: 'D' },
+        });
+        const r = await gerarDarfsSeparados({ empresaCnpj: '00005430000104', anoPA: 2026, mesPA: 3 });
+        const irpj = r.guias.filter((g: any) => g.codigo === '2089');
+        expect(irpj).toHaveLength(1);
+        expect(irpj[0].cota).toBeNull();
+        expect(irpj[0].vencimento).toBe('2026-04-30');
+    });
+});

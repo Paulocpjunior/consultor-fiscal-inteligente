@@ -172,26 +172,32 @@ export function montarPayloadDarfSerpro(req) {
         dataConsolidacao = ajustarDiaUtil(a, m, d, 'postergar');
     }
 
+    const dados = {
+        uf: req.uf || DARF_UF,
+        municipio: String(req.municipio || DARF_MUNICIPIO),
+        codigoReceita,
+        codigoReceitaExtensao,
+        tipoPA,
+        dataPA,
+        vencimento: iso00(vencimento),
+        valorImposto: Number(valor).toFixed(2),
+        dataConsolidacao: iso00(dataConsolidacao),
+        // SICALC valida "tamanho deve ser entre 0 e 50" (EntradaIncorreta-
+        // SICALC, caso real 08/07/2026) — trunca aqui pra proteger todo
+        // chamador.
+        observacao: String(req.observacao || '').slice(0, 50),
+    };
+    // Quota do IRPJ/CSLL trimestral (Lei 9.430 art. 5º — até 3 quotas).
+    // O SICALC calcula os juros SELIC+1% das quotas 2/3 a partir da cota +
+    // data de consolidação. String, como no exemplo oficial da doc.
+    if (req.cota) dados.cota = String(req.cota);
+
     return {
         idSistema: DARF_ID_SISTEMA,
         idServico: DARF_ID_SERVICO,
         versaoSistema: DARF_VERSAO_SISTEMA,
         contribuinteCnpj: empresaCnpj,
         acao: 'Emitir',
-        dados: {
-            uf: req.uf || DARF_UF,
-            municipio: String(req.municipio || DARF_MUNICIPIO),
-            codigoReceita,
-            codigoReceitaExtensao,
-            tipoPA,
-            dataPA,
-            vencimento: iso00(vencimento),
-            valorImposto: Number(valor).toFixed(2),
-            dataConsolidacao: iso00(dataConsolidacao),
-            // SICALC valida "tamanho deve ser entre 0 e 50" (EntradaIncorreta-
-            // SICALC, caso real 08/07/2026) — trunca aqui pra proteger todo
-            // chamador.
-            observacao: String(req.observacao || '').slice(0, 50),
-        },
+        dados,
     };
 }
