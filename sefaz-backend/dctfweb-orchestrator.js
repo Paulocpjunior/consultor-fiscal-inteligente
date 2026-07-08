@@ -280,7 +280,22 @@ export async function gerarDarfsSeparados({
         (grupos[g.vencimento] = grupos[g.vencimento] || []).push(g);
     }
 
-    return { competencia, categoria, guias, grupos, naoEmitidos };
+    // Resumo por vencimento = o "Valor Total do Documento" que a RFB mostra
+    // por data de arrecadação. Como a API não funde os códigos num só DARF,
+    // é o total consolidado das guias daquela data (soma com/sem juros).
+    const resumoPorVencimento = Object.keys(grupos).sort().map((vencimento) => {
+        const doDia = grupos[vencimento];
+        const r2 = (n) => Math.round(n * 100) / 100;
+        return {
+            vencimento,
+            quantidade: doDia.length,
+            totalPrincipal: r2(doDia.reduce((s, g) => s + (g.valorPrincipal || 0), 0)),
+            total: r2(doDia.reduce((s, g) => s + (g.valor || 0), 0)),
+            codigos: doDia.map((g) => `${g.codigo}-${g.extensao}`),
+        };
+    });
+
+    return { competencia, categoria, guias, grupos, resumoPorVencimento, naoEmitidos };
 }
 
 export async function consultarDeclaracaoCompleta({ empresaCnpj, anoPA, mesPA, categoria }) {

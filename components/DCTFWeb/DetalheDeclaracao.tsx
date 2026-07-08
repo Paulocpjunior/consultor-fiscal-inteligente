@@ -357,9 +357,9 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                     <div>
                                         <p className="text-sm font-medium text-slate-700">Guias separadas por vencimento</p>
                                         <p className="text-xs text-slate-500 mt-1">
-                                            O DARF unificado acima vence na data do tributo mais cedo. Para pagar cada
-                                            tributo no seu próprio vencimento (ex.: PIS/COFINS dia 25 e IRPJ/CSLL
-                                            trimestrais no fim do mês), emita 1 guia avulsa por tributo.
+                                            Segue a regra da Receita: cada vencimento gera sua cobrança, com os códigos
+                                            daquela data e o total consolidado. O DARF unificado acima junta tudo na data
+                                            mais cedo; aqui PIS/COFINS ficam no dia 25 e IRPJ/CSLL trimestrais no fim do mês.
                                         </p>
                                     </div>
                                     {!darfsSeparados && (
@@ -394,11 +394,40 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                     )}
                                     {darfsSeparados && Object.entries(darfsSeparados.grupos)
                                         .sort(([a], [b]) => a.localeCompare(b))
-                                        .map(([vencimento, guias]) => (
+                                        .map(([vencimento, guias]) => {
+                                            const totalDia = guias.reduce((s, g) => s + (g.valor || 0), 0);
+                                            const comPdf = guias.filter(g => g.pdfBase64);
+                                            return (
                                             <div key={vencimento} className="border rounded p-3">
-                                                <p className="text-sm font-semibold text-slate-700 mb-2">
-                                                    Vencimento {formatDataBr(vencimento)}
-                                                </p>
+                                                {/* Cabeçalho da data = "Valor Total do Documento" da RFB:
+                                                    mesmo vencimento, vários códigos, total consolidado. */}
+                                                <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b">
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-slate-700">
+                                                            Cobrança — vencimento {formatDataBr(vencimento)}
+                                                        </p>
+                                                        <p className="text-xs text-slate-500">
+                                                            {guias.length} código(s): {guias.map(g => `${g.codigo}-${g.extensao}`).join(', ')}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-xs text-slate-500">Total a pagar nesta data</p>
+                                                        <p className="text-base font-bold text-slate-800">
+                                                            R$ {totalDia.toFixed(2)}
+                                                        </p>
+                                                        {comPdf.length > 1 && (
+                                                            <button
+                                                                onClick={() => comPdf.forEach(g => downloadPdfFromBase64(
+                                                                    g.pdfBase64,
+                                                                    `darf_${g.codigo}${g.extensao}${g.cota != null ? `_quota${g.cota}` : ''}_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`,
+                                                                ))}
+                                                                className="mt-1 text-xs px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                                                            >
+                                                                Baixar as {comPdf.length} guias desta data
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
                                                 <div className="space-y-2">
                                                     {guias.map((g, i) => (
                                                         <div key={`${g.codigo}-${i}`} className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 rounded p-2">
@@ -448,7 +477,8 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                     ))}
                                                 </div>
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     {darfsSeparados && darfsSeparados.naoEmitidos.length > 0 && (
                                         <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 space-y-1">
                                             <p className="font-medium">Débitos não emitidos em guia separada:</p>
@@ -462,9 +492,11 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                     )}
                                     {darfsSeparados && (
                                         <p className="text-xs text-slate-500">
-                                            Guias avulsas (DARF comum via SICALC) com o mesmo código, período e valor
-                                            declarados. Confira depois no e-CAC a baixa dos débitos; o DARF unificado
-                                            numerado continua disponível acima.
+                                            Mesmos códigos, períodos e vencimentos da Receita. Como a API do Integra
+                                            Contador emite 1 código por DARF comum, cada data traz uma guia por código —
+                                            some o total acima e pague as guias da data juntas. Para o DARF único
+                                            multi-código (vários códigos num só documento), a emissão é pelo e-CAC da
+                                            DCTFWeb. Confira depois no e-CAC a baixa dos débitos.
                                         </p>
                                     )}
                                 </div>

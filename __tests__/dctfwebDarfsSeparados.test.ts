@@ -98,6 +98,17 @@ describe('gerarDarfsSeparados', () => {
         expect(r.grupos['2026-07-31'].map((g: any) => g.codigo).sort()).toEqual(['2089', '2372']);
         expect(r.guias.every((g: any) => g.pdfBase64 === 'PDF_B64')).toBe(true);
 
+        // Resumo por vencimento = total consolidado da RFB por data. O principal
+        // é determinístico; o `total` vem do valorTotalConsolidado do SICALC
+        // (mock devolve 0 aqui — em produção é o valor com juros/multa).
+        expect(r.resumoPorVencimento.map((x: any) => ({
+            vencimento: x.vencimento, quantidade: x.quantidade,
+            totalPrincipal: x.totalPrincipal, codigos: x.codigos,
+        }))).toEqual([
+            { vencimento: '2026-07-24', quantidade: 2, totalPrincipal: 73, codigos: ['8109-02', '2172-01'] },
+            { vencimento: '2026-07-31', quantidade: 2, totalPrincipal: 327.36, codigos: ['2089-01', '2372-01'] },
+        ]);
+
         // Payloads SICALC corretos: PIS mensal ME 06/2026; IRPJ TR 02/2026.
         const chamadas = mockInvokeIntegraContador.mock.calls.map((c) => c[0]);
         const pis = chamadas.find((c) => c.dados?.codigoReceita === '8109');
