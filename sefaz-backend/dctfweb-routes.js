@@ -9,6 +9,7 @@ import { getCnpjsDaCarteira, getEmpresaIdsDaCarteira, podeAcessarCnpj } from './
 import {
     sincronizarEmpresa, sincronizarTodasLucro,
     listarDeclaracoes, transmitirDeclaracao, gerarDarf, gerarDarfsSeparados,
+    listarTrimestraisVencendoEsteMes, listarDebitosTrimestrais,
     consultarDeclaracaoCompleta, consultarRecibo,
     encerrarApuracaoMit, consultarStatusEncerramentoMit,
     consultarApuracaoMit, consultarApuracoesAno,
@@ -136,6 +137,30 @@ router.post('/gerar-darf', requireAuth, express.json(), async (req, res) => {
         const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await gerarDarf({ empresaId, empresaCnpj, anoPA, mesPA, categoria, emAndamento: !!emAndamento }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Painel "Trimestrais vencendo este mês": candidatas (declarações ATIVA da
+// competência que fecha o trimestre) da carteira. Sem custo SERPRO.
+router.get('/trimestrais-mes', requireAuth, async (req, res) => {
+    try {
+        const cnpjsPermitidos = await cnpjsPermitidosParaListagem(req.user);
+        if (cnpjsPermitidos && cnpjsPermitidos.size === 0) {
+            return res.json({ aplicavel: true, candidatas: [] });
+        }
+        res.json(await listarTrimestraisVencendoEsteMes({ cnpjsPermitidos }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Débitos trimestrais de UMA declaração (sob demanda, 1 CONSXMLDECLARACAO38).
+router.get('/debitos-trimestrais', requireAuth, async (req, res) => {
+    try {
+        const { empresaCnpj, anoPA, mesPA, categoria } = req.query;
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+        res.json(await listarDebitosTrimestrais({
+            empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA), categoria,
+        }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

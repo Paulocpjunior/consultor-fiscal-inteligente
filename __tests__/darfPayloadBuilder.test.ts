@@ -11,7 +11,7 @@
  */
 
 // @ts-expect-error — modulo .js puro
-import { montarPayloadDarfSerpro, calcularVencimentoDarf, periodoApuracaoSicalc, resolverCodigoEExtensao } from '../sefaz-backend/darf-payload-builder.js';
+import { montarPayloadDarfSerpro, calcularVencimentoDarf, periodoApuracaoSicalc, resolverCodigoEExtensao, trimestreVencendoEsteMes } from '../sefaz-backend/darf-payload-builder.js';
 
 describe('montarPayloadDarfSerpro (SICALC/CONSOLIDARGERARDARF51)', () => {
     it('monta o shape oficial do SICALC', () => {
@@ -147,5 +147,26 @@ describe('resolverCodigoEExtensao', () => {
     it('extensão explícita vence', () => {
         expect(resolverCodigoEExtensao({ codigoReceita: '2089', codigoReceitaExtensao: '03' }))
             .toEqual({ codigo: '2089', extensao: '03' });
+    });
+});
+
+describe('trimestreVencendoEsteMes', () => {
+    it('julho → 2º trimestre, competência 06, vence 31/07', () => {
+        expect(trimestreVencendoEsteMes('2026-07-08')).toEqual({
+            trimestre: 2, competenciaAno: 2026, competenciaMes: 6, vencimento: '2026-07-31',
+        });
+    });
+    it('abril → 1º trimestre, competência 03, vence 30/04', () => {
+        expect(trimestreVencendoEsteMes('2026-04-10')).toEqual({
+            trimestre: 1, competenciaAno: 2026, competenciaMes: 3, vencimento: '2026-04-30',
+        });
+    });
+    it('janeiro → 4º trimestre do ANO ANTERIOR, competência 12', () => {
+        const r = trimestreVencendoEsteMes('2027-01-15');
+        expect(r).toMatchObject({ trimestre: 4, competenciaAno: 2026, competenciaMes: 12 });
+    });
+    it('meses sem vencimento trimestral retornam null', () => {
+        expect(trimestreVencendoEsteMes('2026-06-08')).toBeNull();
+        expect(trimestreVencendoEsteMes('2026-08-08')).toBeNull();
     });
 });

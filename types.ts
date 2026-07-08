@@ -1613,6 +1613,38 @@ export interface DctfwebResumoVencimento {
     codigos: string[];
 }
 
+/** Uma empresa candidata no painel "Trimestrais vencendo este mês". */
+export interface DctfwebTrimestralCandidata {
+    empresaId: string | null;
+    empresaCnpj: string;
+    categoria: DctfwebCategoria | string;
+    anoPA: number;
+    mesPA: number;
+    situacao: string;
+    valorTotalDeclaracao: number | null;
+}
+
+export interface DctfwebTrimestraisMesResult {
+    aplicavel: boolean;
+    motivo?: string;
+    trimestre?: number;
+    competenciaAno?: number;
+    competenciaMes?: number;
+    vencimento?: string;           // YYYY-MM-DD
+    candidatas?: DctfwebTrimestralCandidata[];
+}
+
+export interface DctfwebDebitosTrimestraisResult {
+    lido: boolean;
+    motivo?: string;
+    trimestrais: Array<{
+        codReceita: string; codigo: string; extensao: string;
+        descricao: string; valor: number;
+    }>;
+    totalTrimestral: number;
+    vencimento: string | null;
+}
+
 export interface DctfwebDarfsSeparadosResult {
     competencia: string;           // YYYY-MM
     categoria: DctfwebCategoria | string;
