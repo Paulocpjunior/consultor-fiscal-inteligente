@@ -1582,6 +1582,34 @@ export interface DctfwebPdfResult {
     fonte: 'mock' | 'serpro';
 }
 
+/** Uma guia avulsa (DARF SICALC) emitida para um débito da declaração. */
+export interface DctfwebGuiaSeparada {
+    codigo: string;
+    extensao: string;
+    descricao: string;
+    valorPrincipal: number;
+    valor: number;
+    multa: number;
+    juros: number;
+    vencimento: string;            // YYYY-MM-DD
+    numeroDocumento: string;
+    codigoBarras: string;
+    pdfBase64: string;
+    mensagens?: DctfwebMensagemSerpro[];
+}
+
+export interface DctfwebDarfsSeparadosResult {
+    competencia: string;           // YYYY-MM
+    categoria: DctfwebCategoria | string;
+    guias: DctfwebGuiaSeparada[];
+    /** guias agrupadas por vencimento (YYYY-MM-DD) */
+    grupos: Record<string, DctfwebGuiaSeparada[]>;
+    naoEmitidos: Array<{
+        codigo: string; extensao: string; descricao: string;
+        valor: number; motivo: string;
+    }>;
+}
+
 export type DctfwebMitStatus =
     | 'PROCESSANDO' | 'ENCERRADA' | 'ERRO' | 'DESCONHECIDO';
 

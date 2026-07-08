@@ -8,7 +8,8 @@ import {
     getDctfwebProvider, getDctfwebMode,
     pickDadosApuracaoMit, contarDebitosMit, pickIdApuracao, mitPeriodoLabel,
 } from './dctfweb-provider.js';
-import { normalizarRetencaoDctfweb } from './dctfweb-retencao-normalizer.js';
+import { normalizarRetencaoDctfweb, extrairDebitosDctfweb } from './dctfweb-retencao-normalizer.js';
+import { getDarfProvider } from './darf-provider.js';
 import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
 import {
     extrairModeloDebitosMit, montarDebitosMit, mesclarDebitosMit, maiorIdDebitoMit,
@@ -142,6 +143,85 @@ export async function gerarDarf({ empresaId, empresaCnpj, anoPA, mesPA, categori
     assertEmissaoLiberada('DCTFWEB');
     const provider = getDctfwebProvider();
     return await provider.gerarDarf({ empresaCnpj, anoPA, mesPA, categoria, emAndamento });
+}
+
+// ── Guias separadas por vencimento (DARF avulso via Integra SICALC) ────────
+//
+// O GERARGUIA31 da DCTFWeb emite UMA guia unificada com "pagar até" = menor
+// vencimento entre os débitos (caso real 08/07/2026: PIS/COFINS 24/07 +
+// IRPJ/CSLL trimestrais 31/07 na mesma guia). A API da DCTFWeb NÃO permite
+// escolher débitos (só filtra por sistema de origem — e aqui todos vêm do
+// MIT). Para pagar cada tributo no SEU vencimento, emitimos 1 DARF avulso
+// por débito via SICALC (CONSOLIDARGERARDARF51), com código/extensão lidos
+// da PRÓPRIA declaração transmitida.
+//
+// Receitas que sabemos emitir avulso com o vencimento correto. Débitos fora
+// da lista (ex.: INSS/eSocial — só sai em DARF numerado) NÃO são emitidos e
+// voltam em `naoEmitidos` com orientação de usar o DARF unificado.
+const RECEITAS_GUIA_SEPARADA = new Set([
+    '2089', '0220', '2372', '6012',           // IRPJ/CSLL trimestrais
+    '2362', '2484',                           // IRPJ/CSLL estimativa mensal
+    '8109', '2172', '6912', '5856',           // PIS/COFINS
+]);
+const DARF_VALOR_MINIMO = 10; // R$ — DARF inferior a R$10 não pode ser emitido (RFB)
+
+export async function gerarDarfsSeparados({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
+    assertEmissaoLiberada('DCTFWEB');
+    const provider = getDctfwebProvider();
+    const consulta = await provider.consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria });
+    const ext = extrairDebitosDctfweb(consulta?.xml || consulta?._raw || '');
+    if (!ext.lido) {
+        throw new Error(`Guias separadas: não consegui ler a declaração ${anoPA}-${String(mesPA).padStart(2, '0')}. ${ext.motivo}`);
+    }
+    if (ext.debitos.length === 0) {
+        throw new Error('Guias separadas: a declaração transmitida não tem débitos com saldo a pagar.');
+    }
+
+    const competencia = `${anoPA}-${String(mesPA).padStart(2, '0')}`;
+    const darfProvider = getDarfProvider();
+    const guias = [];
+    const naoEmitidos = [];
+
+    for (const deb of ext.debitos) {
+        if (!RECEITAS_GUIA_SEPARADA.has(deb.codigo)) {
+            naoEmitidos.push({ ...deb, motivo: 'Receita fora da emissão avulsa (ex.: previdenciária) — pague pelo DARF unificado do Painel DCTFWeb.' });
+            continue;
+        }
+        if (deb.valor < DARF_VALOR_MINIMO) {
+            naoEmitidos.push({ ...deb, motivo: `DARF inferior a R$ ${DARF_VALOR_MINIMO},00 não pode ser emitido (RFB) — acumule com o período seguinte ou use o DARF unificado.` });
+            continue;
+        }
+        const r = await darfProvider.gerarDarf({
+            empresaCnpj,
+            competencia,
+            valor: deb.valor,
+            codigoReceita: deb.codigo,
+            codigoReceitaExtensao: deb.extensao,
+            observacao: `DCTFWeb ${categoria} ${String(mesPA).padStart(2, '0')}/${anoPA} - ${deb.descricao}`.slice(0, 80),
+        });
+        guias.push({
+            codigo: deb.codigo,
+            extensao: deb.extensao,
+            descricao: deb.descricao,
+            valorPrincipal: deb.valor,
+            valor: r.valor,
+            multa: r.multa || 0,
+            juros: r.juros || 0,
+            vencimento: r.vencimento,
+            numeroDocumento: r.numeroDocumento || '',
+            codigoBarras: r.codigoBarras || '',
+            pdfBase64: r.pdfBase64 || '',
+            mensagens: r.mensagens || [],
+        });
+    }
+
+    // Agrupa por vencimento — é assim que a UI apresenta (uma seção por data).
+    const grupos = {};
+    for (const g of guias) {
+        (grupos[g.vencimento] = grupos[g.vencimento] || []).push(g);
+    }
+
+    return { competencia, categoria, guias, grupos, naoEmitidos };
 }
 
 export async function consultarDeclaracaoCompleta({ empresaCnpj, anoPA, mesPA, categoria }) {

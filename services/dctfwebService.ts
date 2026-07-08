@@ -20,6 +20,7 @@ import type {
     User,
     DctfwebDeclaracao, DctfwebResumo, DctfwebSyncStats,
     DctfwebTransmissaoResult, DctfwebDarfResult, DctfwebPdfResult,
+    DctfwebDarfsSeparadosResult,
     DctfwebCategoria, DctfwebMitApuracao, DctfwebMitEncerramentoResult,
     DctfwebMitHistorico,
 } from '../types';
@@ -132,6 +133,26 @@ export async function gerarDarf(user: User | null, payload: {
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(err.error || `gerarDarf: ${res.status}`);
+    }
+    return res.json();
+}
+
+/**
+ * Emite 1 DARF avulso (SICALC) por débito da declaração transmitida, cada um
+ * com o SEU vencimento (PIS/COFINS dia 25 antecipado × IRPJ/CSLL trimestrais
+ * no último dia útil do mês seguinte ao trimestre).
+ */
+export async function gerarDarfsSeparados(user: User | null, payload: {
+    empresaCnpj: string; anoPA: number; mesPA: number; categoria?: DctfwebCategoria;
+}): Promise<DctfwebDarfsSeparadosResult> {
+    const res = await fetch(`${BASE}/gerar-darfs-separados`, {
+        method: 'POST',
+        headers: await authHeaders(user),
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `gerarDarfsSeparados: ${res.status}`);
     }
     return res.json();
 }

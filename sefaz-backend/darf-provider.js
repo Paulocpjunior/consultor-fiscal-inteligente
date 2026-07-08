@@ -104,19 +104,20 @@ class MockProvider {
 }
 
 // ── SERPRO Provider ────────────────────────────────────────────────────────
-// Produto PAGTOWEB do Integra Contador (Pagamento e Arrecadação Web).
-// Ref: https://apicenter.estaleiro.serpro.gov.br/documentacao/api-integra-contador
+// Integra SICALC (catálogo oficial do Integra Contador, confirmado 08/07/2026):
+//   idSistema=SICALC  idServico=CONSOLIDARGERARDARF51  versao "2.9"  /Emitir
+// Resposta (dados): { consolidado: { valorPrincipalMoedaCorrente,
+//   valorTotalConsolidado, valorMultaMora, valorJuros, ... },
+//   darf: <PDF base64>, numeroDocumento }
 //
-// Pré-requisitos pra ativar:
-//   - Contratar o produto PAGTOWEB na Loja SERPRO (separado do PGDASD)
-//   - SERPRO_CONSUMER_KEY/SECRET válidos (já configurados pra DAS)
+// Pré-requisitos:
+//   - SERPRO_CONSUMER_KEY/SECRET válidos (já configurados pra DAS/DCTFWeb)
 //   - Procuração eletrônica e-CAC ativa entre escritório e empresa cliente
-//
-// TODO[SERPRO_REAL]: confirmar o nome exato do idServico de EMISSÃO de DARF
-// no portal autenticado SERPRO. idSistema/idServico (PAGTOWEB/EMITEDARF61)
-// + builder do payload vivem em darf-payload-builder.js (configuravel via
-// env SERPRO_DARF_SISTEMA / SERPRO_DARF_SERVICO). Use POST /darf/preview pra
-// inspecionar o payload exato antes de emitir.
+
+function numOr(v, fallback) {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : fallback;
+}
 
 class SerproProvider {
     async gerarDarf(req) {
@@ -129,37 +130,40 @@ class SerproProvider {
             result = await invokeIntegraContador(payload);
         } catch (err) {
             // ICGERENCIADOR-052 = idSistema/idServico fora do catálogo da conta.
-            // O PAGTOWEB/EMITEDARF61 configurado é SUPOSTO (TODO[SERPRO_REAL]) —
-            // a emissão avulsa exige o produto SICALC contratado na Loja SERPRO.
-            // Sem esta tradução, o colaborador via o código cru e não sabia que
-            // o DARF de tributos DCTFWeb sai pelo Painel DCTFWeb (07/07/2026).
             if (/ICGERENCIADOR-052/i.test(String(err?.message || ''))) {
                 throw new Error(
-                    'Emissão AVULSA de DARF via SERPRO não está habilitada nesta conta '
-                    + '(serviço PAGTOWEB/EMITEDARF61 inexistente no catálogo — requer o produto SICALC '
-                    + 'contratado na Loja SERPRO e ajuste de SERPRO_DARF_SISTEMA/SERPRO_DARF_SERVICO). '
-                    + 'Para tributos declarados na DCTFWeb (IRPJ/CSLL/PIS/COFINS do Lucro Presumido/Real), '
-                    + 'emita o DARF pelo Painel DCTFWeb: linha da declaração transmitida → Detalhe → DARF.'
+                    'Emissão avulsa de DARF (Integra SICALC / CONSOLIDARGERARDARF51) não está '
+                    + 'habilitada nesta conta SERPRO — verifique na Loja SERPRO se a solução '
+                    + 'Integra SICALC está incluída no plano do Integra Contador. '
+                    + 'Enquanto isso, o DARF unificado sai pelo Painel DCTFWeb: '
+                    + 'linha da declaração transmitida → Detalhe → DARF.'
                 );
             }
             throw err;
         }
-        const d = result.dados || {};
+        const d = safeParse(result.dados) || {};
+        const c = d.consolidado || {};
         return {
             numeroDocumento: d.numeroDocumento || d.numeroDarf || '',
             codigoBarras:    d.codigoBarras || d.linhaDigitavel || '',
             linhaDigitavel:  d.linhaDigitavel || '',
             codigoReceita,
-            vencimento:      d.dataVencimento || d.vencimento || '',
-            valorPrincipal:  valor,
-            multa:           d.valorMulta || 0,
-            juros:           d.valorJuros || 0,
-            valor:           d.valorTotal || valor,
-            pdfBase64:       d.docArrecadacaoPdfB64 || d.pdfBase64 || null,
+            vencimento:      payload.dados.vencimento.slice(0, 10),
+            valorPrincipal:  numOr(c.valorPrincipalMoedaCorrente, valor),
+            multa:           numOr(c.valorMultaMora, 0),
+            juros:           numOr(c.valorJuros, 0),
+            valor:           numOr(c.valorTotalConsolidado, valor),
+            pdfBase64:       d.darf || d.docArrecadacaoPdfB64 || d.pdfBase64 || null,
+            mensagens:       result.mensagens || [],
             fonte: 'serpro',
-            _raw: d,
+            _raw: { ...d, darf: d.darf ? `(pdf ${String(d.darf).length}b64)` : undefined, consolidado: c },
         };
     }
+}
+
+function safeParse(v) {
+    if (typeof v !== 'string') return v;
+    try { return JSON.parse(v); } catch { return {}; }
 }
 
 // ── Factory ─────────────────────────────────────────────────────────────────

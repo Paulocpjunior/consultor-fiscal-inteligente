@@ -169,4 +169,38 @@ export function normalizarRetencaoDctfweb(entrada) {
     }
 }
 
+/**
+ * Extrai os DÉBITOS com saldo a pagar da declaração DCTFWeb (todos os
+ * CreditoTributarioApurado com saldoaPagar > 0 — inclusive os que NÃO são
+ * retenção Reinf). Usado pela emissão de guias separadas por vencimento.
+ *
+ * @param {string|object} entrada  XML do CONSXMLDECLARACAO ou { xml }.
+ * @returns {{ lido: boolean, motivo: string|null,
+ *   debitos: Array<{codReceita:string, codigo:string, extensao:string,
+ *                   descricao:string, valor:number}> }}
+ */
+export function extrairDebitosDctfweb(entrada) {
+    if (entrada == null || entrada === '') {
+        return { lido: false, motivo: 'Declaracao DCTFWeb ausente.', debitos: [] };
+    }
+    const creditos = extrairCreditos(entrada);
+    if (creditos == null) {
+        return { lido: false, motivo: 'XML da declaracao DCTFWeb ilegivel ou shape nao suportado.', debitos: [] };
+    }
+    const debitos = [];
+    for (const c of creditos) {
+        const valor = num(c.saldoaPagar);
+        if (valor <= 0) continue;
+        const cod = String(c.codReceita || '').replace(/\D/g, '');
+        debitos.push({
+            codReceita: cod,
+            codigo: cod.slice(0, 4),
+            extensao: cod.length >= 6 ? cod.slice(4, 6) : '01',
+            descricao: c.descricao || '',
+            valor: r2(valor),
+        });
+    }
+    return { lido: true, motivo: null, debitos };
+}
+
 export const _internals = { num, familiaPorReceita, RECEITA_RAIZ_FAMILIA, FAMILIAS };
