@@ -165,6 +165,42 @@ export function extrairCamposNaoInformaveis(mensagem) {
     return [...new Set(out)];
 }
 
+// Extrai o XML da resposta do CONSXMLDECLARACAO38. O Integra Contador devolve
+// o XML em dados.XMLStringBase64 (base64) — o código antigo só olhava
+// XMLByteArrayBase64/xmlBase64 (nomes do PDF/chutados) e a transmissão falhava
+// com "CONSXMLDECLARACAO38 vazio" mesmo com a resposta 200 cheia (caso
+// RADIO E TV 06/2026, 08/07/2026). Aceita também dados como string crua
+// (XML direto ou base64 sem wrapper JSON) e, em último caso, varre qualquer
+// campo string cujo conteúdo (cru ou decodificado) pareça XML.
+export function extrairXmlDeclaracao(dados) {
+    const comoXml = (valor) => {
+        const s = String(valor ?? '').trim();
+        if (!s) return '';
+        if (s.startsWith('<')) return s;
+        try {
+            const texto = Buffer.from(s, 'base64').toString('utf8');
+            return texto.trimStart().startsWith('<') ? texto : '';
+        } catch { return ''; }
+    };
+    if (typeof dados === 'string') return comoXml(dados);
+    if (!dados || typeof dados !== 'object') return '';
+    const candidatos = [
+        dados.XMLStringBase64, dados.xmlStringBase64,
+        dados.XMLByteArrayBase64, dados.xmlBase64,
+        dados.xml, dados.XMLDeclaracao, dados.declaracaoXml,
+    ];
+    for (const c of candidatos) {
+        const xml = comoXml(c);
+        if (xml) return xml;
+    }
+    for (const v of Object.values(dados)) {
+        if (typeof v !== 'string') continue;
+        const xml = comoXml(v);
+        if (xml) return xml;
+    }
+    return '';
+}
+
 // Remove um campo aninhado por caminho pontuado ("DadosIniciais.RegimePisCofins").
 // Retorna true se o campo existia e foi removido.
 export function removerCampoPorCaminho(obj, caminho) {
@@ -384,9 +420,21 @@ class SerproProvider {
         const consulta = await this.consultarXmlDeclaracao({ empresaCnpj: cnpj, anoPA, mesPA, categoria });
         const xmlDeclaracao = String(consulta?.xml || '').trim();
         if (!xmlDeclaracao) {
+            // Inclui o que o SERPRO devolveu de fato — sem isso o erro é
+            // indiagnosticável ("vazio" podia ser campo com outro nome,
+            // mensagem de negócio no corpo 200, etc).
+            const raw = consulta?._raw;
+            const chaves = (raw && typeof raw === 'object') ? Object.keys(raw).join(', ')
+                : (typeof raw === 'string' ? `string(${raw.slice(0, 120)})` : '');
+            const msgs = (consulta?.mensagens || [])
+                .map((m) => (m?.codigo ? `${m.codigo} - ${m.texto || ''}` : (m?.texto || '')))
+                .filter(Boolean)
+                .join('; ');
             throw new Error(
                 `Transmissão DCTFWeb: o SERPRO não retornou o XML da declaração ${anoPA}-${String(mesPA).padStart(2, '0')} `
                 + '(CONSXMLDECLARACAO38 vazio). Confirme que a declaração está "Em andamento" e sincronize antes de transmitir.'
+                + (msgs ? ` Mensagens SERPRO: ${msgs}.` : '')
+                + (chaves ? ` Campos retornados: ${chaves}.` : '')
             );
         }
 
@@ -647,13 +695,10 @@ class SerproProvider {
             dados: { categoria, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2, '0') },
         });
         const d = safeJsonParse(r.dados) || {};
-        // SERPRO pode devolver o XML cru (string) OU base64 (XMLByteArrayBase64).
-        let xml = d.xml || d.XMLDeclaracao || d.declaracaoXml || '';
-        const b64 = d.XMLByteArrayBase64 || d.xmlBase64;
-        if (!xml && b64) {
-            try { xml = Buffer.from(b64, 'base64').toString('utf8'); } catch { xml = ''; }
-        }
-        return { xml, _raw: d, categoria, anoPA, mesPA, fonte: 'serpro' };
+        // Shape oficial: dados.XMLStringBase64 (base64). extrairXmlDeclaracao
+        // cobre também os legados/variantes e dados vindo como string crua.
+        const xml = extrairXmlDeclaracao(d);
+        return { xml, _raw: d, mensagens: r.mensagens || [], categoria, anoPA, mesPA, fonte: 'serpro' };
     }
 
     async consultarApuracoesAno({ empresaCnpj, anoPA, mesPA }) {
