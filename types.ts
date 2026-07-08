@@ -1553,18 +1553,29 @@ export interface DctfwebTransmissaoResult {
     _raw?: any;
 }
 
+export interface DctfwebMensagemSerpro {
+    codigo?: string;
+    texto?: string;
+}
+
 export interface DctfwebDarfResult {
-    valor: number;
+    // O GERARGUIA31 retorna apenas o PDF — valor/vencimento/código de barras
+    // vêm null/'' e constam somente dentro do PDF do DARF.
+    valor: number | null;
     numeroDocumento: string;
     codigoBarras: string;
     vencimento: string;
     pdfBase64: string;
+    mensagens?: DctfwebMensagemSerpro[];
     fonte: 'mock' | 'serpro';
     _raw?: any;
 }
 
 export interface DctfwebPdfResult {
     pdfBase64: string;
+    mensagens?: DctfwebMensagemSerpro[];
+    /** Chaves que o SERPRO devolveu quando não veio PDF (diagnóstico). */
+    _camposRetornados?: string[];
     categoria?: DctfwebCategoria | number;
     anoPA: number;
     mesPA: number;
