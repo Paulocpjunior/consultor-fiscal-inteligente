@@ -9,30 +9,34 @@
 // Para tributos não listados, frontend permite código custom.
 // ============================================================================
 
+// extensao = Código de Extensão da Receita (Tabela de Receitas RFB) — o
+// SICALC (CONSOLIDARGERARDARF51) exige código + extensão. Conferido em DARF
+// real emitido pela DCTFWeb (08/07/2026): 2089-01, 2372-01, 8109-02, 2172-01.
+// '01' é a extensão-padrão da maioria das receitas PJ.
 export const CODIGOS_RECEITA = {
     // ── IRPJ ────────────────────────────────────────────────────────────────
-    IRPJ_PRESUMIDO_TRIMESTRAL: { codigo: '2089', descricao: 'IRPJ - Lucro Presumido - Trimestral' },
-    IRPJ_REAL_TRIMESTRAL:      { codigo: '0220', descricao: 'IRPJ - Lucro Real - Trimestral' },
-    IRPJ_REAL_ESTIMATIVA:      { codigo: '2362', descricao: 'IRPJ - Lucro Real - Estimativa Mensal' },
-    IRPJ_REAL_AJUSTE_ANUAL:    { codigo: '2430', descricao: 'IRPJ - Lucro Real - Ajuste Anual' },
+    IRPJ_PRESUMIDO_TRIMESTRAL: { codigo: '2089', extensao: '01', descricao: 'IRPJ - Lucro Presumido - Trimestral' },
+    IRPJ_REAL_TRIMESTRAL:      { codigo: '0220', extensao: '01', descricao: 'IRPJ - Lucro Real - Trimestral' },
+    IRPJ_REAL_ESTIMATIVA:      { codigo: '2362', extensao: '01', descricao: 'IRPJ - Lucro Real - Estimativa Mensal' },
+    IRPJ_REAL_AJUSTE_ANUAL:    { codigo: '2430', extensao: '01', descricao: 'IRPJ - Lucro Real - Ajuste Anual' },
 
     // ── CSLL ────────────────────────────────────────────────────────────────
-    CSLL_PRESUMIDO_TRIMESTRAL: { codigo: '2372', descricao: 'CSLL - Lucro Presumido - Trimestral' },
-    CSLL_REAL_TRIMESTRAL:      { codigo: '6012', descricao: 'CSLL - Lucro Real - Trimestral' },
-    CSLL_REAL_ESTIMATIVA:      { codigo: '2484', descricao: 'CSLL - Lucro Real - Estimativa Mensal' },
-    CSLL_REAL_AJUSTE_ANUAL:    { codigo: '6773', descricao: 'CSLL - Lucro Real - Ajuste Anual' },
+    CSLL_PRESUMIDO_TRIMESTRAL: { codigo: '2372', extensao: '01', descricao: 'CSLL - Lucro Presumido - Trimestral' },
+    CSLL_REAL_TRIMESTRAL:      { codigo: '6012', extensao: '01', descricao: 'CSLL - Lucro Real - Trimestral' },
+    CSLL_REAL_ESTIMATIVA:      { codigo: '2484', extensao: '01', descricao: 'CSLL - Lucro Real - Estimativa Mensal' },
+    CSLL_REAL_AJUSTE_ANUAL:    { codigo: '6773', extensao: '01', descricao: 'CSLL - Lucro Real - Ajuste Anual' },
 
     // ── PIS ─────────────────────────────────────────────────────────────────
-    PIS_CUMULATIVO:            { codigo: '8109', descricao: 'PIS/PASEP - Faturamento (cumulativo, Presumido)' },
-    PIS_NAO_CUMULATIVO:        { codigo: '6912', descricao: 'PIS/PASEP - Não-cumulativo (Lucro Real)' },
+    PIS_CUMULATIVO:            { codigo: '8109', extensao: '02', descricao: 'PIS/PASEP - Faturamento (cumulativo, Presumido)' },
+    PIS_NAO_CUMULATIVO:        { codigo: '6912', extensao: '01', descricao: 'PIS/PASEP - Não-cumulativo (Lucro Real)' },
 
     // ── COFINS ──────────────────────────────────────────────────────────────
-    COFINS_CUMULATIVO:         { codigo: '2172', descricao: 'COFINS - Faturamento (cumulativo, Presumido)' },
-    COFINS_NAO_CUMULATIVO:     { codigo: '5856', descricao: 'COFINS - Não-cumulativo (Lucro Real)' },
+    COFINS_CUMULATIVO:         { codigo: '2172', extensao: '01', descricao: 'COFINS - Faturamento (cumulativo, Presumido)' },
+    COFINS_NAO_CUMULATIVO:     { codigo: '5856', extensao: '01', descricao: 'COFINS - Não-cumulativo (Lucro Real)' },
 
     // ── IRRF (Imposto Retido na Fonte) ──────────────────────────────────────
-    IRRF_SERVICOS_PJ:          { codigo: '1708', descricao: 'IRRF - Serviços PJ (1,5%)' },
-    IRRF_TRABALHO_ASSALARIADO: { codigo: '0561', descricao: 'IRRF - Rendimentos do Trabalho' },
+    IRRF_SERVICOS_PJ:          { codigo: '1708', extensao: '02', descricao: 'IRRF - Serviços PJ (1,5%)' },
+    IRRF_TRABALHO_ASSALARIADO: { codigo: '0561', extensao: '07', descricao: 'IRRF - Rendimentos do Trabalho' },
 };
 
 /**
