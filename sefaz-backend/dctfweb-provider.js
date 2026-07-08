@@ -57,6 +57,37 @@ function safeJsonParse(s) {
     try { return JSON.parse(s); } catch { return s; }
 }
 
+// Alguns serviços do Integra Contador devolvem `dados` como LISTA com um
+// único objeto — normaliza pro objeto.
+function primeiroObjeto(d) {
+    if (Array.isArray(d)) return (d[0] && typeof d[0] === 'object') ? d[0] : {};
+    return (d && typeof d === 'object') ? d : {};
+}
+
+function pickPdfBase64(d) {
+    return d?.PDFByteArrayBase64 || d?.pdfBase64 || '';
+}
+
+// O catálogo do Integra Contador aceita a categoria pelo NOME (GERAL_MENSAL
+// etc). Os códigos internos do app (DCTFWEB_CATEGORIAS, manual RFB) NÃO são
+// os códigos do catálogo SERPRO (lá GERAL_MENSAL=40) — nunca enviar número
+// do app pro SERPRO (caso real 08/07/2026: CONSRECIBO32 com categoria 13
+// voltava 200 sem PDF).
+function nomeCategoria(categoria) {
+    if (typeof categoria === 'string' && categoria && !/^\d+$/.test(categoria)) return categoria;
+    const codigo = Number(categoria);
+    const nome = Object.keys(DCTFWEB_CATEGORIAS).find((k) => DCTFWEB_CATEGORIAS[k] === codigo);
+    return nome || 'GERAL_MENSAL';
+}
+
+// _raw sem o PDF gigante (o base64 já vai em pdfBase64 — duplicar dobra o
+// payload da resposta).
+function rawSemPdf(d) {
+    if (!d || typeof d !== 'object') return d;
+    const { PDFByteArrayBase64, pdfBase64, ...resto } = d;
+    return resto;
+}
+
 function hashCnpj(cnpj) {
     let h = 0;
     for (const c of String(cnpj || '')) h = (h * 31 + c.charCodeAt(0)) | 0;
@@ -460,12 +491,22 @@ class SerproProvider {
                 xmlAssinadoBase64,
             },
         });
-        const d = safeJsonParse(r.dados) || {};
+        const d = primeiroObjeto(safeJsonParse(r.dados));
+        // Shape oficial do TRANSDECLARACAO310: numeroRecibo, dataTransmissao,
+        // horaTransmissao, situacao (caso real 08/07/2026: recibo ficava
+        // "Não informado" — só se buscava numeroRecibo/recibo).
+        const numeroRecibo = String(
+            d.numeroRecibo ?? d.recibo ?? d.numRecibo ?? d.numeroReciboEntrega ?? ''
+        );
+        const transmitidoEm = d.dataHoraTransmissao
+            || (d.dataTransmissao ? `${d.dataTransmissao}${d.horaTransmissao ? ` ${d.horaTransmissao}` : ''}` : '')
+            || new Date().toISOString();
         return {
             _raw: d,
+            mensagens: r.mensagens || [],
             categoria,
-            numeroRecibo: d.numeroRecibo || d.recibo || '',
-            transmitidoEm: d.dataHoraTransmissao || new Date().toISOString(),
+            numeroRecibo,
+            transmitidoEm,
             situacao: 'ATIVA',
             fonte: 'serpro',
         };
@@ -481,43 +522,65 @@ class SerproProvider {
             acao: 'Emitir',
             dados: { categoria, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
         });
-        const d = safeJsonParse(r.dados) || {};
+        const d = primeiroObjeto(safeJsonParse(r.dados));
+        // O GERARGUIA31/GERARGUIAANDAMENTO313 retorna APENAS o PDF do DARF
+        // (PDFByteArrayBase64) — valor/vencimento/código de barras estão só
+        // dentro do PDF. valor=null (não 0 fake) quando o SERPRO não manda.
+        const valorNum = parseFloat(d.valor || d.valorTotal || '');
         return {
-            _raw: d,
-            valor: parseFloat(d.valor || d.valorTotal || '0'),
+            _raw: rawSemPdf(d),
+            mensagens: r.mensagens || [],
+            valor: Number.isFinite(valorNum) ? valorNum : null,
             numeroDocumento: d.numeroDocumento || d.numeroDarf || '',
             codigoBarras: d.codigoBarras || d.linhaDigitavel || '',
             vencimento: d.dataVencimento || d.vencimento || '',
-            pdfBase64: d.PDFByteArrayBase64 || d.pdfBase64 || '',
+            pdfBase64: pickPdfBase64(d),
             fonte: 'serpro',
         };
     }
 
     async consultarDeclaracaoCompleta({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        const cat = nomeCategoria(categoria);
         const r = await invokeIntegraContador({
             idSistema: 'DCTFWEB',
             idServico: 'CONSDECCOMPLETA33',
             contribuinteCnpj: cnpj,
             acao: 'Consultar',
-            dados: { categoria, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
+            dados: { categoria: cat, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
         });
-        const d = safeJsonParse(r.dados) || {};
-        return { pdfBase64: d.PDFByteArrayBase64 || '', categoria, anoPA, mesPA, fonte: 'serpro' };
+        const d = primeiroObjeto(safeJsonParse(r.dados));
+        const pdfBase64 = pickPdfBase64(d);
+        return {
+            pdfBase64,
+            mensagens: r.mensagens || [],
+            // Sem PDF: expõe o que o SERPRO devolveu (senão o "vazio" é indiagnosticável)
+            _camposRetornados: pdfBase64 ? undefined : Object.keys(d),
+            categoria: cat, anoPA, mesPA, fonte: 'serpro',
+        };
     }
 
-    async consultarRecibo({ empresaCnpj, anoPA, mesPA, categoria = 40 }) {
+    async consultarRecibo({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
-        const catCode = typeof categoria === 'number' ? categoria : (DCTFWEB_CATEGORIAS[categoria] || DCTFWEB_CATEGORIAS.GERAL_MENSAL);
+        // Categoria pelo NOME — o código numérico do app (GERAL_MENSAL=13) não
+        // é o do catálogo SERPRO (40); enviar 13 devolvia 200 sem PDF
+        // (caso real 08/07/2026, primeiro recibo após transmissão).
+        const cat = nomeCategoria(categoria);
         const r = await invokeIntegraContador({
             idSistema: 'DCTFWEB',
             idServico: 'CONSRECIBO32',
             contribuinteCnpj: cnpj,
             acao: 'Consultar',
-            dados: { categoria: catCode, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
+            dados: { categoria: cat, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
         });
-        const d = safeJsonParse(r.dados) || {};
-        return { pdfBase64: d.PDFByteArrayBase64 || '', categoria: catCode, anoPA, mesPA, fonte: 'serpro' };
+        const d = primeiroObjeto(safeJsonParse(r.dados));
+        const pdfBase64 = pickPdfBase64(d);
+        return {
+            pdfBase64,
+            mensagens: r.mensagens || [],
+            _camposRetornados: pdfBase64 ? undefined : Object.keys(d),
+            categoria: cat, anoPA, mesPA, fonte: 'serpro',
+        };
     }
 
     async encerrarApuracaoMit({ empresaCnpj, anoPA, mesPA, dadosApuracaoMit }) {

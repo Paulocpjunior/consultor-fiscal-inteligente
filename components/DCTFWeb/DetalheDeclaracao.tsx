@@ -5,7 +5,7 @@
  * PDFs sao lazy (so busca quando tab abrir) pra economizar custo SERPRO.
  */
 import React, { useState, useEffect } from 'react';
-import type { User, DctfwebDeclaracao, DctfwebDarfResult } from '../../types';
+import type { User, DctfwebDeclaracao, DctfwebDarfResult, DctfwebPdfResult } from '../../types';
 import {
     consultarDeclaracaoCompleta,
     consultarRecibo,
@@ -77,8 +77,8 @@ const PdfPreview: React.FC<{
 
 const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }) => {
     const [tab, setTab] = useState<Tab>('declaracao');
-    const [pdfDeclaracao, setPdfDeclaracao] = useState<string | null>(null);
-    const [pdfRecibo, setPdfRecibo] = useState<string | null>(null);
+    const [pdfDeclaracao, setPdfDeclaracao] = useState<DctfwebPdfResult | null>(null);
+    const [pdfRecibo, setPdfRecibo] = useState<DctfwebPdfResult | null>(null);
     const [darfResult, setDarfResult] = useState<DctfwebDarfResult | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -95,7 +95,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                         mesPA: declaracao.mesPA,
                         categoria: declaracao.categoria,
                     });
-                    setPdfDeclaracao(r.pdfBase64);
+                    setPdfDeclaracao(r);
                 } catch (err: any) {
                     setError(`Declaração: ${err.message}`);
                 } finally { setLoading(false); }
@@ -111,7 +111,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                         mesPA: declaracao.mesPA,
                         categoria: declaracao.categoria,
                     });
-                    setPdfRecibo(r.pdfBase64);
+                    setPdfRecibo(r);
                 } catch (err: any) {
                     setError(`Recibo: ${err.message}`);
                 } finally { setLoading(false); }
@@ -139,21 +139,39 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
         } finally { setLoading(false); }
     };
 
-    const renderPdfPreview = (pdfBase64: string | null, filenamePrefix: string) => {
+    const renderPdfPreview = (resultado: DctfwebPdfResult | null, filenamePrefix: string) => {
         if (loading) return <div className="text-center text-slate-500 py-12">Carregando...</div>;
-        if (!pdfBase64) {
+        if (!resultado?.pdfBase64) {
+            const mensagens = (resultado?.mensagens || []).filter(m => m?.texto);
             return (
                 <div className="text-center text-slate-500 py-12">
-                    {declaracao.situacao !== 'ATIVA'
-                        ? 'PDF disponível apenas após transmissão.'
-                        : 'Nenhum PDF retornado pelo SERPRO.'}
+                    <p>
+                        {declaracao.situacao !== 'ATIVA'
+                            ? 'PDF disponível apenas após transmissão.'
+                            : 'Nenhum PDF retornado pelo SERPRO.'}
+                    </p>
+                    {/* Motivo do SERPRO (sem isso o "vazio" é indiagnosticável) */}
+                    {mensagens.length > 0 && (
+                        <ul className="mt-3 text-xs text-left inline-block bg-slate-50 border rounded p-3 space-y-1">
+                            {mensagens.map((m, i) => (
+                                <li key={i} className="font-mono">
+                                    {m.codigo ? `${m.codigo} — ` : ''}{m.texto}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    {mensagens.length === 0 && resultado?._camposRetornados && resultado._camposRetornados.length > 0 && (
+                        <p className="mt-3 text-xs font-mono">
+                            Campos retornados: {resultado._camposRetornados.join(', ')}
+                        </p>
+                    )}
                 </div>
             );
         }
         const filename = `${filenamePrefix}_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`;
         return (
             <PdfPreview
-                pdfBase64={pdfBase64}
+                pdfBase64={resultado.pdfBase64}
                 filename={filename}
                 title={`${filenamePrefix} PDF`}
             />
@@ -234,20 +252,44 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                             )}
                             {darfResult && (
                                 <div className="bg-white border rounded-lg p-4 space-y-2">
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-slate-500">Valor:</span>
-                                        <span className="font-semibold">R$ {darfResult.valor.toFixed(2)}</span>
-                                    </div>
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-slate-500">Vencimento:</span>
-                                        <span>{darfResult.vencimento || '—'}</span>
-                                    </div>
-                                    <div className="text-xs">
-                                        <p className="text-slate-500 mb-1">Código de barras:</p>
-                                        <p className="font-mono bg-slate-50 p-2 rounded break-all">
-                                            {darfResult.codigoBarras || '—'}
+                                    {/* O SERPRO (GERARGUIA31) retorna só o PDF do DARF —
+                                        valor/vencimento/código de barras constam nele. */}
+                                    {darfResult.valor == null && darfResult.pdfBase64 && (
+                                        <p className="text-xs text-slate-500 bg-slate-50 border rounded p-2">
+                                            O SERPRO retorna o DARF apenas em PDF — valor, vencimento e
+                                            código de barras estão no documento abaixo.
                                         </p>
-                                    </div>
+                                    )}
+                                    {darfResult.valor != null && (
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-500">Valor:</span>
+                                            <span className="font-semibold">R$ {darfResult.valor.toFixed(2)}</span>
+                                        </div>
+                                    )}
+                                    {darfResult.vencimento && (
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-500">Vencimento:</span>
+                                            <span>{darfResult.vencimento}</span>
+                                        </div>
+                                    )}
+                                    {darfResult.codigoBarras && (
+                                        <div className="text-xs">
+                                            <p className="text-slate-500 mb-1">Código de barras:</p>
+                                            <p className="font-mono bg-slate-50 p-2 rounded break-all">
+                                                {darfResult.codigoBarras}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {!darfResult.pdfBase64 && (
+                                        <p className="text-sm text-slate-500">
+                                            O SERPRO não retornou o PDF do DARF.
+                                            {(darfResult.mensagens || []).filter(m => m?.texto).map((m, i) => (
+                                                <span key={i} className="block font-mono text-xs mt-1">
+                                                    {m.codigo ? `${m.codigo} — ` : ''}{m.texto}
+                                                </span>
+                                            ))}
+                                        </p>
+                                    )}
                                     {darfResult.pdfBase64 && (
                                         <div className="flex flex-wrap gap-2 pt-2">
                                             <button

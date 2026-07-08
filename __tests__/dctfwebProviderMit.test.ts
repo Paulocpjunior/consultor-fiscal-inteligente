@@ -489,3 +489,96 @@ describe('extrairXmlDeclaracao — shapes de resposta do CONSXMLDECLARACAO38', (
         expect(extrairXmlDeclaracao({ mensagem: 'sem declaracao para o periodo' })).toBe('');
     });
 });
+
+describe('SerproProvider — recibo, DARF e transmissão (retornos pós-transmissão)', () => {
+    beforeEach(() => {
+        mockInvokeIntegraContador.mockReset();
+    });
+
+    it('consultarRecibo envia a categoria pelo NOME do catálogo (nunca o código interno 13)', async () => {
+        // Caso real 08/07/2026: CONSRECIBO32 com categoria numérica 13 (código
+        // interno do app) voltava 200 sem PDF — o catálogo SERPRO usa nomes
+        // (GERAL_MENSAL) ou os códigos DELE (40), que não são os do app.
+        mockInvokeIntegraContador.mockResolvedValue({ dados: { PDFByteArrayBase64: 'PDF64' } });
+
+        const r = await provider.consultarRecibo({
+            empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6, categoria: 'GERAL_MENSAL',
+        });
+        expect(mockInvokeIntegraContador).toHaveBeenCalledWith(expect.objectContaining({
+            idServico: 'CONSRECIBO32',
+            dados: expect.objectContaining({ categoria: 'GERAL_MENSAL', anoPA: '2026', mesPA: '06' }),
+        }));
+        expect(r.pdfBase64).toBe('PDF64');
+
+        // Código numérico legado (13) é convertido de volta pro nome.
+        await provider.consultarRecibo({
+            empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6, categoria: 13,
+        });
+        expect(mockInvokeIntegraContador).toHaveBeenLastCalledWith(expect.objectContaining({
+            dados: expect.objectContaining({ categoria: 'GERAL_MENSAL' }),
+        }));
+    });
+
+    it('consultarRecibo lê dados em LISTA e expõe mensagens + campos quando não vem PDF', async () => {
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: [{ situacao: 'PROCESSANDO' }],
+            mensagens: [{ codigo: 'DCTFWEB-AVISO', texto: 'Recibo ainda em processamento' }],
+        });
+        const r = await provider.consultarRecibo({
+            empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6,
+        });
+        expect(r.pdfBase64).toBe('');
+        expect(r.mensagens).toEqual([{ codigo: 'DCTFWEB-AVISO', texto: 'Recibo ainda em processamento' }]);
+        expect(r._camposRetornados).toEqual(['situacao']);
+
+        // Com PDF em lista, extrai normalmente e não expõe _camposRetornados.
+        mockInvokeIntegraContador.mockResolvedValueOnce({ dados: [{ PDFByteArrayBase64: 'PDF64' }] });
+        const ok = await provider.consultarRecibo({
+            empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6,
+        });
+        expect(ok.pdfBase64).toBe('PDF64');
+        expect(ok._camposRetornados).toBeUndefined();
+    });
+
+    it('gerarDarf: valor null (não 0 fake) quando o SERPRO só retorna o PDF, e _raw sem o base64', async () => {
+        // GERARGUIA31 retorna APENAS PDFByteArrayBase64 — valor/vencimento/
+        // código de barras constam só dentro do PDF (shape oficial).
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: { PDFByteArrayBase64: 'PDF_DARF_64' },
+            mensagens: [{ codigo: 'Sucesso-DCTFWEB', texto: 'Guia emitida' }],
+        });
+        const r = await provider.gerarDarf({ empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6 });
+        expect(r.pdfBase64).toBe('PDF_DARF_64');
+        expect(r.valor).toBeNull();
+        expect(r.vencimento).toBe('');
+        expect(r.codigoBarras).toBe('');
+        expect(r._raw).not.toHaveProperty('PDFByteArrayBase64');
+        expect(r.mensagens).toHaveLength(1);
+
+        // Se algum dia o SERPRO mandar valor, continua sendo lido.
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: { PDFByteArrayBase64: 'PDF64', valor: '123.45', dataVencimento: '2026-07-25' },
+        });
+        const r2 = await provider.gerarDarf({ empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6 });
+        expect(r2.valor).toBe(123.45);
+        expect(r2.vencimento).toBe('2026-07-25');
+    });
+
+    it('transmitirDeclaracao extrai numeroRecibo de campos alternativos e monta transmitidoEm', async () => {
+        // Caso real 08/07/2026: recibo ficava "Não informado" — o shape oficial
+        // traz numeroRecibo/dataTransmissao/horaTransmissao, mas há variações.
+        const xml = '<DeclaracaoDctfWeb/>';
+        mockInvokeIntegraContador
+            .mockResolvedValueOnce({ dados: { XMLStringBase64: Buffer.from(xml).toString('base64') } })
+            .mockResolvedValueOnce({
+                dados: { numRecibo: '2026.06.98765', dataTransmissao: '08/07/2026', horaTransmissao: '09:31' },
+                mensagens: [{ codigo: 'Sucesso-DCTFWEB', texto: 'Declaração transmitida' }],
+            });
+        const r = await provider.transmitirDeclaracao({
+            empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6,
+        });
+        expect(r.numeroRecibo).toBe('2026.06.98765');
+        expect(r.transmitidoEm).toBe('08/07/2026 09:31');
+        expect(r.mensagens).toHaveLength(1);
+    });
+});
