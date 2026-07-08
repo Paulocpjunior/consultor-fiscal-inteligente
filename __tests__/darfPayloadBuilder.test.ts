@@ -76,6 +76,16 @@ describe('montarPayloadDarfSerpro (SICALC/CONSOLIDARGERARDARF51)', () => {
         expect(p.dados.codigoReceitaExtensao).toBe('02'); // extensão da tabela (PJ em geral)
     });
 
+
+    it('observacao é truncada em 50 caracteres (limite do SICALC)', () => {
+        const p = montarPayloadDarfSerpro({
+            empresaCnpj: '12345678000190', competencia: '2026-06', valor: 100,
+            codigoReceita: '2172',
+            observacao: 'DCTFWeb GERAL_MENSAL 06/2026 - COFINS - CONTRIB P/ FIN. SEG. SOCIAL',
+        });
+        expect(p.dados.observacao.length).toBeLessThanOrEqual(50);
+    });
+
     it('lanca em campos obrigatorios faltando', () => {
         expect(() => montarPayloadDarfSerpro({ competencia: '2026-03', valor: 100 } as any))
             .toThrow(/obrigatorios/);
