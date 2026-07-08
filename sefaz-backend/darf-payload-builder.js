@@ -103,6 +103,37 @@ export function periodoApuracaoSicalc(competencia, tributo, periodicidade = 'tri
     return { tipoPA: 'ME', dataPA: `${String(pa.mes).padStart(2, '0')}/${pa.ano}` };
 }
 
+/**
+ * Dado o "hoje" (YYYY-MM-DD), retorna qual trimestre de IRPJ/CSLL vence NESTE
+ * mês e a competência-chave (último mês do trimestre, onde os débitos
+ * trimestrais aparecem na DCTFWeb). Trimestrais vencem no último dia útil do
+ * mês seguinte ao fim do trimestre: abr/jul/out/jan.
+ *
+ * @returns {null | { trimestre, competenciaAno, competenciaMes, vencimento }}
+ */
+export function trimestreVencendoEsteMes(hojeIsoStr) {
+    const m = String(hojeIsoStr).match(/^(\d{4})-(\d{2})/);
+    if (!m) return null;
+    const ano = Number(m[1]);
+    const mes = Number(m[2]);
+    // mês de vencimento -> { trimestre, mês da competência-chave, ano da competência }
+    const mapa = {
+        4:  { trimestre: 1, competenciaMes: 3,  competenciaAno: ano },
+        7:  { trimestre: 2, competenciaMes: 6,  competenciaAno: ano },
+        10: { trimestre: 3, competenciaMes: 9,  competenciaAno: ano },
+        1:  { trimestre: 4, competenciaMes: 12, competenciaAno: ano - 1 },
+    };
+    const info = mapa[mes];
+    if (!info) return null;
+    const comp = `${info.competenciaAno}-${String(info.competenciaMes).padStart(2, '0')}`;
+    return {
+        trimestre: info.trimestre,
+        competenciaAno: info.competenciaAno,
+        competenciaMes: info.competenciaMes,
+        vencimento: calcularVencimentoDarf(comp, 'IRPJ', 'trimestral'),
+    };
+}
+
 export function resolverCodigoReceita(req) {
     if (req.codigoReceita) return req.codigoReceita;
     const sug = sugerirCodigoReceita(req.regime, req.tributo, req.periodicidade);

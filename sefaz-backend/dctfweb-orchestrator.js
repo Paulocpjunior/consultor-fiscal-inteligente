@@ -11,6 +11,7 @@ import {
 import { normalizarRetencaoDctfweb, extrairDebitosDctfweb } from './dctfweb-retencao-normalizer.js';
 import { getDarfProvider } from './darf-provider.js';
 import { calcularUltimoDiaUtil } from './calendario-obrigacoes.js';
+import { trimestreVencendoEsteMes, calcularVencimentoDarf } from './darf-payload-builder.js';
 import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
 import {
     extrairModeloDebitosMit, montarDebitosMit, mesclarDebitosMit, maiorIdDebitoMit,
@@ -296,6 +297,68 @@ export async function gerarDarfsSeparados({
     });
 
     return { competencia, categoria, guias, grupos, resumoPorVencimento, naoEmitidos };
+}
+
+// Painel "Trimestrais vencendo este mês": lista as declarações TRANSMITIDAS
+// (ATIVA) da competência que fecha o trimestre cujo IRPJ/CSLL vence neste mês.
+// NÃO lê o XML de cada uma (sem custo SERPRO) — só aponta as candidatas; os
+// débitos trimestrais são carregados sob demanda (listarDebitosTrimestrais).
+export async function listarTrimestraisVencendoEsteMes({ cnpjsPermitidos = null, hojeIso } = {}) {
+    const hoje = hojeIso || new Date().toISOString().slice(0, 10);
+    const info = trimestreVencendoEsteMes(hoje);
+    if (!info) {
+        return { aplicavel: false, motivo: 'Nenhum trimestre de IRPJ/CSLL vence neste mês (vencem em abril, julho, outubro e janeiro).' };
+    }
+    const declaracoes = await listarDeclaracoes({
+        anoPA: info.competenciaAno,
+        mesPA: info.competenciaMes,
+        situacao: 'ATIVA',
+    });
+    const setPermitidos = cnpjsPermitidos instanceof Set ? cnpjsPermitidos : null;
+    const candidatas = declaracoes
+        .filter((d) => !setPermitidos || setPermitidos.has(String(d.empresaCnpj).replace(/\D/g, '')))
+        .map((d) => ({
+            empresaId: d.empresaId || null,
+            empresaCnpj: d.empresaCnpj,
+            categoria: d.categoria || 'GERAL_MENSAL',
+            anoPA: d.anoPA,
+            mesPA: d.mesPA,
+            situacao: d.situacao,
+            valorTotalDeclaracao: d.valorTotal ?? null,
+        }));
+    return {
+        aplicavel: true,
+        trimestre: info.trimestre,
+        competenciaAno: info.competenciaAno,
+        competenciaMes: info.competenciaMes,
+        vencimento: info.vencimento,
+        candidatas,
+    };
+}
+
+// Carrega (sob demanda, 1 CONSXMLDECLARACAO38) os débitos TRIMESTRAIS de
+// IRPJ/CSLL de uma declaração transmitida — para o painel mostrar valor +
+// vencimento antes de emitir. Só leitura; não emite nada.
+export async function listarDebitosTrimestrais({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
+    const provider = getDctfwebProvider();
+    const consulta = await provider.consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria });
+    const ext = extrairDebitosDctfweb(consulta?.xml || consulta?._raw || '');
+    if (!ext.lido) {
+        return { lido: false, motivo: ext.motivo, trimestrais: [], totalTrimestral: 0, vencimento: null };
+    }
+    const trimestrais = ext.debitos.filter((d) => RECEITAS_TRIMESTRAIS_QUOTA.has(d.codigo));
+    const r2 = (n) => Math.round(n * 100) / 100;
+    // Vencimento trimestral = último dia útil do mês seguinte ao fim do
+    // trimestre da competência (ex.: comp 06 → 2º tri → 31/07).
+    const vencimento = trimestrais.length
+        ? calcularVencimentoDarf(`${anoPA}-${String(mesPA).padStart(2, '0')}`, 'IRPJ', 'trimestral')
+        : null;
+    return {
+        lido: true,
+        trimestrais,
+        totalTrimestral: r2(trimestrais.reduce((s, d) => s + d.valor, 0)),
+        vencimento,
+    };
 }
 
 export async function consultarDeclaracaoCompleta({ empresaCnpj, anoPA, mesPA, categoria }) {

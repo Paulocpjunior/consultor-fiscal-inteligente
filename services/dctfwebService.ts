@@ -20,7 +20,7 @@ import type {
     User,
     DctfwebDeclaracao, DctfwebResumo, DctfwebSyncStats,
     DctfwebTransmissaoResult, DctfwebDarfResult, DctfwebPdfResult,
-    DctfwebDarfsSeparadosResult,
+    DctfwebDarfsSeparadosResult, DctfwebTrimestraisMesResult, DctfwebDebitosTrimestraisResult,
     DctfwebCategoria, DctfwebMitApuracao, DctfwebMitEncerramentoResult,
     DctfwebMitHistorico,
 } from '../types';
@@ -134,6 +134,29 @@ export async function gerarDarf(user: User | null, payload: {
         const err = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(err.error || `gerarDarf: ${res.status}`);
     }
+    return res.json();
+}
+
+/** Painel "Trimestrais vencendo este mês": empresas da carteira com declaração
+ *  ATIVA da competência que fecha o trimestre cujo IRPJ/CSLL vence neste mês. */
+export async function listarTrimestraisMes(user: User | null): Promise<DctfwebTrimestraisMesResult> {
+    const res = await fetch(`${BASE}/trimestrais-mes`, { headers: await authHeaders(user) });
+    if (!res.ok) throw new Error(`listarTrimestraisMes: ${res.status}`);
+    return res.json();
+}
+
+/** Débitos trimestrais de UMA declaração (sob demanda — 1 chamada SERPRO). */
+export async function listarDebitosTrimestrais(user: User | null, params: {
+    empresaCnpj: string; anoPA: number; mesPA: number; categoria?: DctfwebCategoria;
+}): Promise<DctfwebDebitosTrimestraisResult> {
+    const qs = new URLSearchParams({
+        empresaCnpj: params.empresaCnpj,
+        anoPA: String(params.anoPA),
+        mesPA: String(params.mesPA),
+    });
+    if (params.categoria) qs.set('categoria', params.categoria);
+    const res = await fetch(`${BASE}/debitos-trimestrais?${qs}`, { headers: await authHeaders(user) });
+    if (!res.ok) throw new Error(`listarDebitosTrimestrais: ${res.status}`);
     return res.json();
 }
 
