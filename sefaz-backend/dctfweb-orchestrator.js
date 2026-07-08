@@ -191,13 +191,15 @@ export async function gerarDarfsSeparados({ empresaCnpj, anoPA, mesPA, categoria
             naoEmitidos.push({ ...deb, motivo: `DARF inferior a R$ ${DARF_VALOR_MINIMO},00 não pode ser emitido (RFB) — acumule com o período seguinte ou use o DARF unificado.` });
             continue;
         }
+        // observacao: o SICALC limita a 50 caracteres (EntradaIncorreta-SICALC
+        // "tamanho deve ser entre 0 e 50" — caso real 08/07/2026).
         const r = await darfProvider.gerarDarf({
             empresaCnpj,
             competencia,
             valor: deb.valor,
             codigoReceita: deb.codigo,
             codigoReceitaExtensao: deb.extensao,
-            observacao: `DCTFWeb ${categoria} ${String(mesPA).padStart(2, '0')}/${anoPA} - ${deb.descricao}`.slice(0, 80),
+            observacao: `DCTFWeb ${String(mesPA).padStart(2, '0')}/${anoPA} ${deb.descricao}`.slice(0, 50),
         });
         guias.push({
             codigo: deb.codigo,

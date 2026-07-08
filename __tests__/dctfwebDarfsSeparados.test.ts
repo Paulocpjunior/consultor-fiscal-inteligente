@@ -108,6 +108,9 @@ describe('gerarDarfsSeparados', () => {
                 vencimento: '2026-07-24T00:00:00', valorImposto: '13.00',
             }),
         });
+        // SICALC limita observacao a 50 chars (EntradaIncorreta-SICALC 08/07/2026)
+        expect(chamadas.filter((c) => c.idSistema === 'SICALC')
+            .every((c) => String(c.dados.observacao || '').length <= 50)).toBe(true);
         const irpj = chamadas.find((c) => c.dados?.codigoReceita === '2089');
         expect(irpj?.dados).toMatchObject({
             codigoReceitaExtensao: '01', tipoPA: 'TR', dataPA: '02/2026',

@@ -188,7 +188,10 @@ export function montarPayloadDarfSerpro(req) {
             vencimento: iso00(vencimento),
             valorImposto: Number(valor).toFixed(2),
             dataConsolidacao: iso00(dataConsolidacao),
-            observacao: req.observacao || '',
+            // SICALC valida "tamanho deve ser entre 0 e 50" (EntradaIncorreta-
+            // SICALC, caso real 08/07/2026) — trunca aqui pra proteger todo
+            // chamador.
+            observacao: String(req.observacao || '').slice(0, 50),
         },
     };
 }
