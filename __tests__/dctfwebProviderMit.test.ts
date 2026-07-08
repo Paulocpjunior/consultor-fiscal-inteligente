@@ -19,7 +19,9 @@ jest.mock('../sefaz-backend/dctfweb-xml-signer.js', () => ({
 }));
 
 // @ts-expect-error — modulo .js puro
-import { getDctfwebProvider, MIT_SERVICOS } from '../sefaz-backend/dctfweb-provider.js';
+import { getDctfwebProvider, MIT_SERVICOS, extrairXmlDeclaracao } from '../sefaz-backend/dctfweb-provider.js';
+// @ts-expect-error — modulo .js puro (mockado acima; import pra inspecionar chamadas)
+import { assinarXmlDctfwebBase64 } from '../sefaz-backend/dctfweb-xml-signer.js';
 
 const provider = getDctfwebProvider() as any;
 
@@ -218,6 +220,38 @@ describe('SerproProvider MIT — catálogo oficial', () => {
             empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6,
         })).rejects.toThrow(/não retornou o XML/i);
         expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(1); // não tenta transmitir
+    });
+
+    it('transmitirDeclaracao lê o XML de dados.XMLStringBase64 (shape oficial do CONSXMLDECLARACAO38)', async () => {
+        // Caso RADIO E TV 06/2026 (08/07/2026): a resposta 200 vinha CHEIA em
+        // XMLStringBase64, mas o código só olhava XMLByteArrayBase64/xmlBase64
+        // e abortava com "CONSXMLDECLARACAO38 vazio".
+        const xml = '<DeclaracaoDctfWeb versao="1.0"/>';
+        mockInvokeIntegraContador
+            .mockResolvedValueOnce({ dados: { XMLStringBase64: Buffer.from(xml, 'utf8').toString('base64') } })
+            .mockResolvedValueOnce({ dados: { numeroRecibo: 'R-1' } });
+
+        const r = await provider.transmitirDeclaracao({
+            empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6,
+        });
+
+        expect(r.numeroRecibo).toBe('R-1');
+        // O XML assinado deve ser EXATAMENTE o recebido (exigência do SERPRO).
+        expect(assinarXmlDctfwebBase64).toHaveBeenCalledWith(expect.objectContaining({ xml }));
+        expect(mockInvokeIntegraContador).toHaveBeenLastCalledWith(expect.objectContaining({
+            idServico: 'TRANSDECLARACAO310',
+            dados: expect.objectContaining({ xmlAssinadoBase64: 'XML_ASSINADO_B64_FAKE' }),
+        }));
+    });
+
+    it('erro de XML vazio inclui as mensagens e os campos que o SERPRO devolveu', async () => {
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: { info: 'sem xml aqui' },
+            mensagens: [{ codigo: 'DCTFWEB-XYZ', texto: 'Situação inesperada' }],
+        });
+        await expect(provider.transmitirDeclaracao({
+            empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6,
+        })).rejects.toThrow(/DCTFWEB-XYZ - Situação inesperada.*Campos retornados: info/s);
     });
 
     it('listarDeclaracoes traduz DCTFWEB-MG10 em _info amigável (aguardando transmissão), sem _erro', async () => {
@@ -423,5 +457,35 @@ describe('SerproProvider MIT — catálogo oficial', () => {
             idServico: MIT_SERVICOS.CONSULTAR_APURACAO,
             dados: { idApuracao: 987 },
         }));
+    });
+});
+
+describe('extrairXmlDeclaracao — shapes de resposta do CONSXMLDECLARACAO38', () => {
+    const XML = '<?xml version="1.0"?><DeclaracaoDctfWeb/>';
+    const b64 = Buffer.from(XML, 'utf8').toString('base64');
+
+    it('lê o shape oficial XMLStringBase64', () => {
+        expect(extrairXmlDeclaracao({ XMLStringBase64: b64 })).toBe(XML);
+    });
+
+    it('mantém compatibilidade com os campos legados', () => {
+        expect(extrairXmlDeclaracao({ XMLByteArrayBase64: b64 })).toBe(XML);
+        expect(extrairXmlDeclaracao({ xmlBase64: b64 })).toBe(XML);
+        expect(extrairXmlDeclaracao({ xml: XML })).toBe(XML);
+    });
+
+    it('aceita dados como string crua (XML direto ou base64 sem wrapper JSON)', () => {
+        expect(extrairXmlDeclaracao(XML)).toBe(XML);
+        expect(extrairXmlDeclaracao(b64)).toBe(XML);
+    });
+
+    it('varre campos desconhecidos que contenham XML (cru ou base64)', () => {
+        expect(extrairXmlDeclaracao({ outroNomeQualquer: b64 })).toBe(XML);
+    });
+
+    it('devolve vazio para respostas sem XML (não inventa conteúdo)', () => {
+        expect(extrairXmlDeclaracao({})).toBe('');
+        expect(extrairXmlDeclaracao(null)).toBe('');
+        expect(extrairXmlDeclaracao({ mensagem: 'sem declaracao para o periodo' })).toBe('');
     });
 });
