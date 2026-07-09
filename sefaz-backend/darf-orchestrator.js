@@ -71,10 +71,18 @@ export async function emitirDarf(req) {
     return { id: docId, ...payload };
 }
 
+// Filtra docs pela carteira do colaborador. cnpjsPermitidos === null => admin
+// (sem restrição). Set vazio => sem carteira (nada). Compara só dígitos.
+function filtrarPorCarteira(docs, cnpjsPermitidos) {
+    if (!(cnpjsPermitidos instanceof Set)) return docs; // null/undefined = admin
+    return docs.filter((d) => cnpjsPermitidos.has(String(d.empresaCnpj || '').replace(/\D/g, '')));
+}
+
 /**
- * Lista DARFs com filtros opcionais.
+ * Lista DARFs com filtros opcionais, ESCOPADO por carteira.
+ * @param {Set<string>|null} cnpjsPermitidos  null = admin; Set = só esses CNPJs.
  */
-export async function listarDarfs({ empresaId, competencia, tributo, status, regime } = {}) {
+export async function listarDarfs({ empresaId, competencia, tributo, status, regime } = {}, cnpjsPermitidos = null) {
     const db = fa().firestore();
     let q = db.collection(COLLECTION);
     if (empresaId)   q = q.where('empresaId',       '==', empresaId);
@@ -84,17 +92,21 @@ export async function listarDarfs({ empresaId, competencia, tributo, status, reg
     if (status)      q = q.where('statusPagamento', '==', status);
 
     const snap = await q.limit(500).get();
-    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const docs = filtrarPorCarteira(snap.docs.map(d => ({ id: d.id, ...d.data() })), cnpjsPermitidos);
     docs.sort((a, b) => (b.emitidoEm || '').localeCompare(a.emitidoEm || ''));
     return docs;
 }
 
 /**
- * Resumo agregado pra dashboard.
+ * Resumo agregado pra dashboard, ESCOPADO por carteira.
+ * @param {Set<string>|null} cnpjsPermitidos  null = admin; Set = só esses CNPJs.
  */
-export async function getResumoDarf() {
+export async function getResumoDarf(cnpjsPermitidos = null) {
     const db = fa().firestore();
-    const docs = (await fetchAllDocs(db.collection(COLLECTION), { label: 'darf_emitidos/resumo' })).map(d => d.data());
+    const docs = filtrarPorCarteira(
+        (await fetchAllDocs(db.collection(COLLECTION), { label: 'darf_emitidos/resumo' })).map(d => d.data()),
+        cnpjsPermitidos,
+    );
 
     const hoje = new Date().toISOString().slice(0, 10);
     let pendentes = 0, vencidos = 0, pagos = 0;
@@ -140,11 +152,23 @@ export async function getResumoDarf() {
 }
 
 /**
- * Marca DARF como paga.
+ * Marca DARF como paga, VERIFICANDO a carteira antes.
+ * @param {Set<string>|null} cnpjsPermitidos  null = admin; Set = só esses CNPJs.
  */
-export async function marcarPago(docId, dataPagamento) {
+export async function marcarPago(docId, dataPagamento, cnpjsPermitidos = null) {
     const db = fa().firestore();
-    await db.collection(COLLECTION).doc(docId).update({
+    const ref = db.collection(COLLECTION).doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+        const e = new Error('DARF não encontrado'); e.httpStatus = 404; throw e;
+    }
+    if (cnpjsPermitidos instanceof Set) {
+        const cnpj = String(snap.data().empresaCnpj || '').replace(/\D/g, '');
+        if (!cnpjsPermitidos.has(cnpj)) {
+            const e = new Error('DARF não pertence à sua carteira'); e.httpStatus = 403; throw e;
+        }
+    }
+    await ref.update({
         statusPagamento: 'pago',
         dataPagamento: dataPagamento || new Date().toISOString().slice(0, 10),
     });
