@@ -4,7 +4,7 @@
  * Modal de detalhe — 3 tabs (Declaração / Recibo / DARF).
  * PDFs sao lazy (so busca quando tab abrir) pra economizar custo SERPRO.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type {
     User, DctfwebDeclaracao, DctfwebDarfResult, DctfwebPdfResult,
     DctfwebDarfsSeparadosResult,
@@ -87,49 +87,58 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     const [darfsSeparados, setDarfsSeparados] = useState<DctfwebDarfsSeparadosResult | null>(null);
     const [loadingSeparados, setLoadingSeparados] = useState(false);
     const [quotasTrimestrais, setQuotasTrimestrais] = useState<1 | 2 | 3>(1);
-    const [loading, setLoading] = useState(false);
+    // Loadings SEPARADOS por fluxo — um único `loading` fazia a aba Declaração
+    // mostrar "Carregando..." enquanto o DARF era gerado, etc. (varredura 09/07).
+    const [loadingDeclaracao, setLoadingDeclaracao] = useState(false);
+    const [loadingRecibo, setLoadingRecibo] = useState(false);
+    const [loadingDarf, setLoadingDarf] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Guarda SÍNCRONA contra fetch duplicado (custo SERPRO): setState de loading
+    // é assíncrono, então um re-render antes dele atualizar dispararia 2ª busca.
+    // A ref marca "já iniciado" na hora; reseta quando muda a declaração.
+    const declKey = `${declaracao.empresaCnpj}_${declaracao.anoPA}_${declaracao.mesPA}_${declaracao.categoria}`;
+    const buscadoRef = useRef<{ key: string; decl: boolean; recibo: boolean }>({ key: declKey, decl: false, recibo: false });
+    if (buscadoRef.current.key !== declKey) {
+        buscadoRef.current = { key: declKey, decl: false, recibo: false };
+    }
+    const montadoRef = useRef(true);
     useEffect(() => {
-        if (!user) return;
-        if (tab === 'declaracao' && pdfDeclaracao === null && declaracao.situacao === 'ATIVA') {
-            (async () => {
-                setLoading(true); setError(null);
-                try {
-                    const r = await consultarDeclaracaoCompleta(user, {
-                        empresaCnpj: declaracao.empresaCnpj,
-                        anoPA: declaracao.anoPA,
-                        mesPA: declaracao.mesPA,
-                        categoria: declaracao.categoria,
-                    });
-                    setPdfDeclaracao(r);
-                } catch (err: any) {
-                    setError(`Declaração: ${err.message}`);
-                } finally { setLoading(false); }
-            })();
+        montadoRef.current = true;
+        return () => { montadoRef.current = false; };
+    }, []);
+
+    useEffect(() => {
+        if (!user || declaracao.situacao !== 'ATIVA') return;
+
+        if (tab === 'declaracao' && pdfDeclaracao === null && !buscadoRef.current.decl) {
+            buscadoRef.current.decl = true;
+            setLoadingDeclaracao(true); setError(null);
+            consultarDeclaracaoCompleta(user, {
+                empresaCnpj: declaracao.empresaCnpj, anoPA: declaracao.anoPA,
+                mesPA: declaracao.mesPA, categoria: declaracao.categoria,
+            }).then((r) => { if (montadoRef.current) setPdfDeclaracao(r); })
+              .catch((err) => { if (montadoRef.current) { setError(`Declaração: ${err.message}`); buscadoRef.current.decl = false; } })
+              .finally(() => { if (montadoRef.current) setLoadingDeclaracao(false); });
         }
-        if (tab === 'recibo' && pdfRecibo === null && declaracao.situacao === 'ATIVA') {
-            (async () => {
-                setLoading(true); setError(null);
-                try {
-                    const r = await consultarRecibo(user, {
-                        empresaCnpj: declaracao.empresaCnpj,
-                        anoPA: declaracao.anoPA,
-                        mesPA: declaracao.mesPA,
-                        categoria: declaracao.categoria,
-                    });
-                    setPdfRecibo(r);
-                } catch (err: any) {
-                    setError(`Recibo: ${err.message}`);
-                } finally { setLoading(false); }
-            })();
+
+        if (tab === 'recibo' && pdfRecibo === null && !buscadoRef.current.recibo) {
+            buscadoRef.current.recibo = true;
+            setLoadingRecibo(true); setError(null);
+            consultarRecibo(user, {
+                empresaCnpj: declaracao.empresaCnpj, anoPA: declaracao.anoPA,
+                mesPA: declaracao.mesPA, categoria: declaracao.categoria,
+            }).then((r) => { if (montadoRef.current) setPdfRecibo(r); })
+              .catch((err) => { if (montadoRef.current) { setError(`Recibo: ${err.message}`); buscadoRef.current.recibo = false; } })
+              .finally(() => { if (montadoRef.current) setLoadingRecibo(false); });
         }
-    }, [tab, user, declaracao, pdfDeclaracao, pdfRecibo]);
+    }, [tab, user, declKey, pdfDeclaracao, pdfRecibo, declaracao.situacao,
+        declaracao.empresaCnpj, declaracao.anoPA, declaracao.mesPA, declaracao.categoria]);
 
     const handleGerarDarf = async () => {
         if (!user) return;
         if (!confirm(`Gerar DARF para ${declaracao.empresaCnpj} ref ${formatPaLabel(declaracao.anoPA, declaracao.mesPA)}?\n\nCusto SERPRO: ~R$ 0,75`)) return;
-        setLoading(true); setError(null);
+        setLoadingDarf(true); setError(null);
         try {
             const r = await gerarDarf(user, {
                 empresaId: declaracao.empresaId,
@@ -143,7 +152,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
             onShowToast?.('DARF gerado.');
         } catch (err: any) {
             setError(`DARF: ${err.message}`);
-        } finally { setLoading(false); }
+        } finally { setLoadingDarf(false); }
     };
 
     const handleGerarDarfsSeparados = async () => {
@@ -178,8 +187,8 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     const formatDataBr = (iso: string) =>
         /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso;
 
-    const renderPdfPreview = (resultado: DctfwebPdfResult | null, filenamePrefix: string) => {
-        if (loading) return <div className="text-center text-slate-500 py-12">Carregando...</div>;
+    const renderPdfPreview = (resultado: DctfwebPdfResult | null, filenamePrefix: string, isLoading: boolean) => {
+        if (isLoading) return <div className="text-center text-slate-500 py-12">Carregando...</div>;
         if (!resultado?.pdfBase64) {
             const mensagens = (resultado?.mensagens || []).filter(m => m?.texto);
             return (
@@ -270,8 +279,8 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                         <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded p-3 text-sm mb-4">{error}</div>
                     )}
 
-                    {tab === 'declaracao' && renderPdfPreview(pdfDeclaracao, 'dctfweb_declaracao')}
-                    {tab === 'recibo' && renderPdfPreview(pdfRecibo, 'dctfweb_recibo')}
+                    {tab === 'declaracao' && renderPdfPreview(pdfDeclaracao, 'dctfweb_declaracao', loadingDeclaracao)}
+                    {tab === 'recibo' && renderPdfPreview(pdfRecibo, 'dctfweb_recibo', loadingRecibo)}
 
                     {tab === 'darf' && (
                         <div className="space-y-4">
@@ -282,10 +291,10 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                     </p>
                                     <button
                                         onClick={handleGerarDarf}
-                                        disabled={loading}
+                                        disabled={loadingDarf}
                                         className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
                                     >
-                                        {loading ? 'Gerando...' : 'Gerar DARF'}
+                                        {loadingDarf ? 'Gerando...' : 'Gerar DARF'}
                                     </button>
                                 </div>
                             )}

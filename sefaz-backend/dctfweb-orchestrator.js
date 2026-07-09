@@ -674,9 +674,15 @@ export async function consultarRetencaoDctfwebNormalizada({ empresaCnpj, anoPA, 
     return { competencia: `${anoPA}-${String(mesPA).padStart(2, '0')}`, fonte: consulta?.fonte, ...norm };
 }
 
-export async function getResumoGlobal() {
+// Resumo do dashboard DCTFWeb, ESCOPADO por carteira (cnpjsPermitidos === null
+// => admin, vê tudo; Set => só esses CNPJs). Antes contava a base inteira pra
+// qualquer colaborador (varredura 09/07).
+export async function getResumoGlobal(cnpjsPermitidos = null) {
     const db = fa().firestore();
-    const docs = (await fetchAllDocs(db.collection(COLLECTION), { label: 'dctfweb_declaracoes/resumo' })).map(d => d.data());
+    let docs = (await fetchAllDocs(db.collection(COLLECTION), { label: 'dctfweb_declaracoes/resumo' })).map(d => d.data());
+    if (cnpjsPermitidos instanceof Set) {
+        docs = docs.filter(d => cnpjsPermitidos.has(String(d.empresaCnpj || '').replace(/\D/g, '')));
+    }
     const pendentes = docs.filter(d => d.situacao === 'EM_ANDAMENTO');
     const transmitidas = docs.filter(d => d.situacao === 'ATIVA');
     return {

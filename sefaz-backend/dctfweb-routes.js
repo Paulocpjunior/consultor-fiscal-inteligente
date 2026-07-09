@@ -75,8 +75,8 @@ async function cnpjsPermitidosParaListagem(user) {
 
 router.get('/status', (_req, res) => res.json({ mode: getDctfwebMode(), ok: true }));
 
-router.get('/resumo', requireAuth, async (_req, res) => {
-    try { res.json(await getResumoGlobal()); }
+router.get('/resumo', requireAuth, async (req, res) => {
+    try { res.json(await getResumoGlobal(await cnpjsPermitidosParaListagem(req.user))); }
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
