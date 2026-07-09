@@ -41,6 +41,9 @@ const RECEITAS_TRIMESTRAIS = new Set(['2089', '0220', '2372', '6012']);
 // PIS/COFINS (faturamento) vencem dia 25 do mês seguinte (antecipa em dia não
 // útil — Lei 11.933/2009); os demais mensais, último dia útil do mês seguinte.
 const RECEITAS_DIA_25 = new Set(['8109', '2172', '6912', '5856']);
+// IRRF (retenção): vencimento até o último dia útil do 2º decêndio do mês
+// seguinte — na prática dia 20, antecipado se não útil.
+const RECEITAS_DIA_20 = new Set(['1708', '0561', '0588', '3208', '5952', '5987']);
 
 export function ultimoDiaDoMes(ano, mes) {
     return new Date(Date.UTC(ano, mes, 0)).getUTCDate();
@@ -84,6 +87,9 @@ export function calcularVencimentoDarf(competencia, tributo, periodicidade = 'tr
     const t = String(tributo || '').toUpperCase();
     if (RECEITAS_DIA_25.has(raiz) || t === 'PIS' || t === 'COFINS') {
         return ajustarDiaUtil(ano, mes, 25, 'antecipar');
+    }
+    if (RECEITAS_DIA_20.has(raiz) || t === 'IRRF') {
+        return ajustarDiaUtil(ano, mes, 20, 'antecipar');
     }
     return ajustarDiaUtil(ano, mes, ultimoDiaDoMes(ano, mes), 'antecipar');
 }
@@ -160,9 +166,14 @@ export function resolverCodigoEExtensao(req) {
     return { codigo: sug.codigo, extensao: req.codigoReceitaExtensao || sug.extensao || '01' };
 }
 
-/** hoje em YYYY-MM-DD (UTC-3 aware o suficiente pro caso de uso) */
-function hojeIso() {
-    return new Date().toISOString().slice(0, 10);
+/**
+ * Hoje em YYYY-MM-DD no fuso de Brasília. NÃO usar toISOString() (UTC): o
+ * container roda em UTC, então das 21h à meia-noite BRT o toISOString já
+ * marca o dia seguinte — o que faria uma emissão no prazo virar "vencida" e
+ * o SICALC cobrar multa/juros indevidos (achado 09/07/2026).
+ */
+export function hojeIso() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
 }
 
 const iso00 = (yyyyMmDd) => `${yyyyMmDd}T00:00:00`;

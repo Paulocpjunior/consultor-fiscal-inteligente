@@ -1,5 +1,7 @@
 // Normaliza variações do retorno SERPRO GERARDAS12 para o formato interno.
 
+import { parseValorDas } from './das-valor-utils.js';
+
 function firstNonEmpty(...values) {
     for (const value of values) {
         if (value !== undefined && value !== null && value !== '') return value;
@@ -45,7 +47,9 @@ export function normalizarRespostaDasSerpro(result, valorFallback = 0) {
             detalhamento.vencimento,
             detalhamento.dataLimiteAcolhimento,
         )),
-        valor: Number(firstNonEmpty(
+        // parseValorDas trata tanto "1234.56" quanto o pt-BR "1.234,56" —
+        // Number() cru viraria NaN no formato brasileiro (achado 09/07/2026).
+        valor: parseValorDas(firstNonEmpty(
             item.valorTotal,
             item.valor,
             valores.total,

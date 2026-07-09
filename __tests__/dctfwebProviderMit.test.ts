@@ -202,6 +202,12 @@ describe('SerproProvider MIT — catálogo oficial', () => {
         expect(mockInvokeIntegraContador).toHaveBeenLastCalledWith(expect.objectContaining({
             idServico: 'GERARGUIA31', acao: 'Emitir',
         }));
+        // Categoria numérica interna (13) nunca vai ao SERPRO — vira o NOME.
+        mockInvokeIntegraContador.mockClear();
+        await provider.gerarDarf({ empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6, categoria: 13 });
+        expect(mockInvokeIntegraContador).toHaveBeenLastCalledWith(expect.objectContaining({
+            dados: expect.objectContaining({ categoria: 'GERAL_MENSAL' }),
+        }));
 
         await provider.gerarDarf({ empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6, emAndamento: true });
         expect(mockInvokeIntegraContador).toHaveBeenLastCalledWith(expect.objectContaining({

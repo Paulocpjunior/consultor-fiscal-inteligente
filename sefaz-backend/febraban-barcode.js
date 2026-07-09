@@ -5,9 +5,9 @@
 // Layout (44 dígitos, padrão FEBRABAN Convenio 4):
 //   pos 1     : ID Produto       = 8 (arrecadação)
 //   pos 2     : ID Segmento      = 5 (Governo Federal — RFB)
-//   pos 3     : ID Valor Real    = 6 (valor com DV módulo 11)
-//                                   ou 8 (sem valor / qtde)
-//   pos 4     : DV geral         (módulo 11 sobre os 43 demais)
+//   pos 3     : ID Valor Real    = 6 (valor efetivo, DV geral módulo 10)
+//                                   ou 8 (valor efetivo, DV geral módulo 11)
+//   pos 4     : DV geral         (módulo 10, coerente com id=6)
 //   pos 5-15  : Valor (11 dig)   centavos, zero-pad
 //   pos 16-19 : Codigo do orgao  = 1825 (Receita Federal)
 //   pos 20-33 : CNPJ contribuinte (14 dig)
@@ -20,23 +20,9 @@
 
 const ID_PRODUTO_ARRECADACAO = '8';
 const ID_SEGMENTO_RFB = '5';
-const ID_VALOR_REAL_MOD11 = '6';
+// 3º dígito = 6 → valor efetivo em Reais com DV geral por MÓDULO 10.
+const ID_VALOR_REAL_MOD10 = '6';
 const CODIGO_ORGAO_RFB = '1825';
-
-/**
- * DV módulo 11 (padrão arrecadação) — pesos 2..9 da direita pra esquerda.
- * Resto 0, 1 ou 10 → DV = 1.
- */
-function dvModulo11(numero) {
-    let soma = 0, peso = 2;
-    for (let i = numero.length - 1; i >= 0; i--) {
-        soma += parseInt(numero[i], 10) * peso;
-        peso = peso === 9 ? 2 : peso + 1;
-    }
-    const resto = soma % 11;
-    if (resto === 0 || resto === 1 || resto === 10) return '1';
-    return String(11 - resto);
-}
 
 /**
  * Monta o código de barras DARF (44 dígitos).
@@ -58,7 +44,7 @@ export function gerarBarrasDarf({ cnpj, periodo, valor, codigoReceita }) {
     const semDv =
         ID_PRODUTO_ARRECADACAO +
         ID_SEGMENTO_RFB +
-        ID_VALOR_REAL_MOD11 +
+        ID_VALOR_REAL_MOD10 +
         valorCentavos +
         CODIGO_ORGAO_RFB +
         cnpjLimpo +
@@ -69,7 +55,10 @@ export function gerarBarrasDarf({ cnpj, periodo, valor, codigoReceita }) {
     if (semDv.length !== 43) {
         throw new Error(`Layout invalido: ${semDv.length} dig (esperado 43)`);
     }
-    const dv = dvModulo11(semDv);
+    // DV geral por MÓDULO 10 — o 3º dígito é 6 (valor efetivo com DV módulo 10);
+    // usar módulo 11 aqui gerava barra que o banco rejeita (achado 09/07/2026).
+    // Coerente com gerarLinhaDigitavelArrecadacao, que já usa módulo 10.
+    const dv = dvModulo10(semDv);
     return semDv.slice(0, 3) + dv + semDv.slice(3);
 }
 

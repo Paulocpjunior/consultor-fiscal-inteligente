@@ -11,7 +11,7 @@
  */
 
 // @ts-expect-error — modulo .js puro
-import { montarPayloadDarfSerpro, calcularVencimentoDarf, periodoApuracaoSicalc, resolverCodigoEExtensao, trimestreVencendoEsteMes } from '../sefaz-backend/darf-payload-builder.js';
+import { montarPayloadDarfSerpro, calcularVencimentoDarf, periodoApuracaoSicalc, resolverCodigoEExtensao, trimestreVencendoEsteMes, hojeIso } from '../sefaz-backend/darf-payload-builder.js';
 
 describe('montarPayloadDarfSerpro (SICALC/CONSOLIDARGERARDARF51)', () => {
     it('monta o shape oficial do SICALC', () => {
@@ -168,5 +168,21 @@ describe('trimestreVencendoEsteMes', () => {
     it('meses sem vencimento trimestral retornam null', () => {
         expect(trimestreVencendoEsteMes('2026-06-08')).toBeNull();
         expect(trimestreVencendoEsteMes('2026-08-08')).toBeNull();
+    });
+});
+
+describe('correções da varredura 09/07/2026', () => {
+    it('hojeIso usa o fuso de Brasília (não UTC)', () => {
+        // formato YYYY-MM-DD; não deve estourar e deve bater com America/Sao_Paulo
+        const esperado = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+        expect(hojeIso()).toBe(esperado);
+        expect(hojeIso()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('IRRF (1708) vence dia 20 do mês seguinte, antecipado se não útil', () => {
+        // maio/2026 → 20/06/2026 é sábado → antecipa p/ sexta 19/06
+        expect(calcularVencimentoDarf('2026-05', 'IRRF', 'mensal', '1708')).toBe('2026-06-19');
+        // por tributo também
+        expect(calcularVencimentoDarf('2026-05', 'IRRF', 'mensal')).toBe('2026-06-19');
     });
 });

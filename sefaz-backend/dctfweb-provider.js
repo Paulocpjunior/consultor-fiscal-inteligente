@@ -441,6 +441,8 @@ class SerproProvider {
 
     async transmitirDeclaracao({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        // Nunca enviar o código numérico interno (13) — o SERPRO usa o NOME.
+        categoria = nomeCategoria(categoria);
 
         // O TRANSDECLARACAO310 exige o XML da declaração ASSINADO digitalmente
         // em base64 (erro DCTFWEB-MG07 / TRANS21_Xml_Assinado_Base64_Ausente
@@ -514,13 +516,14 @@ class SerproProvider {
 
     async gerarDarf({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL', emAndamento = false }) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
+        const cat = nomeCategoria(categoria); // nunca o código interno (13)
         const idServico = emAndamento ? 'GERARGUIAANDAMENTO313' : 'GERARGUIA31';
         const r = await invokeIntegraContador({
             idSistema: 'DCTFWEB',
             idServico,
             contribuinteCnpj: cnpj,
             acao: 'Emitir',
-            dados: { categoria, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
+            dados: { categoria: cat, anoPA: String(anoPA), mesPA: String(mesPA).padStart(2,'0') },
         });
         const d = primeiroObjeto(safeJsonParse(r.dados));
         // O GERARGUIA31/GERARGUIAANDAMENTO313 retorna APENAS o PDF do DARF

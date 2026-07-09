@@ -23,6 +23,8 @@ interface Props {
 }
 
 const TRIM_LABEL = ['', '1º', '2º', '3º', '4º'];
+// Códigos de IRPJ/CSLL trimestrais (Presumido e Real).
+const TRIMESTRAIS = ['2089', '0220', '2372', '6012'];
 
 function fmtBr(iso?: string | null): string {
     return iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : (iso || '—');
@@ -61,6 +63,8 @@ const LinhaEmpresa: React.FC<{
             const r = await gerarDarfsSeparados(user, {
                 empresaCnpj: cand.empresaCnpj, anoPA: cand.anoPA, mesPA: cand.mesPA,
                 categoria: cand.categoria as any, quotasTrimestrais: quotas,
+                // Emite SÓ IRPJ/CSLL trimestrais — sem cobrar PIS/COFINS aqui.
+                apenasCodigos: TRIMESTRAIS,
             });
             setEmitido(r);
             onShowToast?.(`${r.guias.length} guia(s) emitida(s) para ${fmtCnpj(cand.empresaCnpj)}.`);
@@ -68,8 +72,9 @@ const LinhaEmpresa: React.FC<{
         finally { setLoading(false); }
     };
 
-    // Só as guias trimestrais (IRPJ/CSLL) interessam neste painel.
-    const guiasTrim = (emitido?.guias || []).filter(g => ['2089', '0220', '2372', '6012'].includes(g.codigo));
+    // O backend já emitiu SÓ trimestrais (apenasCodigos), então mostramos todas
+    // as guias retornadas — nenhuma cobrança fica escondida.
+    const guiasTrim = emitido?.guias || [];
 
     return (
         <div className="border rounded-lg p-3" style={{ borderColor: 'var(--border)' }}>

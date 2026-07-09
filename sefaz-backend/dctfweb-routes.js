@@ -169,11 +169,14 @@ router.get('/debitos-trimestrais', requireAuth, async (req, res) => {
 // trimestrais no último dia útil do mês seguinte ao trimestre.
 router.post('/gerar-darfs-separados', requireAuth, express.json(), async (req, res) => {
     try {
-        const { empresaCnpj, anoPA, mesPA, categoria, quotasTrimestrais } = req.body || {};
+        const { empresaCnpj, anoPA, mesPA, categoria, quotasTrimestrais, apenasCodigos } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
         const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
-        res.json(await gerarDarfsSeparados({ empresaCnpj, anoPA, mesPA, categoria, quotasTrimestrais }));
+        res.json(await gerarDarfsSeparados({
+            empresaCnpj, anoPA, mesPA, categoria, quotasTrimestrais,
+            apenasCodigos: Array.isArray(apenasCodigos) ? apenasCodigos : null,
+        }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

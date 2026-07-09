@@ -195,6 +195,10 @@ export async function gerarDarfsSeparados({
     // 1 (quota única, default), 2 ou 3 — aplica-se só aos débitos TRIMESTRAIS
     // (IRPJ/CSLL); mensais (PIS/COFINS) não têm quota.
     quotasTrimestrais = 1,
+    // Escopo opcional: só emite os débitos cujo código esteja nesta lista
+    // (ex.: painel "Trimestrais do mês" passa ['2089','0220','2372','6012']
+    // para NÃO emitir PIS/COFINS junto). Vazio/ausente = emite todos.
+    apenasCodigos = null,
 } = {}) {
     assertEmissaoLiberada('DCTFWEB');
     const provider = getDctfwebProvider();
@@ -207,13 +211,23 @@ export async function gerarDarfsSeparados({
         throw new Error('Guias separadas: a declaração transmitida não tem débitos com saldo a pagar.');
     }
 
+    const escopo = Array.isArray(apenasCodigos) && apenasCodigos.length
+        ? new Set(apenasCodigos.map(String))
+        : null;
+    // Escopo é filtro de EMISSÃO (não cobra fora do escopo); débitos fora dele
+    // nem entram em naoEmitidos para não poluir — foram deliberadamente omitidos.
+    const debitosAlvo = escopo ? ext.debitos.filter((d) => escopo.has(d.codigo)) : ext.debitos;
+    if (debitosAlvo.length === 0) {
+        throw new Error('Guias separadas: nenhum débito no escopo solicitado (ex.: sem IRPJ/CSLL trimestral nesta declaração).');
+    }
+
     const competencia = `${anoPA}-${String(mesPA).padStart(2, '0')}`;
     const darfProvider = getDarfProvider();
     const guias = [];
     const naoEmitidos = [];
     const nQuotas = Math.min(3, Math.max(1, Number(quotasTrimestrais) || 1));
 
-    for (const deb of ext.debitos) {
+    for (const deb of debitosAlvo) {
         if (!RECEITAS_GUIA_SEPARADA.has(deb.codigo)) {
             naoEmitidos.push({ ...deb, motivo: 'Receita fora da emissão avulsa (ex.: previdenciária) — pague pelo DARF unificado do Painel DCTFWeb.' });
             continue;
