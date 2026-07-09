@@ -37,10 +37,19 @@ function hojeBrt() {
     return brt;
 }
 
-function diffDiasBrt(dataVencimento, hoje = hojeBrt()) {
-    const v = dataVencimento instanceof Date
-        ? new Date(dataVencimento.getTime())
-        : (dataVencimento?.toDate?.() || new Date(dataVencimento));
+export function diffDiasBrt(dataVencimento, hoje = hojeBrt()) {
+    let v;
+    if (dataVencimento instanceof Date) {
+        v = new Date(dataVencimento.getTime());
+    } else if (dataVencimento?.toDate) {
+        v = dataVencimento.toDate();
+    } else {
+        // String "YYYY-MM-DD": construir com componentes LOCAIS evita o
+        // off-by-one de fuso (new Date('2026-06-05') = UTC → num servidor BRT
+        // vira 04/06 e alerta "vence hoje" um dia adiantado — varredura 09/07).
+        const m = String(dataVencimento || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        v = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(dataVencimento);
+    }
     v.setHours(0, 0, 0, 0);
     return Math.round((v.getTime() - hoje.getTime()) / (24 * 60 * 60 * 1000));
 }

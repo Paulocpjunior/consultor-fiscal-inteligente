@@ -153,6 +153,15 @@ function maskCnpj(cnpj) {
     return `${clean.slice(0, 2)}**********${clean.slice(-2)}`;
 }
 
+// Redige dados sensíveis do contribuinte antes de logar o corpo cru do SERPRO:
+// CNPJ/CPF (11-14 díg) e sequências longas de dígitos (valores, recibos). Só
+// pra diagnóstico — nunca deixa o dado bruto no Cloud Logging (varredura 09/07).
+function redigirCorpo(txt) {
+    return String(txt || '')
+        .replace(/\b\d{11,14}\b/g, '«id»')
+        .replace(/\b\d{4,}\b/g, '«num»');
+}
+
 // Erro de negocio do SERPRO (4xx que nao seja 401/429): retry NAO resolve.
 // Sinaliza ao loop de retry que deve abortar imediatamente.
 class SerproBusinessError extends Error {
@@ -227,7 +236,7 @@ export async function getAccessToken() {
 
         if (!resMtls.ok) {
             const txtMtls = await resMtls.text().catch(() => '');
-            log('error', 'oauth_mtls_failed', { status: resMtls.status, body: txtMtls.slice(0, 500) });
+            log('error', 'oauth_mtls_failed', { status: resMtls.status, body: redigirCorpo(txtMtls.slice(0, 500)) });
             throw new Error(`SERPRO OAuth mTLS falhou ${resMtls.status}: ${txtMtls.slice(0, 200)}`);
         }
         const dataMtls = await resMtls.json();
@@ -257,7 +266,7 @@ export async function getAccessToken() {
 
     if (!res.ok) {
         const txt = await res.text().catch(() => '');
-        log('error', 'oauth_failed', { status: res.status, body: txt.slice(0, 500) });
+        log('error', 'oauth_failed', { status: res.status, body: redigirCorpo(txt.slice(0, 500)) });
         throw new Error(`SERPRO OAuth falhou ${res.status}: ${txt.slice(0, 200)}`);
     }
 
@@ -384,7 +393,7 @@ export async function invokeIntegraContador(req) {
                     acao,
                     contribuinteCnpj: maskCnpj(cnpjLimpo),
                     mensagens,
-                    bodyPreview: mensagens.length ? undefined : bodyTxt.slice(0, 500),
+                    bodyPreview: mensagens.length ? undefined : redigirCorpo(bodyTxt.slice(0, 500)),
                 });
                 throw new SerproBusinessError(res.status, bodyTxt);
             }
