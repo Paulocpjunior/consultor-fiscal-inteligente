@@ -169,6 +169,8 @@ export async function gerarDarfsSeparados(user: User | null, payload: {
     empresaCnpj: string; anoPA: number; mesPA: number; categoria?: DctfwebCategoria;
     /** IRPJ/CSLL trimestrais em 1 (única), 2 ou 3 quotas (Lei 9.430 art. 5º). */
     quotasTrimestrais?: 1 | 2 | 3;
+    /** Emitir só estes códigos de receita (ex.: só trimestrais). Vazio = todos. */
+    apenasCodigos?: string[];
 }): Promise<DctfwebDarfsSeparadosResult> {
     const res = await fetch(`${BASE}/gerar-darfs-separados`, {
         method: 'POST',

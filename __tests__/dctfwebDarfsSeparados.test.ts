@@ -244,3 +244,41 @@ describe('gerarDarfsSeparados — quotas trimestrais (Lei 9.430 art. 5º)', () =
         expect(irpj[0].vencimento).toBe('2026-04-30');
     });
 });
+
+describe('gerarDarfsSeparados — escopo apenasCodigos (painel trimestrais)', () => {
+    beforeEach(() => mockInvokeIntegraContador.mockReset());
+
+    it('com apenasCodigos=[trimestrais], NÃO emite PIS/COFINS (não cobra escondido)', async () => {
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: { XMLStringBase64: Buffer.from(xmlDeclaracao(), 'utf8').toString('base64') },
+        });
+        mockInvokeIntegraContador.mockResolvedValue({
+            dados: { consolidado: {}, darf: 'PDF', numeroDocumento: 'D' },
+        });
+
+        const r = await gerarDarfsSeparados({
+            empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6,
+            apenasCodigos: ['2089', '0220', '2372', '6012'],
+        });
+
+        // Só IRPJ/CSLL emitidos; PIS/COFINS nem tocados (sem cobrança oculta).
+        expect(r.guias.map((g: any) => g.codigo).sort()).toEqual(['2089', '2372']);
+        const emitidos = mockInvokeIntegraContador.mock.calls
+            .map((c) => c[0]).filter((c) => c.idSistema === 'SICALC')
+            .map((c) => c.dados.codigoReceita).sort();
+        expect(emitidos).toEqual(['2089', '2372']); // 8109/2172 NÃO chamados
+    });
+
+    it('escopo sem match na declaração falha claro (nada é cobrado)', async () => {
+        // XML só com PIS/COFINS; pede escopo trimestral → nenhum débito no escopo
+        const soMensais = '<?xml version="1.0"?><ProcDctf><ConteudoDeclaracao id="I"><DctfXml><A050>'
+            + '<CreditoTributarioApurado><codReceita>810902</codReceita><ctValor>13</ctValor><saldoaPagar>13</saldoaPagar></CreditoTributarioApurado>'
+            + '</A050></DctfXml></ConteudoDeclaracao></ProcDctf>';
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: { XMLStringBase64: Buffer.from(soMensais, 'utf8').toString('base64') },
+        });
+        await expect(gerarDarfsSeparados({
+            empresaCnpj: '09010732000137', anoPA: 2026, mesPA: 6, apenasCodigos: ['2089', '2372'],
+        })).rejects.toThrow(/escopo/i);
+    });
+});
