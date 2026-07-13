@@ -162,46 +162,46 @@ export const deleteEmpresa = async (id: string): Promise<boolean> => {
 };
 
 export const addFichaFinanceira = async (empresaId: string, registro: FichaFinanceiraRegistro): Promise<LucroPresumidoEmpresa | null> => {
-    
-    // 1. Se estiver online, busca o documento atualizado primeiro para não perder histórico
+
+    // 1. Nuvem = fonte da verdade. MESMO conserto do updateEmpresa acima:
+    //    - NAO regrava createdBy/createdByEmail (a regra de lucro_empresas
+    //      exige dono imutavel no update; gravar o uid de quem salva gerava
+    //      permission-denied pra qualquer colaborador que nao fosse o dono);
+    //    - erro na nuvem PROPAGA — o silent-catch antigo caia no localStorage
+    //      e a competencia "salvava" so no navegador, sumindo no proximo
+    //      refetch (bug reportado: ficha Lucro Presumido nao ficava salva).
     if (isFirebaseConfigured && db && auth?.currentUser) {
-        try {
-            const docRef = doc(db, 'lucro_empresas', empresaId);
-            const docSnap = await getDoc(docRef);
+        const docRef = doc(db, 'lucro_empresas', empresaId);
+        const docSnap = await getDoc(docRef);
 
-            if (docSnap.exists()) {
-                const empresaData = docSnap.data() as LucroPresumidoEmpresa;
-                const currentFicha = empresaData.fichaFinanceira || [];
-                
-                const fichaAtualizada = currentFicha.filter(f => f.mesReferencia !== registro.mesReferencia);
-                fichaAtualizada.push(registro);
+        if (docSnap.exists()) {
+            const empresaData = docSnap.data() as LucroPresumidoEmpresa;
+            const currentFicha = empresaData.fichaFinanceira || [];
 
-                fichaAtualizada.sort((a, b) => a.mesReferencia.localeCompare(b.mesReferencia));
+            const fichaAtualizada = currentFicha.filter(f => f.mesReferencia !== registro.mesReferencia);
+            fichaAtualizada.push(registro);
 
-                await updateDoc(docRef, { 
-                    fichaFinanceira: sanitizePayload(fichaAtualizada),
-                    createdBy: auth.currentUser.uid,
-                    createdByEmail: auth.currentUser.email
-                });
-                
-                const localEmpresas = getLocalEmpresas();
-                const idx = localEmpresas.findIndex(e => e.id === empresaId);
-                const empLocal = idx !== -1 ? localEmpresas[idx] : null;
-                if (empLocal) {
-                    empLocal.fichaFinanceira = fichaAtualizada;
-                    saveLocalEmpresas(localEmpresas);
-                    return empLocal;
-                }
-                return { ...empresaData, fichaFinanceira: fichaAtualizada };
+            fichaAtualizada.sort((a, b) => a.mesReferencia.localeCompare(b.mesReferencia));
+
+            await updateDoc(docRef, {
+                fichaFinanceira: sanitizePayload(fichaAtualizada),
+            });
+
+            const localEmpresas = getLocalEmpresas();
+            const idx = localEmpresas.findIndex(e => e.id === empresaId);
+            const empLocal = idx !== -1 ? localEmpresas[idx] : null;
+            if (empLocal) {
+                empLocal.fichaFinanceira = fichaAtualizada;
+                saveLocalEmpresas(localEmpresas);
+                return empLocal;
             }
-        } catch (e: any) {
-            if (e.code !== 'permission-denied') {
-                console.debug("Firestore: Falha ao salvar ficha na nuvem:", e.message);
-            }
+            return { ...empresaData, fichaFinanceira: fichaAtualizada };
         }
+        // Doc nao existe na nuvem (empresa so-local legada) — cai no fallback.
     }
 
-    // 2. Fallback Local
+    // 2. Fallback Local — apenas quando Firebase esta indisponivel/deslogado
+    //    ou a empresa nunca foi sincronizada pra nuvem.
     const localEmpresas = getLocalEmpresas();
     const index = localEmpresas.findIndex(e => e.id === empresaId);
     const empresa = index !== -1 ? localEmpresas[index] : null;
