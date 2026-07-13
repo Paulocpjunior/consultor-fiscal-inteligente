@@ -36,6 +36,7 @@ export enum SearchType {
   CARTEIRA = 'Carteira de Clientes',
   AGENTES_A3 = 'Agentes A3',
   EMISSAO_TRIBUTOS = 'Central de Emissões',
+  GIA_ST = 'GIA-ST',
   RECUPERACAO_TRIBUTARIA = 'Recuperação Tributária',
   NFP_PRO_CLOUD = 'Consulta Situação Fiscal',
 }
