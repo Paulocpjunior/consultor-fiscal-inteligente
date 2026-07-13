@@ -596,8 +596,14 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 setView('details');
             }
             
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
+            // Sem isso, falha de gravacao na nuvem (ex: permission-denied)
+            // era silenciosa e o usuario achava que a competencia foi salva.
+            const detalhe = e?.code === 'permission-denied'
+                ? 'Sem permissão para gravar nesta empresa — verifique com o administrador.'
+                : (e?.message || 'erro desconhecido');
+            showToast(`❌ Competência NÃO foi salva: ${detalhe}`);
         } finally {
             setLoading(false);
         }
