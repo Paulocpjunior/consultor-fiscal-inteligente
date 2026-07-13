@@ -203,17 +203,22 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 novo[saida.uf] = formInicial(saida, temSt);
                 novo[saida.uf].dataVencimento = vencimentoPadrao(parsed.competencia);
             }
-            // Pré-preenche IE das guias já salvas da mesma empresa (última competência)
-            const anteriores = await listarGiaStPorCnpj(parsed.empresaCnpj);
-            setSalvas(anteriores);
-            for (const g of anteriores) {
-                if (novo[g.ufFavorecida] && !novo[g.ufFavorecida].inscricaoEstadualUfFavorecida) {
-                    novo[g.ufFavorecida].inscricaoEstadualUfFavorecida = g.inscricaoEstadualUfFavorecida;
+            // Pré-preenche IE/declarante das guias já salvas — AUXILIAR: uma
+            // falha aqui (rede, permissão) não pode impedir a montagem dos
+            // formulários, senão a tela inteira fica inerte.
+            try {
+                const anteriores = await listarGiaStPorCnpj(parsed.empresaCnpj);
+                setSalvas(anteriores);
+                for (const g of anteriores) {
+                    if (novo[g.ufFavorecida] && !novo[g.ufFavorecida].inscricaoEstadualUfFavorecida) {
+                        novo[g.ufFavorecida].inscricaoEstadualUfFavorecida = g.inscricaoEstadualUfFavorecida || '';
+                    }
                 }
+                const comDeclarante = anteriores.find(g => g.declarante?.nome);
+                if (comDeclarante?.declarante) setDeclarante({ ...DECLARANTE_VAZIO, ...comDeclarante.declarante });
+            } catch (e: any) {
+                console.warn('[GiaSt] falha carregando guias salvas (segue sem pré-preenchimento):', e?.message);
             }
-            // Declarante reaproveitado da última guia salva da empresa
-            const comDeclarante = anteriores.find(g => g.declarante?.nome);
-            if (comDeclarante?.declarante) setDeclarante(comDeclarante.declarante);
             setForms(novo);
         } catch (e: any) {
             setErro(e?.message || 'Falha ao ler o PDF.');
@@ -224,7 +229,13 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
     };
 
     const setCampo = (uf: string, campo: keyof FormGuia, valor: FormGuia[keyof FormGuia]) => {
-        setForms(prev => ({ ...prev, [uf]: { ...prev[uf], [campo]: valor } }));
+        // Fallback formInicial: nunca deixar um form parcial no estado (um
+        // form sem os campos texto derruba o render com undefined.trim()).
+        setForms(prev => {
+            const saida = relatorio?.saidas.linhas.find(l => l.uf === uf);
+            const base = prev[uf] || formInicial(saida, false);
+            return { ...prev, [uf]: { ...base, [campo]: valor } };
+        });
     };
 
     const montarGuia = (uf: string): GiaStGuia => {
@@ -238,12 +249,12 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
             empresaCnpj: r.empresaCnpj,
             empresaNome: r.empresaNome,
             ufFavorecida: uf,
-            inscricaoEstadualUfFavorecida: f.inscricaoEstadualUfFavorecida.trim(),
+            inscricaoEstadualUfFavorecida: String(f.inscricaoEstadualUfFavorecida || '').trim(),
             competencia: r.competencia,
-            semMovimento: f.semMovimento,
-            retificacao: f.retificacao,
-            dataVencimento: f.dataVencimento,
-            informacoesComplementares: f.informacoesComplementares,
+            semMovimento: !!f.semMovimento,
+            retificacao: !!f.retificacao,
+            dataVencimento: f.dataVencimento || '',
+            informacoesComplementares: f.informacoesComplementares || '',
             origemRelatorio: {
                 ...(saida ? { saidas: { valorContabil: saida.valorContabil, baseCalculo: saida.baseCalculo, valorIcms: saida.valorIcms, bcIcmsRetido: saida.bcIcmsRetido, icmsRetidoFonte: saida.icmsRetidoFonte } } : {}),
                 ...(entrada ? { entradas: { valorContabil: entrada.valorContabil, baseCalculo: entrada.baseCalculo, valorIcms: entrada.valorIcms, bcIcmsRetido: entrada.bcIcmsRetido, icmsRetidoFonte: entrada.icmsRetidoFonte } } : {}),
@@ -256,9 +267,9 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
             c16CreditoPeriodoAnterior: f.c16CreditoPeriodoAnterior,
             c17PagamentosAntecipados: f.c17PagamentosAntecipados,
             c19RepasseRefinarias: f.c19RepasseRefinarias, c39RepasseOutros: f.c39RepasseOutros,
-            c37DistribuidoraCombustivel: f.c37DistribuidoraCombustivel,
-            declarante: declarante.nome.trim() ? declarante : null,
-            anexoI: f.anexoI, anexoII: f.anexoII, anexoIII: f.anexoIII,
+            c37DistribuidoraCombustivel: !!f.c37DistribuidoraCombustivel,
+            declarante: String(declarante.nome || '').trim() ? declarante : null,
+            anexoI: f.anexoI || [], anexoII: f.anexoII || [], anexoIII: f.anexoIII || [],
             ...calc,
         };
         return { ...base, inconsistencias: validarGiaSt(base) };
