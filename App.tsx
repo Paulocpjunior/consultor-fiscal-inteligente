@@ -74,6 +74,7 @@ const SimuladorReforma = lazy(() => import('./components/SimuladorReforma'));
 const TaxEmissionDashboard = lazy(() => import('./components/TaxEmission'));
 const RecuperacaoHub = lazy(() => import('./components/RecuperacaoTributaria/RecuperacaoHub'));
 const NfpProCloud = lazy(() => import('./components/NfpProCloud'));
+const GiaStPanel = lazy(() => import('./components/GiaSt/GiaStPanel'));
 
 
 const App: React.FC = () => {
@@ -973,6 +974,18 @@ const App: React.FC = () => {
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CaixaPostalHub
+                                    currentUser={currentUser}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {/* GIA-ST — guia do ICMS-ST a partir do Livro de ICMS Substituto (Office Fiscal). */}
+                        {searchType === SearchType.GIA_ST && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <GiaStPanel
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />

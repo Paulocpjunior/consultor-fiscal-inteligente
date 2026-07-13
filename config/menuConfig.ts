@@ -56,6 +56,7 @@ export const searchDescriptions: Record<SearchType, string> = {
     [SearchType.ANOMALIAS]: 'Detector de Anomalias — análise estatística + IA detecta irregularidades no DAS de cada empresa.',
     [SearchType.SIMULADOR_IBS_CBS]: 'Simulador IBS/CBS — projeção da carga tributária 2026-2033 sob a Reforma Tributária (LC 214/2025).',
     [SearchType.EMISSAO_TRIBUTOS]: 'Central de Emissões — emissão unificada de DAS (Simples) e DARF (IRPJ/CSLL/PIS/COFINS para Presumido e Real) com controle de pagamento.',
+    [SearchType.GIA_ST]: 'GIA-ST — importa o Livro de ICMS Substituto do Office Fiscal (IOB/SAGE) e gera a guia por UF favorecida validada no padrão do aplicativo GIA-ST 3 (SEFAZ-RS).',
     [SearchType.RECUPERACAO_TRIBUTARIA]: 'Recuperação Tributária — identifica impostos pagos a maior e oportunidades de restituição/compensação.',
     [SearchType.NFP_PRO_CLOUD]: 'Consulta de situação fiscal: débitos, certidões, obrigações, parcelamentos e plano de ação. Acesso restrito — liberado pelo administrador.',
 };
@@ -104,6 +105,7 @@ export const MENU_GRUPOS: MenuGrupo[] = [
             { type: SearchType.OBRIGACOES_FISCAIS, label: 'Vencimentos & Obrigações', Icon: CalendarIcon },
             { type: SearchType.DAS_SIMPLES, Icon: CalculatorIcon },
             { type: SearchType.DCTFWEB, Icon: DocumentTextIcon },
+            { type: SearchType.GIA_ST, Icon: DocumentTextIcon },
             { type: SearchType.NFSE_NACIONAL, Icon: GlobeIcon },
             { type: SearchType.CAIXA_POSTAL, Icon: ChatBubbleIcon },
         ],

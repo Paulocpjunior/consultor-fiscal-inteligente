@@ -407,6 +407,19 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // ───────────────────────────────────────────────────────────────
+    // gia_st_guias: GIA-ST (ICMS-ST) por CNPJ × UF favorecida × mês.
+    // Colaborador cria/atualiza; exclusão só admin (mesmo padrão do
+    // sped_arquivos — guia salva é registro de apuração).
+    // ───────────────────────────────────────────────────────────────
+
+    match /gia_st_guias/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
     // nfp_analises: analises de compliance tributario (NFP Pro Cloud).
     // Leitura para qualquer signed-in, escrita para signed-in, delete apenas admin.
 

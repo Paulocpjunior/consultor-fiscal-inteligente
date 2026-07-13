@@ -1,0 +1,494 @@
+/**
+ * components/GiaSt/GiaStPanel.tsx
+ *
+ * GIA-ST — gera a guia (Ajuste SINIEF 04/93) a partir do relatório
+ * "Livro de ICMS Substituto (Operações Interestaduais)" do Office Fiscal
+ * (IOB/SAGE):
+ *   1. Upload do PDF → parser (giaStParserService);
+ *   2. Seleção das UFs favorecidas (onde a empresa tem IE de substituto);
+ *   3. Revisão editável dos campos 7-21/39 com cálculo automático (18/20/21)
+ *      e validações no espírito da aba Inconsistências do GIA-ST 3;
+ *   4. Salvar (Firestore gia_st_guias) + Espelho PDF de conferência.
+ *
+ * A geração do arquivo TXT de importação p/ o aplicativo GIA-ST 3 (seção
+ * 4.15 do manual) entra na fase 2, quando o layout oficial
+ * (Layout_ArquivoGIA-ST_v3.pdf) for anexado ao projeto.
+ */
+
+import React, { useMemo, useRef, useState } from 'react';
+import type { User } from '../../types';
+import {
+    parseGiaStPdf, type GiaStRelatorioParsed, type GiaStLinhaUf,
+} from '../../services/giaStParserService';
+import {
+    calcularGiaSt, validarGiaSt, montarIdGuia, salvarGiaSt, listarGiaStPorCnpj,
+    excluirGiaSt, type GiaStGuia, type GiaStValores,
+} from '../../services/giaStService';
+import { gerarEspelhoGiaStPdf } from '../../services/giaStPdf';
+
+interface Props {
+    currentUser: User;
+    onShowToast?: (msg: string) => void;
+}
+
+interface FormGuia extends GiaStValores {
+    incluida: boolean;
+    inscricaoEstadualUfFavorecida: string;
+    dataVencimento: string;
+    informacoesComplementares: string;
+    semMovimento: boolean;
+    retificacao: boolean;
+}
+
+const fmt = (n: number): string =>
+    (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const fmtCnpj = (c: string): string => {
+    const d = (c || '').replace(/\D/g, '');
+    return d.length === 14 ? d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') : c;
+};
+
+const fmtComp = (c: string): string => {
+    const m = (c || '').match(/^(\d{4})-(\d{2})$/);
+    return m ? `${m[2]}/${m[1]}` : c;
+};
+
+/** Vencimento padrão: dia 10 do mês subsequente (Ajuste SINIEF 04/93, cl. 10 §4). */
+function vencimentoPadrao(competencia: string): string {
+    const m = competencia.match(/^(\d{4})-(\d{2})$/);
+    if (!m) return '';
+    const ano = parseInt(m[1], 10);
+    const mes = parseInt(m[2], 10);
+    const prox = mes === 12 ? { ano: ano + 1, mes: 1 } : { ano, mes: mes + 1 };
+    return `${prox.ano}-${String(prox.mes).padStart(2, '0')}-10`;
+}
+
+function formInicial(saida: GiaStLinhaUf | undefined, incluida: boolean): FormGuia {
+    return {
+        incluida,
+        inscricaoEstadualUfFavorecida: '',
+        dataVencimento: '',
+        informacoesComplementares: '',
+        semMovimento: false,
+        retificacao: false,
+        // Mapeamento relatório → GIA-ST (seção C, Saídas):
+        //   Valor Contábil → 7 (contém IPI+despesas; 8 e 9 ficam editáveis)
+        //   Base de Cálculo → 10 · Valor do ICMS → 11
+        //   BC (ICMS Retido) → 12 · ICMS Retido Fonte → 13
+        c7ValorProdutos: saida?.valorContabil ?? 0,
+        c8ValorIpi: 0,
+        c9DespesasAcessorias: 0,
+        c10BcIcmsProprio: saida?.baseCalculo ?? 0,
+        c11IcmsProprio: saida?.valorIcms ?? 0,
+        c12BcIcmsSt: saida?.bcIcmsRetido ?? 0,
+        c13IcmsRetidoSt: saida?.icmsRetidoFonte ?? 0,
+        c14IcmsDevolucao: 0,
+        c15IcmsRessarcimentos: 0,
+        c16CreditoPeriodoAnterior: 0,
+        c17PagamentosAntecipados: 0,
+        c19RepasseRefinarias: 0,
+        c39RepasseOutros: 0,
+    };
+}
+
+const CAMPOS_EDITAVEIS: Array<{ key: keyof GiaStValores; label: string }> = [
+    { key: 'c7ValorProdutos', label: '7. Valor dos Produtos' },
+    { key: 'c8ValorIpi', label: '8. Valor do IPI' },
+    { key: 'c9DespesasAcessorias', label: '9. Despesas Acessórias' },
+    { key: 'c10BcIcmsProprio', label: '10. BC do ICMS Próprio' },
+    { key: 'c11IcmsProprio', label: '11. ICMS Próprio' },
+    { key: 'c12BcIcmsSt', label: '12. BC ICMS-ST' },
+    { key: 'c13IcmsRetidoSt', label: '13. ICMS Retido por ST' },
+    { key: 'c14IcmsDevolucao', label: '14. ICMS Devolução (Anexo I)' },
+    { key: 'c15IcmsRessarcimentos', label: '15. Ressarcimentos (Anexo II)' },
+    { key: 'c16CreditoPeriodoAnterior', label: '16. Crédito Período Anterior' },
+    { key: 'c17PagamentosAntecipados', label: '17. Pagamentos Antecipados' },
+    { key: 'c19RepasseRefinarias', label: '19. Repasse Refinarias' },
+    { key: 'c39RepasseOutros', label: '39. Repasse Outros Contrib.' },
+];
+
+const inputCls = 'w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs text-right';
+const inputTxtCls = 'w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs';
+
+const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
+    const [parsing, setParsing] = useState(false);
+    const [erro, setErro] = useState<string | null>(null);
+    const [relatorio, setRelatorio] = useState<GiaStRelatorioParsed | null>(null);
+    const [forms, setForms] = useState<Record<string, FormGuia>>({});
+    const [salvas, setSalvas] = useState<GiaStGuia[]>([]);
+    const [salvando, setSalvando] = useState<string | null>(null);
+    const fileRef = useRef<HTMLInputElement>(null);
+
+    const toast = (msg: string) => onShowToast?.(msg);
+
+    const carregarSalvas = async (cnpj: string) => {
+        try { setSalvas(await listarGiaStPorCnpj(cnpj)); } catch { /* lista é auxiliar */ }
+    };
+
+    const handleFile = async (file: File | null) => {
+        if (!file) return;
+        setParsing(true);
+        setErro(null);
+        setRelatorio(null);
+        setForms({});
+        try {
+            const parsed = await parseGiaStPdf(file);
+            setRelatorio(parsed);
+            const novo: Record<string, FormGuia> = {};
+            for (const saida of parsed.saidas.linhas) {
+                const temSt = saida.bcIcmsRetido > 0 || saida.icmsRetidoFonte > 0;
+                novo[saida.uf] = formInicial(saida, temSt);
+                novo[saida.uf].dataVencimento = vencimentoPadrao(parsed.competencia);
+            }
+            // Pré-preenche IE das guias já salvas da mesma empresa (última competência)
+            const anteriores = await listarGiaStPorCnpj(parsed.empresaCnpj);
+            setSalvas(anteriores);
+            for (const g of anteriores) {
+                if (novo[g.ufFavorecida] && !novo[g.ufFavorecida].inscricaoEstadualUfFavorecida) {
+                    novo[g.ufFavorecida].inscricaoEstadualUfFavorecida = g.inscricaoEstadualUfFavorecida;
+                }
+            }
+            setForms(novo);
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao ler o PDF.');
+        } finally {
+            setParsing(false);
+            if (fileRef.current) fileRef.current.value = '';
+        }
+    };
+
+    const setCampo = (uf: string, campo: keyof FormGuia, valor: FormGuia[keyof FormGuia]) => {
+        setForms(prev => ({ ...prev, [uf]: { ...prev[uf], [campo]: valor } }));
+    };
+
+    const montarGuia = (uf: string): GiaStGuia => {
+        const f = forms[uf];
+        const r = relatorio!;
+        const calc = calcularGiaSt(f);
+        const saida = r.saidas.linhas.find(l => l.uf === uf);
+        const entrada = r.entradas.linhas.find(l => l.uf === uf);
+        const base: Omit<GiaStGuia, 'inconsistencias'> = {
+            id: montarIdGuia(r.empresaCnpj, uf, r.competencia),
+            empresaCnpj: r.empresaCnpj,
+            empresaNome: r.empresaNome,
+            ufFavorecida: uf,
+            inscricaoEstadualUfFavorecida: f.inscricaoEstadualUfFavorecida.trim(),
+            competencia: r.competencia,
+            semMovimento: f.semMovimento,
+            retificacao: f.retificacao,
+            dataVencimento: f.dataVencimento,
+            informacoesComplementares: f.informacoesComplementares,
+            origemRelatorio: {
+                ...(saida ? { saidas: { valorContabil: saida.valorContabil, baseCalculo: saida.baseCalculo, valorIcms: saida.valorIcms, bcIcmsRetido: saida.bcIcmsRetido, icmsRetidoFonte: saida.icmsRetidoFonte } } : {}),
+                ...(entrada ? { entradas: { valorContabil: entrada.valorContabil, baseCalculo: entrada.baseCalculo, valorIcms: entrada.valorIcms, bcIcmsRetido: entrada.bcIcmsRetido, icmsRetidoFonte: entrada.icmsRetidoFonte } } : {}),
+            },
+            c7ValorProdutos: f.c7ValorProdutos, c8ValorIpi: f.c8ValorIpi,
+            c9DespesasAcessorias: f.c9DespesasAcessorias, c10BcIcmsProprio: f.c10BcIcmsProprio,
+            c11IcmsProprio: f.c11IcmsProprio, c12BcIcmsSt: f.c12BcIcmsSt,
+            c13IcmsRetidoSt: f.c13IcmsRetidoSt, c14IcmsDevolucao: f.c14IcmsDevolucao,
+            c15IcmsRessarcimentos: f.c15IcmsRessarcimentos,
+            c16CreditoPeriodoAnterior: f.c16CreditoPeriodoAnterior,
+            c17PagamentosAntecipados: f.c17PagamentosAntecipados,
+            c19RepasseRefinarias: f.c19RepasseRefinarias, c39RepasseOutros: f.c39RepasseOutros,
+            ...calc,
+        };
+        return { ...base, inconsistencias: validarGiaSt(base) };
+    };
+
+    const handleSalvar = async (uf: string) => {
+        setSalvando(uf);
+        try {
+            const guia = montarGuia(uf);
+            await salvarGiaSt(guia, currentUser);
+            toast(`GIA-ST ${uf} ${fmtComp(guia.competencia)} salva${guia.inconsistencias.length ? ` com ${guia.inconsistencias.length} inconsistência(s)` : ' e válida'}.`);
+            await carregarSalvas(guia.empresaCnpj);
+        } catch (e: any) {
+            toast(`Erro ao salvar GIA-ST ${uf}: ${e?.message || e}`);
+        } finally {
+            setSalvando(null);
+        }
+    };
+
+    const handleEspelho = async (uf: string) => {
+        try { await gerarEspelhoGiaStPdf(montarGuia(uf)); }
+        catch (e: any) { toast(`Erro ao gerar espelho: ${e?.message || e}`); }
+    };
+
+    const ufsIncluidas = useMemo(
+        () => Object.entries(forms).filter(([, f]) => f.incluida).map(([uf]) => uf).sort(),
+        [forms],
+    );
+
+    return (
+        <div className="space-y-4">
+            <div className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-xl p-4 text-white">
+                <h2 className="text-lg font-bold">GIA-ST — Guia Nacional de Informação e Apuração do ICMS-ST</h2>
+                <p className="text-xs opacity-90">
+                    Importe o relatório "Livro de ICMS Substituto (Operações Interestaduais)" do Office Fiscal (IOB/SAGE),
+                    revise por UF favorecida e gere a guia validada (Ajuste SINIEF 04/93 · aplicativo GIA-ST 3).
+                </p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">
+                    1) Relatório do Office Fiscal (PDF)
+                </label>
+                <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".pdf"
+                    disabled={parsing}
+                    onChange={e => handleFile(e.target.files?.[0] || null)}
+                    className="text-xs text-slate-600 dark:text-slate-300 file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-0 file:bg-amber-600 file:text-white file:text-xs file:font-semibold hover:file:bg-amber-700"
+                />
+                {parsing && <p className="text-xs text-slate-400 mt-2">Lendo PDF…</p>}
+                {erro && <p className="text-xs text-rose-600 dark:text-rose-400 mt-2">{erro}</p>}
+                <p className="text-[11px] text-slate-400 mt-2">
+                    Fase atual: conferência, cálculo, gravação e espelho PDF. O arquivo de importação para o aplicativo
+                    GIA-ST 3 (menu Importar → Sistema Próprio) será liberado quando o layout oficial da SEFAZ-RS
+                    (Layout_ArquivoGIA-ST_v3.pdf) for cadastrado.
+                </p>
+            </div>
+
+            {relatorio && (
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                    <div className="flex flex-wrap gap-x-8 gap-y-1 text-xs">
+                        <span><strong>Empresa:</strong> {relatorio.empresaNome}</span>
+                        <span><strong>CNPJ:</strong> {fmtCnpj(relatorio.empresaCnpj)}</span>
+                        <span><strong>IE origem:</strong> {relatorio.inscricaoEstadual || '—'}</span>
+                        <span><strong>Competência:</strong> {fmtComp(relatorio.competencia)}</span>
+                    </div>
+                    {relatorio.validacao.ok ? (
+                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-2">
+                            ✓ Totais do relatório conferem com a soma das UFs (Entradas e Saídas).
+                        </p>
+                    ) : (
+                        <div className="text-[11px] text-rose-600 dark:text-rose-400 mt-2">
+                            ⚠ Divergências entre a soma das UFs e os totais impressos:
+                            <ul className="list-disc ml-4">{relatorio.validacao.divergencias.map((d, i) => <li key={i}>{d}</li>)}</ul>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {relatorio && (
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+                        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">2) Saídas por UF — marque as UFs favorecidas (IE de substituto)</h3>
+                        <p className="text-[11px] text-slate-400">Pré-marcadas as UFs com ICMS retido na fonte no relatório.</p>
+                    </div>
+                    <div className="overflow-x-auto max-h-[380px]">
+                        <table className="w-full text-xs">
+                            <thead className="bg-slate-50 dark:bg-slate-700 sticky top-0">
+                                <tr>
+                                    <th className="px-3 py-2 text-left font-bold text-slate-600 dark:text-slate-400">Gerar</th>
+                                    <th className="px-3 py-2 text-left font-bold text-slate-600 dark:text-slate-400">UF</th>
+                                    <th className="px-3 py-2 text-right font-bold text-slate-600 dark:text-slate-400">Valor Contábil</th>
+                                    <th className="px-3 py-2 text-right font-bold text-slate-600 dark:text-slate-400">Base de Cálculo</th>
+                                    <th className="px-3 py-2 text-right font-bold text-slate-600 dark:text-slate-400">Valor ICMS</th>
+                                    <th className="px-3 py-2 text-right font-bold text-slate-600 dark:text-slate-400">BC ICMS Retido</th>
+                                    <th className="px-3 py-2 text-right font-bold text-slate-600 dark:text-slate-400">ICMS Retido Fonte</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {relatorio.saidas.linhas.map(l => (
+                                    <tr key={l.uf} className={`border-t border-slate-100 dark:border-slate-700 ${forms[l.uf]?.incluida ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
+                                        <td className="px-3 py-1.5">
+                                            <input
+                                                type="checkbox"
+                                                checked={forms[l.uf]?.incluida || false}
+                                                onChange={e => setCampo(l.uf, 'incluida', e.target.checked)}
+                                            />
+                                        </td>
+                                        <td className="px-3 py-1.5 font-semibold">{l.uf} <span className="text-slate-400 font-normal">{l.nomeUf}</span></td>
+                                        <td className="px-3 py-1.5 text-right">{fmt(l.valorContabil)}</td>
+                                        <td className="px-3 py-1.5 text-right">{fmt(l.baseCalculo)}</td>
+                                        <td className="px-3 py-1.5 text-right">{fmt(l.valorIcms)}</td>
+                                        <td className="px-3 py-1.5 text-right">{fmt(l.bcIcmsRetido)}</td>
+                                        <td className="px-3 py-1.5 text-right font-semibold">{fmt(l.icmsRetidoFonte)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {relatorio && ufsIncluidas.map(uf => {
+                const f = forms[uf];
+                const calc = calcularGiaSt(f);
+                const entrada = relatorio.entradas.linhas.find(l => l.uf === uf);
+                const guiaPrevia = montarGuia(uf);
+                return (
+                    <div key={uf} className="bg-white dark:bg-slate-800 rounded-xl border-2 border-amber-300 dark:border-amber-700 p-4 space-y-3">
+                        <div className="flex justify-between items-center flex-wrap gap-2">
+                            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                                3) GIA-ST · UF favorecida <span className="text-amber-600">{uf}</span> · {fmtComp(relatorio.competencia)}
+                            </h3>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => handleEspelho(uf)}
+                                    className="px-3 py-1.5 text-xs font-semibold bg-slate-600 text-white rounded hover:bg-slate-700"
+                                >
+                                    Espelho PDF
+                                </button>
+                                <button
+                                    onClick={() => handleSalvar(uf)}
+                                    disabled={salvando === uf}
+                                    className="px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-40"
+                                >
+                                    {salvando === uf ? 'Salvando…' : 'Salvar guia'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <div>
+                                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">IE na UF favorecida *</label>
+                                <input
+                                    className={inputTxtCls}
+                                    value={f.inscricaoEstadualUfFavorecida}
+                                    onChange={e => setCampo(uf, 'inscricaoEstadualUfFavorecida', e.target.value)}
+                                    placeholder="Inscrição de substituto"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Vencimento ICMS-ST</label>
+                                <input
+                                    type="date"
+                                    className={inputTxtCls}
+                                    value={f.dataVencimento}
+                                    onChange={e => setCampo(uf, 'dataVencimento', e.target.value)}
+                                />
+                            </div>
+                            <label className="flex items-end gap-1 text-[11px] text-slate-500 dark:text-slate-400 pb-1.5">
+                                <input type="checkbox" checked={f.semMovimento} onChange={e => setCampo(uf, 'semMovimento', e.target.checked)} />
+                                1. Sem movimento
+                            </label>
+                            <label className="flex items-end gap-1 text-[11px] text-slate-500 dark:text-slate-400 pb-1.5">
+                                <input type="checkbox" checked={f.retificacao} onChange={e => setCampo(uf, 'retificacao', e.target.checked)} />
+                                2. Retificação
+                            </label>
+                        </div>
+
+                        {entrada && (entrada.icmsRetidoFonte > 0 || entrada.bcIcmsRetido > 0) && (
+                            <p className="text-[11px] text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/30 rounded px-2 py-1">
+                                Entradas nesta UF no período (possíveis devoluções p/ campo 14 · Anexo I):
+                                ICMS retido R$ {fmt(entrada.icmsRetidoFonte)} · BC retido R$ {fmt(entrada.bcIcmsRetido)}.
+                            </p>
+                        )}
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            {CAMPOS_EDITAVEIS.map(({ key, label }) => (
+                                <div key={key}>
+                                    <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">{label}</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        className={inputCls}
+                                        value={f[key]}
+                                        onChange={e => setCampo(uf, key, parseFloat(e.target.value) || 0)}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                            <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded p-2 text-center">
+                                <div className="text-[11px] text-indigo-700 dark:text-indigo-300 font-semibold">18. ICMS-ST Devido</div>
+                                <div className="text-sm font-bold text-indigo-800 dark:text-indigo-200">R$ {fmt(calc.c18IcmsStDevido)}</div>
+                            </div>
+                            <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded p-2 text-center">
+                                <div className="text-[11px] text-indigo-700 dark:text-indigo-300 font-semibold">20. Crédito Per. Seguinte</div>
+                                <div className="text-sm font-bold text-indigo-800 dark:text-indigo-200">R$ {fmt(calc.c20CreditoPeriodoSeguinte)}</div>
+                            </div>
+                            <div className="bg-emerald-50 dark:bg-emerald-900/30 rounded p-2 text-center">
+                                <div className="text-[11px] text-emerald-700 dark:text-emerald-300 font-semibold">21. Total a Recolher</div>
+                                <div className="text-sm font-bold text-emerald-800 dark:text-emerald-200">R$ {fmt(calc.c21TotalRecolher)}</div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">36. Informações Complementares</label>
+                            <textarea
+                                rows={2}
+                                className={inputTxtCls}
+                                value={f.informacoesComplementares}
+                                onChange={e => setCampo(uf, 'informacoesComplementares', e.target.value)}
+                            />
+                        </div>
+
+                        {guiaPrevia.inconsistencias.length > 0 && (
+                            <div className="text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 rounded px-2 py-1.5">
+                                <strong>Inconsistências (o GIA-ST 3 não gera arquivo com pendências):</strong>
+                                <ul className="list-disc ml-4">{guiaPrevia.inconsistencias.map((inc, i) => <li key={i}>{inc}</li>)}</ul>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+
+            {salvas.length > 0 && (
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+                        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">Guias salvas desta empresa</h3>
+                    </div>
+                    <table className="w-full text-xs">
+                        <thead className="bg-slate-50 dark:bg-slate-700">
+                            <tr>
+                                <th className="px-3 py-2 text-left font-bold text-slate-600 dark:text-slate-400">Competência</th>
+                                <th className="px-3 py-2 text-left font-bold text-slate-600 dark:text-slate-400">UF</th>
+                                <th className="px-3 py-2 text-left font-bold text-slate-600 dark:text-slate-400">IE</th>
+                                <th className="px-3 py-2 text-right font-bold text-slate-600 dark:text-slate-400">21. Total a Recolher</th>
+                                <th className="px-3 py-2 text-left font-bold text-slate-600 dark:text-slate-400">Situação</th>
+                                <th className="px-3 py-2 text-left font-bold text-slate-600 dark:text-slate-400">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {salvas.map(g => (
+                                <tr key={g.id} className="border-t border-slate-100 dark:border-slate-700">
+                                    <td className="px-3 py-1.5">{fmtComp(g.competencia)}</td>
+                                    <td className="px-3 py-1.5 font-semibold">{g.ufFavorecida}</td>
+                                    <td className="px-3 py-1.5">{g.inscricaoEstadualUfFavorecida || '—'}</td>
+                                    <td className="px-3 py-1.5 text-right font-semibold">R$ {fmt(g.c21TotalRecolher)}</td>
+                                    <td className="px-3 py-1.5">
+                                        {g.semMovimento ? <span className="text-slate-400">sem movimento</span>
+                                            : g.inconsistencias?.length
+                                                ? <span className="text-rose-500">{g.inconsistencias.length} pendência(s)</span>
+                                                : <span className="text-emerald-500">válida</span>}
+                                    </td>
+                                    <td className="px-3 py-1.5 flex gap-2">
+                                        <button
+                                            onClick={() => gerarEspelhoGiaStPdf(g).catch(e => toast(String(e?.message || e)))}
+                                            className="text-indigo-500 hover:underline"
+                                        >
+                                            Espelho PDF
+                                        </button>
+                                        {currentUser.role === 'admin' && (
+                                            <button
+                                                onClick={async () => {
+                                                    if (!window.confirm(`Excluir GIA-ST ${g.ufFavorecida} ${fmtComp(g.competencia)}?`)) return;
+                                                    try {
+                                                        await excluirGiaSt(g.id);
+                                                        await carregarSalvas(g.empresaCnpj);
+                                                        toast('Guia excluída.');
+                                                    } catch (e: any) { toast(`Erro ao excluir: ${e?.message || e}`); }
+                                                }}
+                                                className="text-rose-500 hover:underline"
+                                            >
+                                                Excluir
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default GiaStPanel;
