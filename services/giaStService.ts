@@ -15,6 +15,7 @@
 
 import {
     collection, doc, getDocs, query, setDoc, deleteDoc, serverTimestamp, where,
+    limit as fbLimit,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebaseConfig';
 import type { User } from '../types';
@@ -149,7 +150,7 @@ export function validarGiaSt(g: Omit<GiaStGuia, 'inconsistencias'>): string[] {
         const temValor = camposValor.some(([campo]) => (g[campo] || 0) > 0);
         if (temValor) erros.push('GIA-ST marcada como "sem movimento" mas há valores preenchidos.');
     } else {
-        if (!g.inscricaoEstadualUfFavorecida.trim()) {
+        if (!String(g.inscricaoEstadualUfFavorecida || '').trim()) {
             erros.push('Inscrição Estadual na UF favorecida não informada (obrigatória — cadastro de Contribuinte no GIA-ST 3).');
         }
         if (g.c12BcIcmsSt > 0 && g.c13IcmsRetidoSt <= 0) {
@@ -180,7 +181,10 @@ export async function salvarGiaSt(guia: GiaStGuia, user: User): Promise<void> {
 
 export async function listarGiaStPorCnpj(cnpj: string): Promise<GiaStGuia[]> {
     const cnpjNum = cnpj.replace(/\D/g, '');
-    const q = query(collection(ensureDb(), COL_GIA_ST), where('empresaCnpj', '==', cnpjNum));
+    // fbLimit(500) obrigatório: firestore.rules só permite list com
+    // request.query.limit <= 500 — sem limit a regra NEGA ("Missing or
+    // insufficient permissions").
+    const q = query(collection(ensureDb(), COL_GIA_ST), where('empresaCnpj', '==', cnpjNum), fbLimit(500));
     const snap = await getDocs(q);
     const guias = snap.docs.map(d => d.data() as GiaStGuia);
     guias.sort((a, b) => (b.competencia + b.ufFavorecida).localeCompare(a.competencia + a.ufFavorecida));

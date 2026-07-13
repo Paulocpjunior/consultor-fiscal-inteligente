@@ -106,6 +106,7 @@ export function montarRegistroA0(
     const mComp = guia.competencia.match(/^(\d{4})-(\d{2})$/);
     if (!mComp) throw new GiaStExportError(`Competência inválida: ${guia.competencia}`);
     const periodoMMAAAA = `${mComp[2]}${mComp[1]}`;
+    const infoCompl = String(guia.informacoesComplementares || '');
 
     // 03. Até 6 pares [data vencimento + valor]. Fase atual: vencimento único
     // com o total da guia (campo 21). Sem valor a recolher → tudo zerado.
@@ -155,9 +156,9 @@ export function montarRegistroA0(
         + padA(declarante.email, 80)                            // 34 (601)
         + padA(declarante.local, 30)                            // 35 local (631)
         + padData(dataPreenchimento || new Date().toISOString().slice(0, 10)) // 35 data (639)
-        + padA(guia.informacoesComplementares.slice(0, 65), 65)          // 36 L1 (704)
-        + padA(guia.informacoesComplementares.slice(65, 125), 60)        // 36 L2 (764)
-        + padA(guia.informacoesComplementares.slice(125, 185), 60)       // 36 L3 (824)
+        + padA(infoCompl.slice(0, 65), 65)                      // 36 L1 (704)
+        + padA(infoCompl.slice(65, 125), 60)                    // 36 L2 (764)
+        + padA(infoCompl.slice(125, 185), 60)                   // 36 L3 (824)
         + SN(!!guia.c37DistribuidoraCombustivel)                // 37 (825)
         + SN(contagem.anexoIII > 0)                             // 38 (826)
         + padA('', 6)                                           // código entrega (832)

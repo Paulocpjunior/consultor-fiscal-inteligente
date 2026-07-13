@@ -193,6 +193,11 @@ describe('validarGiaSt', () => {
         expect(erros.some(e => e.includes('vencimento'))).toBe(true);
     });
 
+    it('não quebra com IE undefined (form parcial) — retorna inconsistência', () => {
+        const erros = validarGiaSt({ ...guiaOk(), inscricaoEstadualUfFavorecida: undefined as any });
+        expect(erros.some(e => e.includes('Inscrição Estadual'))).toBe(true);
+    });
+
     it('montarIdGuia normaliza CNPJ e competência', () => {
         expect(montarIdGuia('96.312.889/0001-11', 'sp', '2026-06')).toBe('96312889000111_SP_202606');
     });
