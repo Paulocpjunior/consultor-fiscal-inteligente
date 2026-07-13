@@ -3,6 +3,7 @@
 declare const __APP_VERSION__: string;
 declare const __APP_RELEASE__: string;
 declare const __APP_BUILD_TIME__: string;
+declare const __APP_COMMIT__: string;
 
 const safe = <T,>(fn: () => T, fallback: T): T => {
     try {
@@ -15,6 +16,7 @@ const safe = <T,>(fn: () => T, fallback: T): T => {
 export const APP_VERSION: string = safe(() => __APP_VERSION__, '0.0.0-dev');
 export const APP_RELEASE: string = safe(() => __APP_RELEASE__, 'dev');
 export const APP_BUILD_TIME: string = safe(() => __APP_BUILD_TIME__, new Date().toISOString());
+export const APP_COMMIT: string = safe(() => __APP_COMMIT__, 'dev');
 
 export const formatBuildDate = (iso: string = APP_BUILD_TIME): string => {
     try {

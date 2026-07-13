@@ -97,6 +97,7 @@ jobs:
             --build-arg VITE_FIREBASE_APP_ID="$VITE_FIREBASE_APP_ID" \
             --build-arg VITE_SENTRY_DSN="$VITE_SENTRY_DSN" \
             --build-arg VITE_SENTRY_ENV="$VITE_SENTRY_ENV" \
+            --build-arg APP_COMMIT="${{ github.sha }}" \
             -t ${{ env.IMAGE }}:${{ github.sha }} \
             .
 
