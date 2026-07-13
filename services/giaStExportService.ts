@@ -91,11 +91,16 @@ export function padData(dataIso: string | null | undefined): string {
 
 const SN = (b: boolean): string => (b ? 'S' : 'N');
 
-/** Registro Principal A0 — 1031 posições. */
+/**
+ * Registro Principal A0 — 1031 posições.
+ * dataPreenchimento (AAAA-MM-DD): data do campo 35 do A0; default = hoje.
+ * Injetável para testes-gabarito contra arquivos reais exportados pelo app.
+ */
 export function montarRegistroA0(
     guia: GiaStGuia,
     declarante: GiaStDeclarante,
     contagem: { anexoI: number; anexoII: number; anexoIII: number },
+    dataPreenchimento?: string,
 ): string {
     // 05. Período Referência MMAAAA (guia.competencia é AAAA-MM)
     const mComp = guia.competencia.match(/^(\d{4})-(\d{2})$/);
@@ -149,7 +154,7 @@ export function montarRegistroA0(
         + padN('', 9)                                           // 33 fax nº (521)
         + padA(declarante.email, 80)                            // 34 (601)
         + padA(declarante.local, 30)                            // 35 local (631)
-        + padData(new Date().toISOString().slice(0, 10))        // 35 data (639)
+        + padData(dataPreenchimento || new Date().toISOString().slice(0, 10)) // 35 data (639)
         + padA(guia.informacoesComplementares.slice(0, 65), 65)          // 36 L1 (704)
         + padA(guia.informacoesComplementares.slice(65, 125), 60)        // 36 L2 (764)
         + padA(guia.informacoesComplementares.slice(125, 185), 60)       // 36 L3 (824)
@@ -214,7 +219,11 @@ export interface GiaStArquivoGuia {
  *  - soma do Anexo I = campo 14 e soma do Anexo II = campo 15 (quando > 0);
  *  - guia sem inconsistências pendentes.
  */
-export function montarArquivoGiaSt(itens: GiaStArquivoGuia[], declarante: GiaStDeclarante): string {
+export function montarArquivoGiaSt(
+    itens: GiaStArquivoGuia[],
+    declarante: GiaStDeclarante,
+    dataPreenchimento?: string,
+): string {
     if (!itens.length) throw new GiaStExportError('Nenhuma guia selecionada para o arquivo.');
     if (!declarante.nome.trim() || declarante.cpf.replace(/\D/g, '').length !== 11) {
         throw new GiaStExportError('Declarante obrigatório: informe nome e CPF válido (11 dígitos).');
@@ -237,7 +246,7 @@ export function montarArquivoGiaSt(itens: GiaStArquivoGuia[], declarante: GiaStD
         }
         linhas.push(montarRegistroA0(guia, declarante, {
             anexoI: anexoI.length, anexoII: anexoII.length, anexoIII: anexoIII.length,
-        }));
+        }, dataPreenchimento));
         for (const nf of anexoI) linhas.push(montarRegistroAnexoNf('A1', nf));
         for (const nf of anexoII) linhas.push(montarRegistroAnexoNf('A2', nf));
         for (const tr of anexoIII) linhas.push(montarRegistroA3(tr));
