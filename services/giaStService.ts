@@ -18,6 +18,9 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebaseConfig';
 import type { User } from '../types';
+// import type apenas — sem ciclo em runtime (giaStExportService importa
+// GiaStGuia daqui também como type).
+import type { GiaStDeclarante, GiaStAnexoNf, GiaStAnexoTransferencia } from './giaStExportService';
 
 function ensureDb() {
     if (!isFirebaseConfigured || !db) throw new Error('Firestore não configurado.');
@@ -86,6 +89,16 @@ export interface GiaStGuia extends GiaStValores, GiaStCalculada {
         entradas?: { valorContabil: number; baseCalculo: number; valorIcms: number; bcIcmsRetido: number; icmsRetidoFonte: number };
     } | null;
     inconsistencias: string[];
+    /** 37. Distribuidora de combustíveis/TRR com operações p/ UF favorecida. */
+    c37DistribuidoraCombustivel?: boolean;
+    /** Declarante do registro A0 (arquivo GIA-ST 3). */
+    declarante?: GiaStDeclarante | null;
+    /** Detalhamento do campo 14 (registros A1). */
+    anexoI?: GiaStAnexoNf[];
+    /** Detalhamento do campo 15 (registros A2). */
+    anexoII?: GiaStAnexoNf[];
+    /** Transferências p/ UF favorecida — campo 38 (registros A3). */
+    anexoIII?: GiaStAnexoTransferencia[];
     criadoPor?: string;
     atualizadoEm?: unknown;
 }

@@ -25,6 +25,11 @@ import {
     excluirGiaSt, type GiaStGuia, type GiaStValores,
 } from '../../services/giaStService';
 import { gerarEspelhoGiaStPdf } from '../../services/giaStPdf';
+import {
+    gerarArquivoGiaStBlob, type GiaStDeclarante, type GiaStAnexoNf,
+    type GiaStAnexoTransferencia, type GiaStArquivoGuia,
+} from '../../services/giaStExportService';
+import { downloadBlob } from '../../services/iobSageExportService';
 
 interface Props {
     currentUser: User;
@@ -38,7 +43,19 @@ interface FormGuia extends GiaStValores {
     informacoesComplementares: string;
     semMovimento: boolean;
     retificacao: boolean;
+    c37DistribuidoraCombustivel: boolean;
+    anexoI: GiaStAnexoNf[];
+    anexoII: GiaStAnexoNf[];
+    anexoIII: GiaStAnexoTransferencia[];
 }
+
+const DECLARANTE_VAZIO: GiaStDeclarante = {
+    nome: '', cpf: '', cargo: '', telefoneDdd: '', telefoneNumero: '', email: '', local: '',
+};
+
+const ANEXO_NF_VAZIO: GiaStAnexoNf = {
+    numeroNf: '', serie: '', inscricaoEstadual: '', dataEmissao: '', valor: 0,
+};
 
 const fmt = (n: number): string =>
     (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -88,6 +105,10 @@ function formInicial(saida: GiaStLinhaUf | undefined, incluida: boolean): FormGu
         c17PagamentosAntecipados: 0,
         c19RepasseRefinarias: 0,
         c39RepasseOutros: 0,
+        c37DistribuidoraCombustivel: false,
+        anexoI: [],
+        anexoII: [],
+        anexoIII: [],
     };
 }
 
@@ -110,6 +131,47 @@ const CAMPOS_EDITAVEIS: Array<{ key: keyof GiaStValores; label: string }> = [
 const inputCls = 'w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs text-right';
 const inputTxtCls = 'w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs';
 
+/** Editor genérico dos Anexos I/II (notas: A1/A2 do arquivo). */
+const AnexoNfEditor: React.FC<{
+    titulo: string;
+    somaEsperada: number;
+    itens: GiaStAnexoNf[];
+    onChange: (itens: GiaStAnexoNf[]) => void;
+}> = ({ titulo, somaEsperada, itens, onChange }) => {
+    const soma = itens.reduce((acc, i) => acc + (i.valor || 0), 0);
+    const bate = Math.round(soma * 100) === Math.round(somaEsperada * 100);
+    const setItem = (idx: number, campo: keyof GiaStAnexoNf, valor: string | number) =>
+        onChange(itens.map((it, i) => (i === idx ? { ...it, [campo]: valor } : it)));
+    return (
+        <div className="border border-slate-200 dark:border-slate-600 rounded p-2 space-y-1.5">
+            <div className="flex justify-between items-center flex-wrap gap-1">
+                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{titulo}</span>
+                <span className={`text-[11px] font-semibold ${bate ? 'text-emerald-600' : 'text-rose-500'}`}>
+                    Soma: R$ {fmt(soma)} / campo: R$ {fmt(somaEsperada)} {bate ? '✓' : '≠'}
+                </span>
+            </div>
+            {itens.map((it, idx) => (
+                <div key={idx} className="grid grid-cols-2 md:grid-cols-6 gap-1 items-end">
+                    <input className={inputTxtCls} placeholder="Nº NF" value={it.numeroNf}
+                        onChange={e => setItem(idx, 'numeroNf', e.target.value.replace(/\D/g, ''))} />
+                    <input className={inputTxtCls} placeholder="Série" value={it.serie}
+                        onChange={e => setItem(idx, 'serie', e.target.value)} />
+                    <input className={inputTxtCls} placeholder="IE do emitente/destinatário" value={it.inscricaoEstadual}
+                        onChange={e => setItem(idx, 'inscricaoEstadual', e.target.value)} />
+                    <input type="date" className={inputTxtCls} value={it.dataEmissao}
+                        onChange={e => setItem(idx, 'dataEmissao', e.target.value)} />
+                    <input type="number" step="0.01" min="0" className={inputCls} placeholder="Valor ICMS-ST" value={it.valor}
+                        onChange={e => setItem(idx, 'valor', parseFloat(e.target.value) || 0)} />
+                    <button onClick={() => onChange(itens.filter((_, i) => i !== idx))}
+                        className="text-rose-500 text-[11px] hover:underline text-left">remover</button>
+                </div>
+            ))}
+            <button onClick={() => onChange([...itens, { ...ANEXO_NF_VAZIO }])}
+                className="text-indigo-500 text-[11px] hover:underline">+ adicionar nota</button>
+        </div>
+    );
+};
+
 const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [parsing, setParsing] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
@@ -117,6 +179,7 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [forms, setForms] = useState<Record<string, FormGuia>>({});
     const [salvas, setSalvas] = useState<GiaStGuia[]>([]);
     const [salvando, setSalvando] = useState<string | null>(null);
+    const [declarante, setDeclarante] = useState<GiaStDeclarante>(DECLARANTE_VAZIO);
     const fileRef = useRef<HTMLInputElement>(null);
 
     const toast = (msg: string) => onShowToast?.(msg);
@@ -148,6 +211,9 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     novo[g.ufFavorecida].inscricaoEstadualUfFavorecida = g.inscricaoEstadualUfFavorecida;
                 }
             }
+            // Declarante reaproveitado da última guia salva da empresa
+            const comDeclarante = anteriores.find(g => g.declarante?.nome);
+            if (comDeclarante?.declarante) setDeclarante(comDeclarante.declarante);
             setForms(novo);
         } catch (e: any) {
             setErro(e?.message || 'Falha ao ler o PDF.');
@@ -190,9 +256,26 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
             c16CreditoPeriodoAnterior: f.c16CreditoPeriodoAnterior,
             c17PagamentosAntecipados: f.c17PagamentosAntecipados,
             c19RepasseRefinarias: f.c19RepasseRefinarias, c39RepasseOutros: f.c39RepasseOutros,
+            c37DistribuidoraCombustivel: f.c37DistribuidoraCombustivel,
+            declarante: declarante.nome.trim() ? declarante : null,
+            anexoI: f.anexoI, anexoII: f.anexoII, anexoIII: f.anexoIII,
             ...calc,
         };
         return { ...base, inconsistencias: validarGiaSt(base) };
+    };
+
+    const handleArquivoTxt = () => {
+        try {
+            const itens: GiaStArquivoGuia[] = ufsIncluidas.map(uf => {
+                const guia = montarGuia(uf);
+                return { guia, anexoI: guia.anexoI, anexoII: guia.anexoII, anexoIII: guia.anexoIII };
+            });
+            const { blob, nomeArquivo } = gerarArquivoGiaStBlob(itens, declarante);
+            downloadBlob(blob, nomeArquivo);
+            toast(`Arquivo ${nomeArquivo} gerado com ${itens.length} GIA-ST. Importe no aplicativo GIA-ST 3: Arquivo → Importar → Sistema Próprio.`);
+        } catch (e: any) {
+            toast(`Arquivo não gerado: ${e?.message || e}`);
+        }
     };
 
     const handleSalvar = async (uf: string) => {
@@ -244,9 +327,9 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 {parsing && <p className="text-xs text-slate-400 mt-2">Lendo PDF…</p>}
                 {erro && <p className="text-xs text-rose-600 dark:text-rose-400 mt-2">{erro}</p>}
                 <p className="text-[11px] text-slate-400 mt-2">
-                    Fase atual: conferência, cálculo, gravação e espelho PDF. O arquivo de importação para o aplicativo
-                    GIA-ST 3 (menu Importar → Sistema Próprio) será liberado quando o layout oficial da SEFAZ-RS
-                    (Layout_ArquivoGIA-ST_v3.pdf) for cadastrado.
+                    Saídas: espelho PDF de conferência e <strong>arquivo TXT de importação</strong> no layout oficial
+                    v3.1 (PROCERGS) — no aplicativo GIA-ST 3 use Arquivo → Importar → Sistema Próprio, valide e
+                    transmita pelo TED.
                 </p>
             </div>
 
@@ -268,6 +351,49 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             <ul className="list-disc ml-4">{relatorio.validacao.divergencias.map((d, i) => <li key={i}>{d}</li>)}</ul>
                         </div>
                     )}
+
+                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                        <h4 className="text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">
+                            Declarante (registro A0 do arquivo · aba Identificação do GIA-ST 3)
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <div className="md:col-span-2">
+                                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Nome *</label>
+                                <input className={inputTxtCls} value={declarante.nome}
+                                    onChange={e => setDeclarante(d => ({ ...d, nome: e.target.value }))} />
+                            </div>
+                            <div>
+                                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">CPF *</label>
+                                <input className={inputTxtCls} value={declarante.cpf} placeholder="somente números"
+                                    onChange={e => setDeclarante(d => ({ ...d, cpf: e.target.value.replace(/\D/g, '').slice(0, 11) }))} />
+                            </div>
+                            <div>
+                                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Cargo</label>
+                                <input className={inputTxtCls} value={declarante.cargo}
+                                    onChange={e => setDeclarante(d => ({ ...d, cargo: e.target.value }))} />
+                            </div>
+                            <div>
+                                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">DDD</label>
+                                <input className={inputTxtCls} value={declarante.telefoneDdd}
+                                    onChange={e => setDeclarante(d => ({ ...d, telefoneDdd: e.target.value.replace(/\D/g, '').slice(0, 4) }))} />
+                            </div>
+                            <div>
+                                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Telefone</label>
+                                <input className={inputTxtCls} value={declarante.telefoneNumero}
+                                    onChange={e => setDeclarante(d => ({ ...d, telefoneNumero: e.target.value.replace(/\D/g, '').slice(0, 9) }))} />
+                            </div>
+                            <div>
+                                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">E-mail</label>
+                                <input className={inputTxtCls} value={declarante.email}
+                                    onChange={e => setDeclarante(d => ({ ...d, email: e.target.value }))} />
+                            </div>
+                            <div>
+                                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Local (cidade)</label>
+                                <input className={inputTxtCls} value={declarante.local}
+                                    onChange={e => setDeclarante(d => ({ ...d, local: e.target.value }))} />
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -369,6 +495,10 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 <input type="checkbox" checked={f.retificacao} onChange={e => setCampo(uf, 'retificacao', e.target.checked)} />
                                 2. Retificação
                             </label>
+                            <label className="flex items-end gap-1 text-[11px] text-slate-500 dark:text-slate-400 pb-1.5 col-span-2">
+                                <input type="checkbox" checked={f.c37DistribuidoraCombustivel} onChange={e => setCampo(uf, 'c37DistribuidoraCombustivel', e.target.checked)} />
+                                37. Distribuidora de combustíveis/TRR
+                            </label>
                         </div>
 
                         {entrada && (entrada.icmsRetidoFonte > 0 || entrada.bcIcmsRetido > 0) && (
@@ -392,6 +522,47 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                     />
                                 </div>
                             ))}
+                        </div>
+
+                        {f.c14IcmsDevolucao > 0 && (
+                            <AnexoNfEditor
+                                titulo="Anexo I — notas de devolução (campo 14)"
+                                somaEsperada={f.c14IcmsDevolucao}
+                                itens={f.anexoI}
+                                onChange={itens => setCampo(uf, 'anexoI', itens)}
+                            />
+                        )}
+                        {f.c15IcmsRessarcimentos > 0 && (
+                            <AnexoNfEditor
+                                titulo="Anexo II — notas de ressarcimento (campo 15)"
+                                somaEsperada={f.c15IcmsRessarcimentos}
+                                itens={f.anexoII}
+                                onChange={itens => setCampo(uf, 'anexoII', itens)}
+                            />
+                        )}
+
+                        <div className="border border-slate-200 dark:border-slate-600 rounded p-2 space-y-1.5">
+                            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                Anexo III — transferências p/ filial na UF favorecida (campo 38 · opcional)
+                            </span>
+                            {f.anexoIII.map((it, idx) => (
+                                <div key={idx} className="grid grid-cols-2 md:grid-cols-4 gap-1 items-end">
+                                    <input className={inputTxtCls} placeholder="IE da filial" value={it.inscricaoEstadual}
+                                        onChange={e => setCampo(uf, 'anexoIII', f.anexoIII.map((x, i) => i === idx ? { ...x, inscricaoEstadual: e.target.value } : x))} />
+                                    <input type="number" step="0.01" min="0" className={inputCls} placeholder="Base de cálculo" value={it.baseCalculo}
+                                        onChange={e => setCampo(uf, 'anexoIII', f.anexoIII.map((x, i) => i === idx ? { ...x, baseCalculo: parseFloat(e.target.value) || 0 } : x))} />
+                                    <input type="number" step="0.01" min="0" className={inputCls} placeholder="ICMS destacado" value={it.valorIcmsDestacado}
+                                        onChange={e => setCampo(uf, 'anexoIII', f.anexoIII.map((x, i) => i === idx ? { ...x, valorIcmsDestacado: parseFloat(e.target.value) || 0 } : x))} />
+                                    <button onClick={() => setCampo(uf, 'anexoIII', f.anexoIII.filter((_, i) => i !== idx))}
+                                        className="text-rose-500 text-[11px] hover:underline text-left">remover</button>
+                                </div>
+                            ))}
+                            <button
+                                onClick={() => setCampo(uf, 'anexoIII', [...f.anexoIII, { inscricaoEstadual: '', baseCalculo: 0, valorIcmsDestacado: 0 }])}
+                                className="text-indigo-500 text-[11px] hover:underline"
+                            >
+                                + adicionar transferência
+                            </button>
                         </div>
 
                         <div className="grid grid-cols-3 gap-2">
@@ -429,6 +600,24 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 );
             })}
 
+            {relatorio && ufsIncluidas.length > 0 && (
+                <div className="bg-white dark:bg-slate-800 rounded-xl border-2 border-emerald-300 dark:border-emerald-700 p-4 flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">4) Arquivo de importação — GIA-ST 3 (Sistema Próprio · layout v3.1)</h3>
+                        <p className="text-[11px] text-slate-400">
+                            Gera 1 arquivo TXT com {ufsIncluidas.length} GIA-ST ({ufsIncluidas.join(', ')}).
+                            No aplicativo da SEFAZ-RS: Arquivo → Importar → Sistema Próprio → validar → Gerar Arquivo p/ Transmissão (TED).
+                        </p>
+                    </div>
+                    <button
+                        onClick={handleArquivoTxt}
+                        className="px-4 py-2 text-xs font-semibold bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                    >
+                        ⬇ Gerar arquivo TXT
+                    </button>
+                </div>
+            )}
+
             {salvas.length > 0 && (
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
@@ -464,6 +653,20 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                             className="text-indigo-500 hover:underline"
                                         >
                                             Espelho PDF
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                try {
+                                                    const { blob, nomeArquivo } = gerarArquivoGiaStBlob(
+                                                        [{ guia: g, anexoI: g.anexoI, anexoII: g.anexoII, anexoIII: g.anexoIII }],
+                                                        g.declarante || declarante,
+                                                    );
+                                                    downloadBlob(blob, nomeArquivo);
+                                                } catch (e: any) { toast(`Arquivo não gerado: ${e?.message || e}`); }
+                                            }}
+                                            className="text-emerald-600 hover:underline"
+                                        >
+                                            TXT
                                         </button>
                                         {currentUser.role === 'admin' && (
                                             <button
