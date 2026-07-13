@@ -85,6 +85,7 @@ jobs:
             --build-arg VITE_FIREBASE_STORAGE_BUCKET="${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}" \
             --build-arg VITE_FIREBASE_MESSAGING_SENDER_ID="${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}" \
             --build-arg VITE_FIREBASE_APP_ID="${{ secrets.VITE_FIREBASE_APP_ID }}" \
+            --build-arg APP_COMMIT="${{ github.sha }}" \
             -t us-central1-docker.pkg.dev/consultorfiscalapp/cloud-run-deploy/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             .
 

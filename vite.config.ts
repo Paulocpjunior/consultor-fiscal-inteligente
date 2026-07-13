@@ -2,11 +2,25 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { resolve } from 'path';
+import { execSync } from 'child_process';
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
 const buildTime = new Date().toISOString();
 // Release combina versão semântica + timestamp curto. Garante unicidade a cada build.
 const release = `${pkg.version}+${Math.floor(Date.now() / 1000)}`;
+// Commit exibido no rodapé — permite conferir se a tela está na versão mais
+// recente sem decifrar o timestamp do release. No CI o build roda dentro do
+// Docker SEM .git (.dockerignore), então o valor vem do build-arg APP_COMMIT
+// (GITHUB_SHA); localmente cai no git rev-parse.
+const commit = (() => {
+    if (process.env.APP_COMMIT) return process.env.APP_COMMIT.slice(0, 7);
+    try {
+        return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+            .toString().trim().slice(0, 7);
+    } catch {
+        return 'local';
+    }
+})();
 
 export default defineConfig({
     plugins: [
@@ -22,6 +36,7 @@ export default defineConfig({
                     version: pkg.version,
                     release,
                     buildTime,
+                    commit,
                 };
                 writeFileSync(target, JSON.stringify(data, null, 2));
                 // eslint-disable-next-line no-console
@@ -34,6 +49,7 @@ export default defineConfig({
         '__APP_VERSION__': JSON.stringify(pkg.version),
         '__APP_RELEASE__': JSON.stringify(release),
         '__APP_BUILD_TIME__': JSON.stringify(buildTime),
+        '__APP_COMMIT__': JSON.stringify(commit),
     },
     server: {
         host: '0.0.0.0',
