@@ -18,8 +18,10 @@ let cache = null;
 /**
  * Extrai chave privada e certificado em formato PEM a partir do .pfx (PKCS#12).
  * Necessário pra xml-crypto que não aceita .pfx direto.
+ * Exportado pra que a manifestação possa assinar com o A1 da EMPRESA
+ * (cert-storage devolve só pfxBuffer+password, sem PEM).
  */
-function extrairPem(pfxBuffer, password) {
+export function extrairPem(pfxBuffer, password) {
   const pkcs12Asn1 = forge.asn1.fromDer(pfxBuffer.toString('binary'));
   const pkcs12 = forge.pkcs12.pkcs12FromAsn1(pkcs12Asn1, password);
 

@@ -591,6 +591,18 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                                 Verifique certificado e procuração na aba <strong>📋 Status por Empresa</strong>.
                             </p>
                         </div>
+                    ) : filters.direcao === 'saida' ? (
+                        <div className="text-center py-6 px-4 space-y-1">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Nenhuma nota de <strong>saída</strong> encontrada para este filtro.
+                            </p>
+                            <p className="text-[11px] text-amber-700 dark:text-amber-300 max-w-2xl mx-auto">
+                                A captura automática usa a Distribuição DF-e da SEFAZ, que entrega apenas notas onde a
+                                empresa é <strong>destinatária</strong> (entrada) e eventos. NF-e <strong>emitidas</strong> pela
+                                empresa não são distribuídas por esse canal — importe-as pela aba{' '}
+                                <strong>Importação Manual</strong> (XML do sistema emissor) ou via SharePoint.
+                            </p>
+                        </div>
                     ) : (
                         <p className="text-center text-xs text-slate-400 py-6">Nenhum documento encontrado.</p>
                     )
