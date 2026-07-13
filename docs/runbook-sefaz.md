@@ -95,12 +95,13 @@ gcloud run services describe consultor-fiscal-inteligente \
 4. `sync-orchestrator.sincronizarEmpresa`:
    - Acquire lock TTL 1h em `sefaz_locks/{cnpj}` (transação)
    - Lê cursor NSU de `sefaz_state/{cnpj}`
-   - Loop até 5 páginas: `consultaDistDFe` → mTLS → SEFAZ
+   - Loop até 50 páginas (~2500 docs — cobre backlog de 90 dias numa tacada): `consultaDistDFe` → mTLS → SEFAZ
    - Para cada `docZip`: `importarXmlSefaz` → upload Storage + set Firestore
+   - `resNFe` importado → dispara Ciência da Operação (210210) automática assinada com o **A1 da própria empresa** (nunca o do escritório — SEFAZ rejeita evento cujo autor tem raiz CNPJ diferente do cert). Ciência aceita → re-download imediato da `procNFe` completa via `consChNFe` → upgrade resumo→completa
    - Persiste novo `ultNSU` em `sefaz_state`
 5. Frontend mostra resultado + recarrega `getSefazState`
 
-**Sem manifestação destinatário** (escolha do projeto). Resumos `resNFe` ainda chegam mas sem upgrade pra NFe completa.
+**Notas de SAÍDA (emitidas pela empresa) NÃO vêm pela Distribuição DF-e** — a SEFAZ só distribui documentos onde o CNPJ consultado é destinatário/interessado, além de eventos. XML de NF-e emitida entra no sistema via Importação Manual ou SharePoint.
 
 ---
 
@@ -277,6 +278,21 @@ Falhas de captura — motivo, contexto (NSU, schema), timestamp.
 1. Confirmar procuração e-CAC ativa (cliente outorgou no portal Receita?)
 2. Confirmar que serviço autorizado é "NFe-Distribuição de DFe" ou "Todos os Serviços"
 3. Verificar nos logs: `cStat=137` = sem docs, `cStat=280` = sem permissão
+
+### "Saída" mostra 0 documentos
+Comportamento esperado da Distribuição DF-e: a SEFAZ só entrega notas onde a
+empresa é **destinatária** (entrada) + eventos. NF-e **emitidas** pela empresa
+não são redistribuídas ao próprio emitente — importe o XML do sistema emissor
+via **Importação Manual** ou SharePoint.
+
+### Nota fica como "Resumo" (sem valor/itens) e nunca vira completa
+1. Ver `manifestacoes_log` — a Ciência foi aceita (`cStat=135/136`)?
+2. Rejeição por autor ≠ certificado: a empresa precisa de A1 **da própria raiz
+   CNPJ** (o cert do escritório não assina evento de cliente)
+3. Aceita mas sem upgrade: campo `baixaCompleta` no log mostra o resultado do
+   re-download via `consChNFe`; se falhou, a completa chega no próximo DistDFe
+4. Resumos antigos presos: o cron noturno agora manifesta `resNFe` (antes só
+   olhava `tipoDoc='NFe'`, que já era completa — bug corrigido em 07/2026)
 
 ### Certificado deu erro de TLS
 1. Backend tenta recarregar cert do Secret Manager 1x automaticamente
