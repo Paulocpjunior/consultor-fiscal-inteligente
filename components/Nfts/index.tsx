@@ -20,8 +20,10 @@ import { extractNftsDataFromPdf } from '../../services/geminiService';
 import {
     gerarLoteNfts, gerarCsvResumo, gerarCsvPendencias, separarNotasIssRetido,
     validarNotaNfts, parseValorCentavos, parseDataAAAAMMDD, soDigitos,
-    type NftsNota, type NftsPendencia,
+    nomePrestadorSuspeito, enderecoIncompletoNfts, aplicarDadosCnpjNaNota,
+    type NftsNota, type NftsPendencia, type DadosCadastraisCnpj,
 } from '../../services/nftsSpService';
+import { fetchCnpjFromBrasilAPI } from '../../services/externalApiService';
 import { CATALOGO_POR_CODIGO } from '../../services/nftsCatalogoSp';
 
 interface Props {
@@ -56,6 +58,37 @@ async function fileToBase64(file: File): Promise<string> {
         bin += String.fromCharCode(...arr.subarray(i, i + chunk));
     }
     return btoa(bin);
+}
+
+// Cache de consultas CNPJ por sessao (evita repetir lookup do mesmo prestador).
+const cnpjCache = new Map<string, DadosCadastraisCnpj | null>();
+
+async function lookupCnpjCached(cnpj: string): Promise<DadosCadastraisCnpj | null> {
+    if (cnpjCache.has(cnpj)) return cnpjCache.get(cnpj) ?? null;
+    try {
+        const d = await fetchCnpjFromBrasilAPI(cnpj);
+        const dados: DadosCadastraisCnpj = {
+            razaoSocial: d.razaoSocial || '',
+            logradouro: d.logradouro || '',
+            numero: d.numero || '',
+            bairro: d.bairro || '',
+            municipio: d.municipio || '',
+            uf: d.uf || '',
+            cep: d.cep || '',
+        };
+        cnpjCache.set(cnpj, dados);
+        return dados;
+    } catch {
+        cnpjCache.set(cnpj, null);
+        return null;
+    }
+}
+
+/** Enriquece nome/endereco pela Receita quando a extracao do PDF veio fraca. */
+async function enriquecerSePreciso(nota: NftsNota): Promise<NftsNota> {
+    if (!nomePrestadorSuspeito(nota.nome) && !enderecoIncompletoNfts(nota)) return nota;
+    const dados = await lookupCnpjCached(nota.cnpj);
+    return dados ? aplicarDadosCnpjNaNota(nota, dados) : nota;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -126,7 +159,7 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         const base64 = await fileToBase64(file);
                         const dados = await extractNftsDataFromPdf(base64);
                         const r = montarNotaDeGemini(file.name, dados, cnpjTomador);
-                        if (r.nota) novasNotas.push(r.nota);
+                        if (r.nota) novasNotas.push(await enriquecerSePreciso(r.nota));
                         if (r.pendencia) novasPend.push(r.pendencia);
                     } catch (e: any) {
                         novasPend.push({ arquivo: file.name, pagina: 1, motivo: 'Falha na extracao por IA: ' + (e?.message || 'erro desconhecido') });
@@ -136,7 +169,7 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 for (let pg = 0; pg < paginas.length; pg++) {
                     if (paginas[pg].trim().length < 40) continue;
                     const r = parseNftsFromText(file.name, pg + 1, paginas[pg], cnpjTomador);
-                    if (r.nota) novasNotas.push(r.nota);
+                    if (r.nota) novasNotas.push(await enriquecerSePreciso(r.nota));
                     if (r.pendencia) novasPend.push(r.pendencia);
                 }
             } catch (e: any) {

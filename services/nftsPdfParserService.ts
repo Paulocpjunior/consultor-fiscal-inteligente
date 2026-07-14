@@ -169,7 +169,11 @@ export function extrairNomePrestador(texto: string, cnpj: string): string {
     const toks = tokens(bloco);
     const rotuloNome = /^(?:N[O0]ME\s*\/?\s*RAZ[AE]O SOCIAL|N[O0]ME\s*\/\s*N[O0]ME EMPRESARIAL|N[O0]ME EMPRESARIAL|RAZ[AE]O SOCIAL(?:\s*\/\s*N[O0]ME)?|PRESTADOR DE SERVI[CG]OS)$/i;
     const proibido = /^(?:E-?MAIL|TELEFONE|ENDERE[CG]O|MUNICIPIO|CEP|INSCRI[CG][AO]O(?: MUNICIPAL)?|CODIGO IBGE|CNPJ|CPF|NIF|SIMPLES NACIONAL|PRESTADOR|TOMADOR|SERVI[CG]O)$/i;
-    const valido = (c: string) => c.length >= 5 && /[A-Za-z]{3}/.test(c) && !proibido.test(c.trim()) && !/^[\d./() -]+$/.test(c);
+    // Rejeita rotulos multi-palavra que vazavam como razao social,
+    // ex. "Prestador do servico", "Dados do Prestador de Servicos".
+    const rotuloMultiPalavra = /^(?:DADOS\s+DO\s+)?(?:PRESTADOR|TOMADOR|EMITENTE)(?:\s+D[EOA]S?)?(?:\s+SERVI[CG]OS?)?$/i;
+    const valido = (c: string) => c.length >= 5 && /[A-Za-z]{3}/.test(c)
+        && !proibido.test(c.trim()) && !rotuloMultiPalavra.test(c.trim()) && !/^[\d./() -]+$/.test(c);
     for (let i = 0; i < toks.length; i++) {
         const mm = toks[i].match(/^(?:N[O0]me \/ N[O0]me Empresarial|N[O0]me Empresarial|Raz[ae]o Social(?:\/N[O0]me)?|N[O0]me\/Raz[ae]o Social)\s+(.+)/i);
         if (mm && valido(mm[1])) return mm[1].slice(0, 75);

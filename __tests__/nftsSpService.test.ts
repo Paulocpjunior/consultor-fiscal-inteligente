@@ -207,6 +207,49 @@ describe('gerarLoteNfts', () => {
     });
 });
 
+describe('enriquecimento cadastral via CNPJ', () => {
+    const { nomePrestadorSuspeito, enderecoIncompletoNfts, aplicarDadosCnpjNaNota } = jest.requireActual('../services/nftsSpService');
+    it('detecta rotulos vazados como razao social', () => {
+        expect(nomePrestadorSuspeito('Prestador do servico')).toBe(true);
+        expect(nomePrestadorSuspeito('PRESTADOR DE SERVICOS')).toBe(true);
+        expect(nomePrestadorSuspeito('Dados do Prestador')).toBe(true);
+        expect(nomePrestadorSuspeito('PRESTADOR 23098923000123')).toBe(true);
+        expect(nomePrestadorSuspeito('ALELO S.A.')).toBe(false);
+        expect(nomePrestadorSuspeito('HE SERVICOS GERAIS LTDA')).toBe(false);
+    });
+    it('detecta endereco incompleto', () => {
+        expect(enderecoIncompletoNfts(notaBase({ uf: '' }))).toBe(true);
+        expect(enderecoIncompletoNfts(notaBase({ cep: '00000000' }))).toBe(true);
+        expect(enderecoIncompletoNfts(notaBase())).toBe(false);
+    });
+    it('aplica dados da Receita substituindo nome e endereco', () => {
+        const n = notaBase({ nome: 'Prestador do servico', cidade: '', uf: '', cep: '' });
+        const enriquecida = aplicarDadosCnpjNaNota(n, {
+            razaoSocial: '23.098.923 ELOVI HIRT',
+            logradouro: 'RUA OTTERNO SCHAEFFER', numero: '856',
+            bairro: 'CANABARRO', municipio: 'Teutônia', uf: 'RS', cep: '95890-000',
+        });
+        expect(enriquecida.nome).toBe('23.098.923 ELOVI HIRT');
+        expect(enriquecida.tipoLogradouro).toBe('RUA');
+        expect(enriquecida.logradouro).toBe('OTTERNO SCHAEFFER');
+        expect(enriquecida.cidade).toBe('Teutonia');
+        expect(enriquecida.uf).toBe('RS');
+        expect(enriquecida.cep).toBe('95890000');
+        expect(enriquecida.aviso).toContain('Receita Federal');
+        const { erros } = validarNotaNfts(enriquecida);
+        expect(erros).toEqual([]);
+    });
+    it('nao sobrescreve nome legitimo, so endereco', () => {
+        const n = notaBase({ nome: 'EMPRESA BOA LTDA', cidade: '', uf: '', cep: '' });
+        const e = aplicarDadosCnpjNaNota(n, {
+            razaoSocial: 'OUTRO NOME', logradouro: 'AV BRASIL', numero: '1',
+            bairro: 'CENTRO', municipio: 'SAO PAULO', uf: 'SP', cep: '01001000',
+        });
+        expect(e.nome).toBe('EMPRESA BOA LTDA');
+        expect(e.cidade).toBe('SAO PAULO');
+    });
+});
+
 describe('separarNotasIssRetido', () => {
     it('remove notas retidas do lote', () => {
         const notas = [notaBase({ retido: '2' }), notaBase({ retido: '1' }), notaBase({ retido: '2' })];

@@ -92,6 +92,15 @@ describe('extrairNumeroSerie — fallbacks', () => {
     });
 });
 
+describe('extrairNomePrestador — rotulos nao vazam como razao social', () => {
+    const { extrairNomePrestador } = jest.requireActual('../services/nftsPdfParserService');
+    it('"Prestador do servico" isolado nao vira nome; cai no fallback', () => {
+        const texto = 'Prestador do servico\nCNPJ 23.098.923/0001-23\nDemais dados';
+        const nome = extrairNomePrestador(texto, '23098923000123');
+        expect(nome).toBe('PRESTADOR 23098923000123');
+    });
+});
+
 describe('extrairCnpjPrestador', () => {
     it('ignora CNPJ do tomador informado', () => {
         const { cnpj } = extrairCnpjPrestador(FIXTURE_ALELO, '60882552000100');

@@ -270,6 +270,69 @@ export function validarNotaNfts(n: NftsNota): { erros: string[]; avisos: string[
     return { erros, avisos };
 }
 
+// ─── Enriquecimento cadastral via CNPJ (BrasilAPI/Receita) ─────────────────
+
+/**
+ * Detecta razao social contaminada por rotulo do PDF (ex.: "Prestador do
+ * servico") ou fallback "PRESTADOR <cnpj>".
+ */
+export function nomePrestadorSuspeito(nome: string): boolean {
+    const n = cleanNfts(nome).trim();
+    if (!n || n.length < 3) return true;
+    if (/^PRESTADOR\s+\d{14}$/i.test(n)) return true;
+    if (/^(?:DADOS\s+DO\s+)?(?:PRESTADOR|TOMADOR|EMITENTE)(?:\s+D[EOA]S?)?(?:\s+SERVI[CG]OS?)?$/i.test(n)) return true;
+    if (/^(?:NOME|RAZAO\s+SOCIAL|NOME\s+EMPRESARIAL)$/i.test(n)) return true;
+    return false;
+}
+
+export function enderecoIncompletoNfts(n: NftsNota): boolean {
+    return !n.cidade || !n.uf || !n.cep || n.cep === '00000000' || soDigitos(n.cep).length !== 8;
+}
+
+export interface DadosCadastraisCnpj {
+    razaoSocial: string;
+    logradouro: string;
+    numero: string;
+    bairro: string;
+    municipio: string;
+    uf: string;
+    cep: string;
+}
+
+const TIPOS_LOGRADOURO_ENRIQ: Record<string, string> = {
+    'RUA': 'RUA', 'R': 'RUA', 'AVENIDA': 'AV', 'AV': 'AV', 'ALAMEDA': 'AL',
+    'TRAVESSA': 'TV', 'VIELA': 'VLA', 'ESTRADA': 'EST', 'RODOVIA': 'ROD',
+    'PRACA': 'PCA', 'LARGO': 'LGO',
+};
+
+/**
+ * Sobrescreve nome/endereco da nota com os dados cadastrais oficiais da
+ * Receita (via BrasilAPI). Retorna nova nota com aviso de origem.
+ */
+export function aplicarDadosCnpjNaNota(n: NftsNota, d: DadosCadastraisCnpj): NftsNota {
+    const nova = { ...n };
+    const corrigiuNome = nomePrestadorSuspeito(n.nome) && !!d.razaoSocial;
+    if (corrigiuNome) nova.nome = d.razaoSocial.slice(0, 75);
+    if (d.municipio && d.uf && d.cep) {
+        let logradouro = cleanNfts(d.logradouro).trim();
+        const m = logradouro.match(/^([A-Za-z]+)\s+(.+)$/);
+        if (m && TIPOS_LOGRADOURO_ENRIQ[m[1].toUpperCase()]) {
+            nova.tipoLogradouro = TIPOS_LOGRADOURO_ENRIQ[m[1].toUpperCase()];
+            logradouro = m[2];
+        }
+        nova.logradouro = (logradouro || 'NAO INFORMADO').slice(0, 50);
+        nova.numeroEndereco = (soDigitos(d.numero) || '0').slice(0, 10);
+        nova.bairro = (cleanNfts(d.bairro).trim() || 'NAO INFORMADO').slice(0, 30);
+        nova.cidade = cleanNfts(d.municipio).trim().slice(0, 50);
+        nova.uf = d.uf.toUpperCase().slice(0, 2);
+        nova.cep = soDigitos(d.cep).slice(0, 8);
+    }
+    nova.aviso = (nova.aviso ? nova.aviso + '. ' : '')
+        + (corrigiuNome ? 'Razao social e endereco' : 'Endereco')
+        + ' obtidos do cadastro da Receita Federal (BrasilAPI)';
+    return nova;
+}
+
 // ─── Geracao do TXT V.001 ───────────────────────────────────────────────────
 
 export const NFTS_DETALHE_TAMANHO_FIXO = 440;
