@@ -60,6 +60,39 @@ export function inferirTipoDeclaracaoCorretoPgdas(err) {
     return null;
 }
 
+/**
+ * Extrai os CNPJs de estabelecimentos (filiais) que o SERPRO diz faltarem no
+ * payload — erro MSG_ISN_018: "Um ou mais [estabelecimentos] existentes no
+ * Cadastro CNPJ não foram enviados no campo Estabelecimento: <cnpj>[, <cnpj>]".
+ * O SN-Entregar exige TODOS os estabelecimentos do CNPJ, mesmo sem receita.
+ * @returns {string[]} CNPJs completos (14 díg) citados no erro.
+ */
+export function extrairEstabelecimentosFaltantesPgdas(err) {
+    const texto = textoErroSerpro(err);
+    if (!/MSG_ISN_018|campo Estabelecimento/i.test(texto)) return [];
+    const idx = texto.search(/Estabelecimento/i);
+    const trecho = idx >= 0 ? texto.slice(idx) : texto;
+    return [...new Set(trecho.match(/\d{14}/g) || [])];
+}
+
+/**
+ * Devolve uma cópia da declaração com os estabelecimentos faltantes incluídos
+ * (sem atividades — a receita permanece agregada na matriz, como o app já
+ * apura). Retorna null se não há nada novo a acrescentar.
+ */
+export function adicionarEstabelecimentosFaltantes(declaracao, cnpjsFaltantes) {
+    if (!Array.isArray(cnpjsFaltantes) || !cnpjsFaltantes.length) return null;
+    const atuais = new Set(
+        (declaracao?.estabelecimentos || []).map((e) => String(e?.cnpjCompleto || '').replace(/\D/g, '')),
+    );
+    const novos = cnpjsFaltantes
+        .map((c) => String(c).replace(/\D/g, ''))
+        .filter((c) => c.length === 14 && !atuais.has(c))
+        .map((cnpjCompleto) => ({ cnpjCompleto, atividades: [] }));
+    if (!novos.length) return null;
+    return { ...declaracao, estabelecimentos: [...(declaracao?.estabelecimentos || []), ...novos] };
+}
+
 function findNumeroDeclaracaoPgdas(value, depth = 0) {
     if (depth > 8 || value == null) return '';
     const parsed = parseMaybeJson(value);
@@ -275,16 +308,32 @@ class SerproProvider {
             };
         }
 
+        // Valida com auto-correção de dois erros conhecidos do SERPRO, até 3x:
+        //  - MSG_ISN_041: tipo de declaração (Original x Retificadora) errado
+        //  - MSG_ISN_018: estabelecimentos (filiais) do CNPJ faltando no payload
+        //    — o app agrega a receita das filiais na matriz, mas o SN-Entregar
+        //    exige TODOS os estabelecimentos listados. Inclui os que faltam
+        //    (sem receita própria) e revalida. Caso real BRISKA (matriz
+        //    .../0001-75 + filial .../0002-56), 09/07/2026.
         let validacao;
-        try {
-            validacao = await this.validarDeclaracaoPgdas({ cnpjLimpo, pa, declaracao });
-        } catch (err) {
-            const tipoCorreto = inferirTipoDeclaracaoCorretoPgdas(err);
-            if (!tipoCorreto || tipoCorreto === tipoDeclaracao) throw err;
-
-            tipoDeclaracao = tipoCorreto;
-            declaracao = { ...declaracao, tipoDeclaracao };
-            validacao = await this.validarDeclaracaoPgdas({ cnpjLimpo, pa, declaracao });
+        for (let tentativa = 0; ; tentativa++) {
+            try {
+                validacao = await this.validarDeclaracaoPgdas({ cnpjLimpo, pa, declaracao });
+                break;
+            } catch (err) {
+                if (tentativa >= 3) throw err;
+                const tipoCorreto = inferirTipoDeclaracaoCorretoPgdas(err);
+                if (tipoCorreto && tipoCorreto !== tipoDeclaracao) {
+                    tipoDeclaracao = tipoCorreto;
+                    declaracao = { ...declaracao, tipoDeclaracao };
+                    continue;
+                }
+                const comFiliais = adicionarEstabelecimentosFaltantes(
+                    declaracao, extrairEstabelecimentosFaltantesPgdas(err),
+                );
+                if (comFiliais) { declaracao = comFiliais; continue; }
+                throw err;
+            }
         }
 
         if (validacao?.dados?._dryRun) {
