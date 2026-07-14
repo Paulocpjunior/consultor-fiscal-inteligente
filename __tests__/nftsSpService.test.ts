@@ -28,8 +28,8 @@ function notaBase(overrides: Partial<NftsNota> = {}): NftsNota {
 }
 
 describe('catalogo NFTS SP', () => {
-    it('tem 645 correlacoes e indices consistentes', () => {
-        expect(CATALOGO_NFTS_SP.length).toBe(645);
+    it('tem 756 correlacoes (645 Anexo 1 + 111 novos 2026) e indices consistentes', () => {
+        expect(CATALOGO_NFTS_SP.length).toBe(756);
         expect(CATALOGO_POR_CODIGO.size).toBeGreaterThan(600);
         expect(CATALOGO_POR_ITEM.size).toBeGreaterThan(150);
         for (const row of CATALOGO_NFTS_SP) {
@@ -118,6 +118,23 @@ describe('selecionarCodigoSp', () => {
             const r = selecionarCodigoSp('texto qualquer', '', cod);
             if (r) expect(CODIGOS_ENCERRADOS_2025.has(r.codigo)).toBe(false);
         }
+    });
+    it('NUNCA seleciona codigo rejeitado empiricamente pela PMSP (erro 310)', () => {
+        const { CODIGOS_REJEITADOS_PMSP } = jest.requireActual('../services/nftsCatalogoSp');
+        expect(CODIGOS_REJEITADOS_PMSP.size).toBe(3);
+        for (const cod of CODIGOS_REJEITADOS_PMSP) {
+            const r = selecionarCodigoSp('suporte tecnico em informatica e licenciamento de software', '', cod);
+            if (r) expect(CODIGOS_REJEITADOS_PMSP.has(r.codigo)).toBe(false);
+        }
+    });
+    it('codigo rejeitado pela PMSP gera erro bloqueante na validacao', () => {
+        const { erros } = validarNotaNfts(notaBase({ codigo: '02917' }));
+        expect(erros.some(e => e.includes('REJEITADO'))).toBe(true);
+    });
+    it('codigos novos 2026 sao selecionaveis (ex.: filho de 01112, item 7.02)', () => {
+        const r = selecionarCodigoSp('', '', '01122');
+        expect(r?.codigo).toBe('01122');
+        expect(r?.subitem).toBe('0702');
     });
     it('normalizarItemLc116 aceita variantes', () => {
         expect(normalizarItemLc116('07,02')).toBe('7.02');

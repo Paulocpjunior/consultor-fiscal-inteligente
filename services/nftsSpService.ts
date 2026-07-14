@@ -15,7 +15,7 @@
  */
 
 import { validarCnpj } from './validadorDocumento';
-import { CATALOGO_POR_CODIGO, CATALOGO_POR_ITEM, CODIGOS_ENCERRADOS_2025, type CatalogoNftsRow } from './nftsCatalogoSp';
+import { CATALOGO_POR_CODIGO, CATALOGO_POR_ITEM, CODIGOS_ENCERRADOS_2025, CODIGOS_REJEITADOS_PMSP, type CatalogoNftsRow } from './nftsCatalogoSp';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -216,7 +216,8 @@ export function selecionarCodigoSp(
 ): CatalogoNftsRow | null {
     // Nunca seleciona automaticamente codigos encerrados pela IN SF/SUREM
     // 3/2026 (invalidos para emissao a partir de 01/01/2026).
-    const vigentes = (rows: CatalogoNftsRow[]) => rows.filter(r => !CODIGOS_ENCERRADOS_2025.has(r.codigo));
+    const vigentes = (rows: CatalogoNftsRow[]) => rows.filter(r =>
+        !CODIGOS_ENCERRADOS_2025.has(r.codigo) && !CODIGOS_REJEITADOS_PMSP.has(r.codigo));
     const cod = codigoEncontrado ? soDigitos(codigoEncontrado).padStart(5, '0').slice(-5) : '';
     let candidatos: CatalogoNftsRow[] = cod ? vigentes(CATALOGO_POR_CODIGO.get(cod) ?? []) : [];
     let item = normalizarItemLc116(itemEncontrado);
@@ -260,6 +261,8 @@ export function validarNotaNfts(n: NftsNota): { erros: string[]; avisos: string[
         erros.push('codigo de servico ausente ou invalido');
     } else if (CODIGOS_ENCERRADOS_2025.has(n.codigo)) {
         erros.push(`codigo de servico ${n.codigo} ENCERRADO em 31/12/2025 (IN SF/SUREM 3/2026) - substituir pelo codigo vigente`);
+    } else if (CODIGOS_REJEITADOS_PMSP.has(n.codigo)) {
+        erros.push(`codigo ${n.codigo} REJEITADO pela PMSP na importacao (erro 310, teste 07/2026) - confirmar codigo vigente na tela de emissao da NFTS`);
     } else if (!CATALOGO_POR_CODIGO.has(n.codigo)) {
         avisos.push(`codigo ${n.codigo} fora do catalogo local (pode ser codigo novo de 2026) - confirmar na tabela vigente da PMSP`);
     }
