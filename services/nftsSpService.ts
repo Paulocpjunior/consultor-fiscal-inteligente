@@ -15,7 +15,7 @@
  */
 
 import { validarCnpj } from './validadorDocumento';
-import { CATALOGO_POR_CODIGO, CATALOGO_POR_ITEM, type CatalogoNftsRow } from './nftsCatalogoSp';
+import { CATALOGO_POR_CODIGO, CATALOGO_POR_ITEM, CODIGOS_ENCERRADOS_2025, type CatalogoNftsRow } from './nftsCatalogoSp';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -214,16 +214,19 @@ export function selecionarCodigoSp(
     codigoEncontrado = '',
     natureza: 'PJ' | 'PF' = 'PJ',
 ): CatalogoNftsRow | null {
+    // Nunca seleciona automaticamente codigos encerrados pela IN SF/SUREM
+    // 3/2026 (invalidos para emissao a partir de 01/01/2026).
+    const vigentes = (rows: CatalogoNftsRow[]) => rows.filter(r => !CODIGOS_ENCERRADOS_2025.has(r.codigo));
     const cod = codigoEncontrado ? soDigitos(codigoEncontrado).padStart(5, '0').slice(-5) : '';
-    let candidatos: CatalogoNftsRow[] = cod ? (CATALOGO_POR_CODIGO.get(cod) ?? []) : [];
+    let candidatos: CatalogoNftsRow[] = cod ? vigentes(CATALOGO_POR_CODIGO.get(cod) ?? []) : [];
     let item = normalizarItemLc116(itemEncontrado);
-    if (!candidatos.length && item) candidatos = CATALOGO_POR_ITEM.get(item) ?? [];
+    if (!candidatos.length && item) candidatos = vigentes(CATALOGO_POR_ITEM.get(item) ?? []);
     if (!candidatos.length) {
         const limpo = cleanNfts(texto).toLowerCase();
         for (const [padrao, itemKw] of KEYWORDS_ITEM) {
             if (padrao.test(limpo)) {
                 item = itemKw;
-                candidatos = CATALOGO_POR_ITEM.get(itemKw) ?? [];
+                candidatos = vigentes(CATALOGO_POR_ITEM.get(itemKw) ?? []);
                 break;
             }
         }
@@ -253,7 +256,13 @@ export function validarNotaNfts(n: NftsNota): { erros: string[]; avisos: string[
     if (!n.numero || !soDigitos(n.numero)) erros.push('numero da nota ausente');
     if (!/^\d{8}$/.test(n.data)) erros.push('data de emissao ausente ou invalida');
     if (!n.valorCentavos || n.valorCentavos <= 0) erros.push('valor do servico zerado ou invalido');
-    if (!n.codigo || !CATALOGO_POR_CODIGO.has(n.codigo)) erros.push('codigo de servico nao validado no catalogo SP');
+    if (!n.codigo || !/^\d{5}$/.test(n.codigo)) {
+        erros.push('codigo de servico ausente ou invalido');
+    } else if (CODIGOS_ENCERRADOS_2025.has(n.codigo)) {
+        erros.push(`codigo de servico ${n.codigo} ENCERRADO em 31/12/2025 (IN SF/SUREM 3/2026) - substituir pelo codigo vigente`);
+    } else if (!CATALOGO_POR_CODIGO.has(n.codigo)) {
+        avisos.push(`codigo ${n.codigo} fora do catalogo local (pode ser codigo novo de 2026) - confirmar na tabela vigente da PMSP`);
+    }
     if (/^PRESTADOR\s+\d{14}$/i.test(n.nome)) avisos.push('razao social nao localizada; usado PRESTADOR + CNPJ');
     if (n.cep && n.cep !== '00000000' && soDigitos(n.cep).length !== 8) avisos.push('CEP invalido');
     if (!n.cidade || !n.uf || !n.cep || n.cep === '00000000') avisos.push('endereco incompleto; revisar antes de importar (erro 466)');

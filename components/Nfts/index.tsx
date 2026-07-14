@@ -161,12 +161,14 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 if (d) nova.data = d;
             } else if (campo === 'codigo') {
                 const cod = soDigitos(valor).padStart(5, '0').slice(-5);
+                nova.codigo = cod;
                 const rows = CATALOGO_POR_CODIGO.get(cod);
                 if (rows?.length) {
-                    nova.codigo = cod;
                     nova.subitem = rows[0].subitem;
                     nova.aliquota = rows[0].aliquota;
                 }
+                // Codigo fora do catalogo (ex.: novos codigos 2026) e aceito;
+                // subitem/aliquota atuais sao mantidos e a validacao emite aviso.
             } else if (campo === 'retido') {
                 nova.retido = valor === '1' ? '1' : '2';
             } else {

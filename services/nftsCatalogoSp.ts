@@ -669,6 +669,19 @@ export const CATALOGO_NFTS_SP: CatalogoNftsRow[] = [
     { codigo: '08901', item: '40.01', subitem: '4001', natureza: 'PF', aliquota: '0500', descricao: 'Obras de arte sob encomenda (regime especial – profissional autônomo)' },
 ];
 
+/**
+ * Codigos de servico ENCERRADOS em 31/12/2025 pela IN SF/SUREM nº 3, de
+ * 27/03/2026, art. 4º (ajustes da Reforma Tributaria - LC 214/2025).
+ * NAO podem ser usados em notas emitidas a partir de 01/01/2026.
+ * Fonte: legislacao.prefeitura.sp.gov.br (texto consolidado da IN 3/2026).
+ */
+export const CODIGOS_ENCERRADOS_2025: Set<string> = new Set([
+    '02685', '02693', '02686', '01503', '01520', '01538', '01546', '01589',
+    '01600', '01627', '05870', '02340', '03980', '02143', '02232', '05542',
+    '05543', '06653', '06971', '07685', '08036', '08044', '08575', '08899',
+    '02489', '08045', '08274', '07684', '07323', '01112',
+]);
+
 export const CATALOGO_POR_CODIGO: Map<string, CatalogoNftsRow[]> = new Map();
 export const CATALOGO_POR_ITEM: Map<string, CatalogoNftsRow[]> = new Map();
 for (const row of CATALOGO_NFTS_SP) {

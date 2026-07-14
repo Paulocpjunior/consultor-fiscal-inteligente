@@ -8,7 +8,7 @@ import {
     validarNotaNfts, montarRegistroDetalhe, gerarLoteNfts, separarNotasIssRetido,
     NFTS_DETALHE_TAMANHO_FIXO, type NftsNota,
 } from '../services/nftsSpService';
-import { CATALOGO_NFTS_SP, CATALOGO_POR_CODIGO, CATALOGO_POR_ITEM } from '../services/nftsCatalogoSp';
+import { CATALOGO_NFTS_SP, CATALOGO_POR_CODIGO, CATALOGO_POR_ITEM, CODIGOS_ENCERRADOS_2025 } from '../services/nftsCatalogoSp';
 
 // CNPJ valido de teste (digitos verificadores corretos): 11.222.333/0001-81
 const CNPJ_VALIDO = '11222333000181';
@@ -110,6 +110,15 @@ describe('selecionarCodigoSp', () => {
         expect(r).not.toBeNull();
         expect(r?.item).toBe('14.01');
     });
+    it('NUNCA seleciona automaticamente codigo encerrado (IN 3/2026)', () => {
+        expect(CODIGOS_ENCERRADOS_2025.size).toBe(30);
+        // Para cada codigo encerrado presente no catalogo, a selecao exata
+        // por codigo nao pode retorna-lo.
+        for (const cod of CODIGOS_ENCERRADOS_2025) {
+            const r = selecionarCodigoSp('texto qualquer', '', cod);
+            if (r) expect(CODIGOS_ENCERRADOS_2025.has(r.codigo)).toBe(false);
+        }
+    });
     it('normalizarItemLc116 aceita variantes', () => {
         expect(normalizarItemLc116('07,02')).toBe('7.02');
         expect(normalizarItemLc116('17.01')).toBe('17.01');
@@ -130,9 +139,14 @@ describe('validarNotaNfts', () => {
         const { erros } = validarNotaNfts(notaBase({ valorCentavos: 0 }));
         expect(erros.some(e => e.includes('valor'))).toBe(true);
     });
-    it('codigo fora do catalogo gera erro', () => {
-        const { erros } = validarNotaNfts(notaBase({ codigo: '99999' }));
-        expect(erros.some(e => e.includes('catalogo'))).toBe(true);
+    it('codigo fora do catalogo gera AVISO (pode ser codigo novo de 2026)', () => {
+        const { erros, avisos } = validarNotaNfts(notaBase({ codigo: '99999' }));
+        expect(erros).toEqual([]);
+        expect(avisos.some(a => a.includes('fora do catalogo'))).toBe(true);
+    });
+    it('codigo ENCERRADO pela IN SF/SUREM 3/2026 gera erro bloqueante', () => {
+        const { erros } = validarNotaNfts(notaBase({ codigo: '02693' }));
+        expect(erros.some(e => e.includes('ENCERRADO'))).toBe(true);
     });
     it('extracao por IA gera aviso de conferencia', () => {
         const { avisos } = validarNotaNfts(notaBase({ origemExtracao: 'gemini' }));
