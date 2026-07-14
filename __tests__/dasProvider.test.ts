@@ -8,7 +8,7 @@ jest.mock('../sefaz-backend/serpro-client.js', () => ({
 // @ts-ignore modulo .js puro
 import { normalizarRespostaDasSerpro } from '../sefaz-backend/das-response-normalizer.js';
 // @ts-ignore modulo .js puro
-import { extrairNumeroDeclaracaoConsultaPgdas, getDasProvider, inferirTipoDeclaracaoCorretoPgdas } from '../sefaz-backend/das-provider.js';
+import { extrairNumeroDeclaracaoConsultaPgdas, getDasProvider, inferirTipoDeclaracaoCorretoPgdas, extrairEstabelecimentosFaltantesPgdas, adicionarEstabelecimentosFaltantes } from '../sefaz-backend/das-provider.js';
 
 describe('normalizarRespostaDasSerpro', () => {
     it('extrai PDF e detalhamento quando SERPRO retorna dados em array', () => {
@@ -139,5 +139,69 @@ describe('das-provider PGDAS retificadora', () => {
         expect(mockInvokeIntegraContador.mock.calls[2][0].dados.declaracao.tipoDeclaracao).toBe(2);
         expect(mockInvokeIntegraContador.mock.calls[3][0].dados.indicadorTransmissao).toBe(true);
         expect(mockInvokeIntegraContador.mock.calls[3][0].dados.declaracao.tipoDeclaracao).toBe(2);
+    });
+});
+
+describe('PGDAS-D — estabelecimentos faltantes (MSG_ISN_018, empresa com filial)', () => {
+    beforeEach(() => mockInvokeIntegraContador.mockReset());
+
+    const erroFilial = () => {
+        const e = new Error(
+            'SERPRO 400: [EntradaIncorreta-PGDASD-MSG_ISN_018] - SN-Entregar: Um ou mais nis '
+            + 'existentes no Cadastro CNPJ não foram enviados no campo Estabelecimento: 54121843000256.'
+        ) as Error & { serproMessages?: Array<{ codigo: string; texto: string }> };
+        e.serproMessages = [{
+            codigo: 'EntradaIncorreta-PGDASD-MSG_ISN_018',
+            texto: 'Um ou mais nis existentes no Cadastro CNPJ não foram enviados no campo Estabelecimento: 54121843000256.',
+        }];
+        return e;
+    };
+
+    it('extrairEstabelecimentosFaltantesPgdas pega o(s) CNPJ(s) do erro', () => {
+        expect(extrairEstabelecimentosFaltantesPgdas(erroFilial())).toEqual(['54121843000256']);
+        expect(extrairEstabelecimentosFaltantesPgdas(new Error('outro erro'))).toEqual([]);
+    });
+
+    it('adicionarEstabelecimentosFaltantes inclui filial sem atividades e não duplica a matriz', () => {
+        const decl = { estabelecimentos: [{ cnpjCompleto: '54121843000175', atividades: [{ idAtividade: 11, valorAtividade: 10, receitasAtividade: [] }] }] };
+        const novo = adicionarEstabelecimentosFaltantes(decl, ['54121843000256', '54121843000175']);
+        expect(novo.estabelecimentos).toHaveLength(2);
+        expect(novo.estabelecimentos[1]).toEqual({ cnpjCompleto: '54121843000256', atividades: [] });
+        // nada novo → null
+        expect(adicionarEstabelecimentosFaltantes(decl, ['54121843000175'])).toBeNull();
+    });
+
+    it('transmitir: ao receber MSG_ISN_018, adiciona a filial e revalida (auto-correção)', async () => {
+        const declaracao = {
+            receitaPaCompetenciaInterno: 26832.42,
+            receitaPaCompetenciaExterno: 0,
+            receitaPaCaixaInterno: null, receitaPaCaixaExterno: null,
+            valorFixoIcms: null, valorFixoIss: null,
+            receitasBrutasAnteriores: [],
+            estabelecimentos: [{ cnpjCompleto: '54121843000175', atividades: [{ idAtividade: 11, valorAtividade: 26832.42, receitasAtividade: [{ valor: 26832.42 }] }] }],
+        };
+
+        mockInvokeIntegraContador
+            .mockResolvedValueOnce({ dados: {} })            // consultarDeclaracaoPa → não existe (tipo 1)
+            .mockRejectedValueOnce(erroFilial())             // validação → MSG_ISN_018
+            .mockResolvedValueOnce({ dados: [{ valoresDevidos: [{ codigoTributo: 1010, valor: 26832.42 }] }] }) // revalidação OK
+            .mockResolvedValueOnce({ dados: [{ numeroDeclaracao: '99999999999999999', numeroRecibo: 'REC-9', valoresDevidos: [{ codigoTributo: 1010, valor: 26832.42 }] }] }); // transmissão
+
+        const provider = getDasProvider() as any;
+        const result = await provider.transmitirPgdasD({
+            empresaCnpj: '54.121.843/0001-75', competencia: '2026-06', valor: 26832.42,
+            dadosPgdas: { declaracao },
+        });
+
+        expect(result.numeroDeclaracao).toBe('99999999999999999');
+        expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(4);
+        // a revalidação (call[2]) já leva a filial no array de estabelecimentos
+        const estabRevalidacao = mockInvokeIntegraContador.mock.calls[2][0].dados.declaracao.estabelecimentos;
+        expect(estabRevalidacao.map((e: any) => e.cnpjCompleto).sort())
+            .toEqual(['54121843000175', '54121843000256']);
+        // e a transmissão também
+        expect(mockInvokeIntegraContador.mock.calls[3][0].dados.indicadorTransmissao).toBe(true);
+        expect(mockInvokeIntegraContador.mock.calls[3][0].dados.declaracao.estabelecimentos)
+            .toHaveLength(2);
     });
 });
