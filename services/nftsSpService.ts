@@ -327,6 +327,14 @@ export function aplicarDadosCnpjNaNota(n: NftsNota, d: DadosCadastraisCnpj): Nft
         nova.uf = d.uf.toUpperCase().slice(0, 2);
         nova.cep = soDigitos(d.cep).slice(0, 8);
     }
+    // Remove avisos que ficaram obsoletos apos o enriquecimento
+    // (endereco incompleto / erro 466 / razao social nao localizada).
+    const obsoleto = /466|endereco incompleto|revisar endereco|razao social nao localizada/i;
+    nova.aviso = nova.aviso
+        .split(/\.\s+/)
+        .map(s => s.trim())
+        .filter(s => s && !(obsoleto.test(s) && (corrigiuNome || !enderecoIncompletoNfts(nova))))
+        .join('. ');
     nova.aviso = (nova.aviso ? nova.aviso + '. ' : '')
         + (corrigiuNome ? 'Razao social e endereco' : 'Endereco')
         + ' obtidos do cadastro da Receita Federal (BrasilAPI)';

@@ -223,7 +223,10 @@ describe('enriquecimento cadastral via CNPJ', () => {
         expect(enderecoIncompletoNfts(notaBase())).toBe(false);
     });
     it('aplica dados da Receita substituindo nome e endereco', () => {
-        const n = notaBase({ nome: 'Prestador do servico', cidade: '', uf: '', cep: '' });
+        const n = notaBase({
+            nome: 'Prestador do servico', cidade: '', uf: '', cep: '',
+            aviso: 'Numero obtido de nome do arquivo (confianca baixa). Revisar endereco; pode gerar erro 466 na importacao. endereco incompleto; revisar antes de importar (erro 466)',
+        });
         const enriquecida = aplicarDadosCnpjNaNota(n, {
             razaoSocial: '23.098.923 ELOVI HIRT',
             logradouro: 'RUA OTTERNO SCHAEFFER', numero: '856',
@@ -236,6 +239,7 @@ describe('enriquecimento cadastral via CNPJ', () => {
         expect(enriquecida.uf).toBe('RS');
         expect(enriquecida.cep).toBe('95890000');
         expect(enriquecida.aviso).toContain('Receita Federal');
+        expect(enriquecida.aviso).not.toMatch(/466|endereco incompleto/i);
         const { erros } = validarNotaNfts(enriquecida);
         expect(erros).toEqual([]);
     });
