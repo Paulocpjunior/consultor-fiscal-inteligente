@@ -103,8 +103,11 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
         if (empresaSel.ccmSp) setCcm(soDigitos(empresaSel.ccmSp));
     }, [empresaSel]);
 
-    const processarArquivos = async (files: FileList | null) => {
-        if (!files || !files.length) return;
+    // Recebe File[] (nao FileList): a FileList e uma referencia VIVA do input;
+    // limpar input.value durante o processamento assincrono a esvazia e so o
+    // primeiro arquivo era processado (bug reportado no teste em lote).
+    const processarArquivos = async (files: File[]) => {
+        if (!files.length) return;
         setErro(null);
         setStatus({ total: files.length, atual: 0, arquivoAtual: '', fase: 'processando' });
         const novasNotas: NftsNota[] = [];
@@ -246,7 +249,7 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     <label className="px-4 py-2 text-xs font-bold rounded-lg cursor-pointer" style={{ background: 'var(--accent)', color: '#fff' }}>
                         Selecionar PDFs
                         <input type="file" accept=".pdf,application/pdf" multiple className="hidden" style={{ display: 'none' }}
-                            onChange={e => { void processarArquivos(e.target.files); e.target.value = ''; }} />
+                            onChange={e => { const arr = Array.from(e.target.files ?? []); e.target.value = ''; void processarArquivos(arr); }} />
                     </label>
                     {notas.length > 0 || pendencias.length > 0 ? (
                         <>
