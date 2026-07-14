@@ -32,6 +32,7 @@ export const searchDescriptions: Record<SearchType, string> = {
     [SearchType.ANALISADOR_REGIME]: 'Compare cenários de tributação (Simples, Lucro Presumido, Lucro Real) e identifique o regime mais vantajoso.',
     [SearchType.ANALISE_CREDITOS]: 'Análise de créditos PIS/COFINS, conciliação bancária e mapeamento por categoria fiscal.',
     [SearchType.SPED_FISCAL]: 'Geração do arquivo SPED Fiscal (EFD ICMS/IPI) — escrituração digital mensal.',
+    [SearchType.NFTS_SP]: 'NFTS São Paulo — lê PDFs de serviços tomados (com IA para escaneados) e gera o TXT de importação em lote na PMSP.',
     [SearchType.CAIXA_POSTAL]: 'Caixa Postal e-CAC — mensagens da Receita Federal por empresa (intimações, malha fiscal, comunicados).',
     [SearchType.DAS_SIMPLES]: 'DAS Simples Nacional — emissão regular (com PGDAS-D) e avulso, controle de pagamentos por empresa.',
     [SearchType.DCTFWEB]: 'DCTFWeb — Declaração de Débitos e Créditos Tributários Federais Previdenciários (empresas Lucro Presumido/Real), com transmissão, DARF e MIT.',
@@ -95,6 +96,7 @@ export const MENU_GRUPOS: MenuGrupo[] = [
         titulo: 'Documentos Fiscais', cor: '#16a34a', cards: [
             { type: SearchType.IMPORTA_XML, label: 'Central de Documentos Fiscais', Icon: DownloadIcon },
             { type: SearchType.SPED_FISCAL, label: 'SPED Fiscal', Icon: DocumentTextIcon },
+            { type: SearchType.NFTS_SP, label: 'NFTS São Paulo', Icon: DocumentTextIcon },
             { type: SearchType.ANALISE_RELATORIO_SAGE, label: 'Análise SAGE', Icon: DocumentTextIcon },
             { type: SearchType.ANALISE_CREDITOS, Icon: CalculatorIcon },
             { type: SearchType.EMISSAO_TRIBUTOS, Icon: RocketIcon },

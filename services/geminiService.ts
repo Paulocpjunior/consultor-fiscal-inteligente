@@ -349,6 +349,31 @@ export const extractDocumentData = async (base64Data: string, mimeType: string =
 
 export const extractInvoiceDataFromPdf = async (base64Pdf: string): Promise<any[]> => extractDocumentData(base64Pdf, 'application/pdf');
 
+export const extractNftsDataFromPdf = async (base64Pdf: string): Promise<any> => {
+    // FALLBACK do modulo NFTS SP: usado apenas quando o pdfjs nao consegue
+    // extrair texto (PDF escaneado). O resultado passa pelas MESMAS
+    // validacoes do fluxo deterministico (montarNotaDeGemini).
+    const prompt = (
+        'Voce e um extrator de dados de NOTA FISCAL DE SERVICO ELETRONICA (NFS-e) brasileira.\n'
+        + 'O documento pode ser escaneado. Extraia os dados do PRESTADOR do servico (quem emitiu),\n'
+        + 'NUNCA do tomador. Nao invente dados: se um campo nao estiver legivel, retorne null.\n\n'
+        + 'Responda APENAS JSON valido no formato:\n'
+        + '{"numero":"...","serie":"...","dataEmissao":"DD/MM/AAAA","cnpjPrestador":"14 digitos",\n'
+        + '"razaoSocial":"...","valorTotal":"1234,56","itemLc116":"X.XX ou null",\n'
+        + '"codigoServicoMunicipal":"4-5 digitos ou null","descricaoServico":"...",\n'
+        + '"issRetido":true/false,"simplesNacional":true/false,"mei":true/false,\n'
+        + '"email":"... ou null","endereco":{"tipoLogradouro":"RUA/AV/...","logradouro":"...",\n'
+        + '"numero":"...","complemento":"...","bairro":"...","cidade":"...","uf":"XX","cep":"8 digitos"}}\n\n'
+        + 'issRetido = true SOMENTE se o ISS/ISSQN estiver explicitamente retido pelo tomador\n'
+        + '(ignore retencoes de IR, INSS, PIS, COFINS e CSLL).'
+    );
+    const r = await withRetry(() => callProxy([
+        { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
+        { text: prompt },
+    ]));
+    return safeJsonParse(r.text || 'null');
+};
+
 export const extractPgdasDataFromPdf = async (base64Pdf: string): Promise<any> => {
     // FALLBACK: usado apenas quando o parser deterministico (pgdasPdfParser)
     // nao consegue extrair. Prompt corrigido (anterior pedia "RBT12" e o

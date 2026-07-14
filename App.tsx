@@ -45,6 +45,7 @@ const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
 const VencimentosHub = lazy(() => import('./components/Vencimentos/VencimentosHub'));
 const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocumentosFiscais'));
 const SpedFiscal = lazy(() => import('./components/SpedFiscal'));
+const NftsSp = lazy(() => import('./components/Nfts'));
 const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
 const AnalisadorRegime = lazy(() => import('./components/AnalisadorRegime'));
 // Hubs que fundem cada gênero num só card (sub-abas internas):
@@ -962,6 +963,18 @@ const App: React.FC = () => {
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <SpedFiscal
+                                    currentUser={currentUser}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {/* NFTS SP — Gerador de Lotes (Prefeitura de Sao Paulo) */}
+                        {searchType === SearchType.NFTS_SP && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <NftsSp
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />

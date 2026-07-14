@@ -12,6 +12,7 @@ export enum SearchType {
   ANALISADOR_REGIME = 'Regime Tributário',
   ANALISE_CREDITOS = 'Análise de Créditos',
   SPED_FISCAL = 'SPED Fiscal',
+  NFTS_SP = 'NFTS São Paulo',
   CAIXA_POSTAL = 'Caixa Postal',
   DAS_SIMPLES = 'DAS Simples Nacional',
   DCTFWEB = 'DCTFWeb',
