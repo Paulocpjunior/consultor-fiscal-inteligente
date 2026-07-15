@@ -113,6 +113,14 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
   let cStatFinal = null;
   let xMotivoFinal = null;
   let rateLimited = false;
+  let maxNSUFinal = null;
+  // Chaves de resNFe importados nesta sync — a Ciência é disparada DEPOIS da
+  // paginação, em fila sequencial. Antes era setImmediate POR DOCUMENTO durante
+  // a paginação: cada ciência re-baixava a completa via consChNFe no MESMO
+  // webservice NFeDistribuicaoDFe, em rajada concorrente com as páginas → a
+  // SEFAZ devolvia cStat=656 e a captura parava no meio (caso VINATEX:
+  // "baixou algumas notas mas não todas", todo dia).
+  const resumosParaCiencia = [];
 
   // Tenta carregar cert especifico da empresa. Se a empresa for filial sem
   // PFX proprio, reaproveita um A1 valido da mesma raiz CNPJ (matriz/filial).
@@ -239,29 +247,12 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
                 status: r.status,
                 motivo: r.upgrade ? 'resumo→completa (valor/itens gravados)' : null,
               });
-              // Manifestacao automatica: assim que um resNFe e importado com
-              // sucesso, dispara 'Ciencia da Operacao' (210210) em background.
-              // SEFAZ libera o procNFe completo na proxima DistDFe pra essa
-              // chave. Sem isso a base fica so com resumos, sem itens/totais.
-              // Nao dispara pra 'atualizado' (ja e a completa, nao precisa).
+              // Manifestacao automatica: resNFe importado entra na FILA de
+              // 'Ciencia da Operacao' (210210), processada apos a paginacao.
+              // SEFAZ libera o procNFe completo no proximo ciclo DistDFe.
+              // Nao enfileira 'atualizado' (ja e a completa, nao precisa).
               if (r.tipoDoc === 'resNFe' && r.chave) {
-                setImmediate(async () => {
-                  try {
-                    const { manifestarUma } = await import('./manifesto-orchestrator.js');
-                    await manifestarUma({
-                      chNFe: r.chave,
-                      cnpjDestinatario: cnpjNum,
-                      tipo: 'ciencia',
-                      capturadoPor: { ...capturadoPor, motivo: 'auto-pos-import-resNFe' },
-                      // empresaId+uf habilitam o re-download imediato da
-                      // procNFe completa depois da ciência aceita.
-                      empresaId,
-                      uf,
-                    });
-                  } catch (mfErr) {
-                    console.warn(`[auto-manifestar] ${r.chave} falhou:`, mfErr.message);
-                  }
-                });
+                resumosParaCiencia.push(r.chave);
               }
             } else if (r.status === 'duplicado') {
               duplicados++;
@@ -295,23 +286,66 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
       }
 
       if (result.ultNSU) ultNSU = result.ultNSU;
+      if (result.maxNSU) maxNSUFinal = result.maxNSU;
       if (result.maxNSU && result.ultNSU && result.maxNSU === result.ultNSU) break;
       if (result.cStat !== '138') break;
     }
+
+    // Pendência estimada: quantos NSUs a SEFAZ ainda tem além do cursor.
+    // > 0 significa "ainda faltam documentos" — visível no /state e no painel,
+    // pra ninguém mais precisar comparar com a SIEG pra saber que está atrás.
+    const pendenciaNSU = (maxNSUFinal && ultNSU)
+      ? Math.max(0, parseInt(maxNSUFinal, 10) - parseInt(ultNSU, 10))
+      : 0;
 
     await persisteUltNSU(cnpjNum, ultNSU, {
       cStatUltimaSync: cStatFinal,
       xMotivoUltimaSync: xMotivoFinal,
       paginas: pagina,
+      maxNSUUltimaSync: maxNSUFinal,
+      pendenciaNSU,
       ultimoColaborador: capturadoPor?.email || null,
       fonteUltimaSync: capturadoPor?.fonte || 'desconhecido',
     });
+
+    // Fila de Ciência pós-paginação: sequencial, espaçada, SEM re-download
+    // (skipRedownload) — zero chamadas extras ao NFeDistribuicaoDFe. Roda em
+    // background pra não travar a resposta do /sync-one.
+    if (resumosParaCiencia.length > 0) {
+      const chaves = [...resumosParaCiencia];
+      console.log(`[sync-orchestrator] empresa=${empresaId} enfileirando ciência de ${chaves.length} resumo(s) pós-paginação`);
+      setImmediate(async () => {
+        try {
+          const { manifestarUma } = await import('./manifesto-orchestrator.js');
+          for (const chave of chaves) {
+            try {
+              await manifestarUma({
+                chNFe: chave,
+                cnpjDestinatario: cnpjNum,
+                tipo: 'ciencia',
+                capturadoPor: { ...capturadoPor, motivo: 'auto-pos-import-resNFe' },
+                empresaId,
+                uf,
+                skipRedownload: true,
+              });
+            } catch (mfErr) {
+              console.warn(`[auto-manifestar] ${chave} falhou:`, mfErr.message);
+            }
+            await new Promise(r => setTimeout(r, 1200));
+          }
+        } catch (e) {
+          console.warn('[sync-orchestrator] fila de ciência abortou:', e.message);
+        }
+      });
+    }
 
     if (rateLimited) {
       return {
         ok: false, rateLimited: true,
         motivo: 'SEFAZ retornou cStat 656 (Consumo Indevido) — aguarde 1h.',
         novosXmls, duplicados, erros, ultNSU, paginas: pagina,
+        maxNSU: maxNSUFinal, pendenciaNSU,
+        cienciasEnfileiradas: resumosParaCiencia.length,
         documentosProcessados,
       };
     }
@@ -319,6 +353,8 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
     return {
       ok: true, novosXmls, duplicados, erros, ultNSU, paginas: pagina,
       cStat: cStatFinal, xMotivo: xMotivoFinal,
+      maxNSU: maxNSUFinal, pendenciaNSU,
+      cienciasEnfileiradas: resumosParaCiencia.length,
       documentosProcessados,
     };
   } catch (e) {

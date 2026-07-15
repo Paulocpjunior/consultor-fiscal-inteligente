@@ -170,7 +170,12 @@ async function baixarCompletaAposManifestacao({ chNFe, cnpjDestinatario, empresa
   }
 }
 
-export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa = null, dryRun = false, capturadoPor = null, empresaId = null, uf = null }) {
+// skipRedownload=true pula o consChNFe pós-ciência. IMPORTANTE em lote: o
+// re-download bate no MESMO webservice NFeDistribuicaoDFe da captura — dezenas
+// de consChNFe em rajada geram cStat=656 (Consumo Indevido) e DERRUBAM a
+// paginação DistDFe da própria empresa (caso VINATEX: captura parava no meio,
+// "faltavam notas" todo dia). A completa chega no próximo ciclo DistDFe.
+export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa = null, dryRun = false, capturadoPor = null, empresaId = null, uf = null, skipRedownload = false }) {
   if (!TIPOS_MANIFESTACAO.includes(tipo)) {
     throw new Error(`Tipo inválido: ${tipo}. Use: ${TIPOS_MANIFESTACAO.join(', ')}`);
   }
@@ -232,12 +237,15 @@ export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia',
         await docRef.update({ eventos: [...eventosExistentes, novoEvento] });
       }
       // Ciência/Confirmação aceita → busca a procNFe completa na hora.
+      // Em lote (skipRedownload), adia: a completa vem no próximo DistDFe.
       if (tipo === 'ciencia' || tipo === 'confirmacao') {
-        auditoria.baixaCompleta = await baixarCompletaAposManifestacao({
-          chNFe,
-          cnpjDestinatario: String(cnpjDestinatario).replace(/\D/g, ''),
-          empresaId, uf, certOverride, capturadoPor,
-        });
+        auditoria.baixaCompleta = skipRedownload
+          ? { ok: false, adiada: true, motivo: 'lote — completa virá no próximo ciclo DistDFe' }
+          : await baixarCompletaAposManifestacao({
+              chNFe,
+              cnpjDestinatario: String(cnpjDestinatario).replace(/\D/g, ''),
+              empresaId, uf, certOverride, capturadoPor,
+            });
       }
     }
   }
@@ -246,7 +254,7 @@ export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia',
   return result;
 }
 
-export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun = false, tipo = 'ciencia', capturadoPor = null } = {}) {
+export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun = false, tipo = 'ciencia', capturadoPor = null, skipRedownload = true } = {}) {
   const elegiveis = await listarElegiveis({ empresaId, limit, tipo });
   const resultado = { total: elegiveis.length, sucessos: 0, falhas: 0, detalhes: [] };
 
@@ -259,6 +267,9 @@ export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun
         dryRun,
         capturadoPor,
         empresaId: doc.empresaId || null,
+        // Lote NUNCA re-baixa via consChNFe por padrão: até 100 consultas em
+        // rajada no NFeDistribuicaoDFe = cStat 656 pra raiz inteira por 1h+.
+        skipRedownload,
       });
       const cStat = r.retorno?.eventos?.[0]?.cStat;
       const aceito = ['135', '136'].includes(cStat);
