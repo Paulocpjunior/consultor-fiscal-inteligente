@@ -44,6 +44,10 @@ export interface DfeCaptureResult {
     rateLimited?: boolean;
     foraDeJanela?: boolean;
     documentosProcessados?: DfeDocProcessado[];
+    /** NSUs que a SEFAZ ainda tem além do cursor (>0 = ainda faltam docs). */
+    pendenciaNSU?: number;
+    /** Resumos que entraram na fila de Ciência pós-captura. */
+    cienciasEnfileiradas?: number;
 }
 
 export interface SefazWindow {
@@ -62,6 +66,8 @@ export interface SefazState {
         cStatUltimaSync?: string;
         xMotivoUltimaSync?: string;
         paginas?: number;
+        maxNSUUltimaSync?: string;
+        pendenciaNSU?: number;
     } | null;
     lock: {
         startedAt?: any;
@@ -108,9 +114,15 @@ export async function captureFromSefaz(req: DfeCaptureRequest): Promise<DfeCaptu
         const pag = data.paginas ? ` · ${data.paginas} pág` : '';
         const cInfo = data.cStat ? interpretarCstat(data.cStat, data.xMotivo) : null;
         const acao = cInfo?.acao ? ` ⚠ ${cInfo.acao}` : '';
+        const pendencia = (data.pendenciaNSU || 0) > 0
+            ? ` · ⏳ ~${data.pendenciaNSU} doc(s) ainda na fila da SEFAZ (capture de novo em ~1h ou aguarde o próximo ciclo)`
+            : '';
+        const ciencias = (data.cienciasEnfileiradas || 0) > 0
+            ? ` · ${data.cienciasEnfileiradas} resumo(s) manifestando (completa vem no próximo ciclo)`
+            : '';
         return {
             sucesso: true,
-            motivo: `${data.novosXmls || 0} novos · ${data.duplicados || 0} dup · ${data.erros || 0} erros${cStatLabel ? ` · ${cStatLabel}${xMotivo}` : ''}${nsu}${pag}${acao}`,
+            motivo: `${data.novosXmls || 0} novos · ${data.duplicados || 0} dup · ${data.erros || 0} erros${cStatLabel ? ` · ${cStatLabel}${xMotivo}` : ''}${nsu}${pag}${pendencia}${ciencias}${acao}`,
             itens: [],
             novosXmls: data.novosXmls,
             duplicados: data.duplicados,
@@ -120,6 +132,8 @@ export async function captureFromSefaz(req: DfeCaptureRequest): Promise<DfeCaptu
             documentosProcessados: data.documentosProcessados,
             xMotivo: data.xMotivo,
             paginas: data.paginas,
+            pendenciaNSU: data.pendenciaNSU,
+            cienciasEnfileiradas: data.cienciasEnfileiradas,
         };
     } catch (err: any) {
         return { sucesso: false, motivo: err.message || 'Erro de rede', itens: [] };
