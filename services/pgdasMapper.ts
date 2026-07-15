@@ -28,14 +28,27 @@ interface CnaeInputState {
     isExterior: boolean;
 }
 
+/** Receita de UMA filial na competência, repartida por atividade. */
+export interface FilialReceitaInput {
+    cnpj: string;      // CNPJ completo (14 díg) da filial
+    comercio: number;  // Anexo I
+    industria: number; // Anexo II
+    servico: number;   // Anexo III/IV/V
+}
+
 export interface PgdasMapperInput {
     empresa: SimplesNacionalEmpresa;
     resumo: SimplesNacionalResumo;
     mesApuracao: Date;
     faturamentoPorCnae: Record<string, CnaeInputState>;
+    // LEGADO: buckets consolidados na matriz (empresas sem filiais cadastradas).
     filialComercio: number;
     filialIndustria: number;
     filialServico: number;
+    // NOVO: receita por estabelecimento filial. Quando informado (com valor),
+    // cada CNPJ vira um estabelecimento próprio no PGDAS-D e os buckets
+    // consolidados acima são IGNORADOS (evita dupla contagem).
+    filiaisReceita?: FilialReceitaInput[];
     icmsVendas: number;
 }
 
@@ -190,6 +203,41 @@ function serviceFallbackAnexo(empresa: SimplesNacionalEmpresa): SimplesNacionalE
     return ['III', 'IV', 'V'].includes(anexo) ? anexo : 'III';
 }
 
+const soDigitos = (v: string) => String(v || '').replace(/\D/g, '');
+
+/**
+ * Monta as atividades de UM estabelecimento a partir da receita repartida por
+ * tipo (comércio Anexo I → idAtividade 1; indústria Anexo II → 4; serviço →
+ * pelo anexo de serviço da empresa). Retorna as atividades e o total interno.
+ */
+function atividadesEstabelecimento(
+    comercio: number,
+    industria: number,
+    servico: number,
+    empresa: SimplesNacionalEmpresa,
+    fatorR: number,
+): { atividades: AtividadePgdas[]; totalInterno: number; exigeFolha: boolean } {
+    const grupos = new Map<number, AtividadePgdas>();
+    let totalInterno = 0;
+    let exigeFolha = false;
+    const c = round2(comercio || 0);
+    const i = round2(industria || 0);
+    const s = round2(servico || 0);
+    if (c > 0) { addAtividade(grupos, 1, c); totalInterno = round2(totalInterno + c); }
+    if (i > 0) { addAtividade(grupos, 4, i); totalInterno = round2(totalInterno + i); }
+    if (s > 0) {
+        if (anexoExigeFolhaSalario(empresa.anexo)) exigeFolha = true;
+        const idAtividade = idAtividadePgdas(
+            serviceFallbackAnexo(empresa),
+            { issRetido: true, icmsSt: false, isMonofasico: false, isExterior: false },
+            fatorR,
+        );
+        addAtividade(grupos, idAtividade, s);
+        totalInterno = round2(totalInterno + s);
+    }
+    return { atividades: Array.from(grupos.values()), totalInterno, exigeFolha };
+}
+
 type ReceitaAtividade = PgdasPayload['declaracao']['estabelecimentos'][0]['atividades'][0]['receitasAtividade'][0];
 type AtividadePgdas = PgdasPayload['declaracao']['estabelecimentos'][0]['atividades'][0];
 
@@ -307,31 +355,69 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         else totalInterno = round2(totalInterno + valor);
     });
 
-    const filialComercioSafe = round2(filialComercio || 0);
-    const filialIndustriaSafe = round2(filialIndustria || 0);
-    const filialServicoSafe = round2(filialServico || 0);
+    // NOVO modelo (opção B): cada filial é um estabelecimento próprio, com CNPJ
+    // e atividades próprias — igual ao e-CAC. Ativa quando há filiaisReceita com
+    // receita > 0. Nesse caso os buckets consolidados legados são IGNORADOS.
+    const filiaisComReceita = (input.filiaisReceita || [])
+        .map((f) => ({
+            cnpj: soDigitos(f.cnpj),
+            comercio: round2(f.comercio || 0),
+            industria: round2(f.industria || 0),
+            servico: round2(f.servico || 0),
+        }))
+        .filter((f) => f.cnpj.length === 14
+            && f.cnpj !== cnpjLimpo
+            && (f.comercio + f.industria + f.servico) > 0);
 
-    if (filialComercioSafe > 0) {
-        addAtividade(grupos, 1, filialComercioSafe);
-        totalInterno = round2(totalInterno + filialComercioSafe);
-    }
-    if (filialIndustriaSafe > 0) {
-        addAtividade(grupos, 4, filialIndustriaSafe);
-        totalInterno = round2(totalInterno + filialIndustriaSafe);
-    }
-    if (filialServicoSafe > 0) {
-        if (anexoExigeFolhaSalario(empresa.anexo)) exigeFolhaSalario = true;
-        const idAtividade = idAtividadePgdas(
-            serviceFallbackAnexo(empresa),
-            { issRetido: true, icmsSt: false, isMonofasico: false, isExterior: false },
-            resumo.fator_r || 0,
-        );
-        addAtividade(grupos, idAtividade, filialServicoSafe);
-        totalInterno = round2(totalInterno + filialServicoSafe);
+    const usarPerFilial = filiaisComReceita.length > 0;
+
+    // LEGADO: buckets consolidados jogados na matriz. Só quando NÃO há filiais
+    // declaradas por estabelecimento (evita dupla contagem).
+    if (!usarPerFilial) {
+        const filialComercioSafe = round2(filialComercio || 0);
+        const filialIndustriaSafe = round2(filialIndustria || 0);
+        const filialServicoSafe = round2(filialServico || 0);
+
+        if (filialComercioSafe > 0) {
+            addAtividade(grupos, 1, filialComercioSafe);
+            totalInterno = round2(totalInterno + filialComercioSafe);
+        }
+        if (filialIndustriaSafe > 0) {
+            addAtividade(grupos, 4, filialIndustriaSafe);
+            totalInterno = round2(totalInterno + filialIndustriaSafe);
+        }
+        if (filialServicoSafe > 0) {
+            if (anexoExigeFolhaSalario(empresa.anexo)) exigeFolhaSalario = true;
+            const idAtividade = idAtividadePgdas(
+                serviceFallbackAnexo(empresa),
+                { issRetido: true, icmsSt: false, isMonofasico: false, isExterior: false },
+                resumo.fator_r || 0,
+            );
+            addAtividade(grupos, idAtividade, filialServicoSafe);
+            totalInterno = round2(totalInterno + filialServicoSafe);
+        }
     }
 
-    const atividades = Array.from(grupos.values())
+    const atividadesMatriz = Array.from(grupos.values())
         .sort((a, b) => a.idAtividade - b.idAtividade);
+
+    const estabelecimentos: PgdasPayload['declaracao']['estabelecimentos'] = [{
+        cnpjCompleto: cnpjLimpo,
+        atividades: atividadesMatriz,
+    }];
+
+    // Um estabelecimento por filial com receita própria.
+    filiaisComReceita.forEach((f) => {
+        const res = atividadesEstabelecimento(
+            f.comercio, f.industria, f.servico, empresa, resumo.fator_r || 0,
+        );
+        if (res.exigeFolha) exigeFolhaSalario = true;
+        totalInterno = round2(totalInterno + res.totalInterno);
+        estabelecimentos.push({
+            cnpjCompleto: f.cnpj,
+            atividades: res.atividades.sort((a, b) => a.idAtividade - b.idAtividade),
+        });
+    });
 
     // Histórico de receitas anteriores aceito pelo PGDAS-D. Para empresa em
     // início de atividade, não envie meses anteriores à abertura/opção: o SERPRO
@@ -357,10 +443,7 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         valorFixoIcms: icmsVendas > 0 ? round2(icmsVendas) : null,
         valorFixoIss: null,
         receitasBrutasAnteriores,
-        estabelecimentos: [{
-            cnpjCompleto: cnpjLimpo,
-            atividades,
-        }],
+        estabelecimentos,
     };
 
     const folhasSalario = montarFolhasSalario(empresa, pa, exigeFolhaSalario);
