@@ -37,6 +37,11 @@ interface CnaeInputState {
     isExterior: boolean;
 }
 
+const formatCnpj = (cnpj: string): string => {
+    const d = String(cnpj || '').replace(/\D/g, '').padStart(14, '0').slice(0, 14);
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12, 14)}`;
+};
+
 const CurrencyInput: React.FC<{ value: number; onChange: (val: number) => void; className?: string; placeholder?: string; label?: string }> = ({ value, onChange, className, placeholder, label }) => {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const raw = e.target.value.replace(/\D/g, '');
@@ -78,10 +83,17 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     const [mesApuracao, setMesApuracao] = useState(new Date());
     const [faturamentoPorCnae, setFaturamentoPorCnae] = useState<Record<string, CnaeInputState>>({});
     
-    // Filiais Detalhadas
+    // Filiais Detalhadas (LEGADO: buckets consolidados na matriz)
     const [filialComercio, setFilialComercio] = useState<number>(0);
     const [filialIndustria, setFilialIndustria] = useState<number>(0);
     const [filialServico, setFilialServico] = useState<number>(0);
+
+    // NOVO (declaração por estabelecimento): receita própria de cada filial na
+    // competência, keyed por CNPJ (14 díg). Persistido em faturamentoMensalDetalhado
+    // sob as chaves filial::<cnpj>::comercio|industria|servico.
+    const [filiaisReceita, setFiliaisReceita] = useState<Record<string, { comercio: number; industria: number; servico: number }>>({});
+    const [novaFilialCnpj, setNovaFilialCnpj] = useState('');
+    const [novaFilialApelido, setNovaFilialApelido] = useState('');
 
     const [icmsVendas, setIcmsVendas] = useState<number>(0);
     
@@ -117,7 +129,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
         };
 
         // Verifica se já existem dados salvos completos (incluindo itens extras adicionados manualmente)
-        const keysSalvas = Object.keys(detalheMes).filter(k => !k.startsWith('filial_') && k !== 'icms_vendas');
+        const keysSalvas = Object.keys(detalheMes).filter(k => !k.startsWith('filial_') && !k.startsWith('filial::') && k !== 'icms_vendas');
         
         if (keysSalvas.length > 0) {
             keysSalvas.forEach(key => {
@@ -140,17 +152,30 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
 
         setFaturamentoPorCnae(novoFaturamentoPorCnae);
 
-        // Carrega Filiais
+        // Carrega Filiais (LEGADO consolidado)
         setFilialComercio(detalheMes['filial_comercio']?.valor || 0);
         setFilialIndustria(detalheMes['filial_industria']?.valor || 0);
         setFilialServico(detalheMes['filial_servico']?.valor || 0);
-        
+
+        // Carrega receita por estabelecimento (NOVO)
+        const novaFiliaisReceita: Record<string, { comercio: number; industria: number; servico: number }> = {};
+        (empresa.filiais || []).forEach((filial) => {
+            const cnpj = String(filial.cnpj || '').replace(/\D/g, '');
+            if (cnpj.length !== 14) return;
+            novaFiliaisReceita[cnpj] = {
+                comercio: detalheMes[`filial::${cnpj}::comercio`]?.valor || 0,
+                industria: detalheMes[`filial::${cnpj}::industria`]?.valor || 0,
+                servico: detalheMes[`filial::${cnpj}::servico`]?.valor || 0,
+            };
+        });
+        setFiliaisReceita(novaFiliaisReceita);
+
         // Carrega ICMS
         setIcmsVendas(detalheMes['icms_vendas']?.valor || 0);
 
         setManualRbtHistory(empresa.faturamentoManual || {});
 
-    }, [mesApuracao, empresa.id, empresa.faturamentoManual, empresa.faturamentoMensalDetalhado, empresa.cnae, empresa.anexo, empresa.atividadesSecundarias]);
+    }, [mesApuracao, empresa.id, empresa.faturamentoManual, empresa.faturamentoMensalDetalhado, empresa.cnae, empresa.anexo, empresa.atividadesSecundarias, empresa.filiais]);
 
     // Recalcula o Resumo em Tempo Real com base nos Inputs
     const resumo = useMemo(() => {
@@ -177,28 +202,43 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
             });
         });
 
-        // Adiciona Filiais ao cálculo (Assume Anexo I para Comércio, II Indústria, III Serviço se não especificado, ou usa o da empresa)
-        if (filialComercio > 0) {
-            itensCalculo.push({ cnae: 'Filial Comércio', anexo: 'I', valor: filialComercio, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false });
-        }
-        if (filialIndustria > 0) {
-            itensCalculo.push({ cnae: 'Filial Indústria', anexo: 'II', valor: filialIndustria, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false });
-        }
+        // Filiais: quando há receita por estabelecimento (NOVO), usa-a e IGNORA os
+        // buckets consolidados legados (evita dupla contagem). Caso contrário, usa
+        // os buckets consolidados na matriz (compat com empresas sem filial cadastrada).
+        const anexoServicoFilial = ['III', 'IV', 'V'].includes(empresa.anexo) ? empresa.anexo : 'III';
+        const totalFiliaisReceita = Object.values(filiaisReceita)
+            .reduce((acc, r) => acc + (r.comercio || 0) + (r.industria || 0) + (r.servico || 0), 0);
+        const usarPerFilial = totalFiliaisReceita > 0;
 
-if (filialServico > 0) {
-    const anexoServico = ['III', 'IV', 'V'].includes(empresa.anexo) ? empresa.anexo : 'III';
-    itensCalculo.push({ 
-        cnae: 'Filial Serviço', 
-        anexo: anexoServico as any, 
-        valor: filialServico, 
-        issRetido: true,  // ✅ ISS NÃO compõe o DAS da matriz (é municipal, pago na filial)
-        icmsSt: false, 
-        isSup: false, 
-        isMonofasico: false, 
-        isImune: false, 
-        isExterior: false 
-    });
-}
+        if (usarPerFilial) {
+            Object.entries(filiaisReceita).forEach(([cnpj, r]) => {
+                if (r.comercio > 0) {
+                    itensCalculo.push({ cnae: `Filial ${cnpj} Comércio`, anexo: 'I', valor: r.comercio, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false });
+                }
+                if (r.industria > 0) {
+                    itensCalculo.push({ cnae: `Filial ${cnpj} Indústria`, anexo: 'II', valor: r.industria, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false });
+                }
+                if (r.servico > 0) {
+                    itensCalculo.push({ cnae: `Filial ${cnpj} Serviço`, anexo: anexoServicoFilial as any, valor: r.servico, issRetido: true, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false });
+                }
+            });
+        } else {
+            if (filialComercio > 0) {
+                itensCalculo.push({ cnae: 'Filial Comércio', anexo: 'I', valor: filialComercio, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false });
+            }
+            if (filialIndustria > 0) {
+                itensCalculo.push({ cnae: 'Filial Indústria', anexo: 'II', valor: filialIndustria, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false });
+            }
+            if (filialServico > 0) {
+                itensCalculo.push({
+                    cnae: 'Filial Serviço',
+                    anexo: anexoServicoFilial as any,
+                    valor: filialServico,
+                    issRetido: true,  // ISS NÃO compõe o DAS da matriz (é municipal, pago na filial)
+                    icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false
+                });
+            }
+        }
 
         // Simula a empresa com os dados atuais de input para o cálculo
         const empresaTemp = {
@@ -208,7 +248,7 @@ if (filialServico > 0) {
         };
 
         return simplesService.calcularResumoEmpresa(empresaTemp, notas, mesApuracao, { itensCalculo });
-    }, [empresa, notas, mesApuracao, faturamentoPorCnae, filialComercio, filialIndustria, filialServico, manualRbtHistory, folha12Input]);
+    }, [empresa, notas, mesApuracao, faturamentoPorCnae, filialComercio, filialIndustria, filialServico, filiaisReceita, manualRbtHistory, folha12Input]);
 
     // Calculate total RBT12 from manual inputs
     const totalRbt12Manual = useMemo(() => {
@@ -298,6 +338,12 @@ if (filialServico > 0) {
                 filialComercio,
                 filialIndustria,
                 filialServico,
+                filiaisReceita: Object.entries(filiaisReceita).map(([cnpj, r]) => ({
+                    cnpj,
+                    comercio: r.comercio || 0,
+                    industria: r.industria || 0,
+                    servico: r.servico || 0,
+                })),
                 icmsVendas,
             });
             const dasEmitido = await emitirDasRegular(currentUser ?? null, {
@@ -344,16 +390,34 @@ if (filialServico > 0) {
                 };
             });
 
-            // 2. Processa Filiais (Somando ao total e salvando detalhado)
+            // 2a. Filiais consolidadas LEGADO (só entram no total quando NÃO há
+            // receita por estabelecimento, para não duplicar).
+            const totalFiliaisReceita = Object.values(filiaisReceita)
+                .reduce((acc, r) => acc + (r.comercio || 0) + (r.industria || 0) + (r.servico || 0), 0);
+            const usarPerFilial = totalFiliaisReceita > 0;
+
             const safeFilialComercio = Number(filialComercio) || 0;
             const safeFilialIndustria = Number(filialIndustria) || 0;
             const safeFilialServico = Number(filialServico) || 0;
-            
-            totalMes += safeFilialComercio + safeFilialIndustria + safeFilialServico;
-            
+
+            if (!usarPerFilial) {
+                totalMes += safeFilialComercio + safeFilialIndustria + safeFilialServico;
+            }
+
             detalheMes['filial_comercio'] = { valor: safeFilialComercio, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false };
             detalheMes['filial_industria'] = { valor: safeFilialIndustria, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false };
             detalheMes['filial_servico'] = { valor: safeFilialServico, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false };
+
+            // 2b. Receita por estabelecimento (NOVO) — uma chave por tipo/CNPJ.
+            Object.entries(filiaisReceita).forEach(([cnpj, r]) => {
+                const c = Number(r.comercio) || 0;
+                const i = Number(r.industria) || 0;
+                const s = Number(r.servico) || 0;
+                totalMes += c + i + s;
+                detalheMes[`filial::${cnpj}::comercio`] = { valor: c, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false };
+                detalheMes[`filial::${cnpj}::industria`] = { valor: i, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false };
+                detalheMes[`filial::${cnpj}::servico`] = { valor: s, issRetido: true, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false };
+            });
 
             // 3. Salva ICMS Informativo
             detalheMes['icms_vendas'] = { valor: icmsVendas || 0, issRetido: false, icmsSt: false, isSup: false, isMonofasico: false, isImune: false, isExterior: false };
@@ -381,6 +445,71 @@ if (filialServico > 0) {
             onShowToast(`Erro ao salvar apuração: ${error?.message || 'falha desconhecida'}. Os valores NÃO foram gravados.`);
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const raizMatriz = String(empresa.cnpj || '').replace(/\D/g, '').slice(0, 8);
+
+    const setFilialReceitaCampo = (cnpj: string, campo: 'comercio' | 'industria' | 'servico', valor: number) => {
+        setFiliaisReceita(prev => ({
+            ...prev,
+            [cnpj]: {
+                comercio: prev[cnpj]?.comercio || 0,
+                industria: prev[cnpj]?.industria || 0,
+                servico: prev[cnpj]?.servico || 0,
+                [campo]: valor,
+            },
+        }));
+    };
+
+    const handleAddFilial = async () => {
+        const cnpj = novaFilialCnpj.replace(/\D/g, '');
+        if (cnpj.length !== 14) {
+            onShowToast('CNPJ da filial deve ter 14 dígitos.');
+            return;
+        }
+        if (raizMatriz && cnpj.slice(0, 8) !== raizMatriz) {
+            onShowToast('A filial deve ter a mesma raiz de CNPJ da matriz.');
+            return;
+        }
+        if (cnpj === String(empresa.cnpj || '').replace(/\D/g, '')) {
+            onShowToast('Este é o CNPJ da matriz, não de uma filial.');
+            return;
+        }
+        if ((empresa.filiais || []).some(f => String(f.cnpj || '').replace(/\D/g, '') === cnpj)) {
+            onShowToast('Filial já cadastrada.');
+            return;
+        }
+        const novasFiliais = [...(empresa.filiais || []), { cnpj, apelido: novaFilialApelido.trim() || undefined }];
+        try {
+            await onUpdateEmpresa(empresa.id, { filiais: novasFiliais });
+            setFiliaisReceita(prev => ({ ...prev, [cnpj]: { comercio: 0, industria: 0, servico: 0 } }));
+            setNovaFilialCnpj('');
+            setNovaFilialApelido('');
+            onShowToast('Filial cadastrada.');
+        } catch (e: any) {
+            onShowToast(`Erro ao cadastrar filial: ${e?.message || 'falha'}`);
+        }
+    };
+
+    const handleRemoveFilial = async (cnpj: string) => {
+        const ok = await confirm({
+            title: 'Remover filial',
+            message: `Remover o estabelecimento ${formatCnpj(cnpj)} desta empresa? A receita já lançada nos meses não será apagada, mas a filial deixará de aparecer.`,
+            variant: 'danger',
+            confirmLabel: 'Remover',
+        });
+        if (!ok) return;
+        const novasFiliais = (empresa.filiais || []).filter(f => String(f.cnpj || '').replace(/\D/g, '') !== cnpj);
+        try {
+            await onUpdateEmpresa(empresa.id, { filiais: novasFiliais });
+            setFiliaisReceita(prev => {
+                const { [cnpj]: _removed, ...rest } = prev;
+                return rest;
+            });
+            onShowToast('Filial removida.');
+        } catch (e: any) {
+            onShowToast(`Erro ao remover filial: ${e?.message || 'falha'}`);
         }
     };
 
@@ -654,29 +783,104 @@ if (filialServico > 0) {
                             </div>
 
                             <div className="pt-4 mt-6 border-t border-slate-100 dark:border-slate-700">
-                                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase mb-4 flex items-center gap-2">
-                                    <BuildingIcon className="w-4 h-4 text-sky-600" /> Faturamento Filiais (Consolidação)
+                                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase mb-1 flex items-center gap-2">
+                                    <BuildingIcon className="w-4 h-4 text-sky-600" /> Faturamento por Estabelecimento (Filiais)
                                 </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <CurrencyInput 
-                                        label="Filial Comércio"
-                                        value={filialComercio}
-                                        onChange={setFilialComercio}
-                                        className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700"
-                                    />
-                                    <CurrencyInput 
-                                        label="Filial Indústria"
-                                        value={filialIndustria}
-                                        onChange={setFilialIndustria}
-                                        className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700"
-                                    />
-                                    <CurrencyInput 
-                                        label="Filial Serviço"
-                                        value={filialServico}
-                                        onChange={setFilialServico}
-                                        className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700"
-                                    />
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                                    Cada filial é declarada no PGDAS-D com o <b>próprio CNPJ</b> e suas próprias atividades — igual ao e-CAC.
+                                </p>
+
+                                {(empresa.filiais || []).length > 0 ? (
+                                    <div className="space-y-4">
+                                        {(empresa.filiais || []).map((filial) => {
+                                            const cnpj = String(filial.cnpj || '').replace(/\D/g, '');
+                                            const receita = filiaisReceita[cnpj] || { comercio: 0, industria: 0, servico: 0 };
+                                            return (
+                                                <div key={cnpj} className="bg-slate-50 dark:bg-slate-700/40 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div>
+                                                            <p className="font-mono font-bold text-sm text-slate-800 dark:text-slate-200">{formatCnpj(cnpj)}</p>
+                                                            {filial.apelido && <p className="text-xs text-slate-500 dark:text-slate-400">{filial.apelido}</p>}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleRemoveFilial(cnpj)}
+                                                            className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
+                                                            title="Remover filial"
+                                                        >
+                                                            <TrashIcon className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                        <CurrencyInput
+                                                            label="Comércio (Anexo I)"
+                                                            value={receita.comercio}
+                                                            onChange={(v) => setFilialReceitaCampo(cnpj, 'comercio', v)}
+                                                        />
+                                                        <CurrencyInput
+                                                            label="Indústria (Anexo II)"
+                                                            value={receita.industria}
+                                                            onChange={(v) => setFilialReceitaCampo(cnpj, 'industria', v)}
+                                                        />
+                                                        <CurrencyInput
+                                                            label="Serviço"
+                                                            value={receita.servico}
+                                                            onChange={(v) => setFilialReceitaCampo(cnpj, 'servico', v)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-slate-400 dark:text-slate-500 italic mb-3">
+                                        Nenhuma filial cadastrada. Cadastre o CNPJ do estabelecimento para declará-lo separadamente.
+                                    </p>
+                                )}
+
+                                <div className="mt-4 flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                                    <div className="flex-1">
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">CNPJ da filial</label>
+                                        <input
+                                            type="text"
+                                            value={novaFilialCnpj}
+                                            onChange={(e) => setNovaFilialCnpj(e.target.value)}
+                                            placeholder="00.000.000/0000-00"
+                                            className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-slate-900 dark:text-white text-sm font-mono"
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">Apelido (opcional)</label>
+                                        <input
+                                            type="text"
+                                            value={novaFilialApelido}
+                                            onChange={(e) => setNovaFilialApelido(e.target.value)}
+                                            placeholder="Ex.: Filial SP"
+                                            className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-slate-900 dark:text-white text-sm"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={handleAddFilial}
+                                        className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                                    >
+                                        <PlusIcon className="w-4 h-4" /> Adicionar filial
+                                    </button>
                                 </div>
+
+                                {(empresa.filiais || []).length === 0 && (filialComercio > 0 || filialIndustria > 0 || filialServico > 0) && (
+                                    <div className="mt-6 pt-4 border-t border-dashed border-amber-300 dark:border-amber-700">
+                                        <p className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase mb-2">
+                                            ⚠ Consolidação legada (sem CNPJ da filial)
+                                        </p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                                            Estes valores foram lançados no modelo antigo (agregados na matriz). Cadastre a filial acima e relance a receita no CNPJ correto.
+                                        </p>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            <CurrencyInput label="Filial Comércio" value={filialComercio} onChange={setFilialComercio} />
+                                            <CurrencyInput label="Filial Indústria" value={filialIndustria} onChange={setFilialIndustria} />
+                                            <CurrencyInput label="Filial Serviço" value={filialServico} onChange={setFilialServico} />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="pt-4 border-t border-slate-100 dark:border-slate-700">

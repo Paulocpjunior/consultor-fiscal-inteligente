@@ -188,6 +188,13 @@ export interface SimplesNacionalAtividade {
     anexo: SimplesNacionalAnexo;
 }
 
+/** Estabelecimento filial de uma empresa do Simples (PGDAS-D por estabelecimento). */
+export interface FilialEstabelecimento {
+    /** CNPJ completo da filial (14 dígitos, mesma raiz da matriz). */
+    cnpj: string;
+    apelido?: string;
+}
+
 export interface SimplesHistoricoCalculo {
     id: string;
     dataCalculo: number;
@@ -206,6 +213,13 @@ export interface SimplesNacionalEmpresa {
     cnae: string;
     anexo: SimplesNacionalAnexo;
     atividadesSecundarias?: SimplesNacionalAtividade[];
+    /**
+     * Filiais (estabelecimentos) da empresa. Quando presentes, o PGDAS-D é
+     * declarado POR ESTABELECIMENTO (cada CNPJ com sua receita), como no e-CAC.
+     * O faturamento mensal de cada filial fica em faturamentoMensalDetalhado
+     * sob chaves `filial::<cnpj>::comercio|industria|servico`.
+     */
+    filiais?: FilialEstabelecimento[];
     /**
      * (LEGADO) Folha total dos ultimos 12 meses como valor unico. Mantido pra
      * compat com empresas antigas. NOVO: folhaMensal por competencia eh

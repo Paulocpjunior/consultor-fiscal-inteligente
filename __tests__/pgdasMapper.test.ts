@@ -329,3 +329,111 @@ describe('mapPgdasPayload', () => {
         expect(payload.declaracao.receitaPaCompetenciaExterno).toBe(5500);
     });
 });
+
+describe('mapPgdasPayload — declaração por estabelecimento (filiais com CNPJ próprio)', () => {
+    const matriz: SimplesNacionalEmpresa = {
+        ...baseEmpresa,
+        anexo: 'I',
+        cnpj: '54.121.843/0001-75',
+    };
+
+    it('cria um estabelecimento por filial com o CNPJ e as atividades próprias', () => {
+        const payload = mapPgdasPayload({
+            empresa: matriz,
+            resumo: { ...baseResumo, fator_r: 0 },
+            mesApuracao: new Date(2026, 5, 1),
+            faturamentoPorCnae: {
+                'principal::0::4711302::I': { ...emptyState, valor: '10.000,00' },
+            },
+            filialComercio: 0,
+            filialIndustria: 0,
+            filialServico: 0,
+            filiaisReceita: [
+                { cnpj: '54121843000256', comercio: 0, industria: 123477.05, servico: 0 },
+            ],
+            icmsVendas: 0,
+        });
+
+        const estabs = payload.declaracao.estabelecimentos;
+        expect(estabs).toHaveLength(2);
+
+        // Matriz: sua própria receita de comércio.
+        expect(estabs[0].cnpjCompleto).toBe('54121843000175');
+        expect(estabs[0].atividades.map(a => a.idAtividade)).toEqual([1]);
+        expect(estabs[0].atividades[0].valorAtividade).toBe(10000);
+
+        // Filial: a indústria vai no CNPJ da filial, como idAtividade 4 (indústria).
+        expect(estabs[1].cnpjCompleto).toBe('54121843000256');
+        expect(estabs[1].atividades.map(a => a.idAtividade)).toEqual([4]);
+        expect(estabs[1].atividades[0].valorAtividade).toBe(123477.05);
+
+        // Total interno soma matriz + filial.
+        expect(payload.declaracao.receitaPaCompetenciaInterno).toBe(133477.05);
+    });
+
+    it('ignora os buckets consolidados legados quando há receita por estabelecimento', () => {
+        const payload = mapPgdasPayload({
+            empresa: matriz,
+            resumo: { ...baseResumo, fator_r: 0 },
+            mesApuracao: new Date(2026, 5, 1),
+            faturamentoPorCnae: {
+                'principal::0::4711302::I': { ...emptyState, valor: '10.000,00' },
+            },
+            // Estes NÃO devem ser contados (per-filial ativo).
+            filialComercio: 99999,
+            filialIndustria: 88888,
+            filialServico: 77777,
+            filiaisReceita: [
+                { cnpj: '54121843000256', comercio: 5000, industria: 0, servico: 0 },
+            ],
+            icmsVendas: 0,
+        });
+
+        expect(payload.declaracao.estabelecimentos).toHaveLength(2);
+        expect(payload.declaracao.receitaPaCompetenciaInterno).toBe(15000);
+    });
+
+    it('mantém apenas a matriz quando filiaisReceita não tem receita > 0', () => {
+        const payload = mapPgdasPayload({
+            empresa: matriz,
+            resumo: { ...baseResumo, fator_r: 0 },
+            mesApuracao: new Date(2026, 5, 1),
+            faturamentoPorCnae: {
+                'principal::0::4711302::I': { ...emptyState, valor: '10.000,00' },
+            },
+            filialComercio: 0,
+            filialIndustria: 0,
+            filialServico: 0,
+            filiaisReceita: [
+                { cnpj: '54121843000256', comercio: 0, industria: 0, servico: 0 },
+            ],
+            icmsVendas: 0,
+        });
+
+        expect(payload.declaracao.estabelecimentos).toHaveLength(1);
+        expect(payload.declaracao.estabelecimentos[0].cnpjCompleto).toBe('54121843000175');
+        expect(payload.declaracao.receitaPaCompetenciaInterno).toBe(10000);
+    });
+
+    it('reparte comércio, indústria e serviço da mesma filial em atividades distintas', () => {
+        const payload = mapPgdasPayload({
+            empresa: { ...matriz, anexo: 'III' },
+            resumo: { ...baseResumo, fator_r: 0 },
+            mesApuracao: new Date(2026, 5, 1),
+            faturamentoPorCnae: {},
+            filialComercio: 0,
+            filialIndustria: 0,
+            filialServico: 0,
+            filiaisReceita: [
+                { cnpj: '54121843000256', comercio: 1000, industria: 2000, servico: 3000 },
+            ],
+            icmsVendas: 0,
+        });
+
+        const filial = payload.declaracao.estabelecimentos[1];
+        expect(filial.cnpjCompleto).toBe('54121843000256');
+        // comércio→1, indústria→4, serviço Anexo III próprio município (ISS retido)→15.
+        expect(filial.atividades.map(a => a.idAtividade)).toEqual([1, 4, 15]);
+        expect(payload.declaracao.receitaPaCompetenciaInterno).toBe(6000);
+    });
+});
