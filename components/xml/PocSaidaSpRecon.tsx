@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
     rodarReconhecimentoSaidaSp,
     testarDownloadSaida,
+    autoTestarDownloadSaida,
     type PocSaidaSpResposta,
     type PocSaidaCompletaResposta,
 } from '../../services/pocSaidaSpService';
@@ -63,6 +64,20 @@ const PocSaidaSpRecon: React.FC = () => {
         try {
             const r = await testarDownloadSaida(chave);
             setDlResp(r);
+        } catch (e) {
+            setDlResp({ ok: false, error: e instanceof Error ? e.message : String(e) });
+        } finally {
+            setDlLoading(false);
+        }
+    };
+
+    const testarAuto = async () => {
+        setDlLoading(true);
+        setDlResp(null);
+        try {
+            const r = await autoTestarDownloadSaida(cnpj);
+            setDlResp(r);
+            if (r.chave) setChave(r.chave);
         } catch (e) {
             setDlResp({ ok: false, error: e instanceof Error ? e.message : String(e) });
         } finally {
@@ -241,6 +256,14 @@ const PocSaidaSpRecon: React.FC = () => {
                     >
                         {dlLoading ? 'Baixando…' : 'Testar download desta chave'}
                     </button>
+                    <button
+                        onClick={testarAuto}
+                        disabled={dlLoading || cnpj.replace(/\D/g, '').length < 8}
+                        className="px-4 py-1.5 text-xs font-bold rounded-md bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200 disabled:opacity-50"
+                        title="Pega automaticamente uma saída pendente do CNPJ acima e testa"
+                    >
+                        {dlLoading ? '…' : '⚡ Pegar saída pendente e testar'}
+                    </button>
                 </div>
 
                 {dlResp && !dlResp.ok && (
@@ -271,6 +294,7 @@ const PocSaidaSpRecon: React.FC = () => {
                             <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{dlResp.interpretacao}</p>
                         </div>
                         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                            <dt className="text-slate-500">Chave testada</dt><dd className="text-slate-700 dark:text-slate-200 font-mono break-all">{dlResp.chave || '—'} {dlResp.chaveAutoSelecionada ? '(auto)' : ''}</dd>
                             <dt className="text-slate-500">cStat / motivo</dt><dd className="text-slate-700 dark:text-slate-200">{dlResp.cStat ?? '—'} — {dlResp.xMotivo || ''}</dd>
                             <dt className="text-slate-500">Emitente / UF</dt><dd className="text-slate-700 dark:text-slate-200">{dlResp.cnpjEmitente} / {dlResp.uf}</dd>
                             <dt className="text-slate-500">A1 usado (cofre)</dt><dd className="text-slate-700 dark:text-slate-200">{dlResp.certFonte?.cnpj || '—'}</dd>

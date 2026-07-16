@@ -112,6 +112,7 @@ export interface PocSaidaXmlInfo {
 export interface PocSaidaCompletaResposta {
     ok: boolean;
     chave?: string;
+    chaveAutoSelecionada?: boolean;
     cnpjEmitente?: string;
     uf?: string;
     certFonte?: { empresaId: string | null; cnpj: string | null };
@@ -133,9 +134,22 @@ export interface PocSaidaCompletaResposta {
  * emitente (derivado da própria chave). Somente leitura — não persiste nada.
  */
 export async function testarDownloadSaida(chave: string): Promise<PocSaidaCompletaResposta> {
-    const token = await getToken();
     const chaveLimpa = chave.replace(/\D/g, '');
-    const res = await fetch(`/api/admin/sefaz/poc-saida-completa?chave=${encodeURIComponent(chaveLimpa)}`, {
+    return chamarDownload(`chave=${encodeURIComponent(chaveLimpa)}`);
+}
+
+/**
+ * Auto-seleciona uma saída pendente do CNPJ e testa o download — um clique,
+ * sem precisar achar a chave manualmente.
+ */
+export async function autoTestarDownloadSaida(cnpj: string): Promise<PocSaidaCompletaResposta> {
+    const c = cnpj.replace(/\D/g, '');
+    return chamarDownload(`cnpj=${encodeURIComponent(c)}`);
+}
+
+async function chamarDownload(qs: string): Promise<PocSaidaCompletaResposta> {
+    const token = await getToken();
+    const res = await fetch(`/api/admin/sefaz/poc-saida-completa?${qs}`, {
         headers: { Authorization: `Bearer ${token}` },
     });
     let data: PocSaidaCompletaResposta;
