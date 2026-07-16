@@ -86,3 +86,54 @@ export async function rodarReconhecimentoSaidaSp(
     if (!res.ok) return { ...data, ok: false, httpStatus: res.status };
     return data;
 }
+
+// ── Teste F0.5: baixar 1 saída completa via consChNFe com o A1 da empresa ────
+
+export interface PocSaidaXmlInfo {
+    schema: string | null;
+    nsu: string | null;
+    tamanho: number;
+    ehCompleta: boolean;
+    ehResumo: boolean;
+    ehEvento: boolean;
+    temInfNFe: boolean;
+    snippet: string | null;
+}
+
+export interface PocSaidaCompletaResposta {
+    ok: boolean;
+    chave?: string;
+    cnpjEmitente?: string;
+    uf?: string;
+    certFonte?: { empresaId: string | null; cnpj: string | null };
+    cStat?: string | null;
+    xMotivo?: string | null;
+    totalXmls?: number;
+    temCompleta?: boolean;
+    veredito?: 'completa_disponivel' | 'nada_encontrado_137' | 'so_resumo' | 'rate_limited_656' | 'inconclusivo';
+    interpretacao?: string;
+    xmls?: PocSaidaXmlInfo[];
+    error?: string;
+    dica?: string;
+    httpStatus?: number;
+}
+
+/**
+ * Baixa UMA nota de saída pela chave via consChNFe usando o A1 da empresa
+ * emitente (derivado da própria chave). Somente leitura — não persiste nada.
+ */
+export async function testarDownloadSaida(chave: string): Promise<PocSaidaCompletaResposta> {
+    const token = await getToken();
+    const chaveLimpa = chave.replace(/\D/g, '');
+    const res = await fetch(`/api/admin/sefaz/poc-saida-completa?chave=${encodeURIComponent(chaveLimpa)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    let data: PocSaidaCompletaResposta;
+    try {
+        data = await res.json();
+    } catch {
+        return { ok: false, error: `HTTP ${res.status} (resposta nao-JSON)`, httpStatus: res.status };
+    }
+    if (!res.ok) return { ...data, ok: false, httpStatus: res.status };
+    return data;
+}
