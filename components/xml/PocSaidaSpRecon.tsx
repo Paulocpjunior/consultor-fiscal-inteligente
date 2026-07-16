@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { rodarReconhecimentoSaidaSp, type PocSaidaSpResposta } from '../../services/pocSaidaSpService';
+import {
+    rodarReconhecimentoSaidaSp,
+    testarDownloadSaida,
+    type PocSaidaSpResposta,
+    type PocSaidaCompletaResposta,
+} from '../../services/pocSaidaSpService';
 
 /**
  * PocSaidaSpRecon — painel admin da Fase F0.
@@ -23,6 +28,24 @@ const PocSaidaSpRecon: React.FC = () => {
     const [extraUrl, setExtraUrl] = useState('');
     const [loading, setLoading] = useState(false);
     const [resp, setResp] = useState<PocSaidaSpResposta | null>(null);
+
+    // Teste F0.5 — baixar 1 saída completa via consChNFe com o A1 da empresa.
+    const [chave, setChave] = useState('');
+    const [dlLoading, setDlLoading] = useState(false);
+    const [dlResp, setDlResp] = useState<PocSaidaCompletaResposta | null>(null);
+
+    const testarChave = async () => {
+        setDlLoading(true);
+        setDlResp(null);
+        try {
+            const r = await testarDownloadSaida(chave);
+            setDlResp(r);
+        } catch (e) {
+            setDlResp({ ok: false, error: e instanceof Error ? e.message : String(e) });
+        } finally {
+            setDlLoading(false);
+        }
+    };
 
     const rodar = async () => {
         setLoading(true);
@@ -166,6 +189,87 @@ const PocSaidaSpRecon: React.FC = () => {
                     </details>
                 </div>
             )}
+
+            {/* ── Teste F0.5: baixar 1 saída completa via consChNFe + A1 ── */}
+            <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-lg p-4 mt-2">
+                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    ⬇️ Teste: baixar 1 saída completa por chave (consChNFe + A1)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Cole uma chave de <strong>saída pendente</strong> (aba "XMLs NFe", direção saída, status Pendente).
+                    O backend baixa a nota via consChNFe usando o A1 da empresa emitente e diz se veio
+                    <strong> completa</strong> ou só resumo. <strong>Somente leitura</strong> — não grava nada.
+                </p>
+                <div className="flex flex-wrap items-end gap-2 mt-3">
+                    <label className="text-xs text-slate-600 dark:text-slate-300 flex-1 min-w-[280px]">
+                        Chave de acesso (44 dígitos)
+                        <input
+                            value={chave}
+                            onChange={e => setChave(e.target.value)}
+                            className="block mt-1 w-full px-2 py-1.5 text-xs rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 font-mono"
+                            placeholder="3526… (44 dígitos)"
+                        />
+                    </label>
+                    <button
+                        onClick={testarChave}
+                        disabled={dlLoading || chave.replace(/\D/g, '').length !== 44}
+                        className="px-4 py-1.5 text-xs font-bold rounded-md bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white"
+                    >
+                        {dlLoading ? 'Baixando…' : 'Testar download desta chave'}
+                    </button>
+                </div>
+
+                {dlResp && !dlResp.ok && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mt-3">
+                        <p className="text-xs font-bold text-red-700 dark:text-red-300">
+                            {dlResp.httpStatus === 404 ? 'Certificado da empresa não encontrado no cofre' : 'Falha no teste'}
+                        </p>
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">{dlResp.error || 'Erro desconhecido.'}</p>
+                        {dlResp.dica && <p className="text-xs text-red-500 mt-1">{dlResp.dica}</p>}
+                    </div>
+                )}
+
+                {dlResp && dlResp.ok && (
+                    <div className="mt-3 space-y-2">
+                        <div className={`rounded-lg p-3 border ${dlResp.temCompleta
+                            ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                            : dlResp.veredito === 'nada_encontrado_137'
+                                ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                                : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>
+                            <p className="text-sm font-bold text-slate-700 dark:text-slate-100">
+                                {dlResp.temCompleta ? '✓ Nota COMPLETA disponível via consChNFe'
+                                    : dlResp.veredito === 'nada_encontrado_137' ? '✗ SEFAZ não localizou (cStat 137)'
+                                        : dlResp.veredito === 'so_resumo' ? '⚠ Voltou só o resumo'
+                                            : dlResp.veredito === 'rate_limited_656' ? '⏳ Rate limit (656) — tentar depois'
+                                                : '⚠ Inconclusivo'}
+                            </p>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{dlResp.interpretacao}</p>
+                        </div>
+                        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                            <dt className="text-slate-500">cStat / motivo</dt><dd className="text-slate-700 dark:text-slate-200">{dlResp.cStat ?? '—'} — {dlResp.xMotivo || ''}</dd>
+                            <dt className="text-slate-500">Emitente / UF</dt><dd className="text-slate-700 dark:text-slate-200">{dlResp.cnpjEmitente} / {dlResp.uf}</dd>
+                            <dt className="text-slate-500">A1 usado (cofre)</dt><dd className="text-slate-700 dark:text-slate-200">{dlResp.certFonte?.cnpj || '—'}</dd>
+                            <dt className="text-slate-500">XMLs retornados</dt><dd className="text-slate-700 dark:text-slate-200">{dlResp.totalXmls ?? 0}</dd>
+                        </dl>
+                        {dlResp.xmls?.map((x, i) => (
+                            <div key={i} className="text-xs border border-slate-200 dark:border-slate-700 rounded p-2">
+                                <div className="flex gap-2 flex-wrap">
+                                    <span className="font-mono text-slate-500">{x.schema || '?'}</span>
+                                    {badge(x.ehCompleta, 'completa', x.ehResumo ? 'resumo' : x.ehEvento ? 'evento' : 'outro')}
+                                    <span className="text-slate-400">{x.tamanho} bytes</span>
+                                </div>
+                                {x.snippet && <p className="mt-1 text-[10px] text-slate-400 break-all font-mono">{x.snippet}</p>}
+                            </div>
+                        ))}
+                        <details className="text-xs">
+                            <summary className="cursor-pointer text-slate-500 dark:text-slate-400">Ver JSON completo (para enviar)</summary>
+                            <pre className="mt-2 p-3 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-[10px] leading-relaxed">
+                                {JSON.stringify(dlResp, null, 2)}
+                            </pre>
+                        </details>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
