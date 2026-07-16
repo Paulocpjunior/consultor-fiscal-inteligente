@@ -21,6 +21,14 @@ export interface PocCertInfo {
     diasParaVencer: number;
 }
 
+export interface PocCertDiagnostico {
+    ok: false;
+    motivo: string;
+    baseAlvo?: string;
+    basesNoCofre?: string[];
+    cert?: { empresaId?: string; cnpj?: string; tipoCert?: string; notAfter?: string };
+}
+
 export interface PocWafMarcador { tipo: string; evidencia: string; }
 
 export interface PocSondagem {
@@ -52,6 +60,7 @@ export interface PocSaidaSpResposta {
     // Erros (404 cert nao encontrada, 401/403, 500)
     error?: string;
     dica?: string;
+    diagnostico?: PocCertDiagnostico | null;
     httpStatus?: number;
 }
 
@@ -115,6 +124,7 @@ export interface PocSaidaCompletaResposta {
     xmls?: PocSaidaXmlInfo[];
     error?: string;
     dica?: string;
+    diagnostico?: PocCertDiagnostico | null;
     httpStatus?: number;
 }
 

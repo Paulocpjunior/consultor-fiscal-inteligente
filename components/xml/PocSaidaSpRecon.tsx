@@ -15,6 +15,29 @@ import {
  */
 const CNPJ_PILOTO = '32602701';
 
+const MOTIVO_LABEL: Record<string, string> = {
+    nenhum_cert_para_esta_base: 'Nenhum certificado com essa raiz de CNPJ existe no cofre.',
+    cert_nao_e_A1: 'Existe um certificado para essa raiz, mas não é do tipo A1.',
+    cert_incompleto_no_cofre: 'Existe um registro para essa raiz, mas sem o .pfx/senha no cofre.',
+    cert_expirado_ou_invalido: 'Existe um A1 para essa raiz, mas está expirado (ou inválido).',
+    falha_ao_carregar_pfx: 'O A1 foi localizado, mas falhou ao carregar do cofre.',
+    cnpj_invalido: 'CNPJ informado é inválido.',
+};
+
+const renderDiag = (d: import('../../services/pocSaidaSpService').PocCertDiagnostico | null | undefined) => {
+    if (!d) return null;
+    return (
+        <div className="mt-2 text-xs text-red-600 dark:text-red-300 space-y-0.5">
+            <p><strong>Diagnóstico:</strong> {MOTIVO_LABEL[d.motivo] || d.motivo}</p>
+            {d.cert?.cnpj && <p>Cert achado: {d.cert.cnpj} (tipo {d.cert.tipoCert || '?'}, vence {d.cert.notAfter || '?'})</p>}
+            {d.basesNoCofre && d.basesNoCofre.length > 0 && (
+                <p>Raízes de CNPJ no cofre: {d.basesNoCofre.join(', ')}</p>
+            )}
+            {d.basesNoCofre && d.basesNoCofre.length === 0 && <p>O cofre de certificados por empresa está vazio.</p>}
+        </div>
+    );
+};
+
 const badge = (ok: boolean, okTxt: string, noTxt: string) => (
     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${ok
         ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
@@ -116,6 +139,7 @@ const PocSaidaSpRecon: React.FC = () => {
                     </p>
                     <p className="text-xs text-red-600 dark:text-red-400 mt-1">{resp.error || 'Erro desconhecido.'}</p>
                     {resp.dica && <p className="text-xs text-red-500 mt-1">{resp.dica}</p>}
+                    {renderDiag(resp.diagnostico)}
                 </div>
             )}
 
@@ -226,6 +250,7 @@ const PocSaidaSpRecon: React.FC = () => {
                         </p>
                         <p className="text-xs text-red-600 dark:text-red-400 mt-1">{dlResp.error || 'Erro desconhecido.'}</p>
                         {dlResp.dica && <p className="text-xs text-red-500 mt-1">{dlResp.dica}</p>}
+                        {renderDiag(dlResp.diagnostico)}
                     </div>
                 )}
 
