@@ -21,11 +21,38 @@
 // ============================================================================
 
 import express from 'express';
+import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { resolverCertEmpresa } from './poc-cert-diagnostico.js';
 import { consultaNFePorChave } from './sefaz-client.js';
 
 const router = express.Router();
+
+function getDb() {
+  if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
+  return admin.firestore();
+}
+
+// Auto-seleciona UMA chave de saida PENDENTE (resumo) para o CNPJ informado.
+// Query single-field (direcao) — sem indice composto — e filtra em memoria.
+async function autoSelecionarSaidaPendente(cnpjRaw) {
+  const base = String(cnpjRaw || '').replace(/\D/g, '').slice(0, 8);
+  if (base.length !== 8) return null;
+  const snap = await getDb().collection('documentos_fiscais')
+    .where('direcao', '==', 'saida').limit(120).get();
+  let fallback = null; // qualquer saida do CNPJ, se nao achar "pendente"
+  for (const d of snap.docs) {
+    const chave = String(d.id || '').replace(/\D/g, '');
+    if (chave.length !== 44) continue;
+    if (chave.slice(6, 14) !== base) continue;           // emitente = CNPJ pedido
+    const doc = d.data() || {};
+    const pendente = doc.temItens === false || doc.status === 'pendente'
+      || /^res(NFe|NFCe)/.test(String(doc.schema || ''));
+    if (pendente) return chave;
+    if (!fallback) fallback = chave;
+  }
+  return fallback;
+}
 
 const UF_POR_COD = {
   '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
@@ -49,9 +76,26 @@ function classificarXml(xml) {
 router.get('/poc-saida-completa', requireAdmin, async (req, res) => {
   const inicio = Date.now();
   try {
-    const chave = String(req.query.chave || '').replace(/\D/g, '');
+    let chave = String(req.query.chave || '').replace(/\D/g, '');
+    const cnpjParam = String(req.query.cnpj || '').replace(/\D/g, '');
+    let chaveAutoSelecionada = false;
+
+    // Sem chave mas com CNPJ: auto-seleciona uma saida pendente (1 clique).
+    if (chave.length !== 44 && cnpjParam) {
+      const auto = await autoSelecionarSaidaPendente(cnpjParam);
+      if (!auto) {
+        return res.status(404).json({
+          error: 'Nenhuma saida pendente encontrada para auto-selecionar.',
+          dica: 'Cole uma chave manualmente (aba XMLs NFe, saida, status Pendente).',
+          cnpj: cnpjParam,
+        });
+      }
+      chave = auto;
+      chaveAutoSelecionada = true;
+    }
+
     if (chave.length !== 44) {
-      return res.status(400).json({ error: `Chave invalida: esperado 44 digitos, recebido ${chave.length}.` });
+      return res.status(400).json({ error: `Chave invalida: esperado 44 digitos, recebido ${chave.length}. Informe chave= ou cnpj= para auto-selecionar.` });
     }
     const cnpjEmitente = chave.slice(6, 20);
     const ufCod = chave.slice(0, 2);
@@ -103,6 +147,7 @@ router.get('/poc-saida-completa', requireAdmin, async (req, res) => {
       geradoEm: new Date().toISOString(),
       duracaoMs: Date.now() - inicio,
       chave,
+      chaveAutoSelecionada,
       cnpjEmitente,
       uf: ufSigla,
       certFonte: { empresaId: cert.empresaIdFonte || cert.empresaId || null, cnpj: cert.cnpjFonte || cert.cnpj || null },
