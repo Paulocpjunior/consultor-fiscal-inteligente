@@ -16,7 +16,8 @@
 
 import express from 'express';
 import { requireAdmin } from './require-admin.js';
-import { loadCertEmpresa, loadCertEmpresaPorCnpjBase } from './cert-storage.js';
+import { loadCertEmpresa } from './cert-storage.js';
+import { resolverCertEmpresa } from './poc-cert-diagnostico.js';
 import { reconhecerSaidaSp } from './poc-saida-sp-recon.js';
 
 const router = express.Router();
@@ -30,17 +31,25 @@ router.get('/poc-saida-sp', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Informe empresaId ou cnpj na query.' });
     }
 
-    // Carrega o A1 DA EMPRESA (nao o do escritorio). Por CNPJ base usa o
-    // seletor A1-por-raiz do cert-storage (mesmo caminho do manifesto).
-    const cert = empresaId
-      ? await loadCertEmpresa(empresaId)
-      : await loadCertEmpresaPorCnpjBase(cnpjRaw);
+    // Carrega o A1 DA EMPRESA (nao o do escritorio). Por CNPJ usa o resolvedor
+    // com diagnostico (aceita raiz de 8 OU CNPJ de 14 e explica o motivo se
+    // nao achar). Por empresaId, carrega direto.
+    let cert = null;
+    let motivoNaoAchou = null;
+    if (empresaId) {
+      cert = await loadCertEmpresa(empresaId);
+    } else {
+      const r = await resolverCertEmpresa(cnpjRaw);
+      if (r.ok) cert = r.cert;
+      else motivoNaoAchou = r;
+    }
 
     if (!cert || !cert.pfxBuffer) {
       return res.status(404).json({
         error: 'Certificado A1 da empresa nao encontrado no cofre.',
-        dica: 'Faca upload do A1 em Certificados (cert-empresa) antes de rodar o reconhecimento.',
+        dica: 'Faca upload do A1 (tipo A1, valido) em Certificados (cert-empresa) para a raiz do CNPJ informado.',
         empresaId, cnpj: cnpjRaw,
+        diagnostico: motivoNaoAchou || null,
       });
     }
 

@@ -22,7 +22,7 @@
 
 import express from 'express';
 import { requireAdmin } from './require-admin.js';
-import { loadCertEmpresaPorCnpjBase } from './cert-storage.js';
+import { resolverCertEmpresa } from './poc-cert-diagnostico.js';
 import { consultaNFePorChave } from './sefaz-client.js';
 
 const router = express.Router();
@@ -57,15 +57,18 @@ router.get('/poc-saida-completa', requireAdmin, async (req, res) => {
     const ufCod = chave.slice(0, 2);
     const ufSigla = UF_POR_COD[ufCod] || 'SP';
 
-    // A1 da PROPRIA empresa emitente (nao o do escritorio).
-    const cert = await loadCertEmpresaPorCnpjBase(cnpjEmitente);
-    if (!cert || !cert.pfxBuffer) {
+    // A1 da PROPRIA empresa emitente (nao o do escritorio). Resolvedor com
+    // diagnostico: aceita a raiz do CNPJ e explica o motivo se nao achar.
+    const rCert = await resolverCertEmpresa(cnpjEmitente);
+    if (!rCert.ok || !rCert.cert?.pfxBuffer) {
       return res.status(404).json({
         error: 'Certificado A1 da empresa emitente nao encontrado no cofre.',
-        dica: 'Cadastre o A1 da empresa (raiz do CNPJ emitente) em Certificados.',
+        dica: 'Cadastre o A1 (tipo A1, valido) da empresa (raiz do CNPJ emitente) em Certificados.',
         cnpjEmitente,
+        diagnostico: rCert.ok ? null : rCert,
       });
     }
+    const cert = rCert.cert;
 
     let resp;
     try {
