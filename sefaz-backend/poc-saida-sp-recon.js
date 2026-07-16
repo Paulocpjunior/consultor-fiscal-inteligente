@@ -13,7 +13,7 @@
 // so faz GET de reconhecimento (nenhum POST que altere estado no portal).
 // ============================================================================
 
-import { inspecionarCert, sondarEndpoint, ENDPOINTS_CANDIDATOS } from '../scripts/poc-saida-sp.mjs';
+import { inspecionarCert, sondarEndpoint, ENDPOINTS_CANDIDATOS } from './poc-saida-sp-core.js';
 
 const TIMEOUT_MS_DEFAULT = 30_000;
 const TIMEOUT_MS_MAX = 60_000;
