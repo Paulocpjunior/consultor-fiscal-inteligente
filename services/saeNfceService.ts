@@ -21,6 +21,8 @@ export interface SaeNfceResultado {
     erros?: number;
     errosDetalhe?: string[];
     limiteAtingido?: boolean;
+    parcial?: boolean;
+    retomarDataInicial?: string;
     veredito?: string;
     duracaoMs?: number;
     error?: string;
