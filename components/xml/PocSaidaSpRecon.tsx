@@ -269,7 +269,9 @@ const PocSaidaSpRecon: React.FC = () => {
                 {dlResp && !dlResp.ok && (
                     <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mt-3">
                         <p className="text-xs font-bold text-red-700 dark:text-red-300">
-                            {dlResp.httpStatus === 404 ? 'Certificado da empresa não encontrado no cofre' : 'Falha no teste'}
+                            {dlResp.diagnostico ? 'Certificado da empresa não encontrado no cofre'
+                                : dlResp.httpStatus === 404 ? 'Não foi possível auto-selecionar uma saída'
+                                    : 'Falha no teste'}
                         </p>
                         <p className="text-xs text-red-600 dark:text-red-400 mt-1">{dlResp.error || 'Erro desconhecido.'}</p>
                         {dlResp.dica && <p className="text-xs text-red-500 mt-1">{dlResp.dica}</p>}

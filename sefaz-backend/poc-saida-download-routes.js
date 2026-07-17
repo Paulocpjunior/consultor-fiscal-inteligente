@@ -34,18 +34,34 @@ function getDb() {
 }
 
 // Auto-seleciona UMA chave de saida PENDENTE (resumo) para o CNPJ informado.
-// Query single-field (direcao) — sem indice composto — e filtra em memoria.
+// ESCOPA por empresa (senao o scan global pega saidas de outras empresas e
+// nunca acha a pedida). Com CNPJ de 14 digitos usa where('cnpjEmit') — que ja
+// significa "empresa e emitente" = saida, single-field, sem indice composto.
+// Com raiz de 8, cai no scan global por direcao='saida' + filtro de base.
 async function autoSelecionarSaidaPendente(cnpjRaw) {
-  const base = String(cnpjRaw || '').replace(/\D/g, '').slice(0, 8);
+  const cnpj = String(cnpjRaw || '').replace(/\D/g, '');
+  const base = cnpj.slice(0, 8);
   if (base.length !== 8) return null;
-  const snap = await getDb().collection('documentos_fiscais')
-    .where('direcao', '==', 'saida').limit(120).get();
+
+  const db = getDb();
+  let docs = [];
+  if (cnpj.length === 14) {
+    const snap = await db.collection('documentos_fiscais')
+      .where('cnpjEmit', '==', cnpj).limit(300).get();
+    docs = snap.docs;
+  } else {
+    const snap = await db.collection('documentos_fiscais')
+      .where('direcao', '==', 'saida').limit(400).get();
+    docs = snap.docs;
+  }
+
   let fallback = null; // qualquer saida do CNPJ, se nao achar "pendente"
-  for (const d of snap.docs) {
+  for (const d of docs) {
     const chave = String(d.id || '').replace(/\D/g, '');
     if (chave.length !== 44) continue;
     if (chave.slice(6, 14) !== base) continue;           // emitente = CNPJ pedido
     const doc = d.data() || {};
+    if (doc.direcao && doc.direcao !== 'saida') continue; // ignora entrada
     const pendente = doc.temItens === false || doc.status === 'pendente'
       || /^res(NFe|NFCe)/.test(String(doc.schema || ''));
     if (pendente) return chave;
