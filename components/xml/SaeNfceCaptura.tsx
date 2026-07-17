@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { getAuth } from 'firebase/auth';
 import { capturarNFCeSaida, type SaeNfceResultado } from '../../services/saeNfceService';
 
 /**
@@ -65,6 +66,28 @@ const SaeNfceCaptura: React.FC = () => {
         } finally {
             setLoading(false);
             pararRef.current = false;
+        }
+    };
+
+    // Agente A3: baixa o script PowerShell já configurado com a URL do app e a
+    // API key pública do Firebase (mesma que vai no bundle do frontend).
+    const [baixandoAgente, setBaixandoAgente] = useState(false);
+    const baixarAgenteA3 = async () => {
+        setBaixandoAgente(true);
+        try {
+            const raw = await (await fetch('/agente-a3-sae-nfce.ps1')).text();
+            const apiKey = (getAuth().app.options as { apiKey?: string }).apiKey || '';
+            const script = raw
+                .replace('__APP_URL__', window.location.origin)
+                .replace('__API_KEY__', apiKey);
+            const blob = new Blob([script], { type: 'text/plain;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'agente-a3-sae-nfce.ps1';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        } finally {
+            setBaixandoAgente(false);
         }
     };
 
@@ -141,6 +164,34 @@ const SaeNfceCaptura: React.FC = () => {
                     )}
                 </div>
             )}
+
+            {/* ─── Certificado A3 (cartão/token) ─────────────────────────── */}
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
+                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    💳 Cliente com certificado A3 (cartão/token)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    O A3 não pode ser copiado para o cofre (a chave vive dentro do cartão) — então a captura
+                    roda <strong>na máquina onde o cartão está inserido</strong>, com o <strong>Agente A3</strong>:
+                    um script que percorre <em>exatamente o mesmo trajeto</em> da captura A1 (listagem + download
+                    na SEFAZ-SP) e envia os XMLs para cá, passando pelo mesmo importador (dedup, direção=saída).
+                </p>
+                <ol className="text-xs text-slate-600 dark:text-slate-300 mt-2 list-decimal list-inside space-y-1">
+                    <li>Insira o cartão A3 na leitora (middleware do fornecedor instalado).</li>
+                    <li>Baixe o agente abaixo e execute: botão direito → <em>“Executar com o PowerShell”</em>.</li>
+                    <li>Escolha o certificado do cliente, informe o período e faça login com seu usuário CFI.</li>
+                    <li>O PIN é pedido pelo próprio cartão; o script não vê nem guarda o PIN.</li>
+                    <li>Ao final, confira em <em>XMLs NFe (Entrada/Saída)</em> — mesmas regras da captura A1.</li>
+                </ol>
+                <button onClick={baixarAgenteA3} disabled={baixandoAgente}
+                    className="mt-3 px-4 py-1.5 text-xs font-bold rounded-md bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white">
+                    {baixandoAgente ? 'Preparando…' : '⬇ Baixar Agente A3 (Windows)'}
+                </button>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
+                    Se o envio automático falhar (sem internet no momento, sessão expirada), os XMLs ficam salvos
+                    numa pasta local <code>NFCe-Saida-&lt;CNPJ&gt;</code> — importe depois pela aba <em>Importação Manual</em>.
+                </p>
+            </div>
         </div>
     );
 };
