@@ -79,6 +79,7 @@ const SaeNfceCaptura: React.FC = () => {
                         <dt className="text-slate-500">Duplicadas</dt><dd className="text-slate-700 dark:text-slate-200">{resp.duplicadas ?? 0}</dd>
                         <dt className="text-slate-500">Erros</dt><dd className="text-slate-700 dark:text-slate-200">{resp.erros ?? 0}</dd>
                     </dl>
+                    {resp.parcial && <p className="text-xs text-amber-600 dark:text-amber-400">⏳ Retorno parcial (orçamento de ~2 min). Clique em <strong>“Capturar NFC-e de saída”</strong> de novo no mesmo período para continuar — as já baixadas são puladas automaticamente.</p>}
                     {resp.limiteAtingido && <p className="text-xs text-amber-600 dark:text-amber-400">⚠ Limite de segurança atingido — rode períodos menores para pegar o restante.</p>}
                     {resp.errosDetalhe && resp.errosDetalhe.length > 0 && (
                         <details className="text-xs">

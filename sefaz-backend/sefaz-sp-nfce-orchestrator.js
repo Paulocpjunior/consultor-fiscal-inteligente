@@ -57,11 +57,15 @@ function janelas(inicio, fim) {
  * @param {number} [p.tpAmb]       1=producao (padrao)
  * @param {object} [p.capturadoPor]
  * @param {number} [p.maxChaves]   teto de seguranca (padrao 5000)
+ * @param {number} [p.maxDuracaoMs] orcamento de tempo por chamada (padrao 120s):
+ *   ao estourar, retorna PARCIAL com o ponto de retomada, sem travar a UI. Rode
+ *   de novo no mesmo periodo para continuar (as ja baixadas viram jaCompletas).
  */
 export async function capturarNFCeSaida({
   empresaId = null, cnpj = null, dataInicial = null, dataFinal = null,
-  tpAmb = 1, capturadoPor = null, maxChaves = 5000,
+  tpAmb = 1, capturadoPor = null, maxChaves = 5000, maxDuracaoMs = 120_000,
 }) {
+  const t0 = Date.now();
   const cnpj14 = cnpj ? String(cnpj).replace(/\D/g, '') : null;
   const cert = empresaId ? await loadCertEmpresa(empresaId) : (cnpj14 ? await loadCertEmpresaPorCnpjBase(cnpj14) : null);
   if (!cert?.pfxBuffer) {
@@ -85,6 +89,7 @@ export async function capturarNFCeSaida({
   };
   const addErro = (msg) => { r.erros++; if (r.errosDetalhe.length < 10) r.errosDetalhe.push(String(msg).slice(0, 200)); };
   const processadas = () => r.importadas + r.duplicadas + r.jaCompletas;
+  const tempoEsgotado = () => (Date.now() - t0) > maxDuracaoMs;
 
   for (const [wIni, wFim] of janelas(ini, fim)) {
     let cursor = fmt(wIni);
@@ -102,6 +107,7 @@ export async function capturarNFCeSaida({
 
       for (const ch of lista.chaves) {
         if (processadas() >= maxChaves) { r.limiteAtingido = true; break; }
+        if (tempoEsgotado()) { r.parcial = true; r.retomarDataInicial = cursor; break; }
         try {
           const snap = await db.collection('documentos_fiscais').doc(ch).get();
           if (snap.exists && (snap.data() || {}).temItens !== false) { r.jaCompletas++; continue; }
@@ -114,7 +120,7 @@ export async function capturarNFCeSaida({
           else r.importadas++;
         } catch (e) { addErro(`${ch}: ${e.message}`); }
       }
-      if (r.limiteAtingido) break;
+      if (r.limiteAtingido || r.parcial) break;
 
       // Paginacao: cStat 101 => proximo inicio = dhEmisUltNfce. Guarda contra
       // loop (se o cursor nao avancar, para).
@@ -127,10 +133,12 @@ export async function capturarNFCeSaida({
       }
       break; // lista completa (cStat 100) => proxima janela
     }
-    if (r.limiteAtingido) break;
+    if (r.limiteAtingido || r.parcial) break;
   }
 
-  r.veredito = `${r.importadas} importadas, ${r.jaCompletas} ja completas, ${r.duplicadas} duplicadas, ${r.erros} erros`;
+  r.duracaoMs = Date.now() - t0;
+  r.veredito = `${r.importadas} importadas, ${r.jaCompletas} ja completas, ${r.duplicadas} duplicadas, ${r.erros} erros`
+    + (r.parcial ? ' (parcial — rode de novo no mesmo periodo para continuar)' : '');
   if (r.errosDetalhe.length === 0) delete r.errosDetalhe;
   return r;
 }
