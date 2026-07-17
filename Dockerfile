@@ -88,4 +88,10 @@ COPY sefaz-backend ./sefaz-backend
 EXPOSE 8080
 
 # server.js da raiz: serve /api/fiscal/* (Gemini) + dist/ (frontend) + SPA fallback
-CMD ["node", "server.js"]
+#
+# --openssl-legacy-provider: o OpenSSL 3 (Node 22) tirou RC2-40/3DES do provider
+# padrao, e muitos A1 da ICP-Brasil foram exportados com esses ciphers legados —
+# sem o flag, o handshake mTLS quebra com "Unsupported PKCS12 PFX data" (afeta
+# SAE-NFC-e E DistDFe). O flag carrega o provider legado JUNTO do padrao, entao
+# certificados novos (AES) continuam funcionando normalmente.
+CMD ["node", "--openssl-legacy-provider", "server.js"]
