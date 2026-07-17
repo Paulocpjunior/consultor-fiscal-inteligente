@@ -44,16 +44,15 @@ async function autoSelecionarSaidaPendente(cnpjRaw) {
   if (base.length !== 8) return null;
 
   const db = getDb();
-  let docs = [];
-  if (cnpj.length === 14) {
-    const snap = await db.collection('documentos_fiscais')
-      .where('cnpjEmit', '==', cnpj).limit(300).get();
-    docs = snap.docs;
-  } else {
-    const snap = await db.collection('documentos_fiscais')
-      .where('direcao', '==', 'saida').limit(400).get();
-    docs = snap.docs;
-  }
+  // Escopa por cnpjEmit (=saidas da empresa). 14 digitos -> igualdade exata;
+  // raiz de 8 -> faixa [base+000000, base+999999] (range single-field, sem
+  // indice composto) pra pegar qualquer filial da mesma raiz.
+  const col = db.collection('documentos_fiscais');
+  const query = cnpj.length === 14
+    ? col.where('cnpjEmit', '==', cnpj)
+    : col.where('cnpjEmit', '>=', `${base}000000`).where('cnpjEmit', '<=', `${base}999999`);
+  const snap = await query.limit(400).get();
+  const docs = snap.docs;
 
   let fallback = null; // qualquer saida do CNPJ, se nao achar "pendente"
   for (const d of docs) {

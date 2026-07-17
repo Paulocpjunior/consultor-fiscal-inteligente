@@ -14,7 +14,7 @@ import {
  * /api/admin/sefaz/poc-saida-sp) e mostra o resultado na tela, pra o teste
  * virar um clique em vez de curl com token. Nao grava nada.
  */
-const CNPJ_PILOTO = '32602701';
+const CNPJ_PILOTO = '32602701000197';
 
 const MOTIVO_LABEL: Record<string, string> = {
     nenhum_cert_para_esta_base: 'Nenhum certificado com essa raiz de CNPJ existe no cofre.',
