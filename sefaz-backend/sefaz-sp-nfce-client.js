@@ -20,13 +20,30 @@
 
 import https from 'node:https';
 import tls from 'node:tls';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import forge from 'node-forge';
 
-// Extrai TODAS as CAs de dentro do .pfx (cadeia ICP-Brasil do titular). O
-// servidor de webservice da SEFAZ-SP encadeia na ICP-Brasil, que NAO esta no
-// bundle padrao do Node — sem isso o handshake da "unable to get local issuer
-// certificate". Combinado com tls.rootCertificates (CAs publicas), cobre tanto
-// servidor ICP-Brasil quanto comercial. Continua validando (rejectUnauthorized).
+// Bundle de CAs da ICP-Brasil que assina o SSL dos webservices SEFAZ NF-e/NFC-e
+// (AC do SERPRO SSLv1 + AC Raiz Brasileira v10). O servidor da SEFAZ-SP encadeia
+// nessa raiz, que NAO esta no bundle Mozilla do Node — sem ela o handshake da
+// "unable to get local issuer certificate". E o mesmo bundle usado por libs de
+// referencia (fazendatech/brafis) para verificar TODAS as UFs, inclusive SP.
+// Continua validando o servidor (rejectUnauthorized:true).
+const CA_BUNDLE = (() => {
+  try {
+    const p = fileURLToPath(new URL('./sefaz-sp-nfce-ca.pem', import.meta.url));
+    const pem = fs.readFileSync(p, 'utf-8');
+    // separa em certs individuais (o Node aceita array de PEMs em ca)
+    return pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) || [];
+  } catch (e) {
+    console.warn('[sae-nfce] nao carregou o bundle de CA ICP-Brasil:', e.message);
+    return [];
+  }
+})();
+
+// Extrai TODAS as CAs de dentro do .pfx (cadeia ICP-Brasil do titular), como
+// reforco caso o servidor encadeie numa AC intermediaria diferente.
 function caCertsFromPfx(pfxBuffer, password) {
   try {
     const p12 = forge.pkcs12.pkcs12FromAsn1(forge.asn1.fromDer(pfxBuffer.toString('binary')), password);
@@ -108,7 +125,7 @@ export function montaEnvelopeDownload({ tpAmb = 1, chNFCe }) {
 function postSae(url, envelope, action, pfxBuffer, password) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
-    const ca = [...tls.rootCertificates, ...caCertsFromPfx(pfxBuffer, password)];
+    const ca = [...CA_BUNDLE, ...tls.rootCertificates, ...caCertsFromPfx(pfxBuffer, password)];
     const agent = new https.Agent({ pfx: pfxBuffer, passphrase: password, ca, rejectUnauthorized: true, keepAlive: false });
     const req = https.request({
       host: u.hostname, port: u.port || 443, path: u.pathname + u.search, method: 'POST', agent,
