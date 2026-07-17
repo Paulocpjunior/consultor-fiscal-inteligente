@@ -51,7 +51,10 @@ async function autoSelecionarSaidaPendente(cnpjRaw) {
   const query = cnpj.length === 14
     ? col.where('cnpjEmit', '==', cnpj)
     : col.where('cnpjEmit', '>=', `${base}000000`).where('cnpjEmit', '<=', `${base}999999`);
-  const snap = await query.limit(400).get();
+  // Limite alto: uma empresa tem no maximo alguns milhares de saidas; pegar
+  // o conjunto quase todo garante que o sort ache a REALMENTE mais recente
+  // (com 400 a amostra do Firestore podia nao trazer os meses novos).
+  const snap = await query.limit(3000).get();
 
   // Coleta candidatas e escolhe a MAIS RECENTE (AAMM da chave, posicoes 2-5).
   // consChNFe so entrega dentro de uma janela de download — nota antiga da
