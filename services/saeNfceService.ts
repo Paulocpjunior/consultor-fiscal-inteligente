@@ -67,3 +67,35 @@ export async function capturarNFCeSaida(params: {
     if (!res.ok) return { ...data, ok: false, httpStatus: res.status };
     return data;
 }
+
+export interface LoteImportResultado {
+    ok: boolean;
+    recebidos?: number;
+    importadas?: number;
+    duplicadas?: number;
+    atualizadas?: number;
+    erros?: number;
+    errosDetalhe?: string[];
+    error?: string;
+}
+
+/**
+ * Envia um lote de XMLs (strings) para importação server-side pelo mesmo
+ * importer da captura (dedup por chave + upgrade resumo→completa).
+ * Usado pela Importação em Massa (ZIP) e pelo trilho A3.
+ */
+export async function importarXmlsLote(cnpj: string, xmls: string[]): Promise<LoteImportResultado> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sae-nfce/importar-xmls', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpj: cnpj.replace(/\D/g, ''), xmls }),
+    });
+    try {
+        const data = await res.json();
+        if (!res.ok) return { ...data, ok: false };
+        return { ...data, ok: true };
+    } catch {
+        return { ok: false, error: `HTTP ${res.status} (resposta não-JSON)` };
+    }
+}

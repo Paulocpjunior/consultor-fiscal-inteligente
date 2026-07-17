@@ -19,6 +19,7 @@ const XmlNfseSpCsv = lazy(() => import('./XmlNfseSpCsv'));
 const XmlNfseSpCapturadas = lazy(() => import('./XmlNfseSpCapturadas'));
 const NfseSpSessaoCookies = lazy(() => import('../NfseSpSessaoCookies'));
 const SaeNfceCaptura = lazy(() => import('./SaeNfceCaptura'));
+const XmlImportacaoZip = lazy(() => import('./XmlImportacaoZip'));
 
 type TabId =
     | 'dashboard'
@@ -154,11 +155,23 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                     </>
                 )}
                 {tab === 'importacao' && (
-                    <XmlImportacaoManual
-                        currentUser={currentUser}
-                        onShowToast={onShowToast}
-                        onImported={() => setRefreshKey(k => k + 1)}
-                    />
+                    <div className="space-y-4">
+                        <XmlImportacaoManual
+                            currentUser={currentUser}
+                            onShowToast={onShowToast}
+                            onImported={() => setRefreshKey(k => k + 1)}
+                        />
+                        {/* Massa (ZIP): trilho da NF-e mod 55 de saída — o lote do
+                            portal SEFAZ (baixado no escritório com o cert do cliente)
+                            entra aqui e completa os resumos pendentes. */}
+                        <Suspense fallback={null}>
+                            <XmlImportacaoZip
+                                currentUser={currentUser}
+                                onShowToast={onShowToast}
+                                onImported={() => setRefreshKey(k => k + 1)}
+                            />
+                        </Suspense>
+                    </div>
                 )}
                 {tab === 'empresas' && (
                     <XmlEmpresasMonitoradas currentUser={currentUser} />

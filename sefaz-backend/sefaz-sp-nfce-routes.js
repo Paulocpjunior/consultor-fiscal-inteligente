@@ -45,9 +45,17 @@ router.post('/capturar', requireAdmin, async (req, res) => {
   }
 });
 
-// Limites defensivos do lote vindo do Agente A3 local.
+// Limites defensivos do lote (Agente A3 e Importacao em Massa ZIP).
 const MAX_XMLS_POR_LOTE = 100;
-const MAX_XML_BYTES = 800_000; // nfeProc de NFC-e tipicamente < 100 KB
+const MAX_XML_BYTES = 5_000_000; // NF-e mod 55 industrial (centenas de itens) passa de 1 MB
+
+// O XML precisa pertencer a empresa informada: mesma RAIZ de CNPJ (8 digitos)
+// no emitente ou no destinatario. Raiz (e nao os 14) para cobrir filiais.
+function xmlPertenceAEmpresa(xml, cnpj14) {
+  const raiz = cnpj14.slice(0, 8);
+  const cnpjs = String(xml).match(/<CNPJ>\s*(\d{14})\s*<\/CNPJ>/gi) || [];
+  return cnpjs.some((t) => t.replace(/\D/g, '').startsWith(raiz));
+}
 
 // O parser JSON global (server.js) ja aceita ate 20mb — um lote de 100 NFC-e
 // (~100 KB cada) fica bem abaixo disso.
@@ -72,6 +80,11 @@ router.post('/importar-xmls', requireAdmin, async (req, res) => {
         if (Buffer.byteLength(texto, 'utf-8') > MAX_XML_BYTES) {
           r.erros++;
           if (r.errosDetalhe.length < 10) r.errosDetalhe.push('XML acima do limite de tamanho — ignorado');
+          continue;
+        }
+        if (!xmlPertenceAEmpresa(texto, cnpj14)) {
+          r.erros++;
+          if (r.errosDetalhe.length < 10) r.errosDetalhe.push('XML nao pertence a empresa informada (CNPJ nao aparece como emit/dest) — ignorado');
           continue;
         }
         const imp = await importarXmlSefaz({
