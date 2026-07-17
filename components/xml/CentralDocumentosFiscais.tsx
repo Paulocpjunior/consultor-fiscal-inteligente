@@ -18,6 +18,7 @@ import EmpresasStatusCapturaPanel from '../EmpresasStatusCapturaPanel';
 const XmlNfseSpCsv = lazy(() => import('./XmlNfseSpCsv'));
 const XmlNfseSpCapturadas = lazy(() => import('./XmlNfseSpCapturadas'));
 const NfseSpSessaoCookies = lazy(() => import('../NfseSpSessaoCookies'));
+const SaeNfceCaptura = lazy(() => import('./SaeNfceCaptura'));
 
 type TabId =
     | 'dashboard'
@@ -33,13 +34,15 @@ type TabId =
     | 'config'
     | 'nfse_pdf'
     | 'nfse_sp_csv'
-    | 'nfse_sp_captura';
+    | 'nfse_sp_captura'
+    | 'sae_nfce';
 
 const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'captura-auto', label: '🛰️ Captura Automática' },
     { id: 'empresas-status', label: '📋 Status por Empresa' },
     { id: 'documentos', label: 'XMLs NFe (Entrada/Saída)' },
+    { id: 'sae_nfce', label: '🧾 Captura NFC-e Saída (SP)' },
     { id: 'nfse_sp_captura', label: '🛰️ Captura Portal SP' },
     { id: 'importacao', label: 'Importação Manual' },
     { id: 'nfse_pdf', label: 'Importar NFSe (PDF)' },
@@ -178,6 +181,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                         onShowToast={onShowToast}
                         onImported={() => setRefreshKey(k => k + 1)}
                     />
+                )}
+                {tab === 'sae_nfce' && (
+                    <Suspense fallback={<p className="text-center text-xs text-slate-400 py-6">Carregando...</p>}>
+                        <SaeNfceCaptura />
+                    </Suspense>
                 )}
                 {tab === 'nfse_sp_captura' && (
                     <Suspense fallback={<p className="text-center text-xs text-slate-400 py-6">Carregando...</p>}>
