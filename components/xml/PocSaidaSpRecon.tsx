@@ -288,7 +288,8 @@ const PocSaidaSpRecon: React.FC = () => {
                                 : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>
                             <p className="text-sm font-bold text-slate-700 dark:text-slate-100">
                                 {dlResp.temCompleta ? '✓ Nota COMPLETA disponível via consChNFe'
-                                    : dlResp.veredito === 'fora_de_prazo_632' ? '⏱ Fora da janela de download (cStat 632) — teste uma saída recente'
+                                    : dlResp.veredito === 'indisponivel_emitente_641' ? '❌ NF-e indisponível para o emitente (cStat 641) — consChNFe fechado p/ saída'
+                                        : dlResp.veredito === 'fora_de_prazo_632' ? '⏱ Fora da janela de download (cStat 632) — teste uma saída recente'
                                         : dlResp.veredito === 'nada_encontrado_137' ? '✗ SEFAZ não localizou (cStat 137)'
                                             : dlResp.veredito === 'so_resumo' ? '⚠ Voltou só o resumo'
                                                 : dlResp.veredito === 'rate_limited_656' ? '⏳ Rate limit (656) — tentar depois'
