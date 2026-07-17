@@ -113,6 +113,7 @@ export interface PocSaidaCompletaResposta {
     ok: boolean;
     chave?: string;
     chaveAutoSelecionada?: boolean;
+    emissao?: string | null;
     cnpjEmitente?: string;
     uf?: string;
     certFonte?: { empresaId: string | null; cnpj: string | null };
@@ -120,7 +121,7 @@ export interface PocSaidaCompletaResposta {
     xMotivo?: string | null;
     totalXmls?: number;
     temCompleta?: boolean;
-    veredito?: 'completa_disponivel' | 'nada_encontrado_137' | 'so_resumo' | 'rate_limited_656' | 'inconclusivo';
+    veredito?: 'completa_disponivel' | 'fora_de_prazo_632' | 'nada_encontrado_137' | 'so_resumo' | 'rate_limited_656' | 'inconclusivo';
     interpretacao?: string;
     xmls?: PocSaidaXmlInfo[];
     error?: string;
