@@ -106,6 +106,24 @@ upsert_job \
     "/api/admin/nfse-nacional-dfe/sync-cron" \
     "Captura NFSe Nacional ADN (DFe) todas empresas habilitadas"
 
+# Captura de SAIDA de NFC-e (mod 65) via SAE-NFC-e (SEFAZ-SP), com o A1 de
+# cada empresa do cofre ("frente 2" — atuar como o proprio cliente).
+# Roda 2h30 (entre o DistDFe 2h e a NFSe 3h) + reforcos intra-dia 7h/13h/19h
+# (deslocados 1h do sefaz-xml-capture pra nao concorrer pelo mesmo container).
+# Incremental: cada disparo cobre do ultimo cursor ate agora (estado em
+# sae_nfce_state/{cnpj}); o que nao couber no orcamento fica pro proximo.
+upsert_job \
+    "sae-nfce-cron-noturno" \
+    "30 2 * * 1-5" \
+    "/api/admin/sefaz/sae-nfce-cron" \
+    "Captura saida NFC-e (SAE-NFC-e SP) com A1 de cada empresa do cofre"
+
+upsert_job \
+    "sae-nfce-cron-intradia" \
+    "0 7,13,19 * * 1-5" \
+    "/api/admin/sefaz/sae-nfce-cron" \
+    "Captura saida NFC-e (SAE-NFC-e SP) — reforco intra-dia 7h/13h/19h"
+
 # NFSe SP via PORTAL CSV — substitui o WS legacy que retornava erro 1102.
 # 1 login do escritório baixa CSV de TODAS empresas autorizadas no portal.
 upsert_job \
