@@ -49,8 +49,6 @@ import diagnosticoConfigRouter from './sefaz-backend/diagnostico-config-routes.j
 import healthConsolidadoRouter from './sefaz-backend/health-consolidado-routes.js';
 import healthAlertaCronRouter from './sefaz-backend/health-alerta-cron.js';
 import empresasPerfilRouter from './sefaz-backend/empresas-perfil-routes.js';
-import pocSaidaSpRouter from './sefaz-backend/poc-saida-sp-routes.js';
-import pocSaidaDownloadRouter from './sefaz-backend/poc-saida-download-routes.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 import { podeAcessarCnpj, getCnpjsDaCarteira } from './sefaz-backend/carteira-auth.js';
 import { enviarEmail } from './sefaz-backend/graph-provider.js';
@@ -262,8 +260,6 @@ app.use('/api/admin/sefaz', sefazSyncRouter);
 app.use('/api/admin/sefaz', empresaStatusRouter);
 app.use('/api/admin/vencimentos', vencimentosRouter);
 app.use('/api/admin/sefaz', sefazManifestoRouter);
-app.use('/api/admin/sefaz', pocSaidaSpRouter);
-app.use('/api/admin/sefaz', pocSaidaDownloadRouter);
 app.use('/api/admin/sefaz', sefazNfseSpRouter);
 app.use('/api/admin/sped-fiscal', spedFiscalRouter);
 app.use('/api/admin/sped-contrib', spedContribRouter);
