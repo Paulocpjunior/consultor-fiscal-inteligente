@@ -288,15 +288,17 @@ const PocSaidaSpRecon: React.FC = () => {
                                 : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>
                             <p className="text-sm font-bold text-slate-700 dark:text-slate-100">
                                 {dlResp.temCompleta ? '✓ Nota COMPLETA disponível via consChNFe'
-                                    : dlResp.veredito === 'nada_encontrado_137' ? '✗ SEFAZ não localizou (cStat 137)'
-                                        : dlResp.veredito === 'so_resumo' ? '⚠ Voltou só o resumo'
-                                            : dlResp.veredito === 'rate_limited_656' ? '⏳ Rate limit (656) — tentar depois'
-                                                : '⚠ Inconclusivo'}
+                                    : dlResp.veredito === 'fora_de_prazo_632' ? '⏱ Fora da janela de download (cStat 632) — teste uma saída recente'
+                                        : dlResp.veredito === 'nada_encontrado_137' ? '✗ SEFAZ não localizou (cStat 137)'
+                                            : dlResp.veredito === 'so_resumo' ? '⚠ Voltou só o resumo'
+                                                : dlResp.veredito === 'rate_limited_656' ? '⏳ Rate limit (656) — tentar depois'
+                                                    : '⚠ Inconclusivo'}
                             </p>
                             <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{dlResp.interpretacao}</p>
                         </div>
                         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                             <dt className="text-slate-500">Chave testada</dt><dd className="text-slate-700 dark:text-slate-200 font-mono break-all">{dlResp.chave || '—'} {dlResp.chaveAutoSelecionada ? '(auto)' : ''}</dd>
+                            <dt className="text-slate-500">Emissão da nota</dt><dd className="text-slate-700 dark:text-slate-200">{dlResp.emissao || '—'}</dd>
                             <dt className="text-slate-500">cStat / motivo</dt><dd className="text-slate-700 dark:text-slate-200">{dlResp.cStat ?? '—'} — {dlResp.xMotivo || ''}</dd>
                             <dt className="text-slate-500">Emitente / UF</dt><dd className="text-slate-700 dark:text-slate-200">{dlResp.cnpjEmitente} / {dlResp.uf}</dd>
                             <dt className="text-slate-500">A1 usado (cofre)</dt><dd className="text-slate-700 dark:text-slate-200">{dlResp.certFonte?.cnpj || '—'}</dd>

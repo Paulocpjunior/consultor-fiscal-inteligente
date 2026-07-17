@@ -52,10 +52,12 @@ async function autoSelecionarSaidaPendente(cnpjRaw) {
     ? col.where('cnpjEmit', '==', cnpj)
     : col.where('cnpjEmit', '>=', `${base}000000`).where('cnpjEmit', '<=', `${base}999999`);
   const snap = await query.limit(400).get();
-  const docs = snap.docs;
 
-  let fallback = null; // qualquer saida do CNPJ, se nao achar "pendente"
-  for (const d of docs) {
+  // Coleta candidatas e escolhe a MAIS RECENTE (AAMM da chave, posicoes 2-5).
+  // consChNFe so entrega dentro de uma janela de download — nota antiga da
+  // cStat 632 (fora de prazo). Testar a mais nova maximiza a chance de completa.
+  const candidatos = [];
+  for (const d of snap.docs) {
     const chave = String(d.id || '').replace(/\D/g, '');
     if (chave.length !== 44) continue;
     if (chave.slice(6, 14) !== base) continue;           // emitente = CNPJ pedido
@@ -63,10 +65,19 @@ async function autoSelecionarSaidaPendente(cnpjRaw) {
     if (doc.direcao && doc.direcao !== 'saida') continue; // ignora entrada
     const pendente = doc.temItens === false || doc.status === 'pendente'
       || /^res(NFe|NFCe)/.test(String(doc.schema || ''));
-    if (pendente) return chave;
-    if (!fallback) fallback = chave;
+    candidatos.push({ chave, aamm: chave.slice(2, 6), pendente });
   }
-  return fallback;
+  const pend = candidatos.filter(c => c.pendente).sort((a, b) => b.aamm.localeCompare(a.aamm));
+  if (pend.length) return pend[0].chave;
+  const todas = candidatos.sort((a, b) => b.aamm.localeCompare(a.aamm));
+  return todas.length ? todas[0].chave : null;
+}
+
+// Mes de emissao "AAAA-MM" a partir do AAMM da chave (posicoes 2-5).
+function emissaoDaChave(chave) {
+  const aamm = String(chave || '').slice(2, 6);
+  if (aamm.length !== 4) return null;
+  return `20${aamm.slice(0, 2)}-${aamm.slice(2, 4)}`;
 }
 
 const UF_POR_COD = {
@@ -152,9 +163,21 @@ router.get('/poc-saida-completa', requireAdmin, async (req, res) => {
     let veredito;
     if (resp.rateLimited || resp.cStat === '656') veredito = 'rate_limited_656';
     else if (temCompleta) veredito = 'completa_disponivel';
+    else if (resp.cStat === '632') veredito = 'fora_de_prazo_632';
     else if (resp.cStat === '137') veredito = 'nada_encontrado_137';
     else if (xmls.some(x => x.ehResumo)) veredito = 'so_resumo';
     else veredito = 'inconclusivo';
+
+    const emissao = emissaoDaChave(chave);
+
+    const INTERPRETACOES = {
+      completa_disponivel: 'consChNFe com o A1 da empresa DEVOLVEU a nota completa — dispensa o portal SP; F1 vira batch sobre as chaves existentes.',
+      fora_de_prazo_632: `A SEFAZ RECONHECEU a solicitacao do emitente, mas a nota (emissao ${emissao || '?'}) esta fora da janela de download (cStat 632). Isso e promissor: nao e "nao encontrado". Teste uma saida RECENTE (ultimos ~90 dias) para confirmar se vem completa.`,
+      nada_encontrado_137: 'SEFAZ nao localizou a nota pra este interessado (137) — emitente nao consegue puxar a propria saida via DFe; portal SP continua necessario.',
+      so_resumo: 'Voltou so o resumo (sem itens/valor) — a nota completa nao foi liberada por este canal.',
+      rate_limited_656: 'SEFAZ limitou a consulta (656) — tentar de novo mais tarde; nao conclui nada ainda.',
+      inconclusivo: 'Resposta inconclusiva — ver cStat/xMotivo e os xmls retornados.',
+    };
 
     return res.json({
       ok: true,
@@ -163,6 +186,7 @@ router.get('/poc-saida-completa', requireAdmin, async (req, res) => {
       duracaoMs: Date.now() - inicio,
       chave,
       chaveAutoSelecionada,
+      emissao,
       cnpjEmitente,
       uf: ufSigla,
       certFonte: { empresaId: cert.empresaIdFonte || cert.empresaId || null, cnpj: cert.cnpjFonte || cert.cnpj || null },
@@ -172,17 +196,7 @@ router.get('/poc-saida-completa', requireAdmin, async (req, res) => {
       temCompleta,
       veredito,
       xmls,
-      // Guia de leitura pra decisao:
-      interpretacao:
-        veredito === 'completa_disponivel'
-          ? 'consChNFe com o A1 da empresa DEVOLVEU a nota completa — dispensa o portal SP; F1 vira batch sobre as chaves existentes.'
-          : veredito === 'nada_encontrado_137'
-            ? 'SEFAZ nao localizou a nota pra este interessado (137) — emitente nao consegue puxar a propria saida via DFe; portal SP continua necessario.'
-            : veredito === 'so_resumo'
-              ? 'Voltou so o resumo (sem itens/valor) — a nota completa nao foi liberada por este canal.'
-              : veredito === 'rate_limited_656'
-                ? 'SEFAZ limitou a consulta (656) — tentar de novo mais tarde; nao conclui nada ainda.'
-                : 'Resposta inconclusiva — ver cStat/xMotivo e os xmls retornados.',
+      interpretacao: INTERPRETACOES[veredito] || INTERPRETACOES.inconclusivo,
     });
   } catch (e) {
     console.error('[poc-saida-completa] erro:', e.message);
