@@ -19,6 +19,26 @@
 // ============================================================================
 
 import https from 'node:https';
+import tls from 'node:tls';
+import forge from 'node-forge';
+
+// Extrai TODAS as CAs de dentro do .pfx (cadeia ICP-Brasil do titular). O
+// servidor de webservice da SEFAZ-SP encadeia na ICP-Brasil, que NAO esta no
+// bundle padrao do Node — sem isso o handshake da "unable to get local issuer
+// certificate". Combinado com tls.rootCertificates (CAs publicas), cobre tanto
+// servidor ICP-Brasil quanto comercial. Continua validando (rejectUnauthorized).
+function caCertsFromPfx(pfxBuffer, password) {
+  try {
+    const p12 = forge.pkcs12.pkcs12FromAsn1(forge.asn1.fromDer(pfxBuffer.toString('binary')), password);
+    const cas = [];
+    for (const sc of p12.safeContents) {
+      for (const bag of sc.safeBags) {
+        if (bag.type === forge.pki.oids.certBag && bag.cert) cas.push(forge.pki.certificateToPem(bag.cert));
+      }
+    }
+    return cas;
+  } catch { return []; }
+}
 
 const NAMESPACE = 'http://www.portalfiscal.inf.br/nfe';
 const VERSAO = '1.00';
@@ -88,7 +108,8 @@ export function montaEnvelopeDownload({ tpAmb = 1, chNFCe }) {
 function postSae(url, envelope, action, pfxBuffer, password) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
-    const agent = new https.Agent({ pfx: pfxBuffer, passphrase: password, rejectUnauthorized: true, keepAlive: false });
+    const ca = [...tls.rootCertificates, ...caCertsFromPfx(pfxBuffer, password)];
+    const agent = new https.Agent({ pfx: pfxBuffer, passphrase: password, ca, rejectUnauthorized: true, keepAlive: false });
     const req = https.request({
       host: u.hostname, port: u.port || 443, path: u.pathname + u.search, method: 'POST', agent,
       timeout: HTTP_TIMEOUT_MS,
