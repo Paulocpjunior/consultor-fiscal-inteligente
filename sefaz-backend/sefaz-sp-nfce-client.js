@@ -22,7 +22,7 @@ import https from 'node:https';
 import tls from 'node:tls';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import forge from 'node-forge';
+import { pfxToPem } from './pfx-to-pem.js';
 
 // Bundle de CAs da ICP-Brasil que assina o SSL dos webservices SEFAZ NF-e/NFC-e
 // (AC do SERPRO SSLv1 + AC Raiz Brasileira v10). O servidor da SEFAZ-SP encadeia
@@ -42,19 +42,23 @@ const CA_BUNDLE = (() => {
   }
 })();
 
-// Extrai TODAS as CAs de dentro do .pfx (cadeia ICP-Brasil do titular), como
-// reforco caso o servidor encadeie numa AC intermediaria diferente.
-function caCertsFromPfx(pfxBuffer, password) {
+// Monta as credenciais mTLS do cliente a partir do .pfx do titular.
+//
+// PROBLEMA: o OpenSSL 3 (Node 22) removeu ciphers legados (RC2-40/3DES) do
+// provider padrao. Muitos A1 da ICP-Brasil foram exportados com esse cipher
+// antigo — passar o pfx bruto para o https.Agent faz o OpenSSL lancar
+// "Unsupported PKCS12 PFX data" e a captura quebra logo na listagem.
+//
+// SOLUCAO: converter o pfx para cert+key PEM com node-forge (JS puro, entende
+// os ciphers legados). Se o forge falhar (pfx moderno AES-GCM que ele nao le),
+// cai pro pfx bruto — que nesse caso o OpenSSL 3 aceita. Cobrimos os dois lados.
+function credenciaisCliente(pfxBuffer, password) {
   try {
-    const p12 = forge.pkcs12.pkcs12FromAsn1(forge.asn1.fromDer(pfxBuffer.toString('binary')), password);
-    const cas = [];
-    for (const sc of p12.safeContents) {
-      for (const bag of sc.safeBags) {
-        if (bag.type === forge.pki.oids.certBag && bag.cert) cas.push(forge.pki.certificateToPem(bag.cert));
-      }
-    }
-    return cas;
-  } catch { return []; }
+    const { pemKey, pemCert } = pfxToPem(pfxBuffer, password);
+    return { cert: pemCert, key: pemKey };
+  } catch {
+    return { pfx: pfxBuffer, passphrase: password };
+  }
 }
 
 const NAMESPACE = 'http://www.portalfiscal.inf.br/nfe';
@@ -125,8 +129,13 @@ export function montaEnvelopeDownload({ tpAmb = 1, chNFCe }) {
 function postSae(url, envelope, action, pfxBuffer, password) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
-    const ca = [...CA_BUNDLE, ...tls.rootCertificates, ...caCertsFromPfx(pfxBuffer, password)];
-    const agent = new https.Agent({ pfx: pfxBuffer, passphrase: password, ca, rejectUnauthorized: true, keepAlive: false });
+    const ca = [...CA_BUNDLE, ...tls.rootCertificates];
+    let agent;
+    try {
+      agent = new https.Agent({ ...credenciaisCliente(pfxBuffer, password), ca, rejectUnauthorized: true, keepAlive: false });
+    } catch (e) {
+      return reject(new Error(`Certificado A1 invalido ou nao suportado (${e.message}). Reexporte o .pfx e reenvie no cofre.`));
+    }
     const req = https.request({
       host: u.hostname, port: u.port || 443, path: u.pathname + u.search, method: 'POST', agent,
       timeout: HTTP_TIMEOUT_MS,
