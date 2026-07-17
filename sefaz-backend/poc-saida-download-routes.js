@@ -166,6 +166,7 @@ router.get('/poc-saida-completa', requireAdmin, async (req, res) => {
     let veredito;
     if (resp.rateLimited || resp.cStat === '656') veredito = 'rate_limited_656';
     else if (temCompleta) veredito = 'completa_disponivel';
+    else if (resp.cStat === '641') veredito = 'indisponivel_emitente_641';
     else if (resp.cStat === '632') veredito = 'fora_de_prazo_632';
     else if (resp.cStat === '137') veredito = 'nada_encontrado_137';
     else if (xmls.some(x => x.ehResumo)) veredito = 'so_resumo';
@@ -175,7 +176,8 @@ router.get('/poc-saida-completa', requireAdmin, async (req, res) => {
 
     const INTERPRETACOES = {
       completa_disponivel: 'consChNFe com o A1 da empresa DEVOLVEU a nota completa — dispensa o portal SP; F1 vira batch sobre as chaves existentes.',
-      fora_de_prazo_632: `A SEFAZ RECONHECEU a solicitacao do emitente, mas a nota (emissao ${emissao || '?'}) esta fora da janela de download (cStat 632). Isso e promissor: nao e "nao encontrado". Teste uma saida RECENTE (ultimos ~90 dias) para confirmar se vem completa.`,
+      indisponivel_emitente_641: `cStat 641: a SEFAZ diz que a NF-e (emissao ${emissao || '?'}) esta INDISPONIVEL PARA O EMITENTE. CONCLUSIVO: o emitente NAO baixa a propria saida via consChNFe/DFe, nem as recentes — caminho fechado. A saida completa tem de vir do sistema emissor (SharePoint/Importacao Manual).`,
+      fora_de_prazo_632: `A nota (emissao ${emissao || '?'}) esta fora da janela de download (cStat 632). Combinado com o 641 ("indisponivel para o emitente"), confirma que a saida nao vem por consChNFe.`,
       nada_encontrado_137: 'SEFAZ nao localizou a nota pra este interessado (137) — emitente nao consegue puxar a propria saida via DFe; portal SP continua necessario.',
       so_resumo: 'Voltou so o resumo (sem itens/valor) — a nota completa nao foi liberada por este canal.',
       rate_limited_656: 'SEFAZ limitou a consulta (656) — tentar de novo mais tarde; nao conclui nada ainda.',
