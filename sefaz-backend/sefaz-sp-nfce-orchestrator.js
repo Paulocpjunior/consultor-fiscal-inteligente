@@ -28,6 +28,7 @@ const DIA_MS = 86_400_000;
 const MAX_JANELA_DIAS = 100;   // limite da NT SAE-NFC-e
 const THROTTLE_MS = 400;       // entre downloads (controle por IP da SEFAZ)
 const MAX_PAGINAS = 60;        // teto defensivo por janela
+const DEDUP_LOTE = 300;        // chaves por getAll (dedup em lote no Firestore)
 
 // Date -> "AAAA-MM-DDThh:mm" (formato exigido pelo SAE).
 function fmt(d) {
@@ -105,12 +106,27 @@ export async function capturarNFCeSaida({
       if (lista.vazio) break;
       r.chavesEncontradas += lista.chaves.length;
 
-      for (const ch of lista.chaves) {
+      // Dedup em LOTE: em vez de 1 get por chave (que consumia todo o orcamento
+      // em ida-e-volta ao Firestore quando a empresa ja tinha as notas), faz
+      // getAll em blocos e separa quem ja esta completa (temItens!==false) de
+      // quem precisa baixar (novo ou resumo a fazer upgrade).
+      const pendentes = [];
+      for (let i = 0; i < lista.chaves.length; i += DEDUP_LOTE) {
+        const bloco = lista.chaves.slice(i, i + DEDUP_LOTE);
+        const refs = bloco.map((ch) => db.collection('documentos_fiscais').doc(ch));
+        let snaps;
+        try { snaps = await db.getAll(...refs); }
+        catch (e) { addErro(`dedup ${cursor}: ${e.message}`); pendentes.push(...bloco); continue; }
+        for (const snap of snaps) {
+          if (snap.exists && (snap.data() || {}).temItens !== false) r.jaCompletas++;
+          else pendentes.push(snap.id);
+        }
+      }
+
+      for (const ch of pendentes) {
         if (processadas() >= maxChaves) { r.limiteAtingido = true; break; }
         if (tempoEsgotado()) { r.parcial = true; r.retomarDataInicial = cursor; break; }
         try {
-          const snap = await db.collection('documentos_fiscais').doc(ch).get();
-          if (snap.exists && (snap.data() || {}).temItens !== false) { r.jaCompletas++; continue; }
           const dl = await baixarXmlNFCe({ chNFCe: ch, cert, tpAmb });
           await sleep(THROTTLE_MS);
           if (!dl.ok || !dl.nfeProcXml) { addErro(`download ${ch}: cStat ${dl.cStat} ${dl.xMotivo || ''}`); continue; }
@@ -121,6 +137,7 @@ export async function capturarNFCeSaida({
         } catch (e) { addErro(`${ch}: ${e.message}`); }
       }
       if (r.limiteAtingido || r.parcial) break;
+      if (tempoEsgotado()) { r.parcial = true; r.retomarDataInicial = cursor; break; }
 
       // Paginacao: cStat 101 => proximo inicio = dhEmisUltNfce. Guarda contra
       // loop (se o cursor nao avancar, para).
