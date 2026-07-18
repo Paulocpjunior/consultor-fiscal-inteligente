@@ -68,6 +68,46 @@ export async function capturarNFCeSaida(params: {
     return data;
 }
 
+export interface AutXmlHarvestResultado {
+    ok: boolean;
+    escritorio?: string;
+    empresasMonitoradas?: number;
+    docs?: number;
+    importadasSaida?: number;
+    importadasEntrada?: number;
+    atualizadas?: number;
+    duplicadas?: number;
+    eventos?: number;
+    semDono?: number;
+    erros?: number;
+    ultNSU?: string;
+    maxNSU?: string;
+    rateLimited?: boolean;
+    detalhePorEmpresa?: Record<string, { nome: string; saida: number; entrada: number; atualizadas: number; duplicadas: number }>;
+    duracaoMs?: number;
+    error?: string;
+}
+
+/**
+ * Dispara a colheita de saída via autXML (DistribuiçãoDFe com o cert do
+ * escritório). resetNSU=true refaz o backfill dos ~90 dias.
+ */
+export async function colherAutXml(resetNSU = false): Promise<AutXmlHarvestResultado> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/autxml-harvest', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resetNSU }),
+    });
+    try {
+        const data = await res.json();
+        if (!res.ok) return { ...data, ok: false };
+        return { ...data, ok: true };
+    } catch {
+        return { ok: false, error: `HTTP ${res.status} (resposta não-JSON)` };
+    }
+}
+
 export interface LoteImportResultado {
     ok: boolean;
     recebidos?: number;

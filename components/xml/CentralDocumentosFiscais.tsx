@@ -20,6 +20,7 @@ const XmlNfseSpCapturadas = lazy(() => import('./XmlNfseSpCapturadas'));
 const NfseSpSessaoCookies = lazy(() => import('../NfseSpSessaoCookies'));
 const SaeNfceCaptura = lazy(() => import('./SaeNfceCaptura'));
 const XmlImportacaoZip = lazy(() => import('./XmlImportacaoZip'));
+const AutXmlHarvest = lazy(() => import('./AutXmlHarvest'));
 
 type TabId =
     | 'dashboard'
@@ -170,6 +171,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                                 onShowToast={onShowToast}
                                 onImported={() => setRefreshKey(k => k + 1)}
                             />
+                        </Suspense>
+                        {/* autXML: saída mod 55 automática via DistDFe (cert do
+                            escritório). Fica junto do ZIP — ambos completam saída. */}
+                        <Suspense fallback={null}>
+                            <AutXmlHarvest />
                         </Suspense>
                     </div>
                 )}

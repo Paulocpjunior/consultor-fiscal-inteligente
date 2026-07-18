@@ -124,6 +124,16 @@ upsert_job \
     "/api/admin/sefaz/sae-nfce-cron" \
     "Captura saida NFC-e (SAE-NFC-e SP) — reforco intra-dia 7h/13h/19h"
 
+# Colheita de SAIDA via <autXML> (DistDFe com o cert do escritorio). O cliente
+# autoriza o CNPJ do escritorio na emissao (tag autXML) e a SEFAZ distribui o
+# XML completo das notas dele para o escritorio, no MESMO fluxo distNSU. Roda
+# 3x/dia, deslocado dos demais crons de captura.
+upsert_job \
+    "autxml-harvest-cron" \
+    "15 2,10,16 * * 1-5" \
+    "/api/admin/sefaz/autxml-harvest-cron" \
+    "Colhe saida NF-e via autXML (DistDFe cert escritorio) e atribui ao cliente"
+
 # NFSe SP via PORTAL CSV — substitui o WS legacy que retornava erro 1102.
 # 1 login do escritório baixa CSV de TODAS empresas autorizadas no portal.
 upsert_job \
