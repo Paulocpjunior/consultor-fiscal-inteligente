@@ -227,7 +227,7 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                     <select
                         value={direcao}
                         onChange={(e) => setDirecao(e.target.value as any)}
-                        className="px-2 py-1 text-sm border rounded bg-white"
+                        className="px-2 py-1 text-sm border border-slate-300 rounded bg-white text-slate-900"
                     >
                         <option value="todas">Todas</option>
                         <option value="saida">📤 Emitidas (prestados)</option>
@@ -241,16 +241,16 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                         value={cnpjFiltro}
                         onChange={(e) => setCnpjFiltro(e.target.value)}
                         placeholder="44.388.152/0001-89"
-                        className="px-2 py-1 text-sm border rounded bg-white w-44"
+                        className="px-2 py-1 text-sm border border-slate-300 rounded bg-white text-slate-900 placeholder-slate-400 w-44"
                     />
                 </div>
                 <div>
                     <label className="text-xs font-semibold block">Data início</label>
-                    <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="px-2 py-1 text-sm border rounded bg-white" />
+                    <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="px-2 py-1 text-sm border border-slate-300 rounded bg-white text-slate-900" />
                 </div>
                 <div>
                     <label className="text-xs font-semibold block">Data fim</label>
-                    <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="px-2 py-1 text-sm border rounded bg-white" />
+                    <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="px-2 py-1 text-sm border border-slate-300 rounded bg-white text-slate-900" />
                 </div>
                 <div>
                     <label className="text-xs font-semibold block">Buscar</label>
@@ -259,7 +259,7 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                         value={busca}
                         onChange={(e) => setBusca(e.target.value)}
                         placeholder="número, prestador, tomador, descrição"
-                        className="px-2 py-1 text-sm border rounded bg-white w-72"
+                        className="px-2 py-1 text-sm border border-slate-300 rounded bg-white text-slate-900 placeholder-slate-400 w-72"
                     />
                 </div>
                 <button onClick={carregar} className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 rounded">↻ Atualizar</button>

@@ -113,18 +113,18 @@ const NfseSpSessaoCookies: React.FC<Props> = ({ currentUser }) => {
                 <div className={`p-4 rounded border ${status.valida ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'}`}>
                     <div className="flex items-center gap-2 mb-2">
                         <span className="text-2xl">{status.valida ? '✅' : '⚠️'}</span>
-                        <span className="font-semibold">
+                        <span className={`font-bold ${status.valida ? 'text-green-800' : 'text-amber-900'}`}>
                             {status.valida ? 'Sessão válida' : 'Sessão expirada/ausente'}
                         </span>
                     </div>
                     {status.valida ? (
-                        <div className="text-sm space-y-1">
+                        <div className="text-sm space-y-1 text-green-900">
                             <div>Cookies salvos: <code className="text-xs">{status.cookiesNomes?.join(', ')}</code></div>
                             <div>Atualizado: {fmtRelTime(status.atualizadoEm)}</div>
                             <div>Expira: <strong>{fmtRelTime(status.expiraEm)}</strong></div>
                         </div>
                     ) : (
-                        <p className="text-xs text-amber-800">{status.motivo}</p>
+                        <p className="text-sm font-medium text-amber-900">{status.motivo}</p>
                     )}
                 </div>
             )}
@@ -148,7 +148,7 @@ const NfseSpSessaoCookies: React.FC<Props> = ({ currentUser }) => {
                         value={cookieString}
                         onChange={(e) => setCookieString(e.target.value)}
                         placeholder="PMSP_NFeID=ABC123...; PMSP_NFE_CPFCNPJ=44388152000189; ASP.NET_SessionId=xyz..."
-                        className="w-full h-32 p-2 text-xs font-mono border rounded bg-white"
+                        className="w-full h-32 p-2 text-xs font-mono border border-slate-300 rounded bg-white text-slate-900 placeholder-slate-400"
                     />
 
                     <button
