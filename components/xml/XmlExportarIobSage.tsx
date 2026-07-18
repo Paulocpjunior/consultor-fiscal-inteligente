@@ -29,11 +29,15 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const empresas = useMemo(() => {
         const map = new Map<string, { id: string; nome: string; cnpj: string }>();
         docs.forEach(d => {
-            if (!map.has(d.empresaId)) {
-                map.set(d.empresaId, { id: d.empresaId, nome: d.empresaNome, cnpj: d.empresaCnpj });
+            // Docs capturados server-side (autXML/ZIP/SAE) podem vir sem
+            // empresaNome (e ate sem empresaId) — cai pro CNPJ como rotulo/chave
+            // em vez de quebrar a ordenacao com undefined.localeCompare.
+            const id = d.empresaId || d.empresaCnpj || 'sem-empresa';
+            if (!map.has(id)) {
+                map.set(id, { id, nome: d.empresaNome || d.empresaCnpj || '(sem nome)', cnpj: d.empresaCnpj || '' });
             }
         });
-        return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+        return Array.from(map.values()).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
     }, [docs]);
 
     const competencias = useMemo(() => {
@@ -44,7 +48,10 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     const filtrados = useMemo(() => {
         return docs.filter(d => {
-            if (empresaId && d.empresaId !== empresaId) return false;
+            // Mesma chave derivada do seletor de empresas (docs server-side
+            // podem nao ter empresaId — cai pro CNPJ).
+            const idDoc = d.empresaId || d.empresaCnpj || 'sem-empresa';
+            if (empresaId && idDoc !== empresaId) return false;
             if (competencia && d.competencia !== competencia) return false;
             if (direcao && d.direcao !== direcao) return false;
             // IOB/SAGE Folhamatic Fiscal so aceita NFe/NFCe (modelo 55/65). CTe (57),
