@@ -4,6 +4,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL, getStorage } from 'fire
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../services/firebaseConfig';
 import { getEmpresasDisponiveis } from '../../services/xmlFiscalService';
+import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { parseNfsePdf, matchNfseEmpresa, NfsePdfParseError } from '../../services/nfsePdfParserService';
 import type { NfsePdfParsed } from '../../services/nfsePdfParserService';
 import type { User } from '../../types';
@@ -230,18 +231,11 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                         Nenhuma empresa disponivel. Cadastre uma em Simples Nacional ou Lucro Presumido/Real antes.
                     </p>
                 ) : (
-                    <select
+                    <EmpresaSearchSelect
+                        empresas={empresas}
                         value={empresaId}
-                        onChange={e => { setEmpresaId(e.target.value); handleCancel(); }}
-                        className="w-full text-sm bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md px-3 py-2"
-                    >
-                        <option value="">Selecione uma empresa...</option>
-                        {empresas.map(e => (
-                            <option key={e.id} value={e.id}>
-                                {e.nome} - {e.cnpj} ({e.fonte === 'simples' ? 'Simples' : 'Lucro'})
-                            </option>
-                        ))}
-                    </select>
+                        onChange={id => { setEmpresaId(id); handleCancel(); }}
+                    />
                 )}
                 {empresaSelecionada && (
                     <p className="text-[11px] text-slate-400 mt-1">
