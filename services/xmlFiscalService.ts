@@ -521,6 +521,10 @@ export async function listDocumentos(
     // de empresa atribuida via carteira quando outro colega importou (mesmo
     // padrao corrigido no #120 pra empresas).
     if (filters.empresaId) constraints.push(where('empresaId', '==', filters.empresaId));
+    // Competência exata vai ao SERVIDOR: corta a busca de dezenas de milhares
+    // de docs para o mês pedido (igualdade simples — não exige índice composto;
+    // range competenciaInicio/Fim continua no cliente via applyDocumentosFilters).
+    if (filters.competencia) constraints.push(where('competencia', '==', filters.competencia));
     // NÃO usamos orderBy aqui: Firestore exclui docs que não têm o campo.
     // Ordenação fica em memória com fallbacks (ver abaixo).
     // Paginação via cursor (fetchAllDocs) substitui o antigo fbLimit(500) que
