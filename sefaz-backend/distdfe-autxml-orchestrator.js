@@ -40,21 +40,36 @@ function getDb() {
   return admin.firestore();
 }
 
-// Mapa cnpj14 -> { empresaId, cnpj, nome } das empresas monitoradas (Simples +
-// Lucro). Usado para atribuir cada doc colhido ao cliente correto.
-async function mapaEmpresasPorCnpj(db) {
-  const mapa = new Map();
+// Empresas monitoradas (Simples + Lucro), indexadas por CNPJ (14) e por RAIZ
+// (8). A raiz cobre filiais: o cliente pode estar cadastrado numa filial (ex.
+// Vinatex 0003) mas emitir de outra (0001) — sem a raiz, a nota cairia "sem
+// dono". Usado para atribuir cada doc colhido ao cliente correto.
+async function carregarEmpresas(db) {
+  const porCnpj = new Map();
+  const porRaiz = new Map();
   for (const col of ['simples_empresas', 'lucro_empresas']) {
     const snap = await db.collection(col).get();
     snap.forEach((doc) => {
       const d = doc.data() || {};
       const cnpj = String(d.cnpj || '').replace(/\D/g, '');
-      if (cnpj.length === 14 && !mapa.has(cnpj)) {
-        mapa.set(cnpj, { empresaId: doc.id, cnpj, nome: d.razaoSocial || d.nome || d.fantasia || '—' });
-      }
+      if (cnpj.length !== 14) return;
+      const rec = { empresaId: doc.id, cnpj, nome: d.razaoSocial || d.nome || d.fantasia || '—' };
+      if (!porCnpj.has(cnpj)) porCnpj.set(cnpj, rec);
+      const raiz = cnpj.slice(0, 8);
+      if (!porRaiz.has(raiz)) porRaiz.set(raiz, rec);
     });
   }
-  return mapa;
+  return { porCnpj, porRaiz };
+}
+
+// Acha a empresa-cliente dona de um CNPJ de nota: casa por CNPJ exato; se nao
+// achar, casa pela raiz (mesma base = mesmo grupo). Retorna a empresa + flag.
+function acharDono(noteCnpj, porCnpj, porRaiz) {
+  if (!noteCnpj) return null;
+  if (porCnpj.has(noteCnpj)) return { emp: porCnpj.get(noteCnpj), viaRaiz: false };
+  const raiz = noteCnpj.slice(0, 8);
+  if (porRaiz.has(raiz)) return { emp: porRaiz.get(raiz), viaRaiz: true };
+  return null;
 }
 
 // Extrai CNPJ do emitente e do destinatario, cobrindo procNFe/NFe (blocos
@@ -89,12 +104,12 @@ export async function colherSaidaAutXML({ capturadoPor = null, maxPaginas = MAX_
     if (s.exists) ultNSU = String((s.data() || {}).ultNSU || '0');
   }
 
-  const empresas = await mapaEmpresasPorCnpj(db);
+  const { porCnpj, porRaiz } = await carregarEmpresas(db);
   const r = {
-    ok: true, escritorio: CNPJ_ESCRITORIO, empresasMonitoradas: empresas.size,
+    ok: true, escritorio: CNPJ_ESCRITORIO, empresasMonitoradas: porCnpj.size,
     paginas: 0, docs: 0,
     importadasSaida: 0, importadasEntrada: 0, atualizadas: 0, duplicadas: 0,
-    eventos: 0, semDono: 0, erros: 0,
+    eventos: 0, semDono: 0, viaRaiz: 0, erros: 0,
     ultNSU, maxNSU: null, detalhePorEmpresa: {},
   };
 
@@ -121,16 +136,22 @@ export async function colherSaidaAutXML({ capturadoPor = null, maxPaginas = MAX_
 
       // Dono = empresa monitorada que aparece como emit (=> saida do cliente)
       // ou dest (=> entrada). Prioriza emit (o autXML e sobre a saida deles).
-      let dono = null, tipo = null;
-      if (cnpjEmit && empresas.has(cnpjEmit)) { dono = empresas.get(cnpjEmit); tipo = 'saida'; }
-      else if (cnpjDest && empresas.has(cnpjDest)) { dono = empresas.get(cnpjDest); tipo = 'entrada'; }
+      const donoEmit = acharDono(cnpjEmit, porCnpj, porRaiz);
+      const donoDest = acharDono(cnpjDest, porCnpj, porRaiz);
+      let dono = null, tipo = null, cnpjNota = null, viaRaiz = false;
+      if (donoEmit) { dono = donoEmit.emp; tipo = 'saida'; cnpjNota = cnpjEmit; viaRaiz = donoEmit.viaRaiz; }
+      else if (donoDest) { dono = donoDest.emp; tipo = 'entrada'; cnpjNota = cnpjDest; viaRaiz = donoDest.viaRaiz; }
       if (!dono) { r.semDono++; continue; }  // nota do escritorio ou de terceiro nao monitorado
+      if (viaRaiz) r.viaRaiz++;
 
+      // Passa o CNPJ REAL da nota (cnpjNota) como empresaCnpj — assim o importer
+      // classifica a direcao certa mesmo quando a filial emitente difere da
+      // filial cadastrada; empresaId mantem a atribuicao ao grupo do cliente.
       const bucket = r.detalhePorEmpresa[dono.cnpj]
         || (r.detalhePorEmpresa[dono.cnpj] = { nome: dono.nome, saida: 0, entrada: 0, atualizadas: 0, duplicadas: 0 });
       try {
         const imp = await importarXmlSefaz({
-          empresaId: dono.empresaId, empresaCnpj: dono.cnpj,
+          empresaId: dono.empresaId, empresaCnpj: cnpjNota,
           xml: doc.xml, schema: doc.schema, nsu: doc.nsu, capturadoPor,
         });
         if (imp.status === 'ok') {
