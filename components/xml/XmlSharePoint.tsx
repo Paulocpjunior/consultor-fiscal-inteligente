@@ -129,6 +129,14 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
         ? customPath
         : buildFolderPath(grupo, ano, mes, empresaPasta, direcao);
 
+    // Campos obrigatorios faltando (so no modo guiado) — sinaliza ao colaborador
+    // o que impede a pasta de ser encontrada.
+    const faltando = useCustom ? [] : ([
+        !grupo.trim() && 'Grupo',
+        !empresaPasta.trim() && 'Empresa (pasta)',
+        !ano.trim() && 'Ano',
+    ].filter(Boolean) as string[]);
+
     const handleSync = async () => {
         if (!folderPath.trim()) {
             setErro('Preencha o caminho da pasta.');
@@ -214,6 +222,25 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                 <SharePointAutoSyncStatusLine lastSync={autoSyncLastSync} />
             </div>
 
+            {/* Guia de caminho — onde os colaboradores devem consultar */}
+            <div className="p-4 rounded-xl" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+                <h3 className="text-sm font-bold mb-1" style={{ color: 'var(--text-primary)' }}>
+                    📁 Onde consultar os XMLs no SharePoint
+                </h3>
+                <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
+                    Os XMLs ficam sempre nesta estrutura de pastas. Preencha os campos abaixo <strong>exatamente como
+                    aparece no SharePoint</strong> (respeitando maiúsculas e acentos):
+                </p>
+                <div className="text-xs font-mono p-2.5 rounded break-all"
+                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
+                    Empresas / <b style={{ color: 'var(--accent)' }}>GRUPO</b> / DEPARTAMENTO FISCAL / <b style={{ color: 'var(--accent)' }}>ANO</b> / <b style={{ color: 'var(--accent)' }}>MÊS</b>-<b style={{ color: 'var(--accent)' }}>ANO</b> / <b style={{ color: 'var(--accent)' }}>EMPRESA</b> / XML <b style={{ color: 'var(--accent)' }}>SAÍDA</b>
+                </div>
+                <p className="text-[11px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                    Exemplo: <code>Empresas/Grupo Flanacar/DEPARTAMENTO FISCAL/2026/07-2026/CMM/XML SAÍDA</code>
+                    {' '}— para notas recebidas, troque o fim por <code>XML ENTRADA</code>.
+                </p>
+            </div>
+
             {/* Formulário */}
             <div
                 className="p-5 rounded-xl space-y-4"
@@ -248,9 +275,23 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                     </div>
                 ) : (
                     <>
-                        <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                            Caminho: <code style={{ color: 'var(--accent)' }}>{folderPath || '...'}</code>
-                        </p>
+                        <div className="p-3 rounded-lg" style={{ background: 'var(--bg-card)', border: `1px solid ${faltando.length ? 'rgba(239,68,68,0.4)' : 'var(--border-default)'}` }}>
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Caminho que será consultado</span>
+                                <button type="button" onClick={() => { navigator.clipboard?.writeText(folderPath); onShowToast?.('Caminho copiado.'); }}
+                                    className="text-[11px] px-2 py-0.5 rounded" style={{ border: '1px solid var(--border-default)', color: 'var(--text-muted)' }}>
+                                    Copiar
+                                </button>
+                            </div>
+                            <code className="block mt-1 text-sm break-all" style={{ color: faltando.length ? 'var(--danger, #ef4444)' : 'var(--accent)' }}>
+                                {folderPath}
+                            </code>
+                            {faltando.length > 0 && (
+                                <p className="text-[11px] mt-1" style={{ color: 'var(--danger, #ef4444)' }}>
+                                    ⚠ Falta preencher: <strong>{faltando.join(', ')}</strong>. Sem isso a pasta não é encontrada no SharePoint.
+                                </p>
+                            )}
+                        </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                             <div>
                                 <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Grupo</label>
