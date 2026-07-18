@@ -7,6 +7,7 @@ import {
     type EmpresaXmlOption,
 } from '../../services/xmlFiscalService';
 import { XmlParseError, formatCnpjCpf } from '../../services/xmlParserService';
+import EmpresaSearchSelect from './EmpresaSearchSelect';
 
 interface Props {
     currentUser: User;
@@ -104,17 +105,7 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                         Nenhuma empresa cadastrada disponível para o seu perfil. Cadastre uma no Simples Nacional ou Lucro Presumido/Real antes de importar XMLs.
                     </p>
                 ) : (
-                    <select
-                        value={empresaId}
-                        onChange={e => setEmpresaId(e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-200"
-                    >
-                        {empresas.map(e => (
-                            <option key={e.id} value={e.id}>
-                                {e.nome} — {formatCnpjCpf(e.cnpj)} ({e.fonte === 'simples' ? 'Simples' : 'Lucro'})
-                            </option>
-                        ))}
-                    </select>
+                    <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId} />
                 )}
                 {empresaSelecionada && (
                     <p className="text-[11px] text-slate-500 mt-2">

@@ -4,6 +4,7 @@ import type { User } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { formatCnpjCpf } from '../../services/xmlParserService';
 import { importarXmlsLote } from '../../services/saeNfceService';
+import EmpresaSearchSelect from './EmpresaSearchSelect';
 
 interface Props {
     currentUser: User;
@@ -170,12 +171,7 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
 
             <div>
                 <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Empresa</label>
-                <select value={empresaId} onChange={e => setEmpresaId(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-200">
-                    {empresas.map(e => (
-                        <option key={e.id} value={e.id}>{e.nome} — {formatCnpjCpf(e.cnpj)}</option>
-                    ))}
-                </select>
+                <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId} />
                 {empresa && (
                     <p className="text-[11px] text-slate-400 mt-1">
                         Só entram XMLs em que a raiz do CNPJ {formatCnpjCpf(empresa.cnpj)} apareça como emitente ou destinatário.
