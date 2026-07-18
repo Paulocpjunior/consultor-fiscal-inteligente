@@ -58,13 +58,21 @@ const ALLOWED_ORIGINS = [
     ...(process.env.CORS_ORIGIN || '').split(',').map(o => o.trim()),
     'https://consultorfiscalapp.web.app',
     'https://consultorfiscalapp.firebaseapp.com',
+    // App servido tambem pela URL do Cloud Run (consultor-fiscal-inteligente).
+    // Sem isto o navegador bloqueava o /api/sharepoint/health e a aba SharePoint
+    // mostrava "Proxy indisponivel" mesmo com o proxy no ar.
+    'https://consultor-fiscal-inteligente-631239634290.us-west1.run.app',
     'http://localhost:3000',
     'http://localhost:5173',
 ].filter(Boolean);
 
+// Regex de seguranca: qualquer host run.app do app principal (numeros/revisoes
+// mudam) e do proprio firebase, para nao voltar a quebrar por CORS.
+const ALLOWED_ORIGIN_RE = /^https:\/\/consultor-fiscal-inteligente-[a-z0-9-]+\.us-west1\.run\.app$/;
+
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+        if (!origin || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGIN_RE.test(origin)) {
             callback(null, true);
         } else {
             callback(null, false);
