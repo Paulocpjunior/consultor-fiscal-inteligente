@@ -219,7 +219,7 @@ router.post('/mit/preencher-encerrar', requireAuth, express.json(), async (req, 
         const { empresaId, empresaCnpj, anoPA, mesPA, tributosApp, transmitir } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
         if (!tributosApp || typeof tributosApp !== 'object') {
-            return res.status(400).json({ error: 'tributosApp {IRPJ,CSLL,PIS,COFINS} é obrigatório' });
+            return res.status(400).json({ error: 'tributosApp {IRPJ,CSLL,PIS,COFINS,IPI} é obrigatório' });
         }
         const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });

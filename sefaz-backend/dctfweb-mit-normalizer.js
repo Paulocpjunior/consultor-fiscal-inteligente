@@ -33,9 +33,11 @@ const CODIGO_FAMILIA = {
     '8109': 'PIS', '6912': 'PIS', '4574': 'PIS', '8301': 'PIS', '6824': 'PIS',
     // COFINS
     '2172': 'COFINS', '5856': 'COFINS', '5442': 'COFINS', '2050': 'COFINS', '6840': 'COFINS',
+    // IPI (0668 outros, 1097 vinc. importacao, 5110 cigarros, 5123 bebidas, 0676 automoveis)
+    '0668': 'IPI', '1097': 'IPI', '5110': 'IPI', '5123': 'IPI', '0676': 'IPI',
 };
 
-const FAMILIAS = ['IRPJ', 'CSLL', 'PIS', 'COFINS'];
+const FAMILIAS = ['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI'];
 
 const GRUPO_MIT_FAMILIA = {
     Irpj: 'IRPJ',
@@ -46,6 +48,8 @@ const GRUPO_MIT_FAMILIA = {
     PIS: 'PIS',
     Cofins: 'COFINS',
     COFINS: 'COFINS',
+    Ipi: 'IPI',
+    IPI: 'IPI',
 };
 
 function familiaPorCodigo(codigo) {
@@ -61,6 +65,7 @@ function familiaPorDescricao(desc) {
     if (/\bCSLL\b|CONTRIB.*SOCIAL.*LUCRO/.test(d)) return 'CSLL';
     if (/\bCOFINS\b/.test(d)) return 'COFINS'; // antes de PIS (COFINS contem nada de PIS, ok)
     if (/\bPIS\b|PASEP/.test(d)) return 'PIS';
+    if (/\bIPI\b|PRODUTOS INDUSTRIALIZADOS/.test(d)) return 'IPI';
     return null;
 }
 
@@ -166,13 +171,13 @@ function lerDescricao(item) {
  * @returns {{
  *   lido: boolean,
  *   motivo: string|null,
- *   tributos: {IRPJ:number, CSLL:number, PIS:number, COFINS:number},
+ *   tributos: {IRPJ:number, CSLL:number, PIS:number, COFINS:number, IPI:number},
  *   outros: Array<{codigo:string|null, descricao:string, valor:number}>,
  *   totalReconhecido: number
  * }}
  */
 export function normalizarApuracaoMit(apuracaoMit) {
-    const vazio = { IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0 };
+    const vazio = { IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 };
     // CONSAPURACAO316 pode devolver dadosApuracaoMit como ARRAY de 1 item.
     if (Array.isArray(apuracaoMit)) apuracaoMit = apuracaoMit[0];
     if (!apuracaoMit || typeof apuracaoMit !== 'object') {

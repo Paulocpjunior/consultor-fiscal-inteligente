@@ -15,7 +15,7 @@ describe('extrairTributosApp — soma por família a partir do detalhamento', ()
             { imposto: 'PIS (Cumulativo)', valor: 65 },
             { imposto: 'COFINS (Cumulativo)', valor: 300 },
         ];
-        expect(extrairTributosApp(det)).toEqual({ IRPJ: 1000, CSLL: 360, PIS: 65, COFINS: 300 });
+        expect(extrairTributosApp(det)).toEqual({ IRPJ: 1000, CSLL: 360, PIS: 65, COFINS: 300, IPI: 0 });
     });
 
     it('soma múltiplas linhas de PIS/COFINS (cumulativo + rec financeira + importação)', () => {
@@ -31,7 +31,7 @@ describe('extrairTributosApp — soma por família a partir do detalhamento', ()
         expect(r.COFINS).toBe(500);
     });
 
-    it('ignora ISS/ICMS/IPI (não são tributos DCTFWeb federais aqui)', () => {
+    it('ignora ISS/ICMS mas SOMA IPI (IPI é federal e entra no MIT)', () => {
         const det: any[] = [
             { imposto: 'ISS (5%)', valor: 250 },
             { imposto: 'ICMS Próprio', valor: 999 },
@@ -39,7 +39,7 @@ describe('extrairTributosApp — soma por família a partir do detalhamento', ()
             { imposto: 'IRPJ (Trimestral)', valor: 1000 },
         ];
         const r = extrairTributosApp(det);
-        expect(r).toEqual({ IRPJ: 1000, CSLL: 0, PIS: 0, COFINS: 0 });
+        expect(r).toEqual({ IRPJ: 1000, CSLL: 0, PIS: 0, COFINS: 0, IPI: 100 });
     });
 
     it('IRPJ/CSLL combinado vai pra IRPJ (convenção)', () => {
@@ -48,20 +48,20 @@ describe('extrairTributosApp — soma por família a partir do detalhamento', ()
     });
 
     it('lista vazia/null → tudo zero', () => {
-        expect(extrairTributosApp([])).toEqual({ IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0 });
-        expect(extrairTributosApp(null)).toEqual({ IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0 });
+        expect(extrairTributosApp([])).toEqual({ IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 });
+        expect(extrairTributosApp(null)).toEqual({ IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 });
     });
 });
 
 const mk = (o: Partial<TributosPorFamilia>): TributosPorFamilia =>
-    ({ IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, ...o });
+    ({ IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0, ...o });
 
 describe('cruzarTributos — status e severidade', () => {
     it('valores idênticos → tudo ok', () => {
         const app = mk({ IRPJ: 1000, CSLL: 360, PIS: 65, COFINS: 300 });
         const r = cruzarTributos(app, { ...app }, '2026-03');
         expect(r.temDivergencia).toBe(false);
-        expect(r.resumo.ok).toBe(4);
+        expect(r.resumo.ok).toBe(5);
         expect(r.divergencias.every(d => d.status === 'ok')).toBe(true);
     });
 

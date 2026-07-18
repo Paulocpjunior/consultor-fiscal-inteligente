@@ -4,7 +4,7 @@
  * Sem firebase, sem fetch — testável direto em jest (igual xmlDocumentosFilter).
  * O orquestrador (dctfwebConferenceService.ts) busca os dados e chama isto.
  *
- * Cruza por FAMÍLIA de tributo (IRPJ / CSLL / PIS / COFINS), não por código —
+ * Cruza por FAMÍLIA de tributo (IRPJ / CSLL / PIS / COFINS / IPI), não por código —
  * o lado-app nomeia o imposto por prefixo ("IRPJ (Trimestral)", "PIS (Lucro
  * Real)") e o lado-DCTFWeb agrupa por código de receita que o normalizador já
  * converte em família. Cruzar por família evita adivinhar mapa de código.
@@ -15,8 +15,8 @@
 
 import type { DetalheImposto } from '../types';
 
-export type TributoFamilia = 'IRPJ' | 'CSLL' | 'PIS' | 'COFINS';
-export const TRIBUTO_FAMILIAS: TributoFamilia[] = ['IRPJ', 'CSLL', 'PIS', 'COFINS'];
+export type TributoFamilia = 'IRPJ' | 'CSLL' | 'PIS' | 'COFINS' | 'IPI';
+export const TRIBUTO_FAMILIAS: TributoFamilia[] = ['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI'];
 
 export type DivergenciaSeveridade = 'ok' | 'baixa' | 'media' | 'alta';
 export type DivergenciaStatus =
@@ -30,6 +30,7 @@ export interface TributosPorFamilia {
     CSLL: number;
     PIS: number;
     COFINS: number;
+    IPI: number;
 }
 
 export interface DivergenciaTributo {
@@ -59,7 +60,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  * Importação, Aplicações) — somadas na mesma família.
  */
 export function extrairTributosApp(detalhamento: DetalheImposto[] | undefined | null): TributosPorFamilia {
-    const out: TributosPorFamilia = { IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0 };
+    const out: TributosPorFamilia = { IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 };
     for (const det of detalhamento || []) {
         const nome = String(det?.imposto || '').toUpperCase().trim();
         const valor = Number(det?.valor) || 0;
@@ -73,11 +74,15 @@ export function extrairTributosApp(detalhamento: DetalheImposto[] | undefined | 
         // separar com segurança. Vai pra IRPJ por convenção e marcamos via
         // observação no orquestrador. Aqui priorizamos COFINS/PIS/IRPJ/CSLL puros.
         else if (nome.startsWith('IRPJ/CSLL')) out.IRPJ += valor;
+        // IPI da apuracao fiscal da ficha ("IPI", "IPI (A Recolher)") — nao
+        // confunde com IRPJ (prefixos distintos).
+        else if (nome.startsWith('IPI')) out.IPI += valor;
     }
     out.IRPJ = round2(out.IRPJ);
     out.CSLL = round2(out.CSLL);
     out.PIS = round2(out.PIS);
     out.COFINS = round2(out.COFINS);
+    out.IPI = round2(out.IPI);
     return out;
 }
 
