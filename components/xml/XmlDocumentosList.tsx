@@ -166,11 +166,14 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
             .sort((a, b) => {
                 // Empresas com XMLs primeiro (fluxo principal), depois sem XMLs.
                 if (a.temXmls !== b.temXmls) return a.temXmls ? -1 : 1;
-                // Empresas com nome de verdade antes de CNPJ-only.
-                const aTemNome = !/^\d+$/.test(a.nome);
-                const bTemNome = !/^\d+$/.test(b.nome);
+                // Empresas com nome de verdade antes de CNPJ-only. Nome pode
+                // vir undefined em docs de captura server-side — trata como ''.
+                const aNome = a.nome || '';
+                const bNome = b.nome || '';
+                const aTemNome = !/^\d+$/.test(aNome) && aNome !== '';
+                const bTemNome = !/^\d+$/.test(bNome) && bNome !== '';
                 if (aTemNome !== bTemNome) return aTemNome ? -1 : 1;
-                return a.nome.localeCompare(b.nome);
+                return aNome.localeCompare(bNome);
             });
     }, [allDocs, catalogoEmpresas]);
 
