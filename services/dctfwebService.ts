@@ -242,7 +242,7 @@ export interface MitPreencherProposta {
      *  faltantes adicionadas; 'criacao' = a apuração não existia e será
      *  CRIADA (DadosIniciais copiados do mês-modelo) e encerrada. */
     modo?: 'completo' | 'complemento' | 'criacao';
-    tributosApp: { IRPJ: number; CSLL: number; PIS: number; COFINS: number };
+    tributosApp: { IRPJ: number; CSLL: number; PIS: number; COFINS: number; IPI?: number };
     mapeamento: Array<{ familia: string; codigo: string; grupo: string; valor: number }>;
     totalProposto: number;
     /** Famílias já lançadas no MIT — preservadas sem alteração */
@@ -272,7 +272,7 @@ export interface MitPreencherResult {
 export async function preencherEncerrarMit(user: User | null, payload: {
     empresaId?: string; empresaCnpj: string;
     anoPA: number; mesPA: number;
-    tributosApp: { IRPJ: number; CSLL: number; PIS: number; COFINS: number };
+    tributosApp: { IRPJ: number; CSLL: number; PIS: number; COFINS: number; IPI?: number };
     transmitir: boolean;
 }): Promise<MitPreencherResult> {
     const res = await fetch(`${BASE}/mit/preencher-encerrar`, {

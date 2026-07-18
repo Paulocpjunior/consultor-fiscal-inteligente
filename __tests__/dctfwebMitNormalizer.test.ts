@@ -22,7 +22,7 @@ describe('normalizarApuracaoMit — estruturas plausíveis', () => {
         };
         const r = normalizarApuracaoMit(raw);
         expect(r.lido).toBe(true);
-        expect(r.tributos).toEqual({ IRPJ: 1000, CSLL: 360, PIS: 65, COFINS: 300 });
+        expect(r.tributos).toEqual({ IRPJ: 1000, CSLL: 360, PIS: 65, COFINS: 300, IPI: 0 });
         expect(r.totalReconhecido).toBe(1725);
         expect(r.outros).toHaveLength(0);
     });
@@ -99,7 +99,7 @@ describe('normalizarApuracaoMit — estruturas plausíveis', () => {
 
         const r = normalizarApuracaoMit(raw);
         expect(r.lido).toBe(true);
-        expect(r.tributos).toEqual({ IRPJ: 1000, CSLL: 450, PIS: 65, COFINS: 300 });
+        expect(r.tributos).toEqual({ IRPJ: 1000, CSLL: 450, PIS: 65, COFINS: 300, IPI: 0 });
         expect(r.totalReconhecido).toBe(1815);
         expect(r.outros).toHaveLength(0);
     });
@@ -121,6 +121,6 @@ describe('normalizarApuracaoMit — honestidade (NUNCA zeros falsos)', () => {
     it('array existe mas sem valor extraível → lido=false (não retorna zeros)', () => {
         const r = normalizarApuracaoMit({ debitos: [{ foo: 'bar' }, { baz: 1 }] });
         expect(r.lido).toBe(false);
-        expect(r.tributos).toEqual({ IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0 });
+        expect(r.tributos).toEqual({ IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 });
     });
 });

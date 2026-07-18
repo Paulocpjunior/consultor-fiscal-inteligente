@@ -62,7 +62,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
 
     const [anoPA, mesPA] = competencia.split('-').map(Number);
     const totalApp = data
-        ? (['IRPJ', 'CSLL', 'PIS', 'COFINS'] as const).reduce((s, t) => s + (data.tributosApp[t] || 0), 0)
+        ? (['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI'] as const).reduce((s, t) => s + (data.tributosApp[t] || 0), 0)
         : 0;
     // Oferece o preenchimento quando o app tem valores e o MIT está sem débitos
     // OU tem família apurada sem débito correspondente (modo complemento —
@@ -159,7 +159,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                             </p>
                             <table className="w-full text-xs mt-3">
                                 <tbody>
-                                    {(['IRPJ', 'CSLL', 'PIS', 'COFINS'] as const).map(t => (
+                                    {(['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI'] as const).map(t => (
                                         <tr key={t} className="border-t border-amber-200/50">
                                             <td className="py-1">{t} (apurado app)</td>
                                             <td className="py-1 text-right font-mono">{brl(data.tributosApp[t])}</td>
@@ -211,7 +211,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
 
                             {data.outrosDctfweb.length > 0 && (
                                 <div className="mt-3 text-xs text-slate-500">
-                                    <b>Outros débitos na DCTFWeb</b> (não IRPJ/CSLL/PIS/COFINS — ex: INSS, não cruzados):
+                                    <b>Outros débitos na DCTFWeb</b> (não IRPJ/CSLL/PIS/COFINS/IPI — ex: INSS, não cruzados):
                                     <ul className="mt-1 space-y-0.5">
                                         {data.outrosDctfweb.map((o, i) => (
                                             <li key={i} className="font-mono">{o.codigo || '?'} · {o.descricao || '—'} · {brl(o.valor)}</li>
@@ -221,7 +221,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                             )}
 
                             <p className="mt-4 text-[10px] text-slate-400">
-                                Cruzamento por família de tributo (IRPJ/CSLL/PIS/COFINS). INSS patronal não é
+                                Cruzamento por família de tributo (IRPJ/CSLL/PIS/COFINS/IPI). INSS patronal não é
                                 cruzado (o app não calcula INSS). Valores app = soma do detalhamento de
                                 calcularLucro; DCTFWeb = apuração MIT normalizada pelo fluxo oficial MIT.
                             </p>

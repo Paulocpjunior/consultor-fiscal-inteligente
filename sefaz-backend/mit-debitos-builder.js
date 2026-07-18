@@ -2,7 +2,7 @@
 // sefaz-backend/mit-debitos-builder.js  (PURO — sem firebase/io, testável)
 //
 // Monta o bloco `Debitos` oficial do MIT (ENCAPURACAO314) a partir dos
-// tributos apurados pelo APP (IRPJ/CSLL/PIS/COFINS de calcularLucro),
+// tributos apurados pelo APP (IRPJ/CSLL/PIS/COFINS/IPI de calcularLucro),
 // usando uma apuração-MODELO (mês anterior da MESMA empresa, vinda do
 // CONSAPURACAO316) como fonte dos códigos de débito.
 //
@@ -22,7 +22,7 @@
 //   }
 // ============================================================================
 
-const FAMILIAS = ['IRPJ', 'CSLL', 'PIS', 'COFINS'];
+const FAMILIAS = ['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI'];
 
 // Família → grupo oficial do MIT (fallback quando o modelo não traz o grupo).
 const GRUPO_OFICIAL_POR_FAMILIA = {
@@ -30,6 +30,7 @@ const GRUPO_OFICIAL_POR_FAMILIA = {
     CSLL: 'Csll',
     PIS: 'PisPasep',
     COFINS: 'Cofins',
+    IPI: 'Ipi',
 };
 
 // Grupo do MIT → família (mesmo mapa do dctfweb-mit-normalizer).
@@ -38,6 +39,7 @@ const GRUPO_MIT_FAMILIA = {
     Csll: 'CSLL', CSLL: 'CSLL',
     PisPasep: 'PIS', PIS: 'PIS',
     Cofins: 'COFINS', COFINS: 'COFINS',
+    Ipi: 'IPI', IPI: 'IPI',
 };
 
 // Código de receita (4 primeiros dígitos) → família. Tabela pública RFB —
@@ -48,6 +50,7 @@ const CODIGO_FAMILIA = {
     '2484': 'CSLL', '6012': 'CSLL', '2469': 'CSLL', '6758': 'CSLL', '2030': 'CSLL', '6773': 'CSLL',
     '8109': 'PIS', '6912': 'PIS', '4574': 'PIS', '8301': 'PIS', '6824': 'PIS',
     '2172': 'COFINS', '5856': 'COFINS', '5442': 'COFINS', '2050': 'COFINS', '6840': 'COFINS',
+    '0668': 'IPI', '1097': 'IPI', '5110': 'IPI', '5123': 'IPI', '0676': 'IPI',
 };
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -119,7 +122,7 @@ export function extrairModeloDebitosMit(apuracaoModelo) {
 /**
  * Monta o bloco Debitos do encerramento a partir dos tributos do app.
  *
- * @param {{IRPJ?:number,CSLL?:number,PIS?:number,COFINS?:number}} tributosApp
+ * @param {{IRPJ?:number,CSLL?:number,PIS?:number,COFINS?:number,IPI?:number}} tributosApp
  * @param {{codigoPorFamilia: Record<string,{codigo:string,grupo:string}>}} modelo
  * @param {{apenasFamilias?: string[], idInicial?: number}} [opts]
  *        apenasFamilias — monta só estas famílias (modo COMPLEMENTO: famílias
