@@ -174,7 +174,10 @@ app.use(helmet({
             imgSrc: ["'self'", "data:", "https:"],
             frameSrc: ["'self'", "blob:", "https://*.firebaseapp.com", "https://apis.google.com"],
             workerSrc: ["'self'", "https://cdnjs.cloudflare.com", "blob:"],
-            connectSrc: ["'self'", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.firebaseapp.com", "https://firebasestorage.googleapis.com", "https://identitytoolkit.googleapis.com", "https://securetoken.googleapis.com", "https://cdnjs.cloudflare.com"],
+            // consultor-fiscal-proxy: o front chama o proxy SharePoint (deploy
+            // separado) direto do navegador — sem ele no connect-src o CSP
+            // bloqueia o /api/sharepoint/health e a aba mostra "indisponivel".
+            connectSrc: ["'self'", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.firebaseapp.com", "https://firebasestorage.googleapis.com", "https://identitytoolkit.googleapis.com", "https://securetoken.googleapis.com", "https://cdnjs.cloudflare.com", "https://consultor-fiscal-proxy-631239634290.us-west1.run.app"],
         },
     },
 }));
