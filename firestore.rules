@@ -1,5 +1,9 @@
 rules_version = '2';
 
+// Publicado automaticamente pelo workflow deploy-firestore.yml (push nesta
+// arquivo aciona o deploy das rules + indexes). Não precisa mais de
+// `firebase deploy` manual.
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
