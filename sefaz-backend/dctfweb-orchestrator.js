@@ -432,9 +432,11 @@ export async function preencherEncerrarMit({
         return { ok: false, motivo: 'Preenchimento automático do MIT disponível apenas no modo serpro.' };
     }
 
-    // Sanitiza tributos (só números >= 0 das 4 famílias)
+    // Sanitiza tributos (só números >= 0 das familias suportadas). IPI incluido
+    // (#198 habilitou IPI no builder/normalizer/cruzamento; faltava aqui — sem
+    // isto o auto-fill do MIT omitia silenciosamente o IPI de industria).
     const tributos = {};
-    for (const fam of ['IRPJ', 'CSLL', 'PIS', 'COFINS']) {
+    for (const fam of ['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI']) {
         const v = Number(tributosApp?.[fam]);
         tributos[fam] = Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
     }
