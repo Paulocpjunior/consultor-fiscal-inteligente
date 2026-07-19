@@ -15,6 +15,7 @@ import {
 } from './das-orchestrator.js';
 import { getDasMode } from './das-provider.js';
 import { errorPayload } from './das-error-payload.js';
+import { podeAcessarEmpresaId } from './carteira-auth.js';
 export { errorPayload } from './das-error-payload.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
@@ -28,15 +29,29 @@ router.get('/status', (_req, res) => {
     res.json({ mode: getDasMode(), ok: true });
 });
 
-router.get('/resumo', requireAuth, async (_req, res) => {
+// Resumo consolidado (todas as empresas) — so admin. Colaborador ve por
+// empresa via /listar?empresaId=... (checado contra a carteira).
+router.get('/resumo', requireAuth, async (req, res) => {
+    if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Resumo consolidado disponivel apenas para admin.' });
+    }
     try { res.json(await getResumoDas()); }
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.get('/listar', requireAuth, async (req, res) => {
+    const { empresaId } = req.query;
+    // Com empresaId: exige que pertenca a carteira do colaborador (admin passa).
+    // Sem empresaId (listagem global): so admin.
+    if (empresaId) {
+        const c = await podeAcessarEmpresaId(req.user, empresaId);
+        if (!c.ok) return res.status(c.status).json({ error: c.error });
+    } else if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Informe o empresaId da sua carteira para listar.' });
+    }
     try {
         res.json(await listarDas({
-            empresaId: req.query.empresaId,
+            empresaId,
             competencia: req.query.competencia,
             status: req.query.status,
         }));

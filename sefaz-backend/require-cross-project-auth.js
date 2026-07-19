@@ -85,6 +85,19 @@ async function verificarTokenCrossProject(token) {
         throw new Error(`Email não permitido: ${email}`);
     }
 
+    // EXIGE email verificado. Sem isto, bastava cadastrar um email
+    // @dominio-permitido NÃO verificado (que o atacante não controla) em
+    // qualquer dos projetos Firebase para obter acesso total aos dados SERPRO
+    // (FGTS/eSocial/DCTFWeb) de QUALQUER CNPJ via /api/dp-integration/*.
+    if (payload.email_verified !== true) {
+        throw new Error(`Email não verificado: ${email}`);
+    }
+
+    // Rejeita tokens com iat/nbf no futuro (relógio/forja).
+    const agoraSeg = Math.floor(Date.now() / 1000) + 60; // 60s de folga de clock
+    if (payload.iat && payload.iat > agoraSeg) throw new Error('Token emitido no futuro (iat)');
+    if (payload.nbf && payload.nbf > agoraSeg) throw new Error('Token ainda não válido (nbf)');
+
     // Verifica assinatura usando crypto + chave pública
     const crypto = await import('crypto');
     const publicKeys = await getGooglePublicKeys();
