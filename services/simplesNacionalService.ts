@@ -680,7 +680,12 @@ export const calcularResumoEmpresa = (
                 });
             } else {
                 if (item.issRetido || item.isSup) {
-                    percentualReducao += anexoAplicado === 'V' ? 23.5 : (reparticao.ISS || 0);
+                    // ISS retido/suspenso sai do DAS: deduz a repartição REAL de ISS
+                    // da faixa (igual aos Anexos III e IV). Antes o Anexo V usava um
+                    // 23,5% fixo que não corresponde a nenhuma faixa (ISS do Anexo V
+                    // é 48,05/47,55/52,05/52,05/53,05/14,70%) — deduzia de menos nas
+                    // faixas 0–4 e o DAS ficava alto demais (ISS cobrado 2x).
+                    percentualReducao += (reparticao.ISS || 0);
                 }
                 if (item.icmsSt     && reparticao.ICMS)   percentualReducao += reparticao.ICMS;
                 if (item.isMonofasico) {
