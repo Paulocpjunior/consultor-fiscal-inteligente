@@ -125,3 +125,23 @@ export async function coletarSaudeCrons(db, agoraMs = Date.now()) {
         linhas,
     };
 }
+
+/**
+ * Decide se dispara alerta de cron. Problema = cron em 'falha' ou 'travado'
+ * (os vermelhos acionáveis; 'atrasado' é amarelo e não alerta, pra não spammar
+ * na segunda de manhã por gap de fim de semana). Anti-spam por ASSINATURA: só
+ * alerta quando o conjunto de crons problemáticos muda OU virou o dia — assim um
+ * problema persistente re-alerta 1x/dia e um problema novo alerta na hora.
+ * Função PURA (recebe hojeData 'YYYY-MM-DD' pra ser determinística em teste).
+ */
+export function decidirAlertaCron(saude, estadoAnterior, hojeData) {
+    const problemas = (saude?.linhas || []).filter(l => l.saude === 'falha' || l.saude === 'travado');
+    const assinatura = problemas.map(p => p.collection).sort().join(',');
+    if (problemas.length === 0) {
+        return { alertar: false, assinatura: '', problemas: [] };
+    }
+    const prevAssinatura = estadoAnterior?.assinatura || '';
+    const prevData = estadoAnterior?.data || '';
+    const alertar = assinatura !== prevAssinatura || hojeData !== prevData;
+    return { alertar, assinatura, problemas };
+}

@@ -397,10 +397,13 @@ app.get('/ready', async (_req, res) => {
     const out = { status: 'ready', timestamp: new Date().toISOString() };
     try {
         const adminMod = (await import('firebase-admin')).default;
+        // Inicializa o admin se ainda não estiver (numa revisão candidata "fria",
+        // sem tráfego, nada inicializou o firebase-admin ainda — não tratar isso
+        // como falha: inicializa aqui e testa o Firestore de verdade, igual aos
+        // helpers fa() dos routers). Se o credential/Firestore estiver quebrado, o
+        // initializeApp/get abaixo lança e cai no 503 — que é o que o gate quer.
         if (!adminMod.apps.length) {
-            out.status = 'not_ready';
-            out.firestore = 'not_initialized';
-            return res.status(503).json(out);
+            adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
         }
         await adminMod.firestore().collection('users').limit(1).get();
         out.firestore = 'ok';
@@ -408,6 +411,7 @@ app.get('/ready', async (_req, res) => {
     } catch (e) {
         out.status = 'not_ready';
         out.firestore = 'error';
+        out.motivo = String(e && e.message || e).slice(0, 200);
         return res.status(503).json(out);
     }
 });
