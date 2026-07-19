@@ -21,6 +21,10 @@ export interface EmpresaCobertura {
     nome: string;
     fonte: 'simples' | 'lucro';
     ativo: boolean;
+    // Elegibilidade real por certificado A1 (independente da flag). false =
+    // captura vai falhar mesmo com a flag ligada; motivoBloqueio explica o porquê.
+    certOk?: boolean;
+    motivoBloqueio?: string | null;
     alteradoPor: string | null;
     alteradoEm: string | null;
     state: { ultNSU: string | null; ultimaSync: string | null; maxNSU: string | null } | null;
@@ -31,6 +35,10 @@ export interface CoberturaResposta {
     ativas: number;
     inativas: number;
     comCaptura: number;
+    // Enriquecidos pela elegibilidade por certificado:
+    capturando?: number;        // flag ligada E cert ok
+    ativasBloqueadas?: number;  // flag ligada mas cert falha (falta A1 etc.)
+    prontasParaLigar?: number;  // cert ok mas flag desligada
     percentualAtivas: number;
     percentualCaptura: number;
     empresas: EmpresaCobertura[];

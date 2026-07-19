@@ -27,7 +27,7 @@ const fmtDate = (iso: string | null) => {
     } catch { return iso; }
 };
 
-type Filtro = 'todas' | 'ativas' | 'inativas' | 'sem-captura';
+type Filtro = 'todas' | 'ativas' | 'inativas' | 'sem-captura' | 'bloqueadas';
 
 const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
     const confirm = useConfirm();
@@ -59,6 +59,7 @@ const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
             if (filtro === 'ativas' && !e.ativo) return false;
             if (filtro === 'inativas' && e.ativo) return false;
             if (filtro === 'sem-captura' && (e.state?.ultimaSync)) return false;
+            if (filtro === 'bloqueadas' && !(e.ativo && e.certOk === false)) return false;
             if (!q) return true;
             return e.nome.toLowerCase().includes(q) || e.cnpj.includes(q.replace(/\D/g, ''));
         });
@@ -85,9 +86,10 @@ const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
             title: `Habilitar ADN em ${cnpjs.length} empresa(s)?`,
             message: (
                 <>
-                    A ADN exige procuração eletrônica registrada na Receita pra cada CNPJ.
-                    Empresas sem procuração ficarão habilitadas mas vão falhar no cron —
-                    sem perda de dados, só log de erro.
+                    A ADN exige o certificado A1 próprio de cada CNPJ (mesma raiz) — não
+                    aceita o certificado do escritório nem procuração (erro E2243). Empresas
+                    sem A1 válido ficarão habilitadas mas vão falhar no cron — sem perda de
+                    dados, só log de erro. Veja a coluna <em>Certificado (A1)</em>.
                 </>
             ),
             variant: 'warning',
@@ -122,10 +124,12 @@ const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
                 </p>
 
                 {data && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-4">
                         <Kpi label="Total empresas" value={String(data.total)} />
                         <Kpi label="Ativas (ADN ligada)" value={`${data.ativas} (${data.percentualAtivas}%)`} accent="success" />
-                        <Kpi label="Inativas" value={`${data.inativas}`} accent={data.inativas > 0 ? 'danger' : 'success'} />
+                        <Kpi label="Capturando de fato" value={`${data.capturando ?? '—'}`} accent="success" />
+                        <Kpi label="Ligadas s/ A1 (falham)" value={`${data.ativasBloqueadas ?? 0}`} accent={(data.ativasBloqueadas ?? 0) > 0 ? 'danger' : 'success'} />
+                        <Kpi label="Prontas p/ ligar" value={`${data.prontasParaLigar ?? 0}`} />
                         <Kpi label="Com captura efetiva" value={`${data.comCaptura} (${data.percentualCaptura}%)`} />
                     </div>
                 )}
@@ -142,7 +146,7 @@ const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
                     style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
                 />
                 <div className="flex gap-1 text-xs">
-                    {(['todas', 'ativas', 'inativas', 'sem-captura'] as Filtro[]).map(f => (
+                    {(['todas', 'ativas', 'inativas', 'sem-captura', 'bloqueadas'] as Filtro[]).map(f => (
                         <button
                             key={f}
                             onClick={() => setFiltro(f)}
@@ -153,7 +157,7 @@ const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
                                 border: `1px solid ${filtro === f ? 'var(--accent)' : 'var(--border-default)'}`,
                             }}
                         >
-                            {f === 'todas' ? 'Todas' : f === 'ativas' ? 'Ativas' : f === 'inativas' ? 'Inativas' : 'Sem captura'}
+                            {f === 'todas' ? 'Todas' : f === 'ativas' ? 'Ativas' : f === 'inativas' ? 'Inativas' : f === 'sem-captura' ? 'Sem captura' : 'Ligadas s/ A1'}
                         </button>
                     ))}
                 </div>
@@ -190,6 +194,7 @@ const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
                             <th className="py-2 px-3">CNPJ</th>
                             <th className="py-2 px-3">Fonte</th>
                             <th className="py-2 px-3">Captura ADN</th>
+                            <th className="py-2 px-3">Certificado (A1)</th>
                             <th className="py-2 px-3">Última sync</th>
                             <th className="py-2 px-3 text-right">Ação</th>
                         </tr>
@@ -197,7 +202,7 @@ const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
                     <tbody>
                         {listaFiltrada.length === 0 && (
                             <tr>
-                                <td colSpan={6} className="py-6 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
+                                <td colSpan={7} className="py-6 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
                                     {loading ? 'Carregando…' : 'Nenhuma empresa nos filtros atuais.'}
                                 </td>
                             </tr>
@@ -217,6 +222,17 @@ const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
                                     >
                                         {e.ativo ? '✓ Ativa' : '○ Inativa'}
                                     </span>
+                                </td>
+                                <td className="py-2 px-3">
+                                    {e.certOk === false ? (
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--danger)' }} title={e.motivoBloqueio || ''}>
+                                            ✗ {e.motivoBloqueio ? (e.motivoBloqueio.length > 42 ? e.motivoBloqueio.slice(0, 41) + '…' : e.motivoBloqueio) : 'sem A1 válido'}
+                                        </span>
+                                    ) : e.certOk === true ? (
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: 'rgba(34,197,94,0.15)', color: 'var(--success)' }}>✓ A1 ok</span>
+                                    ) : (
+                                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>—</span>
+                                    )}
                                 </td>
                                 <td className="py-2 px-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
                                     {e.state?.ultimaSync ? fmtDate(e.state.ultimaSync) : '—'}
@@ -243,9 +259,11 @@ const CoberturaAdnPanel: React.FC<Props> = ({ onShowToast }) => {
             </div>
 
             <p className="text-[11px] px-2" style={{ color: 'var(--text-muted)' }}>
-                A captura ADN exige procuração eletrônica registrada na Receita por CNPJ. Empresas
-                habilitadas mas sem procuração ficam visíveis aqui como "Ativa" mas não terão
-                <em> Última sync</em> — o cron logará erro sem perder dado.
+                A captura ADN exige o <strong>certificado A1 próprio</strong> de cada empresa (mesma raiz
+                de CNPJ) — o certificado do escritório é rejeitado com E2243, e a ADN não tem procuração
+                (em desenvolvimento pela SERPRO, sem data). A coluna <em>Certificado (A1)</em> mostra quem
+                está pronto; use o filtro <strong>Ligadas s/ A1</strong> para achar quem está habilitado mas
+                vai falhar no cron.
             </p>
         </div>
     );
