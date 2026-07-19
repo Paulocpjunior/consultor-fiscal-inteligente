@@ -8,9 +8,30 @@ import express from 'express';
 import admin from 'firebase-admin';
 import { requireAdmin } from '../require-admin.js';
 import { configMunicipio, municipiosSuportados } from './config-municipios.js';
+import { listarMunicipiosNfse, caminhoNfseRecomendado } from '../municipio-nfse-caminho.js';
 
 const router = express.Router();
 router.use(express.json());
+
+// GET /municipios-caminho — guia de captura de NFS-e por município (2026).
+// Orienta o colaborador: cada município usa ADN (Padrão Nacional, por CNPJ),
+// SP capital usa portal próprio, e ABRASF é legado. Opcional ?cod=IBGE devolve
+// a recomendação de um município específico.
+router.get('/municipios-caminho', requireAdmin, (req, res) => {
+    try {
+        if (req.query.cod) {
+            return res.json({ ok: true, item: caminhoNfseRecomendado(req.query.cod) });
+        }
+        return res.json({
+            ok: true,
+            padrao2026: 'adn',
+            nota: 'LC 214/2025: em 2026 o Padrão Nacional NFS-e (ADN) é obrigatório e a captura é por CNPJ (nfse-nacional-dfe). ABRASF é legado. Habilite nfseNacionalDfeAtivo + A1 próprio nas empresas.',
+            municipios: listarMunicipiosNfse(),
+        });
+    } catch (e) {
+        return res.status(500).json({ ok: false, erro: e.message });
+    }
+});
 
 function getDb() {
     if (!admin.apps.length) admin.initializeApp();

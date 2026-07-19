@@ -14,6 +14,7 @@ import XmlConfiguracoes from './XmlConfiguracoes';
 import XmlExportarIobSage from './XmlExportarIobSage';
 import CapturaDiagnosticoPanel from '../CapturaDiagnosticoPanel';
 import CronsHealthPanel from '../CronsHealthPanel';
+import NfseCaminhoGuia from '../NfseCaminhoGuia';
 import EmpresasStatusCapturaPanel from '../EmpresasStatusCapturaPanel';
 
 const XmlNfseSpCsv = lazy(() => import('./XmlNfseSpCsv'));
@@ -140,6 +141,7 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                     <>
                         <CapturaDiagnosticoPanel currentUser={currentUser} />
                         <CronsHealthPanel />
+                        <NfseCaminhoGuia />
                     </>
                 )}
                 {tab === 'empresas-status' && (
