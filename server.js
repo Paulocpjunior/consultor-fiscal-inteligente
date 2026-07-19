@@ -388,6 +388,30 @@ app.get('/health', async (_req, res) => {
     res.json(checks);
 });
 
+// Readiness estrito: diferente do /health (liveness — 200 se o processo está de
+// pé), o /ready retorna 503 quando uma dependência ESSENCIAL (Firestore) está
+// quebrada. O gate do canário no deploy bate AQUI — assim uma revisão que sobe
+// mas não fala com o Firestore (credencial/env quebrada) é barrada ANTES de
+// receber tráfego, em vez de passar num /health que sempre respondia 200.
+app.get('/ready', async (_req, res) => {
+    const out = { status: 'ready', timestamp: new Date().toISOString() };
+    try {
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) {
+            out.status = 'not_ready';
+            out.firestore = 'not_initialized';
+            return res.status(503).json(out);
+        }
+        await adminMod.firestore().collection('users').limit(1).get();
+        out.firestore = 'ok';
+        return res.json(out);
+    } catch (e) {
+        out.status = 'not_ready';
+        out.firestore = 'error';
+        return res.status(503).json(out);
+    }
+});
+
 function isGeminiQuotaError(err) {
     const raw = err instanceof Error ? `${err.message || ''}\n${err.stack || ''}` : String(err || '');
     return /RESOURCE_EXHAUSTED|prepayment credits|quota exceeded|billing|429/i.test(raw);

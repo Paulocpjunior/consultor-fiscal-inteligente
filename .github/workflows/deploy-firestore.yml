@@ -49,7 +49,7 @@ jobs:
         # regras e índices mas NUNCA apaga índices ausentes do arquivo (evita o
         # incidente de deleção acidental de índices via prompt "Yes").
         run: |
-          npx -y firebase-tools@13 deploy \
+          npx -y firebase-tools@13.35.1 deploy \
             --only firestore:rules,firestore:indexes \
             --project consultorfiscalapp \
             --non-interactive
