@@ -110,17 +110,21 @@ jobs:
       - name: Push image
         run: docker push ${{ env.IMAGE }}:${{ github.sha }}
 
-      - name: Deploy to Cloud Run
-        # Retry: o Cloud Run aborta com "ABORTED: Conflict for resource ...
-        # version was specified but current version is ..." quando outra
-        # operação tocou o serviço entre a leitura e a gravação (corrida
-        # transitória — caso real 08/07/2026). Repetir resolve.
+      - name: Deploy to Cloud Run (sem tráfego, revisão candidata)
+        # --no-traffic + --tag candidate: cria a revisão nova SEM mandar tráfego
+        # de produção pra ela. Assim validamos a saúde da candidata ANTES de
+        # rotear — se ela subir quebrada, a revisão antiga continua servindo 100%
+        # (rollback automático, ninguém vê erro). Antes o deploy roteava tráfego
+        # imediatamente e o health check só rodava DEPOIS (tarde demais).
+        # Retry: o Cloud Run aborta com "ABORTED: Conflict for resource" quando
+        # outra operação tocou o serviço entre leitura e gravação (transitório).
         run: |
           for attempt in 1 2 3; do
             if gcloud run deploy ${{ env.SERVICE_NAME }} \
               --image ${{ env.IMAGE }}:${{ github.sha }} \
               --platform managed \
               --region ${{ env.REGION }} \
+              --no-traffic --tag candidate \
               --quiet; then
               exit 0
             fi
@@ -130,15 +134,42 @@ jobs:
           echo "Deploy falhou após 3 tentativas."
           exit 1
 
-      - name: Route traffic to latest
+      - name: Health check da revisão candidata (antes de rotear)
+        # Bate no /health da URL EXCLUSIVA da candidata (tag). Se falhar, o job
+        # falha aqui e o tráfego NUNCA é roteado — a revisão antiga segue 100%.
+        # curl -sSf retorna != 0 em HTTP >= 400. Retenta pra cobrir cold-start.
+        run: |
+          CANDIDATE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --platform managed --region ${{ env.REGION }} \
+            --format=json | jq -r '.status.traffic[] | select(.tag=="candidate") | .url' | head -n1)
+          if [ -z "$CANDIDATE_URL" ]; then
+            echo "Não achei a URL da revisão candidata (tag=candidate)."; exit 1
+          fi
+          echo "Revisão candidata: $CANDIDATE_URL"
+          for attempt in 1 2 3 4 5; do
+            if curl -sSf "$CANDIDATE_URL/health" > /dev/null; then
+              echo "✓ /health OK na candidata"
+              curl -sSf "$CANDIDATE_URL/version.json" || echo "(version.json indisponível)"
+              exit 0
+            fi
+            echo "health ainda não respondeu (tentativa ${attempt}/5)…"
+            sleep $((attempt * 5))
+          done
+          echo "✗ Candidata NÃO passou no health — tráfego não roteado (revisão antiga segue ativa)."
+          exit 1
+
+      - name: Rotear tráfego para a candidata (health OK)
+        # Só chega aqui se o health passou. Move 100% pra revisão nova e remove a
+        # tag candidate (limpa a URL exclusiva).
         run: |
           gcloud run services update-traffic ${{ env.SERVICE_NAME }} \
             --to-latest \
+            --remove-tags candidate \
             --platform managed \
             --region ${{ env.REGION }} \
             --quiet
 
-      - name: Health check
+      - name: Health check final (produção)
         run: |
           sleep 5
           echo "── /health ──"
