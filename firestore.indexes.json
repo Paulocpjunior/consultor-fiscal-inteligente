@@ -161,6 +161,43 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
+        { "fieldPath": "fonte", "order": "ASCENDING" },
+        { "fieldPath": "dhEmi", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
+        { "fieldPath": "fonte", "order": "ASCENDING" },
+        { "fieldPath": "direcao", "order": "ASCENDING" },
+        { "fieldPath": "dhEmi", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
+        { "fieldPath": "fonte", "order": "ASCENDING" },
+        { "fieldPath": "prestadorCnpj", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
+        { "fieldPath": "fonte", "order": "ASCENDING" },
+        { "fieldPath": "tomadorCnpj", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

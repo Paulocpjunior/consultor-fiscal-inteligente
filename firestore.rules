@@ -144,6 +144,24 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // simples_notas: notas do Simples gravadas como coleção TOP-LEVEL
+    // (simplesNacionalService/cloudSync). Sem esta regra caía no
+    // default-deny e TODA leitura/escrita retornava "Missing or
+    // insufficient permissions" — o sync inicial falhava 100% (perda
+    // silenciosa de dados). Mesmo padrão de documentos_fiscais.
+    // ───────────────────────────────────────────────────────────────
+    match /simples_notas/{notaId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 5000;
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        request.resource.data.createdBy == resource.data.createdBy
+      );
+      allow delete: if isOwnerOrAdmin(resource.data.createdBy);
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // carteiras: vinculo empresa <-> colaborador.
     // Leitura: qualquer logado (o filtro por colaborador e feito no
     //          codigo do app — admin ve tudo, colaborador so os seus).
