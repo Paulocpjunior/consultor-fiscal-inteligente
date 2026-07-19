@@ -27,6 +27,16 @@ describe('normalizarApuracaoMit — estruturas plausíveis', () => {
         expect(r.outros).toHaveLength(0);
     });
 
+    it('IRRF (retenção na fonte) por descrição NÃO conta como IRPJ — vai p/ outros', () => {
+        const raw = { debitos: [
+            { codigo: '9999', descricao: 'IMPOSTO SOBRE A RENDA RETIDO NA FONTE', valor: 500 },
+            { codigoReceita: '2362', valor: 1000 }, // IRPJ de verdade
+        ] };
+        const r = normalizarApuracaoMit(raw);
+        expect(r.tributos.IRPJ).toBe(1000);       // só o IRPJ real, sem o IRRF
+        expect(r.outros.some(o => o.valor === 500)).toBe(true);
+    });
+
     it('valor em formato BR "1.234,56" string', () => {
         const raw = { debitos: [{ codigo: '2362', valor: '1.234,56' }] };
         const r = normalizarApuracaoMit(raw);

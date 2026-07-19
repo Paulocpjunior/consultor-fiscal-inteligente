@@ -61,6 +61,10 @@ function familiaPorCodigo(codigo) {
 // nao bate). Ex: "IRPJ - Lucro Real" -> IRPJ.
 function familiaPorDescricao(desc) {
     const d = String(desc || '').toUpperCase();
+    // IRRF/CSRF (retencao na fonte) NAO sao IRPJ/CSLL — sao codigos proprios.
+    // "IMPOSTO SOBRE A RENDA RETIDO NA FONTE" casava IRPJ e inflava o lado
+    // DCTFWeb, gerando divergencia falsa. Retencao na fonte fica em 'outros'.
+    if (/RETID|NA FONTE|\bIRRF\b|\bCSRF\b/.test(d)) return null;
     if (/\bIRPJ\b|IMPOSTO DE RENDA PJ|IMPOSTO SOBRE A RENDA/.test(d)) return 'IRPJ';
     if (/\bCSLL\b|CONTRIB.*SOCIAL.*LUCRO/.test(d)) return 'CSLL';
     if (/\bCOFINS\b/.test(d)) return 'COFINS'; // antes de PIS (COFINS contem nada de PIS, ok)
