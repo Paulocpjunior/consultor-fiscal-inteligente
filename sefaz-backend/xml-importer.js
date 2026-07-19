@@ -485,11 +485,17 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   // R$ 547,70) nunca apareciam, mesmo com a Ciencia disparada.
   // Agora: se o que esta na base e RESUMO e o que chega e COMPLETA, faz UPGRADE
   // (sobrescreve com itens/totais/valor, preservando eventos ja anexados).
-  const isResumoSchema = (sch) => /^res(NFe|NFCe)/.test(String(sch || ''));
-  const isResumoTipoDoc = (td) => td === 'resNFe' || td === 'resNFCe';
+  const isResumoSchema = (sch) => /^res(NFe|NFCe|CTe|MDFe)/.test(String(sch || ''));
+  const isResumoTipoDoc = (td) => td === 'resNFe' || td === 'resNFCe' || td === 'resCTe' || td === 'resMDFe';
+  // Modelo da chave (posicoes 20-21). Modelos 55/65 tem <det> quando COMPLETOS;
+  // 57 (CTe)/58 (MDFe) NUNCA tem itens. Por isso temItens=false so indica
+  // "resumo" para 55/65 — usar temItens como proxy generico fazia um resCTe de
+  // 531 bytes "atualizar" (sobrescrever) uma CTe COMPLETA, zerando numero/valor.
+  const modeloComItens = (ch) => { const m = String(ch || '').slice(20, 22); return m === '55' || m === '65'; };
   const incomingResumo = isResumoTipoDoc(meta.tipoDoc) || isResumoSchema(schema);
   const existingResumo = existingData
-    ? (isResumoSchema(existingData.schema) || existingData.temItens === false)
+    ? (isResumoSchema(existingData.schema) || isResumoTipoDoc(existingData.tipoDoc) ||
+       (existingData.temItens === false && modeloComItens(meta.chave)))
     : false;
   const ehUpgradeResumoParaCompleta = !!existingData && existingResumo && !incomingResumo;
 
