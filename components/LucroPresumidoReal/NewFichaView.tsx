@@ -26,6 +26,7 @@ import {
     InfoIcon, TagIcon, BriefcaseIcon, PlusIcon, TrashIcon,
 } from '../Icons';
 import { CurrencyInput, ToggleSwitch } from './inputs';
+import { avaliarPresuncaoReduzida16 } from '../../services/lucroService';
 
 interface NewFichaViewProps {
     // Contexto
@@ -156,6 +157,32 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => (
                             colorClass="bg-green-600"
                         />
                     </div>
+
+                    {/* Aviso (não bloqueia) quando o 16% pode ser indevido:
+                        atividade vedada (RIR art.15 §7º) ou receita > R$ 120k. */}
+                    {p.isPresuncaoReduzida && (() => {
+                        const receitaPeriodo = p.fichaComercio + p.fichaIndustria + p.fichaServico
+                            + p.fichaServicoRetido + p.fichaLocacao + p.fichaServicoHospitalar + p.fichaRecFinanceira;
+                        const receitaBrutaAnualEstimada = receitaPeriodo * (p.periodoApuracao === 'Trimestral' ? 4 : 12);
+                        const aviso16 = avaliarPresuncaoReduzida16({
+                            cnae: p.selectedEmpresa?.cnaePrincipal?.codigo,
+                            receitaBrutaAnualEstimada,
+                        });
+                        if (!aviso16.alertar) return null;
+                        return (
+                            <div className="mb-6 -mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-3">
+                                <p className="text-xs font-bold text-amber-800 dark:text-amber-300">⚠️ Atenção à presunção reduzida (16%)</p>
+                                <ul className="mt-1 space-y-1 list-disc list-inside">
+                                    {aviso16.motivos.map((m, i) => (
+                                        <li key={i} className="text-[11px] text-amber-700 dark:text-amber-400">{m}</li>
+                                    ))}
+                                </ul>
+                                <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-1">
+                                    Aviso informativo — não bloqueia o cálculo. Confirme o enquadramento antes de aplicar.
+                                </p>
+                            </div>
+                        );
+                    })()}
 
                     <div className="bg-white dark:bg-slate-900 p-4 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row items-center gap-6">
                         <div className="flex gap-4">
