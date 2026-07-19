@@ -49,6 +49,62 @@ const PRESUNCAO_IRPJ_HOSPITALAR = 0.08;
 const PRESUNCAO_CSLL_HOSPITALAR = 0.12;
 
 // ============================================================================
+// Validação (AVISO) da presunção reduzida de 16% — RIR/2018 art. 15 §7º e
+// IN RFB 1.700/17 art. 33 §7º. NÃO altera o cálculo (o 16% já é aplicado via
+// flag manual); apenas ALERTA quando a atividade (CNAE) é vedada à redução ou
+// a receita bruta anual passa de R$ 120k. Não bloqueia — a decisão é do contador.
+// Prefixos de CNAE (divisão 2 díg. ou grupo 4 díg.) das atividades vedadas.
+// ============================================================================
+export const LIMITE_RECEITA_PRESUNCAO_16 = 120_000;
+const CNAE_VEDADOS_16: { prefixo: string; motivo: string }[] = [
+    { prefixo: '69', motivo: 'atividades jurídicas/contábeis (profissão regulamentada)' },
+    { prefixo: '71', motivo: 'arquitetura/engenharia (profissão regulamentada)' },
+    { prefixo: '86', motivo: 'atenção à saúde — medicina/odontologia (profissão regulamentada)' },
+    { prefixo: '75', motivo: 'atividades veterinárias (profissão regulamentada)' },
+    { prefixo: '7020', motivo: 'consultoria em gestão empresarial' },
+    { prefixo: '6619', motivo: 'intermediação/corretagem / factoring' },
+    { prefixo: '6831', motivo: 'corretagem de imóveis' },
+    { prefixo: '6810', motivo: 'compra/venda de imóveis próprios (administração de bens)' },
+    { prefixo: '6822', motivo: 'administração de imóveis de terceiros' },
+    { prefixo: '77', motivo: 'aluguel/locação de bens (cessão de bens e direitos)' },
+    { prefixo: '6499', motivo: 'factoring / fomento mercantil' },
+    { prefixo: '41', motivo: 'construção de edifícios (se por administração ou só mão de obra)' },
+    { prefixo: '43', motivo: 'serviços especializados de construção (se só mão de obra)' },
+];
+
+export interface AvisoPresuncao16 {
+    alertar: boolean;
+    motivos: string[];
+}
+
+/**
+ * Avalia se a flag de presunção reduzida (16%) merece um AVISO para a atividade/
+ * receita informadas. Pura e testável. Retorna alertar=false quando não há
+ * indício de uso indevido. NÃO decide o cálculo — só orienta o contador.
+ */
+export function avaliarPresuncaoReduzida16(params: {
+    cnae?: string | null;
+    receitaBrutaAnualEstimada?: number | null;
+}): AvisoPresuncao16 {
+    const motivos: string[] = [];
+    const cnae = String(params.cnae || '').replace(/\D/g, '');
+    if (cnae.length >= 2) {
+        const div = cnae.slice(0, 2);
+        const grp = cnae.slice(0, 4);
+        const vedado = CNAE_VEDADOS_16.find(v =>
+            v.prefixo.length === 2 ? div === v.prefixo : grp === v.prefixo);
+        if (vedado) {
+            motivos.push(`CNAE ${cnae.slice(0, 7)} — ${vedado.motivo}: vedado à presunção de 16% (RIR/2018 art. 15 §7º); mantenha 32%.`);
+        }
+    }
+    const receita = params.receitaBrutaAnualEstimada;
+    if (typeof receita === 'number' && receita > LIMITE_RECEITA_PRESUNCAO_16) {
+        motivos.push('Receita bruta anual estimada acima de R$ 120.000: a redução a 16% só vale até esse teto e reverte a 32% (com diferença retroativa) se ultrapassar.');
+    }
+    return { alertar: motivos.length > 0, motivos };
+}
+
+// ============================================================================
 // MAJORAÇÃO LC 224/2025 + IN RFB 2.305/2025 + IN RFB 2.306/2026
 // ----------------------------------------------------------------------------
 // Acréscimo de 10% nos percentuais de presunção de IRPJ e CSLL,
