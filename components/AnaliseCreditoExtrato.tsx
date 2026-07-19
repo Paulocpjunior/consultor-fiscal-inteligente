@@ -526,7 +526,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
             <option value="">
               {empresasLoading ? 'Carregando empresas...' : '— Selecione a empresa antes de subir o PDF —'}
             </option>
-            {[...empresas].sort((a,b) => a.nome.localeCompare(b.nome)).map(e => (
+            {[...empresas].sort((a,b) => (a.nome || '').localeCompare(b.nome || '')).map(e => (
               <option key={e.id} value={e.id}>
                 {e.nome} ({e.cnpj}) · {e.regimeSugerido === 'SIMPLES' ? 'Simples'
                   : e.regimeSugerido === 'LUCRO_PRESUMIDO' ? 'Presumido' : 'Lucro Real'}

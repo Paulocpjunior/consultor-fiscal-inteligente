@@ -181,7 +181,7 @@ export const addFichaFinanceira = async (empresaId: string, registro: FichaFinan
             const fichaAtualizada = currentFicha.filter(f => f.mesReferencia !== registro.mesReferencia);
             fichaAtualizada.push(registro);
 
-            fichaAtualizada.sort((a, b) => a.mesReferencia.localeCompare(b.mesReferencia));
+            fichaAtualizada.sort((a, b) => (a.mesReferencia || '').localeCompare(b.mesReferencia || ''));
 
             await updateDoc(docRef, {
                 fichaFinanceira: sanitizePayload(fichaAtualizada),
