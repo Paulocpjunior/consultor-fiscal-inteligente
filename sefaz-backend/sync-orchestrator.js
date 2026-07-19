@@ -63,11 +63,43 @@ async function acquireLock(cnpj, lockedBy) {
   return result;
 }
 
-async function carregaUltNSU(cnpj) {
+// Quantas vezes tentamos reprocessar o MESMO NSU que falha ao importar antes de
+// desistir dele e avançar o cursor (evita travar a empresa num "poison NSU").
+const MAX_TENTATIVAS_NSU = 3;
+
+// Cursor seguro: NUNCA persiste um ultNSU ALÉM de um NSU que falhou ao importar,
+// senão aquele documento fica "atrás" do cursor e a SEFAZ nunca mais o reenvia
+// (a classe "baixou algumas notas mas não todas" — caso BRASLIMPO/VINATEX).
+// Segura o cursor logo antes do menor NSU falho, pra ele ser reprocessado no
+// próximo run. Como a SEFAZ só devolve NSU > ultNSU solicitado, o menor NSU
+// falho é sempre > cursor inicial, então segurar em (falho-1) nunca retrocede.
+// Se o mesmo NSU falha MAX_TENTATIVAS_NSU vezes, desiste dele (avança o cursor +
+// sinaliza), pra não travar a captura do resto da empresa. Função PURA/testável.
+export function calcularCursorSeguro({ reachedNSU, menorNsuFalho, travadoAnterior }) {
+  if (!menorNsuFalho) {
+    return { cursor: String(reachedNSU), travado: null, desistiu: false };
+  }
+  const falho = parseInt(menorNsuFalho, 10);
+  const prevNsu = travadoAnterior?.nsu != null ? parseInt(travadoAnterior.nsu, 10) : null;
+  const mesmaTrava = prevNsu !== null && prevNsu === falho;
+  const tentativas = mesmaTrava ? (Number(travadoAnterior.tentativas) || 1) + 1 : 1;
+
+  if (tentativas >= MAX_TENTATIVAS_NSU) {
+    return { cursor: String(reachedNSU), travado: null, desistiu: true, nsuDesistido: String(menorNsuFalho) };
+  }
+  const seguro = Math.max(0, falho - 1);
+  return { cursor: String(seguro), travado: { nsu: String(menorNsuFalho), tentativas }, desistiu: false };
+}
+
+async function carregaEstadoNSU(cnpj) {
   const cnpjNum = String(cnpj).replace(/\D/g, '');
   const ref = fa().firestore().collection('sefaz_state').doc(cnpjNum);
   const snap = await ref.get();
-  return snap.exists ? (snap.data().ultNSU || '0') : '0';
+  const d = snap.exists ? snap.data() : {};
+  return {
+    ultNSU: d.ultNSU || '0',
+    travado: d.nsuTravado ? { nsu: d.nsuTravado, tentativas: d.tentativasTravado || 1 } : null,
+  };
 }
 
 async function persisteUltNSU(cnpj, ultNSU, info = {}) {
@@ -104,8 +136,16 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
   // resetNSU=true zera o cursor → SEFAZ reenvia TODO o historico de DF-e dos
   // ultimos ~90 dias. Usado quando uma nota "passou" do cursor sem ser gravada
   // (caso BRASLIMPO: cursor avancou em disparos que abortavam por cert/UF).
-  let ultNSU = resetNSU ? '0' : await carregaUltNSU(cnpjNum);
+  const estadoAnterior = resetNSU ? { ultNSU: '0', travado: null } : await carregaEstadoNSU(cnpjNum);
+  let ultNSU = estadoAnterior.ultNSU;
   if (resetNSU) console.log(`[sync-orchestrator] empresa=${empresaId} RESET NSU=0 solicitado`);
+  // Menor NSU que FALHOU ao importar neste run. Segura o cursor antes dele.
+  let menorNsuFalho = null;
+  const marcarFalha = (nsu) => {
+    const n = parseInt(nsu, 10);
+    if (!Number.isFinite(n)) return;
+    if (menorNsuFalho === null || n < menorNsuFalho) menorNsuFalho = n;
+  };
   let novosXmls = 0;
   let duplicados = 0;
   let erros = 0;
@@ -215,6 +255,7 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
         for (const docZip of result.xmls) {
           if (!docZip.xml) {
             erros++;
+            marcarFalha(docZip.nsu);
             documentosProcessados.push({
               nsu: docZip.nsu, schema: docZip.schema, chave: null,
               status: 'erro-descompressao', motivo: docZip.erroDescompressao || 'docZip vazio',
@@ -269,11 +310,13 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
               documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'evento-dup', motivo: r.tipo || null });
             } else {
               erros++;
+              marcarFalha(docZip.nsu);
               documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'erro-import', motivo: r.motivo || JSON.stringify(r).slice(0, 200) });
               console.warn('[orchestrator] import retornou erro:', r);
             }
           } catch (e) {
             erros++;
+            marcarFalha(docZip.nsu);
             documentosProcessados.push({ nsu: docZip.nsu, schema: docZip.schema, chave, status: 'excecao-import', motivo: e.message });
             console.error('[orchestrator] exceção no import:', e.message);
             await registrarErroSefaz({
@@ -291,19 +334,42 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
       if (result.cStat !== '138') break;
     }
 
-    // Pendência estimada: quantos NSUs a SEFAZ ainda tem além do cursor.
-    // > 0 significa "ainda faltam documentos" — visível no /state e no painel,
-    // pra ninguém mais precisar comparar com a SIEG pra saber que está atrás.
-    const pendenciaNSU = (maxNSUFinal && ultNSU)
-      ? Math.max(0, parseInt(maxNSUFinal, 10) - parseInt(ultNSU, 10))
+    // Cursor SEGURO: nunca persiste além de um NSU que falhou ao importar (senão
+    // o doc fica atrás do cursor e a SEFAZ nunca mais o reenvia). Segura antes do
+    // menor NSU falho pra retentar no próximo run; desiste após MAX_TENTATIVAS_NSU.
+    const cursorInfo = calcularCursorSeguro({
+      reachedNSU: ultNSU,
+      menorNsuFalho,
+      travadoAnterior: estadoAnterior.travado,
+    });
+    const cursorPersistir = cursorInfo.cursor;
+    if (cursorInfo.desistiu) {
+      console.warn(`[sync-orchestrator] empresa=${empresaId} DESISTIU do NSU ${cursorInfo.nsuDesistido} após ${MAX_TENTATIVAS_NSU} tentativas — cursor avançado, doc pulado`);
+      await registrarErroSefaz({
+        empresaId, empresaCnpj: cnpjNum,
+        motivo: `NSU ${cursorInfo.nsuDesistido} falhou ${MAX_TENTATIVAS_NSU}x ao importar; cursor avançado (documento pulado). Investigar e, se necessário, reset NSU manual.`,
+        contexto: { nsuDesistido: cursorInfo.nsuDesistido, maxNSU: maxNSUFinal },
+        capturadoPor,
+      });
+    } else if (menorNsuFalho) {
+      console.warn(`[sync-orchestrator] empresa=${empresaId} cursor SEGURADO em ${cursorPersistir} (NSU falho ${menorNsuFalho}, tentativa ${cursorInfo.travado?.tentativas}) — retenta no próximo run`);
+    }
+
+    // Pendência estimada: quantos NSUs a SEFAZ ainda tem além do cursor (usa o
+    // cursor EFETIVAMENTE persistido, não o alcançado em memória).
+    const pendenciaNSU = (maxNSUFinal && cursorPersistir)
+      ? Math.max(0, parseInt(maxNSUFinal, 10) - parseInt(cursorPersistir, 10))
       : 0;
 
-    await persisteUltNSU(cnpjNum, ultNSU, {
+    await persisteUltNSU(cnpjNum, cursorPersistir, {
       cStatUltimaSync: cStatFinal,
       xMotivoUltimaSync: xMotivoFinal,
       paginas: pagina,
       maxNSUUltimaSync: maxNSUFinal,
       pendenciaNSU,
+      nsuAlcancado: ultNSU,
+      nsuTravado: cursorInfo.travado?.nsu || null,
+      tentativasTravado: cursorInfo.travado?.tentativas || null,
       ultimoColaborador: capturadoPor?.email || null,
       fonteUltimaSync: capturadoPor?.fonte || 'desconhecido',
     });
