@@ -38,6 +38,9 @@ const ultimasCompetencias = (meses = 24): string[] => {
     return out;
 };
 
+// Quantas linhas montar por vez no DOM (render incremental).
+const PAGINA_DOCS = 200;
+
 const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey }) => {
     // ANTES: cada tecla no campo "Buscar" disparava listDocumentos → fetchAllDocs
     // (5k+ docs pela rede) → filtro em memoria → setDocs. Resultado: digitação
@@ -51,6 +54,11 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     const [filters, setFilters] = useState<ListDocumentosFilters>({});
     const [busca, setBusca] = useState('');
     const [exporting, setExporting] = useState<'pdf' | 'csv' | null>(null);
+    // Render incremental: monta só as primeiras N linhas no DOM e cresce sob
+    // demanda ("Carregar mais"). Antes o .map montava TODAS as linhas (milhares
+    // numa competência grande) → travava a rolagem. Export CSV/PDF continua sobre
+    // o conjunto filtrado inteiro (docs), não sobre o recorte visível.
+    const [visibleCount, setVisibleCount] = useState(PAGINA_DOCS);
     const tableRef = React.useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -79,6 +87,15 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         () => applyDocumentosFilters(allDocs, { ...filters, busca }),
         [allDocs, filters, busca],
     );
+
+    // Recorte visível no DOM. Ao mudar o filtro (docs muda de identidade),
+    // volta pro topo e reseta a contagem — senão um filtro novo herdaria o
+    // "carregar mais" do anterior.
+    const docsVisiveis = useMemo(() => docs.slice(0, visibleCount), [docs, visibleCount]);
+    useEffect(() => {
+        setVisibleCount(PAGINA_DOCS);
+        if (tableRef.current) tableRef.current.scrollTop = 0;
+    }, [docs]);
 
     const competencias = useMemo(() => {
         const set = new Set<string>(ultimasCompetencias());
@@ -625,7 +642,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {docs.map(d => (
+                                {docsVisiveis.map(d => (
                                     <tr
                                         key={d.id}
                                         onClick={() => onSelect(d)}
@@ -658,6 +675,27 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                                 ))}
                             </tbody>
                         </table>
+                        {docs.length > visibleCount && (
+                            <div className="sticky bottom-0 bg-white/95 dark:bg-slate-800/95 border-t border-slate-200 dark:border-slate-700 px-4 py-2 flex items-center justify-between gap-3">
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Mostrando {visibleCount.toLocaleString('pt-BR')} de {docs.length.toLocaleString('pt-BR')}
+                                </span>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setVisibleCount(c => c + PAGINA_DOCS)}
+                                        className="px-3 py-1 text-xs font-bold bg-sky-600 text-white rounded hover:bg-sky-700"
+                                    >
+                                        Carregar mais (+{PAGINA_DOCS})
+                                    </button>
+                                    <button
+                                        onClick={() => setVisibleCount(docs.length)}
+                                        className="px-3 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
+                                    >
+                                        Todos
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
