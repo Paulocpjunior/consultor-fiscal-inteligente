@@ -545,6 +545,9 @@ export async function listDocumentos(
         if (scope) docs = docs.filter(d => podeVerDocumentoPorCarteira(d, scope));
     } catch (err: any) {
         console.warn('listDocumentos:', err?.message);
+        // Leitura falhou (rules/rede/índice) — sinaliza incompletude pra o caller
+        // não tratar [] como "base vazia legítima" (ex.: export/agregação).
+        if (meta) meta.truncado = true;
         return [];
     }
 

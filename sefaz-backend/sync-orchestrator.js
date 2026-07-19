@@ -75,20 +75,41 @@ const MAX_TENTATIVAS_NSU = 3;
 // falho é sempre > cursor inicial, então segurar em (falho-1) nunca retrocede.
 // Se o mesmo NSU falha MAX_TENTATIVAS_NSU vezes, desiste dele (avança o cursor +
 // sinaliza), pra não travar a captura do resto da empresa. Função PURA/testável.
-export function calcularCursorSeguro({ reachedNSU, menorNsuFalho, travadoAnterior }) {
-  if (!menorNsuFalho) {
+//
+// IMPORTANTE: recebe TODOS os NSUs falhos do run (nsusFalhos), não só o menor.
+// Ao desistir do poison (menor falho), o cursor NÃO salta para reachedNSU — isso
+// pularia outros NSUs que falharam menos vezes no mesmo run e os perderia. Em vez
+// disso avança só até logo antes do PRÓXIMO NSU falho, que vira a nova trava
+// (tentativa 1). Assim cada NSU ganha suas 3 tentativas de verdade.
+export function calcularCursorSeguro({ reachedNSU, nsusFalhos, travadoAnterior }) {
+  const falhos = (nsusFalhos || [])
+    .map((n) => parseInt(n, 10))
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b);
+  if (falhos.length === 0) {
     return { cursor: String(reachedNSU), travado: null, desistiu: false };
   }
-  const falho = parseInt(menorNsuFalho, 10);
+  const menor = falhos[0];
   const prevNsu = travadoAnterior?.nsu != null ? parseInt(travadoAnterior.nsu, 10) : null;
-  const mesmaTrava = prevNsu !== null && prevNsu === falho;
+  const mesmaTrava = prevNsu !== null && prevNsu === menor;
   const tentativas = mesmaTrava ? (Number(travadoAnterior.tentativas) || 1) + 1 : 1;
 
   if (tentativas >= MAX_TENTATIVAS_NSU) {
-    return { cursor: String(reachedNSU), travado: null, desistiu: true, nsuDesistido: String(menorNsuFalho) };
+    // Desiste do poison (menor), mas não pula os demais falhos: para logo antes
+    // do próximo NSU falho, que passa a ser a trava (tentativa 1).
+    const proximoFalho = falhos.find((n) => n > menor);
+    if (proximoFalho == null) {
+      return { cursor: String(reachedNSU), travado: null, desistiu: true, nsuDesistido: String(menor) };
+    }
+    return {
+      cursor: String(Math.max(0, proximoFalho - 1)),
+      travado: { nsu: String(proximoFalho), tentativas: 1 },
+      desistiu: true,
+      nsuDesistido: String(menor),
+    };
   }
-  const seguro = Math.max(0, falho - 1);
-  return { cursor: String(seguro), travado: { nsu: String(menorNsuFalho), tentativas }, desistiu: false };
+  const seguro = Math.max(0, menor - 1);
+  return { cursor: String(seguro), travado: { nsu: String(menor), tentativas }, desistiu: false };
 }
 
 async function carregaEstadoNSU(cnpj) {
@@ -139,12 +160,14 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
   const estadoAnterior = resetNSU ? { ultNSU: '0', travado: null } : await carregaEstadoNSU(cnpjNum);
   let ultNSU = estadoAnterior.ultNSU;
   if (resetNSU) console.log(`[sync-orchestrator] empresa=${empresaId} RESET NSU=0 solicitado`);
-  // Menor NSU que FALHOU ao importar neste run. Segura o cursor antes dele.
-  let menorNsuFalho = null;
+  // TODOS os NSUs que FALHARAM ao importar neste run. O cursor seguro precisa da
+  // lista completa (não só o menor) pra, ao desistir de um poison, não pular os
+  // demais falhos. Set pra deduplicar.
+  const nsusFalhosSet = new Set();
   const marcarFalha = (nsu) => {
     const n = parseInt(nsu, 10);
     if (!Number.isFinite(n)) return;
-    if (menorNsuFalho === null || n < menorNsuFalho) menorNsuFalho = n;
+    nsusFalhosSet.add(n);
   };
   let novosXmls = 0;
   let duplicados = 0;
@@ -337,9 +360,10 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
     // Cursor SEGURO: nunca persiste além de um NSU que falhou ao importar (senão
     // o doc fica atrás do cursor e a SEFAZ nunca mais o reenvia). Segura antes do
     // menor NSU falho pra retentar no próximo run; desiste após MAX_TENTATIVAS_NSU.
+    const nsusFalhos = [...nsusFalhosSet];
     const cursorInfo = calcularCursorSeguro({
       reachedNSU: ultNSU,
-      menorNsuFalho,
+      nsusFalhos,
       travadoAnterior: estadoAnterior.travado,
     });
     const cursorPersistir = cursorInfo.cursor;
@@ -351,8 +375,8 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
         contexto: { nsuDesistido: cursorInfo.nsuDesistido, maxNSU: maxNSUFinal },
         capturadoPor,
       });
-    } else if (menorNsuFalho) {
-      console.warn(`[sync-orchestrator] empresa=${empresaId} cursor SEGURADO em ${cursorPersistir} (NSU falho ${menorNsuFalho}, tentativa ${cursorInfo.travado?.tentativas}) — retenta no próximo run`);
+    } else if (nsusFalhos.length) {
+      console.warn(`[sync-orchestrator] empresa=${empresaId} cursor SEGURADO em ${cursorPersistir} (${nsusFalhos.length} NSU(s) falho(s), trava em ${cursorInfo.travado?.nsu}, tentativa ${cursorInfo.travado?.tentativas}) — retenta no próximo run`);
     }
 
     // Pendência estimada: quantos NSUs a SEFAZ ainda tem além do cursor (usa o

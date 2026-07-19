@@ -58,6 +58,10 @@ jobs:
         # Trava o deploy se surgir CVE high/critical nas deps. Vulns
         # transitivas conhecidas sem fix upstream são fixadas via
         # "overrides" no package.json (ex.: websocket-driver 0.7.5).
+        # Escape hatch: `[skip-audit]` na msg do commit libera um hotfix urgente
+        # quando um CVE novo sem fix upstream estaria bloqueando um deploy de
+        # incidente não relacionado.
+        if: ${{ !contains(github.event.head_commit.message, '[skip-audit]') }}
         run: npm audit --audit-level=high
 
       - name: Typecheck + testes
@@ -135,9 +139,11 @@ jobs:
           exit 1
 
       - name: Health check da revisão candidata (antes de rotear)
-        # Bate no /health da URL EXCLUSIVA da candidata (tag). Se falhar, o job
-        # falha aqui e o tráfego NUNCA é roteado — a revisão antiga segue 100%.
-        # curl -sSf retorna != 0 em HTTP >= 400. Retenta pra cobrir cold-start.
+        # Bate no /ready (readiness ESTRITO — 503 se o Firestore está quebrado) da
+        # URL EXCLUSIVA da candidata (tag). Diferente do /health, que responde 200
+        # só de o processo estar de pé, o /ready barra revisão que sobe mas não
+        # fala com a dependência essencial. Se falhar, o job falha aqui e o tráfego
+        # NUNCA é roteado — a revisão antiga segue 100%. Retenta pra cold-start.
         run: |
           CANDIDATE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
             --platform managed --region ${{ env.REGION }} \
@@ -147,27 +153,44 @@ jobs:
           fi
           echo "Revisão candidata: $CANDIDATE_URL"
           for attempt in 1 2 3 4 5; do
-            if curl -sSf "$CANDIDATE_URL/health" > /dev/null; then
-              echo "✓ /health OK na candidata"
+            if curl -sSf "$CANDIDATE_URL/ready" > /dev/null; then
+              echo "✓ /ready OK na candidata (processo + Firestore)"
               curl -sSf "$CANDIDATE_URL/version.json" || echo "(version.json indisponível)"
               exit 0
             fi
-            echo "health ainda não respondeu (tentativa ${attempt}/5)…"
+            echo "ready ainda não respondeu OK (tentativa ${attempt}/5)…"
             sleep $((attempt * 5))
           done
-          echo "✗ Candidata NÃO passou no health — tráfego não roteado (revisão antiga segue ativa)."
+          echo "✗ Candidata NÃO passou no /ready — tráfego não roteado (revisão antiga segue ativa)."
           exit 1
 
       - name: Rotear tráfego para a candidata (health OK)
-        # Só chega aqui se o health passou. Move 100% pra revisão nova e remove a
-        # tag candidate (limpa a URL exclusiva).
+        # Só chega aqui se o /ready passou. Roteia 100% para a EXATA revisão
+        # validada, pelo NOME da revisão (não `--to-latest`) — assim um deploy
+        # concorrente fora de banda que criasse uma revisão mais nova entre o
+        # health e este passo não sequestraria o tráfego. O --remove-tags na mesma
+        # chamada limpa a tag candidate atomicamente. Retry: mesmo ABORTED
+        # transitório de conflito que o passo de deploy trata.
         run: |
-          gcloud run services update-traffic ${{ env.SERVICE_NAME }} \
-            --to-latest \
-            --remove-tags candidate \
-            --platform managed \
-            --region ${{ env.REGION }} \
-            --quiet
+          REV=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --platform managed --region ${{ env.REGION }} \
+            --format=json | jq -r '.status.traffic[] | select(.tag=="candidate") | .revisionName' | head -n1)
+          if [ -z "$REV" ]; then
+            echo "Não achei a revisão candidata (tag=candidate) para rotear."; exit 1
+          fi
+          echo "Roteando 100% para a revisão validada: $REV"
+          for attempt in 1 2 3; do
+            if gcloud run services update-traffic ${{ env.SERVICE_NAME }} \
+              --to-revisions "${REV}=100" \
+              --remove-tags candidate \
+              --platform managed --region ${{ env.REGION }} --quiet; then
+              exit 0
+            fi
+            echo "update-traffic falhou (tentativa ${attempt}/3) — aguardando…"
+            sleep $((attempt * 15))
+          done
+          echo "✗ update-traffic falhou após 3 tentativas (revisão antiga segue ativa)."
+          exit 1
 
       - name: Health check final (produção)
         run: |

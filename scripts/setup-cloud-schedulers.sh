@@ -129,9 +129,9 @@ upsert_job \
 # entao as obrigacoes do mes podiam nunca ser geradas.
 upsert_job \
     "tarefas-cron-mensal" \
-    "0 3 1 * *" \
+    "20 3 1 * *" \
     "/api/tarefas/cron-mensal" \
-    "Gera tarefas/obrigacoes mensais de todas as empresas (dia 1)"
+    "Gera tarefas/obrigacoes mensais de todas as empresas (dia 1, deslocado do nfsesp 3h)"
 
 # Alertas de docs novos no SharePoint — 08h30 BRT (apos o auto-sync das 08h).
 # Rota /api/admin/sharepoint/cron-alertas existia sem job (cron orfao).

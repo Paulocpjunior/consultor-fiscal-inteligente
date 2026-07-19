@@ -20,18 +20,27 @@ describe('LC224 — CSLL 2026 respeita o teto anual reduzido (R$ 3,75 mi)', () =
         expect(prop(5_000_000, 0, 'CSLL', 2026, 4)).toBeCloseTo(0.25, 6);
     });
 
-    it('2T (1º trimestre de vigência): sublimite = 1,25 mi', () => {
-        // 2M no 2T, sublimite 1,25M → excedente 0,75M → 0,375.
-        expect(prop(2_000_000, 0, 'CSLL', 2026, 2)).toBeCloseTo(0.375, 6);
+    it('2T: sublimite acumulado = 3,75mi × 2/4 = 1,875 mi', () => {
+        // 2M no 2T, sublimite 1,875M → excedente 0,125M → 0,0625.
+        expect(prop(2_000_000, 0, 'CSLL', 2026, 2)).toBeCloseTo(0.0625, 6);
     });
 
     it('1T/2026: majoração da CSLL ainda não vigora → 0', () => {
         expect(prop(2_000_000, 0, 'CSLL', 2026, 1)).toBe(0);
     });
 
-    it('3T com sublimite acumulado já consumido → 100% majorado', () => {
-        // trimestresVigentes(3T)=2 → sublimite 2,5M; anterior 2,5M → disponível 0.
-        expect(prop(1_000_000, 2_500_000, 'CSLL', 2026, 3)).toBe(1);
+    it('3T com sublimite acumulado já estourado → 100% majorado', () => {
+        // sublimite 3T = 3,75M × 3/4 = 2,8125M; anterior 3M > 2,8125M → disponível <0.
+        expect(prop(1_000_000, 3_000_000, 'CSLL', 2026, 3)).toBe(1);
+    });
+
+    it('REGRESSÃO: receita uniforme com anual = teto (3,75mi) → 0 majoração em todos os trimestres', () => {
+        // 937.500/trimestre → anual exatamente 3,75mi (teto reduzido) → majoração
+        // devida = ZERO. O bug da fase2-g cobrava ~R$811 no 3T; agora dá 0.
+        // ant = receita acumulada dos trimestres ANTERIORES (uniforme).
+        expect(prop(937_500, 937_500, 'CSLL', 2026, 2)).toBe(0);       // 2T: cumSub 1,875 − ant 0,9375 = 0,9375 ≥ 937,5k
+        expect(prop(937_500, 1_875_000, 'CSLL', 2026, 3)).toBe(0);     // 3T: cumSub 2,8125 − 1,875 = 0,9375 ≥ 937,5k
+        expect(prop(937_500, 2_812_500, 'CSLL', 2026, 4)).toBe(0);     // 4T: cumSub 3,75 − 2,8125 = 0,9375 ≥ 937,5k
     });
 });
 
