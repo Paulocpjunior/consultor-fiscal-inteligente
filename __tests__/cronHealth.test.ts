@@ -3,7 +3,7 @@
  * Classificação pura: ok / atrasado / travado / falha / sem-dados.
  */
 // @ts-expect-error — módulo .js puro
-import { tsToMillis, normalizarEntradaLog, classificarSaudeCron, coletarSaudeCrons, CRON_LOG_COLLECTIONS } from '../sefaz-backend/cron-health.js';
+import { tsToMillis, normalizarEntradaLog, classificarSaudeCron, coletarSaudeCrons, CRON_LOG_COLLECTIONS, decidirAlertaCron } from '../sefaz-backend/cron-health.js';
 
 const H = 3_600_000;
 const AGORA = 1_700_000_000_000;
@@ -120,5 +120,54 @@ describe('coletarSaudeCrons — agrega e ordena por severidade', () => {
         const r = await coletarSaudeCrons(db, AGORA);
         expect(r.linhas.some((l: any) => l.saude === 'erro-leitura')).toBe(true);
         expect(r.linhas.some((l: any) => l.saude === 'ok')).toBe(true);
+    });
+});
+
+describe('decidirAlertaCron — anti-spam por assinatura', () => {
+    const saudeCom = (...cols: string[]) => ({
+        linhas: cols.map(c => ({ collection: c, label: c, saude: 'falha' })),
+    });
+
+    it('sem problema → não alerta', () => {
+        const r = decidirAlertaCron({ linhas: [{ collection: 'x', saude: 'ok' }] }, null, '2026-07-19');
+        expect(r.alertar).toBe(false);
+        expect(r.problemas).toHaveLength(0);
+    });
+
+    it("'atrasado' (amarelo) NÃO alerta — só falha/travado", () => {
+        const r = decidirAlertaCron({ linhas: [{ collection: 'x', saude: 'atrasado' }] }, null, '2026-07-19');
+        expect(r.alertar).toBe(false);
+    });
+
+    it('problema novo (sem estado anterior) → alerta', () => {
+        const r = decidirAlertaCron(saudeCom('das_cron_logs'), null, '2026-07-19');
+        expect(r.alertar).toBe(true);
+        expect(r.assinatura).toBe('das_cron_logs');
+    });
+
+    it('mesma assinatura no MESMO dia → não re-alerta (anti-spam)', () => {
+        const r = decidirAlertaCron(saudeCom('das_cron_logs'), { assinatura: 'das_cron_logs', data: '2026-07-19' }, '2026-07-19');
+        expect(r.alertar).toBe(false);
+    });
+
+    it('mesma assinatura em dia DIFERENTE → re-alerta (persistente, 1x/dia)', () => {
+        const r = decidirAlertaCron(saudeCom('das_cron_logs'), { assinatura: 'das_cron_logs', data: '2026-07-18' }, '2026-07-19');
+        expect(r.alertar).toBe(true);
+    });
+
+    it('assinatura MUDOU (novo cron entrou em falha) no mesmo dia → alerta na hora', () => {
+        const r = decidirAlertaCron(
+            saudeCom('das_cron_logs', 'dctfweb_cron_logs'),
+            { assinatura: 'das_cron_logs', data: '2026-07-19' },
+            '2026-07-19',
+        );
+        expect(r.alertar).toBe(true);
+        expect(r.assinatura).toBe('das_cron_logs,dctfweb_cron_logs'); // ordenada
+    });
+
+    it('travado também conta como problema', () => {
+        const r = decidirAlertaCron({ linhas: [{ collection: 'y', saude: 'travado' }] }, null, '2026-07-19');
+        expect(r.alertar).toBe(true);
+        expect(r.problemas).toHaveLength(1);
     });
 });

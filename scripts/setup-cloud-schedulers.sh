@@ -141,6 +141,16 @@ upsert_job \
     "/api/admin/sharepoint/cron-alertas" \
     "Alerta admins por email sobre documentos novos no SharePoint"
 
+# Alerta proativo de cron parado — verifica a saude de TODOS os crons e manda
+# email se algum entrou em falha/travado (anti-spam: 1x/dia por problema). Roda
+# 9h/15h/21h uteis (apos as janelas de captura), pra o painel de saude nao ser
+# so passivo. Deslocado :10 pra nao concorrer com jobs de hora cheia.
+upsert_job \
+    "crons-health-alerta" \
+    "10 9,15,21 * * 1-5" \
+    "/api/admin/crons/health-alerta" \
+    "Alerta por email quando algum cron esta em falha/travado (saude dos crons)"
+
 # Colheita de SAIDA via <autXML> (DistDFe com o cert do escritorio). O cliente
 # autoriza o CNPJ do escritorio na emissao (tag autXML) e a SEFAZ distribui o
 # XML completo das notas dele para o escritorio, no MESMO fluxo distNSU. Roda
