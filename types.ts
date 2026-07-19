@@ -544,7 +544,14 @@ export interface DetalheImposto {
     imposto: string;
     baseCalculo: number;
     aliquota: number;
+    /** Valor a PAGAR — líquido de retenção na fonte (usado em DARF/guias e telas). */
     valor: number;
+    /** Débito BRUTO apurado, antes da retenção na fonte. É o que o MIT/DCTFWeb
+     *  declara (a retenção entra como vinculação, não abate o débito). Ausente =
+     *  usar `valor` (impostos sem retenção). */
+    valorBruto?: number;
+    /** Retenção na fonte (IRRF/CSRF) que reduz o valor a pagar mas não o débito. */
+    retencao?: number;
     observacao?: string;
     cotaInfo?: PlanoCotas;
 }
