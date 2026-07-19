@@ -3,6 +3,7 @@
 // Coordena 1 sincronização SEFAZ: lock + cliente + importer + cursor NSU.
 // ============================================================================
 
+import { randomUUID } from 'crypto';
 import admin from 'firebase-admin';
 import { consultaDistDFe, consultaDistDFeComCert } from './sefaz-client.js';
 import { loadCertEmpresa, loadCertEmpresaPorCnpjBase } from './cert-storage.js';
@@ -31,7 +32,7 @@ function fa() {
   return admin;
 }
 
-async function acquireLock(cnpj, lockedBy) {
+async function acquireLock(cnpj, lockedBy, lockToken) {
   const cnpjNum = String(cnpj).replace(/\D/g, '');
   const ref = fa().firestore().collection('sefaz_locks').doc(cnpjNum);
   const now = Date.now();
@@ -52,10 +53,13 @@ async function acquireLock(cnpj, lockedBy) {
         };
       }
     }
+    // lockToken identifica ESTE run — usado no persist pra não sobrescrever o
+    // cursor caso o run passe do TTL e outro cron reassuma o lock.
     tx.set(ref, {
       startedAt: fa().firestore.Timestamp.fromMillis(now),
       expiresAt: fa().firestore.Timestamp.fromMillis(expiresAt),
       lockedBy,
+      lockToken,
     });
     return { ok: true };
   });
@@ -123,15 +127,34 @@ async function carregaEstadoNSU(cnpj) {
   };
 }
 
-async function persisteUltNSU(cnpj, ultNSU, info = {}) {
+// Persiste o cursor/estado. Se `lockToken` for passado, faz numa transação que
+// só grava se o lock AINDA for nosso (mesmo token) — assim um run que passou do
+// TTL de 1h e teve o lock reassumido por outro cron NÃO sobrescreve o cursor/
+// contador do dono atual. Sem token (ex.: reset), grava direto. Retorna
+// { persistido: boolean }.
+async function persisteUltNSU(cnpj, ultNSU, info = {}, lockToken = null) {
   const cnpjNum = String(cnpj).replace(/\D/g, '');
-  const ref = fa().firestore().collection('sefaz_state').doc(cnpjNum);
-  await ref.set({
+  const db = fa().firestore();
+  const stateRef = db.collection('sefaz_state').doc(cnpjNum);
+  const payload = {
     cnpj: cnpjNum,
     ultNSU,
     ultimaSync: fa().firestore.FieldValue.serverTimestamp(),
     ...info,
-  }, { merge: true });
+  };
+  if (!lockToken) {
+    await stateRef.set(payload, { merge: true });
+    return { persistido: true };
+  }
+  const lockRef = db.collection('sefaz_locks').doc(cnpjNum);
+  return db.runTransaction(async (tx) => {
+    const lockSnap = await tx.get(lockRef);
+    if (!lockSnap.exists || lockSnap.data().lockToken !== lockToken) {
+      return { persistido: false };
+    }
+    tx.set(stateRef, payload, { merge: true });
+    return { persistido: true };
+  });
 }
 
 // carregarFlagsEmpresa (uf + procuracaoEcacAtiva) agora vive em
@@ -151,7 +174,8 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
     };
   }
 
-  const lockResult = await acquireLock(cnpjNum, capturadoPor?.email || capturadoPor?.uid || 'system');
+  const lockToken = randomUUID();
+  const lockResult = await acquireLock(cnpjNum, capturadoPor?.email || capturadoPor?.uid || 'system', lockToken);
   if (!lockResult.ok) return { ok: false, motivo: lockResult.motivo, locked: true };
 
   // resetNSU=true zera o cursor → SEFAZ reenvia TODO o historico de DF-e dos
@@ -385,7 +409,7 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
       ? Math.max(0, parseInt(maxNSUFinal, 10) - parseInt(cursorPersistir, 10))
       : 0;
 
-    await persisteUltNSU(cnpjNum, cursorPersistir, {
+    const persistResult = await persisteUltNSU(cnpjNum, cursorPersistir, {
       cStatUltimaSync: cStatFinal,
       xMotivoUltimaSync: xMotivoFinal,
       paginas: pagina,
@@ -396,7 +420,13 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
       tentativasTravado: cursorInfo.travado?.tentativas || null,
       ultimoColaborador: capturadoPor?.email || null,
       fonteUltimaSync: capturadoPor?.fonte || 'desconhecido',
-    });
+    }, lockToken);
+    if (persistResult && persistResult.persistido === false) {
+      // Run passou do TTL de 1h e outro cron reassumiu o lock desta empresa —
+      // não sobrescrevemos o cursor/contador dele. Os docs deste run já foram
+      // importados (idempotente); o dono atual continua do cursor correto.
+      console.warn(`[sync-orchestrator] empresa=${empresaId} lock reassumido por outro run (TTL excedido) — cursor NÃO persistido pra evitar clobber`);
+    }
 
     // Fila de Ciência pós-paginação: sequencial, espaçada, SEM re-download
     // (skipRedownload) — zero chamadas extras ao NFeDistribuicaoDFe. Roda em

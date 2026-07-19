@@ -94,7 +94,10 @@ export function avaliarPresuncaoReduzida16(params: {
         const vedado = CNAE_VEDADOS_16.find(v =>
             v.prefixo.length === 2 ? div === v.prefixo : grp === v.prefixo);
         if (vedado) {
-            motivos.push(`CNAE ${cnae.slice(0, 7)} — ${vedado.motivo}: vedado à presunção de 16% (RIR/2018 art. 15 §7º); mantenha 32%.`);
+            // "use a presunção normal da atividade" em vez de "mantenha 32%": para
+            // construção (div. 41/43) e hospitalar (div. 86) a presunção normal não
+            // é 32% (é 8%), então afirmar 32% seria impreciso.
+            motivos.push(`CNAE ${cnae.slice(0, 7)} — ${vedado.motivo}: vedado à presunção reduzida de 16% (RIR/2018 art. 15 §7º) — use a presunção normal da atividade.`);
         }
     }
     const receita = params.receitaBrutaAnualEstimada;

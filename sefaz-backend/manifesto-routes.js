@@ -9,6 +9,7 @@ import {
 } from './manifesto-orchestrator.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { getEmpresaIdsDaCarteira, podeAcessarEmpresaId } from './carteira-auth.js';
+import { secretsMatch } from './cron-secret.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET;
 const router = Router();
@@ -20,7 +21,7 @@ function fa() {
 
 function authCron(req, res, next) {
   const segredo = req.headers['x-sefaz-cron-secret'];
-  if (!CRON_SECRET || segredo !== CRON_SECRET) {
+  if (!secretsMatch(segredo, CRON_SECRET)) {
     return res.status(403).json({ erro: 'Cron secret inválido' });
   }
   next();

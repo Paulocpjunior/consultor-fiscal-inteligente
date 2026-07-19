@@ -13,6 +13,7 @@ import {
 import { getDarfMode, montarPayloadDarfSerpro } from './darf-provider.js';
 import { listarCodigos, sugerirCodigoReceita } from './darf-codigos-receita.js';
 import { getCnpjsDaCarteira, podeAcessarCnpj } from './carteira-auth.js';
+import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
@@ -91,7 +92,7 @@ router.post('/marcar-pago', requireEmissao, express.json({ limit: JSON_LIMIT }),
 // Cron noturno (Cloud Scheduler) — marca DARFs vencidas
 router.post('/cron', async (req, res) => {
     const headerSecret = req.header('X-Cron-Secret') || '';
-    if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
+    if (!secretsMatch(headerSecret, CRON_SECRET)) {
         return res.status(403).json({ erro: 'cron secret invalido' });
     }
     try {

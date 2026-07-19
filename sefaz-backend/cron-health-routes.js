@@ -8,9 +8,9 @@
 // ============================================================================
 
 import express from 'express';
-import crypto from 'node:crypto';
 import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
+import { secretsMatch } from './cron-secret.js';
 import { coletarSaudeCrons, decidirAlertaCron } from './cron-health.js';
 import { enviarEmail, isGraphConfigured } from './graph-provider.js';
 import { parseDestinatarios } from './email-destinatarios-helper.js';
@@ -25,15 +25,6 @@ function fa() {
         admin.initializeApp({ credential: admin.credential.applicationDefault() });
     }
     return admin;
-}
-
-// Comparação de segredo em tempo constante (mesmo espírito do secretsMatch do
-// server.js). Buffers de tamanhos diferentes → false sem lançar.
-function secretsMatch(a, b) {
-    if (!a || !b) return false;
-    const ba = Buffer.from(String(a));
-    const bb = Buffer.from(String(b));
-    return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
 }
 
 function requireCronAuth(req, res, next) {
@@ -53,7 +44,7 @@ router.get('/health', requireAdmin, async (req, res) => {
         return res.json({ ok: true, ...saude });
     } catch (e) {
         console.error('[cron-health] erro:', e.message);
-        return res.status(500).json({ ok: false, erro: e.message });
+        return res.status(500).json({ ok: false, erro: 'Falha ao coletar saúde dos crons' });
     }
 });
 

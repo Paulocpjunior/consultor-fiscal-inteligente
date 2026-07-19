@@ -20,6 +20,7 @@ import { DOMParser } from '@xmldom/xmldom';
 import crypto from 'crypto';
 import { validarXmlSeguro, XmlInseguroError } from './xml-seguranca.js';
 import { competenciasAutoSync } from './sharepoint-competencia-helper.js';
+import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -508,7 +509,7 @@ router.post('/auto-sync', async (req, res) => {
         const cronSecret = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'] || '';
         const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 
-        const isCron = !!CRON_SECRET && cronSecret === CRON_SECRET;
+        const isCron = secretsMatch(cronSecret, CRON_SECRET);
         let isAdmin = false;
         if (!isCron && authHeader.startsWith('Bearer ')) {
             const token = authHeader.split(' ')[1];

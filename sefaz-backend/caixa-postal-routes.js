@@ -18,6 +18,7 @@ import {
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 import { getProviderMode, CANAIS_DISPONIVEIS } from './caixa-postal-provider.js';
+import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
 
@@ -130,7 +131,7 @@ router.post('/marcar-lida', requireAdmin, express.json(), async (req, res) => {
 // Uso interno de diagnostico — mira UMA empresa, nao dispara as 213.
 router.post('/sincronizar-uma', express.json(), async (req, res) => {
     const headerSecret = req.headers['x-cron-secret'] || '';
-    if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
+    if (!secretsMatch(headerSecret, CRON_SECRET)) {
         return res.status(403).json({ erro: 'cron secret invalido' });
     }
     try {
@@ -147,7 +148,7 @@ router.post('/sincronizar-uma', express.json(), async (req, res) => {
 
 router.post('/cron', async (req, res) => {
     const headerSecret = req.header('X-Cron-Secret') || '';
-    if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
+    if (!secretsMatch(headerSecret, CRON_SECRET)) {
         return res.status(403).json({ erro: 'cron secret invalido' });
     }
     const t0 = Date.now();

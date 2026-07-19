@@ -11,6 +11,7 @@
 import express from 'express';
 import { requireAdmin } from './require-admin.js';
 import { colherSaidaAutXML } from './distdfe-autxml-orchestrator.js';
+import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ function requireCronAuth(req, res, next) {
   const secret = process.env.SEFAZ_CRON_SECRET;
   if (!secret) return res.status(500).json({ error: 'Cron secret not configured' });
   const header = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
-  if (header === secret) return next();
+  if (secretsMatch(header, secret)) return next();
   return res.status(403).json({ error: 'Cron auth failed' });
 }
 

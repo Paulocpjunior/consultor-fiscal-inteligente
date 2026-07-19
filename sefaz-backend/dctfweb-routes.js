@@ -22,6 +22,7 @@ import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
 import { requireAuth } from './require-admin.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { ultimasCompetenciasComAnoMes as ultimasCompetenciasComAnoMesHelper } from './competencias-helper.js';
+import { secretsMatch } from './cron-secret.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
 const router = express.Router();
@@ -399,7 +400,7 @@ function ultimasCompetenciasDctfweb(n) {
 
 router.post('/cron', async (req, res) => {
     const headerSecret = req.header('X-Cron-Secret') || '';
-    if (!CRON_SECRET || headerSecret !== CRON_SECRET) return res.status(403).json({ erro: 'cron secret invalido' });
+    if (!secretsMatch(headerSecret, CRON_SECRET)) return res.status(403).json({ erro: 'cron secret invalido' });
     const t0 = Date.now();
     try {
         const stats = await sincronizarTodasLucro();

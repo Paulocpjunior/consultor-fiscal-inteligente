@@ -1,5 +1,5 @@
 import express from 'express';
-import crypto from 'node:crypto';
+import { secretsMatch } from './sefaz-backend/cron-secret.js';
 import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
@@ -187,14 +187,8 @@ app.use(express.json({ limit: '20mb' }));
 
 // Rate limiting. skip: requisicoes de cron autenticadas (Cloud Scheduler)
 // nunca sao limitadas — senao um pico de crons as 7-8h poderia ser barrado.
-// Comparacao de segredo em tempo constante (evita vazamento por timing do
-// prefixo correto). Buffers de tamanhos diferentes -> false sem timingSafeEqual.
-const secretsMatch = (a, b) => {
-    if (!a || !b) return false;
-    const ba = Buffer.from(String(a));
-    const bb = Buffer.from(String(b));
-    return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
-};
+// Comparacao de segredo em tempo constante (secretsMatch compartilhado —
+// sefaz-backend/cron-secret.js). Evita vazamento por timing do prefixo correto.
 const isCronRequest = (req) => {
     const secret = process.env.SEFAZ_CRON_SECRET;
     const header = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
