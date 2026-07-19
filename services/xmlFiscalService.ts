@@ -510,7 +510,12 @@ export interface ListDocumentosFilters {
 export async function listDocumentos(
     user: User | null,
     filters: ListDocumentosFilters = {},
+    // Out-param opcional: preenchido com truncado=true quando a leitura bateu no
+    // teto de páginas (pode haver mais docs). Callers que exportam/agregam devem
+    // avisar o usuário — senão o recorte fica silenciosamente incompleto.
+    meta?: { truncado?: boolean },
 ): Promise<DocumentoFiscal[]> {
+    if (meta) meta.truncado = false;
     if (!user || !isFirebaseConfigured || !db) return [];
     const scope = await getCarteiraScope(user);
 
@@ -533,7 +538,9 @@ export async function listDocumentos(
     let docs: DocumentoFiscal[] = [];
     try {
         // documentos_fiscais permite limit <=5000 nas rules; usa pagina maior.
-        const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000 });
+        const pageMeta = { truncated: false, count: 0, maxDocs: 0 };
+        const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000, meta: pageMeta });
+        if (meta) meta.truncado = pageMeta.truncated;
         docs = snaps.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
         if (scope) docs = docs.filter(d => podeVerDocumentoPorCarteira(d, scope));
     } catch (err: any) {
