@@ -92,10 +92,14 @@ async function syncCollection(
                 return;
             }
 
-            // Garante createdBy = uid (regra exige). Mantem se item ja tinha.
+            // Garante createdBy = uid. A regra de create exige
+            // createdBy == auth.uid; preservar um createdBy ESTRANGEIRO (dado
+            // migrado/compartilhado no escritorio) fazia o create ser negado e
+            // a empresa/nota ficava presa no localStorage. Como aqui e sempre
+            // um create (snap.exists() ja retornou acima), forcamos o uid.
             const payload = sanitize({
                 ...item,
-                createdBy: item.createdBy || uid,
+                createdBy: uid,
             });
 
             await setDoc(ref, payload);
