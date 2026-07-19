@@ -9,6 +9,7 @@ import {
     emitirNfse, cancelarNfse, listarNfse, getResumoNfse,
 } from './nfse-nacional-orchestrator.js';
 import { getNfseNacionalMode, NBS_CODIGOS_COMUNS } from './nfse-nacional-provider.js';
+import { podeAcessarEmpresaId } from './carteira-auth.js';
 
 const router = express.Router();
 
@@ -18,15 +19,26 @@ router.get('/status', (_req, res) => {
     res.json({ mode: getNfseNacionalMode(), ok: true });
 });
 
-router.get('/resumo', requireAuth, async (_req, res) => {
+// Resumo consolidado (todas as empresas) — so admin.
+router.get('/resumo', requireAuth, async (req, res) => {
+    if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Resumo consolidado disponivel apenas para admin.' });
+    }
     try { res.json(await getResumoNfse()); }
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.get('/listar', requireAuth, async (req, res) => {
+    const { empresaId } = req.query;
+    if (empresaId) {
+        const c = await podeAcessarEmpresaId(req.user, empresaId);
+        if (!c.ok) return res.status(c.status).json({ error: c.error });
+    } else if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Informe o empresaId da sua carteira para listar.' });
+    }
     try {
         res.json(await listarNfse({
-            empresaId: req.query.empresaId,
+            empresaId,
             status: req.query.status,
             dataInicio: req.query.dataInicio,
             dataFim: req.query.dataFim,
