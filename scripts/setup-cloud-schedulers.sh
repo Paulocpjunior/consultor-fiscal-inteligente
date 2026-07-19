@@ -124,6 +124,23 @@ upsert_job \
     "/api/admin/sefaz/sae-nfce-cron" \
     "Captura saida NFC-e (SAE-NFC-e SP) — reforco intra-dia 7h/13h/19h"
 
+# Tarefas/obrigacoes mensais automaticas — dia 1 as 03h BRT. A rota existia
+# (/api/tarefas/cron-mensal) mas nao havia job criado (auditoria: cron orfao),
+# entao as obrigacoes do mes podiam nunca ser geradas.
+upsert_job \
+    "tarefas-cron-mensal" \
+    "0 3 1 * *" \
+    "/api/tarefas/cron-mensal" \
+    "Gera tarefas/obrigacoes mensais de todas as empresas (dia 1)"
+
+# Alertas de docs novos no SharePoint — 08h30 BRT (apos o auto-sync das 08h).
+# Rota /api/admin/sharepoint/cron-alertas existia sem job (cron orfao).
+upsert_job \
+    "sharepoint-cron-alertas" \
+    "30 8 * * 1-5" \
+    "/api/admin/sharepoint/cron-alertas" \
+    "Alerta admins por email sobre documentos novos no SharePoint"
+
 # Colheita de SAIDA via <autXML> (DistDFe com o cert do escritorio). O cliente
 # autoriza o CNPJ do escritorio na emissao (tag autXML) e a SEFAZ distribui o
 # XML completo das notas dele para o escritorio, no MESMO fluxo distNSU. Roda

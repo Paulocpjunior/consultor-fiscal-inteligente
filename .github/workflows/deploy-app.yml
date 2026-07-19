@@ -54,6 +54,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Auditoria de dependências (bloqueia em critical/high)
+        # Trava o deploy se surgir CVE high/critical nas deps. Vulns
+        # transitivas conhecidas sem fix upstream são fixadas via
+        # "overrides" no package.json (ex.: websocket-driver 0.7.5).
+        run: npm audit --audit-level=high
+
       - name: Typecheck + testes
         run: |
           npm run lint
