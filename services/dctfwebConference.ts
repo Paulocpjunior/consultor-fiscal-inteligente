@@ -91,12 +91,15 @@ export function extrairTributosApp(detalhamento: DetalheImposto[] | undefined | 
     return out;
 }
 
-function severidadePorPct(pct: number): DivergenciaSeveridade {
+// Severidade por % E por valor absoluto. So o % escondia divergencias grandes
+// em reais quando o tributo e alto (ex.: 4% de R$100k = R$4k caia como 'baixa').
+// Piso absoluto: > R$5k nunca fica abaixo de 'alta'; > R$500 nunca 'baixa'.
+function severidadeDivergencia(pct: number, valorAbs: number): DivergenciaSeveridade {
     const a = Math.abs(pct);
-    if (a === 0) return 'ok';
-    if (a > 10) return 'alta';
-    if (a > 5) return 'media';
-    return 'baixa';
+    let sev: DivergenciaSeveridade = a === 0 ? 'ok' : a > 10 ? 'alta' : a > 5 ? 'media' : 'baixa';
+    if (valorAbs > 5000) { if (sev !== 'alta') sev = 'alta'; }
+    else if (valorAbs > 500 && sev === 'baixa') sev = 'media';
+    return sev;
 }
 
 /**
@@ -143,7 +146,7 @@ export function cruzarTributos(
             severidade = 'media'; // declarou e app não tem — revisar apuração
         } else {
             status = 'divergente';
-            severidade = severidadePorPct(diferencaPct);
+            severidade = severidadeDivergencia(diferencaPct, Math.abs(diferenca));
         }
 
         resumo[severidade]++;

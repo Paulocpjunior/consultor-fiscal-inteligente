@@ -17,6 +17,19 @@ const ALIQ_COFINS_APLICACAO = 0.04;
 const ALIQ_PIS_IMPORTACAO = 0.021;
 const ALIQ_COFINS_IMPORTACAO = 0.0965;
 
+// Arredonda para centavos (2 casas). Aplicado num passe final sobre o
+// detalhamento — antes os valores iam como floats crus (1234.5678), somando
+// erro no total e exibindo/emitindo centavos fracionários no DARF/telas.
+const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+function arredondarDetalhamento(det: DetalheImposto[]): void {
+    for (const d of det) {
+        d.valor = round2(d.valor);
+        if (d.valorBruto !== undefined) d.valorBruto = round2(d.valorBruto);
+        if (d.retencao !== undefined) d.retencao = round2(d.retencao);
+        d.baseCalculo = round2(d.baseCalculo);
+    }
+}
+
 // Limites Adicional IRPJ (Conforme Legislação)
 const LIMITE_ADICIONAL_MENSAL = 20000;
 const LIMITE_ADICIONAL_TRIMESTRAL = 60000;
@@ -501,6 +514,7 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
         });
     }
 
+    arredondarDetalhamento(detalhamento);
     const totalImpostos = detalhamento.reduce((acc, item) => acc + item.valor, 0);
     const extraReceitas = (input.itensAvulsos || []).filter(i => i.tipo === 'receita').reduce((acc, i) => acc + i.valor, 0);
     const extraDespesas = (input.itensAvulsos || []).filter(i => i.tipo === 'despesa').reduce((acc, i) => acc + i.valor, 0);
@@ -679,6 +693,7 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
         detalhamento.push({ imposto: 'IPI', baseCalculo: 0, aliquota: 0, valor: ipiPagar, observacao: saldoIpi > 0 ? `Abatido Saldo Credor de ${fmt(saldoIpi)}` : 'Valor informado (Apuração Fiscal)' });
     }
 
+    arredondarDetalhamento(detalhamento);
     const totalImpostos = detalhamento.reduce((acc, item) => acc + item.valor, 0);
     const extraDespesasNaoDedutiveis = (input.itensAvulsos || []).filter(i => i.tipo === 'despesa' && !i.dedutivelIrpj).reduce((acc, i) => acc + i.valor, 0);
     const lucroFinal = totalReceitas - input.custoMercadoriaVendida - input.folhaPagamento - despesasTotaisDedutiveis - extraDespesasNaoDedutiveis - totalImpostos;

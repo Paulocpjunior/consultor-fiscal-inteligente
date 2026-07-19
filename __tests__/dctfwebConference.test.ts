@@ -52,6 +52,25 @@ describe('extrairTributosApp — soma por família a partir do detalhamento', ()
         expect(extrairTributosApp(null)).toEqual({ IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 });
     });
 
+    it('piso absoluto: diferença grande em R$ com % pequeno não fica "baixa"', () => {
+        // IRPJ app 100000 vs dctfweb 96000 → 4% (seria "baixa") mas R$4k > R$500 → "media".
+        const r = cruzarTributos(
+            { IRPJ: 100000, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 },
+            { IRPJ: 96000, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 },
+            '2026-06',
+        );
+        const irpj = r.divergencias.find(d => d.tributo === 'IRPJ')!;
+        expect(irpj.status).toBe('divergente');
+        expect(irpj.severidade).toBe('media'); // R$4k: sai de "baixa" para "media"
+        // Diferença > R$5k sobe para "alta" mesmo com % baixo.
+        const r2 = cruzarTributos(
+            { IRPJ: 100000, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 },
+            { IRPJ: 93000, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 },
+            '2026-06',
+        );
+        expect(r2.divergencias.find(d => d.tributo === 'IRPJ')!.severidade).toBe('alta');
+    });
+
     it('usa valorBruto (débito) quando presente — não o valor líquido de retenção', () => {
         const det: any[] = [
             { imposto: 'IRPJ (Mensal)', valor: 8500, valorBruto: 10000, retencao: 1500 },
