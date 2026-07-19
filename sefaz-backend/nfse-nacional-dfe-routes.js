@@ -15,7 +15,7 @@
 import express from 'express';
 import admin from 'firebase-admin';
 import { sincronizarEmpresaNfseNacionalDfe, limparLocksOrfaos } from './nfse-nacional-dfe-orchestrator.js';
-import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibility.js';
+import { listarElegibilidadeNfseNacionalDfe, classificarElegibilidadeAdn } from './nfse-nacional-dfe-eligibility.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth, requireAdmin } from './require-admin.js';
 
@@ -300,11 +300,38 @@ router.get('/cobertura', requireAuth, async (req, res) => {
         });
         lista.forEach((e) => { e.state = stateMap.get(e.cnpj) || null; });
 
+        // Elegibilidade REAL por certificado: independente da flag, a ADN exige
+        // A1 próprio válido da mesma raiz (senão E2243). Aqui testamos a prontidão
+        // do CERT (forçando flag=true), pra distinguir "ligada mas vai falhar por
+        // falta de A1" de "pronta pra ligar". Antes o painel só mostrava a flag.
+        let certMap = new Map();
+        try {
+            const certsSnap = await db.collection('empresas_certificados').get();
+            certsSnap.forEach((doc) => certMap.set(doc.id, doc.data()));
+        } catch (e) {
+            console.warn('[nfse-nac-dfe/cobertura] erro lendo empresas_certificados:', e.message);
+        }
+        lista.forEach((e) => {
+            const classif = classificarElegibilidadeAdn({
+                empresa: { cnpj: e.cnpj, nfseNacionalDfeAtivo: true },
+                cert: certMap.get(e.id),
+            });
+            e.certOk = classif.elegivel;
+            e.motivoBloqueio = classif.elegivel ? null : classif.motivo;
+        });
+
         const total = lista.length;
         const ativas = lista.filter((e) => e.ativo).length;
         const comCaptura = lista.filter((e) => e.state && e.state.ultimaSync).length;
+        // Prontas de fato = flag ligada E cert elegível (vão capturar).
+        const capturando = lista.filter((e) => e.ativo && e.certOk).length;
+        // Ligadas mas que vão falhar por falta de A1/cert — a lista de trabalho.
+        const ativasBloqueadas = lista.filter((e) => e.ativo && !e.certOk).length;
+        // Prontas pra ligar (cert ok, flag off).
+        const prontasParaLigar = lista.filter((e) => !e.ativo && e.certOk).length;
         return res.json({
             total, ativas, inativas: total - ativas, comCaptura,
+            capturando, ativasBloqueadas, prontasParaLigar,
             percentualAtivas: total ? Math.round((ativas / total) * 100) : 0,
             percentualCaptura: total ? Math.round((comCaptura / total) * 100) : 0,
             empresas: lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || '')),
