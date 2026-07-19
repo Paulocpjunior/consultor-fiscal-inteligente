@@ -22,6 +22,44 @@ function fa() {
   return admin;
 }
 
+// ── Decisao de gravacao (NFe/NFCe/CTe/MDFe, caminho nao-evento) ─────────────
+// resNFe (resumo, ~531 bytes, SEM itens/valor) x procNFe (NFe COMPLETA). Vale
+// tambem pra NFCe (modelo 65). O DistDFe entrega PRIMEIRO o resumo; a completa
+// so e liberada apos a Manifestacao e chega numa DistDFe posterior — quando a
+// chave JA EXISTE (gravada como resumo). Se o que esta na base e RESUMO e o que
+// chega e COMPLETA, faz UPGRADE (sobrescreve com itens/totais, preservando
+// eventos ja anexados via merge).
+const isResumoSchema = (sch) => /^res(NFe|NFCe|CTe|MDFe)/.test(String(sch || ''));
+const isResumoTipoDoc = (td) => td === 'resNFe' || td === 'resNFCe' || td === 'resCTe' || td === 'resMDFe';
+// Modelo da chave (posicoes 20-21). Modelos 55/65 tem <det> quando COMPLETOS;
+// 57 (CTe)/58 (MDFe) NUNCA tem itens. Por isso temItens=false so indica "resumo"
+// para 55/65 — senao um resCTe de 531 bytes "atualizaria" uma CTe COMPLETA.
+const modeloComItens = (ch) => { const m = String(ch || '').slice(20, 22); return m === '55' || m === '65'; };
+
+// Decide, a partir do doc existente e do que esta chegando, se e duplicado,
+// upgrade resumo->completa, e se a escrita deve ser merge (preserva eventos).
+// Funcao PURA — reutilizada no fast-path (get pre-storage) E dentro da transacao
+// de escrita, garantindo que a decisao final seja atomica mesmo com captura
+// concorrente (DistDFe + autXML + SharePoint podem tocar a mesma chave juntos).
+export function decidirGravacaoNFe({ existingData, tipoDoc, schema, chave }) {
+  const incomingResumo = isResumoTipoDoc(tipoDoc) || isResumoSchema(schema);
+  const exData = existingData || null;
+  const exResumo = exData
+    ? (isResumoSchema(exData.schema) || isResumoTipoDoc(exData.tipoDoc) ||
+       (exData.temItens === false && modeloComItens(chave)))
+    : false;
+  const exists = !!exData;
+  const upgrade = exists && exResumo && !incomingResumo;
+  return {
+    exists,
+    upgrade,
+    // Duplicidade só quando NÃO é stub-de-evento E NÃO é upgrade resumo→completa.
+    duplicado: exists && !exData.eventosBeforeNFe && !upgrade,
+    // Merge preserva o array de eventos quando já existia stub OU no upgrade.
+    merge: exists && (exData.eventosBeforeNFe || upgrade),
+  };
+}
+
 function pickTag(xml, tag) {
   const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i'));
   return m ? m[1].trim() : null;
@@ -327,43 +365,49 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
   // eventoData eh empurrado pro array 'eventos' abaixo, entao usamos ISO string.
   // Bug original causou 3630 NSUs perdidos em xml_erros.
 
-  const snap = await docRef.get();
-  if (snap.exists) {
-    // Anexa ao array de eventos (sem duplicar pelo nProt)
-    const data = snap.data();
-    const eventosExistentes = data.eventos || [];
-    if (eventoData.nProt && eventosExistentes.some(e => e.nProt === eventoData.nProt)) {
-      return { status: 'duplicado_evento', chave: chaveNFe, tipo: evento.tipo };
-    }
-    const updates = {
-      eventos: [...eventosExistentes, eventoData],
-    };
-    // Se cancelamento, atualiza status da NFe
-    if (evento.tipo === 'cancelamento' && evento.cStat === '135') {
-      updates.status = 'cancelado';
-      updates.canceladoEm = evento.dhEvento;
-      updates.canceladoProtocolo = evento.nProt;
-    }
-    // 23/05 — defesa contra Update() requires...:
-    // garante que todos os valores do updates sao definidos antes de chamar.
-    for (const [k, v] of Object.entries(updates)) {
-      if (v === undefined) {
-        console.warn(`[xml-importer] anexarEventoNaNFe: campo ${k} undefined em updates, removendo`);
-        delete updates[k];
+  // Transação: a leitura-modificação-escrita do array 'eventos' precisa ser
+  // atômica. Dois eventos concorrentes pro mesmo doc (ou evento + NFe completa)
+  // liam o mesmo 'eventos=[E1]', ambos faziam append e um sobrescrevia o outro
+  // — evento perdido (a classe do bug "3630 NSUs perdidos"). runTransaction
+  // serializa por docId e re-tenta em conflito.
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(docRef);
+    if (snap.exists) {
+      // Anexa ao array de eventos (sem duplicar pelo nProt)
+      const data = snap.data();
+      const eventosExistentes = data.eventos || [];
+      if (eventoData.nProt && eventosExistentes.some(e => e.nProt === eventoData.nProt)) {
+        return { status: 'duplicado_evento', chave: chaveNFe, tipo: evento.tipo };
       }
+      const updates = {
+        eventos: [...eventosExistentes, eventoData],
+      };
+      // Se cancelamento, atualiza status da NFe
+      if (evento.tipo === 'cancelamento' && evento.cStat === '135') {
+        updates.status = 'cancelado';
+        updates.canceladoEm = evento.dhEvento;
+        updates.canceladoProtocolo = evento.nProt;
+      }
+      // 23/05 — defesa contra Update() requires...:
+      // garante que todos os valores do updates sao definidos antes de chamar.
+      for (const [k, v] of Object.entries(updates)) {
+        if (v === undefined) {
+          console.warn(`[xml-importer] anexarEventoNaNFe: campo ${k} undefined em updates, removendo`);
+          delete updates[k];
+        }
+      }
+      if (Object.keys(updates).length === 0) {
+        console.warn('[xml-importer] anexarEventoNaNFe: updates vazio, pulando update');
+        return { status: 'evento_skip_vazio', chave: chaveNFe };
+      }
+      tx.update(docRef, updates);
+      return { status: 'evento_anexado', chave: chaveNFe, tipo: evento.tipo };
     }
-    if (Object.keys(updates).length === 0) {
-      console.warn('[xml-importer] anexarEventoNaNFe: updates vazio, pulando .update()');
-      return { status: 'evento_skip_vazio', chave: chaveNFe };
-    }
-    await docRef.update(updates);
-    return { status: 'evento_anexado', chave: chaveNFe, tipo: evento.tipo };
-  } else {
     // Stub: cria um doc parcial pra quando o documento-pai chegar, ela faz merge.
     // 23/05 — adicionado defaults pra campos undefined (numero, serie, etc)
     // 02/06 — tipoDoc/tipo derivam do evento real (NFe/CTe/MDFe), nao hardcoded.
     const tipoFinal = tipoDocNormalizado || 'NFe';
-    await docRef.set({
+    tx.set(docRef, {
       id: chaveNFe,
       chave: chaveNFe,
       empresaId,
@@ -386,7 +430,7 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
       createdAt: fa().firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     return { status: 'evento_stub_criado', chave: chaveNFe, tipo: evento.tipo };
-  }
+  });
 }
 
 export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, nsu, capturadoPor }) {
@@ -466,41 +510,19 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   const storagePath = buildStoragePath(empresaId, meta.chave, meta.tipoDoc);
   const docRef = db.collection('documentos_fiscais').doc(docId);
 
+  // Fast-path: lê o doc atual e, se for duplicado óbvio, sai SEM gravar storage
+  // (economia). A decisão AUTORITATIVA é refeita dentro da transação de escrita
+  // (decidirGravacaoNFe), pra que a corrida read-check-write seja atômica —
+  // DistDFe + autXML + SharePoint podem importar a mesma chave concorrentemente.
   let existing = null;
   try {
     existing = await docRef.get();
   } catch (e) {
     console.warn('[xml-importer] erro lendo doc existente:', e.message);
   }
-
   const existingData = existing?.exists ? existing.data() : null;
 
-  // resNFe (resumo, ~531 bytes, SEM itens/valor) x procNFe (NFe COMPLETA).
-  // Vale tambem pra NFCe (resNFCe x procNFCe — mesma logica, modelo 65).
-  // O DistDFe entrega PRIMEIRO o resumo pro destinatario; a nota completa so e
-  // liberada pela SEFAZ APOS a Manifestacao (Ciencia 210210) e chega numa
-  // DistDFe/consChNFe posterior. Nesse momento a chave JA EXISTE na base
-  // (gravada como resumo). ANTES o import rejeitava como 'duplicado' e
-  // DESCARTAVA a nota completa — por isso o valor/itens (ex: BRASLIMPO
-  // R$ 547,70) nunca apareciam, mesmo com a Ciencia disparada.
-  // Agora: se o que esta na base e RESUMO e o que chega e COMPLETA, faz UPGRADE
-  // (sobrescreve com itens/totais/valor, preservando eventos ja anexados).
-  const isResumoSchema = (sch) => /^res(NFe|NFCe|CTe|MDFe)/.test(String(sch || ''));
-  const isResumoTipoDoc = (td) => td === 'resNFe' || td === 'resNFCe' || td === 'resCTe' || td === 'resMDFe';
-  // Modelo da chave (posicoes 20-21). Modelos 55/65 tem <det> quando COMPLETOS;
-  // 57 (CTe)/58 (MDFe) NUNCA tem itens. Por isso temItens=false so indica
-  // "resumo" para 55/65 — usar temItens como proxy generico fazia um resCTe de
-  // 531 bytes "atualizar" (sobrescrever) uma CTe COMPLETA, zerando numero/valor.
-  const modeloComItens = (ch) => { const m = String(ch || '').slice(20, 22); return m === '55' || m === '65'; };
-  const incomingResumo = isResumoTipoDoc(meta.tipoDoc) || isResumoSchema(schema);
-  const existingResumo = existingData
-    ? (isResumoSchema(existingData.schema) || isResumoTipoDoc(existingData.tipoDoc) ||
-       (existingData.temItens === false && modeloComItens(meta.chave)))
-    : false;
-  const ehUpgradeResumoParaCompleta = !!existingData && existingResumo && !incomingResumo;
-
-  // Duplicidade só quando NÃO é stub-de-evento E NÃO é upgrade resumo→completa.
-  if (existing?.exists && !existingData.eventosBeforeNFe && !ehUpgradeResumoParaCompleta) {
+  if (decidirGravacaoNFe({ existingData, tipoDoc: meta.tipoDoc, schema, chave: meta.chave }).duplicado) {
     return { status: 'duplicado', chave: meta.chave };
   }
 
@@ -580,39 +602,57 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     capturadoPor: capturadoPor || null,
     eventosBeforeNFe: false,
   };
-  // Merge (preserva array de eventos) quando:
-  //  - ja existia stub de evento (eventosBeforeNFe), OU
-  //  - e upgrade resumo→completa (preserva eventos/manifestacoes ja anexados
-  //    ao resumo, ex: a propria Ciencia que liberou a NFe completa).
-  if (existing?.exists && (existingData.eventosBeforeNFe || ehUpgradeResumoParaCompleta)) {
-    await docRef.set(docData, { merge: true });
-  } else {
-    await docRef.set(docData);
-  }
-
-  try {
-    await db.collection('xml_capturas').add({
-      chave: meta.chave,
-      empresaId,
-      empresaCnpj: empresaCnpj?.replace(/\D/g, '') || null,
-      origem: 'sefaz',
-      schema: meta.schema,
-      nsu,
+  // Escrita AUTORITATIVA em transação: re-lê o doc DENTRO da txn e decide
+  // duplicado/upgrade/merge de forma atômica. Sem isso, um .set() não-merge
+  // podia sobrescrever um stub de evento (eventos[]) que outro processo criou
+  // entre o nosso get inicial e este write — evento perdido. Merge preserva o
+  // array de eventos quando já existia stub OU no upgrade resumo→completa.
+  const writeResult = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(docRef);
+    const dec = decidirGravacaoNFe({
+      existingData: snap.exists ? snap.data() : null,
       tipoDoc: meta.tipoDoc,
-      capturadoPor: capturadoPor || null,
-      createdAt: fa().firestore.FieldValue.serverTimestamp(),
-      createdBy: capturadoPor?.uid || null,
+      schema,
+      chave: meta.chave,
     });
-  } catch (e) {
-    console.warn('[xml-importer] falha auditoria xml_capturas:', e.message);
+    if (dec.duplicado) {
+      return { status: 'duplicado', chave: meta.chave };
+    }
+    if (dec.merge) {
+      tx.set(docRef, docData, { merge: true });
+    } else {
+      tx.set(docRef, docData);
+    }
+    return {
+      status: dec.upgrade ? 'atualizado' : 'ok',
+      chave: meta.chave,
+      tipoDoc: meta.tipoDoc,
+      upgrade: dec.upgrade || undefined,
+    };
+  });
+
+  // Auditoria só quando efetivamente gravou (não para duplicado detectado na txn
+  // por corrida — o storage já foi salvo, mas não repetimos a linha de captura).
+  if (writeResult.status !== 'duplicado') {
+    try {
+      await db.collection('xml_capturas').add({
+        chave: meta.chave,
+        empresaId,
+        empresaCnpj: empresaCnpj?.replace(/\D/g, '') || null,
+        origem: 'sefaz',
+        schema: meta.schema,
+        nsu,
+        tipoDoc: meta.tipoDoc,
+        capturadoPor: capturadoPor || null,
+        createdAt: fa().firestore.FieldValue.serverTimestamp(),
+        createdBy: capturadoPor?.uid || null,
+      });
+    } catch (e) {
+      console.warn('[xml-importer] falha auditoria xml_capturas:', e.message);
+    }
   }
 
-  return {
-    status: ehUpgradeResumoParaCompleta ? 'atualizado' : 'ok',
-    chave: meta.chave,
-    tipoDoc: meta.tipoDoc,
-    upgrade: ehUpgradeResumoParaCompleta || undefined,
-  };
+  return writeResult;
 }
 
 export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor }) {
