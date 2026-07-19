@@ -1,6 +1,15 @@
 // sefaz-backend/abrasf/config-municipios.js
 // Catalogo de municipios suportados pelo adapter ABRASF v2.x.
 //
+// ⚠️ LEGADO (2026): a LC 214/2025 tornou o Padrao Nacional NFS-e (ADN)
+// obrigatorio para TODOS os municipios a partir de 01/01/2026, e a ABRASF
+// congelou o modelo SOAP. Varios municipios ja descontinuaram o layout ABRASF
+// (ex.: Guarulhos e Ribeirao Preto em 01/07/2026). O caminho de captura CORRETO
+// hoje e o NACIONAL (nfse-nacional-dfe), que e por CNPJ e independe de municipio
+// — ver municipio-nfse-caminho.js. Este catalogo ABRASF fica so para captura de
+// notas LEGADAS (anteriores a migracao); NAO adicione novos municipios aqui sem
+// WSDL de producao confirmado com a propria prefeitura.
+//
 // Cada entrada tem:
 //   codIBGE     - codigo IBGE 7 digitos (chave primaria)
 //   nome        - nome do municipio (display)

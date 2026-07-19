@@ -149,6 +149,35 @@ export async function fetchCronsHealth(): Promise<CronsHealth> {
     return res.json();
 }
 
+// ── Guia de caminho de captura de NFS-e por município (2026) ────────────────
+export type CaminhoNfse = 'adn' | 'sp-portal' | 'abrasf';
+
+export interface MunicipioCaminho {
+    cod: string;
+    nome: string;
+    uf: string;
+    caminho: CaminhoNfse;
+    obs: string;
+}
+
+export interface NfseMunicipiosGuia {
+    padrao2026: CaminhoNfse;
+    nota: string;
+    municipios: MunicipioCaminho[];
+}
+
+export async function fetchNfseMunicipiosCaminho(): Promise<NfseMunicipiosGuia> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/abrasf/municipios-caminho', {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.erro || err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+}
+
 export async function forcarCapturaAgora(fonte: 'sefazNfe' | 'nfseSp' | 'nfseNacional'): Promise<{ ok: boolean; motivo?: string }> {
     const token = await getToken();
     const paths: Record<typeof fonte, string> = {
