@@ -13,6 +13,7 @@ import XmlSharePoint from './XmlSharePoint';
 import XmlConfiguracoes from './XmlConfiguracoes';
 import XmlExportarIobSage from './XmlExportarIobSage';
 import CapturaDiagnosticoPanel from '../CapturaDiagnosticoPanel';
+import CronsHealthPanel from '../CronsHealthPanel';
 import EmpresasStatusCapturaPanel from '../EmpresasStatusCapturaPanel';
 
 const XmlNfseSpCsv = lazy(() => import('./XmlNfseSpCsv'));
@@ -136,7 +137,10 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                     <XmlDashboard currentUser={currentUser} refreshKey={refreshKey} />
                 )}
                 {tab === 'captura-auto' && (
-                    <CapturaDiagnosticoPanel currentUser={currentUser} />
+                    <>
+                        <CapturaDiagnosticoPanel currentUser={currentUser} />
+                        <CronsHealthPanel />
+                    </>
                 )}
                 {tab === 'empresas-status' && (
                     <EmpresasStatusCapturaPanel currentUser={currentUser} />

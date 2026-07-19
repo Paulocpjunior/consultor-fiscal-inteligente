@@ -115,6 +115,40 @@ export async function fetchCronLogs(colecao: CronLogColecao, limit = 20): Promis
     return data.logs || [];
 }
 
+// ── Saúde unificada de TODOS os crons (/api/admin/crons/health) ─────────────
+export type CronSaude = 'ok' | 'atrasado' | 'travado' | 'falha' | 'sem-dados' | 'erro-leitura';
+
+export interface CronSaudeLinha {
+    collection: string;
+    label: string;
+    saude: CronSaude;
+    tsMs?: number | null;
+    idadeHoras?: number | null;
+    duracaoMs?: number | null;
+    status?: string;
+    resumo?: Record<string, number>;
+    erro?: string;
+}
+
+export interface CronsHealth {
+    geradoEm: string;
+    totalCrons: number;
+    problemas: number;
+    linhas: CronSaudeLinha[];
+}
+
+export async function fetchCronsHealth(): Promise<CronsHealth> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/crons/health', {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.erro || err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+}
+
 export async function forcarCapturaAgora(fonte: 'sefazNfe' | 'nfseSp' | 'nfseNacional'): Promise<{ ok: boolean; motivo?: string }> {
     const token = await getToken();
     const paths: Record<typeof fonte, string> = {
