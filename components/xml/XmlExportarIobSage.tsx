@@ -22,6 +22,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
     const [docs, setDocs] = useState<DocumentoFiscal[]>([]);
     const [buscou, setBuscou] = useState(false);
+    const [truncado, setTruncado] = useState(false);
     const [loading, setLoading] = useState(false);
     const [empresaId, setEmpresaId] = useState<string>('');
     const [competencia, setCompetencia] = useState<string>('');
@@ -45,11 +46,14 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
         setLoading(true);
         setBuscou(false);
+        setTruncado(false);
         try {
             // Competência vai ao servidor (where ==). Empresa é filtrada aqui no
             // cliente por id OU CNPJ — docs capturados server-side (autXML/ZIP/
             // SAE) podem não ter empresaId preenchido, só o CNPJ.
-            const d = await listDocumentos(currentUser, { competencia });
+            const meta: { truncado?: boolean } = {};
+            const d = await listDocumentos(currentUser, { competencia }, meta);
+            setTruncado(!!meta.truncado);
             const cnpjSel = (empresaSelecionada?.cnpj || '').replace(/\D/g, '');
             const raizSel = cnpjSel.slice(0, 8);
             const filtradosEmpresa = empresaSelecionada
@@ -183,6 +187,19 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         {loading ? 'Buscando…' : '🔎 Buscar documentos'}
                     </button>
                 </div>
+
+                {buscou && truncado && (
+                    <div className="bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-lg p-3">
+                        <p className="text-xs font-bold text-red-800 dark:text-red-300">
+                            ⚠️ Recorte possivelmente incompleto — limite de leitura atingido.
+                        </p>
+                        <p className="text-[11px] text-red-700 dark:text-red-400 mt-1">
+                            A competência {competencia} retornou o máximo de documentos que o navegador
+                            carrega de uma vez. O arquivo gerado pode <strong>não conter todas as notas</strong>.
+                            Selecione uma <strong>empresa específica</strong> acima e busque de novo para garantir a exportação completa.
+                        </p>
+                    </div>
+                )}
 
                 {buscou && (
                     <>

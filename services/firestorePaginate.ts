@@ -29,11 +29,24 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 
+/**
+ * Acumulador opcional preenchido pelo fetchAllDocs. `truncated=true` significa
+ * que o teto (maxDocs) foi atingido e PODE haver mais docs não lidos — o caller
+ * deve avisar o usuário (ex.: export incompleto) em vez de tratar como completo.
+ */
+export interface FetchAllMeta {
+    truncated: boolean;
+    count: number;
+    maxDocs: number;
+}
+
 export async function fetchAllDocs(
     collectionName: string,
     baseConstraints: QueryConstraint[] = [],
-    { batchSize = 500, maxDocs = 20000 }: { batchSize?: number; maxDocs?: number } = {},
+    { batchSize = 500, maxDocs = 20000, meta }:
+        { batchSize?: number; maxDocs?: number; meta?: FetchAllMeta } = {},
 ): Promise<QueryDocumentSnapshot<DocumentData>[]> {
+    if (meta) { meta.truncated = false; meta.count = 0; meta.maxDocs = maxDocs; }
     if (!db) return [];
     const out: QueryDocumentSnapshot<DocumentData>[] = [];
     let last: QueryDocumentSnapshot<DocumentData> | null = null;
@@ -47,7 +60,9 @@ export async function fetchAllDocs(
         if (snap.size < batchSize) break;
         last = snap.docs[snap.docs.length - 1] || null;
     }
-    if (out.length >= maxDocs) {
+    const truncated = out.length >= maxDocs;
+    if (meta) { meta.truncated = truncated; meta.count = out.length; }
+    if (truncated) {
         console.warn(`[fetchAllDocs] ${collectionName}: teto de ${maxDocs} docs atingido — pode haver mais.`);
     }
     return out;
