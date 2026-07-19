@@ -51,6 +51,16 @@ describe('extrairTributosApp — soma por família a partir do detalhamento', ()
         expect(extrairTributosApp([])).toEqual({ IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 });
         expect(extrairTributosApp(null)).toEqual({ IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 });
     });
+
+    it('usa valorBruto (débito) quando presente — não o valor líquido de retenção', () => {
+        const det: any[] = [
+            { imposto: 'IRPJ (Mensal)', valor: 8500, valorBruto: 10000, retencao: 1500 },
+            { imposto: 'PIS (Lucro Real)', valor: 2800, valorBruto: 3300, retencao: 500 },
+        ];
+        const r = extrairTributosApp(det);
+        expect(r.IRPJ).toBe(10000); // bruto, não 8500
+        expect(r.PIS).toBe(3300);   // bruto, não 2800
+    });
 });
 
 const mk = (o: Partial<TributosPorFamilia>): TributosPorFamilia =>

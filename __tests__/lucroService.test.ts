@@ -407,6 +407,10 @@ describe('lucroService', () => {
                 regimeSelecionado: 'Real',
                 faturamentoComercio: 200000,
                 despesasDedutiveis: 50000,
+                // Base de credito PIS/COFINS agora vem do campo SEGREGADO de
+                // insumos (o fallback sobre despesa generica foi removido — era
+                // credito ilegalmente amplo). 50k de insumos = mesmo credito.
+                despesasGeramCreditoPisCofins: 50000,
             });
             const result = calcularLucro(input);
 
@@ -422,11 +426,44 @@ describe('lucroService', () => {
             expect(cofins!.valor).toBeCloseTo(11400, 2);
         });
 
+        it('SEM base de insumos segregada NÃO credita sobre despesa genérica (fix auditoria)', () => {
+            const input = criarInputBase({
+                regimeSelecionado: 'Real',
+                faturamentoComercio: 200000,
+                despesasDedutiveis: 300000, // despesa generica alta — NAO deve gerar credito
+                // despesasGeramCreditoPisCofins ausente de proposito
+            });
+            const result = calcularLucro(input);
+            const pis = findImposto(result, 'PIS (Lucro Real)');
+            const cofins = findImposto(result, 'COFINS (Lucro Real)');
+            // Sem insumos: debito integral, sem credito. PIS = 200000*1,65% = 3300.
+            expect(pis!.valor).toBeCloseTo(3300, 2);
+            expect(cofins!.valor).toBeCloseTo(15200, 2);
+        });
+
+        it('valorBruto é o débito antes da retenção (usado pelo MIT/DCTFWeb)', () => {
+            const input = criarInputBase({
+                regimeSelecionado: 'Real',
+                faturamentoComercio: 200000,
+                retencaoPis: 500,
+                retencaoCofins: 1000,
+            });
+            const result = calcularLucro(input);
+            const pis = findImposto(result, 'PIS (Lucro Real)');
+            const cofins = findImposto(result, 'COFINS (Lucro Real)');
+            // valor = líquido (a pagar); valorBruto = débito (a declarar no MIT).
+            expect(pis!.valorBruto).toBeCloseTo(3300, 2);
+            expect(pis!.valor).toBeCloseTo(2800, 2);      // 3300 - 500 retenção
+            expect(cofins!.valorBruto).toBeCloseTo(15200, 2);
+            expect(cofins!.valor).toBeCloseTo(14200, 2);  // 15200 - 1000 retenção
+        });
+
         it('generates saldo residual when credits exceed debits', () => {
             const input = criarInputBase({
                 regimeSelecionado: 'Real',
                 faturamentoComercio: 50000,
-                despesasDedutiveis: 200000, // huge credits
+                despesasDedutiveis: 200000,
+                despesasGeramCreditoPisCofins: 200000, // insumos > receita → crédito excede débito
             });
             const result = calcularLucro(input);
 

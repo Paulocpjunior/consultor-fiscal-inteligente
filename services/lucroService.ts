@@ -435,6 +435,8 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
             baseCalculo: baseIrpjTotal,
             aliquota: ALIQ_IRPJ * 100,
             valor: Math.max(0, valorIrpj - retencaoIrpj),
+            valorBruto: valorIrpj,
+            retencao: retencaoIrpj,
             observacao: `Base Bruta${obsHosp}${obsReduzida}.${obsTrimestre}${obsLc224Irpj} Isenção: ${fmt(limiteAdicional)}` + (retencaoIrpj > 0 ? `. Retenção abatida: ${fmt(retencaoIrpj)}` : '')
         });
     }
@@ -460,6 +462,8 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
             baseCalculo: baseCsllTotal,
             aliquota: ALIQ_CSLL * 100,
             valor: Math.max(0, (baseCsllTotal * ALIQ_CSLL) - retencaoCsll),
+            valorBruto: baseCsllTotal * ALIQ_CSLL,
+            retencao: retencaoCsll,
             observacao: `Base Bruta${obsHosp}.${obsTrimestre}${obsLc224Csll}` + (retencaoCsll > 0 ? `. Retenção abatida: ${fmt(retencaoCsll)}` : '')
         });
     }
@@ -545,28 +549,37 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
 
     const icmsVendas = input.icmsVendas || 0;
     const basePisCofins = Math.max(0, receitaLiquida - icmsVendas - (input.faturamentoMonofasico || 0));
-    // Base de credito PIS/COFINS no Lucro Real - Lei 10.637/02 art. 3 e Lei 10.833/03 art. 3.
-    // Se o front separou (despesasGeramCreditoPisCofins definido), usa o campo
-    // segregado. Caso contrario, cai em despesasDedutiveis com SUBTRACAO da folha
-    // (art. 3 §2 I veda credito sobre mao-de-obra PF). Compat temporaria; quando
-    // toda a base migrar para o campo segregado, removemos o fallback.
-    const baseCredito = (input.despesasGeramCreditoPisCofins !== undefined)
-        ? input.despesasGeramCreditoPisCofins + extraBaseCredito
-        : Math.max(0, input.despesasDedutiveis - (input.folhaPagamento || 0)) + extraBaseCredito;
+    // Base de credito PIS/COFINS no Lucro Real - Lei 10.637/02 art. 3 e Lei
+    // 10.833/03 art. 3: credito SO sobre INSUMOS e itens taxativos, nunca sobre
+    // despesa generica (aluguel administrativo, honorarios, marketing) nem folha.
+    // Fonte da base: o campo segregado despesasGeramCreditoPisCofins + os itens
+    // avulsos marcados geraCreditoPisCofins (extraBaseCredito). O fallback antigo
+    // creditava (despesasDedutiveis - folha) inteiro — credito ilegalmente amplo
+    // = subpagamento. Removido: sem base segregada, credita SO os insumos
+    // explicitamente marcados (conservador e correto).
+    const semBaseSegregada = input.despesasGeramCreditoPisCofins === undefined;
+    const baseCredito = (input.despesasGeramCreditoPisCofins || 0) + extraBaseCredito;
 
     // Saldos credores do mês anterior (abate débito atual)
     const saldoAbatidoPis = input.saldoCredorPis || 0;
     const saldoAbatidoCofins = input.saldoCredorCofins || 0;
 
-    // Bruto = débito - crédito - retenção - saldo credor anterior
-    const pisBruto = (basePisCofins * ALIQ_PIS_NAO_CUMULATIVO)
-                   - (baseCredito * ALIQ_PIS_NAO_CUMULATIVO)
-                   - (input.retencaoPis || 0)
-                   - saldoAbatidoPis;
-    const cofinsBruto = (basePisCofins * ALIQ_COFINS_NAO_CUMULATIVO)
-                      - (baseCredito * ALIQ_COFINS_NAO_CUMULATIVO)
-                      - (input.retencaoCofins || 0)
-                      - saldoAbatidoCofins;
+    // Débito apurado (débito - crédito - saldo) ANTES da retenção: é o que a
+    // DCTFWeb/MIT declara. A retenção reduz só o valor a PAGAR (vinculação).
+    const pisDebito = (basePisCofins * ALIQ_PIS_NAO_CUMULATIVO)
+                    - (baseCredito * ALIQ_PIS_NAO_CUMULATIVO)
+                    - saldoAbatidoPis;
+    const cofinsDebito = (basePisCofins * ALIQ_COFINS_NAO_CUMULATIVO)
+                       - (baseCredito * ALIQ_COFINS_NAO_CUMULATIVO)
+                       - saldoAbatidoCofins;
+    // Bruto (a pagar) = débito - retenção
+    const pisBruto = pisDebito - (input.retencaoPis || 0);
+    const cofinsBruto = cofinsDebito - (input.retencaoCofins || 0);
+
+    // Aviso quando o crédito pode estar subestimado por falta da base de insumos.
+    const obsCredito = semBaseSegregada && input.despesasDedutiveis > 0
+        ? ' ⚠ Crédito só sobre insumos informados — preencha a base de insumos (PIS/COFINS não-cumulativo) para creditar corretamente.'
+        : '';
 
     // Se o bruto ficou negativo, vira saldo residual pro próximo mês
     const residualPis = pisBruto < 0 ? Math.abs(pisBruto) : 0;
@@ -582,7 +595,9 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
         baseCalculo: basePisCofins,
         aliquota: ALIQ_PIS_NAO_CUMULATIVO * 100,
         valor: Math.max(0, pisBruto),
-        observacao: `Mensal - Crédito sobre despesas. Deduzido ICMS.` + obsSaldoPis + obsResidPis + (input.retencaoPis ? ` Retenção abatida: ${fmt(input.retencaoPis)}` : '')
+        valorBruto: Math.max(0, pisDebito),
+        retencao: input.retencaoPis || 0,
+        observacao: `Mensal - Crédito só sobre insumos. Deduzido ICMS.` + obsCredito + obsSaldoPis + obsResidPis + (input.retencaoPis ? ` Retenção abatida: ${fmt(input.retencaoPis)}` : '')
     });
 
     detalhamento.push({
@@ -590,7 +605,9 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
         baseCalculo: basePisCofins,
         aliquota: ALIQ_COFINS_NAO_CUMULATIVO * 100,
         valor: Math.max(0, cofinsBruto),
-        observacao: `Mensal - Crédito sobre despesas. Deduzido ICMS.` + obsSaldoCofins + obsResidCofins + (input.retencaoCofins ? ` Retenção abatida: ${fmt(input.retencaoCofins)}` : '')
+        valorBruto: Math.max(0, cofinsDebito),
+        retencao: input.retencaoCofins || 0,
+        observacao: `Mensal - Crédito só sobre insumos. Deduzido ICMS.` + obsCredito + obsSaldoCofins + obsResidCofins + (input.retencaoCofins ? ` Retenção abatida: ${fmt(input.retencaoCofins)}` : '')
     });
 
     if (input.receitaFinanceira && input.receitaFinanceira > 0) {
@@ -624,6 +641,8 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
             baseCalculo: lucroReal,
             aliquota: ALIQ_IRPJ * 100,
             valor: Math.max(0, valorIrpj - (input.retencaoIrpj || 0)),
+            valorBruto: valorIrpj,
+            retencao: input.retencaoIrpj || 0,
             observacao: `Lucro Tributável Real (Ajustado). Isenção Adicional: ${fmt(limiteAdicional)}` + (input.retencaoIrpj ? `. Retenção abatida: ${fmt(input.retencaoIrpj)}` : '')
         });
 
@@ -632,6 +651,8 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
             baseCalculo: lucroReal,
             aliquota: ALIQ_CSLL * 100,
             valor: Math.max(0, (lucroReal * ALIQ_CSLL) - (input.retencaoCsll || 0)),
+            valorBruto: lucroReal * ALIQ_CSLL,
+            retencao: input.retencaoCsll || 0,
             observacao: input.retencaoCsll ? `Retenção abatida: ${fmt(input.retencaoCsll)}` : undefined
         });
     } else {

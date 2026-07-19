@@ -63,7 +63,12 @@ export function extrairTributosApp(detalhamento: DetalheImposto[] | undefined | 
     const out: TributosPorFamilia = { IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 };
     for (const det of detalhamento || []) {
         const nome = String(det?.imposto || '').toUpperCase().trim();
-        const valor = Number(det?.valor) || 0;
+        // O DÉBITO declarado na DCTFWeb/MIT é o BRUTO (antes da retenção na
+        // fonte); a retenção entra como vinculação e não abate o débito. Por
+        // isso cruzamos/montamos o MIT com valorBruto (fallback: valor, p/
+        // impostos sem retenção). Antes usava só `valor` (líquido) → gerava
+        // divergência falsa e débito subdeclarado no MIT.
+        const valor = Number(det?.valorBruto ?? det?.valor) || 0;
         if (!valor) continue;
         // COFINS antes de PIS (COFINS não contém "PIS"; ok). IRPJ/CSLL por prefixo.
         if (nome.startsWith('COFINS')) out.COFINS += valor;
