@@ -1,0 +1,55 @@
+name: Deploy Firestore (rules + indexes)
+
+# Publica as REGRAS e os ÍNDICES do Firestore automaticamente — antes isso só
+# saía por `firebase deploy` manual na máquina de alguém, então correções de
+# regra (ex.: perda de dados em simples_notas) e índices compostos podiam ficar
+# no repositório sem nunca chegar à produção. O deploy do app (Cloud Run) NÃO
+# cobre isso; este workflow fecha a lacuna reaproveitando o mesmo GCP_SA_KEY.
+#
+# Dispara só quando os arquivos do Firestore mudam (ou manualmente).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - firestore.rules
+      - firestore.indexes.json
+      - firebase.json
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-firestore
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy rules & indexes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Authenticate to Google Cloud
+        # Mesma credencial que o deploy-app usa. O SA precisa ter permissão de
+        # deploy do Firestore: roles/firebaserules.admin + roles/datastore.indexAdmin
+        # (ou roles/firebase.admin). Se faltar, o passo abaixo falha com erro de
+        # permissão claro apontando a role a conceder.
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Deploy Firestore rules + indexes
+        # ADC: o auth@v2 exporta GOOGLE_APPLICATION_CREDENTIALS, que o
+        # firebase-tools consome. --non-interactive SEM --force: publica/atualiza
+        # regras e índices mas NUNCA apaga índices ausentes do arquivo (evita o
+        # incidente de deleção acidental de índices via prompt "Yes").
+        run: |
+          npx -y firebase-tools@13 deploy \
+            --only firestore:rules,firestore:indexes \
+            --project consultorfiscalapp \
+            --non-interactive
