@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'node:crypto';
 import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
@@ -185,10 +186,18 @@ app.use(express.json({ limit: '20mb' }));
 
 // Rate limiting. skip: requisicoes de cron autenticadas (Cloud Scheduler)
 // nunca sao limitadas — senao um pico de crons as 7-8h poderia ser barrado.
+// Comparacao de segredo em tempo constante (evita vazamento por timing do
+// prefixo correto). Buffers de tamanhos diferentes -> false sem timingSafeEqual.
+const secretsMatch = (a, b) => {
+    if (!a || !b) return false;
+    const ba = Buffer.from(String(a));
+    const bb = Buffer.from(String(b));
+    return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+};
 const isCronRequest = (req) => {
     const secret = process.env.SEFAZ_CRON_SECRET;
     const header = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
-    return !!secret && header === secret;
+    return secretsMatch(header, secret);
 };
 const rateLimitKey = (req) => {
     const auth = req.headers.authorization || '';
@@ -2771,7 +2780,7 @@ app.get('/{*splat}', (req, res) => {
 app.post('/api/admin/sharepoint/cron-alertas', express.json(), async (req, res) => {
     const cronSecret = req.headers['x-cron-secret'];
     const expected = process.env.SEFAZ_CRON_SECRET;
-    if (!expected || cronSecret !== expected) {
+    if (!secretsMatch(cronSecret, expected)) {
         return res.status(401).json({ ok: false, error: 'Cron nao autorizado' });
     }
     try {
@@ -2790,7 +2799,7 @@ app.post('/api/admin/sharepoint/cron-alertas', express.json(), async (req, res) 
 app.post('/api/tarefas/cron-mensal', express.json(), async (req, res) => {
     const cronSecret = req.headers['x-cron-secret'];
     const expected = process.env.SEFAZ_CRON_SECRET;
-    if (!expected || cronSecret !== expected) {
+    if (!secretsMatch(cronSecret, expected)) {
         return res.status(401).json({ ok: false, error: 'Cron nao autorizado' });
     }
     try {
@@ -2810,7 +2819,7 @@ app.post('/api/tarefas/cron-mensal', express.json(), async (req, res) => {
 app.post('/api/tarefas/aplicar-carteira', express.json(), async (req, res) => {
     const cronSecret = req.headers['x-cron-secret'];
     const expected = process.env.SEFAZ_CRON_SECRET;
-    if (!expected || cronSecret !== expected) {
+    if (!secretsMatch(cronSecret, expected)) {
         return res.status(401).json({ ok: false, error: 'Cron nao autorizado' });
     }
     try {
@@ -2829,7 +2838,7 @@ app.post('/api/tarefas/aplicar-carteira', express.json(), async (req, res) => {
 app.post('/api/tarefas/gerar-empresa', express.json(), async (req, res) => {
     const cronSecret = req.headers['x-cron-secret'];
     const expected = process.env.SEFAZ_CRON_SECRET;
-    if (!expected || cronSecret !== expected) {
+    if (!secretsMatch(cronSecret, expected)) {
         return res.status(401).json({ ok: false, error: 'Cron nao autorizado' });
     }
     const { empresaId, competencia } = req.body || {};

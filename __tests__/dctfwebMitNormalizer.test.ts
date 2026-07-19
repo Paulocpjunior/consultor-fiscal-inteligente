@@ -34,7 +34,7 @@ describe('normalizarApuracaoMit — estruturas plausíveis', () => {
         ] };
         const r = normalizarApuracaoMit(raw);
         expect(r.tributos.IRPJ).toBe(1000);       // só o IRPJ real, sem o IRRF
-        expect(r.outros.some(o => o.valor === 500)).toBe(true);
+        expect(r.outros.some((o: any) => o.valor === 500)).toBe(true);
     });
 
     it('valor em formato BR "1.234,56" string', () => {
