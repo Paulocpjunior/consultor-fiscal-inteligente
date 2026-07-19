@@ -55,14 +55,19 @@ jobs:
         run: npm ci
 
       - name: Auditoria de dependências (bloqueia em critical/high)
-        # Trava o deploy se surgir CVE high/critical nas deps. Vulns
-        # transitivas conhecidas sem fix upstream são fixadas via
-        # "overrides" no package.json (ex.: websocket-driver 0.7.5).
-        # Escape hatch: `[skip-audit]` na msg do commit libera um hotfix urgente
-        # quando um CVE novo sem fix upstream estaria bloqueando um deploy de
-        # incidente não relacionado.
-        if: ${{ !contains(github.event.head_commit.message, '[skip-audit]') }}
-        run: npm audit --audit-level=high
+        # Trava o deploy se surgir CVE high/critical nas deps. Vulns transitivas
+        # conhecidas sem fix upstream são fixadas via "overrides" no package.json.
+        # Escape hatch: `[skip-audit]` no ASSUNTO (1ª linha) do commit libera um
+        # hotfix urgente. Checamos só o assunto (git log --pretty=%s), não o corpo
+        # — assim a DESCRIÇÃO de um PR que apenas MENCIONE o marcador não aciona o
+        # skip por acidente (footgun do contains(head_commit.message)).
+        run: |
+          SUBJECT=$(git log -1 --pretty=%s)
+          if printf '%s' "$SUBJECT" | grep -qF '[skip-audit]'; then
+            echo "→ [skip-audit] no assunto do commit — auditoria pulada (hotfix)."
+            exit 0
+          fi
+          npm audit --audit-level=high
 
       - name: Typecheck + testes
         run: |

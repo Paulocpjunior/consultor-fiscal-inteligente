@@ -16,6 +16,7 @@ import {
 import { getDasMode } from './das-provider.js';
 import { errorPayload } from './das-error-payload.js';
 import { podeAcessarEmpresaId } from './carteira-auth.js';
+import { secretsMatch } from './cron-secret.js';
 export { errorPayload } from './das-error-payload.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
@@ -176,7 +177,7 @@ function ultimasCompetencias(n) {
 // Disparado pelo job 'das-cron-noturno' as 03:30 BRT.
 router.post('/cron', async (req, res) => {
     const headerSecret = req.header('X-Cron-Secret') || '';
-    if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
+    if (!secretsMatch(headerSecret, CRON_SECRET)) {
         return res.status(403).json({ erro: 'cron secret invalido' });
     }
     const t0 = Date.now();

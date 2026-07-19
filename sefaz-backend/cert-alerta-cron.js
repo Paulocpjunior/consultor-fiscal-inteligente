@@ -47,7 +47,7 @@ function requireCronAuth(req, res, next) {
     return res.status(500).json({ error: 'Cron secret not configured' });
   }
   const headerSecret = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
-  if (headerSecret === secret) return next();
+  if (secretsMatch(headerSecret, secret)) return next();
   const headerPrefix = headerSecret ? String(headerSecret).slice(0, 4) + '...' : '(ausente)';
   const jobName = req.headers['x-cloudscheduler-jobname'] || '(no header)';
   console.warn(`[cert-alerta-cron] 403 mismatch — header=${headerPrefix} job=${jobName} ip=${req.ip}`);
@@ -65,6 +65,7 @@ function diasAte(fimIso) {
 // Logica de faixa testada em cert-vencimento-helper.js (24 testes).
 // Mantido o "emoji" aqui porque so o email usa.
 import { faixaDeVencimento, urgenciaFaixa } from './cert-vencimento-helper.js';
+import { secretsMatch } from './cron-secret.js';
 
 const faixaDe = faixaDeVencimento;
 

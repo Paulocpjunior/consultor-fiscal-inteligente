@@ -9,6 +9,7 @@ import { requireAdmin } from './require-admin.js';
 import admin from 'firebase-admin';
 import { isGraphConfigured, enviarEmail } from './graph-provider.js';
 import { coletarResumoCapturas, enviarResumoDiario, enviarResumoIndividualizado } from './notificacoes-orchestrator.js';
+import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
 
@@ -95,7 +96,7 @@ router.post('/cron-resumo', async (req, res) => {
     // ele DEVE ser configurado tambem com x-notif-cron-secret.
     const cronSecret = req.headers['x-notif-cron-secret'];
     const expected = process.env.NOTIF_CRON_SECRET;
-    if (!expected || cronSecret !== expected) {
+    if (!secretsMatch(cronSecret, expected)) {
         return res.status(401).json({ error: 'Cron nao autorizado' });
     }
 

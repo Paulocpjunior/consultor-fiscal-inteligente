@@ -17,6 +17,7 @@ import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
 import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
+import { secretsMatch } from './cron-secret.js';
 
 const uploadCsv = multer({
     storage: multer.memoryStorage(),
@@ -71,7 +72,7 @@ router.post('/nfsesp-cron', json(), async (req, res) => {
     const headerSecret = req.header('X-Sefaz-Cron-Secret')
         || req.header('x-cron-secret')
         || '';
-    if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
+    if (!secretsMatch(headerSecret, CRON_SECRET)) {
         return res.status(403).json({ erro: 'cron secret inválido' });
     }
     try {
@@ -264,7 +265,7 @@ router.post('/nfsesp-portal-cron', json(), async (req, res) => {
     const headerSecret = req.header('x-cron-secret')
         || req.header('X-Sefaz-Cron-Secret')
         || '';
-    if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
+    if (!secretsMatch(headerSecret, CRON_SECRET)) {
         return res.status(403).json({ erro: 'cron secret inválido' });
     }
     res.json({ ok: true, motivo: 'Captura NFSe SP via portal iniciada em background' });

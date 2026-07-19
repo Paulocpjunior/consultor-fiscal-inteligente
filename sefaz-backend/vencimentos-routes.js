@@ -9,6 +9,7 @@
 import express from 'express';
 import { processarVencimentos, resumoVencimentos } from './vencimentos-orchestrator.js';
 import { requireAuth } from './require-admin.js';
+import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -17,7 +18,7 @@ const CRON_SECRET = process.env.SEFAZ_CRON_SECRET;
 
 function requireCronAuth(req, res, next) {
     const headerSecret = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
-    if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
+    if (!secretsMatch(headerSecret, CRON_SECRET)) {
         return res.status(403).json({ error: 'Cron auth failed' });
     }
     next();

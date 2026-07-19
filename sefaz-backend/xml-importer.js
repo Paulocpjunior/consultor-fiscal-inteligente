@@ -373,10 +373,20 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(docRef);
     if (snap.exists) {
-      // Anexa ao array de eventos (sem duplicar pelo nProt)
+      // Anexa ao array de eventos (sem duplicar). Preferimos o nProt (chave
+      // natural do protocolo); quando ausente, usamos tpEvento+nSeqEvento+
+      // dhEvento como chave composta — senão o reprocessamento (ex.: reset NSU)
+      // duplicaria eventos sem protocolo no array.
       const data = snap.data();
       const eventosExistentes = data.eventos || [];
-      if (eventoData.nProt && eventosExistentes.some(e => e.nProt === eventoData.nProt)) {
+      const jaExiste = eventoData.nProt
+        ? eventosExistentes.some(e => e.nProt === eventoData.nProt)
+        : eventosExistentes.some(e =>
+            !e.nProt &&
+            e.tpEvento === eventoData.tpEvento &&
+            String(e.nSeqEvento ?? '') === String(eventoData.nSeqEvento ?? '') &&
+            e.dhEvento === eventoData.dhEvento);
+      if (jaExiste) {
         return { status: 'duplicado_evento', chave: chaveNFe, tipo: evento.tipo };
       }
       const updates = {

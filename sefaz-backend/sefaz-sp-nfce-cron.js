@@ -26,6 +26,7 @@ import express from 'express';
 import admin from 'firebase-admin';
 import { listCertsEmpresas } from './cert-storage.js';
 import { capturarNFCeSaida } from './sefaz-sp-nfce-orchestrator.js';
+import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
 
@@ -48,7 +49,7 @@ function requireCronAuth(req, res, next) {
     return res.status(500).json({ error: 'Cron secret not configured' });
   }
   const headerSecret = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
-  if (headerSecret === secret) return next();
+  if (secretsMatch(headerSecret, secret)) return next();
   const headerPrefix = headerSecret ? String(headerSecret).slice(0, 4) + '...' : '(ausente)';
   const jobName = req.headers['x-cloudscheduler-jobname'] || '(no header)';
   console.warn(`[sae-nfce-cron] 403 mismatch — header=${headerPrefix} job=${jobName} ip=${req.ip}`);

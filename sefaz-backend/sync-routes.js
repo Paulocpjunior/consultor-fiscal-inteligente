@@ -18,6 +18,7 @@ import { manifestarPendentes } from './manifesto-orchestrator.js';
 import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibility.js';
 import { certA1MetadataValido, selecionarCertA1PorBase } from './cert-base-helper.js';
 import { umaPorRaizPorCiclo } from './raiz-throttle-helper.js';
+import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
 
@@ -41,7 +42,7 @@ function requireCronAuth(req, res, next) {
         return res.status(500).json({ error: 'Cron secret not configured' });
     }
     const headerSecret = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
-    if (headerSecret === secret) {
+    if (secretsMatch(headerSecret, secret)) {
         return next();
     }
     // Drift de secret entre Scheduler e Cloud Run e causa conhecida de cron

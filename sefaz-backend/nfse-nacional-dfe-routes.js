@@ -18,6 +18,7 @@ import { sincronizarEmpresaNfseNacionalDfe, limparLocksOrfaos } from './nfse-nac
 import { listarElegibilidadeNfseNacionalDfe, classificarElegibilidadeAdn } from './nfse-nacional-dfe-eligibility.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth, requireAdmin } from './require-admin.js';
+import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
 
@@ -35,7 +36,7 @@ function requireCronAuth(req, res, next) {
         return res.status(500).json({ error: 'Cron secret not configured' });
     }
     const headerSecret = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
-    if (headerSecret === secret) {
+    if (secretsMatch(headerSecret, secret)) {
         return next();
     }
     return res.status(403).json({ error: 'Cron auth failed' });
