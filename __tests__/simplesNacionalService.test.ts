@@ -394,6 +394,33 @@ describe('simplesNacionalService', () => {
             expect(result.detalhamento_anexos![0].anexo).toBe('V');
         });
 
+        it('ISS retido no Anexo V deduz a repartição REAL da faixa (não 23,5% fixo)', () => {
+            // Regressão: o Anexo V usava 23,5% fixo pra deduzir o ISS retido; o
+            // correto é o ISS da faixa (faixa 0 = 48,05%), igual aos Anexos III/IV.
+            const rbt12 = 180000; // faixa 0 do Anexo V (<= 180.000)
+            const fat = buildFaturamento12Meses(MES_REF, 15000); // 12 × 15.000
+            const empresa = criarEmpresa({
+                anexo: 'V',
+                faturamentoManual: fat,
+                folha12: rbt12 * 0.10, // Fator R < 0.28 mantém Anexo V
+            });
+            const itemBase = {
+                cnae: '6201501', anexo: 'V' as SimplesNacionalAnexo, valor: 15000,
+                issRetido: false, icmsSt: false, isSup: false,
+                isMonofasico: false, isImune: false, isExterior: false,
+            };
+            const sem = calcularResumoEmpresa(empresa, [], MES_REF, { itensCalculo: [itemBase] });
+            const com = calcularResumoEmpresa(empresa, [], MES_REF, {
+                itensCalculo: [{ ...itemBase, issRetido: true }],
+            });
+
+            const issFaixa0V = REPARTICAO_IMPOSTOS['V'][0].ISS ?? 0; // 48.05
+            // Com ISS retido, o DAS cai pela proporção de ISS da faixa.
+            expect(com.das_mensal).toBeCloseTo(sem.das_mensal * (1 - issFaixa0V / 100), 4);
+            // Sanidade: com o 23,5% antigo a razão seria 0,765 — bem diferente.
+            expect(com.das_mensal / sem.das_mensal).toBeCloseTo(0.5195, 4);
+        });
+
         it('Fator R with zero RBT12 yields fator_r = 0', () => {
             const empresa = criarEmpresa({
                 anexo: 'V',
