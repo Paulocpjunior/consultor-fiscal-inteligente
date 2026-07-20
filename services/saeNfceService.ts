@@ -165,6 +165,7 @@ export interface XmlEmailIngestResultado {
     erros?: number;
     detalhePorEmpresa?: Record<string, { nome: string; saida: number; entrada: number; atualizadas: number; duplicadas: number }>;
     anexosNaoXml?: string[];
+    errosDetalhe?: string[];
     duracaoMs?: number;
     error?: string;
 }

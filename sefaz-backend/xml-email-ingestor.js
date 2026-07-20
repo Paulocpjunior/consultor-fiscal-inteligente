@@ -58,6 +58,7 @@ export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, ca
     eventos: 0, semDono: 0, erros: 0,
     detalhePorEmpresa: {},
     anexosNaoXml: [],  // diagnóstico: anexos que não são .xml direto
+    errosDetalhe: [],  // diagnóstico: motivo dos erros de importação
   };
 
   if (!caixa) {
@@ -106,6 +107,10 @@ export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, ca
           empresaId: atrib.emp.empresaId,
           empresaCnpj: atrib.cnpjNota,
           xml,
+          // null explícito: o Firestore rejeita `undefined`. Diferente do autXML,
+          // o e-mail não tem nsu/schema da SEFAZ — mas os campos precisam existir.
+          schema: null,
+          nsu: null,
           capturadoPor,
           origem: 'email',
         });
@@ -121,9 +126,11 @@ export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, ca
           r.eventos++;
         } else {
           r.erros++; algumErroNaMsg = true;
+          if (r.errosDetalhe.length < 20) r.errosDetalhe.push(`${anexo.name}: ${imp.motivo || imp.status || 'erro desconhecido'}`);
         }
       } catch (e) {
         r.erros++; algumErroNaMsg = true;
+        if (r.errosDetalhe.length < 20) r.errosDetalhe.push(`${anexo.name}: ${e.message}`);
         console.warn(`[xml-email] import falhou (${anexo.name}): ${e.message}`);
       }
     }
