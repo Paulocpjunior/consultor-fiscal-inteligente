@@ -24,6 +24,10 @@ import { listarEmailsComXml, marcarProcessada } from './graph-mail-reader.js';
 
 const STATE_DOC = 'sefaz_xml_email_state/estado';
 
+// Caixa do "cofre" do CFI. Default = a caixa do escritório (mesmo padrão do
+// CNPJ_ESCRITORIO ter default no código); env var sobrescreve se precisar.
+const CAIXA_PADRAO = process.env.XML_INGEST_MAILBOX || 'xml@spassessoriacontabil.com.br';
+
 function getDb() {
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
   return admin.firestore();
@@ -44,7 +48,7 @@ export function decodeAnexoXml(contentBytesBase64) {
  */
 export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, capturadoPor = null } = {}) {
   const t0 = Date.now();
-  const caixa = mailbox || process.env.XML_INGEST_MAILBOX || '';
+  const caixa = mailbox || CAIXA_PADRAO;
   const moverParaId = process.env.XML_INGEST_MOVE_FOLDER_ID || null;
 
   const r = {

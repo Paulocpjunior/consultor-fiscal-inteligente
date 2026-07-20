@@ -58,7 +58,8 @@ router.post('/xml-email-ingest', requireAdmin, async (req, res) => {
 router.get('/xml-email-ingest/status', requireAdmin, async (req, res) => {
   try {
     const snap = await getDb().doc('sefaz_xml_email_state/estado').get();
-    return res.json({ ok: true, configurada: Boolean(process.env.XML_INGEST_MAILBOX), estado: snap.exists ? snap.data() : null });
+    const caixa = process.env.XML_INGEST_MAILBOX || 'xml@spassessoriacontabil.com.br';
+    return res.json({ ok: true, caixa, estado: snap.exists ? snap.data() : null });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
