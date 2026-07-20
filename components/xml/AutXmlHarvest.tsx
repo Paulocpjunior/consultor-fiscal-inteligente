@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { colherAutXml, type AutXmlHarvestResultado } from '../../services/saeNfceService';
+import { colherAutXml, coberturaSaida, type AutXmlHarvestResultado, type CoberturaSaidaResultado } from '../../services/saeNfceService';
 
 /**
  * AutXmlHarvest — dispara a colheita de SAÍDA (mod 55) via tag <autXML>.
@@ -13,6 +13,8 @@ import { colherAutXml, type AutXmlHarvestResultado } from '../../services/saeNfc
 const AutXmlHarvest: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [resp, setResp] = useState<AutXmlHarvestResultado | null>(null);
+    const [cobLoading, setCobLoading] = useState(false);
+    const [cob, setCob] = useState<CoberturaSaidaResultado | null>(null);
 
     const rodar = async (resetNSU: boolean) => {
         setLoading(true);
@@ -24,6 +26,33 @@ const AutXmlHarvest: React.FC = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const rodarCobertura = async () => {
+        setCobLoading(true);
+        setCob(null);
+        try {
+            setCob(await coberturaSaida(90));
+        } catch (e) {
+            setCob({ ok: false, error: e instanceof Error ? e.message : String(e) });
+        } finally {
+            setCobLoading(false);
+        }
+    };
+
+    const baixarCsvSemSaida = () => {
+        const linhas = cob?.empresasSemSaida || [];
+        const head = 'CNPJ;Empresa;Regime;Ativo\n';
+        const corpo = linhas
+            .map((e) => `${e.cnpj};"${String(e.nome).replace(/"/g, '""')}";${e.regime || ''};${e.ativo ? 'sim' : 'nao'}`)
+            .join('\n');
+        const blob = new Blob([head + corpo], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'cobertura-saida-sem-autxml.csv';
+        a.click();
+        URL.revokeObjectURL(url);
     };
 
     const clientes = resp?.detalhePorEmpresa ? Object.entries(resp.detalhePorEmpresa) : [];
@@ -98,6 +127,65 @@ const AutXmlHarvest: React.FC = () => {
                     )}
                 </div>
             )}
+
+            {/* Relatório de cobertura: quem AINDA não tem saída capturada = onde falta o autXML */}
+            <div className="border-t border-sky-200 dark:border-sky-800 pt-3 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200">📋 Cobertura de saída — onde falta o autXML</h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Lista os clientes <strong>sem nenhuma saída (mod 55)</strong> capturada nos últimos 90 dias. É a sua lista de onde
+                            incluir o CNPJ do escritório na tag <code>autXML</code> do emissor.
+                        </p>
+                    </div>
+                    <button onClick={rodarCobertura} disabled={cobLoading}
+                        className="px-3 py-1.5 text-xs font-bold rounded-md bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                        {cobLoading ? 'Analisando…' : 'Gerar relatório'}
+                    </button>
+                </div>
+
+                {cob && !cob.ok && (
+                    <p className="text-xs text-red-600 dark:text-red-400">{cob.error || 'Falha ao gerar o relatório.'}</p>
+                )}
+
+                {cob && cob.ok && (
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2">
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-100">
+                            {cob.comSaida ?? 0}/{cob.totalEmpresas ?? 0} empresas com saída ·{' '}
+                            <span className={(cob.percentualCobertura ?? 0) >= 90 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
+                                {cob.percentualCobertura ?? 0}% de cobertura
+                            </span>
+                        </p>
+                        {(cob.semSaida ?? 0) > 0 ? (
+                            <>
+                                <div className="flex items-center justify-between gap-2">
+                                    <p className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                                        {cob.semSaida} sem saída — configurar autXML:
+                                    </p>
+                                    <button onClick={baixarCsvSemSaida}
+                                        className="px-2 py-1 text-[11px] font-bold rounded bg-emerald-600 hover:bg-emerald-700 text-white">
+                                        Baixar CSV
+                                    </button>
+                                </div>
+                                <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-0.5 max-h-56 overflow-y-auto">
+                                    {(cob.empresasSemSaida || []).map((e) => (
+                                        <li key={e.empresaId}>
+                                            <span className="font-mono">{e.cnpj}</span> — {e.nome}
+                                            <span className="text-slate-400 dark:text-slate-500"> ({e.regime})</span>
+                                            {!e.ativo && <span className="text-red-500"> · inativa</span>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
+                        ) : (
+                            <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ Todas as empresas monitoradas têm saída capturada na janela.</p>
+                        )}
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                            {cob.docsSaidaLidos ?? 0} docs de saída analisados · janela {cob.janelaDias ?? 90} dias
+                        </p>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };

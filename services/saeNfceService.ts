@@ -108,6 +108,48 @@ export async function colherAutXml(resetNSU = false): Promise<AutXmlHarvestResul
     }
 }
 
+export interface CoberturaSaidaEmpresa {
+    empresaId: string;
+    cnpj: string;
+    nome: string;
+    regime: string | null;
+    ativo: boolean;
+    qtdSaida: number;
+    ultimaSaida: string | null;
+}
+export interface CoberturaSaidaResultado {
+    ok: boolean;
+    janelaDias?: number;
+    totalEmpresas?: number;
+    comSaida?: number;
+    semSaida?: number;
+    percentualCobertura?: number;
+    empresasSemSaida?: CoberturaSaidaEmpresa[];
+    empresasComSaida?: CoberturaSaidaEmpresa[];
+    docsSaidaLidos?: number;
+    geradoEm?: string;
+    error?: string;
+}
+
+/**
+ * Relatório de cobertura de saída: quais clientes NÃO tiveram nenhuma NF-e de
+ * saída (mod 55) capturada na janela — a lista de "onde falta o CNPJ do
+ * escritório no autXML do emissor".
+ */
+export async function coberturaSaida(janelaDias = 90): Promise<CoberturaSaidaResultado> {
+    const token = await getToken();
+    const res = await fetch(`/api/admin/sefaz/cobertura-saida?janelaDias=${janelaDias}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    try {
+        const data = await res.json();
+        if (!res.ok) return { ...data, ok: false };
+        return { ...data, ok: true };
+    } catch {
+        return { ok: false, error: `HTTP ${res.status} (resposta não-JSON)` };
+    }
+}
+
 export interface LoteImportResultado {
     ok: boolean;
     recebidos?: number;
