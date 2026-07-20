@@ -59,6 +59,7 @@ export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, ca
     detalhePorEmpresa: {},
     anexosNaoXml: [],  // diagnóstico: anexos que não são .xml direto
     errosDetalhe: [],  // diagnóstico: motivo dos erros de importação
+    pendencias: [],    // e-mails com anexo mas sem .xml (p/ painel + alerta)
   };
 
   if (!caixa) {
@@ -81,10 +82,15 @@ export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, ca
     let algumErroNaMsg = false;
 
     // Diagnóstico: e-mail com anexo mas sem nenhum .xml direto — registra o que
-    // veio (PDF, ZIP, e-mail encaminhado=itemAttachment) pra aparecer no painel.
+    // veio (PDF, ZIP, e-mail encaminhado=itemAttachment) pra aparecer no painel
+    // e virar pendência/alerta (fica não-lido, então continua visível).
     if (msg.anexosXml.length === 0 && (msg.anexosInfo || []).length > 0) {
-      for (const a of msg.anexosInfo) {
-        if (r.anexosNaoXml.length < 20) r.anexosNaoXml.push(`${a.name} [${a.tipo}]`);
+      const anexosStr = msg.anexosInfo.map((a) => `${a.name} [${a.tipo}]`);
+      for (const s of anexosStr) {
+        if (r.anexosNaoXml.length < 20) r.anexosNaoXml.push(s);
+      }
+      if (r.pendencias.length < 50) {
+        r.pendencias.push({ assunto: msg.subject || '(sem assunto)', from: msg.from || null, anexos: anexosStr });
       }
     }
 
@@ -101,7 +107,7 @@ export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, ca
       if (!atrib) { r.semDono++; continue; }  // nota de terceiro não monitorado
 
       const bucket = r.detalhePorEmpresa[atrib.emp.cnpj]
-        || (r.detalhePorEmpresa[atrib.emp.cnpj] = { nome: atrib.emp.nome, saida: 0, entrada: 0, atualizadas: 0, duplicadas: 0 });
+        || (r.detalhePorEmpresa[atrib.emp.cnpj] = { empresaId: atrib.emp.empresaId, nome: atrib.emp.nome, saida: 0, entrada: 0, atualizadas: 0, duplicadas: 0 });
       try {
         const imp = await importarXmlSefaz({
           empresaId: atrib.emp.empresaId,
@@ -148,11 +154,23 @@ export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, ca
     }
   }
 
-  // Persiste um resumo pro painel de saúde.
+  const ranAtMs = Date.now();
+
+  // Mapa "última saída ingerida por empresa" — alimenta a detecção de
+  // inatividade (cliente que sempre enviava e parou). Só empresas com saída
+  // nesta run entram no merge; as demais mantêm o valor anterior.
+  const ultimaSaidaPorEmpresa = {};
+  for (const e of Object.values(r.detalhePorEmpresa)) {
+    if (e.saida > 0 && e.empresaId) ultimaSaidaPorEmpresa[e.empresaId] = { nome: e.nome, ms: ranAtMs };
+  }
+
+  // Persiste um resumo pro painel + o mapa de última saída (merge não clobbera
+  // as empresas que não enviaram desta vez).
   try {
     await db.doc(STATE_DOC).set({
       caixa,
       atualizadoEm: admin.firestore.FieldValue.serverTimestamp(),
+      ...(Object.keys(ultimaSaidaPorEmpresa).length ? { ultimaSaidaPorEmpresa } : {}),
       ultimoResumo: {
         mensagens: r.mensagens, anexos: r.anexos,
         saida: r.importadasSaida, entrada: r.importadasEntrada,
@@ -163,6 +181,23 @@ export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, ca
     }, { merge: true });
   } catch (e) {
     console.warn('[xml-email] erro persistindo estado:', e.message);
+  }
+
+  // Histórico da execução (Fase 1: painel de controle / KPIs).
+  try {
+    await db.collection('cofre_email_runs').add({
+      ranAtMs,
+      ranAt: admin.firestore.FieldValue.serverTimestamp(),
+      mensagens: r.mensagens, anexos: r.anexos,
+      saida: r.importadasSaida, entrada: r.importadasEntrada,
+      atualizadas: r.atualizadas, duplicadas: r.duplicadas,
+      eventos: r.eventos, semDono: r.semDono, erros: r.erros,
+      pendencias: r.pendencias.slice(0, 50),
+      errosDetalhe: r.errosDetalhe.slice(0, 20),
+      origem: capturadoPor?.email || 'manual',
+    });
+  } catch (e) {
+    console.warn('[xml-email] erro gravando histórico:', e.message);
   }
 
   r.duracaoMs = Date.now() - t0;

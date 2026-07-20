@@ -190,6 +190,57 @@ export async function ingerirXmlEmail(mailbox?: string): Promise<XmlEmailIngestR
     }
 }
 
+export interface CofreKpis {
+    hoje: { saida: number; entrada: number; erros: number };
+    mes: { saida: number; entrada: number; erros: number };
+    total: { saida: number; entrada: number; erros: number; execucoes: number };
+    porDia: Array<{ dia: string; saida: number; entrada: number }>;
+    ultimaExecMs: number | null;
+}
+export interface CofreRun {
+    ranAtMs: number; mensagens: number; anexos: number; saida: number; entrada: number;
+    atualizadas: number; duplicadas: number; erros: number; semDono: number;
+    pendencias?: Array<{ assunto: string; from: string | null; anexos: string[] }>;
+    errosDetalhe?: string[]; origem?: string;
+}
+export interface CofreHistoricoResultado {
+    ok: boolean; caixa?: string; kpis?: CofreKpis; runs?: CofreRun[]; error?: string;
+}
+export interface CofrePendencia { assunto: string; from: string | null; recebidoEm: string | null; anexos: string[]; }
+export interface CofrePendenciasResultado {
+    ok: boolean; caixa?: string; total?: number; pendencias?: CofrePendencia[]; error?: string;
+}
+
+/** Histórico das execuções do cofre + KPIs agregados (Fase 1 — controle). */
+export async function historicoCofre(limit = 60): Promise<CofreHistoricoResultado> {
+    const token = await getToken();
+    const res = await fetch(`/api/admin/sefaz/xml-email-ingest/historico?limit=${limit}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    try {
+        const data = await res.json();
+        if (!res.ok) return { ...data, ok: false };
+        return { ...data, ok: true };
+    } catch {
+        return { ok: false, error: `HTTP ${res.status} (resposta não-JSON)` };
+    }
+}
+
+/** E-mails travados na caixa (anexo sem .xml importável) — ao vivo. */
+export async function pendenciasCofre(): Promise<CofrePendenciasResultado> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/xml-email-ingest/pendencias', {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    try {
+        const data = await res.json();
+        if (!res.ok) return { ...data, ok: false };
+        return { ...data, ok: true };
+    } catch {
+        return { ok: false, error: `HTTP ${res.status} (resposta não-JSON)` };
+    }
+}
+
 export interface LoteImportResultado {
     ok: boolean;
     recebidos?: number;
