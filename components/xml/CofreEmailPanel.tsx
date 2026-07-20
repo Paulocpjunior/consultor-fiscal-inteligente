@@ -88,6 +88,14 @@ const CofreEmailPanel: React.FC = () => {
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         caixa: {resp.caixa || '—'} · {resp.empresasMonitoradas ?? 0} empresas monitoradas · {resp.semDono ?? 0} anexos sem cliente monitorado
                     </p>
+                    {(resp.errosDetalhe?.length ?? 0) > 0 && (
+                        <div className="text-[11px] text-red-600 dark:text-red-400 mt-1">
+                            <p className="font-bold">✕ Erros de importação:</p>
+                            <ul className="list-disc list-inside mt-0.5 font-mono break-all">
+                                {(resp.errosDetalhe || []).map((e, i) => <li key={i}>{e}</li>)}
+                            </ul>
+                        </div>
+                    )}
                     {(resp.anexosNaoXml?.length ?? 0) > 0 && (
                         <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
                             <p className="font-bold">⚠ E-mail com anexo, mas nenhum <code>.xml</code> direto:</p>
