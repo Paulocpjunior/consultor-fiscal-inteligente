@@ -46,17 +46,20 @@ export async function listarEmailsComXml(mailbox, { maxMensagens = 25 } = {}) {
   const box = encodeURIComponent(mailbox);
   const top = Math.min(Math.max(Number(maxMensagens) || 25, 1), 100);
 
-  // Só não-lidas + com anexo, mais novas primeiro. $select enxuto.
-  const filtro = '$filter=isRead eq false and hasAttachments eq true';
-  const campos = '$select=id,subject,from,receivedDateTime';
-  const ordem = '$orderby=receivedDateTime asc';
+  // Graph rejeita ($filter em isRead+hasAttachments) COMBINADO com $orderby
+  // (erro InefficientFilter). Então filtramos só por isRead (filtro simples,
+  // sem orderby) e checamos hasAttachments no código. `hasAttachments` vem no
+  // $select pra pular cedo as mensagens sem anexo.
+  const filtro = '$filter=isRead eq false';
+  const campos = '$select=id,subject,from,receivedDateTime,hasAttachments';
   const lista = await graphGet(
-    `/users/${box}/mailFolders/inbox/messages?${filtro}&${campos}&${ordem}&$top=${top}`,
+    `/users/${box}/mailFolders/inbox/messages?${filtro}&${campos}&$top=${top}`,
     token,
   );
 
   const out = [];
   for (const msg of lista.value || []) {
+    if (!msg.hasAttachments) continue;
     // Puxa os anexos de arquivo da mensagem (com conteúdo).
     let anexos = [];
     try {
