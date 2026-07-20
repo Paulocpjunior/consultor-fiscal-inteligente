@@ -23,6 +23,7 @@ const NfseSpSessaoCookies = lazy(() => import('../NfseSpSessaoCookies'));
 const SaeNfceCaptura = lazy(() => import('./SaeNfceCaptura'));
 const XmlImportacaoZip = lazy(() => import('./XmlImportacaoZip'));
 const AutXmlHarvest = lazy(() => import('./AutXmlHarvest'));
+const CofreEmailPanel = lazy(() => import('./CofreEmailPanel'));
 
 type TabId =
     | 'dashboard'
@@ -182,6 +183,12 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                             escritório). Fica junto do ZIP — ambos completam saída. */}
                         <Suspense fallback={null}>
                             <AutXmlHarvest />
+                        </Suspense>
+                        {/* Cofre CFI: XML por e-mail — substitui o cofre da SIEG.
+                            É por aqui que a saída mod 55 entra (a SEFAZ não
+                            entrega a saída ao próprio emissor). */}
+                        <Suspense fallback={null}>
+                            <CofreEmailPanel />
                         </Suspense>
                     </div>
                 )}
