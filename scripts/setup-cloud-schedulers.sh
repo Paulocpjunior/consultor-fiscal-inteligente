@@ -171,6 +171,15 @@ upsert_job \
     "/api/admin/sefaz/xml-email-ingest-cron" \
     "Le XMLs enviados por email (cofre CFI) e importa (saida/entrada)"
 
+# Alertas do cofre: erros de import, e-mails sem XML (pendencias) e clientes
+# que pararam de enviar saida (emissor caiu). Anti-spam por assinatura. Roda
+# 2x/dia em dia util (manha e fim de tarde).
+upsert_job \
+    "cofre-email-alerta-cron" \
+    "0 9,18 * * 1-5" \
+    "/api/admin/sefaz/xml-email-ingest/alerta-cron" \
+    "Alertas do cofre CFI (erros, pendencias, clientes inativos)"
+
 # NFSe SP via PORTAL CSV — substitui o WS legacy que retornava erro 1102.
 # 1 login do escritório baixa CSV de TODAS empresas autorizadas no portal.
 upsert_job \

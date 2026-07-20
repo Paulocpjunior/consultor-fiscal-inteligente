@@ -24,6 +24,7 @@ const SaeNfceCaptura = lazy(() => import('./SaeNfceCaptura'));
 const XmlImportacaoZip = lazy(() => import('./XmlImportacaoZip'));
 const AutXmlHarvest = lazy(() => import('./AutXmlHarvest'));
 const CofreEmailPanel = lazy(() => import('./CofreEmailPanel'));
+const CofreControlePanel = lazy(() => import('./CofreControlePanel'));
 
 type TabId =
     | 'dashboard'
@@ -189,6 +190,9 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                             entrega a saída ao próprio emissor). */}
                         <Suspense fallback={null}>
                             <CofreEmailPanel />
+                        </Suspense>
+                        <Suspense fallback={null}>
+                            <CofreControlePanel />
                         </Suspense>
                     </div>
                 )}
