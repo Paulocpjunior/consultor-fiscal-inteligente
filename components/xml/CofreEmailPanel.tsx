@@ -59,6 +59,17 @@ const CofreEmailPanel: React.FC = () => {
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
                     <p className="text-sm font-bold text-red-700 dark:text-red-300">Falha na ingestão</p>
                     <p className="text-xs text-red-600 dark:text-red-400 mt-1">{resp.error || 'Erro desconhecido.'}</p>
+                    {/(403|Forbidden|Access|permission|Authorization_RequestDenied)/i.test(resp.error || '') && (
+                        <p className="text-[11px] text-red-500 dark:text-red-400 mt-1">
+                            Falta autorizar o app no Azure: <strong>App registrations → API permissions → Microsoft Graph →
+                            Application → <code>Mail.ReadWrite</code> → Grant admin consent</strong>. É a "senha" do app — sem isso o Graph barra a leitura.
+                        </p>
+                    )}
+                    {/(404|NotFound|ErrorInvalidUser|MailboxNotEnabled|ResourceNotFound)/i.test(resp.error || '') && (
+                        <p className="text-[11px] text-red-500 dark:text-red-400 mt-1">
+                            A caixa <code>xml@spassessoriacontabil.com.br</code> não foi encontrada / não tem caixa de correio habilitada. Confirme que ela existe e tem licença de e-mail.
+                        </p>
+                    )}
                     {(resp.error || '').includes('não configurada') && (
                         <p className="text-[11px] text-red-500 dark:text-red-400 mt-1">
                             Defina a variável <code>XML_INGEST_MAILBOX</code> com a caixa que vai receber os XMLs.
