@@ -76,12 +76,20 @@ export async function listarEmailsComXml(mailbox, { maxMensagens = 25 } = {}) {
       .filter((a) => EXT_XML.test(a.name || '') && a.contentBytes)
       .map((a) => ({ name: a.name, contentBytes: a.contentBytes }));
 
+    // Diagnóstico: o que veio no e-mail que NÃO virou XML importável — pra
+    // enxergar PDF/ZIP/e-mail-encaminhado (itemAttachment) em vez de adivinhar.
+    const anexosInfo = anexos.map((a) => ({
+      name: a.name || '(sem nome)',
+      tipo: String(a['@odata.type'] || '').replace('#microsoft.graph.', '') || '?',
+    }));
+
     out.push({
       id: msg.id,
       subject: msg.subject || '',
       from: msg.from?.emailAddress?.address || null,
       recebidoEm: msg.receivedDateTime || null,
       anexosXml,
+      anexosInfo,
     });
   }
   return out;

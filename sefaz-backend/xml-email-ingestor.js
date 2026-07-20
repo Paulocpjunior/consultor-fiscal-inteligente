@@ -57,6 +57,7 @@ export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, ca
     importadasSaida: 0, importadasEntrada: 0, atualizadas: 0, duplicadas: 0,
     eventos: 0, semDono: 0, erros: 0,
     detalhePorEmpresa: {},
+    anexosNaoXml: [],  // diagnóstico: anexos que não são .xml direto
   };
 
   if (!caixa) {
@@ -77,6 +78,14 @@ export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, ca
   for (const msg of mensagens) {
     r.mensagens++;
     let algumErroNaMsg = false;
+
+    // Diagnóstico: e-mail com anexo mas sem nenhum .xml direto — registra o que
+    // veio (PDF, ZIP, e-mail encaminhado=itemAttachment) pra aparecer no painel.
+    if (msg.anexosXml.length === 0 && (msg.anexosInfo || []).length > 0) {
+      for (const a of msg.anexosInfo) {
+        if (r.anexosNaoXml.length < 20) r.anexosNaoXml.push(`${a.name} [${a.tipo}]`);
+      }
+    }
 
     for (const anexo of msg.anexosXml) {
       r.anexos++;

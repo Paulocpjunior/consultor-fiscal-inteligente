@@ -88,6 +88,18 @@ const CofreEmailPanel: React.FC = () => {
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         caixa: {resp.caixa || '—'} · {resp.empresasMonitoradas ?? 0} empresas monitoradas · {resp.semDono ?? 0} anexos sem cliente monitorado
                     </p>
+                    {(resp.anexosNaoXml?.length ?? 0) > 0 && (
+                        <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                            <p className="font-bold">⚠ E-mail com anexo, mas nenhum <code>.xml</code> direto:</p>
+                            <ul className="list-disc list-inside mt-0.5 font-mono">
+                                {(resp.anexosNaoXml || []).map((a, i) => <li key={i}>{a}</li>)}
+                            </ul>
+                            <p className="mt-1 not-italic">
+                                Se aparecer <code>itemAttachment</code> = e-mail encaminhado (o XML está aninhado — mande o XML como anexo direto, sem encaminhar).
+                                Se for <code>.pdf</code>/<code>.zip</code> = mande o <code>.xml</code> em si (o ZIP vai pela Importação em Massa acima).
+                            </p>
+                        </div>
+                    )}
                     {clientes.filter(([, d]) => d.saida > 0).length > 0 && (
                         <ul className="mt-1 text-xs text-slate-600 dark:text-slate-400 space-y-0.5 max-h-40 overflow-y-auto">
                             {clientes.filter(([, d]) => d.saida > 0).map(([cnpj, d]) => (
