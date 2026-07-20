@@ -33,6 +33,9 @@ function requireCronAuth(req, res, next) {
 router.post('/xml-email-ingest-cron', requireCronAuth, async (req, res) => {
   try {
     const r = await ingerirXmlPorEmail({ capturadoPor: { uid: 'cron', email: 'xml-email-ingest-cron' } });
+    // Falha lógica (ex.: 403 sem Mail.ReadWrite, caixa inexistente) NÃO pode
+    // voltar 200 — senão o cliente a lê como sucesso e o erro some.
+    if (r && r.ok === false) return res.status(502).json(r);
     return res.json(r);
   } catch (e) {
     console.error('[xml-email-ingest-cron] erro:', e.message);
@@ -48,6 +51,7 @@ router.post('/xml-email-ingest', requireAdmin, async (req, res) => {
       maxMensagens: Number(maxMensagens) || undefined,
       capturadoPor: { uid: req.user?.uid || null, email: req.user?.email || 'admin' },
     });
+    if (r && r.ok === false) return res.status(502).json(r);
     return res.json(r);
   } catch (e) {
     console.error('[xml-email-ingest] erro:', e.message);
