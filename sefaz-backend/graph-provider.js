@@ -61,6 +61,15 @@ async function getAccessToken() {
 }
 
 /**
+ * Expõe um access token válido do Graph (client-credentials, cacheado).
+ * Usado por leitores de caixa (ingestão de XML por e-mail) que precisam do
+ * mesmo token app-only do envio.
+ */
+export async function getGraphToken() {
+    return getAccessToken();
+}
+
+/**
  * Envia um e-mail pela caixa de `remetente` (UPN/e-mail de um usuário do tenant).
  * @param {object} p
  * @param {string} p.remetente  e-mail da caixa de origem (ex.: junior@spassessoriacontabil.com.br)

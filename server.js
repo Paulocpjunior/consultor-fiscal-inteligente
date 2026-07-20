@@ -14,6 +14,7 @@ import sefazCapturaResumoCronRouter from './sefaz-backend/captura-resumo-cron.js
 import saeNfceCronRouter from './sefaz-backend/sefaz-sp-nfce-cron.js';
 import distdfeAutxmlRouter from './sefaz-backend/distdfe-autxml-routes.js';
 import coberturaSaidaRouter from './sefaz-backend/cobertura-saida-routes.js';
+import xmlEmailIngestRouter from './sefaz-backend/xml-email-ingestor-routes.js';
 import sefazSyncRouter from './sefaz-backend/sync-routes.js';
 import { fetchAllDocs } from './sefaz-backend/firestore-paginate.js';
 import empresaStatusRouter from './sefaz-backend/empresa-status-routes.js';
@@ -270,6 +271,7 @@ app.use('/api/admin/sefaz', sefazCapturaResumoCronRouter);
 app.use('/api/admin/sefaz', saeNfceCronRouter);
 app.use('/api/admin/sefaz', distdfeAutxmlRouter);
 app.use('/api/admin/sefaz', coberturaSaidaRouter);
+app.use('/api/admin/sefaz', xmlEmailIngestRouter);
 app.use('/api/admin/sefaz', sefazSyncRouter);
 app.use('/api/admin/sefaz', empresaStatusRouter);
 app.use('/api/admin/crons', cronHealthRouter);

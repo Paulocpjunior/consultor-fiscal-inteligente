@@ -443,7 +443,7 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
   });
 }
 
-export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, nsu, capturadoPor }) {
+export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, nsu, capturadoPor, origem = 'sefaz' }) {
   if (!xml) return { status: 'erro', motivo: 'XML vazio' };
 
   const meta = extrairMetadados(xml, schema);
@@ -596,7 +596,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     nsu,
     storagePath,
     xmlHash,
-    origem: 'sefaz',
+    origem,
     // 23/05 campos novos:
     numero: meta.numero,
     serie: meta.serie,

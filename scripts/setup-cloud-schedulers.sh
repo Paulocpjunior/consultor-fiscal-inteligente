@@ -161,6 +161,16 @@ upsert_job \
     "/api/admin/sefaz/autxml-harvest-cron" \
     "Colhe saida NF-e via autXML (DistDFe cert escritorio) e atribui ao cliente"
 
+# Ingestao de XML por E-MAIL — o "cofre" do CFI que substitui o da SIEG. O
+# emissor de cada cliente manda o XML de cada nota emitida pra uma caixa nossa
+# (XML_INGEST_MAILBOX); o CFI le os anexos e importa (saida mod 55 inclusive,
+# que a SEFAZ nao entrega ao emissor). Roda de 30 em 30 min em horario comercial.
+upsert_job \
+    "xml-email-ingest-cron" \
+    "*/30 7-21 * * 1-6" \
+    "/api/admin/sefaz/xml-email-ingest-cron" \
+    "Le XMLs enviados por email (cofre CFI) e importa (saida/entrada)"
+
 # NFSe SP via PORTAL CSV — substitui o WS legacy que retornava erro 1102.
 # 1 login do escritório baixa CSV de TODAS empresas autorizadas no portal.
 upsert_job \

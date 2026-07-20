@@ -150,6 +150,44 @@ export async function coberturaSaida(janelaDias = 90): Promise<CoberturaSaidaRes
     }
 }
 
+export interface XmlEmailIngestResultado {
+    ok: boolean;
+    caixa?: string;
+    empresasMonitoradas?: number;
+    mensagens?: number;
+    anexos?: number;
+    importadasSaida?: number;
+    importadasEntrada?: number;
+    atualizadas?: number;
+    duplicadas?: number;
+    eventos?: number;
+    semDono?: number;
+    erros?: number;
+    detalhePorEmpresa?: Record<string, { nome: string; saida: number; entrada: number; atualizadas: number; duplicadas: number }>;
+    duracaoMs?: number;
+    error?: string;
+}
+
+/**
+ * Dispara a ingestão de XML por e-mail (o "cofre" do CFI): lê os anexos .xml
+ * não-lidos da caixa configurada e importa (saída mod 55 inclusive).
+ */
+export async function ingerirXmlEmail(mailbox?: string): Promise<XmlEmailIngestResultado> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/xml-email-ingest', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mailbox: mailbox || undefined }),
+    });
+    try {
+        const data = await res.json();
+        if (!res.ok) return { ...data, ok: false };
+        return { ...data, ok: true };
+    } catch {
+        return { ok: false, error: `HTTP ${res.status} (resposta não-JSON)` };
+    }
+}
+
 export interface LoteImportResultado {
     ok: boolean;
     recebidos?: number;
