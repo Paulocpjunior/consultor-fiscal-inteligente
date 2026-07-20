@@ -60,15 +60,17 @@ export async function listarEmailsComXml(mailbox, { maxMensagens = 25 } = {}) {
   const out = [];
   for (const msg of lista.value || []) {
     if (!msg.hasAttachments) continue;
-    // Puxa os anexos de arquivo da mensagem (com conteúdo).
+    // Puxa os anexos da mensagem. SEM $select: `@odata.type` não é uma
+    // propriedade selecionável (o Graph rejeita `$select=...,@odata.type`), e
+    // sem ele não dá pra distinguir fileAttachment. A lista já traz contentBytes
+    // dos fileAttachment por padrão.
     let anexos = [];
+    let erroAnexos = null;
     try {
-      const at = await graphGet(
-        `/users/${box}/messages/${msg.id}/attachments?$select=name,contentBytes,@odata.type,size`,
-        token,
-      );
+      const at = await graphGet(`/users/${box}/messages/${msg.id}/attachments`, token);
       anexos = at.value || [];
     } catch (e) {
+      erroAnexos = e.message;
       console.warn(`[graph-mail] falha lendo anexos msg=${msg.id}: ${e.message}`);
     }
     const anexosXml = anexos
@@ -82,6 +84,8 @@ export async function listarEmailsComXml(mailbox, { maxMensagens = 25 } = {}) {
       name: a.name || '(sem nome)',
       tipo: String(a['@odata.type'] || '').replace('#microsoft.graph.', '') || '?',
     }));
+    // Se a leitura dos anexos falhou, não engole: expõe pro painel.
+    if (erroAnexos) anexosInfo.push({ name: `ERRO lendo anexos: ${erroAnexos}`, tipo: 'erro' });
 
     out.push({
       id: msg.id,
