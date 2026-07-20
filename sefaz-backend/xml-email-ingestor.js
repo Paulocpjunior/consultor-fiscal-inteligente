@@ -128,9 +128,11 @@ export async function ingerirXmlPorEmail({ mailbox = null, maxMensagens = 25, ca
       }
     }
 
-    // Só marca processada se não houve erro de import (senão, deixa não-lida
-    // pra reprocessar na próxima rodada — não perde nota por falha transitória).
-    if (!algumErroNaMsg) {
+    // Marca como lida SÓ quando havia .xml e a importação não deu erro. E-mail
+    // com anexo mas SEM .xml (PDF, encaminhado, etc.) fica não-lido de propósito
+    // — assim continua visível (o painel diagnostica o anexo) em vez de sumir
+    // silenciosamente. Falha transitória de import também deixa não-lido p/ retry.
+    if (msg.anexosXml.length > 0 && !algumErroNaMsg) {
       try {
         await marcarProcessada(caixa, msg.id, { moverParaId });
       } catch (e) {
