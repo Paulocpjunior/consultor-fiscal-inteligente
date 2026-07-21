@@ -304,6 +304,24 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                                 .map(j => `${j.familia} ${brl(j.valor)}`).join(' · ')}
                                         </p>
                                     )}
+                                    {(mitProposta.proposta as any).ipiDiag && (
+                                        <details className="mt-2 text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded p-2">
+                                            <summary className="cursor-pointer font-semibold">
+                                                IPI · diagnóstico do estabelecimento (envie print se o SERPRO recusar)
+                                            </summary>
+                                            <div className="mt-1">
+                                                CNPJ estab. enviado: <b className="font-mono">{(mitProposta.proposta as any).ipiDiag.cnpjEstabEnviado || '—'}</b>
+                                                {' '}· fonte: <b>{(mitProposta.proposta as any).ipiDiag.fonteCnpjEstab || '—'}</b>
+                                                {' '}· modelo: {(mitProposta.proposta as any).ipiDiag.modeloPeriodo || '—'}
+                                            </div>
+                                            <pre className="mt-1 whitespace-pre-wrap break-all text-[9px] leading-tight">
+{JSON.stringify({
+    modeloIpiRaw: (mitProposta.proposta as any).ipiDiag.modeloIpiRaw,
+    modeloDadosIniciais: (mitProposta.proposta as any).ipiDiag.modeloDadosIniciais,
+}, null, 1)}
+                                            </pre>
+                                        </details>
+                                    )}
                                     <p className="text-[10px] text-violet-600 dark:text-violet-400 mt-1">
                                         Códigos copiados da apuração {mitProposta.proposta.modeloPeriodo || '—'} desta empresa no MIT.
                                         Confira antes de transmitir — os valores serão declarados à Receita Federal.
