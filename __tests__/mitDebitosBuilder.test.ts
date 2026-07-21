@@ -5,6 +5,8 @@
  * nunca chuta código de receita.
  */
 import {
+    // @ts-expect-error — const de módulo .js
+    FAMILIAS,
     extrairModeloDebitosMit, montarDebitosMit, maiorIdDebitoMit, mesclarDebitosMit,
 } from '../sefaz-backend/mit-debitos-builder';
 
@@ -148,5 +150,12 @@ describe('maiorIdDebitoMit / mesclarDebitosMit', () => {
         expect(out.Irpj.ListaDebitos).toHaveLength(2);
         expect(out.Irpj.ListaDebitos[0].ValorDebito).toBe(10);
         expect(out.Irpj.ListaDebitos[1].ValorDebito).toBe(20);
+    });
+});
+
+describe('FAMILIAS (fonte única — guard contra omitir tributo)', () => {
+    it('inclui IPI (regressão: orchestrator omitia IPI de familiasFaltantes)', () => {
+        expect(FAMILIAS).toEqual(['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI']);
+        expect(FAMILIAS).toContain('IPI');
     });
 });

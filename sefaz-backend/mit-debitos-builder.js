@@ -22,7 +22,7 @@
 //   }
 // ============================================================================
 
-const FAMILIAS = ['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI'];
+export const FAMILIAS = ['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI'];
 
 // Família → grupo oficial do MIT (fallback quando o modelo não traz o grupo).
 const GRUPO_OFICIAL_POR_FAMILIA = {

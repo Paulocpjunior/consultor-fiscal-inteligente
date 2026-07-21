@@ -14,7 +14,7 @@ import { calcularUltimoDiaUtil } from './calendario-obrigacoes.js';
 import { trimestreVencendoEsteMes, calcularVencimentoDarf } from './darf-payload-builder.js';
 import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
 import {
-    extrairModeloDebitosMit, montarDebitosMit, mesclarDebitosMit, maiorIdDebitoMit,
+    extrairModeloDebitosMit, montarDebitosMit, mesclarDebitosMit, maiorIdDebitoMit, FAMILIAS,
 } from './mit-debitos-builder.js';
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs } from './firestore-paginate.js';
@@ -436,7 +436,7 @@ export async function preencherEncerrarMit({
     // (#198 habilitou IPI no builder/normalizer/cruzamento; faltava aqui — sem
     // isto o auto-fill do MIT omitia silenciosamente o IPI de industria).
     const tributos = {};
-    for (const fam of ['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI']) {
+    for (const fam of FAMILIAS) {
         const v = Number(tributosApp?.[fam]);
         tributos[fam] = Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
     }
@@ -493,7 +493,7 @@ export async function preencherEncerrarMit({
     const debitosExistentes = modoCriacao ? null : (alvoPayload.Debitos || alvoPayload.debitos || null);
     const debitosJaLancados = contarDebitosMit(debitosExistentes);
     const normAlvo = modoCriacao ? null : normalizarApuracaoMit(alvo.apuracaoMit);
-    const familiasDeclaradas = ['IRPJ', 'CSLL', 'PIS', 'COFINS']
+    const familiasDeclaradas = FAMILIAS
         .filter((f) => (normAlvo?.lido && normAlvo.tributos[f] > 0));
     if (debitosJaLancados > 0 && !normAlvo?.lido) {
         return {
@@ -502,7 +502,7 @@ export async function preencherEncerrarMit({
                 + 'complemente manualmente no e-CAC para não arriscar duplicar débito.',
         };
     }
-    const familiasFaltantes = ['IRPJ', 'CSLL', 'PIS', 'COFINS']
+    const familiasFaltantes = FAMILIAS
         .filter((f) => tributos[f] > 0 && !familiasDeclaradas.includes(f));
     if (familiasFaltantes.length === 0) {
         return {
