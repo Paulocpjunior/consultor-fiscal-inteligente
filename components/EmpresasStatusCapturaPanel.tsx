@@ -263,6 +263,19 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
 
     const r = data.resumo;
 
+    // Card-filtro: clicar aplica o filtro correspondente na tabela e mostra um
+    // anel de "selecionado". Ajuda o colaborador a atacar a pendência direto.
+    const cardFiltro = (f: FiltroTipo, base: string) => ({
+        className: `${base} cursor-pointer transition hover:shadow-md ${filtro === f && !busca ? 'ring-2 ring-offset-1 ring-slate-500 dark:ring-slate-300' : ''}`,
+        role: 'button' as const,
+        tabIndex: 0,
+        title: 'Filtrar a tabela por esta pendência',
+        onClick: () => { setBusca(''); setFiltro(f); },
+        onKeyDown: (ev: React.KeyboardEvent) => {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setBusca(''); setFiltro(f); }
+        },
+    });
+
     return (
         <div className="space-y-4">
             <div>
@@ -278,25 +291,25 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <div className="text-xs text-blue-700 font-semibold">Total empresas</div>
                     <div className="text-2xl font-bold text-blue-900">{r.total}</div>
                 </div>
-                <div className="bg-green-50 border border-green-300 rounded-lg p-3">
+                <div {...cardFiltro('bloqueadas', 'bg-green-50 border border-green-300 rounded-lg p-3')}>
                     <div className="text-xs text-green-700 font-semibold">Captura NFe OK</div>
                     <div className="text-2xl font-bold text-green-900">{r.capturaNfeOk}</div>
-                    <div className="text-xs text-red-700">{r.capturaNfeBloqueada} bloqueadas</div>
+                    <div className="text-xs text-red-700">{r.capturaNfeBloqueada} bloqueadas ›</div>
                 </div>
-                <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3">
-                    <div className="text-xs text-yellow-700 font-semibold">Cert vencendo &lt;30d / Expirado</div>
+                <div {...cardFiltro('cert-vencendo', 'bg-yellow-50 border border-yellow-300 rounded-lg p-3')}>
+                    <div className="text-xs text-yellow-700 font-semibold">Cert vencendo &lt;30d / Expirado ›</div>
                     <div className="text-2xl font-bold text-yellow-900">{r.certVenceEm30d} / {r.certExpirado}</div>
                 </div>
-                <div className="bg-purple-50 border border-purple-300 rounded-lg p-3">
-                    <div className="text-xs text-purple-700 font-semibold">Sem A1/A3 para captura</div>
+                <div {...cardFiltro('sem-cert', 'bg-purple-50 border border-purple-300 rounded-lg p-3')}>
+                    <div className="text-xs text-purple-700 font-semibold">Sem A1/A3 para captura ›</div>
                     <div className="text-2xl font-bold text-purple-900">{r.semCertNenhum}</div>
                 </div>
-                <div className="bg-orange-50 border border-orange-300 rounded-lg p-3">
+                <div {...cardFiltro('sem-uf', 'bg-orange-50 border border-orange-300 rounded-lg p-3')}>
                     <div className="text-xs text-orange-700 font-semibold">Sem UF cadastrada</div>
                     <div className="text-2xl font-bold text-orange-900">{r.semUf}</div>
                     {isAdmin && r.semUf > 0 && (
                         <button
-                            onClick={handleAutoUf}
+                            onClick={(ev) => { ev.stopPropagation(); handleAutoUf(); }}
                             disabled={autoUfRunning}
                             className="mt-1 text-[10px] px-2 py-0.5 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
                             title="Busca a UF de cada CNPJ na BrasilAPI e preenche em massa"
@@ -314,10 +327,10 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <div className="text-xs text-gray-700 font-semibold">Cert A3</div>
                     <div className="text-2xl font-bold text-gray-900">{r.comCertA3}</div>
                 </div>
-                <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
+                <div {...cardFiltro('sem-procuracao', 'bg-gray-50 border border-gray-300 rounded-lg p-3')}>
                     <div className="text-xs text-gray-700 font-semibold">Procuração e-CAC ativa</div>
                     <div className="text-2xl font-bold text-gray-900">{r.comProcuracaoEcac}</div>
-                    <div className="text-xs text-red-700">{r.semProcuracaoEcac} sem</div>
+                    <div className="text-xs text-red-700">{r.semProcuracaoEcac} sem ›</div>
                 </div>
                 <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
                     <div className="text-xs text-gray-700 font-semibold">NFSe SP autorizado / Nacional ativo</div>
