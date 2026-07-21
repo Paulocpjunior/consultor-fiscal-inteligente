@@ -8,6 +8,7 @@ import {
     listXmlFiles,
     downloadXmlContent,
     syncXmlsFromFolder,
+    uploadXmlToFolder,
     checkCredentials,
 } from './sharepoint-sync.js';
 
@@ -177,6 +178,23 @@ app.post('/api/sharepoint/sync', async (req, res) => {
     } catch (err) {
         console.error('Erro SharePoint (sync):', err?.message);
         return res.status(500).json({ error: err?.message || 'Erro ao sincronizar XMLs.' });
+    }
+});
+
+// ─── SharePoint: Upload de um XML para a pasta do cliente ───────────────────
+app.post('/api/sharepoint/upload', async (req, res) => {
+    const { folderPath, filename, contentBase64, mimeType } = req.body || {};
+    if (!folderPath || !filename || !contentBase64) {
+        return res.status(400).json({ error: 'Campos "folderPath", "filename" e "contentBase64" são obrigatórios.' });
+    }
+    try {
+        const token = await getAccessToken();
+        const buffer = Buffer.from(String(contentBase64), 'base64');
+        const result = await uploadXmlToFolder(token, folderPath, filename, buffer, mimeType || 'application/xml');
+        return res.json({ ok: true, ...result });
+    } catch (err) {
+        console.error('Erro SharePoint (upload):', err?.message);
+        return res.status(500).json({ error: err?.message || 'Erro ao subir arquivo.' });
     }
 });
 

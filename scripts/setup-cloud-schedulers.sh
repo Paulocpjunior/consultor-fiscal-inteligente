@@ -180,6 +180,14 @@ upsert_job \
     "/api/admin/sefaz/xml-email-ingest/alerta-cron" \
     "Alertas do cofre CFI (erros, pendencias, clientes inativos)"
 
+# Arquivo automatico no SharePoint dos XMLs do cofre (Fase 3). Roda deslocado
+# da leitura da caixa pra nao competir. So sobe o que ainda nao foi arquivado.
+upsert_job \
+    "cofre-sharepoint-arquivo-cron" \
+    "20 8-20 * * 1-6" \
+    "/api/admin/sefaz/xml-email-arquivo-sp-cron" \
+    "Arquiva no SharePoint os XMLs capturados pelo cofre CFI"
+
 # NFSe SP via PORTAL CSV — substitui o WS legacy que retornava erro 1102.
 # 1 login do escritório baixa CSV de TODAS empresas autorizadas no portal.
 upsert_job \

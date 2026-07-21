@@ -16,6 +16,7 @@ import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
 import { ingerirXmlPorEmail } from './xml-email-ingestor.js';
+import { arquivarNoSharePoint } from './cofre-sharepoint-arquivo.js';
 import { listarEmailsComXml } from './graph-mail-reader.js';
 import { agregarKpisDeRuns } from './cofre-email-metrics.js';
 import { detectarInatividade, decidirAlertasCofre, montarCorpoAlerta } from './cofre-alerta.js';
@@ -160,6 +161,27 @@ router.post('/xml-email-ingest/alerta-cron', requireCronAuth, async (req, res) =
     return res.json({ ok: true, enviar: decisao.enviar, emailEnviado, para: ALERTA_PARA, alertas: decisao.alertas, assinatura: decisao.assinatura });
   } catch (e) {
     console.error('[xml-email-ingest/alerta-cron]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// Fase 3 — arquivo automático no SharePoint dos XMLs do cofre.
+router.post('/xml-email-arquivo-sp-cron', requireCronAuth, async (req, res) => {
+  try {
+    const r = await arquivarNoSharePoint({});
+    return res.json(r);
+  } catch (e) {
+    console.error('[xml-email-arquivo-sp-cron] erro:', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/xml-email-arquivo-sp', requireAdmin, async (req, res) => {
+  try {
+    const r = await arquivarNoSharePoint({ maxDocs: Number(req.body?.maxDocs) || undefined });
+    return res.json(r);
+  } catch (e) {
+    console.error('[xml-email-arquivo-sp] erro:', e.message);
     return res.status(500).json({ error: e.message });
   }
 });

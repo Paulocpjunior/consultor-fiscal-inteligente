@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { historicoCofre, pendenciasCofre, type CofreHistoricoResultado, type CofrePendenciasResultado } from '../../services/saeNfceService';
+import { historicoCofre, pendenciasCofre, arquivarSharePoint, type CofreHistoricoResultado, type CofrePendenciasResultado, type ArquivoSpResultado } from '../../services/saeNfceService';
 
 /**
  * CofreControlePanel — painel de controle do cofre de e-mail (Fase 1).
@@ -26,6 +26,20 @@ const CofreControlePanel: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [hist, setHist] = useState<CofreHistoricoResultado | null>(null);
     const [pend, setPend] = useState<CofrePendenciasResultado | null>(null);
+    const [spLoading, setSpLoading] = useState(false);
+    const [sp, setSp] = useState<ArquivoSpResultado | null>(null);
+
+    const arquivar = async () => {
+        setSpLoading(true);
+        setSp(null);
+        try {
+            setSp(await arquivarSharePoint());
+        } catch (e) {
+            setSp({ ok: false, error: e instanceof Error ? e.message : String(e) });
+        } finally {
+            setSpLoading(false);
+        }
+    };
 
     const carregar = async () => {
         setLoading(true);
@@ -104,6 +118,32 @@ const CofreControlePanel: React.FC = () => {
                 </div>
             )}
             {pend && !pend.ok && <p className="text-xs text-red-600 dark:text-red-400">Pendências: {pend.error}</p>}
+
+            {/* Arquivo no SharePoint (Fase 3) */}
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                        <p className="text-xs font-bold text-slate-600 dark:text-slate-300">🗄️ Arquivo no SharePoint</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Sobe os XMLs do cofre pra pasta do cliente (automático a cada dia útil). Este botão força agora.</p>
+                    </div>
+                    <button onClick={arquivar} disabled={spLoading}
+                        className="px-3 py-1.5 text-xs font-bold rounded-md bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white whitespace-nowrap">
+                        {spLoading ? 'Arquivando…' : 'Arquivar agora'}
+                    </button>
+                </div>
+                {sp && !sp.ok && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{sp.error || 'Falha ao arquivar.'}</p>}
+                {sp && sp.ok && (
+                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                        ✓ <span className="text-indigo-600 dark:text-indigo-400 font-bold">{sp.arquivados ?? 0}</span> arquivados de {sp.candidatos ?? 0} ·
+                        {' '}{sp.semConfig ?? 0} sem config SharePoint · {sp.erros ?? 0} erros
+                        {(sp.errosDetalhe?.length ?? 0) > 0 && (
+                            <ul className="list-disc list-inside mt-0.5 text-[11px] text-red-500 font-mono">
+                                {(sp.errosDetalhe || []).slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}
+                            </ul>
+                        )}
+                    </p>
+                )}
+            </div>
 
             {/* Histórico das execuções */}
             {hist?.runs && hist.runs.length > 0 && (
