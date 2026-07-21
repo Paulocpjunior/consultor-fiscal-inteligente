@@ -36,6 +36,8 @@ export interface EmpresaStatusCaptura {
     capturaNfseNacionalOk: boolean;
     capturaNfseNacionalVia?: 'cloud-a1' | 'a3-local' | 'inativa' | 'bloqueada';
     motivosBloqueio: string[];
+    /** dadosFiscais completo — semeia o modal "Completar cadastro". */
+    dadosFiscais?: import('../types').EmpresaDadosFiscais;
     responsaveis: { nome: string; papel: 'principal' | 'backup' }[];
     ultimaSyncMs: number | null;
     ultNSU: string | null;
@@ -161,6 +163,23 @@ export async function toggleEmpresaFlag(cnpj: string, campo: FlagCampo, valor: b
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}`, code: data.code, cnpj: data.cnpj, status: res.status };
+    return { ok: true, atualizadas: data.atualizadas };
+}
+
+/** Salva campos do cadastro (dadosFiscais) de uma empresa — merge por
+ *  dot-notation no backend (não clobbera outros campos). Admin-only. */
+export async function salvarEmpresaDadosFiscais(
+    cnpj: string,
+    dadosFiscais: import('../types').EmpresaDadosFiscais,
+): Promise<{ ok: boolean; atualizadas?: number; error?: string }> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/empresa-dados-fiscais', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpj, dadosFiscais }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
     return { ok: true, atualizadas: data.atualizadas };
 }
 
