@@ -206,6 +206,64 @@ export async function syncXmlsFromFolder(accessToken, folderPath, maxConcurrent 
     };
 }
 
+// ─── Upload (arquivo → SharePoint) ──────────────────────────────────────────
+// Sobe um XML capturado pelo CFI para a pasta do cliente no SharePoint (a mesma
+// estrutura que o sync lê). Cria as pastas intermediárias se faltarem.
+
+function encodePath(folderPath) {
+    return folderPath.split('/').map(seg => encodeURIComponent(seg)).join('/');
+}
+
+/** Cria cada segmento da pasta idempotentemente (409 nameAlreadyExists = ok). */
+async function ensureFolderPath(accessToken, siteId, folderPath) {
+    const segments = folderPath.split('/').filter(Boolean);
+    let current = '';
+    for (const seg of segments) {
+        const createUrl = current
+            ? `${GRAPH_BASE}/sites/${siteId}/drive/root:/${encodePath(current)}:/children`
+            : `${GRAPH_BASE}/sites/${siteId}/drive/root/children`;
+        const resp = await fetch(createUrl, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: seg, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' }),
+        });
+        if (!resp.ok && resp.status !== 409) {
+            const err = await resp.text();
+            if (!/nameAlreadyExists/i.test(err)) {
+                throw new Error(`ensureFolder "${seg}" (${resp.status}): ${err.slice(0, 150)}`);
+            }
+        }
+        current = current ? `${current}/${seg}` : seg;
+    }
+}
+
+/**
+ * Sobe um arquivo (Buffer) para `folderPath/filename` no drive do site.
+ * Tenta o PUT direto; se a pasta não existir (404), cria e repete.
+ * @returns {Promise<{id,name,webUrl}>}
+ */
+export async function uploadXmlToFolder(accessToken, folderPath, filename, contentBuffer, mimeType = 'application/xml') {
+    const siteId = await cachedSiteId(accessToken);
+    const putUrl = `${GRAPH_BASE}/sites/${siteId}/drive/root:/${encodePath(folderPath)}/${encodeURIComponent(filename)}:/content`;
+    const doPut = () => fetch(putUrl, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': mimeType },
+        body: contentBuffer,
+    });
+
+    let resp = await doPut();
+    if (resp.status === 404) {
+        await ensureFolderPath(accessToken, siteId, folderPath);
+        resp = await doPut();
+    }
+    if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Upload falhou (${resp.status}): ${err.slice(0, 200)}`);
+    }
+    const data = await resp.json();
+    return { id: data.id, name: data.name, webUrl: data.webUrl };
+}
+
 /**
  * Check whether the required SharePoint/Graph credentials are present.
  */

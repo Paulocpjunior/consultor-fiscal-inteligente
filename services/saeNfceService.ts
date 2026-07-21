@@ -241,6 +241,37 @@ export async function pendenciasCofre(): Promise<CofrePendenciasResultado> {
     }
 }
 
+export interface ArquivoSpResultado {
+    ok: boolean;
+    empresasComConfig?: number;
+    candidatos?: number;
+    arquivados?: number;
+    semConfig?: number;
+    semStorage?: number;
+    semCaminho?: number;
+    erros?: number;
+    errosDetalhe?: string[];
+    porEmpresa?: Record<string, { arquivados: number }>;
+    error?: string;
+}
+
+/** Arquiva no SharePoint os XMLs do cofre ainda não arquivados (Fase 3). */
+export async function arquivarSharePoint(maxDocs?: number): Promise<ArquivoSpResultado> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/xml-email-arquivo-sp', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maxDocs: maxDocs || undefined }),
+    });
+    try {
+        const data = await res.json();
+        if (!res.ok) return { ...data, ok: false };
+        return { ...data, ok: true };
+    } catch {
+        return { ok: false, error: `HTTP ${res.status} (resposta não-JSON)` };
+    }
+}
+
 export interface LoteImportResultado {
     ok: boolean;
     recebidos?: number;
