@@ -1,22 +1,24 @@
 export interface ModeloDebitosMit {
-    codigoPorFamilia: Record<string, { codigo: string; grupo: string }>;
+    // cnpjEstabelecimento só vem para IPI (apurado por estabelecimento).
+    codigoPorFamilia: Record<string, { codigo: string; grupo: string; cnpjEstabelecimento?: string }>;
     totalDebitos: number;
 }
 
 export interface MontagemDebitosMit {
     ok: boolean;
     erros: string[];
-    debitos: Record<string, { ListaDebitos: Array<{ IdDebito: number; CodigoDebito: string; ValorDebito: number }> }> | null;
-    mapeamento: Array<{ familia: string; codigo: string; grupo: string; valor: number }>;
+    // CnpjEstabelecimento presente apenas nos débitos de IPI.
+    debitos: Record<string, { ListaDebitos: Array<{ IdDebito: number; CodigoDebito: string; ValorDebito: number; CnpjEstabelecimento?: string }> }> | null;
+    mapeamento: Array<{ familia: string; codigo: string; grupo: string; valor: number; cnpjEstabelecimento?: string }>;
     totalProposto: number;
 }
 
 export function extrairModeloDebitosMit(apuracaoModelo: any): ModeloDebitosMit;
 
 export function montarDebitosMit(
-    tributosApp: { IRPJ?: number; CSLL?: number; PIS?: number; COFINS?: number } | null | undefined,
+    tributosApp: { IRPJ?: number; CSLL?: number; PIS?: number; COFINS?: number; IPI?: number } | null | undefined,
     modelo: ModeloDebitosMit | null | undefined,
-    opts?: { apenasFamilias?: string[]; idInicial?: number },
+    opts?: { apenasFamilias?: string[]; idInicial?: number; empresaCnpj?: string },
 ): MontagemDebitosMit;
 
 export function maiorIdDebitoMit(debitos: any): number;
