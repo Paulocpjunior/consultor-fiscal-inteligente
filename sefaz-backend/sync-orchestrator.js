@@ -17,6 +17,14 @@ import { importarXmlSefaz, registrarErroSefaz } from './xml-importer.js';
 import { carregarFlagsEmpresa, CNPJ_ESCRITORIO } from './empresa-flags.js';
 
 const LOCK_TTL_MS = 60 * 60 * 1000; // 1 hora
+// Cooldown do "Recapturar do zero" (resetNSU / botão ⟲ 90d). Zerar o cursor
+// re-solicita à SEFAZ TODO o histórico a partir do NSU 0 — e repetir isso é
+// EXATAMENTE o gatilho do cStat 656 "Consumo Indevido". Esperar 1h não resolve
+// se a cada tentativa o admin re-dispara o 90d: o próprio reset re-arma o 656.
+// Além disso a SAÍDA própria (mod 55) nunca vem por DistDFe (Rejeição 641), então
+// recapturar 90d NÃO traz nota nova de saída. Travamos reset repetido nesta janela.
+// (caso JOTASUL 07/2026: 656 "persistindo >1h" era reset em loop, não bloqueio da SEFAZ.)
+const RESET_NSU_COOLDOWN_MS = 3 * 60 * 60 * 1000; // 3 horas
 // Cada página DistDFe traz até ~50 docZip. Com 5 páginas, uma empresa com
 // backlog grande (ex.: primeira captura de ~90 dias) baixava só ~250 docs e
 // precisava de VÁRIAS janelas de 1h (lock) pra alcançar o maxNSU — na prática
@@ -127,6 +135,17 @@ async function carregaEstadoNSU(cnpj) {
   };
 }
 
+// Instante (ms) do último "Recapturar do zero" (resetNSU) desta empresa, pro
+// cooldown anti-656. null se nunca resetou.
+async function ultimoResetNsuMs(cnpj) {
+  const cnpjNum = String(cnpj).replace(/\D/g, '');
+  const snap = await fa().firestore().collection('sefaz_state').doc(cnpjNum).get();
+  if (!snap.exists) return null;
+  const v = snap.data()?.ultimoResetNsuEm;
+  if (!v) return null;
+  return v?.toMillis ? v.toMillis() : (typeof v === 'number' ? v : Date.parse(v) || null);
+}
+
 // Persiste o cursor/estado. Se `lockToken` for passado, faz numa transação que
 // só grava se o lock AINDA for nosso (mesmo token) — assim um run que passou do
 // TTL de 1h e teve o lock reassumido por outro cron NÃO sobrescreve o cursor/
@@ -172,6 +191,27 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
       ok: false,
       motivo: `UF não cadastrada para a empresa. Acesse a tela de configuração e preencha dadosFiscais.uf (ex: SP).`,
     };
+  }
+
+  // Guard-rail anti-656 do "Recapturar do zero" (⟲ 90d). Repetir o resetNSU é o
+  // que arma o cStat 656 — e como o admin bypassa o lock de 1h, sem isto ele
+  // entra num loop de reset→656→reset. Bloqueia reset dentro do cooldown, com
+  // mensagem que aponta o caminho certo (Sincronizar incremental / cofre p/ saída).
+  if (resetNSU) {
+    const ultReset = await ultimoResetNsuMs(cnpjNum);
+    if (ultReset && (Date.now() - ultReset) < RESET_NSU_COOLDOWN_MS) {
+      const minAtras = Math.floor((Date.now() - ultReset) / 60000);
+      const minFalta = Math.ceil((RESET_NSU_COOLDOWN_MS - (Date.now() - ultReset)) / 60000);
+      return {
+        ok: false,
+        resetBloqueado: true,
+        motivo: `"Recapturar do zero" (90d) já foi feito há ${minAtras} min nesta empresa. `
+          + `A SEFAZ já reenviou todo o histórico — repetir o 90d agora dispara o cStat 656 `
+          + `(Consumo Indevido) e NÃO traz nota nova. Aguarde ${minFalta} min OU use o `
+          + `"↓ Sincronizar SEFAZ" normal (incremental). Obs.: a saída própria (mod 55) não vem `
+          + `por este canal (Rejeição 641) — para saída use o cofre de e-mail.`,
+      };
+    }
   }
 
   const lockToken = randomUUID();
@@ -420,6 +460,9 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
       tentativasTravado: cursorInfo.travado?.tentativas || null,
       ultimoColaborador: capturadoPor?.email || null,
       fonteUltimaSync: capturadoPor?.fonte || 'desconhecido',
+      // Carimba o reset pro cooldown anti-656 (bloqueia repetir o 90d em loop).
+      // Grava mesmo quando o reset acabou em 656 — foi ele que armou o 656.
+      ...(resetNSU ? { ultimoResetNsuEm: fa().firestore.FieldValue.serverTimestamp() } : {}),
     }, lockToken);
     if (persistResult && persistResult.persistido === false) {
       // Run passou do TTL de 1h e outro cron reassumiu o lock desta empresa —
@@ -462,7 +505,12 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
     if (rateLimited) {
       return {
         ok: false, rateLimited: true,
-        motivo: 'SEFAZ retornou cStat 656 (Consumo Indevido) — aguarde 1h.',
+        motivo: resetNSU
+          ? 'SEFAZ retornou cStat 656 (Consumo Indevido) durante o "Recapturar do zero". '
+            + 'O reset (NSU 0) é o que dispara o 656 — NÃO repita o 90d; aguarde ~1h e use o '
+            + 'Sincronizar normal (incremental). Saída própria não vem por aqui — use o cofre de e-mail.'
+          : 'SEFAZ retornou cStat 656 (Consumo Indevido) — aguarde ~1h e sincronize de novo (incremental). '
+            + 'Evite "Recapturar do zero" repetido: o reset re-arma o 656.',
         novosXmls, duplicados, erros, ultNSU, paginas: pagina,
         maxNSU: maxNSUFinal, pendenciaNSU,
         cienciasEnfileiradas: resumosParaCiencia.length,
