@@ -9,6 +9,7 @@
 # ── Captura fiscal ──────────────────────────────────────────────────────────
 #   sefaz-cron-noturno              0 2 * * 1-5        NFe DistDFe (entrada/saída), noturno
 #   sefaz-xml-capture               0 6,12,18 * * 1-5  NFe DistDFe intra-dia
+#   manifesto-ciencia-cron          0 5,11,17 * * 1-5  Ciência da Operação (destrava XML completo de entrada)
 #   autxml-harvest-cron             15 2,10,16 * * 1-5 Saída NF-e via autXML (cert do escritório)
 #   xml-email-ingest-cron           */30 7-21 * * 1-6  Cofre CFI: lê a caixa e importa (saída mod 55)
 #   sae-nfce-cron-noturno           30 2 * * 1-5       Saída NFC-e (SAE-NFC-e SP), noturno
@@ -63,6 +64,8 @@ upsert_job() {
     local SCHEDULE="$2"          # ex: "0 2 * * 1-5"
     local PATH_URL="$3"          # ex: "/api/admin/sefaz/sync-cron"
     local DESCRICAO="$4"
+    local BODY="${5:-}"          # corpo POST; ex: '{"dryRun":false}'
+    [ -z "$BODY" ] && BODY='{}'  # default '{}'
 
     local URL="${SERVICE_URL}${PATH_URL}"
     echo ""
@@ -83,7 +86,7 @@ upsert_job() {
             --uri="$URL" \
             --http-method=POST \
             --update-headers="x-cron-secret=${CRON_SECRET},Content-Type=application/json" \
-            --message-body='{}' \
+            --message-body="$BODY" \
             --description="$DESCRICAO" \
             --oidc-service-account-email="$SA_EMAIL" \
             --attempt-deadline=900s \
@@ -99,7 +102,7 @@ upsert_job() {
             --uri="$URL" \
             --http-method=POST \
             --headers="x-cron-secret=${CRON_SECRET},Content-Type=application/json" \
-            --message-body='{}' \
+            --message-body="$BODY" \
             --description="$DESCRICAO" \
             --oidc-service-account-email="$SA_EMAIL" \
             --attempt-deadline=900s \
@@ -210,6 +213,17 @@ upsert_job \
     "20 8-20 * * 1-6" \
     "/api/admin/sefaz/xml-email-arquivo-sp-cron" \
     "Arquiva no SharePoint os XMLs capturados pelo cofre CFI"
+
+# Manifestacao automatica (Ciencia da Operacao) das NF-e de ENTRADA — o "CDO"
+# que a SIEG faz. Destrava o XML COMPLETO das entradas (a SEFAZ so libera apos
+# manifestacao). Roda 1h ANTES das capturas de 6/12/18h, com dryRun=false pra
+# manifestar de verdade (a rota vem com dryRun=true por seguranca).
+upsert_job \
+    "manifesto-ciencia-cron" \
+    "0 5,11,17 * * 1-5" \
+    "/api/admin/sefaz/manifest-cron" \
+    "Ciencia da Operacao automatica nas NF-e de entrada (destrava XML completo)" \
+    '{"dryRun":false,"tipo":"ciencia","limit":500}'
 
 # NFSe SP via PORTAL CSV — substitui o WS legacy que retornava erro 1102.
 # 1 login do escritório baixa CSV de TODAS empresas autorizadas no portal.
