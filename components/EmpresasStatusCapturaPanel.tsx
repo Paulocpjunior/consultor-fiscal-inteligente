@@ -19,6 +19,7 @@ import {
     toggleEmpresaFlag,
     autoPreencherUf,
     resetLockSefaz,
+    salvarEmpresaDadosFiscais,
     exportarEmpresasCsv,
     formatarErroAcaoStatusCaptura,
     formatarMotivoBloqueioCaptura,
@@ -27,6 +28,7 @@ import {
     type FlagCampo,
 } from '../services/empresaStatusCapturaService';
 import { captureFromSefaz, type DfeDocProcessado } from '../services/dfeCaptureService';
+import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import type { User } from '../types';
 
 interface Props {
@@ -71,6 +73,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [autoUfRunning, setAutoUfRunning] = useState(false);
     const [capturandoCnpj, setCapturandoCnpj] = useState<string | null>(null);
     const [resetandoLockCnpj, setResetandoLockCnpj] = useState<string | null>(null);
+    const [empresaEditando, setEmpresaEditando] = useState<EmpresaStatusCaptura | null>(null);
     const [feedback, setFeedback] = useState<{ tipo: 'sucesso' | 'erro'; msg: string } | null>(null);
 
     const handleResetLock = async (emp: EmpresaStatusCaptura) => {
@@ -553,6 +556,13 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                 >
                                                     {resetandoLockCnpj === e.cnpj ? '⏳…' : '🔓 Reset lock'}
                                                 </button>
+                                                <button
+                                                    onClick={() => setEmpresaEditando(e)}
+                                                    className="px-2 py-1 text-[10px] font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded transition-colors whitespace-nowrap"
+                                                    title="Preencher UF, CCM, IE e demais campos do cadastro sem sair desta tela"
+                                                >
+                                                    ✏️ Completar cadastro
+                                                </button>
                                             </div>
                                             {ultimaCaptura[e.cnpj] && (
                                                 <div className={`mt-1 text-[10px] font-mono break-words ${
@@ -602,6 +612,29 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     💡 Você é admin — pode ligar/desligar <strong>Procuração e-CAC</strong> e <strong>NFSe Nacional</strong> clicando nos botões.
                     Para NFe DistDFe, use <strong>A1 próprio/mesma raiz CNPJ</strong> ou <strong>agente A3 local</strong>. Pra subir certificado A1, vá em <strong>Empresas Monitoradas → coluna Certificado</strong>.
                 </div>
+            )}
+
+            {/* Ponte "Completar cadastro": corrige a pendência (UF, CCM, IE…)
+                sem sair da tela. Semeia com o dadosFiscais atual e salva por
+                merge (não clobbera outros campos). */}
+            {empresaEditando && (
+                <EmpresaDadosFiscaisModal
+                    isOpen={true}
+                    empresaNome={empresaEditando.nome}
+                    valoresAtuais={empresaEditando.dadosFiscais}
+                    onClose={() => setEmpresaEditando(null)}
+                    onSave={async (dados) => {
+                        const r = await salvarEmpresaDadosFiscais(empresaEditando.cnpj, dados);
+                        if (r.ok) {
+                            setFeedback({ tipo: 'sucesso', msg: `${empresaEditando.nome}: cadastro salvo.` });
+                            setEmpresaEditando(null);
+                            await load();
+                        } else {
+                            setFeedback({ tipo: 'erro', msg: r.error || 'Falha ao salvar o cadastro.' });
+                            throw new Error(r.error || 'falha ao salvar');
+                        }
+                    }}
+                />
             )}
         </div>
     );

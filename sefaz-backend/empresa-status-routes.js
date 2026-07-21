@@ -115,6 +115,8 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                     nfseSpAutorizadoEm: toMillis(d.nfseSpAutorizadoEm),
                     nfseNacionalDfeAtivo: d.nfseNacionalDfeAtivo === true,
                     procuracaoEcacAtiva: d.procuracaoEcacAtiva === true,
+                    // dadosFiscais completo — semeia o modal "Completar cadastro".
+                    dadosFiscais: d.dadosFiscais || {},
                 });
             });
         }
@@ -366,6 +368,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 procuracaoEcacAtiva: procuracaoInferida,
                 procuracaoEcacFlagBruta: emp.procuracaoEcacAtiva,
                 ccmSp: emp.ccmSp,
+                dadosFiscais: emp.dadosFiscais || {},
                 nfseSpAutorizado: !!emp.nfseSpAutorizadoEm,
                 nfseNacionalDfeAtivo: emp.nfseNacionalDfeAtivo,
                 capturarSefaz: emp.capturarSefaz,
@@ -462,6 +465,66 @@ router.post('/empresa-toggle-flag', requireAuth, express.json(), async (req, res
         return res.json({ ok: true, cnpj: cnpjLimpo, campo, valor, atualizadas });
     } catch (e) {
         console.error('[empresa-toggle-flag] erro:', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── Salvar campos do cadastro (dadosFiscais) de uma empresa ───────────────
+// Ponte "Completar cadastro" do painel Status por Empresa: grava os campos que
+// faltam (UF, CCM, IE, etc.) direto da linha da pendência. Merge por
+// dot-notation — NUNCA clobbera o dadosFiscais inteiro (só os campos enviados).
+const CAMPOS_DADOS_FISCAIS = new Set([
+    'inscricaoEstadual', 'uf', 'codMunIBGE', 'ccmSp', 'logradouro', 'numero',
+    'complemento', 'bairro', 'cep', 'email', 'telefone', 'perfilEFD', 'indAtividade',
+]);
+
+router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores' });
+        }
+        const { cnpj, dadosFiscais } = req.body || {};
+        const cnpjLimpo = limparCnpj(cnpj);
+        if (cnpjLimpo.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });
+        if (!dadosFiscais || typeof dadosFiscais !== 'object') {
+            return res.status(400).json({ error: 'dadosFiscais é obrigatório (objeto)' });
+        }
+
+        // Monta o update dot-notation só com campos permitidos e definidos.
+        const update = {};
+        for (const [k, v] of Object.entries(dadosFiscais)) {
+            if (!CAMPOS_DADOS_FISCAIS.has(k)) continue;
+            let val = typeof v === 'string' ? v.trim() : v;
+            if (k === 'uf' && typeof val === 'string') val = val.toUpperCase();
+            if (k === 'ccmSp' && typeof val === 'string') val = val.replace(/\D/g, '');
+            update[`dadosFiscais.${k}`] = val === '' ? admin.firestore.FieldValue.delete() : val;
+        }
+        // Espelha ccmSp/uf no top-level (compat com leitura antiga).
+        if ('ccmSp' in dadosFiscais) update.ccmSp = update['dadosFiscais.ccmSp'];
+        if ('uf' in dadosFiscais) update.uf = update['dadosFiscais.uf'];
+        if (Object.keys(update).length === 0) {
+            return res.status(400).json({ error: 'Nenhum campo válido para salvar' });
+        }
+        update.dadosFiscaisAlteradoEm = admin.firestore.FieldValue.serverTimestamp();
+        update.dadosFiscaisAlteradoPor = req.user.email;
+
+        const db = fa().firestore();
+        const encontrados = await buscarEmpresaDocsPorCnpj(db, cnpjLimpo);
+        let atualizadas = 0;
+        for (const { doc } of encontrados) {
+            await doc.ref.update(update);
+            atualizadas++;
+        }
+        if (!atualizadas) {
+            return res.status(404).json({
+                error: 'Não localizei esta empresa no cadastro atual.',
+                code: 'EMPRESA_NAO_ENCONTRADA', cnpj: cnpjLimpo,
+            });
+        }
+        console.log(`[empresa-dados-fiscais] cnpj=${cnpjLimpo} campos=${Object.keys(update).length} por=${req.user.email}`);
+        return res.json({ ok: true, cnpj: cnpjLimpo, atualizadas });
+    } catch (e) {
+        console.error('[empresa-dados-fiscais] erro:', e);
         return res.status(500).json({ error: e.message });
     }
 });
