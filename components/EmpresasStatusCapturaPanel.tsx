@@ -340,7 +340,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
 
             {/* Filtros */}
             <div className="flex flex-wrap gap-2 items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                <select value={filtro} onChange={e => setFiltro(e.target.value as FiltroTipo)} className="px-3 py-1.5 text-sm border rounded bg-white">
+                <select value={filtro} onChange={e => setFiltro(e.target.value as FiltroTipo)} className="px-3 py-1.5 text-sm border rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-slate-600">
                     <option value="bloqueadas">🚨 Bloqueadas (qualquer motivo)</option>
                     <option value="sem-uf">Sem UF cadastrada (dadosFiscais.uf)</option>
                     <option value="sem-cert">Sem certificado A1/A3</option>
@@ -355,16 +355,16 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 <input
                     type="text" placeholder="Buscar por nome ou CNPJ…"
                     value={busca} onChange={e => setBusca(e.target.value)}
-                    className="px-3 py-1.5 text-sm border rounded bg-white min-w-[240px]"
+                    className="px-3 py-1.5 text-sm border rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-slate-600 placeholder-gray-400 dark:placeholder-slate-500 min-w-[240px]"
                 />
-                <span className="text-sm text-gray-600 ml-2">
+                <span className="text-sm text-gray-600 dark:text-gray-300 ml-2">
                     {empresasFiltradas.length} de {data.empresas.length}
                     {busca && filtro !== 'todas' && (
                         <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-400">(filtro de status ignorado durante busca)</span>
                     )}
                 </span>
                 <div className="ml-auto flex gap-2">
-                    <button onClick={load} className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 rounded">↻ Atualizar</button>
+                    <button onClick={load} className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-800 dark:text-gray-100 rounded">↻ Atualizar</button>
                     <button onClick={handleExportCsv} className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700">⬇ Exportar CSV</button>
                 </div>
             </div>
