@@ -61,6 +61,16 @@ function lerCodigo(item) {
     return c != null && String(c).trim() !== '' ? String(c).trim() : null;
 }
 
+// CNPJ do estabelecimento do item de débito (IPI é apurado POR estabelecimento —
+// o SERPRO exige CnpjEstabelecimento em cada Debitos.Ipi.ListaDebitos[i]). Só
+// dígitos; null se não vier.
+function lerCnpjEstab(item) {
+    const c = item?.CnpjEstabelecimento ?? item?.cnpjEstabelecimento
+        ?? item?.CNPJEstabelecimento ?? item?.cnpjEstab ?? null;
+    const digs = String(c ?? '').replace(/\D/g, '');
+    return digs.length === 14 ? digs : null;
+}
+
 function familiaPorCodigo(codigo) {
     const c = String(codigo || '').replace(/\D/g, '').slice(0, 4);
     return CODIGO_FAMILIA[c] || null;
@@ -106,10 +116,15 @@ export function extrairModeloDebitosMit(apuracaoModelo) {
                     if (!familia || !FAMILIAS.includes(familia)) continue;
                     // Primeiro código da família vence (débito principal).
                     if (!out.codigoPorFamilia[familia]) {
-                        out.codigoPorFamilia[familia] = {
+                        const ref = {
                             codigo,
                             grupo: GRUPO_MIT_FAMILIA[grupo] ? grupo : GRUPO_OFICIAL_POR_FAMILIA[familia],
                         };
+                        // IPI carrega o CnpjEstabelecimento do item-modelo (SERPRO exige
+                        // por estabelecimento). Só anexa quando o modelo trouxer.
+                        const cnpjEstab = lerCnpjEstab(item);
+                        if (cnpjEstab) ref.cnpjEstabelecimento = cnpjEstab;
+                        out.codigoPorFamilia[familia] = ref;
                     }
                 }
             }
@@ -124,10 +139,12 @@ export function extrairModeloDebitosMit(apuracaoModelo) {
  *
  * @param {{IRPJ?:number,CSLL?:number,PIS?:number,COFINS?:number,IPI?:number}} tributosApp
  * @param {{codigoPorFamilia: Record<string,{codigo:string,grupo:string}>}} modelo
- * @param {{apenasFamilias?: string[], idInicial?: number}} [opts]
+ * @param {{apenasFamilias?: string[], idInicial?: number, empresaCnpj?: string}} [opts]
  *        apenasFamilias — monta só estas famílias (modo COMPLEMENTO: famílias
  *        que já têm débito no MIT ficam de fora e são preservadas).
  *        idInicial — primeiro IdDebito (continua a numeração dos existentes).
+ *        empresaCnpj — CNPJ da empresa (fallback do CnpjEstabelecimento do IPI
+ *        quando o mês-modelo não trouxe; IPI é apurado por estabelecimento).
  * @returns {{
  *   ok: boolean,
  *   erros: string[],
@@ -143,6 +160,8 @@ export function montarDebitosMit(tributosApp, modelo, opts = {}) {
     let totalProposto = 0;
     let idDebito = Math.max(1, Number(opts.idInicial) || 1);
     const familiasAlvo = Array.isArray(opts.apenasFamilias) ? opts.apenasFamilias : null;
+    const empresaCnpjDigs = String(opts.empresaCnpj ?? '').replace(/\D/g, '');
+    const empresaCnpjFallback = empresaCnpjDigs.length === 14 ? empresaCnpjDigs : null;
 
     const codigoPorFamilia = modelo?.codigoPorFamilia || {};
 
@@ -166,13 +185,31 @@ export function montarDebitosMit(tributosApp, modelo, opts = {}) {
         }
 
         const grupo = ref.grupo || GRUPO_OFICIAL_POR_FAMILIA[familia];
-        if (!debitos[grupo]) debitos[grupo] = { ListaDebitos: [] };
-        debitos[grupo].ListaDebitos.push({
+        const item = {
             IdDebito: idDebito++,
             CodigoDebito: ref.codigo,
             ValorDebito: valor,
-        });
-        mapeamento.push({ familia, codigo: ref.codigo, grupo, valor });
+        };
+        // IPI é apurado POR estabelecimento: o SERPRO recusa o encerramento com
+        // "Debitos.Ipi.ListaDebitos[i].CnpjEstabelecimento: campo obrigatório não
+        // informado" se o item não trouxer o CNPJ. Usa o do mês-modelo; senão o
+        // CNPJ da empresa (matriz). Sem nenhum dos dois → falha clara, não envia
+        // um débito que o SERPRO vai rejeitar.
+        if (familia === 'IPI') {
+            const cnpjEstab = ref.cnpjEstabelecimento || empresaCnpjFallback;
+            if (!cnpjEstab) {
+                erros.push(
+                    'IPI: o SERPRO exige o CNPJ do estabelecimento em cada débito de IPI, '
+                    + 'mas ele não veio no mês-modelo nem foi possível usar o CNPJ da empresa. '
+                    + 'Confira o cadastro da empresa (CNPJ) e tente de novo.'
+                );
+                continue;
+            }
+            item.CnpjEstabelecimento = cnpjEstab;
+        }
+        if (!debitos[grupo]) debitos[grupo] = { ListaDebitos: [] };
+        debitos[grupo].ListaDebitos.push(item);
+        mapeamento.push({ familia, codigo: ref.codigo, grupo, valor, ...(item.CnpjEstabelecimento ? { cnpjEstabelecimento: item.CnpjEstabelecimento } : {}) });
         totalProposto = round2(totalProposto + valor);
     }
 

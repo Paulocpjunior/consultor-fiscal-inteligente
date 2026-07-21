@@ -585,6 +585,9 @@ export async function preencherEncerrarMit({
     const montagem = montarDebitosMit(tributos, modelo, {
         apenasFamilias: familiasFaltantes,
         idInicial: maiorIdDebitoMit(debitosExistentes) + 1,
+        // IPI exige CnpjEstabelecimento por débito; fallback no CNPJ da empresa
+        // quando o mês-modelo não trouxe.
+        empresaCnpj,
     });
     const di = alvoPayload.DadosIniciais || {};
     const proposta = {
