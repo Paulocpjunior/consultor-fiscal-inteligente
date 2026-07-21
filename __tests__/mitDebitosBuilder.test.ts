@@ -153,6 +153,60 @@ describe('maiorIdDebitoMit / mesclarDebitosMit', () => {
     });
 });
 
+describe('IPI exige CnpjEstabelecimento no débito (SERPRO ENCAPURACAO314)', () => {
+    // Regressão EXPERTE 67.267.435/0001-78, 2026-06: IPI entrava na proposta mas
+    // o SERPRO recusava com "Debitos.Ipi.ListaDebitos[i].CnpjEstabelecimento:
+    // campo obrigatório não informado". IPI é apurado POR estabelecimento.
+    const MODELO_COM_IPI = extrairModeloDebitosMit({
+        Debitos: {
+            Irpj: { ListaDebitos: [{ CodigoDebito: '236201', ValorDebito: 100 }] },
+            Ipi: { ListaDebitos: [{ CodigoDebito: '512301', ValorDebito: 50, CnpjEstabelecimento: '67267435000178' }] },
+        },
+    });
+
+    it('extrai o CnpjEstabelecimento do IPI no modelo', () => {
+        expect(MODELO_COM_IPI.codigoPorFamilia.IPI).toEqual({
+            codigo: '512301', grupo: 'Ipi', cnpjEstabelecimento: '67267435000178',
+        });
+    });
+
+    it('usa o CnpjEstabelecimento do modelo no débito de IPI', () => {
+        const r = montarDebitosMit({ IPI: 7352.9 }, MODELO_COM_IPI);
+        expect(r.ok).toBe(true);
+        expect(r.debitos!.Ipi.ListaDebitos[0]).toEqual({
+            IdDebito: 1, CodigoDebito: '512301', ValorDebito: 7352.9, CnpjEstabelecimento: '67267435000178',
+        });
+        expect(r.mapeamento[0].cnpjEstabelecimento).toBe('67267435000178');
+    });
+
+    it('sem CnpjEstabelecimento no modelo → usa o CNPJ da empresa (matriz)', () => {
+        const modeloSemCnpj = extrairModeloDebitosMit({
+            Debitos: { Ipi: { ListaDebitos: [{ CodigoDebito: '512301', ValorDebito: 50 }] } },
+        });
+        expect(modeloSemCnpj.codigoPorFamilia.IPI.cnpjEstabelecimento).toBeUndefined();
+        const r = montarDebitosMit({ IPI: 7352.9 }, modeloSemCnpj, { empresaCnpj: '67.267.435/0001-78' });
+        expect(r.ok).toBe(true);
+        expect(r.debitos!.Ipi.ListaDebitos[0].CnpjEstabelecimento).toBe('67267435000178');
+    });
+
+    it('IPI sem CnpjEstabelecimento no modelo E sem CNPJ da empresa → falha clara', () => {
+        const modeloSemCnpj = extrairModeloDebitosMit({
+            Debitos: { Ipi: { ListaDebitos: [{ CodigoDebito: '512301', ValorDebito: 50 }] } },
+        });
+        const r = montarDebitosMit({ IPI: 7352.9 }, modeloSemCnpj);
+        expect(r.ok).toBe(false);
+        expect(r.erros.join(' ')).toMatch(/IPI/);
+        expect(r.erros.join(' ')).toMatch(/CNPJ do estabelecimento/i);
+        expect(r.debitos).toBeNull();
+    });
+
+    it('IRPJ/CSLL/PIS/COFINS NÃO recebem CnpjEstabelecimento', () => {
+        const r = montarDebitosMit({ IRPJ: 100 }, MODELO_COM_IPI, { empresaCnpj: '67267435000178' });
+        expect(r.ok).toBe(true);
+        expect(r.debitos!.Irpj.ListaDebitos[0]).not.toHaveProperty('CnpjEstabelecimento');
+    });
+});
+
 describe('FAMILIAS (fonte única — guard contra omitir tributo)', () => {
     it('inclui IPI (regressão: orchestrator omitia IPI de familiasFaltantes)', () => {
         expect(FAMILIAS).toEqual(['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI']);
