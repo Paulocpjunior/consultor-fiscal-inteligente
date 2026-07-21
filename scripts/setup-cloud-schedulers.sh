@@ -1,12 +1,35 @@
 #!/bin/bash
 # ============================================================================
 # scripts/setup-cloud-schedulers.sh
-# Cria/atualiza os 3 Cloud Scheduler jobs que disparam as capturas noturnas:
-#   1. sefaz-cron-noturno              — NFe DistDFe (entrada/saída)
-#   2. nfsesp-cron-noturno             — NFSe SP (tomados + prestados)
-#   3. nfse-nacional-dfe-cron-noturno  — NFSe Nacional ADN (DFe)
 #
-# Idempotente: tenta `update`, se job não existe faz `create`.
+# Fonte ÚNICA e idempotente dos Cloud Scheduler jobs. Rodar este script
+# (cria os que faltam, atualiza os existentes) mantém o agendamento igual a
+# esta lista. Todos POST com header x-cron-secret, TZ America/Sao_Paulo.
+#
+# ── Captura fiscal ──────────────────────────────────────────────────────────
+#   sefaz-cron-noturno              0 2 * * 1-5        NFe DistDFe (entrada/saída), noturno
+#   sefaz-xml-capture               0 6,12,18 * * 1-5  NFe DistDFe intra-dia
+#   autxml-harvest-cron             15 2,10,16 * * 1-5 Saída NF-e via autXML (cert do escritório)
+#   xml-email-ingest-cron           */30 7-21 * * 1-6  Cofre CFI: lê a caixa e importa (saída mod 55)
+#   sae-nfce-cron-noturno           30 2 * * 1-5       Saída NFC-e (SAE-NFC-e SP), noturno
+#   sae-nfce-cron-intradia          0 7,13,19 * * 1-5  Saída NFC-e (SAE-NFC-e SP), intra-dia
+#   nfsesp-cron-noturno             0 3 * * 1-5        NFSe SP (WS)
+#   nfsesp-portal-cron-noturno      30 3 * * 1-5       NFSe SP (portal CSV)
+#   nfse-nacional-dfe-cron-noturno  0 4 * * 1-5        NFSe Nacional ADN (DFe)
+# ── Arquivo / SharePoint ────────────────────────────────────────────────────
+#   sharepoint-auto-sync            0 8 * * 1-5        Importa XMLs das pastas SharePoint
+#   cofre-sharepoint-arquivo-cron   20 8-20 * * 1-6    Arquiva no SharePoint os XMLs do cofre CFI
+# ── Tarefas / vencimentos ───────────────────────────────────────────────────
+#   tarefas-cron-mensal             20 3 1 * *         Gera obrigações mensais (dia 1)
+#   vencimentos-cron-diario         0 8 * * 1-5        Avisa tarefas vencendo (email + in-app)
+# ── Alertas / saúde ─────────────────────────────────────────────────────────
+#   cofre-email-alerta-cron         0 9,18 * * 1-5     Cofre CFI: erros, pendências, clientes inativos
+#   crons-health-alerta             10 9,15,21 * * 1-5 Avisa quando algum cron falha/trava
+#   cert-alerta-cron-diario         0 7 * * 1-5        Avisa certificado vencendo
+#   sharepoint-cron-alertas         30 8 * * 1-5       Avisa documentos novos no SharePoint
+#   captura-resumo-diario           0 9 * * 1-5        Resumo diário das capturas via procuração e-CAC
+#
+# Idempotente: `describe` → se existe `update`, senão `create`.
 #
 # Pré-requisitos:
 #   - gcloud autenticado (gcloud auth login)
