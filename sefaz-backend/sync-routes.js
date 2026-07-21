@@ -96,6 +96,9 @@ router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
       capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: resetNSU ? 'manual-reset-nsu' : 'manual' },
     });
     if (!result.ok && result.locked) return res.status(409).json(result);
+    // resetBloqueado (cooldown do 90d) NÃO é rate-limit da SEFAZ — é guard-rail
+    // nosso. Manda 409 (não 429) pra UI não rotular como "aguarde 1h cStat 656".
+    if (!result.ok && result.resetBloqueado) return res.status(409).json(result);
     if (!result.ok && result.rateLimited) return res.status(429).json(result);
     if (!result.ok) return res.status(500).json(result);
     console.log(`[sync-one] fim — empresa=${empresaId} novos=${result.novosXmls} dup=${result.duplicados} err=${result.erros}`);

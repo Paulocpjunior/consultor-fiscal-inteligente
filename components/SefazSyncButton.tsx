@@ -51,7 +51,14 @@ const SefazSyncButton: React.FC<Props> = ({ empresa, currentUser, onSyncComplete
     useEffect(() => { setAtivoAtual(empresa.capturarSefaz !== false); }, [empresa.capturarSefaz]);
 
     const handleSync = async (resetNSU = false) => {
-        if (resetNSU && !confirm(`Recapturar ${empresa.nome} do início da janela SEFAZ?\n\nIsso zera o cursor NSU e reprocessa os DF-e disponíveis dos últimos ~90 dias. Use quando um XML não apareceu após ajuste de certificado.`)) return;
+        if (resetNSU && !confirm(
+            `Recapturar ${empresa.nome} do início da janela SEFAZ?\n\n`
+            + `Isso zera o cursor NSU e re-solicita ~90 dias de DF-e (ENTRADA + eventos).\n\n`
+            + `⚠ Use no MÁXIMO 1x e só após ajuste de certificado. Repetir o "90d" é o que dispara `
+            + `o cStat 656 (Consumo Indevido) — e aí esperar 1h não resolve, porque cada reset re-arma o bloqueio. `
+            + `Há um cooldown de 3h por empresa.\n\n`
+            + `A SAÍDA própria (mod 55) NÃO vem por este canal (Rejeição 641) — para saída use o cofre de e-mail.`,
+        )) return;
         setRunning(true);
         setResult(null);
         try {
