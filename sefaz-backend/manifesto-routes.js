@@ -20,7 +20,9 @@ function fa() {
 }
 
 function authCron(req, res, next) {
-  const segredo = req.headers['x-sefaz-cron-secret'];
+  // Aceita os dois headers: x-sefaz-cron-secret (histórico) e x-cron-secret
+  // (padrão dos demais crons) — assim o mesmo setup-cloud-schedulers serve.
+  const segredo = req.headers['x-sefaz-cron-secret'] || req.headers['x-cron-secret'];
   if (!secretsMatch(segredo, CRON_SECRET)) {
     return res.status(403).json({ erro: 'Cron secret inválido' });
   }
