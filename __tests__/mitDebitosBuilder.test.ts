@@ -153,43 +153,50 @@ describe('maiorIdDebitoMit / mesclarDebitosMit', () => {
     });
 });
 
-describe('IPI exige CnpjEstabelecimento no débito (SERPRO ENCAPURACAO314)', () => {
-    // Regressão EXPERTE 67.267.435/0001-78, 2026-06: IPI entrava na proposta mas
-    // o SERPRO recusava com "Debitos.Ipi.ListaDebitos[i].CnpjEstabelecimento:
-    // campo obrigatório não informado". IPI é apurado POR estabelecimento.
+describe('IPI exige CnpjEstabelecimento (sufixo ordem+DV) no débito (SERPRO ENCAPURACAO314)', () => {
+    // Regressão EXPERTE 67.267.435/0001-78, 2026-06. O mês-modelo (202603) revelou
+    // que o MIT grava CnpjEstabelecimento como o SUFIXO de 6 dígitos (ordem+DV):
+    // "000178" — não o CNPJ completo. Mandar os 14 dígitos → SERPRO "valor inválido".
     const MODELO_COM_IPI = extrairModeloDebitosMit({
         Debitos: {
             Irpj: { ListaDebitos: [{ CodigoDebito: '236201', ValorDebito: 100 }] },
-            Ipi: { ListaDebitos: [{ CodigoDebito: '512301', ValorDebito: 50, CnpjEstabelecimento: '67267435000178' }] },
+            Ipi: { ListaDebitos: [{ CodigoDebito: '512301', ValorDebito: 50, CnpjEstabelecimento: '000178' }] },
         },
     });
 
-    it('extrai o CnpjEstabelecimento do IPI no modelo', () => {
+    it('extrai o sufixo do estabelecimento do IPI no modelo', () => {
         expect(MODELO_COM_IPI.codigoPorFamilia.IPI).toEqual({
-            codigo: '512301', grupo: 'Ipi', cnpjEstabelecimento: '67267435000178',
+            codigo: '512301', grupo: 'Ipi', cnpjEstabelecimento: '000178',
         });
     });
 
-    it('usa o CnpjEstabelecimento do modelo no débito de IPI', () => {
+    it('normaliza CNPJ completo (14 díg) do modelo para o sufixo de 6', () => {
+        const m = extrairModeloDebitosMit({
+            Debitos: { Ipi: { ListaDebitos: [{ CodigoDebito: '512301', ValorDebito: 1, CnpjEstabelecimento: '67267435000178' }] } },
+        });
+        expect(m.codigoPorFamilia.IPI.cnpjEstabelecimento).toBe('000178');
+    });
+
+    it('usa o sufixo do estabelecimento do modelo no débito de IPI', () => {
         const r = montarDebitosMit({ IPI: 7352.9 }, MODELO_COM_IPI);
         expect(r.ok).toBe(true);
         expect(r.debitos!.Ipi.ListaDebitos[0]).toEqual({
-            IdDebito: 1, CodigoDebito: '512301', ValorDebito: 7352.9, CnpjEstabelecimento: '67267435000178',
+            IdDebito: 1, CodigoDebito: '512301', ValorDebito: 7352.9, CnpjEstabelecimento: '000178',
         });
-        expect(r.mapeamento[0].cnpjEstabelecimento).toBe('67267435000178');
+        expect(r.mapeamento[0].cnpjEstabelecimento).toBe('000178');
     });
 
-    it('sem CnpjEstabelecimento no modelo → usa o CNPJ da empresa (matriz)', () => {
+    it('sem estabelecimento no modelo → usa o sufixo (ordem+DV) do CNPJ da empresa', () => {
         const modeloSemCnpj = extrairModeloDebitosMit({
             Debitos: { Ipi: { ListaDebitos: [{ CodigoDebito: '512301', ValorDebito: 50 }] } },
         });
         expect(modeloSemCnpj.codigoPorFamilia.IPI.cnpjEstabelecimento).toBeUndefined();
         const r = montarDebitosMit({ IPI: 7352.9 }, modeloSemCnpj, { empresaCnpj: '67.267.435/0001-78' });
         expect(r.ok).toBe(true);
-        expect(r.debitos!.Ipi.ListaDebitos[0].CnpjEstabelecimento).toBe('67267435000178');
+        expect(r.debitos!.Ipi.ListaDebitos[0].CnpjEstabelecimento).toBe('000178');
     });
 
-    it('IPI sem CnpjEstabelecimento no modelo E sem CNPJ da empresa → falha clara', () => {
+    it('IPI sem estabelecimento no modelo E sem CNPJ da empresa → falha clara', () => {
         const modeloSemCnpj = extrairModeloDebitosMit({
             Debitos: { Ipi: { ListaDebitos: [{ CodigoDebito: '512301', ValorDebito: 50 }] } },
         });
