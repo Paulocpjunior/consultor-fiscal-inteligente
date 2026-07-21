@@ -538,6 +538,11 @@ export async function preencherEncerrarMit({
     let modelo = null;
     let modeloPeriodo = null;
     let modeloDadosIniciais = null;
+    // Bloco Ipi cru do mês-modelo — diagnóstico do IPI (Experte 06/2026): o SERPRO
+    // recusa o CnpjEstabelecimento que enviamos ("valor inválido"). Precisamos ver
+    // de onde o mês-modelo tira o estabelecimento do IPI (item de débito? nível de
+    // estabelecimento? DadosIniciais?) pra mandar o valor exato que ele aceita.
+    let modeloIpiRaw = null;
     for (const cand of candidatos.slice(0, 4)) {
         try {
             const det = await provider.consultarApuracaoMitPorId({ empresaCnpj, idApuracao: cand.id });
@@ -551,6 +556,8 @@ export async function preencherEncerrarMit({
             // removidos automaticamente pelo retry do provider).
             const payloadModelo = pickDadosApuracaoMit(det?.apuracaoMit);
             modeloDadosIniciais = payloadModelo?.DadosIniciais || payloadModelo?.dadosIniciais || null;
+            const debitosModelo = payloadModelo?.Debitos || payloadModelo?.debitos || null;
+            modeloIpiRaw = debitosModelo?.Ipi || debitosModelo?.ipi || debitosModelo?.IPI || null;
             // Modelo ideal cobre todas as famílias FALTANTES; senão tenta o próximo.
             if (familiasFaltantes.every((f) => m.codigoPorFamilia[f])) break;
         } catch (e) {
@@ -607,6 +614,17 @@ export async function preencherEncerrarMit({
             cpfResponsavel: di.ResponsavelApuracao?.CpfResponsavel
                 ?? di.responsavelApuracao?.cpfResponsavel ?? null,
         },
+        // Diagnóstico do IPI (Experte 06/2026): mostra o que o mês-modelo carrega
+        // pro estabelecimento do IPI e o que estamos enviando — pra achar a fonte
+        // certa do CnpjEstabelecimento que o SERPRO aceita. Só quando há IPI.
+        ipiDiag: (Number(tributos.IPI) > 0) ? {
+            cnpjEstabEnviado: montagem.debitos?.Ipi?.ListaDebitos?.[0]?.CnpjEstabelecimento || null,
+            fonteCnpjEstab: modelo?.codigoPorFamilia?.IPI?.cnpjEstabelecimento
+                ? 'modelo' : (montagem.debitos?.Ipi?.ListaDebitos?.[0]?.CnpjEstabelecimento ? 'fallback-cnpj-empresa' : 'ausente'),
+            modeloPeriodo,
+            modeloIpiRaw,
+            modeloDadosIniciais,
+        } : null,
     };
     if (!montagem.ok) {
         return { ok: false, etapa: 'montagem', motivo: montagem.erros.join(' '), proposta };
