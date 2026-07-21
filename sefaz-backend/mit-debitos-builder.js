@@ -61,14 +61,22 @@ function lerCodigo(item) {
     return c != null && String(c).trim() !== '' ? String(c).trim() : null;
 }
 
-// CNPJ do estabelecimento do item de débito (IPI é apurado POR estabelecimento —
-// o SERPRO exige CnpjEstabelecimento em cada Debitos.Ipi.ListaDebitos[i]). Só
-// dígitos; null se não vier.
+// Estabelecimento do item de débito de IPI (apurado POR estabelecimento). O MIT
+// grava/espera o SUFIXO de 6 dígitos = ordem(4) + DV(2), NÃO o CNPJ completo.
+// Ex.: matriz 67.267.435/0001-78 → "000178" (comprovado no mês-modelo da Experte:
+// CnpjEstabelecimento:"000178"). Enviar os 14 dígitos → SERPRO "valor inválido".
+// Aceita 6 (usa como está) ou 14 (extrai os 6 finais); senão null.
+export function sufixoEstabelecimento(valor) {
+    const digs = String(valor ?? '').replace(/\D/g, '');
+    if (digs.length === 6) return digs;
+    if (digs.length === 14) return digs.slice(-6);
+    return null;
+}
+
 function lerCnpjEstab(item) {
     const c = item?.CnpjEstabelecimento ?? item?.cnpjEstabelecimento
         ?? item?.CNPJEstabelecimento ?? item?.cnpjEstab ?? null;
-    const digs = String(c ?? '').replace(/\D/g, '');
-    return digs.length === 14 ? digs : null;
+    return sufixoEstabelecimento(c);
 }
 
 function familiaPorCodigo(codigo) {
@@ -160,8 +168,9 @@ export function montarDebitosMit(tributosApp, modelo, opts = {}) {
     let totalProposto = 0;
     let idDebito = Math.max(1, Number(opts.idInicial) || 1);
     const familiasAlvo = Array.isArray(opts.apenasFamilias) ? opts.apenasFamilias : null;
-    const empresaCnpjDigs = String(opts.empresaCnpj ?? '').replace(/\D/g, '');
-    const empresaCnpjFallback = empresaCnpjDigs.length === 14 ? empresaCnpjDigs : null;
+    // Fallback do estabelecimento do IPI: sufixo de 6 dígitos (ordem+DV) do CNPJ
+    // da empresa — mesmo formato que o MIT grava (NÃO o CNPJ completo).
+    const empresaCnpjFallback = sufixoEstabelecimento(opts.empresaCnpj);
 
     const codigoPorFamilia = modelo?.codigoPorFamilia || {};
 
