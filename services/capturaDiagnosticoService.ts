@@ -36,6 +36,9 @@ export interface CapturaStatus {
     docsUltimos7d: number | null;
     /** Top motivos de falha da última execução (hoje só NFSe SP envia). */
     topFalhas?: { executadoEm: string | null; top: Array<{ motivo: string; quantidade: number }> } | null;
+    /** Total histórico de docs desta fonte (hoje só NFSe Nacional envia) —
+     *  separa "nunca capturou" (elegibilidade) de "capturava e parou" (quebra). */
+    docsTotalHistorico?: number | null;
 }
 
 export interface CapturaDiagnostico {
@@ -184,7 +187,9 @@ export async function forcarCapturaAgora(fonte: 'sefazNfe' | 'nfseSp' | 'nfseNac
     const token = await getToken();
     const paths: Record<typeof fonte, string> = {
         sefazNfe: '/api/admin/sefaz/sync-cron-now',
-        nfseSp: '/api/admin/sefaz/nfsesp-cron-now',
+        // 22/07: NFSe SP aponta pro trilho PORTAL CSV — o WS legado (nfsesp-
+        // cron-now) devolve 1102 pra tudo e foi aposentado.
+        nfseSp: '/api/admin/sefaz/nfsesp-portal-cron-now',
         nfseNacional: '/api/admin/nfse-nacional-dfe/sync-cron-now',
     };
     const res = await fetch(paths[fonte], {

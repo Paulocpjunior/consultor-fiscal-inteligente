@@ -1000,7 +1000,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       logSefaz, logNfseSp, logNfseNac,
       stateSefaz, stateNfseSp, stateNfseNac,
       docsNfe, docsNfseSp, docsNfseNac,
-      falhasNfseSp,
+      falhasNfseSp, docsNfseNacTotal,
     ] = await Promise.all([
       ultimoLog('sefaz_cron_logs'),
       // 22/07: trilho oficial NFSe SP = PORTAL CSV; o WS legado (1102) foi pausado.
@@ -1024,6 +1024,16 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
         { tipo: 'nfseNacional', campo: 'capturadoEm', desde: new Date(seteDias) },
       ]),
       topFalhasNfseSp(),
+      // Total HISTÓRICO de docs Nacional — separa "nunca capturou nada"
+      // (elegibilidade errada: municípios não aderentes ao ADN, ex. SP capital
+      // usa o portal próprio) de "capturava e parou" (quebra real de cursor/cert).
+      (async () => {
+        try {
+          const snap = await db.collection('documentos_fiscais')
+            .where('tipo', '==', 'nfseNacional').count().get();
+          return snap.data().count;
+        } catch (e) { return null; }
+      })(),
     ]);
 
     return res.json({
@@ -1053,6 +1063,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           ultimoCron: logNfseNac,
           state: stateNfseNac,
           docsUltimos7d: docsNfseNac,
+          docsTotalHistorico: docsNfseNacTotal,
         },
       },
     });
