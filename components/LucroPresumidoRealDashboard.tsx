@@ -427,9 +427,20 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         setCnpjError('');
         setLoading(true);
         try {
+            // Prevenção "Sem UF": semeia dadosFiscais.uf da BrasilAPI já na
+            // criação — sem isto a empresa nasce com a captura NFe bloqueada
+            // e vira pendência no Status por Empresa. Falha da API não bloqueia
+            // o cadastro (a UF pode ser preenchida depois no modal).
+            let dadosFiscais: { uf?: string } | undefined;
+            try {
+                const info = await fetchCnpjFromBrasilAPI(newCnpj.replace(/\D/g, ''));
+                const uf = (info?.uf || '').trim().toUpperCase();
+                if (/^[A-Z]{2}$/.test(uf)) dadosFiscais = { uf };
+            } catch { /* segue sem UF; modal cobre depois */ }
             await lucroPresumidoService.saveEmpresa({
                 nome: newName, cnpj: newCnpj, cnaePrincipal: { codigo: newCnae, descricao: '' },
-                regimePadrao: newRegime, fichaFinanceira: []
+                regimePadrao: newRegime, fichaFinanceira: [],
+                ...(dadosFiscais ? { dadosFiscais, uf: dadosFiscais.uf } : {}),
             }, currentUser.id);
             await loadEmpresas(); setView('list'); setNewName(''); setNewCnpj(''); setNewCnae('');
         } catch (err: any) {

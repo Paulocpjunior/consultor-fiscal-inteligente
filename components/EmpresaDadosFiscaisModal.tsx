@@ -33,19 +33,41 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
     const [dados, setDados] = useState<EmpresaDadosFiscais>(valoresAtuais || {});
     const [salvando, setSalvando] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
+    // Prevenção: UF vazia bloqueia a captura NFe — o 1º clique em Salvar mostra
+    // o aviso; o 2º confirma que é intencional (evita pendência silenciosa).
+    const [avisoUfVazia, setAvisoUfVazia] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
             setDados(valoresAtuais || {});
             setErro(null);
+            setAvisoUfVazia(false);
         }
     }, [isOpen, valoresAtuais]);
 
     const handleField = (key: keyof EmpresaDadosFiscais, value: string) => {
         setDados(prev => ({ ...prev, [key]: value || undefined }));
+        if (key === 'uf') setAvisoUfVazia(false);
     };
 
     const handleSave = async () => {
+        // Validações de prevenção ANTES de chamar o backend.
+        const ufNorm = (dados.uf || '').trim().toUpperCase();
+        if (ufNorm && !UFS.includes(ufNorm)) {
+            setErro(`UF inválida: "${dados.uf}". Use a sigla de 2 letras (ex.: SP).`);
+            return;
+        }
+        const ccmDigits = (dados.ccmSp || '').replace(/\D/g, '');
+        if ((dados.ccmSp || '').trim() && (ccmDigits.length < 6 || ccmDigits.length > 11)) {
+            setErro(`CCM inválido: "${dados.ccmSp}". A Inscrição Municipal de SP tem 8 dígitos (só números).`);
+            return;
+        }
+        if (!ufNorm && !avisoUfVazia) {
+            setAvisoUfVazia(true);
+            setErro('⚠ UF em branco: a captura automática de NF-e desta empresa fica BLOQUEADA até preencher. '
+                + 'Preencha a UF (ex.: SP) ou clique em Salvar de novo para gravar mesmo assim.');
+            return;
+        }
         setSalvando(true);
         setErro(null);
         try {
