@@ -543,6 +543,7 @@ export async function preencherEncerrarMit({
     // de onde o mês-modelo tira o estabelecimento do IPI (item de débito? nível de
     // estabelecimento? DadosIniciais?) pra mandar o valor exato que ele aceita.
     let modeloIpiRaw = null;
+    let modeloDebitosNumeracao = null;
     for (const cand of candidatos.slice(0, 4)) {
         try {
             const det = await provider.consultarApuracaoMitPorId({ empresaCnpj, idApuracao: cand.id });
@@ -558,6 +559,13 @@ export async function preencherEncerrarMit({
             modeloDadosIniciais = payloadModelo?.DadosIniciais || payloadModelo?.dadosIniciais || null;
             const debitosModelo = payloadModelo?.Debitos || payloadModelo?.debitos || null;
             modeloIpiRaw = debitosModelo?.Ipi || debitosModelo?.ipi || debitosModelo?.IPI || null;
+            // Numeração/ordem de TODOS os débitos do modelo (IdDebito por grupo) —
+            // referência da sequência que o SERPRO aceita.
+            modeloDebitosNumeracao = debitosModelo ? Object.fromEntries(
+                Object.entries(debitosModelo).map(([g, b]) => [
+                    g, (b?.ListaDebitos || b?.listaDebitos || []).map((d) => ({ IdDebito: d?.IdDebito ?? d?.idDebito, CodigoDebito: d?.CodigoDebito ?? d?.codigoDebito })),
+                ]),
+            ) : null;
             // Modelo ideal cobre todas as famílias FALTANTES; senão tenta o próximo.
             if (familiasFaltantes.every((f) => m.codigoPorFamilia[f])) break;
         } catch (e) {
@@ -623,6 +631,13 @@ export async function preencherEncerrarMit({
                 ? 'modelo' : (montagem.debitos?.Ipi?.ListaDebitos?.[0]?.CnpjEstabelecimento ? 'fallback-cnpj-empresa' : 'ausente'),
             modeloPeriodo,
             modeloIpiRaw,
+            modeloDebitosNumeracao,
+            // Numeração que ESTAMOS enviando (IdDebito por grupo) — comparar com o modelo.
+            debitosEnviadosNumeracao: montagem.debitos ? Object.fromEntries(
+                Object.entries(montagem.debitos).map(([g, b]) => [
+                    g, (b?.ListaDebitos || []).map((d) => ({ IdDebito: d.IdDebito, CodigoDebito: d.CodigoDebito })),
+                ]),
+            ) : null,
             modeloDadosIniciais,
         } : null,
     };

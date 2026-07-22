@@ -317,6 +317,8 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                             <pre className="mt-1 whitespace-pre-wrap break-all text-[9px] leading-tight">
 {JSON.stringify({
     modeloIpiRaw: (mitProposta.proposta as any).ipiDiag.modeloIpiRaw,
+    modeloDebitosNumeracao: (mitProposta.proposta as any).ipiDiag.modeloDebitosNumeracao,
+    debitosEnviadosNumeracao: (mitProposta.proposta as any).ipiDiag.debitosEnviadosNumeracao,
     modeloDadosIniciais: (mitProposta.proposta as any).ipiDiag.modeloDadosIniciais,
 }, null, 1)}
                                             </pre>

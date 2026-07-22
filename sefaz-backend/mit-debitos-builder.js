@@ -24,6 +24,13 @@
 
 export const FAMILIAS = ['IRPJ', 'CSLL', 'PIS', 'COFINS', 'IPI'];
 
+// Ordem canônica dos débitos no MIT (define o IdDebito sequencial). O SERPRO
+// valida a sequência de IdDebito na ordem canônica dos grupos, NÃO na ordem em
+// que mandamos. Numerar o IPI por último (IPI=5) dava "sequência de débitos
+// inválida; sequencial 5" (Experte 06/2026) — o mês-modelo mostrou o IPI como
+// IdDebito=3, logo o IPI vem ANTES de PIS/COFINS: IRPJ, CSLL, IPI, PIS, COFINS.
+export const ORDEM_DEBITOS_MIT = ['IRPJ', 'CSLL', 'IPI', 'PIS', 'COFINS'];
+
 // Família → grupo oficial do MIT (fallback quando o modelo não traz o grupo).
 const GRUPO_OFICIAL_POR_FAMILIA = {
     IRPJ: 'Irpj',
@@ -174,7 +181,9 @@ export function montarDebitosMit(tributosApp, modelo, opts = {}) {
 
     const codigoPorFamilia = modelo?.codigoPorFamilia || {};
 
-    for (const familia of FAMILIAS) {
+    // Itera na ordem canônica do MIT (IPI entre CSLL e PIS) pra o IdDebito
+    // sequencial bater com o que o SERPRO espera.
+    for (const familia of ORDEM_DEBITOS_MIT) {
         if (familiasAlvo && !familiasAlvo.includes(familia)) continue;
         const valor = round2(tributosApp?.[familia]);
         if (valor < 0) {
