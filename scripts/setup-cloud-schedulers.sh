@@ -10,6 +10,7 @@
 #   sefaz-cron-noturno              0 2 * * 1-5        NFe DistDFe (entrada/saída), noturno
 #   sefaz-xml-capture               0 6,12,18 * * 1-5  NFe DistDFe intra-dia
 #   manifesto-ciencia-cron          15 */2 * * *       Ciência da Operação (destrava XML completo de entrada)
+#   sefaz-drenagem-cron             0 7,10,13,16,19 * * 1-5  Drena pendência NSU (FLANACAR-class)
 #   autxml-harvest-cron             15 2,10,16 * * 1-5 Saída NF-e via autXML (cert do escritório)
 #   xml-email-ingest-cron           */30 7-21 * * 1-6  Cofre CFI: lê a caixa e importa (saída mod 55)
 #   sae-nfce-cron-noturno           30 2 * * 1-5       Saída NFC-e (SAE-NFC-e SP), noturno
@@ -119,6 +120,16 @@ upsert_job \
     "0 2 * * 1-5" \
     "/api/admin/sefaz/sync-cron" \
     "Captura NFe DistDFe (entrada/saída) todas empresas elegíveis"
+
+# DRENAGEM DE PENDÊNCIA NSU (caso FLANACAR: 15.586 na fila, só o noturno
+# drenava ~2.500/noite). Roda de dia nas janelas 07/10/13/16/19h BRT úteis;
+# descobre sozinho as empresas com pendenciaNSU>0 (piores primeiro, top 10)
+# e PARA no primeiro 656. Lock de 1h evita colisão com noturno/manual.
+upsert_job \
+    "sefaz-drenagem-cron" \
+    "0 7,10,13,16,19 * * 1-5" \
+    "/api/admin/sefaz/sync-drenagem-cron" \
+    "Drena empresas com pendencia NSU na SEFAZ (piores primeiro, para em 656)"
 
 # APOSENTADO 22/07/2026: nfsesp-cron-noturno (webservice legado) — o WS da
 # prefeitura devolve erro 1102 "Mensagem XML de Pedido do serviço sem

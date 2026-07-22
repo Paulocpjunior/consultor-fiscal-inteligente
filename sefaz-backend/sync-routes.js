@@ -285,6 +285,82 @@ router.post('/sync-targeted', requireCronAuth, express.json(), async (req, res) 
   });
 });
 
+// ============================================================================
+// /sync-drenagem-cron — drena empresas com PENDÊNCIA NSU (fila na SEFAZ).
+// Caso FLANACAR 22/07: 15.586 NSUs na fila e só o cron noturno drenando
+// (~2.500/noite = ~1 semana). Este cron roda de dia, descobre sozinho as
+// empresas com pendenciaNSU>0 (piores primeiro), sincroniza até MAX_ALVOS
+// por janela e PARA no primeiro 656 (não insiste contra rate-limit).
+// O lock de 1h por CNPJ já evita colisão com o noturno e entre janelas.
+// ============================================================================
+router.post('/sync-drenagem-cron', requireCronAuth, async (req, res) => {
+  const fonte = req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-drenagem-cron';
+  await withCronHeartbeat({ collection: 'sefaz_cron_logs', fonte, res }, async () => {
+    const MAX_ALVOS = 10;
+    const SLEEP_MS = 60_000;
+    const db = fa().firestore();
+
+    // Descobre pendências direto do sefaz_state (piores primeiro).
+    const stSnap = await db.collection('sefaz_state').get();
+    const pendentes = [];
+    stSnap.forEach((doc) => {
+      const d = doc.data() || {};
+      const pend = Number(d.pendenciaNSU) || 0;
+      if (pend > 0) pendentes.push({ cnpj: doc.id, pendenciaNSU: pend });
+    });
+    pendentes.sort((a, b) => b.pendenciaNSU - a.pendenciaNSU);
+    const alvos = pendentes.slice(0, MAX_ALVOS);
+    console.log(`[sync-drenagem] ${pendentes.length} empresa(s) com pendência; drenando top ${alvos.length}`);
+
+    let sucessos = 0, falhas = 0, totalNovos = 0, parouEm656 = false;
+    const errosResumo = [];
+    for (let i = 0; i < alvos.length && !parouEm656; i++) {
+      const alvo = alvos[i];
+      // Resolve empresaId pelo CNPJ (mesma busca do sync-targeted).
+      let emp = null;
+      for (const col of ['simples_empresas', 'lucro_empresas']) {
+        const snap = await db.collection(col).where('cnpj', '==', alvo.cnpj).limit(1).get();
+        if (!snap.empty) { emp = { id: snap.docs[0].id, cnpj: alvo.cnpj }; break; }
+      }
+      if (!emp) {
+        // cnpj formatado no doc — fallback lento só quando necessário
+        for (const col of ['simples_empresas', 'lucro_empresas']) {
+          const todos = await db.collection(col).get();
+          for (const d of todos.docs) {
+            if (String(d.data().cnpj || '').replace(/\D/g, '') === alvo.cnpj) { emp = { id: d.id, cnpj: alvo.cnpj }; break; }
+          }
+          if (emp) break;
+        }
+      }
+      if (!emp) { console.warn(`[sync-drenagem] ${alvo.cnpj} sem cadastro — pulando`); continue; }
+
+      try {
+        const r = await sincronizarEmpresa({
+          empresaId: emp.id, empresaCnpj: emp.cnpj,
+          capturadoPor: { uid: 'cron-system', email: 'cron@spassessoriacontabil', fonte: 'drenagem' },
+        });
+        if (r.ok) { sucessos++; totalNovos += (r.novosXmls || 0); }
+        else if (r.locked) { /* noturno/manual acabou de rodar — ok, pula */ }
+        else {
+          falhas++;
+          if (errosResumo.length < 20) errosResumo.push({ cnpj: emp.cnpj, motivo: String(r.motivo || '').slice(0, 200) });
+          if (r.rateLimited) { parouEm656 = true; console.warn('[sync-drenagem] 656 — parando a janela'); }
+        }
+      } catch (e) {
+        falhas++;
+        if (errosResumo.length < 20) errosResumo.push({ cnpj: emp.cnpj, motivo: `[EXCECAO] ${String(e.message || '').slice(0, 200)}` });
+      }
+      if (i < alvos.length - 1 && !parouEm656) await new Promise((r2) => setTimeout(r2, SLEEP_MS));
+    }
+
+    return {
+      totalEmpresas: alvos.length,
+      comPendencia: pendentes.length,
+      sucessos, falhas, totalNovos, parouEm656, errosResumo,
+    };
+  });
+});
+
 async function listarEmpresasParaCron() {
   const db = fa().firestore();
   const empresas = [];
