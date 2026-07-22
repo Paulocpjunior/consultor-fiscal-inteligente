@@ -164,6 +164,11 @@ const RECEITAS_GUIA_SEPARADA = new Set([
     '2089', '0220', '2372', '6012',           // IRPJ/CSLL trimestrais
     '2362', '2484',                           // IRPJ/CSLL estimativa mensal
     '8109', '2172', '6912', '5856',           // PIS/COFINS
+    // IPI mensal — vence dia 25 do mês seguinte (Lei 11.933/2009), igual
+    // PIS/COFINS (caso Experte 06/2026: 5123 sumia das guias). FICAM FORA:
+    // 5110 (cigarros, vence dia 10 — regra própria) e 0676 (IPI-importação,
+    // pago no desembaraço) — esses seguem no DARF unificado.
+    '5123', '0668', '1097',                   // IPI demais produtos/bebidas/automóveis
 ]);
 const RECEITAS_TRIMESTRAIS_QUOTA = new Set(['2089', '0220', '2372', '6012']);
 const DARF_VALOR_MINIMO = 10;       // R$ — DARF inferior a R$10 não pode ser emitido (RFB)
