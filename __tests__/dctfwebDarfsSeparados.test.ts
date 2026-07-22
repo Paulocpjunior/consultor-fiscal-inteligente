@@ -245,6 +245,64 @@ describe('gerarDarfsSeparados — quotas trimestrais (Lei 9.430 art. 5º)', () =
     });
 });
 
+describe('gerarDarfsSeparados — IPI mensal (caso Experte 06/2026)', () => {
+    beforeEach(() => mockInvokeIntegraContador.mockReset());
+
+    // Regressão: IPI 5123-01 transmitido no MIT aparecia na declaração mas
+    // SUMIA das guias separadas (RECEITAS_GUIA_SEPARADA não tinha IPI). IPI
+    // mensal vence dia 25 do mês seguinte (Lei 11.933/2009) — mesmo grupo do
+    // PIS/COFINS (25/07/2026 é sábado → antecipa 24/07).
+    function xmlComIpi() {
+        const ct = (cod: string, desc: string, valor: string) =>
+            `<CreditoTributarioApurado><codReceita>${cod}</codReceita>`
+            + `<ctDescricaoTributo>${desc}</ctDescricaoTributo>`
+            + `<ctValor>${valor}</ctValor><saldoaPagar>${valor}</saldoaPagar></CreditoTributarioApurado>`;
+        return '<?xml version="1.0"?><ProcDctf><ConteudoDeclaracao id="I"><DctfXml><A050>'
+            + ct('810902', 'PIS - FATURAMENTO', '2698.21')
+            + ct('217201', 'COFINS - FATURAMENTO/PJ EM GERAL', '12453.27')
+            + ct('512301', 'IPI - DEMAIS PRODUTOS', '7352.90')
+            + '</A050></DctfXml></ConteudoDeclaracao></ProcDctf>';
+    }
+
+    it('emite guia avulsa do IPI no grupo do dia 25 (antecipado), junto de PIS/COFINS', async () => {
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: { XMLStringBase64: Buffer.from(xmlComIpi(), 'utf8').toString('base64') },
+        });
+        mockInvokeIntegraContador.mockResolvedValue({
+            dados: { consolidado: {}, darf: 'PDF', numeroDocumento: 'D' },
+        });
+
+        const r = await gerarDarfsSeparados({ empresaCnpj: '67267435000178', anoPA: 2026, mesPA: 6 });
+
+        expect(r.guias.map((g: any) => g.codigo).sort()).toEqual(['2172', '5123', '8109']);
+        expect(r.naoEmitidos).toHaveLength(0);
+        expect(Object.keys(r.grupos)).toEqual(['2026-07-24']);
+        expect(r.grupos['2026-07-24'].map((g: any) => g.codigo).sort()).toEqual(['2172', '5123', '8109']);
+
+        const ipi = mockInvokeIntegraContador.mock.calls.map((c) => c[0])
+            .find((c) => c.dados?.codigoReceita === '5123');
+        expect(ipi?.dados).toMatchObject({
+            codigoReceitaExtensao: '01', tipoPA: 'ME', dataPA: '06/2026',
+            vencimento: '2026-07-24T00:00:00', valorImposto: '7352.90',
+        });
+    });
+
+    it('IPI-cigarros (5110) e IPI-importação (0676) seguem fora da guia avulsa', async () => {
+        const ct = (cod: string, valor: string) =>
+            `<CreditoTributarioApurado><codReceita>${cod}</codReceita>`
+            + `<ctValor>${valor}</ctValor><saldoaPagar>${valor}</saldoaPagar></CreditoTributarioApurado>`;
+        const xml = '<?xml version="1.0"?><ProcDctf><ConteudoDeclaracao id="I"><DctfXml><A050>'
+            + ct('511001', '100.00') + ct('067601', '200.00')
+            + '</A050></DctfXml></ConteudoDeclaracao></ProcDctf>';
+        mockInvokeIntegraContador.mockResolvedValueOnce({
+            dados: { XMLStringBase64: Buffer.from(xml, 'utf8').toString('base64') },
+        });
+        const r = await gerarDarfsSeparados({ empresaCnpj: '67267435000178', anoPA: 2026, mesPA: 6 });
+        expect(r.guias).toHaveLength(0);
+        expect(r.naoEmitidos.map((n: any) => n.codigo).sort()).toEqual(['0676', '5110']);
+    });
+});
+
 describe('gerarDarfsSeparados — escopo apenasCodigos (painel trimestrais)', () => {
     beforeEach(() => mockInvokeIntegraContador.mockReset());
 

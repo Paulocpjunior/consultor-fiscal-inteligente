@@ -38,9 +38,11 @@ const DARF_MUNICIPIO = process.env.SERPRO_DARF_MUNICIPIO || '7107';
 // tratamos como mensais (PIS/COFINS, estimativas, IRRF...).
 const RECEITAS_TRIMESTRAIS = new Set(['2089', '0220', '2372', '6012']);
 
-// PIS/COFINS (faturamento) vencem dia 25 do mês seguinte (antecipa em dia não
-// útil — Lei 11.933/2009); os demais mensais, último dia útil do mês seguinte.
-const RECEITAS_DIA_25 = new Set(['8109', '2172', '6912', '5856']);
+// PIS/COFINS (faturamento) e IPI mensal (demais produtos/bebidas/automóveis)
+// vencem dia 25 do mês seguinte (antecipa em dia não útil — Lei 11.933/2009);
+// os demais mensais, último dia útil do mês seguinte. IPI-cigarros (5110, dia
+// 10) e IPI-importação (0676, desembaraço) NÃO entram aqui.
+const RECEITAS_DIA_25 = new Set(['8109', '2172', '6912', '5856', '5123', '0668', '1097']);
 // IRRF (retenção): vencimento até o último dia útil do 2º decêndio do mês
 // seguinte — na prática dia 20, antecipado se não útil.
 const RECEITAS_DIA_20 = new Set(['1708', '0561', '0588', '3208', '5952', '5987']);
