@@ -34,6 +34,8 @@ export interface CapturaStatus {
         bloqueiosPorMotivo?: Record<string, number>;
     } | { erro: string };
     docsUltimos7d: number | null;
+    /** Top motivos de falha da última execução (hoje só NFSe SP envia). */
+    topFalhas?: { executadoEm: string | null; top: Array<{ motivo: string; quantidade: number }> } | null;
 }
 
 export interface CapturaDiagnostico {
