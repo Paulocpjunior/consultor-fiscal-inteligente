@@ -63,6 +63,8 @@ interface NewFichaViewProps {
     isMonofasicoOption: boolean; setIsMonofasicoOption: (v: boolean) => void;
     fichaMonofasico: number; setFichaMonofasico: (v: number) => void;
     fichaIpi: number; setFichaIpi: (v: number) => void;
+    /** ICMS-ST destacado nas vendas — dedução da receita bruta (igual IPI). */
+    fichaIcmsStFaturado: number; setFichaIcmsStFaturado: (v: number) => void;
     fichaIcmsVendas: number; setFichaIcmsVendas: (v: number) => void;
     fichaDevolucoes: number; setFichaDevolucoes: (v: number) => void;
 
@@ -344,7 +346,13 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <CurrencyInput label="IPI Faturado" value={p.fichaIpi} onChange={p.setFichaIpi} />
                         <CurrencyInput label="Devoluções de Vendas" value={p.fichaDevolucoes} onChange={p.setFichaDevolucoes} />
-                        <CurrencyInput label="ICMS sobre Vendas (Para dedução PIS/COFINS)" value={p.fichaIcmsVendas} onChange={p.setFichaIcmsVendas} className="col-span-1 md:col-span-2" />
+                        <div className="col-span-1">
+                            <CurrencyInput label="ICMS ST (Destacado nas Vendas)" value={p.fichaIcmsStFaturado} onChange={p.setFichaIcmsStFaturado} />
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                                * Não integra a receita bruta (substituição tributária) — deduz a base de IRPJ/CSLL/PIS/COFINS, igual ao IPI.
+                            </p>
+                        </div>
+                        <CurrencyInput label="ICMS sobre Vendas (Para dedução PIS/COFINS)" value={p.fichaIcmsVendas} onChange={p.setFichaIcmsVendas} />
 
                         <div className="col-span-1 md:col-span-2 pt-2 border-t border-orange-100 dark:border-orange-800/30">
                             <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-300 cursor-pointer mb-2">

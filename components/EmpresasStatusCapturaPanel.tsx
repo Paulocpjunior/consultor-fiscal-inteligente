@@ -68,6 +68,8 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
     const [filtro, setFiltro] = useState<FiltroTipo>('bloqueadas');
+    // '' = todos os colaboradores; nome exato = só empresas daquele responsável.
+    const [filtroColaborador, setFiltroColaborador] = useState('');
     const [busca, setBusca] = useState('');
     const [togglingCnpj, setTogglingCnpj] = useState<string | null>(null);
     const [autoUfRunning, setAutoUfRunning] = useState(false);
@@ -201,7 +203,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 return false;
             });
         }
-        return data.empresas.filter(e => {
+        const passaStatus = (e: EmpresaStatusCaptura): boolean => {
             switch (filtro) {
                 case 'bloqueadas': return e.motivosBloqueio.length > 0;
                 case 'sem-uf': return !e.uf;
@@ -220,8 +222,24 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 case 'todas':
                 default: return true;
             }
-        });
-    }, [data, filtro, busca]);
+        };
+        // Filtro por colaborador (responsável na carteira) COMBINA com o de
+        // status (E, não OU) — "bloqueadas do Carlos" é o caso de uso.
+        const passaColaborador = (e: EmpresaStatusCaptura): boolean => {
+            if (!filtroColaborador) return true;
+            return (e.responsaveis || []).some(r => r.nome === filtroColaborador);
+        };
+        return data.empresas.filter(e => passaStatus(e) && passaColaborador(e));
+    }, [data, filtro, busca, filtroColaborador]);
+
+    // Colaboradores distintos presentes na carteira (para o dropdown de filtro).
+    const colaboradores = useMemo(() => {
+        const nomes = new Set<string>();
+        for (const e of data?.empresas || []) {
+            for (const r of e.responsaveis || []) if (r.nome) nomes.add(r.nome);
+        }
+        return [...nomes].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    }, [data]);
 
     const handleToggle = async (cnpj: string, campo: FlagCampo, valorAtual: boolean) => {
         if (!isAdmin) return;
@@ -354,6 +372,17 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <option value="sem-responsavel">👤 Sem responsável na carteira</option>
                     <option value="ok-tudo">✅ Tudo OK</option>
                     <option value="todas">Todas</option>
+                </select>
+                <select
+                    value={filtroColaborador}
+                    onChange={e => setFiltroColaborador(e.target.value)}
+                    title="Filtrar pelas empresas de um colaborador (responsável na carteira)"
+                    className="px-3 py-1.5 text-sm border rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-slate-600"
+                >
+                    <option value="">👥 Todos os colaboradores</option>
+                    {colaboradores.map(nome => (
+                        <option key={nome} value={nome}>👤 {nome}</option>
+                    ))}
                 </select>
                 <input
                     type="text" placeholder="Buscar por nome ou CNPJ…"

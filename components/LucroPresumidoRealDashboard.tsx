@@ -80,7 +80,10 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const [isMonofasicoOption, setIsMonofasicoOption] = useState(false);
     const [fichaMonofasico, setFichaMonofasico] = useState(0);
     const [fichaIpi, setFichaIpi] = useState(0);
-    const [fichaIcmsVendas, setFichaIcmsVendas] = useState(0); 
+    // ICMS-ST destacado nas vendas (dedução da receita bruta, igual IPI).
+    // Não confundir com fichaIcmsSt (ICMS ST a recolher, apuração fiscal).
+    const [fichaIcmsStFaturado, setFichaIcmsStFaturado] = useState(0);
+    const [fichaIcmsVendas, setFichaIcmsVendas] = useState(0);
     const [fichaDevolucoes, setFichaDevolucoes] = useState(0);
     
     // Custos
@@ -175,6 +178,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
 
                 // Ajustes e Deduções
                 setFichaIpi(ficha.valorIpi || 0);
+                setFichaIcmsStFaturado(ficha.valorIcmsSt || 0);
                 setFichaDevolucoes(ficha.valorDevolucoes || 0);
                 setFichaIcmsVendas(ficha.icmsVendas || 0);
                 
@@ -252,7 +256,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         setPeriodoApuracao(selectedEmpresa?.regimePadrao === 'Real' ? 'Mensal' : 'Trimestral');
         setFichaComercio(0); setFichaIndustria(0); setFichaServico(0); setFichaServicoRetido(0); setFichaLocacao(0); setFichaServicoHospitalar(0);
         setFichaFilialComercio(0); setFichaFilialIndustria(0); setFichaFilialServico(0); setFichaFilialServicoHospitalar(0);
-        setFichaIpi(0); setFichaDevolucoes(0); setFichaCmv(0); setFichaFolha(0); setFichaDespesas(0); setFichaDespesasDedutiveis(0); setFichaIcmsVendas(0);
+        setFichaIpi(0); setFichaIcmsStFaturado(0); setFichaDevolucoes(0); setFichaCmv(0); setFichaFolha(0); setFichaDespesas(0); setFichaDespesasDedutiveis(0); setFichaIcmsVendas(0);
         setFichaMonofasico(0); setIsMonofasicoOption(false);
         setFichaIpiRecolher(0); setFichaIcmsProprio(0); setFichaIcmsSt(0);
         setAjustesLucroRealAdicoes(0); setAjustesLucroRealExclusoes(0);
@@ -328,6 +332,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
 
             faturamentoMonofasico: isMonofasicoOption ? fichaMonofasico : 0,
             valorIpi: fichaIpi,
+            valorIcmsSt: fichaIcmsStFaturado,
             valorDevolucoes: fichaDevolucoes,
             icmsVendas: fichaIcmsVendas,
 
@@ -496,6 +501,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
 
                 faturamentoMonofasico: isMonofasicoOption ? fichaMonofasico : 0,
                 valorIpi: fichaIpi,
+                valorIcmsSt: fichaIcmsStFaturado,
                 valorDevolucoes: fichaDevolucoes,
                 icmsVendas: fichaIcmsVendas,
                 
@@ -568,7 +574,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                             faturamentoMesComercio: 0, faturamentoMesIndustria: 0, faturamentoMesServico: 0,
                             faturamentoMesServicoRetido: 0, faturamentoMesLocacao: 0, faturamentoMesServicoHospitalar: 0,
                             faturamentoFiliaisComercio: 0, faturamentoFiliaisIndustria: 0, faturamentoFiliaisServico: 0, faturamentoFiliaisServicoHospitalar: 0,
-                            faturamentoMonofasico: 0, valorIpi: 0, valorDevolucoes: 0, icmsVendas: 0,
+                            faturamentoMonofasico: 0, valorIpi: 0, valorIcmsSt: 0, valorDevolucoes: 0, icmsVendas: 0,
                             receitaFinanceira: 0, faturamentoMesTotal: 0, totalGeral: 0,
                             despesas: 0, despesasDedutiveis: 0, folha: 0, cmv: 0,
                             retencaoPis: 0, retencaoCofins: 0, retencaoIrpj: 0, retencaoCsll: 0,
@@ -657,6 +663,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             isMonofasicoOption={isMonofasicoOption} setIsMonofasicoOption={setIsMonofasicoOption}
             fichaMonofasico={fichaMonofasico} setFichaMonofasico={setFichaMonofasico}
             fichaIpi={fichaIpi} setFichaIpi={setFichaIpi}
+            fichaIcmsStFaturado={fichaIcmsStFaturado} setFichaIcmsStFaturado={setFichaIcmsStFaturado}
             fichaIcmsVendas={fichaIcmsVendas} setFichaIcmsVendas={setFichaIcmsVendas}
             fichaDevolucoes={fichaDevolucoes} setFichaDevolucoes={setFichaDevolucoes}
             fichaCmv={fichaCmv} setFichaCmv={setFichaCmv}

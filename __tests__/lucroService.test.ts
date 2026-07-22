@@ -628,6 +628,49 @@ describe('lucroService', () => {
             // IRPJ base = 180000 * 0.08 = 14400
             expect(irpj!.baseCalculo).toBeCloseTo(14400, 2);
         });
+
+        // ICMS-ST destacado (vendedor substituto) não integra a receita bruta
+        // (DL 1.598/77 art. 12 §4º) — mesmo tratamento do IPI faturado.
+        it('deducts ICMS-ST (valorIcmsSt) from industry base like IPI — Presumido', () => {
+            const input = criarInputBase({
+                faturamentoIndustria: 200000,
+                valorIpi: 20000,
+                valorIcmsSt: 30000,
+            });
+            const result = calcularLucro(input);
+
+            const irpj = findImposto(result, 'IRPJ');
+            // Base indústria = 200000 - 20000 (IPI) - 30000 (ICMS-ST) = 150000
+            // IRPJ base = 150000 * 0.08 = 12000
+            expect(irpj!.baseCalculo).toBeCloseTo(12000, 2);
+        });
+
+        it('ICMS-ST reduces PIS/COFINS base via receita bruta efetiva — Presumido', () => {
+            const sem = calcularLucro(criarInputBase({ faturamentoIndustria: 200000 }));
+            const com = calcularLucro(criarInputBase({ faturamentoIndustria: 200000, valorIcmsSt: 50000 }));
+            const pisSem = findImposto(sem, 'PIS');
+            const pisCom = findImposto(com, 'PIS');
+            // Base PIS cai exatamente os 50k do ICMS-ST
+            expect(pisSem!.baseCalculo - pisCom!.baseCalculo).toBeCloseTo(50000, 2);
+        });
+
+        it('deducts ICMS-ST from receita líquida — Lucro Real', () => {
+            const sem = calcularLucro(criarInputBase({
+                regimeSelecionado: 'Real', faturamentoComercio: 300000,
+            }));
+            const com = calcularLucro(criarInputBase({
+                regimeSelecionado: 'Real', faturamentoComercio: 300000, valorIcmsSt: 40000,
+            }));
+            const pisSem = findImposto(sem, 'PIS');
+            const pisCom = findImposto(com, 'PIS');
+            expect(pisSem!.baseCalculo - pisCom!.baseCalculo).toBeCloseTo(40000, 2);
+        });
+
+        it('sem valorIcmsSt nada muda (retrocompatível)', () => {
+            const a = calcularLucro(criarInputBase({ faturamentoComercio: 100000 }));
+            const b = calcularLucro(criarInputBase({ faturamentoComercio: 100000, valorIcmsSt: 0 }));
+            expect(a.totalImpostos).toBeCloseTo(b.totalImpostos, 2);
+        });
     });
 
     // ========================================================================
