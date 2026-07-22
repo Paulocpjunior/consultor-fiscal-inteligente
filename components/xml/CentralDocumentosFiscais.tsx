@@ -25,11 +25,13 @@ const XmlImportacaoZip = lazy(() => import('./XmlImportacaoZip'));
 const AutXmlHarvest = lazy(() => import('./AutXmlHarvest'));
 const CofreEmailPanel = lazy(() => import('./CofreEmailPanel'));
 const CofreControlePanel = lazy(() => import('./CofreControlePanel'));
+const BacklogEntradaPanel = lazy(() => import('./BacklogEntradaPanel'));
 
 type TabId =
     | 'dashboard'
     | 'captura-auto'
     | 'empresas-status'
+    | 'backlog-entrada'
     | 'documentos'
     | 'importacao'
     | 'empresas'
@@ -47,6 +49,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'captura-auto', label: '🛰️ Captura Automática' },
     { id: 'empresas-status', label: '📋 Status por Empresa' },
+    { id: 'backlog-entrada', label: '📥 Backlog Entrada' },
     { id: 'documentos', label: 'XMLs NFe (Entrada/Saída)' },
     { id: 'sae_nfce', label: '🧾 Captura NFC-e Saída (SP)' },
     { id: 'nfse_sp_captura', label: '🛰️ Captura Portal SP' },
@@ -148,6 +151,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 )}
                 {tab === 'empresas-status' && (
                     <EmpresasStatusCapturaPanel currentUser={currentUser} />
+                )}
+                {tab === 'backlog-entrada' && (
+                    <Suspense fallback={<div className="p-6 text-center text-sm text-slate-400">Carregando…</div>}>
+                        <BacklogEntradaPanel />
+                    </Suspense>
                 )}
                 {tab === 'documentos' && (
                     <>
