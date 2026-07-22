@@ -19,6 +19,8 @@ export interface CronLog {
     totalNovos: number | null;
     erroFatal: string | null;
     fonte: string | null;
+    /** 'iniciado' = run em andamento (heartbeat); 'sucesso' | 'falha' no fim. */
+    status?: string | null;
 }
 
 export interface CapturaStatus {
@@ -32,6 +34,7 @@ export interface CapturaStatus {
         bloqueadas?: number | null;
         totalAtivas?: number | null;
         bloqueiosPorMotivo?: Record<string, number>;
+        elegiveisLista?: Array<{ nome: string; cnpj: string }> | null;
     } | { erro: string };
     docsUltimos7d: number | null;
     /** Top motivos de falha da última execução (hoje só NFSe SP envia). */

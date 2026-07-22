@@ -230,6 +230,23 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
         capturadoPor: capturadoPor || 'cron',
     };
 
+    // HEARTBEAT: grava 'iniciado' JÁ — a varredura leva 15-25 min (188 empresas
+    // × throttle anti-WAF) e sem isto o painel ficava mudo do clique até o fim
+    // ("travado" e "rodando" eram indistinguíveis — caso 22/07 16:57).
+    let logRef = null;
+    try {
+        logRef = await fa().firestore().collection('nfsesp_portal_cron_logs').add({
+            executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+            status: 'iniciado',
+            iniciadoEm: log.iniciadoEm,
+            periodo: per,
+            fonte: 'portal-csv',
+            capturadoPor: log.capturadoPor,
+        });
+    } catch (e) {
+        console.warn('[nfsesp-portal] heartbeat inicial falhou:', e.message);
+    }
+
     let session;
     try {
         const certs = await loadCertificate();
@@ -384,14 +401,24 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
         log.detalhesCount = 0;
         console.error('[nfsesp-portal] erro fatal:', e);
     } finally {
-        // Persiste log (sem detalhes individuais — pode estourar 1 MiB)
+        // Persiste log (sem detalhes individuais — pode estourar 1 MiB).
+        // Atualiza o MESMO doc do heartbeat ('iniciado' → 'sucesso'/'falha');
+        // se o heartbeat não existiu, cria um novo (comportamento antigo).
         try {
             const logFirestore = { ...log };
             delete logFirestore.detalhes; // remove array de detalhes antes de salvar
-            await fa().firestore().collection('nfsesp_portal_cron_logs').add({
-                executadoEm: admin.firestore.FieldValue.serverTimestamp(),
-                ...logFirestore,
-            });
+            logFirestore.status = log.erroFatal ? 'falha' : 'sucesso';
+            if (logRef) {
+                await logRef.update({
+                    executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                    ...logFirestore,
+                });
+            } else {
+                await fa().firestore().collection('nfsesp_portal_cron_logs').add({
+                    executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                    ...logFirestore,
+                });
+            }
         } catch (logErr) {
             console.warn('[nfsesp-portal] log falhou:', logErr.message);
         }
