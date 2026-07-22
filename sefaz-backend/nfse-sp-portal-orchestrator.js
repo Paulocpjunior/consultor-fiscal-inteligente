@@ -38,8 +38,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ─── Período padrão: mês anterior completo ────────────────────────────────
 
-function periodoMesAnterior() {
-    const hoje = new Date();
+export function periodoMesAnterior(hoje = new Date()) {
     const ano = hoje.getMonth() === 0 ? hoje.getFullYear() - 1 : hoje.getFullYear();
     const mes = hoje.getMonth() === 0 ? 11 : hoje.getMonth() - 1;
     const inicio = new Date(ano, mes, 1);
@@ -48,6 +47,21 @@ function periodoMesAnterior() {
         dataInicio: fmtDataPt(inicio),
         dataFim: fmtDataPt(fim),
         anoMes: `${ano}-${String(mes + 1).padStart(2, '0')}`,
+    };
+}
+
+// Janela padrão do CRON: últimos 40 dias ATÉ HOJE. Bug 22/07/2026: o default
+// era periodoMesAnterior() — em julho o cron re-baixava junho toda noite
+// ("0 novas") e NUNCA capturava o mês corrente; a "última nota" ficou parada
+// em 30/06 por 3 semanas. 40 dias cobre o mês atual inteiro + a cauda do mês
+// anterior (notas emitidas com atraso); o importer deduplica, então re-baixar
+// é seguro e o volume é equivalente ao que já se baixava (1 mês/noite).
+export function periodoJanelaCorrente(hoje = new Date(), dias = 40) {
+    const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - dias);
+    return {
+        dataInicio: fmtDataPt(inicio),
+        dataFim: fmtDataPt(hoje),
+        anoMes: `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`,
     };
 }
 
@@ -206,7 +220,9 @@ async function sincronizarPrestador({ session, prestador, empresa, periodo }) {
  */
 export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {}) {
     const inicio = Date.now();
-    const per = periodo || periodoMesAnterior();
+    // Default: janela rolante de 40d até hoje (mês CORRENTE incluso) — o
+    // mês-anterior fixo deixava julho sem nenhuma nota até agosto.
+    const per = periodo || periodoJanelaCorrente();
     const log = {
         iniciadoEm: new Date(inicio).toISOString(),
         periodo: per,
