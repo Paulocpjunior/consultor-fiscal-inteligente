@@ -178,6 +178,17 @@ const CardCaptura: React.FC<{
                         <span className="font-mono text-amber-700">{stateBloqueadas}</span>
                     </div>
                 )}
+                {status.docsTotalHistorico !== undefined && status.docsTotalHistorico !== null && (
+                    <div className="flex justify-between">
+                        <span className="opacity-80" title="Se 0: esta fonte NUNCA capturou nada — problema de elegibilidade (ex.: municípios não aderentes ao ADN), não de cron.">
+                            Docs (histórico total):
+                        </span>
+                        <span className={`font-mono font-bold ${status.docsTotalHistorico === 0 ? 'text-red-700' : ''}`}>
+                            {status.docsTotalHistorico}
+                            {status.docsTotalHistorico === 0 && ' — nunca capturou'}
+                        </span>
+                    </div>
+                )}
                 <div className="flex justify-between">
                     <span className="opacity-80">Docs capturados &lt;7d:</span>
                     <span className="font-mono font-bold">{status.docsUltimos7d ?? '—'}</span>
