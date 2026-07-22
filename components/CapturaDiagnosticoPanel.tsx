@@ -118,6 +118,12 @@ const CardCaptura: React.FC<{
                 </span>
             </div>
 
+            {log?.status === 'iniciado' && (
+                <div className="text-xs font-bold mb-2 bg-sky-100 text-sky-800 border border-sky-300 rounded px-2 py-1">
+                    ⏳ Execução EM ANDAMENTO (iniciada {formatRelativeBR(ultimoMs)}) — varredura completa
+                    leva 15-25 min; o resultado aparece aqui ao terminar.
+                </div>
+            )}
             {/* Motivo do farol — sempre visível; é o que evita "verde mentiroso". */}
             <div className={`text-xs font-semibold mb-2 ${
                 saude.nivel === 'critico' ? 'text-red-800' : saude.nivel === 'atencao' ? 'text-amber-800' : 'text-emerald-800'
@@ -188,6 +194,14 @@ const CardCaptura: React.FC<{
                             {status.docsTotalHistorico}
                             {status.docsTotalHistorico === 0 && ' — nunca capturou'}
                         </span>
+                    </div>
+                )}
+                {stateOk && (status.state as any).elegiveisLista?.length > 0 && (
+                    <div className="bg-white/50 border rounded p-2 text-xs space-y-0.5">
+                        <div className="font-bold opacity-80">Quem são as elegíveis:</div>
+                        {((status.state as any).elegiveisLista as Array<{ nome: string; cnpj: string }>).map(e => (
+                            <div key={e.cnpj} className="font-mono text-[10px]">{e.cnpj} · {e.nome}</div>
+                        ))}
                     </div>
                 )}
                 <div className="flex justify-between">

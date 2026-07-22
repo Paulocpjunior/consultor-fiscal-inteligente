@@ -771,6 +771,9 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           totalNovos: d.totalNovos ?? d.totalNovosXmls ?? d.totalNFes ?? d.criadas ?? null,
           erroFatal: d.erroFatal ?? d.erro ?? null,
           fonte: d.fonte ?? null,
+          // 'iniciado' = run longo em andamento (heartbeat) — o painel mostra
+          // "em execução" em vez de parecer travado por 15-25 min.
+          status: d.status ?? null,
         };
       } catch (e) {
         return { erro: e.message };
@@ -815,13 +818,18 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
     // gerava 258+ falhas E2243 por usar cert do escritorio em CNPJ de outra raiz.
     async function elegiveisNfseNacional() {
       try {
-        const { resumo } = await listarElegibilidadeNfseNacionalDfe();
+        const { resumo, empresas } = await listarElegibilidadeNfseNacionalDfe();
         return {
           total: resumo.elegiveis,
           travadas: null,
           bloqueadas: resumo.bloqueadas,
           totalAtivas: resumo.totalAtivas,
           bloqueiosPorMotivo: resumo.bloqueiosPorMotivo,
+          // Quando sobram POUCAS elegíveis (pós-filtro por município), lista
+          // quem são — responde "quem são as 4?" direto no card.
+          elegiveisLista: resumo.elegiveis <= 10
+            ? empresas.map((e) => ({ nome: (e.nome || '').slice(0, 60), cnpj: e.cnpj }))
+            : null,
         };
       } catch (e) {
         return { erro: e.message };
