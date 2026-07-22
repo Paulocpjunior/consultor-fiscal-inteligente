@@ -26,6 +26,7 @@ const AutXmlHarvest = lazy(() => import('./AutXmlHarvest'));
 const CofreEmailPanel = lazy(() => import('./CofreEmailPanel'));
 const CofreControlePanel = lazy(() => import('./CofreControlePanel'));
 const BacklogEntradaPanel = lazy(() => import('./BacklogEntradaPanel'));
+const CofreChecklistPanel = lazy(() => import('./CofreChecklistPanel'));
 
 type TabId =
     | 'dashboard'
@@ -201,6 +202,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                         </Suspense>
                         <Suspense fallback={null}>
                             <CofreControlePanel />
+                        </Suspense>
+                        {/* Checklist de migração: quem tem saída 55 e ainda não
+                            recebe via cofre → configurar e-mail no emissor. */}
+                        <Suspense fallback={null}>
+                            <CofreChecklistPanel />
                         </Suspense>
                     </div>
                 )}
