@@ -23,6 +23,7 @@ import {
 } from '../services/capturaDiagnosticoService';
 import type { User } from '../types';
 import ConsultaNFePorChavePanel from './ConsultaNFePorChavePanel';
+import ConferenciaChavesPanel from './ConferenciaChavesPanel';
 import { manifestarPendentes, type ManifestarPendentesResult, type TipoManifestacao } from '../services/manifestoService';
 
 interface Props {
@@ -319,6 +320,7 @@ const CapturaDiagnosticoPanel: React.FC<Props> = ({ currentUser }) => {
             </div>
 
             {isAdmin && <ConsultaNFePorChavePanel />}
+            {isAdmin && <ConferenciaChavesPanel />}
             {isAdmin && <ManifestarPendentesCard />}
         </div>
     );
