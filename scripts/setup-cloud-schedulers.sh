@@ -14,7 +14,7 @@
 #   xml-email-ingest-cron           */30 7-21 * * 1-6  Cofre CFI: lê a caixa e importa (saída mod 55)
 #   sae-nfce-cron-noturno           30 2 * * 1-5       Saída NFC-e (SAE-NFC-e SP), noturno
 #   sae-nfce-cron-intradia          0 7,13,19 * * 1-5  Saída NFC-e (SAE-NFC-e SP), intra-dia
-#   nfsesp-cron-noturno             0 3 * * 1-5        NFSe SP (WS)
+#   nfsesp-cron-noturno             (PAUSADO 22/07)    NFSe SP WS legado — erro 1102; substituído pelo portal CSV
 #   nfsesp-portal-cron-noturno      30 3 * * 1-5       NFSe SP (portal CSV)
 #   nfse-nacional-dfe-cron-noturno  0 4 * * 1-5        NFSe Nacional ADN (DFe)
 # ── Arquivo / SharePoint ────────────────────────────────────────────────────
@@ -120,11 +120,15 @@ upsert_job \
     "/api/admin/sefaz/sync-cron" \
     "Captura NFe DistDFe (entrada/saída) todas empresas elegíveis"
 
-upsert_job \
-    "nfsesp-cron-noturno" \
-    "0 3 * * 1-5" \
-    "/api/admin/sefaz/nfsesp-cron" \
-    "Captura NFSe SP (tomados + prestados) todas empresas com ccmSp"
+# APOSENTADO 22/07/2026: nfsesp-cron-noturno (webservice legado) — o WS da
+# prefeitura devolve erro 1102 "Mensagem XML de Pedido do serviço sem
+# conteúdo" para TODAS as empresas (121 falhas/noite no painel). O trilho
+# oficial de NFSe SP é o PORTAL CSV (nfsesp-portal-cron-noturno, 03:30).
+# Pausa (reversível) em vez de delete — histórico de execuções preservado.
+echo "→ pausando job aposentado nfsesp-cron-noturno (WS legado, erro 1102)"
+gcloud scheduler jobs pause "nfsesp-cron-noturno" \
+    --project="$PROJECT_ID" --location="$REGION" --quiet 2>/dev/null \
+    && echo "  ✔ pausado" || echo "  (já pausado ou inexistente — ok)"
 
 upsert_job \
     "nfse-nacional-dfe-cron-noturno" \
@@ -291,7 +295,7 @@ gcloud scheduler jobs list \
 echo ""
 echo "✓ setup concluído. Próxima execução:"
 echo "    02h BRT — sefaz-cron-noturno"
-echo "    03h BRT — nfsesp-cron-noturno"
+echo "    03h30 BRT — nfsesp-portal-cron-noturno (WS legado pausado)"
 echo "    04h BRT — nfse-nacional-dfe-cron-noturno"
 echo ""
 echo "Pra disparar manualmente um job agora:"
