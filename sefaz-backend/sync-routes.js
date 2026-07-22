@@ -1015,10 +1015,15 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
         { tipo: 'CTe', campo: 'createdAt', desde: new Date(seteDias) },
         { tipo: 'MDFe', campo: 'createdAt', desde: new Date(seteDias) },
       ]),
-      // nfse-sp-importer grava createdAt como string ISO — a comparação
-      // lexicográfica com outra string ISO funciona; Date não acharia nada.
+      // NFSe SP tem DOIS importers com formatos de createdAt diferentes:
+      //  - WS legado: string ISO (compara com string)
+      //  - portal CSV: serverTimestamp (compara com Date)
+      // Firestore não cruza tipos — contar só um formato zerava o painel
+      // (22/07: 4445 docs do portal contavam como "0 em 7d"). Soma os dois;
+      // cada doc tem UM tipo de campo, então não há dupla contagem.
       docsRecentes([
         { tipo: 'NFSe', campo: 'createdAt', desde: new Date(seteDias).toISOString() },
+        { tipo: 'NFSe', campo: 'createdAt', desde: new Date(seteDias) },
       ]),
       docsRecentes([
         { tipo: 'nfseNacional', campo: 'capturadoEm', desde: new Date(seteDias) },

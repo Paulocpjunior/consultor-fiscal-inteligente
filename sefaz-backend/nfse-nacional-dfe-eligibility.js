@@ -9,6 +9,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { caminhoNfseRecomendado, CAMINHO_NFSE } from './municipio-nfse-caminho.js';
 
 const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 
@@ -41,6 +42,20 @@ export function classificarElegibilidadeAdn({ empresa, cert, nowMs = Date.now() 
     }
     if (empresa?.nfseNacionalDfeAtivo !== true) {
         return { elegivel: false, motivo: 'NFSe Nacional ADN desativada' };
+    }
+
+    // Município que usa sistema PRÓPRIO (ex.: SP capital, portal CSV) não tem
+    // movimento no ADN — consultar é "sucesso vazio" eterno. 22/07: 89
+    // "elegíveis" com 0 docs capturados NA HISTÓRIA inteira; a NFS-e desses
+    // clientes chega pelo trilho municipal. Só conta como elegível ADN quem
+    // está em município aderente (ou sem codMun cadastrado — aí não dá pra
+    // afirmar e mantemos, com o motivo aparecendo no card quando bloquear).
+    const codMun = String(empresa?.codMunIBGE || '').replace(/\D/g, '');
+    if (codMun && caminhoNfseRecomendado(codMun) !== CAMINHO_NFSE.ADN) {
+        return {
+            elegivel: false,
+            motivo: 'Município usa sistema próprio de NFS-e (ex.: SP capital = portal CSV) — sem movimento no ADN Nacional.',
+        };
     }
 
     // A propria S&P usa o certificado global do Secret Manager, que tem a mesma
@@ -120,6 +135,7 @@ export async function listarElegibilidadeNfseNacionalDfe() {
                     nome: d.razaoSocial || d.nome || '',
                     fonte: colName,
                     nfseNacionalDfeAtivo: true,
+                    codMunIBGE: d.dadosFiscais?.codMunIBGE || d.codMunIBGE || null,
                 });
             });
         } catch (e) {

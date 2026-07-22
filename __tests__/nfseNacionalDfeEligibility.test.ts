@@ -60,6 +60,27 @@ describe('classificarElegibilidadeAdn', () => {
         expect(r.motivo).toContain('A3');
     });
 
+    // Regressão 22/07: 89 "elegíveis" com 0 docs NA HISTÓRIA — clientes de SP
+    // capital não têm movimento no ADN (usam o portal da prefeitura).
+    it('bloqueia empresa de SP capital (município com sistema próprio)', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: empresa({ codMunIBGE: '3550308' }),
+            cert: cert(),
+            nowMs: NOW,
+        });
+        expect(r.elegivel).toBe(false);
+        expect(r.motivo).toMatch(/sistema próprio|portal/i);
+    });
+
+    it('mantém elegível quando codMunIBGE ausente (não dá pra afirmar)', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: empresa({ codMunIBGE: null }),
+            cert: cert(),
+            nowMs: NOW,
+        });
+        expect(r.elegivel).toBe(true);
+    });
+
     it('libera a propria S&P para usar o certificado global', () => {
         const r = classificarElegibilidadeAdn({
             empresa: empresa({ cnpj: '44388152000189' }),
