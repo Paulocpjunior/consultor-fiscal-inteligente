@@ -490,6 +490,27 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
             return res.status(400).json({ error: 'dadosFiscais é obrigatório (objeto)' });
         }
 
+        // PREVENÇÃO (pendências não voltarem): valida UF e CCM ANTES de gravar.
+        // UF errada bloqueia captura NFe; CCM fora do padrão quebra NFSe SP.
+        const UFS_VALIDAS = new Set([
+            'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+            'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+        ]);
+        if ('uf' in dadosFiscais && String(dadosFiscais.uf || '').trim() !== '') {
+            const ufNorm = String(dadosFiscais.uf).trim().toUpperCase();
+            if (!UFS_VALIDAS.has(ufNorm)) {
+                return res.status(400).json({ error: `UF inválida: "${dadosFiscais.uf}". Use a sigla de 2 letras (ex.: SP).` });
+            }
+        }
+        if ('ccmSp' in dadosFiscais && String(dadosFiscais.ccmSp || '').trim() !== '') {
+            const ccmDigits = String(dadosFiscais.ccmSp).replace(/\D/g, '');
+            if (ccmDigits.length < 6 || ccmDigits.length > 11) {
+                return res.status(400).json({
+                    error: `CCM inválido: "${dadosFiscais.ccmSp}". A Inscrição Municipal de SP tem 8 dígitos (aceito 6-11, só números).`,
+                });
+            }
+        }
+
         // Monta o update dot-notation só com campos permitidos e definidos.
         const update = {};
         for (const [k, v] of Object.entries(dadosFiscais)) {
