@@ -9,7 +9,7 @@
 # ── Captura fiscal ──────────────────────────────────────────────────────────
 #   sefaz-cron-noturno              0 2 * * 1-5        NFe DistDFe (entrada/saída), noturno
 #   sefaz-xml-capture               0 6,12,18 * * 1-5  NFe DistDFe intra-dia
-#   manifesto-ciencia-cron          0 5,11,17 * * 1-5  Ciência da Operação (destrava XML completo de entrada)
+#   manifesto-ciencia-cron          15 */2 * * *       Ciência da Operação (destrava XML completo de entrada)
 #   autxml-harvest-cron             15 2,10,16 * * 1-5 Saída NF-e via autXML (cert do escritório)
 #   xml-email-ingest-cron           */30 7-21 * * 1-6  Cofre CFI: lê a caixa e importa (saída mod 55)
 #   sae-nfce-cron-noturno           30 2 * * 1-5       Saída NFC-e (SAE-NFC-e SP), noturno
@@ -216,11 +216,13 @@ upsert_job \
 
 # Manifestacao automatica (Ciencia da Operacao) das NF-e de ENTRADA — o "CDO"
 # que a SIEG faz. Destrava o XML COMPLETO das entradas (a SEFAZ so libera apos
-# manifestacao). Roda 1h ANTES das capturas de 6/12/18h, com dryRun=false pra
-# manifestar de verdade (a rota vem com dryRun=true por seguranca).
+# manifestacao). 22/07: 3.889 resumos presos com 3 janelas/dia-util — passou a
+# rodar A CADA 2H TODOS OS DIAS (evita colisao com capturas de 02/03/04h via
+# minuto 15). Seguro contra 656: o lote intercala por raiz CNPJ, tem
+# circuit-breaker no primeiro 656 da raiz e cooldown de 6h por chave falha.
 upsert_job \
     "manifesto-ciencia-cron" \
-    "0 5,11,17 * * 1-5" \
+    "15 */2 * * *" \
     "/api/admin/sefaz/manifest-cron" \
     "Ciencia da Operacao automatica nas NF-e de entrada (destrava XML completo)" \
     '{"dryRun":false,"tipo":"ciencia","limit":500}'

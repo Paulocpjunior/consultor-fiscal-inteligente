@@ -61,6 +61,41 @@ function ehElegivel(doc, tipoPretendido = 'ciencia') {
   return { ok: true };
 }
 
+// Vazão do lote (caso 22/07: 3.889 resumos presos com o cron "rodando"):
+//  - COOLDOWN_FALHA_MS: chave que falhou espera antes de voltar ao lote —
+//    sem isso as mesmas falhas re-ocupavam os 500 slots toda janela e o
+//    resto da fila morria de fome.
+//  - MAX_FALHAS: depois disso a chave sai do lote (poison) — continua visível
+//    como pendente no Backlog de Entrada, mas não desperdiça mais slots.
+const COOLDOWN_FALHA_MANIFESTACAO_MS = 6 * 60 * 60 * 1000; // 6h
+const MAX_FALHAS_MANIFESTACAO = 8;
+
+// Intercala os docs por RAIZ de CNPJ (round-robin). PURO/testável. Sem isto,
+// uma empresa com 500+ resumos (APATEL: 523) comia o lote inteiro martelando
+// UMA raiz — que entrava em cStat 656 no meio — e as demais nunca chegavam
+// ao lote. Intercalado, cada raiz recebe poucas chamadas por janela e o 656
+// para de ser provocado pelo próprio lote.
+export function intercalarPorRaiz(docs) {
+  const filas = new Map(); // raiz -> fila de docs (ordem original preservada)
+  for (const d of docs) {
+    const raiz = String(d.empresaCnpj || d.cnpjDest || '').replace(/\D/g, '').slice(0, 8) || '?';
+    if (!filas.has(raiz)) filas.set(raiz, []);
+    filas.get(raiz).push(d);
+  }
+  const out = [];
+  const chaves = [...filas.keys()];
+  let restam = docs.length;
+  while (restam > 0) {
+    for (const raiz of chaves) {
+      const fila = filas.get(raiz);
+      if (fila.length === 0) continue;
+      out.push(fila.shift());
+      restam--;
+    }
+  }
+  return out;
+}
+
 export async function listarElegiveis({ empresaId = null, limit = 50, tipo = 'ciencia' } = {}) {
   const db = fa().firestore();
   // 'in' inclui os RESUMOS (resNFe): sao exatamente eles que precisam de
@@ -75,15 +110,24 @@ export async function listarElegiveis({ empresaId = null, limit = 50, tipo = 'ci
   // Pagina sem limite arbitrario; corta pela quantidade de elegiveis,
   // nao pela query bruta (antes truncava em 500 e podia faltar candidatos).
   const snapDocs = await fetchAllDocs(baseQuery, { label: 'documentos_fiscais/manifest-elegiveis' });
+  const agora = Date.now();
   const elegiveis = [];
   for (const d of snapDocs) {
     const doc = { id: d.id, ...d.data() };
     const check = ehElegivel(doc, tipo);
-    if (check.ok) elegiveis.push(doc);
+    if (!check.ok) continue;
+    // Poison/cooldown: não desperdiça slot com chave que acabou de falhar.
+    const falhas = Number(doc.manifestacaoFalhas) || 0;
+    if (falhas >= MAX_FALHAS_MANIFESTACAO) continue;
+    const ultimaFalhaMs = Number(doc.ultimaFalhaManifestacaoMs) || 0;
+    if (ultimaFalhaMs && (agora - ultimaFalhaMs) < COOLDOWN_FALHA_MANIFESTACAO_MS) continue;
+    elegiveis.push(doc);
   }
-  // Resumos primeiro: quando o limit corta, prioriza quem destrava XML completo.
-  elegiveis.sort((a, b) => (a.tipoDoc === 'resNFe' ? 0 : 1) - (b.tipoDoc === 'resNFe' ? 0 : 1));
-  return elegiveis.slice(0, limit);
+  // Resumos primeiro (destravam XML completo); dentro disso, intercala por
+  // raiz CNPJ pro lote não martelar uma raiz só (anti-656 + anti-fome).
+  const resumos = elegiveis.filter((d) => d.tipoDoc === 'resNFe');
+  const completas = elegiveis.filter((d) => d.tipoDoc !== 'resNFe');
+  return [...intercalarPorRaiz(resumos), ...intercalarPorRaiz(completas)].slice(0, limit);
 }
 
 // Resolve o certificado A1 que ASSINA o evento. A SEFAZ exige que o autor do
@@ -254,11 +298,44 @@ export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia',
   return result;
 }
 
+// Detecta rate-limit (cStat 656 / Consumo Indevido) em qualquer forma que a
+// falha apareça (cStat do evento, mensagem de erro, motivo do provider).
+function ehRateLimit656(cStat, texto) {
+  if (String(cStat) === '656') return true;
+  return /656|consumo indevido/i.test(String(texto || ''));
+}
+
 export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun = false, tipo = 'ciencia', capturadoPor = null, skipRedownload = true } = {}) {
+  const db = fa().firestore();
   const elegiveis = await listarElegiveis({ empresaId, limit, tipo });
-  const resultado = { total: elegiveis.length, sucessos: 0, falhas: 0, detalhes: [] };
+  const resultado = { total: elegiveis.length, sucessos: 0, falhas: 0, puladas656: 0, detalhes: [] };
+  // Circuit-breaker por RAIZ: primeiro 656 numa raiz → pula os demais docs da
+  // mesma raiz NESTE run (insistir só re-arma o bloqueio; a raiz volta na
+  // próxima janela do cron). O resto do lote (outras raízes) segue normal.
+  const raizesBloqueadas = new Set();
+
+  // Carimbo de falha no doc — alimenta o cooldown/poison do listarElegiveis.
+  // Sem isto a mesma chave falha voltava em TODA janela e entupia o lote.
+  const carimbarFalha = async (doc, motivo) => {
+    if (dryRun) return;
+    try {
+      await db.collection('documentos_fiscais').doc(doc.id).update({
+        manifestacaoFalhas: admin.firestore.FieldValue.increment(1),
+        ultimaFalhaManifestacaoMs: Date.now(),
+        ultimaFalhaManifestacaoMotivo: String(motivo || 'desconhecido').slice(0, 200),
+      });
+    } catch (e) {
+      console.warn(`[manifestarPendentes] falha carimbando ${doc.chave}:`, e.message);
+    }
+  };
 
   for (const doc of elegiveis) {
+    const raiz = String(doc.empresaCnpj || doc.cnpjDest || '').replace(/\D/g, '').slice(0, 8);
+    if (raizesBloqueadas.has(raiz)) {
+      resultado.puladas656++;
+      // NÃO carimba falha: a chave não tentou — volta normal na próxima janela.
+      continue;
+    }
     try {
       const r = await manifestarUma({
         chNFe: doc.chave,
@@ -272,18 +349,23 @@ export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun
         skipRedownload,
       });
       const cStat = r.retorno?.eventos?.[0]?.cStat;
+      const xMotivo = r.retorno?.eventos?.[0]?.xMotivo;
       const aceito = ['135', '136'].includes(cStat);
       if (aceito || dryRun) {
         resultado.sucessos++;
       } else {
         resultado.falhas++;
+        await carimbarFalha(doc, `cStat ${cStat}: ${xMotivo || ''}`);
+        if (ehRateLimit656(cStat, xMotivo)) raizesBloqueadas.add(raiz);
       }
       resultado.detalhes.push({
         chNFe: doc.chave, empresaId: doc.empresaId, tipo, dryRun,
-        cStat, xMotivo: r.retorno?.eventos?.[0]?.xMotivo,
+        cStat, xMotivo,
       });
     } catch (err) {
       resultado.falhas++;
+      await carimbarFalha(doc, err.message);
+      if (ehRateLimit656(null, err.message)) raizesBloqueadas.add(raiz);
       resultado.detalhes.push({
         chNFe: doc.chave, empresaId: doc.empresaId, tipo, dryRun,
         erro: err.message,
@@ -292,5 +374,8 @@ export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun
     await new Promise(r => setTimeout(r, 1000));
   }
 
+  if (resultado.puladas656 > 0) {
+    console.warn(`[manifestarPendentes] ${resultado.puladas656} doc(s) pulados por 656 na(s) raiz(es): ${[...raizesBloqueadas].join(', ')}`);
+  }
   return resultado;
 }
