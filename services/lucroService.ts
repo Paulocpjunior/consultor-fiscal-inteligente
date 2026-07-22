@@ -344,14 +344,19 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
     // Total Faturado Bruto (Antes de Deduções)
     const totalFaturadoInputs = fatComercioMes + fatIndustriaMes + fatServicoMesTotal + fatServicoHospMes;
 
-    // 2. Aplicação de Deduções da Receita Bruta (IPI e Devoluções)
+    // 2. Aplicação de Deduções da Receita Bruta (IPI, ICMS-ST e Devoluções)
     const valorIpi = input.valorIpi || 0;
+    // ICMS-ST destacado (vendedor como substituto) não integra a receita bruta
+    // (DL 1.598/77 art. 12 §4º, red. Lei 12.973/2014) — mesmo tratamento do IPI:
+    // deduz da indústria primeiro, excedente transborda pro comércio.
+    const valorIcmsSt = input.valorIcmsSt || 0;
+    const deducaoIpiSt = valorIpi + valorIcmsSt;
     const valorDevolucoes = input.valorDevolucoes || 0;
 
-    let fatIndustriaDeduzidoIpi = Math.max(0, fatIndustriaMes - valorIpi);
-    let restoDeducaoIpi = Math.max(0, valorIpi - fatIndustriaMes);
+    let fatIndustriaDeduzidoIpi = Math.max(0, fatIndustriaMes - deducaoIpiSt);
+    let restoDeducaoIpi = Math.max(0, deducaoIpiSt - fatIndustriaMes);
 
-    const totalSemIpi = totalFaturadoInputs - valorIpi;
+    const totalSemIpi = totalFaturadoInputs - deducaoIpiSt;
 
     const ratioComercio = totalSemIpi > 0 ? fatComercioMes / totalSemIpi : 0;
     const ratioIndustria = totalSemIpi > 0 ? fatIndustriaDeduzidoIpi / totalSemIpi : 0;
@@ -606,7 +611,8 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
 
     const faturamentoBrutoInput = fatComercio + fatIndustria + fatServicoTotal + fatServicoHosp;
 
-    const receitaLiquida = Math.max(0, faturamentoBrutoInput - (input.valorIpi || 0) - (input.valorDevolucoes || 0));
+    // IPI e ICMS-ST destacados não integram a receita bruta (DL 1.598/77 art. 12 §4º).
+    const receitaLiquida = Math.max(0, faturamentoBrutoInput - (input.valorIpi || 0) - (input.valorIcmsSt || 0) - (input.valorDevolucoes || 0));
 
     const detalhamento: DetalheImposto[] = [];
 

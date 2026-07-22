@@ -452,6 +452,8 @@ export interface FichaFinanceiraRegistro {
 
     faturamentoMonofasico: number;
     valorIpi: number;
+    /** ICMS-ST destacado nas vendas (dedução da receita bruta, igual IPI). */
+    valorIcmsSt?: number;
     valorDevolucoes: number;
     icmsVendas: number;
 
@@ -590,6 +592,10 @@ export interface LucroInput {
 
     faturamentoMonofasico: number;
     valorIpi?: number;
+    /** ICMS-ST destacado nas vendas (vendedor como substituto) — não integra a
+     *  receita bruta (DL 1.598/77 art. 12 §4º): deduz base IRPJ/CSLL/PIS/COFINS,
+     *  mesmo tratamento do IPI faturado. Não confundir com icmsStRecolher. */
+    valorIcmsSt?: number;
     valorDevolucoes?: number;
     icmsVendas?: number;
 
