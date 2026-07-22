@@ -947,23 +947,42 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       }
     }
 
-    // Top motivos de falha da última captura NFSe SP. O heartbeat
-    // (nfsesp_cron_logs) só tem contadores; os erros POR EMPRESA vivem em
-    // nfsesp_capturas_log.resultados[].erros[]. Sem isto o painel dizia
-    // "0/121 falhas" sem nenhuma pista do porquê (caso 22/07: 121 falhas
-    // silenciosas por noite e ninguém sabia a causa).
+    // Top motivos de falha da última captura NFSe SP — trilho PORTAL CSV
+    // (nfsesp_portal_cron_logs.errosResumo). 22/07: o card apontava pro WS
+    // legado (erro 1102 em 121/121 — aposentado); o trilho real é o portal.
+    // Fallback no log do legado enquanto o portal não tiver registro.
     async function topFalhasNfseSp(maxMotivos = 3) {
+      const conta = (contagem, texto) => {
+        const chave = String(texto || '').slice(0, 160);
+        if (chave) contagem.set(chave, (contagem.get(chave) || 0) + 1);
+      };
       try {
-        const snap = await db.collection('nfsesp_capturas_log')
+        const snap = await db.collection('nfsesp_portal_cron_logs')
           .orderBy('executadoEm', 'desc').limit(1).get();
-        if (snap.empty) return null;
-        const d = snap.docs[0].data();
+        if (!snap.empty) {
+          const d = snap.docs[0].data();
+          const contagem = new Map();
+          if (d.erroFatal) conta(contagem, `FATAL: ${d.erroFatal}`);
+          if (d.headlessErroTipo) conta(contagem, `login headless: ${d.headlessErroTipo}`);
+          for (const err of d.errosResumo || []) {
+            conta(contagem, err.erroPrestador || err.erroTomador || err.motivo || err.status);
+          }
+          const top = [...contagem.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, maxMotivos)
+            .map(([motivo, quantidade]) => ({ motivo, quantidade }));
+          if (top.length) return { executadoEm: d.executadoEm || null, top };
+        }
+        // Fallback: log do WS legado (transição).
+        const legado = await db.collection('nfsesp_capturas_log')
+          .orderBy('executadoEm', 'desc').limit(1).get();
+        if (legado.empty) return null;
+        const d = legado.docs[0].data();
         const contagem = new Map();
         for (const r of d.resultados || []) {
           if (r.sucesso) continue;
           for (const err of r.erros || []) {
-            const chave = `${err.codigo || '?'}: ${String(err.descricao || 'sem descrição').slice(0, 140)}`;
-            contagem.set(chave, (contagem.get(chave) || 0) + 1);
+            conta(contagem, `${err.codigo || '?'}: ${String(err.descricao || 'sem descrição').slice(0, 140)}`);
           }
         }
         const top = [...contagem.entries()]
@@ -984,7 +1003,8 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       falhasNfseSp,
     ] = await Promise.all([
       ultimoLog('sefaz_cron_logs'),
-      ultimoLog('nfsesp_cron_logs'),
+      // 22/07: trilho oficial NFSe SP = PORTAL CSV; o WS legado (1102) foi pausado.
+      ultimoLog('nfsesp_portal_cron_logs'),
       ultimoLog('nfse_nacional_dfe_cron_logs'),
       elegiveisNfeReais(),
       elegiveisNfseSp(),
@@ -1018,9 +1038,9 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           docsUltimos7d: docsNfe,
         },
         nfseSp: {
-          fonte: 'NFSe SP (tomados + prestados)',
-          endpointCron: '/api/admin/sefaz/nfsesp-cron',
-          schedulerEsperado: 'nfsesp-cron-noturno (03:00 BRT seg-sex)',
+          fonte: 'NFSe SP — Portal CSV (tomados + prestados)',
+          endpointCron: '/api/admin/sefaz/nfsesp-portal-cron',
+          schedulerEsperado: 'nfsesp-portal-cron-noturno (03:30 BRT seg-sex)',
           ultimoCron: logNfseSp,
           state: stateNfseSp,
           docsUltimos7d: docsNfseSp,
