@@ -212,6 +212,28 @@ describe('IPI exige CnpjEstabelecimento (sufixo ordem+DV) no débito (SERPRO ENC
         expect(r.ok).toBe(true);
         expect(r.debitos!.Irpj.ListaDebitos[0]).not.toHaveProperty('CnpjEstabelecimento');
     });
+
+    it('numera o IPI como IdDebito 3 na ordem canônica IRPJ,CSLL,IPI,PIS,COFINS', () => {
+        // Regressão: IPI numerado por último (=5) dava "sequência de débitos
+        // inválida; sequencial 5". O modelo mostra IPI como IdDebito 3.
+        const modeloFull = extrairModeloDebitosMit({
+            Debitos: {
+                Irpj: { ListaDebitos: [{ CodigoDebito: '236201', ValorDebito: 1 }] },
+                Csll: { ListaDebitos: [{ CodigoDebito: '248401', ValorDebito: 1 }] },
+                PisPasep: { ListaDebitos: [{ CodigoDebito: '810901', ValorDebito: 1 }] },
+                Cofins: { ListaDebitos: [{ CodigoDebito: '217201', ValorDebito: 1 }] },
+                Ipi: { ListaDebitos: [{ CodigoDebito: '512301', ValorDebito: 1, CnpjEstabelecimento: '000178' }] },
+            },
+        });
+        const r = montarDebitosMit({ IRPJ: 10, CSLL: 20, PIS: 30, COFINS: 40, IPI: 50 }, modeloFull);
+        expect(r.ok).toBe(true);
+        expect(r.debitos!.Irpj.ListaDebitos[0].IdDebito).toBe(1);
+        expect(r.debitos!.Csll.ListaDebitos[0].IdDebito).toBe(2);
+        expect(r.debitos!.Ipi.ListaDebitos[0].IdDebito).toBe(3);
+        expect(r.debitos!.PisPasep.ListaDebitos[0].IdDebito).toBe(4);
+        expect(r.debitos!.Cofins.ListaDebitos[0].IdDebito).toBe(5);
+        expect(r.mapeamento.map(m => m.familia)).toEqual(['IRPJ', 'CSLL', 'IPI', 'PIS', 'COFINS']);
+    });
 });
 
 describe('FAMILIAS (fonte única — guard contra omitir tributo)', () => {
