@@ -13,6 +13,7 @@
  */
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { avaliarSaudeCaptura } from '../services/capturaSaude';
 import {
     fetchCapturaDiagnostico,
     forcarCapturaAgora,
@@ -38,13 +39,16 @@ function formatRelativeBR(ms: number | null | undefined): string {
     return `há ${Math.floor(diffH / 24)}d`;
 }
 
-function statusColor(ultimoMs: number | null | undefined): string {
-    if (!ultimoMs) return 'bg-red-100 text-red-800 border-red-300';
-    const diffH = (Date.now() - ultimoMs) / 3600000;
-    if (diffH < 30) return 'bg-green-100 text-green-800 border-green-300';
-    if (diffH < 72) return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-    return 'bg-red-100 text-red-800 border-red-300';
-}
+// Cores por nível de saúde HONESTA (resultado, não recência) — vide
+// services/capturaSaude.ts. "Rodou há pouco" sozinho nunca mais dá verde.
+const COR_POR_NIVEL: Record<'ok' | 'atencao' | 'critico', string> = {
+    ok: 'bg-green-100 text-green-800 border-green-300',
+    atencao: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+    critico: 'bg-red-100 text-red-800 border-red-300',
+};
+const EMOJI_POR_NIVEL: Record<'ok' | 'atencao' | 'critico', string> = {
+    ok: '✅', atencao: '⚠️', critico: '🔴',
+};
 
 function isCronLog(x: any): x is CronLog {
     return x && typeof x === 'object' && 'executadoEmMs' in x;
@@ -62,7 +66,6 @@ const CardCaptura: React.FC<{
 
     const log = isCronLog(status.ultimoCron) ? status.ultimoCron : null;
     const ultimoMs = log?.executadoEmMs ?? null;
-    const cor = statusColor(ultimoMs);
     const stateOk = status.state && 'total' in status.state;
     const stateTotal = stateOk ? (status.state as any).total : null;
     const stateTotalAtivas = stateOk ? (status.state as any).totalAtivas : null;
@@ -71,6 +74,18 @@ const CardCaptura: React.FC<{
     // pelo cron (nao tentam capturar) — exibimos separado pra nao confundir
     // com "falhas" reais e pra contador ver o que precisa cadastrar.
     const stateBloqueadas = stateOk ? (status.state as any).bloqueadas : null;
+
+    // Saúde HONESTA: mede resultado (docs capturados + taxa de sucesso), não
+    // só "o cron rodou". Regressão do verde mentiroso da NFS-e SP (0/121 ✅).
+    const saude = avaliarSaudeCaptura({
+        ultimoMs,
+        sucessos: log?.sucessos ?? null,
+        falhas: log?.falhas ?? null,
+        docsUltimos7d: status.docsUltimos7d ?? null,
+        elegiveis: stateTotal ?? null,
+        agoraMs: Date.now(),
+    });
+    const cor = COR_POR_NIVEL[saude.nivel];
 
     const handleForcar = async () => {
         setForcando(true);
@@ -97,9 +112,16 @@ const CardCaptura: React.FC<{
                     <h3 className="font-bold text-base">{titulo}</h3>
                     <p className="text-xs opacity-80 mt-1">{status.fonte}</p>
                 </div>
-                <span className="text-2xl">
-                    {!ultimoMs ? '🚨' : (Date.now() - ultimoMs) / 3600000 < 30 ? '✅' : (Date.now() - ultimoMs) / 3600000 < 72 ? '⚠️' : '🔴'}
+                <span className="text-2xl" title={saude.motivo}>
+                    {EMOJI_POR_NIVEL[saude.nivel]}
                 </span>
+            </div>
+
+            {/* Motivo do farol — sempre visível; é o que evita "verde mentiroso". */}
+            <div className={`text-xs font-semibold mb-2 ${
+                saude.nivel === 'critico' ? 'text-red-800' : saude.nivel === 'atencao' ? 'text-amber-800' : 'text-emerald-800'
+            }`}>
+                {saude.motivo}
             </div>
 
             <div className="space-y-2 text-sm">
@@ -123,6 +145,18 @@ const CardCaptura: React.FC<{
                             </div>
                         )}
                     </>
+                )}
+                {/* Por que está falhando — agregado da última execução. Sem isto
+                    o card dizia "0/121" e ninguém sabia a causa. */}
+                {status.topFalhas?.top && status.topFalhas.top.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded p-2 text-xs space-y-1">
+                        <div className="font-bold text-red-800">Principais motivos de falha:</div>
+                        {status.topFalhas.top.map((f, i) => (
+                            <div key={i} className="text-red-700">
+                                <span className="font-mono font-bold">{f.quantidade}×</span> {f.motivo}
+                            </div>
+                        ))}
+                    </div>
                 )}
                 <div className="flex justify-between border-t pt-2 mt-2">
                     <span className="opacity-80">Empresas elegíveis:</span>
@@ -269,7 +303,7 @@ const CapturaDiagnosticoPanel: React.FC<Props> = ({ currentUser }) => {
             </div>
 
             <div className="text-xs text-gray-500 dark:text-gray-400 mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <strong>Como ler:</strong> 🟢 verde = última execução &lt;30h · 🟡 amarelo = 30-72h · 🔴 vermelho = &gt;72h ou nunca executado.
+                <strong>Como ler:</strong> o farol mede RESULTADO, não só execução: 🔴 = falhando tudo, 0 docs em 7d com empresas elegíveis, ou parado &gt;72h · 🟡 = mais falha que sucesso ou execução atrasada · 🟢 = executando E capturando.
                 Empresas <strong>travadas &gt;7d</strong> são as que não tiveram nova captura — verifique cert, autorização ou flag de captura.
             </div>
 

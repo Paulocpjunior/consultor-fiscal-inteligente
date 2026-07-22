@@ -947,10 +947,41 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       }
     }
 
+    // Top motivos de falha da última captura NFSe SP. O heartbeat
+    // (nfsesp_cron_logs) só tem contadores; os erros POR EMPRESA vivem em
+    // nfsesp_capturas_log.resultados[].erros[]. Sem isto o painel dizia
+    // "0/121 falhas" sem nenhuma pista do porquê (caso 22/07: 121 falhas
+    // silenciosas por noite e ninguém sabia a causa).
+    async function topFalhasNfseSp(maxMotivos = 3) {
+      try {
+        const snap = await db.collection('nfsesp_capturas_log')
+          .orderBy('executadoEm', 'desc').limit(1).get();
+        if (snap.empty) return null;
+        const d = snap.docs[0].data();
+        const contagem = new Map();
+        for (const r of d.resultados || []) {
+          if (r.sucesso) continue;
+          for (const err of r.erros || []) {
+            const chave = `${err.codigo || '?'}: ${String(err.descricao || 'sem descrição').slice(0, 140)}`;
+            contagem.set(chave, (contagem.get(chave) || 0) + 1);
+          }
+        }
+        const top = [...contagem.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, maxMotivos)
+          .map(([motivo, quantidade]) => ({ motivo, quantidade }));
+        return top.length ? { executadoEm: d.executadoEm || null, top } : null;
+      } catch (e) {
+        console.warn('[captura-diagnostico] topFalhasNfseSp:', e.message);
+        return null;
+      }
+    }
+
     const [
       logSefaz, logNfseSp, logNfseNac,
       stateSefaz, stateNfseSp, stateNfseNac,
       docsNfe, docsNfseSp, docsNfseNac,
+      falhasNfseSp,
     ] = await Promise.all([
       ultimoLog('sefaz_cron_logs'),
       ultimoLog('nfsesp_cron_logs'),
@@ -972,6 +1003,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       docsRecentes([
         { tipo: 'nfseNacional', campo: 'capturadoEm', desde: new Date(seteDias) },
       ]),
+      topFalhasNfseSp(),
     ]);
 
     return res.json({
@@ -992,6 +1024,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           ultimoCron: logNfseSp,
           state: stateNfseSp,
           docsUltimos7d: docsNfseSp,
+          topFalhas: falhasNfseSp,
         },
         nfseNacional: {
           fonte: 'NFSe Nacional ADN (DFe)',
