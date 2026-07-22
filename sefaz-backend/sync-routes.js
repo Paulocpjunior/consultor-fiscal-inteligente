@@ -971,9 +971,13 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
             .sort((a, b) => b[1] - a[1])
             .slice(0, maxMotivos)
             .map(([motivo, quantidade]) => ({ motivo, quantidade }));
-          if (top.length) return { executadoEm: d.executadoEm || null, top };
+          // Log do portal EXISTE → é a fonte da verdade. Se rodou sem falhas,
+          // devolve null (sem quadro de motivos) — NÃO cai no log do legado,
+          // que só tem o ruído 1102 do trilho aposentado (confundia o card:
+          // portal 313/0 perfeito exibindo erro do serviço morto).
+          return top.length ? { executadoEm: d.executadoEm || null, top } : null;
         }
-        // Fallback: log do WS legado (transição).
+        // Fallback: log do WS legado (só quando NUNCA houve run do portal).
         const legado = await db.collection('nfsesp_capturas_log')
           .orderBy('executadoEm', 'desc').limit(1).get();
         if (legado.empty) return null;
