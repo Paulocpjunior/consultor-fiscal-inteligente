@@ -26,6 +26,24 @@ describe('avaliarSaudeCaptura', () => {
         expect(r.motivo).toMatch(/0 documentos.*7 dias/);
     });
 
+    it('caso real NFe: última execução 0/1 (um 656) MAS 12417 docs em 7d → ATENÇÃO, não crítico (falso "inoperante")', () => {
+        const r = avaliarSaudeCaptura({
+            ultimoMs: AGORA - 5 / 60 * H, sucessos: 0, falhas: 1,
+            docsUltimos7d: 12417, elegiveis: 107, agoraMs: AGORA,
+        });
+        expect(r.nivel).toBe('atencao');
+        expect(r.motivo).toMatch(/transitório|12417 doc/);
+    });
+
+    it('all-failed COM docs7d=0 continua crítico (inoperância real, caso 0/121)', () => {
+        const r = avaliarSaudeCaptura({
+            ultimoMs: AGORA - 1 * H, sucessos: 0, falhas: 121,
+            docsUltimos7d: 0, elegiveis: 149, agoraMs: AGORA,
+        });
+        expect(r.nivel).toBe('critico');
+        expect(r.motivo).toMatch(/inoperante/);
+    });
+
     it('caso real NF-e: 60/21, 10743 docs em 7d → OK', () => {
         const r = avaliarSaudeCaptura({
             ultimoMs: AGORA - 1 * H, sucessos: 60, falhas: 21,
