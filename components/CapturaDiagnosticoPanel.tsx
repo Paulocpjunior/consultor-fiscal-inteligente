@@ -118,12 +118,30 @@ const CardCaptura: React.FC<{
                 </span>
             </div>
 
-            {log?.status === 'iniciado' && (
-                <div className="text-xs font-bold mb-2 bg-sky-100 text-sky-800 border border-sky-300 rounded px-2 py-1">
-                    ⏳ Execução EM ANDAMENTO (iniciada {formatRelativeBR(ultimoMs)}) — varredura completa
-                    pode levar até ~1h (períodos por mês × empresas); o resultado aparece aqui ao terminar.
-                </div>
-            )}
+            {/* Execução 'iniciada'. Uma varredura real termina em ~1h. Passou muito
+                disso e o heartbeat ainda diz 'iniciado' = a execução MORREU no meio
+                (deploy troca a revisão do Cloud Run e mata o setImmediate; reinício
+                de instância idem). O doc fica preso em 'iniciado' pra ninguém pensar
+                que rodou. Aqui a gente para de mentir "rodando" e mostra a verdade:
+                interrompida, clique Forçar pra reiniciar (é seguro — dedup). */}
+            {log?.status === 'iniciado' && (() => {
+                const iniciadoHaMin = ultimoMs ? Math.floor((Date.now() - ultimoMs) / 60000) : 0;
+                const LIMITE_EM_ANDAMENTO_MIN = 90; // ~1h esperado + folga
+                const provavelmenteMorta = iniciadoHaMin >= LIMITE_EM_ANDAMENTO_MIN;
+                return provavelmenteMorta ? (
+                    <div className="text-xs font-bold mb-2 bg-amber-100 text-amber-900 border border-amber-400 rounded px-2 py-1">
+                        ⚠️ Execução iniciada {formatRelativeBR(ultimoMs)} e NÃO terminou — o normal é ~1h.
+                        Provavelmente foi interrompida (deploy/reinício do servidor mata a varredura em
+                        andamento). Os docs já capturados estão salvos. Clique <strong>“Forçar captura
+                        agora”</strong> para reiniciar do zero (seguro: a importação deduplica).
+                    </div>
+                ) : (
+                    <div className="text-xs font-bold mb-2 bg-sky-100 text-sky-800 border border-sky-300 rounded px-2 py-1">
+                        ⏳ Execução EM ANDAMENTO (iniciada {formatRelativeBR(ultimoMs)}) — varredura completa
+                        pode levar até ~1h (períodos por mês × empresas); o resultado aparece aqui ao terminar.
+                    </div>
+                );
+            })()}
             {/* Motivo do farol — sempre visível; é o que evita "verde mentiroso". */}
             <div className={`text-xs font-semibold mb-2 ${
                 saude.nivel === 'critico' ? 'text-red-800' : saude.nivel === 'atencao' ? 'text-amber-800' : 'text-emerald-800'
