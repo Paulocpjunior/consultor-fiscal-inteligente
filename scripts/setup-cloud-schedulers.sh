@@ -298,9 +298,11 @@ upsert_job \
 # ─── Verifica ──────────────────────────────────────────────────────────────
 echo ""
 echo "═══ Jobs ativos em $REGION ═══"
+# SEM filtro por nome: o filtro antigo (name~cron-noturno) escondia jobs
+# como manifesto-ciencia-cron e sefaz-drenagem-cron da verificação final —
+# parecia que não foram criados (susto de 23/07).
 gcloud scheduler jobs list \
     --location="$REGION" --project="$PROJECT_ID" \
-    --filter="name~cron-noturno" \
     --format="table(name.basename(),schedule,state,lastAttemptTime)"
 
 echo ""
