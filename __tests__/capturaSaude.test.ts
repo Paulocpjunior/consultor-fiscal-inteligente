@@ -2,7 +2,7 @@
  * Saúde honesta da captura — regressão do "verde mentiroso" (22/07/2026):
  * NFS-e SP com 0/121 e 0 docs aparecia ✅ porque o farol só media recência.
  */
-import { avaliarSaudeCaptura } from '../services/capturaSaude';
+import { avaliarSaudeCaptura, avaliarSaudeCofreSaida } from '../services/capturaSaude';
 
 const AGORA = 1_800_000_000_000;
 const H = 3600000;
@@ -94,5 +94,45 @@ describe('avaliarSaudeCaptura', () => {
             docsUltimos7d: 0, elegiveis: 5, agoraMs: AGORA,
         });
         expect(r.nivel).toBe('critico');
+    });
+});
+
+describe('avaliarSaudeCofreSaida (saída mod 55 pelo cofre de e-mail)', () => {
+    it('cofre nunca leu a caixa → crítico', () => {
+        expect(avaliarSaudeCofreSaida({
+            ultimoMs: null, saida7d: null, entregando7d: null, monitoradas: 38, agoraMs: AGORA,
+        }).nivel).toBe('critico');
+    });
+
+    it('cofre parado há >72h → crítico (infra da caixa)', () => {
+        const r = avaliarSaudeCofreSaida({
+            ultimoMs: AGORA - 100 * H, saida7d: 50, entregando7d: 20, monitoradas: 38, agoraMs: AGORA,
+        });
+        expect(r.nivel).toBe('critico');
+        expect(r.motivo).toMatch(/sem leitura/);
+    });
+
+    it('caso real hoje: cron roda, mas 0 saída em 7d com 38 monitoradas → crítico (trilho ocioso, adoção 0)', () => {
+        const r = avaliarSaudeCofreSaida({
+            ultimoMs: AGORA - 1 * H, saida7d: 0, entregando7d: 0, monitoradas: 38, agoraMs: AGORA,
+        });
+        expect(r.nivel).toBe('critico');
+        expect(r.motivo).toMatch(/não apontaram o emissor/);
+    });
+
+    it('entra saída mas só 1 de 38 entrega → ATENÇÃO (funciona, falta onboarding) — não verde-mentiroso', () => {
+        const r = avaliarSaudeCofreSaida({
+            ultimoMs: AGORA - 1 * H, saida7d: 12, entregando7d: 1, monitoradas: 38, agoraMs: AGORA,
+        });
+        expect(r.nivel).toBe('atencao');
+        expect(r.motivo).toMatch(/1 de 38/);
+    });
+
+    it('maioria entregando → ok', () => {
+        const r = avaliarSaudeCofreSaida({
+            ultimoMs: AGORA - 1 * H, saida7d: 900, entregando7d: 30, monitoradas: 38, agoraMs: AGORA,
+        });
+        expect(r.nivel).toBe('ok');
+        expect(r.motivo).toMatch(/Recebendo saída/);
     });
 });

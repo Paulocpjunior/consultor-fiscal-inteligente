@@ -1155,11 +1155,69 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       }
     }
 
+    // Saúde do trilho de SAÍDA mod 55 pelo cofre de e-mail (substitui a SIEG).
+    // A saída não vem da SEFAZ (Rejeição 641 — nunca entrega ao emissor): vem do
+    // cliente apontar o emissor pro cofre. O farol mede ADOÇÃO. Lê:
+    //   - sefaz_xml_email_state/estado  → última leitura + ultimaSaidaPorEmpresa
+    //   - cofre_email_runs (7d)         → saída/entrada importada na janela
+    //   - simples/lucro                 → universo monitorado (denominador)
+    async function estadoCofreSaida() {
+      try {
+        let atualizadoMs = null, ultimoResumo = null, entregando7d = 0, jaEntregaram = 0;
+        try {
+          const stSnap = await db.doc('sefaz_xml_email_state/estado').get();
+          if (stSnap.exists) {
+            const st = stSnap.data();
+            atualizadoMs = st.atualizadoEm?.toMillis?.() ?? null;
+            ultimoResumo = st.ultimoResumo ?? null;
+            const mapa = st.ultimaSaidaPorEmpresa || {};
+            jaEntregaram = Object.keys(mapa).length;
+            for (const v of Object.values(mapa)) {
+              const ms = v?.ms ?? null;
+              if (ms && ms >= seteDias) entregando7d++;
+            }
+          }
+        } catch { /* sem state ainda */ }
+
+        let saida7d = 0, entrada7d = 0;
+        try {
+          const runsSnap = await db.collection('cofre_email_runs').where('ranAtMs', '>=', seteDias).get();
+          runsSnap.forEach((d) => {
+            const x = d.data();
+            saida7d += Number(x.saida || 0);
+            entrada7d += Number(x.entrada || 0);
+          });
+        } catch { /* sem histórico ainda */ }
+
+        // Universo monitorado = empresas ativas com CNPJ (mesma base do matcher).
+        let monitoradas = 0;
+        const vistos = new Set();
+        for (const col of ['simples_empresas', 'lucro_empresas']) {
+          try {
+            const snap = await db.collection(col).get();
+            snap.forEach((doc) => {
+              const d = doc.data();
+              if (d._merged_into) return;
+              const cnpj = String(d.cnpj || '').replace(/\D/g, '');
+              if (cnpj.length !== 14 || vistos.has(cnpj)) return;
+              vistos.add(cnpj);
+              monitoradas++;
+            });
+          } catch { /* coleção indisponível */ }
+        }
+
+        return { atualizadoMs, ultimoResumo, entregando7d, jaEntregaram, saida7d, entrada7d, monitoradas };
+      } catch (e) {
+        return { erro: e.message };
+      }
+    }
+
     const [
       logSefaz, logNfseSp, logNfseNac,
       stateSefaz, stateNfseSp, stateNfseNac,
       docsNfe, docsNfseSp, docsNfseNac,
       falhasNfseSp, docsNfseNacTotal, falhasNfe,
+      cofreSaida,
     ] = await Promise.all([
       ultimoLog('sefaz_cron_logs'),
       // 22/07: trilho oficial NFSe SP = PORTAL CSV; o WS legado (1102) foi pausado.
@@ -1199,6 +1257,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
         } catch (e) { return null; }
       })(),
       topFalhasNfe(),
+      estadoCofreSaida(),
     ]);
 
     return res.json({
@@ -1234,6 +1293,37 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           // documento (0 capturado é correto, não crítico); true = há doc e não
           // capturamos (bug); null = desconhecido (mantém rede de segurança).
           movimentoDisponivel: stateNfseNac?.movimentoDisponivel ?? null,
+        },
+        // 4º trilho: SAÍDA mod 55 pelo cofre de e-mail. A SEFAZ nunca entrega a
+        // saída ao emissor (Rejeição 641); ela chega quando o cliente aponta o
+        // emissor pro cofre. Farol mede ADOÇÃO (avaliarSaudeCofreSaida no front).
+        saidaCofre: {
+          fonte: 'Saída mod 55 — Cofre de e-mail (substitui a SIEG)',
+          endpointCron: '/api/admin/sefaz/xml-email-ingest-cron',
+          schedulerEsperado: 'xml-email-ingest-cron (a cada 30min, 7-21h seg-sáb)',
+          ultimoCron: cofreSaida?.erro ? { erro: cofreSaida.erro } : {
+            executadoEmMs: cofreSaida?.atualizadoMs ?? null,
+            // "sucessos" do cofre = docs importados na última leitura; "falhas" =
+            // erros de importação. totalNovos = saída nova (o foco deste card).
+            sucessos: cofreSaida?.ultimoResumo
+              ? (Number(cofreSaida.ultimoResumo.saida || 0) + Number(cofreSaida.ultimoResumo.entrada || 0))
+              : null,
+            falhas: cofreSaida?.ultimoResumo?.erros ?? null,
+            totalNovos: cofreSaida?.ultimoResumo?.saida ?? null,
+            status: null,
+            fonte: 'cofre-email',
+          },
+          state: {
+            total: cofreSaida?.monitoradas ?? null,
+            travadas: null,
+          },
+          // headline do card = SAÍDA importada em 7d (é o que o Paulo pergunta).
+          docsUltimos7d: cofreSaida?.saida7d ?? null,
+          // Sinais de adoção (o farol do cofre usa estes três):
+          entregando7d: cofreSaida?.entregando7d ?? null,
+          jaEntregaram: cofreSaida?.jaEntregaram ?? null,
+          monitoradasCofre: cofreSaida?.monitoradas ?? null,
+          entrada7dCofre: cofreSaida?.entrada7d ?? null,
         },
       },
     });

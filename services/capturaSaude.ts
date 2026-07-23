@@ -84,3 +84,56 @@ export function avaliarSaudeCaptura(s: SinaisCaptura): SaudeCaptura {
     if (!temElegiveis) return { nivel: 'ok', motivo: 'Sem empresas elegíveis no momento.' };
     return { nivel: 'ok', motivo: `Capturando: ${docs7d ?? '—'} doc(s) em 7 dias.` };
 }
+
+export interface SinaisCofreSaida {
+    /** ms da última leitura da caixa (null = nunca) */
+    ultimoMs: number | null;
+    /** saída mod 55 importada pelo cofre nos últimos 7 dias */
+    saida7d: number | null;
+    /** clientes distintos que entregaram alguma saída nos últimos 7 dias */
+    entregando7d: number | null;
+    /** universo de empresas monitoradas (denominador da adoção) */
+    monitoradas: number | null;
+    agoraMs: number;
+}
+
+/**
+ * Saúde HONESTA do trilho de SAÍDA mod 55 pelo cofre de e-mail. Diferente dos
+ * outros trilhos, a saída não depende de a SEFAZ entregar (ela nunca entrega ao
+ * emissor — Rejeição 641): depende de o CLIENTE apontar o emissor pro cofre. Por
+ * isso o farol mede ADOÇÃO, não só "o cron rodou":
+ *   - cofre parado/nunca leu           → crítico (infra quebrada)
+ *   - 0 saída em 7d                     → crítico (ninguém entregando — trilho ocioso)
+ *   - entra saída, mas < metade adota   → atenção (funciona, falta onboarding)
+ *   - maioria entregando                → ok
+ * O crítico aqui NÃO significa "captura quebrada" e sim "trilho vazio"; o âmbar
+ * é o estado real enquanto os clientes migram da SIEG. Evita o verde-mentiroso
+ * de "1 cliente entrega → verde" escondendo 300 sem configurar.
+ */
+export function avaliarSaudeCofreSaida(s: SinaisCofreSaida): SaudeCaptura {
+    const horas = s.ultimoMs ? (s.agoraMs - s.ultimoMs) / 3600000 : null;
+    if (horas === null) return { nivel: 'critico', motivo: 'Cofre nunca leu a caixa.' };
+    if (horas > 72) return { nivel: 'critico', motivo: `Cofre sem leitura há ${Math.floor(horas / 24)} dia(s) — verifique a integração da caixa.` };
+
+    const saida = s.saida7d ?? 0;
+    const entregando = s.entregando7d ?? 0;
+    const mon = s.monitoradas ?? 0;
+
+    if (saida === 0) {
+        return {
+            nivel: 'critico',
+            motivo: mon > 0
+                ? `Nenhuma saída mod 55 entrou no cofre em 7 dias (${mon} empresas monitoradas) — os clientes ainda não apontaram o emissor pro cofre.`
+                : 'Nenhuma saída mod 55 entrou no cofre em 7 dias.',
+        };
+    }
+
+    if (mon > 0 && entregando / mon < 0.5) {
+        return {
+            nivel: 'atencao',
+            motivo: `Recebendo saída, mas só ${entregando} de ${mon} clientes entregaram em 7d — adoção parcial; configure o cofre nos demais (veja Cobertura de Saída).`,
+        };
+    }
+
+    return { nivel: 'ok', motivo: `Recebendo saída: ${saida} nota(s) de ${entregando} cliente(s) em 7 dias.` };
+}
