@@ -1,11 +1,11 @@
 /**
  * CapturaDiagnosticoPanel.tsx
  *
- * Painel admin que mostra estado REAL das 3 capturas noturnas
- * (NFe DistDFe, NFSe SP, NFSe Nacional ADN):
+ * Painel admin que mostra estado REAL dos trilhos de captura
+ * (NFe DistDFe, NFSe SP, NFSe Nacional ADN, saída mod 55 pelo cofre de e-mail):
  *   - última execução do cron + duração + sucessos/falhas
  *   - total de empresas elegíveis + travadas (>7d sem sync)
- *   - docs capturados nos últimos 7d (NFe / NFSe SP / NFSe Nacional)
+ *   - docs capturados nos últimos 7d (NFe / NFSe SP / NFSe Nacional / saída cofre)
  *   - janela operacional atual
  *   - botão "Forçar captura agora" pra cada fonte
  *
@@ -13,7 +13,7 @@
  */
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { avaliarSaudeCaptura } from '../services/capturaSaude';
+import { avaliarSaudeCaptura, avaliarSaudeCofreSaida } from '../services/capturaSaude';
 import {
     fetchCapturaDiagnostico,
     forcarCapturaAgora,
@@ -58,7 +58,7 @@ function isCronLog(x: any): x is CronLog {
 const CardCaptura: React.FC<{
     titulo: string;
     status: CapturaStatus;
-    fonte: 'sefazNfe' | 'nfseSp' | 'nfseNacional';
+    fonte: 'sefazNfe' | 'nfseSp' | 'nfseNacional' | 'saidaCofre';
     isAdmin: boolean;
     onForcarOk: () => void;
 }> = ({ titulo, status, fonte, isAdmin, onForcarOk }) => {
@@ -78,14 +78,28 @@ const CardCaptura: React.FC<{
 
     // Saúde HONESTA: mede resultado (docs capturados + taxa de sucesso), não
     // só "o cron rodou". Regressão do verde mentiroso da NFS-e SP (0/121 ✅).
-    const saude = avaliarSaudeCaptura({
-        ultimoMs,
-        sucessos: log?.sucessos ?? null,
-        falhas: log?.falhas ?? null,
-        docsUltimos7d: status.docsUltimos7d ?? null,
-        elegiveis: stateTotal ?? null,
-        agoraMs: Date.now(),
-    });
+    // Saída pelo cofre tem saúde própria (mede ADOÇÃO, não "o cron rodou"): a
+    // SEFAZ nunca entrega a saída ao emissor, então 0 saída = clientes sem
+    // configurar, não captura quebrada. Os demais trilhos usam o farol clássico.
+    const saude = fonte === 'saidaCofre'
+        ? avaliarSaudeCofreSaida({
+            ultimoMs,
+            saida7d: status.docsUltimos7d ?? null,
+            entregando7d: status.entregando7d ?? null,
+            monitoradas: status.monitoradasCofre ?? null,
+            agoraMs: Date.now(),
+        })
+        : avaliarSaudeCaptura({
+            ultimoMs,
+            sucessos: log?.sucessos ?? null,
+            falhas: log?.falhas ?? null,
+            docsUltimos7d: status.docsUltimos7d ?? null,
+            elegiveis: stateTotal ?? null,
+            // NFSe Nacional: sinal do provedor. false = ADN confirma que não há doc
+            // disponível → "0 capturado" é correto, não pinta vermelho de falha.
+            movimentoDisponivel: status.movimentoDisponivel ?? null,
+            agoraMs: Date.now(),
+        });
     const cor = COR_POR_NIVEL[saude.nivel];
 
     const handleForcar = async () => {
@@ -118,12 +132,30 @@ const CardCaptura: React.FC<{
                 </span>
             </div>
 
-            {log?.status === 'iniciado' && (
-                <div className="text-xs font-bold mb-2 bg-sky-100 text-sky-800 border border-sky-300 rounded px-2 py-1">
-                    ⏳ Execução EM ANDAMENTO (iniciada {formatRelativeBR(ultimoMs)}) — varredura completa
-                    pode levar até ~1h (períodos por mês × empresas); o resultado aparece aqui ao terminar.
-                </div>
-            )}
+            {/* Execução 'iniciada'. Uma varredura real termina em ~1h. Passou muito
+                disso e o heartbeat ainda diz 'iniciado' = a execução MORREU no meio
+                (deploy troca a revisão do Cloud Run e mata o setImmediate; reinício
+                de instância idem). O doc fica preso em 'iniciado' pra ninguém pensar
+                que rodou. Aqui a gente para de mentir "rodando" e mostra a verdade:
+                interrompida, clique Forçar pra reiniciar (é seguro — dedup). */}
+            {log?.status === 'iniciado' && (() => {
+                const iniciadoHaMin = ultimoMs ? Math.floor((Date.now() - ultimoMs) / 60000) : 0;
+                const LIMITE_EM_ANDAMENTO_MIN = 90; // ~1h esperado + folga
+                const provavelmenteMorta = iniciadoHaMin >= LIMITE_EM_ANDAMENTO_MIN;
+                return provavelmenteMorta ? (
+                    <div className="text-xs font-bold mb-2 bg-amber-100 text-amber-900 border border-amber-400 rounded px-2 py-1">
+                        ⚠️ Execução iniciada {formatRelativeBR(ultimoMs)} e NÃO terminou — o normal é ~1h.
+                        Provavelmente foi interrompida (deploy/reinício do servidor mata a varredura em
+                        andamento). Os docs já capturados estão salvos. Clique <strong>“Forçar captura
+                        agora”</strong> para reiniciar do zero (seguro: a importação deduplica).
+                    </div>
+                ) : (
+                    <div className="text-xs font-bold mb-2 bg-sky-100 text-sky-800 border border-sky-300 rounded px-2 py-1">
+                        ⏳ Execução EM ANDAMENTO (iniciada {formatRelativeBR(ultimoMs)}) — varredura completa
+                        pode levar até ~1h (períodos por mês × empresas); o resultado aparece aqui ao terminar.
+                    </div>
+                );
+            })()}
             {/* Motivo do farol — sempre visível; é o que evita "verde mentiroso". */}
             <div className={`text-xs font-semibold mb-2 ${
                 saude.nivel === 'critico' ? 'text-red-800' : saude.nivel === 'atencao' ? 'text-amber-800' : 'text-emerald-800'
@@ -166,7 +198,7 @@ const CardCaptura: React.FC<{
                     </div>
                 )}
                 <div className="flex justify-between border-t pt-2 mt-2">
-                    <span className="opacity-80">Empresas elegíveis:</span>
+                    <span className="opacity-80">{fonte === 'saidaCofre' ? 'Empresas monitoradas:' : 'Empresas elegíveis:'}</span>
                     <span className="font-mono">
                         {stateTotal ?? '—'}
                         {stateTotalAtivas !== null && stateTotalAtivas !== undefined && stateTotalAtivas !== stateTotal && (
@@ -199,27 +231,84 @@ const CardCaptura: React.FC<{
                             ))}
                     </div>
                 )}
-                {status.docsTotalHistorico !== undefined && status.docsTotalHistorico !== null && (
-                    <div className="flex justify-between">
-                        <span className="opacity-80" title="Se 0: esta fonte NUNCA capturou nada — problema de elegibilidade (ex.: municípios não aderentes ao ADN), não de cron.">
-                            Docs (histórico total):
-                        </span>
-                        <span className={`font-mono font-bold ${status.docsTotalHistorico === 0 ? 'text-red-700' : ''}`}>
-                            {status.docsTotalHistorico}
-                            {status.docsTotalHistorico === 0 && ' — nunca capturou'}
-                        </span>
+                {status.docsTotalHistorico !== undefined && status.docsTotalHistorico !== null && (() => {
+                    // "0 histórico" só é vermelho de verdade quando NÃO sabemos que o
+                    // provedor está vazio. Se o ADN confirma sem movimento, 0 é
+                    // esperado (transição) — âmbar, não sangue.
+                    const semMovimentoConfirmado = status.movimentoDisponivel === false;
+                    const zero = status.docsTotalHistorico === 0;
+                    const cor = zero ? (semMovimentoConfirmado ? 'text-amber-700' : 'text-red-700') : '';
+                    return (
+                        <div className="flex justify-between">
+                            <span className="opacity-80" title="Se 0: esta fonte nunca capturou. Cruze com o cursor NSU abaixo — se o ADN confirma sem movimento, 0 é esperado; senão é elegibilidade/cron.">
+                                Docs (histórico total):
+                            </span>
+                            <span className={`font-mono font-bold ${cor}`}>
+                                {status.docsTotalHistorico}
+                                {zero && (semMovimentoConfirmado ? ' — ADN sem movimento' : ' — nunca capturou')}
+                            </span>
+                        </div>
+                    );
+                })()}
+                {stateOk && (status.state as any).elegiveisLista?.length > 0 && (
+                    <div className="bg-white/50 border rounded p-2 text-xs space-y-1">
+                        <div className="font-bold opacity-80">Quem são as elegíveis (e o que o provedor diz):</div>
+                        {((status.state as any).elegiveisLista as Array<{
+                            nome: string; cnpj: string;
+                            ultNSU?: number | null; maxNSU?: number | null; semMovimento?: boolean | null;
+                        }>).map(e => {
+                            // semMovimento: true = ADN confirma que não há nada (0 correto);
+                            // false = há doc esperando e não capturamos (bug); null = nunca sincronizou.
+                            const temNsu = e.maxNSU != null && e.ultNSU != null;
+                            const veredito = e.semMovimento === true
+                                ? { txt: '✓ ADN sem movimento (nada a capturar)', cls: 'text-emerald-700' }
+                                : e.semMovimento === false
+                                ? { txt: `⚠ ${(e.maxNSU ?? 0) - (e.ultNSU ?? 0)} doc(s) no ADN não capturados`, cls: 'text-red-700 font-bold' }
+                                : { txt: '— ainda não sincronizou', cls: 'opacity-60' };
+                            return (
+                                <div key={e.cnpj} className="border-t first:border-t-0 pt-1 first:pt-0">
+                                    <div className="font-mono text-[10px]">{e.cnpj} · {e.nome}</div>
+                                    <div className="flex justify-between text-[10px]">
+                                        <span className={veredito.cls}>{veredito.txt}</span>
+                                        {temNsu && <span className="font-mono opacity-60">NSU {e.ultNSU}/{e.maxNSU}</span>}
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
-                {stateOk && (status.state as any).elegiveisLista?.length > 0 && (
-                    <div className="bg-white/50 border rounded p-2 text-xs space-y-0.5">
-                        <div className="font-bold opacity-80">Quem são as elegíveis:</div>
-                        {((status.state as any).elegiveisLista as Array<{ nome: string; cnpj: string }>).map(e => (
-                            <div key={e.cnpj} className="font-mono text-[10px]">{e.cnpj} · {e.nome}</div>
-                        ))}
+                {/* Cofre de saída: mostra ADOÇÃO (quem entrega vs monitoradas) e
+                    separa saída (o foco) de entrada. É o que responde "como está a
+                    saída mod 55?" num olhar. */}
+                {fonte === 'saidaCofre' && (
+                    <div className="bg-white/50 border rounded p-2 text-xs space-y-1">
+                        <div className="flex justify-between">
+                            <span className="opacity-80">Clientes entregando saída (7d):</span>
+                            <span className={`font-mono font-bold ${(status.entregando7d ?? 0) === 0 ? 'text-red-700' : ''}`}>
+                                {status.entregando7d ?? '—'} de {status.monitoradasCofre ?? '—'}
+                            </span>
+                        </div>
+                        {status.jaEntregaram != null && (
+                            <div className="flex justify-between opacity-70">
+                                <span>Já entregaram alguma vez:</span>
+                                <span className="font-mono">{status.jaEntregaram}</span>
+                            </div>
+                        )}
+                        {status.entrada7dCofre != null && (
+                            <div className="flex justify-between opacity-70">
+                                <span>Entrada via cofre (7d):</span>
+                                <span className="font-mono">{status.entrada7dCofre}</span>
+                            </div>
+                        )}
+                        <div className="text-[10px] opacity-70 pt-1 border-t">
+                            A saída só entra quando o cliente aponta o emissor pro cofre
+                            (<span className="font-mono">xml@spassessoriacontabil.com.br</span>) ou põe nosso
+                            CNPJ no autXML. Lista de quem falta: <strong>Cobertura de Saída</strong>.
+                        </div>
                     </div>
                 )}
                 <div className="flex justify-between">
-                    <span className="opacity-80">Docs capturados &lt;7d:</span>
+                    <span className="opacity-80">{fonte === 'saidaCofre' ? 'Saída mod 55 importada <7d:' : 'Docs capturados <7d:'}</span>
                     <span className="font-mono font-bold">{status.docsUltimos7d ?? '—'}</span>
                 </div>
                 <div className="text-xs opacity-70 pt-2 border-t mt-2">
@@ -297,7 +386,7 @@ const CapturaDiagnosticoPanel: React.FC<Props> = ({ currentUser }) => {
                         🛰️ Diagnóstico de Captura Automática
                     </h2>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Estado real das 3 capturas noturnas que alimentam os XMLs e NFSe dos clientes.
+                        Estado real dos trilhos de captura (NFe, NFSe SP, NFSe Nacional e saída mod 55 pelo cofre) que alimentam os XMLs e NFSe dos clientes.
                     </p>
                 </div>
                 <button
@@ -318,7 +407,7 @@ const CapturaDiagnosticoPanel: React.FC<Props> = ({ currentUser }) => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <CardCaptura
                     titulo="NFe — Entrada/Saída"
                     status={data.capturas.sefazNfe}
@@ -340,11 +429,23 @@ const CapturaDiagnosticoPanel: React.FC<Props> = ({ currentUser }) => {
                     isAdmin={isAdmin}
                     onForcarOk={load}
                 />
+                {/* 4º trilho: SAÍDA mod 55 pelo cofre de e-mail. Opcional pra não
+                    quebrar se o backend ainda não enviar o card (deploy defasado). */}
+                {data.capturas.saidaCofre && (
+                    <CardCaptura
+                        titulo="Saída mod 55 — Cofre de e-mail"
+                        status={data.capturas.saidaCofre}
+                        fonte="saidaCofre"
+                        isAdmin={isAdmin}
+                        onForcarOk={load}
+                    />
+                )}
             </div>
 
             <div className="text-xs text-gray-500 dark:text-gray-400 mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded">
                 <strong>Como ler:</strong> o farol mede RESULTADO, não só execução: 🔴 = falhando tudo, 0 docs em 7d com empresas elegíveis, ou parado &gt;72h · 🟡 = mais falha que sucesso ou execução atrasada · 🟢 = executando E capturando.
                 Empresas <strong>travadas &gt;7d</strong> são as que não tiveram nova captura — verifique cert, autorização ou flag de captura.
+                No card de <strong>Saída mod 55 (cofre)</strong> o farol mede ADOÇÃO: 🔴 = nenhuma saída entrou (clientes ainda não apontaram o emissor pro cofre) · 🟡 = entra saída, mas menos da metade dos clientes migrou · 🟢 = maioria entregando.
             </div>
 
             {isAdmin && <ConsultaNFePorChavePanel />}

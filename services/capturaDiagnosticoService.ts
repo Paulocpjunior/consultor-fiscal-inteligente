@@ -34,7 +34,16 @@ export interface CapturaStatus {
         bloqueadas?: number | null;
         totalAtivas?: number | null;
         bloqueiosPorMotivo?: Record<string, number>;
-        elegiveisLista?: Array<{ nome: string; cnpj: string }> | null;
+        // NFSe Nacional enriquece cada elegível com o cursor NSU do ADN pra
+        // provar se "0 docs" é correto: semMovimento=true → provedor sem nada.
+        elegiveisLista?: Array<{
+            nome: string;
+            cnpj: string;
+            ultNSU?: number | null;
+            maxNSU?: number | null;
+            ultimaSyncMs?: number | null;
+            semMovimento?: boolean | null;
+        }> | null;
     } | { erro: string };
     docsUltimos7d: number | null;
     /** Top motivos de falha da última execução (hoje só NFSe SP envia). */
@@ -42,6 +51,19 @@ export interface CapturaStatus {
     /** Total histórico de docs desta fonte (hoje só NFSe Nacional envia) —
      *  separa "nunca capturou" (elegibilidade) de "capturava e parou" (quebra). */
     docsTotalHistorico?: number | null;
+    /** Provedor tem documento disponível? false = ADN confirma que não há nada
+     *  (0 capturado é correto, farol não fica vermelho). Hoje só NFSe Nacional. */
+    movimentoDisponivel?: boolean | null;
+    // Sinais do trilho de SAÍDA mod 55 pelo cofre de e-mail (só o card saidaCofre
+    // preenche) — o farol dele mede ADOÇÃO, não só "o cron rodou".
+    /** clientes distintos que entregaram saída nos últimos 7 dias */
+    entregando7d?: number | null;
+    /** clientes que já entregaram saída alguma vez (histórico) */
+    jaEntregaram?: number | null;
+    /** universo de empresas monitoradas (denominador da adoção) */
+    monitoradasCofre?: number | null;
+    /** entrada importada pelo cofre em 7d (secundário; o headline é a saída) */
+    entrada7dCofre?: number | null;
 }
 
 export interface CapturaDiagnostico {
@@ -54,6 +76,8 @@ export interface CapturaDiagnostico {
         sefazNfe: CapturaStatus;
         nfseSp: CapturaStatus;
         nfseNacional: CapturaStatus;
+        /** SAÍDA mod 55 pelo cofre de e-mail (opcional p/ compat com backend antigo). */
+        saidaCofre?: CapturaStatus;
     };
 }
 
@@ -186,7 +210,7 @@ export async function fetchNfseMunicipiosCaminho(): Promise<NfseMunicipiosGuia> 
     return res.json();
 }
 
-export async function forcarCapturaAgora(fonte: 'sefazNfe' | 'nfseSp' | 'nfseNacional'): Promise<{ ok: boolean; motivo?: string }> {
+export async function forcarCapturaAgora(fonte: 'sefazNfe' | 'nfseSp' | 'nfseNacional' | 'saidaCofre'): Promise<{ ok: boolean; motivo?: string }> {
     const token = await getToken();
     const paths: Record<typeof fonte, string> = {
         sefazNfe: '/api/admin/sefaz/sync-cron-now',
@@ -194,6 +218,8 @@ export async function forcarCapturaAgora(fonte: 'sefazNfe' | 'nfseSp' | 'nfseNac
         // cron-now) devolve 1102 pra tudo e foi aposentado.
         nfseSp: '/api/admin/sefaz/nfsesp-portal-cron-now',
         nfseNacional: '/api/admin/nfse-nacional-dfe/sync-cron-now',
+        // Saída pelo cofre: força uma leitura da caixa (rota admin manual).
+        saidaCofre: '/api/admin/sefaz/xml-email-ingest',
     };
     const res = await fetch(paths[fonte], {
         method: 'POST',
