@@ -18,6 +18,7 @@ import {
     fetchEmpresasStatusCaptura,
     toggleEmpresaFlag,
     autoPreencherUf,
+    autoPreencherMunicipio,
     resetLockSefaz,
     salvarEmpresaDadosFiscais,
     exportarEmpresasCsv,
@@ -132,6 +133,26 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
             }));
         } finally {
             setCapturandoCnpj(null);
+        }
+    };
+
+    const [autoMunRunning, setAutoMunRunning] = useState(false);
+    const handleAutoMunicipio = async () => {
+        if (!isAdmin) return;
+        if (!confirm('Auto-preencher o CÓDIGO DO MUNICÍPIO (IBGE) de todas as empresas sem ele, via BrasilAPI? Roda em background (~2-4 min). A elegibilidade da NFS-e Nacional depende disso.')) return;
+        setAutoMunRunning(true);
+        setFeedback(null);
+        try {
+            const r = await autoPreencherMunicipio();
+            if (r.ok) {
+                setFeedback({ tipo: 'sucesso', msg: 'Auto-preenchimento de município iniciado. Aguarde alguns minutos e clique em Atualizar (o card NFSe Nacional do Diagnóstico reflete na sequência).' });
+            } else {
+                setFeedback({ tipo: 'erro', msg: formatarErroAcaoStatusCaptura(r.error || 'falha ao auto-preencher município', null, 'auto-preencher o município') });
+            }
+        } catch (e: any) {
+            setFeedback({ tipo: 'erro', msg: formatarErroAcaoStatusCaptura(e?.message || 'falha inesperada', null, 'auto-preencher o município') });
+        } finally {
+            setAutoMunRunning(false);
         }
     };
 
@@ -339,6 +360,16 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                         </button>
                     )}
                     {!isAdmin && <div className="text-xs text-orange-600">bloqueia captura NFe</div>}
+                    {isAdmin && (
+                        <button
+                            onClick={(ev) => { ev.stopPropagation(); handleAutoMunicipio(); }}
+                            disabled={autoMunRunning}
+                            className="mt-1 text-[10px] px-2 py-0.5 bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50 block"
+                            title="Preenche o código IBGE do município (dadosFiscais.codMunIBGE) de todas as empresas sem ele — a elegibilidade da NFS-e Nacional depende disso"
+                        >
+                            {autoMunRunning ? '⏳ rodando…' : '🏙️ Auto-preencher município'}
+                        </button>
+                    )}
                 </div>
                 <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
                     <div className="text-xs text-gray-700 font-semibold">Cert A1 próprio</div>

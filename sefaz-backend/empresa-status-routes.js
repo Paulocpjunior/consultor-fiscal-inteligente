@@ -643,4 +643,72 @@ router.post('/auto-preencher-uf', requireAuth, async (req, res) => {
     }
 });
 
+// ── POST /auto-preencher-municipio ──────────────────────────────────────────
+// Preenche dadosFiscais.codMunIBGE (+municipio) via BrasilAPI para TODAS as
+// empresas sem código de município. Motivação 23/07: a elegibilidade da NFSe
+// Nacional cruza com o município (SP capital = portal próprio, fora do ADN),
+// mas 368/373 empresas não tinham codMun — o auto-preencher-uf não as tocava
+// porque só processa quem está SEM UF. Admin-only; roda em background.
+router.post('/auto-preencher-municipio', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores' });
+        }
+        res.json({ ok: true, motivo: 'Auto-preenchimento de município iniciado em background' });
+
+        setImmediate(async () => {
+            const db = fa().firestore();
+            const t0 = Date.now();
+            let preenchidas = 0, jaTinham = 0, naoEncontradas = 0, erros = 0, total = 0;
+
+            for (const col of ['simples_empresas', 'lucro_empresas']) {
+                const snap = await db.collection(col).get();
+                for (const doc of snap.docs) {
+                    total++;
+                    const d = doc.data();
+                    if (d._merged_into) continue;
+                    const codAtual = String(d.dadosFiscais?.codMunIBGE || d.codMunIBGE || '').replace(/\D/g, '');
+                    if (codAtual) { jaTinham++; continue; }
+                    const cnpj = (d.cnpj || '').replace(/\D/g, '');
+                    if (cnpj.length !== 14) { erros++; continue; }
+                    try {
+                        const info = await lookupCnpj(cnpj);
+                        const codMunIBGE = info?.codigo_municipio_ibge || info?.codigo_municipio || null;
+                        const municipio = info?.municipio || null;
+                        if (!codMunIBGE) { naoEncontradas++; continue; }
+                        const update = {
+                            'dadosFiscais.codMunIBGE': String(codMunIBGE),
+                            'dadosFiscais.municipioAutoPreenchidoEm': admin.firestore.FieldValue.serverTimestamp(),
+                            'dadosFiscais.municipioAutoPreenchidoPor': req.user.email,
+                        };
+                        if (municipio && !d.dadosFiscais?.municipio) update['dadosFiscais.municipio'] = municipio;
+                        await doc.ref.update(update);
+                        preenchidas++;
+                        console.log(`[auto-preencher-municipio] ${cnpj} ${d.razaoSocial || d.nome} → ${codMunIBGE} (${municipio || '?'})`);
+                    } catch (e) {
+                        erros++;
+                        console.warn(`[auto-preencher-municipio] ${cnpj} erro:`, e.message);
+                    }
+                    // Gentileza com a BrasilAPI (o cache brasilapi-cache evita
+                    // re-consultas; o sleep protege a primeira varredura).
+                    await new Promise((r2) => setTimeout(r2, 350));
+                }
+            }
+
+            const duracaoMs = Date.now() - t0;
+            await fa().firestore().collection('sefaz_cron_logs').add({
+                executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                tipo: 'auto-preencher-municipio',
+                total, preenchidas, jaTinham, naoEncontradas, erros,
+                duracaoMs,
+                fonte: req.user.email,
+            });
+            console.log(`[auto-preencher-municipio] FIM — total=${total} preenchidas=${preenchidas} jaTinham=${jaTinham} naoEncontradas=${naoEncontradas} erros=${erros} (${duracaoMs}ms)`);
+        });
+    } catch (e) {
+        console.error('[auto-preencher-municipio] erro:', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 export default router;

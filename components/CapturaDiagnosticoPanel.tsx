@@ -185,6 +185,20 @@ const CardCaptura: React.FC<{
                         <span className="font-mono text-amber-700">{stateBloqueadas}</span>
                     </div>
                 )}
+                {/* POR QUE estão bloqueadas — sem isto o número era mudo (368
+                    bloqueadas no Nacional e ninguém sabia a causa dominante). */}
+                {stateOk && (status.state as any).bloqueiosPorMotivo && Object.keys((status.state as any).bloqueiosPorMotivo).length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs space-y-0.5">
+                        <div className="font-bold text-amber-800">Motivos dos bloqueios:</div>
+                        {Object.entries((status.state as any).bloqueiosPorMotivo as Record<string, number>)
+                            .sort((a, b) => b[1] - a[1]).slice(0, 4)
+                            .map(([motivo, qtd]) => (
+                                <div key={motivo} className="text-amber-700">
+                                    <span className="font-mono font-bold">{qtd}×</span> {motivo}
+                                </div>
+                            ))}
+                    </div>
+                )}
                 {status.docsTotalHistorico !== undefined && status.docsTotalHistorico !== null && (
                     <div className="flex justify-between">
                         <span className="opacity-80" title="Se 0: esta fonte NUNCA capturou nada — problema de elegibilidade (ex.: municípios não aderentes ao ADN), não de cron.">

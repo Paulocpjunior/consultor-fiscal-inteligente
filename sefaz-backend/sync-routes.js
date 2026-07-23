@@ -1084,11 +1084,39 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       }
     }
 
+    // Motivos agregados das falhas do último sync-cron NFe (errosResumo já é
+    // gravado — top 50 por run — mas só aparecia na aba Erros & Logs; o card
+    // dizia "23 falhas" mudo). Pula docs de outros tipos na mesma coleção
+    // (auto-preencher-*, drenagem sem erros etc).
+    async function topFalhasNfe(maxMotivos = 3) {
+      try {
+        const snap = await db.collection('sefaz_cron_logs')
+          .orderBy('executadoEm', 'desc').limit(6).get();
+        for (const docSnap of snap.docs) {
+          const d = docSnap.data();
+          if (!Array.isArray(d.errosResumo) || d.errosResumo.length === 0) continue;
+          const contagem = new Map();
+          for (const err of d.errosResumo) {
+            const chave = `${err.codigo ? err.codigo + ' — ' : ''}${String(err.motivo || 'sem motivo').slice(0, 130)}`;
+            contagem.set(chave, (contagem.get(chave) || 0) + 1);
+          }
+          const top = [...contagem.entries()]
+            .sort((a, b) => b[1] - a[1]).slice(0, maxMotivos)
+            .map(([motivo, quantidade]) => ({ motivo, quantidade }));
+          if (top.length) return { executadoEm: d.executadoEm || null, top };
+        }
+        return null;
+      } catch (e) {
+        console.warn('[captura-diagnostico] topFalhasNfe:', e.message);
+        return null;
+      }
+    }
+
     const [
       logSefaz, logNfseSp, logNfseNac,
       stateSefaz, stateNfseSp, stateNfseNac,
       docsNfe, docsNfseSp, docsNfseNac,
-      falhasNfseSp, docsNfseNacTotal,
+      falhasNfseSp, docsNfseNacTotal, falhasNfe,
     ] = await Promise.all([
       ultimoLog('sefaz_cron_logs'),
       // 22/07: trilho oficial NFSe SP = PORTAL CSV; o WS legado (1102) foi pausado.
@@ -1127,6 +1155,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           return snap.data().count;
         } catch (e) { return null; }
       })(),
+      topFalhasNfe(),
     ]);
 
     return res.json({
@@ -1139,6 +1168,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           ultimoCron: logSefaz,
           state: stateSefaz,
           docsUltimos7d: docsNfe,
+          topFalhas: falhasNfe,
         },
         nfseSp: {
           fonte: 'NFSe SP — Portal CSV (tomados + prestados)',
