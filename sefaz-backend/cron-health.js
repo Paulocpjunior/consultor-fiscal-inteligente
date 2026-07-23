@@ -16,7 +16,8 @@
 // amarelo, não vermelho — folga generosa cobre fim de semana em crons úteis).
 export const CRON_LOG_COLLECTIONS = [
     { collection: 'sefaz_cron_logs',            label: 'Captura NF-e (DistDFe)',       tsField: 'executadoEm', maxIdleHoras: 48 },
-    { collection: 'nfsesp_cron_logs',           label: 'NFS-e SP (WS)',                tsField: 'executadoEm', maxIdleHoras: 48 },
+    // nfsesp_cron_logs (WS legado) REMOVIDO 23/07: trilho aposentado (erro 1102,
+    // job pausado). Mantê-lo aqui mostrava "OK · 0 ok · 121 falhas" pra sempre.
     { collection: 'nfsesp_portal_cron_logs',    label: 'NFS-e SP (portal CSV)',        tsField: 'executadoEm', maxIdleHoras: 48 },
     { collection: 'nfse_nacional_dfe_cron_logs', label: 'NFS-e Nacional (ADN/DF-e)',   tsField: 'executadoEm', maxIdleHoras: 48 },
     { collection: 'das_cron_logs',              label: 'DAS (vencimentos)',            tsField: 'executadoEm', maxIdleHoras: 48 },
@@ -50,6 +51,20 @@ export function extrairResumoLog(data) {
     return out;
 }
 
+// Extrai o motivo dominante da execução (quando o log traz agregado de erros).
+// É o que transforma "0 ok · 500 falhas" de número mudo em causa acionável.
+export function extrairMotivoTop(d) {
+    const m = d?.motivosResumo?.[0] || d?.errosResumo?.[0] || null;
+    if (m) {
+        const txt = typeof m === 'string' ? m
+            : `${m.quantidade ? m.quantidade + '× ' : ''}${m.motivo || m.codigo || ''}`;
+        return String(txt).slice(0, 160) || null;
+    }
+    if (d?.erroFatal) return String(d.erroFatal).slice(0, 160);
+    if (d?.erro) return String(d.erro).slice(0, 160);
+    return null;
+}
+
 // Normaliza um doc de log (formato variável) para o shape comum do painel.
 export function normalizarEntradaLog(reg, data) {
     const d = data || {};
@@ -70,6 +85,7 @@ export function normalizarEntradaLog(reg, data) {
         status,
         duracaoMs,
         resumo: extrairResumoLog(d),
+        motivoTop: extrairMotivoTop(d),
     };
 }
 
@@ -85,10 +101,17 @@ export function classificarSaudeCron(entry, agoraMs) {
         return { ...entry, idadeHoras: null, saude: 'sem-dados' };
     }
     const idadeHoras = (agoraMs - entry.tsMs) / 3_600_000;
+    // All-failed: rodou e TODAS as tentativas falharam. Antes o painel marcava
+    // "OK" só porque o log existia — verde mentiroso ("OK · 0 ok · 500 falhas",
+    // caso Manifestações 23/07). Concluir não é funcionar.
+    const r = entry.resumo || {};
+    const allFailed = typeof r.sucessos === 'number' && typeof r.falhas === 'number'
+        && r.sucessos === 0 && r.falhas > 0;
     let saude;
     if (entry.status === 'falha') saude = 'falha';
     else if (entry.status === 'iniciado' && idadeHoras > 2) saude = 'travado';
     else if (entry.status === 'iniciado') saude = 'ok'; // rodando agora
+    else if (allFailed) saude = 'falha';
     else if (idadeHoras > maxIdle) saude = 'atrasado';
     else saude = 'ok';
     return { ...entry, idadeHoras: Math.round(idadeHoras * 10) / 10, saude };

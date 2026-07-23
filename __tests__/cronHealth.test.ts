@@ -53,6 +53,21 @@ describe('classificarSaudeCron', () => {
         const e = { ...base, tsMs: AGORA - 1 * H, status: 'falha' };
         expect(classificarSaudeCron(e, AGORA).saude).toBe('falha');
     });
+
+    it("caso real 23/07: log concluído com 0 ok · 500 falhas → FALHA (era 'OK' verde-mentiroso)", () => {
+        const e = { ...base, tsMs: AGORA - 0.2 * H, status: 'sucesso', resumo: { sucessos: 0, falhas: 500 } };
+        expect(classificarSaudeCron(e, AGORA).saude).toBe('falha');
+    });
+
+    it('all-failed só dispara com falhas>0 — run vazio (0/0) continua ok', () => {
+        const e = { ...base, tsMs: AGORA - 1 * H, status: 'sucesso', resumo: { sucessos: 0, falhas: 0 } };
+        expect(classificarSaudeCron(e, AGORA).saude).toBe('ok');
+    });
+
+    it('com sucessos>0 e falhas>0 continua ok (parcial não é all-failed)', () => {
+        const e = { ...base, tsMs: AGORA - 1 * H, status: 'sucesso', resumo: { sucessos: 60, falhas: 21 } };
+        expect(classificarSaudeCron(e, AGORA).saude).toBe('ok');
+    });
 });
 
 describe('normalizarEntradaLog — campos variáveis', () => {

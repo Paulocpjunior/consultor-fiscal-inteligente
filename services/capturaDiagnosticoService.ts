@@ -159,6 +159,8 @@ export interface CronSaudeLinha {
     duracaoMs?: number | null;
     status?: string;
     resumo?: Record<string, number>;
+    /** Motivo dominante das falhas da última execução (motivosResumo/errosResumo). */
+    motivoTop?: string | null;
     erro?: string;
 }
 

@@ -104,6 +104,13 @@ const CronsHealthPanel: React.FC = () => {
                                     {idadeLabel(l)}
                                     {resumo && <span> · {resumo}</span>}
                                 </div>
+                                {/* Motivo dominante das falhas — sem isto "0 ok · 500 falhas"
+                                    era número mudo; agora a causa aparece no card. */}
+                                {l.motivoTop && (l.saude === 'falha' || l.saude === 'travado' || (l.resumo?.falhas ?? 0) > 0) && (
+                                    <div className="mt-0.5 text-[10px] text-red-700 dark:text-red-400 break-words" title={l.motivoTop}>
+                                        {l.motivoTop}
+                                    </div>
+                                )}
                                 {l.erro && <div className="mt-0.5 text-[10px] text-orange-600 dark:text-orange-400 truncate" title={l.erro}>{l.erro}</div>}
                             </div>
                         );

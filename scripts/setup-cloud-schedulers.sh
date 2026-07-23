@@ -21,9 +21,12 @@
 # ── Arquivo / SharePoint ────────────────────────────────────────────────────
 #   sharepoint-auto-sync            0 8 * * 1-5        Importa XMLs das pastas SharePoint
 #   cofre-sharepoint-arquivo-cron   20 8-20 * * 1-6    Arquiva no SharePoint os XMLs do cofre CFI
-# ── Tarefas / vencimentos ───────────────────────────────────────────────────
+# ── Tarefas / vencimentos / obrigações ──────────────────────────────────────
 #   tarefas-cron-mensal             20 3 1 * *         Gera obrigações mensais (dia 1)
 #   vencimentos-cron-diario         0 8 * * 1-5        Avisa tarefas vencendo (email + in-app)
+#   das-cron-noturno                40 3 * * 1-5       DAS: vencimentos/status (órfão até 23/07)
+#   dctfweb-cron-noturno            30 4 * * 1-5       DCTFWeb: apuração Lucro (órfão até 23/07)
+#   caixa-postal-cron-diario        0 5 * * 1-5        Caixa postal e-CAC (órfão até 23/07)
 # ── Alertas / saúde ─────────────────────────────────────────────────────────
 #   cofre-email-alerta-cron         0 9,18 * * 1-5     Cofre CFI: erros, pendências, clientes inativos
 #   crons-health-alerta             10 9,15,21 * * 1-5 Avisa quando algum cron falha/trava
@@ -173,6 +176,32 @@ upsert_job \
     "20 3 1 * *" \
     "/api/tarefas/cron-mensal" \
     "Gera tarefas/obrigacoes mensais de todas as empresas (dia 1, deslocado do nfsesp 3h)"
+
+# ─── Crons ORFAOS descobertos 23/07 (painel Saude dos crons: "ha 53d") ─────
+# As rotas existiam com x-cron-secret mas NENHUM job as disparava — DAS e
+# caixa postal pararam quando os jobs antigos sumiram; o cron de apuracao
+# DCTFWeb NUNCA teve job (painel dizia "nunca rodou" e era literal).
+
+# DAS: atualiza vencimentos/status de guias (03:40, deslocado do portal 03:30).
+upsert_job \
+    "das-cron-noturno" \
+    "40 3 * * 1-5" \
+    "/api/admin/das/cron" \
+    "Atualiza DAS (vencimentos/status) de todas as empresas Simples"
+
+# DCTFWeb: apuracao automatica de todas as empresas Lucro (04:30, apos ADN 04:00).
+upsert_job \
+    "dctfweb-cron-noturno" \
+    "30 4 * * 1-5" \
+    "/api/admin/dctfweb/cron" \
+    "Sincroniza apuracao DCTFWeb de todas as empresas Lucro"
+
+# Caixa postal e-CAC: mensagens novas de todas as empresas (05:00).
+upsert_job \
+    "caixa-postal-cron-diario" \
+    "0 5 * * 1-5" \
+    "/api/admin/caixa-postal/cron" \
+    "Sincroniza caixa postal e-CAC de todas as empresas"
 
 # Alertas de docs novos no SharePoint — 08h30 BRT (apos o auto-sync das 08h).
 # Rota /api/admin/sharepoint/cron-alertas existia sem job (cron orfao).
