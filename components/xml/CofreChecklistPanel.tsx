@@ -33,6 +33,26 @@ const fmtQuando = (ms: number | null) => {
     return `há ${d}d`;
 };
 
+// Texto pronto pra mandar ao cliente/emissor — mesmo passo-a-passo que era
+// feito na SIEG, agora apontando pro cofre do CFI. Um clique = migração
+// destravada sem ninguém redigir e-mail do zero (38 empresas na fila, 23/07).
+function instrucoesMigracao(nomeEmpresa: string): string {
+    return [
+        `Olá! Somos da SP Assessoria Contábil, contabilidade da ${nomeEmpresa}.`,
+        '',
+        'Para recebermos automaticamente os XMLs das notas fiscais emitidas (NF-e modelo 55), pedimos um ajuste único no sistema emissor de notas:',
+        '',
+        '1. Acesse as configurações do seu sistema emissor (a tela de "envio de XML por e-mail" — a mesma onde hoje pode estar o e-mail da SIEG).',
+        '2. Cadastre/substitua o e-mail de envio automático dos XMLs por:',
+        '',
+        '   xml@spassessoriacontabil.com.br',
+        '',
+        '3. Se o sistema pedir "quantidade de notas por e-mail" ou periodicidade, pode manter o padrão — nosso sistema processa qualquer volume.',
+        '',
+        'Só isso! A partir daí os XMLs chegam automaticamente para a contabilidade. Qualquer dúvida sobre onde fica essa configuração no seu emissor, respondemos por aqui.',
+    ].join('\n');
+}
+
 const BADGES: Record<Linha['status'], { cls: string; label: string }> = {
     'falta-migrar': { cls: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300', label: '🔴 Falta migrar' },
     'cofre-parado': { cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300', label: '🟠 Cofre parado' },
@@ -47,6 +67,7 @@ const CofreChecklistPanel: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
     const [filtro, setFiltro] = useState<Filtro>('acao');
+    const [copiado, setCopiado] = useState<string | null>(null);
 
     const carregar = async () => {
         setLoading(true); setErro(null);
@@ -168,6 +189,7 @@ const CofreChecklistPanel: React.FC = () => {
                                 <th className="py-1 pr-2 text-right">Via cofre</th>
                                 <th className="py-1 pr-2">Última saída</th>
                                 <th className="py-1">Última via cofre</th>
+                                <th className="py-1"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -184,6 +206,21 @@ const CofreChecklistPanel: React.FC = () => {
                                     <td className="py-1.5 pr-2 text-right font-mono">{l.viaCofre}</td>
                                     <td className="py-1.5 pr-2">{fmtQuando(l.ultimaSaidaMs)}</td>
                                     <td className="py-1.5">{fmtQuando(l.ultimaSaidaCofreMs)}</td>
+                                    <td className="py-1.5">
+                                        {(l.status === 'falta-migrar' || l.status === 'cofre-parado') && (
+                                            <button
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(instrucoesMigracao(l.nome));
+                                                    setCopiado(l.cnpj);
+                                                    setTimeout(() => setCopiado(c => (c === l.cnpj ? null : c)), 2500);
+                                                }}
+                                                className="text-[10px] px-2 py-0.5 bg-sky-600 text-white rounded hover:bg-sky-700"
+                                                title="Copia o texto pronto pra enviar ao cliente (configurar o e-mail do cofre no emissor)"
+                                            >
+                                                {copiado === l.cnpj ? '✓ copiado!' : '📋 Instruções'}
+                                            </button>
+                                        )}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

@@ -209,6 +209,19 @@ export async function autoPreencherUf(): Promise<{ ok: boolean; motivo?: string;
     return { ok: true, motivo: data.motivo };
 }
 
+/** Preenche dadosFiscais.codMunIBGE via BrasilAPI para todas as empresas sem
+ *  código de município (elegibilidade NFSe Nacional depende disso). Admin. */
+export async function autoPreencherMunicipio(): Promise<{ ok: boolean; motivo?: string; error?: string }> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/auto-preencher-municipio', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true, motivo: data.motivo };
+}
+
 export function exportarEmpresasCsv(empresas: EmpresaStatusCaptura[]): string {
     const headers = [
         'CNPJ', 'Razão Social', 'Regime', 'Responsável', 'Tipo Cert', 'Cert Válido',
