@@ -101,4 +101,44 @@ describe('analisarCoberturaSaida', () => {
     expect(r.percentualCobertura).toBe(0);
     expect(r.empresasSemSaida).toEqual([]);
   });
+
+  it('prioriza sem-saida por evidencia historica: quem emitia (fora da janela) vem antes de quem nunca emitiu', () => {
+    // Beta tem 3 saidas historicas (todas fora da janela de 90d) → emite mod 55,
+    // so paramos de capturar. Gama nunca teve saida. Alfa tem saida na janela.
+    const docs = [
+      { empresaId: 'A', direcao: 'saida', chave: chave('55'), dhEmi: iso(5) },   // Alfa: coberta
+      { empresaId: 'B', direcao: 'saida', chave: chave('55'), dhEmi: iso(150) },  // Beta: historico
+      { empresaId: 'B', direcao: 'saida', chave: chave('55'), dhEmi: iso(160) },
+      { empresaId: 'B', direcao: 'saida', chave: chave('55'), dhEmi: iso(200) },
+    ];
+    const r = analisarCoberturaSaida({ empresas, docs, hojeMs: HOJE, janelaDias: 90 });
+    // Alfa coberta; Beta e Gama sem saida na janela.
+    expect(r.comSaida).toBe(1);
+    expect(r.semSaida).toBe(2);
+    // Priorizacao: Beta (3 historicas) antes de Gama (0) na lista sem-saida.
+    expect(r.empresasSemSaida.map((e: any) => e.empresaId)).toEqual(['B', 'C']);
+    // Recortes prontos: Beta e prioritaria; Gama e sem-evidencia.
+    expect(r.prioritarias.map((e: any) => e.empresaId)).toEqual(['B']);
+    expect(r.prioritariasCount).toBe(1);
+    expect(r.semEvidenciaSaida.map((e: any) => e.empresaId)).toEqual(['C']);
+    expect(r.semEvidenciaCount).toBe(1);
+    // Beta carrega o sinal de volume e a ultima saida historica; sem ms interno.
+    const beta = r.prioritarias.find((e: any) => e.empresaId === 'B');
+    expect(beta.qtdSaidaTotal).toBe(3);
+    expect(beta.qtdSaida).toBe(0); // 0 na janela
+    expect(beta.ultimaSaidaHistorica).toBe(iso(150));
+    expect(beta).not.toHaveProperty('ultimaSaidaHistoricaMs');
+    expect(beta).not.toHaveProperty('ultimaSaidaMs');
+  });
+
+  it('empresa coberta na janela tambem soma o total historico', () => {
+    const docs = [
+      { empresaId: 'A', direcao: 'saida', chave: chave('55'), dhEmi: iso(200) }, // historica
+      { empresaId: 'A', direcao: 'saida', chave: chave('55'), dhEmi: iso(3) },   // na janela
+    ];
+    const r = analisarCoberturaSaida({ empresas, docs, hojeMs: HOJE, janelaDias: 90 });
+    const alfa = r.empresasComSaida.find((e: any) => e.empresaId === 'A');
+    expect(alfa.qtdSaida).toBe(1);       // so 1 na janela
+    expect(alfa.qtdSaidaTotal).toBe(2);  // 2 na historia
+  });
 });

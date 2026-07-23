@@ -61,9 +61,16 @@ export function analisarCoberturaSaida({ empresas, docs, hojeMs, janelaDias = 90
       nome: e.nome || '—',
       regime: e.regime || null,
       ativo: e.ativo !== false,
+      // Janela (captura recente) — define coberta x pendente.
       qtdSaida: 0,
       ultimaSaida: null,
       ultimaSaidaMs: null,
+      // Histórico (toda a base, inclusive resumos só-chave e notas fora da
+      // janela) — é o SINAL DE PRIORIDADE: quem tem saída na história mas 0 na
+      // janela emite de verdade e parou de ser capturado → migra primeiro.
+      qtdSaidaTotal: 0,
+      ultimaSaidaHistorica: null,
+      ultimaSaidaHistoricaMs: null,
     };
     if (e.empresaId) porId.set(e.empresaId, rec);
     // Raiz (8) cobre filial que emite de base diferente da cadastrada.
@@ -72,7 +79,6 @@ export function analisarCoberturaSaida({ empresas, docs, hojeMs, janelaDias = 90
 
   for (const d of docs || []) {
     if (!ehSaidaMod55(d)) continue;
-    if (!dentroJanela(d.dhEmi, hojeMs, janelaDias)) continue;
     // Atribui pelo empresaId gravado; fallback pela raiz do emitente.
     let rec = d.empresaId ? porId.get(d.empresaId) : null;
     if (!rec) {
@@ -80,11 +86,21 @@ export function analisarCoberturaSaida({ empresas, docs, hojeMs, janelaDias = 90
       if (cEmit.length === 14) rec = porRaiz.get(cEmit.slice(0, 8));
     }
     if (!rec) continue;
-    rec.qtdSaida++;
     const t = Date.parse(d.dhEmi);
-    if (Number.isFinite(t) && (rec.ultimaSaidaMs === null || t > rec.ultimaSaidaMs)) {
-      rec.ultimaSaidaMs = t;
-      rec.ultimaSaida = d.dhEmi;
+    // Histórico: conta SEMPRE (mesmo fora da janela ou sem dhEmi válido — a
+    // existência da nota já prova que a empresa emite mod 55).
+    rec.qtdSaidaTotal++;
+    if (Number.isFinite(t) && (rec.ultimaSaidaHistoricaMs === null || t > rec.ultimaSaidaHistoricaMs)) {
+      rec.ultimaSaidaHistoricaMs = t;
+      rec.ultimaSaidaHistorica = d.dhEmi;
+    }
+    // Janela: só conta dentro do período (cobertura recente).
+    if (dentroJanela(d.dhEmi, hojeMs, janelaDias)) {
+      rec.qtdSaida++;
+      if (Number.isFinite(t) && (rec.ultimaSaidaMs === null || t > rec.ultimaSaidaMs)) {
+        rec.ultimaSaidaMs = t;
+        rec.ultimaSaida = d.dhEmi;
+      }
     }
   }
 
@@ -93,7 +109,17 @@ export function analisarCoberturaSaida({ empresas, docs, hojeMs, janelaDias = 90
   const comSaida = todas.filter((e) => e.qtdSaida > 0);
 
   const porNome = (a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR');
-  const limpa = ({ ultimaSaidaMs, ...rest }) => rest; // nao vaza o ms interno
+  // Prioridade: mais saída histórica primeiro; empate desempata por nome.
+  const porPrioridade = (a, b) => (b.qtdSaidaTotal - a.qtdSaidaTotal) || porNome(a, b);
+  const limpa = ({ ultimaSaidaMs, ultimaSaidaHistoricaMs, ...rest }) => rest; // nao vaza os ms internos
+
+  // Dentro dos "sem saída na janela": quem TEM histórico de saída são os
+  // prioritários (emite mod 55, só paramos de capturar — migrar pro cofre/autXML
+  // resolve). Quem tem 0 na história inteira provavelmente não emite mod 55
+  // (ex.: só presta serviço/NFS-e, ou só NFC-e) — fica no fim da fila.
+  const semSaidaOrdenada = semSaida.sort(porPrioridade);
+  const prioritarias = semSaidaOrdenada.filter((e) => e.qtdSaidaTotal > 0);
+  const semEvidenciaSaida = semSaidaOrdenada.filter((e) => e.qtdSaidaTotal === 0);
 
   return {
     janelaDias,
@@ -101,8 +127,14 @@ export function analisarCoberturaSaida({ empresas, docs, hojeMs, janelaDias = 90
     comSaida: comSaida.length,
     semSaida: semSaida.length,
     percentualCobertura: todas.length ? Math.round((comSaida.length / todas.length) * 100) : 0,
-    // A lista acionavel: onde (provavelmente) falta o CNPJ do escritorio no autXML.
-    empresasSemSaida: semSaida.sort(porNome).map(limpa),
+    // A lista acionavel, JÁ PRIORIZADA: onde falta o CNPJ do escritorio no
+    // autXML ou o cliente apontar o emissor pro cofre. Migrar de cima pra baixo.
+    empresasSemSaida: semSaidaOrdenada.map(limpa),
+    // Recortes prontos pra equipe atacar por ordem de impacto.
+    prioritarias: prioritarias.map(limpa),          // emite mod 55, parou de ser capturado
+    semEvidenciaSaida: semEvidenciaSaida.map(limpa), // sem sinal de que emite mod 55
+    prioritariasCount: prioritarias.length,
+    semEvidenciaCount: semEvidenciaSaida.length,
     empresasComSaida: comSaida.sort((a, b) => b.qtdSaida - a.qtdSaida).map(limpa),
   };
 }

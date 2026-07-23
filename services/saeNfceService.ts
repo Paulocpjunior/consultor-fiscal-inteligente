@@ -116,6 +116,10 @@ export interface CoberturaSaidaEmpresa {
     ativo: boolean;
     qtdSaida: number;
     ultimaSaida: string | null;
+    // Sinal de prioridade: saída na base inteira (inclui resumos e notas fora da
+    // janela). >0 com qtdSaida=0 = emite mod 55 mas parou de ser capturado.
+    qtdSaidaTotal?: number;
+    ultimaSaidaHistorica?: string | null;
 }
 export interface CoberturaSaidaResultado {
     ok: boolean;
@@ -125,6 +129,12 @@ export interface CoberturaSaidaResultado {
     semSaida?: number;
     percentualCobertura?: number;
     empresasSemSaida?: CoberturaSaidaEmpresa[];
+    // Recortes já priorizados: prioritarias = emite mod 55 mas parou de ser
+    // capturado (migrar primeiro); semEvidenciaSaida = sem sinal de que emite.
+    prioritarias?: CoberturaSaidaEmpresa[];
+    semEvidenciaSaida?: CoberturaSaidaEmpresa[];
+    prioritariasCount?: number;
+    semEvidenciaCount?: number;
     empresasComSaida?: CoberturaSaidaEmpresa[];
     docsSaidaLidos?: number;
     geradoEm?: string;

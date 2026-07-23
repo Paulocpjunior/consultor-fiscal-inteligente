@@ -41,16 +41,22 @@ const AutXmlHarvest: React.FC = () => {
     };
 
     const baixarCsvSemSaida = () => {
+        // Já sai priorizado (backend ordena por saída histórica desc). A coluna
+        // Prioridade + "Saídas na base" dão a ordem de ataque pra equipe.
         const linhas = cob?.empresasSemSaida || [];
-        const head = 'CNPJ;Empresa;Regime;Ativo\n';
+        const head = 'Prioridade;CNPJ;Empresa;Regime;Ativo;SaidasNaBase;UltimaSaidaHistorica\n';
         const corpo = linhas
-            .map((e) => `${e.cnpj};"${String(e.nome).replace(/"/g, '""')}";${e.regime || ''};${e.ativo ? 'sim' : 'nao'}`)
+            .map((e) => {
+                const prioridade = (e.qtdSaidaTotal ?? 0) > 0 ? 'ALTA (emite mod 55)' : 'baixa (sem evidencia)';
+                const ultima = e.ultimaSaidaHistorica ? String(e.ultimaSaidaHistorica).slice(0, 10) : '';
+                return `${prioridade};${e.cnpj};"${String(e.nome).replace(/"/g, '""')}";${e.regime || ''};${e.ativo ? 'sim' : 'nao'};${e.qtdSaidaTotal ?? 0};${ultima}`;
+            })
             .join('\n');
         const blob = new Blob([head + corpo], { type: 'text/csv;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'cobertura-saida-sem-autxml.csv';
+        a.download = 'cobertura-saida-priorizada.csv';
         a.click();
         URL.revokeObjectURL(url);
     };
@@ -160,22 +166,57 @@ const AutXmlHarvest: React.FC = () => {
                             <>
                                 <div className="flex items-center justify-between gap-2">
                                     <p className="text-xs font-bold text-amber-700 dark:text-amber-300">
-                                        {cob.semSaida} sem saída — configurar autXML:
+                                        {cob.semSaida} sem saída na janela — atacar por prioridade:
                                     </p>
                                     <button onClick={baixarCsvSemSaida}
                                         className="px-2 py-1 text-[11px] font-bold rounded bg-emerald-600 hover:bg-emerald-700 text-white">
-                                        Baixar CSV
+                                        Baixar CSV priorizado
                                     </button>
                                 </div>
-                                <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-0.5 max-h-56 overflow-y-auto">
-                                    {(cob.empresasSemSaida || []).map((e) => (
-                                        <li key={e.empresaId}>
-                                            <span className="font-mono">{e.cnpj}</span> — {e.nome}
-                                            <span className="text-slate-400 dark:text-slate-500"> ({e.regime})</span>
-                                            {!e.ativo && <span className="text-red-500"> · inativa</span>}
-                                        </li>
-                                    ))}
-                                </ul>
+
+                                {/* PRIORITÁRIAS: têm saída na base (emitem mod 55) mas paramos de
+                                    capturar — migrar o emissor pro cofre/autXML resolve JÁ. É aqui
+                                    que a equipe ataca primeiro (ordenado por volume histórico). */}
+                                {(cob.prioritariasCount ?? 0) > 0 && (
+                                    <div className="border border-red-200 dark:border-red-800 rounded-lg p-2 bg-red-50/60 dark:bg-red-900/10">
+                                        <p className="text-[11px] font-bold text-red-700 dark:text-red-300">
+                                            🎯 {cob.prioritariasCount} PRIORITÁRIAS — emitem mod 55 e pararam de ser capturadas (migre estas primeiro):
+                                        </p>
+                                        <ul className="mt-1 text-xs text-slate-700 dark:text-slate-300 space-y-0.5 max-h-56 overflow-y-auto">
+                                            {(cob.prioritarias || []).map((e) => (
+                                                <li key={e.empresaId} className="flex justify-between gap-2">
+                                                    <span>
+                                                        <span className="font-mono">{e.cnpj}</span> — {e.nome}
+                                                        <span className="text-slate-400 dark:text-slate-500"> ({e.regime})</span>
+                                                        {!e.ativo && <span className="text-red-500"> · inativa</span>}
+                                                    </span>
+                                                    <span className="whitespace-nowrap font-mono text-red-700 dark:text-red-400" title="Saídas na base × última saída conhecida">
+                                                        {e.qtdSaidaTotal ?? 0}nf{e.ultimaSaidaHistorica ? ` · ${String(e.ultimaSaidaHistorica).slice(0, 10)}` : ''}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {/* SEM EVIDÊNCIA: 0 saída em toda a base — provavelmente nem emitem
+                                    mod 55 (só serviço/NFS-e ou só NFC-e). Recolhidas pra não poluir. */}
+                                {(cob.semEvidenciaCount ?? 0) > 0 && (
+                                    <details className="text-xs text-slate-500 dark:text-slate-400">
+                                        <summary className="cursor-pointer">
+                                            {cob.semEvidenciaCount} sem evidência de saída mod 55 (baixa prioridade — talvez nem emitam)
+                                        </summary>
+                                        <ul className="mt-1 space-y-0.5 max-h-40 overflow-y-auto">
+                                            {(cob.semEvidenciaSaida || []).map((e) => (
+                                                <li key={e.empresaId}>
+                                                    <span className="font-mono">{e.cnpj}</span> — {e.nome}
+                                                    <span className="text-slate-400 dark:text-slate-500"> ({e.regime})</span>
+                                                    {!e.ativo && <span className="text-red-500"> · inativa</span>}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </details>
+                                )}
                             </>
                         ) : (
                             <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ Todas as empresas monitoradas têm saída capturada na janela.</p>
