@@ -50,19 +50,40 @@ export function periodoMesAnterior(hoje = new Date()) {
     };
 }
 
-// Janela padrão do CRON: últimos 40 dias ATÉ HOJE. Bug 22/07/2026: o default
-// era periodoMesAnterior() — em julho o cron re-baixava junho toda noite
-// ("0 novas") e NUNCA capturava o mês corrente; a "última nota" ficou parada
-// em 30/06 por 3 semanas. 40 dias cobre o mês atual inteiro + a cauda do mês
-// anterior (notas emitidas com atraso); o importer deduplica, então re-baixar
-// é seguro e o volume é equivalente ao que já se baixava (1 mês/noite).
-export function periodoJanelaCorrente(hoje = new Date(), dias = 40) {
-    const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - dias);
-    return {
-        dataInicio: fmtDataPt(inicio),
-        dataFim: fmtDataPt(hoje),
-        anoMes: `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`,
-    };
+// Janela padrão do CRON: últimos ~40 dias FATIADOS POR MÊS.
+//
+// História (2 bugs em sequência):
+//  - Até 22/07: default = mês anterior fechado → julho NUNCA era capturado
+//    ("última nota" parada em 30/06 por 3 semanas).
+//  - 22/07: troquei por janela única de 40d cruzando jun→jul → o portal da
+//    prefeitura respondeu HTML em vez de CSV em 313/313 tentativas (23/07,
+//    farol honesto: "Portal SP não retornou CSV. Content-Type=text/html").
+//    A exportação do portal só aceita período DENTRO DE UM MESMO MÊS — o
+//    formato que sempre funcionou (01/06→30/06 = 313/0 OK).
+//
+// Agora: 1 período por mês tocado pela janela — meses anteriores FECHADOS
+// (01→último dia) + mês corrente (01→ONTEM; portais recusam o dia corrente
+// e as notas de hoje chegam na janela de amanhã). Importer deduplica.
+export function periodosJanelaPorMes(hoje = new Date(), dias = 40) {
+    const ontem = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 1);
+    const inicioJanela = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - dias);
+    const periodos = [];
+    // Percorre do mês do início da janela até o mês de ONTEM.
+    let ano = inicioJanela.getFullYear();
+    let mes = inicioJanela.getMonth();
+    while (ano < ontem.getFullYear() || (ano === ontem.getFullYear() && mes <= ontem.getMonth())) {
+        const primeiroDia = new Date(ano, mes, 1);
+        const ultimoDia = new Date(ano, mes + 1, 0);
+        const ehMesDoOntem = ano === ontem.getFullYear() && mes === ontem.getMonth();
+        periodos.push({
+            dataInicio: fmtDataPt(primeiroDia),
+            dataFim: fmtDataPt(ehMesDoOntem && ontem < ultimoDia ? ontem : ultimoDia),
+            anoMes: `${ano}-${String(mes + 1).padStart(2, '0')}`,
+        });
+        mes++;
+        if (mes > 11) { mes = 0; ano++; }
+    }
+    return periodos;
 }
 
 // ─── Lock por CNPJ ────────────────────────────────────────────────────────
@@ -220,12 +241,14 @@ async function sincronizarPrestador({ session, prestador, empresa, periodo }) {
  */
 export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {}) {
     const inicio = Date.now();
-    // Default: janela rolante de 40d até hoje (mês CORRENTE incluso) — o
-    // mês-anterior fixo deixava julho sem nenhuma nota até agosto.
-    const per = periodo || periodoJanelaCorrente();
+    // Default: janela de ~40d FATIADA POR MÊS (o portal só aceita exportação
+    // intra-mês). Período explícito continua aceito (backfill de 1 mês).
+    const periodos = periodo ? [periodo] : periodosJanelaPorMes(new Date());
+    const per = periodos[0]; // compat: log.periodo antigo
     const log = {
         iniciadoEm: new Date(inicio).toISOString(),
         periodo: per,
+        periodos,
         fonte: 'portal-csv',
         capturadoPor: capturadoPor || 'cron',
     };
@@ -347,19 +370,25 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
             }
 
             processadas++;
-            try {
-                const r = await sincronizarPrestador({
-                    session, prestador: prest, empresa: emp, periodo: per,
-                });
-                prestadasTotal += r.prestador?.totalNotas || 0;
-                tomadasTotal += r.tomador?.totalNotas || 0;
-                if (r.prestador?.erro || r.tomador?.erro) erros++;
-                detalhes.push({ ccm: prest.ccm, cnpj: emp.cnpj, ...r });
-                console.log(`[nfsesp-portal] ${emp.cnpj} ${prest.ccm} ok: prest=${r.prestador?.totalNotas || '-'} tom=${r.tomador?.totalNotas || '-'}`);
-            } catch (e) {
-                erros++;
-                detalhes.push({ ccm: prest.ccm, cnpj: emp.cnpj, status: 'erro', motivo: e.message });
-                console.error(`[nfsesp-portal] ${emp.cnpj} ERRO:`, e.message);
+            // Um download POR MÊS da janela (o portal só aceita período
+            // intra-mês) — tipicamente 2: mês anterior fechado + corrente.
+            for (let pi = 0; pi < periodos.length; pi++) {
+                const per2 = periodos[pi];
+                try {
+                    const r = await sincronizarPrestador({
+                        session, prestador: prest, empresa: emp, periodo: per2,
+                    });
+                    prestadasTotal += r.prestador?.totalNotas || 0;
+                    tomadasTotal += r.tomador?.totalNotas || 0;
+                    if (r.prestador?.erro || r.tomador?.erro) erros++;
+                    detalhes.push({ ccm: prest.ccm, cnpj: emp.cnpj, periodo: per2.anoMes, ...r });
+                    console.log(`[nfsesp-portal] ${emp.cnpj} ${prest.ccm} ${per2.anoMes} ok: prest=${r.prestador?.totalNotas || '-'} tom=${r.tomador?.totalNotas || '-'}`);
+                } catch (e) {
+                    erros++;
+                    detalhes.push({ ccm: prest.ccm, cnpj: emp.cnpj, periodo: per2.anoMes, status: 'erro', motivo: e.message });
+                    console.error(`[nfsesp-portal] ${emp.cnpj} ${per2.anoMes} ERRO:`, e.message);
+                }
+                if (pi < periodos.length - 1) await sleep(THROTTLE_MS);
             }
 
             await sleep(THROTTLE_MS);
