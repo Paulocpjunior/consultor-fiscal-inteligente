@@ -93,6 +93,9 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
 
         // 1. Lista todas as empresas (Simples + Lucro)
         const empresasMap = new Map();
+        // Arquivadas somem por padrão; ?incluirArquivadas=1 traz de volta (pra
+        // desarquivar). Marcador: situacao='arquivada' (setado no soft-delete).
+        const incluirArquivadas = String(req.query.incluirArquivadas || '') === '1';
         for (const col of ['simples_empresas', 'lucro_empresas']) {
             const snap = await db.collection(col).get();
             snap.forEach(doc => {
@@ -101,11 +104,14 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 if (cnpj.length !== 14) return;
                 if (empresasMap.has(cnpj)) return; // dedup
                 if (cnpjsSet && !cnpjsSet.has(cnpj)) return; // filtra pela carteira
+                const arquivada = d.situacao === 'arquivada';
+                if (arquivada && !incluirArquivadas) return; // esconde arquivadas
                 empresasMap.set(cnpj, {
                     id: doc.id,
                     cnpj,
                     nome: d.razaoSocial || d.nome || d.fantasia || '—',
                     regime: col === 'simples_empresas' ? 'simples' : 'lucro',
+                    arquivada,
                     fonte: col,
                     capturarSefaz: d.capturarSefaz !== false, // default true
                     uf: d.dadosFiscais?.uf || d.uf || '',
@@ -579,6 +585,158 @@ router.post('/empresa-reset-lock', requireAuth, express.json(), async (req, res)
         return res.json({ ok: true, cnpj: cnpjLimpo, hadLock: true, msg: 'Lock resetado — próximo disparo recria.' });
     } catch (e) {
         console.error('[empresa-reset-lock] erro:', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── Corrigir REGIME (mover Simples ⇄ Lucro) ──────────────────────────────
+// No CFI o regime É a coleção: simples_empresas x lucro_empresas — é ela que
+// decide qual pipeline fiscal (DAS, DCTFWeb, IPI, SPED…) processa a empresa.
+// Cadastrar no regime errado joga a empresa no pipeline errado. Aqui a gente
+// MOVE o doc pra coleção certa PRESERVANDO O MESMO id — os documentos, certs e
+// sefaz_state referenciam a empresa pelo empresaId (id do doc) e os lookups já
+// caem de simples/{id} → lucro/{id}, então nada quebra. Admin-only.
+const COLECAO_POR_REGIME = { simples: 'simples_empresas', lucro: 'lucro_empresas' };
+router.post('/empresa-corrigir-regime', requireAuth, express.json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores' });
+        }
+        const { cnpj, regimeNovo } = req.body || {};
+        const cnpjLimpo = limparCnpj(cnpj);
+        if (cnpjLimpo.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });
+        const alvo = COLECAO_POR_REGIME[String(regimeNovo || '').toLowerCase()];
+        if (!alvo) {
+            return res.status(400).json({ error: "regimeNovo deve ser 'simples' ou 'lucro'." });
+        }
+
+        const db = fa().firestore();
+        const encontrados = await buscarEmpresaDocsPorCnpj(db, cnpjLimpo);
+        if (!encontrados.length) {
+            return res.status(404).json({ error: 'Empresa não encontrada no cadastro.', code: 'EMPRESA_NAO_ENCONTRADA' });
+        }
+        // Já está toda no regime alvo? (nenhum doc fora da coleção alvo)
+        const foraDoAlvo = encontrados.filter(({ col }) => col !== alvo);
+        if (!foraDoAlvo.length) {
+            return res.json({ ok: true, cnpj: cnpjLimpo, movidas: 0, msg: `Empresa já está em ${regimeNovo}.` });
+        }
+
+        let movidas = 0;
+        for (const { doc } of foraDoAlvo) {
+            const data = doc.data() || {};
+            // MESMO id na coleção alvo — mantém os vínculos por empresaId.
+            const batch = db.batch();
+            batch.set(db.collection(alvo).doc(doc.id), {
+                ...data,
+                regimeCorrigidoEm: admin.firestore.FieldValue.serverTimestamp(),
+                regimeCorrigidoPor: req.user.email,
+                regimeCorrigidoDe: doc.ref.parent.id,
+            });
+            batch.delete(doc.ref);
+            await batch.commit();
+            movidas++;
+        }
+        console.log(`[empresa-corrigir-regime] cnpj=${cnpjLimpo} -> ${alvo} movidas=${movidas} por=${req.user.email}`);
+        return res.json({ ok: true, cnpj: cnpjLimpo, movidas, regimeNovo, msg: `Movida para ${regimeNovo}. O pipeline correto passa a processar a empresa.` });
+    } catch (e) {
+        console.error('[empresa-corrigir-regime] erro:', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── Arquivar / desarquivar empresa (soft, reversível) ─────────────────────
+// Cadastro errado ou empresa que saiu da carteira: em vez de apagar (e perder
+// os documentos capturados), marca situacao='arquivada'/ativo=false. Some das
+// listas e capturas, mas os dados ficam e dá pra desarquivar. Admin-only.
+router.post('/empresa-arquivar', requireAuth, express.json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores' });
+        }
+        const { cnpj, desarquivar } = req.body || {};
+        const cnpjLimpo = limparCnpj(cnpj);
+        if (cnpjLimpo.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });
+
+        const db = fa().firestore();
+        const encontrados = await buscarEmpresaDocsPorCnpj(db, cnpjLimpo);
+        if (!encontrados.length) {
+            return res.status(404).json({ error: 'Empresa não encontrada no cadastro.', code: 'EMPRESA_NAO_ENCONTRADA' });
+        }
+        // capturarSefaz é o gate que o cron de NFe já respeita — desligar aqui
+        // faz a empresa arquivada parar de ser capturada sem espalhar checagem
+        // de 'situacao' por todos os crons. Desarquivar religa.
+        const update = desarquivar
+            ? {
+                situacao: admin.firestore.FieldValue.delete(),
+                ativo: true,
+                capturarSefaz: true,
+                arquivadaEm: admin.firestore.FieldValue.delete(),
+                arquivadaPor: admin.firestore.FieldValue.delete(),
+            }
+            : {
+                situacao: 'arquivada',
+                ativo: false,
+                capturarSefaz: false,
+                arquivadaEm: admin.firestore.FieldValue.serverTimestamp(),
+                arquivadaPor: req.user.email,
+            };
+        for (const { doc } of encontrados) await doc.ref.update(update);
+        console.log(`[empresa-arquivar] cnpj=${cnpjLimpo} desarquivar=${!!desarquivar} docs=${encontrados.length} por=${req.user.email}`);
+        return res.json({
+            ok: true, cnpj: cnpjLimpo, atualizadas: encontrados.length,
+            msg: desarquivar ? 'Empresa desarquivada.' : 'Empresa arquivada (reversível).',
+        });
+    } catch (e) {
+        console.error('[empresa-arquivar] erro:', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── Excluir empresa DEFINITIVO (só se não tiver documentos) ───────────────
+// Cadastro-lixo (empresa errada, zero notas): apaga o doc de vez. Trava de
+// segurança: se houver QUALQUER documento_fiscal vinculado (por empresaId ou
+// cnpj), recusa e manda arquivar — pra nunca apagar histórico por engano.
+router.post('/empresa-excluir', requireAuth, express.json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores' });
+        }
+        const { cnpj, confirmar } = req.body || {};
+        const cnpjLimpo = limparCnpj(cnpj);
+        if (cnpjLimpo.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });
+        if (confirmar !== true) {
+            return res.status(400).json({ error: 'Exclusão definitiva exige confirmar=true.' });
+        }
+
+        const db = fa().firestore();
+        const encontrados = await buscarEmpresaDocsPorCnpj(db, cnpjLimpo);
+        if (!encontrados.length) {
+            return res.status(404).json({ error: 'Empresa não encontrada no cadastro.', code: 'EMPRESA_NAO_ENCONTRADA' });
+        }
+
+        // Trava: conta documentos_fiscais vinculados (por empresaId E por cnpj).
+        const idsEmpresa = encontrados.map(({ doc }) => doc.id);
+        let totalDocs = 0;
+        for (const id of idsEmpresa) {
+            const c = await db.collection('documentos_fiscais').where('empresaId', '==', id).count().get();
+            totalDocs += c.data().count;
+        }
+        for (const campo of ['empresaCnpj', 'cnpjEmit', 'cnpjDest']) {
+            const c = await db.collection('documentos_fiscais').where(campo, '==', cnpjLimpo).count().get();
+            totalDocs += c.data().count;
+        }
+        if (totalDocs > 0) {
+            return res.status(409).json({
+                error: `Empresa tem ${totalDocs} documento(s) capturado(s) — não pode ser excluída definitivamente. Use "Arquivar" para preservar o histórico.`,
+                code: 'TEM_DOCUMENTOS', totalDocs,
+            });
+        }
+
+        for (const { doc } of encontrados) await doc.ref.delete();
+        console.log(`[empresa-excluir] cnpj=${cnpjLimpo} docs_apagados=${encontrados.length} por=${req.user.email}`);
+        return res.json({ ok: true, cnpj: cnpjLimpo, excluidas: encontrados.length, msg: 'Empresa excluída definitivamente (não tinha documentos).' });
+    } catch (e) {
+        console.error('[empresa-excluir] erro:', e);
         return res.status(500).json({ error: e.message });
     }
 });
