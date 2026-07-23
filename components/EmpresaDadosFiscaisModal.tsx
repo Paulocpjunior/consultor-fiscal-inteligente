@@ -79,7 +79,10 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                 codMunIBGE: dados.codMunIBGE?.replace(/\D/g, ''),
                 cep: dados.cep?.replace(/\D/g, ''),
                 telefone: dados.telefone?.replace(/\D/g, ''),
-                ccmSp: dados.ccmSp?.replace(/\D/g, '') || undefined,  // canonico: so digitos
+                ccmSp: dados.ccmSp?.replace(/\D/g, '') || undefined,  // canonico SP: so digitos
+                // Inscrição municipal genérica: NÃO stripa (pode ser alfanumérica
+                // conforme a prefeitura); só trim.
+                inscricaoMunicipal: dados.inscricaoMunicipal?.trim() || undefined,
             };
             await onSave(limpo);
             onClose();
@@ -154,11 +157,18 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                             <Field
-                                label="CCM SP (Inscrição Municipal São Paulo)"
+                                label="Inscrição Municipal"
+                                value={dados.inscricaoMunicipal || ''}
+                                onChange={v => handleField('inscricaoMunicipal', v)}
+                                placeholder="Inscrição na prefeitura da empresa"
+                                hint="Para empresas de QUALQUER município. Formato livre (varia por prefeitura). Não é obrigatório e não valida formato."
+                            />
+                            <Field
+                                label="CCM — Inscrição Municipal de SP capital"
                                 value={dados.ccmSp || ''}
                                 onChange={v => handleField('ccmSp', v)}
                                 placeholder="1.234.567-8"
-                                hint="Obrigatório para consultar NFS-e SP. Apenas para empresas de SP capital."
+                                hint="SÓ para empresas de SP capital — é a chave da captura de NFS-e SP. Empresa de outra cidade deixa em branco e usa a Inscrição Municipal acima."
                             />
                             <Field
                                 label="IE Substituto Tributário"

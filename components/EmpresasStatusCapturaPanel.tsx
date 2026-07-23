@@ -21,6 +21,9 @@ import {
     autoPreencherMunicipio,
     resetLockSefaz,
     salvarEmpresaDadosFiscais,
+    corrigirRegimeEmpresa,
+    arquivarEmpresa,
+    excluirEmpresa,
     exportarEmpresasCsv,
     formatarErroAcaoStatusCaptura,
     formatarMotivoBloqueioCaptura,
@@ -103,6 +106,74 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     };
     const [ultimaCaptura, setUltimaCaptura] = useState<Record<string, { ok: boolean; msg: string; docs?: DfeDocProcessado[] }>>({});
     const isAdmin = currentUser.role === 'admin';
+    const [acaoCnpj, setAcaoCnpj] = useState<string | null>(null); // botão em andamento (regime/arquivar/excluir)
+
+    // Corrigir regime: move a empresa pra coleção certa (Simples ⇄ Lucro).
+    const handleCorrigirRegime = async (emp: EmpresaStatusCaptura) => {
+        if (!isAdmin) return;
+        const regimeNovo = emp.regime === 'simples' ? 'lucro' : 'simples';
+        if (!confirm(`Corrigir o REGIME de ${emp.nome}?\n\nDe ${emp.regime.toUpperCase()} → ${regimeNovo.toUpperCase()}.\nA empresa passa a ser processada pelo pipeline fiscal do novo regime (DAS/DCTFWeb/IPI/SPED). Os documentos e certificado já capturados são preservados.`)) return;
+        setAcaoCnpj(emp.cnpj);
+        setFeedback(null);
+        try {
+            const r = await corrigirRegimeEmpresa(emp.cnpj, regimeNovo);
+            if (r.ok) {
+                setFeedback({ tipo: 'sucesso', msg: `${emp.nome}: ${r.msg || `movida para ${regimeNovo}`}.` });
+                await load();
+            } else {
+                setFeedback({ tipo: 'erro', msg: `Falha ao corrigir regime de ${emp.nome}: ${r.error}` });
+            }
+        } catch (e: any) {
+            setFeedback({ tipo: 'erro', msg: `Falha ao corrigir regime de ${emp.nome}: ${e?.message || 'erro'}` });
+        } finally {
+            setAcaoCnpj(null);
+        }
+    };
+
+    // Arquivar (soft, reversível) / desarquivar.
+    const handleArquivar = async (emp: EmpresaStatusCaptura, desarquivar = false) => {
+        if (!isAdmin) return;
+        const verbo = desarquivar ? 'DESARQUIVAR' : 'ARQUIVAR';
+        if (!desarquivar && !confirm(`${verbo} ${emp.nome}?\n\nA empresa some das listas e para de ser capturada, mas os dados e documentos ficam guardados. É reversível (dá pra desarquivar).`)) return;
+        setAcaoCnpj(emp.cnpj);
+        setFeedback(null);
+        try {
+            const r = await arquivarEmpresa(emp.cnpj, desarquivar);
+            if (r.ok) {
+                setFeedback({ tipo: 'sucesso', msg: `${emp.nome}: ${r.msg || (desarquivar ? 'desarquivada' : 'arquivada')}.` });
+                await load();
+            } else {
+                setFeedback({ tipo: 'erro', msg: `Falha ao ${verbo.toLowerCase()} ${emp.nome}: ${r.error}` });
+            }
+        } catch (e: any) {
+            setFeedback({ tipo: 'erro', msg: `Falha ao ${verbo.toLowerCase()} ${emp.nome}: ${e?.message || 'erro'}` });
+        } finally {
+            setAcaoCnpj(null);
+        }
+    };
+
+    // Excluir definitivo (só se não tiver documentos — a trava é no backend).
+    const handleExcluir = async (emp: EmpresaStatusCaptura) => {
+        if (!isAdmin) return;
+        if (!confirm(`EXCLUIR DEFINITIVAMENTE ${emp.nome}?\n\nApaga o cadastro de vez. Só funciona se a empresa NÃO tiver nenhum documento capturado (senão o sistema recusa e sugere Arquivar). Ação irreversível.`)) return;
+        setAcaoCnpj(emp.cnpj);
+        setFeedback(null);
+        try {
+            const r = await excluirEmpresa(emp.cnpj);
+            if (r.ok) {
+                setFeedback({ tipo: 'sucesso', msg: `${emp.nome}: ${r.msg || 'excluída'}.` });
+                await load();
+            } else if (r.code === 'TEM_DOCUMENTOS') {
+                setFeedback({ tipo: 'erro', msg: `${emp.nome} tem ${r.totalDocs} documento(s) — não pode excluir. Use "Arquivar" para preservar o histórico.` });
+            } else {
+                setFeedback({ tipo: 'erro', msg: `Falha ao excluir ${emp.nome}: ${r.error}` });
+            }
+        } catch (e: any) {
+            setFeedback({ tipo: 'erro', msg: `Falha ao excluir ${emp.nome}: ${e?.message || 'erro'}` });
+        } finally {
+            setAcaoCnpj(null);
+        }
+    };
 
     const handleCaptureOne = async (emp: EmpresaStatusCaptura, resetNSU = false) => {
         if (!isAdmin) return;
@@ -137,6 +208,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     };
 
     const [autoMunRunning, setAutoMunRunning] = useState(false);
+    const [mostrarArquivadas, setMostrarArquivadas] = useState(false);
     const handleAutoMunicipio = async () => {
         if (!isAdmin) return;
         if (!confirm('Auto-preencher o CÓDIGO DO MUNICÍPIO (IBGE) de todas as empresas sem ele, via BrasilAPI? Roda em background (~2-4 min). A elegibilidade da NFS-e Nacional depende disso.')) return;
@@ -187,14 +259,14 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
         setLoading(true);
         setErro(null);
         try {
-            const d = await fetchEmpresasStatusCaptura();
+            const d = await fetchEmpresasStatusCaptura(mostrarArquivadas);
             if (aliveRef.current) setData(d);
         } catch (e: any) {
             if (aliveRef.current) setErro(e.message || 'Falha ao carregar');
         } finally {
             if (aliveRef.current) setLoading(false);
         }
-    }, []);
+    }, [mostrarArquivadas]);
 
     useEffect(() => {
         aliveRef.current = true;
@@ -426,7 +498,17 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                         <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-400">(filtro de status ignorado durante busca)</span>
                     )}
                 </span>
-                <div className="ml-auto flex gap-2">
+                <div className="ml-auto flex gap-2 items-center">
+                    {isAdmin && (
+                        <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300 cursor-pointer select-none" title="Mostra empresas arquivadas (soft-delete) para poder desarquivar">
+                            <input
+                                type="checkbox"
+                                checked={mostrarArquivadas}
+                                onChange={e => setMostrarArquivadas(e.target.checked)}
+                            />
+                            🗄️ arquivadas
+                        </label>
+                    )}
                     <button onClick={load} className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-800 dark:text-gray-100 rounded">↻ Atualizar</button>
                     <button onClick={handleExportCsv} className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700">⬇ Exportar CSV</button>
                 </div>
@@ -623,6 +705,46 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                 >
                                                     ✏️ Completar cadastro
                                                 </button>
+                                                {isAdmin && (
+                                                    <button
+                                                        onClick={() => handleCorrigirRegime(e)}
+                                                        disabled={acaoCnpj === e.cnpj}
+                                                        className="px-2 py-1 text-[10px] font-semibold bg-purple-600 hover:bg-purple-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
+                                                        title="Mover a empresa entre Simples e Lucro — corrige o pipeline fiscal quando o regime foi cadastrado errado"
+                                                    >
+                                                        {acaoCnpj === e.cnpj ? '⏳…' : `🔀 Regime → ${e.regime === 'simples' ? 'Lucro' : 'Simples'}`}
+                                                    </button>
+                                                )}
+                                                {isAdmin && !e.arquivada && (
+                                                    <button
+                                                        onClick={() => handleArquivar(e)}
+                                                        disabled={acaoCnpj === e.cnpj}
+                                                        className="px-2 py-1 text-[10px] font-semibold bg-amber-600 hover:bg-amber-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
+                                                        title="Arquivar (reversível): some das listas e para a captura, mas mantém os dados"
+                                                    >
+                                                        {acaoCnpj === e.cnpj ? '⏳…' : '🗄️ Arquivar'}
+                                                    </button>
+                                                )}
+                                                {isAdmin && e.arquivada && (
+                                                    <button
+                                                        onClick={() => handleArquivar(e, true)}
+                                                        disabled={acaoCnpj === e.cnpj}
+                                                        className="px-2 py-1 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
+                                                        title="Desarquivar: religa a empresa nas listas e na captura"
+                                                    >
+                                                        {acaoCnpj === e.cnpj ? '⏳…' : '♻️ Desarquivar'}
+                                                    </button>
+                                                )}
+                                                {isAdmin && (
+                                                    <button
+                                                        onClick={() => handleExcluir(e)}
+                                                        disabled={acaoCnpj === e.cnpj}
+                                                        className="px-2 py-1 text-[10px] font-semibold bg-red-700 hover:bg-red-800 disabled:bg-slate-400 text-white rounded transition-colors whitespace-nowrap"
+                                                        title="Excluir definitivo — só se a empresa não tiver nenhum documento capturado"
+                                                    >
+                                                        {acaoCnpj === e.cnpj ? '⏳…' : '🗑️ Excluir'}
+                                                    </button>
+                                                )}
                                             </div>
                                             {ultimaCaptura[e.cnpj] && (
                                                 <div className={`mt-1 text-[10px] font-mono break-words ${

@@ -1242,11 +1242,19 @@ export interface EmpresaDadosFiscais {
     /** Codigo do municipio IBGE (7 digitos, ex: '3550308' = Sao Paulo). */
     codMunIBGE?: string;
     /**
-     * Inscrição Municipal SP capital (CCM) — usada pra consultar NFSe SP.
+     * Inscrição Municipal SP capital (CCM) — ESPECÍFICO de SP capital; é a chave
+     * da captura de NFS-e SP (portal). Só preencher para empresas de SP capital.
      * O modal Dados Fiscais grava aqui; o backend tambem espera no top-level
      * empresa.ccmSp (espelhado no onSave). Ver EmpresaDadosFiscaisModal.
      */
     ccmSp?: string;
+    /**
+     * Inscrição Municipal GENÉRICA (qualquer município do país). Empresas fora
+     * de SP capital usam este campo — formato varia por prefeitura (pode ser
+     * alfanumérico), então NÃO validamos como o CCM SP. Informativo/SPED; não
+     * dispara a captura NFS-e SP (essa depende do ccmSp).
+     */
+    inscricaoMunicipal?: string;
     /** Endereço sede da empresa. */
     logradouro?: string;
     numero?: string;

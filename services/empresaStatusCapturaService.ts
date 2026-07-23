@@ -27,6 +27,8 @@ export interface EmpresaStatusCaptura {
      *  Esse é o que o cron e o orchestrator usam — se for false, captura
      *  via cert do escritório (procuração) NÃO é tentada. */
     procuracaoEcacFlagBruta: boolean;
+    /** true = empresa arquivada (soft-delete); só aparece com incluirArquivadas. */
+    arquivada?: boolean;
     ccmSp: string;
     nfseSpAutorizado: boolean;
     nfseNacionalDfeAtivo: boolean;
@@ -140,9 +142,10 @@ async function getToken(): Promise<string> {
     return u.getIdToken();
 }
 
-export async function fetchEmpresasStatusCaptura(): Promise<EmpresaStatusResponse> {
+export async function fetchEmpresasStatusCaptura(incluirArquivadas = false): Promise<EmpresaStatusResponse> {
     const token = await getToken();
-    const res = await fetch('/api/admin/sefaz/empresas-status-captura', {
+    const qs = incluirArquivadas ? '?incluirArquivadas=1' : '';
+    const res = await fetch(`/api/admin/sefaz/empresas-status-captura${qs}`, {
         headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
@@ -181,6 +184,55 @@ export async function salvarEmpresaDadosFiscais(
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
     return { ok: true, atualizadas: data.atualizadas };
+}
+
+/** Corrige o REGIME movendo a empresa entre simples_empresas ⇄ lucro_empresas
+ *  (preserva o id — vínculos ficam intactos). Admin-only. */
+export async function corrigirRegimeEmpresa(
+    cnpj: string,
+    regimeNovo: 'simples' | 'lucro',
+): Promise<{ ok: boolean; movidas?: number; msg?: string; error?: string }> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/empresa-corrigir-regime', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpj, regimeNovo }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true, movidas: data.movidas, msg: data.msg };
+}
+
+/** Arquiva (soft-delete reversível) ou desarquiva uma empresa. Admin-only. */
+export async function arquivarEmpresa(
+    cnpj: string,
+    desarquivar = false,
+): Promise<{ ok: boolean; msg?: string; error?: string }> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/empresa-arquivar', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpj, desarquivar }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true, msg: data.msg };
+}
+
+/** Exclui DEFINITIVAMENTE (só se a empresa não tiver documentos). Admin-only.
+ *  Retorna code='TEM_DOCUMENTOS' + totalDocs quando a trava barra. */
+export async function excluirEmpresa(
+    cnpj: string,
+): Promise<{ ok: boolean; msg?: string; error?: string; code?: string; totalDocs?: number }> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/empresa-excluir', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpj, confirmar: true }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}`, code: data.code, totalDocs: data.totalDocs };
+    return { ok: true, msg: data.msg };
 }
 
 /** Apaga o lock SEFAZ de 1h pra essa empresa. Próximo disparo do
