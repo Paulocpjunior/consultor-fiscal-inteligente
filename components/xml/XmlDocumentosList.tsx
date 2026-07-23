@@ -9,6 +9,7 @@ import {
     type EmpresaXmlOption,
 } from '../../services/xmlFiscalService';
 import { getCompetenciaDocumento } from '../../services/xmlDocumentosFilter';
+import { downloadXmlText } from '../../services/xmlStorageService';
 import NFeStatusCell from './NFeStatusCell';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
 import EmpresaFilterCombobox from './EmpresaFilterCombobox';
@@ -261,6 +262,30 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
             URL.revokeObjectURL(url);
         } finally {
             setExporting(null);
+        }
+    };
+
+    // Download do XML BRUTO de uma nota (o arquivo que o colaborador lança no
+    // sistema fiscal). O importer grava todo XML em Storage (storagePath) —
+    // mas até 23/07 nenhuma tela oferecia baixar; a lista só exportava
+    // CSV/PDF de metadados. Resumos (resNFe) não têm XML completo → sem botão.
+    const [baixandoXmlId, setBaixandoXmlId] = useState<string | null>(null);
+    const baixarXml = async (d: DocumentoFiscal) => {
+        if (!d.storagePath) return;
+        setBaixandoXmlId(d.id);
+        try {
+            const texto = await downloadXmlText(d.storagePath);
+            const blob = new Blob([texto], { type: 'application/xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${d.chave || d.id}.xml`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e: any) {
+            alert(`Falha ao baixar o XML: ${e?.message || 'erro'}. Se persistir, avise o admin (arquivo pode não existir no Storage).`);
+        } finally {
+            setBaixandoXmlId(null);
         }
     };
 
@@ -639,6 +664,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                                     <th className="px-3 py-2 text-left font-bold text-slate-600 dark:text-slate-400">Contraparte</th>
                                     <th className="px-3 py-2 text-right font-bold text-slate-600 dark:text-slate-400">Valor</th>
                                     <th className="px-3 py-2 text-left font-bold text-slate-600 dark:text-slate-400">Status</th>
+                                    <th className="px-3 py-2 text-center font-bold text-slate-600 dark:text-slate-400">XML</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -671,6 +697,20 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                                         </td>
                                         <td className="px-3 py-1.5 text-right font-bold text-slate-700 dark:text-slate-200">{formatCurrency(getView(d).valores.total)}</td>
                                         <td className="px-3 py-1.5"><NFeStatusCell doc={d} /></td>
+                                        <td className="px-3 py-1.5 text-center">
+                                            {d.storagePath ? (
+                                                <button
+                                                    onClick={(ev) => { ev.stopPropagation(); baixarXml(d); }}
+                                                    disabled={baixandoXmlId === d.id}
+                                                    className="px-2 py-0.5 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded whitespace-nowrap"
+                                                    title="Baixar o arquivo .xml original desta nota"
+                                                >
+                                                    {baixandoXmlId === d.id ? '⏳' : '⬇ XML'}
+                                                </button>
+                                            ) : (
+                                                <span className="text-[9px] text-slate-400" title="Resumo (resNFe) — ainda sem o XML completo; manifeste Ciência ou aguarde a captura completar">—</span>
+                                            )}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
