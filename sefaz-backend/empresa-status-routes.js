@@ -474,7 +474,10 @@ router.post('/empresa-toggle-flag', requireAuth, express.json(), async (req, res
 // faltam (UF, CCM, IE, etc.) direto da linha da pendência. Merge por
 // dot-notation — NUNCA clobbera o dadosFiscais inteiro (só os campos enviados).
 const CAMPOS_DADOS_FISCAIS = new Set([
-    'inscricaoEstadual', 'uf', 'codMunIBGE', 'ccmSp', 'logradouro', 'numero',
+    // inscricaoMunicipal = genérica (qualquer município); ccmSp = específico de
+    // SP capital (chave da captura NFS-e SP). Campos SEPARADOS de propósito.
+    'inscricaoEstadual', 'uf', 'codMunIBGE', 'ccmSp', 'inscricaoMunicipal',
+    'logradouro', 'numero',
     'complemento', 'bairro', 'cep', 'email', 'telefone', 'perfilEFD', 'indAtividade',
 ]);
 
