@@ -121,7 +121,7 @@ const CardCaptura: React.FC<{
             {log?.status === 'iniciado' && (
                 <div className="text-xs font-bold mb-2 bg-sky-100 text-sky-800 border border-sky-300 rounded px-2 py-1">
                     ⏳ Execução EM ANDAMENTO (iniciada {formatRelativeBR(ultimoMs)}) — varredura completa
-                    leva 15-25 min; o resultado aparece aqui ao terminar.
+                    pode levar até ~1h (períodos por mês × empresas); o resultado aparece aqui ao terminar.
                 </div>
             )}
             {/* Motivo do farol — sempre visível; é o que evita "verde mentiroso". */}

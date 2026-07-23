@@ -10,6 +10,7 @@ import {
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { getEmpresaIdsDaCarteira, podeAcessarEmpresaId } from './carteira-auth.js';
 import { secretsMatch } from './cron-secret.js';
+import { withCronHeartbeat } from './cron-heartbeat.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET;
 const router = Router();
@@ -93,11 +94,18 @@ router.post('/manifest-pending', requireAdmin, async (req, res) => {
   }
 });
 
+// 23/07: rota era SÍNCRONA — o lote de 500 leva 10-20+ min, o Scheduler tem
+// deadline de 900s, matava a conexão no meio, RETENTAVA (tentativas fora do
+// :15) e o log nunca era gravado. Resultado: 40h de cron "rodando" com o
+// backlog de resumos PARADO em ~3.9k. Agora usa o mesmo padrão do sync-cron:
+// withCronHeartbeat responde 200 IMEDIATO, roda em background e grava o log
+// 'iniciado' → 'sucesso'/'falha' no mesmo doc (morte no meio fica visível).
 router.post('/manifest-cron', authCron, async (req, res) => {
-  try {
-    const dryRun = req.body?.dryRun !== false;
-    const tipo = req.body?.tipo || 'ciencia';
-    const limit = Math.min(parseInt(req.body?.limit || '100'), 500);
+  const dryRun = req.body?.dryRun !== false;
+  const tipo = req.body?.tipo || 'ciencia';
+  const limit = Math.min(parseInt(req.body?.limit || '100'), 500);
+  const fonte = req.headers?.['x-cloudscheduler-jobname'] || 'manifesto-ciencia-cron';
+  await withCronHeartbeat({ collection: 'manifestacoes_cron_logs', fonte, res }, async () => {
     const inicio = Date.now();
     console.log(`[manifest-cron] iniciando — dryRun=${dryRun}, tipo=${tipo}, limit=${limit}`);
     const r = await manifestarPendentes({
@@ -105,19 +113,33 @@ router.post('/manifest-cron', authCron, async (req, res) => {
       capturadoPor: { uid: 'system', email: 'manifest-cron@spassessoriacontabil' },
     });
     const ms = Date.now() - inicio;
-    console.log(`[manifest-cron] fim — ${r.sucessos}/${r.total} sucessos, ${r.falhas} falhas, ${ms}ms`);
+    console.log(`[manifest-cron] fim — ${r.sucessos}/${r.total} sucessos, ${r.falhas} falhas, ${r.puladas656 || 0} puladas656, ${ms}ms`);
 
-    await fa().firestore().collection('manifestacoes_cron_logs').add({
-      ...r,
-      dryRun, tipo, durationMs: ms,
-      iniciadoEm: fa().firestore.FieldValue.serverTimestamp(),
-    });
+    // Agrega os MOTIVOS das falhas (cStat/erro) — sem isto o log dizia só
+    // "N falhas" e ninguém sabia se era cert, rejeição SEFAZ ou 656.
+    const motivos = new Map();
+    for (const d of r.detalhes || []) {
+      const ok = ['135', '136'].includes(String(d.cStat));
+      if (ok || d.dryRun) continue;
+      const chave = d.erro
+        ? `ERRO: ${String(d.erro).slice(0, 120)}`
+        : `cStat ${d.cStat || '?'}: ${String(d.xMotivo || '').slice(0, 120)}`;
+      motivos.set(chave, (motivos.get(chave) || 0) + 1);
+    }
+    const motivosResumo = [...motivos.entries()]
+      .sort((a, b) => b[1] - a[1]).slice(0, 10)
+      .map(([motivo, quantidade]) => ({ motivo, quantidade }));
 
-    res.json({ ...r, durationMs: ms });
-  } catch (e) {
-    console.error('[manifest-cron] erro fatal:', e);
-    res.status(500).json({ erro: e.message });
-  }
+    return {
+      dryRun, tipo, limit,
+      total: r.total, sucessos: r.sucessos, falhas: r.falhas,
+      puladas656: r.puladas656 || 0,
+      durationMs: ms,
+      motivosResumo,
+      // detalhes truncados (500 itens estourariam o doc)
+      detalhes: (r.detalhes || []).slice(0, 50),
+    };
+  });
 });
 
 export default router;
