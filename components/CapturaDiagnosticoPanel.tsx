@@ -84,6 +84,9 @@ const CardCaptura: React.FC<{
         falhas: log?.falhas ?? null,
         docsUltimos7d: status.docsUltimos7d ?? null,
         elegiveis: stateTotal ?? null,
+        // NFSe Nacional: sinal do provedor. false = ADN confirma que não há doc
+        // disponível → "0 capturado" é correto, não pinta vermelho de falha.
+        movimentoDisponivel: status.movimentoDisponivel ?? null,
         agoraMs: Date.now(),
     });
     const cor = COR_POR_NIVEL[saude.nivel];
@@ -217,23 +220,50 @@ const CardCaptura: React.FC<{
                             ))}
                     </div>
                 )}
-                {status.docsTotalHistorico !== undefined && status.docsTotalHistorico !== null && (
-                    <div className="flex justify-between">
-                        <span className="opacity-80" title="Se 0: esta fonte NUNCA capturou nada — problema de elegibilidade (ex.: municípios não aderentes ao ADN), não de cron.">
-                            Docs (histórico total):
-                        </span>
-                        <span className={`font-mono font-bold ${status.docsTotalHistorico === 0 ? 'text-red-700' : ''}`}>
-                            {status.docsTotalHistorico}
-                            {status.docsTotalHistorico === 0 && ' — nunca capturou'}
-                        </span>
-                    </div>
-                )}
+                {status.docsTotalHistorico !== undefined && status.docsTotalHistorico !== null && (() => {
+                    // "0 histórico" só é vermelho de verdade quando NÃO sabemos que o
+                    // provedor está vazio. Se o ADN confirma sem movimento, 0 é
+                    // esperado (transição) — âmbar, não sangue.
+                    const semMovimentoConfirmado = status.movimentoDisponivel === false;
+                    const zero = status.docsTotalHistorico === 0;
+                    const cor = zero ? (semMovimentoConfirmado ? 'text-amber-700' : 'text-red-700') : '';
+                    return (
+                        <div className="flex justify-between">
+                            <span className="opacity-80" title="Se 0: esta fonte nunca capturou. Cruze com o cursor NSU abaixo — se o ADN confirma sem movimento, 0 é esperado; senão é elegibilidade/cron.">
+                                Docs (histórico total):
+                            </span>
+                            <span className={`font-mono font-bold ${cor}`}>
+                                {status.docsTotalHistorico}
+                                {zero && (semMovimentoConfirmado ? ' — ADN sem movimento' : ' — nunca capturou')}
+                            </span>
+                        </div>
+                    );
+                })()}
                 {stateOk && (status.state as any).elegiveisLista?.length > 0 && (
-                    <div className="bg-white/50 border rounded p-2 text-xs space-y-0.5">
-                        <div className="font-bold opacity-80">Quem são as elegíveis:</div>
-                        {((status.state as any).elegiveisLista as Array<{ nome: string; cnpj: string }>).map(e => (
-                            <div key={e.cnpj} className="font-mono text-[10px]">{e.cnpj} · {e.nome}</div>
-                        ))}
+                    <div className="bg-white/50 border rounded p-2 text-xs space-y-1">
+                        <div className="font-bold opacity-80">Quem são as elegíveis (e o que o provedor diz):</div>
+                        {((status.state as any).elegiveisLista as Array<{
+                            nome: string; cnpj: string;
+                            ultNSU?: number | null; maxNSU?: number | null; semMovimento?: boolean | null;
+                        }>).map(e => {
+                            // semMovimento: true = ADN confirma que não há nada (0 correto);
+                            // false = há doc esperando e não capturamos (bug); null = nunca sincronizou.
+                            const temNsu = e.maxNSU != null && e.ultNSU != null;
+                            const veredito = e.semMovimento === true
+                                ? { txt: '✓ ADN sem movimento (nada a capturar)', cls: 'text-emerald-700' }
+                                : e.semMovimento === false
+                                ? { txt: `⚠ ${(e.maxNSU ?? 0) - (e.ultNSU ?? 0)} doc(s) no ADN não capturados`, cls: 'text-red-700 font-bold' }
+                                : { txt: '— ainda não sincronizou', cls: 'opacity-60' };
+                            return (
+                                <div key={e.cnpj} className="border-t first:border-t-0 pt-1 first:pt-0">
+                                    <div className="font-mono text-[10px]">{e.cnpj} · {e.nome}</div>
+                                    <div className="flex justify-between text-[10px]">
+                                        <span className={veredito.cls}>{veredito.txt}</span>
+                                        {temNsu && <span className="font-mono opacity-60">NSU {e.ultNSU}/{e.maxNSU}</span>}
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
                 <div className="flex justify-between">

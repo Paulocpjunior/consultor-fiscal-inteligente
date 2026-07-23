@@ -34,7 +34,16 @@ export interface CapturaStatus {
         bloqueadas?: number | null;
         totalAtivas?: number | null;
         bloqueiosPorMotivo?: Record<string, number>;
-        elegiveisLista?: Array<{ nome: string; cnpj: string }> | null;
+        // NFSe Nacional enriquece cada elegível com o cursor NSU do ADN pra
+        // provar se "0 docs" é correto: semMovimento=true → provedor sem nada.
+        elegiveisLista?: Array<{
+            nome: string;
+            cnpj: string;
+            ultNSU?: number | null;
+            maxNSU?: number | null;
+            ultimaSyncMs?: number | null;
+            semMovimento?: boolean | null;
+        }> | null;
     } | { erro: string };
     docsUltimos7d: number | null;
     /** Top motivos de falha da última execução (hoje só NFSe SP envia). */
@@ -42,6 +51,9 @@ export interface CapturaStatus {
     /** Total histórico de docs desta fonte (hoje só NFSe Nacional envia) —
      *  separa "nunca capturou" (elegibilidade) de "capturava e parou" (quebra). */
     docsTotalHistorico?: number | null;
+    /** Provedor tem documento disponível? false = ADN confirma que não há nada
+     *  (0 capturado é correto, farol não fica vermelho). Hoje só NFSe Nacional. */
+    movimentoDisponivel?: boolean | null;
 }
 
 export interface CapturaDiagnostico {

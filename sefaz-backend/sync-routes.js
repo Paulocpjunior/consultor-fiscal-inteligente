@@ -890,22 +890,65 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       }
     }
 
+    // Lê o cursor NSU (nfse_nacional_dfe_state) das elegíveis pra PROVAR se
+    // "0 docs capturados" é correto ou é bug. O ADN devolve maxNSU (último NSU
+    // disponível pra aquele CNPJ); o orquestrador persiste ultNSU (até onde
+    // capturamos). Se maxNSU > ultNSU há documento esperando e 0 capturado é
+    // falha real. Se maxNSU <= ultNSU o próprio provedor confirma que não há
+    // nada — 0 é correto (elegível sem movimento no ADN, comum na transição).
+    async function estadoNsuNacional(empresas) {
+      const itens = [];
+      let algumComMovimento = false;
+      let algumComState = false;
+      await Promise.all((empresas || []).map(async (e) => {
+        const cnpjNum = String(e.cnpj || '').replace(/\D/g, '');
+        let ultNSU = null, maxNSU = null, ultimaSyncMs = null;
+        try {
+          const snap = await db.collection('nfse_nacional_dfe_state').doc(cnpjNum).get();
+          if (snap.exists) {
+            const d = snap.data();
+            const toNum = (v) => (v == null ? null : Number(String(v).replace(/\D/g, '')));
+            ultNSU = toNum(d.ultNSU);
+            maxNSU = toNum(d.maxNSU);
+            ultimaSyncMs = d.ultimaSync?.toMillis?.() ?? null;
+            algumComState = true;
+          }
+        } catch { /* sem state, segue */ }
+        // semMovimento: true = provedor sem nada; false = há doc esperando;
+        // null = ainda não dá pra afirmar (nunca sincronizou / sem maxNSU).
+        const semMovimento = (maxNSU != null && ultNSU != null) ? maxNSU <= ultNSU : null;
+        if (semMovimento === false) algumComMovimento = true;
+        itens.push({ nome: (e.nome || '').slice(0, 60), cnpj: cnpjNum, ultNSU, maxNSU, ultimaSyncMs, semMovimento });
+      }));
+      // Sinal pro farol: true se ALGUÉM tem doc esperando; false se TODOS com
+      // state já alcançaram o maxNSU; null se ninguém tem state (nunca rodou).
+      const movimentoDisponivel = algumComMovimento ? true : (algumComState ? false : null);
+      return { itens, movimentoDisponivel };
+    }
+
     // NFSe Nacional ADN: conta elegibilidade REAL. A flag ativa sem A1 proprio
     // gerava 258+ falhas E2243 por usar cert do escritorio em CNPJ de outra raiz.
     async function elegiveisNfseNacional() {
       try {
         const { resumo, empresas } = await listarElegibilidadeNfseNacionalDfe();
+        // Quando sobram POUCAS elegíveis (pós-filtro por município), lista quem
+        // são JUNTO com o cursor NSU — responde "quem são as 3 e por que 0 docs?"
+        // direto no card (SERPRO confirma nada disponível vs bug de captura).
+        let elegiveisLista = null;
+        let movimentoDisponivel = null;
+        if (resumo.elegiveis <= 10) {
+          const { itens, movimentoDisponivel: mov } = await estadoNsuNacional(empresas);
+          elegiveisLista = itens;
+          movimentoDisponivel = mov;
+        }
         return {
           total: resumo.elegiveis,
           travadas: null,
           bloqueadas: resumo.bloqueadas,
           totalAtivas: resumo.totalAtivas,
           bloqueiosPorMotivo: resumo.bloqueiosPorMotivo,
-          // Quando sobram POUCAS elegíveis (pós-filtro por município), lista
-          // quem são — responde "quem são as 4?" direto no card.
-          elegiveisLista: resumo.elegiveis <= 10
-            ? empresas.map((e) => ({ nome: (e.nome || '').slice(0, 60), cnpj: e.cnpj }))
-            : null,
+          elegiveisLista,
+          movimentoDisponivel,
         };
       } catch (e) {
         return { erro: e.message };
@@ -1187,6 +1230,10 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           state: stateNfseNac,
           docsUltimos7d: docsNfseNac,
           docsTotalHistorico: docsNfseNacTotal,
+          // Sinal do provedor pro farol honesto: false = ADN confirma que não há
+          // documento (0 capturado é correto, não crítico); true = há doc e não
+          // capturamos (bug); null = desconhecido (mantém rede de segurança).
+          movimentoDisponivel: stateNfseNac?.movimentoDisponivel ?? null,
         },
       },
     });

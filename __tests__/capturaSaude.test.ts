@@ -69,4 +69,30 @@ describe('avaliarSaudeCaptura', () => {
             docsUltimos7d: 0, elegiveis: 0, agoraMs: AGORA,
         }).nivel).toBe('ok');
     });
+
+    it('caso real NFSe Nacional: 3 elegíveis, 0 docs, mas ADN confirma maxNSU alcançado → ATENÇÃO, não crítico', () => {
+        const r = avaliarSaudeCaptura({
+            ultimoMs: AGORA - 2 * H, sucessos: 3, falhas: 0,
+            docsUltimos7d: 0, elegiveis: 3, movimentoDisponivel: false, agoraMs: AGORA,
+        });
+        expect(r.nivel).toBe('atencao');
+        expect(r.motivo).toMatch(/nada a capturar|maxNSU/);
+    });
+
+    it('0 docs + elegíveis + provedor TEM documento disponível (maxNSU>ultNSU) → CRÍTICO (bug real de captura)', () => {
+        const r = avaliarSaudeCaptura({
+            ultimoMs: AGORA - 1 * H, sucessos: 3, falhas: 0,
+            docsUltimos7d: 0, elegiveis: 3, movimentoDisponivel: true, agoraMs: AGORA,
+        });
+        expect(r.nivel).toBe('critico');
+        expect(r.motivo).toMatch(/0 documentos.*7 dias/);
+    });
+
+    it('movimentoDisponivel ausente (desconhecido) mantém a rede de segurança: 0 docs + elegíveis = crítico', () => {
+        const r = avaliarSaudeCaptura({
+            ultimoMs: AGORA - 1 * H, sucessos: 5, falhas: 0,
+            docsUltimos7d: 0, elegiveis: 5, agoraMs: AGORA,
+        });
+        expect(r.nivel).toBe('critico');
+    });
 });

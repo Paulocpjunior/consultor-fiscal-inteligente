@@ -24,6 +24,15 @@ export interface SinaisCaptura {
     docsUltimos7d: number | null;
     /** empresas elegíveis para este trilho */
     elegiveis: number | null;
+    /**
+     * O PROVEDOR tem documento disponível além do já capturado?
+     *   true  = há doc esperando (maxNSU > ultNSU nalguma elegível) → 0 capturado É falha
+     *   false = provedor CONFIRMA que não há nada (maxNSU alcançado) → 0 é correto
+     *   null/undefined = desconhecido → mantém a rede de segurança (0 + elegíveis = crítico)
+     * Só o NFSe Nacional ADN preenche isto (o ADN devolve maxNSU); os demais
+     * trilhos deixam null e seguem a regra clássica do "sucesso vazio".
+     */
+    movimentoDisponivel?: boolean | null;
     agoraMs: number;
 }
 
@@ -45,9 +54,19 @@ export function avaliarSaudeCaptura(s: SinaisCaptura): SaudeCaptura {
         return { nivel: 'critico', motivo: `TODAS as ${falhas} tentativas da última execução falharam — captura inoperante.` };
     }
 
-    // 3) Roda, "dá certo", mas não entra NADA há 7 dias com empresas elegíveis —
-    //    crítico ("sucesso vazio", caso NFS-e Nacional 71/8 com 0 docs).
+    // 3) Roda, "dá certo", mas não entra NADA há 7 dias com empresas elegíveis.
     if (docs7d !== null && docs7d === 0 && temElegiveis) {
+        // 3a) O provedor CONFIRMA que não há documento disponível (maxNSU
+        //     alcançado). Não é falha — é elegível sem movimento, comum na
+        //     transição do NFSe Nacional ADN (município aderiu, mas ainda não há
+        //     emissão/tomada no ambiente nacional). Âmbar (não verde) porque
+        //     "elegível e nunca capturou" ainda merece um olhar do humano —
+        //     pode ser codMun errado. Mas NÃO é o vermelho de "captura quebrada".
+        if (s.movimentoDisponivel === false) {
+            return { nivel: 'atencao', motivo: `${elegiveis} elegível(is), mas o provedor não tem documento disponível (maxNSU alcançado) — nada a capturar. Normal na transição do ADN; confira o município se persistir.` };
+        }
+        // 3b) Sem confirmação do provedor: mantém crítico ("sucesso vazio",
+        //     caso NFS-e Nacional 71/8 com 0 docs; NFS-e SP 0/121).
         return { nivel: 'critico', motivo: `0 documentos capturados em 7 dias com ${elegiveis} empresa(s) elegível(is) — rodando sem capturar.` };
     }
 
