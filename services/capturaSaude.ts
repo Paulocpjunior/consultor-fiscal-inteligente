@@ -49,8 +49,16 @@ export function avaliarSaudeCaptura(s: SinaisCaptura): SaudeCaptura {
     const elegiveis = s.elegiveis ?? null;
     const temElegiveis = (elegiveis ?? 0) > 0;
 
-    // 2) Roda mas falha tudo — crítico (o caso NFS-e SP 0/121).
+    // 2) Roda mas falha tudo. Só é "inoperante" (crítico) quando NÃO há captura
+    //    recente saudável. Uma rodada pequena que pegou um único 656 (rate-limit
+    //    transitório, absorvido pelo round-robin) NÃO é inoperância se milhares
+    //    de docs entraram em 7 dias — pintar vermelho aí é falso alarme (caso
+    //    NFe 0/1 com 12.417 docs/7d). O caso real 0/121 tinha docs7d=0 → segue
+    //    crítico. Se há captura recente, vira atenção (última rodada falhou).
     if (sucessos !== null && falhas !== null && sucessos === 0 && falhas > 0) {
+        if (docs7d !== null && docs7d > 0) {
+            return { nivel: 'atencao', motivo: `Última execução falhou (${falhas} tentativa(s)), mas há ${docs7d} doc(s) capturados em 7 dias — provavelmente transitório (ex.: rate-limit 656). Sincroniza de novo.` };
+        }
         return { nivel: 'critico', motivo: `TODAS as ${falhas} tentativas da última execução falharam — captura inoperante.` };
     }
 
