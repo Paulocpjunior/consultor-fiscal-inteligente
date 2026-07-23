@@ -15,9 +15,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   NFS-e SP ficou semanas "verde" com 0 sucessos/121 falhas.
 - Mensagens de erro para o usuário: em português, com a AÇÃO prática (padrão
   interpretarCstat). Módulos de lógica: puros e testados (jest), rotas = I/O.
+- **CFI é CONCORRENTE da SIEG, não satélite** (Paulo, 23/07/2026): a prova de
+  completude do produto é PRÓPRIA, contra a FONTE (SEFAZ) — cursor
+  ultNSU=maxNSU, pendências de manifestação, resumos sem completo. NUNCA
+  propor "comparar com a SIEG" como rito; a Conferência por chaves é só rede
+  de segurança da migração.
+- **Farol honesto vale pra TODO painel** (não só o Diagnóstico): all-failed
+  (0 ok + N falhas) nunca é verde; falha sempre com o MOTIVO dominante ao
+  lado. Lições 23/07: "Saúde dos crons" dizia OK com 0/500; NFe ficou
+  "inoperante" vermelho com 12k docs/7d (all-failed transitório com captura
+  saudável = âmbar, não vermelho).
 - CNPJ escritório: 44.388.152/0001-89. Projeto GCP `consultorfiscalapp`
   (us-west1). Scheduler: `scripts/setup-cloud-schedulers.sh` (idempotente;
   o Paulo roda no Mac dele — clone em `~/consultor-fiscal-inteligente`).
+  Frontend+backend = MESMO serviço Cloud Run: deploy mata captura em
+  andamento — checar o banner do Diagnóstico antes de mesclar.
 
 ## Fila de features acordadas (com requisitos)
 
@@ -35,6 +47,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
    22/07, aguardando "bora" do Paulo). Sem mudança de lógica; PRs incrementais;
    padrão de sub-abas do DctfwebHub. Mapa completo da auditoria nos PRs de
    22/07.
+
+## Pendências operacionais (23/07/2026)
+
+- **Paulo rodar `setup-cloud-schedulers.sh` no Mac**: cria os 3 crons órfãos
+  descobertos (das-cron-noturno 03:40, dctfweb-cron-noturno 04:30,
+  caixa-postal-cron-diario 05:00 — rotas existiam, jobs nunca/não mais).
+- **Manifestações (ciência) falhando 100%** (0 ok · 500 falhas às ~16h de
+  23/07): após deploy do #271 o card "Saúde dos crons" mostra o motivo
+  dominante — diagnosticar por ele.
+- **SharePoint só recebe docs do cofre** (`origem='email'`): capturas DistDFe
+  NÃO vão pro SharePoint. Proposta de estender pra todas as capturas +
+  backfill apresentada; aguardando decisão do Paulo se as pastas SharePoint
+  são o local oficial de trabalho da equipe.
+- **Adoção do cofre (saída mod 55) = 0/388**: lista priorizada na Cobertura
+  de Saída (🎯 prioritárias = emitem mod 55 e pararam de ser capturadas);
+  equipe deve enviar as "📋 Instruções" por ordem de volume.
 
 ## Contexto vivo (jul/2026)
 
