@@ -12,6 +12,7 @@
 import React, { useMemo, useState } from 'react';
 import type { LucroPresumidoEmpresa, User } from '../../types';
 import { PlusIcon, TrashIcon } from '../Icons';
+import LoteDareModal from './LoteDareModal';
 
 // CNPJ SEMPRE formatado na exibição — a base tem registros mistos
 // ('05049535000170' e '05.049.535/0001-70'), o que escondia duplicatas do
@@ -31,6 +32,7 @@ export interface ListViewProps {
 
 const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpresa, onAbrir, onExcluir }) => {
     const [busca, setBusca] = useState('');
+    const [loteDareAberto, setLoteDareAberto] = useState(false);
     const empresasFiltradas = useMemo(() => {
         const termo = busca.trim().toLowerCase();
         if (!termo) return empresas;
@@ -62,13 +64,24 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                     <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Lucro Presumido e Real</h2>
                     <p className="mt-1 text-slate-500 dark:text-slate-400">Gestão de fichas financeiras e cálculo de impostos.</p>
                 </div>
-                <button
-                    onClick={onNovaEmpresa}
-                    className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-700 transition-colors"
-                >
-                    <PlusIcon className="w-5 h-5" /> Nova Empresa
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setLoteDareAberto(true)}
+                        className="btn-press flex items-center gap-2 px-4 py-2 bg-emerald-700 text-white font-semibold rounded-lg hover:bg-emerald-600 transition-colors"
+                        title="Gera o TXT do 'Dare em Lote' com o ICMS informado nas fichas do mês — cola no portal e baixa o ZIP com todos os DAREs"
+                    >
+                        🧾 Lote DARE
+                    </button>
+                    <button
+                        onClick={onNovaEmpresa}
+                        className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-700 transition-colors"
+                    >
+                        <PlusIcon className="w-5 h-5" /> Nova Empresa
+                    </button>
+                </div>
             </div>
+
+            {loteDareAberto && <LoteDareModal empresas={empresas} onClose={() => setLoteDareAberto(false)} />}
 
             {empresas.length > 0 && (
                 <div className="relative">

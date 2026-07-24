@@ -157,3 +157,54 @@ export function codigoGnreParaDareSp(codigoDareSp) {
   }
   return null;
 }
+
+// ── Trilho "Dare em Lote" (TXT copiar/colar) ────────────────────────────────
+// Formato DOCUMENTADO na própria página www4.fazenda.sp.gov.br/DareICMS/
+// DareLote (print do Paulo, 24/07/2026) — é o lote do ICMS DECLARADO, com os
+// códigos RPA (04601/14601) no dropdown. Regras da página:
+//   · linha: CNPJ;servico;MM/AAAA;DD/MM/AAAA;valor;1   (1 = sistema calcula
+//     acréscimos moratórios/valor total — nosso default: nunca calculamos
+//     multa/juros de guia estadual localmente)
+//   · SEM espaços; centavos com PONTO; máx 50 documentos por lote;
+//   · não misturar inscritos e não-inscritos no mesmo lote;
+//   · serviços PROIBIDOS em lote: 06305, 08101, 1044, 89202.
+// Exemplos oficiais da página (os testes replicam verbatim):
+//   18857209000131;06301;03/2022;30/04/2022;1000.99;1
+//   18821372000144;10101;04/2022;31/05/2022;0;0;2000.53
+export const MAX_DOCS_LOTE_DARE = 50;
+export const SERVICOS_BLOQUEADOS_LOTE = ['06305', '08101', '1044', '89202'];
+
+/** Uma linha do lote TXT. Valida TUDO via montarDare (mesma régua da guia
+ *  unitária) e formata exatamente como os exemplos oficiais. */
+export function montarLinhaLoteTxt({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento }) {
+  const svcNum = String(codigoServico || '').trim();
+  if (SERVICOS_BLOQUEADOS_LOTE.includes(svcNum)) {
+    throw new Error(`Serviço ${svcNum} não pode ser emitido em lote (regra do portal DARE) — emita pelo Dare Unitário.`);
+  }
+  const p = montarDare({ cnpj, razaoSocial: razaoSocial || 'lote', codigoServico, referencia, valor, vencimento });
+  const vencBr = p.vencimento.split('-').reverse().join('/'); // AAAA-MM-DD → DD/MM/AAAA
+  return `${p.contribuinte.cnpj};${p.codigoServico};${p.referencia};${vencBr};${p.valor.toFixed(2)};1`;
+}
+
+/**
+ * Monta o lote TXT completo. Erro em QUALQUER item aborta o lote inteiro
+ * (guia de imposto não sai "quase certa"); >50 itens = dividir em 2 lotes.
+ * @returns {{ texto: string, linhas: string[], totalValor: number }}
+ */
+export function montarLoteTxt(itens) {
+  if (!Array.isArray(itens) || itens.length === 0) {
+    throw new Error('Lote vazio — selecione ao menos uma guia.');
+  }
+  if (itens.length > MAX_DOCS_LOTE_DARE) {
+    throw new Error(`Lote com ${itens.length} documentos — o portal aceita no máximo ${MAX_DOCS_LOTE_DARE} por lote. Divida em lotes menores.`);
+  }
+  const linhas = itens.map((item, i) => {
+    try {
+      return montarLinhaLoteTxt(item);
+    } catch (e) {
+      throw new Error(`Item ${i + 1} (${item?.razaoSocial || item?.cnpj || '?'}): ${e.message}`);
+    }
+  });
+  const totalValor = Math.round(itens.reduce((s, it) => s + Number(it.valor || 0) * 100, 0)) / 100;
+  return { texto: linhas.join('\n'), linhas, totalValor };
+}
