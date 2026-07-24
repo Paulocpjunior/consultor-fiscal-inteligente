@@ -71,14 +71,28 @@ describe('extrairTributosApp — soma por família a partir do detalhamento', ()
         expect(r2.divergencias.find(d => d.tributo === 'IRPJ')!.severidade).toBe('alta');
     });
 
-    it('usa valorBruto (débito) quando presente — não o valor líquido de retenção', () => {
+    // Decisão do Paulo 24/07 (caso HS PROJETOS 2026-06, reverte o #205): a
+    // conferência e o MIT usam o LÍQUIDO de retenções (det.valor) — retenção
+    // sofrida é deduzida NA APURAÇÃO (não é vinculação da DCTFWeb) e o débito
+    // do MIT vira o DARF; declarar o bruto cobraria imposto maior que o devido.
+    it('usa o valor LÍQUIDO de retenção (det.valor) — não o valorBruto', () => {
         const det: any[] = [
             { imposto: 'IRPJ (Mensal)', valor: 8500, valorBruto: 10000, retencao: 1500 },
             { imposto: 'PIS (Lucro Real)', valor: 2800, valorBruto: 3300, retencao: 500 },
         ];
         const r = extrairTributosApp(det);
-        expect(r.IRPJ).toBe(10000); // bruto, não 8500
-        expect(r.PIS).toBe(3300);   // bruto, não 2800
+        expect(r.IRPJ).toBe(8500); // líquido (a pagar/declarar), não 10000
+        expect(r.PIS).toBe(2800);  // líquido, não 3300
+    });
+
+    it('caso HS PROJETOS 2026-06: IRPJ/CSLL líquidos batem com o card da apuração', () => {
+        const det: any[] = [
+            { imposto: 'IRPJ (Trimestral)', valor: 2106.14, valorBruto: 8733.53, retencao: 6627.39 },
+            { imposto: 'CSLL (Trimestral)', valor: 4412.52, valorBruto: 5240.12, retencao: 827.60 },
+        ];
+        const r = extrairTributosApp(det);
+        expect(r.IRPJ).toBe(2106.14);
+        expect(r.CSLL).toBe(4412.52);
     });
 });
 
