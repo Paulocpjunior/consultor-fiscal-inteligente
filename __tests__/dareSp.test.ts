@@ -153,3 +153,69 @@ describe('Conversão GNRE→DARE-SP (tabela oficial do portal GnreLote, 24/07/20
         expect(codigoGnreParaDareSp('102-8')).toBe('10011-0');
     });
 });
+
+// @ts-expect-error — módulo .js puro
+import { montarLinhaLoteTxt, montarLoteTxt, SERVICOS_BLOQUEADOS_LOTE, MAX_DOCS_LOTE_DARE } from '../sefaz-backend/dare-sp.js';
+
+describe('Dare em Lote (TXT) — formato oficial da página DareLote (24/07/2026)', () => {
+    it('replica o formato do exemplo oficial: CNPJ;servico;MM/AAAA;DD/MM/AAAA;valor;1', () => {
+        // Exemplo oficial: 18857209000131;06301;03/2022;30/04/2022;1000.99;1
+        // (usamos serviço da nossa tabela — 04601 — com os mesmos demais campos)
+        const linha = montarLinhaLoteTxt({
+            cnpj: '18.857.209/0001-31', razaoSocial: 'Teste', codigoServico: '04601',
+            referencia: '2022-03', valor: 1000.99, vencimento: '2022-04-30',
+        });
+        expect(linha).toBe('18857209000131;04601;03/2022;30/04/2022;1000.99;1');
+    });
+
+    it('caso real WALDESA 06/2026: linha pronta pro portal', () => {
+        const linha = montarLinhaLoteTxt({
+            cnpj: '05.049.535/0006-85', razaoSocial: 'Waldesa', codigoServico: '04601',
+            referencia: '2026-06', valor: 88.64, vencimento: '2026-07-20',
+        });
+        expect(linha).toBe('05049535000685;04601;06/2026;20/07/2026;88.64;1');
+    });
+
+    it('valor inteiro sai com 2 casas e PONTO (regra da página)', () => {
+        const linha = montarLinhaLoteTxt({
+            cnpj: '18857209000131', razaoSocial: 'T', codigoServico: '04601',
+            referencia: '03/2022', valor: 1000, vencimento: '2022-04-30',
+        });
+        expect(linha).toContain(';1000.00;1');
+        expect(linha).not.toContain(',');
+        expect(linha).not.toContain(' ');
+    });
+
+    it('serviços proibidos em lote (06305/08101/1044/89202) são recusados', () => {
+        for (const svc of SERVICOS_BLOQUEADOS_LOTE) {
+            expect(() => montarLinhaLoteTxt({
+                cnpj: '18857209000131', razaoSocial: 'T', codigoServico: svc,
+                referencia: '03/2022', valor: 10, vencimento: '2022-04-30',
+            })).toThrow(/não pode ser emitido em lote/);
+        }
+    });
+
+    it('lote: junta linhas, soma total em centavos exatos, aborta inteiro se 1 item inválido', () => {
+        const base = { razaoSocial: 'T', codigoServico: '04601', referencia: '06/2026', vencimento: '2026-07-20' };
+        const r = montarLoteTxt([
+            { ...base, cnpj: '05049535000685', valor: 88.64 },
+            { ...base, cnpj: '96312889000111', codigoServico: '14601', valor: 146661.37 },
+        ]);
+        expect(r.linhas).toHaveLength(2);
+        expect(r.texto.split('\n')).toHaveLength(2);
+        expect(r.totalValor).toBe(146750.01);
+        expect(() => montarLoteTxt([
+            { ...base, cnpj: '05049535000685', valor: 88.64 },
+            { ...base, cnpj: '123', valor: 10 }, // CNPJ inválido → aborta TUDO
+        ])).toThrow(/Item 2.*CNPJ inválido/);
+    });
+
+    it('lote vazio e lote >50 são recusados com mensagem acionável', () => {
+        expect(() => montarLoteTxt([])).toThrow(/Lote vazio/);
+        const muitos = Array.from({ length: MAX_DOCS_LOTE_DARE + 1 }, () => ({
+            cnpj: '18857209000131', razaoSocial: 'T', codigoServico: '04601',
+            referencia: '06/2026', valor: 10, vencimento: '2026-07-20',
+        }));
+        expect(() => montarLoteTxt(muitos)).toThrow(/máximo 50/);
+    });
+});

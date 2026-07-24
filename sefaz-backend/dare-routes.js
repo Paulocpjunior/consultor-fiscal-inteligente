@@ -16,7 +16,7 @@
 import { Router } from 'express';
 import admin from 'firebase-admin';
 import { requireAuth, requireAdmin } from './require-admin.js';
-import { montarDare, derivacoesDisponiveis, CODIGOS_DARE_ICMS } from './dare-sp.js';
+import { montarDare, derivacoesDisponiveis, CODIGOS_DARE_ICMS, montarLoteTxt } from './dare-sp.js';
 import { reconhecerPortalDare } from './dare-recon.js';
 
 const router = Router();
@@ -61,6 +61,31 @@ router.post('/registrar', requireAuth, async (req, res) => {
     });
     console.log(`[dare] solicitacao ${doc.id} ${payload.codigoServico} ${payload.contribuinte.cnpj} ${payload.referencia} R$${payload.valor} por ${req.user?.email}`);
     return res.json({ ok: true, id: doc.id, payload });
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+// Lote TXT do "Dare em Lote" (ICMS declarado em massa — formato documentado
+// na própria página do portal). Valida TUDO (um item ruim aborta o lote) e
+// registra a auditoria do lote inteiro. A emissão continua no portal (humano
+// cola o TXT e resolve o reCAPTCHA; o portal gera o ZIP com os DAREs).
+router.post('/lote-txt', requireAuth, async (req, res) => {
+  try {
+    const itens = req.body?.itens;
+    const lote = montarLoteTxt(itens);
+    const db = fa().firestore();
+    const doc = await db.collection('dare_solicitacoes').add({
+      tipo: 'lote-txt',
+      totalDocs: lote.linhas.length,
+      totalValor: lote.totalValor,
+      linhas: lote.linhas,
+      solicitadoPor: req.user?.email || req.user?.uid || 'desconhecido',
+      solicitadoEm: admin.firestore.FieldValue.serverTimestamp(),
+      status: 'lote-gerado-no-app',
+    });
+    console.log(`[dare] lote ${doc.id}: ${lote.linhas.length} guia(s), R$${lote.totalValor} por ${req.user?.email}`);
+    return res.json({ ok: true, id: doc.id, ...lote });
   } catch (e) {
     return res.status(400).json({ ok: false, error: e.message });
   }
