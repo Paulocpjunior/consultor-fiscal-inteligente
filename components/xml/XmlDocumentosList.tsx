@@ -94,18 +94,29 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         if (!catalogoEmpresas.length) return allDocs;
         const porCnpj = new Map<string, string>();
         const porRaiz = new Map<string, string>();
+        const cnpjPorId = new Map<string, string>();
         for (const e of catalogoEmpresas) {
             const c = (e.cnpj || '').replace(/\D/g, '');
             if (c.length !== 14) continue;
             if (!porCnpj.has(c)) porCnpj.set(c, e.nome);
             const raiz = c.slice(0, 8);
             if (!porRaiz.has(raiz)) porRaiz.set(raiz, e.nome);
+            if (e.id) cnpjPorId.set(e.id, c);
         }
         return allDocs.map(d => {
-            if (d.empresaNome) return d;
-            const c = String(d.empresaCnpj || '').replace(/\D/g, '');
-            const nome = (c.length === 14 && (porCnpj.get(c) || porRaiz.get(c.slice(0, 8)))) || null;
-            return nome ? { ...d, empresaNome: nome } : d;
+            let out = d;
+            // Doc sem empresaCnpj mas com empresaId conhecido: preenche o CNPJ
+            // pelo catálogo — senão o filtro de empresa (por raiz) não o acha.
+            const cnpjDoCatalogo = out.empresaId ? cnpjPorId.get(out.empresaId) : undefined;
+            if (!out.empresaCnpj && cnpjDoCatalogo) {
+                out = { ...out, empresaCnpj: cnpjDoCatalogo };
+            }
+            if (!out.empresaNome) {
+                const c = String(out.empresaCnpj || '').replace(/\D/g, '');
+                const nome = (c.length === 14 && (porCnpj.get(c) || porRaiz.get(c.slice(0, 8)))) || null;
+                if (nome) out = out === d ? { ...out, empresaNome: nome } : Object.assign(out, { empresaNome: nome });
+            }
+            return out;
         });
     }, [allDocs, catalogoEmpresas]);
 

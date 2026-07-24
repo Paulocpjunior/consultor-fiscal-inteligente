@@ -115,9 +115,12 @@ export function applyDocumentosFilters(
         if (filters.origem && d.origem !== filters.origem) return false;
         if (filters.empresaCnpj) {
             const alvo = norm(filters.empresaCnpj);
-            // Match exato — usuario escolheu UMA empresa especifica do dropdown.
-            // Diferente do `busca`, que faz substring em emitente/destinatario.
-            if (!alvo || empresaCnpjN !== alvo) return false;
+            // Match pela RAIZ do CNPJ (8 dígitos): cobre matriz + filiais e docs
+            // atribuídos por trilhos que gravam o CNPJ da filial. O match exato
+            // de 14 dígitos subcontava — caso VINATEX 24/07: lista mostrava 52
+            // docs e o exportador SAGE (que casa por raiz) mostrava 110 no MESMO
+            // recorte, minando a confiança na consulta. Paridade com o SAGE.
+            if (!alvo || !empresaCnpjN || empresaCnpjN.slice(0, 8) !== alvo.slice(0, 8)) return false;
         }
         if (filters.tipoDoc) {
             const t = String((d as any).tipoDoc || d.tipo || '').toLowerCase();
