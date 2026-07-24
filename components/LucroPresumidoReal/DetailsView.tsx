@@ -7,10 +7,16 @@
  * embutido pra admin.
  * Extraido de LucroPresumidoRealDashboard.tsx - issue #100.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import type { LucroPresumidoEmpresa, User } from '../../types';
 import { ArrowLeftIcon, BuildingIcon, CalculatorIcon, PlusIcon } from '../Icons';
 import NfseSpAdminPanel from '../NfseSpAdminPanel';
+import DareSpModal from './DareSpModal';
+
+const fmtCnpj = (c?: string): string => {
+    const d = String(c || '').replace(/\D/g, '');
+    return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : (c || '—');
+};
 
 export interface DetailsViewProps {
     empresa: LucroPresumidoEmpresa;
@@ -28,14 +34,19 @@ export interface DetailsViewProps {
 const DetailsView: React.FC<DetailsViewProps> = ({
     empresa, currentUser, onVoltar, onAbrirDadosFiscais, onAbrirCorrelacaoCfop,
     onCriarNovaFicha, onAbrirFicha, onSalvarNfseSpConfig, onShowToast,
-}) => (
+}) => {
+    // DARE-SP direto do card da ficha ("empresa aberta não tinha a opção ICMS"
+    // — Paulo 24/07): quando a ficha tem ICMS informado, o botão aparece aqui,
+    // sem precisar entrar na ficha.
+    const [dareFicha, setDareFicha] = useState<{ competencia: string; valor: number; derivacao: 'proprio' | 'st' } | null>(null);
+    return (
     <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
                 <button onClick={onVoltar} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><ArrowLeftIcon className="w-5 h-5" /></button>
                 <div>
                     <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{empresa.nome}</h2>
-                    <p className="text-slate-500 dark:text-slate-400 font-mono text-sm">{empresa.cnpj}</p>
+                    <p className="text-slate-500 dark:text-slate-400 font-mono text-sm">{fmtCnpj(empresa.cnpj)}</p>
                 </div>
             </div>
             <button onClick={onAbrirDadosFiscais} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Dados fiscais para SPED, DCTFWeb e outras obrigacoes">
@@ -86,13 +97,48 @@ const DetailsView: React.FC<DetailsViewProps> = ({
                             <div className="flex justify-between"><span>Faturamento:</span> <span className="font-mono text-slate-900 dark:text-slate-200 font-bold">{ficha.faturamentoMesTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></div>
                             <div className="flex justify-between"><span>Impostos:</span> <span className="font-mono">{ficha.totalImpostos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></div>
                         </div>
+                        {((ficha.icmsProprioRecolher || 0) > 0 || (ficha.icmsStRecolher || 0) > 0) && (
+                            <div className="mt-2 flex gap-1 flex-wrap">
+                                {(ficha.icmsProprioRecolher || 0) > 0 && (
+                                    <button
+                                        onClick={(ev) => { ev.stopPropagation(); setDareFicha({ competencia: ficha.mesReferencia, valor: ficha.icmsProprioRecolher || 0, derivacao: 'proprio' }); }}
+                                        className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-700 hover:bg-emerald-600 text-white"
+                                        title="Gerar DARE-SP do ICMS Próprio desta competência"
+                                    >
+                                        🧾 DARE ICMS
+                                    </button>
+                                )}
+                                {(ficha.icmsStRecolher || 0) > 0 && (
+                                    <button
+                                        onClick={(ev) => { ev.stopPropagation(); setDareFicha({ competencia: ficha.mesReferencia, valor: ficha.icmsStRecolher || 0, derivacao: 'st' }); }}
+                                        className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-800 hover:bg-emerald-700 text-white"
+                                        title="Gerar DARE-SP do ICMS-ST desta competência"
+                                    >
+                                        🧾 DARE ST
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )) : (
                     <p className="text-slate-500 col-span-3 text-center py-4">Nenhuma ficha financeira registrada.</p>
                 )}
             </div>
         </div>
+
+        {dareFicha && empresa.cnpj && (
+            <DareSpModal
+                cnpj={empresa.cnpj}
+                razaoSocial={empresa.nome || ''}
+                empresaId={empresa.id}
+                competencia={dareFicha.competencia}
+                valorInicial={dareFicha.valor}
+                derivacaoInicial={dareFicha.derivacao}
+                onClose={() => setDareFicha(null)}
+            />
+        )}
     </div>
-);
+    );
+};
 
 export default DetailsView;

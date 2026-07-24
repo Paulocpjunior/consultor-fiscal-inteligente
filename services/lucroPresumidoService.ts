@@ -72,10 +72,15 @@ export const saveEmpresa = async (empresa: any, userId: string): Promise<LucroPr
 
     // Garante ID
     const id = empresa.id || generateUUID();
-    
-    const newEmpresaData: LucroPresumidoEmpresa = { 
-        ...empresa, 
+
+    const newEmpresaData: LucroPresumidoEmpresa = {
+        ...empresa,
         id,
+        // CNPJ canônico: SÓ DÍGITOS. A base tinha formatos mistos
+        // ('05.049.535/0001-70' vs '05049535000170') — caso WALDESA 24/07:
+        // mesma empresa duplicada porque o formato enganava o olho. A exibição
+        // formata na tela; o dado gravado é normalizado.
+        cnpj: String(empresa.cnpj || '').replace(/\D/g, '') || empresa.cnpj,
         fichaFinanceira: empresa.fichaFinanceira || [], 
         createdBy: userId,
         createdByEmail: auth?.currentUser?.email || undefined,
