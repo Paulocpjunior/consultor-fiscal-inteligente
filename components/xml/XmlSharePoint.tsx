@@ -404,6 +404,9 @@ interface AutoSyncStatus {
         timestamp?: { _seconds: number };
     } | null;
     empresasAutoSync: { id: string; nome: string; cnpj: string; grupo: string; empresaPasta: string }[];
+    /** Gap que trava a cópia no SharePoint (XMLs + IMPOSTOS): quem ainda
+     *  não tem grupo+pasta preenchidos. */
+    empresasSemConfig?: { id: string; nome: string; cnpj: string; fonte: 'simples' | 'lucro' }[];
 }
 
 const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }) => {
@@ -461,7 +464,11 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
         if (!configEmpresaId) return;
         setSavingConfig(true);
         try {
-            const empresa = empresas.find(e => e.id === configEmpresaId);
+            // fonte: catálogo de opções OU a lista de pendentes (empresa que só
+            // aparece lá também precisa salvar na coleção certa — Simples ia
+            // parar em lucro_empresas sem este fallback).
+            const empresa = empresas.find(e => e.id === configEmpresaId)
+                || status?.empresasSemConfig?.find(e => e.id === configEmpresaId);
             const collection = empresa?.fonte === 'simples' ? 'simples_empresas' : 'lucro_empresas';
             const headers = await getHeaders();
             const resp = await fetch('/api/admin/sharepoint/config', {
@@ -559,6 +566,52 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                             </span>
                         )}
                     </div>
+
+                    {/* Pendentes de configuração — a lista de trabalho do gap
+                        semConfig: sem grupo+pasta nada sobe pro SharePoint
+                        (nem XML do arquivo, nem imposto da ordem técnica).
+                        "Preencher" pré-seleciona a empresa no formulário. */}
+                    {(status?.empresasSemConfig?.length || 0) > 0 && (
+                        <div className="border-t pt-3 mt-3" style={{ borderColor: 'var(--border-subtle)' }}>
+                            <div className="flex items-center justify-between mb-1">
+                                <p className="text-[10px] font-bold uppercase" style={{ color: 'var(--danger, #ef4444)' }}>
+                                    ⚠ {status!.empresasSemConfig!.length} empresa(s) SEM pasta configurada — nada sobe pro SharePoint
+                                </p>
+                                <button
+                                    onClick={() => {
+                                        const txt = status!.empresasSemConfig!
+                                            .map(e => `${e.cnpj}\t${e.nome}\t${e.fonte === 'simples' ? 'Simples' : 'Lucro'}`)
+                                            .join('\n');
+                                        navigator.clipboard.writeText(`CNPJ\tEmpresa\tRegime\n${txt}`);
+                                    }}
+                                    className="text-[10px] underline"
+                                    style={{ color: 'var(--text-muted)' }}
+                                    title="Copia a lista (CNPJ / nome / regime) pra colar no Excel"
+                                >
+                                    📋 Copiar lista
+                                </button>
+                            </div>
+                            <div className="max-h-48 overflow-y-auto space-y-0.5">
+                                {status!.empresasSemConfig!.map(e => (
+                                    <div key={e.id} className="flex items-center gap-2 text-xs py-0.5">
+                                        <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                                        <span className="font-mono" style={{ color: 'var(--text-muted)' }}>
+                                            {e.cnpj.length === 14 ? e.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : e.cnpj || '—'}
+                                        </span>
+                                        <span className="truncate" style={{ color: 'var(--text-primary)' }}>{e.nome}</span>
+                                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{e.fonte === 'simples' ? 'Simples' : 'Lucro'}</span>
+                                        <button
+                                            onClick={() => { setConfigEmpresaId(e.id); setConfigGrupo(''); setConfigPasta(''); }}
+                                            className="ml-auto text-[10px] font-bold underline shrink-0"
+                                            style={{ color: 'var(--accent)' }}
+                                        >
+                                            Preencher ↓
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Add empresa config */}
                     <div className="border-t pt-3 mt-3" style={{ borderColor: 'var(--border-subtle)' }}>
