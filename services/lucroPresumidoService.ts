@@ -68,6 +68,28 @@ export const saveEmpresa = async (empresa: any, userId: string): Promise<LucroPr
         if (check.duplicado) {
             throw new Error(mensagemCnpjDuplicado(empresa.cnpj || '', check));
         }
+    } else if (empresa.cnpj && isFirebaseConfigured && db) {
+        // UPDATE: a trava antiga só cobria cadastro novo — editar o CNPJ de uma
+        // empresa existente pra um já cadastrado passava direto (2º furo achado
+        // na auditoria WALDESA 24/07). Só varre quando o CNPJ MUDOU de fato
+        // (salvamento de ficha não paga o custo da varredura).
+        try {
+            const atual = await getDoc(doc(db, 'lucro_empresas', empresa.id));
+            const cnpjAtual = String(atual.exists() ? (atual.data() as any).cnpj || '' : '').replace(/\D/g, '');
+            const cnpjNovo = String(empresa.cnpj).replace(/\D/g, '');
+            if (atual.exists() && cnpjNovo && cnpjAtual && cnpjNovo !== cnpjAtual) {
+                if (!validarCnpj(empresa.cnpj)) {
+                    throw new Error(`CNPJ invalido: "${empresa.cnpj}". Verifique os digitos.`);
+                }
+                const check = await verificarCnpjDuplicado(empresa.cnpj, empresa.id);
+                if (check.duplicado) {
+                    throw new Error(mensagemCnpjDuplicado(empresa.cnpj, check));
+                }
+            }
+        } catch (e) {
+            // Erros de trava sobem; falha de REDE na leitura não bloqueia o save.
+            if (e instanceof Error && /CNPJ/.test(e.message)) throw e;
+        }
     }
 
     // Garante ID

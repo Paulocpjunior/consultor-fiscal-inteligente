@@ -21,7 +21,7 @@
  * do mesmo CNPJ). YAGNI — chance praticamente zero no fluxo de cadastro
  * manual da contabilidade.
  */
-import { collection, getDocs, query, limit as fbLimit } from 'firebase/firestore';
+import { collection, getDocs, query, limit as fbLimit, orderBy, startAfter, documentId, type Query, type QuerySnapshot, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebaseConfig';
 
 export interface ResultadoCnpjCheck {
@@ -33,53 +33,64 @@ export interface ResultadoCnpjCheck {
 
 const soDigitos = (s: string): string => (s || '').replace(/\D+/g, '');
 
+// Varre UMA coleção INTEIRA (paginada por id, 500/página) atrás do CNPJ.
+// O fbLimit(500) único de antes era um ponto cego: empresa além da 500ª
+// ficava INVISÍVEL pra trava — com a base em ~388 no Lucro + Simples, o
+// estouro era questão de meses (caso WALDESA 24/07 escancarou o risco).
+async function buscarCnpjNaColecao(
+    colName: 'simples_empresas' | 'lucro_empresas',
+    cnpjDig: string,
+    regime: 'SIMPLES' | 'LUCRO',
+    ignorarEmpresaId?: string,
+): Promise<ResultadoCnpjCheck | null> {
+    let cursor: QueryDocumentSnapshot | null = null;
+    for (;;) {
+        const base = collection(db!, colName);
+        const consulta: Query = cursor
+            ? query(base, orderBy(documentId()), startAfter(cursor), fbLimit(500))
+            : query(base, orderBy(documentId()), fbLimit(500));
+        const snap: QuerySnapshot = await getDocs(consulta);
+        if (snap.empty) return null;
+        for (const d of snap.docs) {
+            if (ignorarEmpresaId && d.id === ignorarEmpresaId) continue; // a própria (update)
+            const data = d.data() as { cnpj?: string; nome?: string; _merged_into?: string };
+            if (data._merged_into) continue; // 23/05: ignora perdedores do merge
+            if (soDigitos(data.cnpj || '') === cnpjDig) {
+                return {
+                    duplicado: true,
+                    regime,
+                    razaoSocial: data.nome || '(sem nome)',
+                    empresaId: d.id,
+                };
+            }
+        }
+        if (snap.docs.length < 500) return null;
+        cursor = snap.docs[snap.docs.length - 1];
+    }
+}
+
 /**
- * Consulta simples_empresas e lucro_empresas atras de qualquer doc com
- * o mesmo CNPJ (normalizado). Retorna o primeiro match.
+ * Consulta simples_empresas e lucro_empresas (COMPLETAS, paginadas) atrás de
+ * qualquer doc com o mesmo CNPJ normalizado. `ignorarEmpresaId` permite usar
+ * a trava também em UPDATE (edição de CNPJ) sem acusar a própria empresa.
  */
-export async function verificarCnpjDuplicado(cnpj: string): Promise<ResultadoCnpjCheck> {
+export async function verificarCnpjDuplicado(cnpj: string, ignorarEmpresaId?: string): Promise<ResultadoCnpjCheck> {
     const cnpjDig = soDigitos(cnpj);
     if (!cnpjDig) return { duplicado: false };
     if (!isFirebaseConfigured || !db) return { duplicado: false };
 
-    // 1. simples_empresas
     try {
-        const snap = await getDocs(query(collection(db, 'simples_empresas'), fbLimit(500)));
-        for (const d of snap.docs) {
-            const data = d.data() as { cnpj?: string; nome?: string; _merged_into?: string };
-            if (data._merged_into) continue; // 23/05: ignora perdedores do merge
-            if (soDigitos(data.cnpj || '') === cnpjDig) {
-                return {
-                    duplicado: true,
-                    regime: 'SIMPLES',
-                    razaoSocial: data.nome || '(sem nome)',
-                    empresaId: d.id,
-                };
-            }
-        }
+        const m = await buscarCnpjNaColecao('simples_empresas', cnpjDig, 'SIMPLES', ignorarEmpresaId);
+        if (m) return m;
     } catch (e) {
         console.error('[empresaUniqueness] simples_empresas:', e);
     }
-
-    // 2. lucro_empresas
     try {
-        const snap = await getDocs(query(collection(db, 'lucro_empresas'), fbLimit(500)));
-        for (const d of snap.docs) {
-            const data = d.data() as { cnpj?: string; nome?: string; _merged_into?: string };
-            if (data._merged_into) continue; // 23/05: ignora perdedores do merge
-            if (soDigitos(data.cnpj || '') === cnpjDig) {
-                return {
-                    duplicado: true,
-                    regime: 'LUCRO',
-                    razaoSocial: data.nome || '(sem nome)',
-                    empresaId: d.id,
-                };
-            }
-        }
+        const m = await buscarCnpjNaColecao('lucro_empresas', cnpjDig, 'LUCRO', ignorarEmpresaId);
+        if (m) return m;
     } catch (e) {
         console.error('[empresaUniqueness] lucro_empresas:', e);
     }
-
     return { duplicado: false };
 }
 

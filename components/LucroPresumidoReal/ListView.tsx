@@ -97,11 +97,26 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                             <tr key={emp.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                                 <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">
                                     {emp.nome}
-                                    {cnpjsDuplicados.has(String(emp.cnpj || '').replace(/\D/g, '')) && (
-                                        <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" title="Mesmo CNPJ cadastrado mais de uma vez — fichas podem estar divididas entre os cadastros. Admin: manter o que tem as fichas e excluir/arquivar o outro.">
-                                            ⚠ duplicada
-                                        </span>
-                                    )}
+                                    {cnpjsDuplicados.has(String(emp.cnpj || '').replace(/\D/g, '')) && (() => {
+                                        // Responde "qual excluir?" com dado: quem tem 0 fichas é o
+                                        // cadastro-lixo; quem tem fichas é o verdadeiro. Duas com
+                                        // fichas = NÃO excluir nenhuma (precisa mesclagem — admin).
+                                        const nFichas = (emp.fichaFinanceira || []).length;
+                                        return (
+                                            <span
+                                                className={`ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded ${
+                                                    nFichas === 0
+                                                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                                }`}
+                                                title={nFichas === 0
+                                                    ? 'CNPJ duplicado e SEM fichas — este é o cadastro que pode ser excluído (🗑️).'
+                                                    : `CNPJ duplicado, mas este cadastro TEM ${nFichas} ficha(s) — é o que deve ser MANTIDO. Exclua o gêmeo sem fichas.`}
+                                            >
+                                                ⚠ duplicada · {nFichas === 0 ? '0 fichas — excluir este' : `${nFichas} ficha(s) — manter`}
+                                            </span>
+                                        );
+                                    })()}
                                 </td>
                                 <td className="px-6 py-4 font-mono">{fmtCnpj(emp.cnpj)}</td>
                                 <td className="px-6 py-4">
