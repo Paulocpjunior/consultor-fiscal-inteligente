@@ -179,7 +179,7 @@ describe('applyDocumentosFilters — outros filtros', () => {
         expect(filtra({ direcao: 'saida' })).toEqual(['carlezzo', 'chave-fp'].sort());
     });
 
-    describe('filtro empresaCnpj — match exato (dropdown explícito)', () => {
+    describe('filtro empresaCnpj — match pela RAIZ (matriz + filiais)', () => {
         // Dos 7 fixtures, 4 têm empresaCnpj=S&P (braslimpo/amil/pluxee/carlezzo).
         // Outros 3 (hs/spa/chave-fp) têm CNPJs diferentes.
         const SP_DOCS = ['amil', 'braslimpo', 'carlezzo', 'pluxee'].sort();
@@ -223,6 +223,24 @@ describe('applyDocumentosFilters — outros filtros', () => {
         it('vazio/undefined não filtra', () => {
             expect(filtra({ empresaCnpj: undefined }).length).toBe(docs.length);
             expect(filtra({ empresaCnpj: '' }).length).toBe(docs.length);
+        });
+
+        it('caso VINATEX 24/07: doc de FILIAL (mesma raiz, sufixo diferente) ENTRA no filtro da matriz', () => {
+            // Lista mostrava 52 e o exportador SAGE 110 no mesmo recorte: o
+            // exportador casa por raiz de 8 e a lista exigia os 14 idênticos.
+            const docsComFilial = [
+                ...docs,
+                { id: 'filial-sp', empresaNome: 'S&P FILIAL', empresaCnpj: '44388152000260', tipo: 'NFe', direcao: 'entrada', dhEmi: '2026-07-10T10:00:00-03:00' } as any,
+            ];
+            const r = applyDocumentosFilters(docsComFilial, { empresaCnpj: SP }).map((d: any) => d.id).sort();
+            expect(r).toContain('filial-sp');
+            expect(r).toEqual([...SP_DOCS, 'filial-sp'].sort());
+        });
+
+        it('raiz diferente continua fora (não vira substring solta)', () => {
+            const r = filtra({ empresaCnpj: '44388152000189' });
+            expect(r).not.toContain('spa'); // 44444444... raiz diferente
+            expect(r).not.toContain('hs');
         });
     });
 });
