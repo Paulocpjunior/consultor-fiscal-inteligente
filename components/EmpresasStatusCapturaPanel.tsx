@@ -308,7 +308,9 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 // Usa flag BRUTA pra filtro: empresa sem procuração REAL marcada
                 // no e-CAC. Cert A1/A3 próprio não conta como procuração.
                 case 'sem-procuracao': return !e.procuracaoEcacFlagBruta;
-                case 'sem-ccmsp': return !e.nfseSpAutorizado;
+                // Só conta como pendente quem o trilho SP-capital de fato
+                // se aplica — empresa de outro município (ADN) fica fora.
+                case 'sem-ccmsp': return e.nfseSpAplicavel !== false && !e.nfseSpAutorizado;
                 case 'nfse-nac-inativa': return !e.nfseNacionalDfeAtivo;
                 case 'sem-responsavel': return !e.responsaveis || e.responsaveis.length === 0;
                 case 'ok-tudo': return e.capturaNfeOk && e.capturaNfseSpOk && e.capturaNfseNacionalOk;
@@ -631,8 +633,29 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                         )}
                                     </td>
                                     <td className="px-2 py-1.5 text-center">
-                                        <Pill ok={e.nfseSpAutorizado} label={e.nfseSpAutorizado ? 'autorizado' : 'pendente'} />
-                                        {e.ccmSp && <div className="text-[10px] text-gray-500 mt-1">CCM: {e.ccmSp}</div>}
+                                        {/* Trilho da capital só pra quem É da capital (codMunIBGE).
+                                            Empresa de outro município mostra "ADN" — nunca fica
+                                            "pendente" de um portal que não se aplica a ela. */}
+                                        {e.nfseSpAplicavel === false ? (
+                                            <>
+                                                <span
+                                                    className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                                                    title={`${e.municipioNfse ? `Município: ${e.municipioNfse}. ` : ''}O portal da Prefeitura de SP não se aplica — a NFS-e desta empresa vem pelo Padrão Nacional (ADN).`}
+                                                >
+                                                    — ADN
+                                                </span>
+                                                {e.ccmSp && (
+                                                    <div className="text-[10px] text-amber-600 mt-1" title="CCM é específico da capital — se este número é a inscrição municipal local, mova para 'Inscrição Municipal' no Completar cadastro.">
+                                                        ⚠ CCM: {e.ccmSp}
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Pill ok={e.nfseSpAutorizado} label={e.nfseSpAutorizado ? 'autorizado' : 'pendente'} />
+                                                {e.ccmSp && <div className="text-[10px] text-gray-500 mt-1">CCM: {e.ccmSp}</div>}
+                                            </>
+                                        )}
                                     </td>
                                     <td className="px-2 py-1.5 text-center">
                                         {isAdmin ? (

@@ -668,8 +668,26 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                             <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
                                 <strong>{empresaSelecionadaInfo.nome}</strong> não tem XMLs capturados.
                             </p>
-                            <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                                Verifique certificado e procuração na aba <strong>📋 Status por Empresa</strong>.
+                            {/* NUNCA chutar a causa aqui: esta tela dizia "verifique
+                                certificado e procuração" pra empresa com tudo OK no
+                                Status (caso 4BZ 24/07 — cert válido, procuração
+                                marcada, e o alerta apontava o caminho errado). O
+                                diagnóstico real, motivo a motivo, é o da aba Status
+                                por Empresa — as duas telas seguem a MESMA fonte. */}
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                O motivo real aparece na aba <strong>📋 Status por Empresa</strong> (coluna
+                                Motivos Bloqueio) — pode ser certificado, procuração, autorização de NFS-e
+                                ou simplesmente ainda não haver nota emitida/recebida no período capturado.
+                            </p>
+                        </div>
+                    ) : (filters.tipoDoc || filters.competencia || filters.status || filters.origem) && filters.direcao !== 'saida' ? (
+                        <div className="text-center py-6 px-4">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Nenhum documento com os <strong>filtros aplicados</strong>
+                                {filters.tipoDoc ? <> (tipo <strong>{String(filters.tipoDoc)}</strong>)</> : null}.
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-1">
+                                A empresa pode ter documentos de outros tipos/competências — limpe os filtros para ver tudo.
                             </p>
                         </div>
                     ) : filters.direcao === 'saida' ? (
