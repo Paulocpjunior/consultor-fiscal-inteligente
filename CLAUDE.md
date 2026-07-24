@@ -43,10 +43,11 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
      (`req.user.role === 'admin'` no backend + esconder botão no front para
      não-admin). Preview obrigatório do antes → depois antes de transmitir,
      mesmo padrão do preenchimento atual.
-2. **Consolidação da Central de XMLs: 16 → 8 abas** (proposta apresentada
-   22/07, aguardando "bora" do Paulo). Sem mudança de lógica; PRs incrementais;
-   padrão de sub-abas do DctfwebHub. Mapa completo da auditoria nos PRs de
-   22/07.
+2. ~~Consolidação da Central de XMLs: 16 → 8 abas~~ **FEITA 24/07** (#277):
+   8 grupos + sub-abas (padrão DctfwebHub), zero mudança de lógica. Grupos:
+   Dashboard | Captura (Diagnóstico·Status·Backlog·NFC-e·Portal SP) | XMLs |
+   Importar (Manual&Cofre·PDF·CSV) | Empresas | Integrações (SharePoint·SAGE)
+   | Relatórios&Logs | Config.
 
 ## Pendências operacionais (23/07/2026)
 
