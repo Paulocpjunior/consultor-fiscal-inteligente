@@ -16,7 +16,7 @@
 import { Router } from 'express';
 import admin from 'firebase-admin';
 import { requireAuth, requireAdmin } from './require-admin.js';
-import { montarDare, derivacoesDisponiveis, CODIGOS_DARE_ICMS, montarLoteTxt } from './dare-sp.js';
+import { montarDare, derivacoesDisponiveis, CODIGOS_DARE_ICMS, montarLoteTxt, montarLinhaLoteTxt } from './dare-sp.js';
 import { reconhecerPortalDare } from './dare-recon.js';
 
 const router = Router();
@@ -30,7 +30,15 @@ router.post('/preview', requireAuth, async (req, res) => {
   try {
     const { cnpj, razaoSocial, codigoServico, referencia, valor, vencimento } = req.body || {};
     const payload = montarDare({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento });
-    return res.json({ ok: true, payload });
+    // linhaTxt: a MESMA página de colar TXT do portal aceita 1 linha só —
+    // é o caminho rápido da emissão INDIVIDUAL (colaborador cola 1 linha em
+    // vez de digitar 6 campos no formulário unitário). Serviço bloqueado em
+    // lote → linhaTxt null (cai no unitário mesmo).
+    let linhaTxt = null;
+    try {
+      linhaTxt = montarLinhaLoteTxt({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento });
+    } catch { /* serviço fora do lote — sem linha */ }
+    return res.json({ ok: true, payload, linhaTxt });
   } catch (e) {
     return res.status(400).json({ ok: false, error: e.message });
   }
