@@ -63,12 +63,15 @@ export function extrairTributosApp(detalhamento: DetalheImposto[] | undefined | 
     const out: TributosPorFamilia = { IRPJ: 0, CSLL: 0, PIS: 0, COFINS: 0, IPI: 0 };
     for (const det of detalhamento || []) {
         const nome = String(det?.imposto || '').toUpperCase().trim();
-        // O DÉBITO declarado na DCTFWeb/MIT é o BRUTO (antes da retenção na
-        // fonte); a retenção entra como vinculação e não abate o débito. Por
-        // isso cruzamos/montamos o MIT com valorBruto (fallback: valor, p/
-        // impostos sem retenção). Antes usava só `valor` (líquido) → gerava
-        // divergência falsa e débito subdeclarado no MIT.
-        const valor = Number(det?.valorBruto ?? det?.valor) || 0;
+        // LÍQUIDO de retenções (det.valor) — decisão do Paulo, 24/07 (caso HS
+        // PROJETOS 2026-06: card IRPJ R$ 2.106,14 com retenção abatida de
+        // R$ 6.627,39; a conferência mostrava R$ 8.733,53 e "não assumia" a
+        // retenção). Mecânica DCTFWeb: retenção na fonte SOFRIDA não é
+        // vinculação da DCTFWeb (vinculações = pagamento/compensação/
+        // suspensão/parcelamento) — ela é deduzida NA APURAÇÃO, e o débito
+        // lançado no MIT vira o DARF. Declarar o bruto geraria DARF maior que
+        // o imposto devido. (Reverte o critério do #205, que usava valorBruto.)
+        const valor = Number(det?.valor) || 0;
         if (!valor) continue;
         // COFINS antes de PIS (COFINS não contém "PIS"; ok). IRPJ/CSLL por prefixo.
         if (nome.startsWith('COFINS')) out.COFINS += valor;
