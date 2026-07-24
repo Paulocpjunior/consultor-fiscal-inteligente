@@ -8,6 +8,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { getAuth } from 'firebase/auth';
+import { instrucoesMigracaoCofre } from '../../services/cofreInstrucoes';
 
 interface Linha {
     empresaId: string; cnpj: string; nome: string; regime: string;
@@ -33,25 +34,9 @@ const fmtQuando = (ms: number | null) => {
     return `há ${d}d`;
 };
 
-// Texto pronto pra mandar ao cliente/emissor — mesmo passo-a-passo que era
-// feito na SIEG, agora apontando pro cofre do CFI. Um clique = migração
-// destravada sem ninguém redigir e-mail do zero (38 empresas na fila, 23/07).
-function instrucoesMigracao(nomeEmpresa: string): string {
-    return [
-        `Olá! Somos da SP Assessoria Contábil, contabilidade da ${nomeEmpresa}.`,
-        '',
-        'Para recebermos automaticamente os XMLs das notas fiscais emitidas (NF-e modelo 55), pedimos um ajuste único no sistema emissor de notas:',
-        '',
-        '1. Acesse as configurações do seu sistema emissor (a tela de "envio de XML por e-mail" — a mesma onde hoje pode estar o e-mail da SIEG).',
-        '2. Cadastre/substitua o e-mail de envio automático dos XMLs por:',
-        '',
-        '   xml@spassessoriacontabil.com.br',
-        '',
-        '3. Se o sistema pedir "quantidade de notas por e-mail" ou periodicidade, pode manter o padrão — nosso sistema processa qualquer volume.',
-        '',
-        'Só isso! A partir daí os XMLs chegam automaticamente para a contabilidade. Qualquer dúvida sobre onde fica essa configuração no seu emissor, respondemos por aqui.',
-    ].join('\n');
-}
+// Texto pronto pra mandar ao cliente/emissor — fonte ÚNICA em
+// services/cofreInstrucoes.ts (compartilhada com o card do Diagnóstico).
+const instrucoesMigracao = instrucoesMigracaoCofre;
 
 const BADGES: Record<Linha['status'], { cls: string; label: string }> = {
     'falta-migrar': { cls: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300', label: '🔴 Falta migrar' },
