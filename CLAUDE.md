@@ -57,10 +57,12 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 - **Manifestações (ciência) falhando 100%** (0 ok · 500 falhas às ~16h de
   23/07): após deploy do #271 o card "Saúde dos crons" mostra o motivo
   dominante — diagnosticar por ele.
-- **SharePoint só recebe docs do cofre** (`origem='email'`): capturas DistDFe
-  NÃO vão pro SharePoint. Proposta de estender pra todas as capturas +
-  backfill apresentada; aguardando decisão do Paulo se as pastas SharePoint
-  são o local oficial de trabalho da equipe.
+- ~~SharePoint só recebe docs do cofre~~ **FEITO 24/07** (#279): arquiva
+  TODAS as capturas, backfill progressivo por cursor (~2.6k XMLs/dia,
+  cron 20 8-20h). SÓ sobe empresa com `sharePointConfig` (grupo+pasta)
+  preenchido — equipe precisa preencher as configs; contador `semConfig`
+  no resultado do cron mostra o gap. Resumos resNFe não sobem (só a
+  completa pós-Ciência).
 - **Adoção do cofre (saída mod 55) = 0/388**: lista priorizada na Cobertura
   de Saída (🎯 prioritárias = emitem mod 55 e pararam de ser capturadas);
   equipe deve enviar as "📋 Instruções" por ordem de volume.
