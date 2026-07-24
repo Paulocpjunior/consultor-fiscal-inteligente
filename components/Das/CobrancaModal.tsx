@@ -8,6 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { getAuth } from 'firebase/auth';
 import type { User } from '../../types';
 import { getCobrancaIa, formatBRL, formatBarras, enviarDasCliente } from '../../services/dasService';
+import { enviarPorEmailDoColaborador, registrarEnvioImposto, GESTOR_EMAIL } from '../../services/envioImpostoService';
 
 interface DasInfo {
     id?: string;
@@ -158,6 +159,53 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
         }
     };
 
+    // Farol honesto do rito (ordem técnica): diz o que aconteceu com a cópia
+    // no SharePoint e com a baixa da obrigação — nunca só "enviado".
+    const resumoRito = (r: { sharePoint?: { status: string; motivo?: string }; baixa?: { status: string; tarefas?: number } } | null | undefined): string => {
+        if (!r) return '';
+        const partes: string[] = [];
+        if (r.sharePoint?.status === 'arquivado') partes.push('cópia no SharePoint (IMPOSTOS)');
+        else if (r.sharePoint?.status === 'sem-config') partes.push('SEM cópia no SharePoint (empresa sem pasta configurada)');
+        else if (r.sharePoint?.status === 'erro') partes.push('falha na cópia do SharePoint');
+        if (r.baixa?.status === 'baixada') partes.push(`baixa de ${r.baixa.tarefas} obrigação(ões)`);
+        else if (r.baixa?.status === 'sem-tarefa') partes.push('sem obrigação pendente pra baixar');
+        return partes.length ? ` Rito: ${partes.join(' · ')}.` : '';
+    };
+
+    // Envio pelo e-mail PADRÃO do colaborador (mailto): cliente no Para,
+    // gestor em CC, e o rito (SharePoint + baixa + auditoria) registrado no
+    // backend. mailto não anexa arquivo — o colaborador anexa o PDF baixado.
+    const [registrandoApp, setRegistrandoApp] = useState(false);
+    const enviarPeloMeuEmail = async () => {
+        if (!mensagem) { onShowToast('Gere a mensagem primeiro.'); return; }
+        if (!emailDest || !emailDest.includes('@')) { onShowToast('Informe o e-mail do cliente.'); return; }
+        setRegistrandoApp(true);
+        try {
+            const r = await enviarPorEmailDoColaborador({
+                empresaCnpj: dasInfo.empresaCnpj,
+                empresaNome: dasInfo.empresaNome,
+                tipo: 'DAS',
+                competencia: dasInfo.competencia || '',
+                para: emailDest,
+                assunto: assunto || `DAS Simples Nacional - ${dasInfo.empresaNome}`,
+                corpo: mensagem,
+                pdfBase64: dasInfo.pdfBase64 || undefined,
+                pdfFileName,
+                valor: dasInfo.valor,
+            });
+            if (r.ok) {
+                onShowToast(`E-mail aberto no seu aplicativo com ${GESTOR_EMAIL} em cópia. Anexe o PDF antes de enviar!${resumoRito(r)}`);
+                onEnviado?.();
+            } else {
+                onShowToast(`Registro do envio falhou: ${r.error}`);
+            }
+        } catch (e: any) {
+            onShowToast(`Registro do envio falhou: ${e.message}`);
+        } finally {
+            setRegistrandoApp(false);
+        }
+    };
+
     const enviar = () => {
         if (!mensagem) { onShowToast('Gere a mensagem primeiro.'); return; }
         if (canal === 'email') {
@@ -180,7 +228,7 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                 pdfFileName,
             }).then((r) => {
                 const copia = r.copiaPara && r.copiaPara.length > 0 ? ` Cópia oculta enviada a ${r.copiaPara.join(', ')}.` : '';
-                onShowToast(`E-mail enviado para ${r.para}${r.anexouPdf ? ' com PDF anexado' : ''}.${copia}`);
+                onShowToast(`E-mail enviado para ${r.para}${r.anexouPdf ? ' com PDF anexado' : ''}.${copia}${resumoRito((r as any).rito)}`);
                 onEnviado?.();
             }).catch((e: any) => {
                 onShowToast(`Erro ao enviar e-mail: ${e.message}`);
@@ -194,6 +242,21 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                 ? `https://wa.me/55${tel}?text=${encodeURIComponent(mensagem)}`
                 : `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
             window.open(url, '_blank', 'noopener');
+            // Ordem técnica vale pra TODO canal: registra o envio (cópia do
+            // PDF no SharePoint + baixa da obrigação + auditoria).
+            registrarEnvioImposto({
+                empresaCnpj: dasInfo.empresaCnpj,
+                empresaNome: dasInfo.empresaNome,
+                tipo: 'DAS',
+                competencia: dasInfo.competencia || '',
+                canal: 'whatsapp',
+                para: tel ? `+55${tel}` : undefined,
+                pdfBase64: dasInfo.pdfBase64 || undefined,
+                pdfFileName,
+                valor: dasInfo.valor,
+            }).then((r) => {
+                if (r.ok) { onShowToast(`WhatsApp aberto.${resumoRito(r)}`); onEnviado?.(); }
+            }).catch(() => { /* registro falhou — envio manual segue */ });
         }
     };
 
@@ -347,6 +410,16 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                             <button onClick={copiar} className="btn-press px-4 py-2 bg-slate-700 text-white font-bold rounded-lg hover:bg-slate-800">
                                 📋 Copiar
                             </button>
+                            {canal === 'email' && (
+                                <button
+                                    onClick={enviarPeloMeuEmail}
+                                    disabled={registrandoApp}
+                                    title={`Abre o e-mail padrão do SEU computador com o cliente no Para e ${GESTOR_EMAIL} em cópia — anexe o PDF baixado antes de enviar. A cópia no SharePoint e a baixa da obrigação são feitas pelo app.`}
+                                    className="btn-press px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    {registrandoApp ? '⏳…' : '📧 Abrir no meu e-mail'}
+                                </button>
+                            )}
                             <button
                                 onClick={enviar}
                                 disabled={enviando}

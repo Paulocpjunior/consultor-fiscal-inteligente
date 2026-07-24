@@ -25,6 +25,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   lado. Lições 23/07: "Saúde dos crons" dizia OK com 0/500; NFe ficou
   "inoperante" vermelho com 12k docs/7d (all-failed transitório com captura
   saudável = âmbar, não vermelho).
+- **ORDEM TÉCNICA do envio de imposto** (Paulo, 24/07/2026 — vale pra TODO
+  imposto/guia/obrigação enviada ao cliente, #293): 1) cópia do arquivo na
+  pasta IMPOSTOS do cliente no SharePoint (mesma árvore do sync:
+  `Empresas/{grupo}/DEPARTAMENTO FISCAL/{ano}/{mês}-{ano}/{empresaPasta}/IMPOSTOS`);
+  2) gestor alexandre@spassessoriacontabil.com.br SEMPRE em cópia (BCC no
+  Graph, CC no mailto); 3) baixa da obrigação na aba Vencimentos e
+  Obrigações (reverso da pendência do cron mensal; obrigações zeram todo mês
+  com as novas tarefas); 4) auditoria em `impostos_enviados`. Núcleo:
+  `sefaz-backend/envio-imposto.js` (executarRitoEnvioImposto) + rota
+  `/api/admin/envio-imposto/registrar` + `services/envioImpostoService.ts`.
+  Fluxos ligados: DAS (Graph + "abrir no meu e-mail" + WhatsApp), DARF
+  (DetalheDeclaracao) e DARE (DareSpModal). Feature nova de guia DEVE
+  chamar o rito.
 - CNPJ escritório: 44.388.152/0001-89. Projeto GCP `consultorfiscalapp`
   (us-west1). Scheduler: `scripts/setup-cloud-schedulers.sh` (idempotente;
   o Paulo roda no Mac dele — clone em `~/consultor-fiscal-inteligente`).

@@ -32,6 +32,8 @@ import caixaPostalRouter from './sefaz-backend/caixa-postal-routes.js';
 import dasRouter from './sefaz-backend/das-routes.js';
 import dctfwebRouter from './sefaz-backend/dctfweb-routes.js';
 import dareRouter from './sefaz-backend/dare-routes.js';
+import envioImpostoRouter from './sefaz-backend/envio-imposto-routes.js';
+import { executarRitoEnvioImposto } from './sefaz-backend/envio-imposto.js';
 import darfRouter from './sefaz-backend/darf-routes.js';
 import emissionRouter from './sefaz-backend/emission-routes.js';
 import nfseNacRouter from './sefaz-backend/nfse-nacional-routes.js';
@@ -294,6 +296,7 @@ app.use('/api/admin/caixa-postal', caixaPostalRouter);
 app.use('/api/admin/das', dasRouter);
 app.use('/api/admin/dctfweb', dctfwebRouter);
 app.use('/api/admin/dare', dareRouter);
+app.use('/api/admin/envio-imposto', envioImpostoRouter);
 app.use('/api/admin/darf', darfRouter);
 app.use('/api/admin/emission', emissionRouter);
 app.use('/api/admin/nfse-nacional', nfseNacRouter);
@@ -755,6 +758,7 @@ app.get('/api/admin/empresa-contato/:cnpj', requireAuth, async (req, res) => {
             const snap = await db.collection(col).get();
             for (const d of snap.docs) {
                 const e = d.data();
+                if (e._merged_into || e._deleted) continue; // zumbis fora
                 if ((e.cnpj || '').replace(/\D/g, '') === cnpjLimpo) {
                     dadosFiscais = e.dadosFiscais || {};
                     break;
@@ -1174,7 +1178,29 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
             console.warn('[das/enviar-cliente] envio OK, log falhou:', logErr.message);
         }
 
-        return res.json({ ok: true, canal: 'email', para: emailDest, copiaPara: copiaGestor, anexouPdf: Boolean(pdfLimpo) });
+        // ORDEM TÉCNICA do envio de imposto (24/07): cópia do PDF na pasta
+        // IMPOSTOS do cliente no SharePoint + baixa da obrigação DAS na aba
+        // de Vencimentos e Obrigações + auditoria central. Falha do rito não
+        // desfaz o envio (e-mail já saiu) — o resultado volta pro front.
+        let rito = null;
+        try {
+            rito = await executarRitoEnvioImposto({
+                empresaCnpj, empresaNome,
+                tipo: 'DAS',
+                competencia: competencia || null,
+                canal: 'email-graph',
+                para: emailDest,
+                copiaPara: copiaGestor,
+                pdfBase64: pdfLimpo,
+                pdfFileName: pdfFileName || null,
+                valor,
+                enviadoPor: req.user?.email || req.user?.uid || null,
+            });
+        } catch (ritoErr) {
+            console.warn('[das/enviar-cliente] envio OK, rito falhou:', ritoErr.message);
+        }
+
+        return res.json({ ok: true, canal: 'email', para: emailDest, copiaPara: copiaGestor, anexouPdf: Boolean(pdfLimpo), rito });
     } catch (err) {
         console.error('[das/enviar-cliente]', err);
         return respondeErro(res, err);

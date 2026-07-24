@@ -9,6 +9,7 @@
  */
 import React, { useState } from 'react';
 import { previewDare, registrarDare, type DarePayload } from '../../services/dareSpService';
+import { enviarPorEmailDoColaborador, GESTOR_EMAIL } from '../../services/envioImpostoService';
 
 interface Props {
     cnpj: string;
@@ -90,6 +91,47 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
         }
     };
 
+    // ORDEM TÉCNICA (24/07): envio pelo e-mail padrão do colaborador — cliente
+    // no Para (e-mail do cadastro) e gestor SEMPRE em cópia. O DARE em si é
+    // emitido no portal (reCAPTCHA) — o colaborador anexa o PDF baixado do
+    // portal; o registro do envio fica na auditoria central.
+    const [aviso, setAviso] = useState<string | null>(null);
+    const enviarPorEmail = async () => {
+        if (!preview) return;
+        setOcupado(true); setErro(null); setAviso(null);
+        try {
+            const { getAuth } = await import('firebase/auth');
+            const u = getAuth().currentUser;
+            if (!u) throw new Error('Sessão expirada');
+            const token = await u.getIdToken();
+            const resp = await fetch(`/api/admin/empresa-contato/${encodeURIComponent(cnpj)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const contato = resp.ok ? await resp.json() : { email: '' };
+            if (!contato.email) {
+                setErro('E-mail do cliente não cadastrado — preencha em "Dados Fiscais" da empresa.');
+                return;
+            }
+            const r = await enviarPorEmailDoColaborador({
+                empresaId,
+                empresaCnpj: cnpj,
+                empresaNome: razaoSocial,
+                tipo: 'DARE',
+                competencia,
+                para: contato.email,
+                assunto: `DARE-SP ICMS ${competencia.split('-').reverse().join('/')} - ${razaoSocial}`,
+                corpo: `${textoConferencia(preview)}\n\nO DARE segue anexo. Por gentileza, confirme o pagamento após a regularização.\n\nAtenciosamente,\nSP Assessoria Contábil`,
+                valor: preview.valor,
+            });
+            if (r.ok) setAviso(`E-mail aberto com ${GESTOR_EMAIL} em cópia — anexe o PDF do DARE emitido no portal antes de enviar. Envio registrado na auditoria.`);
+            else setErro(r.error || 'Falha ao registrar o envio.');
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao abrir o e-mail.');
+        } finally {
+            setOcupado(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onClose}>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg p-5 space-y-4" onClick={e => e.stopPropagation()}>
@@ -163,7 +205,15 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                                 className="px-3 py-2 text-sm font-bold rounded-lg border border-sky-400 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/30">
                                 🌐 Portal DARE
                             </a>
+                            <button onClick={enviarPorEmail} disabled={ocupado}
+                                title={`Abre o e-mail padrão do seu computador com o cliente no Para e ${GESTOR_EMAIL} em cópia — anexe o PDF do DARE emitido no portal. O envio fica registrado na auditoria.`}
+                                className="px-3 py-2 text-sm font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white">
+                                ✉ E-mail
+                            </button>
                         </div>
+                        {aviso && (
+                            <div className="text-xs text-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded p-2">{aviso}</div>
+                        )}
                         <p className="text-[10px] text-slate-400">
                             {linhaTxt
                                 ? <>No portal: <strong>"Você já tem todos os dados… CLIQUE AQUI"</strong> → cola a linha → Gerar Dare → baixa o DARE. O número e o código de barras são emitidos pelo sistema da SEFAZ-SP.</>
