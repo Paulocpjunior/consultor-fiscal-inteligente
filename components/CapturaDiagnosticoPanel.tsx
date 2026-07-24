@@ -25,6 +25,7 @@ import type { User } from '../types';
 import ConsultaNFePorChavePanel from './ConsultaNFePorChavePanel';
 import ConferenciaChavesPanel from './ConferenciaChavesPanel';
 import { manifestarPendentes, type ManifestarPendentesResult, type TipoManifestacao } from '../services/manifestoService';
+import { instrucoesMigracaoCofre } from '../services/cofreInstrucoes';
 
 interface Props {
     currentUser: User;
@@ -64,6 +65,7 @@ const CardCaptura: React.FC<{
 }> = ({ titulo, status, fonte, isAdmin, onForcarOk }) => {
     const [forcando, setForcando] = useState(false);
     const [feedback, setFeedback] = useState<string | null>(null);
+    const [comunicadoCopiado, setComunicadoCopiado] = useState(false);
 
     const log = isCronLog(status.ultimoCron) ? status.ultimoCron : null;
     const ultimoMs = log?.executadoEmMs ?? null;
@@ -316,6 +318,25 @@ const CardCaptura: React.FC<{
                 </div>
             </div>
 
+            {/* Comunicado do mod 55 DIRETO no card do problema — o texto vivia
+                enterrado na aba Importação Manual → Checklist do Cofre e o
+                Paulo não o achava (24/07). Copia genérico; a versão com o nome
+                da empresa continua no Checklist (botão 📋 Instruções). */}
+            {fonte === 'saidaCofre' && (
+                <div className="mt-3 pt-3 border-t">
+                    <button
+                        onClick={() => {
+                            navigator.clipboard.writeText(instrucoesMigracaoCofre());
+                            setComunicadoCopiado(true);
+                            setTimeout(() => setComunicadoCopiado(false), 2500);
+                        }}
+                        className="w-full px-3 py-2 bg-sky-600 text-white rounded text-sm font-medium hover:bg-sky-700 transition"
+                        title="Copia o texto pronto pra enviar ao cliente (configurar o cofre no emissor). Versão com o nome da empresa: Importação Manual → Checklist do Cofre."
+                    >
+                        {comunicadoCopiado ? '✓ Comunicado copiado!' : '📋 Copiar comunicado ao cliente'}
+                    </button>
+                </div>
+            )}
             {isAdmin && (
                 <div className="mt-3 pt-3 border-t">
                     <button
