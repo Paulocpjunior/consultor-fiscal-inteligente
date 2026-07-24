@@ -128,3 +128,32 @@ export function derivacoesDisponiveis(regime) {
   const r = String(regime || '').toLowerCase();
   return Object.values(CODIGOS_DARE_ICMS).filter((c) => c.regimes.includes(r));
 }
+
+// ── Trilho GNRE em Lote (XML) ───────────────────────────────────────────────
+// Tabela de CONVERSÃO oficial exibida em www4.fazenda.sp.gov.br/DareICMS/
+// GnreLote (print do Paulo, 24/07/2026). DESCOBERTA IMPORTANTE: o lote
+// XML-GNRE cobre SÓ estas 8 receitas (perfil "contribuinte de fora de SP
+// recolhendo pra SP" — comunicação/energia/transporte/DIFAL remetente/
+// especiais/ST/importação). NÃO emite as guias mensais RPA do escritório
+// (046-2 ICMS próprio, 146-6 ST do inscrito paulista) — pra essas, o trilho
+// é Dare Unitário/Dare em Lote ou a API oficial credenciada.
+export const CONVERSAO_GNRE_DARE_SP = {
+  '10001-3': { dareSp: '113-2', gnre: 'ICMS Comunicação' },
+  '10002-1': { dareSp: '116-8', gnre: 'ICMS Energia Elétrica' },
+  '10003-0': { dareSp: '111-9', gnre: 'ICMS Transporte' },
+  '10004-8': { dareSp: '246-0', gnre: 'ICMS Consumidor final não contribuinte' },
+  '10008-0': { dareSp: '119-3', gnre: 'ICMS Recolhimentos Especiais' },
+  '10009-9': { dareSp: '247-1', gnre: 'ICMS Substituição Tributária por Apuração' },
+  '10010-2': { dareSp: '101-6', gnre: 'ICMS Substituição Tributária por Operação' },
+  '10011-0': { dareSp: '102-8', gnre: 'ICMS Importação' },
+};
+
+/** O código DARE-SP é emissível pelo lote XML-GNRE? (null = não — usar
+ *  Dare Unitário/Dare em Lote/API. Vale pros RPA 046-2 e 146-6.) */
+export function codigoGnreParaDareSp(codigoDareSp) {
+  const alvo = String(codigoDareSp || '').trim();
+  for (const [gnre, info] of Object.entries(CONVERSAO_GNRE_DARE_SP)) {
+    if (info.dareSp === alvo) return gnre;
+  }
+  return null;
+}

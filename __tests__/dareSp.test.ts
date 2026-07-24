@@ -126,3 +126,30 @@ describe('dare-recon: extrairEstrutura (parser puro do reconhecimento)', () => {
         expect(PAGINAS_DARE.map((p: any) => p.id).sort()).toEqual(['avulso', 'gnre-lote', 'lote']);
     });
 });
+
+// @ts-expect-error — módulo .js puro
+import { CONVERSAO_GNRE_DARE_SP, codigoGnreParaDareSp } from '../sefaz-backend/dare-sp.js';
+
+describe('Conversão GNRE→DARE-SP (tabela oficial do portal GnreLote, 24/07/2026)', () => {
+    it('as 8 receitas da tabela oficial, verbatim', () => {
+        expect(CONVERSAO_GNRE_DARE_SP['10001-3'].dareSp).toBe('113-2');
+        expect(CONVERSAO_GNRE_DARE_SP['10002-1'].dareSp).toBe('116-8');
+        expect(CONVERSAO_GNRE_DARE_SP['10003-0'].dareSp).toBe('111-9');
+        expect(CONVERSAO_GNRE_DARE_SP['10004-8'].dareSp).toBe('246-0');
+        expect(CONVERSAO_GNRE_DARE_SP['10008-0'].dareSp).toBe('119-3');
+        expect(CONVERSAO_GNRE_DARE_SP['10009-9'].dareSp).toBe('247-1');
+        expect(CONVERSAO_GNRE_DARE_SP['10010-2'].dareSp).toBe('101-6');
+        expect(CONVERSAO_GNRE_DARE_SP['10011-0'].dareSp).toBe('102-8');
+        expect(Object.keys(CONVERSAO_GNRE_DARE_SP)).toHaveLength(8);
+    });
+
+    it('DESCOBERTA que evitou guia errada: RPA 046-2 e 146-6 NÃO são emissíveis pelo lote GNRE', () => {
+        expect(codigoGnreParaDareSp('046-2')).toBeNull();
+        expect(codigoGnreParaDareSp('146-6')).toBeNull();
+    });
+
+    it('lookup reverso funciona pras receitas cobertas', () => {
+        expect(codigoGnreParaDareSp('247-1')).toBe('10009-9');
+        expect(codigoGnreParaDareSp('102-8')).toBe('10011-0');
+    });
+});
