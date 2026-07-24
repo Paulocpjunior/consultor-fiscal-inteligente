@@ -29,3 +29,34 @@ describe('buildFolderPathArquivo', () => {
     expect(buildFolderPathArquivo('G', 'E', '2026-01', 'desconhecida')).toBeNull();
   });
 });
+
+// @ts-expect-error — módulo .js puro
+import { elegivelParaArquivoSp } from '../sefaz-backend/cofre-sharepoint-arquivo.js';
+
+describe('elegivelParaArquivoSp — todas as capturas (24/07)', () => {
+  const base = {
+    storagePath: 'xmls/emp1/chave.xml', tipoDoc: 'NFe',
+    direcao: 'entrada', competencia: '2026-07',
+  };
+
+  it('nota completa de QUALQUER origem é elegível (DistDFe, cofre, manual…)', () => {
+    expect(elegivelParaArquivoSp({ ...base, origem: 'sefaz' }).ok).toBe(true);
+    expect(elegivelParaArquivoSp({ ...base, origem: 'email' }).ok).toBe(true);
+    expect(elegivelParaArquivoSp({ ...base, origem: undefined }).ok).toBe(true);
+  });
+
+  it('já arquivado não sobe de novo (idempotência do ciclo)', () => {
+    expect(elegivelParaArquivoSp({ ...base, spArquivadoEm: new Date() })).toEqual({ ok: false, motivo: 'ja-arquivado' });
+  });
+
+  it('resumo (resNFe) NÃO sobe — só a nota completa pós-Ciência', () => {
+    expect(elegivelParaArquivoSp({ ...base, tipoDoc: 'resNFe' })).toEqual({ ok: false, motivo: 'resumo' });
+  });
+
+  it('sem storage / sem direção / sem competência ficam de fora com motivo', () => {
+    expect(elegivelParaArquivoSp({ ...base, storagePath: null }).motivo).toBe('sem-storage');
+    expect(elegivelParaArquivoSp({ ...base, direcao: 'desconhecida' }).motivo).toBe('sem-direcao');
+    expect(elegivelParaArquivoSp({ ...base, competencia: '07/2026' }).motivo).toBe('sem-competencia');
+    expect(elegivelParaArquivoSp(null).motivo).toBe('doc-vazio');
+  });
+});

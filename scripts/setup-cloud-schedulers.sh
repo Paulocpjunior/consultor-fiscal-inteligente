@@ -20,7 +20,7 @@
 #   nfse-nacional-dfe-cron-noturno  0 4 * * 1-5        NFSe Nacional ADN (DFe)
 # ── Arquivo / SharePoint ────────────────────────────────────────────────────
 #   sharepoint-auto-sync            0 8 * * 1-5        Importa XMLs das pastas SharePoint
-#   cofre-sharepoint-arquivo-cron   20 8-20 * * 1-6    Arquiva no SharePoint os XMLs do cofre CFI
+#   cofre-sharepoint-arquivo-cron   20 8-20 * * 1-6    Arquiva no SharePoint TODAS as capturas (backfill progressivo)
 # ── Tarefas / vencimentos / obrigações ──────────────────────────────────────
 #   tarefas-cron-mensal             20 3 1 * *         Gera obrigações mensais (dia 1)
 #   vencimentos-cron-diario         0 8 * * 1-5        Avisa tarefas vencendo (email + in-app)
@@ -256,7 +256,7 @@ upsert_job \
     "cofre-sharepoint-arquivo-cron" \
     "20 8-20 * * 1-6" \
     "/api/admin/sefaz/xml-email-arquivo-sp-cron" \
-    "Arquiva no SharePoint os XMLs capturados pelo cofre CFI"
+    "Arquiva no SharePoint TODAS as capturas de XML (backfill progressivo por cursor)"
 
 # Manifestacao automatica (Ciencia da Operacao) das NF-e de ENTRADA — o "CDO"
 # que a SIEG faz. Destrava o XML COMPLETO das entradas (a SEFAZ so libera apos
