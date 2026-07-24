@@ -78,6 +78,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 - **Adoção do cofre (saída mod 55) = 0/388**: lista priorizada na Cobertura
   de Saída (🎯 prioritárias = emitem mod 55 e pararam de ser capturadas);
   equipe deve enviar as "📋 Instruções" por ordem de volume.
+- ~~Exclusão de empresa não acatada (WALDESA)~~ **FEITA 24/07** (#290):
+  exclusão agora é SOFT-DELETE com lápide `_deleted` (deleteDoc físico
+  ressuscitava via merge do localStorage de outros navegadores + re-sync do
+  login). REGRA PERMANENTE: NUNCA voltar a deletar doc de empresa fisicamente
+  nem re-adicionar cópia local de id que a nuvem conhece; enumeradores novos
+  de simples_empresas/lucro_empresas DEVEM pular `_merged_into` E `_deleted`
+  (padrão em ~35 pontos do backend). Rules: só admin mexe na lápide. Painel
+  Simples padronizado = Lucro (fmtCnpj + badge "⚠ duplicada · qual excluir").
+  Falta: Paulo excluir as duplicatas WALDESA (badge vermelho) e confirmar
+  que não voltam (F5 + outro navegador).
 
 ## Contexto vivo (jul/2026)
 
