@@ -3,7 +3,7 @@
  * raiz CNPJ pro lote não martelar uma raiz só (anti-656 + anti-fome).
  */
 // @ts-expect-error — módulo .js (importa firebase-admin, mockado abaixo)
-import { intercalarPorRaiz } from '../sefaz-backend/manifesto-orchestrator';
+import { intercalarPorRaiz, ehErroInfra } from '../sefaz-backend/manifesto-orchestrator';
 
 jest.mock('firebase-admin', () => ({
     __esModule: true,
@@ -48,5 +48,26 @@ describe('intercalarPorRaiz', () => {
         expect(intercalarPorRaiz([])).toEqual([]);
         const out = intercalarPorRaiz([{ chave: 'z' } as any, doc('22222222000122', 'x1')]);
         expect(out).toHaveLength(2);
+    });
+});
+
+describe('ehErroInfra — falha de ambiente não envenena a chave', () => {
+    it('caso real 24/07: TLS "unable to get local issuer certificate" → infra', () => {
+        expect(ehErroInfra('unable to get local issuer certificate')).toBe(true);
+        expect(ehErroInfra('ERRO: unable to get local issuer certificate')).toBe(true);
+    });
+
+    it('erros de rede/timeout → infra', () => {
+        expect(ehErroInfra('ECONNRESET')).toBe(true);
+        expect(ehErroInfra('socket hang up')).toBe(true);
+        expect(ehErroInfra('Timeout 60000ms na chamada SEFAZ')).toBe(true);
+        expect(ehErroInfra('getaddrinfo ENOTFOUND www1.nfe.fazenda.gov.br')).toBe(true);
+    });
+
+    it('rejeição SEFAZ da CHAVE (cStat) NÃO é infra — essas envenenam de verdade', () => {
+        expect(ehErroInfra('cStat 573: Duplicidade de evento')).toBe(false);
+        expect(ehErroInfra('cStat 656: Consumo indevido')).toBe(false);
+        expect(ehErroInfra('Rejeição 217: NF-e não consta na base')).toBe(false);
+        expect(ehErroInfra(null)).toBe(false);
     });
 });

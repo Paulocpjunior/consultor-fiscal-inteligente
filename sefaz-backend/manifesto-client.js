@@ -6,7 +6,10 @@
 // Baseado em:
 // - NT 2020.001 (Manifestação do Destinatário)
 // - Schema envConfRecebto_v9.99.xsd
-// - Endpoint: https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx
+// - Endpoint: https://www1.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx
+//   (www1 = host dos WEBSERVICES do Ambiente Nacional, mesmo da DistribuicaoDFe.
+//    O host "www." é o portal/site: a cadeia TLS dele não valida no Node —
+//    486× "unable to get local issuer certificate" em 24/07/2026.)
 //
 // Fluxo:
 //   1. Monta XML <infEvento>
@@ -22,7 +25,7 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { loadCertificate } from './secret-loader.js';
 
 // ── Constantes SEFAZ ────────────────────────────────────────────────────────
-const SEFAZ_HOST = 'www.nfe.fazenda.gov.br';
+const SEFAZ_HOST = 'www1.nfe.fazenda.gov.br';
 const SEFAZ_PATH = '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx';
 const SOAP_ACTION = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento/nfeRecepcaoEvento';
 const NS_NFE = 'http://www.portalfiscal.inf.br/nfe';

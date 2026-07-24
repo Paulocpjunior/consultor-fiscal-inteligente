@@ -305,6 +305,48 @@ function ehRateLimit656(cStat, texto) {
   return /656|consumo indevido/i.test(String(texto || ''));
 }
 
+// Falha de INFRA (TLS/rede/timeout) diz respeito ao AMBIENTE, não à chave —
+// não pode envenenar o contador poison (MAX_FALHAS tirava a chave do lote
+// PRA SEMPRE). Caso 24/07: host errado no manifesto-client gerou 486×
+// "unable to get local issuer certificate" e envenenou lotes inteiros de
+// chaves perfeitamente manifestáveis.
+export function ehErroInfra(motivo) {
+  return /unable to (get|verify) (local )?issuer|self.signed|certificate|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EPIPE|socket hang up|timeout|network/i
+    .test(String(motivo || ''));
+}
+
+/**
+ * Reseta o carimbo de falha das chaves cujo ÚLTIMO motivo foi erro de INFRA
+ * (TLS/rede) — limpa o veneno deixado pelo bug do host (24/07: 486× TLS
+ * incrementaram manifestacaoFalhas de chaves saudáveis; com >=8 elas saíam
+ * do lote pra sempre). Zera contador + cooldown pra voltarem já na próxima
+ * janela do cron. Idempotente.
+ */
+export async function resetarFalhasInfraManifestacao() {
+  const db = fa().firestore();
+  const snap = await db.collection('documentos_fiscais')
+    .where('manifestacaoFalhas', '>=', 1).get();
+  const r = { candidatos: 0, resetados: 0 };
+  let batch = db.batch();
+  let noBatch = 0;
+  for (const d of snap.docs) {
+    r.candidatos++;
+    const doc = d.data() || {};
+    if (!ehErroInfra(doc.ultimaFalhaManifestacaoMotivo)) continue;
+    batch.update(d.ref, {
+      manifestacaoFalhas: admin.firestore.FieldValue.delete(),
+      ultimaFalhaManifestacaoMs: admin.firestore.FieldValue.delete(),
+      ultimaFalhaManifestacaoMotivo: admin.firestore.FieldValue.delete(),
+    });
+    r.resetados++;
+    noBatch++;
+    if (noBatch >= 400) { await batch.commit(); batch = db.batch(); noBatch = 0; }
+  }
+  if (noBatch > 0) await batch.commit();
+  console.log(`[manifesto] reset falhas infra: ${r.resetados}/${r.candidatos} chaves limpas`);
+  return r;
+}
+
 export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun = false, tipo = 'ciencia', capturadoPor = null, skipRedownload = true } = {}) {
   const db = fa().firestore();
   const elegiveis = await listarElegiveis({ empresaId, limit, tipo });
@@ -316,14 +358,20 @@ export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun
 
   // Carimbo de falha no doc — alimenta o cooldown/poison do listarElegiveis.
   // Sem isto a mesma chave falha voltava em TODA janela e entupia o lote.
+  // Falha de INFRA (TLS/rede) NÃO incrementa o poison: só carimba o cooldown
+  // (evita martelar enquanto o ambiente está quebrado) — a chave volta
+  // normal assim que a infra sara, em vez de sair do lote pra sempre.
   const carimbarFalha = async (doc, motivo) => {
     if (dryRun) return;
     try {
-      await db.collection('documentos_fiscais').doc(doc.id).update({
-        manifestacaoFalhas: admin.firestore.FieldValue.increment(1),
+      const update = {
         ultimaFalhaManifestacaoMs: Date.now(),
         ultimaFalhaManifestacaoMotivo: String(motivo || 'desconhecido').slice(0, 200),
-      });
+      };
+      if (!ehErroInfra(motivo)) {
+        update.manifestacaoFalhas = admin.firestore.FieldValue.increment(1);
+      }
+      await db.collection('documentos_fiscais').doc(doc.id).update(update);
     } catch (e) {
       console.warn(`[manifestarPendentes] falha carimbando ${doc.chave}:`, e.message);
     }

@@ -6,6 +6,7 @@ import { Router } from 'express';
 import admin from 'firebase-admin';
 import {
   manifestarUma, manifestarPendentes, listarElegiveis,
+  resetarFalhasInfraManifestacao,
 } from './manifesto-orchestrator.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { getEmpresaIdsDaCarteira, podeAcessarEmpresaId } from './carteira-auth.js';
@@ -29,6 +30,20 @@ function authCron(req, res, next) {
   }
   next();
 }
+
+// Limpa o "veneno" deixado por falha de INFRA (TLS/rede) no contador de
+// manifestação — chaves saudáveis que sairiam do lote pra sempre voltam já
+// na próxima janela. Admin-only; idempotente (rodar 2× não muda nada).
+router.post('/manifest-reset-falhas-infra', authUser, async (req, res) => {
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ erro: 'Apenas administradores' });
+    const r = await resetarFalhasInfraManifestacao();
+    return res.json({ ok: true, ...r });
+  } catch (e) {
+    console.error('[manifest-reset-falhas-infra] erro:', e);
+    return res.status(500).json({ erro: e.message });
+  }
+});
 
 router.get('/manifest-elegiveis', authUser, async (req, res) => {
   try {
@@ -108,6 +123,16 @@ router.post('/manifest-cron', authCron, async (req, res) => {
   await withCronHeartbeat({ collection: 'manifestacoes_cron_logs', fonte, res }, async () => {
     const inicio = Date.now();
     console.log(`[manifest-cron] iniciando — dryRun=${dryRun}, tipo=${tipo}, limit=${limit}`);
+    // Auto-cura: falha de INFRA (TLS/rede) não é culpa da chave — limpa o
+    // veneno antigo antes de montar o lote (barato: só varre docs carimbados).
+    // Sem isto, o bug do host (24/07) deixaria centenas de chaves fora do
+    // lote pra sempre mesmo depois de corrigido.
+    let resetInfra = null;
+    try {
+      resetInfra = await resetarFalhasInfraManifestacao();
+    } catch (e) {
+      console.warn('[manifest-cron] reset falhas infra falhou (segue sem):', e.message);
+    }
     const r = await manifestarPendentes({
       tipo, limit, dryRun,
       capturadoPor: { uid: 'system', email: 'manifest-cron@spassessoriacontabil' },
@@ -136,6 +161,7 @@ router.post('/manifest-cron', authCron, async (req, res) => {
       puladas656: r.puladas656 || 0,
       durationMs: ms,
       motivosResumo,
+      resetInfra,
       // detalhes truncados (500 itens estourariam o doc)
       detalhes: (r.detalhes || []).slice(0, 50),
     };
