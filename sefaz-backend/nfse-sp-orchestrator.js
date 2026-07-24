@@ -37,6 +37,7 @@ export async function listarEmpresasElegiveis(db) {
         const snap = await db.collection(col).get();
         for (const doc of snap.docs) {
             const d = doc.data();
+            if (d._merged_into || d._deleted) continue; // perdedor de merge / excluida
             const ccmSp = (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, '');
             const autorizado = d.nfseSpAutorizadoEm;
             if (!ccmSp || !autorizado) continue;

@@ -1197,7 +1197,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
             const snap = await db.collection(col).get();
             snap.forEach((doc) => {
               const d = doc.data();
-              if (d._merged_into) return;
+              if (d._merged_into || d._deleted) return;
               const cnpj = String(d.cnpj || '').replace(/\D/g, '');
               if (cnpj.length !== 14 || vistos.has(cnpj)) return;
               vistos.add(cnpj);

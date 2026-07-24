@@ -97,7 +97,7 @@ async function analisarMonofasico(empresaId, empresa) {
 
     docsSnap.forEach(d => {
         const doc = d.data();
-        if (doc._merged_into) return; // ignora docs marcados como duplicata
+        if (doc._merged_into || doc._deleted) return; // ignora docs marcados como duplicata
         const itens = doc.itens || [];
         itens.forEach(item => {
             if (isNcmMonofasico(item.ncm)) {
@@ -212,7 +212,7 @@ async function analisarIcmsStMva(empresaId) {
 
     docsSnap.forEach(d => {
         const doc = d.data();
-        if (doc._merged_into) return; // ignora docs marcados como duplicata
+        if (doc._merged_into || doc._deleted) return; // ignora docs marcados como duplicata
         (doc.itens || []).forEach(item => {
             const vICMSST = item.vICMSST || 0;
             const vBCST = item.vBCST || 0;
@@ -315,7 +315,7 @@ async function analisarIssLocal(empresaId, empresa) {
 
     nfseSnap.forEach(d => {
         const doc = d.data();
-        if (doc._merged_into) return; // ignora docs marcados como duplicata
+        if (doc._merged_into || doc._deleted) return; // ignora docs marcados como duplicata
         const tomadorUf = doc.tomador?.uf || doc.destinatario?.uf || '';
         const prestadorUf = doc.prestador?.uf || doc.emitente?.uf || '';
         const issValor = doc.valores?.iss || 0;
@@ -354,7 +354,7 @@ export async function analisarEmpresa(empresaId, regimeKind) {
     const snap = await db.collection(col).doc(empresaId).get();
     if (!snap.exists) throw new Error('Empresa não encontrada');
     const empresa = { id: snap.id, ...snap.data() };
-    if (empresa._merged_into) throw new Error('Empresa consolidada');
+    if (empresa._merged_into || empresa._deleted) throw new Error('Empresa consolidada ou excluida');
 
     const regime = regimeKind === 'simples' ? 'Simples' : (empresa.regimePadrao || 'Presumido');
     const teses = [];
@@ -403,7 +403,7 @@ export async function analisarTodas() {
         const snap = await db.collection(col).get();
         for (const d of snap.docs) {
             const emp = d.data();
-            if (emp._merged_into) continue;
+            if (emp._merged_into || emp._deleted) continue;
             try {
                 const resultado = await analisarEmpresa(d.id, regimeKind);
                 resultados.push(resultado);

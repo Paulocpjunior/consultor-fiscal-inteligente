@@ -12,7 +12,7 @@ import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquene
 import { validarCnpj } from './validadorDocumento';
 import {
     collection, getDocs, doc, setDoc, getDoc,
-    query, where, deleteDoc, limit as fbLimit
+    query, where, limit as fbLimit
 } from 'firebase/firestore';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -153,12 +153,19 @@ export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEm
     if (!user) return [];
 
     let cloudEmpresas: SimplesNacionalEmpresa[] = [];
+    // TODOS os ids que a nuvem conhece (incl. _deleted/_merged_into) — o merge
+    // local só pode re-adicionar id DESCONHECIDO da nuvem (criado offline).
+    const cloudIds = new Set<string>();
 
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
             const snaps = await fetchAllDocs('simples_empresas', []);
+            snaps.forEach(d => cloudIds.add(d.id));
             cloudEmpresas = snaps
-                .filter(d => !(d.data() as any)._merged_into)
+                .filter(d => {
+                    const dados = d.data() as any;
+                    return !dados._merged_into && !dados._deleted;
+                })
                 .map(d => ({ id: d.id, ...d.data() } as SimplesNacionalEmpresa));
             console.info('[Simples] cloud retornou', cloudEmpresas.length, 'empresas');
         } catch (err: any) {
@@ -167,10 +174,21 @@ export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEm
         }
     }
 
-    // SEMPRE faz merge cloud + local pra nunca sumir empresa do cache.
+    // Merge cloud + local SÓ pra empresa que a nuvem NUNCA viu (criada offline).
+    // O merge antigo re-adicionava qualquer cópia do localStorage de QUALQUER
+    // navegador — empresa deletada "ressuscitava" (caso WALDESA 24/07 no
+    // Lucro; mesmo furo aqui). Cópia local de id conhecido = descartada
+    // (nuvem é a fonte da verdade, inclusive sobre exclusão).
     const local = getLocalEmpresas();
     const merged = [...cloudEmpresas];
-    local.forEach(l => { if (!merged.find(c => c.id === l.id)) merged.push(l); });
+    if (cloudIds.size > 0) {
+        local.forEach(l => {
+            if (!cloudIds.has(l.id) && !merged.find(c => c.id === l.id)) merged.push(l);
+        });
+    } else {
+        // Nuvem indisponível (offline/erro): preserva o cache inteiro.
+        local.forEach(l => { if (!merged.find(c => c.id === l.id)) merged.push(l); });
+    }
     saveLocalEmpresas(merged);
     return merged;
 };
@@ -251,19 +269,28 @@ export const updateEmpresa = async (
 /**
  * Deleta uma empresa do Simples. Firestore eh fonte da verdade — se a
  * delecao na nuvem falhar (permission-denied, network, etc), o erro
- * propaga e o cache local NAO eh modificado. Isso evita o anti-pattern
- * antigo de "some da tela mas volta no proximo refresh".
+ * propaga e o cache local NAO eh modificado.
+ *
+ * SOFT-DELETE com lápide (caso WALDESA 24/07): o deleteDoc antigo apagava
+ * o doc, mas cópias no localStorage de outros navegadores ressuscitavam a
+ * empresa via merge do getEmpresas. A lápide `_deleted` mantém o id
+ * conhecido na nuvem — o merge descarta a cópia local. O updateEmpresa usa
+ * setDoc(..., merge:true), então a lápide sobrevive a updates de cache velho.
  *
  * Regra Firestore (firestore.rules):
- *   allow delete: if isOwnerOrAdmin(resource.data.createdBy);
- * Ou seja: o dono OU qualquer admin pode deletar.
+ *   allow update: if isOwnerOrAdmin(resource.data.createdBy);
  */
 export const deleteEmpresa = async (id: string): Promise<void> => {
     if (!isFirebaseConfigured || !db) {
         throw new Error('Firebase nao configurado — nao foi possivel deletar a empresa.');
     }
-    // 1. Deleta da nuvem (fonte da verdade). Se falhar, throw — nao toca no local.
-    await deleteDoc(doc(db, 'simples_empresas', id));
+    // 1. Lápide na nuvem (fonte da verdade). merge:true — full overwrite
+    //    apagaria createdBy e quebraria a regra de posse.
+    await setDoc(doc(db, 'simples_empresas', id), {
+        _deleted: true,
+        _deletedAt: new Date().toISOString(),
+        _deletedBy: auth?.currentUser?.email || 'admin',
+    }, { merge: true });
 
     // 2. Atualiza local cache so depois do sucesso na nuvem
     const local = getLocalEmpresas();

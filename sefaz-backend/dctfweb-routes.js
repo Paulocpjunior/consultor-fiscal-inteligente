@@ -58,14 +58,15 @@ async function listarEmpresasDctfwebDisponiveis(user) {
                 fonte: 'lucro',
                 regime: data.regimePadrao || 'Presumido',
                 _merged_into: data._merged_into,
+                _deleted: data._deleted,
             };
         })
-        .filter((emp) => !emp._merged_into && emp.cnpj.length === 14)
+        .filter((emp) => !emp._merged_into && !emp._deleted && emp.cnpj.length === 14)
         .filter((emp) => {
             if (!cnpjsSet && !idsSet) return true;
             return !!(idsSet?.has(emp.id) || cnpjsSet?.has(emp.cnpj));
         })
-        .map(({ _merged_into, ...emp }) => emp)
+        .map(({ _merged_into, _deleted, ...emp }) => emp)
         .sort((a, b) => (a.nome || a.cnpj).localeCompare(b.nome || b.cnpj));
 }
 
@@ -317,7 +318,7 @@ router.get('/cobertura', requireAuth, async (req, res) => {
         const empresas = [];
         lucroSnap.forEach((doc) => {
             const d = doc.data();
-            if (d._merged_into) return;
+            if (d._merged_into || d._deleted) return;
             const cnpj = (d.cnpj || '').replace(/\D/g, '');
             if (cnpj.length !== 14) return;
             empresas.push({ id: doc.id, cnpj, nome: d.razaoSocial || d.nome || '' });

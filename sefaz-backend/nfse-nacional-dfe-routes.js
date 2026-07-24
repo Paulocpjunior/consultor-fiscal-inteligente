@@ -231,7 +231,7 @@ router.get('/resumo', requireAuth, async (_req, res) => {
         let nfse = 0, eventos = 0, valorTotal = 0;
         snap.docs.forEach((d) => {
             const x = d.data();
-            if (x._merged_into) return; // ignora docs marcados como duplicata
+            if (x._merged_into || x._deleted) return; // ignora docs marcados como duplicata
             if (x.tipo === 'nfseNacional') { nfse++; valorTotal += x.valorServico || 0; }
             else eventos++;
         });
@@ -263,7 +263,7 @@ router.get('/cobertura', requireAuth, async (req, res) => {
                 const snap = await db.collection(col).get();
                 snap.forEach((doc) => {
                     const d = doc.data();
-                    if (d._merged_into) return; // perdedor de merge
+                    if (d._merged_into || d._deleted) return; // perdedor de merge
                     const cnpj = (d.cnpj || '').replace(/\D/g, '');
                     if (cnpj.length !== 14) return;
                     empresas.push({
@@ -365,7 +365,7 @@ router.get('/municipios', requireAuth, async (req, res) => {
                 const snap = await db.collection(col).get();
                 snap.forEach((doc) => {
                     const d = doc.data();
-                    if (d._merged_into) return;
+                    if (d._merged_into || d._deleted) return;
                     const cnpj = (d.cnpj || '').replace(/\D/g, '');
                     if (cnpj.length !== 14) return;
                     if (empresas.has(cnpj)) return;
@@ -465,7 +465,7 @@ router.post('/toggle-bulk-por-municipio', requireAuth, express.json(), async (re
                 const snap = await db.collection(col).get();
                 snap.forEach((doc) => {
                     const d = doc.data();
-                    if (d._merged_into) return;
+                    if (d._merged_into || d._deleted) return;
                     const cnpj = (d.cnpj || '').replace(/\D/g, '');
                     if (cnpj.length !== 14) return;
                     const df = d.dadosFiscais || {};

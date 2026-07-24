@@ -98,7 +98,7 @@ router.get('/cobertura-pgdas', requireAuth, async (req, res) => {
         const empresas = [];
         simplesSnap.forEach((doc) => {
             const d = doc.data();
-            if (d._merged_into) return;
+            if (d._merged_into || d._deleted) return;
             const cnpj = (d.cnpj || '').replace(/\D/g, '');
             if (cnpj.length !== 14) return;
             empresas.push({ id: doc.id, cnpj, nome: d.razaoSocial || d.nome || '' });

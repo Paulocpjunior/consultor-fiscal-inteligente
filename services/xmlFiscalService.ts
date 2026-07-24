@@ -152,14 +152,14 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
 
         // 23/05: filtra perdedores do merge de duplicatas
         const simples: EmpresaXmlOption[] = simplesSnap
-            .filter(d => !(d.data() as any)._merged_into)
+            .filter(d => !(d.data() as any)._merged_into && !(d.data() as any)._deleted)
             .map(d => {
                 const data = d.data() as SimplesNacionalEmpresa;
                 return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
             })
             .filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
         const lucro: EmpresaXmlOption[] = lucroSnap
-            .filter(d => !(d.data() as any)._merged_into)
+            .filter(d => !(d.data() as any)._merged_into && !(d.data() as any)._deleted)
             .map(d => {
                 const data = d.data() as LucroPresumidoEmpresa;
                 return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
@@ -235,7 +235,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
 
         // 23/05: filtra perdedores do merge de duplicatas
         const simples: EmpresaPerfilOption[] = simplesSnap
-            .filter(d => !(d.data() as any)._merged_into)
+            .filter(d => !(d.data() as any)._merged_into && !(d.data() as any)._deleted)
             .map(d => {
             const data = d.data() as SimplesNacionalEmpresa;
             return {
@@ -251,7 +251,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
             };
         }).filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
         const lucro: EmpresaPerfilOption[] = lucroSnap
-            .filter(d => !(d.data() as any)._merged_into)
+            .filter(d => !(d.data() as any)._merged_into && !(d.data() as any)._deleted)
             .map(d => {
             const data = d.data() as LucroPresumidoEmpresa;
             return {

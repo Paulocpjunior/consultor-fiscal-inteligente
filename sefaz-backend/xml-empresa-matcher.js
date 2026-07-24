@@ -21,6 +21,7 @@ export async function carregarEmpresas(db) {
     const snap = await db.collection(col).get();
     snap.forEach((doc) => {
       const d = doc.data() || {};
+      if (d._merged_into || d._deleted) return; // perdedor de merge / excluida
       const cnpj = String(d.cnpj || '').replace(/\D/g, '');
       if (cnpj.length !== 14) return;
       const rec = { empresaId: doc.id, cnpj, nome: d.razaoSocial || d.nome || d.fantasia || '—' };

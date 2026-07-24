@@ -170,14 +170,14 @@ export async function sincronizarTodasEmpresas() {
     const simplesSnap = await db.collection('simples_empresas').get();
     simplesSnap.forEach(d => {
         const x = d.data();
-        if (x._merged_into) return; // 23/05: ignora perdedores do merge
+        if (x._merged_into || x._deleted) return; // 23/05: ignora perdedores do merge
         empresas.push({ id: d.id, ...x });
     });
 
     const lucroSnap = await db.collection('lucro_empresas').get();
     lucroSnap.forEach(d => {
         const x = d.data();
-        if (x._merged_into) return; // 23/05: ignora perdedores do merge
+        if (x._merged_into || x._deleted) return; // 23/05: ignora perdedores do merge
         empresas.push({ id: d.id, ...x });
     });
 

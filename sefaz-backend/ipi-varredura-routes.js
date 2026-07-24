@@ -79,7 +79,7 @@ router.get('/ipi-varredura', requireAdmin, async (req, res) => {
 
         for (const doc of snap.docs) {
             const d = doc.data() || {};
-            if (d._merged_into) continue; // perdedora de merge — ignora
+            if (d._merged_into || d._deleted) continue; // perdedora de merge — ignora
             const cnpj = String(d.cnpj || '').replace(/\D/g, '');
             if (cnpj.length !== 14) continue;
 
