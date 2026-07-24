@@ -51,6 +51,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Pendências operacionais (23/07/2026)
 
+- **DARE-SP fase 2 (API oficial)**: fase 1 no ar (#281 — preview conferível
+  + auditoria + emissão assistida no portal; códigos validados por 3 DAREs
+  reais: 04601 próprio RPA, 14601 ST RPA, 04602 DIFAL Simples). Fase 2 =
+  emissão direta via API oficial "DARE ICMS" da SEFAZ-SP — **depende de
+  credenciamento** que o Paulo pede em api_dare_icms@fazenda.sp.gov.br.
+  NUNCA gerar número/barras de DARE localmente (é do sistema da SEFAZ).
+
 - **Paulo rodar `setup-cloud-schedulers.sh` no Mac**: cria os 3 crons órfãos
   descobertos (das-cron-noturno 03:40, dctfweb-cron-noturno 04:30,
   caixa-postal-cron-diario 05:00 — rotas existiam, jobs nunca/não mais).
