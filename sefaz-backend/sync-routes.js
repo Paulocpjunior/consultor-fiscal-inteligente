@@ -931,16 +931,19 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
     async function elegiveisNfseNacional() {
       try {
         const { resumo, empresas } = await listarElegibilidadeNfseNacionalDfe();
-        // Quando sobram POUCAS elegíveis (pós-filtro por município), lista quem
-        // são JUNTO com o cursor NSU — responde "quem são as 3 e por que 0 docs?"
-        // direto no card (SERPRO confirma nada disponível vs bug de captura).
+        // movimentoDisponivel é calculado SEMPRE (24/07: o cálculo era só para
+        // ≤10 elegíveis — quando o #297 destravou 28, o sinal virou null e o
+        // farol caía no crítico "rodando sem capturar" mesmo com o ADN
+        // confirmando lote vazio pra todo mundo; N leituras de doc é barato).
+        // A lista detalhada com cursor NSU continua só quando são POUCAS —
+        // responde "quem são e por que 0 docs?" direto no card.
         let elegiveisLista = null;
         let movimentoDisponivel = null;
-        if (resumo.elegiveis <= 10) {
+        try {
           const { itens, movimentoDisponivel: mov } = await estadoNsuNacional(empresas);
-          elegiveisLista = itens;
           movimentoDisponivel = mov;
-        }
+          if (resumo.elegiveis <= 10) elegiveisLista = itens;
+        } catch { /* sem state, farol mantém a rede de segurança */ }
         return {
           total: resumo.elegiveis,
           travadas: null,
