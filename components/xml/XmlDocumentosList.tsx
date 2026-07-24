@@ -84,9 +84,34 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         return () => { alive = false; };
     }, [currentUser, refreshKey]);
 
+    // Resolve o NOME da empresa pra docs gravados sem empresaNome (varia por
+    // trilho de importação) — a lista mostrava só o CNPJ, dificultando qualquer
+    // consulta, e a busca por nome não achava esses docs. O catálogo já está
+    // carregado (pro combobox); o join por CNPJ (com fallback pela raiz de 8,
+    // pra filial emitindo por CNPJ diferente do cadastrado) cobre o histórico
+    // inteiro sem backfill no banco.
+    const docsComNome = useMemo(() => {
+        if (!catalogoEmpresas.length) return allDocs;
+        const porCnpj = new Map<string, string>();
+        const porRaiz = new Map<string, string>();
+        for (const e of catalogoEmpresas) {
+            const c = (e.cnpj || '').replace(/\D/g, '');
+            if (c.length !== 14) continue;
+            if (!porCnpj.has(c)) porCnpj.set(c, e.nome);
+            const raiz = c.slice(0, 8);
+            if (!porRaiz.has(raiz)) porRaiz.set(raiz, e.nome);
+        }
+        return allDocs.map(d => {
+            if (d.empresaNome) return d;
+            const c = String(d.empresaCnpj || '').replace(/\D/g, '');
+            const nome = (c.length === 14 && (porCnpj.get(c) || porRaiz.get(c.slice(0, 8)))) || null;
+            return nome ? { ...d, empresaNome: nome } : d;
+        });
+    }, [allDocs, catalogoEmpresas]);
+
     const docs = useMemo(
-        () => applyDocumentosFilters(allDocs, { ...filters, busca }),
-        [allDocs, filters, busca],
+        () => applyDocumentosFilters(docsComNome, { ...filters, busca }),
+        [docsComNome, filters, busca],
     );
 
     // Recorte visível no DOM. Ao mudar o filtro (docs muda de identidade),
@@ -675,7 +700,10 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                                         className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40"
                                     >
                                         <td className="px-3 py-1.5 text-slate-500">{formatDate(d.dhEmi).split(' ')[0]}</td>
-                                        <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200 max-w-[180px] truncate" title={d.empresaNome || formatCnpjCpf(d.empresaCnpj) || ''}>{d.empresaNome || formatCnpjCpf(d.empresaCnpj) || '—'}</td>
+                                        <td className="px-3 py-1.5 max-w-[200px]" title={`${d.empresaNome || '—'} · ${formatCnpjCpf(d.empresaCnpj) || ''}`}>
+                                            <div className="text-slate-700 dark:text-slate-200 truncate font-medium">{d.empresaNome || '—'}</div>
+                                            <div className="text-[10px] text-slate-400 font-mono">{formatCnpjCpf(d.empresaCnpj) || ''}</div>
+                                        </td>
                                         <td className="px-3 py-1.5 text-slate-500">{d.tipo}{getView(d).resumoOnly && <span className="ml-1 text-[9px] bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 px-1 py-0.5 rounded font-bold">Resumo</span>}</td>
                                         <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200 font-mono">{getView(d).numero || '—'}/{getView(d).serie || '—'}</td>
                                         <td className="px-3 py-1.5">
