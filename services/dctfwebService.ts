@@ -287,6 +287,58 @@ export async function preencherEncerrarMit(user: User | null, payload: {
     return res.json();
 }
 
+// ── Retificação da apuração MIT já encerrada (ADMIN) ──────────────────────
+// Reencerra o MIT com os valores do app; a DCTFWeb RETIFICADORA é gerada
+// automaticamente pela Receita. Backend exige role admin (403 pros demais).
+
+export interface MitRetificarProposta {
+    pa: string;
+    modo: 'retificacao';
+    tributosApp: { IRPJ: number; CSLL: number; PIS: number; COFINS: number; IPI?: number };
+    mapeamento: Array<{
+        familia: string; codigo: string; grupo: string;
+        antes: number; depois: number; diferenca: number;
+        acao: 'ajustado' | 'mantido' | 'incluido';
+    }>;
+    totalAntes: number;
+    totalDepois: number;
+    alvoIdApuracao: number | null;
+    dadosIniciaisResumo?: {
+        qualificacaoPj: number | null;
+        tributacaoLucro: number | null;
+        cpfResponsavel: string | null;
+    };
+}
+
+export interface MitRetificarResult {
+    ok: boolean;
+    transmitido?: boolean;
+    etapa?: 'alvo' | 'montagem';
+    motivo?: string;
+    proposta?: MitRetificarProposta;
+    protocolo?: string;
+    statusEncerramento?: string;
+    camposRemovidos?: string[];
+}
+
+export async function retificarMit(user: User | null, payload: {
+    empresaId?: string; empresaCnpj: string;
+    anoPA: number; mesPA: number;
+    tributosApp: { IRPJ: number; CSLL: number; PIS: number; COFINS: number; IPI?: number };
+    transmitir: boolean;
+}): Promise<MitRetificarResult> {
+    const res = await fetch(`${BASE}/mit/retificar`, {
+        method: 'POST',
+        headers: await authHeaders(user),
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `retificarMit: ${res.status}`);
+    }
+    return res.json();
+}
+
 export async function consultarStatusEncerramentoMit(user: User | null, params: {
     empresaCnpj: string; protocolo?: string; anoPA?: number; mesPA?: number;
 }): Promise<{ statusEncerramento: string; protocolo: string; fonte: 'mock' | 'serpro'; _raw?: any }> {
