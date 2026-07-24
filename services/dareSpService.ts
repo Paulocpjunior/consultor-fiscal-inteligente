@@ -34,7 +34,7 @@ async function getToken(): Promise<string> {
     return u.getIdToken();
 }
 
-async function post(path: string, body: unknown): Promise<{ ok: boolean; payload?: DarePayload; id?: string; error?: string }> {
+async function post(path: string, body: unknown): Promise<{ ok: boolean; payload?: DarePayload; linhaTxt?: string | null; id?: string; error?: string }> {
     const token = await getToken();
     const res = await fetch(path, {
         method: 'POST',

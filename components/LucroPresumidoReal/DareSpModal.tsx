@@ -34,6 +34,7 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
     // o colaborador informa a data oficial do vencimento do imposto.
     const [vencimento, setVencimento] = useState('');
     const [preview, setPreview] = useState<DarePayload | null>(null);
+    const [linhaTxt, setLinhaTxt] = useState<string | null>(null);
     const [erro, setErro] = useState<string | null>(null);
     const [copiado, setCopiado] = useState(false);
     const [ocupado, setOcupado] = useState(false);
@@ -46,11 +47,13 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
     });
 
     const conferir = async () => {
-        setOcupado(true); setErro(null); setPreview(null);
+        setOcupado(true); setErro(null); setPreview(null); setLinhaTxt(null);
         try {
             const r = await previewDare(inputAtual());
-            if (r.ok && r.payload) setPreview(r.payload);
-            else setErro(r.error || 'Falha ao validar.');
+            if (r.ok && r.payload) {
+                setPreview(r.payload);
+                setLinhaTxt(r.linhaTxt || null);
+            } else setErro(r.error || 'Falha ao validar.');
         } catch (e: any) {
             setErro(e?.message || 'Falha ao validar.');
         } finally {
@@ -67,11 +70,15 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
         `Valor: ${fmtBRL(p.valor)}`,
     ].join('\n');
 
-    const copiarERegistrar = async () => {
+    // Caminho RÁPIDO da emissão individual (24/07, "inúmeras empresas com
+    // diversos colaboradores"): a página de colar TXT do portal aceita 1 linha
+    // só — o colaborador cola UMA linha em vez de digitar 6 campos no
+    // formulário unitário. Copiar registra a auditoria.
+    const copiarERegistrar = async (conteudo: string) => {
         if (!preview) return;
         setOcupado(true);
         try {
-            navigator.clipboard.writeText(textoConferencia(preview));
+            navigator.clipboard.writeText(conteudo);
             setCopiado(true);
             setTimeout(() => setCopiado(false), 2500);
             // Auditoria: registra quem gerou o quê ANTES da emissão no portal.
@@ -136,20 +143,32 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                             <div className="flex justify-between"><span>Vencimento:</span><span className="font-mono">{preview.vencimento.split('-').reverse().join('/')}</span></div>
                             <div className="flex justify-between text-sm"><span className="font-bold">Valor:</span><span className="font-mono font-bold">{fmtBRL(preview.valor)}</span></div>
                         </div>
-                        <div className="flex gap-2">
-                            <button onClick={copiarERegistrar} disabled={ocupado}
-                                className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white">
-                                {copiado ? '✓ Copiado + registrado!' : '📋 Copiar dados (registra auditoria)'}
-                            </button>
-                            <a href={preview.portalUrl} target="_blank" rel="noreferrer"
+                        {linhaTxt && (
+                            <pre className="bg-slate-900 text-emerald-300 text-[11px] p-2 rounded-lg overflow-x-auto">{linhaTxt}</pre>
+                        )}
+                        <div className="flex gap-2 flex-wrap">
+                            {linhaTxt ? (
+                                <button onClick={() => copiarERegistrar(linhaTxt)} disabled={ocupado}
+                                    className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white"
+                                    title="Cola essa linha no portal (Dare em Lote → 'CLIQUE AQUI' de colar .txt) e o DARE sai pronto — 1 colada em vez de 6 campos">
+                                    {copiado ? '✓ Copiado + registrado!' : '📋 Copiar linha p/ portal (1 colada)'}
+                                </button>
+                            ) : (
+                                <button onClick={() => copiarERegistrar(textoConferencia(preview))} disabled={ocupado}
+                                    className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white">
+                                    {copiado ? '✓ Copiado + registrado!' : '📋 Copiar dados (registra auditoria)'}
+                                </button>
+                            )}
+                            <a href={linhaTxt ? 'https://www4.fazenda.sp.gov.br/DareICMS/DareLote' : preview.portalUrl} target="_blank" rel="noreferrer"
                                 className="px-3 py-2 text-sm font-bold rounded-lg border border-sky-400 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/30">
                                 🌐 Portal DARE
                             </a>
                         </div>
                         <p className="text-[10px] text-slate-400">
-                            O número do DARE e o código de barras são emitidos pelo sistema da SEFAZ-SP — cole os dados
-                            no portal e confira antes de gerar. (Emissão direta via API oficial entra quando o
-                            credenciamento da SEFAZ for aprovado.)
+                            {linhaTxt
+                                ? <>No portal: <strong>"Você já tem todos os dados… CLIQUE AQUI"</strong> → cola a linha → Gerar Dare → baixa o DARE. O número e o código de barras são emitidos pelo sistema da SEFAZ-SP.</>
+                                : <>O número do DARE e o código de barras são emitidos pelo sistema da SEFAZ-SP — cole os dados no portal e confira antes de gerar.</>}
+                            {' '}(Emissão direta via API oficial entra quando o credenciamento da SEFAZ for aprovado.)
                         </p>
                     </div>
                 )}
