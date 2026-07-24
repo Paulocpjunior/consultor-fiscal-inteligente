@@ -18,6 +18,7 @@
 
 import { consultarNfseRecebidas } from './nfse-sp-client.js';
 import { salvarNfseSpRecebida } from './nfse-sp-importer.js';
+import { caminhoNfseRecomendado, CAMINHO_NFSE } from './municipio-nfse-caminho.js';
 
 // Remetente = escritório (SP Assessoria 44388152000189). Hardcoded como
 // fallback porque o env não foi configurado em produção e a NFSe SP precisa
@@ -41,6 +42,12 @@ export async function listarEmpresasElegiveis(db) {
             const ccmSp = (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, '');
             const autorizado = d.nfseSpAutorizadoEm;
             if (!ccmSp || !autorizado) continue;
+            // O trilho do portal é da CAPITAL: empresa com codMunIBGE de OUTRO
+            // município não entra, mesmo com CCM preenchido (caso 4BZ/Jundiaí
+            // 24/07 — CCM errado no cadastro fazia o cron consultar a
+            // prefeitura de SP por uma empresa que não é de lá).
+            const codMun = String(d.dadosFiscais?.codMunIBGE || d.codMunIBGE || '').replace(/\D/g, '');
+            if (codMun && caminhoNfseRecomendado(codMun).caminho !== CAMINHO_NFSE.SP_PORTAL) continue;
 
             resultado.push({
                 colecao: col,

@@ -31,6 +31,10 @@ export interface EmpresaStatusCaptura {
     arquivada?: boolean;
     ccmSp: string;
     nfseSpAutorizado: boolean;
+    /** Trilho do portal SP-capital se aplica? false = município do cadastro
+     *  não é SP capital — NFS-e vem pelo Padrão Nacional (ADN). */
+    nfseSpAplicavel?: boolean;
+    municipioNfse?: string | null;
     nfseNacionalDfeAtivo: boolean;
     capturarSefaz: boolean;
     capturaNfeOk: boolean;

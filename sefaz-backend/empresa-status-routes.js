@@ -27,6 +27,7 @@ import { loadCertificate } from './secret-loader.js';
 import { lookupCnpj } from './brasilapi-cache.js';
 import { classificarCapturaNfseNacionalAdn } from './empresa-status-helper.js';
 import { selecionarCertA1PorBase } from './cert-base-helper.js';
+import { caminhoNfseRecomendado, CAMINHO_NFSE } from './municipio-nfse-caminho.js';
 
 const router = express.Router();
 
@@ -121,6 +122,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                     // Cadastro UNICO: ccmSp em dadosFiscais.ccmSp (canonico, igual
                     // uf/IE). Fallback ao top-level d.ccmSp so pra dado legado.
                     ccmSp: (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, ''),
+                    codMunIBGE: String(d.dadosFiscais?.codMunIBGE || d.codMunIBGE || '').replace(/\D/g, ''),
                     nfseSpAutorizadoEm: toMillis(d.nfseSpAutorizadoEm),
                     nfseNacionalDfeAtivo: d.nfseNacionalDfeAtivo === true,
                     procuracaoEcacAtiva: d.procuracaoEcacAtiva === true,
@@ -334,10 +336,34 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 }
             }
 
-            // b) NFSe SP: precisa ccmSp + autorização do contador no portal SP
-            const capturaNfseSpOk = !!emp.ccmSp && !!emp.nfseSpAutorizadoEm;
-            if (!emp.ccmSp) motivosBloqueio.push('NFS-e SP: falta Inscrição Municipal (CCM) nos dados fiscais da empresa.');
-            else if (!emp.nfseSpAutorizadoEm) motivosBloqueio.push('NFS-e SP: falta autorizar o escritório no portal nfe.prefeitura.sp.gov.br.');
+            // b) NFSe SP (portal da CAPITAL): o app NUNCA assume que a empresa
+            // é de SP Capital (caso 4BZ/Jundiaí 24/07 — pedia CCM e marcava o
+            // trilho da capital pra empresa de outro município). Aplicabilidade
+            // vem do CADASTRO: codMunIBGE == 3550308. Sem codMun, o único
+            // indício aceito é o CCM já preenchido (CCM é específico da
+            // capital) — senão o trilho simplesmente não se aplica e a NFS-e
+            // da empresa vem pelo Padrão Nacional (ADN).
+            const recNfse = caminhoNfseRecomendado(emp.codMunIBGE);
+            const nfseSpAplicavel = emp.codMunIBGE
+                ? recNfse.caminho === CAMINHO_NFSE.SP_PORTAL
+                : !!emp.ccmSp;
+            let capturaNfseSpOk;
+            if (nfseSpAplicavel) {
+                capturaNfseSpOk = !!emp.ccmSp && !!emp.nfseSpAutorizadoEm;
+                if (!emp.ccmSp) motivosBloqueio.push('NFS-e SP: falta Inscrição Municipal (CCM) nos dados fiscais da empresa.');
+                else if (!emp.nfseSpAutorizadoEm) motivosBloqueio.push('NFS-e SP: falta autorizar o escritório no portal nfe.prefeitura.sp.gov.br.');
+            } else {
+                // Trilho da capital não se aplica — não bloqueia nem pede CCM.
+                capturaNfseSpOk = true;
+                if (emp.ccmSp && emp.codMunIBGE) {
+                    motivosBloqueio.push(
+                        `NFS-e SP: o campo CCM está preenchido (${emp.ccmSp}), mas o município do cadastro é `
+                        + `${recNfse.nome || emp.codMunIBGE}${recNfse.uf ? '/' + recNfse.uf : ''} — o portal da Prefeitura de SP `
+                        + 'não se aplica; a NFS-e desta empresa vem pelo Padrão Nacional (ADN). Se esse número é a inscrição '
+                        + 'municipal local, mova para o campo "Inscrição Municipal" em Completar cadastro.'
+                    );
+                }
+            }
 
             // c) NFSe Nacional ADN: no Cloud Run precisa A1 proprio da mesma
             // raiz CNPJ (ou a propria S&P com cert global). A3 nao entra no
@@ -379,6 +405,10 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 ccmSp: emp.ccmSp,
                 dadosFiscais: emp.dadosFiscais || {},
                 nfseSpAutorizado: !!emp.nfseSpAutorizadoEm,
+                // Trilho SP-capital se aplica a esta empresa? (município do
+                // cadastro decide; false = NFS-e via ADN, coluna vira "ADN")
+                nfseSpAplicavel,
+                municipioNfse: recNfse.nome || null,
                 nfseNacionalDfeAtivo: emp.nfseNacionalDfeAtivo,
                 capturarSefaz: emp.capturarSefaz,
                 // capacidades
@@ -410,7 +440,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             }
             if (procuracaoInferida) resumo.comProcuracaoEcac++;
             else resumo.semProcuracaoEcac++;
-            if (capturaNfseSpOk) resumo.ccmSpAutorizado++;
+            if (nfseSpAplicavel && capturaNfseSpOk) resumo.ccmSpAutorizado++;
             if (emp.nfseNacionalDfeAtivo) resumo.nfseNacionalAtivo++;
             if (capturaNfeOk) resumo.capturaNfeOk++;
             else resumo.capturaNfeBloqueada++;
