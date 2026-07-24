@@ -46,23 +46,47 @@ type TabId =
     | 'nfse_sp_captura'
     | 'sae_nfce';
 
-const TABS: Array<{ id: TabId; label: string }> = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'captura-auto', label: '🛰️ Captura Automática' },
-    { id: 'empresas-status', label: '📋 Status por Empresa' },
-    { id: 'backlog-entrada', label: '📥 Backlog Entrada' },
-    { id: 'documentos', label: 'XMLs NFe (Entrada/Saída)' },
-    { id: 'sae_nfce', label: '🧾 Captura NFC-e Saída (SP)' },
-    { id: 'nfse_sp_captura', label: '🛰️ Captura Portal SP' },
-    { id: 'importacao', label: 'Importação Manual' },
-    { id: 'nfse_pdf', label: 'Importar NFSe (PDF)' },
-    { id: 'nfse_sp_csv', label: '📥 Importar NFSe SP (CSV)' },
-    { id: 'empresas', label: 'Empresas Monitoradas' },
-    { id: 'sharepoint', label: 'SharePoint' },
-    { id: 'exportar-iob', label: 'Exportar IOB SAGE' },
-    { id: 'erros', label: 'Erros & Logs' },
-    { id: 'relatorios', label: 'Relatórios' },
-    { id: 'config', label: 'Configurações' },
+// ── Consolidação 16 → 8 abas (aprovada pelo Paulo 24/07) ────────────────────
+// As 16 telas continuam EXATAMENTE as mesmas (TabId preservado, zero mudança
+// de lógica): mudou só a navegação — 8 grupos no topo, telas irmãs viram
+// sub-abas (mesmo padrão do DctfwebHub). Motivo: função enterrada em aba
+// invisível sem rolar a barra (casos 23-24/07: comunicado do mod 55,
+// Checklist do Cofre, Exportar SAGE).
+type GrupoId = 'dashboard' | 'captura' | 'documentos' | 'importar' | 'empresas' | 'integracoes' | 'relatorios' | 'config';
+
+const GRUPOS: Array<{ id: GrupoId; label: string; subs: Array<{ id: TabId; label: string }> }> = [
+    { id: 'dashboard', label: 'Dashboard', subs: [{ id: 'dashboard', label: 'Dashboard' }] },
+    {
+        id: 'captura', label: '🛰️ Captura', subs: [
+            { id: 'captura-auto', label: '🛰️ Diagnóstico' },
+            { id: 'empresas-status', label: '📋 Status por Empresa' },
+            { id: 'backlog-entrada', label: '📥 Backlog Entrada' },
+            { id: 'sae_nfce', label: '🧾 NFC-e Saída (SP)' },
+            { id: 'nfse_sp_captura', label: '🛰️ Portal SP' },
+        ],
+    },
+    { id: 'documentos', label: 'XMLs (Entrada/Saída)', subs: [{ id: 'documentos', label: 'XMLs' }] },
+    {
+        id: 'importar', label: '📥 Importar', subs: [
+            { id: 'importacao', label: '📥 Manual & Cofre (saída 55)' },
+            { id: 'nfse_pdf', label: 'NFSe (PDF)' },
+            { id: 'nfse_sp_csv', label: 'NFSe SP (CSV)' },
+        ],
+    },
+    { id: 'empresas', label: '🏢 Empresas', subs: [{ id: 'empresas', label: 'Empresas Monitoradas' }] },
+    {
+        id: 'integracoes', label: '🔗 Integrações', subs: [
+            { id: 'sharepoint', label: 'SharePoint' },
+            { id: 'exportar-iob', label: 'Exportar IOB SAGE' },
+        ],
+    },
+    {
+        id: 'relatorios', label: '📊 Relatórios & Logs', subs: [
+            { id: 'relatorios', label: 'Relatórios' },
+            { id: 'erros', label: 'Erros & Logs' },
+        ],
+    },
+    { id: 'config', label: '⚙️ Configurações', subs: [{ id: 'config', label: 'Configurações' }] },
 ];
 
 interface Props {
@@ -71,9 +95,19 @@ interface Props {
 }
 
 const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast }) => {
+    const [grupo, setGrupo] = useState<GrupoId>('dashboard');
+    // tab = a TELA ativa (mesmos 16 TabId de antes — conteúdo intocado).
+    // Trocar de grupo cai na 1ª sub-aba dele; trocar de sub muda só a tela.
     const [tab, setTab] = useState<TabId>('dashboard');
     const [refreshKey, setRefreshKey] = useState(0);
     const [selectedDoc, setSelectedDoc] = useState<DocumentoFiscal | null>(null);
+
+    const grupoAtivo = GRUPOS.find(g => g.id === grupo) ?? GRUPOS[0];
+    const irParaGrupo = (g: (typeof GRUPOS)[number]) => {
+        setGrupo(g.id);
+        setTab(g.subs[0].id);
+        setSelectedDoc(null);
+    };
 
     if (!currentUser) {
         return <p className="text-center text-xs text-slate-400 py-6">Faça login para acessar a Central de Documentos Fiscais.</p>;
@@ -121,22 +155,41 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 </div>
             )}
 
-            {/* Tabs */}
+            {/* Navegação em 2 níveis: 8 grupos (cabem sem rolar) + sub-abas do
+                grupo ativo. As 16 telas antigas continuam todas aqui — só a
+                forma de chegar mudou (padrão DctfwebHub). */}
             <div className="flex gap-1 overflow-x-auto bg-slate-100 dark:bg-slate-800/60 p-1 rounded-lg">
-                {TABS.map(t => (
+                {GRUPOS.map(g => (
                     <button
-                        key={t.id}
-                        onClick={() => { setTab(t.id); setSelectedDoc(null); }}
+                        key={g.id}
+                        onClick={() => irParaGrupo(g)}
                         className={`px-3 py-1.5 text-xs font-bold whitespace-nowrap rounded-md transition-colors ${
-                            tab === t.id
+                            grupo === g.id
                                 ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-sm'
                                 : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
                         }`}
                     >
-                        {t.label}
+                        {g.label}
                     </button>
                 ))}
             </div>
+            {grupoAtivo.subs.length > 1 && (
+                <div className="flex gap-1 overflow-x-auto -mt-2 pl-1">
+                    {grupoAtivo.subs.map(s => (
+                        <button
+                            key={s.id}
+                            onClick={() => { setTab(s.id); setSelectedDoc(null); }}
+                            className={`px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap rounded-md border transition-colors ${
+                                tab === s.id
+                                    ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
+                                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                            }`}
+                        >
+                            {s.label}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* Tab content */}
             <div>
