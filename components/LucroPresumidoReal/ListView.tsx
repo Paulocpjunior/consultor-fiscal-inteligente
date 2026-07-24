@@ -13,6 +13,14 @@ import React, { useMemo, useState } from 'react';
 import type { LucroPresumidoEmpresa, User } from '../../types';
 import { PlusIcon, TrashIcon } from '../Icons';
 
+// CNPJ SEMPRE formatado na exibição — a base tem registros mistos
+// ('05049535000170' e '05.049.535/0001-70'), o que escondia duplicatas do
+// olho humano (caso WALDESA 24/07: mesma empresa 2x em formatos diferentes).
+const fmtCnpj = (c?: string): string => {
+    const d = String(c || '').replace(/\D/g, '');
+    return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : (c || '—');
+};
+
 export interface ListViewProps {
     empresas: LucroPresumidoEmpresa[];
     currentUser: User | null;
@@ -33,6 +41,19 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
             return nome.includes(termo) || (termoCnpj !== '' && cnpj.includes(termoCnpj));
         });
     }, [empresas, busca]);
+
+    // Duplicatas por CNPJ NORMALIZADO: mesma empresa cadastrada 2+ vezes (em
+    // formatos diferentes o olho não pega). Badge vermelho pro admin limpar
+    // (🗑️ aqui, ou Arquivar no Status por Empresa) — duplicata divide fichas
+    // entre dois cadastros e gera erro de colaborador.
+    const cnpjsDuplicados = useMemo(() => {
+        const contagem = new Map<string, number>();
+        for (const e of empresas) {
+            const d = String(e.cnpj || '').replace(/\D/g, '');
+            if (d.length === 14) contagem.set(d, (contagem.get(d) || 0) + 1);
+        }
+        return new Set([...contagem.entries()].filter(([, n]) => n > 1).map(([c]) => c));
+    }, [empresas]);
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -74,8 +95,15 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                     <tbody>
                         {empresasFiltradas.map(emp => (
                             <tr key={emp.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{emp.nome}</td>
-                                <td className="px-6 py-4 font-mono">{emp.cnpj}</td>
+                                <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">
+                                    {emp.nome}
+                                    {cnpjsDuplicados.has(String(emp.cnpj || '').replace(/\D/g, '')) && (
+                                        <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" title="Mesmo CNPJ cadastrado mais de uma vez — fichas podem estar divididas entre os cadastros. Admin: manter o que tem as fichas e excluir/arquivar o outro.">
+                                            ⚠ duplicada
+                                        </span>
+                                    )}
+                                </td>
+                                <td className="px-6 py-4 font-mono">{fmtCnpj(emp.cnpj)}</td>
                                 <td className="px-6 py-4">
                                     <span className={`px-2 py-1 rounded-full text-xs font-bold ${emp.regimePadrao === 'Real' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
                                         {emp.regimePadrao || 'Presumido'}
