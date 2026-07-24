@@ -702,10 +702,16 @@ router.get('/status', async (req, res) => {
         const lastSync = lastLogSnap.empty ? null : lastLogSnap.docs[0].data();
 
         const empresasAutoSync = [];
+        // Lista de quem AINDA NÃO tem grupo+pasta — o gap que trava a cópia
+        // no SharePoint (XMLs do arquivo E impostos da ordem técnica). Antes
+        // só existia o CONTADOR semConfig no log do cron; ninguém sabia QUEM
+        // faltava sem abrir empresa por empresa (Paulo, 24/07).
+        const empresasSemConfig = [];
         for (const col of ['simples_empresas', 'lucro_empresas']) {
             const snap = await db.collection(col).get();
             for (const d of snap.docs) {
                 const data = d.data();
+                if (data._merged_into || data._deleted) continue; // zumbis fora
                 if (data.sharePointConfig?.autoSyncEnabled) {
                     empresasAutoSync.push({
                         id: d.id,
@@ -715,10 +721,20 @@ router.get('/status', async (req, res) => {
                         empresaPasta: data.sharePointConfig.empresaPasta,
                     });
                 }
+                const cfg = data.sharePointConfig;
+                if (!cfg || !String(cfg.grupo || '').trim() || !String(cfg.empresaPasta || '').trim()) {
+                    empresasSemConfig.push({
+                        id: d.id,
+                        nome: data.razaoSocial || data.nome || '—',
+                        cnpj: String(data.cnpj || '').replace(/\D/g, ''),
+                        fonte: col === 'simples_empresas' ? 'simples' : 'lucro',
+                    });
+                }
             }
         }
+        empresasSemConfig.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
-        return res.json({ lastSync, empresasAutoSync });
+        return res.json({ lastSync, empresasAutoSync, empresasSemConfig });
     } catch (err) {
         return res.status(500).json({ error: err.message });
     }
