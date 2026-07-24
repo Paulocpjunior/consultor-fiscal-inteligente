@@ -22,6 +22,8 @@ import {
     situacaoLabel,
     situacaoColorClass,
 } from '../../services/dctfwebService';
+import { getAuth } from 'firebase/auth';
+import { enviarPorEmailDoColaborador, GESTOR_EMAIL } from '../../services/envioImpostoService';
 
 interface Props {
     declaracao: DctfwebDeclaracao;
@@ -92,7 +94,72 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     const [loadingDeclaracao, setLoadingDeclaracao] = useState(false);
     const [loadingRecibo, setLoadingRecibo] = useState(false);
     const [loadingDarf, setLoadingDarf] = useState(false);
+    const [enviandoDarf, setEnviandoDarf] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // ORDEM TÉCNICA do envio de imposto (24/07): abre o e-mail padrão do
+    // colaborador (cliente no Para, gestor em CC), copia o PDF pra pasta
+    // IMPOSTOS do cliente no SharePoint e dá baixa na obrigação DCTFWEB da
+    // aba Vencimentos e Obrigações. mailto não anexa — colaborador anexa o
+    // PDF baixado; a cópia de arquivo fica garantida pelo SharePoint.
+    const enviarDarfAoCliente = async (pdfBase64: string, filename: string) => {
+        setEnviandoDarf(true);
+        try {
+            const token = await getAuth().currentUser?.getIdToken();
+            if (!token) throw new Error('Sessão expirada');
+            const resp = await fetch(`/api/admin/empresa-contato/${encodeURIComponent(declaracao.empresaCnpj)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const contato = resp.ok ? await resp.json() : { email: '' };
+            if (!contato.email) {
+                onShowToast?.('E-mail do cliente não cadastrado — preencha em "Dados Fiscais" da empresa.');
+                return;
+            }
+            const competencia = `${declaracao.anoPA}-${String(declaracao.mesPA).padStart(2, '0')}`;
+            // A declaração não carrega razão social — o backend do rito resolve
+            // o nome pelo cadastro da empresa (CNPJ) na auditoria.
+            const nomeEmpresa = declaracao.empresaCnpj;
+            const corpo = [
+                'Olá, tudo bem?',
+                '',
+                `Segue o DARF da DCTFWeb — competência ${formatPaLabel(declaracao.anoPA, declaracao.mesPA)}.`,
+                darfResult?.valor != null ? `Valor: ${formatCurrency(darfResult.valor)}` : '',
+                darfResult?.vencimento ? `Vencimento: ${darfResult.vencimento}` : '',
+                '',
+                'O PDF segue anexo. Por gentileza, confirme o pagamento após a regularização.',
+                '',
+                'Atenciosamente,',
+                user?.name || 'Equipe SP Assessoria Contábil',
+            ].filter((l) => l !== '').join('\n');
+            const r = await enviarPorEmailDoColaborador({
+                empresaCnpj: declaracao.empresaCnpj,
+                empresaNome: nomeEmpresa,
+                tipo: 'DARF',
+                competencia,
+                para: contato.email,
+                assunto: `DARF DCTFWeb ${formatPaLabel(declaracao.anoPA, declaracao.mesPA)} - CNPJ ${nomeEmpresa}`,
+                corpo,
+                pdfBase64,
+                pdfFileName: filename,
+                valor: darfResult?.valor ?? undefined,
+            });
+            if (r.ok) {
+                const sp = r.sharePoint?.status === 'arquivado'
+                    ? 'Cópia arquivada no SharePoint (IMPOSTOS).'
+                    : r.sharePoint?.status === 'sem-config'
+                        ? 'SEM cópia no SharePoint: empresa sem pasta configurada.'
+                        : '';
+                const baixa = r.baixa?.status === 'baixada' ? `Baixa de ${r.baixa.tarefas} obrigação(ões) DCTFWeb.` : '';
+                onShowToast?.(`E-mail aberto com ${GESTOR_EMAIL} em cópia — anexe o PDF baixado antes de enviar! ${sp} ${baixa}`.trim());
+            } else {
+                onShowToast?.(`Registro do envio falhou: ${r.error}`);
+            }
+        } catch (e: any) {
+            onShowToast?.(`Falha no envio: ${e.message}`);
+        } finally {
+            setEnviandoDarf(false);
+        }
+    };
 
     // Guarda SÍNCRONA contra fetch duplicado (custo SERPRO): setState de loading
     // é assíncrono, então um re-render antes dele atualizar dispararia 2ª busca.
@@ -351,6 +418,14 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                 className="text-sm px-3 py-1 bg-sky-600 text-white rounded hover:bg-sky-700"
                                             >
                                                 Baixar PDF DARF
+                                            </button>
+                                            <button
+                                                onClick={() => enviarDarfAoCliente(darfResult.pdfBase64!, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
+                                                disabled={enviandoDarf}
+                                                title={`Abre o e-mail padrão do seu computador com o cliente no Para e ${GESTOR_EMAIL} em cópia; arquiva o PDF na pasta IMPOSTOS do cliente no SharePoint e dá baixa na obrigação DCTFWeb do mês.`}
+                                                className="text-sm px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+                                            >
+                                                {enviandoDarf ? '⏳…' : '✉ Enviar ao cliente'}
                                             </button>
                                         </div>
                                     )}
