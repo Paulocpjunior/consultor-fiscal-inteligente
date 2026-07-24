@@ -46,7 +46,9 @@ async function buscarEmpresaDocsPorCnpj(db, cnpjLimpo) {
     for (const col of ['simples_empresas', 'lucro_empresas']) {
         const snap = await db.collection(col).get();
         snap.forEach((doc) => {
-            if (limparCnpj(doc.data()?.cnpj) === cnpjLimpo) {
+            const dd = doc.data() || {};
+            if (dd._merged_into || dd._deleted) return; // zumbis fora
+            if (limparCnpj(dd.cnpj) === cnpjLimpo) {
                 encontrados.push({ col, doc });
             }
         });
@@ -100,6 +102,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             const snap = await db.collection(col).get();
             snap.forEach(doc => {
                 const d = doc.data();
+                if (d._merged_into || d._deleted) return; // perdedor de merge / lápide de exclusão
                 const cnpj = limparCnpj(d.cnpj);
                 if (cnpj.length !== 14) return;
                 if (empresasMap.has(cnpj)) return; // dedup
@@ -761,6 +764,7 @@ router.post('/auto-preencher-uf', requireAuth, async (req, res) => {
                 for (const doc of snap.docs) {
                     total++;
                     const d = doc.data();
+                    if (d._merged_into || d._deleted) continue;
                     const ufAtual = d.dadosFiscais?.uf || d.uf || '';
                     if (ufAtual) { jaTinham++; continue; }
                     const cnpj = (d.cnpj || '').replace(/\D/g, '');
@@ -827,7 +831,7 @@ router.post('/auto-preencher-municipio', requireAuth, async (req, res) => {
                 for (const doc of snap.docs) {
                     total++;
                     const d = doc.data();
-                    if (d._merged_into) continue;
+                    if (d._merged_into || d._deleted) continue;
                     const codAtual = String(d.dadosFiscais?.codMunIBGE || d.codMunIBGE || '').replace(/\D/g, '');
                     if (codAtual) { jaTinham++; continue; }
                     const cnpj = (d.cnpj || '').replace(/\D/g, '');

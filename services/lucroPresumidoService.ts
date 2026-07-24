@@ -4,7 +4,7 @@ import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
-import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, deleteDoc, limit as fbLimit } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, limit as fbLimit } from 'firebase/firestore';
 
 const STORAGE_KEY_LUCRO_EMPRESAS = 'lucro_presumido_empresas';
 const MASTER_ADMIN_EMAIL = 'junior@spassessoriacontabil.com.br';
@@ -36,12 +36,19 @@ export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresu
     if (!currentUser) return [];
 
     let cloudEmpresas: LucroPresumidoEmpresa[] = [];
+    // TODOS os ids que a nuvem conhece (incl. _deleted/_merged_into) — o merge
+    // local só pode re-adicionar id DESCONHECIDO da nuvem (criado offline).
+    const cloudIds = new Set<string>();
 
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
             const snaps = await fetchAllDocs('lucro_empresas', []);
+            snaps.forEach(doc => cloudIds.add(doc.id));
             cloudEmpresas = snaps
-                .filter(doc => !(doc.data() as any)._merged_into)
+                .filter(doc => {
+                    const d = doc.data() as any;
+                    return !d._merged_into && !d._deleted;
+                })
                 .map(doc => ({ id: doc.id, ...doc.data() } as LucroPresumidoEmpresa));
             console.info('[Lucro] cloud retornou', cloudEmpresas.length, 'empresas');
         } catch (err: any) {
@@ -49,10 +56,22 @@ export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresu
         }
     }
 
-    // SEMPRE merge cloud + local. Sem filtro de createdBy/carteira -- visibilidade aberta.
+    // Merge cloud + local SÓ pra empresa que a nuvem NUNCA viu (criada offline).
+    // O merge antigo re-adicionava qualquer cópia do localStorage de QUALQUER
+    // navegador — a empresa deletada "ressuscitava" (caso WALDESA 24/07:
+    // deletada várias vezes, voltava sempre; um save posterior regravava o
+    // zumbi na nuvem pra todo mundo). Cópia local de id conhecido = descartada
+    // (nuvem é a fonte da verdade, inclusive sobre exclusão).
     const localEmpresas = getLocalEmpresas();
     const merged = [...cloudEmpresas];
-    localEmpresas.forEach(l => { if (!merged.find(c => c.id === l.id)) merged.push(l); });
+    if (cloudIds.size > 0) {
+        localEmpresas.forEach(l => {
+            if (!cloudIds.has(l.id) && !merged.find(c => c.id === l.id)) merged.push(l);
+        });
+    } else {
+        // Nuvem indisponível (offline/erro): preserva o cache inteiro.
+        localEmpresas.forEach(l => { if (!merged.find(c => c.id === l.id)) merged.push(l); });
+    }
     saveLocalEmpresas(merged);
     return merged;
 };
@@ -68,15 +87,21 @@ export const saveEmpresa = async (empresa: any, userId: string): Promise<LucroPr
         if (check.duplicado) {
             throw new Error(mensagemCnpjDuplicado(empresa.cnpj || '', check));
         }
-    } else if (empresa.cnpj && isFirebaseConfigured && db) {
+    } else if (isFirebaseConfigured && db) {
         // UPDATE: a trava antiga só cobria cadastro novo — editar o CNPJ de uma
         // empresa existente pra um já cadastrado passava direto (2º furo achado
         // na auditoria WALDESA 24/07). Só varre quando o CNPJ MUDOU de fato
         // (salvamento de ficha não paga o custo da varredura).
         try {
             const atual = await getDoc(doc(db, 'lucro_empresas', empresa.id));
+            // Guarda anti-ressurreição: doc com lápide _deleted não aceita
+            // regravação — sem isso, um "salvar" disparado de um navegador com
+            // cache velho recriava a empresa que o admin acabou de excluir.
+            if (atual.exists() && (atual.data() as any)._deleted) {
+                throw new Error('Esta empresa foi excluída por um administrador — o cadastro não pode ser regravado. Atualize a página (F5); se ela precisa voltar, cadastre-a novamente.');
+            }
             const cnpjAtual = String(atual.exists() ? (atual.data() as any).cnpj || '' : '').replace(/\D/g, '');
-            const cnpjNovo = String(empresa.cnpj).replace(/\D/g, '');
+            const cnpjNovo = String(empresa.cnpj || '').replace(/\D/g, '');
             if (atual.exists() && cnpjNovo && cnpjAtual && cnpjNovo !== cnpjAtual) {
                 if (!validarCnpj(empresa.cnpj)) {
                     throw new Error(`CNPJ invalido: "${empresa.cnpj}". Verifique os digitos.`);
@@ -87,8 +112,8 @@ export const saveEmpresa = async (empresa: any, userId: string): Promise<LucroPr
                 }
             }
         } catch (e) {
-            // Erros de trava sobem; falha de REDE na leitura não bloqueia o save.
-            if (e instanceof Error && /CNPJ/.test(e.message)) throw e;
+            // Erros de trava/exclusão sobem; falha de REDE na leitura não bloqueia o save.
+            if (e instanceof Error && /CNPJ|exclu/i.test(e.message)) throw e;
         }
     }
 
@@ -167,19 +192,27 @@ export const updateEmpresa = async (id: string, data: Partial<LucroPresumidoEmpr
  * verdade — se a delecao na nuvem falhar (permission-denied, network,
  * etc), o erro propaga e o cache local NAO eh modificado.
  *
- * Antes (bug): silent catch + sempre apaga local => empresa "sumia da
- * tela mas voltava no proximo refresh". Sintoma classico de admin que
- * "nao consegue deletar". Conserto: throw em vez de silenciar.
+ * SOFT-DELETE com lápide (caso WALDESA 24/07): o deleteDoc antigo apagava
+ * o doc da nuvem, mas cópias no localStorage de OUTROS navegadores eram
+ * re-adicionadas pelo merge do getEmpresas e um save posterior regravava
+ * o zumbi — "deletada por várias vezes, mas a empresa retorna". A lápide
+ * `_deleted` mantém o id conhecido na nuvem pra sempre: o merge descarta
+ * a cópia local e as guardas de save/ficha recusam regravação.
  *
  * Regra Firestore (firestore.rules):
- *   allow delete: if isOwnerOrAdmin(resource.data.createdBy);
+ *   allow update: if isOwnerOrAdmin(resource.data.createdBy);
  */
 export const deleteEmpresa = async (id: string): Promise<boolean> => {
     if (!isFirebaseConfigured || !db) {
         throw new Error('Firebase nao configurado — nao foi possivel deletar a empresa.');
     }
-    // 1. Deleta da nuvem (fonte da verdade). Se falhar, throw — nao toca no local.
-    await deleteDoc(doc(db, 'lucro_empresas', id));
+    // 1. Lápide na nuvem (fonte da verdade). merge:true — NUNCA setDoc cheio
+    //    aqui: full overwrite apagaria createdBy e quebraria a regra de posse.
+    await setDoc(doc(db, 'lucro_empresas', id), {
+        _deleted: true,
+        _deletedAt: new Date().toISOString(),
+        _deletedBy: auth?.currentUser?.email || 'admin',
+    }, { merge: true });
 
     // 2. Atualiza local cache so depois do sucesso na nuvem
     const localEmpresas = getLocalEmpresas();
@@ -203,6 +236,11 @@ export const addFichaFinanceira = async (empresaId: string, registro: FichaFinan
 
         if (docSnap.exists()) {
             const empresaData = docSnap.data() as LucroPresumidoEmpresa;
+            // Lápide: empresa excluída não recebe ficha (grava-se no cadastro
+            // certo — o gêmeo mantido — nunca no zumbi).
+            if ((empresaData as any)._deleted) {
+                throw new Error('Esta empresa foi excluída por um administrador — a ficha não pode ser salva nela. Atualize a página (F5) e lance no cadastro correto.');
+            }
             const currentFicha = empresaData.fichaFinanceira || [];
 
             const fichaAtualizada = currentFicha.filter(f => f.mesReferencia !== registro.mesReferencia);

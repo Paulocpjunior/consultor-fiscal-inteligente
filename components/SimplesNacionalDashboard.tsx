@@ -15,8 +15,16 @@ interface SimplesNacionalDashboardProps {
     onShowToast?: (msg: string) => void;
 }
 
+// CNPJ SEMPRE formatado na exibição — mesmo padrão do Lucro (ListView): a
+// base tem registros mistos ('05049535000170' e '05.049.535/0001-70'), o que
+// esconde duplicatas do olho humano (caso WALDESA 24/07).
+const fmtCnpj = (c?: string): string => {
+    const d = String(c || '').replace(/\D/g, '');
+    return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : (c || '—');
+};
+
 const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ empresas, notas, onSelectEmpresa, onAddNew, onEdit, onDelete, currentUser, onShowToast }) => {
-    
+
     const empresasComResumo = useMemo(() => {
         return empresas.map(empresa => {
             // Pass { fullHistory: false } to align "mensal" data with RBT12 period (last 12 months)
@@ -26,6 +34,17 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
     }, [empresas, notas]);
 
     const isAdminView = currentUser?.role === 'admin' || currentUser?.email === 'junior@spassessoriacontabil.com.br';
+
+    // Duplicatas por CNPJ NORMALIZADO — mesmo padrão do painel Lucro: mesma
+    // empresa cadastrada 2+ vezes (em formatos diferentes o olho não pega).
+    const cnpjsDuplicados = useMemo(() => {
+        const contagem = new Map<string, number>();
+        for (const e of empresas) {
+            const d = String(e.cnpj || '').replace(/\D/g, '');
+            if (d.length === 14) contagem.set(d, (contagem.get(d) || 0) + 1);
+        }
+        return new Set([...contagem.entries()].filter(([, n]) => n > 1).map(([c]) => c));
+    }, [empresas]);
 
     const [busca, setBusca] = useState('');
     const empresasFiltradas = useMemo(() => {
@@ -99,7 +118,27 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                     <tr key={e.id} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600/20">
                                         <td className="px-6 py-4 font-medium text-slate-900 dark:text-white whitespace-nowrap">
                                             {e.nome}
-                                            <p className="font-normal text-slate-500 dark:text-slate-400">{e.cnpj}</p>
+                                            {cnpjsDuplicados.has(String(e.cnpj || '').replace(/\D/g, '')) && (() => {
+                                                // Responde "qual excluir?" com dado: quem tem 0 lançamentos
+                                                // (faturamento/histórico) é o cadastro-lixo; quem tem dados é
+                                                // o verdadeiro. Dois com dados = NÃO excluir nenhum (mesclar).
+                                                const nLanc = Object.keys(e.faturamentoManual || {}).length + (e.historicoCalculos || []).length;
+                                                return (
+                                                    <span
+                                                        className={`ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded ${
+                                                            nLanc === 0
+                                                                ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                                : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                                        }`}
+                                                        title={nLanc === 0
+                                                            ? 'CNPJ duplicado e SEM lançamentos — este é o cadastro que pode ser excluído (🗑️).'
+                                                            : `CNPJ duplicado, mas este cadastro TEM ${nLanc} lançamento(s) de faturamento/cálculo — é o que deve ser MANTIDO. Exclua o gêmeo sem dados.`}
+                                                    >
+                                                        ⚠ duplicada · {nLanc === 0 ? '0 lançamentos — excluir este' : `${nLanc} lançamento(s) — manter`}
+                                                    </span>
+                                                );
+                                            })()}
+                                            <p className="font-normal font-mono text-slate-500 dark:text-slate-400">{fmtCnpj(e.cnpj)}</p>
                                         </td>
                                         {isAdminView && (
                                             <td className="px-6 py-4">

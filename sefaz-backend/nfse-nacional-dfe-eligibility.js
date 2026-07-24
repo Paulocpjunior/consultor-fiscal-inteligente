@@ -125,7 +125,7 @@ export async function listarElegibilidadeNfseNacionalDfe() {
             const snap = await db.collection(colName).get();
             snap.forEach((doc) => {
                 const d = doc.data();
-                if (d._merged_into) return;
+                if (d._merged_into || d._deleted) return;
                 if (d.nfseNacionalDfeAtivo !== true) return;
                 const cnpj = String(d.cnpj || '').replace(/\D/g, '');
                 if (cnpj.length !== 14 || empresasPorCnpj.has(cnpj)) return;

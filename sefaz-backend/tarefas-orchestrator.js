@@ -168,7 +168,7 @@ export async function executarCronMensal(competencia, opts = {}) {
             const emp = empDoc.data();
             // Pula perdedores do merge (23/05): empresa consolidada em outra.
             // Sem isso o cron cria tarefas em dobro pro CNPJ duplicado.
-            if (emp._merged_into) { log.empresasPuladas++; continue; }
+            if (emp._merged_into || emp._deleted) { log.empresasPuladas++; continue; }
             const empresaId = empDoc.id;
             const empresaNome = emp.razaoSocial || emp.nome || emp.empresaNome || '';
             const empresaCnpj = emp.cnpj || emp.empresaCnpj || '';

@@ -96,6 +96,7 @@ async function coletarDados() {
       .get();
     snap.forEach(doc => {
       const d = doc.data() || {};
+      if (d._merged_into || d._deleted) return; // perdedor de merge / excluida
       const cnpj = (d.cnpj || '').replace(/\D/g, '');
       if (cnpj.length !== 14) return;
       if (empresas.some(e => e.cnpj === cnpj)) return; // dedup

@@ -126,7 +126,7 @@ export async function capturarTodas(opts) {
             .get();
         snap.forEach(d => {
             const e = d.data();
-            if (e._merged_into) return;
+            if (e._merged_into || e._deleted) return;
             const cnpj = (e.cnpj || '').replace(/\D/g, '');
             if (cnpj.length !== 14) return;
             const codMunIBGE = e.dadosFiscais?.codMunIBGE;

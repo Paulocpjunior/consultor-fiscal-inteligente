@@ -98,9 +98,10 @@ export async function listarEmpresasPerfilCliente(user) {
                 ccmSp: getCcmSp(data),
                 createdBy: data.createdBy || undefined,
                 _merged_into: data._merged_into,
+                _deleted: data._deleted,
             };
         })
-        .filter((emp) => !emp._merged_into && emp.cnpj.length === 14)
+        .filter((emp) => !emp._merged_into && !emp._deleted && emp.cnpj.length === 14)
         .filter((emp) => empresaPermitida(emp, cnpjsSet, idsSet, user));
 
     const lucro = lucroDocs
@@ -117,12 +118,13 @@ export async function listarEmpresasPerfilCliente(user) {
                 ccmSp: getCcmSp(data),
                 createdBy: data.createdBy || undefined,
                 _merged_into: data._merged_into,
+                _deleted: data._deleted,
             };
         })
-        .filter((emp) => !emp._merged_into && emp.cnpj.length === 14)
+        .filter((emp) => !emp._merged_into && !emp._deleted && emp.cnpj.length === 14)
         .filter((emp) => empresaPermitida(emp, cnpjsSet, idsSet, user));
 
-    return dedupEmpresasPerfil([...simples, ...lucro]).map(({ _merged_into, ...emp }) => emp);
+    return dedupEmpresasPerfil([...simples, ...lucro]).map(({ _merged_into, _deleted, ...emp }) => emp);
 }
 
 router.get('/', requireAuth, async (req, res) => {

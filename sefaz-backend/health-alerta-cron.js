@@ -67,7 +67,7 @@ async function calcularSaude() {
             const snap = await db.collection(col).get();
             snap.forEach((doc) => {
                 const d = doc.data();
-                if (d._merged_into) return;
+                if (d._merged_into || d._deleted) return;
                 const pendencias = pendenciasCadastro(d, regime);
                 empresas.push({ gravidade: gravidadeCadastro(pendencias) });
             });

@@ -234,6 +234,7 @@ export async function syncAllEmpresas({ periodo, maxEmpresas = null, force = fal
         const snap = await getDb().collection(colecao).get();
         snap.forEach(s => {
             const d = s.data();
+            if (d._merged_into || d._deleted) return; // perdedor de merge / excluida
             const cnpj = (d.cnpj || '').replace(/\D/g, '');
             if (cnpj && cnpj.length === 14) {
                 cnpjs.add(cnpj);

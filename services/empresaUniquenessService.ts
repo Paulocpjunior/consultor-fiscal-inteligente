@@ -53,8 +53,11 @@ async function buscarCnpjNaColecao(
         if (snap.empty) return null;
         for (const d of snap.docs) {
             if (ignorarEmpresaId && d.id === ignorarEmpresaId) continue; // a própria (update)
-            const data = d.data() as { cnpj?: string; nome?: string; _merged_into?: string };
+            const data = d.data() as { cnpj?: string; nome?: string; _merged_into?: string; _deleted?: boolean };
             if (data._merged_into) continue; // 23/05: ignora perdedores do merge
+            // 24/07: lápide de soft-delete não conta como duplicata — senão
+            // excluir uma empresa bloquearia recadastrá-la pra sempre.
+            if (data._deleted) continue;
             if (soDigitos(data.cnpj || '') === cnpjDig) {
                 return {
                     duplicado: true,
