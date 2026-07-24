@@ -19,8 +19,9 @@
  * deles -- centralizar la simplifica a dependencia. Esta view eh
  * puramente apresentacional, recebe tudo via props.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { LucroPresumidoEmpresa, LucroResult, ItemFinanceiroAvulso } from '../../types';
+import DareSpModal from './DareSpModal';
 import {
     ArrowLeftIcon, SaveIcon, ShieldIcon, BuildingIcon, CalculatorIcon,
     InfoIcon, TagIcon, BriefcaseIcon, PlusIcon, TrashIcon,
@@ -119,7 +120,11 @@ interface NewFichaViewProps {
     onAbrirConferirDctfweb: () => void;
 }
 
-const NewFichaView: React.FC<NewFichaViewProps> = (p) => (
+const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
+    // DARE-SP: único estado local desta view (efêmero de UI — não precisa
+    // subir pro dashboard pai como os campos da ficha).
+    const [dareModal, setDareModal] = useState<{ valor: number; derivacao: 'proprio' | 'st' } | null>(null);
+    return (
     <div className="max-w-7xl mx-auto animate-fade-in pb-20">
         <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-4">
@@ -502,6 +507,19 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => (
                                         </div>
                                         {item.observacao && <div className="text-[10px] text-slate-600 italic mt-1">{item.observacao}</div>}
 
+                                        {/* DARE-SP: ICMS é estadual — gera a guia com preview
+                                            conferível (códigos validados nos DAREs reais 24/07). */}
+                                        {(item.imposto === 'ICMS Próprio' || item.imposto === 'ICMS ST') && item.valor > 0 && p.selectedEmpresa?.cnpj && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setDareModal({ valor: item.valor, derivacao: item.imposto === 'ICMS ST' ? 'st' : 'proprio' })}
+                                                className="mt-2 px-3 py-1 text-[11px] font-bold rounded bg-emerald-700 hover:bg-emerald-600 text-white"
+                                                title="Preview conferível + dados prontos pra emissão do DARE-SP no portal da SEFAZ"
+                                            >
+                                                🧾 Gerar DARE-SP
+                                            </button>
+                                        )}
+
                                         {item.cotaInfo?.disponivel && (
                                             <div className="mt-2 bg-slate-700/30 p-2 rounded border border-slate-700">
                                                 <label className="flex items-center gap-2 cursor-pointer">
@@ -662,7 +680,20 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => (
                 </div>
             </div>
         </div>
+
+        {dareModal && p.selectedEmpresa?.cnpj && (
+            <DareSpModal
+                cnpj={p.selectedEmpresa.cnpj}
+                razaoSocial={p.selectedEmpresa.nome || ''}
+                empresaId={p.selectedEmpresa.id}
+                competencia={p.fichaMes}
+                valorInicial={dareModal.valor}
+                derivacaoInicial={dareModal.derivacao}
+                onClose={() => setDareModal(null)}
+            />
+        )}
     </div>
-);
+    );
+};
 
 export default NewFichaView;
