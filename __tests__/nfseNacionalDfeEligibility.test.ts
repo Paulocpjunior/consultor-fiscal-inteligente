@@ -72,6 +72,30 @@ describe('classificarElegibilidadeAdn', () => {
         expect(r.motivo).toMatch(/sistema próprio|portal/i);
     });
 
+    // Regressão 24/07 (caso 4BZ/Jundiaí): a comparação antiga comparava o
+    // OBJETO de caminhoNfseRecomendado com a string 'adn' — sempre true — e
+    // bloqueava TODA empresa com município preenchido ("369 bloqueadas · 0
+    // docs na história"). Empresa de município ADN TEM que ser elegível: é o
+    // trilho que captura a NFS-e de quem não é da capital.
+    it('LIBERA empresa de município no Padrão Nacional (Jundiaí — fora da tabela = ADN default)', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: empresa({ codMunIBGE: '3525904' }),
+            cert: cert(),
+            nowMs: NOW,
+        });
+        expect(r.elegivel).toBe(true);
+        expect(r.tipoCert).toBe('A1');
+    });
+
+    it('LIBERA empresa de município catalogado como ADN (Guarulhos)', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: empresa({ codMunIBGE: '3518800' }),
+            cert: cert(),
+            nowMs: NOW,
+        });
+        expect(r.elegivel).toBe(true);
+    });
+
     it('mantém elegível quando codMunIBGE ausente (não dá pra afirmar)', () => {
         const r = classificarElegibilidadeAdn({
             empresa: empresa({ codMunIBGE: null }),
