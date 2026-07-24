@@ -15,6 +15,7 @@ import { trimestreVencendoEsteMes, calcularVencimentoDarf } from './darf-payload
 import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
 import {
     extrairModeloDebitosMit, montarDebitosMit, mesclarDebitosMit, maiorIdDebitoMit, FAMILIAS,
+    montarDebitosRetificacaoMit,
 } from './mit-debitos-builder.js';
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs } from './firestore-paginate.js';
@@ -688,6 +689,198 @@ export async function preencherEncerrarMit({
         }));
     } catch (e) {
         console.warn('[preencherEncerrarMit] falha gravando auditoria:', e.message);
+    }
+
+    return {
+        ok: true, transmitido: true, proposta,
+        protocolo: r.protocolo, statusEncerramento: r.statusEncerramento,
+        camposRemovidos: r.camposRemovidos,
+    };
+}
+
+// ── Retificação da apuração MIT com os valores do app ──────────────────────
+//
+// Contraparte do preenchimento pra apuração JÁ ENCERRADA/transmitida cujos
+// valores mudaram no app (caso CLINICA MANTOAN 06/2026: aplicações
+// financeiras lançadas DEPOIS da transmissão — IRPJ/CSLL subiram). Mecânica:
+// reencerramento via ENCAPURACAO314 com os débitos ajustados; a DCTFWeb
+// RETIFICADORA é gerada automaticamente pela Receita.
+//
+// REQUISITO INEGOCIÁVEL (Paulo, 23/07/2026): SOMENTE ADMIN retifica — a rota
+// usa requireAdmin e esta função revalida o role (defesa em profundidade).
+// Preview obrigatório do antes → depois: transmitir=false devolve a proposta;
+// transmitir=true remonta TUDO no servidor e transmite.
+export async function retificarMit({
+    empresaId, empresaCnpj, anoPA, mesPA, tributosApp, transmitir = false, usuario = null,
+}) {
+    const provider = getDctfwebProvider();
+    if (typeof provider.consultarApuracaoMitPorId !== 'function') {
+        return { ok: false, motivo: 'Retificação do MIT disponível apenas no modo serpro.' };
+    }
+    // Trava de papel TAMBÉM aqui: a rota já exige admin, mas quem chamar esta
+    // função por outro caminho não pode escapar da regra.
+    if (usuario && usuario.role !== 'admin') {
+        return { ok: false, motivo: 'Somente administradores podem retificar uma apuração transmitida.' };
+    }
+
+    const tributos = {};
+    for (const fam of FAMILIAS) {
+        const v = Number(tributosApp?.[fam]);
+        tributos[fam] = Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
+    }
+    const paAlvo = `${anoPA}${String(mesPA).padStart(2, '0')}`;
+
+    // 1. Apuração-alvo TEM que existir e estar ENCERRADA — senão o fluxo certo
+    //    é o preenchimento normal (que cria/complementa/encerra).
+    const alvo = await provider.consultarApuracaoMit({ empresaCnpj, anoPA, mesPA });
+    if (!alvo?.apuracaoMit) {
+        return {
+            ok: false, etapa: 'alvo',
+            motivo: `A apuração MIT de ${paAlvo} não existe — não há o que retificar. `
+                + 'Use "Preencher MIT com os valores do app", que cria e encerra a apuração.',
+        };
+    }
+    const alvoPayload = pickDadosApuracaoMit(alvo.apuracaoMit);
+    const dadosIniciais = alvoPayload?.DadosIniciais || alvoPayload?.dadosIniciais;
+    if (!alvoPayload || !dadosIniciais) {
+        return { ok: false, etapa: 'alvo', motivo: `Apuração MIT de ${paAlvo} encontrada, mas sem DadosIniciais no retorno do SERPRO.` };
+    }
+    const semMovimento = dadosIniciais.SemMovimento ?? dadosIniciais.semMovimento;
+    if (semMovimento === true || semMovimento === 'true') {
+        return {
+            ok: false, etapa: 'alvo',
+            motivo: `A apuração MIT de ${paAlvo} está marcada como Sem Movimento — retificação de sem-movimento para com-movimento deve ser feita no e-CAC.`,
+        };
+    }
+    const situacaoAlvo = Number(
+        alvo.apuracaoResumo?.situacao ?? alvo.apuracaoResumo?.situacaoApuracao
+        ?? alvo.apuracaoMit?.situacaoApuracao ?? alvo.apuracaoMit?.situacao ?? NaN
+    );
+    if (situacaoAlvo === 4) {
+        return {
+            ok: false, etapa: 'alvo',
+            motivo: `A apuração MIT de ${paAlvo} está com encerramento em processamento no SERPRO — aguarde e atualize antes de retificar.`,
+        };
+    }
+    if (situacaoAlvo !== 3) {
+        return {
+            ok: false, etapa: 'alvo',
+            motivo: `A apuração MIT de ${paAlvo} ainda NÃO está encerrada — retificação é só para apuração já transmitida. `
+                + 'Use "Preencher MIT com os valores do app" (fluxo normal de encerramento).',
+        };
+    }
+
+    // 2. Precisamos LER os débitos atuais com segurança (antes → depois honesto).
+    const debitosExistentes = alvoPayload.Debitos || alvoPayload.debitos || null;
+    const normAlvo = normalizarApuracaoMit(alvo.apuracaoMit);
+    if (contarDebitosMit(debitosExistentes) > 0 && !normAlvo?.lido) {
+        return {
+            ok: false, etapa: 'alvo',
+            motivo: `A apuração MIT de ${paAlvo} tem débitos num formato que não consegui classificar por tributo — `
+                + 'retifique manualmente no e-CAC para não arriscar duplicar ou perder débito.',
+        };
+    }
+
+    // 3. Código pra família NOVA na retificação (sem débito atual): busca a
+    //    apuração-modelo (meses anteriores), mesmo rito do preenchimento.
+    let modelo = extrairModeloDebitosMit(alvo.apuracaoMit);
+    const familiasSemCodigo = FAMILIAS.filter((f) => tributos[f] > 0 && !modelo.codigoPorFamilia[f]);
+    if (familiasSemCodigo.length > 0) {
+        const candidatos = [];
+        for (const ano of [Number(anoPA), Number(anoPA) - 1]) {
+            try {
+                const hist = await provider.consultarApuracoesAno({ empresaCnpj, anoPA: ano });
+                for (const item of hist?.apuracoes || []) {
+                    const periodo = mitPeriodoLabel(item);
+                    const id = pickIdApuracao(item);
+                    if (!periodo || id == null || id === '') continue;
+                    if (periodo >= paAlvo) continue;
+                    candidatos.push({ periodo, id });
+                }
+            } catch (e) {
+                console.warn(`[retificarMit] histórico ${ano} indisponível:`, e.message);
+            }
+            if (candidatos.length > 0) break;
+        }
+        candidatos.sort((a, b) => b.periodo.localeCompare(a.periodo));
+        for (const cand of candidatos.slice(0, 4)) {
+            try {
+                const det = await provider.consultarApuracaoMitPorId({ empresaCnpj, idApuracao: cand.id });
+                const m = extrairModeloDebitosMit(det?.apuracaoMit);
+                for (const f of familiasSemCodigo) {
+                    if (!modelo.codigoPorFamilia[f] && m.codigoPorFamilia[f]) {
+                        modelo.codigoPorFamilia[f] = m.codigoPorFamilia[f];
+                    }
+                }
+                if (familiasSemCodigo.every((f) => modelo.codigoPorFamilia[f])) break;
+            } catch (e) {
+                console.warn(`[retificarMit] detalhe modelo ${cand.periodo} falhou:`, e.message);
+            }
+        }
+    }
+
+    // 4. Monta os débitos retificados (puro, testado) e a proposta antes→depois.
+    const montagem = montarDebitosRetificacaoMit(tributos, debitosExistentes, modelo, { empresaCnpj });
+    const di = alvoPayload.DadosIniciais || {};
+    const proposta = {
+        pa: paAlvo,
+        modo: 'retificacao',
+        tributosApp: tributos,
+        mapeamento: montagem.mapeamento,
+        totalAntes: montagem.totalAntes,
+        totalDepois: montagem.totalDepois,
+        alvoIdApuracao: alvo?.idApuracao ?? null,
+        dadosIniciaisResumo: {
+            qualificacaoPj: di.QualificacaoPj ?? di.qualificacaoPj ?? null,
+            tributacaoLucro: di.TributacaoLucro ?? di.tributacaoLucro ?? null,
+            cpfResponsavel: di.ResponsavelApuracao?.CpfResponsavel
+                ?? di.responsavelApuracao?.cpfResponsavel ?? null,
+        },
+    };
+    if (!montagem.ok) {
+        return { ok: false, etapa: 'montagem', motivo: montagem.erros.join(' '), proposta };
+    }
+    if (!montagem.temDiferenca) {
+        return {
+            ok: false, etapa: 'alvo',
+            motivo: `Os débitos do MIT de ${paAlvo} já batem com a apuração do app — nada a retificar.`,
+            proposta,
+        };
+    }
+
+    if (!transmitir) {
+        return { ok: true, transmitido: false, proposta };
+    }
+
+    // 5. Reencerra a apuração com os débitos ajustados. A Receita gera a
+    //    DCTFWeb retificadora automaticamente a partir do novo encerramento.
+    const payload = {
+        ...alvoPayload,
+        PeriodoApuracao: alvoPayload.PeriodoApuracao || { MesApuracao: Number(mesPA), AnoApuracao: Number(anoPA) },
+        Debitos: montagem.debitos,
+    };
+    delete payload.debitos;
+    const r = await encerrarApuracaoMit({ empresaId, empresaCnpj, anoPA, mesPA, dadosApuracaoMit: payload });
+
+    // Auditoria: retificação é o ato mais sensível do módulo — grava antes,
+    // depois, diferença por tributo e QUEM transmitiu.
+    try {
+        const db = fa().firestore();
+        await db.collection('dctfweb_mit_retificacoes').add(sanitize({
+            empresaId: empresaId || null,
+            empresaCnpj,
+            pa: paAlvo,
+            mapeamento: montagem.mapeamento,
+            totalAntes: montagem.totalAntes,
+            totalDepois: montagem.totalDepois,
+            camposRemovidos: r.camposRemovidos || null,
+            protocolo: r.protocolo || null,
+            statusEncerramento: r.statusEncerramento || null,
+            transmitidoPor: usuario?.email || usuario?.uid || null,
+            transmitidoEm: new Date().toISOString(),
+        }));
+    } catch (e) {
+        console.warn('[retificarMit] falha gravando auditoria:', e.message);
     }
 
     return {

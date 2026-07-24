@@ -14,12 +14,13 @@ import {
     encerrarApuracaoMit, consultarStatusEncerramentoMit,
     consultarApuracaoMit, consultarApuracoesAno,
     preencherEncerrarMit,
+    retificarMit,
     consultarRetencaoDctfwebNormalizada,
     getResumoGlobal,
 } from './dctfweb-orchestrator.js';
 import { getDctfwebMode } from './dctfweb-provider.js';
 import { normalizarApuracaoMit } from './dctfweb-mit-normalizer.js';
-import { requireAuth } from './require-admin.js';
+import { requireAuth, requireAdmin } from './require-admin.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { ultimasCompetenciasComAnoMes as ultimasCompetenciasComAnoMesHelper } from './competencias-helper.js';
 import { secretsMatch } from './cron-secret.js';
@@ -231,6 +232,31 @@ router.post('/mit/preencher-encerrar', requireAuth, express.json(), async (req, 
             tributosApp,
             transmitir: transmitir === true,
             usuario: { uid: req.user.uid, email: req.user.email },
+        });
+        res.json(r);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// RETIFICAÇÃO da apuração MIT já ENCERRADA com os valores do app (reencerra
+// via ENCAPURACAO314; a DCTFWeb retificadora é gerada automaticamente pela
+// Receita). REQUISITO INEGOCIÁVEL: SOMENTE ADMIN (requireAdmin valida o role
+// no Firestore; o orquestrador revalida). Duas fases iguais ao preenchimento:
+// transmitir=false → proposta antes→depois (preview obrigatório);
+// transmitir=true → remonta tudo no servidor e transmite, com auditoria em
+// dctfweb_mit_retificacoes.
+router.post('/mit/retificar', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { empresaId, empresaCnpj, anoPA, mesPA, tributosApp, transmitir } = req.body || {};
+        if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
+        if (!tributosApp || typeof tributosApp !== 'object') {
+            return res.status(400).json({ error: 'tributosApp {IRPJ,CSLL,PIS,COFINS,IPI} é obrigatório' });
+        }
+        const r = await retificarMit({
+            empresaId, empresaCnpj,
+            anoPA: Number(anoPA), mesPA: Number(mesPA),
+            tributosApp,
+            transmitir: transmitir === true,
+            usuario: { uid: req.user.uid, email: req.user.email, role: req.user.role },
         });
         res.json(r);
     } catch (err) { res.status(500).json({ error: err.message }); }

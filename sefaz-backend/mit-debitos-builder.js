@@ -248,6 +248,162 @@ export function montarDebitosMit(tributosApp, modelo, opts = {}) {
 }
 
 /**
+ * Monta o bloco Debitos de uma RETIFICAÇÃO (reencerramento de apuração já
+ * ENCERRADA — ENCAPURACAO314 de novo; a DCTFWeb retificadora é gerada
+ * automaticamente pela Receita). Caso CLINICA MANTOAN 06/2026: apuração
+ * transmitida e depois as aplicações financeiras entraram no app — IRPJ/CSLL
+ * mudaram e o MIT precisa ser reencerrado com os valores novos.
+ *
+ * Regras (zero surpresa pro admin que confere o preview):
+ *   - Família com valor no APP (> 0): débito REESCRITO com o valor do app.
+ *     Código de débito vem do PRÓPRIO débito atual da família (mesma empresa,
+ *     mesmo mês — fonte mais segura possível); se a família é NOVA na
+ *     retificação, cai no código da apuração-modelo (mês anterior). Sem
+ *     código em lugar nenhum → falha clara, nunca chuta.
+ *   - Família com débito no MIT mas SEM valor no app (0): débito PRESERVADO
+ *     intacto (não removemos débito que o app não apura — remover seria
+ *     reduzir tributo declarado sem base).
+ *   - Débito existente que não dá pra classificar por família → falha o lote
+ *     inteiro (retificar por cima de débito desconhecido arrisca duplicar ou
+ *     sumir com tributo — e-CAC manual nesse caso).
+ *   - IdDebito renumerado sequencialmente na ordem canônica do MIT.
+ *
+ * @param {{IRPJ?:number,CSLL?:number,PIS?:number,COFINS?:number,IPI?:number}} tributosApp
+ * @param {object|null} debitosExistentes  bloco Debitos atual da apuração-alvo
+ * @param {{codigoPorFamilia: Record<string,{codigo:string,grupo:string,cnpjEstabelecimento?:string}>}} modelo
+ * @param {{empresaCnpj?: string}} [opts]
+ * @returns {{
+ *   ok: boolean, erros: string[], debitos: object|null,
+ *   mapeamento: Array<{familia:string,codigo:string,grupo:string,antes:number,depois:number,diferenca:number,acao:'ajustado'|'mantido'|'incluido'}>,
+ *   totalAntes: number, totalDepois: number, temDiferenca: boolean,
+ * }}
+ */
+export function montarDebitosRetificacaoMit(tributosApp, debitosExistentes, modelo, opts = {}) {
+    const erros = [];
+    const mapeamento = [];
+    const empresaCnpjFallback = sufixoEstabelecimento(opts.empresaCnpj);
+    const codigoPorFamilia = modelo?.codigoPorFamilia || {};
+
+    // 1. Classifica TODOS os débitos existentes por família. Item sem família
+    //    identificável derruba a retificação (segurança > conveniência).
+    const existentesPorFamilia = {};
+    if (debitosExistentes && typeof debitosExistentes === 'object' && !Array.isArray(debitosExistentes)) {
+        for (const [grupo, bloco] of Object.entries(debitosExistentes)) {
+            if (!bloco || typeof bloco !== 'object') continue;
+            for (const listaNome of ['ListaDebitos', 'listaDebitos']) {
+                const lista = bloco[listaNome];
+                if (!Array.isArray(lista)) continue;
+                for (const item of lista) {
+                    if (!item || typeof item !== 'object') continue;
+                    const codigo = lerCodigo(item);
+                    const familia = GRUPO_MIT_FAMILIA[grupo] || familiaPorCodigo(codigo);
+                    if (!familia || !FAMILIAS.includes(familia)) {
+                        erros.push(
+                            `Débito atual do MIT (grupo ${grupo}, código ${codigo || '?'}) não pôde ser `
+                            + 'classificado por tributo — retifique manualmente no e-CAC para não arriscar '
+                            + 'duplicar ou perder débito.'
+                        );
+                        continue;
+                    }
+                    const valor = round2(item.ValorDebito ?? item.valorDebito ?? 0);
+                    if (!existentesPorFamilia[familia]) existentesPorFamilia[familia] = [];
+                    existentesPorFamilia[familia].push({
+                        familia,
+                        grupo: GRUPO_MIT_FAMILIA[grupo] ? grupo : GRUPO_OFICIAL_POR_FAMILIA[familia],
+                        codigo,
+                        valor,
+                        cnpjEstabelecimento: lerCnpjEstab(item),
+                    });
+                }
+            }
+        }
+    }
+    if (erros.length > 0) {
+        return { ok: false, erros, debitos: null, mapeamento, totalAntes: 0, totalDepois: 0, temDiferenca: false };
+    }
+
+    // 2. Reconstrói o bloco inteiro na ordem canônica, renumerando IdDebito.
+    const debitos = {};
+    let idDebito = 1;
+    let totalAntes = 0;
+    let totalDepois = 0;
+    for (const familia of ORDEM_DEBITOS_MIT) {
+        const valorApp = round2(tributosApp?.[familia]);
+        const existentes = existentesPorFamilia[familia] || [];
+        const antes = round2(existentes.reduce((s, e) => s + e.valor, 0));
+        totalAntes = round2(totalAntes + antes);
+
+        if (valorApp < 0) {
+            erros.push(`${familia}: valor negativo (${valorApp}) não pode ser declarado no MIT.`);
+            continue;
+        }
+
+        if (valorApp > 0) {
+            // Débito reescrito com o valor do app. Código do débito atual da
+            // própria família; família nova cai no modelo.
+            const ref = existentes[0] || codigoPorFamilia[familia];
+            if (!ref?.codigo) {
+                erros.push(
+                    `${familia}: apurado R$ ${valorApp.toFixed(2)} no app, mas não há código de débito `
+                    + 'nem na apuração atual nem na apuração-modelo (mês anterior). '
+                    + 'Lance este tributo manualmente no e-CAC.'
+                );
+                continue;
+            }
+            const grupo = ref.grupo || GRUPO_OFICIAL_POR_FAMILIA[familia];
+            const item = { IdDebito: idDebito++, CodigoDebito: ref.codigo, ValorDebito: valorApp };
+            if (familia === 'IPI') {
+                const cnpjEstab = ref.cnpjEstabelecimento
+                    || codigoPorFamilia.IPI?.cnpjEstabelecimento || empresaCnpjFallback;
+                if (!cnpjEstab) {
+                    erros.push(
+                        'IPI: o SERPRO exige o CNPJ do estabelecimento em cada débito de IPI e ele não '
+                        + 'veio do débito atual, do mês-modelo nem do cadastro da empresa.'
+                    );
+                    continue;
+                }
+                item.CnpjEstabelecimento = cnpjEstab;
+            }
+            if (!debitos[grupo]) debitos[grupo] = { ListaDebitos: [] };
+            debitos[grupo].ListaDebitos.push(item);
+            totalDepois = round2(totalDepois + valorApp);
+            mapeamento.push({
+                familia, codigo: ref.codigo, grupo,
+                antes, depois: valorApp, diferenca: round2(valorApp - antes),
+                acao: existentes.length === 0 ? 'incluido'
+                    : (Math.abs(valorApp - antes) < 0.005 ? 'mantido' : 'ajustado'),
+            });
+        } else if (existentes.length > 0) {
+            // App não apura esta família → débitos atuais preservados intactos.
+            for (const e of existentes) {
+                const item = { IdDebito: idDebito++, CodigoDebito: e.codigo, ValorDebito: e.valor };
+                if (e.cnpjEstabelecimento) item.CnpjEstabelecimento = e.cnpjEstabelecimento;
+                if (!debitos[e.grupo]) debitos[e.grupo] = { ListaDebitos: [] };
+                debitos[e.grupo].ListaDebitos.push(item);
+            }
+            totalDepois = round2(totalDepois + antes);
+            mapeamento.push({
+                familia, codigo: existentes[0].codigo, grupo: existentes[0].grupo,
+                antes, depois: antes, diferenca: 0, acao: 'mantido',
+            });
+        }
+    }
+
+    if (erros.length > 0) {
+        return { ok: false, erros, debitos: null, mapeamento, totalAntes, totalDepois, temDiferenca: false };
+    }
+    if (mapeamento.length === 0) {
+        return {
+            ok: false,
+            erros: ['Nenhum tributo com valor no app nem débito existente no MIT — nada a retificar.'],
+            debitos: null, mapeamento, totalAntes: 0, totalDepois: 0, temDiferenca: false,
+        };
+    }
+    const temDiferenca = mapeamento.some((m) => Math.abs(m.diferenca) >= 0.01);
+    return { ok: true, erros: [], debitos, mapeamento, totalAntes, totalDepois, temDiferenca };
+}
+
+/**
  * Maior IdDebito presente num bloco Debitos existente (0 se não houver).
  * Usado pra continuar a numeração ao COMPLEMENTAR uma apuração.
  */

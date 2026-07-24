@@ -9,7 +9,7 @@
 import React, { useEffect, useState } from 'react';
 import type { DetalheImposto } from '../../types';
 import { conferirDctfweb, type ConferenciaCompleta } from '../../services/dctfwebConferenceService';
-import { preencherEncerrarMit, type MitPreencherResult } from '../../services/dctfwebService';
+import { preencherEncerrarMit, retificarMit, type MitPreencherResult, type MitRetificarResult } from '../../services/dctfwebService';
 
 interface Props {
     empresaCnpj: string;
@@ -18,6 +18,9 @@ interface Props {
     empresaId?: string;
     competencia: string; // YYYY-MM
     detalhamento: DetalheImposto[];
+    /** Retificação do MIT é EXCLUSIVA de admin (requisito inegociável 23/07):
+     *  o botão só aparece pra admin e o backend revalida o role (403). */
+    isAdmin?: boolean;
     onClose: () => void;
 }
 
@@ -37,7 +40,7 @@ const statusLabel: Record<string, string> = {
     'sem-apuracao-app': 'Declarado, sem apuração',
 };
 
-const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empresaId, competencia, detalhamento, onClose }) => {
+const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empresaId, competencia, detalhamento, isAdmin, onClose }) => {
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
     const [data, setData] = useState<ConferenciaCompleta | null>(null);
@@ -48,6 +51,13 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
     const [mitTransmitindo, setMitTransmitindo] = useState(false);
     const [mitResultado, setMitResultado] = useState<MitPreencherResult | null>(null);
     const [mitErro, setMitErro] = useState<string | null>(null);
+
+    // ── Retificação (apuração JÁ transmitida, valores mudaram no app — admin)
+    const [retProposta, setRetProposta] = useState<MitRetificarResult | null>(null);
+    const [retPreparando, setRetPreparando] = useState(false);
+    const [retTransmitindo, setRetTransmitindo] = useState(false);
+    const [retResultado, setRetResultado] = useState<MitRetificarResult | null>(null);
+    const [retErro, setRetErro] = useState<string | null>(null);
 
     useEffect(() => {
         let alive = true;
@@ -91,6 +101,63 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
             setMitErro(e?.message || 'Falha ao preparar o preenchimento do MIT.');
         } finally {
             setMitPreparando(false);
+        }
+    };
+
+    // Retificação em duas fases: proposta (antes → depois por tributo) →
+    // confirmação explícita → reencerramento. A oferta aparece quando o MIT
+    // foi LIDO e há divergência — o backend decide se a apuração está mesmo
+    // ENCERRADA (senão devolve o motivo e orienta o fluxo normal).
+    const retPodeOferecer = !!isAdmin && !!data?.mitLido && !!data?.resultado?.temDivergencia;
+
+    const prepararRetificacao = async () => {
+        if (!data) return;
+        setRetPreparando(true);
+        setRetErro(null);
+        setRetProposta(null);
+        try {
+            const r = await retificarMit(null, {
+                empresaId, empresaCnpj,
+                anoPA, mesPA,
+                tributosApp: data.tributosApp,
+                transmitir: false,
+            });
+            if (r.ok) setRetProposta(r);
+            else setRetErro(r.motivo || 'Não foi possível montar a retificação.');
+        } catch (e: any) {
+            setRetErro(e?.message || 'Falha ao preparar a retificação.');
+        } finally {
+            setRetPreparando(false);
+        }
+    };
+
+    const transmitirRetificacao = async () => {
+        if (!data || !retProposta?.proposta) return;
+        const p = retProposta.proposta;
+        const linhas = p.mapeamento
+            .map(m => `${m.familia}: ${brl(m.antes)} → ${brl(m.depois)}${m.acao === 'mantido' ? ' (mantido)' : ` (${m.diferenca > 0 ? '+' : ''}${brl(m.diferenca)})`}`)
+            .join('\n');
+        if (!confirm(
+            `RETIFICAR o MIT ${competencia} de ${empresaNome || empresaCnpj}?\n\n`
+            + `${linhas}\n\nTotal: ${brl(p.totalAntes)} → ${brl(p.totalDepois)}\n\n`
+            + 'A apuração será REENCERRADA com os valores acima e a Receita Federal '
+            + 'gerará automaticamente a DCTFWeb RETIFICADORA. Esta ação é registrada em auditoria.'
+        )) return;
+        setRetTransmitindo(true);
+        setRetErro(null);
+        try {
+            const r = await retificarMit(null, {
+                empresaId, empresaCnpj,
+                anoPA, mesPA,
+                tributosApp: data.tributosApp,
+                transmitir: true,
+            });
+            if (r.ok) setRetResultado(r);
+            else setRetErro(r.motivo || 'Retificação não aceita.');
+        } catch (e: any) {
+            setRetErro(e?.message || 'Falha na transmissão da retificação.');
+        } finally {
+            setRetTransmitindo(false);
         }
     };
 
@@ -352,6 +419,115 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                     className="mt-3 px-3 py-1.5 text-xs font-semibold bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-50"
                                 >
                                     {mitPreparando ? 'Montando proposta…' : 'Preparar débitos com os valores do app'}
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Retificação (ADMIN) ─────────────────────────────────
+                        Apuração JÁ transmitida cujos valores mudaram no app
+                        (caso CLINICA MANTOAN 06/2026: aplicações financeiras
+                        lançadas depois). Reencerra o MIT (ENCAPURACAO314) e a
+                        Receita gera a DCTFWeb RETIFICADORA automaticamente.
+                        Botão só para admin; backend exige role admin (403). */}
+                    {!loading && !erro && data && retPodeOferecer && (
+                        <div className="mt-4 p-4 rounded-lg border border-rose-200 bg-rose-50 dark:bg-rose-900/20 dark:border-rose-800">
+                            <h4 className="font-bold text-sm text-rose-800 dark:text-rose-300">
+                                Retificar com os valores do app <span className="text-[10px] font-normal">(admin)</span>
+                            </h4>
+                            <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
+                                Se a apuração de {competencia} <b>já foi transmitida</b> e os valores mudaram no app
+                                (ex.: aplicações financeiras lançadas depois), o app reencerra o MIT com os débitos
+                                ajustados e a Receita gera a <b>DCTFWeb retificadora automaticamente</b>. Débitos de
+                                tributos que o app não apura são preservados.
+                            </p>
+
+                            {retErro && (
+                                <div className="mt-2 p-2 rounded border border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
+                                    {retErro}
+                                </div>
+                            )}
+
+                            {retResultado?.transmitido ? (
+                                <div className="mt-3 p-3 rounded border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-800 dark:text-emerald-300">
+                                    <b>✓ Retificação transmitida.</b>
+                                    <p className="text-xs mt-1">
+                                        Status: <b>{retResultado.statusEncerramento || 'PROCESSANDO'}</b>
+                                        {retResultado.protocolo && <> · Protocolo: <span className="font-mono">{retResultado.protocolo}</span></>}
+                                    </p>
+                                    <p className="text-[10px] mt-1 opacity-80">
+                                        O SERPRO processa o reencerramento de forma assíncrona e a Receita gera a
+                                        DCTFWeb retificadora na sequência. Acompanhe pelo botão MIT no Painel DCTFWeb.
+                                    </p>
+                                </div>
+                            ) : retProposta?.proposta ? (
+                                <div className="mt-3">
+                                    {/* PREVIEW OBRIGATÓRIO antes → depois, tributo a tributo. */}
+                                    <table className="w-full text-xs">
+                                        <thead>
+                                            <tr className="text-left text-rose-700 dark:text-rose-300 border-b border-rose-200 dark:border-rose-800">
+                                                <th className="py-1">Tributo</th>
+                                                <th className="py-1">Código</th>
+                                                <th className="py-1 text-right">Antes (MIT)</th>
+                                                <th className="py-1 text-right">Depois (app)</th>
+                                                <th className="py-1 text-right">Diferença</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {retProposta.proposta.mapeamento.map(m => (
+                                                <tr key={m.familia} className="border-b border-rose-100 dark:border-rose-900/40">
+                                                    <td className="py-1 font-medium">
+                                                        {m.familia}
+                                                        {m.acao === 'mantido' && <span className="ml-1 text-[9px] text-slate-400">(mantido)</span>}
+                                                        {m.acao === 'incluido' && <span className="ml-1 text-[9px] text-rose-500">(novo)</span>}
+                                                    </td>
+                                                    <td className="py-1 font-mono">{m.codigo}</td>
+                                                    <td className="py-1 text-right font-mono">{brl(m.antes)}</td>
+                                                    <td className="py-1 text-right font-mono font-bold">{brl(m.depois)}</td>
+                                                    <td className={`py-1 text-right font-mono ${m.diferenca > 0 ? 'text-rose-700 dark:text-rose-300' : m.diferenca < 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-400'}`}>
+                                                        {m.diferenca === 0 ? '—' : `${m.diferenca > 0 ? '+' : ''}${brl(m.diferenca)}`}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            <tr>
+                                                <td className="py-1 font-bold" colSpan={2}>Total</td>
+                                                <td className="py-1 text-right font-mono font-bold">{brl(retProposta.proposta.totalAntes)}</td>
+                                                <td className="py-1 text-right font-mono font-bold">{brl(retProposta.proposta.totalDepois)}</td>
+                                                <td className="py-1 text-right font-mono font-bold">
+                                                    {`${retProposta.proposta.totalDepois - retProposta.proposta.totalAntes > 0 ? '+' : ''}${brl(retProposta.proposta.totalDepois - retProposta.proposta.totalAntes)}`}
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <p className="text-[10px] text-rose-600 dark:text-rose-400 mt-1">
+                                        Confira ANTES de transmitir — o reencerramento substitui os débitos na Receita
+                                        Federal e gera a DCTFWeb retificadora. A ação fica registrada em auditoria
+                                        (quem, quando, antes → depois).
+                                    </p>
+                                    <div className="flex gap-2 mt-2">
+                                        <button
+                                            onClick={transmitirRetificacao}
+                                            disabled={retTransmitindo}
+                                            className="px-3 py-1.5 text-xs font-semibold bg-rose-600 text-white rounded hover:bg-rose-700 disabled:opacity-50"
+                                        >
+                                            {retTransmitindo ? 'Transmitindo…' : 'Confirmar e transmitir retificação'}
+                                        </button>
+                                        <button
+                                            onClick={() => { setRetProposta(null); setRetErro(null); }}
+                                            disabled={retTransmitindo}
+                                            className="px-3 py-1.5 text-xs bg-white dark:bg-slate-700 border border-rose-200 dark:border-rose-800 rounded disabled:opacity-50"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={prepararRetificacao}
+                                    disabled={retPreparando}
+                                    className="mt-3 px-3 py-1.5 text-xs font-semibold bg-rose-600 text-white rounded hover:bg-rose-700 disabled:opacity-50"
+                                >
+                                    {retPreparando ? 'Montando antes → depois…' : 'Preparar retificação (preview obrigatório)'}
                                 </button>
                             )}
                         </div>

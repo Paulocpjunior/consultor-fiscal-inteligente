@@ -33,16 +33,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Fila de features acordadas (com requisitos)
 
-1. **Retificação DCTFWeb/MIT pelo CFI** (aprovada 23/07/2026 — próxima feature):
-   - Botão "Retificar com os valores do app" na Conferência DCTFWeb × Apuração,
-     para quando a apuração JÁ FOI transmitida e os valores do app mudaram
-     (caso CLINICA MANTOAN 06/2026: aplicações financeiras lançadas depois).
-   - Mecânica: reencerramento MIT (ENCAPURACAO314) com débitos ajustados;
-     a DCTFWeb retificadora é gerada automaticamente pela Receita.
-   - **REQUISITO INEGOCIÁVEL: somente usuários ADMIN podem retificar**
-     (`req.user.role === 'admin'` no backend + esconder botão no front para
-     não-admin). Preview obrigatório do antes → depois antes de transmitir,
-     mesmo padrão do preenchimento atual.
+1. ~~Retificação DCTFWeb/MIT pelo CFI~~ **FEITA 24/07** (#292): seção
+   "Retificar com os valores do app" (admin) na Conferência DCTFWeb ×
+   Apuração. Regras implementadas: rota `/mit/retificar` com requireAdmin
+   E revalidação de role no orquestrador; exige apuração ENCERRADA
+   (situação 3 — senão aponta o fluxo de preenchimento); preview
+   obrigatório antes → depois por tributo; débitos de família que o app
+   não apura são PRESERVADOS (nunca remove tributo declarado); código de
+   débito vem do débito atual da própria família (família nova cai no
+   mês-modelo; sem código → falha clara); débito não classificável derruba
+   tudo (e-CAC manual). Auditoria em `dctfweb_mit_retificacoes` (antes/
+   depois/quem). Builder puro `montarDebitosRetificacaoMit` (11 testes).
+   Validar com o caso real CLINICA MANTOAN 06/2026.
 2. ~~Consolidação da Central de XMLs: 16 → 8 abas~~ **FEITA 24/07** (#277):
    8 grupos + sub-abas (padrão DctfwebHub), zero mudança de lógica. Grupos:
    Dashboard | Captura (Diagnóstico·Status·Backlog·NFC-e·Portal SP) | XMLs |

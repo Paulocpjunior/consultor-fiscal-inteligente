@@ -772,6 +772,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                         empresaId={selectedEmpresa.id}
                         competencia={fichaMes}
                         detalhamento={liveResults.detalhamento}
+                        isAdmin={currentUser?.role === 'admin'}
                         onClose={() => setConferirDctfwebAberto(false)}
                     />
                 )}
