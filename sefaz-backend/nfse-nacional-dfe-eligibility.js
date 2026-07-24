@@ -51,7 +51,13 @@ export function classificarElegibilidadeAdn({ empresa, cert, nowMs = Date.now() 
     // está em município aderente (ou sem codMun cadastrado — aí não dá pra
     // afirmar e mantemos, com o motivo aparecendo no card quando bloquear).
     const codMun = String(empresa?.codMunIBGE || '').replace(/\D/g, '');
-    if (codMun && caminhoNfseRecomendado(codMun) !== CAMINHO_NFSE.ADN) {
+    // BUG HISTÓRICO (achado 24/07 pelo card "0 elegíveis / 369 bloqueadas /
+    // 0 docs NA HISTÓRIA"): caminhoNfseRecomendado devolve um OBJETO — a
+    // comparação antiga `!== CAMINHO_NFSE.ADN` era sempre true e bloqueava
+    // TODA empresa com município preenchido como "sistema próprio". O trilho
+    // ADN (que é o padrão nacional 2026 e cobre os municípios fora da capital)
+    // nunca consultou ninguém. O certo é comparar o CAMPO .caminho.
+    if (codMun && caminhoNfseRecomendado(codMun).caminho !== CAMINHO_NFSE.ADN) {
         return {
             elegivel: false,
             motivo: 'Município usa sistema próprio de NFS-e (ex.: SP capital = portal CSV) — sem movimento no ADN Nacional.',
