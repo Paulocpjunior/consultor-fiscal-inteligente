@@ -153,6 +153,40 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                         </p>
                     </div>
                 )}
+
+                {/* Reconhecimento do portal (admin): baixa a estrutura real das
+                    páginas DareAvulso/Lote/GnreLote — ground-truth pra automação
+                    do lote XML-GNRE. Backend exige admin (403 pra demais). */}
+                <button
+                    onClick={async () => {
+                        setOcupado(true); setErro(null);
+                        try {
+                            const { getAuth } = await import('firebase/auth');
+                            const u = getAuth().currentUser;
+                            if (!u) throw new Error('Sessão expirada');
+                            const token = await u.getIdToken();
+                            const res = await fetch('/api/admin/dare/recon', { headers: { Authorization: `Bearer ${token}` } });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `dare-portal-recon-${new Date().toISOString().slice(0, 10)}.json`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                        } catch (e: any) {
+                            setErro(`Reconhecimento: ${e?.message || 'falha'}`);
+                        } finally {
+                            setOcupado(false);
+                        }
+                    }}
+                    disabled={ocupado}
+                    className="w-full px-2 py-1 text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 underline disabled:opacity-50"
+                    title="Admin: baixa a estrutura real do portal DARE (campos, códigos, layout do lote XML-GNRE) — base da automação total"
+                >
+                    🔬 Mapear portal DARE (admin — gera JSON do reconhecimento)
+                </button>
             </div>
         </div>
     );

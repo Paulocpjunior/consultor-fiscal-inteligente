@@ -87,3 +87,42 @@ describe('derivacoesDisponiveis por regime', () => {
         expect(derivacoesDisponiveis('outro')).toEqual([]);
     });
 });
+
+// @ts-expect-error — módulo .js puro
+import { extrairEstrutura, PAGINAS_DARE } from '../sefaz-backend/dare-recon.js';
+
+describe('dare-recon: extrairEstrutura (parser puro do reconhecimento)', () => {
+    const HTML = `
+      <form action="/DareICMS/DareAvulso" method="post" id="frmDare">
+        <input name="__RequestVerificationToken" type="hidden" value="tok" />
+        <input name="Cnpj" type="text" />
+        <input name="RazaoSocial" type="text" />
+        <input name="btnConsultar" type="submit" value="Consultar" />
+        <select name="TipoDebito">
+          <option value="">Selecione</option>
+          <option value="04601">ICMS- Operações Próprias- RPA (04601)</option>
+          <option value="14601">ICMS- Substituição Tributária- RPA (14601)</option>
+        </select>
+        <a href="/DareICMS/docs/leiaute-gnre.pdf">Leiaute</a>
+      </form>`;
+
+    it('extrai form, inputs (sem submit), select com options, token e link de layout', () => {
+        const e = extrairEstrutura(HTML);
+        expect(e.forms).toEqual([{ action: '/DareICMS/DareAvulso', method: 'POST', id: 'frmDare' }]);
+        expect(e.inputs).toEqual([{ name: 'Cnpj', type: 'text' }, { name: 'RazaoSocial', type: 'text' }]);
+        expect(e.tokens).toEqual(['__RequestVerificationToken']);
+        expect(e.selects[0].name).toBe('TipoDebito');
+        expect(e.selects[0].options).toContainEqual({ value: '04601', label: 'ICMS- Operações Próprias- RPA (04601)' });
+        expect(e.linksLayout).toEqual(['/DareICMS/docs/leiaute-gnre.pdf']);
+        expect(e.captcha).toBe(false);
+    });
+
+    it('detecta captcha e não quebra com HTML vazio', () => {
+        expect(extrairEstrutura('<div class="g-recaptcha"></div>').captcha).toBe(true);
+        expect(extrairEstrutura('').forms).toEqual([]);
+    });
+
+    it('páginas-alvo: avulso, lote e gnre-lote (as 3 do menu do portal)', () => {
+        expect(PAGINAS_DARE.map((p: any) => p.id).sort()).toEqual(['avulso', 'gnre-lote', 'lote']);
+    });
+});

@@ -15,8 +15,9 @@
 
 import { Router } from 'express';
 import admin from 'firebase-admin';
-import { requireAuth } from './require-admin.js';
+import { requireAuth, requireAdmin } from './require-admin.js';
 import { montarDare, derivacoesDisponiveis, CODIGOS_DARE_ICMS } from './dare-sp.js';
+import { reconhecerPortalDare } from './dare-recon.js';
 
 const router = Router();
 
@@ -62,6 +63,20 @@ router.post('/registrar', requireAuth, async (req, res) => {
     return res.json({ ok: true, id: doc.id, payload });
   } catch (e) {
     return res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+// Reconhecimento do portal DARE (somente leitura, admin): estrutura real das
+// páginas DareAvulso/DareLote/GnreLote — o ground-truth pra automação (lote
+// XML-GNRE / POST unitário) sem chutar contrato. Roda NO Cloud Run porque o
+// ambiente de dev não alcança a fazenda.sp.gov.br.
+router.get('/recon', requireAdmin, async (_req, res) => {
+  try {
+    const r = await reconhecerPortalDare();
+    return res.json({ ok: true, ...r });
+  } catch (e) {
+    console.error('[dare/recon] erro:', e);
+    return res.status(500).json({ ok: false, error: e.message });
   }
 });
 
