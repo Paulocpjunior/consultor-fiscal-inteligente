@@ -942,7 +942,10 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
         try {
           const { itens, movimentoDisponivel: mov } = await estadoNsuNacional(empresas);
           movimentoDisponivel = mov;
-          if (resumo.elegiveis <= 10) elegiveisLista = itens;
+          // Lista por empresa até 40 elegíveis (25/07, caso 4BZ/Jundiaí "por
+          // que segue 0?"): a linha da empresa responde na tela se ela foi
+          // consultada, se o ADN confirmou vazio ou se há doc esperando.
+          if (resumo.elegiveis <= 40) elegiveisLista = itens;
         } catch { /* sem state, farol mantém a rede de segurança */ }
         return {
           total: resumo.elegiveis,
@@ -1158,6 +1161,36 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       }
     }
 
+    // Top motivos de falha do trilho NFSe Nacional ADN — o card mostrava só
+    // "26 / 2" sem dizer QUEM falhou nem POR QUÊ (25/07, caso 4BZ). Agrega os
+    // erros recentes de nfse_nacional_dfe_erros com o CNPJ junto do motivo.
+    async function topFalhasNfseNacional(maxMotivos = 3) {
+      try {
+        const snap = await db.collection('nfse_nacional_dfe_erros')
+          .orderBy('registradoEm', 'desc').limit(30).get();
+        if (snap.empty) return null;
+        const contagem = new Map();
+        let maisRecenteMs = null;
+        for (const docSnap of snap.docs) {
+          const d = docSnap.data();
+          const ts = d.registradoEm?.toMillis?.() ?? null;
+          if (maisRecenteMs == null) maisRecenteMs = ts;
+          // Janela: só erros das últimas 48h (erro velho não é "principal
+          // motivo de falha" da rodada atual).
+          if (ts != null && maisRecenteMs != null && (maisRecenteMs - ts) > 48 * 3600000) break;
+          const chave = `${d.empresaCnpj ? d.empresaCnpj + ' — ' : ''}${String(d.motivo || 'sem motivo').slice(0, 140)}`;
+          contagem.set(chave, (contagem.get(chave) || 0) + 1);
+        }
+        const top = [...contagem.entries()]
+          .sort((a, b) => b[1] - a[1]).slice(0, maxMotivos)
+          .map(([motivo, quantidade]) => ({ motivo, quantidade }));
+        return top.length ? { executadoEmMs: maisRecenteMs, top } : null;
+      } catch (e) {
+        console.warn('[captura-diagnostico] topFalhasNfseNacional:', e.message);
+        return null;
+      }
+    }
+
     // Saúde do trilho de SAÍDA mod 55 pelo cofre de e-mail (substitui a SIEG).
     // A saída não vem da SEFAZ (Rejeição 641 — nunca entrega ao emissor): vem do
     // cliente apontar o emissor pro cofre. O farol mede ADOÇÃO. Lê:
@@ -1220,7 +1253,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       stateSefaz, stateNfseSp, stateNfseNac,
       docsNfe, docsNfseSp, docsNfseNac,
       falhasNfseSp, docsNfseNacTotal, falhasNfe,
-      cofreSaida,
+      falhasNfseNac, cofreSaida,
     ] = await Promise.all([
       ultimoLog('sefaz_cron_logs'),
       // 22/07: trilho oficial NFSe SP = PORTAL CSV; o WS legado (1102) foi pausado.
@@ -1260,6 +1293,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
         } catch (e) { return null; }
       })(),
       topFalhasNfe(),
+      topFalhasNfseNacional(),
       estadoCofreSaida(),
     ]);
 
@@ -1292,6 +1326,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           state: stateNfseNac,
           docsUltimos7d: docsNfseNac,
           docsTotalHistorico: docsNfseNacTotal,
+          topFalhas: falhasNfseNac,
           // Sinal do provedor pro farol honesto: false = ADN confirma que não há
           // documento (0 capturado é correto, não crítico); true = há doc e não
           // capturamos (bug); null = desconhecido (mantém rede de segurança).
