@@ -253,7 +253,9 @@ const CardCaptura: React.FC<{
                     );
                 })()}
                 {stateOk && (status.state as any).elegiveisLista?.length > 0 && (
-                    <div className="bg-white/50 border rounded p-2 text-xs space-y-1">
+                    // max-h + scroll: com 28 elegíveis a lista esticava o card
+                    // quilométrico e quebrava o grid dos 4 trilhos (25/07).
+                    <div className="bg-white/50 border rounded p-2 text-xs space-y-1 max-h-72 overflow-y-auto">
                         <div className="font-bold opacity-80">Quem são as elegíveis (e o que o provedor diz):</div>
                         {((status.state as any).elegiveisLista as Array<{
                             nome: string; cnpj: string;
