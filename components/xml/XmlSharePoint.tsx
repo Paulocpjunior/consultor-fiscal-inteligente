@@ -18,6 +18,12 @@ interface SharePointLastSync {
     empresasComConfigIncompleta?: number;
     erroFatal?: string | null;
     timestamp?: { _seconds: number };
+    /** Resultado por empresa — carrega o MOTIVO dos erros (errosDetalhe/erro). */
+    results?: {
+        empresaId?: string; empresaNome?: string;
+        novos?: number; duplicados?: number; erros?: number;
+        erro?: string; errosDetalhe?: string[]; configIncompleta?: boolean;
+    }[];
 }
 
 // Mostra o estado REAL do auto-sync diário (separado do /health do proxy).
@@ -66,6 +72,19 @@ const SharePointAutoSyncStatusLine: React.FC<{ lastSync: SharePointLastSync | nu
                     {' '}— <span className="text-amber-700 dark:text-amber-300">{lastSync.empresasComConfigIncompleta} empresa(s) com grupo/pasta não preenchidos (nada sincronizado para elas)</span>
                 </>
             )}
+            {/* Motivo dominante dos erros JUNTO da contagem (farol honesto) —
+                "9 erros" sem porquê obrigava a caçar no log (25/07). */}
+            {!temErroFatal && temErros && (() => {
+                const comErro = (lastSync.results || []).filter((r: any) => r.erro || (r.errosDetalhe || []).length > 0);
+                if (comErro.length === 0) return null;
+                const r0: any = comErro[0];
+                const motivo = r0.erro || (r0.errosDetalhe || [])[0] || '';
+                return (
+                    <>
+                        {' '}— <span className="text-red-700 dark:text-red-300">{r0.empresaNome || '—'}: {motivo}{comErro.length > 1 ? ` (+${comErro.length - 1} empresa(s) com erro — detalhe no card Auto-Sync abaixo)` : ''}</span>
+                    </>
+                );
+            })()}
             {!fresh && (
                 <>
                     {' '}— <span className="text-amber-700 dark:text-amber-300">parado há {Math.floor(ageH / 24)}d. Provável secret drift no Cloud Scheduler do job <code>sharepoint-auto-sync</code> (rotação 01/06 exigia atualização manual).</span>
@@ -402,6 +421,13 @@ interface AutoSyncStatus {
         competencia: string; totalNovos: number; totalDup: number; totalErros: number;
         empresasComConfigIncompleta?: number; erroFatal?: string | null;
         timestamp?: { _seconds: number };
+        /** Resultado por empresa do último run — carrega o MOTIVO dos erros
+         *  (errosDetalhe/erro), que o card escondia atrás do "N erros". */
+        results?: {
+            empresaId?: string; empresaNome?: string;
+            novos?: number; duplicados?: number; erros?: number;
+            erro?: string; errosDetalhe?: string[]; configIncompleta?: boolean;
+        }[];
     } | null;
     empresasAutoSync: { id: string; nome: string; cnpj: string; grupo: string; empresaPasta: string }[];
     /** Gap que trava a cópia no SharePoint (XMLs + IMPOSTOS): quem ainda
@@ -516,6 +542,22 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                             <p style={{ color: status.lastSync.totalErros > 0 ? 'var(--danger, #ef4444)' : undefined }}>
                                 {status.lastSync.totalNovos} novos, {status.lastSync.totalDup} duplicados, {status.lastSync.totalErros} erros
                             </p>
+                            {/* Farol honesto: erro sempre com o MOTIVO ao lado. O card
+                                dizia "9 erros" e escondia o porquê — os motivos já
+                                vinham no log (results[].errosDetalhe), só não eram
+                                renderizados (25/07). */}
+                            {status.lastSync.totalErros > 0 && (status.lastSync.results || []).some(r => r.erro || (r.errosDetalhe || []).length > 0) && (
+                                <div className="mt-1 space-y-0.5">
+                                    {(status.lastSync.results || [])
+                                        .filter(r => r.erro || (r.errosDetalhe || []).length > 0)
+                                        .slice(0, 6)
+                                        .map((r, i) => (
+                                            <p key={i} className="text-[10px]" style={{ color: 'var(--danger, #ef4444)' }}>
+                                                • {r.empresaNome || r.empresaId || '—'}: {r.erro || (r.errosDetalhe || []).join(' · ')}
+                                            </p>
+                                        ))}
+                                </div>
+                            )}
                             {status.lastSync.erroFatal && (
                                 <p className="font-semibold" style={{ color: 'var(--danger, #ef4444)' }}>
                                     ✗ Última execução FALHOU: {status.lastSync.erroFatal}
@@ -592,7 +634,13 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                                 </button>
                             </div>
                             <div className="max-h-48 overflow-y-auto space-y-0.5">
-                                {status!.empresasSemConfig!.map(e => (
+                                {status!.empresasSemConfig!.map(e => {
+                                    // Cadastro sem nome E sem CNPJ é lixo (não dá nem pra
+                                    // achar a pasta no SharePoint) — em vez de "Preencher",
+                                    // aponta a exclusão no painel do regime (25/07: a lista
+                                    // revelou 2 vazios e um "(deletar)" literal).
+                                    const vazio = !e.cnpj && (!e.nome || e.nome === '—');
+                                    return (
                                     <div key={e.id} className="flex items-center gap-2 text-xs py-0.5">
                                         <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
                                         <span className="font-mono" style={{ color: 'var(--text-muted)' }}>
@@ -600,15 +648,22 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                                         </span>
                                         <span className="truncate" style={{ color: 'var(--text-primary)' }}>{e.nome}</span>
                                         <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{e.fonte === 'simples' ? 'Simples' : 'Lucro'}</span>
-                                        <button
-                                            onClick={() => { setConfigEmpresaId(e.id); setConfigGrupo(''); setConfigPasta(''); }}
-                                            className="ml-auto text-[10px] font-bold underline shrink-0"
-                                            style={{ color: 'var(--accent)' }}
-                                        >
-                                            Preencher ↓
-                                        </button>
+                                        {vazio ? (
+                                            <span className="ml-auto text-[10px] font-bold shrink-0 text-amber-600" title="Cadastro sem nome e sem CNPJ — não tem o que preencher; exclua no painel do regime (🗑️ admin).">
+                                                ⚠ cadastro vazio — excluir no painel
+                                            </span>
+                                        ) : (
+                                            <button
+                                                onClick={() => { setConfigEmpresaId(e.id); setConfigGrupo(''); setConfigPasta(''); }}
+                                                className="ml-auto text-[10px] font-bold underline shrink-0"
+                                                style={{ color: 'var(--accent)' }}
+                                            >
+                                                Preencher ↓
+                                            </button>
+                                        )}
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
