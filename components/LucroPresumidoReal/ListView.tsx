@@ -13,6 +13,7 @@ import React, { useMemo, useState } from 'react';
 import type { LucroPresumidoEmpresa, User } from '../../types';
 import { PlusIcon, TrashIcon } from '../Icons';
 import LoteDareModal from './LoteDareModal';
+import { previewMesclagem, executarMesclagem, descreverResumo } from '../../services/empresasMergeService';
 
 // CNPJ SEMPRE formatado na exibição — a base tem registros mistos
 // ('05049535000170' e '05.049.535/0001-70'), o que escondia duplicatas do
@@ -28,11 +29,43 @@ export interface ListViewProps {
     onNovaEmpresa: () => void;
     onAbrir: (empresaId: string) => void;
     onExcluir: (empresaId: string) => void;
+    /** Chamado após uma mesclagem de duplicatas bem-sucedida (recarrega a lista). */
+    onMesclado?: () => void;
 }
 
-const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpresa, onAbrir, onExcluir }) => {
+const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpresa, onAbrir, onExcluir, onMesclado }) => {
     const [busca, setBusca] = useState('');
     const [loteDareAberto, setLoteDareAberto] = useState(false);
+    const [mesclando, setMesclando] = useState<string | null>(null);
+
+    // Mesclagem de duplicata quando AS DUAS têm fichas (o badge "qual excluir"
+    // não resolve esse caso): o cadastro clicado é o VENCEDOR; o gêmeo entra
+    // como perdedor. Preview obrigatório → confirmação → executar; o perdedor
+    // vira lápide _merged_into (não é apagado).
+    const mesclarDuplicata = async (vencedor: LucroPresumidoEmpresa) => {
+        const cnpjN = String(vencedor.cnpj || '').replace(/\D/g, '');
+        const gemeo = empresas.find(e => e.id !== vencedor.id && String(e.cnpj || '').replace(/\D/g, '') === cnpjN);
+        if (!gemeo) { alert('Gêmeo não encontrado na lista.'); return; }
+        setMesclando(vencedor.id);
+        try {
+            const p = await previewMesclagem('lucro', vencedor.id, gemeo.id);
+            if (!p.ok) { alert(`Preview falhou: ${p.error}`); return; }
+            const msg = `MESCLAR duplicatas de ${vencedor.nome}?\n\n`
+                + `MANTIDO: "${vencedor.nome}" (${(vencedor.fichaFinanceira || []).length} ficha(s))\n`
+                + `MESCLADO E ARQUIVADO: o gêmeo com ${(gemeo.fichaFinanceira || []).length} ficha(s)\n\n`
+                + `${descreverResumo(p.resumo, p.conflitos)}\n\n`
+                + 'O gêmeo sai de todas as listas (lápide de mesclagem) — nada é apagado.';
+            if (!confirm(msg)) return;
+            const r = await executarMesclagem('lucro', vencedor.id, gemeo.id);
+            if (!r.ok) { alert(`Mesclagem falhou: ${r.error}`); return; }
+            alert(`✓ Mesclado. ${descreverResumo(r.resumo, r.conflitos)}`);
+            onMesclado?.();
+        } catch (e: any) {
+            alert(`Mesclagem falhou: ${e?.message || e}`);
+        } finally {
+            setMesclando(null);
+        }
+    };
     const empresasFiltradas = useMemo(() => {
         const termo = busca.trim().toLowerCase();
         if (!termo) return empresas;
@@ -113,21 +146,37 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                                     {cnpjsDuplicados.has(String(emp.cnpj || '').replace(/\D/g, '')) && (() => {
                                         // Responde "qual excluir?" com dado: quem tem 0 fichas é o
                                         // cadastro-lixo; quem tem fichas é o verdadeiro. Duas com
-                                        // fichas = NÃO excluir nenhuma (precisa mesclagem — admin).
+                                        // fichas = mesclagem (admin): o clicado é mantido e o gêmeo
+                                        // entra com os meses que faltam + lápide _merged_into.
                                         const nFichas = (emp.fichaFinanceira || []).length;
+                                        const cnpjN = String(emp.cnpj || '').replace(/\D/g, '');
+                                        const gemeo = empresas.find(e => e.id !== emp.id && String(e.cnpj || '').replace(/\D/g, '') === cnpjN);
+                                        const ambasComFichas = nFichas > 0 && (gemeo?.fichaFinanceira || []).length > 0;
                                         return (
-                                            <span
-                                                className={`ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded ${
-                                                    nFichas === 0
-                                                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
-                                                }`}
-                                                title={nFichas === 0
-                                                    ? 'CNPJ duplicado e SEM fichas — este é o cadastro que pode ser excluído (🗑️).'
-                                                    : `CNPJ duplicado, mas este cadastro TEM ${nFichas} ficha(s) — é o que deve ser MANTIDO. Exclua o gêmeo sem fichas.`}
-                                            >
-                                                ⚠ duplicada · {nFichas === 0 ? '0 fichas — excluir este' : `${nFichas} ficha(s) — manter`}
-                                            </span>
+                                            <>
+                                                <span
+                                                    className={`ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded ${
+                                                        nFichas === 0
+                                                            ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                                    }`}
+                                                    title={nFichas === 0
+                                                        ? 'CNPJ duplicado e SEM fichas — este é o cadastro que pode ser excluído (🗑️).'
+                                                        : `CNPJ duplicado, mas este cadastro TEM ${nFichas} ficha(s) — é o que deve ser MANTIDO. Exclua o gêmeo sem fichas.`}
+                                                >
+                                                    ⚠ duplicada · {nFichas === 0 ? '0 fichas — excluir este' : `${nFichas} ficha(s) — manter`}
+                                                </span>
+                                                {ambasComFichas && currentUser?.role === 'admin' && (
+                                                    <button
+                                                        onClick={(ev) => { ev.stopPropagation(); mesclarDuplicata(emp); }}
+                                                        disabled={mesclando !== null}
+                                                        className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 hover:bg-violet-200 disabled:opacity-50"
+                                                        title="As DUAS têm fichas — mescla o gêmeo NESTE cadastro (mantém este; copia do gêmeo só os meses que faltam; o gêmeo vira lápide de mesclagem). Preview antes de aplicar."
+                                                    >
+                                                        {mesclando === emp.id ? '⏳ mesclando…' : '⇄ Mesclar aqui'}
+                                                    </button>
+                                                )}
+                                            </>
                                         );
                                     })()}
                                 </td>

@@ -1013,6 +1013,10 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
         const elegiveis = new Map(); // cnpj -> id (de quem vai mesmo ser capturado)
         let bloqueadas = 0;
         const nowMs = Date.now();
+        // Motivos dos bloqueios (25/07): o card mostrava "272 bloqueadas" sem
+        // dizer POR QUÊ — mesmo padrão do card ADN, que já quebra por motivo.
+        const bloqueiosPorMotivo = {};
+        const contaMotivo = (m) => { bloqueiosPorMotivo[m] = (bloqueiosPorMotivo[m] || 0) + 1; };
         for (const [cnpj, info] of candidatos) {
           const certMeta = certsPorId.get(info.id);
           const temA1Proprio = certA1MetadataValido(certMeta, nowMs);
@@ -1022,6 +1026,13 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
             elegiveis.set(cnpj, info.id);
           } else {
             bloqueadas++;
+            if (certMeta?.tipoCert === 'A3') {
+              contaMotivo('Certificado A3 — capturada pelo agente local (cfi-a3), fora do cron em nuvem.');
+            } else if (certMeta) {
+              contaMotivo('A1 cadastrado mas inválido (vencido ou sem PFX/senha) — reenvie o .pfx na coluna Certificado.');
+            } else {
+              contaMotivo('Sem certificado A1 (nem próprio, nem da mesma raiz CNPJ) — suba o A1 da empresa na coluna Certificado do Status.');
+            }
           }
         }
 
@@ -1042,7 +1053,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
             if (!ts || ts < seteDias) travadas++;
           }
         } catch (e) { /* sem state, deixa travadas=0 */ }
-        return { total, travadas, bloqueadas };
+        return { total, travadas, bloqueadas, bloqueiosPorMotivo };
       } catch (e) {
         return { erro: e.message };
       }

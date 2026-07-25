@@ -88,6 +88,12 @@ const SimplesNacionalSection: React.FC<Props> = ({
                             }
                         }}
                         onShowToast={(msg) => setToastMessage(msg)}
+                        onMesclado={async () => {
+                            // Pós-mesclagem: refetch da nuvem — a perdedora (lápide
+                            // _merged_into) some e a vencedora volta com os meses novos.
+                            const atualizadas = await simplesService.getEmpresas(currentUser);
+                            setSimplesEmpresas(atualizadas);
+                        }}
                         currentUser={currentUser}
                     />
                 )}

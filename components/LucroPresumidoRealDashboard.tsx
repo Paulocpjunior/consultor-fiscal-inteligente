@@ -749,6 +749,12 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                     onNovaEmpresa={() => setView('new_company')}
                     onAbrir={(id) => { setSelectedEmpresaId(id); setView('details'); }}
                     onExcluir={handleDeleteCompany}
+                    onMesclado={async () => {
+                        // Pós-mesclagem: refetch da nuvem — o perdedor (lápide
+                        // _merged_into) some e o vencedor volta com as fichas novas.
+                        const atualizadas = await lucroPresumidoService.getEmpresas(currentUser);
+                        setEmpresas(atualizadas);
+                    }}
                 />
             )}
             {view === 'new_company' && renderNewCompany()}
