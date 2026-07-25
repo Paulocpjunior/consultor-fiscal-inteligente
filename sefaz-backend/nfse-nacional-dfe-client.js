@@ -161,6 +161,22 @@ export async function consultarDFe({ empresaId, empresaCnpj, nsu = '0', tipoNSU 
     const cert = await obterCertParaConsulta(empresaId, cnpjNum);
     const { statusCode, body } = await getAdn(path, cert);
 
+    // 404 + E2220 ("NENHUM_DOCUMENTO_ENCONTRADO") é a forma do ADN dizer
+    // "não há documento pra esse CNPJ" — NÃO é falha. Tratar como erro fazia
+    // a empresa aparecer em "falhas" e nunca ganhar state/semMovimento (25/07:
+    // as "2 falhas" do card eram exatamente isto — WM PAINEIS e ENGPES).
+    if (statusCode === 404 && /E2220|NENHUM_DOCUMENTO/i.test(body)) {
+        return {
+            ok: true,
+            statusCode,
+            lote: [],
+            ultNSU: nsuStr,
+            maxNSU: nsuStr, // provedor confirma: nada além do cursor atual
+            motivo: null,
+            fonte: cert.fonte,
+        };
+    }
+
     // Não foi 200 — retorna pra orquestrador decidir o que fazer
     if (statusCode !== 200) {
         return {

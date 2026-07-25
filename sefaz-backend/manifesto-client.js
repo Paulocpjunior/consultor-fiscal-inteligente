@@ -27,7 +27,12 @@ import { loadCertificate } from './secret-loader.js';
 // ── Constantes SEFAZ ────────────────────────────────────────────────────────
 const SEFAZ_HOST = 'www1.nfe.fazenda.gov.br';
 const SEFAZ_PATH = '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx';
-const SOAP_ACTION = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento/nfeRecepcaoEvento';
+// Namespace/action do WSDL v4 (25/07): o serviço é o NFeRecepcaoEvento4 e o
+// namespace do nfeDadosMsg TEM o sufixo "4" — sem ele o .asmx não roteia a
+// mensagem e devolve HTTP 500 com SOAP Fault (491× "SEFAZ HTTP 500" na noite
+// de 24/07, TODAS as manifestações).
+const NS_WSDL = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4';
+const SOAP_ACTION = `${NS_WSDL}/nfeRecepcaoEvento`;
 const NS_NFE = 'http://www.portalfiscal.inf.br/nfe';
 const NS_SOAP = 'http://www.w3.org/2003/05/soap-envelope';
 const COD_AMBIENTE_NACIONAL = '91';
@@ -154,7 +159,7 @@ export async function enviarLoteSefaz(eventosAssinadosXml, idLote = null, certOv
   const soap = `<?xml version="1.0" encoding="UTF-8"?>` +
     `<soap12:Envelope xmlns:soap12="${NS_SOAP}">` +
     `<soap12:Body>` +
-      `<nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento">` +
+      `<nfeDadosMsg xmlns="${NS_WSDL}">` +
         envEvento +
       `</nfeDadosMsg>` +
     `</soap12:Body>` +
@@ -182,7 +187,14 @@ export async function enviarLoteSefaz(eventosAssinadosXml, idLote = null, certOv
       res.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
         if (res.statusCode !== 200) {
-          return reject(new Error(`SEFAZ HTTP ${res.statusCode}: ${body.slice(0, 500)}`));
+          // Extrai a RAZÃO do SOAP Fault (soap:Text / faultstring) — o erro
+          // truncado no início do envelope escondia o motivo real ("erros sem
+          // explicação" no card, 25/07). O trecho do envelope fica de fallback.
+          const fault = (body.match(/<(?:\w+:)?Text[^>]*>([\s\S]*?)<\/(?:\w+:)?Text>/) || [])[1]
+            || (body.match(/<faultstring[^>]*>([\s\S]*?)<\/faultstring>/) || [])[1]
+            || (body.match(/<(?:\w+:)?Reason[^>]*>([\s\S]*?)<\/(?:\w+:)?Reason>/) || [])[1];
+          const detalhe = fault ? `SOAP Fault: ${fault.trim().slice(0, 300)}` : body.slice(0, 500);
+          return reject(new Error(`SEFAZ HTTP ${res.statusCode}: ${detalhe}`));
         }
         resolve(body);
       });
