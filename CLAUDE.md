@@ -38,11 +38,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Fluxos ligados: DAS (Graph + "abrir no meu e-mail" + WhatsApp), DARF
   (DetalheDeclaracao) e DARE (DareSpModal). Feature nova de guia DEVE
   chamar o rito.
+- **Retenções IRPJ/CSLL: conferência/MIT usam o LÍQUIDO** (Paulo, 24/07 —
+  #298, reverte o critério do #205): retenção sofrida é deduzida NA
+  APURAÇÃO (não é vinculação da DCTFWeb) e o débito do MIT vira o DARF.
+  extrairTributosApp soma det.valor; valorBruto é só exibição. Caso de
+  referência: HS PROJETOS 2026-06 (IRPJ 2.106,14 líq / 8.733,53 bruto).
+- **Captura NUNCA assume SP Capital** (#296/#297): trilho NFSe SP (portal)
+  só com codMunIBGE==3550308; demais municípios = ADN
+  (caminhoNfseRecomendado — CUIDADO: devolve OBJETO, comparar .caminho).
+  ADN 404+E2220 = "sem documento" (sucesso-vazio, #302). Farol ADN usa
+  movimentoDisponivel (maxNSU==ultNSU ⇒ âmbar "sem movimento", #299).
+- **Gate de auditoria do deploy**: bloqueia em high/critical de QUALQUER
+  dep (dev incluso). 2 falhas em 30 runs, ambas por advisory novo
+  publicado entre deploys (postcss 24/07 #295; brace-expansion 25/07
+  #301). LIÇÃO: pino de segurança em `overrides` do package.json trava o
+  audit fix quando o pinado ganha advisory — revisitar os pinos ao
+  destravar (hoje: brace-expansion 5.0.8, protobufjs 7.6.5).
 - CNPJ escritório: 44.388.152/0001-89. Projeto GCP `consultorfiscalapp`
   (us-west1). Scheduler: `scripts/setup-cloud-schedulers.sh` (idempotente;
   o Paulo roda no Mac dele — clone em `~/consultor-fiscal-inteligente`).
   Frontend+backend = MESMO serviço Cloud Run: deploy mata captura em
-  andamento — checar o banner do Diagnóstico antes de mesclar.
+  andamento — checar o banner do Diagnóstico antes de mesclar (deploy
+  20:19 de 24/07 matou o manifest-cron das 20:10 → alerta de FALHA).
 
 ## Fila de features acordadas (com requisitos)
 
@@ -78,12 +95,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   (Paulo pede em api_dare_icms@fazenda.sp.gov.br). NUNCA gerar
   número/barras de DARE localmente (é do sistema da SEFAZ).
 
-- **Paulo rodar `setup-cloud-schedulers.sh` no Mac**: cria os 3 crons órfãos
-  descobertos (das-cron-noturno 03:40, dctfweb-cron-noturno 04:30,
-  caixa-postal-cron-diario 05:00 — rotas existiam, jobs nunca/não mais).
-- **Manifestações (ciência) falhando 100%** (0 ok · 500 falhas às ~16h de
-  23/07): após deploy do #271 o card "Saúde dos crons" mostra o motivo
-  dominante — diagnosticar por ele.
+- ~~Paulo rodar `setup-cloud-schedulers.sh`~~ **FEITO 24/07** (3 crons
+  órfãos criados e rodando OK: das/dctfweb/caixa-postal).
+- **Manifestações (ciência)**: 23/07 = TLS www→www1 (#273); 24-25/07 =
+  491× "SEFAZ HTTP 500" SOAP Fault → causa-raiz achada 25/07 (#302):
+  namespace WSDL sem o sufixo "4" no NFeRecepcaoEvento4 (nfeDadosMsg +
+  SOAPAction) — .asmx não roteava. **VALIDAR**: cron roda a cada 2h
+  (15 */2 * * *); esperar cStat 135 em massa e resumos virando procNFe.
+  Erro agora extrai a razão do SOAP Fault (fim do XML truncado).
+- **Obrigações de JULHO nunca geradas**: tarefas-cron-mensal (dia 1)
+  falhou em 01/06 e 01/07; job recriado 24/07 mas só dispara 01/08.
+  **Paulo: Cloud Scheduler → tarefas-cron-mensal → "Forçar execução"**
+  (gera as pendências de julho e destrava as baixas do rito #293).
+  vencimentos-cron-diario atrasado 3d — observar segunda 08:00.
+- **4BZ CONSULTORIA (Jundiaí) — caso fechado no app, gap do município**:
+  card ADN mostra "✓ ADN sem movimento · NSU 0/0" = consultamos certo e
+  a prefeitura de Jundiaí NÃO transcreveu nada ao ADN (nem a NF emitida
+  24/07). Acompanhar 2-3 dias úteis; se seguir vazio, cobertura via
+  importação manual até Jundiaí aderir. TI do cliente configurou nosso
+  CNPJ no lugar errado (Bloco 0100 do SPED — não roteia XML); o certo é
+  cópia de e-mail no EMISSOR pro cofre OU autXML (instruções prontas na
+  Cobertura de Saída).
 - ~~SharePoint só recebe docs do cofre~~ **FEITO 24/07** (#279): arquiva
   TODAS as capturas, backfill progressivo por cursor (~2.6k XMLs/dia,
   cron 20 8-20h). SÓ sobe empresa com `sharePointConfig` (grupo+pasta)
