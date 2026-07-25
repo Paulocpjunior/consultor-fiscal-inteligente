@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { SimplesNacionalEmpresa, SimplesNacionalNota, User } from '../types';
 import * as simplesService from '../services/simplesNacionalService';
 import { PlusIcon, InfoIcon, ShieldIcon, PencilIcon, TrashIcon } from './Icons';
+import { previewMesclagem, executarMesclagem, descreverResumo } from '../services/empresasMergeService';
 
 interface SimplesNacionalDashboardProps {
     empresas: SimplesNacionalEmpresa[];
@@ -13,6 +14,8 @@ interface SimplesNacionalDashboardProps {
     onDelete?: (empresa: SimplesNacionalEmpresa) => void;
     currentUser?: User | null;
     onShowToast?: (msg: string) => void;
+    /** Chamado após mesclagem de duplicatas (recarrega a lista da nuvem). */
+    onMesclado?: () => void;
 }
 
 // CNPJ SEMPRE formatado na exibição — mesmo padrão do Lucro (ListView): a
@@ -23,7 +26,32 @@ const fmtCnpj = (c?: string): string => {
     return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : (c || '—');
 };
 
-const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ empresas, notas, onSelectEmpresa, onAddNew, onEdit, onDelete, currentUser, onShowToast }) => {
+const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ empresas, notas, onSelectEmpresa, onAddNew, onEdit, onDelete, currentUser, onShowToast, onMesclado }) => {
+    const [mesclando, setMesclando] = useState<string | null>(null);
+
+    // Mesclagem quando AS DUAS duplicatas têm lançamentos (mesmo fluxo do
+    // Lucro): clicada = vencedora; gêmea entra com os meses que faltam e vira
+    // lápide _merged_into. Preview obrigatório antes de aplicar.
+    const mesclarDuplicata = async (vencedora: SimplesNacionalEmpresa) => {
+        const cnpjN = String(vencedora.cnpj || '').replace(/\D/g, '');
+        const gemea = empresas.find(e => e.id !== vencedora.id && String(e.cnpj || '').replace(/\D/g, '') === cnpjN);
+        if (!gemea) { onShowToast?.('Gêmea não encontrada na lista.'); return; }
+        setMesclando(vencedora.id);
+        try {
+            const p = await previewMesclagem('simples', vencedora.id, gemea.id);
+            if (!p.ok) { onShowToast?.(`Preview falhou: ${p.error}`); return; }
+            const msg = `MESCLAR duplicatas de ${vencedora.nome}?\n\nMANTIDA: "${vencedora.nome}"\nMESCLADA E ARQUIVADA: a gêmea\n\n${descreverResumo(p.resumo, p.conflitos)}\n\nA gêmea sai de todas as listas (lápide de mesclagem) — nada é apagado.`;
+            if (!confirm(msg)) return;
+            const r = await executarMesclagem('simples', vencedora.id, gemea.id);
+            if (!r.ok) { onShowToast?.(`Mesclagem falhou: ${r.error}`); return; }
+            onShowToast?.(`✓ Mesclado. ${descreverResumo(r.resumo, r.conflitos)}`);
+            onMesclado?.();
+        } catch (e: any) {
+            onShowToast?.(`Mesclagem falhou: ${e?.message || e}`);
+        } finally {
+            setMesclando(null);
+        }
+    };
 
     const empresasComResumo = useMemo(() => {
         return empresas.map(empresa => {
@@ -123,7 +151,12 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                                 // (faturamento/histórico) é o cadastro-lixo; quem tem dados é
                                                 // o verdadeiro. Dois com dados = NÃO excluir nenhum (mesclar).
                                                 const nLanc = Object.keys(e.faturamentoManual || {}).length + (e.historicoCalculos || []).length;
+                                                const cnpjN = String(e.cnpj || '').replace(/\D/g, '');
+                                                const gemea = empresas.find(x => x.id !== e.id && String(x.cnpj || '').replace(/\D/g, '') === cnpjN);
+                                                const nLancGemea = gemea ? Object.keys(gemea.faturamentoManual || {}).length + (gemea.historicoCalculos || []).length : 0;
+                                                const ambasComDados = nLanc > 0 && nLancGemea > 0;
                                                 return (
+                                                    <>
                                                     <span
                                                         className={`ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded ${
                                                             nLanc === 0
@@ -136,6 +169,17 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                                     >
                                                         ⚠ duplicada · {nLanc === 0 ? '0 lançamentos — excluir este' : `${nLanc} lançamento(s) — manter`}
                                                     </span>
+                                                    {ambasComDados && isAdminView && (
+                                                        <button
+                                                            onClick={(ev) => { ev.stopPropagation(); mesclarDuplicata(e); }}
+                                                            disabled={mesclando !== null}
+                                                            className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 hover:bg-violet-200 disabled:opacity-50"
+                                                            title="As DUAS têm lançamentos — mescla a gêmea NESTE cadastro (mantém este; copia da gêmea só os meses que faltam; a gêmea vira lápide de mesclagem). Preview antes de aplicar."
+                                                        >
+                                                            {mesclando === e.id ? '⏳ mesclando…' : '⇄ Mesclar aqui'}
+                                                        </button>
+                                                    )}
+                                                    </>
                                                 );
                                             })()}
                                             <p className="font-normal font-mono text-slate-500 dark:text-slate-400">{fmtCnpj(e.cnpj)}</p>
