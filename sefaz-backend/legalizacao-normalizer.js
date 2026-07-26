@@ -90,8 +90,21 @@ const texto = (v) => {
 
 const cnpjDigits = (v) => {
     const d = String(v || '').replace(/\D/g, '');
-    return d.length >= 11 ? d : null; // aceita CPF (11) e CNPJ (14)
+    if (d.length < 11) return null; // aceita CPF (11) e CNPJ (14)
+    // Placeholder da tabela real: "00-000-000/0000-00" = sem CNPJ (~110 registros,
+    // geralmente pessoa física). Todos-zeros não é documento.
+    if (/^0+$/.test(d)) return null;
+    return d;
 };
+
+/**
+ * Empresa marcada como fora de operação no próprio nome — padrão da equipe na
+ * tabela: "(INATIVA) FULANO LTDA", "(PARALIZADO)", "(suspensa)", "(encerrada)".
+ * Essas continuam no painel, mas NÃO gera alerta ao cliente (seria spam).
+ */
+export function empresaInativa(nome) {
+    return /\(\s*(inativ|paraliz|suspens|encerrad)/i.test(String(nome || ''));
+}
 
 function emailValido(v) {
     const s = texto(v);
@@ -113,9 +126,18 @@ export function normalizarSubmissionCertidao(sub) {
 
     const tipoCertificado = texto(acharResposta(a, ['selecione um dos certificados']));
     const tipoCertidao = texto(acharResposta(a, ['selecione uma das certidoes']));
-    const categoria = tipoCertificado ? 'certificado' : 'certidao';
+    // O campo de certificados da tabela real também carrega procuração
+    // ("7-PROCURAÇÃO ELETRONICA...") e o marcador "8- NÃO POSSUE CERTIFICADO".
+    const detalheNorm = normalizarTexto(tipoCertificado || '');
+    const categoria = detalheNorm.includes('procuracao') ? 'procuracao'
+        : tipoCertificado ? 'certificado' : 'certidao';
+    const semDocumento = /nao possue|nao possui/.test(detalheNorm);
 
     return {
+        // semDocumento=true: linha de controle sem certificado real — fica no
+        // painel mas o cron NÃO alerta o cliente.
+        semDocumento,
+        empresaInativa: empresaInativa(empresaNome),
         origem: 'jotform',
         formId: String(sub.form_id || ''),
         submissionId: String(sub.id),
@@ -147,6 +169,8 @@ export function normalizarSubmissionParcelamento(sub) {
         formId: String(sub.form_id || ''),
         submissionId: String(sub.id),
         categoria: 'parcelamento',
+        semDocumento: false,
+        empresaInativa: empresaInativa(empresaNome),
         tipoDetalhe: texto(acharResposta(a, ['parcelamento orgao'])) || 'Parcelamento',
         empresaNome,
         empresaNumero: texto(acharResposta(a, ['n empresa'])),
