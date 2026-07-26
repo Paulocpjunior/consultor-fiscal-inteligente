@@ -100,6 +100,9 @@ const CardCaptura: React.FC<{
             // NFSe Nacional: sinal do provedor. false = ADN confirma que não há doc
             // disponível → "0 capturado" é correto, não pinta vermelho de falha.
             movimentoDisponivel: status.movimentoDisponivel ?? null,
+            // Cron seg-sex (pelo scheduler declarado): fim de semana não conta
+            // como atraso — domingo 26/07 amarelou o painel inteiro à toa.
+            cadenciaSegSex: /seg-sex/i.test(status.schedulerEsperado || ''),
             agoraMs: Date.now(),
         });
     const cor = COR_POR_NIVEL[saude.nivel];
@@ -190,10 +193,12 @@ const CardCaptura: React.FC<{
                 {/* Por que está falhando — agregado da última execução. Sem isto
                     o card dizia "0/121" e ninguém sabia a causa. */}
                 {status.topFalhas?.top && status.topFalhas.top.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded p-2 text-xs space-y-1">
+                    <div className="bg-red-50 border border-red-200 rounded p-2 text-xs space-y-1 overflow-hidden">
                         <div className="font-bold text-red-800">Principais motivos de falha:</div>
                         {status.topFalhas.top.map((f, i) => (
-                            <div key={i} className="text-red-700">
+                            // break-all: motivo com JSON/token gigante estourava pra
+                            // fora do card (print 26/07 — E2220 do ADN).
+                            <div key={i} className="text-red-700 break-all">
                                 <span className="font-mono font-bold">{f.quantidade}×</span> {f.motivo}
                             </div>
                         ))}

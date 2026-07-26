@@ -154,3 +154,36 @@ describe('avaliarSaudeCofreSaida (saída mod 55 pelo cofre de e-mail)', () => {
         expect(r.motivo).toMatch(/Recebendo saída/);
     });
 });
+
+// ── Fim de semana não é atraso (26/07: painel inteiro amarelou num domingo) ──
+import { horasFimDeSemanaEntre } from '../services/capturaSaude';
+
+describe('cadenciaSegSex — fim de semana não conta como atraso', () => {
+    // Sex 24/07/2026 05:00 UTC (02:00 BRT) → Dom 26/07/2026 12:00 UTC (09:00 BRT)
+    const SEX_CRON = Date.parse('2026-07-24T05:00:00Z');
+    const DOM_MANHA = Date.parse('2026-07-26T12:00:00Z');
+
+    it('horasFimDeSemanaEntre conta só sáb/dom em BRT', () => {
+        // Sex 02:00 BRT → dom 09:00 BRT = 55h brutas; sábado inteiro (24h) +
+        // domingo 00:00-09:00 BRT (9h) = 33h de fim de semana.
+        expect(horasFimDeSemanaEntre(SEX_CRON, DOM_MANHA)).toBeCloseTo(33, 0);
+        // Intervalo todo em dias úteis → 0.
+        expect(horasFimDeSemanaEntre(Date.parse('2026-07-21T12:00:00Z'), Date.parse('2026-07-22T12:00:00Z'))).toBe(0);
+    });
+
+    it('domingo de manhã com cron seg-sex que rodou sexta → OK, não atraso', () => {
+        const r = avaliarSaudeCaptura({
+            ultimoMs: SEX_CRON, sucessos: 5, falhas: 0, docsUltimos7d: 100,
+            elegiveis: 10, cadenciaSegSex: true, agoraMs: DOM_MANHA,
+        });
+        expect(r.nivel).toBe('ok'); // 55h brutas - 33h de fds = 22h úteis < 30h
+    });
+
+    it('sem a flag, o mesmo cenário segue como atraso (rede de segurança intacta)', () => {
+        const r = avaliarSaudeCaptura({
+            ultimoMs: SEX_CRON, sucessos: 5, falhas: 0, docsUltimos7d: 100,
+            elegiveis: 10, agoraMs: DOM_MANHA,
+        });
+        expect(r.nivel).toBe('atencao');
+    });
+});
