@@ -33,15 +33,45 @@ export interface SinaisCaptura {
      * trilhos deixam null e seguem a regra clássica do "sucesso vazio".
      */
     movimentoDisponivel?: boolean | null;
+    /**
+     * Cron roda só em dia útil (seg-sex)? Se sim, as horas de FIM DE SEMANA
+     * não contam como atraso — 26/07 (domingo): os 4 cards amarelaram com
+     * "há 36h/50h (esperado <30h)" sendo que sábado/domingo não HÁ execução
+     * agendada. Farol honesto vale nos dois sentidos: também não pode gritar
+     * atraso quando o calendário diz que não era pra rodar.
+     */
+    cadenciaSegSex?: boolean;
     agoraMs: number;
 }
 
+/**
+ * Horas de FIM DE SEMANA (sáb/dom, fuso BRT = UTC-3) dentro do intervalo
+ * [inicioMs, fimMs]. Pura, usada pra descontar o "atraso" de cron seg-sex.
+ */
+export function horasFimDeSemanaEntre(inicioMs: number, fimMs: number): number {
+    if (!(fimMs > inicioMs)) return 0;
+    const HORA = 3600000;
+    const OFFSET_BRT = 3 * HORA; // BRT = UTC-3 (sem horário de verão desde 2019)
+    let horas = 0;
+    // Caminha de hora em hora (intervalos reais aqui são dias, não anos).
+    for (let t = inicioMs; t < fimMs; t += HORA) {
+        const dia = new Date(t - OFFSET_BRT).getUTCDay(); // 0=dom, 6=sáb em BRT
+        if (dia === 0 || dia === 6) horas += Math.min(HORA, fimMs - t) / HORA;
+    }
+    return horas;
+}
+
 export function avaliarSaudeCaptura(s: SinaisCaptura): SaudeCaptura {
-    const horas = s.ultimoMs ? (s.agoraMs - s.ultimoMs) / 3600000 : null;
+    const horasBrutas = s.ultimoMs ? (s.agoraMs - s.ultimoMs) / 3600000 : null;
+    // Cron seg-sex: fim de semana não conta como atraso (26/07: painel inteiro
+    // amarelou num domingo por "atraso" que era só o calendário).
+    const horas = horasBrutas === null
+        ? null
+        : (s.cadenciaSegSex ? Math.max(0, horasBrutas - horasFimDeSemanaEntre(s.ultimoMs!, s.agoraMs)) : horasBrutas);
 
     // 1) Nem roda — crítico.
     if (horas === null) return { nivel: 'critico', motivo: 'Nunca executado.' };
-    if (horas > 72) return { nivel: 'critico', motivo: `Sem execução há ${Math.floor(horas / 24)} dia(s).` };
+    if (horas > 72) return { nivel: 'critico', motivo: `Sem execução há ${Math.floor(horas / 24)} dia(s) útil(eis).` };
 
     const sucessos = s.sucessos ?? null;
     const falhas = s.falhas ?? null;
@@ -83,9 +113,9 @@ export function avaliarSaudeCaptura(s: SinaisCaptura): SaudeCaptura {
         return { nivel: 'atencao', motivo: `Falhas (${falhas}) superam sucessos (${sucessos}) na última execução.` };
     }
 
-    // 5) Execução atrasada — atenção.
+    // 5) Execução atrasada — atenção (horas ÚTEIS quando o cron é seg-sex).
     if (horas >= 30) {
-        return { nivel: 'atencao', motivo: `Última execução há ${Math.floor(horas)}h (esperado <30h).` };
+        return { nivel: 'atencao', motivo: `Última execução há ${Math.floor(horas)}h útil(eis) (esperado <30h${s.cadenciaSegSex ? '; fim de semana não conta' : ''}).` };
     }
 
     // 6) Saudável de verdade: recente E com resultado (ou sem ninguém elegível).

@@ -1189,6 +1189,9 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           // Janela: só erros das últimas 48h (erro velho não é "principal
           // motivo de falha" da rodada atual).
           if (ts != null && maisRecenteMs != null && (maisRecenteMs - ts) > 48 * 3600000) break;
+          // E2220/NENHUM_DOCUMENTO deixou de ser erro no #302 (sucesso-vazio);
+          // registros ANTIGOS dele não devem assustar o card até envelhecerem.
+          if (/E2220|NENHUM_DOCUMENTO/i.test(String(d.motivo || ''))) continue;
           const chave = `${d.empresaCnpj ? d.empresaCnpj + ' — ' : ''}${String(d.motivo || 'sem motivo').slice(0, 140)}`;
           contagem.set(chave, (contagem.get(chave) || 0) + 1);
         }
