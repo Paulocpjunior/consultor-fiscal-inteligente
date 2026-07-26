@@ -19,7 +19,9 @@ export interface VencimentoDoc {
     origem: 'jotform';
     formId: string;
     submissionId: string;
-    categoria: 'certificado' | 'certidao' | 'parcelamento';
+    categoria: 'certificado' | 'certidao' | 'parcelamento' | 'procuracao';
+    semDocumento: boolean;
+    empresaInativa: boolean;
     tipoDetalhe: string;
     empresaNome: string;
     empresaNumero: string | null;
@@ -39,6 +41,7 @@ export interface VencimentoDoc {
 }
 
 export declare function normalizarTexto(s: unknown): string;
+export declare function empresaInativa(nome: unknown): boolean;
 export declare function parseDataJotform(answer: unknown): string | null;
 export declare function acharResposta(
     answers: Record<string, JotformAnswer> | null | undefined,

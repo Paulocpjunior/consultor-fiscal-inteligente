@@ -6,6 +6,7 @@ import {
     normalizarTexto,
     parseDataJotform,
     acharResposta,
+    empresaInativa,
     normalizarSubmissionCertidao,
     normalizarSubmissionParcelamento,
     normalizarLote,
@@ -103,6 +104,57 @@ describe('normalizarSubmissionCertidao', () => {
 
     it('submission DELETED é ignorada', () => {
         expect(normalizarSubmissionCertidao({ ...subCertidao, status: 'DELETED' })).toBeNull();
+    });
+
+    // Casos vindos da análise da tabela real (26/07/2026, 850 registros):
+
+    it('CNPJ placeholder 00-000-000/0000-00 vira null (não é documento)', () => {
+        const doc = normalizarSubmissionCertidao({
+            ...subCertidao,
+            answers: { ...subCertidao.answers, '5': { text: 'CNPJ', answer: '00-000-000/0000-00' } },
+        })!;
+        expect(doc.cnpj).toBeNull();
+    });
+
+    it('"7-PROCURAÇÃO ELETRONICA" no campo de certificados → categoria procuracao', () => {
+        const doc = normalizarSubmissionCertidao({
+            ...subCertidao,
+            answers: {
+                ...subCertidao.answers,
+                '9': { text: 'Selecione uma das Certidões abaixo .', answer: '' },
+                '11': { text: 'Selecione um dos Certificados abaixo .', answer: "7-PROCURAÇÃO ELETRONICA 'PAPEL'" },
+            },
+        })!;
+        expect(doc.categoria).toBe('procuracao');
+        expect(doc.semDocumento).toBe(false);
+    });
+
+    it('"8- NÃO POSSUE CERTIFICADO" marca semDocumento (não alertar cliente)', () => {
+        const doc = normalizarSubmissionCertidao({
+            ...subCertidao,
+            answers: {
+                ...subCertidao.answers,
+                '9': { text: 'Selecione uma das Certidões abaixo .', answer: '' },
+                '11': { text: 'Selecione um dos Certificados abaixo .', answer: '8- NÃO POSSUE CERTIFICADO' },
+            },
+        })!;
+        expect(doc.categoria).toBe('certificado');
+        expect(doc.semDocumento).toBe(true);
+    });
+
+    it('prefixo (INATIVA)/(PARALIZADO)/(suspensa)/(encerrada) marca empresaInativa', () => {
+        expect(empresaInativa('(INATIVA) AQUA PLASTIC BRASIL')).toBe(true);
+        expect(empresaInativa('( INATIVA) ESCADA INDUSTRIA LTDA')).toBe(true);
+        expect(empresaInativa('(PARALIZADO) BAR E LANCHE FREI AGOSTINHO LTDA')).toBe(true);
+        expect(empresaInativa('(suspensa) ADITIVA ENSINO')).toBe(true);
+        expect(empresaInativa('(encerrada) R. P. CARDOSO')).toBe(true);
+        expect(empresaInativa('PADARIA DO ZÉ LTDA')).toBe(false);
+
+        const doc = normalizarSubmissionCertidao({
+            ...subCertidao,
+            answers: { ...subCertidao.answers, '3': { text: 'Empresa', answer: '(INATIVA) PADARIA DO ZÉ LTDA' } },
+        })!;
+        expect(doc.empresaInativa).toBe(true);
     });
 });
 

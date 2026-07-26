@@ -147,7 +147,8 @@ export async function processarAlertasLegalizacao({ disparadoPor = 'cron', force
     const db = fa().firestore();
     const log = {
         disparadoPor, examinados: 0, alertasDevidos: 0, emailsEnviados: 0,
-        semEmailCliente: 0, jaAlertados: 0, falhasEmail: 0, motivos: {},
+        semEmailCliente: 0, jaAlertados: 0, falhasEmail: 0, puladosInativos: 0,
+        puladosSemDocumento: 0, motivos: {},
     };
     if (!isGraphConfigured()) {
         log.motivoDominante = 'Graph não configurado (GRAPH_CLIENT_ID/TENANT_ID/SECRET) — nenhum e-mail enviado';
@@ -159,6 +160,10 @@ export async function processarAlertasLegalizacao({ disparadoPor = 'cron', force
 
     for (const item of itens) {
         if (!item.dataVencimento) continue;
+        // Linhas de controle sem documento real e empresas marcadas como
+        // inativas/paralisadas na tabela NÃO geram alerta ao cliente (spam).
+        if (item.semDocumento === true) { log.puladosSemDocumento++; continue; }
+        if (item.empresaInativa === true) { log.puladosInativos++; continue; }
         const dias = diffDiasBrt(item.dataVencimento);
         const faixa = faixaAlertaDevida(dias);
         if (faixa === null) continue;
