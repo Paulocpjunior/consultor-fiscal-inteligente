@@ -463,6 +463,41 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // Módulo Legalização (departamento de legalização/societário).
+    // legalizacao_vencimentos: espelho dos formulários Jotform (certidões,
+    //   certificados digitais, parcelamentos) — SÓ o backend escreve (sync).
+    // legalizacao_processos: processos do departamento (abertura, alteração,
+    //   encerramento, contrato, procuração, regularização...) — colaborador
+    //   cria/edita, exclusão só admin (mesmo padrão gia_st_guias).
+    // legalizacao_alertas: auditoria dos alertas enviados — só backend.
+    // legalizacao_cron_logs: log das corridas do cron — só admin lê.
+    // ───────────────────────────────────────────────────────────────
+
+    match /legalizacao_vencimentos/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if false;
+    }
+
+    match /legalizacao_processos/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    match /legalizacao_alertas/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if false;
+    }
+
+    match /legalizacao_cron_logs/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // Default deny: qualquer coleção não listada acima é negada.
     // ───────────────────────────────────────────────────────────────
 

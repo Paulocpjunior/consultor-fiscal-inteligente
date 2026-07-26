@@ -31,6 +31,7 @@ import { getFriendlyErrorMessage } from './services/errorTranslation';
 import { runInitialSync } from './services/cloudSyncService';
 import { requestNotificationPermission } from './services/notificacoesService';
 import { safeStorage } from './services/safeStorage';
+import { resolverModuloDeepLink } from './services/moduloDeepLink';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
 // ✅ REMOVIDO: import { onAuthStateChanged } from 'firebase/auth';
 // Ambos encapsulados em authService.subscribeAuthState
@@ -76,6 +77,8 @@ const TaxEmissionDashboard = lazy(() => import('./components/TaxEmission'));
 const RecuperacaoHub = lazy(() => import('./components/RecuperacaoTributaria/RecuperacaoHub'));
 const NfpProCloud = lazy(() => import('./components/NfpProCloud'));
 const GiaStPanel = lazy(() => import('./components/GiaSt/GiaStPanel'));
+// App do departamento de Legalização (Jotform + vencimentos + processos).
+const LegalizacaoHub = lazy(() => import('./components/Legalizacao/LegalizacaoHub'));
 
 
 const App: React.FC = () => {
@@ -193,6 +196,15 @@ const App: React.FC = () => {
             safeStorage.setItem('theme', 'light');
         }
     }, [theme]);
+
+    // Deep-link ?modulo=<slug> — URL fixa por app (ex.: /?modulo=legalizacao).
+    // Só seleciona o card depois do login resolvido; o gate de acesso do menu
+    // e do backend continuam valendo.
+    useEffect(() => {
+        if (!isAuthResolved || !currentUser) return;
+        const tipo = resolverModuloDeepLink(window.location.search);
+        if (tipo) setSearchType(tipo);
+    }, [isAuthResolved, currentUser]);
 
     const handleLoginSuccess = (user: User) => {
         setCurrentUser(user);
@@ -1045,6 +1057,19 @@ const App: React.FC = () => {
                             <ErrorBoundary>
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DiagnosticoHub
+                                    currentUser={currentUser}
+                                    onShowToast={setToastMessage}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {/* Legalização — hub do departamento (Painel + Vencimentos +
+                            Processos + Integração Jotform). URL fixa: /?modulo=legalizacao */}
+                        {searchType === SearchType.LEGALIZACAO && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <LegalizacaoHub
                                     currentUser={currentUser}
                                     onShowToast={setToastMessage}
                                 />

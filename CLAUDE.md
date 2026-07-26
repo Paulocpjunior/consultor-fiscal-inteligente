@@ -61,6 +61,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   andamento — checar o banner do Diagnóstico antes de mesclar (deploy
   20:19 de 24/07 matou o manifest-cron das 20:10 → alerta de FALHA).
 
+- **Módulo Legalização** (Paulo, 26/07/2026): app do departamento no card
+  "Legalização" (grupo próprio, URL fixa `/?modulo=legalizacao` — deep-link
+  `services/moduloDeepLink.ts`, novo padrão pra qualquer módulo). Fonte de
+  dados = Jotform (`jotform-provider.js`, secret `JOTFORM_API_KEY`; forms
+  certidões/certificados 203618343863862 e parcelamentos 210087778597674,
+  override por env). Sync diário → `legalizacao_vencimentos` (backend-only;
+  docId `jf_{submissionId}`, casamento de campo pelo TEXTO da pergunta —
+  sobrevive ao clone anual "…-2027"). Processos manuais (aberturas,
+  alterações, encerramentos, contratos, procurações, permissões especiais,
+  regularizações) em `legalizacao_processos` (colaborador cria/edita, admin
+  apaga); processo com dataVencimento entra nos alertas (cobre procuração,
+  que o Jotform não tem). Alertas ao CLIENTE por faixa 30/15/7/3/1/0 +
+  vencido≤60d (menor-faixa-que-cobre, imune a fim de semana sem cron),
+  idempotência `legalizacao_alertas/{itemId}_{faixa}`, gestor
+  (`LEGALIZACAO_GESTOR_EMAIL`, default alexandre@) SEMPRE em BCC. Cron
+  `legalizacao-cron-diario` 7h30 BRT (**Paulo precisa rodar
+  `setup-cloud-schedulers.sh` + cadastrar secret JOTFORM_API_KEY no Cloud
+  Run — senão cron órfão/sync parado**, painel avisa em vez de fingir
+  verde). Limiar do farol front/back espelhado (legalizacaoLogic.ts ↔
+  legalizacao-helper.js, teste cruzado garante).
+
 ## Fila de features acordadas (com requisitos)
 
 1. ~~Retificação DCTFWeb/MIT pelo CFI~~ **FEITA 24/07** (#292): seção
