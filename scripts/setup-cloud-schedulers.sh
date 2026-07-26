@@ -324,6 +324,17 @@ upsert_job \
     "/api/admin/sefaz/captura-resumo-cron" \
     "Resumo diario por email das capturas NFe via procuracao e-CAC"
 
+# Legalização — sincroniza os formulários Jotform do departamento (certidões/
+# certificados digitais e parcelamentos) e dispara alertas antecipados de
+# vencimento ao cliente (30/15/7/3/1/0 dias). Roda 7h30 BRT, entre o alerta
+# de certificados (7h) e o cron de vencimentos de obrigações (8h).
+# Requer secrets JOTFORM_API_KEY (+ Graph) no serviço.
+upsert_job \
+    "legalizacao-cron-diario" \
+    "30 7 * * 1-5" \
+    "/api/admin/legalizacao/cron" \
+    "Sync Jotform (certidoes/certificados/parcelamentos) + alertas de vencimento ao cliente"
+
 # ─── Verifica ──────────────────────────────────────────────────────────────
 echo ""
 echo "═══ Jobs ativos em $REGION ═══"
