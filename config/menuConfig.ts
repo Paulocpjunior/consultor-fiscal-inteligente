@@ -60,7 +60,6 @@ export const searchDescriptions: Record<SearchType, string> = {
     [SearchType.GIA_ST]: 'GIA-ST — importa o Livro de ICMS Substituto do Office Fiscal (IOB/SAGE) e gera a guia por UF favorecida validada no padrão do aplicativo GIA-ST 3 (SEFAZ-RS).',
     [SearchType.RECUPERACAO_TRIBUTARIA]: 'Recuperação Tributária — identifica impostos pagos a maior e oportunidades de restituição/compensação.',
     [SearchType.NFP_PRO_CLOUD]: 'Consulta de situação fiscal: débitos, certidões, obrigações, parcelamentos e plano de ação. Acesso restrito — liberado pelo administrador.',
-    [SearchType.LEGALIZACAO]: 'Departamento de Legalização — aberturas, alterações, encerramentos, contratos, certidões, certificados digitais, procurações e parcelamentos, com análise de vencimentos (Jotform) e alertas antecipados ao cliente.',
 };
 
 export interface MenuCard {
@@ -118,11 +117,6 @@ export const MENU_GRUPOS: MenuGrupo[] = [
             { type: SearchType.SAUDE_GERAL, label: 'Diagnóstico & Saúde', Icon: ShieldIcon },
             { type: SearchType.RECUPERACAO_TRIBUTARIA, Icon: ScaleIcon },
             { type: SearchType.NFP_PRO_CLOUD, label: 'Consulta Situação Fiscal', Icon: SearchIcon, adminOnly: true },
-        ],
-    },
-    {
-        titulo: 'Legalização & Societário', cor: '#be185d', cards: [
-            { type: SearchType.LEGALIZACAO, label: 'Legalização', Icon: BriefcaseIcon },
         ],
     },
     {
