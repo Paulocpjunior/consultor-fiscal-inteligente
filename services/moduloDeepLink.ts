@@ -12,7 +12,6 @@
 import { SearchType } from '../types';
 
 export const MODULO_SLUGS: Record<string, SearchType> = {
-    legalizacao: SearchType.LEGALIZACAO,
     vencimentos: SearchType.OBRIGACOES_FISCAIS,
     xmls: SearchType.IMPORTA_XML,
     das: SearchType.DAS_SIMPLES,

@@ -5,12 +5,12 @@ import { resolverModuloDeepLink, MODULO_SLUGS } from '../services/moduloDeepLink
 import { SearchType } from '../types';
 
 describe('resolverModuloDeepLink', () => {
-    it('?modulo=legalizacao → card Legalização (URL fixa do app)', () => {
-        expect(resolverModuloDeepLink('?modulo=legalizacao')).toBe(SearchType.LEGALIZACAO);
+    it('?modulo=vencimentos → card Vencimentos & Obrigações (URL fixa)', () => {
+        expect(resolverModuloDeepLink('?modulo=vencimentos')).toBe(SearchType.OBRIGACOES_FISCAIS);
     });
     it('aceita caixa alta e espaços', () => {
-        expect(resolverModuloDeepLink('?modulo=LEGALIZACAO')).toBe(SearchType.LEGALIZACAO);
-        expect(resolverModuloDeepLink('?modulo=%20legalizacao%20')).toBe(SearchType.LEGALIZACAO);
+        expect(resolverModuloDeepLink('?modulo=VENCIMENTOS')).toBe(SearchType.OBRIGACOES_FISCAIS);
+        expect(resolverModuloDeepLink('?modulo=%20vencimentos%20')).toBe(SearchType.OBRIGACOES_FISCAIS);
     });
     it('slug desconhecido, vazio ou ausente → null (fica no menu normal)', () => {
         expect(resolverModuloDeepLink('?modulo=nao-existe')).toBeNull();

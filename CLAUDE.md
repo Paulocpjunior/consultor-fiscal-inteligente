@@ -61,26 +61,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   andamento — checar o banner do Diagnóstico antes de mesclar (deploy
   20:19 de 24/07 matou o manifest-cron das 20:10 → alerta de FALHA).
 
-- **Módulo Legalização** (Paulo, 26/07/2026): app do departamento no card
-  "Legalização" (grupo próprio, URL fixa `/?modulo=legalizacao` — deep-link
-  `services/moduloDeepLink.ts`, novo padrão pra qualquer módulo). Fonte de
-  dados = Jotform (`jotform-provider.js`, secret `JOTFORM_API_KEY`; forms
-  certidões/certificados 203618343863862 e parcelamentos 210087778597674,
-  override por env). Sync diário → `legalizacao_vencimentos` (backend-only;
-  docId `jf_{submissionId}`, casamento de campo pelo TEXTO da pergunta —
-  sobrevive ao clone anual "…-2027"). Processos manuais (aberturas,
-  alterações, encerramentos, contratos, procurações, permissões especiais,
-  regularizações) em `legalizacao_processos` (colaborador cria/edita, admin
-  apaga); processo com dataVencimento entra nos alertas (cobre procuração,
-  que o Jotform não tem). Alertas ao CLIENTE por faixa 30/15/7/3/1/0 +
-  vencido≤60d (menor-faixa-que-cobre, imune a fim de semana sem cron),
-  idempotência `legalizacao_alertas/{itemId}_{faixa}`, gestor
-  (`LEGALIZACAO_GESTOR_EMAIL`, default alexandre@) SEMPRE em BCC. Cron
-  `legalizacao-cron-diario` 7h30 BRT (**Paulo precisa rodar
-  `setup-cloud-schedulers.sh` + cadastrar secret JOTFORM_API_KEY no Cloud
-  Run — senão cron órfão/sync parado**, painel avisa em vez de fingir
-  verde). Limiar do farol front/back espelhado (legalizacaoLogic.ts ↔
-  legalizacao-helper.js, teste cruzado garante).
+- **Legalização é APP PRÓPRIO, fora do CFI** (Paulo, 26/07/2026 — corrigiu
+  com ênfase a 1ª entrega como card interno): repo GitHub `legalizacao`,
+  serviço Cloud Run `legalizacao` (us-west1, mesmo projeto), URL própria.
+  MESMO Firebase Auth/`users` (login e roles do CFI valem lá) e MESMO
+  Firestore — as rules das coleções `legalizacao_*` (vencimentos/alertas =
+  só backend; processos = colaborador cria/edita, admin apaga; cron_logs =
+  só admin lê) continuam NESTE repo (deploy-firestore.yml). Fonte = Jotform
+  (secret JOTFORM_API_KEY; forms 203618343863862 certidões/certificados e
+  210087778597674 parcelamentos; parser casa campo pelo TEXTO da pergunta e
+  foi calibrado nos 850 registros reais: CNPJ zerado 00-000…→null,
+  "7-PROCURAÇÃO ELETRONICA"→categoria procuracao, "8- NÃO POSSUE
+  CERTIFICADO"→semDocumento sem alerta, prefixo (INATIVA)/(PARALIZADA)/
+  (SUSPENSA)/(ENCERRADA)→empresaInativa sem alerta). Alertas ao cliente
+  30/15/7/3/1/0 + vencido≤60d, idempotência {itemId}_{faixa}, gestor
+  alexandre@ em BCC. Cron próprio `legalizacao-cron-diario` 7h30 BRT via
+  scripts/setup-scheduler.sh DO REPO NOVO (o setup-cloud-schedulers.sh
+  daqui NÃO tem esse job). Estado 26/07: app pronto e commitado localmente;
+  **falta Paulo criar o repo privado `legalizacao` no GitHub + autorizar o
+  app do Claude + secret GCP_SA_KEY no repo novo** → aí push + 1º deploy +
+  secrets do serviço (README do repo novo tem o passo-a-passo). O card
+  Legalização foi REMOVIDO do CFI; deep-link `services/moduloDeepLink.ts`
+  ficou (padrão de URL fixa pros hubs internos).
 
 ## Fila de features acordadas (com requisitos)
 
