@@ -49,11 +49,21 @@ export function decidirGravacaoNFe({ existingData, tipoDoc, schema, chave }) {
        (exData.temItens === false && modeloComItens(chave)))
     : false;
   const exists = !!exData;
-  const upgrade = exists && exResumo && !incomingResumo;
+  // Doc INCOMPLETO: existe na base mas sem os campos que o painel usa pra
+  // achar a nota — sem competência, sem data de emissão ou sem valor. É uma
+  // casca: aparece na contagem, some de qualquer filtro. Caso GUARANI 27/07 —
+  // 30 das 36 notas do ZIP estavam assim e o importer as chamava de
+  // "duplicadas", recusando-se a completá-las com o XML inteiro em mãos.
+  const exIncompleto = exists && (!exData.competencia || !exData.dhEmi || exData.valorTotal == null);
+  // Upgrade = a base tem menos do que está chegando. Nunca o contrário: o
+  // `!incomingResumo` impede que um resumo rebaixe uma nota completa.
+  const upgrade = exists && (exResumo || exIncompleto) && !incomingResumo;
   return {
     exists,
     upgrade,
-    // Duplicidade só quando NÃO é stub-de-evento E NÃO é upgrade resumo→completa.
+    incompleto: exIncompleto,
+    // Duplicidade só quando NÃO é stub-de-evento E NÃO é upgrade
+    // (resumo→completa ou incompleto→completa).
     duplicado: exists && !exData.eventosBeforeNFe && !upgrade,
     // Merge preserva o array de eventos quando já existia stub OU no upgrade.
     merge: exists && (exData.eventosBeforeNFe || upgrade),
