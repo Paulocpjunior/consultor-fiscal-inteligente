@@ -10,6 +10,7 @@
 
 import admin from 'firebase-admin';
 import { caminhoNfseRecomendado, CAMINHO_NFSE } from './municipio-nfse-caminho.js';
+import { selecionarCertA1PorBase } from './cert-base-helper.js';
 
 const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 
@@ -33,7 +34,17 @@ function toMillis(v) {
     return null;
 }
 
-export function classificarElegibilidadeAdn({ empresa, cert, nowMs = Date.now() }) {
+/**
+ * @param {object} p
+ * @param {object} p.empresa
+ * @param {object|null} p.cert       certificado DA PRÓPRIA empresa (se houver)
+ * @param {Array}  [p.certsMeta]     metadados de TODOS os certs — habilita o
+ *   fallback de RAIZ (matriz ↔ filial). Paulo, 27/07: filial sem cert próprio
+ *   usa o da matriz (mesma raiz de CNPJ) até subir o seu; é o mesmo critério
+ *   que o NFe DistDFe já aplica ("A1 raiz" no Status). O E2243 do ADN barra
+ *   raiz DIVERGENTE — mesma raiz é aceita.
+ */
+export function classificarElegibilidadeAdn({ empresa, cert, certsMeta = null, nowMs = Date.now() }) {
     const cnpj = String(empresa?.cnpj || '').replace(/\D/g, '');
     const ehEscritorio = cnpj === CNPJ_ESCRITORIO;
 
@@ -70,15 +81,25 @@ export function classificarElegibilidadeAdn({ empresa, cert, nowMs = Date.now() 
         return { elegivel: true, motivo: null, tipoCert: 'escritorio' };
     }
 
+    // Fallback de RAIZ (matriz ↔ filial): vale quando a empresa não tem cert
+    // próprio E quando o próprio é A3/inválido — a filial só depende do A1 da
+    // matriz até subir o seu. Procurado pela raiz de 8 dígitos, ignorando o
+    // doc da própria empresa.
+    const certRaiz = certsMeta ? selecionarCertA1PorBase(certsMeta, cnpj, nowMs, empresa?.id) : null;
+
     if (!cert) {
+        if (certRaiz) return { elegivel: true, motivo: null, tipoCert: 'A1-raiz', certEmpresaId: certRaiz.empresaId };
         return {
             elegivel: false,
-            motivo: 'NFSe Nacional ADN exige certificado A1 proprio da empresa; certificado do escritorio retorna E2243 (CNPJ base divergente).',
+            motivo: 'NFSe Nacional ADN exige certificado A1 proprio da empresa (ou da matriz, mesma raiz de CNPJ); certificado do escritorio retorna E2243 (CNPJ base divergente).',
         };
     }
 
     const tipoCert = cert.tipoCert || 'A1';
     if (tipoCert === 'A3') {
+        // A3 da própria empresa não roda em nuvem, mas se a MATRIZ tem A1
+        // válido a filial captura por ele (não precisa do agente local).
+        if (certRaiz) return { elegivel: true, motivo: null, tipoCert: 'A1-raiz', certEmpresaId: certRaiz.empresaId };
         return {
             elegivel: false,
             motivo: 'NFSe Nacional ADN no Cloud Run exige A1 proprio; certificado A3 precisa fluxo/agente local especifico.',
@@ -89,7 +110,11 @@ export function classificarElegibilidadeAdn({ empresa, cert, nowMs = Date.now() 
         return { elegivel: false, motivo: `Tipo de certificado ${tipoCert} nao suportado para ADN.`, tipoCert };
     }
 
+    // Daqui pra baixo, cert próprio COM defeito: se a matriz (mesma raiz) tem
+    // A1 válido, a captura segue por ele — o defeito do cert da filial vira
+    // pendência de cadastro, não bloqueio de captura.
     if (!cert.storagePath || !cert.passwordEnc) {
+        if (certRaiz) return { elegivel: true, motivo: null, tipoCert: 'A1-raiz', certEmpresaId: certRaiz.empresaId };
         return {
             elegivel: false,
             motivo: 'Certificado A1 marcado no cadastro, mas sem PFX/senha armazenados. Reenvie o .pfx pela coluna Certificado.',
@@ -99,6 +124,7 @@ export function classificarElegibilidadeAdn({ empresa, cert, nowMs = Date.now() 
 
     const notAfterMs = toMillis(cert.notAfter);
     if (!notAfterMs || notAfterMs <= nowMs) {
+        if (certRaiz) return { elegivel: true, motivo: null, tipoCert: 'A1-raiz', certEmpresaId: certRaiz.empresaId };
         return {
             elegivel: false,
             motivo: 'Certificado A1 proprio vencido ou sem validade cadastrada. Reenvie/renove o .pfx.',
@@ -108,6 +134,7 @@ export function classificarElegibilidadeAdn({ empresa, cert, nowMs = Date.now() 
 
     const cnpjCert = String(cert.cnpj || '').replace(/\D/g, '');
     if (!cnpjCert || cnpjCert.slice(0, 8) !== cnpj.slice(0, 8)) {
+        if (certRaiz) return { elegivel: true, motivo: null, tipoCert: 'A1-raiz', certEmpresaId: certRaiz.empresaId };
         return {
             elegivel: false,
             motivo: 'Certificado A1 proprio tem CNPJ-base diferente da empresa; a ADN rejeita com E2243.',
@@ -150,9 +177,22 @@ export async function listarElegibilidadeNfseNacionalDfe() {
     }
 
     const certsPorId = new Map();
+    // certsMeta: lista com empresaId — base do fallback de RAIZ (matriz ↔ filial).
+    const certsMeta = [];
     try {
         const certsSnap = await db.collection('empresas_certificados').get();
-        certsSnap.forEach((doc) => certsPorId.set(doc.id, doc.data()));
+        certsSnap.forEach((doc) => {
+            const c = doc.data();
+            certsPorId.set(doc.id, c);
+            certsMeta.push({
+                empresaId: doc.id,
+                tipoCert: c.tipoCert || 'A1',
+                cnpj: c.cnpj,
+                notAfter: c.notAfter,
+                storagePath: c.storagePath,
+                passwordEnc: c.passwordEnc,
+            });
+        });
     } catch (e) {
         console.warn('[nfse-nac-dfe/elegibilidade] erro lendo empresas_certificados:', e.message);
     }
@@ -163,6 +203,7 @@ export async function listarElegibilidadeNfseNacionalDfe() {
         const classif = classificarElegibilidadeAdn({
             empresa: emp,
             cert: certsPorId.get(emp.id),
+            certsMeta,
         });
         const item = { ...emp, ...classif };
         todos.push(item);

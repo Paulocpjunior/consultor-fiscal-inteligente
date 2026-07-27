@@ -22,8 +22,10 @@
 // ============================================================================
 
 import https from 'node:https';
+import admin from 'firebase-admin';
 import { loadCertificate } from './secret-loader.js';
 import { loadCertEmpresa } from './cert-storage.js';
+import { selecionarCertA1PorBase } from './cert-base-helper.js';
 
 const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 const TP_AMB = process.env.NFSE_NAC_AMB || 'producao'; // 'producao' | 'homologacao'
@@ -43,6 +45,31 @@ function host() {
  * Retorna { pfxBuffer, password } pra usar no https.Agent.
  * Preferência: cert da empresa (se houver) → cert do escritório (fallback).
  */
+// Cache dos metadados de empresas_certificados pro fallback de RAIZ — o
+// loop de sincronização consulta várias empresas em sequência; 1 leitura da
+// coleção a cada 5 min cobre todas sem custo por página.
+let _certsRaizCache = { ts: 0, metas: [] };
+async function carregarCertsMeta() {
+    const agora = Date.now();
+    if (agora - _certsRaizCache.ts < 5 * 60 * 1000) return _certsRaizCache.metas;
+    if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    const snap = await admin.firestore().collection('empresas_certificados').get();
+    const metas = [];
+    snap.forEach((d) => {
+        const c = d.data();
+        metas.push({
+            empresaId: d.id,
+            tipoCert: c.tipoCert || 'A1',
+            cnpj: c.cnpj,
+            notAfter: c.notAfter,
+            storagePath: c.storagePath,
+            passwordEnc: c.passwordEnc,
+        });
+    });
+    _certsRaizCache = { ts: agora, metas };
+    return metas;
+}
+
 async function obterCertParaConsulta(empresaId, empresaCnpj) {
     const cnpjNum = String(empresaCnpj || '').replace(/\D/g, '');
     // 1ª tentativa: cert específico da empresa
@@ -57,9 +84,26 @@ async function obterCertParaConsulta(empresaId, empresaCnpj) {
         }
     }
 
+    // 2ª tentativa: A1 válido da MESMA RAIZ de CNPJ (matriz ↔ filiais) —
+    // Paulo, 27/07: filial sem cert próprio usa o da matriz até subir o seu.
+    // O E2243 do ADN barra RAIZ divergente; mesma raiz é aceito (é o mesmo
+    // critério que o NFe DistDFe já usa, badge "A1 raiz" do Status).
+    try {
+        const metas = await carregarCertsMeta();
+        const metaRaiz = selecionarCertA1PorBase(metas, cnpjNum, Date.now(), empresaId);
+        if (metaRaiz) {
+            const certRaiz = await loadCertEmpresa(metaRaiz.empresaId);
+            if (certRaiz?.pfxBuffer && certRaiz?.password) {
+                return { pfx: certRaiz.pfxBuffer, password: certRaiz.password, fonte: 'a1-raiz' };
+            }
+        }
+    } catch (e) {
+        console.warn('[nfse-nac-dfe] fallback A1 mesma raiz indisponivel:', e.message);
+    }
+
     if (cnpjNum.slice(0, 8) !== CNPJ_ESCRITORIO.slice(0, 8)) {
         throw new Error(
-            'NFSe Nacional ADN exige certificado A1 proprio da empresa. ' +
+            'NFSe Nacional ADN exige certificado A1 proprio da empresa OU da matriz (mesma raiz de CNPJ). ' +
             'O certificado do escritorio nao pode consultar CNPJ de outra raiz (ADN retorna E2243).'
         );
     }

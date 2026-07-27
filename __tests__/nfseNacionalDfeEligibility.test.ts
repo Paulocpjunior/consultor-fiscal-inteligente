@@ -116,3 +116,71 @@ describe('classificarElegibilidadeAdn', () => {
         expect(r.tipoCert).toBe('escritorio');
     });
 });
+
+// ── Matriz ↔ filial: filial usa o A1 da matriz até subir o próprio ──────────
+// Paulo, 27/07 (J.N. VINATEX 0002-78 e 0003-59): as filiais já capturavam NFe
+// com "A1 raiz" mas o ADN as bloqueava exigindo cert próprio. O E2243 barra
+// raiz DIVERGENTE — mesma raiz é aceita.
+describe('classificarElegibilidadeAdn — fallback de RAIZ (matriz ↔ filial)', () => {
+    const MATRIZ = '32602701000178';
+    const FILIAL = '32602701000259';
+    const certMatriz = {
+        empresaId: 'emp-matriz', tipoCert: 'A1', cnpj: MATRIZ,
+        storagePath: 'certs/matriz.pfx.enc', passwordEnc: 'x',
+        notAfter: '2027-10-22T00:00:00.000Z',
+    };
+
+    it('filial SEM cert próprio + A1 válido da matriz → ELEGÍVEL como A1-raiz', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: { id: 'emp-filial', cnpj: FILIAL, nfseNacionalDfeAtivo: true },
+            cert: null,
+            certsMeta: [certMatriz],
+            nowMs: NOW,
+        });
+        expect(r.elegivel).toBe(true);
+        expect(r.tipoCert).toBe('A1-raiz');
+        expect(r.certEmpresaId).toBe('emp-matriz');
+    });
+
+    it('filial com A1 PRÓPRIO vencido → cai no da matriz (captura não para)', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: { id: 'emp-filial', cnpj: FILIAL, nfseNacionalDfeAtivo: true },
+            cert: cert({ cnpj: FILIAL, notAfter: '2026-01-01T00:00:00.000Z' }),
+            certsMeta: [certMatriz],
+            nowMs: NOW,
+        });
+        expect(r.elegivel).toBe(true);
+        expect(r.tipoCert).toBe('A1-raiz');
+    });
+
+    it('filial com A3 próprio + matriz A1 → captura em nuvem pelo da matriz', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: { id: 'emp-filial', cnpj: FILIAL, nfseNacionalDfeAtivo: true },
+            cert: cert({ tipoCert: 'A3', cnpj: FILIAL }),
+            certsMeta: [certMatriz],
+            nowMs: NOW,
+        });
+        expect(r.elegivel).toBe(true);
+        expect(r.tipoCert).toBe('A1-raiz');
+    });
+
+    it('cert de OUTRA raiz não serve de fallback (E2243 continua barrado)', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: { id: 'emp-x', cnpj: '11222333000181', nfseNacionalDfeAtivo: true },
+            cert: null,
+            certsMeta: [certMatriz],
+            nowMs: NOW,
+        });
+        expect(r.elegivel).toBe(false);
+        expect(r.motivo).toMatch(/E2243/);
+    });
+
+    it('sem certsMeta o comportamento antigo é preservado (sem cert = bloqueada)', () => {
+        const r = classificarElegibilidadeAdn({
+            empresa: { id: 'emp-filial', cnpj: FILIAL, nfseNacionalDfeAtivo: true },
+            cert: null,
+            nowMs: NOW,
+        });
+        expect(r.elegivel).toBe(false);
+    });
+});
