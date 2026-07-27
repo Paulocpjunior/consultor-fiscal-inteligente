@@ -74,8 +74,12 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   "7-PROCURAÇÃO ELETRONICA"→categoria procuracao, "8- NÃO POSSUE
   CERTIFICADO"→semDocumento sem alerta, prefixo (INATIVA)/(PARALIZADA)/
   (SUSPENSA)/(ENCERRADA)→empresaInativa sem alerta). Alertas ao cliente
-  30/15/7/3/1/0 + vencido≤60d, idempotência {itemId}_{faixa}, gestor
-  alexandre@ em BCC. Cron próprio `legalizacao-cron-diario` 7h30 BRT via
+  30/15/7/3/1/0 + vencido≤60d, idempotência {itemId}_{faixa}, gestor do
+  DEPARTAMENTO (jefferson@ — Paulo 27/07: dept. próprio, gestor próprio;
+  alexandre@ é só do fiscal/CFI) em BCC; Ajustes (admin) configura cópias,
+  e-mails de renovação, link de compra + WhatsApp no alerta e pasta do
+  Cofre de certificados no SharePoint (renovação detectada no sync copia
+  o A1 pro Cofre e notifica). Cron próprio `legalizacao-cron-diario` 7h30 BRT via
   scripts/setup-scheduler.sh DO REPO NOVO (o setup-cloud-schedulers.sh
   daqui NÃO tem esse job). Estado 27/07: **app NO AR** — repo real ficou
   `Paulocpjunior/legaliza-o` (GitHub cortou os acentos), URL fixa
