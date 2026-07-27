@@ -9,6 +9,11 @@
 export function classificarCapturaNfseNacionalAdn({
     nfseNacionalDfeAtivo,
     temA1ProprioValido,
+    // Filial SEM cert próprio que usa o A1 da MATRIZ (mesma raiz de CNPJ).
+    // Paulo, 27/07 (caso J.N. VINATEX 0002-78/0003-59): o ADN rejeita raiz
+    // DIVERGENTE (E2243) — mesma raiz é aceita, igual ao NFe DistDFe, que já
+    // mostra "A1 raiz". Sem isto a filial ficava ✗ vermelha sem necessidade.
+    temA1MesmaRaizValido,
     ehEscritorio,
     tipoCert,
     usaCertEscritorio,
@@ -28,6 +33,10 @@ export function classificarCapturaNfseNacionalAdn({
         return { ok: true, via: 'cloud-a1', motivo: null };
     }
 
+    if (temA1MesmaRaizValido) {
+        return { ok: true, via: 'cloud-a1-raiz', motivo: null };
+    }
+
     if (tipoCert === 'A3' && certUploaded) {
         return { ok: true, via: 'a3-local', motivo: null };
     }
@@ -36,7 +45,7 @@ export function classificarCapturaNfseNacionalAdn({
         return {
             ok: false,
             via: 'bloqueada',
-            motivo: 'NFS-e Nacional ADN: procuração/certificado do escritório não basta para consultar DFe; cadastre A1 próprio da empresa ou use agente A3 local.',
+            motivo: 'NFS-e Nacional ADN: procuração/certificado do escritório não basta para consultar DFe; cadastre A1 próprio da empresa (ou da matriz, mesma raiz de CNPJ) ou use agente A3 local.',
         };
     }
 
@@ -51,6 +60,6 @@ export function classificarCapturaNfseNacionalAdn({
     return {
         ok: false,
         via: 'bloqueada',
-        motivo: 'NFS-e Nacional ADN: falta certificado A1 próprio da empresa ou marcação A3 para agente local.',
+        motivo: 'NFS-e Nacional ADN: falta certificado A1 próprio da empresa (ou da matriz, mesma raiz de CNPJ) ou marcação A3 para agente local.',
     };
 }

@@ -372,6 +372,8 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             const nfseNacStatus = classificarCapturaNfseNacionalAdn({
                 nfseNacionalDfeAtivo: emp.nfseNacionalDfeAtivo,
                 temA1ProprioValido,
+                // Filial usando o A1 da matriz (mesma raiz) — o ADN aceita.
+                temA1MesmaRaizValido,
                 ehEscritorio,
                 tipoCert,
                 usaCertEscritorio,
