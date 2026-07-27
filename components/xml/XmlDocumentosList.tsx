@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { localizarDocumento, type DocLocalizado } from '../../services/saeNfceService';
 import { getView } from '../../services/xmlDocumentoView';
 import type { User, DocumentoFiscal } from '../../types';
 import {
@@ -54,6 +55,12 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<ListDocumentosFilters>({});
     const [busca, setBusca] = useState('');
+    // Quando a busca por nº/chave não acha NADA com os filtros atuais, o app
+    // não pode dar de ombros: a nota pode estar em OUTRA empresa (importação
+    // no cliente errado) ou sem dono. Aqui procuramos na base inteira e
+    // dizemos onde ela está — o filtro serve pra isso (Paulo, 27/07).
+    const [ondeEsta, setOndeEsta] = useState<DocLocalizado[] | null>(null);
+    const [procurandoFora, setProcurandoFora] = useState(false);
     const [exporting, setExporting] = useState<'pdf' | 'csv' | null>(null);
     // Render incremental: monta só as primeiras N linhas no DOM e cresce sob
     // demanda ("Carregar mais"). Antes o .map montava TODAS as linhas (milhares
@@ -124,6 +131,23 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         () => applyDocumentosFilters(docsComNome, { ...filters, busca }),
         [docsComNome, filters, busca],
     );
+
+    // Busca global automática: só quando há termo de busca e zero resultados.
+    // Não dispara em navegação normal (sem termo) — é diagnóstico, não ruído.
+    useEffect(() => {
+        const termo = busca.trim();
+        const digitos = termo.replace(/\D/g, '');
+        if (docs.length > 0 || digitos.length < 3) { setOndeEsta(null); return; }
+        let vivo = true;
+        setProcurandoFora(true);
+        localizarDocumento(termo)
+            .then(r => { if (vivo) setOndeEsta(r.ok ? (r.docs || []) : []); })
+            .catch(() => { if (vivo) setOndeEsta([]); })
+            .finally(() => { if (vivo) setProcurandoFora(false); });
+        return () => { vivo = false; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [busca, docs.length]);
+
 
     // Recorte visível no DOM. Ao mudar o filtro (docs muda de identidade),
     // volta pro topo e reseta a contagem — senão um filtro novo herdaria o
@@ -662,6 +686,46 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                 </div>
                 {loading ? (
                     <p className="text-center text-xs text-slate-400 py-6">Carregando...</p>
+                ) : docs.length === 0 && (ondeEsta?.length || procurandoFora) ? (
+                    /* A busca não achou AQUI, mas a nota existe — dizer ONDE.
+                       O filtro serve pra isso: em vez de "nenhum documento",
+                       mostramos a empresa dona e um clique pra ir até ela. */
+                    <div className="py-6 px-4 space-y-2">
+                        {procurandoFora && <p className="text-center text-xs text-slate-400">Procurando esta nota nas demais empresas…</p>}
+                        {!procurandoFora && (ondeEsta?.length ?? 0) > 0 && (
+                            <>
+                                <p className="text-center text-xs text-slate-600 dark:text-slate-300">
+                                    Nada com os filtros atuais — mas <strong>encontrei esta nota</strong> na base:
+                                </p>
+                                <ul className="max-w-3xl mx-auto space-y-1">
+                                    {(ondeEsta || []).map(d => (
+                                        <li key={d.chave} className="bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded p-2 text-xs">
+                                            <p className="font-bold text-slate-700 dark:text-slate-200">
+                                                nº {d.numero}/{d.serie} · {d.dhEmi?.slice(0, 10)} · {d.direcao} · competência {d.competencia || '—'}
+                                            </p>
+                                            <p className={d.empresaId ? 'text-slate-600 dark:text-slate-300' : 'text-red-600 dark:text-red-400 font-bold'}>
+                                                Está em: <strong>{d.empresaNome}</strong>
+                                                {d.empresaCnpj ? <span className="font-mono"> ({formatCnpjCpf(d.empresaCnpj)})</span> : null}
+                                                {d.temItens === false ? ' · resumo sem valor' : ''}
+                                            </p>
+                                            {d.empresaCnpj && (
+                                                <button
+                                                    onClick={() => setFilters(f => ({ ...f, empresaCnpj: d.empresaCnpj || undefined, competencia: undefined, direcao: undefined, tipoDoc: undefined, status: undefined, origem: undefined }))}
+                                                    className="mt-1 px-2 py-1 text-[11px] font-bold rounded bg-sky-600 hover:bg-sky-700 text-white">
+                                                    Ver nesta empresa
+                                                </button>
+                                            )}
+                                            {!d.empresaId && (
+                                                <p className="text-[11px] text-red-600 dark:text-red-400 mt-0.5">
+                                                    Nota SEM DONO — use "🔧 Notas importadas que não aparecem no filtro por empresa" na aba Importar.
+                                                </p>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
+                        )}
+                    </div>
                 ) : docs.length === 0 ? (
                     empresaSelecionadaInfo && empresaSelecionadaInfo.temXmls === false ? (
                         <div className="text-center py-6 px-4">
