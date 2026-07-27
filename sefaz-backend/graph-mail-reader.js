@@ -17,9 +17,10 @@ import { getGraphToken } from './graph-provider.js';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 
-// Extensões de anexo que interessam (XML de DFe; .gz descomprime via zlib no
-// ingestor). .zip NÃO é tratado aqui — vai pela Importação por ZIP da tela.
+// Extensões de anexo que interessam. ZIP entra desde 27/07 (emissor que manda
+// os XMLs do dia zipados era ignorado em silêncio) — extraído no ingestor.
 const EXT_XML = /\.xml$/i;
+const EXT_ZIP = /\.zip$/i;
 
 async function graphGet(path, token) {
   const resp = await fetch(`${GRAPH}${path}`, {
@@ -33,32 +34,69 @@ async function graphGet(path, token) {
 }
 
 /**
- * Lista mensagens NÃO LIDAS da caixa que tenham anexo, trazendo os anexos de
- * arquivo (fileAttachment) já com o conteúdo (contentBytes base64).
+ * Pastas a varrer: Caixa de Entrada + subpastas dela + Lixo Eletrônico.
+ * Regra do Outlook que move XML pra subpasta, ou spam que engoliu o e-mail do
+ * cliente, deixavam a nota invisível pro cofre (27/07).
+ */
+async function listarPastasParaVarrer(box, token) {
+  const pastas = [{ id: 'inbox', nome: 'Caixa de Entrada' }];
+  try {
+    const filhas = await graphGet(`/users/${box}/mailFolders/inbox/childFolders?$select=id,displayName&$top=20`, token);
+    for (const f of filhas.value || []) pastas.push({ id: f.id, nome: f.displayName });
+  } catch (e) {
+    console.warn('[graph-mail] childFolders indisponivel:', e.message);
+  }
+  pastas.push({ id: 'junkemail', nome: 'Lixo Eletrônico' });
+  return pastas;
+}
+
+/**
+ * Lista mensagens COM ANEXO recebidas desde `desdeIso`, em todas as pastas
+ * relevantes, trazendo os anexos de arquivo (.xml e .zip) com o conteúdo.
+ *
+ * MUDANÇA CRÍTICA (27/07): NÃO filtra mais por `isRead eq false`. A caixa é
+ * compartilhada — bastava alguém da equipe abrir o e-mail no Outlook (ou o
+ * painel de leitura marcar como lido ao passar) pra a nota sumir do radar do
+ * cofre PARA SEMPRE. Agora a janela é por DATA e o controle de "já processei"
+ * é do ingestor (registro por messageId no Firestore), não do estado de
+ * leitura da caixa.
  *
  * @param {string} mailbox  UPN/e-mail da caixa (ex.: xml@spassessoriacontabil.com.br)
  * @param {object} [opts]
- * @param {number} [opts.maxMensagens=25]  teto por rodada (paginação simples)
- * @returns {Promise<Array<{id, subject, from, recebidoEm, anexosXml: Array<{name, contentBytes}>}>>}
+ * @param {number} [opts.maxMensagens=25]  teto por rodada
+ * @param {string} [opts.desdeIso]         ISO da janela (default: 30 dias atrás)
+ * @returns {Promise<Array<{id, subject, from, recebidoEm, pasta, anexosXml, anexosZip, anexosInfo}>>}
  */
-export async function listarEmailsComXml(mailbox, { maxMensagens = 25 } = {}) {
+export async function listarEmailsComXml(mailbox, { maxMensagens = 25, desdeIso = null } = {}) {
   const token = await getGraphToken();
   const box = encodeURIComponent(mailbox);
   const top = Math.min(Math.max(Number(maxMensagens) || 25, 1), 100);
+  const desde = desdeIso || new Date(Date.now() - 30 * 86400000).toISOString();
 
-  // Graph rejeita ($filter em isRead+hasAttachments) COMBINADO com $orderby
-  // (erro InefficientFilter). Então filtramos só por isRead (filtro simples,
-  // sem orderby) e checamos hasAttachments no código. `hasAttachments` vem no
-  // $select pra pular cedo as mensagens sem anexo.
-  const filtro = '$filter=isRead eq false';
-  const campos = '$select=id,subject,from,receivedDateTime,hasAttachments';
-  const lista = await graphGet(
-    `/users/${box}/mailFolders/inbox/messages?${filtro}&${campos}&$top=${top}`,
-    token,
-  );
+  // Filtrar e ordenar pelo MESMO campo (receivedDateTime) é aceito pelo Graph
+  // (o InefficientFilter acontecia ao combinar isRead/hasAttachments com
+  // orderby de outro campo). hasAttachments vem no $select pra pular cedo.
+  const filtro = `$filter=receivedDateTime ge ${desde}`;
+  const campos = '$select=id,subject,from,receivedDateTime,hasAttachments,isRead';
+  const ordem = '$orderby=receivedDateTime desc';
+
+  const pastas = await listarPastasParaVarrer(box, token);
+  const mensagens = [];
+  for (const pasta of pastas) {
+    if (mensagens.length >= top) break;
+    try {
+      const lista = await graphGet(
+        `/users/${box}/mailFolders/${pasta.id}/messages?${filtro}&${campos}&${ordem}&$top=${top}`,
+        token,
+      );
+      for (const m of lista.value || []) mensagens.push({ ...m, _pasta: pasta.nome });
+    } catch (e) {
+      console.warn(`[graph-mail] pasta ${pasta.nome} indisponivel: ${e.message}`);
+    }
+  }
 
   const out = [];
-  for (const msg of lista.value || []) {
+  for (const msg of mensagens) {
     if (!msg.hasAttachments) continue;
     // Puxa os anexos da mensagem. SEM $select: `@odata.type` não é uma
     // propriedade selecionável (o Graph rejeita `$select=...,@odata.type`), e
@@ -73,9 +111,13 @@ export async function listarEmailsComXml(mailbox, { maxMensagens = 25 } = {}) {
       erroAnexos = e.message;
       console.warn(`[graph-mail] falha lendo anexos msg=${msg.id}: ${e.message}`);
     }
-    const anexosXml = anexos
-      .filter((a) => a['@odata.type'] === '#microsoft.graph.fileAttachment')
-      .filter((a) => EXT_XML.test(a.name || '') && a.contentBytes)
+    const arquivos = anexos.filter((a) => a['@odata.type'] === '#microsoft.graph.fileAttachment' && a.contentBytes);
+    const anexosXml = arquivos
+      .filter((a) => EXT_XML.test(a.name || ''))
+      .map((a) => ({ name: a.name, contentBytes: a.contentBytes }));
+    // ZIP com os XMLs do dia — o ingestor extrai e importa cada um.
+    const anexosZip = arquivos
+      .filter((a) => EXT_ZIP.test(a.name || ''))
       .map((a) => ({ name: a.name, contentBytes: a.contentBytes }));
 
     // Diagnóstico: o que veio no e-mail que NÃO virou XML importável — pra
@@ -92,7 +134,10 @@ export async function listarEmailsComXml(mailbox, { maxMensagens = 25 } = {}) {
       subject: msg.subject || '',
       from: msg.from?.emailAddress?.address || null,
       recebidoEm: msg.receivedDateTime || null,
+      pasta: msg._pasta || null,
+      jaLida: msg.isRead === true,
       anexosXml,
+      anexosZip,
       anexosInfo,
     });
   }
