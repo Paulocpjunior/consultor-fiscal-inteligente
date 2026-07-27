@@ -16,8 +16,12 @@
 import { Router } from 'express';
 import admin from 'firebase-admin';
 import { requireAuth, requireAdmin } from './require-admin.js';
-import { montarDare, derivacoesDisponiveis, CODIGOS_DARE_ICMS, montarLoteTxt, montarLinhaLoteTxt } from './dare-sp.js';
+import { montarDare, derivacoesDisponiveis, CODIGOS_DARE_ICMS, montarLoteTxt, montarLinhaLoteTxt, MAX_DOCS_LOTE_DARE } from './dare-sp.js';
 import { reconhecerPortalDare } from './dare-recon.js';
+import {
+  listarReceitas, emitirDareUnitario, emitirDareLote, montarDareApiDTO,
+  resolverAmbiente, AMBIENTE_PADRAO,
+} from './dare-icms-api.js';
 
 const router = Router();
 
@@ -96,6 +100,140 @@ router.post('/lote-txt', requireAuth, async (req, res) => {
     return res.json({ ok: true, id: doc.id, ...lote });
   } catch (e) {
     return res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+// ── Web API oficial DARE-ICMS (credenciamento 27/07/2026) ──────────────────
+// A emissão sai do portal e passa a ser feita pela API: o número e o código de
+// barras continuam vindo da SEFAZ, mas chegam direto no app.
+//
+//   GET  /api/admin/dare/api/receitas?ambiente=  — teste de fumaça da chave
+//   POST /api/admin/dare/api/emitir              — 1 DARE
+//   POST /api/admin/dare/api/emitir-lote         — até 50 DAREs
+//
+// Produção exige confirmação EXPLÍCITA no corpo (confirmoProducao: true):
+// DARE de produção é cobrança de verdade, pagável na rede bancária.
+
+/** Só admin emite guia — mesma régua do envio de imposto (#293). */
+function checarProducao(req) {
+  const ambiente = String(req.body?.ambiente || req.query?.ambiente || AMBIENTE_PADRAO).toLowerCase();
+  if (ambiente === 'producao' && req.body?.confirmoProducao !== true) {
+    const err = new Error(
+      'Emissão em PRODUÇÃO exige confirmação explícita: o DARE gerado é válido e pagável. '
+      + 'Confirme na tela (ou envie confirmoProducao: true) para seguir.',
+    );
+    err.precisaConfirmar = true;
+    throw err;
+  }
+  return ambiente;
+}
+
+router.get('/api/receitas', requireAdmin, async (req, res) => {
+  try {
+    const ambiente = String(req.query.ambiente || AMBIENTE_PADRAO).toLowerCase();
+    const receitas = await listarReceitas({ ambiente });
+    return res.json({ ok: true, ambiente, rotulo: resolverAmbiente(ambiente).rotulo, receitas });
+  } catch (e) {
+    console.error('[dare/api/receitas]', e.message);
+    return res.status(e.httpStatus && e.httpStatus < 500 ? 400 : 502).json({ ok: false, error: e.message });
+  }
+});
+
+router.post('/api/emitir', requireAdmin, async (req, res) => {
+  try {
+    const ambiente = checarProducao(req);
+    const { cnpj, razaoSocial, codigoServico, referencia, valor, vencimento, linha06, linha08, gerarPDF, empresaId } = req.body || {};
+    // Revalida pelo montarDare (mesma régua do preview: código de serviço
+    // conhecido, referência/vencimento/valor coerentes) ANTES de chamar a API.
+    const preview = montarDare({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento });
+    const dto = montarDareApiDTO({
+      cnpj, codigoServico, referencia: preview.referencia, valor: preview.valor,
+      dataVencimento: preview.vencimento, linha06, linha08, gerarPDF,
+    });
+
+    const db = fa().firestore();
+    const logRef = await db.collection('dare_solicitacoes').add({
+      ...preview,
+      empresaId: empresaId || null,
+      ambiente,
+      linha06: dto.linha06 || null,
+      linha08: dto.linha08 || null,
+      solicitadoPor: req.user?.email || req.user?.uid || 'desconhecido',
+      solicitadoEm: admin.firestore.FieldValue.serverTimestamp(),
+      status: 'emitindo-via-api',
+    });
+
+    try {
+      const resposta = await emitirDareUnitario(dto, { ambiente });
+      await logRef.update({
+        status: 'emitida-via-api',
+        emitidaEm: admin.firestore.FieldValue.serverTimestamp(),
+        // Guarda o retorno da SEFAZ (número, barras, PIX, PDF) — é o
+        // comprovante. Nada disso é gerado localmente.
+        retornoApi: resposta ?? null,
+      });
+      return res.json({ ok: true, id: logRef.id, ambiente, preview, retorno: resposta });
+    } catch (erroApi) {
+      await logRef.update({
+        status: 'falha-api',
+        erro: String(erroApi.message || erroApi).slice(0, 800),
+        falhouEm: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      throw erroApi;
+    }
+  } catch (e) {
+    const status = e.precisaConfirmar ? 428 : (e.camposInvalidos || !e.httpStatus ? 400 : 502);
+    return res.status(status).json({ ok: false, error: e.message, camposInvalidos: e.camposInvalidos || null });
+  }
+});
+
+router.post('/api/emitir-lote', requireAdmin, async (req, res) => {
+  try {
+    const ambiente = checarProducao(req);
+    const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
+    if (itens.length === 0) return res.status(400).json({ ok: false, error: 'Informe ao menos um DARE no lote.' });
+    if (itens.length > MAX_DOCS_LOTE_DARE) {
+      return res.status(400).json({ ok: false, error: `O lote aceita no máximo ${MAX_DOCS_LOTE_DARE} guias — divida o envio.` });
+    }
+
+    // Um item inválido aborta o lote inteiro (nunca emitir metade).
+    const previews = itens.map((it) => montarDare(it));
+    const dtos = itens.map((it, i) => montarDareApiDTO({
+      cnpj: it.cnpj, codigoServico: it.codigoServico, referencia: previews[i].referencia,
+      valor: previews[i].valor, dataVencimento: previews[i].vencimento,
+      linha06: it.linha06, linha08: it.linha08, gerarPDF: req.body?.gerarPDF,
+    }));
+
+    const db = fa().firestore();
+    const logRef = await db.collection('dare_solicitacoes').add({
+      tipo: 'lote-api',
+      ambiente,
+      totalDocs: dtos.length,
+      totalValor: previews.reduce((s, p) => s + Number(p.valor || 0), 0),
+      solicitadoPor: req.user?.email || req.user?.uid || 'desconhecido',
+      solicitadoEm: admin.firestore.FieldValue.serverTimestamp(),
+      status: 'emitindo-via-api',
+    });
+
+    try {
+      const resposta = await emitirDareLote(dtos, { ambiente });
+      await logRef.update({
+        status: 'emitida-via-api',
+        emitidaEm: admin.firestore.FieldValue.serverTimestamp(),
+        retornoApi: resposta ?? null,
+      });
+      return res.json({ ok: true, id: logRef.id, ambiente, total: dtos.length, retorno: resposta });
+    } catch (erroApi) {
+      await logRef.update({
+        status: 'falha-api',
+        erro: String(erroApi.message || erroApi).slice(0, 800),
+        falhouEm: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      throw erroApi;
+    }
+  } catch (e) {
+    const status = e.precisaConfirmar ? 428 : (e.camposInvalidos || !e.httpStatus ? 400 : 502);
+    return res.status(status).json({ ok: false, error: e.message, camposInvalidos: e.camposInvalidos || null });
   }
 });
 
