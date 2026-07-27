@@ -174,6 +174,9 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                 setStatusApi(ambiente === 'homologacao'
                     ? '✓ DARE emitido em HOMOLOGAÇÃO — documento de teste, sem validade e não pagável.'
                     : '✓ DARE emitido em PRODUÇÃO — documento válido. Registrado na auditoria.');
+            } else if (r.indeterminado) {
+                // Rede caiu no meio: a guia PODE existir. Não repetir às cegas.
+                setAviso(`⚠ ${r.error} Antes de emitir de novo, confira no portal DARE se a guia já saiu.`);
             } else {
                 setErro((r.camposInvalidos?.join(' ') || r.error) ?? 'Falha ao emitir.');
             }

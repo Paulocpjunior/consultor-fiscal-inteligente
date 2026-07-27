@@ -211,16 +211,25 @@ router.post('/api/emitir', requireAdmin, async (req, res) => {
       });
       return res.json({ ok: true, id: logRef.id, ambiente, preview, comprovante: resumo, pdfPath, retorno: resposta });
     } catch (erroApi) {
+      // Rede caiu no meio do POST: NÃO dá pra afirmar que falhou — a SEFAZ
+      // pode ter criado a guia e só a resposta ter se perdido. Marcar como
+      // 'falha-api' aqui levaria alguém a reemitir e duplicar o DARE.
       await logRef.update({
-        status: 'falha-api',
+        status: erroApi.indeterminado ? 'indeterminado' : 'falha-api',
         erro: String(erroApi.message || erroApi).slice(0, 800),
         falhouEm: admin.firestore.FieldValue.serverTimestamp(),
       });
       throw erroApi;
     }
   } catch (e) {
-    const status = e.precisaConfirmar ? 428 : (e.camposInvalidos || !e.httpStatus ? 400 : 502);
-    return res.status(status).json({ ok: false, error: e.message, camposInvalidos: e.camposInvalidos || null });
+    const status = e.precisaConfirmar ? 428
+      : e.indeterminado ? 504
+      : (e.camposInvalidos || !e.httpStatus ? 400 : 502);
+    return res.status(status).json({
+      ok: false, error: e.message,
+      camposInvalidos: e.camposInvalidos || null,
+      indeterminado: !!e.indeterminado,
+    });
   }
 });
 
@@ -266,15 +275,21 @@ router.post('/api/emitir-lote', requireAdmin, async (req, res) => {
       return res.json({ ok: true, id: logRef.id, ambiente, total: dtos.length, zipPath, retorno: resposta });
     } catch (erroApi) {
       await logRef.update({
-        status: 'falha-api',
+        status: erroApi.indeterminado ? 'indeterminado' : 'falha-api',
         erro: String(erroApi.message || erroApi).slice(0, 800),
         falhouEm: admin.firestore.FieldValue.serverTimestamp(),
       });
       throw erroApi;
     }
   } catch (e) {
-    const status = e.precisaConfirmar ? 428 : (e.camposInvalidos || !e.httpStatus ? 400 : 502);
-    return res.status(status).json({ ok: false, error: e.message, camposInvalidos: e.camposInvalidos || null });
+    const status = e.precisaConfirmar ? 428
+      : e.indeterminado ? 504
+      : (e.camposInvalidos || !e.httpStatus ? 400 : 502);
+    return res.status(status).json({
+      ok: false, error: e.message,
+      camposInvalidos: e.camposInvalidos || null,
+      indeterminado: !!e.indeterminado,
+    });
   }
 });
 

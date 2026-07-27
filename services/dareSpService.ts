@@ -102,6 +102,11 @@ export interface EmissaoApiResultado {
     camposInvalidos?: string[] | null;
     /** HTTP 428: produção pede confirmação explícita. */
     precisaConfirmar?: boolean;
+    /**
+     * HTTP 504: a rede caiu no meio da emissão. NÃO significa que falhou — a
+     * guia pode ter sido criada na SEFAZ. Conferir antes de emitir de novo.
+     */
+    indeterminado?: boolean;
 }
 
 export async function emitirDarePelaApi(
@@ -120,6 +125,7 @@ export async function emitirDarePelaApi(
             error: data.error || `HTTP ${res.status}`,
             camposInvalidos: data.camposInvalidos || null,
             precisaConfirmar: res.status === 428,
+            indeterminado: res.status === 504 || data.indeterminado === true,
         };
     }
     return { ...data, ok: true };
