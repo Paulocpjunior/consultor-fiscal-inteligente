@@ -24,7 +24,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   (0 ok + N falhas) nunca é verde; falha sempre com o MOTIVO dominante ao
   lado. Lições 23/07: "Saúde dos crons" dizia OK com 0/500; NFe ficou
   "inoperante" vermelho com 12k docs/7d (all-failed transitório com captura
-  saudável = âmbar, não vermelho).
+  saudável = âmbar, não vermelho). Lição 27/07 (#319): status de heartbeat
+  ('iniciado') NUNCA pode virar vermelho ETERNO — deploy mata o setImmediate
+  e o doc ficava 'iniciado' pra sempre ("NFS-e SP travado há 9h" sem nada
+  travado). Todo trilho com heartbeat DEVE ter as duas redes: SIGTERM
+  (cron-heartbeat.registrarRunEmAndamento) marcando 'interrompido' na hora +
+  auto-cura por idade (cron-health.decidirCuraOrfao, >2h). 'interrompido' =
+  âmbar com a ação enquanto a próxima rodada cabe na janela; passou do
+  maxIdle sem rodar = vermelho. Nunca verde (não capturou nada).
 - **ORDEM TÉCNICA do envio de imposto** (Paulo, 24/07/2026 — vale pra TODO
   imposto/guia/obrigação enviada ao cliente, #293): 1) cópia do arquivo na
   pasta IMPOSTOS do cliente no SharePoint (mesma árvore do sync:
@@ -197,6 +204,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 - **Adoção do cofre (saída mod 55) = 0/388**: lista priorizada na Cobertura
   de Saída (🎯 prioritárias = emitem mod 55 e pararam de ser capturadas);
   equipe deve enviar as "📋 Instruções" por ordem de volume.
+- **Cofre de e-mail — 3 formatos reais** (prints do Paulo 27/07, #317/#318):
+  anexo .xml, .zip com os XMLs do dia e LINK no corpo (ISS.NET-DF manda o
+  .aspx do XML; ERP manda pacote do mês que expira em 7 dias). Cofre NÃO
+  depende mais de "não lido" (idempotência própria em `cofre_email_mensagens`
+  por messageId) e varre inbox + subpastas + lixo eletrônico. Link só é
+  baixado com domínio na allowlist (`gov.br` + `XML_INGEST_LINK_DOMINIOS`),
+  https e guarda de SSRF. **Paulo (#320)**: rodar "Recuperar histórico (180
+  dias)" no painel do cofre pra trazer o que ficou preso, e autorizar o
+  domínio do ERP da Ludus se aparecer em "link recusado".
 - ~~Exclusão de empresa não acatada (WALDESA)~~ **FEITA 24/07** (#290):
   exclusão agora é SOFT-DELETE com lápide `_deleted` (deleteDoc físico
   ressuscitava via merge do localStorage de outros navegadores + re-sync do
