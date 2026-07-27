@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import type { EmpresaDadosFiscais } from '../types';
 import { CloseIcon, BuildingIcon } from './Icons';
+import { sanitizarDadosFiscais } from '../services/empresaDadosFiscaisSanitize';
 
 interface Props {
     isOpen: boolean;
@@ -46,7 +47,12 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
     }, [isOpen, valoresAtuais]);
 
     const handleField = (key: keyof EmpresaDadosFiscais, value: string) => {
-        setDados(prev => ({ ...prev, [key]: value || undefined }));
+        // Guarda a string COMO ESTÁ, inclusive vazia. O `value || undefined`
+        // antigo virava undefined ao limpar o campo, o JSON perdia a chave e o
+        // backend nunca recebia ordem de apagar — era por isso que "limpar e
+        // salvar" não pegava (CCM de empresa fora de SP capital, 27/07).
+        // Campo intocado continua ausente do objeto e segue inalterado.
+        setDados(prev => ({ ...prev, [key]: value }));
         if (key === 'uf') setAvisoUfVazia(false);
     };
 
@@ -71,27 +77,10 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
         setSalvando(true);
         setErro(null);
         try {
-            // Sanitiza: aceita IE em maiusculas, remove espacos extras
-            const limpo: EmpresaDadosFiscais = {
-                ...dados,
-                inscricaoEstadual: dados.inscricaoEstadual?.trim().toUpperCase(),
-                uf: dados.uf?.trim().toUpperCase(),
-                codMunIBGE: dados.codMunIBGE?.replace(/\D/g, ''),
-                cep: dados.cep?.replace(/\D/g, ''),
-                telefone: dados.telefone?.replace(/\D/g, ''),
-                // CCM canônico: só dígitos. Campo LIMPO envia '' (o backend
-                // apaga) — o `|| undefined` antigo sumia do JSON e o valor
-                // velho ficava preso ("não aceita ficar sem valor", 26/07,
-                // caso DARCY/Santos). Zeros (000000000) = contorno da equipe
-                // pra campo obrigatório fantasma → também vira vazio.
-                ccmSp: dados.ccmSp != null
-                    ? (/^0*$/.test(dados.ccmSp.replace(/\D/g, '')) ? '' : dados.ccmSp.replace(/\D/g, ''))
-                    : undefined,
-                // Inscrição municipal genérica: NÃO stripa (pode ser alfanumérica
-                // conforme a prefeitura); só trim. Limpa → '' (apaga no backend).
-                inscricaoMunicipal: dados.inscricaoMunicipal != null ? dados.inscricaoMunicipal.trim() : undefined,
-            };
-            await onSave(limpo);
+            // Sanitiza (puro e testado): campo limpo vira '' = ordem de APAGAR;
+            // campo intocado fica ausente = não mexe. Ver
+            // services/empresaDadosFiscaisSanitize.ts.
+            await onSave(sanitizarDadosFiscais(dados));
             onClose();
         } catch (e: any) {
             setErro(e?.message || 'Erro ao salvar.');

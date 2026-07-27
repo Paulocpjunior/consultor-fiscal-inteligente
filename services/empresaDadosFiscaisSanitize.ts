@@ -1,0 +1,47 @@
+/**
+ * empresaDadosFiscaisSanitize.ts — PURO (testável).
+ *
+ * Regra que já quebrou duas vezes: campo LIMPO tem de chegar ao backend como
+ * string vazia (''), que é a ordem de APAGAR. Se virar `undefined`, o
+ * JSON.stringify some com a chave, o backend não recebe nada e o valor velho
+ * fica preso — foi o "CCM não aceita ficar sem valor" (26/07, DARCY) e de novo
+ * o "colaborador não consegue gravar" (27/07, FASTWELD/Guarulhos).
+ *
+ * Campo NUNCA tocado continua ausente do objeto (undefined) — esse é o jeito
+ * de dizer "não mexe neste campo".
+ */
+import type { EmpresaDadosFiscais } from '../types';
+
+/** Só dígitos; '' quando não sobrar nada. */
+function digitos(v: string): string {
+    return v.replace(/\D/g, '');
+}
+
+export function sanitizarDadosFiscais(dados: EmpresaDadosFiscais): EmpresaDadosFiscais {
+    const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+    const trim = (v: unknown): string | undefined => {
+        const s = str(v);
+        return s == null ? undefined : s.trim();
+    };
+    const numerico = (v: unknown): string | undefined => {
+        const s = str(v);
+        return s == null ? undefined : digitos(s);
+    };
+
+    const ccmBruto = str(dados.ccmSp);
+    return {
+        ...dados,
+        inscricaoEstadual: trim(dados.inscricaoEstadual)?.toUpperCase(),
+        uf: trim(dados.uf)?.toUpperCase(),
+        codMunIBGE: numerico(dados.codMunIBGE),
+        cep: numerico(dados.cep),
+        telefone: numerico(dados.telefone),
+        // CCM canônico: só dígitos. Zeros (000000000) são o contorno que a
+        // equipe digitava num campo que parecia obrigatório → tratados como
+        // vazio (apaga), igual ao backend.
+        ccmSp: ccmBruto == null ? undefined : (/^0*$/.test(digitos(ccmBruto)) ? '' : digitos(ccmBruto)),
+        // Inscrição municipal genérica: NÃO stripa (pode ser alfanumérica
+        // conforme a prefeitura); só trim.
+        inscricaoMunicipal: trim(dados.inscricaoMunicipal),
+    };
+}
