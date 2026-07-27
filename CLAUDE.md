@@ -79,7 +79,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   alexandre@ é só do fiscal/CFI) em BCC; Ajustes (admin) configura cópias,
   e-mails de renovação, link de compra + WhatsApp no alerta e pasta do
   Cofre de certificados no SharePoint (renovação detectada no sync copia
-  o A1 pro Cofre e notifica). Cron próprio `legalizacao-cron-diario` 7h30 BRT via
+  o A1 pro Cofre e notifica). **Contratos IA** (v1.0.14): colaborador marca
+  a flag do tipo (constituição/alteração/encerramento/ata/holding/S-A),
+  sobe PDF-DOCX e a IA (gemini-pro-latest, GEMINI_API_KEY espelhada do
+  CFI) devolve RESUMO TÉCNICO — adequação ao tipo, ortografia,
+  concordância, cláusulas por tipo — NUNCA altera o documento; cópia por
+  e-mail ao gestor (jefferson@) com colaborador em CC; auditoria em
+  legalizacao_contratos_analises (arquivo NÃO é armazenado, só o resumo). Cron próprio `legalizacao-cron-diario` 7h30 BRT via
   scripts/setup-scheduler.sh DO REPO NOVO (o setup-cloud-schedulers.sh
   daqui NÃO tem esse job). Estado 27/07: **app NO AR** — repo real ficou
   `Paulocpjunior/legaliza-o` (GitHub cortou os acentos), URL fixa
