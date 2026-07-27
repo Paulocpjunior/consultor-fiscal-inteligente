@@ -55,18 +55,26 @@ export interface ResumoLote {
     porEmitente: Record<string, number>;
     /** CNPJ do destinatário → quantidade. */
     porDestinatario: Record<string, number>;
+    /**
+     * "emit|dest" → quantidade. Guarda o PAR de cada nota: sem isso não dá pra
+     * contar direito a nota em que a empresa é a destinatária (entrada) —
+     * contar emitente e destinatário em listas separadas duplica ou perde.
+     */
+    pares: Record<string, number>;
     /** XMLs em que não deu para identificar nenhuma das pontas. */
     semIdentificacao: number;
 }
 
 export function resumirLoteXmls(xmls: string[]): ResumoLote {
-    const resumo: ResumoLote = { total: 0, porEmitente: {}, porDestinatario: {}, semIdentificacao: 0 };
+    const resumo: ResumoLote = { total: 0, porEmitente: {}, porDestinatario: {}, pares: {}, semIdentificacao: 0 };
     for (const xml of xmls || []) {
         resumo.total++;
         const d = extrairDadosXml(xml);
         if (d.emit) resumo.porEmitente[d.emit] = (resumo.porEmitente[d.emit] || 0) + 1;
         if (d.dest) resumo.porDestinatario[d.dest] = (resumo.porDestinatario[d.dest] || 0) + 1;
-        if (!d.emit && !d.dest) resumo.semIdentificacao++;
+        if (!d.emit && !d.dest) { resumo.semIdentificacao++; continue; }
+        const chave = `${d.emit || ''}|${d.dest || ''}`;
+        resumo.pares[chave] = (resumo.pares[chave] || 0) + 1;
     }
     return resumo;
 }
@@ -88,6 +96,9 @@ export interface ValidacaoLote {
     total: number;
     /** XMLs em que a empresa escolhida aparece como emitente ou destinatário. */
     compativeis: number;
+    /** Dos compatíveis: quantos ela emitiu (saída) e quantos recebeu (entrada). */
+    comoEmitente: number;
+    comoDestinatario: number;
     /** XMLs que não têm nada a ver com a empresa escolhida. */
     incompativeis: number;
     semIdentificacao: number;
@@ -111,20 +122,27 @@ export function validarLoteParaEmpresa(
 ): ValidacaoLote {
     const raizAlvo = raizCnpj(empresaCnpj);
     let compativeis = 0;
+    let comoEmitente = 0;
+    let comoDestinatario = 0;
     const foraPorCnpj: Record<string, number> = {};
 
-    for (const [cnpj, qtd] of Object.entries(resumo.porEmitente)) {
-        if (raizCnpj(cnpj) === raizAlvo) compativeis += qtd;
-        else foraPorCnpj[cnpj] = (foraPorCnpj[cnpj] || 0) + qtd;
-    }
-    for (const [cnpj, qtd] of Object.entries(resumo.porDestinatario)) {
-        // Destinatário só soma quando o emitente NÃO era a empresa (evita contar
-        // duas vezes a nota em que ela é as duas pontas — transferência).
-        if (raizCnpj(cnpj) === raizAlvo && !Object.keys(resumo.porEmitente).some((c) => raizCnpj(c) === raizAlvo)) {
+    // Conta POR NOTA (par emit|dest): a nota de ENTRADA tem emitente de
+    // terceiro e a empresa no destinatário — contar as duas listas separadas
+    // fazia o fornecedor virar "dono provável" de uma nota que é da empresa.
+    for (const [par, qtd] of Object.entries(resumo.pares)) {
+        const [emit, dest] = par.split('|');
+        const ehEmit = !!emit && raizCnpj(emit) === raizAlvo;
+        const ehDest = !!dest && raizCnpj(dest) === raizAlvo;
+        if (ehEmit || ehDest) {
             compativeis += qtd;
+            if (ehEmit) comoEmitente += qtd; else comoDestinatario += qtd;
+        } else {
+            // Só nota que NÃO é da empresa aponta um dono alheio (pelo emitente,
+            // que é quem define a posse da saída).
+            const alheio = emit || dest;
+            if (alheio) foraPorCnpj[alheio] = (foraPorCnpj[alheio] || 0) + qtd;
         }
     }
-    compativeis = Math.min(compativeis, resumo.total);
 
     const porRaiz = new Map<string, EmpresaConhecida>();
     for (const e of empresas || []) {
@@ -159,12 +177,17 @@ export function validarLoteParaEmpresa(
     } else if (resumo.semIdentificacao > 0) {
         mensagem = `${compativeis} XMLs desta empresa; ${resumo.semIdentificacao} sem CNPJ identificável (o servidor decide na importação).`;
     } else {
-        mensagem = `Todos os ${resumo.total} XMLs são desta empresa.`;
+        const detalhe = comoEmitente && comoDestinatario
+            ? `${comoEmitente} de saída (ela emitiu) e ${comoDestinatario} de entrada (ela recebeu)`
+            : comoEmitente ? 'todos de saída (ela emitiu)' : 'todos de entrada (ela recebeu)';
+        mensagem = `Todos os ${resumo.total} XMLs são desta empresa — ${detalhe}.`;
     }
 
     return {
         total: resumo.total,
         compativeis,
+        comoEmitente,
+        comoDestinatario,
         incompativeis,
         semIdentificacao: resumo.semIdentificacao,
         donosProvaveis,

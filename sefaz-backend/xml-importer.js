@@ -626,6 +626,24 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
       chave: meta.chave,
     });
     if (dec.duplicado) {
+      // Doc já existe, mas SEM dono (empresaId null — importações em lote
+      // antigas gravavam assim e a nota sumia do filtro por empresa) ou com
+      // dono diferente do CNPJ desta importação. Reatribui só os campos de
+      // posse/direção — o corpo da nota fica intacto (nunca rebaixa completa
+      // para resumo).
+      const atual = snap.data() || {};
+      const donoNovo = empresaId || null;
+      const precisaDono = donoNovo && atual.empresaId !== donoNovo;
+      if (precisaDono) {
+        tx.update(docRef, {
+          empresaId: donoNovo,
+          empresaCnpj: docData.empresaCnpj ?? null,
+          direcao: docData.direcao ?? atual.direcao ?? null,
+          reatribuidoEm: fa().firestore.FieldValue.serverTimestamp(),
+          reatribuidoDe: atual.empresaId || null,
+        });
+        return { status: 'reatribuido', chave: meta.chave, deEmpresaId: atual.empresaId || null };
+      }
       return { status: 'duplicado', chave: meta.chave };
     }
     if (dec.merge) {

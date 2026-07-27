@@ -57,14 +57,25 @@ const ConfirmarImportacaoModal: React.FC<Props> = ({
                             {validacao.incompativeis > 0 && <span className="text-red-600 dark:text-red-400 font-bold"> · {validacao.incompativeis} de outro CNPJ</span>}
                             {validacao.semIdentificacao > 0 && <span className="text-slate-500"> · {validacao.semIdentificacao} sem CNPJ legível</span>}
                         </p>
-                        {validacao.donosProvaveis.length > 0 && (
-                            <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-0.5">
-                                {validacao.donosProvaveis.map((d) => (
-                                    <li key={d.cnpj}>
-                                        <span className="font-mono">{formatCnpjCpf(d.cnpj)}</span> — {d.empresa ? d.empresa.nome : 'não cadastrada'} ({d.qtd} XML)
-                                    </li>
-                                ))}
-                            </ul>
+                        {validacao.compativeis > 0 && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                {validacao.comoEmitente} de saída (ela emitiu) · {validacao.comoDestinatario} de entrada (ela recebeu)
+                            </p>
+                        )}
+                        {/* Só lista dono alheio quando há XML que NÃO é desta
+                            empresa — antes o fornecedor da nota de entrada
+                            aparecia como "não cadastrada" e assustava à toa. */}
+                        {validacao.incompativeis > 0 && validacao.donosProvaveis.length > 0 && (
+                            <>
+                                <p className="text-[11px] font-bold uppercase text-red-600 dark:text-red-400">De outro CNPJ</p>
+                                <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-0.5">
+                                    {validacao.donosProvaveis.map((d) => (
+                                        <li key={d.cnpj}>
+                                            <span className="font-mono">{formatCnpjCpf(d.cnpj)}</span> — {d.empresa ? d.empresa.nome : 'não cadastrada'} ({d.qtd} XML)
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
                         )}
                         {arquivos.length > 0 && (
                             <p className="text-[11px] text-slate-400 break-all">

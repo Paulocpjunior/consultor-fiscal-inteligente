@@ -327,8 +327,12 @@ export interface LoteImportResultado {
     importadas?: number;
     duplicadas?: number;
     atualizadas?: number;
+    /** Já existiam SEM dono (ou noutra empresa) e foram trazidas para esta. */
+    reatribuidas?: number;
     erros?: number;
     errosDetalhe?: string[];
+    empresaId?: string;
+    empresaNome?: string;
     error?: string;
 }
 

@@ -19,6 +19,8 @@ interface Totais {
     importadas: number;
     atualizadas: number;
     duplicadas: number;
+    /** Já estavam na base sem dono (ou noutra empresa) e vieram pra esta. */
+    reatribuidas: number;
     erros: number;
 }
 
@@ -103,7 +105,7 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             }
             if (xmls.length === 0) {
                 onShowToast?.('Nenhum XML encontrado nos arquivos.');
-                setTotais({ arquivos: 0, importadas: 0, atualizadas: 0, duplicadas: 0, erros: 0 });
+                setTotais({ arquivos: 0, importadas: 0, atualizadas: 0, duplicadas: 0, reatribuidas: 0, erros: 0 });
                 setErrosDetalhe(erros);
                 return;
             }
@@ -120,7 +122,7 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
     const processar = async (xmls: string[], errosIniciais: string[]) => {
         if (!empresa) return;
         setProcessando(true);
-        const acc: Totais = { arquivos: xmls.length, importadas: 0, atualizadas: 0, duplicadas: 0, erros: 0 };
+        const acc: Totais = { arquivos: xmls.length, importadas: 0, atualizadas: 0, duplicadas: 0, reatribuidas: 0, erros: 0 };
         const erros: string[] = [...errosIniciais];
         try {
             // Envia em lotes limitados por quantidade E tamanho.
@@ -134,6 +136,7 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                     acc.importadas += r.importadas || 0;
                     acc.atualizadas += r.atualizadas || 0;
                     acc.duplicadas += r.duplicadas || 0;
+                    acc.reatribuidas += r.reatribuidas || 0;
                     acc.erros += r.erros || 0;
                     if (r.errosDetalhe) for (const e of r.errosDetalhe) if (erros.length < 30) erros.push(e);
                 } else {
@@ -154,7 +157,7 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             }
             await enviar();
 
-            onShowToast?.(`Massa concluída — ${acc.importadas} novas, ${acc.atualizadas} atualizadas (resumo→completa), ${acc.duplicadas} duplicadas, ${acc.erros} erros.`);
+            onShowToast?.(`Massa concluída — ${acc.importadas} novas, ${acc.atualizadas} atualizadas (resumo→completa), ${acc.reatribuidas} reatribuídas a esta empresa, ${acc.duplicadas} duplicadas, ${acc.erros} erros.`);
             onImported?.();
         } catch (e) {
             erros.push(e instanceof Error ? e.message : String(e));
@@ -234,6 +237,12 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                         {totais.arquivos} XMLs no lote → {totais.importadas} novas · {totais.atualizadas} atualizadas
                         (resumo→completa) · {totais.duplicadas} duplicadas · {totais.erros} erros
                     </p>
+                    {totais.reatribuidas > 0 && (
+                        <p className="text-[11px] text-sky-700 dark:text-sky-400 mt-0.5">
+                            ↪ {totais.reatribuidas} nota(s) já estavam na base sem dono (ou em outra empresa) e foram
+                            atribuídas a esta — agora aparecem no filtro por empresa.
+                        </p>
+                    )}
                     {errosDetalhe.length > 0 && (
                         <details className="mt-1">
                             <summary className="cursor-pointer text-slate-500">Ver ocorrências ({errosDetalhe.length})</summary>
