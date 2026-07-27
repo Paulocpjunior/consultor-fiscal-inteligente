@@ -93,9 +93,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   vazou 2× em colas de terminal no chat — na próxima manutenção, gerar
   versão nova do secret e rodar os DOIS scripts de scheduler (CFI + novo).
   Lição de gcloud: `--update-headers` só existe no `update`; `create` usa
-  `--headers`. O card Legalização foi REMOVIDO do CFI; deep-link
-  `services/moduloDeepLink.ts` ficou (padrão de URL fixa pros hubs
-  internos).
+  `--headers`. LIÇÕES 27/07 (tarde, v1.0.5→v1.0.10): (1) serviço Cloud Run
+  NOVO nasce com CPU-por-requisição — o padrão do CFI "responde e trabalha
+  em setImmediate" CONGELA (botão sync não fazia nada); rotas de
+  cron/cron-now do app novo viraram SÍNCRONAS + serviço com
+  --no-cpu-throttling --timeout 600. (2) Campo checkbox do Jotform devolve
+  answer em ARRAY — parser v1 jogava fora e tudo virava "Certidão/Não
+  informado". (3) `PARSER_VERSAO` carimbado na meta + `migrarSeNecessario()`
+  no boot: parser novo re-sincroniza o banco sozinho no deploy (nunca
+  depender de clique pós-deploy). (4) UpdateBanner obrigatório desde o
+  1º deploy — Safari segura HTML antigo mesmo com no-store. O card
+  Legalização foi REMOVIDO do CFI; deep-link `services/moduloDeepLink.ts`
+  ficou (padrão de URL fixa pros hubs internos).
 
 ## Fila de features acordadas (com requisitos)
 
