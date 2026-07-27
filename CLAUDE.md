@@ -83,13 +83,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   O workflow do repo novo é "instalador completo": pós-deploy grava
   jotform-api-key no Secret Manager (do GitHub secret JOTFORM_API_KEY),
   espelha do serviço do CFI os vínculos de SEFAZ_CRON_SECRET/GRAPH_* e
-  tenta criar o scheduler. ÚNICO gap: a SA github-deploy não tem
-  secretAccessor no sefaz-cron-secret ⇒ **job legalizacao-cron-diario NÃO
-  foi criado — Paulo precisa rodar `scripts/setup-scheduler.sh` do repo
-  novo no Mac dele** (gcloud pessoal lê o secret). Até lá, sync/alertas só
-  pelo botão "Rodar agora" da aba Integração (admin). O card Legalização
-  foi REMOVIDO do CFI; deep-link `services/moduloDeepLink.ts` ficou
-  (padrão de URL fixa pros hubs internos).
+  tenta criar o scheduler (a SA github-deploy NÃO lê sefaz-cron-secret —
+  o passo avisa e segue; quem cria o job é o script manual). **CONCLUÍDO
+  27/07**: Paulo rodou `scripts/setup-scheduler.sh` → job
+  `legalizacao-cron-diario` ENABLED (30 7 * * 1-5 BRT), apontando pra URL
+  nova-geração do serviço (legalizacao-zricstsjqa-uw.a.run.app — mesma
+  coisa que a URL numérica). v1.0.4 com identidade própria (nome/logo/
+  tema no login). PENDÊNCIA de higiene: o valor do sefaz-cron-secret
+  vazou 2× em colas de terminal no chat — na próxima manutenção, gerar
+  versão nova do secret e rodar os DOIS scripts de scheduler (CFI + novo).
+  Lição de gcloud: `--update-headers` só existe no `update`; `create` usa
+  `--headers`. O card Legalização foi REMOVIDO do CFI; deep-link
+  `services/moduloDeepLink.ts` ficou (padrão de URL fixa pros hubs
+  internos).
 
 ## Fila de features acordadas (com requisitos)
 
