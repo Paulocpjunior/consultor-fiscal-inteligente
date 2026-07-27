@@ -168,7 +168,9 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
         try {
             const r = await emitirDarePelaApi({ ...inputAtual(), ambiente, confirmoProducao: ambiente === 'producao' });
             if (r.ok) {
-                setEmitido(r.retorno ?? {});
+                // Comprovante = o que a SEFAZ devolveu (número, barras, Pix).
+                // Nada aqui é gerado localmente.
+                setEmitido(r.comprovante ?? r.retorno ?? {});
                 setStatusApi(ambiente === 'homologacao'
                     ? '✓ DARE emitido em HOMOLOGAÇÃO — documento de teste, sem validade e não pagável.'
                     : '✓ DARE emitido em PRODUÇÃO — documento válido. Registrado na auditoria.');

@@ -20,7 +20,7 @@ import { montarDare, derivacoesDisponiveis, CODIGOS_DARE_ICMS, montarLoteTxt, mo
 import { reconhecerPortalDare } from './dare-recon.js';
 import {
   listarReceitas, emitirDareUnitario, emitirDareLote, montarDareApiDTO,
-  resolverAmbiente, AMBIENTE_PADRAO,
+  resolverAmbiente, AMBIENTE_PADRAO, resumirRetornoDare,
 } from './dare-icms-api.js';
 
 const router = Router();
@@ -114,6 +114,38 @@ router.post('/lote-txt', requireAuth, async (req, res) => {
 // Produção exige confirmação EXPLÍCITA no corpo (confirmoProducao: true):
 // DARE de produção é cobrança de verdade, pagável na rede bancária.
 
+/**
+ * Guarda o PDF do DARE (documentoImpressao, base64) no Storage. Firestore não
+ * serve pra isso (teto de 1 MiB por doc) e o PDF é o comprovante que o cliente
+ * recebe — some daqui, some do rito de envio.
+ * Falha ao salvar NÃO derruba a emissão (o DARE já existe na SEFAZ): devolve
+ * null e o log fica sem o caminho.
+ */
+async function salvarBase64NoStorage(base64, caminho) {
+  if (!base64) return null;
+  try {
+    const bucket = fa().storage().bucket();
+    const arquivo = bucket.file(caminho);
+    await arquivo.save(Buffer.from(base64, 'base64'), {
+      contentType: caminho.endsWith('.zip') ? 'application/zip' : 'application/pdf',
+      resumable: false,
+    });
+    return caminho;
+  } catch (e) {
+    console.warn('[dare/api] falha salvando arquivo no Storage:', e.message);
+    return null;
+  }
+}
+
+function salvarPdfDare(resposta, id, ambiente) {
+  const item = resposta?.itensParaGeracao?.[0] || resposta || {};
+  return salvarBase64NoStorage(item.documentoImpressao, `dares/${ambiente}/${id}.pdf`);
+}
+
+function salvarZipLote(resposta, id, ambiente) {
+  return salvarBase64NoStorage(resposta?.zipDownload, `dares/${ambiente}/${id}-lote.zip`);
+}
+
 /** Só admin emite guia — mesma régua do envio de imposto (#293). */
 function checarProducao(req) {
   const ambiente = String(req.body?.ambiente || req.query?.ambiente || AMBIENTE_PADRAO).toLowerCase();
@@ -147,7 +179,9 @@ router.post('/api/emitir', requireAdmin, async (req, res) => {
     // conhecido, referência/vencimento/valor coerentes) ANTES de chamar a API.
     const preview = montarDare({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento });
     const dto = montarDareApiDTO({
-      cnpj, codigoServico, referencia: preview.referencia, valor: preview.valor,
+      cnpj, razaoSocial: razaoSocial || preview.contribuinte?.razaoSocial,
+      codigoServico, codigoReceita: preview.codigoReceita,
+      referencia: preview.referencia, valor: preview.valor,
       dataVencimento: preview.vencimento, linha06, linha08, gerarPDF,
     });
 
@@ -165,14 +199,17 @@ router.post('/api/emitir', requireAdmin, async (req, res) => {
 
     try {
       const resposta = await emitirDareUnitario(dto, { ambiente });
+      // O comprovante (número, barras, Pix) vai pra auditoria; o PDF é grande
+      // demais pro Firestore (limite de 1 MiB por doc) e vai pro Storage.
+      const resumo = resumirRetornoDare(resposta);
+      const pdfPath = await salvarPdfDare(resposta, logRef.id, ambiente);
       await logRef.update({
         status: 'emitida-via-api',
         emitidaEm: admin.firestore.FieldValue.serverTimestamp(),
-        // Guarda o retorno da SEFAZ (número, barras, PIX, PDF) — é o
-        // comprovante. Nada disso é gerado localmente.
-        retornoApi: resposta ?? null,
+        comprovante: resumo,
+        pdfPath: pdfPath || null,
       });
-      return res.json({ ok: true, id: logRef.id, ambiente, preview, retorno: resposta });
+      return res.json({ ok: true, id: logRef.id, ambiente, preview, comprovante: resumo, pdfPath, retorno: resposta });
     } catch (erroApi) {
       await logRef.update({
         status: 'falha-api',
@@ -199,7 +236,9 @@ router.post('/api/emitir-lote', requireAdmin, async (req, res) => {
     // Um item inválido aborta o lote inteiro (nunca emitir metade).
     const previews = itens.map((it) => montarDare(it));
     const dtos = itens.map((it, i) => montarDareApiDTO({
-      cnpj: it.cnpj, codigoServico: it.codigoServico, referencia: previews[i].referencia,
+      cnpj: it.cnpj, razaoSocial: it.razaoSocial || previews[i].contribuinte?.razaoSocial,
+      codigoServico: it.codigoServico, codigoReceita: previews[i].codigoReceita,
+      referencia: previews[i].referencia,
       valor: previews[i].valor, dataVencimento: previews[i].vencimento,
       linha06: it.linha06, linha08: it.linha08, gerarPDF: req.body?.gerarPDF,
     }));
@@ -217,12 +256,14 @@ router.post('/api/emitir-lote', requireAdmin, async (req, res) => {
 
     try {
       const resposta = await emitirDareLote(dtos, { ambiente });
+      const zipPath = await salvarZipLote(resposta, logRef.id, ambiente);
       await logRef.update({
         status: 'emitida-via-api',
         emitidaEm: admin.firestore.FieldValue.serverTimestamp(),
-        retornoApi: resposta ?? null,
+        comprovantes: (resposta?.itensParaGeracao || []).map(resumirRetornoDare).slice(0, 50),
+        zipPath: zipPath || null,
       });
-      return res.json({ ok: true, id: logRef.id, ambiente, total: dtos.length, retorno: resposta });
+      return res.json({ ok: true, id: logRef.id, ambiente, total: dtos.length, zipPath, retorno: resposta });
     } catch (erroApi) {
       await logRef.update({
         status: 'falha-api',

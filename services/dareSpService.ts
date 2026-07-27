@@ -78,10 +78,25 @@ export async function receitasApiDare(ambiente: AmbienteDare = 'homologacao'): P
     return { ...data, ok: true };
 }
 
+export interface ComprovanteDare {
+    numeroControle: number | null;
+    codigoBarra44: string | null;
+    codigoBarra48: string | null;
+    pixCopiaCola: string | null;
+    valorTotal: number | null;
+    valorJuros: number | null;
+    valorMulta: number | null;
+    temPdf: boolean;
+}
+
 export interface EmissaoApiResultado {
     ok: boolean;
     id?: string;
     ambiente?: AmbienteDare;
+    /** Número, código de barras e Pix — tudo emitido pela SEFAZ. */
+    comprovante?: ComprovanteDare;
+    /** Caminho do PDF no Storage (o documento que vai ao cliente). */
+    pdfPath?: string | null;
     retorno?: any;
     error?: string;
     camposInvalidos?: string[] | null;
