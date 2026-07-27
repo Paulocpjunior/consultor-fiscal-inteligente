@@ -60,6 +60,9 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     // no cliente errado) ou sem dono. Aqui procuramos na base inteira e
     // dizemos onde ela está — o filtro serve pra isso (Paulo, 27/07).
     const [ondeEsta, setOndeEsta] = useState<DocLocalizado[] | null>(null);
+    // Leitura bateu no teto: a lista mostra um RECORTE. Precisa aparecer na
+    // tela — silenciosamente truncado foi o que escondeu as notas da GUARANI.
+    const [leituraTruncada, setLeituraTruncada] = useState(false);
     const [procurandoFora, setProcurandoFora] = useState(false);
     const [exporting, setExporting] = useState<'pdf' | 'csv' | null>(null);
     // Render incremental: monta só as primeiras N linhas no DOM e cresce sob
@@ -72,24 +75,44 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     useEffect(() => {
         let alive = true;
         setLoading(true);
-        // listDocumentos sem filtros = busca todos os docs visiveis ao usuario
-        // (ja aplica createdBy pra colaborador, allow-all pra admin).
-        // Em paralelo: catalogo completo de empresas (simples + lucro). Necessario
-        // pra mostrar no combobox empresas SEM XMLs capturados (cert expirado,
-        // procuracao inativa) — caso real: FASTWELD aparece em "Status por
-        // Empresa" mas sumia daqui porque o dropdown vinha so de allDocs.
+        // Os filtros de EMPRESA e COMPETÊNCIA vão ao SERVIDOR. Antes esta tela
+        // lia a coleção inteira (teto de 20.000 docs, sem ordem garantida) e
+        // filtrava no navegador: numa base grande as notas do cliente ficavam
+        // FORA da leitura e a tela dizia "2 XMLs" com 36 gravadas (caso GUARANI
+        // 27/07 — a importação confirmava 36 em 06/2026 e a lista mostrava 2).
+        // Com o where no servidor, a query traz o recorte inteiro.
+        const cnpjFiltro = (filters.empresaCnpj || '').replace(/\D/g, '');
+        const raiz = cnpjFiltro.slice(0, 8);
+        // Casa por RAIZ (matriz + filiais), igual ao filtro em memória: manda os
+        // ids das empresas da mesma raiz (Firestore aceita até 30 no `in`).
+        const idsDaRaiz = raiz
+            ? catalogoEmpresas
+                .filter(e => (e.cnpj || '').replace(/\D/g, '').slice(0, 8) === raiz)
+                .map(e => e.id)
+                .slice(0, 30)
+            : [];
+        const filtrosServidor: ListDocumentosFilters = {};
+        if (filters.competencia) filtrosServidor.competencia = filters.competencia;
+        if (idsDaRaiz.length === 1) filtrosServidor.empresaId = idsDaRaiz[0];
+        else if (idsDaRaiz.length > 1) filtrosServidor.empresaIds = idsDaRaiz;
+
+        const metaLeitura: { truncado?: boolean } = {};
         Promise.all([
-            listDocumentos(currentUser, {}),
+            listDocumentos(currentUser, filtrosServidor, metaLeitura),
             getEmpresasDisponiveis(currentUser),
         ]).then(([docs, empresas]) => {
             if (alive) {
                 setAllDocs(docs);
                 setCatalogoEmpresas(empresas);
+                setLeituraTruncada(!!metaLeitura.truncado);
                 setLoading(false);
             }
         });
         return () => { alive = false; };
-    }, [currentUser, refreshKey]);
+        // Recarrega quando muda empresa/competência — são os filtros que vão ao
+        // servidor. Os demais continuam em memória, sobre o recorte já lido.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentUser, refreshKey, filters.empresaCnpj, filters.competencia]);
 
     // Resolve o NOME da empresa pra docs gravados sem empresaNome (varia por
     // trilho de importação) — a lista mostrava só o CNPJ, dificultando qualquer
@@ -684,6 +707,12 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                         </button>
                     </div>
                 </div>
+                {leituraTruncada && (
+                    <div className="mb-2 text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded p-2">
+                        ⚠ A leitura bateu no teto de documentos e esta lista é um <strong>recorte</strong> — pode faltar nota.
+                        Filtre por <strong>empresa</strong> e/ou <strong>competência</strong>: esses dois filtros vão ao servidor e trazem o período inteiro.
+                    </div>
+                )}
                 {loading ? (
                     <p className="text-center text-xs text-slate-400 py-6">Carregando...</p>
                 ) : docs.length === 0 && (ondeEsta?.length || procurandoFora) ? (

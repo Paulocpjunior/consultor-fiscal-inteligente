@@ -488,6 +488,8 @@ export async function registrarErro(input: ErroInput): Promise<void> {
 
 export interface ListDocumentosFilters {
     empresaId?: string;
+    /** Vários ids (matriz + filiais da mesma raiz) — vira `in` no servidor. */
+    empresaIds?: string[];
     empresaCnpj?: string;        // match exato no campo empresaCnpj do doc
     direcao?: 'entrada' | 'saida';
     competencia?: string;        // YYYY-MM
@@ -526,6 +528,12 @@ export async function listDocumentos(
     // de empresa atribuida via carteira quando outro colega importou (mesmo
     // padrao corrigido no #120 pra empresas).
     if (filters.empresaId) constraints.push(where('empresaId', '==', filters.empresaId));
+    // Vários ids (matriz + filiais da mesma raiz): `in` aceita até 30 valores.
+    // Sem isto, a tela caía na leitura da coleção INTEIRA e o teto de 20.000
+    // docs cortava justamente as notas procuradas (caso GUARANI 27/07).
+    else if (filters.empresaIds && filters.empresaIds.length > 0) {
+        constraints.push(where('empresaId', 'in', filters.empresaIds.slice(0, 30)));
+    }
     // Competência exata vai ao SERVIDOR: corta a busca de dezenas de milhares
     // de docs para o mês pedido (igualdade simples — não exige índice composto;
     // range competenciaInicio/Fim continua no cliente via applyDocumentosFilters).
