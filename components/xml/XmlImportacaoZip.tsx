@@ -14,6 +14,14 @@ interface Props {
     onImported?: () => void;
 }
 
+interface Conferencia {
+    conferidas: number;
+    porCompetencia: Record<string, number>;
+    resumosSemValor: number;
+    emOutraEmpresa: number;
+    naoEncontradas: number;
+}
+
 interface Totais {
     arquivos: number;
     importadas: number;
@@ -56,6 +64,7 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
     const [progresso, setProgresso] = useState('');
     const [totais, setTotais] = useState<Totais | null>(null);
     const [errosDetalhe, setErrosDetalhe] = useState<string[]>([]);
+    const [conferencia, setConferencia] = useState<Conferencia | null>(null);
     // Lote lido e AGUARDANDO confirmação (a importação só começa depois que
     // alguém conferiu de quem são os XMLs — ver ConfirmarImportacaoModal).
     const [pendente, setPendente] = useState<{ xmls: string[]; nomes: string[]; erros: string[] } | null>(null);
@@ -81,6 +90,7 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
         setProcessando(true);
         setTotais(null);
         setErrosDetalhe([]);
+        setConferencia(null);
         const erros: string[] = [];
         try {
             setProgresso('Lendo arquivos…');
@@ -137,6 +147,23 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                     acc.atualizadas += r.atualizadas || 0;
                     acc.duplicadas += r.duplicadas || 0;
                     acc.reatribuidas += r.reatribuidas || 0;
+                    // Acumula a conferência dos lotes (o ZIP vai em fatias de 50).
+                    if (r.conferencia) {
+                        setConferencia(prev => {
+                            const base: Conferencia = prev || { conferidas: 0, porCompetencia: {}, resumosSemValor: 0, emOutraEmpresa: 0, naoEncontradas: 0 };
+                            const porCompetencia = { ...base.porCompetencia };
+                            for (const [k, v] of Object.entries(r.conferencia!.porCompetencia || {})) {
+                                porCompetencia[k] = (porCompetencia[k] || 0) + (v as number);
+                            }
+                            return {
+                                conferidas: base.conferidas + r.conferencia!.conferidas,
+                                porCompetencia,
+                                resumosSemValor: base.resumosSemValor + r.conferencia!.resumosSemValor,
+                                emOutraEmpresa: base.emOutraEmpresa + r.conferencia!.emOutraEmpresa,
+                                naoEncontradas: base.naoEncontradas + r.conferencia!.naoEncontradas,
+                            };
+                        });
+                    }
                     acc.erros += r.erros || 0;
                     if (r.errosDetalhe) for (const e of r.errosDetalhe) if (erros.length < 30) erros.push(e);
                 } else {
@@ -237,6 +264,46 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                         {totais.arquivos} XMLs no lote → {totais.importadas} novas · {totais.atualizadas} atualizadas
                         (resumo→completa) · {totais.duplicadas} duplicadas · {totais.erros} erros
                     </p>
+                    {/* Onde as notas foram parar. Sem isto, "36 duplicadas"
+                        mandava o operador procurar na competência da PASTA
+                        ("entradas 06.2026") enquanto o app arquiva pela
+                        competência da EMISSÃO (dhEmi) — caso GUARANI 27/07. */}
+                    {conferencia && conferencia.conferidas > 0 && (
+                        <div className="mt-2 border-t border-slate-200 dark:border-slate-700 pt-2 space-y-1">
+                            <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                Onde estas {conferencia.conferidas} nota(s) estão na base:
+                            </p>
+                            <ul className="text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5">
+                                {Object.entries(conferencia.porCompetencia)
+                                    .sort(([a], [b]) => b.localeCompare(a))
+                                    .map(([comp, qtd]) => (
+                                        <li key={comp}>
+                                            <span className="font-mono">{comp === 'sem-competencia' ? 'sem competência' : comp.split('-').reverse().join('/')}</span> — {qtd} nota(s)
+                                        </li>
+                                    ))}
+                            </ul>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                A competência é a da <strong>emissão da nota</strong> (dhEmi), não a do nome da pasta —
+                                por isso um arquivo "entradas 06/2026" costuma espalhar notas por vários meses.
+                            </p>
+                            {conferencia.resumosSemValor > 0 && (
+                                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                                    ⚠ {conferencia.resumosSemValor} continua(m) como <strong>resumo sem valor</strong> — o XML completo não entrou.
+                                    Confira se o arquivo tem o <code>nfeProc</code> inteiro (não só o resumo da SEFAZ).
+                                </p>
+                            )}
+                            {conferencia.emOutraEmpresa > 0 && (
+                                <p className="text-[11px] text-red-700 dark:text-red-400">
+                                    ⚠ {conferencia.emOutraEmpresa} está(ão) atribuída(s) a OUTRA empresa — provável importação anterior no cliente errado.
+                                </p>
+                            )}
+                            {conferencia.naoEncontradas > 0 && (
+                                <p className="text-[11px] text-red-700 dark:text-red-400">
+                                    ⚠ {conferencia.naoEncontradas} não foi(ram) encontrada(s) na base depois da importação — reimporte e, se persistir, avise.
+                                </p>
+                            )}
+                        </div>
+                    )}
                     {totais.reatribuidas > 0 && (
                         <p className="text-[11px] text-sky-700 dark:text-sky-400 mt-0.5">
                             ↪ {totais.reatribuidas} nota(s) já estavam na base sem dono (ou em outra empresa) e foram

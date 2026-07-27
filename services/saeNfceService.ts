@@ -329,6 +329,17 @@ export interface LoteImportResultado {
     atualizadas?: number;
     /** Já existiam SEM dono (ou noutra empresa) e foram trazidas para esta. */
     reatribuidas?: number;
+    /**
+     * Onde as notas do lote foram parar. Responde ao "importei 36 e não acho":
+     * a competência do app é a da EMISSÃO (dhEmi), não a do nome da pasta.
+     */
+    conferencia?: {
+        conferidas: number;
+        porCompetencia: Record<string, number>;
+        resumosSemValor: number;
+        emOutraEmpresa: number;
+        naoEncontradas: number;
+    } | null;
     erros?: number;
     errosDetalhe?: string[];
     empresaId?: string;
