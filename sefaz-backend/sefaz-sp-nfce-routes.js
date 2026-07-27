@@ -64,6 +64,44 @@ function xmlPertenceAEmpresa(xml, cnpj14) {
   return cnpjs.some((t) => t.replace(/\D/g, '').startsWith(raiz));
 }
 
+/**
+ * Lê os documentos das chaves do lote e diz ONDE cada nota está: competência
+ * (que vem da EMISSÃO, não do mês da pasta), se ainda é resumo sem valor e se
+ * ficou em outra empresa. É o que responde "importei 36 e não acho as notas".
+ */
+async function conferirDestinoDasChaves(chaves, empresaIdEsperada) {
+  const unicas = [...new Set((chaves || []).filter(Boolean))].slice(0, 200);
+  if (unicas.length === 0) return null;
+  const db = getDbNfce();
+  const porCompetencia = {};
+  let resumosSemValor = 0;
+  let emOutraEmpresa = 0;
+  let naoEncontradas = 0;
+  try {
+    // getAll aceita ate 300 refs por chamada — o lote maximo aqui e 100.
+    const refs = unicas.map((c) => db.collection('documentos_fiscais').doc(c));
+    const snaps = await db.getAll(...refs);
+    for (const snap of snaps) {
+      if (!snap.exists) { naoEncontradas++; continue; }
+      const d = snap.data() || {};
+      const comp = d.competencia || 'sem-competencia';
+      porCompetencia[comp] = (porCompetencia[comp] || 0) + 1;
+      if (d.temItens === false || !d.valorTotal) resumosSemValor++;
+      if (empresaIdEsperada && d.empresaId && d.empresaId !== empresaIdEsperada) emOutraEmpresa++;
+    }
+  } catch (e) {
+    console.warn('[sae-nfce] conferencia do lote falhou:', e.message);
+    return null;
+  }
+  return {
+    conferidas: unicas.length,
+    porCompetencia,
+    resumosSemValor,
+    emOutraEmpresa,
+    naoEncontradas,
+  };
+}
+
 // O parser JSON global (server.js) ja aceita ate 20mb — um lote de 100 NFC-e
 // (~100 KB cada) fica bem abaixo disso.
 router.post('/importar-xmls', requireAdmin, async (req, res) => {
@@ -86,6 +124,7 @@ router.post('/importar-xmls', requireAdmin, async (req, res) => {
     // Descobre a empresa-cliente dona do CNPJ informado (casa por CNPJ e, se
     // preciso, pela raiz — filial). Sem isto o doc fica sem empresaId e some
     // dos filtros por empresa.
+    const chavesDoLote = [];
     let empresaId = null;
     let empresaNome = null;
     try {
@@ -132,6 +171,7 @@ router.post('/importar-xmls', requireAdmin, async (req, res) => {
         else if (imp.status === 'atualizado') r.atualizadas++;
         else if (imp.status === 'erro') { r.erros++; if (r.errosDetalhe.length < 10) r.errosDetalhe.push(imp.motivo || 'erro'); }
         else r.importadas++;
+        if (imp.chave) chavesDoLote.push(imp.chave);
       } catch (e) {
         r.erros++;
         if (r.errosDetalhe.length < 10) r.errosDetalhe.push(String(e.message).slice(0, 200));
@@ -139,6 +179,11 @@ router.post('/importar-xmls', requireAdmin, async (req, res) => {
     }
 
     if (r.errosDetalhe.length === 0) delete r.errosDetalhe;
+    // CONFERÊNCIA do lote (27/07): "36 duplicadas" não diz NADA sobre onde as
+    // notas foram parar — e o operador ia procurá-las na competência do NOME
+    // DA PASTA ("entradas 06.2026") quando o app arquiva pela competência da
+    // EMISSÃO (dhEmi). Devolvemos o destino real de cada chave do lote.
+    r.conferencia = await conferirDestinoDasChaves(chavesDoLote, empresaId);
     return res.json({ ...r, duracaoMs: Date.now() - inicio });
   } catch (e) {
     console.error('[sae-nfce] importar-xmls erro:', e.message);
