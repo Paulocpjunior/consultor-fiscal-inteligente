@@ -59,10 +59,14 @@ router.post('/xml-email-ingest-cron', requireCronAuth, async (req, res) => {
 
 router.post('/xml-email-ingest', requireAdmin, async (req, res) => {
   try {
-    const { mailbox, maxMensagens } = req.body || {};
+    // janelaDias/maxMensagens: permitem o BACKFILL manual (ex.: 180 dias e 100
+    // mensagens) pra recuperar o que ficou preso quando o cofre só lia e-mail
+    // não-lido — e-mail que a equipe abriu no Outlook nunca era importado.
+    const { mailbox, maxMensagens, janelaDias } = req.body || {};
     const r = await ingerirXmlPorEmail({
       mailbox: mailbox || null,
       maxMensagens: Number(maxMensagens) || undefined,
+      janelaDias: Number(janelaDias) || undefined,
       capturadoPor: { uid: req.user?.uid || null, email: req.user?.email || 'admin' },
     });
     if (r && r.ok === false) return res.status(502).json(r);
