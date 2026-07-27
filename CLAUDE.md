@@ -77,12 +77,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   30/15/7/3/1/0 + vencido≤60d, idempotência {itemId}_{faixa}, gestor
   alexandre@ em BCC. Cron próprio `legalizacao-cron-diario` 7h30 BRT via
   scripts/setup-scheduler.sh DO REPO NOVO (o setup-cloud-schedulers.sh
-  daqui NÃO tem esse job). Estado 26/07: app pronto e commitado localmente;
-  **falta Paulo criar o repo privado `legalizacao` no GitHub + autorizar o
-  app do Claude + secret GCP_SA_KEY no repo novo** → aí push + 1º deploy +
-  secrets do serviço (README do repo novo tem o passo-a-passo). O card
-  Legalização foi REMOVIDO do CFI; deep-link `services/moduloDeepLink.ts`
-  ficou (padrão de URL fixa pros hubs internos).
+  daqui NÃO tem esse job). Estado 27/07: **app NO AR** — repo real ficou
+  `Paulocpjunior/legaliza-o` (GitHub cortou os acentos), URL fixa
+  https://legalizacao-631239634290.us-west1.run.app (health verde no run 5).
+  O workflow do repo novo é "instalador completo": pós-deploy grava
+  jotform-api-key no Secret Manager (do GitHub secret JOTFORM_API_KEY),
+  espelha do serviço do CFI os vínculos de SEFAZ_CRON_SECRET/GRAPH_* e
+  tenta criar o scheduler. ÚNICO gap: a SA github-deploy não tem
+  secretAccessor no sefaz-cron-secret ⇒ **job legalizacao-cron-diario NÃO
+  foi criado — Paulo precisa rodar `scripts/setup-scheduler.sh` do repo
+  novo no Mac dele** (gcloud pessoal lê o secret). Até lá, sync/alertas só
+  pelo botão "Rodar agora" da aba Integração (admin). O card Legalização
+  foi REMOVIDO do CFI; deep-link `services/moduloDeepLink.ts` ficou
+  (padrão de URL fixa pros hubs internos).
 
 ## Fila de features acordadas (com requisitos)
 
