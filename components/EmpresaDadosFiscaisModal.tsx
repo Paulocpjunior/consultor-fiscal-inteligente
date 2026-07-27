@@ -79,10 +79,17 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                 codMunIBGE: dados.codMunIBGE?.replace(/\D/g, ''),
                 cep: dados.cep?.replace(/\D/g, ''),
                 telefone: dados.telefone?.replace(/\D/g, ''),
-                ccmSp: dados.ccmSp?.replace(/\D/g, '') || undefined,  // canonico SP: so digitos
+                // CCM canônico: só dígitos. Campo LIMPO envia '' (o backend
+                // apaga) — o `|| undefined` antigo sumia do JSON e o valor
+                // velho ficava preso ("não aceita ficar sem valor", 26/07,
+                // caso DARCY/Santos). Zeros (000000000) = contorno da equipe
+                // pra campo obrigatório fantasma → também vira vazio.
+                ccmSp: dados.ccmSp != null
+                    ? (/^0*$/.test(dados.ccmSp.replace(/\D/g, '')) ? '' : dados.ccmSp.replace(/\D/g, ''))
+                    : undefined,
                 // Inscrição municipal genérica: NÃO stripa (pode ser alfanumérica
-                // conforme a prefeitura); só trim.
-                inscricaoMunicipal: dados.inscricaoMunicipal?.trim() || undefined,
+                // conforme a prefeitura); só trim. Limpa → '' (apaga no backend).
+                inscricaoMunicipal: dados.inscricaoMunicipal != null ? dados.inscricaoMunicipal.trim() : undefined,
             };
             await onSave(limpo);
             onClose();
@@ -163,13 +170,27 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 placeholder="Inscrição na prefeitura da empresa"
                                 hint="Para empresas de QUALQUER município. Formato livre (varia por prefeitura). Não é obrigatório e não valida formato."
                             />
-                            <Field
-                                label="CCM — Inscrição Municipal de SP capital"
-                                value={dados.ccmSp || ''}
-                                onChange={v => handleField('ccmSp', v)}
-                                placeholder="1.234.567-8"
-                                hint="SÓ para empresas de SP capital — é a chave da captura de NFS-e SP. Empresa de outra cidade deixa em branco e usa a Inscrição Municipal acima."
-                            />
+                            <div>
+                                <Field
+                                    label="CCM — Inscrição Municipal de SP capital"
+                                    value={dados.ccmSp || ''}
+                                    onChange={v => handleField('ccmSp', v)}
+                                    placeholder="Deixe em branco se não for SP capital"
+                                    hint="SÓ para empresas de SP capital — é a chave da captura de NFS-e SP. Empresa de outra cidade deixa em branco e usa a Inscrição Municipal acima. Apagar e salvar REMOVE o valor."
+                                />
+                                {/* Aviso vivo: município preenchido ≠ capital + CCM com
+                                    valor = cadastro enganando o trilho NFS-e SP (caso
+                                    DARCY/Santos com 000000000, 26/07). */}
+                                {(dados.ccmSp || '').replace(/\D/g, '').replace(/0/g, '') !== '' &&
+                                    (dados.codMunIBGE || '').replace(/\D/g, '').length === 7 &&
+                                    (dados.codMunIBGE || '').replace(/\D/g, '') !== '3550308' && (
+                                    <p className="text-[11px] text-amber-500 mt-1">
+                                        ⚠ O município deste cadastro não é São Paulo capital — este CCM não se
+                                        aplica e engana o trilho de NFS-e. Apague o campo e salve (a Inscrição
+                                        Municipal genérica acima é o lugar certo).
+                                    </p>
+                                )}
+                            </div>
                             <Field
                                 label="IE Substituto Tributário"
                                 value={dados.inscEstSubstTrib || ''}
