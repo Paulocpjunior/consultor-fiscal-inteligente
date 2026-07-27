@@ -553,7 +553,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                             <th className="px-2 py-2 text-center">NFSe Nacional</th>
                             <th className="px-2 py-2 text-center">Capturas</th>
                             <th className="px-2 py-2 text-left">Motivos Bloqueio</th>
-                            {isAdmin && <th className="px-2 py-2 text-center">Ações</th>}
+                            <th className="px-2 py-2 text-center">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -694,9 +694,15 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                             </ul>
                                         )}
                                     </td>
-                                    {isAdmin && (
-                                        <td className="px-2 py-1.5 text-center align-top">
-                                            <div className="flex flex-col gap-1 items-stretch">
+                                    {/* Ações: "Completar cadastro" vale pra QUALQUER
+                                        usuário — preencher UF/CCM/IE é trabalho da
+                                        equipe, e quem enxerga a pendência tem de poder
+                                        corrigi-la (27/07). As ações de captura e as
+                                        destrutivas seguem admin-only. */}
+                                    <td className="px-2 py-1.5 text-center align-top">
+                                        <div className="flex flex-col gap-1 items-stretch">
+                                            {isAdmin && (
+                                                <>
                                                 <button
                                                     onClick={() => handleCaptureOne(e)}
                                                     disabled={capturandoCnpj === e.cnpj}
@@ -721,6 +727,8 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                 >
                                                     {resetandoLockCnpj === e.cnpj ? '⏳…' : '🔓 Reset lock'}
                                                 </button>
+                                                </>
+                                            )}
                                                 <button
                                                     onClick={() => setEmpresaEditando(e)}
                                                     className="px-2 py-1 text-[10px] font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded transition-colors whitespace-nowrap"
@@ -800,8 +808,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                     </div>
                                                 </details>
                                             )}
-                                        </td>
-                                    )}
+                                    </td>
                                 </tr>
                             );
                         })}

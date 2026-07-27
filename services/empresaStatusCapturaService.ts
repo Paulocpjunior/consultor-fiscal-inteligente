@@ -174,7 +174,8 @@ export async function toggleEmpresaFlag(cnpj: string, campo: FlagCampo, valor: b
 }
 
 /** Salva campos do cadastro (dadosFiscais) de uma empresa — merge por
- *  dot-notation no backend (não clobbera outros campos). Admin-only. */
+ *  dot-notation no backend (não clobbera outros campos). Admin e colaborador —
+ *  preencher cadastro é trabalho da equipe; a auditoria grava quem alterou. */
 export async function salvarEmpresaDadosFiscais(
     cnpj: string,
     dadosFiscais: import('../types').EmpresaDadosFiscais,

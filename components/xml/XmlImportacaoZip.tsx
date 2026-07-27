@@ -5,6 +5,8 @@ import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xm
 import { formatCnpjCpf } from '../../services/xmlParserService';
 import { importarXmlsLote } from '../../services/saeNfceService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
+import ConfirmarImportacaoModal from './ConfirmarImportacaoModal';
+import { resumirLoteXmls, validarLoteParaEmpresa, type ValidacaoLote } from '../../services/xmlLoteValidacao';
 
 interface Props {
     currentUser: User;
@@ -52,6 +54,10 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
     const [progresso, setProgresso] = useState('');
     const [totais, setTotais] = useState<Totais | null>(null);
     const [errosDetalhe, setErrosDetalhe] = useState<string[]>([]);
+    // Lote lido e AGUARDANDO confirmação (a importação só começa depois que
+    // alguém conferiu de quem são os XMLs — ver ConfirmarImportacaoModal).
+    const [pendente, setPendente] = useState<{ xmls: string[]; nomes: string[]; erros: string[] } | null>(null);
+    const [validacao, setValidacao] = useState<ValidacaoLote | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -59,27 +65,29 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
         getEmpresasDisponiveis(currentUser).then(list => {
             if (!alive) return;
             setEmpresas(list);
-            if (list.length > 0) setEmpresaId(prev => prev || list[0].id);
+            // NÃO pré-seleciona a primeira empresa: era exatamente assim que o
+            // ZIP de um cliente entrava no cadastro de outro (27/07).
         });
         return () => { alive = false; };
     }, [currentUser]);
 
     const empresa = empresas.find(e => e.id === empresaId);
 
-    const processar = async (files: FileList | File[]) => {
-        if (!empresa) { onShowToast?.('Selecione uma empresa antes de importar.'); return; }
+    /** Lê os arquivos e ABRE a confirmação — não importa nada ainda. */
+    const prepararLote = async (files: FileList | File[]) => {
+        if (!empresa) { onShowToast?.('Selecione a empresa antes de arrastar os arquivos.'); return; }
         setProcessando(true);
         setTotais(null);
         setErrosDetalhe([]);
-        const acc: Totais = { arquivos: 0, importadas: 0, atualizadas: 0, duplicadas: 0, erros: 0 };
         const erros: string[] = [];
         try {
-            // 1. Extrai todos os XMLs (de ZIPs e/ou .xml soltos).
             setProgresso('Lendo arquivos…');
             const xmls: string[] = [];
+            const nomes: string[] = [];
             const lista = Array.from(files as ArrayLike<File>);
             for (const file of lista) {
                 const nome = file.name.toLowerCase();
+                nomes.push(file.name);
                 if (nome.endsWith('.zip')) {
                     const zip = unzipSync(new Uint8Array(await file.arrayBuffer()));
                     for (const [entrada, bytes] of Object.entries(zip)) {
@@ -93,15 +101,29 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                     erros.push(`${file.name}: não é .zip nem .xml — ignorado`);
                 }
             }
-            acc.arquivos = xmls.length;
             if (xmls.length === 0) {
                 onShowToast?.('Nenhum XML encontrado nos arquivos.');
-                setTotais(acc);
+                setTotais({ arquivos: 0, importadas: 0, atualizadas: 0, duplicadas: 0, erros: 0 });
                 setErrosDetalhe(erros);
                 return;
             }
+            setPendente({ xmls, nomes, erros });
+            setValidacao(validarLoteParaEmpresa(resumirLoteXmls(xmls), empresa.cnpj, empresas));
+        } catch (e) {
+            setErrosDetalhe([e instanceof Error ? e.message : String(e)]);
+        } finally {
+            setProgresso('');
+            setProcessando(false);
+        }
+    };
 
-            // 2. Envia em lotes limitados por quantidade E tamanho.
+    const processar = async (xmls: string[], errosIniciais: string[]) => {
+        if (!empresa) return;
+        setProcessando(true);
+        const acc: Totais = { arquivos: xmls.length, importadas: 0, atualizadas: 0, duplicadas: 0, erros: 0 };
+        const erros: string[] = [...errosIniciais];
+        try {
+            // Envia em lotes limitados por quantidade E tamanho.
             let enviados = 0;
             let lote: string[] = [];
             let loteBytes = 0;
@@ -172,9 +194,13 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             <div>
                 <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Empresa</label>
                 <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId} />
-                {empresa && (
+                {empresa ? (
                     <p className="text-[11px] text-slate-400 mt-1">
                         Só entram XMLs em que a raiz do CNPJ {formatCnpjCpf(empresa.cnpj)} apareça como emitente ou destinatário.
+                    </p>
+                ) : (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                        Escolha a empresa primeiro — nada é pré-selecionado, para o arquivo não cair no cliente errado.
                     </p>
                 )}
             </div>
@@ -182,7 +208,7 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             <div
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
-                onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) processar(e.dataTransfer.files); }}
+                onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) prepararLote(e.dataTransfer.files); }}
                 onClick={() => !processando && inputRef.current?.click()}
                 className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
                     processando ? 'opacity-60 cursor-wait'
@@ -192,7 +218,7 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             >
                 <input ref={inputRef} type="file" accept=".zip,.xml" multiple className="hidden"
                     onChange={e => {
-                        if (e.target.files?.length) processar(e.target.files);
+                        if (e.target.files?.length) prepararLote(e.target.files);
                         if (inputRef.current) inputRef.current.value = '';
                     }} />
                 {processando ? (
@@ -218,6 +244,27 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                     )}
                 </div>
             )}
+
+            {/* Trava: confere de quem são os XMLs ANTES de importar. */}
+            <ConfirmarImportacaoModal
+                aberto={!!pendente}
+                empresa={empresa ? { id: empresa.id, nome: empresa.nome, cnpj: empresa.cnpj } : null}
+                validacao={validacao}
+                arquivos={pendente?.nomes || []}
+                onCancelar={() => { setPendente(null); setValidacao(null); }}
+                onTrocarEmpresa={(id) => {
+                    setEmpresaId(id);
+                    const nova = empresas.find(e => e.id === id);
+                    // Revalida contra a empresa nova sem obrigar a arrastar de novo.
+                    if (nova && pendente) setValidacao(validarLoteParaEmpresa(resumirLoteXmls(pendente.xmls), nova.cnpj, empresas));
+                }}
+                onConfirmar={() => {
+                    const lote = pendente;
+                    setPendente(null);
+                    setValidacao(null);
+                    if (lote) processar(lote.xmls, lote.erros);
+                }}
+            />
         </div>
     );
 };

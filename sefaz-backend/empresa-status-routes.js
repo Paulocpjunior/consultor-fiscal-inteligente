@@ -522,11 +522,14 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     'complemento', 'bairro', 'cep', 'email', 'telefone', 'perfilEFD', 'indAtividade',
 ]);
 
+// Cadastro (IE, UF, CCM, endereço) é trabalho da EQUIPE — colaborador grava.
+// Admin-only aqui travava o "Completar cadastro" da equipe com 403 ("não
+// consegue gravar", 27/07): quem detecta a pendência não podia corrigi-la.
+// Continuam admin-only as ações destrutivas/estruturais (regime, arquivar,
+// excluir, reset de lock, flags de captura). Quem alterou fica registrado em
+// dadosFiscaisAlteradoPor.
 router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, res) => {
     try {
-        if (req.user?.role !== 'admin') {
-            return res.status(403).json({ error: 'Apenas administradores' });
-        }
         const { cnpj, dadosFiscais } = req.body || {};
         const cnpjLimpo = limparCnpj(cnpj);
         if (cnpjLimpo.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });

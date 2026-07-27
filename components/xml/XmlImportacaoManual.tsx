@@ -8,6 +8,8 @@ import {
 } from '../../services/xmlFiscalService';
 import { XmlParseError, formatCnpjCpf } from '../../services/xmlParserService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
+import ConfirmarImportacaoModal from './ConfirmarImportacaoModal';
+import { resumirLoteXmls, validarLoteParaEmpresa, type ValidacaoLote } from '../../services/xmlLoteValidacao';
 
 interface Props {
     currentUser: User;
@@ -28,6 +30,9 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
     const [loading, setLoading] = useState(false);
     const [results, setResults] = useState<ProcessedItem[]>([]);
     const [loadingEmpresas, setLoadingEmpresas] = useState(true);
+    // Arquivos escolhidos aguardando confirmação de que são da empresa certa.
+    const [pendentes, setPendentes] = useState<File[] | null>(null);
+    const [validacao, setValidacao] = useState<ValidacaoLote | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -36,7 +41,8 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
         getEmpresasDisponiveis(currentUser).then(list => {
             if (!alive) return;
             setEmpresas(list);
-            if (list.length > 0 && !empresaId) setEmpresaId(list[0].id);
+            // Sem pré-seleção: a primeira empresa da lista pré-marcada fazia o
+            // XML cair no cliente errado quando ninguém olhava o combo (27/07).
             setLoadingEmpresas(false);
         });
         return () => { alive = false; };
@@ -44,6 +50,29 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
     }, [currentUser]);
 
     const empresaSelecionada = empresas.find(e => e.id === empresaId);
+
+    /** Lê os .xml escolhidos e abre a confirmação — não importa nada ainda. */
+    const prepararArquivos = async (files: FileList | File[]) => {
+        if (!empresaSelecionada) {
+            onShowToast?.('Selecione a empresa antes de escolher os arquivos.');
+            return;
+        }
+        const lista = Array.from(files as ArrayLike<File>).filter(f => f.name.toLowerCase().endsWith('.xml'));
+        if (lista.length === 0) {
+            onShowToast?.('Nenhum arquivo .xml selecionado.');
+            return;
+        }
+        setLoading(true);
+        try {
+            const textos = await Promise.all(lista.map(f => f.text()));
+            setPendentes(lista);
+            setValidacao(validarLoteParaEmpresa(resumirLoteXmls(textos), empresaSelecionada.cnpj, empresas));
+        } catch (e) {
+            onShowToast?.(`Falha lendo os arquivos: ${e instanceof Error ? e.message : String(e)}`);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleFiles = async (files: FileList | File[]) => {
         if (!empresaSelecionada) {
@@ -89,7 +118,7 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         setDragOver(false);
-        if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
+        if (e.dataTransfer.files.length > 0) prepararArquivos(e.dataTransfer.files);
     };
 
     return (
@@ -107,9 +136,13 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                 ) : (
                     <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId} />
                 )}
-                {empresaSelecionada && (
+                {empresaSelecionada ? (
                     <p className="text-[11px] text-slate-500 mt-2">
                         Apenas XMLs em que <strong>{formatCnpjCpf(empresaSelecionada.cnpj)}</strong> apareça como emitente ou destinatário serão aceitos.
+                    </p>
+                ) : empresas.length > 0 && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">
+                        Escolha a empresa primeiro — nada vem pré-selecionado, para o XML não cair no cliente errado.
                     </p>
                 )}
             </div>
@@ -133,7 +166,7 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                     accept=".xml"
                     multiple
                     onChange={(e) => {
-                        if (e.target.files && e.target.files.length > 0) handleFiles(e.target.files);
+                        if (e.target.files && e.target.files.length > 0) prepararArquivos(e.target.files);
                         if (fileInputRef.current) fileInputRef.current.value = '';
                     }}
                     className="hidden"
@@ -179,6 +212,31 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                     </div>
                 </div>
             )}
+
+            {/* Trava: confere de quem são os XMLs ANTES de importar. */}
+            <ConfirmarImportacaoModal
+                aberto={!!pendentes}
+                empresa={empresaSelecionada
+                    ? { id: empresaSelecionada.id, nome: empresaSelecionada.nome, cnpj: empresaSelecionada.cnpj }
+                    : null}
+                validacao={validacao}
+                arquivos={(pendentes || []).map(f => f.name)}
+                onCancelar={() => { setPendentes(null); setValidacao(null); }}
+                onTrocarEmpresa={async (id) => {
+                    setEmpresaId(id);
+                    const nova = empresas.find(e => e.id === id);
+                    if (nova && pendentes) {
+                        const textos = await Promise.all(pendentes.map(f => f.text()));
+                        setValidacao(validarLoteParaEmpresa(resumirLoteXmls(textos), nova.cnpj, empresas));
+                    }
+                }}
+                onConfirmar={() => {
+                    const arquivos = pendentes;
+                    setPendentes(null);
+                    setValidacao(null);
+                    if (arquivos) handleFiles(arquivos);
+                }}
+            />
         </div>
     );
 };
