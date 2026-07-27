@@ -48,3 +48,64 @@ async function post(path: string, body: unknown): Promise<{ ok: boolean; payload
 
 export const previewDare = (input: DareInput) => post('/api/admin/dare/preview', input);
 export const registrarDare = (input: DareInput) => post('/api/admin/dare/registrar', input);
+
+// ── Web API oficial da SEFAZ-SP (credenciamento 27/07/2026) ────────────────
+// Emissão direta: o número e o código de barras continuam vindo da SEFAZ, mas
+// chegam ao app em vez de o colaborador digitar no portal.
+
+export type AmbienteDare = 'homologacao' | 'producao';
+
+export interface ReceitasApiResultado {
+    ok: boolean;
+    ambiente?: AmbienteDare;
+    rotulo?: string;
+    receitas?: unknown;
+    error?: string;
+}
+
+/**
+ * Teste de fumaça da credencial: lista as receitas do ambiente. É GET e NÃO
+ * emite guia nenhuma — serve para confirmar que a chave do Secret Manager
+ * chega à SEFAZ antes de arriscar uma emissão.
+ */
+export async function receitasApiDare(ambiente: AmbienteDare = 'homologacao'): Promise<ReceitasApiResultado> {
+    const token = await getToken();
+    const res = await fetch(`/api/admin/dare/api/receitas?ambiente=${ambiente}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ...data, ok: true };
+}
+
+export interface EmissaoApiResultado {
+    ok: boolean;
+    id?: string;
+    ambiente?: AmbienteDare;
+    retorno?: any;
+    error?: string;
+    camposInvalidos?: string[] | null;
+    /** HTTP 428: produção pede confirmação explícita. */
+    precisaConfirmar?: boolean;
+}
+
+export async function emitirDarePelaApi(
+    input: DareInput & { ambiente: AmbienteDare; linha06?: string; linha08?: string; confirmoProducao?: boolean },
+): Promise<EmissaoApiResultado> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/dare/api/emitir', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        return {
+            ok: false,
+            error: data.error || `HTTP ${res.status}`,
+            camposInvalidos: data.camposInvalidos || null,
+            precisaConfirmar: res.status === 428,
+        };
+    }
+    return { ...data, ok: true };
+}
