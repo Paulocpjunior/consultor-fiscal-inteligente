@@ -100,7 +100,7 @@ describe('espaços em volta não invalidam nem sujam o payload', () => {
 // Montagem do payload e tradução de erro do gateway (cliente da Web API).
 // ---------------------------------------------------------------------------
 // @ts-expect-error — módulo .js puro
-import { montarDareApiDTO, traduzirErroDare, resolverAmbiente, AMBIENTES } from '../sefaz-backend/dare-icms-api.js';
+import { montarDareApiDTO, traduzirErroDare, resolverAmbiente, AMBIENTES, extrairRecusa, resumirRetornoDare, paraDataHora } from '../sefaz-backend/dare-icms-api.js';
 
 describe('montarDareApiDTO', () => {
     const base = { cnpj: '46.377.222/0001-21', referencia: '08/2026', valor: 1234.56, dataVencimento: '2026-08-20' };
@@ -108,7 +108,10 @@ describe('montarDareApiDTO', () => {
     it('limpa o CNPJ, normaliza o serviço e não manda campo que a receita não usa', () => {
         const dto = montarDareApiDTO({ ...base, codigoServico: '4601' });
         expect(dto.cnpj).toBe('46377222000121');
-        expect(dto.codigoServico).toBe('04601');
+        // O Swagger real não tem `codigoServico` solto: vai dentro de `receita`
+        // como INTEIRO (codigoServicoDARE). Mandar solto dava 400 em tudo.
+        expect(dto.codigoServico).toBeUndefined();
+        expect(dto.receita).toEqual({ codigoServicoDARE: 4601 });
         expect(dto.valor).toBe(1234.56);
         expect(dto.gerarPDF).toBe(true);
         expect('linha06' in dto).toBe(false);
@@ -140,5 +143,59 @@ describe('ambientes e tradução de erro', () => {
         expect(traduzirErroDare(429, '')).toMatch(/Aguarde alguns minutos/);
         expect(traduzirErroDare(500, 'erro')).toMatch(/emita pelo portal DARE/);
         expect(traduzirErroDare(400, { erro: 'referencia invalida' })).toMatch(/linha06\/linha08/);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Contrato REAL do Swagger (conferido em 27/07/2026 com a chave de produção).
+// ---------------------------------------------------------------------------
+describe('formato exigido pelo Swagger', () => {
+    const base = { cnpj: '46377222000121', razaoSocial: 'CLIENTE LTDA', referencia: '08/2026', valor: 100, dataVencimento: '2026-08-20' };
+
+    it('dataVencimento vai como date-time (só a data dava 400 / fuso comia um dia)', () => {
+        expect(paraDataHora('2026-08-20')).toBe('2026-08-20T00:00:00');
+        expect(montarDareApiDTO({ ...base, codigoServico: '04601' }).dataVencimento).toBe('2026-08-20T00:00:00');
+    });
+
+    it('serviço vai dentro de receita, com o código de receita quando conhecido', () => {
+        const dto = montarDareApiDTO({ ...base, codigoServico: '14601', codigoReceita: '146-6' });
+        expect(dto.receita).toEqual({ codigoServicoDARE: 14601, codigo: '146-6' });
+        expect(dto.razaoSocial).toBe('CLIENTE LTDA');
+    });
+});
+
+describe('extrairRecusa — HTTP 200 NÃO significa emitido', () => {
+    it('pega a recusa que vem no corpo com estaOk=false', () => {
+        const r = extrairRecusa({ erro: { estaOk: false, mensagens: ['Referência inválida'] } });
+        expect(r).toMatch(/A SEFAZ recusou a emissão/);
+        expect(r).toMatch(/Referência inválida/);
+    });
+
+    it('pega recusa de item dentro do lote', () => {
+        const r = extrairRecusa({ itensParaGeracao: [{ erro: { estaOk: false, mensagens: ['CNPJ não cadastrado'] } }] });
+        expect(r).toMatch(/CNPJ não cadastrado/);
+    });
+
+    it('emissão boa não vira falso alarme', () => {
+        expect(extrairRecusa({ erro: { estaOk: true, mensagens: [] }, codigoBarra44: '123' })).toBeNull();
+        expect(extrairRecusa({ itensParaGeracao: [{ numeroControleDarePrincipal: 9 }] })).toBeNull();
+        expect(extrairRecusa(null)).toBeNull();
+    });
+});
+
+describe('resumirRetornoDare — o comprovante que vai pra auditoria', () => {
+    it('extrai número, barras e Pix do item emitido', () => {
+        const r = resumirRetornoDare({
+            itensParaGeracao: [{
+                numeroControleDarePrincipal: 230590000193959,
+                codigoBarra44: '8'.repeat(44), codigoBarra48: '8'.repeat(48),
+                pixCopiaCola: '00020126...', valorTotal: 123.45, valorJuros: 1.2, valorMulta: 2.3,
+                documentoImpressao: 'JVBERi0=',
+            }],
+        });
+        expect(r.numeroControle).toBe(230590000193959);
+        expect(r.codigoBarra44).toHaveLength(44);
+        expect(r.pixCopiaCola).toMatch(/^000201/);
+        expect(r.temPdf).toBe(true);
     });
 });

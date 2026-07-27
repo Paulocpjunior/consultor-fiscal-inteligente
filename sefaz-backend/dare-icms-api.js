@@ -161,11 +161,26 @@ export async function listarReceitas({ ambiente = AMBIENTE_PADRAO } = {}) {
 }
 
 /**
- * Monta o objeto de um DARE no formato da API (DareApiDTO).
+ * 'AAAA-MM-DD' → 'AAAA-MM-DDT00:00:00'. O Swagger declara dataVencimento como
+ * date-time; mandar só a data é convite a 400 (ou a fuso comendo um dia).
+ */
+export function paraDataHora(data) {
+  const s = String(data || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00`;
+  return s;
+}
+
+/**
+ * Monta o DareApiDTO no formato REAL do Swagger (conferido em 27/07/2026).
  * PURO — separado da chamada pra ser conferido no preview antes de emitir.
+ *
+ * Atenção ao que o Swagger revelou: NÃO existe campo `codigoServico` solto —
+ * o serviço vai dentro do objeto `receita` (ReceitaApiDTO.codigoServicoDARE,
+ * que é INTEIRO). Mandar como estava daria 400 em toda emissão.
  */
 export function montarDareApiDTO({
-  cnpj, codigoServico, referencia, valor, dataVencimento, linha06, linha08, gerarPDF = true,
+  cnpj, razaoSocial, codigoServico, codigoReceita, referencia, valor, dataVencimento,
+  linha06, linha08, gerarPDF = true,
 }) {
   const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
   const servico = normalizarCodigoServico(codigoServico);
@@ -175,32 +190,98 @@ export function montarDareApiDTO({
     erro.camposInvalidos = extra.erros;
     throw erro;
   }
+  const receita = { codigoServicoDARE: Number(servico) };
+  // `codigo` é o código de receita impresso no DARE ('046-2'); mandamos quando
+  // conhecemos, porque é o que o operador confere no documento.
+  if (codigoReceita) receita.codigo = String(codigoReceita);
+
   return {
     cnpj: cnpjLimpo,
-    codigoServico: servico,
-    referencia,          // 'MM/AAAA'
-    dataVencimento,      // 'AAAA-MM-DD'
+    razaoSocial: razaoSocial ? String(razaoSocial).slice(0, 120) : undefined,
+    receita,
+    referencia,                             // 'MM/AAAA'
+    dataVencimento: paraDataHora(dataVencimento),
     valor: Number(valor),
     gerarPDF: gerarPDF !== false,
-    ...extra.campos,     // linha06/linha08 só quando a receita usa
+    ...extra.campos,                        // linha06/linha08 só quando a receita usa
   };
 }
 
-/** Emite UM DARE. Devolve o retorno cru da SEFAZ (número, barras, PDF). */
+/**
+ * A API responde 200 mesmo quando REJEITA: o motivo vem em
+ * `erro: { estaOk: false, mensagens: [...] }`. Tratar 200 como sucesso cego
+ * daria "DARE emitido" sem número nenhum — verde mentiroso.
+ * @returns {string|null} mensagem de recusa, ou null se está tudo certo.
+ */
+export function extrairRecusa(resposta) {
+  if (!resposta || typeof resposta !== 'object') return null;
+  const erros = [];
+  const coletar = (e) => {
+    if (!e || typeof e !== 'object') return;
+    if (e.estaOk === false || (Array.isArray(e.mensagens) && e.mensagens.length > 0)) {
+      const msgs = (e.mensagens || []).filter(Boolean);
+      if (e.estaOk === false || msgs.length) erros.push(msgs.join(' · ') || 'recusado sem detalhe');
+    }
+  };
+  coletar(resposta.erro);
+  for (const item of resposta.itensParaGeracao || []) coletar(item.erro);
+  if (erros.length === 0) return null;
+  return `A SEFAZ recusou a emissão: ${[...new Set(erros)].join(' | ')}`;
+}
+
+/**
+ * Extrai o que interessa do retorno: é o comprovante (número, barras, Pix).
+ * O PDF (documentoImpressao, base64) sai separado — não cabe no Firestore.
+ */
+export function resumirRetornoDare(resposta) {
+  const item = resposta?.itensParaGeracao?.[0] || resposta || {};
+  return {
+    numeroControle: item.numeroControleDarePrincipal ?? null,
+    codigoBarra44: item.codigoBarra44 ?? null,
+    codigoBarra48: item.codigoBarra48 ?? null,
+    pixCopiaCola: item.pixCopiaCola ?? null,
+    valorTotal: item.valorTotal ?? item.valor ?? null,
+    valorJuros: item.valorJuros ?? null,
+    valorMulta: item.valorMulta ?? null,
+    temPdf: !!item.documentoImpressao,
+    zipLote: !!resposta?.zipDownload,
+  };
+}
+
+/** Emite UM DARE. Devolve o retorno cru da SEFAZ (número, barras, Pix, PDF). */
 export async function emitirDareUnitario(dto, { ambiente = AMBIENTE_PADRAO } = {}) {
-  return chamar('/dare-unitario/emitir', { metodo: 'POST', corpo: dto, ambiente });
+  const resposta = await chamar('/dare-unitario/emitir', { metodo: 'POST', corpo: dto, ambiente });
+  const recusa = extrairRecusa(resposta);
+  if (recusa) {
+    const erro = new Error(recusa);
+    erro.recusadoPelaSefaz = true;
+    erro.corpo = resposta;
+    throw erro;
+  }
+  return resposta;
 }
 
 /**
  * Emite um LOTE de DAREs.
- * ATENÇÃO (regra da SEFAZ): o `gerarPDF` do PRIMEIRO item vale para o lote
- * inteiro — normalizamos para evitar lote com metade sem PDF.
+ *
+ * O Swagger mostrou que o corpo NÃO é um array: é o DareLoteApiDTO, com os
+ * DAREs em `itensParaGeracao` (e o ZIP dos documentos volta em zipDownload).
+ * Regra da SEFAZ: o `gerarPDF` do PRIMEIRO item vale para o lote inteiro —
+ * normalizamos para não sair lote com metade sem PDF.
  */
 export async function emitirDareLote(dtos, { ambiente = AMBIENTE_PADRAO } = {}) {
   if (!Array.isArray(dtos) || dtos.length === 0) {
     throw new Error('Lote vazio: informe ao menos um DARE.');
   }
   const gerarPDF = dtos[0].gerarPDF !== false;
-  const itens = dtos.map((d) => ({ ...d, gerarPDF }));
-  return chamar('/dare-lote/emitir', { metodo: 'POST', corpo: itens, ambiente });
+  const corpo = { itensParaGeracao: dtos.map((d) => ({ ...d, gerarPDF })) };
+  const resposta = await chamar('/dare-lote/emitir', { metodo: 'POST', corpo, ambiente });
+  const recusa = extrairRecusa(resposta);
+  if (recusa) {
+    const erro = new Error(recusa);
+    erro.recusadoPelaSefaz = true;
+    erro.corpo = resposta;
+    throw erro;
+  }
+  return resposta;
 }
