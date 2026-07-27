@@ -15,6 +15,16 @@ const AutXmlHarvest: React.FC = () => {
     const [resp, setResp] = useState<AutXmlHarvestResultado | null>(null);
     const [cobLoading, setCobLoading] = useState(false);
     const [cob, setCob] = useState<CoberturaSaidaResultado | null>(null);
+    const [buscaConfirmacao, setBuscaConfirmacao] = useState('');
+
+    // Busca por nome OU CNPJ (com ou sem máscara) — o cliente avisa "liguei" e
+    // a equipe confere na hora, sem abrir Firestore.
+    const termo = buscaConfirmacao.trim().toLowerCase();
+    const termoDigitos = termo.replace(/\D/g, '');
+    const confirmacoesFiltradas = (cob?.confirmacoes || []).filter((c) =>
+        (termo.length >= 2 && c.nome.toLowerCase().includes(termo))
+        || (termoDigitos.length >= 3 && c.cnpj.includes(termoDigitos)),
+    ).slice(0, 30);
 
     const rodar = async (resetNSU: boolean) => {
         setLoading(true);
@@ -138,10 +148,12 @@ const AutXmlHarvest: React.FC = () => {
             <div className="border-t border-sky-200 dark:border-sky-800 pt-3 space-y-2">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div>
-                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200">📋 Cobertura de saída — onde falta o autXML</h4>
+                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200">📋 Cobertura de saída — quem ainda não está ligado</h4>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                            Lista os clientes <strong>sem nenhuma saída (mod 55)</strong> capturada nos últimos 90 dias. É a sua lista de onde
-                            incluir o CNPJ do escritório na tag <code>autXML</code> do emissor.
+                            Lista os clientes <strong>sem nenhuma saída (mod 55)</strong> capturada nos últimos 90 dias. São duas ligações
+                            possíveis, qualquer uma resolve: <strong>(1)</strong> o emissor manda o XML para{' '}
+                            <code>xml@spassessoriacontabil.com.br</code> (cofre) ou <strong>(2)</strong> o CNPJ do escritório entra na
+                            tag <code>autXML</code> da nota.
                         </p>
                     </div>
                     <button onClick={rodarCobertura} disabled={cobLoading}
@@ -221,6 +233,59 @@ const AutXmlHarvest: React.FC = () => {
                         ) : (
                             <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ Todas as empresas monitoradas têm saída capturada na janela.</p>
                         )}
+                        {/* CONFIRMAÇÃO por cliente. São duas ligações possíveis
+                            (Paulo, 27/07): apontar o emissor pro cofre xml@ OU
+                            pôr o CNPJ do escritório no autXML. O cliente avisa
+                            que ligou — aqui a gente PROVA qual das duas está
+                            valendo, com data, ou diz o que cobrar. */}
+                        <div className="border-t border-slate-200 dark:border-slate-700 pt-2">
+                            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                🔎 Cliente disse que ligou? Confirme aqui
+                            </p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                Busque por nome ou CNPJ. <strong>Confirmado</strong> = nota chegou sozinha por um dos dois caminhos
+                                (cofre de e-mail ou autXML) — importação manual não confirma nada.
+                                {typeof cob.confirmadas === 'number' && (
+                                    <span> Hoje: <strong>{cob.confirmadas}</strong> de {cob.totalEmpresas ?? 0} confirmadas.</span>
+                                )}
+                            </p>
+                            <input
+                                type="text"
+                                value={buscaConfirmacao}
+                                onChange={(e) => setBuscaConfirmacao(e.target.value)}
+                                placeholder="Nome ou CNPJ do cliente (ex.: 4BZ ou 12345678000199)"
+                                className="mt-1 w-full px-2 py-1.5 text-xs rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+                            />
+                            {buscaConfirmacao.trim().length >= 2 && (
+                                <ul className="mt-1 space-y-1 max-h-72 overflow-y-auto">
+                                    {confirmacoesFiltradas.length === 0 && (
+                                        <li className="text-[11px] text-slate-500 dark:text-slate-400">
+                                            Nenhuma empresa monitorada casa com essa busca — confira o cadastro (CNPJ) do cliente.
+                                        </li>
+                                    )}
+                                    {confirmacoesFiltradas.map((c) => (
+                                        <li key={c.empresaId}
+                                            className={`rounded-lg border p-2 ${c.confirmado
+                                                ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/10'
+                                                : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10'}`}>
+                                            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                                {c.confirmado ? '✓' : '✗'} <span className="font-mono">{c.cnpj}</span> — {c.nome}
+                                                {!c.ativo && <span className="text-red-500"> · inativa</span>}
+                                            </p>
+                                            <p className="text-[11px] text-slate-600 dark:text-slate-300">{c.titulo} · {c.detalhe}</p>
+                                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                cofre: {c.cofre ? `${c.cofre.qtd} nota(s) · última ${String(c.cofre.ultima).slice(0, 10)}` : '—'}
+                                                {' · '}autXML: {c.autxml ? `${c.autxml.qtd} nota(s) · última ${String(c.autxml.ultima).slice(0, 10)}` : '—'}
+                                                {c.manual ? ` · manual: ${c.manual.qtd}` : ''}
+                                            </p>
+                                            {c.acao && (
+                                                <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">{c.acao}</p>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
                         <p className="text-[11px] text-slate-400 dark:text-slate-500">
                             {cob.docsSaidaLidos ?? 0} docs de saída analisados · janela {cob.janelaDias ?? 90} dias
                         </p>
