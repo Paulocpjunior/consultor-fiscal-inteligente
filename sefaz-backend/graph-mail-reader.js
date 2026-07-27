@@ -77,7 +77,9 @@ export async function listarEmailsComXml(mailbox, { maxMensagens = 25, desdeIso 
   // (o InefficientFilter acontecia ao combinar isRead/hasAttachments com
   // orderby de outro campo). hasAttachments vem no $select pra pular cedo.
   const filtro = `$filter=receivedDateTime ge ${desde}`;
-  const campos = '$select=id,subject,from,receivedDateTime,hasAttachments,isRead';
+  // `body` vem junto: cliente que manda LINK em vez de anexo (ISS.NET-DF, ERP
+  // com pacote mensal) só é capturável se lermos o corpo pra achar a URL.
+  const campos = '$select=id,subject,from,receivedDateTime,hasAttachments,isRead,body';
   const ordem = '$orderby=receivedDateTime desc';
 
   const pastas = await listarPastasParaVarrer(box, token);
@@ -97,19 +99,23 @@ export async function listarEmailsComXml(mailbox, { maxMensagens = 25, desdeIso 
 
   const out = [];
   for (const msg of mensagens) {
-    if (!msg.hasAttachments) continue;
-    // Puxa os anexos da mensagem. SEM $select: `@odata.type` não é uma
-    // propriedade selecionável (o Graph rejeita `$select=...,@odata.type`), e
-    // sem ele não dá pra distinguir fileAttachment. A lista já traz contentBytes
-    // dos fileAttachment por padrão.
+    // ATENÇÃO: mensagem SEM anexo NÃO é mais descartada — o XML pode vir por
+    // LINK no corpo (ISS.NET-DF manda o .aspx de download; ERP manda pacote
+    // mensal que expira em 7 dias). O ingestor decide o que fazer com os links.
     let anexos = [];
     let erroAnexos = null;
-    try {
-      const at = await graphGet(`/users/${box}/messages/${msg.id}/attachments`, token);
-      anexos = at.value || [];
-    } catch (e) {
-      erroAnexos = e.message;
-      console.warn(`[graph-mail] falha lendo anexos msg=${msg.id}: ${e.message}`);
+    if (msg.hasAttachments) {
+      // Puxa os anexos da mensagem. SEM $select: `@odata.type` não é uma
+      // propriedade selecionável (o Graph rejeita `$select=...,@odata.type`), e
+      // sem ele não dá pra distinguir fileAttachment. A lista já traz contentBytes
+      // dos fileAttachment por padrão.
+      try {
+        const at = await graphGet(`/users/${box}/messages/${msg.id}/attachments`, token);
+        anexos = at.value || [];
+      } catch (e) {
+        erroAnexos = e.message;
+        console.warn(`[graph-mail] falha lendo anexos msg=${msg.id}: ${e.message}`);
+      }
     }
     const arquivos = anexos.filter((a) => a['@odata.type'] === '#microsoft.graph.fileAttachment' && a.contentBytes);
     const anexosXml = arquivos
@@ -129,6 +135,10 @@ export async function listarEmailsComXml(mailbox, { maxMensagens = 25, desdeIso 
     // Se a leitura dos anexos falhou, não engole: expõe pro painel.
     if (erroAnexos) anexosInfo.push({ name: `ERRO lendo anexos: ${erroAnexos}`, tipo: 'erro' });
 
+    const corpo = msg.body?.content || '';
+    // Sem anexo E sem corpo: nada a fazer (evita ruído no painel).
+    if (anexosXml.length === 0 && anexosZip.length === 0 && anexosInfo.length === 0 && !corpo) continue;
+
     out.push({
       id: msg.id,
       subject: msg.subject || '',
@@ -139,6 +149,7 @@ export async function listarEmailsComXml(mailbox, { maxMensagens = 25, desdeIso 
       anexosXml,
       anexosZip,
       anexosInfo,
+      corpo,
     });
   }
   return out;

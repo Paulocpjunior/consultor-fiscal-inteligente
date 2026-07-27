@@ -22,6 +22,8 @@ import { importarXmlSefaz } from './xml-importer.js';
 import { carregarEmpresas, atribuirXml } from './xml-empresa-matcher.js';
 import { listarEmailsComXml, marcarProcessada } from './graph-mail-reader.js';
 import { extrairXmlsDoZip } from './zip-reader.js';
+import { extrairLinksFiscais, dominioAutorizado, classificarConteudoBaixado, hostDaUrl, DOMINIOS_PADRAO } from './email-link-xml.js';
+import { baixarLinkFiscal } from './email-link-downloader.js';
 
 const STATE_DOC = 'sefaz_xml_email_state/estado';
 // Registro de mensagens JÁ PROCESSADAS — o controle passou a ser NOSSO
@@ -32,6 +34,18 @@ const COL_MSGS = 'cofre_email_mensagens';
 // Caixa do "cofre" do CFI. Default = a caixa do escritório (mesmo padrão do
 // CNPJ_ESCRITORIO ter default no código); env var sobrescreve se precisar.
 const CAIXA_PADRAO = process.env.XML_INGEST_MAILBOX || 'xml@spassessoriacontabil.com.br';
+
+/**
+ * Domínios autorizados a download automático de XML por LINK. Padrão: só
+ * gov.br (SEFAZ/prefeituras — cobre o ISS.NET-DF). Domínio de ERP de cliente
+ * entra por env (XML_INGEST_LINK_DOMINIOS, separado por vírgula) depois que o
+ * admin conferir a origem — link de e-mail é superfície de ataque.
+ */
+function dominiosPermitidos() {
+  const extra = String(process.env.XML_INGEST_LINK_DOMINIOS || '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  return [...DOMINIOS_PADRAO, ...extra];
+}
 
 function getDb() {
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -78,6 +92,7 @@ export async function ingerirXmlPorEmail({
     mensagens: 0, anexos: 0,
     jaProcessadas: 0,   // pulos por registro nosso (não por estado de leitura)
     zips: 0, xmlsDeZip: 0,
+    links: 0, linksBaixados: 0, xmlsDeLink: 0, linksBloqueados: [],
     importadasSaida: 0, importadasEntrada: 0, atualizadas: 0, duplicadas: 0,
     eventos: 0, semDono: 0, erros: 0,
     detalhePorEmpresa: {},
@@ -143,6 +158,45 @@ export async function ingerirXmlPorEmail({
       }
     }
 
+    // LINKS: cliente que manda o XML por link em vez de anexo. Só tenta quando
+    // não veio XML/ZIP utilizável no e-mail (anexo é sempre preferível).
+    if (msg.anexosXml.length === 0 && anexosDeZip.length === 0 && msg.corpo) {
+      const permitidos = dominiosPermitidos();
+      const links = extrairLinksFiscais(msg.corpo).slice(0, 5);
+      for (const link of links) {
+        r.links++;
+        if (!dominioAutorizado(link.url, permitidos)) {
+          // Não baixa domínio não autorizado — registra pro admin liberar
+          // (XML_INGEST_LINK_DOMINIOS) depois de conferir a origem.
+          const host = hostDaUrl(link.url);
+          if (host && !r.linksBloqueados.includes(host)) r.linksBloqueados.push(host);
+          continue;
+        }
+        try {
+          const baixado = await baixarLinkFiscal(link.url, { dominios: permitidos });
+          const tipo = classificarConteudoBaixado(baixado.buffer, baixado.contentType);
+          if (tipo === 'xml') {
+            anexosDeZip.push({ name: `link:${hostDaUrl(link.url)}`, xmlPronto: baixado.buffer.toString('utf-8') });
+            r.linksBaixados++; r.xmlsDeLink++;
+          } else if (tipo === 'zip') {
+            const { xmls } = extrairXmlsDoZip(baixado.buffer);
+            for (const x of xmls) anexosDeZip.push({ name: `link:${x.nome}`, xmlPronto: x.xml });
+            r.linksBaixados++; r.xmlsDeLink += xmls.length;
+            if (xmls.length === 0 && r.errosDetalhe.length < 20) {
+              r.errosDetalhe.push(`${link.url.slice(0, 80)}: ZIP do link sem .xml dentro`);
+            }
+          } else {
+            // HTML = página de login/expirada (o link do ERP expira em 7 dias).
+            if (r.errosDetalhe.length < 20) {
+              r.errosDetalhe.push(`${link.url.slice(0, 80)}: link não devolveu XML (${tipo}) — pode ter expirado.`);
+            }
+          }
+        } catch (e) {
+          if (r.errosDetalhe.length < 20) r.errosDetalhe.push(`${link.url.slice(0, 80)}: ${e.message}`);
+        }
+      }
+    }
+
     // Diagnóstico: e-mail com anexo mas sem nenhum .xml direto — registra o que
     // veio (PDF, ZIP, e-mail encaminhado=itemAttachment) pra aparecer no painel
     // e virar pendência/alerta (fica não-lido, então continua visível).
@@ -154,6 +208,16 @@ export async function ingerirXmlPorEmail({
       if (r.pendencias.length < 50) {
         r.pendencias.push({ assunto: msg.subject || '(sem assunto)', from: msg.from || null, anexos: anexosStr });
       }
+    }
+    // Pendência de LINK: e-mail sem XML nenhum, mas com link de domínio não
+    // autorizado — o painel mostra o host pro admin decidir se libera.
+    if (msg.anexosXml.length === 0 && anexosDeZip.length === 0 && r.linksBloqueados.length > 0
+      && r.pendencias.length < 50) {
+      r.pendencias.push({
+        assunto: msg.subject || '(sem assunto)',
+        from: msg.from || null,
+        anexos: [`link não autorizado: ${r.linksBloqueados.slice(-2).join(', ')}`],
+      });
     }
 
     for (const anexo of [...msg.anexosXml, ...anexosDeZip]) {
@@ -254,6 +318,8 @@ export async function ingerirXmlPorEmail({
         mensagens: r.mensagens, anexos: r.anexos,
         jaProcessadas: r.jaProcessadas, janelaDias: r.janelaDias,
         zips: r.zips, xmlsDeZip: r.xmlsDeZip,
+        links: r.links, linksBaixados: r.linksBaixados, xmlsDeLink: r.xmlsDeLink,
+        linksBloqueados: r.linksBloqueados.slice(0, 10),
         saida: r.importadasSaida, entrada: r.importadasEntrada,
         atualizadas: r.atualizadas, duplicadas: r.duplicadas,
         semDono: r.semDono, erros: r.erros,
@@ -272,6 +338,8 @@ export async function ingerirXmlPorEmail({
       mensagens: r.mensagens, anexos: r.anexos,
       jaProcessadas: r.jaProcessadas, janelaDias: r.janelaDias,
       zips: r.zips, xmlsDeZip: r.xmlsDeZip,
+      links: r.links, linksBaixados: r.linksBaixados, xmlsDeLink: r.xmlsDeLink,
+      linksBloqueados: r.linksBloqueados.slice(0, 10),
       saida: r.importadasSaida, entrada: r.importadasEntrada,
       atualizadas: r.atualizadas, duplicadas: r.duplicadas,
       eventos: r.eventos, semDono: r.semDono, erros: r.erros,
