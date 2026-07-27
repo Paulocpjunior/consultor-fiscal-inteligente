@@ -184,6 +184,40 @@ export async function coberturaSaida(janelaDias = 90): Promise<CoberturaSaidaRes
     }
 }
 
+export interface DocLocalizado {
+    chave: string;
+    numero: string | null;
+    serie: string | null;
+    dhEmi: string | null;
+    competencia: string | null;
+    empresaId: string | null;
+    empresaNome: string;
+    empresaCnpj: string | null;
+    cnpjEmit: string | null;
+    cnpjDest: string | null;
+    xNomeEmit: string | null;
+    direcao: string | null;
+    valorTotal: number | null;
+    tipoDoc: string | null;
+    temItens: boolean | null;
+    origem: string | null;
+}
+
+/**
+ * "Onde está esta nota?" — procura em TODA a base, ignorando filtro de
+ * empresa. A aba XMLs só busca dentro da empresa filtrada, então nota que caiu
+ * no cliente errado (ou sem dono) sumia da tela.
+ */
+export async function localizarDocumento(q: string): Promise<{ ok: boolean; total?: number; docs?: DocLocalizado[]; error?: string }> {
+    const token = await getToken();
+    const res = await fetch(`/api/admin/sae-nfce/localizar-doc?q=${encodeURIComponent(q)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ...data, ok: true };
+}
+
 export interface ReparoSemDonoResultado {
     ok: boolean;
     analisados?: number;

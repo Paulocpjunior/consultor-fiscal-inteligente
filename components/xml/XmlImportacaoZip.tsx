@@ -3,7 +3,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import type { User } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { formatCnpjCpf } from '../../services/xmlParserService';
-import { importarXmlsLote, repararNotasSemDono, type ReparoSemDonoResultado } from '../../services/saeNfceService';
+import { importarXmlsLote, repararNotasSemDono, localizarDocumento, type ReparoSemDonoResultado, type DocLocalizado } from '../../services/saeNfceService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 import ConfirmarImportacaoModal from './ConfirmarImportacaoModal';
 import { resumirLoteXmls, validarLoteParaEmpresa, type ValidacaoLote } from '../../services/xmlLoteValidacao';
@@ -69,6 +69,25 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
     // nulo (a rota de lote não passava o dono) e somem do filtro por empresa.
     const [reparo, setReparo] = useState<ReparoSemDonoResultado | null>(null);
     const [reparando, setReparando] = useState(false);
+    // "Onde está esta nota?" — busca global, sem filtro de empresa.
+    const [buscaNota, setBuscaNota] = useState('');
+    const [achados, setAchados] = useState<DocLocalizado[] | null>(null);
+    const [buscandoNota, setBuscandoNota] = useState(false);
+
+    const localizar = async () => {
+        if (buscaNota.replace(/\D/g, '').length < 3) return;
+        setBuscandoNota(true);
+        setAchados(null);
+        try {
+            const r = await localizarDocumento(buscaNota.trim());
+            if (r.ok) setAchados(r.docs || []);
+            else onShowToast?.(r.error || 'Falha na busca.');
+        } catch (e) {
+            onShowToast?.(e instanceof Error ? e.message : String(e));
+        } finally {
+            setBuscandoNota(false);
+        }
+    };
 
     const rodarReparo = async (aplicar: boolean) => {
         setReparando(true);
@@ -357,6 +376,49 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                     )}
                 </div>
             )}
+
+            {/* Busca GLOBAL por nota: a aba XMLs sempre procura DENTRO da
+                empresa filtrada, então nota no cliente errado ficava invisível.
+                Aqui não há filtro nenhum — é o "cadê a nota". */}
+            <div className="border-t border-amber-200 dark:border-amber-800 pt-3 space-y-2">
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">🔍 Onde está esta nota?</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Procura em <strong>todas as empresas</strong> pela chave (44 dígitos) ou pelo número da NF — inclusive
+                    notas sem dono ou atribuídas ao cliente errado.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                    <input value={buscaNota} onChange={e => setBuscaNota(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') localizar(); }}
+                        placeholder="Chave de 44 dígitos ou nº da nota (ex.: 17850)"
+                        className="flex-1 min-w-[240px] px-2 py-1.5 text-xs rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200" />
+                    <button onClick={localizar} disabled={buscandoNota}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white">
+                        {buscandoNota ? '⏳…' : 'Localizar'}
+                    </button>
+                </div>
+                {achados && achados.length === 0 && (
+                    <p className="text-[11px] text-red-600 dark:text-red-400">
+                        Não existe na base — nem em outra empresa, nem sem dono. A nota não chegou a ser gravada.
+                    </p>
+                )}
+                {achados && achados.length > 0 && (
+                    <ul className="text-[11px] space-y-1">
+                        {achados.map(d => (
+                            <li key={d.chave} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2">
+                                <p className="font-bold text-slate-700 dark:text-slate-200">
+                                    nº {d.numero}/{d.serie} · {d.dhEmi?.slice(0, 10)} · {d.direcao} ·{' '}
+                                    <span className={d.empresaId ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>{d.empresaNome}</span>
+                                </p>
+                                <p className="text-slate-500 dark:text-slate-400">
+                                    competência {d.competencia || '—'} · {d.tipoDoc}{d.temItens === false ? ' (resumo, sem valor)' : ''} ·
+                                    origem {d.origem || '—'} · emitente {d.xNomeEmit || d.cnpjEmit}
+                                </p>
+                                <p className="font-mono text-[10px] text-slate-400 break-all">{d.chave}</p>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
 
             {/* Reparo do acervo importado ANTES do conserto de 27/07: essas
                 notas existem na base, mas com empresaId nulo — invisíveis no

@@ -193,6 +193,76 @@ router.post('/importar-xmls', requireAdmin, async (req, res) => {
 });
 
 /**
+ * "Onde está esta nota?" — busca em TODA a base, sem filtro de empresa.
+ *
+ * É a pergunta que o painel não respondia: a aba XMLs sempre busca DENTRO da
+ * empresa filtrada, então nota que caiu no cliente errado (ou sem dono) some
+ * da tela e ninguém acha. Aceita a chave de 44 dígitos ou o número da NF.
+ */
+router.get('/localizar-doc', requireAdmin, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const digitos = q.replace(/\D/g, '');
+    if (digitos.length < 3) {
+      return res.status(400).json({ ok: false, error: 'Informe a chave (44 dígitos) ou o número da nota.' });
+    }
+    const db = getDbNfce();
+    const achados = [];
+
+    if (digitos.length === 44) {
+      const snap = await db.collection('documentos_fiscais').doc(digitos).get();
+      if (snap.exists) achados.push({ id: snap.id, ...snap.data() });
+    } else {
+      // numero e gravado como STRING (nNF do XML); tentamos numero tambem por
+      // seguranca em bases antigas.
+      for (const valor of [digitos, Number(digitos)]) {
+        if (achados.length >= 20) break;
+        try {
+          const snap = await db.collection('documentos_fiscais').where('numero', '==', valor).limit(20).get();
+          snap.forEach((d) => { if (!achados.some((a) => a.id === d.id)) achados.push({ id: d.id, ...d.data() }); });
+        } catch { /* tipo incompativel — ignora */ }
+      }
+    }
+
+    // Nome da empresa dona (o id sozinho nao diz nada pro operador).
+    let nomePorId = new Map();
+    if (achados.length) {
+      try {
+        const { porCnpj } = await carregarEmpresas(db);
+        for (const emp of porCnpj.values()) nomePorId.set(emp.empresaId, emp.nome);
+      } catch { /* segue sem nome */ }
+    }
+
+    return res.json({
+      ok: true,
+      consulta: q,
+      total: achados.length,
+      docs: achados.slice(0, 20).map((d) => ({
+        chave: d.id,
+        numero: d.numero ?? null,
+        serie: d.serie ?? null,
+        dhEmi: d.dhEmi ?? null,
+        competencia: d.competencia ?? null,
+        empresaId: d.empresaId ?? null,
+        empresaNome: d.empresaId ? (nomePorId.get(d.empresaId) || '(empresa não identificada)') : 'SEM DONO',
+        empresaCnpj: d.empresaCnpj ?? null,
+        cnpjEmit: d.cnpjEmit ?? null,
+        cnpjDest: d.cnpjDest ?? null,
+        xNomeEmit: d.xNomeEmit ?? null,
+        direcao: d.direcao ?? null,
+        valorTotal: d.valorTotal ?? null,
+        tipoDoc: d.tipoDoc ?? null,
+        temItens: d.temItens ?? null,
+        origem: d.origem ?? null,
+      })),
+    });
+  } catch (e) {
+    console.error('[localizar-doc] erro:', e.message);
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/**
  * Notas ÓRFÃS (empresaId nulo) — passado das importações em lote que gravavam
  * sem dono. `aplicar=false` (padrão) só relata; `aplicar=true` devolve a posse.
  * Devolve cursor pra UI repetir até acabar (acervo grande).
