@@ -176,20 +176,35 @@ export interface XmlEmailIngestResultado {
     detalhePorEmpresa?: Record<string, { nome: string; saida: number; entrada: number; atualizadas: number; duplicadas: number }>;
     anexosNaoXml?: string[];
     errosDetalhe?: string[];
+    /** Links no corpo do e-mail (ISS.NET-DF, pacote de ERP) — #318. */
+    links?: number;
+    linksBaixados?: number;
+    xmlsDeLink?: number;
+    /** Hosts recusados pela allowlist — é a lista do que autorizar. */
+    linksBloqueados?: string[];
     duracaoMs?: number;
     error?: string;
 }
 
 /**
- * Dispara a ingestão de XML por e-mail (o "cofre" do CFI): lê os anexos .xml
- * não-lidos da caixa configurada e importa (saída mod 55 inclusive).
+ * Dispara a ingestão de XML por e-mail (o "cofre" do CFI): lê a caixa
+ * configurada (anexo .xml, .zip e link no corpo) e importa — saída mod 55
+ * inclusive. `janelaDias`/`maxMensagens` servem ao BACKFILL manual: o cofre só
+ * lia e-mail NÃO-LIDO até 27/07, então tudo que alguém abriu no Outlook ficou
+ * para trás e precisa de uma varredura com janela maior.
  */
-export async function ingerirXmlEmail(mailbox?: string): Promise<XmlEmailIngestResultado> {
+export async function ingerirXmlEmail(
+    opts: { mailbox?: string; janelaDias?: number; maxMensagens?: number } = {},
+): Promise<XmlEmailIngestResultado> {
     const token = await getToken();
     const res = await fetch('/api/admin/sefaz/xml-email-ingest', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mailbox: mailbox || undefined }),
+        body: JSON.stringify({
+            mailbox: opts.mailbox || undefined,
+            janelaDias: opts.janelaDias || undefined,
+            maxMensagens: opts.maxMensagens || undefined,
+        }),
     });
     try {
         const data = await res.json();
