@@ -546,7 +546,12 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
         }
         if ('ccmSp' in dadosFiscais && String(dadosFiscais.ccmSp || '').trim() !== '') {
             const ccmDigits = String(dadosFiscais.ccmSp).replace(/\D/g, '');
-            if (ccmDigits.length < 6 || ccmDigits.length > 11) {
+            // Só zeros = "não tenho CCM" digitado num campo que parecia
+            // obrigatório (26/07: vários cadastros com 000000000) — trata como
+            // vazio (apaga) em vez de validar/gravar um CCM fantasma.
+            if (/^0*$/.test(ccmDigits)) {
+                dadosFiscais.ccmSp = '';
+            } else if (ccmDigits.length < 6 || ccmDigits.length > 11) {
                 return res.status(400).json({
                     error: `CCM inválido: "${dadosFiscais.ccmSp}". A Inscrição Municipal de SP tem 8 dígitos (aceito 6-11, só números).`,
                 });
