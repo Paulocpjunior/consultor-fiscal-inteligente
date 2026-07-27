@@ -113,6 +113,25 @@ describe('avaliarSaudeCaptura', () => {
         });
         expect(r.nivel).toBe('critico');
     });
+
+    // 27/07: run morto por deploy no meio da varredura (NFS-e SP portal).
+    it('última execução INTERROMPIDA nunca é verde — âmbar com a ação (forçar captura)', () => {
+        const r = avaliarSaudeCaptura({
+            ultimoMs: AGORA - 1 * H, sucessos: null, falhas: null,
+            docsUltimos7d: 40, elegiveis: 188, runInterrompido: true, agoraMs: AGORA,
+        });
+        expect(r.nivel).toBe('atencao');
+        expect(r.motivo).toMatch(/interrompida/i);
+        expect(r.motivo).toMatch(/Forçar captura agora/i);
+    });
+
+    it('interrompida NÃO mascara problema pior: 0 docs com elegíveis segue crítico', () => {
+        const r = avaliarSaudeCaptura({
+            ultimoMs: AGORA - 1 * H, sucessos: null, falhas: null,
+            docsUltimos7d: 0, elegiveis: 188, runInterrompido: true, agoraMs: AGORA,
+        });
+        expect(r.nivel).toBe('critico');
+    });
 });
 
 describe('avaliarSaudeCofreSaida (saída mod 55 pelo cofre de e-mail)', () => {

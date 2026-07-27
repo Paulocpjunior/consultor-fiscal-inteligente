@@ -54,6 +54,9 @@ export function extrairResumoLog(data) {
 // Extrai o motivo dominante da execução (quando o log traz agregado de erros).
 // É o que transforma "0 ok · 500 falhas" de número mudo em causa acionável.
 export function extrairMotivoTop(d) {
+    // Run interrompido carrega o próprio motivo (auto-cura) — vem primeiro pra
+    // o card explicar o vermelho/âmbar em vez de só dizer "Travado".
+    if (d?.motivoInterrupcao) return String(d.motivoInterrupcao).slice(0, 200);
     const m = d?.motivosResumo?.[0] || d?.errosResumo?.[0] || null;
     if (m) {
         const txt = typeof m === 'string' ? m
@@ -89,10 +92,44 @@ export function normalizarEntradaLog(reg, data) {
     };
 }
 
+// A partir de quantas horas um run em 'iniciado' deixa de ser "rodando agora" e
+// passa a ser órfão (container reciclado por deploy/scale-down no meio do
+// setImmediate). Vale pra classificação E pra auto-cura.
+export const HORAS_RUN_ORFAO = 2;
+
+/**
+ * Decide se um doc de log em 'iniciado' virou órfão e precisa ser CURADO —
+ * marcado como 'interrompido' com motivo honesto. Sem isso o doc fica
+ * 'iniciado' pra sempre e o painel mostra "TRAVADO" eterno mesmo depois de o
+ * cron voltar a rodar (caso NFS-e SP, 27/07: 9h "travado" sem nada travado).
+ * Função PURA — devolve o patch, quem grava é coletarSaudeCrons.
+ *
+ * @returns {{curar: boolean, patch?: object}}
+ */
+export function decidirCuraOrfao(data, agoraMs) {
+    const d = data || {};
+    if (d.status !== 'iniciado') return { curar: false };
+    const inicioMs = tsToMillis(d.iniciadoEm) ?? tsToMillis(d.executadoEm) ?? tsToMillis(d.criadoEm);
+    if (!inicioMs) return { curar: false }; // sem hora de início não dá pra julgar idade
+    const idadeHoras = (agoraMs - inicioMs) / 3_600_000;
+    if (idadeHoras <= HORAS_RUN_ORFAO) return { curar: false }; // ainda pode estar rodando
+    const idadeTxt = idadeHoras < 24 ? `${Math.round(idadeHoras)}h` : `${Math.round(idadeHoras / 24)}d`;
+    return {
+        curar: true,
+        patch: {
+            status: 'interrompido',
+            interrompidoEm: new Date(agoraMs).toISOString(),
+            motivoInterrupcao: `Execução interrompida após ${idadeTxt} sem concluir (reinício do servidor — deploy ou reciclagem da instância). Nada foi capturado nesta rodada: rode a captura de novo ou aguarde o próximo horário do cron.`,
+        },
+    };
+}
+
 /**
  * Classifica a saúde de um cron a partir da entrada normalizada.
- * saude: 'ok' (verde) | 'atrasado' (amarelo) | 'travado' (vermelho, órfão em
- * 'iniciado') | 'falha' (vermelho) | 'sem-dados' (cinza, nunca logou).
+ * saude: 'ok' (verde) | 'atrasado' (amarelo) | 'interrompido' (âmbar, run morto
+ * no meio mas com próxima rodada dentro da janela) | 'travado' (vermelho, órfão
+ * em 'iniciado' que a cura não alcançou) | 'falha' (vermelho) | 'sem-dados'
+ * (cinza, nunca logou).
  * Função PURA — recebe o "agora" pra ser determinística em teste.
  */
 export function classificarSaudeCron(entry, agoraMs) {
@@ -109,8 +146,12 @@ export function classificarSaudeCron(entry, agoraMs) {
         && r.sucessos === 0 && r.falhas > 0;
     let saude;
     if (entry.status === 'falha') saude = 'falha';
-    else if (entry.status === 'iniciado' && idadeHoras > 2) saude = 'travado';
+    else if (entry.status === 'iniciado' && idadeHoras > HORAS_RUN_ORFAO) saude = 'travado';
     else if (entry.status === 'iniciado') saude = 'ok'; // rodando agora
+    // Run interrompido (deploy/reciclagem): âmbar enquanto a próxima rodada
+    // ainda cabe na janela; se passou do maxIdle sem nova execução, é falha de
+    // verdade — o cron não voltou sozinho.
+    else if (entry.status === 'interrompido') saude = idadeHoras > maxIdle ? 'falha' : 'interrompido';
     else if (allFailed) saude = 'falha';
     else if (idadeHoras > maxIdle) saude = 'atrasado';
     else saude = 'ok';
@@ -118,19 +159,42 @@ export function classificarSaudeCron(entry, agoraMs) {
 }
 
 // Ordem de severidade pra ordenar o painel (pior primeiro).
-const ORDEM_SAUDE = { falha: 0, travado: 1, atrasado: 2, 'sem-dados': 3, ok: 4 };
+const ORDEM_SAUDE = { falha: 0, travado: 1, interrompido: 2, atrasado: 3, 'sem-dados': 4, ok: 5 };
 
 /**
  * Lê o último log de cada coleção e devolve a lista de saúde ordenada por
  * severidade. `db` é um Firestore admin handle; `agoraMs` injetável p/ teste.
+ *
+ * Também CURA runs órfãos: doc que ficou em 'iniciado' por mais de
+ * HORAS_RUN_ORFAO vira 'interrompido' com motivo. Antes o doc órfão ficava
+ * 'iniciado' pra sempre e o painel gritava "TRAVADO" eterno — o cron NFS-e SP
+ * apareceu "travado há 9h" quando nada estava travado (o container tinha sido
+ * reciclado num deploy). Passe `{ curar: false }` pra só ler.
  */
-export async function coletarSaudeCrons(db, agoraMs = Date.now()) {
+export async function coletarSaudeCrons(db, agoraMs = Date.now(), { curar = true } = {}) {
     const linhas = [];
+    let curados = 0;
     for (const reg of CRON_LOG_COLLECTIONS) {
         try {
             const snap = await db.collection(reg.collection)
                 .orderBy(reg.tsField, 'desc').limit(1).get();
-            const data = snap.empty ? null : snap.docs[0].data();
+            const doc = snap.empty ? null : snap.docs[0];
+            let data = doc ? doc.data() : null;
+            if (curar && data) {
+                const cura = decidirCuraOrfao(data, agoraMs);
+                // Sem ref (stub/teste) não dá pra gravar: cai no 'travado' —
+                // vermelho honesto em vez de fingir que curou.
+                if (cura.curar && typeof doc.ref?.update === 'function') {
+                    try {
+                        await doc.ref.update(cura.patch);
+                        data = { ...data, ...cura.patch };
+                        curados++;
+                        console.warn(`[cron-health] run órfão curado em ${reg.collection}: ${cura.patch.motivoInterrupcao}`);
+                    } catch (e) {
+                        console.warn(`[cron-health] falha curando órfão em ${reg.collection}: ${e.message}`);
+                    }
+                }
+            }
             linhas.push(classificarSaudeCron(normalizarEntradaLog(reg, data), agoraMs));
         } catch (e) {
             linhas.push({
@@ -145,6 +209,7 @@ export async function coletarSaudeCrons(db, agoraMs = Date.now()) {
         geradoEm: new Date(agoraMs).toISOString(),
         totalCrons: CRON_LOG_COLLECTIONS.length,
         problemas,
+        curados,
         linhas,
     };
 }

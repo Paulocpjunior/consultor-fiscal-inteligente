@@ -41,6 +41,13 @@ export interface SinaisCaptura {
      * atraso quando o calendário diz que não era pra rodar.
      */
     cadenciaSegSex?: boolean;
+    /**
+     * A última execução MORREU no meio (deploy/reinício do Cloud Run mata a
+     * varredura em setImmediate). Nunca pode dar verde: nada foi capturado
+     * naquela rodada — mas também não é o vermelho de "captura quebrada",
+     * porque a próxima execução (ou o "Forçar captura agora") resolve.
+     */
+    runInterrompido?: boolean;
     agoraMs: number;
 }
 
@@ -111,6 +118,12 @@ export function avaliarSaudeCaptura(s: SinaisCaptura): SaudeCaptura {
     // 4) Mais falha que sucesso — atenção.
     if (sucessos !== null && falhas !== null && falhas > sucessos) {
         return { nivel: 'atencao', motivo: `Falhas (${falhas}) superam sucessos (${sucessos}) na última execução.` };
+    }
+
+    // 4b) Última execução interrompida no meio (deploy/reinício). Âmbar: não
+    //     capturou nesta rodada, mas basta rodar de novo — nada quebrado.
+    if (s.runInterrompido) {
+        return { nivel: 'atencao', motivo: 'Última execução foi interrompida antes de terminar (deploy/reinício do servidor). O que já entrou está salvo — clique "Forçar captura agora" ou aguarde o próximo horário do cron.' };
     }
 
     // 5) Execução atrasada — atenção (horas ÚTEIS quando o cron é seg-sex).
