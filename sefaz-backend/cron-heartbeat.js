@@ -58,6 +58,58 @@ function getServerTs(opts) {
   return fa().firestore.FieldValue.serverTimestamp();
 }
 
+// ── Runs em andamento + desligamento gracioso ───────────────────────────────
+// Cloud Run manda SIGTERM antes de matar a instancia (deploy, scale-down). O
+// setImmediate em curso morre junto e o log fica em 'iniciado' PRA SEMPRE — o
+// painel mostrava "TRAVADO ha 9h" com nada travado (caso NFS-e SP 27/07).
+// Aqui marcamos os runs vivos como 'interrompido' NA HORA, com motivo honesto.
+// (A rede de seguranca pra quando nem isso da tempo e a auto-cura por idade em
+// cron-health.decidirCuraOrfao.)
+const RUNS_EM_ANDAMENTO = new Map(); // logRef → { collection, fonte }
+let desligamentoArmado = false;
+
+/** Registra um log 'iniciado' vivo, pra ser marcado se o servidor cair. */
+export function registrarRunEmAndamento(logRef, meta = {}) {
+  if (!logRef || typeof logRef.update !== 'function') return;
+  RUNS_EM_ANDAMENTO.set(logRef, meta);
+  armarDesligamentoGracioso();
+}
+
+/** Run terminou (sucesso ou falha) — sai da lista de "vivos". */
+export function concluirRunEmAndamento(logRef) {
+  if (logRef) RUNS_EM_ANDAMENTO.delete(logRef);
+}
+
+/** Marca todos os runs vivos como 'interrompido'. Exportada pra teste. */
+export async function marcarRunsInterrompidos(sinal = 'SIGTERM') {
+  const pendentes = [...RUNS_EM_ANDAMENTO.entries()];
+  RUNS_EM_ANDAMENTO.clear();
+  if (pendentes.length === 0) return 0;
+  const motivoInterrupcao = `Execucao interrompida pelo servidor (${sinal} — deploy ou reciclagem da instancia). Nada foi capturado nesta rodada: rode a captura de novo ou aguarde o proximo horario do cron.`;
+  await Promise.allSettled(pendentes.map(([ref]) => ref.update({
+    status: 'interrompido',
+    interrompidoEm: new Date().toISOString(),
+    motivoInterrupcao,
+  })));
+  return pendentes.length;
+}
+
+function armarDesligamentoGracioso() {
+  if (desligamentoArmado) return;
+  desligamentoArmado = true;
+  process.on('SIGTERM', async () => {
+    // Janela de graca do Cloud Run e curta (~10s): tenta marcar e sai.
+    const timeout = new Promise((r) => setTimeout(() => r('timeout'), 8000));
+    try {
+      const n = await Promise.race([marcarRunsInterrompidos('SIGTERM'), timeout]);
+      if (n && n !== 'timeout') console.warn(`[cron-heartbeat] SIGTERM: ${n} run(s) marcados como interrompidos`);
+    } catch (e) {
+      console.warn('[cron-heartbeat] SIGTERM: falha marcando runs:', e.message);
+    }
+    process.exit(0);
+  });
+}
+
 /**
  * @param {object} opts
  * @param {string} opts.collection - nome da colecao Firestore p/ logar (ex 'sefaz_cron_logs').
@@ -90,6 +142,7 @@ export async function withCronHeartbeat(opts, work) {
     res.status(500).json({ ok: false, motivo: 'Falha registrando inicio do cron' });
     return;
   }
+  registrarRunEmAndamento(logRef, { collection, fonte });
 
   // 2) Responde 200 imediato. Scheduler nao retentara mesmo se o trabalho
   //    pesado demorar minutos. O logId vai junto pra debug.
@@ -106,6 +159,7 @@ export async function withCronHeartbeat(opts, work) {
     try {
       const result = (await work(logRef)) || {};
       const duracaoMs = Date.now() - inicioMs;
+      concluirRunEmAndamento(logRef);
       try {
         await logRef.update({
           status: 'sucesso',
@@ -119,6 +173,7 @@ export async function withCronHeartbeat(opts, work) {
     } catch (e) {
       console.error(`[cron-heartbeat] erro fatal no cron (fonte=${fonte}, logId=${logRef.id}):`, e);
       const duracaoMs = Date.now() - inicioMs;
+      concluirRunEmAndamento(logRef);
       try {
         await logRef.update({
           status: 'falha',

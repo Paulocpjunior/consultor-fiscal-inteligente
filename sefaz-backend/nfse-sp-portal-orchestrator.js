@@ -21,6 +21,7 @@ import {
     fmtDataPt,
 } from './nfse-sp-portal-client.js';
 import { loginHeadlessPortalSp } from './nfse-sp-headless-login.js';
+import { registrarRunEmAndamento, concluirRunEmAndamento } from './cron-heartbeat.js';
 import { parseCsvNfseSp } from './nfse-sp-csv-parser.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 
@@ -266,6 +267,10 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
             fonte: 'portal-csv',
             capturadoPor: log.capturadoPor,
         });
+        // Se o servidor for reiniciado (deploy) no meio da varredura, o SIGTERM
+        // marca este doc como 'interrompido' — sem isso ele ficava 'iniciado'
+        // pra sempre e o painel dizia "TRAVADO" eterno (caso 27/07, 9h).
+        registrarRunEmAndamento(logRef, { collection: 'nfsesp_portal_cron_logs', fonte: 'portal-csv' });
     } catch (e) {
         console.warn('[nfsesp-portal] heartbeat inicial falhou:', e.message);
     }
@@ -433,6 +438,7 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
         // Persiste log (sem detalhes individuais — pode estourar 1 MiB).
         // Atualiza o MESMO doc do heartbeat ('iniciado' → 'sucesso'/'falha');
         // se o heartbeat não existiu, cria um novo (comportamento antigo).
+        concluirRunEmAndamento(logRef);
         try {
             const logFirestore = { ...log };
             delete logFirestore.detalhes; // remove array de detalhes antes de salvar
@@ -441,6 +447,9 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
                 await logRef.update({
                     executadoEm: admin.firestore.FieldValue.serverTimestamp(),
                     ...logFirestore,
+                    // Concluiu: apaga marca de interrupção que a auto-cura possa
+                    // ter gravado (só vale em update, não em add).
+                    motivoInterrupcao: admin.firestore.FieldValue.delete(),
                 });
             } else {
                 await fa().firestore().collection('nfsesp_portal_cron_logs').add({

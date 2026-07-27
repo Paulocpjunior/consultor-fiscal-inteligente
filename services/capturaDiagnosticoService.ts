@@ -19,7 +19,11 @@ export interface CronLog {
     totalNovos: number | null;
     erroFatal: string | null;
     fonte: string | null;
-    /** 'iniciado' = run em andamento (heartbeat); 'sucesso' | 'falha' no fim. */
+    /**
+     * 'iniciado' = run em andamento (heartbeat); 'sucesso' | 'falha' no fim;
+     * 'interrompido' = morreu no meio (deploy/reinício) — carimbado pelo SIGTERM
+     * ou pela auto-cura por idade, pra não ficar "travado" eterno.
+     */
     status?: string | null;
 }
 
@@ -148,7 +152,7 @@ export async function fetchCronLogs(colecao: CronLogColecao, limit = 20): Promis
 }
 
 // ── Saúde unificada de TODOS os crons (/api/admin/crons/health) ─────────────
-export type CronSaude = 'ok' | 'atrasado' | 'travado' | 'falha' | 'sem-dados' | 'erro-leitura';
+export type CronSaude = 'ok' | 'atrasado' | 'interrompido' | 'travado' | 'falha' | 'sem-dados' | 'erro-leitura';
 
 export interface CronSaudeLinha {
     collection: string;
@@ -168,6 +172,8 @@ export interface CronsHealth {
     geradoEm: string;
     totalCrons: number;
     problemas: number;
+    /** Runs órfãos ('iniciado' há > 2h) curados para 'interrompido' nesta leitura. */
+    curados?: number;
     linhas: CronSaudeLinha[];
 }
 

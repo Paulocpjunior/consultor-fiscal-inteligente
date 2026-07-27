@@ -3,7 +3,7 @@
  * Classificação pura: ok / atrasado / travado / falha / sem-dados.
  */
 // @ts-expect-error — módulo .js puro
-import { tsToMillis, normalizarEntradaLog, classificarSaudeCron, coletarSaudeCrons, CRON_LOG_COLLECTIONS, decidirAlertaCron } from '../sefaz-backend/cron-health.js';
+import { tsToMillis, normalizarEntradaLog, classificarSaudeCron, coletarSaudeCrons, CRON_LOG_COLLECTIONS, decidirAlertaCron, decidirCuraOrfao } from '../sefaz-backend/cron-health.js';
 
 const H = 3_600_000;
 const AGORA = 1_700_000_000_000;
@@ -70,6 +70,38 @@ describe('classificarSaudeCron', () => {
     });
 });
 
+describe('auto-cura de run órfão (caso NFS-e SP 27/07: "travado há 9h" sem nada travado)', () => {
+    const base = { collection: 'nfsesp_portal_cron_logs', label: 'NFS-e SP', maxIdleHoras: 48 };
+
+    it('doc "iniciado" há 9h vira patch de interrompido com motivo acionável', () => {
+        const r = decidirCuraOrfao({ status: 'iniciado', iniciadoEm: AGORA - 9 * H }, AGORA);
+        expect(r.curar).toBe(true);
+        expect(r.patch.status).toBe('interrompido');
+        expect(r.patch.motivoInterrupcao).toMatch(/9h/);
+        expect(r.patch.motivoInterrupcao).toMatch(/rode a captura de novo|aguarde/i);
+    });
+
+    it('run recente (< 2h) NÃO é curado — pode estar rodando agora', () => {
+        expect(decidirCuraOrfao({ status: 'iniciado', iniciadoEm: AGORA - 1 * H }, AGORA).curar).toBe(false);
+    });
+
+    it('run concluído ou sem hora de início não é tocado', () => {
+        expect(decidirCuraOrfao({ status: 'sucesso', iniciadoEm: AGORA - 9 * H }, AGORA).curar).toBe(false);
+        expect(decidirCuraOrfao({ status: 'iniciado' }, AGORA).curar).toBe(false);
+    });
+
+    it("'interrompido' dentro da janela = âmbar; passou do maxIdle sem nova rodada = falha", () => {
+        expect(classificarSaudeCron({ ...base, tsMs: AGORA - 9 * H, status: 'interrompido' }, AGORA).saude).toBe('interrompido');
+        expect(classificarSaudeCron({ ...base, tsMs: AGORA - 60 * H, status: 'interrompido' }, AGORA).saude).toBe('falha');
+    });
+
+    it('motivo da interrupção aparece no card (motivoTop)', () => {
+        const reg = { ...base, tsField: 'executadoEm' };
+        const n = normalizarEntradaLog(reg, { executadoEm: AGORA, status: 'interrompido', motivoInterrupcao: 'Execução interrompida após 9h sem concluir (reinício do servidor).' });
+        expect(n.motivoTop).toMatch(/interrompida/i);
+    });
+});
+
 describe('normalizarEntradaLog — campos variáveis', () => {
     it('usa tsField do registro e soma resumo; durationMs alternativo', () => {
         const reg = { collection: 'manifestacoes_cron_logs', label: 'Manif.', tsField: 'iniciadoEm', maxIdleHoras: 48 };
@@ -89,15 +121,19 @@ describe('normalizarEntradaLog — campos variáveis', () => {
 
 describe('coletarSaudeCrons — agrega e ordena por severidade', () => {
     // Stub de Firestore: devolve um doc canned por coleção.
-    const makeDb = (porColecao: Record<string, any>) => ({
+    // `updates` (quando passado) recolhe as curas gravadas via doc.ref.update.
+    const makeDb = (porColecao: Record<string, any>, updates?: Record<string, any>) => ({
         collection: (name: string) => ({
             orderBy: () => ({
                 limit: () => ({
                     get: async () => {
                         const data = porColecao[name];
-                        return data
-                            ? { empty: false, docs: [{ data: () => data }] }
-                            : { empty: true, docs: [] };
+                        if (!data) return { empty: true, docs: [] };
+                        const doc: any = { data: () => data };
+                        // Sem `updates` o stub NÃO tem ref — simula o caso em que
+                        // a cura não consegue gravar (deve continuar 'travado').
+                        if (updates) doc.ref = { update: async (p: any) => { updates[name] = p; } };
+                        return { empty: false, docs: [doc] };
                     },
                 }),
             }),
@@ -117,6 +153,30 @@ describe('coletarSaudeCrons — agrega e ordena por severidade', () => {
         expect(r.linhas[0].saude).toBe('falha');
         // Coleções sem doc viram 'sem-dados'.
         expect(r.linhas.some((l: any) => l.saude === 'sem-dados')).toBe(true);
+    });
+
+    it('cura o órfão em disco: "iniciado" há 9h vira interrompido (âmbar), não travado eterno', async () => {
+        const updates: Record<string, any> = {};
+        const db = makeDb({
+            nfsesp_portal_cron_logs: { executadoEm: AGORA - 9 * H, iniciadoEm: AGORA - 9 * H, status: 'iniciado' },
+        }, updates);
+        const r = await coletarSaudeCrons(db, AGORA);
+        expect(updates.nfsesp_portal_cron_logs.status).toBe('interrompido');
+        expect(r.curados).toBe(1);
+        const linha = r.linhas.find((l: any) => l.collection === 'nfsesp_portal_cron_logs');
+        expect(linha.saude).toBe('interrompido');
+        expect(linha.motivoTop).toMatch(/interrompida/i);
+        expect(r.problemas).toBe(0); // âmbar não é vermelho — e não alerta
+    });
+
+    it('curar:false só lê (não grava) e mantém o diagnóstico travado', async () => {
+        const updates: Record<string, any> = {};
+        const db = makeDb({
+            nfsesp_portal_cron_logs: { executadoEm: AGORA - 9 * H, iniciadoEm: AGORA - 9 * H, status: 'iniciado' },
+        }, updates);
+        const r = await coletarSaudeCrons(db, AGORA, { curar: false });
+        expect(updates).toEqual({});
+        expect(r.linhas.find((l: any) => l.collection === 'nfsesp_portal_cron_logs').saude).toBe('travado');
     });
 
     it('erro de leitura numa coleção não derruba o resto', async () => {

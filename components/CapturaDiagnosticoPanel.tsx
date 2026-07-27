@@ -103,6 +103,9 @@ const CardCaptura: React.FC<{
             // Cron seg-sex (pelo scheduler declarado): fim de semana não conta
             // como atraso — domingo 26/07 amarelou o painel inteiro à toa.
             cadenciaSegSex: /seg-sex/i.test(status.schedulerEsperado || ''),
+            // Run morto no meio (SIGTERM do deploy ou auto-cura por idade):
+            // nunca verde — não capturou nesta rodada.
+            runInterrompido: log?.status === 'interrompido',
             agoraMs: Date.now(),
         });
     const cor = COR_POR_NIVEL[saude.nivel];
@@ -161,6 +164,16 @@ const CardCaptura: React.FC<{
                     </div>
                 );
             })()}
+            {/* Run já CARIMBADO como interrompido (SIGTERM do deploy ou auto-cura
+                por idade). Antes o doc ficava preso em 'iniciado' e o painel dizia
+                "TRAVADO" pra sempre; agora o próprio log diz o que houve. */}
+            {log?.status === 'interrompido' && (
+                <div className="text-xs font-bold mb-2 bg-amber-100 text-amber-900 border border-amber-400 rounded px-2 py-1">
+                    ⚠️ Execução iniciada {formatRelativeBR(ultimoMs)} foi <strong>interrompida</strong> (deploy/reinício
+                    do servidor mata a varredura em andamento). Os docs já capturados estão salvos. Clique
+                    <strong> “Forçar captura agora”</strong> para completar (seguro: a importação deduplica).
+                </div>
+            )}
             {/* Motivo do farol — sempre visível; é o que evita "verde mentiroso". */}
             <div className={`text-xs font-semibold mb-2 ${
                 saude.nivel === 'critico' ? 'text-red-800' : saude.nivel === 'atencao' ? 'text-amber-800' : 'text-emerald-800'

@@ -15,6 +15,9 @@ import { fetchCronsHealth, type CronsHealth, type CronSaudeLinha, type CronSaude
 const SAUDE_UI: Record<CronSaude, { label: string; cls: string; dot: string }> = {
     ok:            { label: 'OK',         cls: 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700',   dot: 'bg-green-500' },
     atrasado:      { label: 'Atrasado',   cls: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700', dot: 'bg-yellow-500' },
+    // Run morto no meio (deploy/reciclagem) — âmbar: não capturou nesta rodada,
+    // mas a próxima execução do cron ainda está dentro da janela.
+    interrompido:  { label: 'Interrompido', cls: 'bg-amber-50 dark:bg-amber-900/20 border-amber-400 dark:border-amber-700', dot: 'bg-amber-500' },
     travado:       { label: 'Travado',    cls: 'bg-red-50 dark:bg-red-900/20 border-red-400 dark:border-red-700',         dot: 'bg-red-500' },
     falha:         { label: 'Falha',      cls: 'bg-red-50 dark:bg-red-900/20 border-red-400 dark:border-red-700',         dot: 'bg-red-500' },
     'sem-dados':   { label: 'Sem dados',  cls: 'bg-slate-50 dark:bg-slate-800/40 border-slate-300 dark:border-slate-600', dot: 'bg-slate-400' },
@@ -62,6 +65,8 @@ const CronsHealthPanel: React.FC = () => {
 
     if (oculto) return null;
 
+    const interrompidos = (data?.linhas || []).filter((l) => l.saude === 'interrompido').length;
+
     return (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 mt-4">
             <div className="flex items-center justify-between mb-3">
@@ -72,7 +77,14 @@ const CronsHealthPanel: React.FC = () => {
                         {data && data.problemas > 0 && (
                             <span className="ml-1 font-bold text-red-600 dark:text-red-400">{data.problemas} com problema.</span>
                         )}
-                        {data && data.problemas === 0 && <span className="ml-1 text-green-600 dark:text-green-400">todos ok.</span>}
+                        {/* Farol honesto: só diz "todos ok" se NÃO houver run
+                            interrompido — interrompido não capturou nada. */}
+                        {data && data.problemas === 0 && interrompidos > 0 && (
+                            <span className="ml-1 font-bold text-amber-600 dark:text-amber-400">
+                                {interrompidos} interrompido(s) por reinício do servidor — a próxima rodada retoma.
+                            </span>
+                        )}
+                        {data && data.problemas === 0 && interrompidos === 0 && <span className="ml-1 text-green-600 dark:text-green-400">todos ok.</span>}
                     </p>
                 </div>
                 <button
@@ -106,8 +118,8 @@ const CronsHealthPanel: React.FC = () => {
                                 </div>
                                 {/* Motivo dominante das falhas — sem isto "0 ok · 500 falhas"
                                     era número mudo; agora a causa aparece no card. */}
-                                {l.motivoTop && (l.saude === 'falha' || l.saude === 'travado' || (l.resumo?.falhas ?? 0) > 0) && (
-                                    <div className="mt-0.5 text-[10px] text-red-700 dark:text-red-400 break-words" title={l.motivoTop}>
+                                {l.motivoTop && (l.saude === 'falha' || l.saude === 'travado' || l.saude === 'interrompido' || (l.resumo?.falhas ?? 0) > 0) && (
+                                    <div className={`mt-0.5 text-[10px] break-words ${l.saude === 'interrompido' ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'}`} title={l.motivoTop}>
                                         {l.motivoTop}
                                     </div>
                                 )}
