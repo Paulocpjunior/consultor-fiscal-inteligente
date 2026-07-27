@@ -113,33 +113,67 @@ export function traduzirErroDare(status, corpo) {
   return `Falha na API DARE (HTTP ${status}): ${trecho}`;
 }
 
-async function chamar(caminho, { metodo = 'GET', corpo = null, ambiente = AMBIENTE_PADRAO } = {}) {
+/**
+ * Falha de REDE numa emissão é ambígua: a conexão pode ter caído DEPOIS de a
+ * SEFAZ criar a guia. Por isso nunca reenviamos POST sozinhos (duplicaria
+ * DARE) — sinalizamos `indeterminado` e mandamos conferir antes de reemitir.
+ * GET (/receitas) é idempotente: esse sim tenta de novo.
+ */
+function erroDeRede(e) {
+  const m = String(e?.message || e || '').toLowerCase();
+  return e?.name === 'AbortError' || m.includes('fetch failed') || m.includes('econnreset')
+    || m.includes('etimedout') || m.includes('enotfound') || m.includes('socket') || m.includes('network');
+}
+
+async function chamar(caminho, { metodo = 'GET', corpo = null, ambiente = AMBIENTE_PADRAO, tentativas = 1 } = {}) {
   const amb = resolverAmbiente(ambiente);
   const apiKey = await obterApiKey(amb.nome);
   const url = `${amb.baseUrl}${caminho}`;
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   let resp;
-  try {
-    resp = await fetch(url, {
-      method: metodo,
-      headers: {
-        'api-key': apiKey,
-        Accept: 'application/json',
-        ...(corpo ? { 'Content-Type': 'application/json' } : {}),
-      },
-      body: corpo ? JSON.stringify(corpo) : undefined,
-      signal: ctrl.signal,
-    });
-  } catch (e) {
-    clearTimeout(timer);
-    if (e.name === 'AbortError') {
-      throw new Error(`A API DARE não respondeu em ${Math.round(TIMEOUT_MS / 1000)}s (${amb.nome}). Tente de novo; se persistir, emita pelo portal.`);
+  let ultimoErro = null;
+  for (let n = 1; n <= tentativas; n++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    try {
+      resp = await fetch(url, {
+        method: metodo,
+        headers: {
+          'api-key': apiKey,
+          Accept: 'application/json',
+          ...(corpo ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: corpo ? JSON.stringify(corpo) : undefined,
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      ultimoErro = null;
+      break;
+    } catch (e) {
+      clearTimeout(timer);
+      ultimoErro = e;
+      if (n < tentativas && erroDeRede(e)) {
+        await new Promise((r) => setTimeout(r, 1500 * n));
+        continue;
+      }
+      break;
     }
-    throw new Error(`Não consegui falar com a API DARE (${amb.nome}): ${e.message}`);
   }
-  clearTimeout(timer);
+
+  if (ultimoErro) {
+    const e = ultimoErro;
+    const ehPost = metodo === 'POST';
+    const base = e.name === 'AbortError'
+      ? `A API DARE da SEFAZ não respondeu em ${Math.round(TIMEOUT_MS / 1000)}s (${amb.nome})`
+      : `A conexão com a API DARE da SEFAZ falhou (${amb.nome}): ${e.message}`;
+    const erro = new Error(ehPost
+      ? `${base}. ATENÇÃO: a guia PODE ter sido emitida mesmo assim — confira antes de emitir de novo, `
+        + 'para não gerar DARE duplicado. O registro ficou marcado como indeterminado na auditoria.'
+      : `${base}. Tente de novo em instantes.`);
+    erro.erroDeRede = true;
+    erro.indeterminado = ehPost;
+    throw erro;
+  }
 
   const bruto = await resp.text();
   let dados = null;
@@ -157,7 +191,9 @@ async function chamar(caminho, { metodo = 'GET', corpo = null, ambiente = AMBIEN
 /** Lista as receitas/serviços aceitos pela API no ambiente. Também serve de
  *  teste de fumaça da credencial (é GET, não emite nada). */
 export async function listarReceitas({ ambiente = AMBIENTE_PADRAO } = {}) {
-  return chamar('/receitas', { metodo: 'GET', ambiente });
+  // GET é idempotente: 3 tentativas com espera crescente absorvem a queda de
+  // rede intermitente do gateway (fetch failed visto em 27/07).
+  return chamar('/receitas', { metodo: 'GET', ambiente, tentativas: 3 });
 }
 
 /**
