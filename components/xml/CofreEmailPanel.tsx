@@ -14,11 +14,11 @@ const CofreEmailPanel: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [resp, setResp] = useState<XmlEmailIngestResultado | null>(null);
 
-    const rodar = async () => {
+    const rodar = async (opts: { janelaDias?: number; maxMensagens?: number } = {}) => {
         setLoading(true);
         setResp(null);
         try {
-            setResp(await ingerirXmlEmail());
+            setResp(await ingerirXmlEmail(opts));
         } catch (e) {
             setResp({ ok: false, error: e instanceof Error ? e.message : String(e) });
         } finally {
@@ -37,6 +37,8 @@ const CofreEmailPanel: React.FC = () => {
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                     Lê os XMLs que os <strong>emissores dos clientes enviam por e-mail</strong> para a caixa do escritório e importa
                     automaticamente — é assim que a <strong>saída mod 55</strong> entra (a SEFAZ não entrega a saída ao próprio emissor).
+                    Aceita <strong>anexo .xml</strong>, <strong>.zip</strong> com os XMLs do dia e <strong>link de download</strong> no
+                    corpo (prefeitura/ERP), varrendo Caixa de Entrada, subpastas e Lixo Eletrônico.
                     Roda sozinho a cada 30 min; este botão é disparo manual.
                 </p>
             </div>
@@ -50,10 +52,24 @@ const CofreEmailPanel: React.FC = () => {
                 </ol>
             </details>
 
-            <button onClick={rodar} disabled={loading}
-                className="px-4 py-1.5 text-xs font-bold rounded-md bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white">
-                {loading ? 'Lendo a caixa…' : 'Ler caixa agora'}
-            </button>
+            <div className="flex flex-wrap gap-2 items-center">
+                <button onClick={() => rodar()} disabled={loading}
+                    className="px-4 py-1.5 text-xs font-bold rounded-md bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white">
+                    {loading ? 'Lendo a caixa…' : 'Ler caixa agora'}
+                </button>
+                {/* Até 27/07 o cofre só lia e-mail NÃO-LIDO: bastava alguém da
+                    equipe abrir a mensagem no Outlook pra a nota nunca ser
+                    importada. Esta varredura recupera o que ficou para trás
+                    (é seguro: a importação deduplica e o registro por
+                    messageId evita reprocesso). */}
+                <button onClick={() => rodar({ janelaDias: 180, maxMensagens: 100 })} disabled={loading}
+                    className="px-4 py-1.5 text-xs font-bold rounded-md bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-slate-700 dark:text-slate-200">
+                    Recuperar histórico (180 dias)
+                </button>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    A recuperação varre 6 meses da caixa (inclusive e-mails já abertos pela equipe) — pode levar alguns minutos.
+                </span>
+            </div>
 
             {resp && !resp.ok && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
@@ -87,7 +103,22 @@ const CofreEmailPanel: React.FC = () => {
                     </p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         caixa: {resp.caixa || '—'} · {resp.empresasMonitoradas ?? 0} empresas monitoradas · {resp.semDono ?? 0} anexos sem cliente monitorado
+                        {(resp.links ?? 0) > 0 && ` · ${resp.links} link(s) no corpo, ${resp.linksBaixados ?? 0} baixado(s) → ${resp.xmlsDeLink ?? 0} XML(s)`}
                     </p>
+                    {/* Link recusado pela allowlist: é exatamente a lista de
+                        domínios a autorizar (só .gov.br entra por padrão). */}
+                    {(resp.linksBloqueados?.length ?? 0) > 0 && (
+                        <div className="text-[11px] text-amber-600 dark:text-amber-400">
+                            <p className="font-bold">⚠ Link de download recusado (domínio não autorizado):</p>
+                            <ul className="list-disc list-inside mt-0.5 font-mono">
+                                {(resp.linksBloqueados || []).map((h, i) => <li key={i}>{h}</li>)}
+                            </ul>
+                            <p className="mt-1">
+                                Se o domínio for do ERP de um cliente e for confiável, acrescente-o à variável{' '}
+                                <code>XML_INGEST_LINK_DOMINIOS</code> (lista separada por vírgula) e rode de novo.
+                            </p>
+                        </div>
+                    )}
                     {(resp.errosDetalhe?.length ?? 0) > 0 && (
                         <div className="text-[11px] text-red-600 dark:text-red-400 mt-1">
                             <p className="font-bold">✕ Erros de importação:</p>
@@ -104,7 +135,7 @@ const CofreEmailPanel: React.FC = () => {
                             </ul>
                             <p className="mt-1 not-italic">
                                 Se aparecer <code>itemAttachment</code> = e-mail encaminhado (o XML está aninhado — mande o XML como anexo direto, sem encaminhar).
-                                Se for <code>.pdf</code>/<code>.zip</code> = mande o <code>.xml</code> em si (o ZIP vai pela Importação em Massa acima).
+                                <code>.zip</code> já é lido automaticamente; <code>.pdf</code> sozinho não serve — peça o <code>.xml</code>.
                             </p>
                         </div>
                     )}
