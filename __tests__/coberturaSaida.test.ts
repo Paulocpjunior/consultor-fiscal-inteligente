@@ -4,7 +4,7 @@
  * escritorio no <autXML> do emissor dela → entra na lista acionavel.
  */
 // @ts-expect-error — módulo .js puro
-import { analisarCoberturaSaida, ehSaidaMod55, modeloDaChave, dentroJanela } from '../sefaz-backend/cobertura-saida.js';
+import { analisarCoberturaSaida, ehSaidaMod55, modeloDaChave, dentroJanela, trilhoDaOrigem } from '../sefaz-backend/cobertura-saida.js';
 
 // Chave de 44 digitos com o modelo nas posicoes 21-22 (indices 20-21).
 function chave(modelo: string): string {
@@ -140,5 +140,89 @@ describe('analisarCoberturaSaida', () => {
     const alfa = r.empresasComSaida.find((e: any) => e.empresaId === 'A');
     expect(alfa.qtdSaida).toBe(1);       // so 1 na janela
     expect(alfa.qtdSaidaTotal).toBe(2);  // 2 na historia
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CONFIRMAÇÃO da ligação do cliente (Paulo, 27/07): "são 2 opções para ligação
+// das empresas de XML mod 55 — inserir nosso e-mail no cofre OU autXML com
+// nosso CNPJ". O cliente avisa que ligou; o app tem de PROVAR qual das duas
+// está valendo, com data — ou dizer o que cobrar.
+// ---------------------------------------------------------------------------
+describe('trilhoDaOrigem — de onde a saída chegou', () => {
+  it('cofre = origem email; autXML = carimbo próprio ou DistDFe', () => {
+    expect(trilhoDaOrigem('email')).toBe('cofre');
+    expect(trilhoDaOrigem('autxml')).toBe('autxml');
+    // A SEFAZ não devolve ao emissor a saída que ele emitiu (Rejeição 641):
+    // se veio pelo DistDFe do escritório, é porque o autXML está lá.
+    expect(trilhoDaOrigem('sefaz')).toBe('autxml');
+  });
+
+  it('importação humana NÃO conta como ligação (mesmo gravando origem sefaz)', () => {
+    expect(trilhoDaOrigem('sefaz', 'conferencia-chaves')).toBe('manual');
+    expect(trilhoDaOrigem('sefaz', 'consulta-chave-importar')).toBe('manual');
+    expect(trilhoDaOrigem('sharepoint_auto')).toBe('manual');
+    expect(trilhoDaOrigem('manual')).toBe('manual');
+  });
+
+  it('origem ausente não vira confirmação falsa', () => {
+    expect(trilhoDaOrigem(null)).toBe('desconhecido');
+  });
+});
+
+describe('confirmação por cliente — as duas ligações possíveis', () => {
+  const empresas = [
+    { empresaId: 'A', cnpj: '11111111000191', nome: 'Alfa', regime: 'simples' },
+    { empresaId: 'B', cnpj: '22222222000172', nome: 'Beta', regime: 'lucro' },
+    { empresaId: 'C', cnpj: '33333333000153', nome: 'Gama', regime: 'simples' },
+    { empresaId: 'D', cnpj: '44444444000134', nome: 'Delta', regime: 'lucro' },
+  ];
+  const docs = [
+    // A: cliente apontou o emissor pro cofre → confirmado pelo cofre.
+    { empresaId: 'A', direcao: 'saida', chave: chave('55'), dhEmi: iso(3), origem: 'email' },
+    // B: cliente pôs nosso CNPJ no autXML → confirmado pelo autXML.
+    { empresaId: 'B', direcao: 'saida', chave: chave('55'), dhEmi: iso(1), origem: 'autxml' },
+    // C: só entrou porque alguém importou à mão → NÃO confirma nada.
+    { empresaId: 'C', direcao: 'saida', chave: chave('55'), dhEmi: iso(4), origem: 'sefaz', capturadoPor: { fonte: 'conferencia-chaves' } },
+    // D: emitia antes (fora da janela) e parou de chegar.
+    { empresaId: 'D', direcao: 'saida', chave: chave('55'), dhEmi: iso(200), origem: 'sefaz' },
+  ];
+  const r = analisarCoberturaSaida({ empresas, docs, hojeMs: HOJE, janelaDias: 90 });
+  const porNome = (n: string) => r.confirmacoes.find((c: any) => c.nome === n);
+
+  it('cofre ligado: confirmado, com o trilho e a data', () => {
+    const c = porNome('Alfa');
+    expect(c.confirmado).toBe(true);
+    expect(c.trilhos).toEqual(['cofre']);
+    expect(c.titulo).toMatch(/cofre de e-mail/);
+    expect(c.cofre.qtd).toBe(1);
+    expect(c.acao).toBeNull();
+  });
+
+  it('autXML ligado: confirmado pelo autXML', () => {
+    const c = porNome('Beta');
+    expect(c.confirmado).toBe(true);
+    expect(c.trilhos).toEqual(['autxml']);
+    expect(c.autxml.qtd).toBe(1);
+  });
+
+  it('só importação manual: NÃO confirmado, com a cobrança das duas opções', () => {
+    const c = porNome('Gama');
+    expect(c.confirmado).toBe(false);
+    expect(c.trilhos).toEqual(['manual']);
+    expect(c.acao).toMatch(/xml@spassessoriacontabil\.com\.br/);
+    expect(c.acao).toMatch(/44\.388\.152\/0001-89/);
+  });
+
+  it('emitia e parou: aponta a última conhecida e o que checar com o cliente', () => {
+    const c = porNome('Delta');
+    expect(c.confirmado).toBe(false);
+    expect(c.titulo).toMatch(/nada chega/);
+    expect(c.acao).toMatch(/autXML DA NOTA/);
+    expect(c.acao).toMatch(/Bloco 0100/); // erro real da TI da 4BZ
+  });
+
+  it('conta quantas empresas estão confirmadas (as duas ligações valem)', () => {
+    expect(r.confirmadas).toBe(2); // Alfa (cofre) + Beta (autXML)
   });
 });

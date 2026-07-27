@@ -29,6 +29,84 @@ export function ehSaidaMod55(doc) {
 }
 
 /**
+ * Por qual TRILHO a nota de saida chegou — e a prova de que a configuracao do
+ * cliente esta valendo (27/07, pergunta do Paulo: "o cliente diz que incluiu
+ * nosso CNPJ, como confirmar?").
+ *
+ *   'autxml' → veio da SEFAZ pelo DistDFe do escritorio. A SEFAZ NUNCA entrega
+ *              ao emissor a saida que ele mesmo emitiu (Rejeicao 641): se uma
+ *              saida mod 55 chegou por 'sefaz', so pode ser porque o CNPJ do
+ *              escritorio esta na tag <autXML> (ou somos destinatarios). Ou
+ *              seja: prova direta de que a configuracao do cliente funcionou.
+ *   'cofre'  → o emissor do cliente mandou o XML pra caixa xml@ (origem
+ *              'email').
+ *   'manual' → alguem importou (ZIP/upload/SharePoint). NAO confirma nada: se
+ *              a captura automatica parar, ninguem percebe.
+ */
+export function trilhoDaOrigem(origem, fonte = null) {
+  const o = String(origem || '').toLowerCase();
+  const f = String(fonte || '').toLowerCase();
+  if (o === 'email') return 'cofre';
+  if (o === 'autxml') return 'autxml';
+  // Importação por gente (ZIP, consulta por chave, conferência, SharePoint):
+  // NÃO confirma configuração nenhuma — se a captura automática parar, ninguém
+  // percebe. Precisa vir antes do 'sefaz', porque essas rotas também gravam
+  // origem='sefaz' (default do importer).
+  if (o === 'sharepoint_auto' || o === 'manual'
+    || /conferencia|consulta-chave|manual|agent|importac/.test(f)) return 'manual';
+  if (o === 'sefaz') return 'autxml';
+  return 'desconhecido';
+}
+
+/**
+ * Veredito de CONFIRMAÇÃO da configuração de saída de UMA empresa — responde
+ * "o cliente disse que ligou; ligou mesmo?" com prova (trilho + data).
+ * PURA. `rec` vem do analisarCoberturaSaida (contadores por trilho).
+ */
+export function classificarConfirmacaoSaida(rec, hojeMs, janelaDias = 90) {
+  const t = rec?.trilhos || {};
+  const auto = ['cofre', 'autxml'].filter((k) => (t[k]?.qtd || 0) > 0);
+  const ultimaAutoMs = Math.max(0, ...auto.map((k) => t[k].ultimaMs || 0));
+  const diasSemAuto = ultimaAutoMs ? Math.floor((hojeMs - ultimaAutoMs) / DIA_MS) : null;
+
+  if (auto.length > 0) {
+    const nomes = auto.map((k) => (k === 'cofre' ? 'cofre de e-mail' : 'autXML')).join(' + ');
+    return {
+      confirmado: true,
+      trilhos: auto,
+      titulo: `Ligado por ${nomes}`,
+      detalhe: `Última saída capturada há ${diasSemAuto} dia(s) — ${auto.map((k) => `${t[k].qtd} pelo ${k === 'cofre' ? 'cofre' : 'autXML'}`).join(', ')} na janela de ${janelaDias} dias.`,
+      acao: null,
+    };
+  }
+  if ((t.manual?.qtd || 0) > 0) {
+    return {
+      confirmado: false,
+      trilhos: ['manual'],
+      titulo: 'Só importação manual',
+      detalhe: `${t.manual.qtd} nota(s) na janela, todas importadas à mão — nenhuma chegou sozinha.`,
+      acao: 'A configuração do cliente NÃO está valendo: peça o e-mail do emissor apontado para xml@spassessoriacontabil.com.br OU o CNPJ 44.388.152/0001-89 na tag autXML. Enquanto isso, a captura depende de alguém lembrar de importar.',
+    };
+  }
+  if ((rec?.qtdSaidaTotal || 0) > 0) {
+    return {
+      confirmado: false,
+      trilhos: [],
+      titulo: 'Emite mod 55, mas nada chega',
+      detalhe: `Nenhuma saída nos últimos ${janelaDias} dias; a última conhecida é de ${String(rec.ultimaSaidaHistorica || '').slice(0, 10) || '—'}.`,
+      acao: 'Confirme com o cliente ONDE ele mexeu: (1) cofre — o emissor precisa mandar o XML para xml@spassessoriacontabil.com.br a cada emissão (não só o PDF/DANFE); (2) autXML — o CNPJ 44.388.152/0001-89 tem de entrar na tag autXML DA NOTA, no cadastro do emissor (não no Bloco 0100 do SPED). Só vale para notas emitidas DEPOIS da mudança.',
+    };
+  }
+  return {
+    confirmado: false,
+    trilhos: [],
+    titulo: 'Sem evidência de que emite mod 55',
+    detalhe: 'Nenhuma saída mod 55 na base, nem na janela nem no histórico.',
+    acao: 'Antes de cobrar configuração, confirme com o cliente se ele emite NF-e mod 55 (pode ser só serviço/NFS-e ou só NFC-e).',
+  };
+}
+
+/**
  * dhEmi (ISO) esta dentro da janela [hoje - janelaDias, hoje + 1dia]? O +1dia
  * tolera fuso/relogio adiantado sem descartar nota de hoje.
  */
@@ -71,6 +149,9 @@ export function analisarCoberturaSaida({ empresas, docs, hojeMs, janelaDias = 90
       qtdSaidaTotal: 0,
       ultimaSaidaHistorica: null,
       ultimaSaidaHistoricaMs: null,
+      // Por TRILHO, dentro da janela — é a prova de qual das duas ligações
+      // (cofre de e-mail / autXML com nosso CNPJ) está de fato valendo.
+      trilhos: {},
     };
     if (e.empresaId) porId.set(e.empresaId, rec);
     // Raiz (8) cobre filial que emite de base diferente da cadastrada.
@@ -100,6 +181,13 @@ export function analisarCoberturaSaida({ empresas, docs, hojeMs, janelaDias = 90
       if (Number.isFinite(t) && (rec.ultimaSaidaMs === null || t > rec.ultimaSaidaMs)) {
         rec.ultimaSaidaMs = t;
         rec.ultimaSaida = d.dhEmi;
+      }
+      const trilho = trilhoDaOrigem(d.origem, d.capturadoPor?.fonte);
+      const bucket = rec.trilhos[trilho] || (rec.trilhos[trilho] = { qtd: 0, ultimaMs: null, ultima: null });
+      bucket.qtd++;
+      if (Number.isFinite(t) && (bucket.ultimaMs === null || t > bucket.ultimaMs)) {
+        bucket.ultimaMs = t;
+        bucket.ultima = d.dhEmi;
       }
     }
   }
@@ -136,5 +224,24 @@ export function analisarCoberturaSaida({ empresas, docs, hojeMs, janelaDias = 90
     prioritariasCount: prioritarias.length,
     semEvidenciaCount: semEvidenciaSaida.length,
     empresasComSaida: comSaida.sort((a, b) => b.qtdSaida - a.qtdSaida).map(limpa),
+    // CONFIRMAÇÃO por cliente: a resposta a "o cliente disse que ligou o cofre
+    // (ou pôs nosso CNPJ no autXML) — ligou mesmo?". Vem para TODAS as
+    // empresas, com o trilho e a data que provam (ou a ação, quando não há).
+    confirmacoes: todas
+      .map((e) => ({
+        empresaId: e.empresaId,
+        cnpj: e.cnpj,
+        nome: e.nome,
+        ativo: e.ativo,
+        qtdSaida: e.qtdSaida,
+        ultimaSaida: e.ultimaSaida,
+        ultimaSaidaHistorica: e.ultimaSaidaHistorica,
+        cofre: e.trilhos.cofre ? { qtd: e.trilhos.cofre.qtd, ultima: e.trilhos.cofre.ultima } : null,
+        autxml: e.trilhos.autxml ? { qtd: e.trilhos.autxml.qtd, ultima: e.trilhos.autxml.ultima } : null,
+        manual: e.trilhos.manual ? { qtd: e.trilhos.manual.qtd, ultima: e.trilhos.manual.ultima } : null,
+        ...classificarConfirmacaoSaida(e, hojeMs, janelaDias),
+      }))
+      .sort(porNome),
+    confirmadas: todas.filter((e) => (e.trilhos.cofre?.qtd || 0) > 0 || (e.trilhos.autxml?.qtd || 0) > 0).length,
   };
 }

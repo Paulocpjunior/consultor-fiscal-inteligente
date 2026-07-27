@@ -110,6 +110,11 @@ export async function colherSaidaAutXML({ capturadoPor = null, maxPaginas = MAX_
         const imp = await importarXmlSefaz({
           empresaId: dono.empresaId, empresaCnpj: cnpjNota,
           xml: doc.xml, schema: doc.schema, nsu: doc.nsu, capturadoPor,
+          // Carimbo do TRILHO: é o que prova, depois, que o cliente realmente
+          // pôs o CNPJ do escritório no <autXML> (a saída não chega de outro
+          // jeito pela SEFAZ). Sem isto a colheita ficava indistinguível de
+          // uma importação manual no relatório de cobertura.
+          origem: 'autxml',
         });
         if (imp.status === 'ok') {
           if (tipo === 'saida') { r.importadasSaida++; bucket.saida++; }

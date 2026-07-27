@@ -67,6 +67,10 @@ router.get('/cobertura-saida', requireAdmin, async (req, res) => {
         direcao: x.direcao,
         chave: x.chave,
         dhEmi: x.dhEmi,
+        // Trilho da captura: 'email' = cofre; 'autxml'/'sefaz' = DistDFe com o
+        // CNPJ do escritório no autXML; fonte separa o que foi importado à mão.
+        origem: x.origem || null,
+        capturadoPor: x.capturadoPor?.fonte ? { fonte: x.capturadoPor.fonte } : null,
       };
     });
 

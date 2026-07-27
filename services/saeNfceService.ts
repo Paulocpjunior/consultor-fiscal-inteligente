@@ -136,9 +136,33 @@ export interface CoberturaSaidaResultado {
     prioritariasCount?: number;
     semEvidenciaCount?: number;
     empresasComSaida?: CoberturaSaidaEmpresa[];
+    /** Confirmação por cliente das DUAS ligações possíveis (cofre / autXML). */
+    confirmacoes?: ConfirmacaoSaidaEmpresa[];
+    confirmadas?: number;
     docsSaidaLidos?: number;
     geradoEm?: string;
     error?: string;
+}
+
+/** Prova (ou falta dela) de que a ligação do cliente está valendo. */
+export interface ConfirmacaoSaidaEmpresa {
+    empresaId: string;
+    cnpj: string;
+    nome: string;
+    ativo: boolean;
+    qtdSaida: number;
+    ultimaSaida: string | null;
+    ultimaSaidaHistorica: string | null;
+    /** Notas que chegaram por cada trilho na janela (null = nenhuma). */
+    cofre: { qtd: number; ultima: string | null } | null;
+    autxml: { qtd: number; ultima: string | null } | null;
+    manual: { qtd: number; ultima: string | null } | null;
+    confirmado: boolean;
+    trilhos: string[];
+    titulo: string;
+    detalhe: string;
+    /** O que cobrar do cliente quando não está confirmado. */
+    acao: string | null;
 }
 
 /**

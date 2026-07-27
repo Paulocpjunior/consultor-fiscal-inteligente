@@ -1211,6 +1211,35 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
     //   - sefaz_xml_email_state/estado  → última leitura + ultimaSaidaPorEmpresa
     //   - cofre_email_runs (7d)         → saída/entrada importada na janela
     //   - simples/lucro                 → universo monitorado (denominador)
+    // Motivo dominante das falhas do COFRE. O card mostrava "2 / 8" mudo
+    // (print do Paulo 27/07) — número de falha sem causa não é farol honesto.
+    async function topFalhasCofre(maxMotivos = 3) {
+      try {
+        const snap = await db.collection('cofre_email_runs')
+          .orderBy('ranAtMs', 'desc').limit(6).get();
+        for (const docSnap of snap.docs) {
+          const d = docSnap.data();
+          if (!Array.isArray(d.errosDetalhe) || d.errosDetalhe.length === 0) continue;
+          const contagem = new Map();
+          for (const err of d.errosDetalhe) {
+            // errosDetalhe é "arquivo.xml: motivo" — agrupa pelo MOTIVO (o
+            // nome do arquivo muda a cada nota e esconderia o padrão).
+            const txt = String(err || '');
+            const motivo = (txt.includes(':') ? txt.slice(txt.indexOf(':') + 1) : txt).trim().slice(0, 130);
+            contagem.set(motivo, (contagem.get(motivo) || 0) + 1);
+          }
+          const top = [...contagem.entries()]
+            .sort((a, b) => b[1] - a[1]).slice(0, maxMotivos)
+            .map(([motivo, quantidade]) => ({ motivo, quantidade }));
+          if (top.length) return { executadoEm: d.ranAtMs ? new Date(d.ranAtMs).toISOString() : null, top };
+        }
+        return null;
+      } catch (e) {
+        console.warn('[captura-diagnostico] topFalhasCofre:', e.message);
+        return null;
+      }
+    }
+
     async function estadoCofreSaida() {
       try {
         let atualizadoMs = null, ultimoResumo = null, entregando7d = 0, jaEntregaram = 0;
@@ -1267,7 +1296,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       stateSefaz, stateNfseSp, stateNfseNac,
       docsNfe, docsNfseSp, docsNfseNac,
       falhasNfseSp, docsNfseNacTotal, falhasNfe,
-      falhasNfseNac, cofreSaida,
+      falhasNfseNac, cofreSaida, falhasCofre,
     ] = await Promise.all([
       ultimoLog('sefaz_cron_logs'),
       // 22/07: trilho oficial NFSe SP = PORTAL CSV; o WS legado (1102) foi pausado.
@@ -1309,6 +1338,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
       topFalhasNfe(),
       topFalhasNfseNacional(),
       estadoCofreSaida(),
+      topFalhasCofre(),
     ]);
 
     return res.json({
@@ -1376,6 +1406,8 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           jaEntregaram: cofreSaida?.jaEntregaram ?? null,
           monitoradasCofre: cofreSaida?.monitoradas ?? null,
           entrada7dCofre: cofreSaida?.entrada7d ?? null,
+          // Falha sempre com o MOTIVO ao lado (regra do farol honesto).
+          topFalhas: falhasCofre,
         },
       },
     });
