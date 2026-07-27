@@ -533,6 +533,28 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   const existingData = existing?.exists ? existing.data() : null;
 
   if (decidirGravacaoNFe({ existingData, tipoDoc: meta.tipoDoc, schema, chave: meta.chave }).duplicado) {
+    // Duplicado SEM DONO (ou de outra empresa) ainda precisa ser reatribuído —
+    // o fast-path saía antes da transação e engolia a reatribuição inteira
+    // (caso GUARANI 27/07: "36 duplicadas · 0 reatribuídas" com as notas
+    // invisíveis no filtro por empresa). Corrige aqui mesmo, sem regravar o
+    // XML no Storage: o corpo da nota já está lá, só a posse estava errada.
+    const donoNovo = empresaId || null;
+    if (donoNovo && existingData && existingData.empresaId !== donoNovo) {
+      const cnpjLimpo = empresaCnpj?.replace(/\D/g, '') || null;
+      const direcaoNova = decidirDirecao(existingData.cnpjEmit || meta.cnpjEmit, existingData.cnpjDest || meta.cnpjDest, cnpjLimpo);
+      try {
+        await docRef.update({
+          empresaId: donoNovo,
+          empresaCnpj: cnpjLimpo,
+          direcao: direcaoNova !== 'desconhecida' ? direcaoNova : (existingData.direcao ?? null),
+          reatribuidoEm: fa().firestore.FieldValue.serverTimestamp(),
+          reatribuidoDe: existingData.empresaId || null,
+        });
+        return { status: 'reatribuido', chave: meta.chave, deEmpresaId: existingData.empresaId || null };
+      } catch (e) {
+        console.warn(`[xml-importer] falha reatribuindo ${meta.chave}: ${e.message}`);
+      }
+    }
     return { status: 'duplicado', chave: meta.chave };
   }
 

@@ -21,6 +21,7 @@ import { requireAdmin } from './require-admin.js';
 import { capturarNFCeSaida } from './sefaz-sp-nfce-orchestrator.js';
 import { importarXmlSefaz } from './xml-importer.js';
 import { carregarEmpresas, acharDono } from './xml-empresa-matcher.js';
+import { repararDocsSemDono } from './docs-sem-dono.js';
 
 const router = express.Router();
 
@@ -188,6 +189,31 @@ router.post('/importar-xmls', requireAdmin, async (req, res) => {
   } catch (e) {
     console.error('[sae-nfce] importar-xmls erro:', e.message);
     return res.status(500).json({ error: e.message, duracaoMs: Date.now() - inicio });
+  }
+});
+
+/**
+ * Notas ÓRFÃS (empresaId nulo) — passado das importações em lote que gravavam
+ * sem dono. `aplicar=false` (padrão) só relata; `aplicar=true` devolve a posse.
+ * Devolve cursor pra UI repetir até acabar (acervo grande).
+ */
+router.post('/reparar-sem-dono', requireAdmin, async (req, res) => {
+  const inicio = Date.now();
+  try {
+    const aplicar = req.body?.aplicar === true;
+    const maxDocs = Math.min(Math.max(Number(req.body?.maxDocs) || 2000, 100), 5000);
+    const cursor = req.body?.cursor || null;
+    const db = getDbNfce();
+    const { porCnpj, porRaiz } = await carregarEmpresas(db);
+    const r = await repararDocsSemDono({
+      db, porCnpj, porRaiz, aplicar, maxDocs, cursor,
+      FieldValue: admin.firestore.FieldValue,
+    });
+    console.log(`[reparar-sem-dono] aplicar=${aplicar} analisados=${r.analisados} reparados=${r.reparados} por=${req.user?.email}`);
+    return res.json({ ok: true, ...r, duracaoMs: Date.now() - inicio });
+  } catch (e) {
+    console.error('[reparar-sem-dono] erro:', e.message);
+    return res.status(500).json({ ok: false, error: e.message, duracaoMs: Date.now() - inicio });
   }
 });
 

@@ -3,7 +3,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import type { User } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { formatCnpjCpf } from '../../services/xmlParserService';
-import { importarXmlsLote } from '../../services/saeNfceService';
+import { importarXmlsLote, repararNotasSemDono, type ReparoSemDonoResultado } from '../../services/saeNfceService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 import ConfirmarImportacaoModal from './ConfirmarImportacaoModal';
 import { resumirLoteXmls, validarLoteParaEmpresa, type ValidacaoLote } from '../../services/xmlLoteValidacao';
@@ -65,6 +65,43 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
     const [totais, setTotais] = useState<Totais | null>(null);
     const [errosDetalhe, setErrosDetalhe] = useState<string[]>([]);
     const [conferencia, setConferencia] = useState<Conferencia | null>(null);
+    // Reparo do PASSADO: notas importadas antes de 27/07 ficaram com empresaId
+    // nulo (a rota de lote não passava o dono) e somem do filtro por empresa.
+    const [reparo, setReparo] = useState<ReparoSemDonoResultado | null>(null);
+    const [reparando, setReparando] = useState(false);
+
+    const rodarReparo = async (aplicar: boolean) => {
+        setReparando(true);
+        setReparo(null);
+        try {
+            let acumulado: ReparoSemDonoResultado | null = null;
+            let cursor: string | null | undefined = null;
+            // Segue o cursor até varrer tudo (acervo grande vai em fatias).
+            for (let volta = 0; volta < 20; volta++) {
+                const r: ReparoSemDonoResultado = await repararNotasSemDono({ aplicar, cursor });
+                if (!r.ok) { setReparo(r); return; }
+                acumulado = acumulado ? {
+                    ...r,
+                    analisados: (acumulado.analisados || 0) + (r.analisados || 0),
+                    reparados: (acumulado.reparados || 0) + (r.reparados || 0),
+                    semDonoConhecido: (acumulado.semDonoConhecido || 0) + (r.semDonoConhecido || 0),
+                    semCnpjNoDoc: (acumulado.semCnpjNoDoc || 0) + (r.semCnpjNoDoc || 0),
+                    porEmpresa: Object.entries(r.porEmpresa || {}).reduce(
+                        (acc: Record<string, number>, [k, v]) => { acc[k] = (acc[k] || 0) + (v as number); return acc; },
+                        { ...((acumulado?.porEmpresa || {}) as Record<string, number>) },
+                    ),
+                } : r;
+                setReparo(acumulado);
+                if (r.acabou || !r.cursor) break;
+                cursor = r.cursor;
+            }
+            if (aplicar) onImported?.();
+        } catch (e) {
+            setReparo({ ok: false, error: e instanceof Error ? e.message : String(e) });
+        } finally {
+            setReparando(false);
+        }
+    };
     // Lote lido e AGUARDANDO confirmação (a importação só começa depois que
     // alguém conferiu de quem são os XMLs — ver ConfirmarImportacaoModal).
     const [pendente, setPendente] = useState<{ xmls: string[]; nomes: string[]; erros: string[] } | null>(null);
@@ -320,6 +357,48 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                     )}
                 </div>
             )}
+
+            {/* Reparo do acervo importado ANTES do conserto de 27/07: essas
+                notas existem na base, mas com empresaId nulo — invisíveis no
+                filtro por empresa. Reimportar não resolvia (o fast-path de
+                duplicidade saía antes de reatribuir). */}
+            <div className="border-t border-amber-200 dark:border-amber-800 pt-3 space-y-2">
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">🔧 Notas importadas que não aparecem no filtro por empresa</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Importações em lote feitas até 27/07/2026 gravavam a nota <strong>sem dono</strong>. Ela está na base,
+                    mas some ao filtrar o cliente. Rode o ensaio para ver quantas são e de quem; depois aplique.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                    <button onClick={() => rodarReparo(false)} disabled={reparando}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-slate-700 dark:text-slate-200">
+                        {reparando ? '⏳ Varrendo…' : '🔎 Ensaio (não grava)'}
+                    </button>
+                    <button onClick={() => rodarReparo(true)} disabled={reparando}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white">
+                        {reparando ? '⏳…' : '✅ Aplicar reparo'}
+                    </button>
+                </div>
+                {reparo && !reparo.ok && <p className="text-xs text-red-600 dark:text-red-400">{reparo.error}</p>}
+                {reparo && reparo.ok && (
+                    <div className="text-[11px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 space-y-1">
+                        <p className="font-bold text-slate-700 dark:text-slate-200">
+                            {reparo.analisados} sem dono analisada(s) → <span className="text-emerald-600 dark:text-emerald-400">{reparo.reparados} {reparo.aplicar ? 'reparada(s)' : 'seriam reparadas'}</span>
+                            {(reparo.semDonoConhecido ?? 0) > 0 && <span className="text-slate-500"> · {reparo.semDonoConhecido} de terceiros (nenhuma ponta é cliente)</span>}
+                            {(reparo.semCnpjNoDoc ?? 0) > 0 && <span className="text-slate-500"> · {reparo.semCnpjNoDoc} sem CNPJ gravado</span>}
+                        </p>
+                        {Object.keys(reparo.porEmpresa || {}).length > 0 && (
+                            <ul className="text-slate-600 dark:text-slate-300 space-y-0.5 max-h-40 overflow-y-auto">
+                                {Object.entries(reparo.porEmpresa || {}).sort((a, b) => b[1] - a[1]).map(([nome, qtd]) => (
+                                    <li key={nome}>{nome}: <strong>{qtd}</strong> nota(s)</li>
+                                ))}
+                            </ul>
+                        )}
+                        {reparo.aplicar && (reparo.reparados ?? 0) > 0 && (
+                            <p className="text-emerald-700 dark:text-emerald-400">Pronto — agora elas aparecem ao filtrar a empresa na aba XMLs.</p>
+                        )}
+                    </div>
+                )}
+            </div>
 
             {/* Trava: confere de quem são os XMLs ANTES de importar. */}
             <ConfirmarImportacaoModal

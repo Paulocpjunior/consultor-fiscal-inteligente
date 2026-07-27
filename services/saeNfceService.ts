@@ -184,6 +184,42 @@ export async function coberturaSaida(janelaDias = 90): Promise<CoberturaSaidaRes
     }
 }
 
+export interface ReparoSemDonoResultado {
+    ok: boolean;
+    analisados?: number;
+    reparados?: number;
+    semDonoConhecido?: number;
+    semCnpjNoDoc?: number;
+    porEmpresa?: Record<string, number>;
+    aplicar?: boolean;
+    cursor?: string | null;
+    acabou?: boolean;
+    error?: string;
+}
+
+/**
+ * Notas que ficaram SEM DONO (empresaId nulo) por causa das importações em
+ * lote antigas — existem na base mas somem do filtro por empresa. `aplicar`
+ * false = ensaio (só conta); true = devolve a posse.
+ */
+export async function repararNotasSemDono(
+    opts: { aplicar?: boolean; cursor?: string | null; maxDocs?: number } = {},
+): Promise<ReparoSemDonoResultado> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sae-nfce/reparar-sem-dono', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            aplicar: opts.aplicar === true,
+            cursor: opts.cursor || undefined,
+            maxDocs: opts.maxDocs || undefined,
+        }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ...data, ok: true };
+}
+
 export interface XmlEmailIngestResultado {
     ok: boolean;
     caixa?: string;
