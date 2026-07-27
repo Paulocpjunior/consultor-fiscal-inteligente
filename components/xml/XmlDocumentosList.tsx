@@ -63,6 +63,9 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
     // Leitura bateu no teto: a lista mostra um RECORTE. Precisa aparecer na
     // tela — silenciosamente truncado foi o que escondeu as notas da GUARANI.
     const [leituraTruncada, setLeituraTruncada] = useState(false);
+    // Nenhuma empresa/competência escolhida: não lemos nada (economia real —
+    // eram até 20.000 docs por abertura de tela).
+    const [semRecorte, setSemRecorte] = useState(true);
     const [procurandoFora, setProcurandoFora] = useState(false);
     const [exporting, setExporting] = useState<'pdf' | 'csv' | null>(null);
     // Render incremental: monta só as primeiras N linhas no DOM e cresce sob
@@ -96,15 +99,21 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
         if (idsDaRaiz.length === 1) filtrosServidor.empresaId = idsDaRaiz[0];
         else if (idsDaRaiz.length > 1) filtrosServidor.empresaIds = idsDaRaiz;
 
+        // SEM recorte escolhido, não lê documento nenhum (Paulo, 27/07):
+        // varrer a coleção inteira pra depois filtrar no navegador gastava
+        // leitura, tempo e ainda entregava um recorte truncado. O catálogo de
+        // empresas continua carregando — é ele que enche o seletor.
+        const temRecorte = !!(filtrosServidor.empresaId || filtrosServidor.empresaIds?.length || filtrosServidor.competencia);
         const metaLeitura: { truncado?: boolean } = {};
         Promise.all([
-            listDocumentos(currentUser, filtrosServidor, metaLeitura),
+            temRecorte ? listDocumentos(currentUser, filtrosServidor, metaLeitura) : Promise.resolve([]),
             getEmpresasDisponiveis(currentUser),
         ]).then(([docs, empresas]) => {
             if (alive) {
                 setAllDocs(docs);
                 setCatalogoEmpresas(empresas);
                 setLeituraTruncada(!!metaLeitura.truncado);
+                setSemRecorte(!temRecorte);
                 setLoading(false);
             }
         });
@@ -707,13 +716,22 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
                         </button>
                     </div>
                 </div>
+                {semRecorte && !loading && (
+                    <div className="text-center py-8 px-4">
+                        <p className="text-sm font-bold text-slate-600 dark:text-slate-300">Escolha a empresa para carregar os XMLs</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-xl mx-auto">
+                            A busca vai direto ao servidor pelo recorte pedido — traz o período inteiro do cliente, sem teto de
+                            leitura e sem varrer a base toda. Também dá para começar por uma <strong>competência</strong>.
+                        </p>
+                    </div>
+                )}
                 {leituraTruncada && (
                     <div className="mb-2 text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded p-2">
                         ⚠ A leitura bateu no teto de documentos e esta lista é um <strong>recorte</strong> — pode faltar nota.
                         Filtre por <strong>empresa</strong> e/ou <strong>competência</strong>: esses dois filtros vão ao servidor e trazem o período inteiro.
                     </div>
                 )}
-                {loading ? (
+                {semRecorte ? null : loading ? (
                     <p className="text-center text-xs text-slate-400 py-6">Carregando...</p>
                 ) : docs.length === 0 && (ondeEsta?.length || procurandoFora) ? (
                     /* A busca não achou AQUI, mas a nota existe — dizer ONDE.
