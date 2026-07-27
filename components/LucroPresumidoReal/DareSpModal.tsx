@@ -8,7 +8,7 @@
  * credenciamento sair).
  */
 import React, { useState } from 'react';
-import { previewDare, registrarDare, type DarePayload } from '../../services/dareSpService';
+import { previewDare, registrarDare, receitasApiDare, emitirDarePelaApi, type DarePayload, type AmbienteDare } from '../../services/dareSpService';
 import { enviarPorEmailDoColaborador, GESTOR_EMAIL } from '../../services/envioImpostoService';
 
 interface Props {
@@ -39,6 +39,12 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
     const [erro, setErro] = useState<string | null>(null);
     const [copiado, setCopiado] = useState(false);
     const [ocupado, setOcupado] = useState(false);
+    // ── Web API oficial da SEFAZ (credenciamento 27/07) ────────────────────
+    // Homologação é o padrão: lá o DARE sai SEM validade (não pode ser pago),
+    // que é o certo pra validar a integração sem gerar cobrança de verdade.
+    const [ambiente, setAmbiente] = useState<AmbienteDare>('homologacao');
+    const [statusApi, setStatusApi] = useState<string | null>(null);
+    const [emitido, setEmitido] = useState<any>(null);
 
     const inputAtual = () => ({
         cnpj, razaoSocial, empresaId, codigoServico,
@@ -132,6 +138,48 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
         }
     };
 
+    // Teste de fumaça da credencial: GET /receitas. NÃO emite guia — só prova
+    // que a chave do Secret Manager chega à SEFAZ.
+    const testarCredencial = async () => {
+        setOcupado(true); setErro(null); setStatusApi(null);
+        try {
+            const r = await receitasApiDare(ambiente);
+            if (r.ok) {
+                const qtd = Array.isArray(r.receitas) ? r.receitas.length : null;
+                setStatusApi(`✓ Credencial OK em ${r.rotulo || ambiente}${qtd != null ? ` — ${qtd} receita(s) na tabela oficial` : ''}.`);
+            } else setErro(r.error || 'Falha ao consultar as receitas.');
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao consultar as receitas.');
+        } finally { setOcupado(false); }
+    };
+
+    // Emissão pela API. Em produção o backend exige confirmação explícita
+    // (o DARE sai válido e pagável) — perguntamos aqui antes de mandar.
+    const emitirPelaApi = async () => {
+        if (!preview) return;
+        if (ambiente === 'producao') {
+            const ok = window.confirm(
+                `EMISSÃO EM PRODUÇÃO\n\n${razaoSocial}\nReferência ${preview.referencia} · ${fmtBRL(preview.valor)}\n\n`
+                + 'O DARE gerado é VÁLIDO e pagável na rede bancária. Confirma?',
+            );
+            if (!ok) return;
+        }
+        setOcupado(true); setErro(null); setStatusApi(null); setEmitido(null);
+        try {
+            const r = await emitirDarePelaApi({ ...inputAtual(), ambiente, confirmoProducao: ambiente === 'producao' });
+            if (r.ok) {
+                setEmitido(r.retorno ?? {});
+                setStatusApi(ambiente === 'homologacao'
+                    ? '✓ DARE emitido em HOMOLOGAÇÃO — documento de teste, sem validade e não pagável.'
+                    : '✓ DARE emitido em PRODUÇÃO — documento válido. Registrado na auditoria.');
+            } else {
+                setErro((r.camposInvalidos?.join(' ') || r.error) ?? 'Falha ao emitir.');
+            }
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao emitir.');
+        } finally { setOcupado(false); }
+    };
+
     return (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onClose}>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg p-5 space-y-4" onClick={e => e.stopPropagation()}>
@@ -222,6 +270,42 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                         </p>
                     </div>
                 )}
+
+                {/* ── Emissão pela Web API oficial (credenciamento 27/07) ──
+                    O portal continua valendo como plano B; aqui o DARE vem
+                    pronto, com número e código de barras da própria SEFAZ. */}
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">⚡ Emissão direta (API oficial SEFAZ-SP)</p>
+                        <select value={ambiente} onChange={e => { setAmbiente(e.target.value as AmbienteDare); setStatusApi(null); setEmitido(null); }}
+                            className="text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700">
+                            <option value="homologacao">Homologação (teste, sem validade)</option>
+                            <option value="producao">Produção (DARE válido)</option>
+                        </select>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                        <button onClick={testarCredencial} disabled={ocupado}
+                            title="Consulta a tabela de receitas do ambiente escolhido. Não emite guia nenhuma."
+                            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-slate-700 dark:text-slate-200">
+                            {ocupado ? '⏳…' : '🔌 Testar credencial'}
+                        </button>
+                        <button onClick={emitirPelaApi} disabled={ocupado || !preview}
+                            title={preview ? 'Emite o DARE pela API da SEFAZ com os dados do preview' : 'Faça o preview antes de emitir'}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-lg disabled:opacity-50 text-white ${
+                                ambiente === 'producao' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                            {ambiente === 'producao' ? '🧾 Emitir DARE VÁLIDO' : '🧪 Emitir DARE de teste'}
+                        </button>
+                    </div>
+                    {!preview && (
+                        <p className="text-[10px] text-slate-400">O preview é obrigatório antes de emitir — é ele que valida serviço, referência e vencimento.</p>
+                    )}
+                    {statusApi && (
+                        <div className="text-xs text-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded p-2">{statusApi}</div>
+                    )}
+                    {emitido && (
+                        <pre className="bg-slate-900 text-emerald-300 text-[10px] p-2 rounded-lg overflow-x-auto max-h-48">{JSON.stringify(emitido, null, 2)}</pre>
+                    )}
+                </div>
 
                 {/* Reconhecimento do portal (admin): baixa a estrutura real das
                     páginas DareAvulso/Lote/GnreLote — ground-truth pra automação
