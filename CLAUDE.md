@@ -48,6 +48,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   (caminhoNfseRecomendado — CUIDADO: devolve OBJETO, comparar .caminho).
   ADN 404+E2220 = "sem documento" (sucesso-vazio, #302). Farol ADN usa
   movimentoDisponivel (maxNSU==ultNSU ⇒ âmbar "sem movimento", #299).
+- **MATRIZ ↔ FILIAL: cert vale pela RAIZ do CNPJ** (Paulo, 27/07 — #315,
+  caso J.N. VINATEX 0002-78/0003-59): filial NÃO precisa de certificado
+  próprio — usa o A1 válido da matriz (mesma raiz de 8 dígitos) até subir
+  o seu, quando o próprio assume. Vale pra filial SEM cert, com A3 (não
+  roda em nuvem) e com A1 vencido/incompleto. O E2243 do ADN barra só
+  raiz DIVERGENTE — cert de outra raiz continua bloqueado. Helper único:
+  `selecionarCertA1PorBase` (cert-base-helper.js); aplicado em NFe
+  DistDFe, ADN client (`obterCertParaConsulta`, fonte 'a1-raiz', cache
+  5min), elegibilidade ADN (param `certsMeta`) e painel Status
+  (`temA1MesmaRaizValido` → via 'cloud-a1-raiz'). TRILHO NOVO que exigir
+  certificado DEVE aceitar o da matriz pela raiz.
+- **CCM-SP só existe pra SP capital** (#311): campo aceita ficar VAZIO —
+  limpar e salvar APAGA (o sanitize não pode virar `undefined`, senão a
+  chave some do JSON e o backend nunca apaga). CCM só-zeros (contorno da
+  equipe pra campo que parecia obrigatório) = vazio. Empresa de outro
+  município usa `inscricaoMunicipal` genérica; o modal avisa quando
+  codMunIBGE != 3550308 e o CCM tem valor.
 - **Gate de auditoria do deploy**: bloqueia em high/critical de QUALQUER
   dep (dev incluso). 2 falhas em 30 runs, ambas por advisory novo
   publicado entre deploys (postcss 24/07 #295; brace-expansion 25/07
