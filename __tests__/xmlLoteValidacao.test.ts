@@ -103,3 +103,36 @@ describe('validarLoteParaEmpresa', () => {
         expect(v.mensagem).toMatch(/Nenhum XML/);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Print do Paulo (27/07): modal dizia "Todos os 36 XMLs são desta empresa" e,
+// logo abaixo, listava 5 fornecedores "não cadastrada". Eram notas de ENTRADA
+// (GUARANI destinatária) — o emitente é fornecedor, não dono alheio.
+// ---------------------------------------------------------------------------
+describe('lote de ENTRADAS não trata fornecedor como dono alheio', () => {
+    const fornecedores = ['01157555001186', '05953156000100', '42115174000140'];
+    const resumo = resumirLoteXmls(fornecedores.map(f => nfe(f, CNPJ_GUARANI)));
+    const v = validarLoteParaEmpresa(resumo, CNPJ_GUARANI, empresas);
+
+    it('conta tudo como compatível, como entradas', () => {
+        expect(v.compativeis).toBe(3);
+        expect(v.comoDestinatario).toBe(3);
+        expect(v.comoEmitente).toBe(0);
+        expect(v.incompativeis).toBe(0);
+    });
+
+    it('não aponta nenhum dono alheio (a lista de fornecedores some)', () => {
+        expect(v.donosProvaveis).toHaveLength(0);
+    });
+
+    it('mensagem diz que são entradas', () => {
+        expect(v.mensagem).toMatch(/Todos os 3/);
+        expect(v.mensagem).toMatch(/entrada/);
+    });
+
+    it('lote de saída informa o outro lado da conta', () => {
+        const saida = validarLoteParaEmpresa(resumirLoteXmls([nfe(CNPJ_GUARANI, '01157555001186')]), CNPJ_GUARANI, empresas);
+        expect(saida.comoEmitente).toBe(1);
+        expect(saida.mensagem).toMatch(/saída/);
+    });
+});

@@ -16,11 +16,18 @@
 // ============================================================================
 
 import express from 'express';
+import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { capturarNFCeSaida } from './sefaz-sp-nfce-orchestrator.js';
 import { importarXmlSefaz } from './xml-importer.js';
+import { carregarEmpresas, acharDono } from './xml-empresa-matcher.js';
 
 const router = express.Router();
+
+function getDbNfce() {
+  if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
+  return admin.firestore();
+}
 
 router.post('/capturar', requireAdmin, async (req, res) => {
   const inicio = Date.now();
@@ -70,8 +77,33 @@ router.post('/importar-xmls', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: `Maximo de ${MAX_XMLS_POR_LOTE} XMLs por lote — divida o envio.` });
     }
 
-    const r = { ok: true, cnpj: cnpj14, recebidos: xmls.length, importadas: 0, duplicadas: 0, atualizadas: 0, erros: 0, errosDetalhe: [] };
+    const r = {
+      ok: true, cnpj: cnpj14, recebidos: xmls.length,
+      importadas: 0, duplicadas: 0, atualizadas: 0, reatribuidas: 0, erros: 0, errosDetalhe: [],
+    };
     const capturadoPor = { uid: req.user?.uid || null, email: req.user?.email || 'agente-a3' };
+
+    // Descobre a empresa-cliente dona do CNPJ informado (casa por CNPJ e, se
+    // preciso, pela raiz — filial). Sem isto o doc fica sem empresaId e some
+    // dos filtros por empresa.
+    let empresaId = null;
+    let empresaNome = null;
+    try {
+      const { porCnpj, porRaiz } = await carregarEmpresas(getDbNfce());
+      const dono = acharDono(cnpj14, porCnpj, porRaiz);
+      if (dono) { empresaId = dono.emp.empresaId; empresaNome = dono.emp.nome; }
+    } catch (e) {
+      console.warn('[sae-nfce] falha resolvendo empresa do CNPJ:', e.message);
+    }
+    if (!empresaId) {
+      return res.status(404).json({
+        error: `CNPJ ${cnpj14} não está cadastrado como empresa monitorada (nem por CNPJ nem pela raiz). `
+          + 'Cadastre a empresa antes de importar — sem isso a nota entra sem dono e não aparece nos filtros.',
+        code: 'EMPRESA_NAO_ENCONTRADA',
+      });
+    }
+    r.empresaId = empresaId;
+    r.empresaNome = empresaNome;
 
     for (const xml of xmls) {
       try {
@@ -88,10 +120,15 @@ router.post('/importar-xmls', requireAdmin, async (req, res) => {
           continue;
         }
         const imp = await importarXmlSefaz({
-          empresaId: null, empresaCnpj: cnpj14, xml: texto,
+          // empresaId RESOLVIDO pelo CNPJ. Ficava null e o documento entrava
+          // órfão: a aba XMLs filtra por empresaId, então a nota importada
+          // simplesmente NÃO aparecia ao filtrar o cliente (27/07, caso
+          // GUARANI: 36 XMLs importados, 2 visíveis).
+          empresaId, empresaCnpj: cnpj14, xml: texto,
           schema: null, nsu: null, capturadoPor,
         });
         if (imp.status === 'duplicado') r.duplicadas++;
+        else if (imp.status === 'reatribuido') r.reatribuidas++;
         else if (imp.status === 'atualizado') r.atualizadas++;
         else if (imp.status === 'erro') { r.erros++; if (r.errosDetalhe.length < 10) r.errosDetalhe.push(imp.motivo || 'erro'); }
         else r.importadas++;
