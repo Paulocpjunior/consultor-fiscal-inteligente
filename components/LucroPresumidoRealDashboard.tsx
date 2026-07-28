@@ -328,6 +328,12 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 servicoHospitalar: fichaFilialServicoHospitalar
             },
 
+            // Receita dos períodos ANTERIORES do ano — habilita o saldo
+            // transportado do §4º da LC 224/25. Sem passar isto, o campo da
+            // ficha ficava INERTE: o colaborador digitava e o imposto não
+            // mudava (defeito visto em 28/07, depois do #338).
+            acumuladoAno: acumuladoAnoLc224,
+
             acumuladoTrimestre: periodoApuracao === 'Trimestral' ? {
                 comercio: acumuladoComercio,
                 industria: acumuladoIndustria,

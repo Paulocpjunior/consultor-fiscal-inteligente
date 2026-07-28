@@ -15,7 +15,8 @@
  * O teto anual (5 mi; 3,75 mi na CSLL/2026) é só a SOMA dos sublimites dos
  * trimestres vigentes — a CSLL de 2026 vale a partir do 2T, daí 3 × 1,25 mi.
  */
-import { calcularProporcaoMajoradaLc224 } from '../services/lucroService';
+import { calcularProporcaoMajoradaLc224, detalharLimiteLc224, calcularLucro } from '../services/lucroService';
+import type { LucroInput } from '../types';
 
 // assinatura: (receitaPeriodoAtual, receitaAnoAcumuladaAnterior, tributo, ano, trimestre, periodo)
 const prop = (
@@ -116,5 +117,98 @@ describe('bordas', () => {
         const p = prop(999_999_999, 0, 'IRPJ', 2026, 4);
         expect(p).toBeGreaterThan(0.99);
         expect(p).toBeLessThanOrEqual(1);
+    });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// REVISÃO 28/07 (tarde) — o colaborador reportou que "ainda não bate". Dois
+// defeitos reais achados na revisão, ambos cobertos abaixo.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('DEFEITO 1 — apuração MENSAL usava o sublimite de um TRIMESTRE inteiro', () => {
+    // Estimativa mensal (Lucro Real) apura por MÊS: o sublimite é 1/3 do
+    // trimestral (R$ 416.666,67). Com o limite trimestral cheio, o mês ganhava
+    // 3× o que tem direito e o imposto saía A MENOS.
+    const mensal = (atual: number, anterior: number, mes: number) =>
+        calcularProporcaoMajoradaLc224(atual, anterior, 'IRPJ', 2026, Math.ceil(mes / 3), 'Mensal', mes);
+
+    it('mês com R$ 1 mi majora o que excede R$ 416.666,67 (antes: nada)', () => {
+        const p = mensal(1_000_000, 0, 5);
+        expect(p).toBeCloseTo((1_000_000 - 1_250_000 / 3) / 1_000_000, 6);
+        expect(p).toBeGreaterThan(0);
+    });
+
+    it('mês dentro do sublimite mensal continua sem majoração', () => {
+        expect(mensal(400_000, 0, 5)).toBe(0);
+    });
+
+    it('o mesmo valor no TRIMESTRAL não majora — são períodos diferentes', () => {
+        expect(prop(1_000_000, 0, 'IRPJ', 2026, 2)).toBe(0);
+    });
+
+    it('saldo transportado no mensal conta MESES, não trimestres', () => {
+        // Março (3º mês): 2 meses anteriores × 416.666,67 = 833.333,33 de
+        // sublimite; faturou 300 mil → sobra 533.333,33 pro mês atual.
+        const limite = detalharLimiteLc224(2_000_000, 300_000, 'IRPJ', 2026, 1, 'Mensal', 3);
+        expect(limite.sublimitePeriodo).toBeCloseTo(416_666.67, 2);
+        expect(limite.saldoTransportado).toBeCloseTo(533_333.33, 2);
+        expect(limite.limiteAplicado).toBeCloseTo(950_000, 2);
+    });
+
+    it('CSLL/2026 no mensal só começa a contar em ABRIL (nonagesimal)', () => {
+        // Maio é o 2º mês vigente da CSLL: 1 mês anterior de sublimite.
+        const l = detalharLimiteLc224(2_000_000, 100_000, 'CSLL', 2026, 2, 'Mensal', 5);
+        expect(l.saldoTransportado).toBeCloseTo(416_666.67 - 100_000, 2);
+        // Março (1T) não vige pra CSLL nem no mensal.
+        expect(calcularProporcaoMajoradaLc224(9_000_000, 0, 'CSLL', 2026, 1, 'Mensal', 3)).toBe(0);
+    });
+});
+
+describe('DEFEITO 2 — o campo "receita dos períodos anteriores" não chegava ao cálculo', () => {
+    // O dashboard gravava acumuladoAno no registro da ficha mas NÃO o passava
+    // no input do cálculo: o colaborador digitava e o imposto não mudava.
+    // Este teste trava o contrato pelo lado do serviço.
+    const base: LucroInput = {
+        regimeSelecionado: 'Presumido',
+        periodoApuracao: 'Trimestral',
+        mesReferencia: '2026-06',
+        faturamentoComercio: 2_250_000,
+        faturamentoIndustria: 0,
+        faturamentoServico: 0,
+        faturamentoMonofasico: 0,
+        despesasOperacionais: 0,
+        folhaPagamento: 0,
+        custoMercadoriaVendida: 0,
+        receitaFinanceira: 0,
+        retencaoPis: 0, retencaoCofins: 0, retencaoIrpj: 0, retencaoCsll: 0,
+        issConfig: { tipo: 'nao_incide', aliquota: 0 },
+    } as unknown as LucroInput;
+
+    const irpjDe = (input: LucroInput) =>
+        calcularLucro(input).detalhamento.find(d => d.imposto.startsWith('IRPJ'))!;
+
+    it('informar a receita anterior REDUZ o imposto (saldo transportado do §4º)', () => {
+        const semInformar = irpjDe(base);
+        // 1T faturou 250 mil → sobram 1 mi, que se somam ao limite do 2T.
+        const informando = irpjDe({ ...base, acumuladoAno: 250_000 });
+        expect(informando.baseCalculo).toBeLessThan(semInformar.baseCalculo);
+        expect(informando.valor).toBeLessThan(semInformar.valor);
+    });
+
+    it('sem informar, o limite é o do próprio trimestre (comportamento conservador)', () => {
+        const d = irpjDe(base);
+        // 2,25 mi com limite 1,25 mi → 1 mi majorado (8,8%) e 1,25 mi a 8%.
+        expect(d.baseCalculo).toBeCloseTo(1_250_000 * 0.08 + 1_000_000 * 0.088, 2);
+    });
+
+    it('a observação mostra o LIMITE aplicado — é a linha do relatório oficial', () => {
+        expect(irpjDe(base).observacao).toMatch(/Limite do período: R\$\s?1\.250\.000,00/);
+        expect(irpjDe({ ...base, acumuladoAno: 250_000 }).observacao).toMatch(/transportado/);
+    });
+
+    it('receita dentro do limite também informa o limite (some a dúvida "aplicou ou não?")', () => {
+        const d = irpjDe({ ...base, faturamentoComercio: 900_000 });
+        expect(d.observacao).toMatch(/não aplicada: receita do período dentro do limite/);
+        expect(d.observacao).toMatch(/Limite do período/);
     });
 });

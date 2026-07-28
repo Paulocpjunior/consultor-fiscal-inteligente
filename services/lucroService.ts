@@ -163,17 +163,38 @@ const obterLimiteAnualLc224 = (tributo: TributoLC224, ano: number): number => {
  * @param trimestre 1 a 4
  * @param periodoApuracao 'Mensal' ou 'Trimestral'
  */
-export const calcularProporcaoMajoradaLc224 = (
+export interface LimiteLc224 {
+    /** Sublimite do próprio período (1,25 mi no trimestre; 1/3 disso no mês). */
+    sublimitePeriodo: number;
+    /** Saldo não usado em períodos anteriores (§4º). 0 quando não informado. */
+    saldoTransportado: number;
+    /** Limite efetivamente aplicado — é este número que o relatório oficial mostra. */
+    limiteAplicado: number;
+    /** Fração da receita do período que sofre presunção majorada. */
+    proporcaoMajorada: number;
+    vigente: boolean;
+}
+
+/**
+ * Detalha o limite da majoração no período — usado no cálculo E na observação
+ * do detalhamento, pra conferência linha a linha com o relatório oficial
+ * ("Limite do Trimestre 1.250.000,00").
+ */
+export const detalharLimiteLc224 = (
     receitaPeriodoAtual: number,
     receitaAnoAcumuladaAnterior: number,
     tributo: TributoLC224,
     ano: number,
     trimestre: number,
-    periodoApuracao: 'Mensal' | 'Trimestral'
-): number => {
-    if (receitaPeriodoAtual <= 0) return 0;
-    if (!majoracaoLc224Vigente(tributo, ano, trimestre)) return 0;
+    periodoApuracao: 'Mensal' | 'Trimestral',
+    mes?: number,
+): LimiteLc224 => {
+    const vazio: LimiteLc224 = {
+        sublimitePeriodo: 0, saldoTransportado: 0, limiteAplicado: 0, proporcaoMajorada: 0, vigente: false,
+    };
+    if (!majoracaoLc224Vigente(tributo, ano, trimestre)) return vazio;
 
+    const mensal = periodoApuracao === 'Mensal';
     // Sublimite de R$ 1,25 mi POR TRIMESTRE, que se RENOVA a cada trimestre
     // (IN RFB 2.305/2025 art. 15 §2º). Confirmado pelo relatório oficial do
     // cliente (EDUARDO GUERRA, 2T/2026): faturamento de R$ 13,2 mi no trimestre
@@ -181,24 +202,59 @@ export const calcularProporcaoMajoradaLc224 = (
     // 1.250.000,00", com o excedente majorado. Não existe "estourou o anual →
     // 100% dali em diante": o teto anual (5 mi; 3,75 mi na CSLL/2026) é apenas
     // a soma dos sublimites dos trimestres VIGENTES.
-    const primeiroTrimestreVigente = (tributo === 'CSLL' && ano === 2026) ? 2 : 1;
-    const trimestresAnterioresVigentes = Math.max(0, trimestre - primeiroTrimestreVigente);
+    //
+    // Na apuração MENSAL (estimativa do Lucro Real) o período é o MÊS, então o
+    // sublimite é 1/3 do trimestral. Sem isso o mês inteiro ganhava o limite de
+    // um trimestre — 3× a mais — e o imposto saía a MENOS.
+    const sublimitePeriodo = mensal
+        ? SUBLIMITE_TRIMESTRAL_LC224 / 3
+        : SUBLIMITE_TRIMESTRAL_LC224;
 
-    // §4º: o que sobrou de trimestre anterior é transportado — mas só dá pra
+    // Quantos períodos vigentes já se passaram no ano (é o que pode ter deixado
+    // saldo). CSLL/2026 só vige a partir do 2T (abril) — antes disso não há
+    // sublimite para sobrar.
+    const primeiroTrimestreVigente = (tributo === 'CSLL' && ano === 2026) ? 2 : 1;
+    const periodosAnterioresVigentes = mensal
+        ? Math.max(0, (Number(mes) || 0) - ((primeiroTrimestreVigente - 1) * 3 + 1))
+        : Math.max(0, trimestre - primeiroTrimestreVigente);
+
+    // §4º: o que sobrou de período anterior é transportado — mas só dá pra
     // saber isso conhecendo o faturamento anterior. Com o dado ausente (0), NÃO
     // presumimos sobra: presumir inflava o limite (2,5 mi no 2T em vez de 1,25
     // mi), majorava de MENOS e o imposto saía abaixo do devido — caso EDUARDO
     // GUERRA 2T/2026, R$ 2.500 a menos de IRPJ que o relatório oficial.
     const anteriorInformado = receitaAnoAcumuladaAnterior > 0;
     const saldoTransportado = anteriorInformado
-        ? Math.max(0, SUBLIMITE_TRIMESTRAL_LC224 * trimestresAnterioresVigentes - receitaAnoAcumuladaAnterior)
+        ? Math.max(0, sublimitePeriodo * periodosAnterioresVigentes - receitaAnoAcumuladaAnterior)
         : 0;
 
-    const sublimiteDisponivel = SUBLIMITE_TRIMESTRAL_LC224 + saldoTransportado;
-    if (receitaPeriodoAtual <= sublimiteDisponivel) return 0;
+    const limiteAplicado = sublimitePeriodo + saldoTransportado;
+    const proporcaoMajorada = receitaPeriodoAtual > limiteAplicado
+        ? Math.min(1, Math.max(0, (receitaPeriodoAtual - limiteAplicado) / receitaPeriodoAtual))
+        : 0;
 
-    const excedente = receitaPeriodoAtual - sublimiteDisponivel;
-    return Math.min(1, Math.max(0, excedente / receitaPeriodoAtual));
+    return {
+        sublimitePeriodo,
+        saldoTransportado,
+        limiteAplicado,
+        proporcaoMajorada: receitaPeriodoAtual > 0 ? proporcaoMajorada : 0,
+        vigente: true,
+    };
+};
+
+export const calcularProporcaoMajoradaLc224 = (
+    receitaPeriodoAtual: number,
+    receitaAnoAcumuladaAnterior: number,
+    tributo: TributoLC224,
+    ano: number,
+    trimestre: number,
+    periodoApuracao: 'Mensal' | 'Trimestral',
+    mes?: number,
+): number => {
+    if (receitaPeriodoAtual <= 0) return 0;
+    return detalharLimiteLc224(
+        receitaPeriodoAtual, receitaAnoAcumuladaAnterior, tributo, ano, trimestre, periodoApuracao, mes,
+    ).proporcaoMajorada;
 };
 
 /**
@@ -223,14 +279,14 @@ const aplicarMajoracaoProporcional = (
  * Extrai ano e trimestre de uma string no formato "YYYY-MM".
  * Retorna { ano: 0, trimestre: 0 } se inválido.
  */
-const extrairAnoTrimestre = (mesReferencia?: string): { ano: number; trimestre: number } => {
-    if (!mesReferencia) return { ano: 0, trimestre: 0 };
+const extrairAnoTrimestre = (mesReferencia?: string): { ano: number; trimestre: number; mes: number } => {
+    if (!mesReferencia) return { ano: 0, trimestre: 0, mes: 0 };
     const parts = mesReferencia.split('-');
     const ano = parseInt(parts[0] || '0');
     const mes = parseInt(parts[1] || '0');
-    if (!ano || !mes) return { ano, trimestre: 0 };
+    if (!ano || !mes) return { ano, trimestre: 0, mes: 0 };
     const trimestre = Math.ceil(mes / 3);
-    return { ano, trimestre };
+    return { ano, trimestre, mes };
 };
 
 const fmt = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -377,7 +433,7 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
     //   - Majora apenas o EXCEDENTE do sublimite trimestral (§3º)
     //   - Diferença não usada vira carry-forward (§4º)
     // ========================================================================
-    const { ano, trimestre } = extrairAnoTrimestre(input.mesReferencia);
+    const { ano, trimestre, mes } = extrairAnoTrimestre(input.mesReferencia);
 
     // Soma do acumulado trimestral informado pela UI (meses anteriores DESTE trimestre).
     const somaAcumuladoTrimestre = input.acumuladoTrimestre
@@ -402,23 +458,21 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
     // O usuário informa via campo "acumuladoAno" no dashboard.
     const receitaAnoAcumuladaAnterior = input.acumuladoAno || 0;
 
-    const proporcaoMajoradaIrpj = calcularProporcaoMajoradaLc224(
-        receitaPeriodoParaLc224,
-        receitaAnoAcumuladaAnterior,
-        'IRPJ',
-        ano,
-        trimestre,
-        input.periodoApuracao
+    const limiteIrpj = detalharLimiteLc224(
+        receitaPeriodoParaLc224, receitaAnoAcumuladaAnterior, 'IRPJ', ano, trimestre, input.periodoApuracao, mes,
     );
+    const limiteCsll = detalharLimiteLc224(
+        receitaPeriodoParaLc224, receitaAnoAcumuladaAnterior, 'CSLL', ano, trimestre, input.periodoApuracao, mes,
+    );
+    const proporcaoMajoradaIrpj = receitaPeriodoParaLc224 > 0 ? limiteIrpj.proporcaoMajorada : 0;
+    const proporcaoMajoradaCsll = receitaPeriodoParaLc224 > 0 ? limiteCsll.proporcaoMajorada : 0;
 
-    const proporcaoMajoradaCsll = calcularProporcaoMajoradaLc224(
-        receitaPeriodoParaLc224,
-        receitaAnoAcumuladaAnterior,
-        'CSLL',
-        ano,
-        trimestre,
-        input.periodoApuracao
-    );
+    // Texto do limite aplicado — é a linha que o relatório oficial mostra
+    // ("Limite do Trimestre 1.250.000,00"). Sem ela, divergência de imposto
+    // vira caça ao tesouro; com ela, dá pra conferir lado a lado.
+    const textoLimite = (l: LimiteLc224) => l.saldoTransportado > 0
+        ? `Limite do período: ${fmt(l.limiteAplicado)} (${fmt(l.sublimitePeriodo)} + ${fmt(l.saldoTransportado)} transportado).`
+        : `Limite do período: ${fmt(l.limiteAplicado)}.`;
 
     const aplicouLc224 = proporcaoMajoradaIrpj > 0 || proporcaoMajoradaCsll > 0;
 
@@ -503,8 +557,10 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
         const obsHosp = baseIrpjServicoHosp > 0 ? " + Hosp. 8%" : "";
         const obsReduzida = input.isPresuncaoReduzida16 ? " (Reduzida 16% R$120k)" : "";
         const obsLc224Irpj = proporcaoMajoradaIrpj > 0
-            ? ` LC 224/25: ${(proporcaoMajoradaIrpj * 100).toFixed(1)}% da receita com presunção majorada (+10%).`
-            : '';
+            ? ` LC 224/25: ${(proporcaoMajoradaIrpj * 100).toFixed(1)}% da receita com presunção majorada (+10%). ${textoLimite(limiteIrpj)}`
+            : (limiteIrpj.vigente && receitaPeriodoParaLc224 > 0
+                ? ` LC 224/25 não aplicada: receita do período dentro do limite. ${textoLimite(limiteIrpj)}`
+                : '');
 
         detalhamento.push({
             imposto: `IRPJ (${input.periodoApuracao})`,
@@ -528,7 +584,7 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
     if (baseCsllTotal > 0) {
         const obsHosp = baseCsllServicoHosp > 0 ? " + Hosp. 12%" : "";
         const obsLc224Csll = proporcaoMajoradaCsll > 0
-            ? ` LC 224/25: ${(proporcaoMajoradaCsll * 100).toFixed(1)}% da receita com presunção majorada (+10%).`
+            ? ` LC 224/25: ${(proporcaoMajoradaCsll * 100).toFixed(1)}% da receita com presunção majorada (+10%). ${textoLimite(limiteCsll)}`
             : (ano === 2026 && trimestre === 1
                 ? ' LC 224/25 não aplicada à CSLL no 1T/2026 (anterioridade nonagesimal).'
                 : '');
