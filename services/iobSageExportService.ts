@@ -141,6 +141,49 @@ function buildE001(numeroEmpresa: number): string {
     });
 }
 
+
+// ─── Participante da NF ────────────────────────────────────────────────────
+// A captura (DistDFe/cofre) grava o participante ACHATADO — cnpjEmit,
+// cnpjDest, xNomeEmit — enquanto a importação por XML monta os objetos
+// `emitente`/`destinatario`. O exportador só olhava os objetos: com os docs da
+// captura, TODA nota era descartada e o .FML saía só com E001 + E020 (produtos
+// sem nota nenhuma). Caso 28/07: 204 produtos, zero lançamentos, e o E-Fiscal
+// dizendo "importação feita com sucesso".
+const UF_POR_CUF: Record<string, string> = {
+    '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
+    '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL',
+    '28': 'SE', '29': 'BA', '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP', '41': 'PR',
+    '42': 'SC', '43': 'RS', '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF',
+};
+
+/** UF do EMITENTE pelas 2 primeiras posições da chave de acesso (cUF). */
+function ufDaChave(chave: string | undefined): string {
+    return UF_POR_CUF[String(chave || '').slice(0, 2)] || '';
+}
+
+interface ParticipanteNF { cnpjCpf: string; nome: string; uf: string; ie?: string }
+
+/**
+ * Participante a cadastrar/referenciar: quem NÃO é a empresa monitorada.
+ * Usa o objeto quando existe; senão remonta pelos campos achatados do doc.
+ */
+export function participanteDoDoc(d: DocumentoFiscal): ParticipanteNF | null {
+    const entrada = d.direcao === 'entrada';
+    const obj: any = entrada ? d.emitente : d.destinatario;
+    const x: any = d as any;
+
+    const cnpjCpf = onlyDigits(obj?.cnpjCpf || (entrada ? x.cnpjEmit : x.cnpjDest));
+    if (!cnpjCpf) return null;
+
+    const nome = obj?.nome
+        || (entrada ? x.xNomeEmit : x.xNomeDest)
+        || (entrada ? 'FORNECEDOR' : 'CLIENTE');
+    // UF do emitente vem da chave; na saída o destinatário nem sempre tem UF
+    // gravada — cai na UF da empresa, informada pela tela.
+    const uf = obj?.uf || (entrada ? ufDaChave(d.chave) : '') || '';
+    return { cnpjCpf, nome: String(nome), uf: String(uf), ie: obj?.ie };
+}
+
 function buildE010(d: DocumentoFiscal): string {
     // Participante a cadastrar = quem NAO e a empresa monitorada.
     // Guard: IOB/SAGE so aceita NFe/NFCe (modelo 55/65). NFSe nao deveria chegar aqui
@@ -148,9 +191,9 @@ function buildE010(d: DocumentoFiscal): string {
     if (d.tipo === 'NFSe') {
         throw new Error(`buildE010: documento ${d.id} e NFSe, nao suportado em IOB/SAGE Folhamatic Fiscal.`);
     }
-    const part = d.direcao === 'entrada' ? d.emitente : d.destinatario;
+    const part = participanteDoDoc(d);
     if (!part) {
-        throw new Error(`buildE010: documento ${d.id} sem ${d.direcao === 'entrada' ? 'emitente' : 'destinatario'} (esperado em NFe).`);
+        throw new Error(`nota ${d.numero || d.chave}: sem CNPJ do ${d.direcao === 'entrada' ? 'emitente' : 'destinatário'} — não dá pra cadastrar o participante no E-Fiscal.`);
     }
     const isCliente = d.direcao === 'saida';
     const isFornecedor = d.direcao === 'entrada';
@@ -233,9 +276,9 @@ function commonNF(d: DocumentoFiscal) {
     if (d.tipo === 'NFSe') {
         throw new Error(`commonNF: documento ${d.id} e NFSe, nao suportado em IOB/SAGE.`);
     }
-    const part = d.direcao === 'entrada' ? d.emitente : d.destinatario;
+    const part = participanteDoDoc(d);
     if (!part) {
-        throw new Error(`commonNF: documento ${d.id} sem ${d.direcao === 'entrada' ? 'emitente' : 'destinatario'}.`);
+        throw new Error(`nota ${d.numero || d.chave}: sem CNPJ do ${d.direcao === 'entrada' ? 'emitente' : 'destinatário'}.`);
     }
     const especie = d.tipo === 'NFCe' ? 'NFCE' : d.tipo === 'NFe' ? 'NFE' : 'NF';
     const dEmi = parseIsoDate(d.dhEmi) || new Date();
@@ -462,12 +505,20 @@ function buildE342(d: DocumentoFiscal): string | null {
 
 export interface ExportarResult {
     blob: Blob;
+    /**
+     * Documentos que NÃO entraram no arquivo, com o motivo. Falha aqui era
+     * console.warn: o .FML saía sem as notas e ninguém ficava sabendo — o
+     * E-Fiscal ainda dizia "importação feita com sucesso" porque o que chegou
+     * nele estava formalmente correto (caso 28/07: 204 produtos, zero notas).
+     */
+    falhas: Array<{ documento: string; motivo: string }>;
     /** Conteúdo textual do .FML — permite conferir o arquivo sem baixar/abrir. */
     conteudo: string;
     fileName: string;
     totalLinhas: number;
     estatisticas: {
         documentos: number;
+        notasNoArquivo: number;
         participantes: number;
         produtos: number;
         e201: number;
@@ -484,17 +535,20 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
     // 1. E001 (uma vez).
     const e001 = buildE001(numeroEmpresaEfiscal);
 
+    const falhas: Array<{ documento: string; motivo: string }> = [];
+    const rotuloDoc = (d: DocumentoFiscal) =>
+        `NF ${d.numero || '?'}${d.serie ? `/${d.serie}` : ''} · ${d.chave || d.id}`;
+
     // 2. E010 — um por participante unico (CNPJ/CPF).
     const e010Set = new Map<string, string>();
     for (const d of documentos) {
         try {
-            const part = d.direcao === 'entrada' ? d.emitente : d.destinatario;
-            if (!part) continue;
-            const cnpj = onlyDigits(part.cnpjCpf);
-            if (!cnpj || e010Set.has(cnpj)) continue;
-            e010Set.set(cnpj, buildE010(d));
-        } catch (err) {
-            console.warn('Falha E010 para', d.id, err);
+            const part = participanteDoDoc(d);
+            if (!part) continue; // reportado no bloco da nota, não duas vezes
+            if (e010Set.has(part.cnpjCpf)) continue;
+            e010Set.set(part.cnpjCpf, buildE010(d));
+        } catch (err: any) {
+            falhas.push({ documento: rotuloDoc(d), motivo: `participante: ${err?.message || err}` });
         }
     }
 
@@ -507,8 +561,8 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
             if (e020Set.has(cod)) continue;
             try {
                 e020Set.set(cod, buildE020(it, dataInclusao, tipoInventario));
-            } catch (err) {
-                console.warn('Falha E020 para item', cod, err);
+            } catch (err: any) {
+                falhas.push({ documento: `${rotuloDoc(d)} · produto ${cod}`, motivo: String(err?.message || err) });
             }
         }
     }
@@ -536,8 +590,10 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
             if (e342) bloco.push(e342);
 
             blocosPorNota.push(bloco);
-        } catch (err) {
-            console.warn('Falha bloco da NF', d.numero, err);
+        } catch (err: any) {
+            // A NOTA INTEIRA fica de fora — é o que mais dói e era o que menos
+            // aparecia. Vai pro relatório de falhas, que a tela mostra.
+            falhas.push({ documento: rotuloDoc(d), motivo: String(err?.message || err) });
         }
     }
 
@@ -560,10 +616,13 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
     return {
         blob,
         conteudo,
+        falhas,
         fileName,
         totalLinhas: linhas.length,
         estatisticas: {
             documentos: documentos.length,
+            /** Notas que REALMENTE entraram no arquivo (E200 gerado). */
+            notasNoArquivo: blocosPorNota.length,
             participantes: e010Set.size,
             produtos: e020Set.size,
             e201: count201,

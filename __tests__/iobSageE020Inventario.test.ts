@@ -63,3 +63,68 @@ describe('E020 campo 11 — tipo para inventário', () => {
         }
     });
 });
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// 28/07 (2ª rodada): o E-Fiscal disse "importação feita com sucesso" e as
+// Notas Fiscais de Entrada continuaram VAZIAS. O .FML tinha E001 + 204 E020 e
+// NENHUM E200 — só o cadastro de produtos. Causa: o exportador só reconhecia
+// o participante nos objetos `emitente`/`destinatario`, mas a CAPTURA grava
+// achatado (cnpjEmit/cnpjDest/xNomeEmit) — e a exceção virava console.warn.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Documento como a CAPTURA grava: participante achatado, sem objetos. */
+const docCapturado = () => ({
+    id: 'd2',
+    chave: '35' + '2607' + '32602701000197' + '55' + '1'.repeat(22),
+    numero: '4321',
+    serie: '1',
+    direcao: 'entrada',
+    dhEmi: '2026-07-10T10:00:00-03:00',
+    importadoEm: Date.parse('2026-07-11T10:00:00Z'),
+    valorTotal: 500,
+    cnpjEmit: '11222333000181',
+    xNomeEmit: 'FORNECEDOR DE TECIDOS LTDA',
+    cnpjDest: '32602701000197',
+    itens: [
+        { cProd: 'T1', xProd: 'TECIDO OXFORD', uCom: 'MT', ncm: '54075210', cfop: '1102', quantidade: 100, valorUnitario: 5, valorTotal: 500 },
+    ],
+}) as unknown as DocumentoFiscal;
+
+describe('nota capturada pela SEFAZ entra no arquivo (não só o produto)', () => {
+    it('gera E200 mesmo sem os objetos emitente/destinatario', () => {
+        const r = exportarParaIobSage({ documentos: [docCapturado()], numeroEmpresaEfiscal: 587 });
+        const linhas = r.conteudo.split('\r\n');
+        expect(linhas.filter((l) => l.startsWith('E200'))).toHaveLength(1);
+        expect(linhas.filter((l) => l.startsWith('E010'))).toHaveLength(1);
+        expect(linhas.filter((l) => l.startsWith('E020'))).toHaveLength(1);
+        expect(r.estatisticas.notasNoArquivo).toBe(1);
+        expect(r.falhas).toHaveLength(0);
+    });
+
+    it('a UF do emitente sai da chave de acesso quando não há objeto', () => {
+        const r = exportarParaIobSage({ documentos: [docCapturado()], numeroEmpresaEfiscal: 587 });
+        const e200 = r.conteudo.split('\r\n').find((l) => l.startsWith('E200'))!;
+        expect(e200).toContain('SP'); // cUF 35
+    });
+
+    it('REGRESSÃO: arquivo com produto e NENHUMA nota não passa despercebido', () => {
+        // Sem CNPJ de emitente não dá pra montar a nota. O documento tem que
+        // aparecer em `falhas` — era exatamente isso que virava console.warn.
+        const semEmitente = { ...docCapturado(), cnpjEmit: undefined } as unknown as DocumentoFiscal;
+        const r = exportarParaIobSage({ documentos: [semEmitente], numeroEmpresaEfiscal: 587 });
+        expect(r.estatisticas.notasNoArquivo).toBe(0);
+        expect(r.falhas.length).toBeGreaterThan(0);
+        expect(r.falhas[0]!.motivo).toMatch(/sem CNPJ do emitente/i);
+        expect(r.falhas[0]!.documento).toMatch(/NF 4321/);
+    });
+
+    it('uma nota problemática não derruba as outras — e é reportada', () => {
+        const ok = docCapturado();
+        const ruim = { ...docCapturado(), id: 'd3', numero: '9999', cnpjEmit: undefined } as unknown as DocumentoFiscal;
+        const r = exportarParaIobSage({ documentos: [ok, ruim], numeroEmpresaEfiscal: 587 });
+        expect(r.estatisticas.notasNoArquivo).toBe(1);
+        expect(r.falhas).toHaveLength(1);
+        expect(r.falhas[0]!.documento).toMatch(/NF 9999/);
+    });
+});
