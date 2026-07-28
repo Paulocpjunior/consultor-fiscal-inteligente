@@ -20,6 +20,10 @@ interface Props {
     onSelect: (doc: DocumentoFiscal) => void;
     /** Quando muda, força recarregar a lista. */
     refreshKey?: number;
+    /** Abre a Prova de captura já com o CNPJ filtrado. A contagem desta tela é
+     *  o que o CFI TEM; a pergunta seguinte — "e falta alguma?" — se responde
+     *  contra a SEFAZ, não contra concorrente (Paulo, 28/07). */
+    onProvarCaptura?: (cnpj: string) => void;
 }
 
 const formatCompetencia = (competencia: string): string => {
@@ -43,7 +47,7 @@ const ultimasCompetencias = (meses = 24): string[] => {
 // Quantas linhas montar por vez no DOM (render incremental).
 const PAGINA_DOCS = 200;
 
-const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey }) => {
+const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey, onProvarCaptura }) => {
     // ANTES: cada tecla no campo "Buscar" disparava listDocumentos → fetchAllDocs
     // (5k+ docs pela rede) → filtro em memoria → setDocs. Resultado: digitação
     // travada e custo absurdo.
@@ -694,9 +698,21 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey 
 
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center gap-3 flex-wrap">
-                    <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                        XMLs Capturados ({docs.length})
-                    </h3>
+                    <div>
+                        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                            XMLs Capturados ({docs.length})
+                        </h3>
+                        {/* Este número é o que o CFI TEM — não afirma que é tudo
+                            o que existe. Quem responde isso é a SEFAZ. */}
+                        {onProvarCaptura && (filters.empresaCnpj || '').replace(/\D/g, '').length === 14 && (
+                            <button
+                                onClick={() => onProvarCaptura((filters.empresaCnpj || '').replace(/\D/g, ''))}
+                                className="text-[11px] text-blue-600 dark:text-blue-400 underline"
+                            >
+                                Falta alguma nota? Provar contra a SEFAZ (matriz e filial separadas)
+                            </button>
+                        )}
+                    </div>
                     <div className="flex gap-2">
                         <button
                             onClick={exportCsv}

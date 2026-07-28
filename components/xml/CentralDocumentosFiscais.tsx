@@ -26,6 +26,7 @@ const AutXmlHarvest = lazy(() => import('./AutXmlHarvest'));
 const CofreEmailPanel = lazy(() => import('./CofreEmailPanel'));
 const CofreControlePanel = lazy(() => import('./CofreControlePanel'));
 const BacklogEntradaPanel = lazy(() => import('./BacklogEntradaPanel'));
+const ProvaCapturaPanel = lazy(() => import('./ProvaCapturaPanel'));
 const CofreChecklistPanel = lazy(() => import('./CofreChecklistPanel'));
 
 type TabId =
@@ -33,6 +34,7 @@ type TabId =
     | 'captura-auto'
     | 'empresas-status'
     | 'backlog-entrada'
+    | 'prova-captura'
     | 'documentos'
     | 'importacao'
     | 'empresas'
@@ -60,6 +62,7 @@ const GRUPOS: Array<{ id: GrupoId; label: string; subs: Array<{ id: TabId; label
         id: 'captura', label: '🛰️ Captura', subs: [
             { id: 'captura-auto', label: '🛰️ Diagnóstico' },
             { id: 'empresas-status', label: '📋 Status por Empresa' },
+            { id: 'prova-captura', label: '🔎 Prova de captura' },
             { id: 'backlog-entrada', label: '📥 Backlog Entrada' },
             { id: 'sae_nfce', label: '🧾 NFC-e Saída (SP)' },
             { id: 'nfse_sp_captura', label: '🛰️ Portal SP' },
@@ -102,6 +105,8 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
     // tab = a TELA ativa (mesmos 16 TabId de antes — conteúdo intocado).
     // Trocar de grupo cai na 1ª sub-aba dele; trocar de sub muda só a tela.
     const [tab, setTab] = useState<TabId>('dashboard');
+    // CNPJ levado da lista de XMLs para a Prova de captura (um clique).
+    const [cnpjProva, setCnpjProva] = useState('');
     const [refreshKey, setRefreshKey] = useState(0);
     const [selectedDoc, setSelectedDoc] = useState<DocumentoFiscal | null>(null);
 
@@ -229,6 +234,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 {tab === 'empresas-status' && (
                     <EmpresasStatusCapturaPanel currentUser={currentUser} />
                 )}
+                {tab === 'prova-captura' && (
+                    <Suspense fallback={<div className="p-6 text-center text-sm text-slate-400">Carregando…</div>}>
+                        <ProvaCapturaPanel cnpjInicial={cnpjProva} />
+                    </Suspense>
+                )}
                 {tab === 'backlog-entrada' && (
                     <Suspense fallback={<div className="p-6 text-center text-sm text-slate-400">Carregando…</div>}>
                         <BacklogEntradaPanel />
@@ -240,6 +250,7 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                             currentUser={currentUser}
                             onSelect={setSelectedDoc}
                             refreshKey={refreshKey}
+                            onProvarCaptura={(cnpj) => { setCnpjProva(cnpj); setGrupo('captura'); setTab('prova-captura'); }}
                         />
                         {selectedDoc && (
                             <div className="mt-4">
