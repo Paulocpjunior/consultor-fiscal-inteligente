@@ -539,27 +539,38 @@ export const calcularResumoEmpresa = (
         const d = new Date(dataInicioRBT12.getFullYear(), dataInicioRBT12.getMonth() + i, 1);
         const k = `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}`;
         const valTotalMes = mensal[k] || 0;
-        rbt12Global += valTotalMes;
 
+        // Segregação interno × externo do mês. O detalhamento por CNAE diz
+        // QUANTO é exterior — ele NÃO redefine o total do mês.
+        let mesInterno = 0, mesExterno = 0;
         if (detalhadoHistorico[k]) {
-            let mesInterno = 0, mesExterno = 0;
             Object.values(detalhadoHistorico[k]).forEach((item: any) => {
                 const valorItem = typeof item === 'number' ? item : item.valor;
                 const isExt = typeof item === 'object' && item.isExterior === true;
                 if (isExt) mesExterno += valorItem; else mesInterno += valorItem;
             });
-            const diff = valTotalMes - (mesInterno + mesExterno);
-            if (diff > 0.01) mesInterno += diff;
-            rbt12Interno += mesInterno;
-            rbt12Externo += mesExterno;
-        } else {
-            rbt12Interno += valTotalMes;
         }
+
+        // O TOTAL do mês manda. Antes, quando o detalhamento somava MAIS que o
+        // total lançado (item duplicado, filial contada duas vezes), o excesso
+        // entrava no RBT12 interno — que é justamente o que define a FAIXA e a
+        // alíquota. Resultado: o app enquadrava numa base inflada e o DAS saía
+        // acima do PGDAS-D. Caso JD DE SOUZA ITAPEVI 06/2026: RBT12 real
+        // 635.302,87, o app usava 664.180,87 e cobrava R$ 3.012,58 onde a
+        // Receita apurou R$ 2.981,84.
+        // Sem total lançado, a soma do detalhamento faz as vezes dele.
+        const totalMes = valTotalMes > 0 ? valTotalMes : (mesInterno + mesExterno);
+        const externoMes = Math.min(mesExterno, totalMes);
+
+        // Invariante: interno + externo === global, sempre.
+        rbt12Global += totalMes;
+        rbt12Externo += externoMes;
+        rbt12Interno += Math.max(0, totalMes - externoMes);
 
         historico_simulado.push({
             competencia: k,
             label: d.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
-            faturamento: valTotalMes, rbt12: 0, aliquotaEfetiva: 0,
+            faturamento: totalMes, rbt12: 0, aliquotaEfetiva: 0,
             fatorR: 0, dasCalculado: 0, anexoAplicado: empresa.anexo
         });
     }
