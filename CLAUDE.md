@@ -204,6 +204,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   emissão. A rota `/api/emitir-lote` foi REMOVIDA de propósito — não
   recriar. O "Lote DARE TXT" (#287) continua valendo porque é só
   GERAÇÃO de arquivo; quem emite é humano no portal, com reCAPTCHA.
+- **PROVA DE CAPTURA é contra a SEFAZ, por CNPJ** (Paulo, 28/07 — NOVA ERA
+  79 no CFI × 502 na SIEG, #343): enquanto o app não disser SOZINHO se falta
+  documento, a equipe abre o concorrente — e isso é o oposto do produto. A
+  prova é o cursor do DistDFe em `sefaz_state`: `ultNSU` (lido) × `maxNSU`
+  (o que a SEFAZ tem); `maxNSU > ultNSU` = INCOMPLETO, com o número que
+  falta. Núcleo puro `sefaz-backend/prova-captura.js` (18 testes) + rota
+  `/api/admin/sefaz/prova-captura?cnpj=` + aba Captura → "🔎 Prova de
+  captura" (link direto da lista de XMLs). SEMPRE por RAIZ, matriz e filial
+  LADO A LADO (cadastro, certificado e cursor são próprios de cada CNPJ —
+  ver a filial e concluir sobre a matriz foi a origem do caso). CNPJ da raiz
+  SEM cadastro aparece com o motivo, nunca some da conta. Três ressalvas
+  ficam SEMPRE na tela, senão comparar totais engana: (1) matriz ≠ filial;
+  (2) DistDFe entrega só ~90 dias e a partir do 1º acesso — histórico
+  anterior só por importação; (3) saída não vem ao emitente (Rej. 641).
 - **A ROTINA tem ORDEM e ela é uma TELA** (Paulo, 28/07 — "o colaborador
   não está seguindo uma linha de processo: captura notas, valida as nfs,
   cálculo de impostos, entrega de obrigações e emissão de guias", #341):
