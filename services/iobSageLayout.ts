@@ -92,11 +92,19 @@ export function formatField(value: unknown, spec: FieldSpec): string {
       break;
     }
     case 'D': {
-      if (value instanceof Date) {
+      // Data INVÁLIDA (ex.: new Date(undefined)) formatava como "0NaNNaNNaN":
+      // 10 caracteres onde cabem 8, e a LINHA INTEIRA saía com o tamanho
+      // errado — o E-Fiscal recusava com "Linha E010 com tamanho inválido:
+      // esperado=977, obtido=979" (caso 28/07). Data que não dá pra escrever
+      // vira campo não informado; o registro nunca muda de largura por causa
+      // de um valor.
+      if (value instanceof Date && !Number.isNaN(value.getTime())) {
         const y = value.getFullYear().toString().padStart(4, '0');
         const m = (value.getMonth() + 1).toString().padStart(2, '0');
         const d = value.getDate().toString().padStart(2, '0');
         formatted = `${y}${m}${d}`;
+      } else if (value instanceof Date) {
+        formatted = ' '.repeat(spec.tamanho);
       } else {
         const digits = String(value).replace(/\D/g, '');
         formatted = digits.length === 0
@@ -107,6 +115,17 @@ export function formatField(value: unknown, spec: FieldSpec): string {
     }
     default:
       formatted = ' '.repeat(spec.tamanho);
+  }
+
+  // GUARDA FINAL: nenhum valor pode alterar a largura do campo. Sem isto, um
+  // dado estranho desloca todos os campos seguintes e o registro inteiro é
+  // recusado — com uma mensagem que fala de tamanho, não do dado.
+  if (formatted.length > spec.tamanho) {
+    formatted = spec.tipo === 'N' ? formatted.slice(-spec.tamanho) : formatted.slice(0, spec.tamanho);
+  } else if (formatted.length < spec.tamanho) {
+    formatted = spec.tipo === 'N'
+      ? formatted.padStart(spec.tamanho, '0')
+      : formatted.padEnd(spec.tamanho, ' ');
   }
 
   return formatted;

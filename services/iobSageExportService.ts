@@ -164,6 +164,22 @@ function ufDaChave(chave: string | undefined): string {
 interface ParticipanteNF { cnpjCpf: string; nome: string; uf: string; ie?: string }
 
 /**
+ * Data utilizável do documento. `importadoEm` não existe nos docs vindos da
+ * CAPTURA (o backend grava `createdAt`), e `new Date(undefined)` vira Invalid
+ * Date — que formatava com 10 caracteres num campo de 8 e derrubava a linha
+ * inteira no E-Fiscal ("tamanho inválido: esperado=977, obtido=979").
+ */
+export function dataDoDoc(d: DocumentoFiscal): Date {
+    const x: any = d as any;
+    for (const bruto of [x.importadoEm, x.createdAt, d.dhEmi]) {
+        if (bruto == null) continue;
+        const dt = bruto instanceof Date ? bruto : new Date(bruto);
+        if (!Number.isNaN(dt.getTime())) return dt;
+    }
+    return new Date();
+}
+
+/**
  * Participante a cadastrar/referenciar: quem NÃO é a empresa monitorada.
  * Usa o objeto quando existe; senão remonta pelos campos achatados do doc.
  */
@@ -201,7 +217,7 @@ function buildE010(d: DocumentoFiscal): string {
     return buildRecord(L('E010'), {
         'CÓDIGO DO CLIENTE/FORNECEDOR': codigoParticipante(part.cnpjCpf),
         'NOME': sanitizeTexto(part.nome).slice(0, 100),
-        'DATA DE INCLUSÃO': new Date(d.importadoEm),
+        'DATA DE INCLUSÃO': dataDoDoc(d),
         'TIPO DE LOGRADOURO': 'RUA',
         'LOGRADOURO': '',
         'NÚMERO DO LOGRADOURO': 'S/N',
@@ -555,7 +571,7 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
     // 3. E020 — um por produto unico (cProd).
     const e020Set = new Map<string, string>();
     for (const d of documentos) {
-        const dataInclusao = parseIsoDate(d.dhEmi) || new Date(d.importadoEm);
+        const dataInclusao = parseIsoDate(d.dhEmi) || dataDoDoc(d);
         for (const it of d.itens || []) {
             const cod = codigoProduto(it.cProd);
             if (e020Set.has(cod)) continue;

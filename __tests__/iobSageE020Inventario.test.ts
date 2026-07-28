@@ -128,3 +128,59 @@ describe('nota capturada pela SEFAZ entra no arquivo (não só o produto)', () =
         expect(r.falhas[0]!.documento).toMatch(/NF 9999/);
     });
 });
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// 28/07 (3ª rodada): com as notas finalmente sendo geradas, o E-Fiscal recusou
+// 145 delas com "Linha E010 com tamanho inválido: esperado=977, obtido=979".
+// Causa: `importadoEm` não existe nos docs da CAPTURA (o backend grava
+// `createdAt`); new Date(undefined) vira Invalid Date, que formatava como
+// "0NaNNaNNaN" — 10 caracteres num campo de 8, deslocando a linha inteira.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('data inválida não pode mudar a largura da linha', () => {
+    const semImportadoEm = () => {
+        const d: any = { ...docCapturado() };
+        delete d.importadoEm;
+        return d as DocumentoFiscal;
+    };
+
+    it('doc sem importadoEm gera E010 com os 977 caracteres exatos', () => {
+        const r = exportarParaIobSage({ documentos: [semImportadoEm()], numeroEmpresaEfiscal: 587 });
+        const e010 = r.conteudo.split('\r\n').filter((l) => l.startsWith('E010'));
+        expect(e010).toHaveLength(1);
+        expect(e010[0]).toHaveLength(977);
+        expect(r.falhas).toHaveLength(0);
+        expect(r.estatisticas.notasNoArquivo).toBe(1);
+    });
+
+    it('usa createdAt quando é ele que veio da captura', () => {
+        const d: any = { ...docCapturado(), createdAt: '2026-07-11T10:00:00Z' };
+        delete d.importadoEm;
+        const r = exportarParaIobSage({ documentos: [d as DocumentoFiscal], numeroEmpresaEfiscal: 587 });
+        const e010 = r.conteudo.split('\r\n').find((l) => l.startsWith('E010'))!;
+        expect(e010).toContain('20260711');
+        expect(e010).toHaveLength(977);
+    });
+
+    it('REGRESSÃO: data inválida vira campo em branco, nunca "NaN"', () => {
+        const d: any = { ...docCapturado(), importadoEm: 'data-quebrada', dhEmi: 'xx' };
+        const r = exportarParaIobSage({ documentos: [d as DocumentoFiscal], numeroEmpresaEfiscal: 587 });
+        for (const linha of r.conteudo.split('\r\n')) {
+            if (!linha) continue;
+            expect(linha).not.toContain('NaN');
+        }
+    });
+
+    it('TODAS as linhas do arquivo respeitam a largura do seu registro', () => {
+        const TAMANHOS: Record<string, number> = {
+            E001: 15, E010: 977, E020: 486, E200: 422, E201: 284, E221: 340, E222: 594, E342: 135,
+        };
+        const r = exportarParaIobSage({ documentos: [semImportadoEm()], numeroEmpresaEfiscal: 587 });
+        for (const linha of r.conteudo.split('\r\n')) {
+            if (!linha || linha === '\x1A') continue;
+            const reg = linha.slice(0, 4);
+            if (TAMANHOS[reg]) expect(linha.replace(/\x1A$/, '')).toHaveLength(TAMANHOS[reg]!);
+        }
+    });
+});
