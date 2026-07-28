@@ -212,3 +212,57 @@ describe('DEFEITO 2 — o campo "receita dos períodos anteriores" não chegava 
         expect(d.observacao).toMatch(/Limite do período/);
     });
 });
+
+describe('CASO REAL — A CASTELLANO METALURGICA, 2T/2026 (diferença de R$ 196,17 na base)', () => {
+    // Relatório oficial:
+    //   Limite do Trimestre        1.250.000,00
+    //   Saldo do Trimestre Anterior   24.520,97   ← o app ignorava
+    //   Total do Limite            1.274.520,97
+    //   Receita do trimestre (8%)  1.531.859,51
+    //   Base IRPJ                    124.607,47  (1.274.520,97×8% + 257.338,54×8,8%)
+    //
+    // O app usava 1.250.000 e chegava a 124.803,64 — exatamente
+    // 24.520,97 × 0,8% (a diferença entre 8,8% e 8%) a mais.
+    const RECEITA = 1_531_859_51 / 100;
+    const SALDO_ANTERIOR = 24_520.97;
+
+    const baseDe = (saldo: number) => {
+        const l = detalharLimiteLc224(RECEITA, 0, 'IRPJ', 2026, 2, 'Trimestral', 6, saldo);
+        return RECEITA * (1 - l.proporcaoMajorada) * 0.08 + RECEITA * l.proporcaoMajorada * 0.088;
+    };
+
+    it('com o saldo informado, a base bate com o relatório (R$ 124.607,47)', () => {
+        expect(baseDe(SALDO_ANTERIOR)).toBeCloseTo(124_607.47, 2);
+    });
+
+    it('o limite aplicado é o "Total do Limite" do relatório', () => {
+        const l = detalharLimiteLc224(RECEITA, 0, 'IRPJ', 2026, 2, 'Trimestral', 6, SALDO_ANTERIOR);
+        expect(l.limiteAplicado).toBeCloseTo(1_274_520.97, 2);
+        expect(l.sublimitePeriodo).toBe(1_250_000);
+        expect(l.saldoTransportado).toBeCloseTo(24_520.97, 2);
+    });
+
+    it('REGRESSÃO: sem o saldo, a base dava R$ 196,17 a mais', () => {
+        expect(baseDe(0) - baseDe(SALDO_ANTERIOR)).toBeCloseTo(196.17, 2);
+        expect(baseDe(0)).toBeCloseTo(124_803.64, 2);
+    });
+
+    it('o saldo INFORMADO vence a derivação pela receita (o carry é por período)', () => {
+        // Somar receitas do ano e subtrair do sublimite acumulado erra quando um
+        // trimestre excedeu e outro sobrou: o excesso de um não consome a sobra
+        // do outro. Quem manda é o número do relatório.
+        const l = detalharLimiteLc224(RECEITA, 5_000_000, 'IRPJ', 2026, 2, 'Trimestral', 6, SALDO_ANTERIOR);
+        expect(l.saldoTransportado).toBeCloseTo(24_520.97, 2);
+    });
+
+    it('no 1T não há de onde transportar — saldo informado é ignorado', () => {
+        const l = detalharLimiteLc224(RECEITA, 0, 'IRPJ', 2026, 1, 'Trimestral', 3, 99_999);
+        expect(l.saldoTransportado).toBe(0);
+        expect(l.limiteAplicado).toBe(1_250_000);
+    });
+
+    it('CSLL/2026: no 2T (1º período vigente) também não transporta', () => {
+        const l = detalharLimiteLc224(RECEITA, 0, 'CSLL', 2026, 2, 'Trimestral', 6, 24_520.97);
+        expect(l.saldoTransportado).toBe(0);
+    });
+});

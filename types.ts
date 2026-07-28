@@ -433,6 +433,9 @@ export interface FichaFinanceiraRegistro {
     periodoApuracao: 'Mensal' | 'Trimestral';
     
     acumuladoAno: number;
+    /** Saldo do trimestre anterior (limite LC 224/25 não usado), como no
+     *  relatório oficial. Somado ao sublimite do período. */
+    saldoLimiteAnteriorLc224?: number;
     
     faturamentoMesComercio: number;
     faturamentoMesIndustria: number;
@@ -622,6 +625,10 @@ export interface LucroInput {
     isPresuncaoReduzida16?: boolean;
     itensAvulsos?: ItemFinanceiroAvulso[];
     acumuladoAno?: number;
+    /** SALDO do trimestre anterior (limite da LC 224/25 não utilizado). É o
+     *  número que o relatório oficial entrega pronto — "Saldo do Trimestre
+     *  Anterior" — e soma direto ao sublimite do período. */
+    saldoLimiteAnteriorLc224?: number;
     acumuladoTrimestre?: AcumuladoTrimestre;
     
     ipiRecolher?: number;

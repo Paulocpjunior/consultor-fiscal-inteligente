@@ -71,7 +71,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     // Receita dos TRIMESTRES ANTERIORES do ano — usada só pelo limite da
     // majoração da LC 224/25 (§4º: saldo não usado é transportado). Sem o dado
     // o cálculo usa apenas o sublimite do próprio trimestre (R$ 1,25 mi).
-    const [acumuladoAnoLc224, setAcumuladoAnoLc224] = useState(0);
+    const [saldoAnteriorLc224, setSaldoAnteriorLc224] = useState(0);
     const [acumuladoAluguel, setAcumuladoAluguel] = useState(0);
 
     // Filiais (Consolidação)
@@ -181,7 +181,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 }
                 // Limite da majoração LC 224/25 — reabrir a ficha tem de trazer
                 // o que foi informado, senão o recálculo muda o imposto sozinho.
-                setAcumuladoAnoLc224(ficha.acumuladoAno || 0);
+                setSaldoAnteriorLc224(ficha.saldoLimiteAnteriorLc224 || 0);
 
                 // Ajustes e Deduções
                 setFichaIpi(ficha.valorIpi || 0);
@@ -270,7 +270,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         setSaldoCredorIcms(0); setSaldoCredorIpi(0); setSaldoCredorPis(0); setSaldoCredorCofins(0);
         setAcumuladoComercio(0); setAcumuladoIndustria(0); setAcumuladoServico(0); setAcumuladoServicoHospitalar(0); setAcumuladoFinanceira(0);
         setAcumuladoComercio(0); setAcumuladoIndustria(0); setAcumuladoServico(0); setAcumuladoServicoHospitalar(0); setAcumuladoAluguel(0);
-        setAcumuladoAnoLc224(0);
+        setSaldoAnteriorLc224(0);
         setIsEquiparacaoHospitalar(false); setIsPresuncaoReduzida(false);
         setFichaRecFinanceira(0);
         setItensAdicionaisExtra(0);
@@ -332,7 +332,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             // transportado do §4º da LC 224/25. Sem passar isto, o campo da
             // ficha ficava INERTE: o colaborador digitava e o imposto não
             // mudava (defeito visto em 28/07, depois do #338).
-            acumuladoAno: acumuladoAnoLc224,
+            saldoLimiteAnteriorLc224: saldoAnteriorLc224,
 
             acumuladoTrimestre: periodoApuracao === 'Trimestral' ? {
                 comercio: acumuladoComercio,
@@ -397,6 +397,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         selectedEmpresa, fichaMes, periodoApuracao, 
         fichaComercio, fichaIndustria, fichaServico, fichaServicoRetido, fichaLocacao, fichaRecFinanceira, fichaServicoHospitalar,
         acumuladoComercio, acumuladoIndustria, acumuladoServico, acumuladoServicoHospitalar, acumuladoFinanceira, acumuladoAluguel,
+        saldoAnteriorLc224,
         fichaFilialComercio, fichaFilialIndustria, fichaFilialServico, fichaFilialServicoHospitalar,
         isMonofasicoOption, fichaMonofasico, fichaIpi, fichaDevolucoes, fichaIcmsVendas,
         fichaCmv, fichaFolha, fichaDespesas, fichaDespesasDedutiveis,
@@ -500,7 +501,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 mesReferencia: fichaMes,
                 regime: selectedEmpresa.regimePadrao || 'Presumido',
                 periodoApuracao: periodoApuracao,
-                acumuladoAno: acumuladoAnoLc224,
+                acumuladoAno: 0,
+                saldoLimiteAnteriorLc224: saldoAnteriorLc224,
 
                 faturamentoMesComercio: fichaComercio,
                 faturamentoMesIndustria: fichaIndustria,
@@ -675,7 +677,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             fichaLocacao={fichaLocacao} setFichaLocacao={setFichaLocacao}
             fichaServicoHospitalar={fichaServicoHospitalar} setFichaServicoHospitalar={setFichaServicoHospitalar}
             fichaRecFinanceira={fichaRecFinanceira} setFichaRecFinanceira={setFichaRecFinanceira}
-            acumuladoAnoLc224={acumuladoAnoLc224} setAcumuladoAnoLc224={setAcumuladoAnoLc224}
+            saldoAnteriorLc224={saldoAnteriorLc224} setSaldoAnteriorLc224={setSaldoAnteriorLc224}
             acumuladoComercio={acumuladoComercio} setAcumuladoComercio={setAcumuladoComercio}
             acumuladoIndustria={acumuladoIndustria} setAcumuladoIndustria={setAcumuladoIndustria}
             acumuladoServico={acumuladoServico} setAcumuladoServico={setAcumuladoServico}

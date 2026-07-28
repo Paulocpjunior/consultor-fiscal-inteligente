@@ -188,6 +188,15 @@ export const detalharLimiteLc224 = (
     trimestre: number,
     periodoApuracao: 'Mensal' | 'Trimestral',
     mes?: number,
+    /**
+     * SALDO do período anterior (limite não utilizado) informado direto — é o
+     * número que o relatório oficial dá pronto ("Saldo do Trimestre Anterior").
+     * Quando informado, VENCE a derivação pela receita: somar as receitas de
+     * vários trimestres e subtrair do sublimite acumulado dá resultado ERRADO
+     * quando um trimestre excedeu e outro sobrou (o excesso de um não consome
+     * a sobra do outro — o carry é por período).
+     */
+    saldoAnteriorInformado?: number,
 ): LimiteLc224 => {
     const vazio: LimiteLc224 = {
         sublimitePeriodo: 0, saldoTransportado: 0, limiteAplicado: 0, proporcaoMajorada: 0, vigente: false,
@@ -224,9 +233,15 @@ export const detalharLimiteLc224 = (
     // mi), majorava de MENOS e o imposto saía abaixo do devido — caso EDUARDO
     // GUERRA 2T/2026, R$ 2.500 a menos de IRPJ que o relatório oficial.
     const anteriorInformado = receitaAnoAcumuladaAnterior > 0;
-    const saldoTransportado = anteriorInformado
+    const saldoDerivado = anteriorInformado
         ? Math.max(0, sublimitePeriodo * periodosAnterioresVigentes - receitaAnoAcumuladaAnterior)
         : 0;
+    // O saldo informado direto tem precedência (e só vale se houve período
+    // anterior vigente — no 1T, ou no 1º período da CSLL/2026, não há de onde
+    // transportar).
+    const saldoTransportado = (Number(saldoAnteriorInformado) > 0 && periodosAnterioresVigentes > 0)
+        ? Number(saldoAnteriorInformado)
+        : saldoDerivado;
 
     const limiteAplicado = sublimitePeriodo + saldoTransportado;
     const proporcaoMajorada = receitaPeriodoAtual > limiteAplicado
@@ -458,11 +473,17 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
     // O usuário informa via campo "acumuladoAno" no dashboard.
     const receitaAnoAcumuladaAnterior = input.acumuladoAno || 0;
 
+    // Saldo do período anterior informado pela ficha — é o número que o
+    // relatório oficial entrega pronto ("Saldo do Trimestre Anterior").
+    const saldoAnteriorInformado = input.saldoLimiteAnteriorLc224 || 0;
+
     const limiteIrpj = detalharLimiteLc224(
-        receitaPeriodoParaLc224, receitaAnoAcumuladaAnterior, 'IRPJ', ano, trimestre, input.periodoApuracao, mes,
+        receitaPeriodoParaLc224, receitaAnoAcumuladaAnterior, 'IRPJ', ano, trimestre,
+        input.periodoApuracao, mes, saldoAnteriorInformado,
     );
     const limiteCsll = detalharLimiteLc224(
-        receitaPeriodoParaLc224, receitaAnoAcumuladaAnterior, 'CSLL', ano, trimestre, input.periodoApuracao, mes,
+        receitaPeriodoParaLc224, receitaAnoAcumuladaAnterior, 'CSLL', ano, trimestre,
+        input.periodoApuracao, mes, saldoAnteriorInformado,
     );
     const proporcaoMajoradaIrpj = receitaPeriodoParaLc224 > 0 ? limiteIrpj.proporcaoMajorada : 0;
     const proporcaoMajoradaCsll = receitaPeriodoParaLc224 > 0 ? limiteCsll.proporcaoMajorada : 0;
@@ -531,7 +552,13 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
         baseCalculoIrpjServico += input.acumuladoTrimestre.servico + (input.acumuladoTrimestre.aluguel || 0);
         baseCalculoIrpjServicoHosp += (input.acumuladoTrimestre.servicoHospitalar || 0);
         baseCalculoReceitaFinanceira += input.acumuladoTrimestre.financeira;
-        obsTrimestre = ` (Inclui Out/Nov/Dez)`;
+        // Meses do trimestre da PRÓPRIA competência. Era fixo em "Out/Nov/Dez",
+        // o que confundia a conferência de qualquer trimestre que não o 4º.
+        const MESES_TRI = [
+            ['Jan', 'Fev', 'Mar'], ['Abr', 'Mai', 'Jun'], ['Jul', 'Ago', 'Set'], ['Out', 'Nov', 'Dez'],
+        ];
+        const nomes = MESES_TRI[trimestre - 1];
+        obsTrimestre = nomes ? ` (Inclui ${nomes.join('/')})` : '';
     }
 
     const presuncaoServicoUsada = input.isPresuncaoReduzida16

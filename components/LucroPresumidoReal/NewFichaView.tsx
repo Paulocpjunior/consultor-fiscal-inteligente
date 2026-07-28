@@ -54,7 +54,7 @@ interface NewFichaViewProps {
     acumuladoFinanceira: number; setAcumuladoFinanceira: (v: number) => void;
     acumuladoAluguel: number; setAcumuladoAluguel: (v: number) => void;
     /** Receita dos TRIMESTRES ANTERIORES do ano — limite da majoração LC 224/25. */
-    acumuladoAnoLc224: number; setAcumuladoAnoLc224: (v: number) => void;
+    saldoAnteriorLc224: number; setSaldoAnteriorLc224: (v: number) => void;
 
     // Filiais
     fichaFilialComercio: number; setFichaFilialComercio: (v: number) => void;
@@ -293,23 +293,25 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
                                     <CurrencyInput label="Acumulado Aluguel" value={p.acumuladoAluguel} onChange={p.setAcumuladoAluguel} className="bg-white dark:bg-slate-800 p-2 rounded border border-sky-100 dark:border-sky-900" />
                                 </div>
 
-                                {/* Limite da majoração (LC 224/25): o sublimite é de R$ 1,25 mi POR
-                                    TRIMESTRE e renova a cada um. O saldo não usado em trimestre
-                                    anterior é transportado (§4º) — mas só dá pra saber isso
-                                    informando quanto a empresa faturou antes. Em branco, o cálculo
-                                    usa só o limite do próprio trimestre (conservador). */}
+                                {/* Limite da majoração (LC 224/25). O campo pede o SALDO — é o
+                                    número que o relatório oficial dá pronto ("Saldo do Trimestre
+                                    Anterior"), somado ao sublimite de R$ 1,25 mi do período.
+                                    Pedir a RECEITA anterior e derivar o saldo aqui dava resultado
+                                    errado quando um trimestre excedeu e outro sobrou — o carry é
+                                    por período, não pela soma do ano (caso A CASTELLANO 2T/2026). */}
                                 <div className="mt-3 pt-3 border-t border-sky-200 dark:border-sky-800">
                                     <CurrencyInput
-                                        label="Receita dos TRIMESTRES ANTERIORES do ano (majoração LC 224/25)"
-                                        value={p.acumuladoAnoLc224}
-                                        onChange={p.setAcumuladoAnoLc224}
+                                        label="Saldo do TRIMESTRE ANTERIOR (limite não usado — LC 224/25)"
+                                        value={p.saldoAnteriorLc224}
+                                        onChange={p.setSaldoAnteriorLc224}
                                         className="bg-white dark:bg-slate-800 p-2 rounded border border-sky-100 dark:border-sky-900"
                                     />
                                     <p className="text-[10px] text-sky-600 dark:text-sky-400 mt-1">
-                                        Só afeta o <strong>limite da presunção majorada</strong>: o sublimite é de
-                                        R$ 1.250.000 por trimestre e o que sobrou de trimestre anterior é transportado.
-                                        Deixando em branco, usamos apenas o limite deste trimestre — nunca presumimos
-                                        sobra que a empresa não teve.
+                                        Copie o campo <strong>“Saldo do Trimestre Anterior”</strong> do relatório de
+                                        excesso de limite. Ele soma ao sublimite de R$ 1.250.000 deste trimestre e vira
+                                        o <strong>Total do Limite</strong> — o mesmo que aparece na observação do IRPJ/CSLL.
+                                        Em branco, usamos só o limite deste trimestre: nunca presumimos sobra que a
+                                        empresa não teve.
                                     </p>
                                 </div>
                             </div>
