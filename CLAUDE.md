@@ -170,9 +170,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Lucro varre fichas da competência). **GNRE-lote NÃO serve pros RPA**
   (046-2/146-6) — só 8 receitas "de fora" (tabela CONVERSAO_GNRE_DARE_SP
   com guarda anti-rubrica-errada, #286). Portal tem reCAPTCHA (humano
-  emite; app gera/valida/audita). Fase final = API oficial credenciada
-  (Paulo pede em api_dare_icms@fazenda.sp.gov.br). NUNCA gerar
-  número/barras de DARE localmente (é do sistema da SEFAZ).
+  emite; app gera/valida/audita). NUNCA gerar número/barras de DARE
+  localmente (é do sistema da SEFAZ).
+- **API DARE-ICMS credenciada e NO AR (28/07, #325-#335)**: gateway
+  `apigateway[-hml].fazenda.sp.gov.br/dare-icms`, header `api-key` do
+  Secret Manager (`dare-icms-api-key-hml`/`-prod`), homologação como
+  PADRÃO e produção só com confirmação explícita. Payload conferido
+  contra o Swagger REAL: serviço vai em `receita.codigoServicoDARE`
+  (INTEIRO, não `codigoServico` solto), `dataVencimento` é date-time.
+  A API responde **HTTP 200 mesmo RECUSANDO** (`erro.estaOk=false` +
+  `mensagens[]`) — 200 nunca é sucesso cego (extrairRecusa). Falha de
+  REDE em POST é `indeterminado`, NUNCA 'falha': a guia pode ter sido
+  emitida e reenviar duplica cobrança (só GET tem retry). Emissão
+  valida e testada em homologação (número, barras 44/48, Pix, PDF); o
+  PDF entra no rito #293 (SharePoint → gestor → baixa → auditoria), e
+  PDF de homologação NUNCA vai ao cliente.
+- **NUNCA emitir guia em LOTE pela API** (Paulo, 28/07 — "já foi
+  alertado sobre isso"): imposto sai UMA A UMA, com preview conferido.
+  Erro em lote vira dezenas de cobranças indevidas e a SEFAZ não desfaz
+  emissão. A rota `/api/emitir-lote` foi REMOVIDA de propósito — não
+  recriar. O "Lote DARE TXT" (#287) continua valendo porque é só
+  GERAÇÃO de arquivo; quem emite é humano no portal, com reCAPTCHA.
 
 - ~~Paulo rodar `setup-cloud-schedulers.sh`~~ **FEITO 24/07** (3 crons
   órfãos criados e rodando OK: das/dctfweb/caixa-postal).
