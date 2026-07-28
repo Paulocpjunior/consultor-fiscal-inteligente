@@ -13,6 +13,7 @@ import { Router } from 'express';
 import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
+import { montarPainelEnvios } from './envio-imposto-painel.js';
 import { executarRitoEnvioImposto, GESTOR_EMAIL } from './envio-imposto.js';
 
 const router = Router();
@@ -69,6 +70,30 @@ router.get('/historico', requireAuth, async (req, res) => {
         return res.json({ ok: true, envios });
     } catch (e) {
         console.error('[envio-imposto/historico]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * Painel do rito (#293): quantos envios saíram COMPLETOS na competência e,
+ * quando não saíram, a causa agrupada com a ação. Admin — é visão de gestão.
+ */
+router.get('/painel', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ ok: false, error: 'Apenas administradores' });
+        const competencia = String(req.query.competencia || '').trim() || null;
+        const db = fa().firestore();
+        // Sem índice composto: filtra a competência em memória (o volume é de
+        // dezenas por mês, não de milhares).
+        const snap = await db.collection('impostos_enviados').limit(2000).get();
+        const envios = snap.docs.map((d) => {
+            const x = d.data();
+            return { id: d.id, ...x, enviadoEm: x.enviadoEm?.toDate?.()?.toISOString?.() || null };
+        });
+        const painel = montarPainelEnvios(envios, { competencia });
+        return res.json({ ok: true, gestor: GESTOR_EMAIL, ...painel });
+    } catch (e) {
+        console.error('[envio-imposto/painel]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

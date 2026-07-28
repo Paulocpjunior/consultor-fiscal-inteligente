@@ -17,8 +17,11 @@ import type { User } from '../types';
 const FiscalObligationsDashboard = lazy(() => import('./FiscalObligationsDashboard'));
 const Tarefas = lazy(() => import('./Tarefas'));
 const CalendarioFiscal = lazy(() => import('./CalendarioFiscal'));
+// Farol do rito de envio (#293) — mora aqui porque é nesta tela que a BAIXA
+// da obrigação acontece; o painel mostra quais envios não completaram o ciclo.
+const EnviosImpostoPainel = lazy(() => import('./EnviosImpostoPainel'));
 
-type Modo = 'dashboard' | 'kanban' | 'calendario';
+type Modo = 'dashboard' | 'kanban' | 'calendario' | 'envios';
 
 interface Props {
     currentUser: User | null;
@@ -29,6 +32,7 @@ const ABAS: { id: Modo; label: string; emoji: string }[] = [
     { id: 'dashboard', label: 'Dashboard', emoji: '📊' },
     { id: 'kanban', label: 'Kanban (Tarefas)', emoji: '📋' },
     { id: 'calendario', label: 'Calendário', emoji: '📅' },
+    { id: 'envios', label: 'Envios (rito)', emoji: '📤' },
 ];
 
 const ObrigacoesETarefas: React.FC<Props> = ({ currentUser, onShowToast }) => {
@@ -59,6 +63,7 @@ const ObrigacoesETarefas: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     {modo === 'calendario' && (
                         <CalendarioFiscal currentUser={currentUser} onShowToast={onShowToast || (() => {})} />
                     )}
+                    {modo === 'envios' && <EnviosImpostoPainel />}
                 </Suspense>
             </ErrorBoundary>
         </div>
