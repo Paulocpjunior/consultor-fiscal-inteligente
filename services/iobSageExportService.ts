@@ -102,6 +102,11 @@ function codigoProduto(cProd: string): string {
 interface ExportarParams {
     /** Documentos a exportar. */
     documentos: DocumentoFiscal[];
+    /**
+     * Código do "Tipo para o Inventário" (E020 campo 11) como cadastrado no
+     * E-Fiscal do cliente. Vazio (padrão) = não informar.
+     */
+    tipoInventario?: string;
     /** Numero da empresa no E-Fiscal (campo NÚMERO DA EMPRESA do E001). */
     numeroEmpresaEfiscal: number;
     /** UF da empresa (para emitter de saidas). */
@@ -185,7 +190,16 @@ function buildE010(d: DocumentoFiscal): string {
     });
 }
 
-function buildE020(item: DocumentoFiscalItem, dataInclusao: Date): string {
+function buildE020(
+    item: DocumentoFiscalItem,
+    dataInclusao: Date,
+    // Código da tabela "Tipos de Inventário" DO E-FISCAL do cliente. Não é uma
+    // tabela oficial: cada escritório cadastra os seus. Mandar um código que
+    // não existe lá recusa a linha inteira ("tipo para inventário não
+    // cadastrado" — 28/07, 205 produtos perdidos por um '1' fixo). Vazio =
+    // não informar, que o layout permite (campo 11 é opcional).
+    tipoInventario: string = '',
+): string {
     const uCom = sanitizeTexto(item.uCom || 'UN').slice(0, 6) || 'UN';
     return buildRecord(L('E020'), {
         'CÓDIGO DO PRODUTO/SERVIÇO': codigoProduto(item.cProd),
@@ -194,7 +208,7 @@ function buildE020(item: DocumentoFiscalItem, dataInclusao: Date): string {
         'PERÍODO INICIAL DE UTILIZAÇÃO DO PRODUTO/SERVIÇO': dataInclusao,
         'GÊNERO DO ITEM': '',
         'TIPO DO PRODUTO': '01', // Mercadoria de Revenda (default)
-        'TIPO PARA O INVENTÁRIO': 1,
+        'TIPO PARA O INVENTÁRIO': tipoInventario,
         'NBM/SH': formatNcm(item.ncm),
         'CÓDIGO DE BARRA': '',
         'COMBUSTÍVEL/SOLVENTE': 'N',
@@ -448,6 +462,8 @@ function buildE342(d: DocumentoFiscal): string | null {
 
 export interface ExportarResult {
     blob: Blob;
+    /** Conteúdo textual do .FML — permite conferir o arquivo sem baixar/abrir. */
+    conteudo: string;
     fileName: string;
     totalLinhas: number;
     estatisticas: {
@@ -460,7 +476,7 @@ export interface ExportarResult {
 }
 
 export function exportarParaIobSage(params: ExportarParams): ExportarResult {
-    const { documentos, numeroEmpresaEfiscal } = params;
+    const { documentos, numeroEmpresaEfiscal, tipoInventario = '' } = params;
     if (!documentos.length) {
         throw new Error('Nenhum documento para exportar.');
     }
@@ -490,7 +506,7 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
             const cod = codigoProduto(it.cProd);
             if (e020Set.has(cod)) continue;
             try {
-                e020Set.set(cod, buildE020(it, dataInclusao));
+                e020Set.set(cod, buildE020(it, dataInclusao, tipoInventario));
             } catch (err) {
                 console.warn('Falha E020 para item', cod, err);
             }
@@ -543,6 +559,7 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
 
     return {
         blob,
+        conteudo,
         fileName,
         totalLinhas: linhas.length,
         estatisticas: {

@@ -28,6 +28,10 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [competencia, setCompetencia] = useState<string>('');
     const [direcao, setDirecao] = useState<'entrada' | 'saida' | ''>('');
     const [numeroEmpresaEfiscal, setNumeroEmpresaEfiscal] = useState<number>(1);
+    // E020 campo 11. Cada escritório cadastra os próprios tipos de inventário
+    // no E-Fiscal; mandar um código inexistente recusa TODOS os produtos.
+    // Em branco (padrão) o campo não é informado — e o layout permite.
+    const [tipoInventario, setTipoInventario] = useState<string>('');
     const [exporting, setExporting] = useState(false);
 
     // Catálogo de empresas (leve) para o seletor pesquisável — não carrega docs.
@@ -96,6 +100,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
             const result = exportarParaIobSage({
                 documentos: filtrados,
                 numeroEmpresaEfiscal,
+                tipoInventario: tipoInventario.trim(),
             });
             downloadBlob(result.blob, result.fileName);
             onShowToast?.(
@@ -171,7 +176,30 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             title="Código da empresa no cadastro do E-Fiscal Folhamatic (campo do registro E001)"
                         />
                     </div>
+
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
+                            Tipo p/ inventário (opcional)
+                        </label>
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={4}
+                            placeholder="deixe vazio"
+                            value={tipoInventario}
+                            onChange={(e) => setTipoInventario(e.target.value.replace(/\D/g, ''))}
+                            className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm"
+                            title="E020 campo 11. Só preencha com um código que EXISTA em Cadastros → Tipos de Inventário do E-Fiscal do cliente."
+                        />
+                    </div>
                 </div>
+
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
+                    <strong>Tipo p/ inventário:</strong> deixe <strong>vazio</strong> salvo orientação em contrário. Esse
+                    código vem da tabela <em>Cadastros → Tipos de Inventário</em> do E-Fiscal de cada cliente — se você
+                    mandar um número que não existe lá, o E-Fiscal recusa <strong>todos</strong> os produtos (E020) e as
+                    notas entram sem item.
+                </p>
 
                 <div className="flex justify-between items-center pt-1">
                     <p className="text-[11px] text-slate-400">
