@@ -186,11 +186,21 @@ export function contarDebitosMit(debitos) {
     return total;
 }
 
-// Extrai da mensagem de erro do SERPRO os caminhos de campo recusados com
-// "campo não deve ser informado" (ex.: "DadosIniciais.RegimePisCofins").
+// Extrai da mensagem de erro do SERPRO os caminhos de campo recusados. Duas
+// formas conhecidas:
+//   1. "DadosIniciais.RegimePisCofins: campo não deve ser informado."
+//   2. "O campo transmissaoImediata só deve ser enviado para apuração sem
+//      movimento." (MIT-MSG_0020)
+// A 2ª só entra quando vem com "não/só/somente" logo após o nome — um
+// "o campo X deve ser enviado" é o OPOSTO (obrigatório) e não pode virar
+// remoção.
 export function extrairCamposNaoInformaveis(mensagem) {
+    const texto = String(mensagem || '');
     const out = [];
-    for (const m of String(mensagem || '').matchAll(/([A-Za-z][\w.]*)\s*:\s*campo n[ãa]o deve ser informado/gi)) {
+    for (const m of texto.matchAll(/([A-Za-z][\w.]*)\s*:\s*campo n[ãa]o deve ser informado/gi)) {
+        out.push(m[1]);
+    }
+    for (const m of texto.matchAll(/\bcampo\s+([A-Za-z][\w.]*)\s+(?:n[ãa]o|s[óo]|somente)\b[^.]*?deve ser (?:enviado|informado)/gi)) {
         out.push(m[1]);
     }
     return [...new Set(out)];
@@ -232,6 +242,17 @@ export function extrairXmlDeclaracao(dados) {
     return '';
 }
 
+// Acha a chave REAL de um objeto ignorando maiúsculas/minúsculas. O SERPRO
+// aponta o campo em camelCase ("transmissaoImediata") mas devolve o payload em
+// PascalCase ("TransmissaoImediata") — sem isto a remoção não achava nada e o
+// encerramento morria dizendo "campo apontado não existe no payload".
+function acharChave(obj, nome) {
+    if (!obj || typeof obj !== 'object') return null;
+    if (Object.prototype.hasOwnProperty.call(obj, nome)) return nome;
+    const alvo = String(nome).toLowerCase();
+    return Object.keys(obj).find((k) => k.toLowerCase() === alvo) ?? null;
+}
+
 // Remove um campo aninhado por caminho pontuado ("DadosIniciais.RegimePisCofins").
 // Retorna true se o campo existia e foi removido.
 export function removerCampoPorCaminho(obj, caminho) {
@@ -239,15 +260,65 @@ export function removerCampoPorCaminho(obj, caminho) {
     if (partes.length === 0) return false;
     let alvo = obj;
     for (let i = 0; i < partes.length - 1; i++) {
-        alvo = alvo?.[partes[i]];
+        const chave = acharChave(alvo, partes[i]);
+        if (!chave) return false;
+        alvo = alvo[chave];
         if (!alvo || typeof alvo !== 'object') return false;
     }
-    const ultima = partes[partes.length - 1];
-    if (alvo && typeof alvo === 'object' && Object.prototype.hasOwnProperty.call(alvo, ultima)) {
+    const ultima = acharChave(alvo, partes[partes.length - 1]);
+    if (ultima) {
         delete alvo[ultima];
         return true;
     }
     return false;
+}
+
+/**
+ * Remove o campo que o SERPRO recusou. Ele nem sempre manda o caminho
+ * completo: o MIT-MSG_0020 aponta só "transmissaoImediata", que na verdade
+ * mora na raiz E/OU em DadosIniciais. Tenta o caminho literal e, se o nome
+ * vier solto, também dentro de DadosIniciais (onde ficam os campos do MIT).
+ * @returns {string[]} caminhos efetivamente removidos
+ */
+export function removerCampoRecusado(dados, caminho) {
+    const removidos = [];
+    if (removerCampoPorCaminho(dados, caminho)) removidos.push(caminho);
+    if (!String(caminho).includes('.')) {
+        const aninhado = `DadosIniciais.${caminho}`;
+        if (removerCampoPorCaminho(dados, aninhado)) removidos.push(aninhado);
+    }
+    return removidos;
+}
+
+// Campos que o ENCAPURACAO314 aceita SOMENTE em apuração sem movimento. O
+// CONSAPURACAO316 devolve TransmissaoImediata sempre — reenviá-lo numa
+// apuração COM movimento derruba o encerramento com 400
+// [EntradaIncorreta-MIT-MSG_0020]: "O campo transmissaoImediata só deve ser
+// enviado para apuração sem movimento" (caso real 28/07/2026, retificação de
+// 2026-06). Removemos ANTES de transmitir — o retry reativo existe como rede,
+// mas guia de imposto não deve depender de uma ida extra ao SERPRO.
+const CAMPOS_SO_SEM_MOVIMENTO = ['TransmissaoImediata'];
+
+export function ehApuracaoSemMovimento(dadosIniciais) {
+    const v = dadosIniciais?.SemMovimento ?? dadosIniciais?.semMovimento;
+    return v === true || v === 'true';
+}
+
+/**
+ * Tira do payload os campos que só valem para apuração SEM movimento.
+ * Muta `dados` (o chamador já trabalha numa cópia) e devolve o que removeu.
+ */
+export function sanitizarCamposPorMovimento(dados) {
+    const removidos = [];
+    if (!dados || typeof dados !== 'object') return removidos;
+    if (ehApuracaoSemMovimento(dados.DadosIniciais || dados.dadosIniciais)) return removidos;
+    for (const campo of CAMPOS_SO_SEM_MOVIMENTO) {
+        // raiz e dentro de DadosIniciais — o SERPRO já devolveu nos dois lugares.
+        for (const caminho of [campo, `DadosIniciais.${campo}`]) {
+            if (removerCampoPorCaminho(dados, caminho)) removidos.push(caminho);
+        }
+    }
+    return removidos;
 }
 
 function ensureMitEncerramentoPayload({ dadosApuracaoMit, anoPA, mesPA }) {
@@ -603,7 +674,12 @@ class SerproProvider {
         // codificar o schema condicional do SERPRO (e errar), removemos
         // exatamente o(s) campo(s) que ele apontar e retransmitimos —
         // no máximo 4 rodadas pra nunca virar loop.
-        const camposRemovidos = [];
+        // Preventivo: campos que só existem em apuração sem movimento saem
+        // antes da 1ª tentativa (MIT-MSG_0020).
+        const camposRemovidos = sanitizarCamposPorMovimento(dados);
+        if (camposRemovidos.length > 0) {
+            console.warn(`[encerrarApuracaoMit] ${cnpj} ${anoPA}-${mesPA}: removido(s) ${camposRemovidos.join(', ')} (campo de apuração SEM movimento).`);
+        }
         let r = null;
         for (let tentativa = 0; tentativa < 4; tentativa++) {
             try {
@@ -620,8 +696,9 @@ class SerproProvider {
                 if (campos.length === 0) throw e;
                 let removeuAlgum = false;
                 for (const caminho of campos) {
-                    if (removerCampoPorCaminho(dados, caminho)) {
-                        camposRemovidos.push(caminho);
+                    const tirados = removerCampoRecusado(dados, caminho);
+                    if (tirados.length > 0) {
+                        camposRemovidos.push(...tirados);
                         removeuAlgum = true;
                     }
                 }
