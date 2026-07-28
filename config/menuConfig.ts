@@ -20,6 +20,7 @@ import {
 } from '../components/Icons';
 
 export const searchDescriptions: Record<SearchType, string> = {
+    [SearchType.ROTINA_FISCAL]: 'A ordem do mês, cliente a cliente: capturar → validar → apurar → entregar obrigações → emitir e enviar a guia. Mostra em que etapa cada empresa parou e qual é o próximo passo.',
     [SearchType.CFOP]: 'Consulte códigos de operação e entenda a aplicação e tributação.',
     [SearchType.NCM]: 'Classificação fiscal de mercadorias e incidência de impostos (IPI, ICMS).',
     [SearchType.SERVICO]: 'Análise de retenção de ISS, local de incidência e alíquotas.',
@@ -76,6 +77,14 @@ export interface MenuGrupo {
 }
 
 export const MENU_GRUPOS: MenuGrupo[] = [
+    // Primeiro grupo de propósito: a rotina tem ORDEM, e o dia começa por ela
+    // (Paulo, 28/07/2026 — "o colaborador não está seguindo uma linha de
+    // processo"). As telas de cada etapa continuam nos grupos abaixo.
+    {
+        titulo: 'Rotina do Mês', cor: '#0d9488', cards: [
+            { type: SearchType.ROTINA_FISCAL, label: 'Rotina do Mês (por onde começar)', Icon: CalendarIcon },
+        ],
+    },
     {
         titulo: 'Consultas', cor: '#2563eb', cards: [
             { type: SearchType.CFOP, Icon: TagIcon },

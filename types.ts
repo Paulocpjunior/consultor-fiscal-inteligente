@@ -1,5 +1,6 @@
 
 export enum SearchType {
+    ROTINA_FISCAL = 'Rotina do Mês',
     CFOP = 'CFOP',
     NCM = 'NCM',
     SERVICO = 'Serviço',
