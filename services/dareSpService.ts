@@ -97,6 +97,8 @@ export interface EmissaoApiResultado {
     comprovante?: ComprovanteDare;
     /** Caminho do PDF no Storage (o documento que vai ao cliente). */
     pdfPath?: string | null;
+    /** PDF em base64 — segue pro rito de envio (cópia na pasta IMPOSTOS). */
+    pdfBase64?: string | null;
     retorno?: any;
     error?: string;
     camposInvalidos?: string[] | null;

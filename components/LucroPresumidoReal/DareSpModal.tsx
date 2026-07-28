@@ -45,6 +45,10 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
     const [ambiente, setAmbiente] = useState<AmbienteDare>('homologacao');
     const [statusApi, setStatusApi] = useState<string | null>(null);
     const [emitido, setEmitido] = useState<any>(null);
+    // PDF que a SEFAZ devolveu na emissão. Guardado aqui pra o envio ao
+    // cliente arquivar sozinho na pasta IMPOSTOS do SharePoint (ordem técnica
+    // #293) — antes o colaborador tinha de baixar do portal e anexar à mão.
+    const [pdfEmitido, setPdfEmitido] = useState<{ base64: string; ambiente: AmbienteDare } | null>(null);
 
     const inputAtual = () => ({
         cnpj, razaoSocial, empresaId, codigoServico,
@@ -118,18 +122,31 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                 setErro('E-mail do cliente não cadastrado — preencha em "Dados Fiscais" da empresa.');
                 return;
             }
+            // Só o PDF de PRODUÇÃO vai pro cliente/SharePoint: o de
+            // homologação é documento de teste, sem validade e não pagável.
+            const pdfValido = pdfEmitido && pdfEmitido.ambiente === 'producao' ? pdfEmitido.base64 : undefined;
             const r = await enviarPorEmailDoColaborador({
                 empresaId,
                 empresaCnpj: cnpj,
                 empresaNome: razaoSocial,
                 tipo: 'DARE',
                 competencia,
+                pdfBase64: pdfValido,
+                pdfFileName: pdfValido
+                    ? `dare_${cnpj.replace(/\D/g, '')}_${competencia}.pdf`
+                    : undefined,
                 para: contato.email,
                 assunto: `DARE-SP ICMS ${competencia.split('-').reverse().join('/')} - ${razaoSocial}`,
                 corpo: `${textoConferencia(preview)}\n\nO DARE segue anexo. Por gentileza, confirme o pagamento após a regularização.\n\nAtenciosamente,\nSP Assessoria Contábil`,
                 valor: preview.valor,
             });
-            if (r.ok) setAviso(`E-mail aberto com ${GESTOR_EMAIL} em cópia — anexe o PDF do DARE emitido no portal antes de enviar. Envio registrado na auditoria.`);
+            if (r.ok) {
+                setAviso(pdfValido
+                    ? `E-mail aberto com ${GESTOR_EMAIL} em cópia. O PDF do DARE já foi arquivado na pasta IMPOSTOS do SharePoint`
+                      + `${r.sharePoint?.status === 'arquivado' ? '' : ` (${r.sharePoint?.motivo || r.sharePoint?.status || 'confira a configuração'})`}`
+                      + ' — anexe o mesmo arquivo no e-mail antes de enviar. Envio registrado na auditoria.'
+                    : `E-mail aberto com ${GESTOR_EMAIL} em cópia — anexe o PDF do DARE antes de enviar. Envio registrado na auditoria.`);
+            }
             else setErro(r.error || 'Falha ao registrar o envio.');
         } catch (e: any) {
             setErro(e?.message || 'Falha ao abrir o e-mail.');
@@ -171,6 +188,7 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                 // Comprovante = o que a SEFAZ devolveu (número, barras, Pix).
                 // Nada aqui é gerado localmente.
                 setEmitido(r.comprovante ?? r.retorno ?? {});
+                if (r.pdfBase64) setPdfEmitido({ base64: r.pdfBase64, ambiente });
                 setStatusApi(ambiente === 'homologacao'
                     ? '✓ DARE emitido em HOMOLOGAÇÃO — documento de teste, sem validade e não pagável.'
                     : '✓ DARE emitido em PRODUÇÃO — documento válido. Registrado na auditoria.');
@@ -309,6 +327,30 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                     )}
                     {emitido && (
                         <pre className="bg-slate-900 text-emerald-300 text-[10px] p-2 rounded-lg overflow-x-auto max-h-48">{JSON.stringify(emitido, null, 2)}</pre>
+                    )}
+                    {pdfEmitido && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                                onClick={() => {
+                                    // Abre o PDF que a SEFAZ devolveu — é o arquivo que o
+                                    // cliente recebe (e o mesmo que o rito arquiva).
+                                    const bytes = Uint8Array.from(atob(pdfEmitido.base64), c => c.charCodeAt(0));
+                                    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `dare_${cnpj.replace(/\D/g, '')}_${competencia}${pdfEmitido.ambiente === 'homologacao' ? '_TESTE' : ''}.pdf`;
+                                    a.click();
+                                    URL.revokeObjectURL(url);
+                                }}
+                                className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200">
+                                ⬇ Baixar PDF do DARE
+                            </button>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                {pdfEmitido.ambiente === 'producao'
+                                    ? 'No “✉ E-mail” este PDF vai automaticamente para a pasta IMPOSTOS do SharePoint.'
+                                    : 'Documento de TESTE (homologação) — não vai ao cliente nem ao SharePoint.'}
+                            </span>
+                        </div>
                     )}
                 </div>
 
