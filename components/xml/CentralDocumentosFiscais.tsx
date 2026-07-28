@@ -75,9 +75,12 @@ const GRUPOS: Array<{ id: GrupoId; label: string; subs: Array<{ id: TabId; label
     },
     { id: 'empresas', label: '🏢 Empresas', subs: [{ id: 'empresas', label: 'Empresas Monitoradas' }] },
     {
-        id: 'integracoes', label: '🔗 Integrações', subs: [
+        // O nome do grupo diz o que tem DENTRO: depois da consolidação em 8
+        // grupos (#277), "Exportar SAGE" ficou escondido atrás de "Integrações"
+        // e a equipe achou que a função tinha sumido (Paulo, 28/07).
+        id: 'integracoes', label: '🔗 Integrações (SharePoint · SAGE)', subs: [
             { id: 'sharepoint', label: 'SharePoint' },
-            { id: 'exportar-iob', label: 'Exportar IOB SAGE' },
+            { id: 'exportar-iob', label: '📤 Exportar SAGE (IOB)' },
         ],
     },
     {
@@ -194,7 +197,27 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
             {/* Tab content */}
             <div>
                 {tab === 'dashboard' && (
-                    <XmlDashboard currentUser={currentUser} refreshKey={refreshKey} />
+                    <>
+                        {/* Mapa das funções: a consolidação em 8 grupos (#277)
+                            deixou telas escondidas atrás do nome do grupo. Este
+                            índice leva direto, sem caça ao tesouro. */}
+                        <div className="mb-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+                            <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">Onde está cada função</p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {GRUPOS.filter(g => g.id !== 'dashboard').flatMap(g => g.subs.map(sub => (
+                                    <button
+                                        key={`${g.id}-${sub.id}`}
+                                        onClick={() => { setGrupo(g.id); setTab(sub.id); setSelectedDoc(null); }}
+                                        title={`${g.label} → ${sub.label}`}
+                                        className="px-2.5 py-1 text-[11px] font-semibold rounded-md border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                                    >
+                                        {sub.label}
+                                    </button>
+                                )))}
+                            </div>
+                        </div>
+                        <XmlDashboard currentUser={currentUser} refreshKey={refreshKey} />
+                    </>
                 )}
                 {tab === 'captura-auto' && (
                     <>
