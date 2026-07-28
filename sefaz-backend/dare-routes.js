@@ -19,7 +19,7 @@ import { requireAuth, requireAdmin } from './require-admin.js';
 import { montarDare, derivacoesDisponiveis, CODIGOS_DARE_ICMS, montarLoteTxt, montarLinhaLoteTxt, MAX_DOCS_LOTE_DARE } from './dare-sp.js';
 import { reconhecerPortalDare } from './dare-recon.js';
 import {
-  listarReceitas, emitirDareUnitario, emitirDareLote, montarDareApiDTO,
+  listarReceitas, emitirDareUnitario, montarDareApiDTO,
   resolverAmbiente, AMBIENTE_PADRAO, resumirRetornoDare,
 } from './dare-icms-api.js';
 
@@ -108,8 +108,8 @@ router.post('/lote-txt', requireAuth, async (req, res) => {
 // barras continuam vindo da SEFAZ, mas chegam direto no app.
 //
 //   GET  /api/admin/dare/api/receitas?ambiente=  — teste de fumaça da chave
-//   POST /api/admin/dare/api/emitir              — 1 DARE
-//   POST /api/admin/dare/api/emitir-lote         — até 50 DAREs
+//   POST /api/admin/dare/api/emitir              — 1 DARE (não há lote:
+//                                                  guia sai uma a uma)
 //
 // Produção exige confirmação EXPLÍCITA no corpo (confirmoProducao: true):
 // DARE de produção é cobrança de verdade, pagável na rede bancária.
@@ -140,10 +140,6 @@ async function salvarBase64NoStorage(base64, caminho) {
 function salvarPdfDare(resposta, id, ambiente) {
   const item = resposta?.itensParaGeracao?.[0] || resposta || {};
   return salvarBase64NoStorage(item.documentoImpressao, `dares/${ambiente}/${id}.pdf`);
-}
-
-function salvarZipLote(resposta, id, ambiente) {
-  return salvarBase64NoStorage(resposta?.zipDownload, `dares/${ambiente}/${id}-lote.zip`);
 }
 
 /** Só admin emite guia — mesma régua do envio de imposto (#293). */
@@ -242,65 +238,12 @@ router.post('/api/emitir', requireAdmin, async (req, res) => {
   }
 });
 
-router.post('/api/emitir-lote', requireAdmin, async (req, res) => {
-  try {
-    const ambiente = checarProducao(req);
-    const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
-    if (itens.length === 0) return res.status(400).json({ ok: false, error: 'Informe ao menos um DARE no lote.' });
-    if (itens.length > MAX_DOCS_LOTE_DARE) {
-      return res.status(400).json({ ok: false, error: `O lote aceita no máximo ${MAX_DOCS_LOTE_DARE} guias — divida o envio.` });
-    }
-
-    // Um item inválido aborta o lote inteiro (nunca emitir metade).
-    const previews = itens.map((it) => montarDare(it));
-    const dtos = itens.map((it, i) => montarDareApiDTO({
-      cnpj: it.cnpj, razaoSocial: it.razaoSocial || previews[i].contribuinte?.razaoSocial,
-      codigoServico: it.codigoServico, codigoReceita: previews[i].codigoReceita,
-      referencia: previews[i].referencia,
-      valor: previews[i].valor, dataVencimento: previews[i].vencimento,
-      linha06: it.linha06, linha08: it.linha08, gerarPDF: req.body?.gerarPDF,
-    }));
-
-    const db = fa().firestore();
-    const logRef = await db.collection('dare_solicitacoes').add({
-      tipo: 'lote-api',
-      ambiente,
-      totalDocs: dtos.length,
-      totalValor: previews.reduce((s, p) => s + Number(p.valor || 0), 0),
-      solicitadoPor: req.user?.email || req.user?.uid || 'desconhecido',
-      solicitadoEm: admin.firestore.FieldValue.serverTimestamp(),
-      status: 'emitindo-via-api',
-    });
-
-    try {
-      const resposta = await emitirDareLote(dtos, { ambiente });
-      const zipPath = await salvarZipLote(resposta, logRef.id, ambiente);
-      await logRef.update({
-        status: 'emitida-via-api',
-        emitidaEm: admin.firestore.FieldValue.serverTimestamp(),
-        comprovantes: (resposta?.itensParaGeracao || []).map(resumirRetornoDare).slice(0, 50),
-        zipPath: zipPath || null,
-      });
-      return res.json({ ok: true, id: logRef.id, ambiente, total: dtos.length, zipPath, retorno: resposta });
-    } catch (erroApi) {
-      await logRef.update({
-        status: erroApi.indeterminado ? 'indeterminado' : 'falha-api',
-        erro: String(erroApi.message || erroApi).slice(0, 800),
-        falhouEm: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      throw erroApi;
-    }
-  } catch (e) {
-    const status = e.precisaConfirmar ? 428
-      : e.indeterminado ? 504
-      : (e.camposInvalidos || !e.httpStatus ? 400 : 502);
-    return res.status(status).json({
-      ok: false, error: e.message,
-      camposInvalidos: e.camposInvalidos || null,
-      indeterminado: !!e.indeterminado,
-    });
-  }
-});
+// EMISSÃO EM LOTE pela API: REMOVIDA de propósito (Paulo, 28/07/2026 —
+// "não vamos emitir em lote! já foi alertado sobre isso"). Guia de imposto sai
+// UMA A UMA, com preview conferido antes: um erro em lote vira dezenas de
+// cobranças erradas ao cliente, e a API não desfaz emissão. O "Lote DARE TXT"
+// segue existindo só como GERAÇÃO de arquivo pro portal (#287) — quem emite
+// ali é humano, com reCAPTCHA e conferência.
 
 // Reconhecimento do portal DARE (somente leitura, admin): estrutura real das
 // páginas DareAvulso/DareLote/GnreLote — o ground-truth pra automação (lote

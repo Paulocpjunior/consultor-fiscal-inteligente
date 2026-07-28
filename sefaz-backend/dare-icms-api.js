@@ -13,7 +13,8 @@
 // Autenticação: header `api-key`. A chave NUNCA vive no código nem em variável
 // de ambiente comum — vem do Secret Manager (uma por ambiente), com cache curto.
 //
-// Métodos: /receitas · /dare-unitario/emitir · /dare-lote/emitir
+// Métodos usados: /receitas · /dare-unitario/emitir
+// (/dare-lote/emitir existe na SEFAZ, mas NÃO é usado — ver nota no fim.)
 // ============================================================================
 
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
@@ -280,7 +281,7 @@ export function resumirRetornoDare(resposta) {
     valorJuros: item.valorJuros ?? null,
     valorMulta: item.valorMulta ?? null,
     temPdf: !!item.documentoImpressao,
-    zipLote: !!resposta?.zipDownload,
+
   };
 }
 
@@ -297,27 +298,6 @@ export async function emitirDareUnitario(dto, { ambiente = AMBIENTE_PADRAO } = {
   return resposta;
 }
 
-/**
- * Emite um LOTE de DAREs.
- *
- * O Swagger mostrou que o corpo NÃO é um array: é o DareLoteApiDTO, com os
- * DAREs em `itensParaGeracao` (e o ZIP dos documentos volta em zipDownload).
- * Regra da SEFAZ: o `gerarPDF` do PRIMEIRO item vale para o lote inteiro —
- * normalizamos para não sair lote com metade sem PDF.
- */
-export async function emitirDareLote(dtos, { ambiente = AMBIENTE_PADRAO } = {}) {
-  if (!Array.isArray(dtos) || dtos.length === 0) {
-    throw new Error('Lote vazio: informe ao menos um DARE.');
-  }
-  const gerarPDF = dtos[0].gerarPDF !== false;
-  const corpo = { itensParaGeracao: dtos.map((d) => ({ ...d, gerarPDF })) };
-  const resposta = await chamar('/dare-lote/emitir', { metodo: 'POST', corpo, ambiente });
-  const recusa = extrairRecusa(resposta);
-  if (recusa) {
-    const erro = new Error(recusa);
-    erro.recusadoPelaSefaz = true;
-    erro.corpo = resposta;
-    throw erro;
-  }
-  return resposta;
-}
+// Emissão em LOTE: NÃO existe aqui de propósito (Paulo, 28/07/2026). Guia de
+// imposto é emitida uma a uma, com preview conferido — erro em lote vira
+// dezenas de cobranças indevidas e a SEFAZ não desfaz emissão pela API.
