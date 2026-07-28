@@ -13,6 +13,7 @@
  * Botão "Exportar CSV" pra usar como to-do list operacional.
  */
 
+import CadastroClienteModal from './CadastroClienteModal';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
     fetchEmpresasStatusCaptura,
@@ -75,6 +76,9 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     // '' = todos os colaboradores; nome exato = só empresas daquele responsável.
     const [filtroColaborador, setFiltroColaborador] = useState('');
     const [busca, setBusca] = useState('');
+    // Cadastro do cliente (pendências + responsável) — abre pela própria linha,
+    // sem mandar o colaborador pra Carteira de Clientes em outra aba.
+    const [cadastroAberto, setCadastroAberto] = useState<any | null>(null);
     const [togglingCnpj, setTogglingCnpj] = useState<string | null>(null);
     const [autoUfRunning, setAutoUfRunning] = useState(false);
     const [capturandoCnpj, setCapturandoCnpj] = useState<string | null>(null);
@@ -584,6 +588,13 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                         ) : (
                                             <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">⚠ sem responsável</span>
                                         )}
+                                        <button
+                                            onClick={(ev) => { ev.stopPropagation(); setCadastroAberto(e); }}
+                                            className="mt-1 text-[10px] text-sky-600 dark:text-sky-400 hover:underline"
+                                            title="Cadastro do cliente: o que falta, o que isso quebra e a troca de responsável."
+                                        >
+                                            ✏️ cadastro / responsável
+                                        </button>
                                     </td>
                                     <td className="px-2 py-1.5 text-center">
                                         <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border ${certCor}`}>
@@ -846,6 +857,29 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                             throw new Error(r.error || 'falha ao salvar');
                         }
                     }}
+                />
+            )}
+
+            {cadastroAberto && (
+                <CadastroClienteModal
+                    currentUser={currentUser}
+                    empresa={{
+                        id: cadastroAberto.id,
+                        nome: cadastroAberto.nome,
+                        cnpj: cadastroAberto.cnpj,
+                        regime: cadastroAberto.regime,
+                        uf: cadastroAberto.uf,
+                        codMunIBGE: cadastroAberto.dadosFiscais?.codMunIBGE,
+                        inscricaoEstadual: cadastroAberto.dadosFiscais?.inscricaoEstadual,
+                        inscricaoMunicipal: cadastroAberto.dadosFiscais?.inscricaoMunicipal,
+                        ccmSp: cadastroAberto.ccmSp,
+                        email: cadastroAberto.dadosFiscais?.email,
+                        telefone: cadastroAberto.dadosFiscais?.telefone,
+                        responsaveis: cadastroAberto.responsaveis,
+                    }}
+                    onClose={() => setCadastroAberto(null)}
+                    onShowToast={(msg) => setFeedback({ tipo: 'sucesso', msg })}
+                    onAlterado={load}
                 />
             )}
         </div>
