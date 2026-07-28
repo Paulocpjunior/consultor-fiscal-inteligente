@@ -53,6 +53,14 @@ export function formatField(value: unknown, spec: FieldSpec): string {
     if (spec.tipo === 'N') return '0'.repeat(spec.tamanho);
     return ' '.repeat(spec.tamanho);
   }
+  // String VAZIA = "não informar este campo" — sai em BRANCO mesmo em campo
+  // numérico. Zero não é a mesma coisa que vazio: no E-Fiscal, um código que
+  // não existe no cadastro do cliente derruba a linha inteira ("tipo para
+  // inventário não cadastrado", caso 28/07 — 205 E020 recusados por um '1'
+  // fixo). Campo opcional em branco o sistema aceita.
+  if (value === '' && !spec.obrigatorio) {
+    return ' '.repeat(spec.tamanho);
+  }
 
   let formatted: string;
 
