@@ -45,6 +45,7 @@ const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
 // Semana num só card (mesmo grupo: prazos derivados do regime/cadastro).
 const VencimentosHub = lazy(() => import('./components/Vencimentos/VencimentosHub'));
 const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocumentosFiscais'));
+const RotinaFiscalPainel = lazy(() => import('./components/RotinaFiscalPainel'));
 const SpedFiscal = lazy(() => import('./components/SpedFiscal'));
 const NftsSp = lazy(() => import('./components/Nfts'));
 const AnaliseRelatorioSAGE = lazy(() => import('./components/AnaliseRelatorioSAGE'));
@@ -650,6 +651,29 @@ const App: React.FC = () => {
         }
     };
 
+    /**
+     * Rotina do Mês → tela da etapa. O painel diz ONDE o cliente parou; este
+     * mapa é o que faz o "próximo passo" virar um clique só (e já abre a ficha
+     * da empresa certa quando a etapa é a apuração).
+     */
+    const irParaEtapaDaRotina = (etapaId: string, empresa: { id?: string; regime?: string } | null) => {
+        if (etapaId === 'captura' || etapaId === 'validacao') {
+            selecionarTipo(SearchType.IMPORTA_XML);
+            return;
+        }
+        if (etapaId === 'apuracao') {
+            if (empresa?.regime === 'simples') {
+                selecionarTipo(SearchType.SIMPLES_NACIONAL);
+                if (empresa?.id) setSelectedSimplesEmpresaId(empresa.id);
+            } else {
+                selecionarTipo(SearchType.LUCRO_PRESUMIDO_REAL);
+                if (empresa?.id) setSelectedLucroEmpresaId(empresa.id);
+            }
+            return;
+        }
+        selecionarTipo(SearchType.OBRIGACOES_FISCAIS); // obrigações e guias (rito)
+    };
+
     return (
         <div className="min-h-screen transition-colors bg-slate-50 dark:bg-[var(--bg-page)]" style={{fontFamily:"'DM Sans',sans-serif"}}>
             <div className="container mx-auto px-4 max-w-screen-2xl">
@@ -941,6 +965,16 @@ const App: React.FC = () => {
                                     currentUser={currentUser}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {/* Rotina do Mês — a linha do processo (captura → validação →
+                            apuração → obrigações → guias), por cliente. */}
+                        {searchType === SearchType.ROTINA_FISCAL && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <RotinaFiscalPainel onIrPara={irParaEtapaDaRotina} />
                             </Suspense>
                             </ErrorBoundary>
                         )}

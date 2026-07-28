@@ -191,6 +191,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   emissão. A rota `/api/emitir-lote` foi REMOVIDA de propósito — não
   recriar. O "Lote DARE TXT" (#287) continua valendo porque é só
   GERAÇÃO de arquivo; quem emite é humano no portal, com reCAPTCHA.
+- **A ROTINA tem ORDEM e ela é uma TELA** (Paulo, 28/07 — "o colaborador
+  não está seguindo uma linha de processo: captura notas, valida as nfs,
+  cálculo de impostos, entrega de obrigações e emissão de guias", #341):
+  card "Rotina do Mês" (1º do menu) mostra, por cliente/competência, as 5
+  etapas e o PRÓXIMO PASSO = primeira etapa não fechada, com a ação e o
+  botão que leva à tela certa. Núcleo puro `sefaz-backend/rotina-fiscal.js`
+  (montarRotinaFiscal/resumirFunil, 25 testes) + rota
+  `/api/admin/rotina-fiscal/painel` (uma leitura por fonte, agrupada em
+  memória — nada por empresa). Regras: NENHUMA etapa se marca à mão (toda
+  prova vem de dado real); zero tarefa = âmbar (o cron mensal não gerou),
+  nunca sucesso; guia só fecha com o rito #293 completo (SharePoint +
+  baixa); apuração de Simples = faturamento lançado da competência
+  (`saveHistoricoCalculo` não é chamado por tela nenhuma), do Lucro = ficha
+  do mês. FEATURE NOVA de etapa fiscal DEVE aparecer nesse trilho.
 
 - ~~Paulo rodar `setup-cloud-schedulers.sh`~~ **FEITO 24/07** (3 crons
   órfãos criados e rodando OK: das/dctfweb/caixa-postal).
