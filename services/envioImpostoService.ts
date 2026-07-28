@@ -91,3 +91,40 @@ export async function enviarPorEmailDoColaborador(
     const { assunto: _a, corpo: _c, ...resto } = input;
     return registrarEnvioImposto({ ...resto, canal: 'email-app' });
 }
+
+
+// ── Painel do rito (#293) ───────────────────────────────────────────────────
+
+export interface PainelEnvios {
+    ok: boolean;
+    competencia?: string | null;
+    total?: number;
+    completos?: number;
+    incompletos?: number;
+    porTipo?: Record<string, number>;
+    pendencias?: Record<string, { qtd: number; acao: string; empresas: string[] }>;
+    semGestorEmCopia?: string[];
+    valorTotal?: number;
+    farol?: 'ok' | 'atencao' | 'vazio';
+    resumo?: string;
+    gestor?: string;
+    error?: string;
+}
+
+/**
+ * Agregado dos envios de imposto da competência: quantos saíram COMPLETOS
+ * (cópia no SharePoint + baixa da obrigação) e, quando não, a causa agrupada
+ * com a ação. Envio pela metade não é sucesso.
+ */
+export async function painelEnviosImposto(competencia?: string): Promise<PainelEnvios> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada' };
+    const token = await u.getIdToken();
+    const q = competencia ? `?competencia=${encodeURIComponent(competencia)}` : '';
+    const res = await fetch(`/api/admin/envio-imposto/painel${q}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ...data, ok: true };
+}
