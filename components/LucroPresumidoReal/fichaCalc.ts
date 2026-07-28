@@ -38,6 +38,10 @@ export function convertFichaToInput(
 
         faturamentoMonofasico: ficha.faturamentoMonofasico,
         valorIpi: ficha.valorIpi,
+        // ICMS-ST destacado também deduz a receita bruta (igual ao IPI). Faltava
+        // aqui: o card ao vivo deduzia e o relatório não, então os dois
+        // divergiam em qualquer empresa com ST destacado.
+        valorIcmsSt: ficha.valorIcmsSt,
         valorDevolucoes: ficha.valorDevolucoes,
         icmsVendas: ficha.icmsVendas,
 
@@ -60,6 +64,11 @@ export function convertFichaToInput(
         itensAvulsos: ficha.itensAvulsos,
 
         acumuladoAno: ficha.acumuladoAno,
+        // Saldo do trimestre anterior (LC 224/25). Sem isto a MEMÓRIA DE
+        // APURAÇÃO recalculava sem o saldo e mostrava um IRPJ maior que o do
+        // card ao vivo — caso A CASTELLANO 2T/2026: R$ 25.658,44 no relatório
+        // contra R$ 25.609,40 na tela.
+        saldoLimiteAnteriorLc224: ficha.saldoLimiteAnteriorLc224,
         acumuladoTrimestre: ficha.dadosTrimestrais,
 
         ipiRecolher: ficha.ipiRecolher,
