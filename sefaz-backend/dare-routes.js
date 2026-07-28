@@ -209,7 +209,16 @@ router.post('/api/emitir', requireAdmin, async (req, res) => {
         comprovante: resumo,
         pdfPath: pdfPath || null,
       });
-      return res.json({ ok: true, id: logRef.id, ambiente, preview, comprovante: resumo, pdfPath, retorno: resposta });
+      // Devolve o PDF ao front: é o documento que segue pro cliente e que o
+      // rito de envio (#293) arquiva na pasta IMPOSTOS do SharePoint. Sem
+      // isso o colaborador teria de baixar do portal à mão — de novo.
+      const item = resposta?.itensParaGeracao?.[0] || resposta || {};
+      return res.json({
+        ok: true, id: logRef.id, ambiente, preview,
+        comprovante: resumo, pdfPath,
+        pdfBase64: item.documentoImpressao || null,
+        retorno: resposta,
+      });
     } catch (erroApi) {
       // Rede caiu no meio do POST: NÃO dá pra afirmar que falhou — a SEFAZ
       // pode ter criado a guia e só a resposta ter se perdido. Marcar como
