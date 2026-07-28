@@ -4,6 +4,7 @@ import { SimplesNacionalEmpresa, SimplesNacionalNota, User } from '../types';
 import * as simplesService from '../services/simplesNacionalService';
 import { PlusIcon, InfoIcon, ShieldIcon, PencilIcon, TrashIcon } from './Icons';
 import { previewMesclagem, executarMesclagem, descreverResumo } from '../services/empresasMergeService';
+import SimplesBaseVarreduraModal from './SimplesBaseVarreduraModal';
 
 interface SimplesNacionalDashboardProps {
     empresas: SimplesNacionalEmpresa[];
@@ -75,6 +76,9 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
     }, [empresas]);
 
     const [busca, setBusca] = useState('');
+    // Conferência das bases (RBT12) — varre a carteira atrás de detalhamento
+    // por CNAE acima do total lançado, que inflava a faixa e o DAS.
+    const [varreduraAberta, setVarreduraAberta] = useState(false);
     const empresasFiltradas = useMemo(() => {
         const termo = busca.trim().toLowerCase();
         if (!termo) return empresasComResumo;
@@ -104,13 +108,22 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                         Gerencie as empresas e acompanhe os cálculos do Simples.
                     </p>
                 </div>
-                <button
-                    onClick={onAddNew}
-                    className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 transition-colors"
-                >
-                    <PlusIcon className="w-5 h-5" />
-                    Nova Empresa
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setVarreduraAberta(true)}
+                        className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                        title="Procura clientes cujo detalhamento por CNAE soma acima do total lançado do mês — era isso que inflava o RBT12 e deixava o DAS acima do PGDAS-D."
+                    >
+                        🔍 Conferir bases (RBT12)
+                    </button>
+                    <button
+                        onClick={onAddNew}
+                        className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 transition-colors"
+                    >
+                        <PlusIcon className="w-5 h-5" />
+                        Nova Empresa
+                    </button>
+                </div>
             </div>
             
             {empresas.length > 0 && (
@@ -270,6 +283,14 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                         Clique em "Nova Empresa" para começar a fazer seus cálculos do Simples Nacional.
                     </p>
                 </div>
+            )}
+
+            {varreduraAberta && (
+                <SimplesBaseVarreduraModal
+                    empresas={empresas}
+                    onClose={() => setVarreduraAberta(false)}
+                    onAbrirEmpresa={(id) => onSelectEmpresa(id, 'detalhe')}
+                />
             )}
         </div>
     );
