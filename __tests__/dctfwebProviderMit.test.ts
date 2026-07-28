@@ -131,6 +131,88 @@ describe('SerproProvider MIT — catálogo oficial', () => {
         expect(segundaChamada.dados.Debitos.Irpj.ListaDebitos).toHaveLength(1);
     });
 
+    it('apuração COM movimento não leva TransmissaoImediata (MIT-MSG_0020)', async () => {
+        // Caso real 28/07/2026, retificação de 2026-06: o CONSAPURACAO316
+        // devolve TransmissaoImediata, o encerramento respondia 400
+        // "O campo transmissaoImediata só deve ser enviado para apuração sem
+        // movimento" e a retificação parava na tela.
+        mockInvokeIntegraContador.mockResolvedValue({ dados: { protocoloEncerramento: 'PROTO-20', idApuracao: 20 } });
+
+        const r = await provider.encerrarApuracaoMit({
+            empresaCnpj: '55070577000161',
+            anoPA: 2026,
+            mesPA: 6,
+            dadosApuracaoMit: {
+                PeriodoApuracao: { MesApuracao: 6, AnoApuracao: 2026 },
+                DadosIniciais: { SemMovimento: false, QualificacaoPj: 1, TransmissaoImediata: true },
+                TransmissaoImediata: false,
+                Debitos: { Irpj: { ListaDebitos: [{ CodigoDebito: '208901', ValorDebito: 4608 }] } },
+            },
+        });
+
+        expect(r.protocolo).toBe('PROTO-20');
+        // Uma chamada só: o campo sai ANTES de ir ao SERPRO, sem retry.
+        expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(1);
+        const enviado = mockInvokeIntegraContador.mock.calls[0][0].dados;
+        expect(enviado.TransmissaoImediata).toBeUndefined();
+        expect(enviado.DadosIniciais.TransmissaoImediata).toBeUndefined();
+        expect(enviado.DadosIniciais.QualificacaoPj).toBe(1); // resto intacto
+        expect(r.camposRemovidos).toEqual(['TransmissaoImediata', 'DadosIniciais.TransmissaoImediata']);
+    });
+
+    it('apuração SEM movimento PRESERVA TransmissaoImediata (lá o campo é válido)', async () => {
+        mockInvokeIntegraContador.mockResolvedValue({ dados: { protocoloEncerramento: 'PROTO-SM' } });
+        await provider.encerrarApuracaoMit({
+            empresaCnpj: '55070577000161',
+            anoPA: 2026,
+            mesPA: 6,
+            dadosApuracaoMit: {
+                PeriodoApuracao: { MesApuracao: 6, AnoApuracao: 2026 },
+                DadosIniciais: { SemMovimento: true },
+                TransmissaoImediata: false,
+            },
+        });
+        expect(mockInvokeIntegraContador.mock.calls[0][0].dados.TransmissaoImediata).toBe(false);
+    });
+
+    it('rede de segurança: SERPRO apontando o campo em camelCase remove o PascalCase do payload', async () => {
+        mockInvokeIntegraContador
+            .mockRejectedValueOnce(new Error(
+                'SERPRO 400: [EntradaIncorreta-MIT-MSG_0021] - O campo tributacaoLucro não deve ser enviado nesta apuração.'
+            ))
+            .mockResolvedValueOnce({ dados: { protocoloEncerramento: 'PROTO-CASE' } });
+
+        const r = await provider.encerrarApuracaoMit({
+            empresaCnpj: '55070577000161',
+            anoPA: 2026,
+            mesPA: 6,
+            dadosApuracaoMit: {
+                PeriodoApuracao: { MesApuracao: 6, AnoApuracao: 2026 },
+                DadosIniciais: { SemMovimento: false, TributacaoLucro: 3 },
+                Debitos: { Irpj: { ListaDebitos: [{ CodigoDebito: '208901', ValorDebito: 10 }] } },
+            },
+        });
+
+        expect(r.protocolo).toBe('PROTO-CASE');
+        expect(mockInvokeIntegraContador.mock.calls[1][0].dados.DadosIniciais.TributacaoLucro).toBeUndefined();
+    });
+
+    it('"o campo X deve ser enviado" (obrigatório) NÃO vira remoção', async () => {
+        mockInvokeIntegraContador.mockRejectedValue(new Error(
+            'SERPRO 400: [MIT-MSG_0099] - O campo qualificacaoPj deve ser enviado.'
+        ));
+        await expect(provider.encerrarApuracaoMit({
+            empresaCnpj: '55070577000161',
+            anoPA: 2026,
+            mesPA: 6,
+            dadosApuracaoMit: {
+                PeriodoApuracao: { MesApuracao: 6, AnoApuracao: 2026 },
+                DadosIniciais: { SemMovimento: true, QualificacaoPj: 1 },
+            },
+        })).rejects.toThrow(/qualificacaoPj deve ser enviado/);
+        expect(mockInvokeIntegraContador).toHaveBeenCalledTimes(1);
+    });
+
     it('encerrarApuracaoMit NÃO insiste em erro sem padrão "não deve ser informado"', async () => {
         mockInvokeIntegraContador.mockRejectedValueOnce(new Error('SERPRO 500: indisponível'));
         await expect(provider.encerrarApuracaoMit({
