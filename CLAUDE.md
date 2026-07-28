@@ -109,7 +109,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   CFI) devolve RESUMO TÉCNICO — adequação ao tipo, ortografia,
   concordância, cláusulas por tipo — NUNCA altera o documento; cópia por
   e-mail ao gestor (jefferson@) com colaborador em CC; auditoria em
-  legalizacao_contratos_analises (arquivo NÃO é armazenado, só o resumo). Cron próprio `legalizacao-cron-diario` 7h30 BRT via
+  legalizacao_contratos_analises (arquivo NÃO é armazenado na análise, só o
+  resumo). **ENVIOS AO CLIENTE PAUSADOS desde 28/07** (Paulo: clientes já
+  receberam comunicados; regularizar o Jotform antes): chave `alertasAtivos`
+  em Ajustes nasce DESLIGADA e o cron respeita — sync roda, nenhum e-mail
+  sai; religar só na aba Ajustes. **Jotform Sign** (v1.0.17): a API do
+  Jotform NÃO cria nem baixa documentos do Sign (limitação da plataforma,
+  verificada 28/07) ⇒ o trilho é WEBHOOK. Fluxo: análise → colaborador
+  corrige → "Validar e arquivar" anexa a versão FINAL (vai pro Cofre
+  SharePoint em CONTRATOS/{empresa}) → botão abre o Sign → registra
+  ID/link do documento → webhook POST /api/legalizacao/sign/webhook?token=
+  {SEFAZ_CRON_SECRET} marca 'assinado' e avisa gestor+colaborador (payload
+  cru guardado em legalizacao_sign_eventos pra aprender a forma real).
+  PENDENTE do Paulo: cadastrar essa URL no Jotform Sign (Settings →
+  Integrations → Webhooks) e preencher signLink/contratosPasta em Ajustes. Cron próprio `legalizacao-cron-diario` 7h30 BRT via
   scripts/setup-scheduler.sh DO REPO NOVO (o setup-cloud-schedulers.sh
   daqui NÃO tem esse job). Estado 27/07: **app NO AR** — repo real ficou
   `Paulocpjunior/legaliza-o` (GitHub cortou os acentos), URL fixa
