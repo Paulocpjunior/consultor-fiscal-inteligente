@@ -174,34 +174,30 @@ export const calcularProporcaoMajoradaLc224 = (
     if (receitaPeriodoAtual <= 0) return 0;
     if (!majoracaoLc224Vigente(tributo, ano, trimestre)) return 0;
 
-    const limiteAnual = obterLimiteAnualLc224(tributo, ano);
+    // Sublimite de R$ 1,25 mi POR TRIMESTRE, que se RENOVA a cada trimestre
+    // (IN RFB 2.305/2025 art. 15 §2º). Confirmado pelo relatório oficial do
+    // cliente (EDUARDO GUERRA, 2T/2026): faturamento de R$ 13,2 mi no trimestre
+    // — muito acima do teto anual — e mesmo assim "Limite do Trimestre
+    // 1.250.000,00", com o excedente majorado. Não existe "estourou o anual →
+    // 100% dali em diante": o teto anual (5 mi; 3,75 mi na CSLL/2026) é apenas
+    // a soma dos sublimites dos trimestres VIGENTES.
+    const primeiroTrimestreVigente = (tributo === 'CSLL' && ano === 2026) ? 2 : 1;
+    const trimestresAnterioresVigentes = Math.max(0, trimestre - primeiroTrimestreVigente);
 
-    // Regra dos trimestres subsequentes: limite anual já estourado em períodos anteriores
-    // → 100% da receita do período atual é majorada (independente do sublimite).
-    if (receitaAnoAcumuladaAnterior >= limiteAnual) {
-        return 1;
-    }
+    // §4º: o que sobrou de trimestre anterior é transportado — mas só dá pra
+    // saber isso conhecendo o faturamento anterior. Com o dado ausente (0), NÃO
+    // presumimos sobra: presumir inflava o limite (2,5 mi no 2T em vez de 1,25
+    // mi), majorava de MENOS e o imposto saía abaixo do devido — caso EDUARDO
+    // GUERRA 2T/2026, R$ 2.500 a menos de IRPJ que o relatório oficial.
+    const anteriorInformado = receitaAnoAcumuladaAnterior > 0;
+    const saldoTransportado = anteriorInformado
+        ? Math.max(0, SUBLIMITE_TRIMESTRAL_LC224 * trimestresAnterioresVigentes - receitaAnoAcumuladaAnterior)
+        : 0;
 
-    // Sublimite acumulado até o trimestre = teto anual do tributo rateado pelos
-    // trimestres de calendário decorridos (limiteAnual × trimestre / 4). Isso é
-    // CRÍTICO para a CSLL/2026: o acumulador de receita (receitaAnoAcumuladaAnterior
-    // = acumuladoAno) inclui o 1T, então a curva de sublimite tem que usar a MESMA
-    // base de trimestres de calendário, senão receita e sublimite ficam
-    // desalinhados e a CSLL é majorada mesmo com o anual ≤ 3,75 mi (bug corrigido).
-    //   - IRPJ 2026:  5,00 mi × trimestre/4  = 1,25 mi × trimestre  (idêntico ao anterior).
-    //   - CSLL 2026:  3,75 mi × trimestre/4  → 0,9375/1,875/2,8125/3,75 mi (4T = teto).
-    //   - 2027+:      5,00 mi × trimestre/4.
-    // §3º: majora só o excedente do sublimite disponível. §4º (carry-forward) fica
-    // embutido no acumulado. NOTA: a LC 224/25 majora a PRESUNÇÃO do Lucro
-    // Presumido, que é trimestral por lei (Lei 9.430/96 art. 1º); Lucro Real não
-    // usa presunção. periodoApuracao é preservado só para compat futura.
-    const sublimiteAcumuladoAteAgora = limiteAnual * trimestre / 4;
-    const sublimiteDisponivelPeriodo = sublimiteAcumuladoAteAgora - receitaAnoAcumuladaAnterior;
+    const sublimiteDisponivel = SUBLIMITE_TRIMESTRAL_LC224 + saldoTransportado;
+    if (receitaPeriodoAtual <= sublimiteDisponivel) return 0;
 
-    if (receitaPeriodoAtual <= sublimiteDisponivelPeriodo) return 0;
-    if (sublimiteDisponivelPeriodo < 0) return 1; // já estourou todo o sublimite acumulado
-
-    const excedente = receitaPeriodoAtual - sublimiteDisponivelPeriodo;
+    const excedente = receitaPeriodoAtual - sublimiteDisponivel;
     return Math.min(1, Math.max(0, excedente / receitaPeriodoAtual));
 };
 
