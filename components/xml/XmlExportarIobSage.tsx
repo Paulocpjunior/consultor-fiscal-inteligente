@@ -32,6 +32,9 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // no E-Fiscal; mandar um código inexistente recusa TODOS os produtos.
     // Em branco (padrão) o campo não é informado — e o layout permite.
     const [tipoInventario, setTipoInventario] = useState<string>('');
+    // Notas que ficaram FORA do arquivo. Antes isso era console.warn: o .FML
+    // saía só com produtos e o E-Fiscal ainda dizia "importado com sucesso".
+    const [falhas, setFalhas] = useState<Array<{ documento: string; motivo: string }>>([]);
     const [exporting, setExporting] = useState(false);
 
     // Catálogo de empresas (leve) para o seletor pesquisável — não carrega docs.
@@ -102,10 +105,21 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 numeroEmpresaEfiscal,
                 tipoInventario: tipoInventario.trim(),
             });
+            const st = result.estatisticas;
+            setFalhas(result.falhas);
+            // Só baixa se ALGUMA nota entrou. Arquivo só com produtos importa
+            // "com sucesso" no E-Fiscal e não lança nada — pior que erro.
+            if (st.notasNoArquivo === 0) {
+                onShowToast?.(
+                    `Nenhuma das ${st.documentos} nota(s) pôde ser gerada — arquivo NÃO baixado. Veja os motivos abaixo.`,
+                );
+                return;
+            }
             downloadBlob(result.blob, result.fileName);
             onShowToast?.(
-                `Arquivo ${result.fileName} gerado: ${result.estatisticas.documentos} NF, ` +
-                `${result.estatisticas.participantes} participantes, ${result.estatisticas.produtos} produtos.`,
+                `Arquivo ${result.fileName}: ${st.notasNoArquivo} de ${st.documentos} NF, ` +
+                `${st.participantes} participantes, ${st.produtos} produtos.`
+                + (result.falhas.length > 0 ? ` ⚠ ${result.falhas.length} item(ns) ficaram de fora.` : ''),
             );
         } catch (err: any) {
             onShowToast?.(`Falha ao gerar arquivo: ${err?.message || err}`);
@@ -116,6 +130,25 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     return (
         <div className="space-y-3">
+            {falhas.length > 0 && (
+                <div className="border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+                    <p className="text-xs font-bold text-red-800 dark:text-red-300">
+                        {falhas.length} item(ns) ficaram FORA do arquivo
+                    </p>
+                    <p className="text-[11px] text-red-700 dark:text-red-400">
+                        O E-Fiscal importa o que receber e diz "sucesso" mesmo assim — o que está aqui simplesmente
+                        não vai chegar lá.
+                    </p>
+                    <ul className="mt-1 text-[11px] text-slate-700 dark:text-slate-300 space-y-0.5 max-h-40 overflow-y-auto">
+                        {falhas.slice(0, 50).map((f, i) => (
+                            <li key={i}><strong>{f.documento}</strong> — {f.motivo}</li>
+                        ))}
+                    </ul>
+                    {falhas.length > 50 && (
+                        <p className="text-[11px] text-slate-500 mt-1">…e mais {falhas.length - 50}.</p>
+                    )}
+                </div>
+            )}
             <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3">
                 <p className="text-xs text-emerald-800 dark:text-emerald-300">
                     Gera arquivo <strong>.FML</strong> no Layout Folhamatic Fiscal v2.0.06 (largura fixa, Windows-1252, CRLF) para importação no E-Fiscal IOB SAGE.
