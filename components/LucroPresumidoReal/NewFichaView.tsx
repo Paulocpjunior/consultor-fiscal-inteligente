@@ -53,6 +53,8 @@ interface NewFichaViewProps {
     acumuladoServicoHospitalar: number; setAcumuladoServicoHospitalar: (v: number) => void;
     acumuladoFinanceira: number; setAcumuladoFinanceira: (v: number) => void;
     acumuladoAluguel: number; setAcumuladoAluguel: (v: number) => void;
+    /** Receita dos TRIMESTRES ANTERIORES do ano — limite da majoração LC 224/25. */
+    acumuladoAnoLc224: number; setAcumuladoAnoLc224: (v: number) => void;
 
     // Filiais
     fichaFilialComercio: number; setFichaFilialComercio: (v: number) => void;
@@ -289,6 +291,26 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
                                     )}
                                     <CurrencyInput label="Acumulado Financeira" value={p.acumuladoFinanceira} onChange={p.setAcumuladoFinanceira} className="bg-white dark:bg-slate-800 p-2 rounded border border-sky-100 dark:border-sky-900" />
                                     <CurrencyInput label="Acumulado Aluguel" value={p.acumuladoAluguel} onChange={p.setAcumuladoAluguel} className="bg-white dark:bg-slate-800 p-2 rounded border border-sky-100 dark:border-sky-900" />
+                                </div>
+
+                                {/* Limite da majoração (LC 224/25): o sublimite é de R$ 1,25 mi POR
+                                    TRIMESTRE e renova a cada um. O saldo não usado em trimestre
+                                    anterior é transportado (§4º) — mas só dá pra saber isso
+                                    informando quanto a empresa faturou antes. Em branco, o cálculo
+                                    usa só o limite do próprio trimestre (conservador). */}
+                                <div className="mt-3 pt-3 border-t border-sky-200 dark:border-sky-800">
+                                    <CurrencyInput
+                                        label="Receita dos TRIMESTRES ANTERIORES do ano (majoração LC 224/25)"
+                                        value={p.acumuladoAnoLc224}
+                                        onChange={p.setAcumuladoAnoLc224}
+                                        className="bg-white dark:bg-slate-800 p-2 rounded border border-sky-100 dark:border-sky-900"
+                                    />
+                                    <p className="text-[10px] text-sky-600 dark:text-sky-400 mt-1">
+                                        Só afeta o <strong>limite da presunção majorada</strong>: o sublimite é de
+                                        R$ 1.250.000 por trimestre e o que sobrou de trimestre anterior é transportado.
+                                        Deixando em branco, usamos apenas o limite deste trimestre — nunca presumimos
+                                        sobra que a empresa não teve.
+                                    </p>
                                 </div>
                             </div>
                         )}
