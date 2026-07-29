@@ -114,16 +114,14 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
             onShowToast?.('Nenhum documento para exportar com os filtros atuais.');
             return;
         }
-        // Bloqueio conhecido: confirma antes, porque o E-Fiscal vai recusar
-        // essas notas e o "importação concluída" não deixa isso claro.
+        // BLOQUEIO DURO (Paulo, 29/07): erro conhecido não gera arquivo. Gerar,
+        // importar e voltar com recusa é perda de tempo — corrige antes.
         if (preflight && preflight.bloqueios > 0) {
-            const ok = window.confirm(
-                `${preflight.bloqueios} nota(s) serão recusadas pelo E-Fiscal:\n\n`
-                + preflight.problemas.filter(p => p.gravidade === 'bloqueia')
-                    .map(p => `• ${p.qtd}× ${p.causa}`).join('\n')
-                + `\n\nGerar mesmo assim com as ${preflight.notasNoArquivo} nota(s) que passam?`,
+            onShowToast?.(
+                `Arquivo NÃO gerado: ${preflight.bloqueios} nota(s) seriam recusadas pelo E-Fiscal. `
+                + `Corrija o que está no quadro de conferência e clique em Reconferir.`,
             );
-            if (!ok) return;
+            return;
         }
         setExporting(true);
         try {
@@ -164,7 +162,12 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20'
                 }`}>
                     <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                        🚦 Conferência antes de gerar — {preflight.resumo}
+                        {preflight.farol === 'bloqueado' ? '🔒' : '🚦'} Conferência antes de gerar — {preflight.resumo}
+                        {preflight.farol === 'bloqueado' && (
+                            <span className="block font-normal text-[11px] mt-0.5">
+                                Os itens marcados com ✕ IMPEDEM a geração do arquivo. Corrija-os e clique em Reconferir.
+                            </span>
+                        )}
                     </p>
                     {preflight.problemas.map((p, i) => (
                         <div key={i} className="border-l-2 pl-2"
@@ -360,7 +363,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         <div className="flex justify-between items-center gap-3 flex-wrap pt-2">
                             <p className="text-[11px] text-slate-600 dark:text-slate-300 flex-1 min-w-[240px]">
                                 {preflight?.farol === 'bloqueado'
-                                    ? <><strong className="text-red-700 dark:text-red-400">Corrija antes de gerar:</strong> {preflight.bloqueios} nota(s) serão recusadas pelo E-Fiscal. Arrume o que está no quadro acima e clique em <strong>Reconferir</strong>.</>
+                                    ? <><strong className="text-red-700 dark:text-red-400">Geração bloqueada:</strong> {preflight.bloqueios} nota(s) seriam recusadas pelo E-Fiscal. Corrija o que está no quadro acima e clique em <strong>Reconferir</strong> — o arquivo só sai limpo.</>
                                     : preflight?.farol === 'atencao'
                                         ? <>Nada trava a importação — as ressalvas do quadro acima são para conferir.</>
                                         : preflight
@@ -378,15 +381,15 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 </button>
                                 <button
                                     onClick={handleExportar}
-                                    disabled={exporting || filtrados.length === 0}
-                                    className={`px-4 py-2 text-sm text-white rounded-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed ${
-                                        preflight?.farol === 'bloqueado'
-                                            ? 'bg-amber-600 hover:bg-amber-700'
-                                            : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                                    disabled={exporting || filtrados.length === 0 || (preflight?.bloqueios ?? 0) > 0}
+                                    title={(preflight?.bloqueios ?? 0) > 0
+                                        ? 'Há erro que o E-Fiscal recusa. Corrija e clique em Reconferir.'
+                                        : 'Gera o .FML para importar no E-Fiscal.'}
+                                    className="px-4 py-2 text-sm text-white rounded-lg font-bold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                     {exporting ? 'Gerando...'
-                                        : preflight?.farol === 'bloqueado'
-                                            ? `Gerar assim mesmo (${preflight.notasNoArquivo} de ${preflight.documentos})`
+                                        : (preflight?.bloqueios ?? 0) > 0
+                                            ? `🔒 Corrija ${preflight!.bloqueios} nota(s) para gerar`
                                             : 'Gerar arquivo .FML'}
                                 </button>
                             </div>
