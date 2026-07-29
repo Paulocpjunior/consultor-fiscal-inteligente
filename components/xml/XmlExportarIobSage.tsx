@@ -341,16 +341,55 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                     {filtrados.reduce((a, d) => a + (d.itens?.length || 0), 0)}
                                 </p>
                             </div>
+                            {/* Conferência ao lado dos totais: o colaborador vê o
+                                veredito no MESMO lugar onde decide gerar. */}
+                            <div className={`rounded-lg p-3 text-center ${
+                                !preflight ? 'bg-slate-50 dark:bg-slate-700/40'
+                                : preflight.farol === 'bloqueado' ? 'bg-red-50 dark:bg-red-900/20'
+                                : preflight.farol === 'atencao' ? 'bg-amber-50 dark:bg-amber-900/20'
+                                : 'bg-emerald-50 dark:bg-emerald-900/20'}`}>
+                                <p className="text-[10px] uppercase text-slate-500">Vão chegar no E-Fiscal</p>
+                                <p className={`text-lg font-bold ${
+                                    preflight?.farol === 'bloqueado' ? 'text-red-700 dark:text-red-400'
+                                    : 'text-emerald-700 dark:text-emerald-400'}`}>
+                                    {preflight ? `${preflight.notasNoArquivo}/${preflight.documentos}` : '—'}
+                                </p>
+                            </div>
                         </div>
 
-                        <div className="flex justify-end pt-2">
-                            <button
-                                onClick={handleExportar}
-                                disabled={exporting || filtrados.length === 0}
-                                className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed font-bold"
-                            >
-                                {exporting ? 'Gerando...' : 'Gerar arquivo .FML'}
-                            </button>
+                        <div className="flex justify-between items-center gap-3 flex-wrap pt-2">
+                            <p className="text-[11px] text-slate-600 dark:text-slate-300 flex-1 min-w-[240px]">
+                                {preflight?.farol === 'bloqueado'
+                                    ? <><strong className="text-red-700 dark:text-red-400">Corrija antes de gerar:</strong> {preflight.bloqueios} nota(s) serão recusadas pelo E-Fiscal. Arrume o que está no quadro acima e clique em <strong>Reconferir</strong>.</>
+                                    : preflight?.farol === 'atencao'
+                                        ? <>Nada trava a importação — as ressalvas do quadro acima são para conferir.</>
+                                        : preflight
+                                            ? <>Conferência feita: nada que o E-Fiscal costume recusar.</>
+                                            : <>Busque um recorte para o app conferir antes de gerar.</>}
+                            </p>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={buscar}
+                                    disabled={loading || !competencia}
+                                    className="px-3 py-2 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-40"
+                                    title="Recarrega os documentos e refaz a conferência — use depois de corrigir."
+                                >
+                                    {loading ? 'Conferindo…' : '↻ Reconferir'}
+                                </button>
+                                <button
+                                    onClick={handleExportar}
+                                    disabled={exporting || filtrados.length === 0}
+                                    className={`px-4 py-2 text-sm text-white rounded-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed ${
+                                        preflight?.farol === 'bloqueado'
+                                            ? 'bg-amber-600 hover:bg-amber-700'
+                                            : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                                >
+                                    {exporting ? 'Gerando...'
+                                        : preflight?.farol === 'bloqueado'
+                                            ? `Gerar assim mesmo (${preflight.notasNoArquivo} de ${preflight.documentos})`
+                                            : 'Gerar arquivo .FML'}
+                                </button>
+                            </div>
                         </div>
                     </>
                 )}
