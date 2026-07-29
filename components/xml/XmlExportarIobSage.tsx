@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { User, DocumentoFiscal } from '../../types';
 import { listDocumentos, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { exportarParaIobSage, downloadBlob } from '../../services/iobSageExportService';
+import { conferirAntesDeGerar, type ResultadoPreflight } from '../../services/iobSagePreflight';
 import { formatCurrency } from '../../services/xmlParserService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 
@@ -88,6 +89,21 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         });
     }, [docs, direcao]);
 
+    // FREIO: confere o que seria enviado ANTES de baixar. Roda sobre o recorte
+    // atual, sem clique — o colaborador vê o problema antes de gastar uma
+    // rodada de importação no E-Fiscal (Paulo, 29/07).
+    const preflight: ResultadoPreflight | null = useMemo(() => {
+        if (!buscou || filtrados.length === 0) return null;
+        try {
+            return conferirAntesDeGerar(filtrados, {
+                numeroEmpresaEfiscal,
+                tipoInventario: tipoInventario.trim(),
+            });
+        } catch {
+            return null;
+        }
+    }, [buscou, filtrados, numeroEmpresaEfiscal, tipoInventario]);
+
     const totalValor = useMemo(
         () => filtrados.reduce((acc, d) => acc + (d.totais?.vNF || 0), 0),
         [filtrados],
@@ -97,6 +113,17 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         if (filtrados.length === 0) {
             onShowToast?.('Nenhum documento para exportar com os filtros atuais.');
             return;
+        }
+        // Bloqueio conhecido: confirma antes, porque o E-Fiscal vai recusar
+        // essas notas e o "importação concluída" não deixa isso claro.
+        if (preflight && preflight.bloqueios > 0) {
+            const ok = window.confirm(
+                `${preflight.bloqueios} nota(s) serão recusadas pelo E-Fiscal:\n\n`
+                + preflight.problemas.filter(p => p.gravidade === 'bloqueia')
+                    .map(p => `• ${p.qtd}× ${p.causa}`).join('\n')
+                + `\n\nGerar mesmo assim com as ${preflight.notasNoArquivo} nota(s) que passam?`,
+            );
+            if (!ok) return;
         }
         setExporting(true);
         try {
@@ -130,6 +157,41 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     return (
         <div className="space-y-3">
+            {preflight && preflight.problemas.length > 0 && (
+                <div className={`rounded-lg border p-3 space-y-2 ${
+                    preflight.farol === 'bloqueado'
+                        ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20'
+                        : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20'
+                }`}>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                        🚦 Conferência antes de gerar — {preflight.resumo}
+                    </p>
+                    {preflight.problemas.map((p, i) => (
+                        <div key={i} className="border-l-2 pl-2"
+                            style={{ borderColor: p.gravidade === 'bloqueia' ? '#dc2626' : '#d97706' }}>
+                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                {p.gravidade === 'bloqueia' ? '✕' : '!'} {p.qtd}× {p.causa}
+                            </p>
+                            <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                                No E-Fiscal: {p.oQueAconteceLa}
+                            </p>
+                            <p className="text-[11px] text-sky-700 dark:text-sky-400">→ {p.acao}</p>
+                            <details>
+                                <summary className="text-[10px] cursor-pointer text-slate-500">ver exemplos</summary>
+                                <ul className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5 space-y-0.5">
+                                    {p.exemplos.map((e, j) => <li key={j}>{e}</li>)}
+                                </ul>
+                            </details>
+                        </div>
+                    ))}
+                </div>
+            )}
+            {preflight && preflight.problemas.length === 0 && (
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-2">
+                    🚦 {preflight.resumo}
+                </p>
+            )}
+
             {falhas.length > 0 && (
                 <div className="border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
                     <p className="text-xs font-bold text-red-800 dark:text-red-300">
