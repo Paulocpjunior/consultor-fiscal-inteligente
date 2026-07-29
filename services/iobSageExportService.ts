@@ -109,6 +109,12 @@ interface ExportarParams {
      * E-Fiscal do cliente. Vazio (padrão) = não informar.
      */
     tipoInventario?: string;
+    /**
+     * Natureza da atividade + overrides da empresa (tela Correlação CFOP).
+     * Sem isto, TODO CFOP caía na inversão mecânica e a configuração da
+     * equipe não surtia efeito nenhum no arquivo.
+     */
+    cfopCtx?: CfopCtx;
     /** Numero da empresa no E-Fiscal (campo NÚMERO DA EMPRESA do E001). */
     numeroEmpresaEfiscal: number;
     /** UF da empresa (para emitter de saidas). */
@@ -197,8 +203,18 @@ export function serieDaNota(d: DocumentoFiscal): string {
  * entradas (com início 1, 2 e 3)". A conversão usa a regra que já existia no
  * backend (correlacionarCfop), a mesma da tela Correlação CFOP.
  */
-export function cfopParaEscriturar(cfop: string | undefined, direcao: string): string {
-    return correlacionarCfop(cfop || '', direcao === 'entrada' ? 'entrada' : 'saida');
+export interface CfopCtx {
+    naturezaAtividade?: string | null;
+    cfopOverrides?: Record<string, string> | null;
+}
+
+export function cfopParaEscriturar(
+    cfop: string | undefined, direcao: string, ctx?: CfopCtx,
+): string {
+    return correlacionarCfop(cfop || '', direcao === 'entrada' ? 'entrada' : 'saida', {
+        naturezaAtividade: ctx?.naturezaAtividade ?? null,
+        cfopOverrides: ctx?.cfopOverrides ?? null,
+    });
 }
 
 /**
@@ -417,14 +433,14 @@ function isVendaFutura(cfop: string | undefined): boolean {
     return ['5922', '6922', '5117', '6117', '5118', '6118'].includes(c);
 }
 
-function buildE201sFromDoc(d: DocumentoFiscal): string[] {
+function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx): string[] {
     const c = commonNF(d);
     const linhas: string[] = [];
 
     // Agrupa itens por CFOP.
     const porCfop = new Map<string, DocumentoFiscalItem[]>();
     for (const it of d.itens || []) {
-        const cfop = cfopParaEscriturar(it.cfop, d.direcao) || '0000';
+        const cfop = cfopParaEscriturar(it.cfop, d.direcao, ctxCfop) || '0000';
         if (!porCfop.has(cfop)) porCfop.set(cfop, []);
         porCfop.get(cfop)!.push(it);
     }
@@ -497,7 +513,7 @@ function buildE221(d: DocumentoFiscal): string {
     });
 }
 
-function buildE222sFromDoc(d: DocumentoFiscal): string[] {
+function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx): string[] {
     const c = commonNF(d);
     return (d.itens || []).map((it, idx) => {
         const aliquota = it.vProd > 0 && it.vICMS > 0 ? (it.vICMS / it.vProd) * 100 : 0;
@@ -509,7 +525,7 @@ function buildE222sFromDoc(d: DocumentoFiscal): string[] {
             'NÚMERO N.F.': c.numero,
             'CÓDIGO DO CLIENTE/FORNECEDOR': c.codigoPart,
             'Nº ITEM': parseInt(it.nItem || String(idx + 1), 10) || (idx + 1),
-            'CFOP': cfopParaEscriturar(it.cfop, d.direcao),
+            'CFOP': cfopParaEscriturar(it.cfop, d.direcao, ctxCfop),
             'CÓDIGO DO PRODUTO/SERVIÇO': codigoProduto(it.cProd),
             'ALÍQUOTA DO ICMS': aliquota,
             'QUANTIDADE': it.qCom || 0,
@@ -581,7 +597,7 @@ export interface ExportarResult {
 }
 
 export function exportarParaIobSage(params: ExportarParams): ExportarResult {
-    const { documentos, numeroEmpresaEfiscal, tipoInventario = '' } = params;
+    const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx } = params;
     if (!documentos.length) {
         throw new Error('Nenhum documento para exportar.');
     }
@@ -629,13 +645,13 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
         const bloco: string[] = [];
         try {
             bloco.push(buildE200(d));
-            const e201s = buildE201sFromDoc(d);
+            const e201s = buildE201sFromDoc(d, cfopCtx);
             bloco.push(...e201s);
             count201 += e201s.length;
 
             if ((d.itens || []).length > 0) {
                 bloco.push(buildE221(d));
-                const e222s = buildE222sFromDoc(d);
+                const e222s = buildE222sFromDoc(d, cfopCtx);
                 bloco.push(...e222s);
                 count222 += e222s.length;
             }

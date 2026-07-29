@@ -810,3 +810,29 @@ export function summarize(docs: DocumentoFiscal[]): DashboardSummary {
 }
 
 export const xmlCollections = COLLECTIONS;
+
+/**
+ * Dados fiscais de UMA empresa (natureza da atividade + overrides de CFOP).
+ *
+ * A exportação IOB/SAGE precisa deles para correlacionar o CFOP: o que a
+ * equipe configura na tela Correlação CFOP não estava chegando ao arquivo —
+ * tudo caía na inversão mecânica, ignorando a configuração (Paulo, 29/07).
+ */
+export async function getDadosFiscaisEmpresa(
+    fonte: 'simples' | 'lucro',
+    empresaId: string,
+): Promise<{ naturezaAtividade?: string | null; cfopOverrides?: Record<string, string> | null } | null> {
+    if (!isFirebaseConfigured || !db || !empresaId) return null;
+    try {
+        const colecao = fonte === 'simples' ? 'simples_empresas' : 'lucro_empresas';
+        const snap = await getDoc(doc(db, colecao, empresaId));
+        if (!snap.exists()) return null;
+        const df = (snap.data() as any)?.dadosFiscais || {};
+        return {
+            naturezaAtividade: df.naturezaAtividade ?? null,
+            cfopOverrides: df.cfopOverrides ?? null,
+        };
+    } catch {
+        return null;
+    }
+}
