@@ -10,7 +10,7 @@
  * escritório cadastra os seus tipos no E-Fiscal, e um código inexistente
  * derruba a linha. O campo é OPCIONAL no layout: em branco, passa.
  */
-import { exportarParaIobSage } from '../services/iobSageExportService';
+import { exportarParaIobSage, numeroDaNota, serieDaNota, cfopParaEscriturar } from '../services/iobSageExportService';
 import type { DocumentoFiscal } from '../types';
 
 // posições 129..132 (1-based) do registro E020
@@ -182,5 +182,66 @@ describe('data inválida não pode mudar a largura da linha', () => {
             const reg = linha.slice(0, 4);
             if (TAMANHOS[reg]) expect(linha.replace(/\x1A$/, '')).toHaveLength(TAMANHOS[reg]!);
         }
+    });
+});
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// 29/07: com as notas entrando, o E-Fiscal apontou 3 erros — e os números se
+// explicam entre si:
+//   89× E201 campo 08 — "CFOP inválido para o tipo de nota. Informe um CFOP
+//        de entradas (1, 2 e 3)" → mandávamos o CFOP do EMITENTE (5xxx/6xxx).
+//   56× E200 campo 06 — "só pode conter números e deve ser maior que 0"
+//        → notas sem `numero` no documento iam com zero.
+//  145× E342 — "nota fiscal não cadastrada" = 89 + 56: toda nota recusada
+//        deixa a chave órfã. Corrigidas as duas causas, o E342 se resolve.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Chave real: cUF(2) AAMM(4) CNPJ(14) mod(2) série(3) nNF(9) resto(10). */
+const chaveCom = (serie: string, numero: string) =>
+    '35' + '2607' + '32602701000197' + '55'
+    + serie.padStart(3, '0') + numero.padStart(9, '0') + '1'.repeat(10);
+
+describe('número da nota — resgate pela chave de acesso', () => {
+    it('usa o número do documento quando existe', () => {
+        expect(numeroDaNota({ numero: '4321', chave: chaveCom('1', '209514') } as any)).toBe(4321);
+    });
+
+    it('sem número no documento, extrai da chave (posições 26-34)', () => {
+        expect(numeroDaNota({ chave: chaveCom('1', '209514') } as any)).toBe(209514);
+        expect(serieDaNota({ chave: chaveCom('7', '209514') } as any)).toBe('7');
+    });
+
+    it('REGRESSÃO: E200 não sai mais com número zerado', () => {
+        const d: any = { ...docCapturado(), numero: '', chave: chaveCom('1', '209514') };
+        const r = exportarParaIobSage({ documentos: [d as DocumentoFiscal], numeroEmpresaEfiscal: 587 });
+        const e200 = r.conteudo.split('\r\n').find((l) => l.startsWith('E200'))!;
+        expect(e200.slice(15, 25)).toBe('0000209514');
+    });
+});
+
+describe('CFOP de ENTRADA (E201 campo 08 / E222)', () => {
+    it('converte o CFOP do emitente no de entrada', () => {
+        expect(cfopParaEscriturar('6102', 'entrada')[0]).toBe('2');
+        expect(cfopParaEscriturar('5101', 'entrada')[0]).toBe('1');
+        expect(cfopParaEscriturar('7101', 'entrada')[0]).toBe('3');
+    });
+
+    it('saída mantém o CFOP original (é a operação da própria empresa)', () => {
+        expect(cfopParaEscriturar('5102', 'saida')).toBe('5102');
+    });
+
+    it('REGRESSÃO: E201 e E222 não saem mais com CFOP 5xxx/6xxx numa entrada', () => {
+        const d: any = {
+            ...docCapturado(),
+            itens: [{ ...(docCapturado() as any).itens[0], cfop: '6102' }],
+        };
+        const r = exportarParaIobSage({ documentos: [d as DocumentoFiscal], numeroEmpresaEfiscal: 587 });
+        const linhas = r.conteudo.split('\r\n');
+        const e201 = linhas.find((l) => l.startsWith('E201'))!;
+        const e222 = linhas.find((l) => l.startsWith('E222'))!;
+        expect(e201).toMatch(/2102/);
+        expect(e201).not.toMatch(/6102/);
+        expect(e222).toMatch(/2102/);
     });
 });

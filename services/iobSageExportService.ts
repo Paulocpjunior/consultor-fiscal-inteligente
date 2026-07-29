@@ -6,6 +6,8 @@
 
 import { buildFile, buildRecord, LAYOUT_VERSION } from './iobSageLayout';
 import { LAYOUT } from './iobSageLayoutData';
+// MESMA regra de correlação do backend — CFOP de entrada não se duplica aqui.
+import { correlacionarCfop } from '../sefaz-backend/cfop-correlacao.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
@@ -164,6 +166,42 @@ function ufDaChave(chave: string | undefined): string {
 interface ParticipanteNF { cnpjCpf: string; nome: string; uf: string; ie?: string }
 
 /**
+ * Número da NF. Quando o documento não traz (56 das 145 notas do caso 28/07),
+ * sai da CHAVE de acesso: cUF(2) AAMM(4) CNPJ(14) mod(2) série(3) nNF(9).
+ * Sem isso o E200 ia com zero e o E-Fiscal recusava — "Campo 06, só pode
+ * conter números e deve ser maior que 0".
+ */
+export function numeroDaNota(d: DocumentoFiscal): number {
+    const doDoc = parseInt(String(d.numero || '').replace(/\D/g, ''), 10);
+    if (Number.isFinite(doDoc) && doDoc > 0) return doDoc;
+    const chave = String(d.chave || '').replace(/\D/g, '');
+    if (chave.length === 44) {
+        const n = parseInt(chave.slice(25, 34), 10);
+        if (Number.isFinite(n) && n > 0) return n;
+    }
+    return 0;
+}
+
+/** Série da NF, com o mesmo resgate pela chave (posições 23-25). */
+export function serieDaNota(d: DocumentoFiscal): string {
+    const doDoc = String(d.serie || '').trim();
+    if (doDoc) return doDoc.slice(0, 3);
+    const chave = String(d.chave || '').replace(/\D/g, '');
+    if (chave.length === 44) return String(parseInt(chave.slice(22, 25), 10) || 1);
+    return '1';
+}
+
+/**
+ * CFOP para ESCRITURAR. Na nota de ENTRADA, o CFOP do XML é o do EMITENTE
+ * (5xxx/6xxx/7xxx = saída dele) — e o E-Fiscal recusa: "Informe um CFOP de
+ * entradas (com início 1, 2 e 3)". A conversão usa a regra que já existia no
+ * backend (correlacionarCfop), a mesma da tela Correlação CFOP.
+ */
+export function cfopParaEscriturar(cfop: string | undefined, direcao: string): string {
+    return correlacionarCfop(cfop || '', direcao === 'entrada' ? 'entrada' : 'saida');
+}
+
+/**
  * Data utilizável do documento. `importadoEm` não existe nos docs vindos da
  * CAPTURA (o backend grava `createdAt`), e `new Date(undefined)` vira Invalid
  * Date — que formatava com 10 caracteres num campo de 8 e derrubava a linha
@@ -301,9 +339,9 @@ function commonNF(d: DocumentoFiscal) {
     return {
         es: d.direcao === 'entrada' ? 'E' : 'S',
         especie,
-        serie: (d.serie || '1').slice(0, 3),
+        serie: serieDaNota(d),
         subserie: '',
-        numero: parseInt(d.numero || '0', 10) || 0,
+        numero: numeroDaNota(d),
         codigoPart: codigoParticipante(part.cnpjCpf),
         dEmi,
         ufNF: sanitizeAlfa(part.uf || '').slice(0, 2).toUpperCase() || '  ',
@@ -386,7 +424,7 @@ function buildE201sFromDoc(d: DocumentoFiscal): string[] {
     // Agrupa itens por CFOP.
     const porCfop = new Map<string, DocumentoFiscalItem[]>();
     for (const it of d.itens || []) {
-        const cfop = it.cfop || '0000';
+        const cfop = cfopParaEscriturar(it.cfop, d.direcao) || '0000';
         if (!porCfop.has(cfop)) porCfop.set(cfop, []);
         porCfop.get(cfop)!.push(it);
     }
@@ -471,7 +509,7 @@ function buildE222sFromDoc(d: DocumentoFiscal): string[] {
             'NÚMERO N.F.': c.numero,
             'CÓDIGO DO CLIENTE/FORNECEDOR': c.codigoPart,
             'Nº ITEM': parseInt(it.nItem || String(idx + 1), 10) || (idx + 1),
-            'CFOP': it.cfop || '',
+            'CFOP': cfopParaEscriturar(it.cfop, d.direcao),
             'CÓDIGO DO PRODUTO/SERVIÇO': codigoProduto(it.cProd),
             'ALÍQUOTA DO ICMS': aliquota,
             'QUANTIDADE': it.qCom || 0,
