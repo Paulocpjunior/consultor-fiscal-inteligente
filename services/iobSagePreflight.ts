@@ -18,6 +18,7 @@
 import type { DocumentoFiscal } from '../types';
 import {
     exportarParaIobSage, participanteDoDoc, numeroDaNota, cfopParaEscriturar,
+    type CfopCtx,
 } from './iobSageExportService';
 
 export type GravidadePreflight = 'bloqueia' | 'atencao';
@@ -72,7 +73,7 @@ class Balde {
  */
 export function conferirAntesDeGerar(
     documentos: DocumentoFiscal[],
-    opts: { numeroEmpresaEfiscal: number; tipoInventario?: string },
+    opts: { numeroEmpresaEfiscal: number; tipoInventario?: string; cfopCtx?: CfopCtx },
 ): ResultadoPreflight {
     const balde = new Balde();
     const docs = documentos || [];
@@ -141,7 +142,7 @@ export function conferirAntesDeGerar(
         }
 
         for (const it of itens) {
-            const cfopFinal = cfopParaEscriturar(it.cfop, d.direcao);
+            const cfopFinal = cfopParaEscriturar(it.cfop, d.direcao, opts.cfopCtx);
             const primeiro = String(cfopFinal || '')[0];
             const esperado = d.direcao === 'entrada' ? ['1', '2', '3'] : ['5', '6', '7'];
             if (!primeiro || !esperado.includes(primeiro)) {

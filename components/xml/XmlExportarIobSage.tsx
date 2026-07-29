@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { User, DocumentoFiscal } from '../../types';
-import { listDocumentos, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
+import { listDocumentos, getEmpresasDisponiveis, getDadosFiscaisEmpresa, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { exportarParaIobSage, downloadBlob } from '../../services/iobSageExportService';
 import { conferirAntesDeGerar, type ResultadoPreflight } from '../../services/iobSagePreflight';
+import { conferirCorrelacaoCfop } from '../../services/cfopConferencia';
+import type { CfopCtx } from '../../services/iobSageExportService';
 import { formatCurrency } from '../../services/xmlParserService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 
@@ -36,6 +38,9 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // Notas que ficaram FORA do arquivo. Antes isso era console.warn: o .FML
     // saía só com produtos e o E-Fiscal ainda dizia "importado com sucesso".
     const [falhas, setFalhas] = useState<Array<{ documento: string; motivo: string }>>([]);
+    // Natureza da atividade + overrides da empresa (tela Correlação CFOP).
+    // Sem isso, a configuração da equipe não chegava ao arquivo.
+    const [cfopCtx, setCfopCtx] = useState<CfopCtx | undefined>(undefined);
     const [exporting, setExporting] = useState(false);
 
     // Catálogo de empresas (leve) para o seletor pesquisável — não carrega docs.
@@ -46,6 +51,15 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     }, [currentUser]);
 
     const empresaSelecionada = empresas.find(e => e.id === empresaId) || null;
+
+    // Configuração de CFOP da empresa escolhida.
+    useEffect(() => {
+        let alive = true;
+        if (!empresaSelecionada) { setCfopCtx(undefined); return; }
+        getDadosFiscaisEmpresa(empresaSelecionada.fonte, empresaSelecionada.id)
+            .then(df => { if (alive) setCfopCtx(df ? { naturezaAtividade: df.naturezaAtividade, cfopOverrides: df.cfopOverrides } : undefined); });
+        return () => { alive = false; };
+    }, [empresaSelecionada?.id, empresaSelecionada?.fonte]);
 
     const buscar = async () => {
         if (!competencia) {
@@ -98,11 +112,18 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
             return conferirAntesDeGerar(filtrados, {
                 numeroEmpresaEfiscal,
                 tipoInventario: tipoInventario.trim(),
+                cfopCtx,
             });
         } catch {
             return null;
         }
-    }, [buscou, filtrados, numeroEmpresaEfiscal, tipoInventario]);
+    }, [buscou, filtrados, numeroEmpresaEfiscal, tipoInventario, cfopCtx]);
+
+    // Evidência da correlação: origem → destino, com o motivo da decisão.
+    const correlacao = useMemo(
+        () => (buscou && filtrados.length > 0 ? conferirCorrelacaoCfop(filtrados, cfopCtx) : null),
+        [buscou, filtrados, cfopCtx],
+    );
 
     const totalValor = useMemo(
         () => filtrados.reduce((acc, d) => acc + (d.totais?.vNF || 0), 0),
@@ -129,6 +150,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 documentos: filtrados,
                 numeroEmpresaEfiscal,
                 tipoInventario: tipoInventario.trim(),
+                cfopCtx,
             });
             const st = result.estatisticas;
             setFalhas(result.falhas);
@@ -193,6 +215,54 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <p className="text-[11px] text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-2">
                     🚦 {preflight.resumo}
                 </p>
+            )}
+
+            {correlacao && correlacao.linhas.length > 0 && (
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                            🔁 Correlação de CFOP (entrada) — {correlacao.resumo}
+                        </p>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Natureza da empresa: <strong>{correlacao.naturezaAtividade || 'não declarada'}</strong>
+                        </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-[11px]">
+                            <thead className="text-slate-500 dark:text-slate-400">
+                                <tr className="text-left">
+                                    <th className="py-1 pr-2">Do emitente</th>
+                                    <th className="py-1 pr-2">Escriturado</th>
+                                    <th className="py-1 pr-2 text-right">Itens</th>
+                                    <th className="py-1 pr-2 text-right">Valor</th>
+                                    <th className="py-1">Por quê</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {correlacao.linhas.map((l, i) => (
+                                    <tr key={i} className={`border-t border-slate-100 dark:border-slate-700 ${
+                                        l.conferir ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}`}>
+                                        <td className="py-1 pr-2 font-mono">{l.origem}</td>
+                                        <td className="py-1 pr-2 font-mono font-bold">
+                                            {l.conferir && '⚠ '}{l.destino}
+                                        </td>
+                                        <td className="py-1 pr-2 text-right">{l.qtd}</td>
+                                        <td className="py-1 pr-2 text-right">{formatCurrency(l.valor)}</td>
+                                        <td className="py-1 text-slate-600 dark:text-slate-300">{l.explicacao}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    {correlacao.aConferir > 0 && (
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                            As linhas em âmbar dependem de decisão do contador — o app preservou o CFOP do emitente.
+                            Para fixar a regra desta empresa, use <strong>Correlação CFOP</strong> no cadastro
+                            (o override vale aqui também) ou declare a <strong>natureza da atividade</strong> nos
+                            dados fiscais.
+                        </p>
+                    )}
+                </div>
             )}
 
             {falhas.length > 0 && (
