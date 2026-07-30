@@ -50,7 +50,9 @@ router.get('/cofre-checklist', requireAdmin, async (req, res) => {
         const snaps = await fetchAllDocs(
             db.collection('documentos_fiscais')
                 .where('direcao', '==', 'saida')
-                .select('empresaCnpj', 'chave', 'origem', 'dhEmi'),
+                // capturadoPor entra pra classificar o trilho (importação manual
+                // não confirma migração — mesma régua da Cobertura de Saída).
+                .select('empresaCnpj', 'chave', 'origem', 'dhEmi', 'capturadoPor'),
             { label: 'cofre-checklist' },
         );
         const docsSaida = snaps.map((s) => s.data() || {});

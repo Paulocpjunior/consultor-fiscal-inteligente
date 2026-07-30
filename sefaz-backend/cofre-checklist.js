@@ -1,18 +1,22 @@
 // ============================================================================
 // sefaz-backend/cofre-checklist.js  (PURO — sem firebase/io, testável)
 //
-// CHECKLIST DE MIGRAÇÃO DO COFRE DE SAÍDA: por empresa, cruza o histórico de
-// NF-e mod 55 de SAÍDA com a origem 'email' (cofre CFI) e diz quem falta
-// migrar da SIEG. A SEFAZ não entrega saída ao próprio emissor (Rejeição 641),
-// então saída SÓ entra por cofre de e-mail ou autXML — quem tem saída
-// histórica e nunca recebeu via cofre está, na prática, dependendo da SIEG.
+// CHECKLIST DE MIGRAÇÃO DA SAÍDA (mod 55): por empresa, cruza o histórico de
+// NF-e de SAÍDA com os DOIS trilhos automáticos — cofre de e-mail (origem
+// 'email') e autXML (origem 'sefaz'/'autxml', que só existe com o CNPJ do
+// escritório autorizado na nota: a SEFAZ não entrega saída ao emissor,
+// Rejeição 641). Quem tem saída histórica e nunca recebeu por NENHUM trilho
+// automático está, na prática, dependendo da SIEG.
 //
-//   cofre-ativo   → recebeu saída via cofre nos últimos N dias (migrada ✔)
-//   cofre-parado  → já recebeu via cofre, mas nada há >N dias (config caiu?)
-//   falta-migrar  → tem saída mod 55 histórica e NUNCA via cofre → configurar
-//                   xml@spassessoriacontabil.com.br no emissor do cliente
-//   sem-saida-55  → nenhum mod 55 de saída no histórico (não emite ou nunca
-//                   capturamos — vide relatório de cobertura de saída)
+// v2 (30/07, print do Paulo): a v1 só olhava o cofre — Eduardo Guerra com 60
+// saídas chegando NO DIA via autXML aparecia "🔴 Falta migrar". Farol honesto:
+// migrada é migrada, por qualquer trilho.
+//
+//   ativo         → recebeu saída por trilho automático nos últimos N dias
+//                   (campo `trilho` diz qual: cofre | autxml | ambos)
+//   parado        → já recebeu por trilho automático, mas nada há >N dias
+//   falta-migrar  → tem saída mod 55 histórica e NUNCA por trilho automático
+//   sem-saida-55  → nenhum mod 55 de saída no histórico
 // ============================================================================
 
 const DIA_MS = 24 * 3600 * 1000;
@@ -29,9 +33,24 @@ function tsMs(v) {
     return Number.isFinite(ms) ? ms : null;
 }
 
+// Trilho AUTOMÁTICO do documento (mesma régua da Cobertura de Saída):
+//  'cofre'  → origem 'email';
+//  'autxml' → origem 'sefaz'/'autxml' SEM fonte manual (conferência, consulta
+//             por chave, importação, agente) — captura que chegou sozinha;
+//  null     → manual/desconhecido: não confirma migração nenhuma.
+export function trilhoAutomatico(origem, fonte = null) {
+    const o = String(origem || '').toLowerCase();
+    const f = String(fonte || '').toLowerCase();
+    if (o === 'email') return 'cofre';
+    if (o === 'sharepoint_auto' || o === 'manual') return null;
+    if (/conferencia|consulta-chave|manual|agent|importac/.test(f)) return null;
+    if (o === 'sefaz' || o === 'autxml') return 'autxml';
+    return null;
+}
+
 /**
  * @param {{empresas: Array<{empresaId,cnpj,nome,regime}>,
- *          docsSaida: Array<{empresaCnpj,chave,origem,dhEmi}>,
+ *          docsSaida: Array<{empresaCnpj,chave,origem,dhEmi,capturadoPor}>,
  *          agoraMs: number, inatividadeDias?: number}} args
  */
 export function analisarChecklistCofre({ empresas, docsSaida, agoraMs, inatividadeDias = 30 }) {
@@ -44,8 +63,10 @@ export function analisarChecklistCofre({ empresas, docsSaida, agoraMs, inativida
             regime: e.regime,
             totalSaidas55: 0,
             viaCofre: 0,
+            viaAutXml: 0,
             ultimaSaidaMs: null,
             ultimaSaidaCofreMs: null,
+            ultimaSaidaAutXmlMs: null,
         });
     }
 
@@ -58,32 +79,49 @@ export function analisarChecklistCofre({ empresas, docsSaida, agoraMs, inativida
         linha.totalSaidas55++;
         const ms = tsMs(d?.dhEmi);
         if (ms && (!linha.ultimaSaidaMs || ms > linha.ultimaSaidaMs)) linha.ultimaSaidaMs = ms;
-        if (d?.origem === 'email') {
+        const trilho = trilhoAutomatico(d?.origem, d?.capturadoPor?.fonte);
+        if (trilho === 'cofre') {
             linha.viaCofre++;
             if (ms && (!linha.ultimaSaidaCofreMs || ms > linha.ultimaSaidaCofreMs)) linha.ultimaSaidaCofreMs = ms;
+        } else if (trilho === 'autxml') {
+            linha.viaAutXml++;
+            if (ms && (!linha.ultimaSaidaAutXmlMs || ms > linha.ultimaSaidaAutXmlMs)) linha.ultimaSaidaAutXmlMs = ms;
         }
     }
 
     const limiteMs = agoraMs - inatividadeDias * DIA_MS;
     const linhas = [...porCnpj.values()].map((l) => {
+        const viaAuto = l.viaCofre + l.viaAutXml;
+        const ultimaAutoMs = Math.max(l.ultimaSaidaCofreMs ?? 0, l.ultimaSaidaAutXmlMs ?? 0) || null;
+        const cofreRecente = (l.ultimaSaidaCofreMs ?? 0) >= limiteMs;
+        const autXmlRecente = (l.ultimaSaidaAutXmlMs ?? 0) >= limiteMs;
+
         let status = 'sem-saida-55';
+        let trilho = null;
         if (l.totalSaidas55 > 0) {
-            if (l.viaCofre === 0) status = 'falta-migrar';
-            else if ((l.ultimaSaidaCofreMs ?? 0) >= limiteMs) status = 'cofre-ativo';
-            else status = 'cofre-parado';
+            if (viaAuto === 0) status = 'falta-migrar';
+            else if (cofreRecente || autXmlRecente) {
+                status = 'ativo';
+                trilho = cofreRecente && autXmlRecente ? 'ambos' : (autXmlRecente ? 'autxml' : 'cofre');
+            } else {
+                status = 'parado';
+                trilho = l.viaAutXml > 0 && l.viaCofre > 0 ? 'ambos' : (l.viaAutXml > 0 ? 'autxml' : 'cofre');
+            }
         }
-        return { ...l, status };
+        return { ...l, viaAuto, ultimaAutoMs, status, trilho };
     });
 
-    // Pior primeiro: falta-migrar > cofre-parado > sem-saida-55 > cofre-ativo
-    const peso = { 'falta-migrar': 3, 'cofre-parado': 2, 'sem-saida-55': 1, 'cofre-ativo': 0 };
+    // Pior primeiro: falta-migrar > parado > sem-saida-55 > ativo
+    const peso = { 'falta-migrar': 3, 'parado': 2, 'sem-saida-55': 1, 'ativo': 0 };
     linhas.sort((a, b) => (peso[b.status] - peso[a.status]) || (b.totalSaidas55 - a.totalSaidas55));
 
     const resumo = {
         totalEmpresas: linhas.length,
         comSaida55: linhas.filter((l) => l.totalSaidas55 > 0).length,
-        cofreAtivo: linhas.filter((l) => l.status === 'cofre-ativo').length,
-        cofreParado: linhas.filter((l) => l.status === 'cofre-parado').length,
+        ativos: linhas.filter((l) => l.status === 'ativo').length,
+        ativosCofre: linhas.filter((l) => l.status === 'ativo' && (l.trilho === 'cofre' || l.trilho === 'ambos')).length,
+        ativosAutXml: linhas.filter((l) => l.status === 'ativo' && (l.trilho === 'autxml' || l.trilho === 'ambos')).length,
+        parados: linhas.filter((l) => l.status === 'parado').length,
         faltaMigrar: linhas.filter((l) => l.status === 'falta-migrar').length,
         semSaida55: linhas.filter((l) => l.status === 'sem-saida-55').length,
         docsSemEmpresa,

@@ -1,8 +1,10 @@
 /**
- * Checklist de migração do cofre de saída: quem já recebe mod 55 via e-mail
- * (cofre CFI) × quem ainda depende da SIEG (falta configurar o e-mail).
+ * Checklist de migração da saída mod 55 — v2 reconhece os DOIS trilhos
+ * automáticos (cofre de e-mail E autXML). A v1 só olhava o cofre: empresa com
+ * saídas chegando NO DIA via autXML aparecia "Falta migrar" (caso Eduardo
+ * Guerra, print do Paulo 30/07).
  */
-import { modeloDaChave, analisarChecklistCofre } from '../sefaz-backend/cofre-checklist';
+import { modeloDaChave, trilhoAutomatico, analisarChecklistCofre } from '../sefaz-backend/cofre-checklist';
 
 const AGORA = new Date('2026-07-22T12:00:00Z').getTime();
 const DIA = 24 * 3600 * 1000;
@@ -22,35 +24,70 @@ describe('modeloDaChave', () => {
     });
 });
 
-describe('analisarChecklistCofre', () => {
+describe('trilhoAutomatico', () => {
+    it('email → cofre; sefaz/autxml → autxml', () => {
+        expect(trilhoAutomatico('email')).toBe('cofre');
+        expect(trilhoAutomatico('sefaz')).toBe('autxml');
+        expect(trilhoAutomatico('autxml')).toBe('autxml');
+    });
+    it('importação manual/conferência/consulta-chave NÃO confirma trilho', () => {
+        expect(trilhoAutomatico('manual')).toBeNull();
+        expect(trilhoAutomatico('sharepoint_auto')).toBeNull();
+        expect(trilhoAutomatico('sefaz', 'consulta-chave-importar')).toBeNull();
+        expect(trilhoAutomatico('sefaz', 'conferencia-sieg')).toBeNull();
+        expect(trilhoAutomatico('importacao-zip')).toBeNull();
+    });
+});
+
+describe('analisarChecklistCofre (v2 — cofre + autXML)', () => {
     const empresas = [
         { empresaId: 'a', cnpj: '11111111000111', nome: 'Apatel', regime: 'lucro' },
         { empresaId: 'b', cnpj: '22222222000122', nome: 'Beta', regime: 'lucro' },
         { empresaId: 'c', cnpj: '33333333000133', nome: 'Gama', regime: 'simples' },
         { empresaId: 'd', cnpj: '44444444000144', nome: 'Delta Serviços', regime: 'simples' },
+        { empresaId: 'e', cnpj: '55555555000155', nome: 'Eduardo Guerra', regime: 'lucro' },
     ];
     const docsSaida = [
         // Apatel: cofre ativo (saída via email há 2 dias)
         { empresaCnpj: '11111111000111', chave: chave('55'), origem: 'email', dhEmi: iso(2) },
         { empresaCnpj: '11111111000111', chave: chave('55'), origem: 'email', dhEmi: iso(10) },
-        // Beta: só saídas históricas SEM origem email (era SIEG) → falta migrar
+        // Beta: só saídas históricas SEM trilho automático (era SIEG) → falta migrar
         { empresaCnpj: '22222222000122', chave: chave('55'), origem: 'importacao-zip', dhEmi: iso(20) },
-        // Gama: recebeu via cofre mas parou (45 dias) → cofre-parado
+        // Gama: recebeu via cofre mas parou (45 dias) → parado
         { empresaCnpj: '33333333000133', chave: chave('55'), origem: 'email', dhEmi: iso(45) },
         // Delta: só NFC-e 65 (não conta) → sem-saida-55
         { empresaCnpj: '44444444000144', chave: chave('65'), origem: 'email', dhEmi: iso(1) },
+        // Eduardo Guerra (o caso do print): saídas chegando HOJE via autXML,
+        // zero via cofre — na v1 era "falta migrar"; agora é ATIVO · autXML.
+        { empresaCnpj: '55555555000155', chave: chave('55'), origem: 'sefaz', dhEmi: iso(0) },
+        { empresaCnpj: '55555555000155', chave: chave('55'), origem: 'sefaz', dhEmi: iso(1) },
+        // importação por consulta-chave não muda o status (não confirma trilho)
+        { empresaCnpj: '22222222000122', chave: chave('55'), origem: 'sefaz', dhEmi: iso(3), capturadoPor: { fonte: 'consulta-chave-importar' } },
         // órfão
         { empresaCnpj: '99999999000199', chave: chave('55'), origem: 'email', dhEmi: iso(1) },
     ];
 
     const r = analisarChecklistCofre({ empresas, docsSaida, agoraMs: AGORA, inatividadeDias: 30 });
+    const por = Object.fromEntries(r.linhas.map(l => [l.cnpj, l]));
 
-    it('classifica: ativo / falta-migrar / parado / sem-saida-55', () => {
-        const por = Object.fromEntries(r.linhas.map(l => [l.cnpj, l]));
-        expect(por['11111111000111'].status).toBe('cofre-ativo');
+    it('classifica: ativo (cofre) / falta-migrar / parado / sem-saida-55', () => {
+        expect(por['11111111000111'].status).toBe('ativo');
+        expect(por['11111111000111'].trilho).toBe('cofre');
         expect(por['22222222000122'].status).toBe('falta-migrar');
-        expect(por['33333333000133'].status).toBe('cofre-parado');
+        expect(por['33333333000133'].status).toBe('parado');
         expect(por['44444444000144'].status).toBe('sem-saida-55');
+    });
+
+    it('CASO DO PRINT: saída chegando via autXML = ATIVO · autXML (não "falta migrar")', () => {
+        expect(por['55555555000155'].status).toBe('ativo');
+        expect(por['55555555000155'].trilho).toBe('autxml');
+        expect(por['55555555000155'].viaAutXml).toBe(2);
+        expect(por['55555555000155'].viaCofre).toBe(0);
+    });
+
+    it('importação via consulta-chave não vira trilho automático', () => {
+        expect(por['22222222000122'].viaAutXml).toBe(0);
+        expect(por['22222222000122'].totalSaidas55).toBe(2);
     });
 
     it('ordena pior primeiro (falta-migrar no topo)', () => {
@@ -58,22 +95,22 @@ describe('analisarChecklistCofre', () => {
     });
 
     it('mod 65 não conta como saída 55; órfão vai pro contador', () => {
-        const delta = r.linhas.find(l => l.cnpj === '44444444000144')!;
-        expect(delta.totalSaidas55).toBe(0);
+        expect(por['44444444000144'].totalSaidas55).toBe(0);
         expect(r.resumo.docsSemEmpresa).toBe(1);
     });
 
-    it('resumo agregado', () => {
+    it('resumo agregado com quebra por trilho', () => {
         expect(r.resumo).toMatchObject({
-            totalEmpresas: 4, comSaida55: 3,
-            cofreAtivo: 1, cofreParado: 1, faltaMigrar: 1, semSaida55: 1,
+            totalEmpresas: 5, comSaida55: 4,
+            ativos: 2, ativosCofre: 1, ativosAutXml: 1,
+            parados: 1, faltaMigrar: 1, semSaida55: 1,
             inatividadeDias: 30,
         });
     });
 
-    it('última saída via cofre registrada', () => {
-        const apatel = r.linhas.find(l => l.cnpj === '11111111000111')!;
-        expect(apatel.viaCofre).toBe(2);
-        expect(apatel.ultimaSaidaCofreMs).toBe(AGORA - 2 * DIA);
+    it('última saída por trilho registrada', () => {
+        expect(por['11111111000111'].viaCofre).toBe(2);
+        expect(por['11111111000111'].ultimaSaidaCofreMs).toBe(AGORA - 2 * DIA);
+        expect(por['55555555000155'].ultimaAutoMs).toBe(AGORA);
     });
 });
