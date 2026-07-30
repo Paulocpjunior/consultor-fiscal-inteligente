@@ -12,6 +12,7 @@ import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
 import { coletarSaudeCrons, decidirAlertaCron } from './cron-health.js';
+import { retomarCronsInterrompidos } from './cron-retomada.js';
 import { enviarEmail, isGraphConfigured } from './graph-provider.js';
 import { parseDestinatarios } from './email-destinatarios-helper.js';
 
@@ -80,6 +81,20 @@ router.post('/health-alerta', requireCronAuth, async (req, res) => {
     try {
         const db = fa().firestore();
         const saude = await coletarSaudeCrons(db);
+
+        // Retomada AUTOMÁTICA fora de deploy: coletarSaudeCrons acabou de curar
+        // órfãos ('iniciado' >2h → 'interrompido'). O boot-retomada (server.js)
+        // só cobre morte por DEPLOY (a instância nova re-dispara); varredura
+        // morta por scale-down/OOM sem deploy ficava esperando o cron do dia
+        // seguinte. Aqui, o health-alerta (3x/dia) re-dispara na hora — a
+        // reivindicação transacional em cron-retomada garante disparo único.
+        let retomada = null;
+        try {
+            retomada = await retomarCronsInterrompidos({ port: process.env.PORT || 8080 });
+        } catch (e) {
+            console.warn('[cron-health-alerta] retomada automática falhou:', e.message);
+            retomada = { ok: false, motivo: e.message };
+        }
         const stateRef = db.collection('cron_health_alerta_state').doc('singleton');
         const snap = await stateRef.get();
         const estadoAnterior = snap.exists ? snap.data() : null;
@@ -115,6 +130,10 @@ router.post('/health-alerta', requireCronAuth, async (req, res) => {
             problemas: decisao.problemas.length,
             alertado: decisao.alertar,
             emailStatus,
+            retomada: retomada ? {
+                ok: retomada.ok,
+                retomados: (retomada.resumo || []).filter((r) => r.retomado).map((r) => r.collection),
+            } : null,
         });
     } catch (e) {
         console.error('[cron-health-alerta] erro:', e.message);
