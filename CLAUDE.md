@@ -151,7 +151,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   depender de clique pós-deploy). (4) UpdateBanner obrigatório desde o
   1º deploy — Safari segura HTML antigo mesmo com no-store. O card
   Legalização foi REMOVIDO do CFI; deep-link `services/moduloDeepLink.ts`
-  ficou (padrão de URL fixa pros hubs internos).
+  ficou (padrão de URL fixa pros hubs internos). **PARCELAMENTO vence MÊS A
+  MÊS** (Paulo, 30/07 — v1.0.19): a data do Jotform é a DATA-BASE (1ª
+  parcela), não vencimento; `projetarProximaParcela` devolve a próxima
+  parcela + o número dela (`Parcela 47/60`), acordo cumprido vira 🏁
+  concluído (não alerta, não é vencido) e a idempotência do alerta virou
+  `{item}_p{parcela}_{faixa}`. Fim de 144 "vencidos" falsos. **FAROL HONESTO
+  VALE PRA CONTAGEM** (Paulo, 30/07 — v1.0.20): o painel mostrava 20 de ~150
+  itens na janela -7/+30d por um `slice(0,20)` mudo e contradizia os próprios
+  selos dos cards. Regra: lista cortada SEMPRE diz "mostrando X de N";
+  `/resumo` manda proximosTotal + quebra por categoria + proximosTruncado, e
+  a janela é uma função pura só (`itensNaJanela` no back, `dentroDaJanela` no
+  front, com teste cruzado) — nunca reimplementada por painel.
 
 ## Fila de features acordadas (com requisitos)
 
