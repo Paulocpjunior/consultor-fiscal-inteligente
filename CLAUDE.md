@@ -162,7 +162,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   selos dos cards. Regra: lista cortada SEMPRE diz "mostrando X de N";
   `/resumo` manda proximosTotal + quebra por categoria + proximosTruncado, e
   a janela é uma função pura só (`itensNaJanela` no back, `dentroDaJanela` no
-  front, com teste cruzado) — nunca reimplementada por painel.
+  front, com teste cruzado) — nunca reimplementada por painel. **E-MAIL AO
+  CLIENTE COM IDENTIDADE PRÓPRIA** (Paulo, 30/07 — v1.0.21→v1.0.23):
+  destinatário sai do campo dedicado "E-mail Cliente" do Jotform
+  (EMAIL_CLIENTE_TERMOS ordena específico→genérico; PARSER_VERSAO 3
+  re-sincronizou sozinho). Casca `montarLayoutEmail` (pura) com logo da SP
+  INLINE por `cid:` (anexo isInline no Graph — imagem hospedada fora chega
+  bloqueada), cores do próprio logo (#0E3BFA/#091D8D) e rodapé Site ·
+  Instagram · WhatsApp, tudo em Ajustes (Instagram nasce VAZIO de propósito).
+  **A cor ALTERNA pelo farol** (`coresPorPrazo` → chama o mesmo
+  `classificarVencimento`, sem limiar paralelo): vencido vermelho, ≤7d
+  laranja, ≤30d âmbar, em dia verde, sem data azul; selo com o prazo na
+  faixa e `EMOJI_FAROL` no assunto (antes 90d saía 🟡 com faixa azul).
+  Botão "✉️ Enviar teste pra mim" (rota `/alertas/teste`) manda SÓ pro
+  e-mail do admin do token — dá pra validar layout com os envios PAUSADOS.
+  `departamento`/`motivoRodape` são parâmetros: a casca serve lembrete de
+  QUALQUER departamento. PENDENTE (Paulo escolheu "deixar pronto por ora",
+  30/07): portar a casca pro CFI pros e-mails de guia do rito #293 — hoje
+  eles não têm template nenhum e os repos não compartilham código.
 
 ## Fila de features acordadas (com requisitos)
 
