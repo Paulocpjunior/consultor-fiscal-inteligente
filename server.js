@@ -2928,4 +2928,12 @@ app.post('/api/tarefas/gerar-empresa', express.json(), async (req, res) => {
 // ao cliente. PRECISA ser o ultimo middleware registrado.
 app.use(errorMiddleware);
 
-app.listen(PORT, () => console.log('Servidor rodando na porta ' + PORT));
+app.listen(PORT, () => {
+    console.log('Servidor rodando na porta ' + PORT);
+    // Retomada automática de crons mortos por deploy/reinício: a instância
+    // nova (esta) re-dispara varreduras marcadas 'interrompido' há pouco —
+    // antes a retomada era manual ("Forçar captura agora" no painel).
+    import('./sefaz-backend/cron-retomada.js')
+        .then(({ agendarRetomadaAposBoot }) => agendarRetomadaAposBoot({ port: PORT }))
+        .catch((e) => console.warn('[server] retomada automática indisponível:', e.message));
+});
