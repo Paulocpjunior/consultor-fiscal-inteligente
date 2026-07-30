@@ -655,9 +655,20 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   // cadastrada. Sem isto, a nota ficava empresaId=escritório com direção
   // 'desconhecida': invisível como saída do cliente na Cobertura de Saída,
   // fora do trilho autXML do painel e fora do filtro por empresa.
-  if (direcao === 'desconhecida' && (meta.cnpjEmit || meta.cnpjDest)) {
+  //
+  // Também roda quando NÃO há dono explícito (empresaId vazio) — caso
+  // "Consultar + Importar": a rota mandava empresaCnpj = DESTINATÁRIO da
+  // nota, e uma VENDA do cliente a terceiro era gravada como "entrada do
+  // terceiro" (que nem é cliente) em vez de SAÍDA da empresa emitente. Sem
+  // dono explícito, o cadastro decide (emitente → saída; dest → entrada).
+  if ((direcao === 'desconhecida' || !empresaId) && (meta.cnpjEmit || meta.cnpjDest)) {
     try {
-      const dono = await resolverDonoPorParticipantes(db, meta.cnpjEmit, meta.cnpjDest, empresaCnpj);
+      const dono = await resolverDonoPorParticipantes(
+        db, meta.cnpjEmit, meta.cnpjDest,
+        // Com dono explícito, respeita quando ele é participante; sem dono,
+        // ninguém tem prioridade — o cadastro decide.
+        empresaId ? empresaCnpj : null,
+      );
       if (dono) {
         empresaId = dono.empresaId;
         empresaCnpj = dono.empresaCnpj;
