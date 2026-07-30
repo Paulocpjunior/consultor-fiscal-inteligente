@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { colherAutXml, coberturaSaida, type AutXmlHarvestResultado, type CoberturaSaidaResultado } from '../../services/saeNfceService';
+import { colherAutXml, coberturaSaida, provaSaida, type AutXmlHarvestResultado, type CoberturaSaidaResultado, type ProvaSaidaResultado } from '../../services/saeNfceService';
 
 /**
  * AutXmlHarvest — dispara a colheita de SAÍDA (mod 55) via tag <autXML>.
@@ -16,6 +16,8 @@ const AutXmlHarvest: React.FC = () => {
     const [cobLoading, setCobLoading] = useState(false);
     const [cob, setCob] = useState<CoberturaSaidaResultado | null>(null);
     const [buscaConfirmacao, setBuscaConfirmacao] = useState('');
+    const [provaLoading, setProvaLoading] = useState(false);
+    const [prova, setProva] = useState<ProvaSaidaResultado | null>(null);
 
     // Busca por nome OU CNPJ (com ou sem máscara) — o cliente avisa "liguei" e
     // a equipe confere na hora, sem abrir Firestore.
@@ -47,6 +49,18 @@ const AutXmlHarvest: React.FC = () => {
             setCob({ ok: false, error: e instanceof Error ? e.message : String(e) });
         } finally {
             setCobLoading(false);
+        }
+    };
+
+    const rodarProva = async () => {
+        setProvaLoading(true);
+        setProva(null);
+        try {
+            setProva(await provaSaida(90));
+        } catch (e) {
+            setProva({ ok: false, error: e instanceof Error ? e.message : String(e) });
+        } finally {
+            setProvaLoading(false);
         }
     };
 
@@ -288,6 +302,71 @@ const AutXmlHarvest: React.FC = () => {
                         </div>
                         <p className="text-[11px] text-slate-400 dark:text-slate-500">
                             {cob.docsSaidaLidos ?? 0} docs de saída analisados · janela {cob.janelaDias ?? 90} dias
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {/* PROVA EXATA por numeração (Paulo, 30/07: "não pode ser no chute").
+                NF-e é sequencial por série: buraco na sequência capturada = nota
+                que NÃO recebemos, com o número exato. Zero dependência de SIEG. */}
+            <div className="border-t border-sky-200 dark:border-sky-800 pt-3 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200">🔢 Prova de Saída por numeração — exatidão</h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            NF-e é <strong>sequencial por série</strong>: se capturamos a 760, 761 e 763, a <strong>762 está
+                            faltando</strong> — com número e tudo. Buraco também pode ser numeração <em>inutilizada</em>
+                            (não desce por DistDFe): confirmar com o cliente antes de cobrar. A mesma análise sai
+                            todo dia no e-mail das 9h (resumo de captura).
+                        </p>
+                    </div>
+                    <button onClick={rodarProva} disabled={provaLoading}
+                        className="px-3 py-1.5 text-xs font-bold rounded-md bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                        {provaLoading ? 'Analisando…' : 'Rodar prova'}
+                    </button>
+                </div>
+
+                {prova && !prova.ok && (
+                    <p className="text-xs text-red-600 dark:text-red-400">{prova.error || 'Falha ao rodar a prova.'}</p>
+                )}
+
+                {prova && prova.ok && (
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2">
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-100">
+                            <span className="text-emerald-600 dark:text-emerald-400">{prova.totais?.empresasExatas ?? 0} exatas</span> ·{' '}
+                            <span className={(prova.totais?.empresasComBuraco ?? 0) > 0 ? 'text-red-600 dark:text-red-400' : ''}>
+                                {prova.totais?.empresasComBuraco ?? 0} com buraco
+                            </span> ·{' '}
+                            {prova.totais?.notasFaltantes ?? 0} nota(s) faltante(s)
+                        </p>
+                        {(prova.empresas || []).filter((e) => e.farol === 'incompleta').length > 0 ? (
+                            <ul className="space-y-1.5 max-h-80 overflow-y-auto">
+                                {(prova.empresas || []).filter((e) => e.farol === 'incompleta').map((e) => (
+                                    <li key={e.cnpj} className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-900/10 p-2">
+                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                            <span className="font-mono">{e.cnpj}</span> — {e.nome}
+                                            <span className="text-red-600 dark:text-red-400"> · faltam {e.totalFaltantes}</span>
+                                        </p>
+                                        {e.series.filter((s) => s.totalFaltantes > 0).map((s) => (
+                                            <p key={s.serie} className="text-[11px] text-slate-600 dark:text-slate-300 font-mono">
+                                                série {s.serie} ({s.menor}–{s.maior}): nº {s.faltantes.join(', ')}{s.faltantesTruncado ? ` … +${s.totalFaltantes - s.faltantes.length}` : ''}
+                                            </p>
+                                        ))}
+                                        {e.semNumero > 0 && (
+                                            <p className="text-[11px] text-slate-400">{e.semNumero} doc(s) sem número (resumo) fora da conta</p>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                                ✓ Nenhum buraco de numeração — tudo que os clientes emitiram na janela chegou.
+                            </p>
+                        )}
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                            {prova.totais?.empresasAnalisadas ?? 0} empresa(s) com saída na janela · {prova.docsSaidaLidos ?? 0} docs lidos · janela {prova.janelaDias ?? 90} dias ·
+                            a prova alcança até a maior nota capturada de cada série (notas depois dela ainda não são detectáveis).
                         </p>
                     </div>
                 )}

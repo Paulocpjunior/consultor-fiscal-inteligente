@@ -15,6 +15,7 @@ import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { analisarCoberturaSaida } from './cobertura-saida.js';
+import { analisarSequenciasSaida } from './prova-saida.js';
 
 const router = express.Router();
 
@@ -79,6 +80,41 @@ router.get('/cobertura-saida', requireAdmin, async (req, res) => {
     return res.json({ ...relatorio, docsSaidaLidos: docs.length, geradoEm: new Date().toISOString() });
   } catch (e) {
     console.error('[cobertura-saida]', e);
+    return res.status(500).json({ error: 'Falha interna' });
+  }
+});
+
+// ── GET /prova-saida?janelaDias=90 ─────────────────────────────────────────
+// PROVA EXATA por NUMERAÇÃO: NF-e é sequencial por série — buraco na sequência
+// capturada é nota faltante COM NÚMERO (ou inutilizada — a confirmar). Zero
+// dependência de fonte externa (SIEG/cliente): a exatidão sai dos nossos
+// próprios dados. Pedido do Paulo 30/07 ("não pode ser no chute").
+router.get('/prova-saida', requireAdmin, async (req, res) => {
+  try {
+    const janelaDias = Math.min(Math.max(Number(req.query.janelaDias) || 90, 1), 365);
+    const db = getDb();
+    const empresas = await carregarEmpresas(db);
+    const snaps = await fetchAllDocs(
+      db.collection('documentos_fiscais').where('direcao', '==', 'saida'),
+      { label: 'prova-saida' },
+    );
+    const docs = snaps.map((s) => {
+      const x = s.data() || {};
+      return {
+        empresaId: x.empresaId,
+        cnpjEmit: x.cnpjEmit,
+        empresaCnpj: x.empresaCnpj,
+        direcao: x.direcao,
+        chave: x.chave,
+        dhEmi: x.dhEmi,
+        numero: x.numero,
+        serie: x.serie,
+      };
+    });
+    const prova = analisarSequenciasSaida({ docs, empresas, hojeMs: Date.now(), janelaDias });
+    return res.json({ ok: true, ...prova, docsSaidaLidos: docs.length, geradoEm: new Date().toISOString() });
+  } catch (e) {
+    console.error('[prova-saida]', e);
     return res.status(500).json({ error: 'Falha interna' });
   }
 });

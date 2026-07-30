@@ -20,6 +20,8 @@ import admin from 'firebase-admin';
 import { enviarEmail, isGraphConfigured } from './graph-provider.js';
 import { parseDestinatarios } from './email-destinatarios-helper.js';
 import { secretsMatch } from './cron-secret.js';
+import { fetchAllDocs } from './firestore-paginate.js';
+import { analisarSequenciasSaida } from './prova-saida.js';
 
 const router = express.Router();
 
@@ -149,10 +151,92 @@ async function coletarDados() {
   }
   for (const e of empresas) e.xmlsNovas24h = xmlsPorCnpj.get(e.cnpj) || 0;
 
-  return { empresas, desdeMs, agoraMs };
+  // 4. PROVA DE SAÍDA por numeração (pedido do Paulo 30/07 — "não pode ser no
+  // chute"): buracos na sequência de nNF por série = notas faltantes COM
+  // NÚMERO. Vai no e-mail diário pra equipe agir com exatidão. Universo:
+  // TODAS as empresas monitoradas (não só procuração) — saída chega por
+  // cofre/autXML independente de procuração.
+  let provaSaida = null;
+  try {
+    const todasEmpresas = [];
+    for (const col of ['simples_empresas', 'lucro_empresas']) {
+      const snap = await db.collection(col).get();
+      snap.forEach((doc) => {
+        const d = doc.data() || {};
+        if (d._merged_into || d._deleted) return;
+        const cnpj = (d.cnpj || '').replace(/\D/g, '');
+        if (cnpj.length !== 14) return;
+        todasEmpresas.push({ empresaId: doc.id, cnpj, nome: d.razaoSocial || d.nome || '—' });
+      });
+    }
+    const snaps = await fetchAllDocs(
+      db.collection('documentos_fiscais').where('direcao', '==', 'saida'),
+      { label: 'captura-resumo/prova-saida' },
+    );
+    const docsSaida = snaps.map((s) => {
+      const x = s.data() || {};
+      return {
+        empresaId: x.empresaId, cnpjEmit: x.cnpjEmit, empresaCnpj: x.empresaCnpj,
+        direcao: x.direcao, chave: x.chave, dhEmi: x.dhEmi,
+        numero: x.numero, serie: x.serie,
+      };
+    });
+    provaSaida = analisarSequenciasSaida({ docs: docsSaida, empresas: todasEmpresas, hojeMs: agoraMs, janelaDias: 90 });
+  } catch (err) {
+    console.warn('[captura-resumo-cron] prova de saída falhou:', err.message);
+  }
+
+  return { empresas, desdeMs, agoraMs, provaSaida };
 }
 
-function montarHtml({ empresas, desdeMs, agoraMs }) {
+// Seção "Prova de Saída por numeração" do e-mail. Só as empresas com BURACO
+// (número exato das notas faltantes) — quem está exato vira uma linha-resumo.
+function montarSecaoProvaSaida(provaSaida) {
+  if (!provaSaida) return '';
+  const { totais, empresas, janelaDias } = provaSaida;
+  if (!totais || totais.empresasAnalisadas === 0) return '';
+
+  const comBuraco = empresas.filter((e) => e.farol === 'incompleta').slice(0, 15);
+  const linhas = comBuraco.map((e) => {
+    const seriesTxt = e.series
+      .filter((s) => s.totalFaltantes > 0)
+      .map((s) => `série ${s.serie}: faltam ${s.totalFaltantes} — nº ${s.faltantes.join(', ')}${s.faltantesTruncado ? '…' : ''}`)
+      .join('<br>');
+    return `
+      <tr>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-size:11px">${e.cnpj}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${e.nome}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700;color:#b91c1c">${e.totalFaltantes}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:11px">${seriesTxt}</td>
+      </tr>`;
+  }).join('');
+
+  return `
+  <h3 style="color:#1f2937;margin:20px 0 4px">🔢 Prova de Saída por numeração (mod 55, ${janelaDias}d)</h3>
+  <p style="color:#6b7280;font-size:12px;margin:0 0 8px">
+    NF-e é sequencial por série: buraco na sequência capturada = nota que NÃO recebemos, com o número exato.
+    <strong>${totais.empresasExatas}</strong> empresa(s) com sequência exata ·
+    <strong style="color:${totais.empresasComBuraco > 0 ? '#b91c1c' : '#15803d'}">${totais.empresasComBuraco}</strong> com buraco ·
+    <strong>${totais.notasFaltantes}</strong> nota(s) faltante(s) no total.
+    <br><em>Um buraco também pode ser numeração INUTILIZADA (não desce por DistDFe) — confirmar com o cliente antes de cobrar.</em>
+  </p>
+  ${comBuraco.length > 0 ? `
+  <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px">
+    <thead>
+      <tr style="background:#fef2f2">
+        <th style="padding:8px;text-align:left;border-bottom:2px solid #fecaca">CNPJ</th>
+        <th style="padding:8px;text-align:left;border-bottom:2px solid #fecaca">Empresa</th>
+        <th style="padding:8px;text-align:right;border-bottom:2px solid #fecaca">Faltantes</th>
+        <th style="padding:8px;text-align:left;border-bottom:2px solid #fecaca">Números exatos (por série)</th>
+      </tr>
+    </thead>
+    <tbody>${linhas}</tbody>
+  </table>
+  ${totais.empresasComBuraco > comBuraco.length ? `<p style="font-size:11px;color:#6b7280">Mostrando ${comBuraco.length} de ${totais.empresasComBuraco} — lista completa na aba Cobertura de Saída → Prova de Saída.</p>` : ''}
+  ` : '<p style="color:#15803d;font-size:12px">✓ Nenhum buraco de numeração — tudo que os clientes emitiram na janela chegou.</p>'}`;
+}
+
+function montarHtml({ empresas, desdeMs, agoraMs, provaSaida }) {
   // Agregados
   const total = empresas.length;
   const ok = empresas.filter(e => categorizarCstat(e.cStat) === 'ok').length;
@@ -258,6 +342,8 @@ function montarHtml({ empresas, desdeMs, agoraMs }) {
     <tbody>${linhas || '<tr><td colspan="7" style="padding:12px;text-align:center;color:#6b7280">Nenhuma empresa com procuração ativa.</td></tr>'}</tbody>
   </table>
 
+  ${montarSecaoProvaSaida(provaSaida)}
+
   <p style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#6b7280">
     Email gerado automaticamente pelo Consultor Fiscal Inteligente — cron <code>captura-resumo-cron</code>.<br>
     Pra desativar: remova o Cloud Scheduler <code>captura-resumo-diario</code> ou ajuste <code>CAPTURA_RESUMO_TO</code>.
@@ -287,7 +373,11 @@ router.post('/captura-resumo-cron', requireCronAuth, async (req, res) => {
 
     const erros = dados.empresas.filter(e => categorizarCstat(e.cStat) === 'erro').length;
     const totalXmls = dados.empresas.reduce((acc, e) => acc + e.xmlsNovas24h, 0);
-    const assunto = `📊 Captura via procuração e-CAC — ${dados.empresas.length} empresa(s), ${totalXmls} XMLs, ${erros} erro(s)`;
+    const faltantes = dados.provaSaida?.totais?.notasFaltantes || 0;
+    // Nota faltante no ASSUNTO: é o número que exige ação — não pode ficar
+    // enterrado no corpo (exatidão pedida pelo Paulo 30/07).
+    const sufixoProva = faltantes > 0 ? ` · 🔢 ${faltantes} nota(s) de saída FALTANDO` : '';
+    const assunto = `📊 Captura via procuração e-CAC — ${dados.empresas.length} empresa(s), ${totalXmls} XMLs, ${erros} erro(s)${sufixoProva}`;
 
     const r = await enviarEmail({
       remetente: REMETENTE,
@@ -301,6 +391,7 @@ router.post('/captura-resumo-cron', requireCronAuth, async (req, res) => {
       total: dados.empresas.length,
       totalXmls,
       erros,
+      provaSaida: dados.provaSaida?.totais || null,
       emailStatus: r.ok ? 'enviado' : `falha: ${r.error || 'desconhecida'}`,
     });
   } catch (e) {
