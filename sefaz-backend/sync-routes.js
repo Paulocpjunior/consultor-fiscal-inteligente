@@ -12,7 +12,7 @@ import { requireAuth } from './require-admin.js';
 import { consultaNFePorChave } from './sefaz-client.js';
 import { loadCertificate } from './secret-loader.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
-import { importarXmlSefaz } from './xml-importer.js';
+import { importarXmlSefaz, reatribuirDesconhecidas } from './xml-importer.js';
 import { withCronHeartbeat, listarCronsOrfaos } from './cron-heartbeat.js';
 import { manifestarPendentes } from './manifesto-orchestrator.js';
 import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibility.js';
@@ -193,6 +193,19 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
       manifestacaoAuto = { erro: String(e.message || 'desconhecido').slice(0, 200) };
     }
 
+    // Reatribuição do histórico 'desconhecida' (autXML/Nova Era 30/07): docs
+    // que desceram pelo DistDFe do escritório sem ser emit/dest ficavam
+    // invisíveis. Idempotente: corrigidos saem da query no próximo ciclo.
+    let reatribuicao = null;
+    try {
+      reatribuicao = await reatribuirDesconhecidas({ limit: 500 });
+      if (reatribuicao.reatribuidas > 0) {
+        console.log(`[sync-cron] reatribuição: ${reatribuicao.reatribuidas}/${reatribuicao.examinadas} doc(s) 'desconhecida' atribuídos à empresa dona`);
+      }
+    } catch (e) {
+      console.warn('[sync-cron] reatribuição de desconhecidas falhou:', e.message);
+    }
+
     console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);
     // Campos retornados aqui sao MERGED no log (junto com status='sucesso',
     // duracaoMs, finalizadoEm). Bloqueadas por cadastro (sem cert A1/A3 e sem
@@ -210,6 +223,7 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
         falhas: manifestacaoAuto.falhas ?? 0,
         erro: manifestacaoAuto.erro || null,
       } : null,
+      reatribuicao: reatribuicao || null,
       errosResumo,
     };
   });
@@ -605,6 +619,18 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
       manifestacaoAuto = { erro: String(e.message || 'desconhecido').slice(0, 200) };
     }
 
+    // Mesma reatribuição do cron noturno — "Forçar captura agora" também cura
+    // o histórico 'desconhecida' (o admin não precisa esperar a madrugada).
+    let reatribuicao = null;
+    try {
+      reatribuicao = await reatribuirDesconhecidas({ limit: 500 });
+      if (reatribuicao.reatribuidas > 0) {
+        console.log(`[sync-cron-now] reatribuição: ${reatribuicao.reatribuidas}/${reatribuicao.examinadas} doc(s) 'desconhecida' atribuídos`);
+      }
+    } catch (e) {
+      console.warn('[sync-cron-now] reatribuição de desconhecidas falhou:', e.message);
+    }
+
     console.log(`[sync-cron-now] fim — ${sucessos}/${empresas.length} ok, ${totalNovos} novos`);
     return {
       totalEmpresas: empresas.length, sucessos, falhas, totalNovosXmls: totalNovos,
@@ -614,6 +640,7 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
         falhas: manifestacaoAuto.falhas ?? 0,
         erro: manifestacaoAuto.erro || null,
       } : null,
+      reatribuicao: reatribuicao || null,
     };
   });
 });

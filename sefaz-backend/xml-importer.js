@@ -10,6 +10,7 @@ import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 import { classificarTipoDoc } from './xml-tipo-doc.js';
 import { competenciaFromDhEmi, extrairParticipantesNfe } from './xml-metadata-helper.js';
+import { decidirDonoPorParticipantes } from './atribuicao-participantes.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -453,6 +454,53 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
   });
 }
 
+// ── Lookup de empresa cadastrada por CNPJ (com cache) ───────────────────────
+// Usado pela atribuição por participantes: quando a empresa sob a qual o doc
+// chegou (ex.: escritório via autXML) não é emit nem dest, o dono real é a
+// empresa CADASTRADA que aparece como emitente (saída) ou destinatário
+// (entrada). Cache de 10 min evita 2 queries por documento numa paginação.
+const cacheEmpresaPorCnpj = new Map(); // cnpj → { val: {empresaId,cnpj}|null, ts }
+const CACHE_EMPRESA_TTL_MS = 10 * 60_000;
+
+async function lookupEmpresaCadastrada(db, cnpj) {
+  const c = String(cnpj || '').replace(/\D/g, '');
+  if (c.length !== 14) return null;
+  const hit = cacheEmpresaPorCnpj.get(c);
+  if (hit && (Date.now() - hit.ts) < CACHE_EMPRESA_TTL_MS) return hit.val;
+  let val = null;
+  for (const col of ['simples_empresas', 'lucro_empresas']) {
+    try {
+      const snap = await db.collection(col).where('cnpj', '==', c).limit(1).get();
+      if (!snap.empty) {
+        const d = snap.docs[0].data() || {};
+        // Lápides não recebem documentos (regra do soft-delete #290).
+        if (!d._deleted && !d._merged_into) {
+          val = { empresaId: snap.docs[0].id, cnpj: c };
+          break;
+        }
+      }
+    } catch (e) { /* coleção indisponível — tenta a próxima */ }
+  }
+  cacheEmpresaPorCnpj.set(c, { val, ts: Date.now() });
+  return val;
+}
+
+// Resolve o dono real pelos participantes (emit → saída; dest → entrada).
+// null = mantém a atribuição atual.
+async function resolverDonoPorParticipantes(db, cnpjEmit, cnpjDest, empresaAtualCnpj) {
+  const empresasPorCnpj = new Map();
+  const emp1 = await lookupEmpresaCadastrada(db, cnpjEmit);
+  if (emp1) empresasPorCnpj.set(emp1.cnpj, emp1);
+  // Só consulta o dest se o emit não resolveu (economiza leitura).
+  let decisao = decidirDonoPorParticipantes({ cnpjEmit, cnpjDest, empresaAtualCnpj, empresasPorCnpj });
+  if (!decisao) {
+    const emp2 = await lookupEmpresaCadastrada(db, cnpjDest);
+    if (emp2) empresasPorCnpj.set(emp2.cnpj, emp2);
+    decisao = decidirDonoPorParticipantes({ cnpjEmit, cnpjDest, empresaAtualCnpj, empresasPorCnpj });
+  }
+  return decisao;
+}
+
 export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, nsu, capturadoPor, origem = 'sefaz' }) {
   if (!xml) return { status: 'erro', motivo: 'XML vazio' };
 
@@ -602,6 +650,24 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     }
   }
 
+  // autXML (caso Nova Era, 30/07): a empresa sob a qual o doc chegou (ex.:
+  // ESCRITÓRIO via DistDFe) não é emit nem dest — o doc é de OUTRA empresa
+  // cadastrada. Sem isto, a nota ficava empresaId=escritório com direção
+  // 'desconhecida': invisível como saída do cliente na Cobertura de Saída,
+  // fora do trilho autXML do painel e fora do filtro por empresa.
+  if (direcao === 'desconhecida' && (meta.cnpjEmit || meta.cnpjDest)) {
+    try {
+      const dono = await resolverDonoPorParticipantes(db, meta.cnpjEmit, meta.cnpjDest, empresaCnpj);
+      if (dono) {
+        empresaId = dono.empresaId;
+        empresaCnpj = dono.empresaCnpj;
+        direcao = dono.direcao;
+      }
+    } catch (e) {
+      console.warn(`[xml-importer] atribuição por participantes falhou (${meta.chave}):`, e.message);
+    }
+  }
+
   // Para o frontend e manifestacao, agrupa resumo+completa sob a mesma "familia":
   //  - resNFe/procNFe   -> tipoDoc='NFe'   (manifesto-orchestrator filtra por isso)
   //  - resNFCe/procNFCe -> tipoDoc='NFCe'  (UI filtra por isso na coluna Tipo)
@@ -713,6 +779,50 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   }
 
   return writeResult;
+}
+
+/**
+ * Backfill: reatribui documentos já gravados com direcao='desconhecida' cujo
+ * emitente (→ saída) ou destinatário (→ entrada) é empresa cadastrada.
+ * Cobre o histórico anterior à atribuição por participantes no import — ex.:
+ * notas autXML que desceram pelo DistDFe do escritório e ficaram invisíveis.
+ * Roda no fim do sync-cron (idempotente; docs corrigidos saem da query).
+ */
+export async function reatribuirDesconhecidas({ limit = 500 } = {}) {
+  const db = fa().firestore();
+  let examinadas = 0, reatribuidas = 0, semDono = 0;
+  try {
+    const snap = await db.collection('documentos_fiscais')
+      .where('direcao', '==', 'desconhecida')
+      .limit(limit)
+      .get();
+    for (const docSnap of snap.docs) {
+      examinadas++;
+      const d = docSnap.data() || {};
+      // Stubs de evento (sem participantes) não têm como resolver — pula.
+      if (!d.cnpjEmit && !d.cnpjDest) { semDono++; continue; }
+      try {
+        const dono = await resolverDonoPorParticipantes(db, d.cnpjEmit, d.cnpjDest, d.empresaCnpj);
+        if (!dono) { semDono++; continue; }
+        if (d.empresaId === dono.empresaId && d.direcao === dono.direcao) continue;
+        await docSnap.ref.update({
+          empresaId: dono.empresaId,
+          empresaCnpj: dono.empresaCnpj,
+          direcao: dono.direcao,
+          reatribuidoEm: fa().firestore.FieldValue.serverTimestamp(),
+          reatribuidoDe: d.empresaId || null,
+          reatribuidoMotivo: `auto-${dono.motivo}`,
+        });
+        reatribuidas++;
+      } catch (e) {
+        console.warn(`[reatribuirDesconhecidas] falha em ${docSnap.id}:`, e.message);
+      }
+    }
+  } catch (e) {
+    console.warn('[reatribuirDesconhecidas] query falhou:', e.message);
+    return { examinadas, reatribuidas, semDono, erro: e.message };
+  }
+  return { examinadas, reatribuidas, semDono };
 }
 
 export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor }) {
