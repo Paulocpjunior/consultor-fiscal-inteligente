@@ -76,6 +76,23 @@ describe('decidirDonoPorParticipantes', () => {
         })).toBeNull();
     });
 
+    it('sem dono explícito (Consultar + Importar): venda a terceiro vira SAÍDA da emitente cadastrada', () => {
+        // Caso card 4 (30/07): a rota de importar-por-chave mandava
+        // empresaCnpj = destinatário. Numa VENDA a terceiro, a nota era
+        // gravada como "entrada do terceiro" (nem cliente é). Sem dono
+        // explícito (empresaAtualCnpj null), o cadastro decide.
+        const r = decidirDonoPorParticipantes({
+            cnpjEmit: NOVAERA_FILIAL,
+            cnpjDest: TERCEIRO,
+            empresaAtualCnpj: null,
+            empresasPorCnpj: cadastro([NOVAERA_FILIAL, 'EMP-FILIAL']),
+        });
+        expect(r).toEqual({
+            empresaId: 'EMP-FILIAL', empresaCnpj: NOVAERA_FILIAL,
+            direcao: 'saida', motivo: 'emitente-cadastrado',
+        });
+    });
+
     it('tolera CNPJs formatados, vazios e mapa ausente', () => {
         const r = decidirDonoPorParticipantes({
             cnpjEmit: '29.240.822/0002-02',
