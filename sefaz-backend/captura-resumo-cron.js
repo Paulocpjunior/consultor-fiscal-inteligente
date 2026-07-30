@@ -199,7 +199,7 @@ function montarSecaoProvaSaida(provaSaida) {
   const comBuraco = empresas.filter((e) => e.farol === 'incompleta').slice(0, 15);
   const linhas = comBuraco.map((e) => {
     const seriesTxt = e.series
-      .filter((s) => s.totalFaltantes > 0)
+      .filter((s) => s.totalFaltantes > 0 && !s.grandeFaixa)
       .map((s) => `série ${s.serie}: faltam ${s.totalFaltantes} — nº ${s.faltantes.join(', ')}${s.faltantesTruncado ? '…' : ''}`)
       .join('<br>');
     return `
@@ -214,10 +214,12 @@ function montarSecaoProvaSaida(provaSaida) {
   return `
   <h3 style="color:#1f2937;margin:20px 0 4px">🔢 Prova de Saída por numeração (mod 55, ${janelaDias}d)</h3>
   <p style="color:#6b7280;font-size:12px;margin:0 0 8px">
-    NF-e é sequencial por série: buraco na sequência capturada = nota que NÃO recebemos, com o número exato.
-    <strong>${totais.empresasExatas}</strong> empresa(s) com sequência exata ·
+    NF-e é sequencial por série (a chave carrega emitente, série e número — análise por ESTABELECIMENTO):
+    buraco na sequência capturada = nota que NÃO recebemos, com o número exato.
+    <strong>${totais.empresasExatas}</strong> emitente(s) com sequência exata ·
     <strong style="color:${totais.empresasComBuraco > 0 ? '#b91c1c' : '#15803d'}">${totais.empresasComBuraco}</strong> com buraco ·
-    <strong>${totais.notasFaltantes}</strong> nota(s) faltante(s) no total.
+    <strong>${totais.notasFaltantes}</strong> nota(s) faltante(s) acionáveis.
+    ${(totais.seriesGrandeFaixa || 0) > 0 ? `<br><span style="color:#a16207">⚠ ${totais.seriesGrandeFaixa} série(s) com faixa gigante de ausências (histórico não coberto — resolve com backfill/ZIP, não com cobrança ao cliente).</span>` : ''}
     <br><em>Um buraco também pode ser numeração INUTILIZADA (não desce por DistDFe) — confirmar com o cliente antes de cobrar.</em>
   </p>
   ${comBuraco.length > 0 ? `

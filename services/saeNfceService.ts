@@ -194,6 +194,8 @@ export interface ProvaSaidaSerie {
     faltantes: number[];
     totalFaltantes: number;
     faltantesTruncado: boolean;
+    /** true = faixa gigante de ausências: histórico não coberto (backfill), não buraco pontual. */
+    grandeFaixa?: boolean;
 }
 
 export interface ProvaSaidaEmpresa {
@@ -217,6 +219,10 @@ export interface ProvaSaidaResultado {
         empresasExatas: number;
         empresasComBuraco: number;
         notasFaltantes: number;
+        seriesGrandeFaixa?: number;
+        faltantesGrandeFaixa?: number;
+        docsForaCadastro?: number;
+        chavesInvalidas?: number;
     };
     docsSaidaLidos?: number;
     geradoEm?: string;

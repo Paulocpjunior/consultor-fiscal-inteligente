@@ -338,24 +338,33 @@ const AutXmlHarvest: React.FC = () => {
                             <span className={(prova.totais?.empresasComBuraco ?? 0) > 0 ? 'text-red-600 dark:text-red-400' : ''}>
                                 {prova.totais?.empresasComBuraco ?? 0} com buraco
                             </span> ·{' '}
-                            {prova.totais?.notasFaltantes ?? 0} nota(s) faltante(s)
+                            {prova.totais?.notasFaltantes ?? 0} nota(s) faltante(s) acionáveis
                         </p>
-                        {(prova.empresas || []).filter((e) => e.farol === 'incompleta').length > 0 ? (
+                        {(prova.totais?.seriesGrandeFaixa ?? 0) > 0 && (
+                            <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                                ⚠ {prova.totais?.seriesGrandeFaixa} série(s) com faixa gigante de ausências
+                                ({(prova.totais?.faltantesGrandeFaixa ?? 0).toLocaleString('pt-BR')} números) — isso é
+                                <strong> histórico não coberto</strong> (captura começou no meio da numeração), não buraco
+                                pontual. Fecha com backfill/ZIP, não com cobrança ao cliente.
+                            </p>
+                        )}
+                        {(prova.empresas || []).filter((e) => e.farol === 'incompleta' || e.series.some((s) => s.grandeFaixa)).length > 0 ? (
                             <ul className="space-y-1.5 max-h-80 overflow-y-auto">
-                                {(prova.empresas || []).filter((e) => e.farol === 'incompleta').map((e) => (
-                                    <li key={e.cnpj} className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-900/10 p-2">
+                                {(prova.empresas || []).filter((e) => e.farol === 'incompleta' || e.series.some((s) => s.grandeFaixa)).map((e) => (
+                                    <li key={e.cnpj} className={`rounded-lg border p-2 ${e.farol === 'incompleta'
+                                        ? 'border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-900/10'
+                                        : 'border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10'}`}>
                                         <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
                                             <span className="font-mono">{e.cnpj}</span> — {e.nome}
-                                            <span className="text-red-600 dark:text-red-400"> · faltam {e.totalFaltantes}</span>
+                                            {e.totalFaltantes > 0 && <span className="text-red-600 dark:text-red-400"> · faltam {e.totalFaltantes}</span>}
                                         </p>
                                         {e.series.filter((s) => s.totalFaltantes > 0).map((s) => (
                                             <p key={s.serie} className="text-[11px] text-slate-600 dark:text-slate-300 font-mono">
-                                                série {s.serie} ({s.menor}–{s.maior}): nº {s.faltantes.join(', ')}{s.faltantesTruncado ? ` … +${s.totalFaltantes - s.faltantes.length}` : ''}
+                                                {s.grandeFaixa
+                                                    ? <>série {s.serie} ({s.menor}–{s.maior}): {s.capturadas} capturadas de {(s.maior - s.menor + 1).toLocaleString('pt-BR')} — histórico não coberto (backfill/ZIP)</>
+                                                    : <>série {s.serie} ({s.menor}–{s.maior}): nº {s.faltantes.join(', ')}{s.faltantesTruncado ? ` … +${s.totalFaltantes - s.faltantes.length}` : ''}</>}
                                             </p>
                                         ))}
-                                        {e.semNumero > 0 && (
-                                            <p className="text-[11px] text-slate-400">{e.semNumero} doc(s) sem número (resumo) fora da conta</p>
-                                        )}
                                     </li>
                                 ))}
                             </ul>
