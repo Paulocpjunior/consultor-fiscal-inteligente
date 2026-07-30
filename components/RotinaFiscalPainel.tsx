@@ -13,6 +13,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { carregarRotinaFiscal, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
+import FronteiraProcessoPanel from './FronteiraProcessoPanel';
 
 interface Props {
     /** Leva o colaborador à tela da etapa (App resolve o SearchType). */
@@ -132,6 +133,10 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara }) => {
                     </div>
                 </div>
             </div>
+
+            {/* O CORTE oficial CFI × e-Fiscal — o colaborador decide "onde fazer"
+                aqui mesmo, antes de escolher o próximo passo (Paulo, 30/07). */}
+            <FronteiraProcessoPanel />
 
             {carregando && !dados && <p className="text-sm text-slate-400">Montando a rotina de {fmtComp(competencia)}…</p>}
             {dados && !dados.ok && (
