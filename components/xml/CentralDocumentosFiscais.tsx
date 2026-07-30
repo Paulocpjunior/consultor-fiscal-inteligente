@@ -23,6 +23,7 @@ const NfseSpSessaoCookies = lazy(() => import('../NfseSpSessaoCookies'));
 const SaeNfceCaptura = lazy(() => import('./SaeNfceCaptura'));
 const XmlImportacaoZip = lazy(() => import('./XmlImportacaoZip'));
 const AutXmlHarvest = lazy(() => import('./AutXmlHarvest'));
+const SistemaBancoPanel = lazy(() => import('../SistemaBancoPanel'));
 const CofreEmailPanel = lazy(() => import('./CofreEmailPanel'));
 const CofreControlePanel = lazy(() => import('./CofreControlePanel'));
 const BacklogEntradaPanel = lazy(() => import('./BacklogEntradaPanel'));
@@ -347,7 +348,16 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                     </Suspense>
                 )}
                 {tab === 'config' && (
-                    <XmlConfiguracoes currentUser={currentUser} />
+                    <div className="space-y-4">
+                        <XmlConfiguracoes currentUser={currentUser} />
+                        {/* Sistema → Banco (DEV-ONLY): controle funcionalidade × coleção.
+                            O backend trava por admin + SISTEMA_DEV_EMAILS. */}
+                        {currentUser?.role === 'admin' && (
+                            <Suspense fallback={null}>
+                                <SistemaBancoPanel />
+                            </Suspense>
+                        )}
+                    </div>
                 )}
             </div>
         </div>

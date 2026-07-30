@@ -52,6 +52,7 @@ import nfseNacionalDfeRouter from './sefaz-backend/nfse-nacional-dfe-routes.js';
 import abrasfRouter from './sefaz-backend/abrasf/routes.js';
 import abrasfDiagnosticoRouter from './sefaz-backend/abrasf/diagnostico-routes.js';
 import recuperacaoRouter from './sefaz-backend/recuperacao-tributaria-routes.js';
+import sistemaBancoRouter from './sefaz-backend/sistema-banco-routes.js';
 import nfpComplianceRouter from './sefaz-backend/nfp-compliance-routes.js';
 import dpIntegrationRouter from './sefaz-backend/dp-integration-routes.js';
 import sharepointAutoSyncRouter from './sefaz-backend/sharepoint-auto-sync.js';
@@ -315,6 +316,8 @@ app.use('/api/admin/abrasf', abrasfRouter);
 app.use('/api/admin/abrasf', abrasfDiagnosticoRouter);
 app.use('/api/internal/plano-contas', planoContasBridgeRouter);
 app.use('/api/admin/recuperacao', recuperacaoRouter);
+// Painel Sistema (dev-only): controle funcionalidade × banco de dados.
+app.use('/api/admin/sistema', sistemaBancoRouter);
 app.use('/api/admin/nfp-compliance', nfpComplianceRouter);
 app.use('/api/dp-integration', dpIntegrationRouter);
 app.use('/api/admin/sharepoint', sharepointAutoSyncRouter);
