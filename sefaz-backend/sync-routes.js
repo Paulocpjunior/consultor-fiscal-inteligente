@@ -135,7 +135,9 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
     // por linha expandida (PR #28). Sem isso, painel so dizia '17 falhas'
     // sem nenhuma pista de QUAIS empresas e por que.
     const errosResumo = [];
+    let idxEmp = 0;
     for (const emp of empresas) {
+      idxEmp++;
       try {
         const result = await sincronizarEmpresa({
           empresaId: emp.id,
@@ -162,6 +164,13 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
           motivo: `[EXCECAO] ${String(e.message || '').slice(0, 200)}`,
           codigo: 'EXCEPTION',
         });
+      }
+      // Anti-656: respiro entre empresas. Sem pausa, a varredura vira uma
+      // rajada contínua no NFeDistribuicaoDFe (140 empresas back-to-back) e o
+      // WAF da SEFAZ pune com "Consumo Indevido" (29× num ciclo, painel 30/07).
+      // 3s × 140 empresas ≈ 7 min a mais num job noturno — irrelevante.
+      if (idxEmp < empresas.length) {
+        await new Promise(r => setTimeout(r, 3000));
       }
     }
     // Manifestação automática (ciência) dos resNFe que ficaram pendentes de
@@ -558,7 +567,9 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
     console.log('[sync-cron-now] início — admin:', req.user.email);
     let sucessos = 0, falhas = 0, totalNovos = 0;
     const empresas = await listarEmpresasParaCron();
+    let idxEmpNow = 0;
     for (const emp of empresas) {
+      idxEmpNow++;
       try {
         const result = await sincronizarEmpresa({
           empresaId: emp.id, empresaCnpj: emp.cnpj,
@@ -569,6 +580,10 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
       } catch (e) {
         falhas++;
         console.error(`[sync-cron-now] exceção em ${emp.cnpj}:`, e.message);
+      }
+      // Anti-656: mesmo respiro entre empresas do cron noturno.
+      if (idxEmpNow < empresas.length) {
+        await new Promise(r => setTimeout(r, 3000));
       }
     }
     // Mesma manifestação automática do cron noturno — sem ela, o admin que

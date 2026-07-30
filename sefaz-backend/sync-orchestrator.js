@@ -419,6 +419,11 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
       if (result.maxNSU) maxNSUFinal = result.maxNSU;
       if (result.maxNSU && result.ultNSU && result.maxNSU === result.ultNSU) break;
       if (result.cStat !== '138') break;
+      // Anti-656: respiro curto entre páginas. Backlog de 90d = até 50
+      // requisições seguidas no NFeDistribuicaoDFe; sem pausa vira rajada e o
+      // WAF da SEFAZ derruba a própria paginação com "Consumo Indevido".
+      // 500ms × 50 páginas = +25s no pior caso — barato pelo risco evitado.
+      await new Promise(r => setTimeout(r, 500));
     }
 
     // Cursor SEGURO: nunca persiste além de um NSU que falhou ao importar (senão
