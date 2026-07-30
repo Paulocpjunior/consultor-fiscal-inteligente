@@ -302,17 +302,33 @@ const CardCaptura: React.FC<{
                 {/* Cofre de saída: mostra ADOÇÃO (quem entrega vs monitoradas) e
                     separa saída (o foco) de entrada. É o que responde "como está a
                     saída mod 55?" num olhar. */}
-                {fonte === 'saidaCofre' && (
+                {fonte === 'saidaCofre' && (() => {
+                    // Adoção = QUALQUER trilho automático (cofre ∪ autXML). Antes o
+                    // card só contava o cofre de e-mail — empresa entregando 100%
+                    // via autXML aparecia como "não entrega" (Paulo, 30/07).
+                    const totalEntregando = status.entregandoQualquer7d ?? status.entregando7d ?? null;
+                    return (
                     <div className="bg-white/50 border rounded p-2 text-xs space-y-1">
                         <div className="flex justify-between">
                             <span className="opacity-80">Clientes entregando saída (7d):</span>
-                            <span className={`font-mono font-bold ${(status.entregando7d ?? 0) === 0 ? 'text-red-700' : ''}`}>
-                                {status.entregando7d ?? '—'} de {status.monitoradasCofre ?? '—'}
+                            <span className={`font-mono font-bold ${(totalEntregando ?? 0) === 0 ? 'text-red-700' : ''}`}>
+                                {totalEntregando ?? '—'} de {status.monitoradasCofre ?? '—'}
+                            </span>
+                        </div>
+                        <div className="flex justify-between opacity-70 pl-2">
+                            <span>· pelo cofre de e-mail:</span>
+                            <span className="font-mono">{status.entregando7d ?? '—'}</span>
+                        </div>
+                        <div className="flex justify-between opacity-70 pl-2">
+                            <span>· pelo autXML (DistDFe):</span>
+                            <span className="font-mono">
+                                {status.entregandoAutXml7d ?? '—'}
+                                {(status.saidaAutXml7d ?? 0) > 0 && <span className="opacity-70"> ({status.saidaAutXml7d} nota{(status.saidaAutXml7d ?? 0) > 1 ? 's' : ''})</span>}
                             </span>
                         </div>
                         {status.jaEntregaram != null && (
                             <div className="flex justify-between opacity-70">
-                                <span>Já entregaram alguma vez:</span>
+                                <span>Já entregaram pelo cofre alguma vez:</span>
                                 <span className="font-mono">{status.jaEntregaram}</span>
                             </div>
                         )}
@@ -323,12 +339,14 @@ const CardCaptura: React.FC<{
                             </div>
                         )}
                         <div className="text-[10px] opacity-70 pt-1 border-t">
-                            A saída só entra quando o cliente aponta o emissor pro cofre
-                            (<span className="font-mono">xml@spassessoriacontabil.com.br</span>) ou põe nosso
-                            CNPJ no autXML. Lista de quem falta: <strong>Cobertura de Saída</strong>.
+                            A saída entra por DOIS trilhos automáticos: cliente aponta o emissor pro cofre
+                            (<span className="font-mono">xml@spassessoriacontabil.com.br</span>) OU põe o CNPJ
+                            44.388.152/0001-89 no autXML da nota. Prova por empresa e lista de quem falta:
+                            {' '}<strong>Cobertura de Saída</strong>.
                         </div>
                     </div>
-                )}
+                    );
+                })()}
                 <div className="flex justify-between">
                     <span className="opacity-80">{fonte === 'saidaCofre' ? 'Saída mod 55 importada <7d:' : 'Docs capturados <7d:'}</span>
                     <span className="font-mono font-bold">{status.docsUltimos7d ?? '—'}</span>

@@ -68,6 +68,12 @@ export interface CapturaStatus {
     monitoradasCofre?: number | null;
     /** entrada importada pelo cofre em 7d (secundário; o headline é a saída) */
     entrada7dCofre?: number | null;
+    /** clientes distintos entregando saída via autXML (DistDFe) nos últimos 7d */
+    entregandoAutXml7d?: number | null;
+    /** saídas mod 55 capturadas via autXML em 7d */
+    saidaAutXml7d?: number | null;
+    /** clientes entregando por QUALQUER trilho automático (cofre ∪ autXML) em 7d */
+    entregandoQualquer7d?: number | null;
 }
 
 export interface CapturaDiagnostico {

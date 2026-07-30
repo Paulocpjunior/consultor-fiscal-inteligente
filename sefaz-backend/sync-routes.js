@@ -19,6 +19,7 @@ import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibil
 import { certA1MetadataValido, selecionarCertA1PorBase } from './cert-base-helper.js';
 import { umaPorRaizPorCiclo } from './raiz-throttle-helper.js';
 import { secretsMatch } from './cron-secret.js';
+import { ehSaidaMod55 } from './cobertura-saida.js';
 
 const router = express.Router();
 
@@ -1258,6 +1259,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
     async function estadoCofreSaida() {
       try {
         let atualizadoMs = null, ultimoResumo = null, entregando7d = 0, jaEntregaram = 0;
+        const empresasCofre7d = new Set();
         try {
           const stSnap = await db.doc('sefaz_xml_email_state/estado').get();
           if (stSnap.exists) {
@@ -1266,12 +1268,46 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
             ultimoResumo = st.ultimoResumo ?? null;
             const mapa = st.ultimaSaidaPorEmpresa || {};
             jaEntregaram = Object.keys(mapa).length;
-            for (const v of Object.values(mapa)) {
+            for (const [empId, v] of Object.entries(mapa)) {
               const ms = v?.ms ?? null;
-              if (ms && ms >= seteDias) entregando7d++;
+              if (ms && ms >= seteDias) { entregando7d++; empresasCofre7d.add(empId); }
             }
           }
         } catch { /* sem state ainda */ }
+
+        // Trilho autXML (pedido do Paulo 30/07): o card só vigiava o cofre de
+        // e-mail — empresa entregando 100% via autXML aparecia como "não
+        // entrega". Saída mod 55 com origem 'sefaz' só chega ao escritório
+        // via autXML (a SEFAZ nunca entrega ao emissor a própria saída,
+        // Rejeição 641) — mesma regra do trilhoDaOrigem da Cobertura de Saída.
+        // direcao+origem são DUAS igualdades (sem índice composto novo);
+        // janela 7d por dhEmi em memória; select() projeta só o necessário.
+        let entregandoAutXml7d = 0, saidaAutXml7d = 0;
+        try {
+          const empresasAutXml = new Set();
+          const snapAx = await db.collection('documentos_fiscais')
+            .where('direcao', '==', 'saida')
+            .where('origem', '==', 'sefaz')
+            .select('empresaId', 'cnpjEmit', 'empresaCnpj', 'dhEmi', 'chave')
+            .limit(5000)
+            .get();
+          snapAx.forEach((docSnap) => {
+            const x = docSnap.data();
+            if (!ehSaidaMod55({ direcao: 'saida', chave: x.chave })) return;
+            const t = Date.parse(x.dhEmi || '');
+            if (!Number.isFinite(t) || t < seteDias) return;
+            saidaAutXml7d++;
+            const id = x.empresaId || String(x.cnpjEmit || x.empresaCnpj || '').replace(/\D/g, '');
+            if (id) empresasAutXml.add(id);
+          });
+          entregandoAutXml7d = empresasAutXml.size;
+          // União dos trilhos automáticos (cofre + autXML), sem dupla contagem
+          // de quem entrega pelos dois.
+          for (const id of empresasAutXml) empresasCofre7d.add(id);
+        } catch (e) {
+          console.warn('[captura-diagnostico] contagem autXML 7d falhou:', e.message);
+        }
+        const entregandoQualquer7d = empresasCofre7d.size;
 
         let saida7d = 0, entrada7d = 0;
         try {
@@ -1300,7 +1336,10 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           } catch { /* coleção indisponível */ }
         }
 
-        return { atualizadoMs, ultimoResumo, entregando7d, jaEntregaram, saida7d, entrada7d, monitoradas };
+        return {
+          atualizadoMs, ultimoResumo, entregando7d, jaEntregaram, saida7d, entrada7d, monitoradas,
+          entregandoAutXml7d, saidaAutXml7d, entregandoQualquer7d,
+        };
       } catch (e) {
         return { erro: e.message };
       }
@@ -1421,6 +1460,11 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           jaEntregaram: cofreSaida?.jaEntregaram ?? null,
           monitoradasCofre: cofreSaida?.monitoradas ?? null,
           entrada7dCofre: cofreSaida?.entrada7d ?? null,
+          // Trilho autXML + união dos trilhos automáticos (30/07): sem isto,
+          // empresa entregando 100% via autXML contava como "não entrega".
+          entregandoAutXml7d: cofreSaida?.entregandoAutXml7d ?? null,
+          saidaAutXml7d: cofreSaida?.saidaAutXml7d ?? null,
+          entregandoQualquer7d: cofreSaida?.entregandoQualquer7d ?? null,
           // Falha sempre com o MOTIVO ao lado (regra do farol honesto).
           topFalhas: falhasCofre,
         },
