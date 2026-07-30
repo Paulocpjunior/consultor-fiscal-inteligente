@@ -51,6 +51,20 @@ const ConsultaNFePorChavePanel: React.FC = () => {
     const chaveLimpa = chave.replace(/\D/g, '');
     const valido = chaveLimpa.length === 44;
 
+    // Acesso via autXML: a SEFAZ devolveu a nota consultando como ESCRITÓRIO,
+    // mas o escritório NÃO é emitente nem destinatário. Só a tag <autXML> da
+    // nota explica — prova direta de que a autorização do cliente valeu.
+    // (Antes esse caso caía no aviso âmbar "peça pro fornecedor reemitir",
+    // ação ERRADA: o destinatário da nota está correto; nós somos terceiro
+    // autorizado. Caso Grupo Nova Era, 30/07.)
+    const emitCnpjRes = (resultado?.detalhes?.emitente?.cnpj || '').replace(/\D/g, '');
+    const escCnpjRes = (resultado?.cnpjEscritorio || '').replace(/\D/g, '');
+    const acessoViaAutXml = !!resultado
+        && resultado.cStat === '138'
+        && resultado.escritorioEhDestinatario === false
+        && resultado.cnpjConsultadoComo === 'escritorio'
+        && emitCnpjRes !== '' && escCnpjRes !== '' && emitCnpjRes !== escCnpjRes;
+
     const consultar = async (importar = false) => {
         if (!valido) return;
         setCarregando(true);
@@ -167,7 +181,7 @@ const ConsultaNFePorChavePanel: React.FC = () => {
                         <div className="space-y-3">
                             {/* Veredito principal */}
                             <div className={`p-3 rounded border ${
-                                resultado.escritorioEhDestinatario === true ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' :
+                                resultado.escritorioEhDestinatario === true || acessoViaAutXml ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' :
                                 resultado.escritorioEhDestinatario === false ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' :
                                 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700'
                             }`}>
@@ -182,12 +196,26 @@ const ConsultaNFePorChavePanel: React.FC = () => {
                                         </div>
                                     </div>
                                 )}
-                                {resultado.escritorioEhDestinatario === false && (
+                                {acessoViaAutXml && (
+                                    <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                                        ✓ Acesso via autXML confirmado — a configuração do cliente VALEU.
+                                        <div className="text-xs font-normal mt-1 text-slate-700 dark:text-slate-300">
+                                            O escritório não é emitente nem destinatário desta NFe (destinatário: <strong>{formatCnpj(resultado.detalhes?.destinatario.cnpj)}</strong>),
+                                            e mesmo assim a SEFAZ a entregou ao nosso CNPJ — só a tag <strong>autXML</strong> da nota explica isso.
+                                            Use <strong>"Consultar + Importar"</strong> pra gravar esta nota na base; as próximas notas do emissor
+                                            entram pela captura e aparecem no trilho <strong>autXML</strong> da Cobertura de Saída.
+                                        </div>
+                                    </div>
+                                )}
+                                {resultado.escritorioEhDestinatario === false && !acessoViaAutXml && (
                                     <div className="text-sm font-bold text-amber-700 dark:text-amber-300">
                                         ⚠ Destinatário diferente do escritório.
                                         <div className="text-xs font-normal mt-1">
-                                            Esta NFe foi emitida para <strong>{formatCnpj(resultado.detalhes?.destinatario.cnpj)}</strong> — não pra <strong>{formatCnpj(resultado.cnpjEscritorio)}</strong>.
-                                            Por isso a DistDFe do escritório não a entregou. Peça pro fornecedor reemitir corrigindo, ou faça importação manual do XML.
+                                            Esta NFe foi emitida para <strong>{formatCnpj(resultado.detalhes?.destinatario.cnpj)}</strong> — não pra <strong>{formatCnpj(resultado.cnpjEscritorio)}</strong> —
+                                            e o escritório também não está autorizado nela (sem autXML). Por isso a DistDFe do escritório não a entrega.
+                                            Se é COMPRA de uma empresa-cliente, o caminho certo é o DistDFe da própria empresa (A1 dela na Status por Empresa).
+                                            Se é SAÍDA do cliente, peça a inclusão do CNPJ 44.388.152/0001-89 no autXML do emissor (vale só pra notas novas) ou importe o XML manualmente.
+                                            Reemissão só se o destinatário estiver realmente errado.
                                         </div>
                                     </div>
                                 )}
