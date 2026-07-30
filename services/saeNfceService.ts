@@ -184,6 +184,64 @@ export async function coberturaSaida(janelaDias = 90): Promise<CoberturaSaidaRes
     }
 }
 
+// ── Prova de Saída por numeração (exatidão, Paulo 30/07) ────────────────────
+export interface ProvaSaidaSerie {
+    serie: string;
+    menor: number;
+    maior: number;
+    capturadas: number;
+    /** Números EXATOS faltando na sequência (até o corte). */
+    faltantes: number[];
+    totalFaltantes: number;
+    faltantesTruncado: boolean;
+}
+
+export interface ProvaSaidaEmpresa {
+    empresaId: string | null;
+    cnpj: string;
+    nome: string;
+    capturadas: number;
+    semNumero: number;
+    totalFaltantes: number;
+    ultimaSaida: string | null;
+    farol: 'exata' | 'incompleta';
+    series: ProvaSaidaSerie[];
+}
+
+export interface ProvaSaidaResultado {
+    ok: boolean;
+    janelaDias?: number;
+    empresas?: ProvaSaidaEmpresa[];
+    totais?: {
+        empresasAnalisadas: number;
+        empresasExatas: number;
+        empresasComBuraco: number;
+        notasFaltantes: number;
+    };
+    docsSaidaLidos?: number;
+    geradoEm?: string;
+    error?: string;
+}
+
+/**
+ * PROVA EXATA por numeração: NF-e é sequencial por série — buraco na
+ * sequência capturada = nota faltante COM NÚMERO (ou inutilizada, a
+ * confirmar). Zero dependência de SIEG/cliente.
+ */
+export async function provaSaida(janelaDias = 90): Promise<ProvaSaidaResultado> {
+    const token = await getToken();
+    const res = await fetch(`/api/admin/sefaz/prova-saida?janelaDias=${janelaDias}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    try {
+        const data = await res.json();
+        if (!res.ok) return { ...data, ok: false };
+        return { ...data, ok: true };
+    } catch {
+        return { ok: false, error: `HTTP ${res.status} (resposta não-JSON)` };
+    }
+}
+
 export interface DocLocalizado {
     chave: string;
     numero: string | null;
