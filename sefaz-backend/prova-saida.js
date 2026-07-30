@@ -10,120 +10,153 @@
 // 762 está FALTANDO — com número e tudo. Nenhuma fonte externa (SIEG,
 // planilha, cliente) é necessária.
 //
-// Ressalva honesta (vai na tela e no e-mail): um buraco pode ser nota
-// INUTILIZADA (numeração pulada legalmente — a inutilização não desce por
-// DistDFe). Por isso o buraco é "faltante ou inutilizada — confirmar", nunca
-// silenciado. Nota CANCELADA não é buraco: ela desce normalmente e preenche a
-// sequência (com status cancelado).
+// v2 (mesma tarde): a v1 agrupava por EMPRESA da base e misturava numerações
+// de CNPJs/emitentes diferentes no mesmo balde — a S&P apareceu com 429 mil
+// "faltantes" (docs de vários emitentes atribuídos ao escritório por
+// importações antigas + fallback por raiz juntando filiais, e numeração de
+// NF-e é POR ESTABELECIMENTO). Agora TUDO sai da própria CHAVE de 44 dígitos,
+// que carrega o CNPJ do emitente (pos 6-20), a série (22-25) e o nNF (25-34):
+// imune a erro de atribuição, e cobre até resumo sem campo numero.
 //
-// Limite intrínseco: a prova alcança até a MAIOR nota capturada. Notas
-// emitidas depois dela ainda não são detectáveis por sequência (fronteira).
+// Ressalvas honestas (vão na tela e no e-mail):
+//  - buraco pode ser numeração INUTILIZADA (não desce por DistDFe) —
+//    "faltante ou inutilizada, confirmar antes de cobrar";
+//  - nota CANCELADA não é buraco (desce normalmente e preenche a sequência);
+//  - série com faixa gigante de ausências (> limiarGrandeFaixa) não é buraco
+//    pontual: é captura que começou no meio da numeração (histórico não
+//    coberto) — reportada à parte pra não inflar o total acionável.
+//
+// Limite intrínseco: a prova alcança até a MAIOR nota capturada de cada
+// série. Notas depois dela ainda não são detectáveis (fronteira).
 // ============================================================================
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 
 const norm = (c) => String(c || '').replace(/\D/g, '');
 
-function modeloDaChave(chave) {
+/** Decompõe a chave de acesso: cUF(2) AAMM(4) CNPJ(14) mod(2) série(3) nNF(9)… */
+export function decomporChave(chave) {
   const d = norm(chave);
-  return d.length === 44 ? d.slice(20, 22) : null;
+  if (d.length !== 44) return null;
+  const numero = parseInt(d.slice(25, 34), 10);
+  const serie = parseInt(d.slice(22, 25), 10);
+  if (!Number.isFinite(numero) || numero <= 0 || !Number.isFinite(serie)) return null;
+  return {
+    cnpjEmit: d.slice(6, 20),
+    modelo: d.slice(20, 22),
+    serie: String(serie),
+    numero,
+  };
 }
 
 /**
- * Analisa a sequência de numeração das saídas mod 55 por empresa e por série.
+ * Analisa a sequência de numeração das saídas mod 55 POR EMITENTE (CNPJ da
+ * chave) e por série. Só emitentes que são empresas CADASTRADAS entram
+ * (match exato de CNPJ; senão pela raiz, exibindo o CNPJ real do emitente).
  *
  * @param {object} p
- * @param {Array<{empresaId?:string, cnpjEmit?:string, empresaCnpj?:string,
- *   direcao?:string, chave?:string, dhEmi?:string, numero?:string|number|null,
- *   serie?:string|number|null}>} p.docs  documentos de saída da base
- * @param {Array<{empresaId:string, cnpj:string, nome?:string}>} p.empresas cadastro
+ * @param {Array<{direcao?:string, chave?:string, dhEmi?:string}>} p.docs
+ * @param {Array<{empresaId:string, cnpj:string, nome?:string}>} p.empresas
  * @param {number} p.hojeMs
  * @param {number} [p.janelaDias=90]
- * @param {number} [p.maxFaltantesLista=30] corte da lista de números por série
- * @returns {{
- *   janelaDias:number,
- *   empresas: Array<{empresaId:string|null, cnpj:string, nome:string,
- *     capturadas:number, semNumero:number, totalFaltantes:number,
- *     ultimaSaida:string|null, farol:'exata'|'incompleta',
- *     series: Array<{serie:string, menor:number, maior:number, capturadas:number,
- *       faltantes:number[], totalFaltantes:number, faltantesTruncado:boolean}>}>,
- *   totais: {empresasAnalisadas:number, empresasExatas:number,
- *     empresasComBuraco:number, notasFaltantes:number}
- * }}
+ * @param {number} [p.maxFaltantesLista=30]
+ * @param {number} [p.limiarGrandeFaixa=5000] acima disso a série é "histórico
+ *   não coberto", não buraco pontual — sai do total acionável.
  */
-export function analisarSequenciasSaida({ docs, empresas, hojeMs, janelaDias = 90, maxFaltantesLista = 30 }) {
+export function analisarSequenciasSaida({ docs, empresas, hojeMs, janelaDias = 90, maxFaltantesLista = 30, limiarGrandeFaixa = 5000 }) {
   const inicioMs = hojeMs - janelaDias * DIA_MS;
 
-  // Índices do cadastro pra atribuir doc → empresa (id primeiro, raiz depois —
-  // mesmo critério da Cobertura de Saída).
-  const porId = new Map();
+  // Cadastro: CNPJ exato → empresa; raiz → empresa (pra filial sem cadastro
+  // próprio aparecer com o nome do grupo, mas SEMPRE por CNPJ emitente).
+  const porCnpj = new Map();
   const porRaiz = new Map();
   for (const e of empresas || []) {
     const cnpj = norm(e.cnpj);
-    const rec = {
-      empresaId: e.empresaId || null,
-      cnpj,
-      nome: e.nome || '—',
-      series: new Map(), // serie → Set<int> números capturados
-      capturadas: 0,
-      semNumero: 0,
-      ultimaMs: null,
-      ultimaSaida: null,
-    };
-    if (e.empresaId) porId.set(e.empresaId, rec);
-    if (cnpj.length === 14 && !porRaiz.has(cnpj.slice(0, 8))) porRaiz.set(cnpj.slice(0, 8), rec);
+    if (cnpj.length !== 14) continue;
+    if (!porCnpj.has(cnpj)) porCnpj.set(cnpj, { empresaId: e.empresaId || null, nome: e.nome || '—' });
+    const raiz = cnpj.slice(0, 8);
+    if (!porRaiz.has(raiz)) porRaiz.set(raiz, { empresaId: e.empresaId || null, nome: e.nome || '—' });
   }
+
+  // emitente(14) → { info, series: Map(serie → Set<num>), capturadas, ultima… }
+  const porEmitente = new Map();
+  let docsForaCadastro = 0;
+  let chavesInvalidas = 0;
 
   for (const d of docs || []) {
     if (String(d?.direcao) !== 'saida') continue;
-    if (modeloDaChave(d.chave) !== '55') continue;
+    const dec = decomporChave(d.chave);
+    if (!dec) { chavesInvalidas++; continue; }
+    if (dec.modelo !== '55') continue;
     const t = Date.parse(d.dhEmi || '');
     if (!Number.isFinite(t) || t < inicioMs || t > hojeMs + DIA_MS) continue;
 
-    let rec = d.empresaId ? porId.get(d.empresaId) : null;
-    if (!rec) {
-      const cEmit = norm(d.cnpjEmit || d.empresaCnpj);
-      if (cEmit.length === 14) rec = porRaiz.get(cEmit.slice(0, 8));
-    }
-    if (!rec) continue;
+    const info = porCnpj.get(dec.cnpjEmit) || porRaiz.get(dec.cnpjEmit.slice(0, 8));
+    if (!info) { docsForaCadastro++; continue; }
 
+    let rec = porEmitente.get(dec.cnpjEmit);
+    if (!rec) {
+      rec = {
+        cnpj: dec.cnpjEmit,
+        empresaId: info.empresaId,
+        nome: info.nome,
+        series: new Map(),
+        capturadas: 0,
+        ultimaMs: null,
+        ultimaSaida: null,
+      };
+      porEmitente.set(dec.cnpjEmit, rec);
+    }
     rec.capturadas++;
     if (rec.ultimaMs === null || t > rec.ultimaMs) { rec.ultimaMs = t; rec.ultimaSaida = d.dhEmi; }
-
-    const num = parseInt(String(d.numero ?? '').replace(/\D/g, ''), 10);
-    if (!Number.isFinite(num) || num <= 0) { rec.semNumero++; continue; }
-    const serie = String(d.serie ?? '').replace(/\D/g, '') || '1';
-    if (!rec.series.has(serie)) rec.series.set(serie, new Set());
-    rec.series.get(serie).add(num);
+    if (!rec.series.has(dec.serie)) rec.series.set(dec.serie, new Set());
+    rec.series.get(dec.serie).add(dec.numero);
   }
 
   const resultado = [];
   let empresasExatas = 0, empresasComBuraco = 0, notasFaltantes = 0;
+  let seriesGrandeFaixa = 0, faltantesGrandeFaixa = 0;
 
-  for (const rec of new Set([...porId.values(), ...porRaiz.values()])) {
-    if (rec.capturadas === 0) continue; // sem saída na janela — Cobertura de Saída cuida
-
+  for (const rec of porEmitente.values()) {
     const series = [];
     let totalFaltantes = 0;
     for (const [serie, nums] of rec.series) {
       const ordenados = [...nums].sort((a, b) => a - b);
       const menor = ordenados[0];
       const maior = ordenados[ordenados.length - 1];
+      const totalAusentes = (maior - menor + 1) - ordenados.length;
+
+      if (totalAusentes > limiarGrandeFaixa) {
+        // Faixa gigante = captura começou no meio da numeração (histórico não
+        // coberto pela janela/importação) — informação útil, mas NÃO é buraco
+        // pontual acionável. Não lista números nem infla o total.
+        seriesGrandeFaixa++;
+        faltantesGrandeFaixa += totalAusentes;
+        series.push({
+          serie, menor, maior,
+          capturadas: ordenados.length,
+          faltantes: [],
+          totalFaltantes: totalAusentes,
+          faltantesTruncado: true,
+          grandeFaixa: true,
+        });
+        continue;
+      }
+
       const faltantes = [];
-      let totalSerie = 0;
       for (let n = menor + 1; n < maior; n++) {
         if (!nums.has(n)) {
-          totalSerie++;
           if (faltantes.length < maxFaltantesLista) faltantes.push(n);
         }
       }
-      totalFaltantes += totalSerie;
+      totalFaltantes += totalAusentes;
       series.push({
         serie, menor, maior,
         capturadas: ordenados.length,
         faltantes,
-        totalFaltantes: totalSerie,
-        faltantesTruncado: totalSerie > faltantes.length,
+        totalFaltantes: totalAusentes,
+        faltantesTruncado: totalAusentes > faltantes.length,
+        grandeFaixa: false,
       });
     }
     series.sort((a, b) => b.totalFaltantes - a.totalFaltantes || a.serie.localeCompare(b.serie));
@@ -137,7 +170,7 @@ export function analisarSequenciasSaida({ docs, empresas, hojeMs, janelaDias = 9
       cnpj: rec.cnpj,
       nome: rec.nome,
       capturadas: rec.capturadas,
-      semNumero: rec.semNumero,
+      semNumero: 0, // v2: número sai da chave — não há mais doc sem número
       totalFaltantes,
       ultimaSaida: rec.ultimaSaida,
       farol,
@@ -145,7 +178,6 @@ export function analisarSequenciasSaida({ docs, empresas, hojeMs, janelaDias = 9
     });
   }
 
-  // Pior primeiro (mais faltantes); empate por nome.
   resultado.sort((a, b) => b.totalFaltantes - a.totalFaltantes
     || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
 
@@ -157,6 +189,10 @@ export function analisarSequenciasSaida({ docs, empresas, hojeMs, janelaDias = 9
       empresasExatas,
       empresasComBuraco,
       notasFaltantes,
+      seriesGrandeFaixa,
+      faltantesGrandeFaixa,
+      docsForaCadastro,
+      chavesInvalidas,
     },
   };
 }
