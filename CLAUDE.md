@@ -392,7 +392,10 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   quem recolhe é o emitente. Centavo é DESPREZADO (IN RFB 971), igual ao
   SAGE. O app confere o cálculo contra o FUNRURAL declarado no infAdic da
   própria nota e aponta divergência. Bloco 1 do SPED: `IND_VA='S'` só existe COM
-  1400 e vice-versa. Detalhes em `docs/dipam-produtor-rural.md`.
+  1400 e vice-versa. Detalhes em `docs/dipam-produtor-rural.md`. Guia do
+  colaborador: `/guia-dipam-produtor-rural.html` (botão 📗 na aba; fonte dupla
+  `public/guia-dipam-produtor-rural.html` + `docs/guia-colaborador-dipam.md`,
+  atualizar as DUAS juntas).
 - Painel Sistema→Banco (#371, dev-only): coleção nova no Firestore = linha no
   `catalogo-banco.js` no MESMO PR (o painel denuncia órfãs). Pendente Paulo:
   definir env `SISTEMA_DEV_EMAILS` no Cloud Run (sugerido p.c.pereira@me.com)
