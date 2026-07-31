@@ -479,7 +479,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <option value="sem-ccmsp">Sem autorização NFSe SP</option>
                     <option value="nfse-nac-inativa">NFSe Nacional desativada</option>
                     <option value="sem-responsavel">👤 Sem responsável na carteira</option>
-                    <option value="ok-tudo">✅ Tudo OK</option>
+                    <option value="ok-tudo">✅ Captura sem bloqueio</option>
                     <option value="todas">Todas</option>
                 </select>
                 <select
@@ -556,7 +556,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                             <th className="px-2 py-2 text-center">NFSe SP</th>
                             <th className="px-2 py-2 text-center">NFSe Nacional</th>
                             <th className="px-2 py-2 text-center">Capturas</th>
-                            <th className="px-2 py-2 text-left">Motivos Bloqueio</th>
+                            <th className="px-2 py-2 text-left" title="Só o que impede a CAPTURA. A conferência do cadastro completo fica em &quot;Completar cadastro&quot;.">Bloqueios de captura</th>
                             <th className="px-2 py-2 text-center">Ações</th>
                         </tr>
                     </thead>
@@ -697,8 +697,23 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                         </div>
                                     </td>
                                     <td className="px-2 py-1.5">
+                                        {/* "Tudo OK" lido como "cadastro perfeito"
+                                            era a origem da dúvida da equipe
+                                            (31/07): esta coluna só olha o que
+                                            BLOQUEIA A CAPTURA. Campos como CNAE,
+                                            e-mail, IE e data de abertura não
+                                            travam captura nenhuma e por isso
+                                            aparecem só na conferência de
+                                            cadastro (botão "Completar cadastro"
+                                            ao lado, e o selo da Carteira). */}
                                         {e.motivosBloqueio.length === 0 ? (
-                                            <span className="text-green-700 text-xs">✓ Tudo OK</span>
+                                            <span
+                                                className="text-green-700 text-xs"
+                                                title={'Nada bloqueia a CAPTURA desta empresa. Não é atestado de cadastro completo: '
+                                                    + 'CNAE, e-mail, Inscrição Estadual, anexo e data de abertura não travam captura e são conferidos em "Completar cadastro".'}
+                                            >
+                                                ✓ Captura OK
+                                            </span>
                                         ) : (
                                             <ul className="text-[10px] text-red-700 space-y-0.5">
                                                 {e.motivosBloqueio.map((m, i) => <li key={i}>• {formatarMotivoBloqueioCaptura(m)}</li>)}

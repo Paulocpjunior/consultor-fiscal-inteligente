@@ -88,6 +88,11 @@ export function resumirCarteira(
         // empresa atribuída seguiria "pendente de responsável".
         const resumo = resumirCadastro(conferirCadastroCliente({
             ...e,
+            // A lista de empresas traz o regime em `fonte` ('simples'|'lucro');
+            // sem esta linha a checagem do Anexo do Simples NUNCA rodava e a
+            // empresa sem anexo passava por "cadastro completo" (o DAS é que
+            // não calculava).
+            regime: e.regime ?? e.fonte ?? null,
             responsaveis: vincs.map((v) => ({ nome: v.colaboradorNome, papel: v.papel || 'principal' })),
         }));
         farolPorEmpresa.set(e.id, resumo);
