@@ -362,15 +362,18 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
     };
 
     // Download do XML BRUTO de uma nota (o arquivo que o colaborador lança no
-    // sistema fiscal). O importer grava todo XML em Storage (storagePath) —
-    // mas até 23/07 nenhuma tela oferecia baixar; a lista só exportava
-    // CSV/PDF de metadados. Resumos (resNFe) não têm XML completo → sem botão.
+    // sistema fiscal). Baixa pela ROTA do backend (/xml-bruto), não pelo SDK
+    // do Storage no navegador: o caminho antigo dependia do bucket do build,
+    // do CORS e das storage.rules, e qualquer um dos três virava um
+    // "storage/retry-limit-exceeded" sem diagnóstico (31/07, EDUARDO GUERRA).
+    // O backend lê do MESMO bucket em que o importer gravou e devolve erro em
+    // português com a ação. Resumos (resNFe) não têm XML completo → sem botão.
     const [baixandoXmlId, setBaixandoXmlId] = useState<string | null>(null);
     const baixarXml = async (d: DocumentoFiscal) => {
         if (!d.storagePath) return;
         setBaixandoXmlId(d.id);
         try {
-            const texto = await downloadXmlText(d.storagePath);
+            const texto = await downloadXmlText(d.chave || '');
             const blob = new Blob([texto], { type: 'application/xml;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -379,7 +382,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
             a.click();
             URL.revokeObjectURL(url);
         } catch (e: any) {
-            alert(`Falha ao baixar o XML: ${e?.message || 'erro'}. Se persistir, avise o admin (arquivo pode não existir no Storage).`);
+            alert(`Falha ao baixar o XML: ${e?.message || 'erro'}`);
         } finally {
             setBaixandoXmlId(null);
         }
