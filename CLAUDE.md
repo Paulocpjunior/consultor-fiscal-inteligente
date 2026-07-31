@@ -66,6 +66,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   5min), elegibilidade ADN (param `certsMeta`) e painel Status
   (`temA1MesmaRaizValido` → via 'cloud-a1-raiz'). TRILHO NOVO que exigir
   certificado DEVE aceitar o da matriz pela raiz.
+- **Campo novo no modal Dados Fiscais EXIGE a whitelist do backend** (#382,
+  31/07): a rota `/empresa-dados-fiscais` (o "Completar cadastro" do Status)
+  filtra por `CAMPOS_DADOS_FISCAIS` — campo fora da lista é DESCARTADO EM
+  SILÊNCIO (o modal diz "salvo" e nada persiste; foi o que quase engoliu a
+  condicaoRural do 🌾 e deixou CNAE/dataAbertura sem tela de edição). Regra:
+  campo novo no modal = entrada na whitelist NO MESMO PR + espelho top-level
+  quando apuração/DAS leem de lá (cnae, dataAbertura, ccmSp, uf).
 - **CCM-SP só existe pra SP capital** (#311): campo aceita ficar VAZIO —
   limpar e salvar APAGA (o sanitize não pode virar `undefined`, senão a
   chave some do JSON e o backend nunca apaga). CCM só-zeros (contorno da
