@@ -43,5 +43,15 @@ export function sanitizarDadosFiscais(dados: EmpresaDadosFiscais): EmpresaDadosF
         // Inscrição municipal genérica: NÃO stripa (pode ser alfanumérica
         // conforme a prefeitura); só trim.
         inscricaoMunicipal: trim(dados.inscricaoMunicipal),
+        // Condição rural: booleano vai EXPLÍCITO (true/false), nunca undefined
+        // — desmarcar precisa chegar ao backend como false, mesma lição do CCM.
+        // Bloco intocado continua ausente (undefined) e nada muda.
+        condicaoRural: dados.condicaoRural == null ? undefined : {
+            adquireDeProdutor: !!dados.condicaoRural.adquireDeProdutor,
+            ehProdutorRuralPF: !!dados.condicaoRural.ehProdutorRuralPF,
+            ehCooperativa: !!dados.condicaoRural.ehCooperativa,
+            funruralSubRogacao: dados.condicaoRural.funruralSubRogacao === 'nao_aplica' ? 'nao_aplica' : 'automatico',
+            observacao: (dados.condicaoRural.observacao || '').trim(),
+        },
     };
 }

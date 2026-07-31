@@ -1242,6 +1242,29 @@ export type XmlTipoDocumento = 'NFe' | 'NFCe' | 'NFSe' | 'CTe' | 'MDFe' | 'desco
  *
  * Comum a SimplesNacionalEmpresa e LucroPresumidoEmpresa.
  */
+/**
+ * Marcação de condição rural no cadastro do cliente.
+ *
+ * Os três casos são diferentes e não se confundem:
+ *   • adquireDeProdutor  — COMPRA de produtor rural PF: lança DIPAM 1.1 (por
+ *                          município paulista de origem) e recolhe o FUNRURAL
+ *                          por sub-rogação no lugar do produtor;
+ *   • ehProdutorRuralPF  — o próprio cliente É produtor rural PF: entrega a
+ *                          DIPAM-A anual e NÃO lança o código 1.1;
+ *   • ehCooperativa      — cooperativa que recebe do cooperado: código 1.3.
+ */
+export interface CondicaoRuralEmpresa {
+    adquireDeProdutor?: boolean;
+    ehProdutorRuralPF?: boolean;
+    ehCooperativa?: boolean;
+    /**
+     * 'automatico' (padrão) calcula a sub-rogação nas compras de produtor PF.
+     * 'nao_aplica' desliga — usar só com fundamento registrado na observação.
+     */
+    funruralSubRogacao?: 'automatico' | 'nao_aplica';
+    observacao?: string;
+}
+
 export interface EmpresaDadosFiscais {
     /** Inscrição Estadual (numero ou 'ISENTO'). */
     inscricaoEstadual?: string;
@@ -1308,6 +1331,18 @@ export interface EmpresaDadosFiscais {
      * proprio, demonstracao, etc).
      */
     cfopOverrides?: Record<string, string>;
+    /**
+     * Condição RURAL do cliente — o que liga a DIPAM (Manual da DIPAM 2026,
+     * Portaria SRE 94/2022) e o FUNRURAL por sub-rogação (Lei 8.212/91, art.
+     * 30, IV) para esta empresa.
+     *
+     * A marcação NÃO é a fonte da verdade (o app classifica cada nota pelo que
+     * ela mostra); ela serve para (1) cobrar a obrigação todo mês, inclusive em
+     * mês SEM nota — mês sem compra pode ser falha de captura, não ausência de
+     * obrigação — e (2) escolher o código certo (1.1 comprador × 1.3
+     * cooperativa) e saber quem entrega DIPAM-A.
+     */
+    condicaoRural?: CondicaoRuralEmpresa;
     /** Inscrição Estadual no Substituto Tributario (opcional). */
     inscEstSubstTrib?: string;
     /** Codigo Suframa (opcional, so se zona franca). */

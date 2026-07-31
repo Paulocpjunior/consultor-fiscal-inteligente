@@ -18,6 +18,7 @@ import { requireAuth } from './require-admin.js';
 import { getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { montarRotinaFiscal, resumirFunil, acharApuracaoDaCompetencia } from './rotina-fiscal.js';
+import { identificarNaturezaFornecedor } from './dipam-produtor-rural.js';
 
 const router = Router();
 
@@ -85,6 +86,26 @@ function agrupar(itens, porCnpjToId) {
     return mapa;
 }
 
+/**
+ * Sinal de DIPAM na rotina: quantas entradas do mês vêm de produtor rural COM
+ * prova na própria nota (CPF do emitente ou IE paulista de produtor, que começa
+ * com "P"). É só o sinal — a conta por município e a lista de fornecedores a
+ * confirmar vivem na aba DIPAM, que lê os documentos inteiros (itens/CFOP).
+ *
+ * Aqui NÃO se conta "fornecedor indefinido": com CNPJ e sem IE de produtor
+ * está a maioria absoluta das compras de qualquer empresa, e transformar isso
+ * em pendência pintaria a carteira inteira de âmbar.
+ */
+function contarProdutoresRurais(documentos) {
+    let produtores = 0;
+    for (const d of documentos) {
+        if (d.direcao !== 'entrada') continue;
+        if (['cancelado', 'cancelada', 'denegado', 'inutilizado'].includes(d.status)) continue;
+        if (identificarNaturezaFornecedor(d.emitente || {}).ehProdutorRuralPF) produtores += 1;
+    }
+    return { produtores, indefinidos: 0 };
+}
+
 router.get('/painel', requireAuth, async (req, res) => {
     try {
         const competencia = /^\d{4}-\d{2}$/.test(String(req.query.competencia || ''))
@@ -112,7 +133,10 @@ router.get('/painel', requireAuth, async (req, res) => {
             db.collection('documentos_fiscais')
                 .where('competencia', '==', competencia)
                 .select('empresaId', 'empresaCnpj', 'cnpjDest', 'cnpjEmit', 'direcao', 'status',
-                    'valorTotal', 'temItens', 'schema', 'tipoDoc', 'chave'),
+                    // `emitente` entra pra detectar compra de produtor rural
+                    // (DIPAM) sem NENHUMA leitura extra — o detalhe fica na
+                    // aba própria, aqui só sinaliza que a obrigação existe.
+                    'valorTotal', 'temItens', 'schema', 'tipoDoc', 'chave', 'emitente'),
             { label: `rotina-fiscal ${competencia}`, maxDocs: 60000 },
         );
         const documentos = docsSnaps.map((s) => s.data() || {});
@@ -136,6 +160,7 @@ router.get('/painel', requireAuth, async (req, res) => {
         const enviosPorEmpresa = agrupar(envios, porCnpjToId);
 
         const rotinas = empresas.map((e) => montarRotinaFiscal({
+            dipam: contarProdutoresRurais(docsPorEmpresa.get(e.id) || []),
             empresa: { id: e.id, nome: e.nome, cnpj: e.cnpj, regime: e.regime },
             competencia,
             documentos: docsPorEmpresa.get(e.id) || [],

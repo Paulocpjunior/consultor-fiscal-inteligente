@@ -88,6 +88,7 @@ export const CATALOGO_BANCO = [
     // ── Integrações & catálogos ────────────────────────────────────────────
     { colecao: 'sharepoint_sync_log', grupo: 'Integrações', funcionalidade: 'Sincronização SharePoint (arquivamento)' },
     { colecao: 'sharepoint_alertas_log', grupo: 'Integrações', funcionalidade: 'Alertas do SharePoint' },
+    { colecao: 'produtores_rurais', grupo: 'Catálogos', funcionalidade: 'Fornecedores produtores rurais (natureza CADESP, município e regime do FUNRURAL) — base da DIPAM 1.1' },
     { colecao: 'nbs_codigos_oficiais', grupo: 'Catálogos', funcionalidade: 'Catálogo NBS oficial' },
     { colecao: 'nfp_compliance_cache', grupo: 'Catálogos', funcionalidade: 'Cache de compliance NFP' },
     { colecao: 'items', grupo: 'Catálogos', funcionalidade: '⚠ Nome genérico — verificar origem e renomear ou aposentar' },

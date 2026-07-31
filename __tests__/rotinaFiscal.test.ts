@@ -191,6 +191,27 @@ describe('4. obrigações', () => {
         expect(e.resumo).toMatch(/1\/2/);
     });
 
+    it('compra de produtor rural aparece na etapa de obrigações (é lá que a DIPAM é entregue)', () => {
+        const e = etapaDe(completo({ dipam: { produtores: 3, indefinidos: 0 } }), 'obrigacoes');
+        expect(e.status).toBe('concluida');       // não rebaixa o que já fechou
+        expect(e.resumo).toMatch(/DIPAM: 3 compra/);
+    });
+
+    it('fornecedor de produtor rural a confirmar NÃO deixa a etapa fechar', () => {
+        const r = completo({ dipam: { produtores: 2, indefinidos: 1 } });
+        const e = etapaDe(r, 'obrigacoes');
+        expect(e.status).toBe('atencao');
+        expect(e.acao).toMatch(/DIPAM/);
+        expect(e.total).toBe(1);                  // conta das tarefas preservada
+        expect(r.farol).not.toBe('ok');
+        expect(r.proximoPasso.id).toBe('obrigacoes');
+    });
+
+    it('sem compra de produtor, nada muda na etapa', () => {
+        expect(etapaDe(completo({ dipam: { produtores: 0, indefinidos: 0 } }), 'obrigacoes').resumo)
+            .not.toMatch(/DIPAM/);
+    });
+
     it('cancelada não conta como pendente nem como entregue', () => {
         const e = etapaDe(completo({
             tarefas: [tarefa({ status: 'concluida' }), tarefa({ obrigacao: 'EFD_REINF', status: 'cancelada' })],
