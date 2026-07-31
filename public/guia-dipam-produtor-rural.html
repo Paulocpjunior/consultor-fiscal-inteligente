@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Guia do Colaborador — DIPAM e FUNRURAL (compra de produtor rural) · SP Assessoria Contábil</title>
+<style>
+    :root {
+        --azul: #0E3BFA; --azul-escuro: #091D8D;
+        --tinta: #1e293b; --cinza: #64748b; --borda: #e2e8f0;
+        --verde: #059669; --vermelho: #dc2626; --ambar: #b45309;
+        --fundo-suave: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; padding: 0; color: var(--tinta); background: var(--fundo-suave);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6; font-size: 16px;
+    }
+    header {
+        background: linear-gradient(135deg, var(--azul-escuro), var(--azul));
+        color: #fff; padding: 28px 20px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 4px; }
+    header .wrap { display: flex; align-items: center; gap: 16px; }
+    header img { height: 52px; background: #fff; border-radius: 10px; padding: 6px; }
+    header h1 { font-size: 1.35rem; margin: 0; line-height: 1.3; }
+    header p { margin: 4px 0 0; font-size: .85rem; opacity: .9; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+    section {
+        background: #fff; border: 1px solid var(--borda); border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 18px;
+    }
+    h2 { font-size: 1.15rem; color: var(--azul-escuro); margin: 0 0 10px; }
+    h3 { font-size: 1rem; margin: 18px 0 6px; }
+    .onde {
+        background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;
+        padding: 10px 14px; font-size: .9rem; margin-bottom: 18px;
+    }
+    .quando {
+        border-left: 4px solid var(--azul); background: var(--fundo-suave);
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .alerta {
+        border-left: 4px solid var(--ambar); background: #fffbeb;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .perigo {
+        border-left: 4px solid var(--vermelho); background: #fef2f2;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--borda); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--fundo-suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--cinza); }
+    .tabela-rolagem { overflow-x: auto; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+    pre {
+        background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 16px;
+        overflow-x: auto; font-size: .85rem; line-height: 1.55;
+    }
+    ul, ol { padding-left: 22px; }
+    li { margin: 4px 0; }
+    .selo { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .selo-verde { background: #ecfdf5; color: var(--verde); }
+    .selo-vermelho { background: #fef2f2; color: var(--vermelho); }
+    .selo-ambar { background: #fffbeb; color: var(--ambar); }
+    footer { text-align: center; font-size: .8rem; color: var(--cinza); padding: 0 20px 40px; }
+    strong { color: var(--azul-escuro); }
+    @media print {
+        body { background: #fff; }
+        section { border: none; padding: 8px 0; break-inside: avoid; }
+        header { background: var(--azul-escuro); -webkit-print-color-adjust: exact; }
+    }
+</style>
+</head>
+<body>
+<header>
+    <div class="wrap">
+        <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
+        <div>
+            <h1>Guia do Colaborador — DIPAM e FUNRURAL (compra de produtor rural)</h1>
+            <p>SP Assessoria Contábil · Consultor Fiscal Inteligente</p>
+        </div>
+    </div>
+</header>
+<main>
+
+<div class="onde">
+    <strong>Onde no sistema:</strong> Central de Documentos Fiscais → aba <strong>XMLs (Entrada/Saída)</strong> → <strong>🌾 DIPAM / Produtor rural</strong>
+</div>
+
+<section>
+    <h2>Por que essa aba existe (leia primeiro)</h2>
+    <p>Quando um cliente nosso <strong>compra de produtor rural pessoa física</strong>, aquela nota de
+    entrada gera <strong>DUAS obrigações</strong> que até agora eram digitadas na mão, nota a nota, no SAGE:</p>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th></th><th>DIPAM 1.1</th><th>FUNRURAL (sub-rogação)</th></tr>
+        <tr>
+            <td><strong>O que é</strong></td>
+            <td>Informar o total <strong>mensal</strong> das compras, <strong>por município paulista de origem</strong>. Define quanto do ICMS volta pro município do produtor.</td>
+            <td>A empresa compradora recolhe a contribuição previdenciária <strong>no lugar do produtor</strong> (previdência + GILRAT + SENAR).</td>
+        </tr>
+        <tr>
+            <td><strong>Vale para</strong></td>
+            <td>Só produtor <strong>de São Paulo</strong></td>
+            <td>Produtor PF de <strong>qualquer estado</strong></td>
+        </tr>
+        <tr>
+            <td><strong>Onde declara</strong></td>
+            <td>Ficha "Informações para a DIPAM B" da GIA <strong>E</strong> Registro 1400 da EFD — um não dispensa o outro</td>
+            <td>Guia previdenciária do cliente (DCTFWeb)</td>
+        </tr>
+        <tr>
+            <td><strong>Se errar</strong></td>
+            <td>Multa (RICMS/SP art. 527) — e desde 2025 a SEFAZ <strong>cruza com as próprias NF-e</strong></td>
+            <td>Recolhimento errado do cliente</td>
+        </tr>
+    </table>
+    </div>
+    <p>Exemplo real: nota de produtor de <strong>MG</strong> → tem FUNRURAL, <strong>não</strong> tem DIPAM.
+    Nota de produtor de <strong>SP</strong> → tem as duas.</p>
+    <p>A aba lê as notas <strong>já capturadas</strong> e entrega os dois valores prontos. O seu trabalho
+    passa a ser <strong>confirmar fornecedor</strong> e <strong>conferir pendência</strong> — não digitar.</p>
+</section>
+
+<section>
+    <h2>1. Marcar o CLIENTE (uma vez por cliente)</h2>
+    <div class="quando"><strong>Quando:</strong> ao pegar um cliente que compra de produtor rural — ou quando
+    a própria aba avisar "não marcado no cadastro".</div>
+    <ol>
+        <li>Abra os <strong>Dados Fiscais</strong> do cliente (botão no header da empresa, ou "Completar cadastro" no Status).</li>
+        <li>Na seção <strong>🌾 Produtor rural — DIPAM e FUNRURAL</strong>, marque o que se aplica:</li>
+    </ol>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>Marcação</th><th>Quando usar</th><th>Efeito</th></tr>
+        <tr>
+            <td><strong>Adquire de produtor rural</strong></td>
+            <td>Cliente compra de produtor PF (o caso comum: hortifruti, cerealista, laticínio…)</td>
+            <td>A obrigação passa a ser cobrada <strong>todo mês</strong> — inclusive mês sem nota (pode ser falha de captura, o sistema avisa)</td>
+        </tr>
+        <tr>
+            <td><strong>O próprio cliente É produtor rural PF</strong></td>
+            <td>Cliente pessoa física com inscrição de produtor</td>
+            <td>Ele entrega a <strong>DIPAM-A anual</strong> e <strong>não</strong> lança o código 1.1</td>
+        </tr>
+        <tr>
+            <td><strong>Cooperativa que recebe do cooperado</strong></td>
+            <td>Cooperativas</td>
+            <td>Troca o código para <strong>1.3</strong></td>
+        </tr>
+        <tr>
+            <td><strong>Não calcular FUNRURAL</strong></td>
+            <td>Só com orientação do admin, com o motivo escrito na observação</td>
+            <td>Desliga o cálculo da sub-rogação</td>
+        </tr>
+    </table>
+    </div>
+    <div class="alerta"><strong>A marcação não substitui as notas:</strong> o sistema classifica cada nota
+    pelo que ela mostra. Se o que estiver marcado não bater com as notas, aparece um aviso de divergência
+    na aba — nunca some em silêncio.</div>
+</section>
+
+<section>
+    <h2>2. Rodar o mês (rotina mensal)</h2>
+    <ol>
+        <li>Abra <strong>🌾 DIPAM / Produtor rural</strong>, escolha a competência e clique
+            <strong>"🔎 Quem tem DIPAM neste mês"</strong>.</li>
+        <li>A lista mostra <strong>todos os clientes com compra de produtor</strong> no mês — inclusive os
+            que ninguém marcou no cadastro (aparecem com ⚠ "não marcado"). Clique <strong>abrir</strong>.</li>
+        <li>No painel do cliente você vê:
+            <ul>
+                <li><strong>DIPAM por município</strong> — o valor que vai na GIA, já agrupado, com devoluções deduzidas;</li>
+                <li><strong>📋 copiar Registro 1400</strong> — as linhas da EFD prontas (o SPED gerado pelo app já sai com elas);</li>
+                <li><strong>FUNRURAL nota a nota</strong> — Seguro Social, GILRAT e SENAR <strong>separados</strong>, do jeito que o lançamento pede, com centavos desprezados como na guia;</li>
+                <li><strong>Pendências</strong> — o que falta resolver antes de fechar (cada uma com a ação).</li>
+            </ul>
+        </li>
+    </ol>
+    <div class="quando"><strong>Regra de ouro do farol:</strong> se o painel está <span class="selo selo-vermelho">✕ vermelho</span>,
+    o total mostrado está <strong>INCOMPLETO</strong> — tem nota fora da conta esperando confirmação. Não
+    lance esse valor na GIA. Resolva as pendências primeiro.</div>
+</section>
+
+<section>
+    <h2>3. Confirmar fornecedor (a pendência mais comum)</h2>
+    <p>Só entra no DIPAM 1.1 quem é <strong>Produtor Rural — Pessoa Física</strong> no CADESP.
+    O sistema reconhece sozinho dois casos:</p>
+    <ul>
+        <li><span class="selo selo-verde">automático</span> Emitente com <strong>CPF</strong>;</li>
+        <li><span class="selo selo-verde">automático</span> Inscrição Estadual paulista começando com
+            <strong>"P"</strong> (ex.: <code>P-01100424.3/002</code>) — mesmo que o produtor tenha CNPJ.</li>
+    </ul>
+    <p>Quando o fornecedor tem <strong>CNPJ sem IE de produtor</strong> e vende produto agropecuário, o sistema
+    <strong>não adivinha</strong> — vira pendência "confirmar no CADESP". Aí é com você:</p>
+    <ol>
+        <li>Clique em <strong>consultar CADESP ↗</strong> na própria pendência e busque o CNPJ.</li>
+        <li>Olhe o campo <strong>"Natureza Jurídica"</strong>:</li>
+    </ol>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>No CADESP consta…</th><th>Clique em…</th><th>O que acontece</th></tr>
+        <tr>
+            <td>"Produtor Rural (Pessoa Física)"</td>
+            <td><strong>Produtor Rural (PF)</strong></td>
+            <td>Todas as notas dele (passadas e futuras, de todos os clientes) entram no DIPAM e no FUNRURAL</td>
+        </tr>
+        <tr>
+            <td>Produtor PF <strong>de agricultura familiar</strong> (segurado especial)</td>
+            <td><strong>PF · segurado especial (1,5%)</strong></td>
+            <td>Entra no DIPAM igual, mas o FUNRURAL fica em 1,5% (a LC 224/2025 não subiu o segurado especial)</td>
+        </tr>
+        <tr>
+            <td>Qualquer outra coisa (LTDA, empresário individual etc.)</td>
+            <td><strong>Pessoa Jurídica</strong></td>
+            <td>Sai da conta para sempre — e a pendência não volta</td>
+        </tr>
+    </table>
+    </div>
+    <div class="perigo"><strong>Por que isso importa tanto:</strong> lançar compra de <strong>PJ</strong> no
+    DIPAM 1.1 é o erro que a SEFAZ mais pega no cruzamento com as NF-e — ela <strong>desconsidera o
+    lançamento inteiro</strong> e computa de ofício. Confirmar uma vez resolve todas as notas daquele
+    fornecedor, em todos os clientes. Só admin grava a confirmação.</div>
+</section>
+
+<section>
+    <h2>4. As alíquotas do FUNRURAL (o sistema já sabe, você só confere)</h2>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>Situação</th><th>Total</th><th>Composição</th></tr>
+        <tr><td>Venda até 31/03/2026</td><td><strong>1,50%</strong></td><td>1,2% previdência + 0,1% GILRAT + 0,2% SENAR</td></tr>
+        <tr><td>Venda de <strong>01/04/2026</strong> em diante (LC 224/2025)</td><td><strong>1,63%</strong></td><td>1,32% + 0,11% + 0,20%</td></tr>
+        <tr><td>Segurado especial (agricultura familiar) — sempre</td><td><strong>1,50%</strong></td><td>marcado no cadastro do produtor</td></tr>
+        <tr><td>Produtor optou por recolher sobre a FOLHA</td><td>—</td><td>sem sub-rogação (marcado no cadastro)</td></tr>
+        <tr><td>Produtor rural <strong>PJ</strong></td><td>—</td><td>não há sub-rogação: ele mesmo recolhe</td></tr>
+    </table>
+    </div>
+    <p>O sistema ainda <strong>confere o cálculo contra o FUNRURAL que o próprio emitente declarou</strong>
+    no rodapé da nota (informações complementares). Diferença de centavo é normal (arredondamento); diferença
+    de verdade vira pendência <span class="selo selo-vermelho">⚠ divergente</span> — aí alguém precisa decidir
+    quem está certo, e o painel mostra os dois valores.</p>
+</section>
+
+<section>
+    <h2>5. O que o sistema deixa FORA da conta (de propósito)</h2>
+    <ul>
+        <li><strong>Depósito, armazenagem, retorno simbólico, consignação</strong> — não há transferência de propriedade;</li>
+        <li><strong>Entrada para fixação de preço (CFOP 1131)</strong> — o Manual manda não lançar;</li>
+        <li><strong>Notas canceladas/denegadas</strong>;</li>
+        <li><strong>Devolução</strong> não some: ela <strong>deduz</strong> do município. Se o mês fechar
+            negativo, o valor não vai ao arquivo e vira pendência para compensar no mês seguinte;</li>
+        <li><strong>Compra de PJ comum</strong> (autopeças, combustível, embalagem…) — nem vira pendência,
+            senão a tela seria só ruído.</li>
+    </ul>
+    <p>Cada nota excluída mostra o <strong>motivo</strong> — se você discordar de alguma classificação,
+    fale com o admin em vez de lançar por fora.</p>
+</section>
+
+<section>
+    <h2>O que continua manual (por enquanto)</h2>
+    <ul>
+        <li><strong>Transmitir a GIA</strong> — o valor por município sai pronto daqui; a transmissão é no portal da SEFAZ;</li>
+        <li><strong>Lançar no SAGE</strong> — enquanto ele existir, use os valores desta tela (aba Eventos → DIPAM
+            e Impostos Retidos → Sub-rogação) em vez de calcular na mão;</li>
+        <li><strong>A guia do FUNRURAL</strong> — o valor sai daqui conferido; a emissão segue o fluxo atual.</li>
+    </ul>
+</section>
+
+<section>
+    <h2>Fluxo de decisão em 10 segundos</h2>
+<pre>Cliente comprou de produtor rural?
+├─ Painel VERMELHO?          → tem fornecedor sem confirmação → CADESP → botão certo → recarrega
+├─ Painel ÂMBAR?             → leia as pendências (divergência, NCM estranho, saldo negativo)
+├─ Painel VERDE?             → copie o Registro 1400 + lance a GIA + FUNRURAL como mostrado
+├─ "não marcado no cadastro" → Dados Fiscais → 🌾 marcar "Adquire de produtor rural"
+└─ Cliente marcado, mês vazio → confira a CAPTURA antes de concluir que não houve compra</pre>
+</section>
+
+<section>
+    <h2>Rotina sugerida</h2>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>Frequência</th><th>Ação</th></tr>
+        <tr><td><strong>Início do mês</strong></td><td>Rodar "Quem tem DIPAM" da competência anterior → confirmar fornecedores pendentes</td></tr>
+        <tr><td><strong>Antes de entregar GIA/EFD</strong></td><td>Painel do cliente VERDE → copiar Registro 1400 → conferir se a ficha DIPAM B da GIA bate com o total por município</td></tr>
+        <tr><td><strong>Cliente novo rural</strong></td><td>Marcar em Dados Fiscais → 🌾 no primeiro dia</td></tr>
+        <tr><td><strong>Divergência de FUNRURAL</strong></td><td>Ver se o produtor é segurado especial (1,5%) ou se o emitente aplicou alíquota errada — na dúvida, escalar pro admin</td></tr>
+    </table>
+    </div>
+</section>
+
+</main>
+<footer>
+    Dúvidas técnicas: falar com o Paulo (admin). Este guia é atualizado junto com a ferramenta —
+    versão fonte em <code>docs/guia-colaborador-dipam.md</code>.
+</footer>
+</body>
+</html>

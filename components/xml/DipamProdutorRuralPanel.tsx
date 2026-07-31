@@ -85,7 +85,20 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
     return (
         <div className="space-y-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">🌾 DIPAM / Produtor rural</h3>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">🌾 DIPAM / Produtor rural</h3>
+                    {/* Guia do colaborador: HTML estático servido pelo próprio app
+                        (public/ → dist/) — link estável pra equipe toda, mesmo
+                        padrão do guia da saída mod 55. */}
+                    <a
+                        href="/guia-dipam-produtor-rural.html"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
+                    >
+                        📗 Guia do colaborador
+                    </a>
+                </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                     Compra de produtor rural gera DUAS obrigações a partir da mesma nota: o <strong>DIPAM 1.1</strong>{' '}
                     (valor mensal por município paulista de origem, na GIA e no Registro 1400 da EFD — Manual da
