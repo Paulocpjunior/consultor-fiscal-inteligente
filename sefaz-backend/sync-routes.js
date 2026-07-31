@@ -1329,7 +1329,14 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
               const t = Date.parse(x.dhEmi || '');
               if (!Number.isFinite(t) || t < seteDias) return;
               saidaAutXml7d++;
-              const id = x.empresaId || String(x.cnpjEmit || x.empresaCnpj || '').replace(/\D/g, '');
+              // Identidade pela CHAVE: em saída, o dono é o emitente (pos 6-20
+              // da chave). Doc com atribuição de outra raiz (legado — caso S&P
+              // "dona" de 138 saídas de terceiros) conta pro emitente REAL.
+              const emitChave = String(x.chave || '').replace(/\D/g, '').slice(6, 20);
+              const donoCnpj = String(x.empresaCnpj || x.cnpjEmit || '').replace(/\D/g, '');
+              const donoBateComChave = donoCnpj.length === 14 && emitChave.length === 14
+                && donoCnpj.slice(0, 8) === emitChave.slice(0, 8);
+              const id = (donoBateComChave && x.empresaId) ? x.empresaId : emitChave;
               if (id) empresasAutXml.add(id);
             });
           }
