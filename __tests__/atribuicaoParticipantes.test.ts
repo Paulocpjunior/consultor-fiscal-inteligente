@@ -32,6 +32,18 @@ describe('decidirDonoPorParticipantes', () => {
         });
     });
 
+    it('emitente cadastrado com tpNF=0 → ENTRADA (nota própria de compra de produtor)', () => {
+        const r = decidirDonoPorParticipantes({
+            cnpjEmit: NOVAERA_FILIAL,
+            cnpjDest: TERCEIRO,
+            empresaAtualCnpj: ESCRITORIO,
+            empresasPorCnpj: cadastro([NOVAERA_FILIAL, 'EMP-FILIAL']),
+            tpNF: '0',
+        });
+        expect(r?.direcao).toBe('entrada');
+        expect(r?.empresaId).toBe('EMP-FILIAL');
+    });
+
     it('emitente NÃO cadastrado mas destinatário sim → ENTRADA do destinatário', () => {
         const r = decidirDonoPorParticipantes({
             cnpjEmit: TERCEIRO,

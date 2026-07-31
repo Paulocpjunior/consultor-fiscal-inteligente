@@ -12,7 +12,7 @@ import { requireAuth } from './require-admin.js';
 import { consultaNFePorChave } from './sefaz-client.js';
 import { loadCertificate } from './secret-loader.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
-import { importarXmlSefaz, reatribuirDesconhecidas } from './xml-importer.js';
+import { importarXmlSefaz, reatribuirDesconhecidas, corrigirDirecaoEntradaPropria } from './xml-importer.js';
 import { withCronHeartbeat, listarCronsOrfaos } from './cron-heartbeat.js';
 import { manifestarPendentes } from './manifesto-orchestrator.js';
 import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibility.js';
@@ -204,6 +204,17 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
       }
     } catch (e) {
       console.warn('[sync-cron] reatribuição de desconhecidas falhou:', e.message);
+    }
+
+    // Nota própria de ENTRADA (tpNF=0) gravada como 'saida' pelo importer
+    // antigo — compra de produtor rural etc. Idempotente igual à de cima.
+    try {
+      const c = await corrigirDirecaoEntradaPropria({ limit: 500 });
+      if (c.corrigidas > 0) {
+        console.log(`[sync-cron] direção: ${c.corrigidas} nota(s) própria(s) de entrada (tpNF=0) corrigidas de 'saida' → 'entrada'`);
+      }
+    } catch (e) {
+      console.warn('[sync-cron] correção de direção tpNF=0 falhou:', e.message);
     }
 
     console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);
@@ -629,6 +640,15 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
       }
     } catch (e) {
       console.warn('[sync-cron-now] reatribuição de desconhecidas falhou:', e.message);
+    }
+
+    try {
+      const c = await corrigirDirecaoEntradaPropria({ limit: 500 });
+      if (c.corrigidas > 0) {
+        console.log(`[sync-cron-now] direção: ${c.corrigidas} nota(s) própria(s) de entrada (tpNF=0) corrigidas`);
+      }
+    } catch (e) {
+      console.warn('[sync-cron-now] correção de direção tpNF=0 falhou:', e.message);
     }
 
     console.log(`[sync-cron-now] fim — ${sucessos}/${empresas.length} ok, ${totalNovos} novos`);

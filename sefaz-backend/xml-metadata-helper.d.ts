@@ -5,3 +5,7 @@ export interface XmlParticipantesNfe {
 
 export function competenciaFromDhEmi(value: unknown): string | null;
 export function extrairParticipantesNfe(xml: string): XmlParticipantesNfe;
+
+export function direcaoEfetivaDoc(
+    d: { direcao?: string | null; tpNF?: string | number | null } | null | undefined,
+): string | undefined;

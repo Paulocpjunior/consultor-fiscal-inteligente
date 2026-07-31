@@ -231,14 +231,21 @@ function statusFromCStat(xml) {
 
 /**
  * Decide direcao=entrada|saida comparando emit/dest com empresa-cliente.
+ *
+ * tpNF é decisivo quando a EMPRESA é a emitente: nota própria de ENTRADA
+ * (tpNF=0, RICMS/SP art. 136 — o caso clássico é compra de produtor rural PF,
+ * que não emite NF-e) tem emit=empresa mas é ENTRADA de mercadoria. Sem olhar
+ * o tpNF, essas notas viravam "saída", o Exportar SAGE recusava o CFOP 1xxx/2xxx
+ * ("CFOP inválido para nota de saída") e a DIPAM não as via (31/07, caso
+ * EDUARDO GUERRA).
  */
-function decidirDirecao(cnpjEmit, cnpjDest, empresaCnpj) {
+function decidirDirecao(cnpjEmit, cnpjDest, empresaCnpj, tpNF) {
   const norm = c => String(c || '').replace(/\D/g, '');
   const emi = norm(cnpjEmit);
   const dest = norm(cnpjDest);
   const emp = norm(empresaCnpj);
   if (!emp) return 'desconhecida';
-  if (emi === emp) return 'saida';
+  if (emi === emp) return String(tpNF ?? '') === '0' ? 'entrada' : 'saida';
   if (dest === emp) return 'entrada';
   return 'desconhecida';
 }
@@ -487,16 +494,16 @@ async function lookupEmpresaCadastrada(db, cnpj) {
 
 // Resolve o dono real pelos participantes (emit → saída; dest → entrada).
 // null = mantém a atribuição atual.
-async function resolverDonoPorParticipantes(db, cnpjEmit, cnpjDest, empresaAtualCnpj) {
+async function resolverDonoPorParticipantes(db, cnpjEmit, cnpjDest, empresaAtualCnpj, tpNF) {
   const empresasPorCnpj = new Map();
   const emp1 = await lookupEmpresaCadastrada(db, cnpjEmit);
   if (emp1) empresasPorCnpj.set(emp1.cnpj, emp1);
   // Só consulta o dest se o emit não resolveu (economiza leitura).
-  let decisao = decidirDonoPorParticipantes({ cnpjEmit, cnpjDest, empresaAtualCnpj, empresasPorCnpj });
+  let decisao = decidirDonoPorParticipantes({ cnpjEmit, cnpjDest, empresaAtualCnpj, empresasPorCnpj, tpNF });
   if (!decisao) {
     const emp2 = await lookupEmpresaCadastrada(db, cnpjDest);
     if (emp2) empresasPorCnpj.set(emp2.cnpj, emp2);
-    decisao = decidirDonoPorParticipantes({ cnpjEmit, cnpjDest, empresaAtualCnpj, empresasPorCnpj });
+    decisao = decidirDonoPorParticipantes({ cnpjEmit, cnpjDest, empresaAtualCnpj, empresasPorCnpj, tpNF });
   }
   return decisao;
 }
@@ -599,7 +606,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     const donoNovo = empresaId || null;
     if (donoNovo && existingData && existingData.empresaId !== donoNovo) {
       const cnpjLimpo = empresaCnpj?.replace(/\D/g, '') || null;
-      const direcaoNova = decidirDirecao(existingData.cnpjEmit || meta.cnpjEmit, existingData.cnpjDest || meta.cnpjDest, cnpjLimpo);
+      const direcaoNova = decidirDirecao(existingData.cnpjEmit || meta.cnpjEmit, existingData.cnpjDest || meta.cnpjDest, cnpjLimpo, existingData.tpNF ?? meta.tpNF);
       try {
         await docRef.update({
           empresaId: donoNovo,
@@ -636,7 +643,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   // 23/05 — extrai itens/totais/direcao/status para docData completo
   const itens = extrairItens(xml);
   const totais = extrairTotais(xml);
-  let direcao = decidirDirecao(meta.cnpjEmit, meta.cnpjDest, empresaCnpj);
+  let direcao = decidirDirecao(meta.cnpjEmit, meta.cnpjDest, empresaCnpj, meta.tpNF);
   const status = statusFromCStat(xml);
   const temItens = itens.length > 0;
 
@@ -668,6 +675,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
         // Com dono explícito, respeita quando ele é participante; sem dono,
         // ninguém tem prioridade — o cadastro decide.
         empresaId ? empresaCnpj : null,
+        meta.tpNF,
       );
       if (dono) {
         empresaId = dono.empresaId;
@@ -813,7 +821,7 @@ export async function reatribuirDesconhecidas({ limit = 500 } = {}) {
       // Stubs de evento (sem participantes) não têm como resolver — pula.
       if (!d.cnpjEmit && !d.cnpjDest) { semDono++; continue; }
       try {
-        const dono = await resolverDonoPorParticipantes(db, d.cnpjEmit, d.cnpjDest, d.empresaCnpj);
+        const dono = await resolverDonoPorParticipantes(db, d.cnpjEmit, d.cnpjDest, d.empresaCnpj, d.tpNF);
         if (!dono) { semDono++; continue; }
         if (d.empresaId === dono.empresaId && d.direcao === dono.direcao) continue;
         await docSnap.ref.update({
@@ -834,6 +842,49 @@ export async function reatribuirDesconhecidas({ limit = 500 } = {}) {
     return { examinadas, reatribuidas, semDono, erro: e.message };
   }
   return { examinadas, reatribuidas, semDono };
+}
+
+/**
+ * Backfill: corrige docs já gravados como 'saida' que são NOTA PRÓPRIA DE
+ * ENTRADA (tpNF=0 — compra de produtor rural PF, retorno etc.). O importer
+ * antigo decidia só pelo CNPJ do emitente e errava a direção; o Exportar SAGE
+ * recusava o CFOP e a DIPAM não via a compra (31/07, caso EDUARDO GUERRA).
+ * Roda no fim do sync-cron (idempotente: corrigidos saem da query).
+ */
+export async function corrigirDirecaoEntradaPropria({ limit = 500 } = {}) {
+  const db = fa().firestore();
+  let examinadas = 0, corrigidas = 0;
+  try {
+    // Duas igualdades: sem índice composto (zigzag merge) e a query ENCOLHE a
+    // cada rodada — doc corrigido sai do filtro, o backlog drena sozinho.
+    const snap = await db.collection('documentos_fiscais')
+      .where('tpNF', '==', '0')
+      .where('direcao', '==', 'saida')
+      .limit(limit)
+      .get();
+    for (const docSnap of snap.docs) {
+      examinadas++;
+      const d = docSnap.data() || {};
+      // Só corrige quando a EMPRESA dona é mesmo a emitente (nota própria);
+      // doc atribuído a terceiro não muda de direção por aqui.
+      const norm = (c) => String(c || '').replace(/\D/g, '');
+      if (norm(d.cnpjEmit) !== norm(d.empresaCnpj)) continue;
+      try {
+        await docSnap.ref.update({
+          direcao: 'entrada',
+          direcaoCorrigidaEm: fa().firestore.FieldValue.serverTimestamp(),
+          direcaoCorrigidaMotivo: 'tpNF=0 (nota própria de entrada)',
+        });
+        corrigidas++;
+      } catch (e) {
+        console.warn(`[corrigirDirecaoEntradaPropria] falha em ${docSnap.id}:`, e.message);
+      }
+    }
+  } catch (e) {
+    console.warn('[corrigirDirecaoEntradaPropria] query falhou:', e.message);
+    return { examinadas, corrigidas, erro: e.message };
+  }
+  return { examinadas, corrigidas };
 }
 
 export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor }) {

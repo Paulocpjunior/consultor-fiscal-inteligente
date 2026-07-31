@@ -34,3 +34,19 @@ export function extrairParticipantesNfe(xml) {
         },
     };
 }
+
+/**
+ * Direção EFETIVA de um doc já gravado — a régua única de leitura.
+ *
+ * O importer antigo marcava 'saida' sempre que a empresa era a emitente,
+ * ignorando o tpNF: nota própria de ENTRADA (tpNF=0 — compra de produtor
+ * rural PF, retorno etc.) ficava como saída, o Exportar SAGE recusava o CFOP
+ * 1xxx/2xxx e a DIPAM não via a compra (31/07, caso EDUARDO GUERRA). O
+ * backfill do sync-cron corrige o banco aos poucos; esta função corrige a
+ * LEITURA na hora, para o painel não depender do próximo ciclo.
+ */
+export function direcaoEfetivaDoc(d) {
+    if (!d) return undefined;
+    if (d.direcao === 'saida' && String(d.tpNF ?? '') === '0') return 'entrada';
+    return d.direcao;
+}
