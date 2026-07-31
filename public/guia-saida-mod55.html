@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Guia do Colaborador — Captura de Saída (NF-e mod 55) · SP Assessoria Contábil</title>
+<style>
+    :root {
+        --azul: #0E3BFA; --azul-escuro: #091D8D;
+        --tinta: #1e293b; --cinza: #64748b; --borda: #e2e8f0;
+        --verde: #059669; --vermelho: #dc2626; --ambar: #b45309;
+        --fundo-suave: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; padding: 0; color: var(--tinta); background: var(--fundo-suave);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6; font-size: 16px;
+    }
+    header {
+        background: linear-gradient(135deg, var(--azul-escuro), var(--azul));
+        color: #fff; padding: 28px 20px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 4px; }
+    header .wrap { display: flex; align-items: center; gap: 16px; }
+    header img { height: 52px; background: #fff; border-radius: 10px; padding: 6px; }
+    header h1 { font-size: 1.35rem; margin: 0; line-height: 1.3; }
+    header p { margin: 4px 0 0; font-size: .85rem; opacity: .9; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+    section {
+        background: #fff; border: 1px solid var(--borda); border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 18px;
+    }
+    h2 { font-size: 1.15rem; color: var(--azul-escuro); margin: 0 0 10px; }
+    h3 { font-size: 1rem; margin: 18px 0 6px; }
+    .onde {
+        background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;
+        padding: 10px 14px; font-size: .9rem; margin-bottom: 18px;
+    }
+    .quando {
+        border-left: 4px solid var(--azul); background: var(--fundo-suave);
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .alerta {
+        border-left: 4px solid var(--ambar); background: #fffbeb;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--borda); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--fundo-suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--cinza); }
+    .tabela-rolagem { overflow-x: auto; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+    pre {
+        background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 16px;
+        overflow-x: auto; font-size: .85rem; line-height: 1.55;
+    }
+    ul, ol { padding-left: 22px; }
+    li { margin: 4px 0; }
+    .selo { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .selo-verde { background: #ecfdf5; color: var(--verde); }
+    .selo-vermelho { background: #fef2f2; color: var(--vermelho); }
+    .selo-ambar { background: #fffbeb; color: var(--ambar); }
+    footer { text-align: center; font-size: .8rem; color: var(--cinza); padding: 0 20px 40px; }
+    strong { color: var(--azul-escuro); }
+    @media print {
+        body { background: #fff; }
+        section { border: none; padding: 8px 0; break-inside: avoid; }
+        header { background: var(--azul-escuro); -webkit-print-color-adjust: exact; }
+    }
+</style>
+</head>
+<body>
+<header>
+    <div class="wrap">
+        <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
+        <div>
+            <h1>Guia do Colaborador — Captura de SAÍDA (NF-e mod 55)</h1>
+            <p>SP Assessoria Contábil · Consultor Fiscal Inteligente</p>
+        </div>
+    </div>
+</header>
+<main>
+
+<div class="onde">
+    <strong>Onde no sistema:</strong> Central de Documentos Fiscais → aba <strong>📥 Importar</strong> → <strong>Manual &amp; Cofre (saída 55)</strong>
+</div>
+
+<section>
+    <h2>Por que essa aba existe (leia primeiro)</h2>
+    <p>A SEFAZ <strong>nunca entrega ao emissor a nota que ele mesmo emitiu</strong> (Rejeição 641).
+    Ou seja: as notas de <strong>venda/saída</strong> dos nossos clientes não chegam sozinhas pelo
+    certificado deles — precisam de uma "ligação" que o cliente faz <strong>uma vez</strong>, ou de
+    importação nossa. Esta aba concentra tudo isso. Era o papel da SIEG; agora é nosso.</p>
+</section>
+
+<section>
+    <h2>1. 🔗 As DUAS ligações do cliente (automáticas para sempre)</h2>
+    <div class="quando"><strong>Quando usar:</strong> em TODO cliente que emite NF-e mod 55. É a primeira
+    coisa a resolver — qualquer uma das duas serve, não precisa das duas.</div>
+
+    <h3>Opção A — Cofre de e-mail</h3>
+    <ul>
+        <li><strong>O que é:</strong> o sistema emissor do cliente manda uma cópia do XML para
+            <code>xml@spassessoriacontabil.com.br</code> a cada emissão.</li>
+        <li><strong>Como configurar:</strong> botão <strong>"📋 Copiar comunicado ao cliente"</strong>
+            (no card Saída mod 55 do Diagnóstico, ou no Checklist do Cofre) → enviar ao cliente.
+            O e-mail dele deve mandar o <strong>XML</strong> (não só o PDF/DANFE).</li>
+        <li><strong>Vale para:</strong> notas novas <strong>e antigas</strong> (o emissor pode reenviar
+            o histórico em ZIP para o mesmo e-mail — o sistema não duplica nada).</li>
+    </ul>
+
+    <h3>Opção B — autXML</h3>
+    <ul>
+        <li><strong>O que é:</strong> o cliente inclui o CNPJ <code>44.388.152/0001-89</code> no campo
+            "autorizados a obter XML" (tag autXML) do sistema emissor dele.</li>
+        <li><strong>Como configurar:</strong> no CADASTRO do emissor (para valer em toda nota nova) —
+            <strong>não</strong> é o Bloco 0100 do SPED. Cada CNPJ que emite (matriz e filiais)
+            precisa da própria configuração.</li>
+        <li><strong>Vale para:</strong> somente notas emitidas <strong>depois</strong> da configuração
+            (a autorização entra dentro da nota na hora da emissão — não é retroativa).</li>
+        <li><strong>Como conferir se valeu:</strong> ver item 4 (Confirmação) e item 5 (Prova).</li>
+    </ul>
+</section>
+
+<section>
+    <h2>2. 📦 Importação Manual (ZIP)</h2>
+    <div class="quando"><strong>Quando usar:</strong> para trazer o <strong>histórico</strong> (notas
+    emitidas antes das ligações acima) ou cobrir um período específico que faltou.<br>
+    <strong>Por quê:</strong> autXML não é retroativo e o cofre só recebe o que o emissor mandar —
+    o ZIP fecha o passado.</div>
+    <p><strong>Como:</strong> peça ao cliente (ou exporte da SIEG enquanto ativa) o ZIP com os XMLs →
+    arraste na seção de Importação ZIP da aba. O sistema deduplica sozinho: pode subir o mesmo
+    arquivo duas vezes sem medo.</p>
+</section>
+
+<section>
+    <h2>3. 🏢 Colheita de Saída via autXML (botões)</h2>
+    <div class="quando"><strong>Quando usar:</strong> normalmente NUNCA precisa — roda sozinha 3×/dia.
+    Os botões são para dois momentos:
+    <ul>
+        <li><strong>"Colher agora (incremental)"</strong> — o cliente acabou de configurar o autXML
+            e você quer ver as notas entrando sem esperar o próximo ciclo.</li>
+        <li><strong>"Backfill (recomeçar do início)"</strong> — repuxa os últimos ~90 dias do fluxo.
+            Use quando suspeitar que algo se perdeu. No máximo 1×/dia.</li>
+    </ul></div>
+    <p><strong>Por quê:</strong> é o robô que baixa da SEFAZ as notas autorizadas via autXML e
+    entrega cada uma à empresa dona.</p>
+</section>
+
+<section>
+    <h2>4. 📋 Cobertura de Saída — "quem ainda não está ligado"</h2>
+    <div class="quando"><strong>Quando usar:</strong> toda semana (rotina), e sempre que um cliente
+    disser "já configurei".<br>
+    <strong>Por quê:</strong> é a lista de trabalho da migração — mostra quem ainda não tem NENHUMA
+    saída chegando sozinha.</div>
+    <ol>
+        <li>Botão <strong>"Gerar relatório"</strong>.</li>
+        <li><span class="selo selo-vermelho">🎯 PRIORITÁRIAS</span> emitem mod 55 e paramos de
+            capturar — atacar primeiro, de cima para baixo (ordenado por volume). Botão de
+            <strong>CSV</strong> para distribuir a lista.</li>
+        <li>"Sem evidência" (recolhido): provavelmente nem emitem mod 55 — baixa prioridade.</li>
+        <li><strong>"Cliente disse que ligou? Confirme aqui"</strong>: digite o nome/CNPJ. O sistema
+            PROVA por qual trilho a nota está chegando (cofre/autXML, com data) — ou diz exatamente
+            o que cobrar do cliente. Importação manual <strong>não</strong> confirma ligação nenhuma.</li>
+    </ol>
+</section>
+
+<section>
+    <h2>5. 🔢 Prova de Saída por numeração — a EXATIDÃO</h2>
+    <div class="quando"><strong>Quando usar:</strong> semanalmente, e antes de qualquer conversa de
+    "está faltando nota". Também chega <strong>todo dia no e-mail das 9h</strong> — se houver nota
+    faltando, o próprio ASSUNTO do e-mail avisa.<br>
+    <strong>Por quê:</strong> NF-e é numerada em sequência POR SÉRIE e POR ESTABELECIMENTO. Se temos
+    a 760, 761 e 763, a <strong>762 está faltando — com número</strong>. É prova matemática, sem
+    depender de SIEG nem do cliente.</div>
+
+    <p><strong>Como ler o resultado (botão "Rodar prova"):</strong></p>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>O que aparece</th><th>O que significa</th><th>O que fazer</th></tr>
+        <tr>
+            <td><span class="selo selo-verde">✅ Exatas</span></td>
+            <td>Sequência contínua — tudo que o cliente emitiu chegou</td>
+            <td>Nada 🎉</td>
+        </tr>
+        <tr>
+            <td><span class="selo selo-vermelho">🔴 Com buraco</span> + números</td>
+            <td>Notas específicas NÃO chegaram (lista o nº exato)</td>
+            <td>Pedir ao cliente exatamente essas notas (ZIP/e-mail) e conferir a ligação</td>
+        </tr>
+        <tr>
+            <td><span class="selo selo-ambar">🟡 Histórico não coberto</span> (faixa gigante)</td>
+            <td>A captura começou no meio da numeração — falta o passado, não é falha da ligação</td>
+            <td>Resolver com ZIP/backfill (item 2) — <strong>não</strong> cobrar o cliente</td>
+        </tr>
+        <tr>
+            <td>Aviso de <strong>inutilizada</strong></td>
+            <td>Buraco pode ser numeração inutilizada legalmente (não circula na SEFAZ)</td>
+            <td>Confirmar com o cliente ANTES de cobrar</td>
+        </tr>
+    </table>
+    </div>
+
+    <div class="alerta"><strong>Limite honesto:</strong> a prova enxerga até a <strong>maior nota
+    capturada</strong> de cada série. Nota emitida depois dela ainda não é detectável — é o papel
+    dos trilhos (cofre/autXML) trazê-la; quando a próxima chegar, a sequência fecha o cerco.</div>
+</section>
+
+<section>
+    <h2>Rotina sugerida</h2>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>Frequência</th><th>Ação</th></tr>
+        <tr><td><strong>Diária (9h)</strong></td><td>Ler o e-mail de resumo — se o assunto tiver "🔢 N nota(s) FALTANDO", abrir a Prova e agir nos números listados</td></tr>
+        <tr><td><strong>Semanal</strong></td><td>Gerar a Cobertura de Saída → atacar as 🎯 prioritárias (comunicado cofre/autXML)</td></tr>
+        <tr><td><strong>Ao cliente dizer "configurei"</strong></td><td>Buscar o nome na Confirmação → validar o trilho com data</td></tr>
+        <tr><td><strong>Cliente novo com histórico</strong></td><td>ZIP do histórico (item 2) + ligação (item 1) no mesmo dia</td></tr>
+    </table>
+    </div>
+</section>
+
+<section>
+    <h2>Fluxo de decisão em 10 segundos</h2>
+<pre>Falta nota de saída de um cliente?
+├─ Nunca chegou NADA dele sozinho?  → Cobertura de Saída → cobrar ligação (cofre OU autXML)
+├─ Chegava e parou?                 → Confirmação (item 4) → ver qual trilho quebrou
+├─ Faltam NÚMEROS específicos?      → Prova (item 5) → pedir exatamente essas notas
+└─ Falta o PASSADO inteiro?         → ZIP / backfill (item 2) — não é culpa do cliente</pre>
+</section>
+
+</main>
+<footer>
+    Dúvidas técnicas: falar com o Paulo (admin). Este guia é atualizado junto com a ferramenta —
+    versão fonte em <code>docs/guia-colaborador-saida-mod55.md</code>.
+</footer>
+</body>
+</html>
