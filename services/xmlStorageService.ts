@@ -11,7 +11,6 @@ import {
     uploadString,
     getDownloadURL,
     deleteObject,
-    getBlob,
 } from 'firebase/storage';
 import { storage, isFirebaseStorageConfigured } from './firebaseConfig';
 
@@ -56,14 +55,34 @@ export async function uploadXml(
     return { storagePath: path, storageUrl: url };
 }
 
-/** Recupera o conteúdo do XML armazenado como texto UTF-8. */
-export async function downloadXmlText(path: string): Promise<string> {
-    if (!isFirebaseStorageConfigured || !storage) {
-        throw new XmlStorageError('Firebase Storage não está configurado.');
+/**
+ * Recupera o XML original de uma nota PELA CHAVE, via backend (/xml-bruto).
+ *
+ * NÃO usa o SDK do Storage no navegador: aquele caminho dependia de três
+ * coisas fora do controle da tela — o bucket do build (VITE_FIREBASE_STORAGE_
+ * BUCKET pode divergir do STORAGE_BUCKET do importer), o CORS do bucket e as
+ * storage.rules (que não cobriam xmls/{empresa}/eventos/…) — e qualquer uma
+ * virava "storage/retry-limit-exceeded" sem diagnóstico (31/07). O backend lê
+ * do MESMO bucket em que gravou, com a autorização da carteira, e quando o
+ * arquivo não existe diz exatamente isso, com a ação.
+ */
+export async function downloadXmlText(chave: string): Promise<string> {
+    const chaveLimpa = (chave || '').replace(/\D/g, '');
+    if (chaveLimpa.length !== 44) {
+        throw new XmlStorageError('Documento sem chave de acesso completa — não há XML para baixar.');
     }
-    const ref = storageRef(storage, path);
-    const blob = await getBlob(ref);
-    return await blob.text();
+    const { getAuth } = await import('firebase/auth');
+    const u = getAuth().currentUser;
+    if (!u) throw new XmlStorageError('Sessão expirada — entre novamente.');
+    const token = await u.getIdToken();
+    const res = await fetch(`/api/admin/sefaz/xml-bruto?chave=${chaveLimpa}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({} as any));
+        throw new XmlStorageError(data.error || `Falha no servidor (HTTP ${res.status}).`);
+    }
+    return await res.text();
 }
 
 /** Remove o XML original do Storage (uso administrativo). */
