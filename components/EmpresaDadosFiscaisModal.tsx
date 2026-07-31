@@ -56,6 +56,24 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
         if (key === 'uf') setAvisoUfVazia(false);
     };
 
+    // Condição rural: o bloco inteiro é gravado junto (booleano desmarcado tem
+    // de chegar como false — undefined sumiria do JSON e o valor velho ficaria
+    // preso, mesma lição do CCM).
+    const handleRural = (key: keyof NonNullable<EmpresaDadosFiscais['condicaoRural']>, value: boolean | string) => {
+        setDados(prev => ({
+            ...prev,
+            condicaoRural: {
+                adquireDeProdutor: false,
+                ehProdutorRuralPF: false,
+                ehCooperativa: false,
+                funruralSubRogacao: 'automatico',
+                observacao: '',
+                ...(prev.condicaoRural || {}),
+                [key]: value,
+            },
+        }));
+    };
+
     const handleSave = async () => {
         // Validações de prevenção ANTES de chamar o backend.
         const ufNorm = (dados.uf || '').trim().toUpperCase();
@@ -292,6 +310,56 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                             />
                         </div>
                     </Section>
+
+                    {/* Produtor rural — DIPAM e FUNRURAL */}
+                    <Section titulo="🌾 Produtor rural — DIPAM e FUNRURAL">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                            Marque a condição do cliente. A marcação faz a obrigação aparecer TODO mês (inclusive
+                            em mês sem nota — mês vazio pode ser falha de captura) e escolhe o código certo. O app
+                            classifica cada nota pelo que ela mostra: o que estiver marcado aqui e não bater com as
+                            notas aparece como divergência no painel DIPAM, nunca em silêncio.
+                        </p>
+                        <div className="space-y-2">
+                            <Check
+                                label="Adquire de produtor rural (compra de produtor PF)"
+                                hint="Lança DIPAM 1.1 por município paulista de origem e recolhe o FUNRURAL por sub-rogação (Lei 8.212/91, art. 30, IV)."
+                                checked={!!dados.condicaoRural?.adquireDeProdutor}
+                                onChange={v => handleRural('adquireDeProdutor', v)}
+                            />
+                            <Check
+                                label="O próprio cliente é Produtor Rural (Pessoa Física)"
+                                hint="Entrega a DIPAM-A anual (www4.fazenda.sp.gov.br/DIPAM-A) e NÃO lança o código 1.1 sobre as próprias compras."
+                                checked={!!dados.condicaoRural?.ehProdutorRuralPF}
+                                onChange={v => handleRural('ehProdutorRuralPF', v)}
+                            />
+                            <Check
+                                label="Cooperativa que recebe do cooperado"
+                                hint="Usa o código DIPAM 1.3 (SPDIPAM13) no lugar do 1.1 — só quando há efetiva transmissão de propriedade à cooperativa."
+                                checked={!!dados.condicaoRural?.ehCooperativa}
+                                onChange={v => handleRural('ehCooperativa', v)}
+                            />
+                            <Check
+                                label="Não calcular FUNRURAL por sub-rogação para este cliente"
+                                hint="Desliga o cálculo. Use só com fundamento — e escreva o motivo na observação abaixo."
+                                checked={dados.condicaoRural?.funruralSubRogacao === 'nao_aplica'}
+                                onChange={v => handleRural('funruralSubRogacao', v ? 'nao_aplica' : 'automatico')}
+                            />
+                        </div>
+                        {dados.condicaoRural?.ehProdutorRuralPF && dados.condicaoRural?.adquireDeProdutor && (
+                            <p className="text-[11px] text-amber-500 mt-2">
+                                ⚠ As duas marcações juntas: produtor rural PF entrega DIPAM-A e não lança o 1.1 —
+                                a compra de produtor não vai gerar código 1.1 para este cliente.
+                            </p>
+                        )}
+                        <div className="mt-4">
+                            <Field
+                                label="Observação (fica registrada no cadastro)"
+                                value={dados.condicaoRural?.observacao || ''}
+                                onChange={v => handleRural('observacao', v)}
+                                placeholder="Ex.: só compra de produtores de Mirassol; fornecedor X optou pela folha."
+                            />
+                        </div>
+                    </Section>
                 </div>
 
                 {/* Footer */}
@@ -375,6 +443,25 @@ const SelectField: React.FC<SelectFieldProps> = ({ label, value, onChange, optio
         </select>
         {hint && <p className="text-[11px] mt-1 text-slate-400 dark:text-slate-500">{hint}</p>}
     </div>
+);
+
+const Check: React.FC<{ label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }> = ({
+    label, hint, checked, onChange,
+}) => (
+    <label className="flex items-start gap-2 cursor-pointer group">
+        <input
+            type="checkbox"
+            checked={checked}
+            onChange={e => onChange(e.target.checked)}
+            className="mt-0.5 w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500"
+        />
+        <span>
+            <span className="text-sm text-slate-700 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white">
+                {label}
+            </span>
+            {hint && <span className="block text-[11px] text-slate-400 dark:text-slate-500">{hint}</span>}
+        </span>
+    </label>
 );
 
 export default EmpresaDadosFiscaisModal;

@@ -29,6 +29,7 @@ const CofreControlePanel = lazy(() => import('./CofreControlePanel'));
 const BacklogEntradaPanel = lazy(() => import('./BacklogEntradaPanel'));
 const ProvaCapturaPanel = lazy(() => import('./ProvaCapturaPanel'));
 const CofreChecklistPanel = lazy(() => import('./CofreChecklistPanel'));
+const DipamProdutorRuralPanel = lazy(() => import('./DipamProdutorRuralPanel'));
 
 type TabId =
     | 'dashboard'
@@ -37,6 +38,7 @@ type TabId =
     | 'backlog-entrada'
     | 'prova-captura'
     | 'documentos'
+    | 'dipam'
     | 'importacao'
     | 'empresas'
     | 'sharepoint'
@@ -69,7 +71,14 @@ const GRUPOS: Array<{ id: GrupoId; label: string; subs: Array<{ id: TabId; label
             { id: 'nfse_sp_captura', label: '🛰️ Portal SP' },
         ],
     },
-    { id: 'documentos', label: 'XMLs (Entrada/Saída)', subs: [{ id: 'documentos', label: 'XMLs' }] },
+    {
+        id: 'documentos', label: 'XMLs (Entrada/Saída)', subs: [
+            { id: 'documentos', label: 'XMLs' },
+            // Compra de produtor rural: DIPAM 1.1 + FUNRURAL sub-rogação, lidos
+            // das próprias notas capturadas (#378).
+            { id: 'dipam', label: '🌾 DIPAM / Produtor rural' },
+        ],
+    },
     {
         id: 'importar', label: '📥 Importar', subs: [
             { id: 'importacao', label: '📥 Manual & Cofre (saída 55)' },
@@ -259,6 +268,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                             </div>
                         )}
                     </>
+                )}
+                {tab === 'dipam' && (
+                    <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando DIPAM…</p>}>
+                        <DipamProdutorRuralPanel isAdmin={currentUser?.role === 'admin'} />
+                    </Suspense>
                 )}
                 {tab === 'importacao' && (
                     <div className="space-y-4">

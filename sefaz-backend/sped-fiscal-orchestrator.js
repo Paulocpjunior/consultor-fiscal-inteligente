@@ -19,6 +19,8 @@ import { buildBlocoD } from './sped-fiscal-blocoD.js';
 import { buildBlocoE } from './sped-fiscal-blocoE.js';
 import { buildBlocoH } from './sped-fiscal-blocoH.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
+import { montarDipamCompetencia } from './dipam-produtor-rural.js';
+import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -223,6 +225,32 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         }
     }
 
+    // ─── 8. DIPAM (Registro 1400) — compras de produtor rural paulista ──────
+    // O Manual da DIPAM 2026 (pág. 29) manda informar o valor MENSAL por
+    // município de origem no Registro 1400. Sem isso o município perde a fatia
+    // do IPM e a empresa fica sujeita à multa do art. 527, VII do RICMS/SP.
+    let dipam = null;
+    try {
+        const fornecedores = await carregarProdutoresRurais(documentosDaContraparte(notas));
+        dipam = montarDipamCompetencia({
+            documentos: notas,
+            competencia: periodoInicio,
+            empresa: lerCondicaoRural(empresa),
+            fornecedores,
+        });
+        if (dipam.pendencias.length > 0) {
+            // Pendência de DIPAM não pode passar em silêncio: o arquivo sai
+            // com valor a MENOS e ninguém percebe até a SEFAZ cruzar as NF-e.
+            warnings.push(
+                `DIPAM: ${dipam.pendencias.length} ponto(s) a resolver antes de entregar `
+                + `(veja em XMLs → 🌾 DIPAM / Produtor rural). ${dipam.pendencias[0].mensagem}`,
+            );
+        }
+    } catch (err) {
+        console.warn(`[sped-fiscal] DIPAM falhou: ${err.message}`);
+        warnings.push(`DIPAM não pôde ser apurada (${err.message}) — o Registro 1400 sai vazio. Confira antes de transmitir.`);
+    }
+
     return {
         empresa,
         contador: getContadorPadrao(),
@@ -233,6 +261,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         participantes,
         unidades,
         saldoCredorIcmsAnterior,
+        dipam,
         warnings,
     };
 }
@@ -253,7 +282,9 @@ export async function montarBlocos({ dados }) {
     const linhasBlocoG = buildBlocoG();   // vazio
     const linhasBlocoH = buildBlocoH(dados);   // inventario (Bloco H real)
     const linhasBlocoK = buildBlocoK();   // vazio
-    const linhasBloco1 = buildBloco1();   // vazio
+    // Bloco 1 traz o Registro 1400 (DIPAM por município) quando houver compra
+    // de produtor rural paulista — e só aí o 1010 liga o IND_VA.
+    const linhasBloco1 = buildBloco1(dados.dipam?.dipam?.registro1400 || []);
 
     // Bloco 9 precisa contar registros de TODOS os blocos anteriores.
     // Ordem oficial: 0 -> B -> C -> D -> E -> G -> H -> K -> 1 -> 9

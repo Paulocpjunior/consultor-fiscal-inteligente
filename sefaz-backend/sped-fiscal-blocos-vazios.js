@@ -36,26 +36,46 @@ export const buildBlocoG = () => buildBlocoVazio('G');
 // buildBlocoH foi pra ./sped-fiscal-blocoH.js (com H005/H010 reais).
 export const buildBlocoK = () => buildBlocoVazio('K');
 /**
- * Bloco 1 — gera 1001|0| + 1010|N|x14| + 1990|3|.
+ * Bloco 1 — gera 1001|0| + 1010|…| + (1400 por municipio) + 1990|N|.
  *
  * Registro 1010 (Obrigatoriedade de Registros do Bloco 1) eh exigido pelo
- * PVA mesmo quando a empresa nao tem operacoes especiais. 14 campos S/N,
- * todos 'N' indicando que nada se aplica.
+ * PVA mesmo quando a empresa nao tem operacoes especiais. 14 campos S/N.
  *
  * Layout do 1010 (NT 2024.001):
  *  REG | IND_EXP | IND_CCRF | IND_COMB | IND_USINA | IND_VA |
  *      | IND_EE  | IND_CART | IND_FORM | IND_AER  | IND_GIAF1 |
  *      | IND_GIAF3 | IND_GIAF4 | IND_REST_RESSARC_COMPL_ICMS
+ *
+ * IND_VA ("informou Valor Adicionado?") eh o interruptor do Registro 1400:
+ * so pode ser 'S' quando ha 1400 no arquivo, e nao pode ser 'N' quando ha —
+ * o PVA rejeita as duas combinacoes.
+ *
+ * Registro 1400 = DIPAM por municipio (Manual da DIPAM 2026, pag. 29):
+ * |1400|COD_ITEM_IPM|MUN|VALOR| — ex.: |1400|SPDIPAM11|3548906|52520,00|.
+ * Quem compra de produtor rural paulista informa aqui o montante mensal
+ * agrupado por municipio de origem. Ver sefaz-backend/dipam-produtor-rural.js.
+ *
+ * @param {Array<{codItemIpm:string, mun:string, valor:number}>} [registros1400]
  */
-export function buildBloco1() {
-    return [
+export function buildBloco1(registros1400 = []) {
+    const dipam = (registros1400 || []).filter((r) => r && r.mun && Number(r.valor) > 0);
+    const temVA = dipam.length > 0;
+
+    const linhas = [
         fmt.buildLine(['1001', '0']),  // 0 = Bloco COM dados (tem o 1010)
         fmt.buildLine([
             '1010',
-            'N', 'N', 'N', 'N', 'N',  // EXP, CCRF, COMB, USINA, VA
+            'N', 'N', 'N', 'N', temVA ? 'S' : 'N',  // EXP, CCRF, COMB, USINA, VA
             'N', 'N', 'N', 'N', 'N',  // EE, CART, FORM, AER, GIAF1
             'N', 'N', 'N',            // GIAF3, GIAF4, REST_RESSARC
         ]),
-        fmt.buildLine(['1990', '3']),  // 3 linhas no bloco
+        ...dipam.map((r) => fmt.buildLine([
+            '1400',
+            fmt.sanitizeString(r.codItemIpm, 60),
+            String(r.mun).replace(/\D/g, ''),
+            fmt.formatValue(r.valor),
+        ])),
     ];
+    linhas.push(fmt.buildLine(['1990', String(linhas.length + 1)]));
+    return linhas;
 }

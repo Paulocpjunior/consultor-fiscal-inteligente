@@ -362,6 +362,32 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   pendência que TRAVA). Operacional: a conta só fica honesta com os vínculos
   da carteira preenchidos — lista grande em "sem responsável" é trabalho de
   atribuição, não bug.
+- **COMPRA DE PRODUTOR RURAL = DUAS obrigações da MESMA nota** (Paulo, 31/07 —
+  prints do SAGE + NF 425.231, #378): (1) **DIPAM 1.1** — só produtor PAULISTA,
+  valor MENSAL agrupado POR MUNICÍPIO de origem, na ficha "Informações para a
+  DIPAM B" da GIA **E** no Registro 1400 da EFD (`SPDIPAM11`; um não dispensa o
+  outro, Manual pág. 29); (2) **FUNRURAL por sub-rogação** — produtor PF de
+  QUALQUER estado (o caso MG do print gera FUNRURAL e NÃO gera DIPAM).
+  Núcleo puro `sefaz-backend/dipam-produtor-rural.js` (39 testes) + rotas
+  `/api/admin/dipam/*` + aba `XMLs → 🌾 DIPAM / Produtor rural`. REGRAS que não
+  podem ser afrouxadas: só **Produtor Rural PF** entra (CNPJ NÃO descaracteriza
+  — Comunicado CAT 45/2008; a prova forte é a IE paulista começando com **"P"**);
+  lançar PJ no 1.1 é o erro que a SEFAZ desconsidera, então fornecedor sem prova
+  fica FORA do total e vira pendência de CADESP — **uma por fornecedor, e só
+  quando ele vende gênero agropecuário** (senão toda compra de PJ viraria
+  pendência); devolução DEDUZ do município e mês negativo não vai ao arquivo;
+  cooperativa usa 1.3; cliente que É produtor PF entrega DIPAM-A e não lança
+  1.1. Cadastro em DOIS níveis: `dadosFiscais.condicaoRural` no CLIENTE (a
+  marcação faz a obrigação aparecer em mês SEM nota — mês vazio pode ser falha
+  de captura) e coleção `produtores_rurais` no FORNECEDOR (natureza CADESP,
+  município e opção pela FOLHA, que zera a sub-rogação; só admin grava).
+  **Alíquotas do FUNRURAL são TABELA COM VIGÊNCIA** (1,2/0,1/0,2 desde 2018;
+  1,32/0,11/0,20 desde 2026-01 marcada `revisar:true`, conferida contra a nota
+  que declara 1,63% = R$ 909,47) — PENDENTE do Paulo: confirmar a base legal de
+  2026 e virar `revisar` para false. Centavo é DESPREZADO (IN RFB 971), igual ao
+  SAGE. O app confere o cálculo contra o FUNRURAL declarado no infAdic da
+  própria nota e aponta divergência. Bloco 1 do SPED: `IND_VA='S'` só existe COM
+  1400 e vice-versa. Detalhes em `docs/dipam-produtor-rural.md`.
 - Painel Sistema→Banco (#371, dev-only): coleção nova no Firestore = linha no
   `catalogo-banco.js` no MESMO PR (o painel denuncia órfãs). Pendente Paulo:
   definir env `SISTEMA_DEV_EMAILS` no Cloud Run (sugerido p.c.pereira@me.com)

@@ -113,9 +113,13 @@ export function acharApuracaoDaCompetencia(empresa, competencia) {
  * @param {Array}   p.tarefas      tarefas (obrigações) da competência
  * @param {Array}   p.envios       registros de impostos_enviados da competência
  * @param {boolean} [p.capturaAtiva] a empresa está elegível à captura automática
+ * @param {object}  [p.dipam]        { produtores, indefinidos } — compras de
+ *   produtor rural detectadas no mês. Entra na etapa de OBRIGAÇÕES porque é lá
+ *   que a DIPAM é entregue (ficha da GIA + Registro 1400 da EFD).
  */
 export function montarRotinaFiscal({
     empresa, competencia, documentos = [], apuracao = null, tarefas = [], envios = [], capturaAtiva = true,
+    dipam = null,
 }) {
     const docs = documentos || [];
     const entradas = docs.filter((d) => d.direcao === 'entrada').length;
@@ -186,6 +190,29 @@ export function montarRotinaFiscal({
     } else {
         eObrigacoes = etapa('obrigacoes', 'concluida', `${tarefas.length} obrigação(ões) entregue(s).`, null,
             { concluidas, total: tarefas.length, abertas: [] });
+    }
+
+    // DIPAM: a compra de produtor rural entra na GIA e no Registro 1400 da EFD
+    // — ou seja, é entrega de obrigação. Fornecedor não confirmado NÃO deixa a
+    // etapa fechar: o arquivo sairia com valor a menos e ninguém veria.
+    const dipamProdutores = Number(dipam?.produtores || 0);
+    const dipamIndefinidos = Number(dipam?.indefinidos || 0);
+    if (dipamProdutores > 0 || dipamIndefinidos > 0) {
+        const acaoDipam = 'Abra XMLs → 🌾 DIPAM / Produtor rural: confirme os fornecedores e leve o Registro 1400 para a GIA/EFD.';
+        if (dipamIndefinidos > 0) {
+            eObrigacoes = etapa('obrigacoes', 'atencao',
+                `${eObrigacoes.resumo} · DIPAM: ${dipamIndefinidos} fornecedor(es) a confirmar.`,
+                acaoDipam,
+                {
+                    concluidas: eObrigacoes.concluidas, total: eObrigacoes.total, abertas: eObrigacoes.abertas || [],
+                    dipam: { produtores: dipamProdutores, indefinidos: dipamIndefinidos },
+                });
+        } else {
+            eObrigacoes = { ...eObrigacoes,
+                resumo: `${eObrigacoes.resumo} · DIPAM: ${dipamProdutores} compra(s) de produtor rural.`,
+                acao: eObrigacoes.acao || acaoDipam,
+                dipam: { produtores: dipamProdutores, indefinidos: 0 } };
+        }
     }
 
     // ── 5. GUIAS ────────────────────────────────────────────────────────────
