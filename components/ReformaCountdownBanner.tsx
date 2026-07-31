@@ -1,39 +1,24 @@
 /**
- * ReformaCountdownBanner — alerta de contagem regressiva pro marco CBS/IBS.
+ * ReformaCountdownBanner — alerta dos marcos CBS/IBS nos documentos fiscais.
  *
- * A Reforma Tributária (EC 132/2023) entra em fase relevante em 01/08/2026.
- * Este banner fica no topo lembrando quantos dias faltam, com urgência
- * crescente conforme a data chega. Some sozinho depois que a data passa
- * (vira aviso de "já vigente").
+ * ATUALIZADO 31/07/2026 (Ato Conjunto RFB/CGIBS nº 4/2026): o início da
+ * obrigatoriedade virou ESCALONADO — NF-e/NFC-e/CT-e/MDF-e seguem em
+ * 03/08/2026 (regime regular, rejeição 1115), NFS-e em 01/10, NFAg/NF-e ABI
+ * em 01/12 e Simples Nacional só em 01/01/2027. O banner mostra o PRÓXIMO
+ * marco com contagem regressiva e o cronograma completo embaixo — a tabela
+ * de datas vive em services/reformaMarcos.ts (fonte única, testada).
  *
- * Data configurável via env VITE_REFORMA_CBS_IBS_DATE (YYYY-MM-DD); default
- * 2026-08-01. O usuário pode fechar (lembra via localStorage por 1 dia).
+ * Some sozinho quando o último marco passa. O usuário pode fechar
+ * (lembra via localStorage por 1 dia).
  */
 import React, { useMemo, useState } from 'react';
-
-// Marco CBS/IBS. ISO (meia-noite local). Override por env se a data mudar.
-const DATA_ALVO_ISO =
-    ((import.meta as any).env?.VITE_REFORMA_CBS_IBS_DATE as string) || '2026-08-01';
+import { estadoMarcosReforma, cronogramaCompacto, fmtDataBr } from '../services/reformaMarcos';
 
 const STORAGE_KEY = 'reforma_cbs_ibs_banner_fechado_em';
 
 interface Props {
     /** Leva o colaborador pra aba Reforma Tributária ao clicar. */
     onIrParaReforma?: () => void;
-}
-
-function diasAte(alvoIso: string): number {
-    const [a, m, d] = alvoIso.split('-').map(Number);
-    if (!a || !m || !d) return NaN;
-    const alvo = new Date(a, m - 1, d);
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    return Math.round((alvo.getTime() - hoje.getTime()) / 86_400_000);
-}
-
-function fmtDataBr(alvoIso: string): string {
-    const [a, m, d] = alvoIso.split('-');
-    return `${d}/${m}/${a}`;
 }
 
 const ReformaCountdownBanner: React.FC<Props> = ({ onIrParaReforma }) => {
@@ -46,16 +31,19 @@ const ReformaCountdownBanner: React.FC<Props> = ({ onIrParaReforma }) => {
         } catch { return false; }
     });
 
-    const dias = useMemo(() => diasAte(DATA_ALVO_ISO), []);
+    const estado = useMemo(() => estadoMarcosReforma(new Date()), []);
 
-    if (fechado || !Number.isFinite(dias)) return null;
-    // Passou da data: some (a info vira a própria aba Reforma).
-    if (dias < 0) return null;
+    if (fechado) return null;
+    // Todos os marcos vigentes: banner aposenta (a info vira a aba Reforma).
+    if (!estado.proximo || estado.diasAteProximo === null) return null;
 
-    // Urgência crescente: <=15 vermelho, <=45 âmbar, senão azul.
+    const dias = estado.diasAteProximo;
+    const marco = estado.proximo;
+
+    // Urgência crescente: <=7 vermelho, <=30 âmbar, senão azul.
     const tema =
-        dias <= 15 ? { bg: 'linear-gradient(135deg,#dc2626,#b91c1c)', emoji: '🚨' }
-        : dias <= 45 ? { bg: 'linear-gradient(135deg,#d97706,#b45309)', emoji: '⏳' }
+        dias <= 7 ? { bg: 'linear-gradient(135deg,#dc2626,#b91c1c)', emoji: '🚨' }
+        : dias <= 30 ? { bg: 'linear-gradient(135deg,#d97706,#b45309)', emoji: '⏳' }
         : { bg: 'linear-gradient(135deg,#1e40af,#1e3a8a)', emoji: '📣' };
 
     const fechar = () => {
@@ -64,9 +52,9 @@ const ReformaCountdownBanner: React.FC<Props> = ({ onIrParaReforma }) => {
     };
 
     const frase =
-        dias === 0 ? 'É HOJE — CBS/IBS entra em vigor!'
-        : dias === 1 ? 'Falta 1 dia pro início da CBS/IBS!'
-        : `Faltam ${dias} dias pro início da CBS/IBS`;
+        dias === 0 ? `É HOJE — campos IBS/CBS obrigatórios em ${marco.docs}!`
+        : dias === 1 ? `AMANHÃ os campos IBS/CBS ficam obrigatórios em ${marco.docs}!`
+        : `Faltam ${dias} dias: campos IBS/CBS obrigatórios em ${marco.docs}`;
 
     return (
         <div
@@ -79,8 +67,8 @@ const ReformaCountdownBanner: React.FC<Props> = ({ onIrParaReforma }) => {
                     Reforma Tributária — {frase}
                 </p>
                 <p className="text-xs opacity-90 leading-tight">
-                    Marco em <b>{fmtDataBr(DATA_ALVO_ISO)}</b>. Prepare as empresas: simule o impacto
-                    IBS/CBS e revise CFOP/CST/NCM.
+                    {fmtDataBr(marco.dataIso)}: {marco.publico}.
+                    {' '}Cronograma: {cronogramaCompacto()} <i>(Ato Conjunto RFB/CGIBS nº 4/2026)</i>.
                 </p>
             </div>
             {onIrParaReforma && (

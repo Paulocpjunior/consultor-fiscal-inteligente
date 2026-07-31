@@ -340,7 +340,9 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // do Google que SEMPRE aponta pra ultima versao GA do Flash). Pra pinar uma
 // versao especifica (ex: se uma release nova quebrar prompts), defina o env
 // GEMINI_MODEL_PRO/FLASH com o ID exato (ex: gemini-3.5-flash).
-const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-flash-latest';
+// PRO precisa apontar pro alias do Pro — com os dois em flash-latest o
+// roteador virava enfeite: anexo/prompt longo/parecer caía no modelo barato.
+const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-pro-latest';
 const GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || 'gemini-flash-latest';
 let ai = null;
 if (GEMINI_API_KEY) {
