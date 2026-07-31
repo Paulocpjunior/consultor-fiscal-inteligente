@@ -43,6 +43,10 @@ export function sanitizarDadosFiscais(dados: EmpresaDadosFiscais): EmpresaDadosF
         // Inscrição municipal genérica: NÃO stripa (pode ser alfanumérica
         // conforme a prefeitura); só trim.
         inscricaoMunicipal: trim(dados.inscricaoMunicipal),
+        // CNAE aceita o formato com máscara (4712-1/00) — só trim; apagar e
+        // salvar remove ('' = ordem de apagar, mesma regra dos demais).
+        cnae: trim(dados.cnae),
+        dataAbertura: trim(dados.dataAbertura),
         // Condição rural: booleano vai EXPLÍCITO (true/false), nunca undefined
         // — desmarcar precisa chegar ao backend como false, mesma lição do CCM.
         // Bloco intocado continua ausente (undefined) e nada muda.

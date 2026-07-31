@@ -1347,6 +1347,16 @@ export interface EmpresaDadosFiscais {
     inscEstSubstTrib?: string;
     /** Codigo Suframa (opcional, so se zona franca). */
     codSuframa?: string;
+    /**
+     * CNAE principal e data de abertura nasceram na tela de CRIAÇÃO da empresa
+     * (top-level do doc) e não tinham onde ser editados depois — a conferência
+     * de cadastro cobrava um campo sem tela (31/07). O modal Dados Fiscais
+     * agora edita os dois; o backend espelha no top-level (de onde apuração/DAS
+     * leem) e a conferência aceita os dois lugares.
+     */
+    cnae?: string;
+    /** Data de abertura da empresa (YYYY-MM-DD). */
+    dataAbertura?: string;
 }
 
 export interface DocumentoFiscalItem {

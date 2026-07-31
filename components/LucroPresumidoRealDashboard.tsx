@@ -803,12 +803,22 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                     isOpen={isDadosFiscaisModalOpen}
                     onClose={() => setIsDadosFiscaisModalOpen(false)}
                     empresaNome={selectedEmpresa.nome}
-                    valoresAtuais={selectedEmpresa.dadosFiscais}
+                    valoresAtuais={{
+                        cnae: (selectedEmpresa as any).cnae,
+                        dataAbertura: (selectedEmpresa as any).dataAbertura,
+                        ...selectedEmpresa.dadosFiscais,
+                    }}
                     onSave={async (dados) => {
                         // Cadastro UNICO: ccmSp vive em dadosFiscais.ccmSp, igual
                         // aos demais campos (uf, IE, codMunIBGE). O backend le esse
                         // caminho (com fallback ao top-level legado).
-                        await lucroPresumidoService.updateEmpresa(selectedEmpresa.id, { dadosFiscais: dados });
+                        // CNAE/data de abertura espelham no top-level, de onde a
+                        // apuração e a criação da empresa sempre leram.
+                        await lucroPresumidoService.updateEmpresa(selectedEmpresa.id, {
+                            dadosFiscais: dados,
+                            ...(dados.cnae !== undefined ? { cnae: dados.cnae } : {}),
+                            ...(dados.dataAbertura !== undefined ? { dataAbertura: dados.dataAbertura } : {}),
+                        } as any);
                         // Refresh lista pra refletir mudanca
                         const empresasAtualizadas = await lucroPresumidoService.getEmpresas(currentUser);
                         setEmpresas(empresasAtualizadas);

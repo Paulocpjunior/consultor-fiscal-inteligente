@@ -48,6 +48,25 @@ describe('sanitizarDadosFiscais — apagar × não mexer', () => {
         expect(r.telefone).toBe('11999998888');
     });
 
+    it('condição rural: booleano desmarcado chega como false (não some do JSON)', () => {
+        const r = sanitizarDadosFiscais({ condicaoRural: { adquireDeProdutor: true } } as any);
+        expect(r.condicaoRural).toEqual({
+            adquireDeProdutor: true, ehProdutorRuralPF: false, ehCooperativa: false,
+            funruralSubRogacao: 'automatico', observacao: '',
+        });
+        // Bloco intocado continua ausente — não mexe no que está gravado.
+        expect(sanitizarDadosFiscais({} as any).condicaoRural).toBeUndefined();
+    });
+
+    it('CNAE e data de abertura: trim, e limpar = apagar (a pendência sem tela, 31/07)', () => {
+        const r = sanitizarDadosFiscais({ cnae: ' 4712-1/00 ', dataAbertura: ' 2015-03-01 ' } as any);
+        expect(r.cnae).toBe('4712-1/00');
+        expect(r.dataAbertura).toBe('2015-03-01');
+        const limpo = sanitizarDadosFiscais({ cnae: '' } as any);
+        expect(limpo.cnae).toBe('');            // '' = ordem de apagar
+        expect(limpo.dataAbertura).toBeUndefined(); // intocado não vai
+    });
+
     it('inscrição municipal alfanumérica (varia por prefeitura) não é mutilada', () => {
         expect(sanitizarDadosFiscais({ inscricaoMunicipal: ' 12345/001-A ' }).inscricaoMunicipal).toBe('12345/001-A');
     });
