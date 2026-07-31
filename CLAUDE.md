@@ -323,3 +323,46 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   faltantes (cert da própria empresa, pacing anti-656).
 - cStat 656: nunca insistir na mesma raiz; padrão round-robin + cooldown +
   circuit-breaker (manifesto) e cooldown 3h no "⟲ 90d" (resetNSU).
+
+## Decisões e memória de 31/07/2026
+
+- **Substituição do SAGE e-Fiscal: plano FECHADO, execução ADIADA** (Paulo,
+  31/07: "algumas coisas não faremos de imediato como a migração do
+  postgresql"). NÃO iniciar a migração do PG12 sem o Paulo mandar. O plano de
+  4 fases fica registrado pra quando retomar: F0 inventário (quem entrega
+  EFD); F1 gerador EFD ICMS/IPI + conferência-espelho (2 pilotos Lucro que o
+  Paulo escolher); F2 extração do PG12 — aguarda 3 arquivos do Paulo
+  (`pg_dump --schema-only -n gen -n gen_modelo -n pad_modelo -n e0299`,
+  pg_stat_user_tables do e0299, `\dt gen.*`); F3 ondas por cliente.
+  Arquitetura já mapeada (schemas_efiscal.csv): PG12 (EOL nov/2024), 1 schema
+  por empresa (e0001–e9996, 1.735 schemas), `gen` compartilhado 625MB, total
+  real 84GB (cuidado: o CSV tem linha TOTAL — não somar duas vezes), 29
+  empresas >500MB = 55% do volume. REGRAS ao retomar: PG12 NUNCA exposto à
+  internet; dado fiscal de cliente NUNCA transita pelo chat (só
+  schema/estrutura — extração vai pra bucket GCS privado do projeto
+  consultorfiscalapp); acesso por usuário read-only (`cfi_leitura`).
+- **"A chave não mente" vale pro DONO da saída** (caso S&P 138, #373): em
+  saída o dono é o EMITENTE e o CNPJ dele está na chave (pos 6-20). Dono de
+  raiz ≠ raiz do emitente da chave = legado mal atribuído — descartar da
+  conta (`docsDonoErrado` no cofre-checklist; card 4 deriva a identidade da
+  chave). Régua ÚNICA de trilho automático (`trilhoAutomatico`): origem
+  'email'→cofre; 'sefaz'/'autxml' sem fonte manual→autxml; manual/conferência/
+  consulta-chave→não confirma. Painel novo de saída DEVE usar as duas réguas
+  — o card 4 ficou 2 dias mentindo por ter contador próprio (lição repetida).
+- **Material pra equipe NUNCA vai como artifact do claude.ai** (link é
+  privado do dono — colaborador recebe "link inválido"). O trilho é HTML
+  estático em `public/` servido pelo próprio app. Guia da saída mod 55:
+  `/guia-saida-mod55.html` (#374; botão 📗 na aba Manual & Cofre) — fonte
+  dupla `public/guia-saida-mod55.html` + `docs/guia-colaborador-saida-mod55.md`,
+  atualizar as DUAS juntas.
+- **Resumo da Carteira** (#375): tela Carteira abre com total por colaborador
+  (principal+backup), quebra pelo farol da conferência de cadastro
+  (`services/carteiraResumo.ts` puro — mesma régua do modal
+  `cadastroClientePendencias`) e balde "sem responsável" (que também é
+  pendência que TRAVA). Operacional: a conta só fica honesta com os vínculos
+  da carteira preenchidos — lista grande em "sem responsável" é trabalho de
+  atribuição, não bug.
+- Painel Sistema→Banco (#371, dev-only): coleção nova no Firestore = linha no
+  `catalogo-banco.js` no MESMO PR (o painel denuncia órfãs). Pendente Paulo:
+  definir env `SISTEMA_DEV_EMAILS` no Cloud Run (sugerido p.c.pereira@me.com)
+  pra restringir além de admin.
