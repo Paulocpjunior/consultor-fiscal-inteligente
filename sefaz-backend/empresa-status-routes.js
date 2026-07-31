@@ -127,7 +127,14 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                     nfseNacionalDfeAtivo: d.nfseNacionalDfeAtivo === true,
                     procuracaoEcacAtiva: d.procuracaoEcacAtiva === true,
                     // dadosFiscais completo — semeia o modal "Completar cadastro".
-                    dadosFiscais: d.dadosFiscais || {},
+                    // CNAE e data de abertura vivem no top-level (vieram da tela
+                    // de criação); entram aqui pro modal mostrar o valor atual
+                    // em vez de campo vazio (o merge deixa dadosFiscais vencer).
+                    dadosFiscais: {
+                        cnae: d.cnae || undefined,
+                        dataAbertura: d.dataAbertura || undefined,
+                        ...(d.dadosFiscais || {}),
+                    },
                 });
             });
         }
@@ -520,6 +527,14 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     'inscricaoEstadual', 'uf', 'codMunIBGE', 'ccmSp', 'inscricaoMunicipal',
     'logradouro', 'numero',
     'complemento', 'bairro', 'cep', 'email', 'telefone', 'perfilEFD', 'indAtividade',
+    // CUIDADO com esta whitelist: campo que o modal Dados Fiscais salva e não
+    // está aqui é DESCARTADO EM SILÊNCIO neste caminho (o "Completar cadastro"
+    // do Status) — o colaborador salva, a tela agradece e nada persiste. Foi o
+    // caso de 31/07: CNAE/data de abertura cobrados pela conferência sem lugar
+    // pra preencher, e a condição rural (🌾) caindo no chão por aqui.
+    'naturezaAtividade', 'inscEstSubstTrib', 'codSuframa',
+    'cnae', 'dataAbertura',
+    'condicaoRural',
 ]);
 
 // Cadastro (IE, UF, CCM, endereço) é trabalho da EQUIPE — colaborador grava.
@@ -570,11 +585,28 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
             let val = typeof v === 'string' ? v.trim() : v;
             if (k === 'uf' && typeof val === 'string') val = val.toUpperCase();
             if (k === 'ccmSp' && typeof val === 'string') val = val.replace(/\D/g, '');
+            // Condição rural (🌾 DIPAM/FUNRURAL): objeto com forma fixa — grava
+            // só as chaves conhecidas, booleano explícito (desmarcar = false).
+            if (k === 'condicaoRural') {
+                if (val == null || typeof val !== 'object') continue;
+                val = {
+                    adquireDeProdutor: !!val.adquireDeProdutor,
+                    ehProdutorRuralPF: !!val.ehProdutorRuralPF,
+                    ehCooperativa: !!val.ehCooperativa,
+                    funruralSubRogacao: val.funruralSubRogacao === 'nao_aplica' ? 'nao_aplica' : 'automatico',
+                    observacao: String(val.observacao || '').trim(),
+                };
+            }
             update[`dadosFiscais.${k}`] = val === '' ? admin.firestore.FieldValue.delete() : val;
         }
         // Espelha ccmSp/uf no top-level (compat com leitura antiga).
         if ('ccmSp' in dadosFiscais) update.ccmSp = update['dadosFiscais.ccmSp'];
         if ('uf' in dadosFiscais) update.uf = update['dadosFiscais.uf'];
+        // CNAE e data de abertura vivem no TOP-LEVEL desde a criação da empresa
+        // (é de lá que apuração/DAS e a conferência leem) — o modal só passou a
+        // editá-los; espelha pros dois lugares ficarem iguais.
+        if ('cnae' in dadosFiscais) update.cnae = update['dadosFiscais.cnae'];
+        if ('dataAbertura' in dadosFiscais) update.dataAbertura = update['dadosFiscais.dataAbertura'];
         if (Object.keys(update).length === 0) {
             return res.status(400).json({ error: 'Nenhum campo válido para salvar' });
         }

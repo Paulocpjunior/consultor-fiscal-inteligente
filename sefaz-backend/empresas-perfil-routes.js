@@ -53,7 +53,10 @@ function camposConferencia(data) {
         email: data.email || data.dadosFiscais?.email || undefined,
         cnae: data.cnae || data.dadosFiscais?.cnae || undefined,
         anexo: data.anexo || undefined,
-        dataAbertura: data.dataAbertura || undefined,
+        // dataAbertura também pode viver em dadosFiscais: o modal Dados Fiscais
+        // passou a editá-la (31/07) e os painéis Simples/Lucro salvam só o
+        // objeto dadosFiscais — sem o fallback a pendência nunca sairia.
+        dataAbertura: data.dataAbertura || data.dadosFiscais?.dataAbertura || undefined,
     };
 }
 

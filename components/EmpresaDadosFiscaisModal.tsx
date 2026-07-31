@@ -199,6 +199,27 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 )}
                             </div>
                             <Field
+                                label="CNAE Principal"
+                                value={dados.cnae || ''}
+                                onChange={v => handleField('cnae', v)}
+                                placeholder="4712-1/00"
+                                hint="Define presunção, anexo e correlação de CFOP. Antes só dava pra preencher na criação da empresa — agora edita aqui."
+                            />
+                            <div>
+                                <label className="text-xs uppercase font-medium block mb-1 text-slate-500 dark:text-slate-400">
+                                    Data de abertura
+                                </label>
+                                <input
+                                    type="date"
+                                    value={dados.dataAbertura || ''}
+                                    onChange={e => handleField('dataAbertura', e.target.value)}
+                                    className="w-full p-2.5 text-sm rounded-lg outline-none bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                                />
+                                <p className="text-[11px] mt-1 text-slate-400 dark:text-slate-500">
+                                    Empresa com menos de 12 meses precisa do RBT12 proporcionalizado — sem a data o DAS pode sair errado.
+                                </p>
+                            </div>
+                            <Field
                                 label="IE Substituto Tributário"
                                 value={dados.inscEstSubstTrib || ''}
                                 onChange={v => handleField('inscEstSubstTrib', v)}

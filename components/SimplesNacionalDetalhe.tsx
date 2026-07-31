@@ -1072,11 +1072,20 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                 isOpen={isDadosFiscaisModalOpen}
                 onClose={() => setIsDadosFiscaisModalOpen(false)}
                 empresaNome={empresa.nome}
-                valoresAtuais={empresa.dadosFiscais}
+                valoresAtuais={{
+                    cnae: (empresa as any).cnae,
+                    dataAbertura: (empresa as any).dataAbertura,
+                    ...empresa.dadosFiscais,
+                }}
                 onSave={async (dados) => {
                     // Cadastro UNICO: ccmSp vive em dadosFiscais.ccmSp (igual aos
                     // demais campos). Backend le esse caminho (fallback top-level).
-                    await onUpdateEmpresa(empresa.id, { dadosFiscais: dados });
+                    // CNAE/data de abertura espelham no top-level (apuração/DAS).
+                    await onUpdateEmpresa(empresa.id, {
+                        dadosFiscais: dados,
+                        ...(dados.cnae !== undefined ? { cnae: dados.cnae } : {}),
+                        ...(dados.dataAbertura !== undefined ? { dataAbertura: dados.dataAbertura } : {}),
+                    } as any);
                     onShowToast('Dados fiscais salvos com sucesso!');
                 }}
             />

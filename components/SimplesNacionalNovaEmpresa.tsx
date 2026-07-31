@@ -517,11 +517,20 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
                         isOpen={isDadosFiscaisModalOpen}
                         onClose={() => setIsDadosFiscaisModalOpen(false)}
                         empresaNome={initialData.nome}
-                        valoresAtuais={dadosFiscaisLocal}
+                        valoresAtuais={{
+                            cnae: initialData.cnae,
+                            dataAbertura: initialData.dataAbertura,
+                            ...dadosFiscaisLocal,
+                        }}
                         onSave={async (dados) => {
                             // Cadastro unico: ccmSp vive em dadosFiscais.ccmSp (igual ao
                             // Lucro). updateEmpresa faz merge no doc simples_empresas.
-                            await updateSimplesEmpresa(initialData.id, { dadosFiscais: dados });
+                            // CNAE/data de abertura espelham no top-level (DAS/apuração).
+                            await updateSimplesEmpresa(initialData.id, {
+                                dadosFiscais: dados,
+                                ...(dados.cnae !== undefined ? { cnae: dados.cnae } : {}),
+                                ...(dados.dataAbertura !== undefined ? { dataAbertura: dados.dataAbertura } : {}),
+                            } as any);
                             setDadosFiscaisLocal(dados);
                             onShowToast?.('Dados fiscais atualizados.');
                         }}
