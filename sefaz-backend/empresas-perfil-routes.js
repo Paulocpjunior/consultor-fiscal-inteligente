@@ -44,6 +44,19 @@ function getCcmSp(data) {
     return data.dadosFiscais?.ccmSp || data.ccmSp || undefined;
 }
 
+// Campos que a conferência de cadastro (services/cadastroClientePendencias)
+// precisa pra dizer o que falta em cada empresa — mesma ordem de fallback dos
+// helpers acima (dadosFiscais primeiro, raiz depois).
+function camposConferencia(data) {
+    return {
+        codMunIBGE: data.dadosFiscais?.codMunIBGE || data.codMunIBGE || undefined,
+        email: data.email || data.dadosFiscais?.email || undefined,
+        cnae: data.cnae || data.dadosFiscais?.cnae || undefined,
+        anexo: data.anexo || undefined,
+        dataAbertura: data.dataAbertura || undefined,
+    };
+}
+
 function dedupEmpresasPerfil(list) {
     const map = new Map();
     for (const emp of list) {
@@ -96,6 +109,7 @@ export async function listarEmpresasPerfilCliente(user) {
                 uf: getUf(data),
                 inscricaoEstadual: getIe(data),
                 ccmSp: getCcmSp(data),
+                ...camposConferencia(data),
                 createdBy: data.createdBy || undefined,
                 _merged_into: data._merged_into,
                 _deleted: data._deleted,
@@ -116,6 +130,7 @@ export async function listarEmpresasPerfilCliente(user) {
                 uf: getUf(data),
                 inscricaoEstadual: getIe(data),
                 ccmSp: getCcmSp(data),
+                ...camposConferencia(data),
                 createdBy: data.createdBy || undefined,
                 _merged_into: data._merged_into,
                 _deleted: data._deleted,

@@ -16,6 +16,7 @@ import {
     type PapelCarteira,
 } from '../../services/carteiraService';
 import { testarResumoDiario } from '../../services/notificacoesService';
+import { resumirCarteira, resumoCarteiraCsv } from '../../services/carteiraResumo';
 
 interface Props {
     currentUser: User;
@@ -29,6 +30,8 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [loading, setLoading] = useState(true);
     const [busca, setBusca] = useState('');
     const [soSemResp, setSoSemResp] = useState(false);
+    // Filtro vindo do resumo: uid do colaborador, 'sem' (sem responsável) ou null.
+    const [filtroColab, setFiltroColab] = useState<string | null>(null);
     const [salvando, setSalvando] = useState<string | null>(null);
     const [erroEmpresas, setErroEmpresas] = useState<string | null>(null);
 
@@ -89,14 +92,33 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         return m;
     }, [vinculos]);
 
+    // Resumo por colaborador (função pura): totais, pendências de cadastro e
+    // o balde "sem responsável" — a conta pedida pelo Paulo (31/07).
+    const resumo = useMemo(
+        () => resumirCarteira(empresas, vinculos),
+        [empresas, vinculos],
+    );
+
     const empresasFiltradas = useMemo(() => {
         const q = busca.trim().toLowerCase();
         return empresas.filter(e => {
             if (q && !e.nome.toLowerCase().includes(q) && !e.cnpj.includes(q)) return false;
-            if (soSemResp && (vinculosPorEmpresa.get(e.id)?.length || 0) > 0) return false;
+            const vincs = vinculosPorEmpresa.get(e.id) || [];
+            if (soSemResp && vincs.length > 0) return false;
+            if (filtroColab === 'sem' && vincs.length > 0) return false;
+            if (filtroColab && filtroColab !== 'sem' && !vincs.some(v => v.colaboradorUid === filtroColab)) return false;
             return true;
         });
-    }, [empresas, busca, soSemResp, vinculosPorEmpresa]);
+    }, [empresas, busca, soSemResp, filtroColab, vinculosPorEmpresa]);
+
+    const baixarCsvResumo = () => {
+        const blob = new Blob(['﻿' + resumoCarteiraCsv(resumo)], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'carteira-resumo.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    };
 
     const handleAtribuir = async (emp: EmpresaPerfilOption, colaboradorUid: string, papel: PapelCarteira) => {
         const colab = colaboradores.find(c => c.id === colaboradorUid);
@@ -172,6 +194,85 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <span className="ml-2 text-xs text-slate-400">Diagnóstico — envia o resumo de capturas das últimas 24h para sua caixa.</span>
             </div>
 
+            {/* ── Resumo: total por colaborador × pendências de cadastro ── */}
+            {!loading && empresas.length > 0 && (
+                <div className="mb-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+                    <div className="flex items-start justify-between gap-2 flex-wrap mb-3">
+                        <div>
+                            <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">📊 Resumo da carteira</h3>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                Pendências = conferência de cadastro (campos que travam trilho). Clique numa linha para filtrar a lista abaixo.
+                            </p>
+                        </div>
+                        <button onClick={baixarCsvResumo}
+                            className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded">
+                            ⬇ CSV
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center mb-3">
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2">
+                            <div className="text-xl font-bold text-slate-700 dark:text-slate-200">{resumo.totalEmpresas}</div>
+                            <div className="text-[10px] uppercase text-slate-500">empresas no cadastro</div>
+                        </div>
+                        <button onClick={() => setFiltroColab(filtroColab === 'sem' ? null : 'sem')}
+                            className={`rounded-lg border p-2 text-center ${filtroColab === 'sem' ? 'ring-2 ring-amber-400' : ''} ${resumo.semResponsavel.total > 0 ? 'border-amber-300 dark:border-amber-700' : 'border-emerald-200 dark:border-emerald-800'}`}>
+                            <div className={`text-xl font-bold ${resumo.semResponsavel.total > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{resumo.semResponsavel.total}</div>
+                            <div className="text-[10px] uppercase text-slate-500">sem responsável</div>
+                        </button>
+                        <div className={`rounded-lg border p-2 ${resumo.geral.comBloqueio > 0 ? 'border-red-300 dark:border-red-700' : 'border-emerald-200 dark:border-emerald-800'}`}>
+                            <div className={`text-xl font-bold ${resumo.geral.comBloqueio > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{resumo.geral.comBloqueio}</div>
+                            <div className="text-[10px] uppercase text-slate-500">com pendência que trava</div>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2">
+                            <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{resumo.geral.ok}</div>
+                            <div className="text-[10px] uppercase text-slate-500">cadastro completo</div>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="bg-slate-50 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400 text-[10px] uppercase">
+                                    <th className="py-1.5 px-2 text-left">Colaborador</th>
+                                    <th className="py-1.5 px-2 text-right">Empresas</th>
+                                    <th className="py-1.5 px-2 text-right" title="Vínculo principal">Principal</th>
+                                    <th className="py-1.5 px-2 text-right">🔴 Trava</th>
+                                    <th className="py-1.5 px-2 text-right">🟡 Atenção</th>
+                                    <th className="py-1.5 px-2 text-right">✅ Ok</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {resumo.porColaborador.map((l) => (
+                                    <tr key={l.colaboradorUid}
+                                        onClick={() => setFiltroColab(filtroColab === l.colaboradorUid ? null : l.colaboradorUid)}
+                                        className={`border-t border-slate-100 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40 ${filtroColab === l.colaboradorUid ? 'bg-sky-50 dark:bg-sky-900/20' : ''}`}>
+                                        <td className="py-1.5 px-2 font-semibold text-slate-700 dark:text-slate-200">{l.colaboradorNome}</td>
+                                        <td className="py-1.5 px-2 text-right font-mono font-bold">{l.total}</td>
+                                        <td className="py-1.5 px-2 text-right font-mono text-slate-500">{l.comoPrincipal}</td>
+                                        <td className={`py-1.5 px-2 text-right font-mono ${l.comBloqueio > 0 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-slate-400'}`}>{l.comBloqueio}</td>
+                                        <td className={`py-1.5 px-2 text-right font-mono ${l.soAtencao > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`}>{l.soAtencao}</td>
+                                        <td className="py-1.5 px-2 text-right font-mono text-emerald-600 dark:text-emerald-400">{l.ok}</td>
+                                    </tr>
+                                ))}
+                                <tr onClick={() => setFiltroColab(filtroColab === 'sem' ? null : 'sem')}
+                                    className={`border-t-2 border-slate-200 dark:border-slate-600 cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-900/10 ${filtroColab === 'sem' ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
+                                    <td className="py-1.5 px-2 font-semibold text-amber-700 dark:text-amber-400">⚠ Sem responsável</td>
+                                    <td className="py-1.5 px-2 text-right font-mono font-bold text-amber-700 dark:text-amber-400">{resumo.semResponsavel.total}</td>
+                                    <td className="py-1.5 px-2 text-right font-mono text-slate-400">—</td>
+                                    <td className={`py-1.5 px-2 text-right font-mono ${resumo.semResponsavel.comBloqueio > 0 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-slate-400'}`}>{resumo.semResponsavel.comBloqueio}</td>
+                                    <td className="py-1.5 px-2 text-right font-mono text-slate-400">{resumo.semResponsavel.soAtencao}</td>
+                                    <td className="py-1.5 px-2 text-right font-mono text-slate-400">{resumo.semResponsavel.ok}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1.5">
+                        Empresa com principal + backup conta na linha dos dois — o TOTAL GERAL ({resumo.totalEmpresas}) é a verdade, a soma das linhas pode passar dele.
+                    </p>
+                </div>
+            )}
+
             <div className="flex flex-wrap gap-3 mb-4 items-center">
                 <input
                     type="text"
@@ -195,8 +296,14 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {loading && <div className="text-sm text-slate-500 py-8 text-center">Carregando...</div>}
 
             {!loading && (
-                <div className="text-xs text-slate-500 mb-2">
-                    {empresasFiltradas.length} de {empresas.length} empresa(s)
+                <div className="text-xs text-slate-500 mb-2 flex items-center gap-2 flex-wrap">
+                    <span>{empresasFiltradas.length} de {empresas.length} empresa(s)</span>
+                    {filtroColab && (
+                        <button onClick={() => setFiltroColab(null)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 text-[11px]">
+                            Filtro: {filtroColab === 'sem' ? 'sem responsável' : (resumo.porColaborador.find(l => l.colaboradorUid === filtroColab)?.colaboradorNome || filtroColab)} ✕
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -214,6 +321,7 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
             {!loading && empresasFiltradas.map(emp => {
                 const vincs = vinculosPorEmpresa.get(emp.id) || [];
+                const farol = resumo.farolPorEmpresa.get(emp.id);
                 return (
                     <div key={emp.id} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 mb-2">
                         <div className="flex justify-between items-start gap-3">
@@ -221,6 +329,16 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 <div className="font-semibold text-slate-800 dark:text-slate-100">{emp.nome}</div>
                                 <div className="text-xs text-slate-500">{emp.cnpj} · {emp.fonte}</div>
                             </div>
+                            {farol && (
+                                <span title={farol.resumo}
+                                    className={`text-[11px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${
+                                        farol.farol === 'bloqueado' ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                                        : farol.farol === 'atencao' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                        : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                    }`}>
+                                    {farol.farol === 'bloqueado' ? `🔴 ${farol.bloqueios} pendência(s)` : farol.farol === 'atencao' ? `🟡 ${farol.atencoes} revisar` : '✅ completo'}
+                                </span>
+                            )}
                         </div>
 
                         <div className="flex flex-wrap gap-2 mt-2">
