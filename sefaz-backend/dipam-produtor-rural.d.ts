@@ -38,6 +38,8 @@ export const CFOPS_COMPRA: Set<string>;
 export const CFOPS_DEVOLUCAO: Set<string>;
 export const CFOPS_NAO_LANCAR: Record<string, string>;
 export const ALIQUOTAS_FUNRURAL_PF: AliquotasFunrural[];
+export const ALIQUOTAS_FUNRURAL_SEGURADO_ESPECIAL: AliquotasFunrural[];
+export function tabelaDoProdutor(cadastro: any, tabelaPadrao?: AliquotasFunrural[]): AliquotasFunrural[];
 
 export function ehIeProdutorRuralSP(ie: unknown): boolean;
 export function ehNcmAgropecuario(ncm: unknown): boolean;

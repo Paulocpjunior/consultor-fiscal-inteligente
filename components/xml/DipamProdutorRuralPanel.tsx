@@ -354,10 +354,10 @@ const ConfirmarProdutor: React.FC<{ doc: string; nome: string; onSalvo: () => vo
     const [salvando, setSalvando] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
 
-    const marcar = async (natureza: 'produtor_rural_pf' | 'pessoa_juridica') => {
+    const marcar = async (natureza: 'produtor_rural_pf' | 'pessoa_juridica', seguradoEspecial = false) => {
         setSalvando(true);
         setErro(null);
-        const r = await salvarProdutorRural({ doc, nome, natureza });
+        const r = await salvarProdutorRural({ doc, nome, natureza, seguradoEspecial });
         setSalvando(false);
         if (!r.ok) { setErro(r.error || 'Falha ao gravar.'); return; }
         onSalvo();
@@ -372,6 +372,16 @@ const ConfirmarProdutor: React.FC<{ doc: string; nome: string; onSalvo: () => vo
                 className="px-2 py-0.5 text-[10px] rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-40"
             >
                 Produtor Rural (PF)
+            </button>
+            {/* Segurado especial (agricultura familiar) ficou em 1,5% quando a
+                LC 224/2025 subiu o geral para 1,63% — e isso não está na nota. */}
+            <button
+                onClick={() => marcar('produtor_rural_pf', true)}
+                disabled={salvando}
+                title="Agricultura familiar: entra no DIPAM 1.1 igual, mas o FUNRURAL continua em 1,5% (LC 224/2025 não alterou o segurado especial)."
+                className="px-2 py-0.5 text-[10px] rounded bg-emerald-800 hover:bg-emerald-900 text-white font-semibold disabled:opacity-40"
+            >
+                PF · segurado especial (1,5%)
             </button>
             <button
                 onClick={() => marcar('pessoa_juridica')}

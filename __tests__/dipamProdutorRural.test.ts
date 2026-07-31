@@ -166,6 +166,34 @@ describe('FUNRURAL por sub-rogação — caso real NF 425.231', () => {
         expect(a.revisar).toBe(false);
     });
 
+    it('a virada é 01/04/2026 (LC 224/2025) — março ainda é 1,5%', () => {
+        // Errar a vigência cobraria 0,13 ponto a mais em jan-mar/2026, e quem
+        // paga é o cliente adquirente (sub-rogação).
+        const marco = aliquotasFunruralVigentes('2026-03');
+        expect([marco.inss, marco.gilrat, marco.senar]).toEqual([1.2, 0.1, 0.2]);
+        const abril = aliquotasFunruralVigentes('2026-04');
+        expect([abril.inss, abril.gilrat, abril.senar]).toEqual([1.32, 0.11, 0.20]);
+        expect(abril.fonte).toMatch(/LC 224\/2025/);
+        expect(abril.revisar).toBe(false);   // base legal confirmada (31/07/2026)
+    });
+
+    it('mesma nota em março e em junho de 2026 dá valores diferentes', () => {
+        expect(calcularFunrural(55796, '2026-03').total).toBe(836.93);  // 1,50%
+        expect(calcularFunrural(55796, '2026-06').total).toBe(909.46);  // 1,63%
+    });
+
+    it('SEGURADO ESPECIAL (agricultura familiar) continua em 1,5% depois da LC 224/2025', () => {
+        const n = classificarNota(notaEntrada(), {
+            cadastro: { natureza: 'produtor_rural_pf', seguradoEspecial: true },
+        });
+        expect(n.funrural.aplica).toBe(true);
+        expect(n.funrural.percentualTotal).toBe(1.5);
+        expect(n.funrural.total).toBe(836.93);
+        // A nota declara 1,63% (o emitente aplicou a regra geral): divergência
+        // real, que tem de aparecer pra alguém decidir.
+        expect(n.pendencias.map((p: any) => p.codigo)).toContain('funrural-divergente');
+    });
+
     it('produtor que optou pela FOLHA não sofre sub-rogação (só o cadastro sabe)', () => {
         const n = classificarNota(notaEntrada(), { cadastro: { natureza: 'produtor_rural_pf', funrural: 'folha' } });
         expect(n.funrural.aplica).toBe(false);
@@ -378,9 +406,10 @@ describe('consolidação da competência', () => {
         expect(r.funrural.notas).toHaveLength(2);
         // Alíquota a confirmar é aviso ÚNICO da competência, não pendência por
         // nota (senão o farol viveria em âmbar e a equipe pararia de ler).
-        expect(r.funrural.revisarAliquotas).toBe(true);
-        expect(r.avisos[0]).toMatch(/1,63|1.63/);
-        expect(r.pendencias.map((p: any) => p.codigo)).not.toContain('funrural-aliquota-a-confirmar');
+        // Base legal confirmada (LC 224/2025): nada mais a revisar, e o aviso
+        // da competência some.
+        expect(r.funrural.revisarAliquotas).toBe(false);
+        expect(r.avisos).toHaveLength(0);
     });
 
     it('cadastro do produtor sobrepõe o município da nota (rateio informado pelo produtor)', () => {

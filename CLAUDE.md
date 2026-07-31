@@ -381,10 +381,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   marcação faz a obrigação aparecer em mês SEM nota — mês vazio pode ser falha
   de captura) e coleção `produtores_rurais` no FORNECEDOR (natureza CADESP,
   município e opção pela FOLHA, que zera a sub-rogação; só admin grava).
-  **Alíquotas do FUNRURAL são TABELA COM VIGÊNCIA** (1,2/0,1/0,2 desde 2018;
-  1,32/0,11/0,20 desde 2026-01 marcada `revisar:true`, conferida contra a nota
-  que declara 1,63% = R$ 909,47) — PENDENTE do Paulo: confirmar a base legal de
-  2026 e virar `revisar` para false. Centavo é DESPREZADO (IN RFB 971), igual ao
+  **Alíquotas do FUNRURAL são TABELA COM VIGÊNCIA** e a base legal está
+  CONFIRMADA (Paulo, 31/07): Lei 8.212/91 art. 25 — 1,2/0,1/0,2 (1,5%) até
+  31/03/2026 e 1,32/0,11/0,20 (1,63%) a partir de **01/04/2026** pela
+  **LC 224/2025**. A virada é pela DATA DA VENDA (não pela colheita); como cai
+  no 1º dia do mês, comparar competência AAAA-MM dá o mesmo. **SEGURADO
+  ESPECIAL (agricultura familiar) NÃO subiu — segue 1,5%** (tabela própria
+  `ALIQUOTAS_FUNRURAL_SEGURADO_ESPECIAL`, ligada pelo campo `seguradoEspecial`
+  do cadastro do produtor; a nota não diz isso). PJ não entra: sem sub-rogação,
+  quem recolhe é o emitente. Centavo é DESPREZADO (IN RFB 971), igual ao
   SAGE. O app confere o cálculo contra o FUNRURAL declarado no infAdic da
   própria nota e aponta divergência. Bloco 1 do SPED: `IND_VA='S'` só existe COM
   1400 e vice-versa. Detalhes em `docs/dipam-produtor-rural.md`.

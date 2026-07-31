@@ -86,22 +86,33 @@ duas combinações). Pendência de DIPAM vira **warning** na geração do arquiv
 A compra de produtor rural aparece na etapa **Obrigações** (é lá que a DIPAM é
 entregue). Fornecedor a confirmar **não deixa a etapa fechar**.
 
-## Alíquotas do FUNRURAL — ponto de manutenção
+## Alíquotas do FUNRURAL — tabela com vigência
 
-`ALIQUOTAS_FUNRURAL_PF` é **tabela com vigência** (`sefaz-backend/dipam-produtor-rural.js`):
+`ALIQUOTAS_FUNRURAL_PF` (`sefaz-backend/dipam-produtor-rural.js`):
 
-| Desde | Previdenciária | GILRAT | SENAR | Total |
-|---|---|---|---|---|
-| 2018-01 | 1,20% | 0,10% | 0,20% | 1,50% |
-| 2026-01 | 1,32% | 0,11% | 0,20% | 1,63% | ⚠ `revisar: true` |
+| Desde | Previdenciária | GILRAT/RAT | SENAR | Total | Base legal |
+|---|---|---|---|---|---|
+| 2018-01 | 1,20% | 0,10% | 0,20% | **1,50%** | Lei 8.212/91, art. 25 (redação da Lei 13.606/2018) + Lei 9.528/97 |
+| **2026-04** | 1,32% | 0,11% | 0,20% | **1,63%** | Lei 8.212/91, art. 25, com as alíquotas da **LC 224/2025** |
 
-A linha de 2026 foi conferida contra a NF-e 425.231 (que declara "FUNRURAL 1.63%
-… R$ 909,47" sobre R$ 55.796,00) e contra o lançamento do SAGE. **Está marcada
-para revisão**: confirme a base legal vigente e troque `revisar` para `false`.
-Enquanto estiver marcada, o painel mostra o aviso.
+A virada é **1º/04/2026** e vale pela **data da venda** (não pela colheita).
+Como a vigência começa no 1º dia do mês, comparar por competência `AAAA-MM` dá o
+mesmo resultado: nota de 31/03/2026 fica em 1,5%; de 01/04 em diante, 1,63%.
+
+**Segurado especial (agricultura familiar) NÃO subiu** — continua em 1,5%
+(`ALIQUOTAS_FUNRURAL_SEGURADO_ESPECIAL`). A condição não está na nota: vem do
+campo `seguradoEspecial` no cadastro do produtor (botão "PF · segurado especial"
+na pendência). Usar a tabela geral nele cobraria 0,13 ponto a mais em toda nota
+— e quem paga é o cliente adquirente, por sub-rogação.
+
+Produtor rural **PJ** não entra aqui: não há sub-rogação, quem recolhe é o
+próprio emitente (2,23% desde 04/2026).
 
 Centavos são **desprezados** (IN RFB 971/2009), como no SAGE:
 55.796,00 × 1,32% = 736,5072 → **736,50**.
+
+O app sempre confere o resultado contra o FUNRURAL que o emitente declarou no
+campo de informações complementares da nota e aponta a divergência.
 
 ## Arquivos
 
