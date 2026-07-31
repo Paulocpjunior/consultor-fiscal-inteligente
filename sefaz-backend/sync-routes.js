@@ -1312,21 +1312,27 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
         let entregandoAutXml7d = 0, saidaAutXml7d = 0;
         try {
           const empresasAutXml = new Set();
-          const snapAx = await db.collection('documentos_fiscais')
-            .where('direcao', '==', 'saida')
-            .where('origem', '==', 'sefaz')
-            .select('empresaId', 'cnpjEmit', 'empresaCnpj', 'dhEmi', 'chave')
-            .limit(5000)
-            .get();
-          snapAx.forEach((docSnap) => {
-            const x = docSnap.data();
-            if (!ehSaidaMod55({ direcao: 'saida', chave: x.chave })) return;
-            const t = Date.parse(x.dhEmi || '');
-            if (!Number.isFinite(t) || t < seteDias) return;
-            saidaAutXml7d++;
-            const id = x.empresaId || String(x.cnpjEmit || x.empresaCnpj || '').replace(/\D/g, '');
-            if (id) empresasAutXml.add(id);
-          });
+          // A colheita dedicada grava origem='autxml'; o DistDFe do escritório
+          // grava origem='sefaz'. O contador olhava SÓ 'sefaz' e o card ficou
+          // 0 eterno mesmo com 67 saídas colhidas (bug apontado pelo Paulo,
+          // 31/07). Duas queries de igualdade — sem índice composto novo.
+          for (const origemTrilho of ['sefaz', 'autxml']) {
+            const snapAx = await db.collection('documentos_fiscais')
+              .where('direcao', '==', 'saida')
+              .where('origem', '==', origemTrilho)
+              .select('empresaId', 'cnpjEmit', 'empresaCnpj', 'dhEmi', 'chave')
+              .limit(5000)
+              .get();
+            snapAx.forEach((docSnap) => {
+              const x = docSnap.data();
+              if (!ehSaidaMod55({ direcao: 'saida', chave: x.chave })) return;
+              const t = Date.parse(x.dhEmi || '');
+              if (!Number.isFinite(t) || t < seteDias) return;
+              saidaAutXml7d++;
+              const id = x.empresaId || String(x.cnpjEmit || x.empresaCnpj || '').replace(/\D/g, '');
+              if (id) empresasAutXml.add(id);
+            });
+          }
           entregandoAutXml7d = empresasAutXml.size;
           // União dos trilhos automáticos (cofre + autXML), sem dupla contagem
           // de quem entrega pelos dois.
