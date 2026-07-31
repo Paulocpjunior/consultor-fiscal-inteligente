@@ -156,21 +156,37 @@ export interface ResumoCadastro {
     atencoes: number;
     farol: 'ok' | 'atencao' | 'bloqueado';
     resumo: string;
+    /**
+     * O CAMPO da pendência mais grave — o motivo dominante. Farol sem motivo ao
+     * lado gera exatamente a dúvida que a equipe trouxe (31/07): "o cadastro
+     * está certo e mesmo assim aparece 1 revisar". Um número sozinho não diz o
+     * que revisar; o nome do campo diz.
+     */
+    motivo: string | null;
+    /** Todos os campos pendentes, do mais grave ao menos — para tooltip/lista. */
+    campos: string[];
 }
 
 /** Farol do cadastro — honesto: pendência que trava nunca vira verde. */
 export function resumirCadastro(pendencias: PendenciaCadastro[]): ResumoCadastro {
     const bloqueios = pendencias.filter((p) => p.gravidade === 'bloqueia').length;
     const atencoes = pendencias.length - bloqueios;
+    const campos = pendencias.map((p) => p.campo);
+    const motivo = campos[0] || null;
+    // "e mais N" em vez de listar tudo: o card é estreito e a lista completa
+    // vive no modal, com impacto e onde resolver.
+    const comMotivo = (txt: string) => (motivo ? `${txt}: ${motivo}${campos.length > 1 ? ` (e mais ${campos.length - 1})` : ''}` : txt);
     return {
         total: pendencias.length,
         bloqueios,
         atencoes,
+        motivo,
+        campos,
         farol: bloqueios > 0 ? 'bloqueado' : atencoes > 0 ? 'atencao' : 'ok',
         resumo: bloqueios > 0
-            ? `${bloqueios} pendência(s) travando trilho${atencoes > 0 ? ` · ${atencoes} para revisar` : ''}.`
+            ? `${comMotivo(`${bloqueios} pendência(s) travando trilho`)}${atencoes > 0 ? ` · ${atencoes} para revisar` : ''}.`
             : atencoes > 0
-                ? `${atencoes} ponto(s) para revisar — nada travando.`
+                ? `${comMotivo(`${atencoes} ponto(s) para revisar`)} — nada travando a captura.`
                 : 'Cadastro completo.',
     };
 }

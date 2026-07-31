@@ -104,6 +104,25 @@ describe('farol do cadastro', () => {
         expect(r.resumo).toMatch(/nada travando/);
     });
 
+    it('o selo diz O QUE revisar — número sozinho gerou a dúvida da equipe (31/07)', () => {
+        const r = resumirCadastro(conferirCadastroCliente({ ...completo, email: '' } as any));
+        expect(r.motivo).toBe('E-mail do cliente');
+        expect(r.campos).toEqual(['E-mail do cliente']);
+        expect(r.resumo).toMatch(/E-mail do cliente/);
+    });
+
+    it('com mais de uma pendência, o selo mostra a dominante e conta o resto', () => {
+        const r = resumirCadastro(conferirCadastroCliente({ ...completo, uf: '', email: '', cnae: '' } as any));
+        expect(r.motivo).toBe('UF');           // bloqueio vem primeiro
+        expect(r.resumo).toMatch(/UF \(e mais 2\)/);
+    });
+
+    it('cadastro completo não inventa motivo', () => {
+        const r = resumirCadastro(conferirCadastroCliente(completo as any));
+        expect(r.motivo).toBeNull();
+        expect(r.campos).toEqual([]);
+    });
+
     it('toda pendência traz impacto e onde resolver', () => {
         const p = conferirCadastroCliente({ regime: 'simples' } as any);
         expect(p.length).toBeGreaterThan(3);

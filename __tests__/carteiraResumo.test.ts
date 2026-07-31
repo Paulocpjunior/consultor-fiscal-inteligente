@@ -18,6 +18,31 @@ const vinculo = (empresaId: string, uid: string, nome: string, papel = 'principa
     empresaId, colaboradorUid: uid, colaboradorNome: nome, papel,
 });
 
+describe('regime vem de `fonte` na lista de empresas', () => {
+    // A lista real (empresas-perfil) devolve `fonte`, não `regime`. Sem a
+    // conversão, a checagem do Anexo do Simples nunca rodava e empresa sem
+    // anexo passava por "cadastro completo" — com o DAS sem calcular.
+    const semRegime = (over: any = {}) => ({
+        id: 'x1', nome: 'Ômega', fonte: 'simples',
+        cnpj: '11111111000111',
+        uf: 'SP', codMunIBGE: '3550308', inscricaoEstadual: 'ISENTO', ccmSp: '12345678',
+        email: 'x@y.com', cnae: '6201-5/01', anexo: 'III', dataAbertura: '2020-01-01',
+        ...over,
+    });
+
+    it('empresa do Simples sem anexo é BLOQUEIO, mesmo sem o campo `regime`', () => {
+        const r = resumirCarteira([semRegime({ anexo: '' })] as any, [vinculo('x1', 'ana', 'Ana')]);
+        const farol = r.farolPorEmpresa.get('x1')!;
+        expect(farol.farol).toBe('bloqueado');
+        expect(farol.motivo).toBe('Anexo do Simples');
+    });
+
+    it('empresa completa continua verde', () => {
+        const r = resumirCarteira([semRegime()] as any, [vinculo('x1', 'ana', 'Ana')]);
+        expect(r.farolPorEmpresa.get('x1')!.farol).toBe('ok');
+    });
+});
+
 describe('resumirCarteira', () => {
     const empresas = [
         completa('e1', 'Alfa'),                                   // Ana (ok)

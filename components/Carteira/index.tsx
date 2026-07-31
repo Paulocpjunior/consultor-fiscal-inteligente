@@ -329,14 +329,21 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 <div className="font-semibold text-slate-800 dark:text-slate-100">{emp.nome}</div>
                                 <div className="text-xs text-slate-500">{emp.cnpj} · {emp.fonte}</div>
                             </div>
+                            {/* O selo diz O QUE revisar, não só quantos: número
+                                sozinho fez a equipe achar que o cadastro certo
+                                estava sendo acusado à toa (31/07). */}
                             {farol && (
                                 <span title={farol.resumo}
-                                    className={`text-[11px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${
+                                    className={`text-[11px] px-2 py-0.5 rounded-full font-semibold max-w-[18rem] truncate ${
                                         farol.farol === 'bloqueado' ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
                                         : farol.farol === 'atencao' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
                                         : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
                                     }`}>
-                                    {farol.farol === 'bloqueado' ? `🔴 ${farol.bloqueios} pendência(s)` : farol.farol === 'atencao' ? `🟡 ${farol.atencoes} revisar` : '✅ completo'}
+                                    {farol.farol === 'bloqueado'
+                                        ? `🔴 trava: ${farol.motivo}${farol.total > 1 ? ` +${farol.total - 1}` : ''}`
+                                        : farol.farol === 'atencao'
+                                            ? `🟡 revisar: ${farol.motivo}${farol.total > 1 ? ` +${farol.total - 1}` : ''}`
+                                            : '✅ completo'}
                                 </span>
                             )}
                         </div>
