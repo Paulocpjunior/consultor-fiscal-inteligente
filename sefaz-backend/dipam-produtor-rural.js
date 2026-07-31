@@ -117,22 +117,45 @@ export const ALIQUOTAS_FUNRURAL_PF = [
     {
         desde: '2018-01',
         inss: 1.2, gilrat: 0.1, senar: 0.2,
-        fonte: 'Lei 13.606/2018 (1,2% previdenciária + 0,1% GILRAT) e Lei 9.528/1997 (0,2% SENAR).',
+        fonte: 'Lei 8.212/1991, art. 25, com a redação da Lei 13.606/2018 (1,2% previdenciária + 0,1% GILRAT/RAT) e Lei 9.528/1997 (0,2% SENAR) — total 1,5%.',
         revisar: false,
     },
     {
-        // Conferido contra a NF-e 425.231 de 03/06/2026 (JOSE SOARES FILHO E
-        // OUTROS → EDUARDO GUERRA HORTIFRUTI), cujo próprio campo de
-        // informações complementares declara "FUNRURAL 1.63% do total"
-        // = R$ 909,47 sobre R$ 55.796,00, e contra o lançamento do SAGE
-        // (1,32 + 0,11 + 0,20). `revisar` acende o aviso na tela: a equipe
-        // confirma a base legal antes de fechar a competência.
-        desde: '2026-01',
+        // Base legal confirmada pelo Paulo (31/07/2026): LC 224/2025, vigência
+        // 1º/04/2026. Bate com a NF-e 425.231 de 03/06/2026, cujo próprio campo
+        // de informações complementares declara "FUNRURAL 1.63% do total"
+        // = R$ 909,47 sobre R$ 55.796,00, e com o lançamento do SAGE.
+        //
+        // A vigência é pela DATA DA VENDA (não pela colheita) — como ela começa
+        // no 1º dia de um mês, comparar por competência 'AAAA-MM' dá o mesmo
+        // resultado: nota de 31/03/2026 fica em 1,5%, a de 01/04 em diante em
+        // 1,63%.
+        desde: '2026-04',
         inss: 1.32, gilrat: 0.11, senar: 0.20,
-        fonte: 'Percentuais praticados nas notas de 2026 (total 1,63%) — CONFERIR a base legal vigente antes de fechar.',
-        revisar: true,
+        fonte: 'Lei 8.212/1991, art. 25, com as alíquotas da LC 224/2025 — vigência 1º/04/2026 (1,32% previdenciária + 0,11% GILRAT/RAT + 0,20% SENAR = 1,63%).',
+        revisar: false,
     },
 ];
+
+/**
+ * SEGURADO ESPECIAL (agricultura familiar) NÃO subiu: a LC 224/2025 manteve o
+ * total em 1,5%. Usar a tabela geral nele cobraria 0,13 ponto a mais em toda
+ * nota — e quem paga é o cliente adquirente, por sub-rogação. A condição não
+ * está na nota: vem do cadastro do produtor (`seguradoEspecial`).
+ */
+export const ALIQUOTAS_FUNRURAL_SEGURADO_ESPECIAL = [
+    {
+        desde: '2018-01',
+        inss: 1.2, gilrat: 0.1, senar: 0.2,
+        fonte: 'Segurado especial (agricultura familiar): a LC 224/2025 manteve o total em 1,5% (1,2% + 0,1% GILRAT/RAT + 0,2% SENAR).',
+        revisar: false,
+    },
+];
+
+/** Tabela que vale para ESTE produtor (o segurado especial tem a sua). */
+export function tabelaDoProdutor(cadastro, tabelaPadrao = ALIQUOTAS_FUNRURAL_PF) {
+    return cadastro?.seguradoEspecial ? ALIQUOTAS_FUNRURAL_SEGURADO_ESPECIAL : tabelaPadrao;
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -505,7 +528,7 @@ function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevol
         return fora('Sub-rogação marcada como não aplicável no cadastro do produtor.');
     }
 
-    const calc = calcularFunrural(base.valor, base.competencia, tabelaFunrural);
+    const calc = calcularFunrural(base.valor, base.competencia, tabelaDoProdutor(cadastro, tabelaFunrural));
     const declarado = extrairFunruralDeclarado(doc.infAdic);
 
     let divergencia = null;

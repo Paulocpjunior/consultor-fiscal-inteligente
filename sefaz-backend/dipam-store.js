@@ -86,6 +86,10 @@ export async function salvarProdutorRural(doc, dados, usuario) {
         municipio: String(dados.municipio || '').trim(),
         natureza: dados.natureza || null,
         funrural: dados.funrural || null,
+        // Segurado especial (agricultura familiar) ficou em 1,5% quando a
+        // LC 224/2025 subiu o geral para 1,63% — e essa condição não está na
+        // nota, só no cadastro.
+        seguradoEspecial: !!dados.seguradoEspecial,
         observacao: String(dados.observacao || '').trim(),
         confirmadoPor: usuario?.email || usuario?.uid || 'desconhecido',
         confirmadoEm: Date.now(),

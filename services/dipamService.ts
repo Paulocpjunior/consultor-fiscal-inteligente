@@ -100,6 +100,8 @@ export interface ProdutorRural {
     municipio?: string;
     natureza?: 'produtor_rural_pf' | 'pessoa_juridica' | 'cooperativa' | null;
     funrural?: 'sub_rogacao' | 'folha' | 'nao_aplica' | null;
+    /** Agricultura familiar: FUNRURAL continua em 1,5% (LC 224/2025). */
+    seguradoEspecial?: boolean;
     observacao?: string;
     confirmadoPor?: string;
     confirmadoEm?: number;
