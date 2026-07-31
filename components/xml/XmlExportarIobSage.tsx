@@ -7,6 +7,7 @@ import { conferirCorrelacaoCfop } from '../../services/cfopConferencia';
 import type { CfopCtx } from '../../services/iobSageExportService';
 import { formatCurrency } from '../../services/xmlParserService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
+import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 
 interface Props {
     currentUser: User;
@@ -83,7 +84,15 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     doc.empresaId === empresaSelecionada.id
                     || (raizSel && String(doc.empresaCnpj || '').replace(/\D/g, '').startsWith(raizSel)))
                 : d;
-            setDocs(filtradosEmpresa);
+            // Régua única de direção: nota própria de ENTRADA (tpNF=0, compra
+            // de produtor rural etc.) gravada como 'saida' pelo importer antigo
+            // é corrigida NA LEITURA — o E-Fiscal recebe essas notas como
+            // entrada (CFOP 1xxx/2xxx), não como saída. O backfill do sync-cron
+            // arruma o banco; aqui a tela não espera o próximo ciclo.
+            setDocs(filtradosEmpresa.map(doc => {
+                const efetiva = direcaoEfetivaDoc(doc);
+                return efetiva !== doc.direcao ? { ...doc, direcao: efetiva as any } : doc;
+            }));
             setBuscou(true);
         } catch (err: any) {
             onShowToast?.(`Falha na busca: ${err?.message || err}`);

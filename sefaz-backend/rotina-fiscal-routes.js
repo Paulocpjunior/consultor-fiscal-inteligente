@@ -99,9 +99,13 @@ function agrupar(itens, porCnpjToId) {
 function contarProdutoresRurais(documentos) {
     let produtores = 0;
     for (const d of documentos) {
-        if (d.direcao !== 'entrada') continue;
+        // Nota própria de entrada (tpNF=0): o cliente emite e o produtor está
+        // no bloco destinatário — o importer antigo gravava como 'saida'.
+        const propriaEntrada = String(d.tpNF ?? '') === '0';
+        if (d.direcao !== 'entrada' && !propriaEntrada) continue;
         if (['cancelado', 'cancelada', 'denegado', 'inutilizado'].includes(d.status)) continue;
-        if (identificarNaturezaFornecedor(d.emitente || {}).ehProdutorRuralPF) produtores += 1;
+        const contraparte = propriaEntrada ? d.destinatario : d.emitente;
+        if (identificarNaturezaFornecedor(contraparte || {}).ehProdutorRuralPF) produtores += 1;
     }
     return { produtores, indefinidos: 0 };
 }
@@ -133,10 +137,11 @@ router.get('/painel', requireAuth, async (req, res) => {
             db.collection('documentos_fiscais')
                 .where('competencia', '==', competencia)
                 .select('empresaId', 'empresaCnpj', 'cnpjDest', 'cnpjEmit', 'direcao', 'status',
-                    // `emitente` entra pra detectar compra de produtor rural
-                    // (DIPAM) sem NENHUMA leitura extra — o detalhe fica na
-                    // aba própria, aqui só sinaliza que a obrigação existe.
-                    'valorTotal', 'temItens', 'schema', 'tipoDoc', 'chave', 'emitente'),
+                    // `emitente`/`destinatario`/`tpNF` entram pra detectar compra
+                    // de produtor rural (DIPAM) sem NENHUMA leitura extra — o
+                    // detalhe fica na aba própria, aqui só sinaliza a obrigação.
+                    // tpNF=0 = nota própria de entrada (produtor no destinatário).
+                    'valorTotal', 'temItens', 'schema', 'tipoDoc', 'chave', 'emitente', 'destinatario', 'tpNF'),
             { label: `rotina-fiscal ${competencia}`, maxDocs: 60000 },
         );
         const documentos = docsSnaps.map((s) => s.data() || {});

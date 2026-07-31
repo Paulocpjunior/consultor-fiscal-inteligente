@@ -351,12 +351,25 @@ const pendencia = (codigo, mensagem, acao) => ({ codigo, mensagem, acao });
 export function classificarNota(doc, opts = {}) {
     const { cadastro = null, empresa = {}, tabelaFunrural = ALIQUOTAS_FUNRURAL_PF } = opts;
     const d = doc || {};
-    const direcao = d.direcao;
     const emitente = d.emitente || d.prestador || {};
     const destinatario = d.destinatario || d.tomador || {};
+
+    // NOTA PRÓPRIA DE ENTRADA (tpNF=0): o CLIENTE emite a nota da compra
+    // porque o produtor rural PF não emite NF-e (RICMS/SP art. 136 — é o
+    // formato da NF 425.231 do caso de referência). Aqui emitente = cliente e
+    // o PRODUTOR está no bloco destinatário/remetente. O importer antigo
+    // gravava direcao='saida' (só olhava o CNPJ do emitente) e a compra sumia
+    // da DIPAM — por isso a direção efetiva é decidida AQUI, pelo tpNF, sem
+    // confiar no campo gravado.
+    const notaPropriaEntrada = String(d.tpNF ?? '') === '0'
+        && (d.direcao === 'saida'
+            || (empresa.cnpj && soDigitos(emitente.cnpjCpf || emitente.cnpj) === soDigitos(empresa.cnpj)));
+    const direcao = notaPropriaEntrada ? 'entrada' : d.direcao;
     // Na devolução quem emite é a nossa empresa: o produtor está do outro lado.
     const ehDevolucaoSaida = direcao === 'saida';
-    const contraparte = ehDevolucaoSaida ? destinatario : emitente;
+    // O produtor é sempre o OUTRO lado: emitente na compra normal, mas
+    // destinatário/remetente na nota própria de entrada e na devolução.
+    const contraparte = (ehDevolucaoSaida || notaPropriaEntrada) ? destinatario : emitente;
 
     const cfops = Array.from(new Set((d.itens || []).map((i) => soDigitos(i.cfop)).filter(Boolean)));
     const cfopPrincipal = cfops[0] || '';

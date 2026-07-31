@@ -168,15 +168,23 @@ router.get('/varredura', requireAuth, async (req, res) => {
         const leves = await fetchAllDocs(
             db.collection('documentos_fiscais')
                 .where('competencia', '==', competencia)
-                .select('empresaId', 'direcao', 'status', 'emitente', 'valorTotal'),
+                // tpNF + destinatario: a compra de produtor costuma ser NOTA
+                // PRÓPRIA DE ENTRADA (tpNF=0, emitida pelo cliente, produtor no
+                // bloco destinatário) — sem esses campos ela passaria batida.
+                .select('empresaId', 'direcao', 'status', 'emitente', 'destinatario', 'tpNF', 'valorTotal'),
             { label: `dipam varredura ${competencia}`, maxDocs: 80000 },
         );
         const candidatos = new Map();
         for (const s of leves) {
             const d = s.data() || {};
-            if (d.direcao !== 'entrada') continue;
-            if (!empresas.has(d.empresaId)) continue;
-            const nat = identificarNaturezaFornecedor(d.emitente || {});
+            const emp = empresas.get(d.empresaId);
+            if (!emp) continue;
+            // Nota própria de entrada = tpNF 0 com o CLIENTE de emitente
+            // (vale antes E depois do backfill de direção do sync-cron).
+            const propriaEntrada = String(d.tpNF ?? '') === '0'
+                && soDigitos((d.emitente || {}).cnpjCpf || (d.emitente || {}).cnpj) === emp.cnpj;
+            if (d.direcao !== 'entrada' && !propriaEntrada) continue;
+            const nat = identificarNaturezaFornecedor((propriaEntrada ? d.destinatario : d.emitente) || {});
             const conta = nat.ehProdutorRuralPF || nat.confianca === 'indefinida';
             if (!conta) continue;
             const at = candidatos.get(d.empresaId) || { provaveis: 0, indefinidos: 0 };

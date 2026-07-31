@@ -207,6 +207,67 @@ describe('FUNRURAL por sub-rogação — caso real NF 425.231', () => {
     });
 });
 
+describe('nota própria de ENTRADA (tpNF=0) — o formato real da compra de produtor', () => {
+    // Como a NF 425.231 existe DE VERDADE no banco: o CLIENTE emite a nota
+    // (RICMS/SP art. 136 — produtor PF não emite NF-e), o produtor fica no
+    // bloco destinatário/remetente e o importer antigo gravava direcao='saida'
+    // (só olhava o CNPJ do emitente). Sem tratar isso, o Exportar SAGE recusava
+    // o CFOP e a DIPAM não via a compra (31/07, caso EDUARDO GUERRA).
+    const empresa = { id: 'eg', nome: 'EDUARDO GUERRA HORTIFRUTI', cnpj: '00005430000104' };
+    const notaPropria = (over: any = {}) => ({
+        chave: '35260600005430000104550010004252311178456640',
+        numero: '425231',
+        dhEmi: '2026-06-03T08:14:14-03:00',
+        competencia: '2026-06',
+        direcao: 'saida',          // como o importer antigo gravou
+        tpNF: '0',                 // mas o XML diz: ENTRADA
+        status: 'autorizado',
+        valorTotal: 55796,
+        emitente: { cnpjCpf: '00005430000104', nome: 'EDUARDO GUERRA HORTIFRUTI', uf: 'SP' },
+        destinatario: {
+            cnpjCpf: '28585062649', nome: 'JOSE SOARES FILHO E OUTROS',
+            ie: '0011410720080', uf: 'MG', codMunIBGE: '3121001', municipio: 'DELFINOPOLIS',
+        },
+        itens: [{ cfop: '2102', ncm: '08039000', xProd: 'BANANA PRATA' }],
+        infAdic: 'FUNRURAL 1.63% do total Nota Valor.: R$ 909.47',
+        ...over,
+    });
+
+    it('gera FUNRURAL com o PRODUTOR (destinatário) como contraparte — não vira "saída"', () => {
+        const n = classificarNota(notaPropria(), { empresa });
+        expect(n.direcao).toBe('entrada');
+        expect(n.fornecedor.nome).toBe('JOSE SOARES FILHO E OUTROS');
+        expect(n.funrural.aplica).toBe(true);
+        expect(n.funrural.total).toBe(909.46);
+        expect(n.dipam.aplica).toBe(false);   // produtor de MG: sem DIPAM
+    });
+
+    it('produtor paulista na nota própria entra no DIPAM 1.1 pelo município dele', () => {
+        const n = classificarNota(notaPropria({
+            itens: [{ cfop: '1102', ncm: '08039000' }],
+            destinatario: {
+                cnpjCpf: '28585062649', nome: 'SITIO SAO PEDRO',
+                ie: 'P011223344', uf: 'SP', codMunIBGE: '3548906', municipio: 'SAO JOSE DO RIO PRETO',
+            },
+        }), { empresa });
+        expect(n.dipam.aplica).toBe(true);
+        expect(n.dipam.codMunIBGE).toBe('3548906');
+        expect(n.dipam.valor).toBe(55796);
+    });
+
+    it('depois do backfill (direcao=entrada, tpNF=0), a contraparte continua sendo o destinatário', () => {
+        const n = classificarNota(notaPropria({ direcao: 'entrada' }), { empresa });
+        expect(n.fornecedor.nome).toBe('JOSE SOARES FILHO E OUTROS');
+        expect(n.funrural.aplica).toBe(true);
+    });
+
+    it('saída de verdade (tpNF=1) continua saída — devolução segue a régua própria', () => {
+        const n = classificarNota(notaPropria({ tpNF: '1', itens: [{ cfop: '5102', ncm: '08039000' }] }), { empresa });
+        expect(n.direcao).toBe('saida');
+        expect(n.funrural.aplica).toBe(false);
+    });
+});
+
 describe('DIPAM 1.1 — quem entra e quem fica de fora', () => {
     it('produtor de MG gera FUNRURAL mas NÃO gera DIPAM (a declaração é paulista)', () => {
         const n = classificarNota(notaEntrada());

@@ -28,9 +28,11 @@ const norm = (c) => String(c || '').replace(/\D/g, '');
  * @param {string|null} p.cnpjDest        CNPJ do destinatário do documento
  * @param {string|null} p.empresaAtualCnpj CNPJ da empresa sob a qual o doc foi capturado
  * @param {Map<string,{empresaId:string}>} p.empresasPorCnpj cadastro (cnpj 14 díg → empresa)
+ * @param {string|null} [p.tpNF] tpNF do XML — 0 = nota própria de ENTRADA
+ *   (compra de produtor rural etc.): emitente-cadastrado vira entrada, não saída.
  * @returns {{empresaId:string, empresaCnpj:string, direcao:'saida'|'entrada', motivo:string}|null}
  */
-export function decidirDonoPorParticipantes({ cnpjEmit, cnpjDest, empresaAtualCnpj, empresasPorCnpj }) {
+export function decidirDonoPorParticipantes({ cnpjEmit, cnpjDest, empresaAtualCnpj, empresasPorCnpj, tpNF }) {
     const emit = norm(cnpjEmit);
     const dest = norm(cnpjDest);
     const atual = norm(empresaAtualCnpj);
@@ -42,7 +44,10 @@ export function decidirDonoPorParticipantes({ cnpjEmit, cnpjDest, empresaAtualCn
 
     const empEmit = emit.length === 14 ? empresasPorCnpj.get(emit) : null;
     if (empEmit?.empresaId) {
-        return { empresaId: empEmit.empresaId, empresaCnpj: emit, direcao: 'saida', motivo: 'emitente-cadastrado' };
+        // Nota própria de ENTRADA (tpNF=0): a empresa emite, mas a mercadoria
+        // está ENTRANDO (compra de produtor rural PF, retorno etc.).
+        const direcao = String(tpNF ?? '') === '0' ? 'entrada' : 'saida';
+        return { empresaId: empEmit.empresaId, empresaCnpj: emit, direcao, motivo: 'emitente-cadastrado' };
     }
     const empDest = dest.length === 14 ? empresasPorCnpj.get(dest) : null;
     if (empDest?.empresaId) {

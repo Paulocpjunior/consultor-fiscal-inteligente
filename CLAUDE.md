@@ -348,6 +348,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   internet; dado fiscal de cliente NUNCA transita pelo chat (só
   schema/estrutura — extração vai pra bucket GCS privado do projeto
   consultorfiscalapp); acesso por usuário read-only (`cfi_leitura`).
+- **tpNF DECIDE a direção quando o cliente é o emitente** (#384, 31/07 —
+  caso EDUARDO GUERRA no Exportar SAGE): compra de produtor rural PF é NOTA
+  PRÓPRIA DE ENTRADA (RICMS/SP art. 136 — tpNF=0, cliente emite, produtor no
+  bloco destinatário/remetente). O importer decidia direção só pelo CNPJ do
+  emitente → essas notas viravam 'saida', o SAGE recusava o CFOP 1xxx/2xxx e a
+  DIPAM não as via. Régua única: `decidirDirecao(..., tpNF)` no import,
+  `direcaoEfetivaDoc` (xml-metadata-helper) na leitura, backfill idempotente
+  `corrigirDirecaoEntradaPropria` no fim do sync-cron (tpNF==0 && direcao==
+  'saida' && emit==empresa → 'entrada'; duas igualdades = sem índice composto).
+  Na DIPAM, contraparte da nota própria é o DESTINATÁRIO. NÃO usar "Correlação
+  CFOP" pra contornar isso — o CFOP está certo, a direção é que estava errada.
 - **"A chave não mente" vale pro DONO da saída** (caso S&P 138, #373): em
   saída o dono é o EMITENTE e o CNPJ dele está na chave (pos 6-20). Dono de
   raiz ≠ raiz do emitente da chave = legado mal atribuído — descartar da

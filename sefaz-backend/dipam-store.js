@@ -118,11 +118,16 @@ export function lerCondicaoRural(empresa) {
     };
 }
 
-/** CPF/CNPJ da contraparte de cada documento (emitente na entrada, destinatário na devolução). */
+/**
+ * CPF/CNPJ da contraparte de cada documento: emitente na entrada normal,
+ * destinatário na devolução E na nota própria de entrada (tpNF=0 — o cliente
+ * emite a nota da compra e o produtor fica no bloco destinatário/remetente).
+ */
 export function documentosDaContraparte(notas = []) {
     const out = [];
     for (const n of notas) {
-        const p = n?.direcao === 'saida'
+        const usaDestinatario = n?.direcao === 'saida' || String(n?.tpNF ?? '') === '0';
+        const p = usaDestinatario
             ? (n.destinatario || n.tomador)
             : (n.emitente || n.prestador);
         const d = soDigitos(p?.cnpjCpf || p?.cnpj || p?.cpf);
