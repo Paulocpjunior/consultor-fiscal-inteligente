@@ -190,6 +190,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Fila de features acordadas (com requisitos)
 
+0. **PENDÊNCIAS NOVAS (Paulo, 31/07/2026 — fim do dia da DIPAM):**
+   a) **Menu RELATÓRIOS** — criar o menu de relatórios do CFI. Requisitos a
+      levantar com o Paulo antes de codar: quais relatórios a equipe tira hoje
+      do SAGE/E-Fiscal (é o candidato natural de escopo — ver item b), formato
+      (tela/PDF/Excel), recorte (por cliente × carteira × competência). Já
+      existe "Relatórios & Logs" dentro da Central de XMLs (#277) — decidir se
+      o menu novo é hub próprio no menu principal ou expansão daquele grupo.
+   b) **Varredura completa do E-Fiscal SAGE** — descobrir como dar acesso ao
+      Claude pro mapeamento menu a menu, função a função (base do gap-analysis
+      da substituição do SAGE, complementa o plano F0-F3 adiado). O E-Fiscal é
+      app DESKTOP Windows: acesso direto não dá. Caminhos possíveis, a
+      escolher com o Paulo: (1) prints sistemáticos de cada menu/tela (o
+      método que já funcionou hoje com DIPAM/Impostos Retidos — barato e
+      imediato); (2) vídeo de navegação narrado; (3) PDFs de manual/ajuda do
+      próprio E-Fiscal se existirem; (4) relatórios exportados de cada módulo.
+      Entregável: inventário funcional × "o CFI já cobre / falta / não vale
+      cobrir", que vira a fila de features da substituição.
+
 1. ~~Retificação DCTFWeb/MIT pelo CFI~~ **FEITA 24/07** (#292): seção
    "Retificar com os valores do app" (admin) na Conferência DCTFWeb ×
    Apuração. Regras implementadas: rota `/mit/retificar` com requireAdmin
