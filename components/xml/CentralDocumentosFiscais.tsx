@@ -262,6 +262,18 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 )}
                 {tab === 'importacao' && (
                     <div className="space-y-4">
+                        {/* Guia do colaborador: HTML estático servido pelo próprio
+                            app (public/ → dist/) — link estável pra equipe toda. */}
+                        <div className="flex justify-end">
+                            <a
+                                href="/guia-saida-mod55.html"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800"
+                            >
+                                📗 Guia do colaborador — quando/por que/como usar cada função
+                            </a>
+                        </div>
                         <XmlImportacaoManual
                             currentUser={currentUser}
                             onShowToast={onShowToast}

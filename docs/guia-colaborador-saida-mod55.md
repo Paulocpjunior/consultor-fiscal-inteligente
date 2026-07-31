@@ -132,3 +132,6 @@ Falta nota de saída de um cliente?
 ---
 *Dúvidas técnicas: falar com o Paulo (admin). Este guia vive em
 `docs/guia-colaborador-saida-mod55.md` e é atualizado junto com a ferramenta.*
+
+*Versão pública para a equipe: `/guia-saida-mod55.html` no próprio app
+(fonte em `public/guia-saida-mod55.html` — atualizar as DUAS ao mudar o guia).*
