@@ -29,6 +29,7 @@ export interface CofreChecklistResumo {
     faltaMigrar: number;
     semSaida55: number;
     docsSemEmpresa: number;
+    docsDonoErrado: number;
     inatividadeDias: number;
 }
 

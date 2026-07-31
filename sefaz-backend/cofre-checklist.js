@@ -71,9 +71,19 @@ export function analisarChecklistCofre({ empresas, docsSaida, agoraMs, inativida
     }
 
     let docsSemEmpresa = 0;
+    let docsDonoErrado = 0;
     for (const d of docsSaida) {
         if (modeloDaChave(d?.chave) !== '55') continue; // só NF-e mod 55
         const cnpj = String(d?.empresaCnpj || '').replace(/\D/g, '');
+        // Dono errado: em SAÍDA, o dono é o EMITENTE — a chave carrega o CNPJ
+        // dele (pos 6-20). Doc atribuído a empresa de OUTRA raiz é legado de
+        // importação (caso S&P com 138 "saídas" de terceiros, 31/07): não
+        // conta pra empresa errada, senão o farol mente.
+        const emitChave = String(d?.chave || '').replace(/\D/g, '').slice(6, 20);
+        if (cnpj.length === 14 && emitChave.length === 14 && cnpj.slice(0, 8) !== emitChave.slice(0, 8)) {
+            docsDonoErrado++;
+            continue;
+        }
         const linha = porCnpj.get(cnpj);
         if (!linha) { docsSemEmpresa++; continue; }
         linha.totalSaidas55++;
@@ -125,6 +135,7 @@ export function analisarChecklistCofre({ empresas, docsSaida, agoraMs, inativida
         faltaMigrar: linhas.filter((l) => l.status === 'falta-migrar').length,
         semSaida55: linhas.filter((l) => l.status === 'sem-saida-55').length,
         docsSemEmpresa,
+        docsDonoErrado,
         inatividadeDias,
     };
     return { resumo, linhas };

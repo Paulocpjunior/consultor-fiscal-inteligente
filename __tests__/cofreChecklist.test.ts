@@ -10,8 +10,11 @@ const AGORA = new Date('2026-07-22T12:00:00Z').getTime();
 const DIA = 24 * 3600 * 1000;
 const iso = (diasAtras: number) => new Date(AGORA - diasAtras * DIA).toISOString();
 
-// chave com modelo nas posições 20-21
-const chave = (modelo: string) => `35260767267435000178${modelo}0010000012341${'0'.repeat(9)}`.slice(0, 44);
+// chave real: cUF(2) AAMM(4) CNPJ-emitente(6-20) modelo(20-22) série nNF...
+// O CNPJ do emitente ENTRA na chave — o guard de dono-errado compara a raiz
+// da chave com a raiz do dono do doc.
+const chave = (modelo: string, cnpjEmit = '67267435000178') =>
+    `352607${cnpjEmit}${modelo}0010000012341${'0'.repeat(9)}`.slice(0, 44);
 
 describe('modeloDaChave', () => {
     it('extrai modelo das posições 20-21', () => {
@@ -49,22 +52,25 @@ describe('analisarChecklistCofre (v2 — cofre + autXML)', () => {
     ];
     const docsSaida = [
         // Apatel: cofre ativo (saída via email há 2 dias)
-        { empresaCnpj: '11111111000111', chave: chave('55'), origem: 'email', dhEmi: iso(2) },
-        { empresaCnpj: '11111111000111', chave: chave('55'), origem: 'email', dhEmi: iso(10) },
+        { empresaCnpj: '11111111000111', chave: chave('55', '11111111000111'), origem: 'email', dhEmi: iso(2) },
+        { empresaCnpj: '11111111000111', chave: chave('55', '11111111000111'), origem: 'email', dhEmi: iso(10) },
         // Beta: só saídas históricas SEM trilho automático (era SIEG) → falta migrar
-        { empresaCnpj: '22222222000122', chave: chave('55'), origem: 'importacao-zip', dhEmi: iso(20) },
+        { empresaCnpj: '22222222000122', chave: chave('55', '22222222000122'), origem: 'importacao-zip', dhEmi: iso(20) },
         // Gama: recebeu via cofre mas parou (45 dias) → parado
-        { empresaCnpj: '33333333000133', chave: chave('55'), origem: 'email', dhEmi: iso(45) },
+        { empresaCnpj: '33333333000133', chave: chave('55', '33333333000133'), origem: 'email', dhEmi: iso(45) },
         // Delta: só NFC-e 65 (não conta) → sem-saida-55
-        { empresaCnpj: '44444444000144', chave: chave('65'), origem: 'email', dhEmi: iso(1) },
+        { empresaCnpj: '44444444000144', chave: chave('65', '44444444000144'), origem: 'email', dhEmi: iso(1) },
         // Eduardo Guerra (o caso do print): saídas chegando HOJE via autXML,
         // zero via cofre — na v1 era "falta migrar"; agora é ATIVO · autXML.
-        { empresaCnpj: '55555555000155', chave: chave('55'), origem: 'sefaz', dhEmi: iso(0) },
-        { empresaCnpj: '55555555000155', chave: chave('55'), origem: 'sefaz', dhEmi: iso(1) },
+        { empresaCnpj: '55555555000155', chave: chave('55', '55555555000155'), origem: 'sefaz', dhEmi: iso(0) },
+        { empresaCnpj: '55555555000155', chave: chave('55', '55555555000155'), origem: 'sefaz', dhEmi: iso(1) },
         // importação por consulta-chave não muda o status (não confirma trilho)
-        { empresaCnpj: '22222222000122', chave: chave('55'), origem: 'sefaz', dhEmi: iso(3), capturadoPor: { fonte: 'consulta-chave-importar' } },
+        { empresaCnpj: '22222222000122', chave: chave('55', '22222222000122'), origem: 'sefaz', dhEmi: iso(3), capturadoPor: { fonte: 'consulta-chave-importar' } },
         // órfão
-        { empresaCnpj: '99999999000199', chave: chave('55'), origem: 'email', dhEmi: iso(1) },
+        { empresaCnpj: '99999999000199', chave: chave('55', '99999999000199'), origem: 'email', dhEmi: iso(1) },
+        // DONO ERRADO (caso S&P 31/07): saída atribuída à Apatel mas a CHAVE tem
+        // emitente de OUTRA raiz — não pode contar pra Apatel (nem pra ninguém).
+        { empresaCnpj: '11111111000111', chave: chave('55', '67267435000178'), origem: 'autxml', dhEmi: iso(1) },
     ];
 
     const r = analisarChecklistCofre({ empresas, docsSaida, agoraMs: AGORA, inatividadeDias: 30 });
@@ -97,6 +103,13 @@ describe('analisarChecklistCofre (v2 — cofre + autXML)', () => {
     it('mod 65 não conta como saída 55; órfão vai pro contador', () => {
         expect(por['44444444000144'].totalSaidas55).toBe(0);
         expect(r.resumo.docsSemEmpresa).toBe(1);
+    });
+
+    it('DONO ERRADO (caso S&P): saída com chave de outra raiz NÃO conta pra empresa atribuída', () => {
+        // Apatel segue com 2 saídas (as legítimas) — o doc de terceiro é descartado
+        expect(por['11111111000111'].totalSaidas55).toBe(2);
+        expect(por['11111111000111'].viaAutXml).toBe(0);
+        expect(r.resumo.docsDonoErrado).toBe(1);
     });
 
     it('resumo agregado com quebra por trilho', () => {
