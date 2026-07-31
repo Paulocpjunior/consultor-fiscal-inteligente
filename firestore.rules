@@ -275,6 +275,16 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // De→Para de códigos de participante do E-Fiscal (Exportar SAGE) — um doc
+    // por empresa. Shared-write: quem opera a exportação é o colaborador e o
+    // ciclo (gerar → log de erros → mapear código → regerar) não pode esperar
+    // admin. Alimentado pelo leitor do log em Exportar SAGE (IOB).
+    match /sage_codigos_participantes/{empresaId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isSignedIn();
+    }
+
     // ───────────────────────────────────────────────────────────────
     // empresa_credito_config: config de credito PIS/COFINS por empresa.
     // Armazena lista de categorias marcadas como "nao gera credito" pra

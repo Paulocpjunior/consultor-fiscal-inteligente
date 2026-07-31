@@ -90,8 +90,18 @@ function formatNcm(ncm: string | undefined): string {
 }
 
 /** Codigo da empresa para o campo CODIGO DO CLIENTE/FORNECEDOR (max 20 chars). */
-function codigoParticipante(cnpjCpf: string): string {
+/**
+ * Código do participante no E-Fiscal. O padrão é o próprio CNPJ/CPF — mas o
+ * E-Fiscal do cliente costuma JÁ TER o participante com um código interno
+ * (ex.: "6UU0LLF9X"), e aí recusa o cadastro novo ("CNPJ já cadastrado com
+ * outro Código de Faturamento") e TODAS as notas dele caem no E200 campo 08.
+ * O De→Para (mapa cnpj→código existente, alimentado pelo log de erros) faz a
+ * nota referenciar o cadastro que o E-Fiscal já tem.
+ */
+function codigoParticipante(cnpjCpf: string, codigos?: Record<string, string>): string {
     const digits = onlyDigits(cnpjCpf);
+    const mapeado = codigos?.[digits];
+    if (mapeado && mapeado.trim()) return mapeado.trim().slice(0, 20);
     return digits.length === 0 ? 'SEMCNPJ' : digits.slice(0, 20);
 }
 
@@ -109,6 +119,14 @@ interface ExportarParams {
      * E-Fiscal do cliente. Vazio (padrão) = não informar.
      */
     tipoInventario?: string;
+    /**
+     * De→Para de códigos de participante: CNPJ/CPF (só dígitos) → código de
+     * faturamento que JÁ EXISTE no E-Fiscal do cliente. Alimentado pelo log de
+     * erros da importação ("já cadastrado com outro Código"). Participante
+     * mapeado NÃO gera E010 (o cadastro já está lá) e as notas dele saem com o
+     * código existente.
+     */
+    codigosParticipantes?: Record<string, string>;
     /**
      * Natureza da atividade + overrides da empresa (tela Correlação CFOP).
      * Sem isto, TODO CFOP caía na inversão mecânica e a configuração da
@@ -238,20 +256,36 @@ export function dataDoDoc(d: DocumentoFiscal): Date {
  * Usa o objeto quando existe; senão remonta pelos campos achatados do doc.
  */
 export function participanteDoDoc(d: DocumentoFiscal): ParticipanteNF | null {
-    const entrada = d.direcao === 'entrada';
-    const obj: any = entrada ? d.emitente : d.destinatario;
     const x: any = d as any;
+    // NOTA PRÓPRIA DE ENTRADA (tpNF=0): o cliente emite a nota da compra
+    // (produtor rural PF não emite NF-e) e o fornecedor está no bloco
+    // DESTINATÁRIO. Sem isso, o participante seria a própria empresa.
+    const propriaEntrada = String(x.tpNF ?? '') === '0'
+        && onlyDigits(x.cnpjEmit || d.emitente?.cnpjCpf) === onlyDigits(x.empresaCnpj || '');
+    const usaDestinatario = d.direcao === 'saida' || propriaEntrada;
+    const obj: any = usaDestinatario ? d.destinatario : d.emitente;
 
-    const cnpjCpf = onlyDigits(obj?.cnpjCpf || (entrada ? x.cnpjEmit : x.cnpjDest));
+    const cnpjCpf = onlyDigits(obj?.cnpjCpf || (usaDestinatario ? x.cnpjDest : x.cnpjEmit));
     if (!cnpjCpf) return null;
 
     const nome = obj?.nome
-        || (entrada ? x.xNomeEmit : x.xNomeDest)
-        || (entrada ? 'FORNECEDOR' : 'CLIENTE');
-    // UF do emitente vem da chave; na saída o destinatário nem sempre tem UF
-    // gravada — cai na UF da empresa, informada pela tela.
-    const uf = obj?.uf || (entrada ? ufDaChave(d.chave) : '') || '';
+        || (usaDestinatario ? x.xNomeDest : x.xNomeEmit)
+        || (usaDestinatario ? 'CLIENTE' : 'FORNECEDOR');
+    // UF: campo do participante → derivada do MUNICÍPIO (IBGE, 2 primeiros
+    // dígitos = mesma tabela do cUF) → chave de acesso (só vale pro emitente).
+    // UF em branco no E010 é recusa certa: "Campo 10, UF inválida" derrubou 53
+    // participantes (e as notas todas atrás) no caso 31/07.
+    const uf = obj?.uf
+        || ufDoMunicipioIBGE(obj?.codMunIBGE)
+        || (!usaDestinatario ? ufDaChave(d.chave) : '')
+        || '';
     return { cnpjCpf, nome: String(nome), uf: String(uf), ie: obj?.ie };
+}
+
+/** UF pelo código IBGE do município (2 primeiros dígitos = código da UF). */
+function ufDoMunicipioIBGE(codMunIBGE: unknown): string {
+    const d = String(codMunIBGE || '').replace(/\D/g, '');
+    return d.length === 7 ? (UF_POR_CUF[d.slice(0, 2)] || '') : '';
 }
 
 function buildE010(d: DocumentoFiscal): string {
@@ -341,7 +375,7 @@ function buildE020(
     });
 }
 
-function commonNF(d: DocumentoFiscal) {
+function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>) {
     // Guard: mesmo motivo do buildE010.
     if (d.tipo === 'NFSe') {
         throw new Error(`commonNF: documento ${d.id} e NFSe, nao suportado em IOB/SAGE.`);
@@ -358,7 +392,7 @@ function commonNF(d: DocumentoFiscal) {
         serie: serieDaNota(d),
         subserie: '',
         numero: numeroDaNota(d),
-        codigoPart: codigoParticipante(part.cnpjCpf),
+        codigoPart: codigoParticipante(part.cnpjCpf, codigos),
         dEmi,
         ufNF: sanitizeAlfa(part.uf || '').slice(0, 2).toUpperCase() || '  ',
         modelo: d.modelo || (d.tipo === 'NFCe' ? '65' : '55'),
@@ -382,8 +416,8 @@ function mapTipoFrete(tpFrete: unknown): number {
     }
 }
 
-function buildE200(d: DocumentoFiscal): string {
-    const c = commonNF(d);
+function buildE200(d: DocumentoFiscal, codigos?: Record<string, string>): string {
+    const c = commonNF(d, codigos);
     const situacao =
         d.status === 'cancelado' ? 2
         : d.status === 'denegado' ? 4
@@ -433,8 +467,8 @@ function isVendaFutura(cfop: string | undefined): boolean {
     return ['5922', '6922', '5117', '6117', '5118', '6118'].includes(c);
 }
 
-function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx): string[] {
-    const c = commonNF(d);
+function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Record<string, string>): string[] {
+    const c = commonNF(d, codigos);
     const linhas: string[] = [];
 
     // Agrupa itens por CFOP.
@@ -491,8 +525,8 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx): string[] {
     return linhas;
 }
 
-function buildE221(d: DocumentoFiscal): string {
-    const c = commonNF(d);
+function buildE221(d: DocumentoFiscal, codigos?: Record<string, string>): string {
+    const c = commonNF(d, codigos);
     return buildRecord(L('E221'), {
         'ENTRADAS OU SAÍDAS': c.es,
         'ESPÉCIE N.F.': c.especie,
@@ -513,8 +547,8 @@ function buildE221(d: DocumentoFiscal): string {
     });
 }
 
-function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx): string[] {
-    const c = commonNF(d);
+function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Record<string, string>): string[] {
+    const c = commonNF(d, codigos);
     return (d.itens || []).map((it, idx) => {
         const aliquota = it.vProd > 0 && it.vICMS > 0 ? (it.vICMS / it.vProd) * 100 : 0;
         return buildRecord(L('E222'), {
@@ -556,9 +590,9 @@ function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx): string[] {
     });
 }
 
-function buildE342(d: DocumentoFiscal): string | null {
+function buildE342(d: DocumentoFiscal, codigos?: Record<string, string>): string | null {
     if (!d.chave || d.chave.length !== 44) return null;
-    const c = commonNF(d);
+    const c = commonNF(d, codigos);
     return buildRecord(L('E342'), {
         'ENTRADAS OU SAÍDAS': c.es,
         'ESPÉCIE N.F.': c.especie,
@@ -597,7 +631,7 @@ export interface ExportarResult {
 }
 
 export function exportarParaIobSage(params: ExportarParams): ExportarResult {
-    const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx } = params;
+    const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes } = params;
     if (!documentos.length) {
         throw new Error('Nenhum documento para exportar.');
     }
@@ -616,6 +650,9 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
             const part = participanteDoDoc(d);
             if (!part) continue; // reportado no bloco da nota, não duas vezes
             if (e010Set.has(part.cnpjCpf)) continue;
+            // Participante com código MAPEADO já existe no E-Fiscal — mandar
+            // E010 de novo é o que dispara o "já cadastrado com outro Código".
+            if (codigosParticipantes?.[part.cnpjCpf]?.trim()) continue;
             e010Set.set(part.cnpjCpf, buildE010(d));
         } catch (err: any) {
             falhas.push({ documento: rotuloDoc(d), motivo: `participante: ${err?.message || err}` });
@@ -644,19 +681,19 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
     for (const d of documentos) {
         const bloco: string[] = [];
         try {
-            bloco.push(buildE200(d));
-            const e201s = buildE201sFromDoc(d, cfopCtx);
+            bloco.push(buildE200(d, codigosParticipantes));
+            const e201s = buildE201sFromDoc(d, cfopCtx, codigosParticipantes);
             bloco.push(...e201s);
             count201 += e201s.length;
 
             if ((d.itens || []).length > 0) {
-                bloco.push(buildE221(d));
-                const e222s = buildE222sFromDoc(d, cfopCtx);
+                bloco.push(buildE221(d, codigosParticipantes));
+                const e222s = buildE222sFromDoc(d, cfopCtx, codigosParticipantes);
                 bloco.push(...e222s);
                 count222 += e222s.length;
             }
 
-            const e342 = buildE342(d);
+            const e342 = buildE342(d, codigosParticipantes);
             if (e342) bloco.push(e342);
 
             blocosPorNota.push(bloco);
