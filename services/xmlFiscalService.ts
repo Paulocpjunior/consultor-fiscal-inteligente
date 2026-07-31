@@ -192,6 +192,13 @@ export interface EmpresaPerfilOption {
     inscricaoEstadual?: string;
     ccmSp?: string;
     createdBy?: string;
+    // Campos da conferência de cadastro (cadastroClientePendencias) — vêm do
+    // backend de perfil; ausentes em respostas antigas/fallback local.
+    codMunIBGE?: string;
+    email?: string;
+    cnae?: string;
+    anexo?: string;
+    dataAbertura?: string;
 }
 
 function inferirRegimeLucro(data: LucroPresumidoEmpresa): RegimeSugerido {

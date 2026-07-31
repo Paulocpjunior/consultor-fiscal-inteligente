@@ -61,6 +61,11 @@ export function normalizarEmpresasPerfilResponse(data: unknown): EmpresaPerfilOp
             inscricaoEstadual: textoOpcional(item.inscricaoEstadual),
             ccmSp: textoOpcional(item.ccmSp),
             createdBy: textoOpcional(item.createdBy),
+            codMunIBGE: textoOpcional(item.codMunIBGE),
+            email: textoOpcional(item.email),
+            cnae: textoOpcional(item.cnae),
+            anexo: textoOpcional(item.anexo),
+            dataAbertura: textoOpcional(item.dataAbertura),
         };
         const key = empresa.cnpj || empresa.id;
         if (!map.has(key)) map.set(key, empresa);
