@@ -8,6 +8,8 @@ import type { CfopCtx } from '../../services/iobSageExportService';
 import { formatCurrency } from '../../services/xmlParserService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
+import { parseLogEfiscal, cruzarLogComFml, type CruzamentoLogEfiscal } from '../../services/iobSageLogEfiscal';
+import { carregarCodigosParticipantes, salvarCodigosParticipantes } from '../../services/sageCodigosService';
 
 interface Props {
     currentUser: User;
@@ -139,6 +141,51 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         [filtrados],
     );
 
+    // De→Para de códigos do E-Fiscal (participantes que já existem lá com
+    // outro código) + o conteúdo da última geração (pra cruzar com o log).
+    const [codigosPart, setCodigosPart] = useState<Record<string, string>>({});
+    const [ultimoConteudo, setUltimoConteudo] = useState<string | null>(null);
+    const [logCruzado, setLogCruzado] = useState<CruzamentoLogEfiscal | null>(null);
+    const [codigosDigitados, setCodigosDigitados] = useState<Record<string, string>>({});
+    const [salvandoCodigos, setSalvandoCodigos] = useState(false);
+
+    useEffect(() => {
+        let alive = true;
+        setCodigosPart({});
+        setLogCruzado(null);
+        if (!empresaSelecionada) return;
+        carregarCodigosParticipantes(empresaSelecionada.id)
+            .then(m => { if (alive) setCodigosPart(m); });
+        return () => { alive = false; };
+    }, [empresaSelecionada?.id]);
+
+    const lerLogEfiscal = async (file: File | null) => {
+        if (!file) return;
+        if (!ultimoConteudo) {
+            onShowToast?.('Gere o arquivo .FML nesta tela primeiro — as linhas do log apontam pra ele.');
+            return;
+        }
+        const txt = await file.text();
+        const erros = parseLogEfiscal(txt);
+        if (erros.length === 0) {
+            onShowToast?.('Nenhum erro "(X)" encontrado neste arquivo — é o log de erros do E-Fiscal?');
+            return;
+        }
+        setLogCruzado(cruzarLogComFml(erros, ultimoConteudo));
+        setCodigosDigitados({});
+    };
+
+    const salvarDePara = async () => {
+        if (!empresaSelecionada) return;
+        setSalvandoCodigos(true);
+        const r = await salvarCodigosParticipantes(empresaSelecionada.id, codigosDigitados);
+        setSalvandoCodigos(false);
+        if (!r.ok) { onShowToast?.(r.error || 'Falha ao salvar o De→Para.'); return; }
+        const novos = await carregarCodigosParticipantes(empresaSelecionada.id);
+        setCodigosPart(novos);
+        onShowToast?.('De→Para salvo. Gere o arquivo de novo — os participantes mapeados saem com o código do E-Fiscal.');
+    };
+
     const handleExportar = async () => {
         if (filtrados.length === 0) {
             onShowToast?.('Nenhum documento para exportar com os filtros atuais.');
@@ -160,7 +207,11 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 numeroEmpresaEfiscal,
                 tipoInventario: tipoInventario.trim(),
                 cfopCtx,
+                codigosParticipantes: codigosPart,
             });
+            // Guarda o conteúdo: o log de erros do E-Fiscal referencia LINHAS
+            // deste arquivo, e o leitor cruza os dois.
+            setUltimoConteudo(result.conteudo);
             const st = result.estatisticas;
             setFalhas(result.falhas);
             // Só baixa se ALGUMA nota entrou. Arquivo só com produtos importa
@@ -293,6 +344,86 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     )}
                 </div>
             )}
+            {/* ── Leitor do LOG DE ERROS do E-Fiscal ──────────────────────────
+                O E-Fiscal recusa em cascata (participante → nota) e o log só
+                fala em "Linha NNNNNN". Cruzando com o arquivo gerado nesta
+                tela, viram ações: UF (regerar resolve) e De→Para de código. */}
+            {ultimoConteudo && (
+                <div className="border border-slate-300 dark:border-slate-600 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                            🧾 O E-Fiscal recusou a importação? Leia o log de erros aqui
+                        </p>
+                        <label className="text-[11px] px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 cursor-pointer font-semibold">
+                            📄 Abrir log (.txt)
+                            <input
+                                type="file"
+                                accept=".txt,.log"
+                                className="hidden"
+                                onChange={e => { lerLogEfiscal(e.target.files?.[0] || null); e.target.value = ''; }}
+                            />
+                        </label>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        É o arquivo .txt que o E-Fiscal gera ao importar. As linhas dele apontam pro .FML
+                        gerado NESTA tela — leia logo após gerar/importar, sem buscar de novo.
+                    </p>
+
+                    {logCruzado && (
+                        <div className="space-y-2">
+                            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                {logCruzado.totalErros} erro(s) no log → {logCruzado.resumo}
+                            </p>
+                            {logCruzado.semUf.length > 0 && (
+                                <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                                    ✓ {logCruzado.semUf.length} participante(s) recusados por UF: esta versão já
+                                    preenche a UF pela cidade (IBGE) — <strong>gere o arquivo de novo</strong> e importe.
+                                </p>
+                            )}
+                            {logCruzado.codigoExistente.length > 0 && (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                                        ⚠ {logCruzado.codigoExistente.length} participante(s) já existem no E-Fiscal com
+                                        OUTRO código. Abra o cadastro de Clientes/Fornecedores lá, copie o
+                                        <strong> Código de Faturamento</strong> de cada um e preencha abaixo — as notas
+                                        passarão a apontar pro cadastro que o E-Fiscal já tem (sem duplicar).
+                                    </p>
+                                    <div className="max-h-56 overflow-y-auto space-y-1">
+                                        {logCruzado.codigoExistente.map(p => (
+                                            <div key={p.cnpjCpf} className="flex items-center gap-2 text-[11px]">
+                                                <span className="flex-1 min-w-0 truncate text-slate-700 dark:text-slate-300" title={p.nome}>
+                                                    {p.nome} <span className="text-slate-400 font-mono">({p.cnpjCpf})</span>
+                                                </span>
+                                                <input
+                                                    value={codigosDigitados[p.cnpjCpf] ?? codigosPart[p.cnpjCpf] ?? ''}
+                                                    onChange={e => setCodigosDigitados(prev => ({ ...prev, [p.cnpjCpf]: e.target.value }))}
+                                                    placeholder="código no E-Fiscal"
+                                                    className="w-40 p-1.5 text-[11px] font-mono rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button
+                                        onClick={salvarDePara}
+                                        disabled={salvandoCodigos || Object.values(codigosDigitados).every(v => !v.trim())}
+                                        className="px-3 py-1.5 text-[11px] rounded bg-sky-600 hover:bg-sky-700 text-white font-semibold disabled:opacity-40"
+                                    >
+                                        {salvandoCodigos ? 'Salvando…' : '💾 Salvar De→Para e usar nas próximas gerações'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {Object.keys(codigosPart).length > 0 && (
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    🔗 De→Para ativo: {Object.keys(codigosPart).length} participante(s) desta empresa usam o código
+                    já existente no E-Fiscal (não geram cadastro novo no arquivo).
+                </p>
+            )}
+
             <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3">
                 <p className="text-xs text-emerald-800 dark:text-emerald-300">
                     Gera arquivo <strong>.FML</strong> no Layout Folhamatic Fiscal v2.0.06 (largura fixa, Windows-1252, CRLF) para importação no E-Fiscal IOB SAGE.
