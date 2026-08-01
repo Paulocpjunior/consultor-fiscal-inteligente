@@ -190,23 +190,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Fila de features acordadas (com requisitos)
 
-0. **PENDÊNCIAS NOVAS (Paulo, 31/07/2026 — fim do dia da DIPAM):**
-   a) **Menu RELATÓRIOS** — criar o menu de relatórios do CFI. Requisitos a
-      levantar com o Paulo antes de codar: quais relatórios a equipe tira hoje
-      do SAGE/E-Fiscal (é o candidato natural de escopo — ver item b), formato
-      (tela/PDF/Excel), recorte (por cliente × carteira × competência). Já
-      existe "Relatórios & Logs" dentro da Central de XMLs (#277) — decidir se
-      o menu novo é hub próprio no menu principal ou expansão daquele grupo.
-   b) **Varredura completa do E-Fiscal SAGE** — descobrir como dar acesso ao
-      Claude pro mapeamento menu a menu, função a função (base do gap-analysis
-      da substituição do SAGE, complementa o plano F0-F3 adiado). O E-Fiscal é
-      app DESKTOP Windows: acesso direto não dá. Caminhos possíveis, a
-      escolher com o Paulo: (1) prints sistemáticos de cada menu/tela (o
-      método que já funcionou hoje com DIPAM/Impostos Retidos — barato e
-      imediato); (2) vídeo de navegação narrado; (3) PDFs de manual/ajuda do
-      próprio E-Fiscal se existirem; (4) relatórios exportados de cada módulo.
-      Entregável: inventário funcional × "o CFI já cobre / falta / não vale
-      cobrir", que vira a fila de features da substituição.
+0. **PENDÊNCIAS 31/07 — decisões tomadas 01/08:**
+   a) ~~Menu RELATÓRIOS~~ **v1 FEITA 01/08** (#389): card próprio no grupo
+      Gestão (decisão do Paulo), 4 abas — Livro de Entradas/Saídas (por
+      empresa, colunas Base/Isentos/Outras pela MESMA alocação do Exportar
+      SAGE), Faturamento por carteira (rota nova
+      `/api/admin/relatorios/faturamento`, agregação server-side com escopo de
+      carteira), Impostos apurados × enviados (lê o painel da Rotina) e
+      DIPAM/FUNRURAL (lê a varredura da aba 🌾). Formato escolhido: **PDF com
+      identidade SP** (casca única `services/relatorioPdf.ts` — logo +
+      #0E3BFA/#091D8D + paginação; toda aba nova DEVE usá-la). REGRA: relatório
+      NUNCA tem conta própria — lê o endpoint da tela de origem (lição do card
+      4). PRÓXIMO: completar a lista com o que o menu Relatórios do E-Fiscal
+      oferece (sai do vídeo do item b).
+   b) **Varredura do E-Fiscal SAGE** — MÉTODO ESCOLHIDO (Paulo, 01/08):
+      **vídeo de navegação** pelos menus. Aguardando o Paulo gravar/enviar;
+      entregável segue: inventário funcional × "CFI cobre / falta / não vale
+      cobrir". Começar pelo menu Relatórios do E-Fiscal (alimenta o item a).
 
 1. ~~Retificação DCTFWeb/MIT pelo CFI~~ **FEITA 24/07** (#292): seção
    "Retificar com os valores do app" (admin) na Conferência DCTFWeb ×

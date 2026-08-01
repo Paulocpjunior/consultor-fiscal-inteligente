@@ -69,6 +69,7 @@ const DctfwebHub = lazy(() => import('./components/DCTFWeb/DctfwebHub'));
 // importados DENTRO do hub agora — não mais soltos aqui.
 const DiagnosticoHub = lazy(() => import('./components/Diagnostico/DiagnosticoHub'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
+const RelatoriosHub = lazy(() => import('./components/Relatorios'));
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
 const NfseNacionalHub = lazy(() => import('./components/NfseNacional/NfseNacionalHub'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
@@ -1125,6 +1126,17 @@ const App: React.FC = () => {
                             <Suspense fallback={<LoadingSpinner />}>
                                 <NfseNacionalHub
                                     currentUser={currentUser}
+                                    onShowToast={(msg) => setToastMessage(msg)}
+                                />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.RELATORIOS && (
+                            <ErrorBoundary>
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <RelatoriosHub
+                                    currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
                             </Suspense>

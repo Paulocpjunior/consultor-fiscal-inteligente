@@ -41,6 +41,7 @@ export enum SearchType {
   GIA_ST = 'GIA-ST',
   RECUPERACAO_TRIBUTARIA = 'Recuperação Tributária',
   NFP_PRO_CLOUD = 'Consulta Situação Fiscal',
+  RELATORIOS = 'Relatórios',
 }
 
 export interface GroundingSource {
