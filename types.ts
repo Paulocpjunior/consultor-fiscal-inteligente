@@ -1358,6 +1358,23 @@ export interface EmpresaDadosFiscais {
     cnae?: string;
     /** Data de abertura da empresa (YYYY-MM-DD). */
     dataAbertura?: string;
+    /**
+     * Responsável LEGAL pela empresa (sócio/administrador) e contador
+     * responsável — obrigatórios na IDENTIFICAÇÃO dos relatórios emitidos
+     * (faturamento, livros, obrigações acessórias). Pedido do Paulo 01/08.
+     * NÃO confundir com o responsável da CARTEIRA (colaborador do escritório).
+     */
+    respLegalNome?: string;
+    /** CPF do responsável legal (só dígitos). */
+    respLegalCpf?: string;
+    /** Cargo/qualificação (ex.: Sócio administrador). */
+    respLegalCargo?: string;
+    /** Contador responsável — nome como sai no relatório. */
+    contadorNome?: string;
+    /** Registro no CRC (ex.: 1SP123456/O-8) — formato livre, varia por regional. */
+    contadorCrc?: string;
+    /** CPF do contador (só dígitos). */
+    contadorCpf?: string;
 }
 
 export interface DocumentoFiscalItem {

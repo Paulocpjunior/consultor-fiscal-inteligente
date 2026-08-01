@@ -13,6 +13,7 @@ const completo = {
     uf: 'SP', codMunIBGE: '3550308', inscricaoEstadual: 'ISENTO',
     ccmSp: '12345678', email: 'contato@cliente.com.br', cnae: '4712100',
     anexo: 'I', dataAbertura: '2015-03-01',
+    respLegalNome: 'João Sócio', contadorNome: 'Maria Contadora', contadorCrc: '1SP123456/O-8',
     responsaveis: [{ nome: 'Eunice', papel: 'principal' }],
 };
 
@@ -121,6 +122,14 @@ describe('farol do cadastro', () => {
         const r = resumirCadastro(conferirCadastroCliente(completo as any));
         expect(r.motivo).toBeNull();
         expect(r.campos).toEqual([]);
+    });
+
+    it('responsável legal e contador são obrigatórios pros relatórios (01/08)', () => {
+        expect(campos({ ...completo, respLegalNome: '' })).toContain('Responsável legal da empresa');
+        expect(campos({ ...completo, contadorNome: '' })).toContain('Contador responsável');
+        // Contador com nome mas sem CRC também pende — a identificação exige os dois.
+        expect(campos({ ...completo, contadorCrc: '' })).toContain('CRC do contador');
+        expect(campos(completo)).toEqual([]);
     });
 
     it('toda pendência traz impacto e onde resolver', () => {

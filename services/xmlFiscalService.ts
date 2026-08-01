@@ -115,6 +115,26 @@ export interface EmpresaXmlOption {
     createdBy?: string;
 }
 
+/**
+ * Dados de identificação (responsável legal + contador) do cadastro da
+ * empresa — usados pelo bloco obrigatório dos relatórios em PDF. Leitura
+ * direta do doc (dadosFiscais); null quando indisponível — o PDF imprime
+ * "não cadastrado" no lugar, nunca esconde o buraco.
+ */
+export async function getIdentificacaoEmpresa(opt: EmpresaXmlOption): Promise<import('../types').EmpresaDadosFiscais | null> {
+    if (!isFirebaseConfigured || !db || !opt?.id) return null;
+    const colecoes = opt.fonte === 'lucro'
+        ? ['lucro_empresas', 'simples_empresas']
+        : ['simples_empresas', 'lucro_empresas'];
+    for (const col of colecoes) {
+        try {
+            const snap = await getDoc(doc(db, col, opt.id));
+            if (snap.exists()) return ((snap.data() as any).dadosFiscais || {}) as import('../types').EmpresaDadosFiscais;
+        } catch { /* tenta a outra coleção */ }
+    }
+    return null;
+}
+
 function dedupEmpresas(list: EmpresaXmlOption[]): EmpresaXmlOption[] {
     const map = new Map<string, EmpresaXmlOption>();
     list.forEach(e => {
@@ -199,6 +219,13 @@ export interface EmpresaPerfilOption {
     cnae?: string;
     anexo?: string;
     dataAbertura?: string;
+    /** Responsável legal e contador (identificação dos relatórios, 01/08). */
+    respLegalNome?: string;
+    respLegalCpf?: string;
+    respLegalCargo?: string;
+    contadorNome?: string;
+    contadorCrc?: string;
+    contadorCpf?: string;
 }
 
 function inferirRegimeLucro(data: LucroPresumidoEmpresa): RegimeSugerido {

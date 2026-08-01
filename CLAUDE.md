@@ -218,6 +218,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
       (fornecedores|clientes, cobre também a listagem "Clientes e
       fornecedores" do SAGE). Lista de tela cortada em 50 SEMPRE diz
       "mostrando X de N — o PDF traz todos".
+   c) **Identificação obrigatória dos relatórios** (Paulo, 01/08): todo PDF
+      POR EMPRESA leva o bloco "Responsável pela empresa" (sócio/adm, ≠
+      colaborador da carteira) + "Contador responsável" (nome+CRC). Campos em
+      `dadosFiscais` (respLegal*/contador*), seção ✍️ do modal Dados Fiscais,
+      whitelist + rota de perfil no mesmo PR (regra #382). Farol honesto:
+      faltou cadastro ⇒ o PDF IMPRIME "não cadastrado" (o buraco fica no
+      papel) + aviso âmbar na tela + pendência 'atencao' na conferência de
+      cadastro/Carteira. Relatórios de CARTEIRA (multi-empresa) não levam o
+      bloco. `montarIdentificacao` (relatorioPdf.ts, pura). CRC é formato
+      LIVRE (varia por regional — não stripar).
    b) **Varredura do E-Fiscal SAGE** — 1ª leva ANALISADA 01/08 (2 Gravadores
       de Passos do Paulo): inventário completo do menu Relatórios em
       `docs/inventario-relatorios-efiscal.md`. Achados: CFI já cobre livros/

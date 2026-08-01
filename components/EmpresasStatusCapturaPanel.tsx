@@ -890,6 +890,9 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                         ccmSp: cadastroAberto.ccmSp,
                         email: cadastroAberto.dadosFiscais?.email,
                         telefone: cadastroAberto.dadosFiscais?.telefone,
+                        respLegalNome: cadastroAberto.dadosFiscais?.respLegalNome,
+                        contadorNome: cadastroAberto.dadosFiscais?.contadorNome,
+                        contadorCrc: cadastroAberto.dadosFiscais?.contadorCrc,
                         responsaveis: cadastroAberto.responsaveis,
                     }}
                     onClose={() => setCadastroAberto(null)}

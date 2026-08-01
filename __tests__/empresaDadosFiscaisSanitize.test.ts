@@ -67,6 +67,21 @@ describe('sanitizarDadosFiscais — apagar × não mexer', () => {
         expect(limpo.dataAbertura).toBeUndefined(); // intocado não vai
     });
 
+    it('responsável legal e contador: CPFs em dígitos, CRC livre, limpar = apagar', () => {
+        const r = sanitizarDadosFiscais({
+            respLegalNome: ' João Sócio ', respLegalCpf: '529.982.247-25', respLegalCargo: ' Sócio administrador ',
+            contadorNome: ' Maria ', contadorCrc: ' 1SP123456/O-8 ', contadorCpf: '390.533.447-05',
+        } as any);
+        expect(r.respLegalNome).toBe('João Sócio');
+        expect(r.respLegalCpf).toBe('52998224725');
+        expect(r.respLegalCargo).toBe('Sócio administrador');
+        expect(r.contadorCrc).toBe('1SP123456/O-8'); // formato livre — não stripa
+        expect(r.contadorCpf).toBe('39053344705');
+        const limpo = sanitizarDadosFiscais({ contadorNome: '' } as any);
+        expect(limpo.contadorNome).toBe('');          // '' = ordem de apagar
+        expect(limpo.respLegalNome).toBeUndefined();  // intocado não vai
+    });
+
     it('inscrição municipal alfanumérica (varia por prefeitura) não é mutilada', () => {
         expect(sanitizarDadosFiscais({ inscricaoMunicipal: ' 12345/001-A ' }).inscricaoMunicipal).toBe('12345/001-A');
     });

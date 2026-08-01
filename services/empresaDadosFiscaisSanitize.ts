@@ -47,6 +47,15 @@ export function sanitizarDadosFiscais(dados: EmpresaDadosFiscais): EmpresaDadosF
         // salvar remove ('' = ordem de apagar, mesma regra dos demais).
         cnae: trim(dados.cnae),
         dataAbertura: trim(dados.dataAbertura),
+        // Responsável legal e contador (identificação dos relatórios): nomes e
+        // cargo só trim; CPFs canônicos em dígitos; CRC fica LIVRE (formato
+        // varia por regional — 1SP123456/O-8, CRC-SP 123456…), só trim.
+        respLegalNome: trim(dados.respLegalNome),
+        respLegalCpf: numerico(dados.respLegalCpf),
+        respLegalCargo: trim(dados.respLegalCargo),
+        contadorNome: trim(dados.contadorNome),
+        contadorCrc: trim(dados.contadorCrc),
+        contadorCpf: numerico(dados.contadorCpf),
         // Condição rural: booleano vai EXPLÍCITO (true/false), nunca undefined
         // — desmarcar precisa chegar ao backend como false, mesma lição do CCM.
         // Bloco intocado continua ausente (undefined) e nada muda.
