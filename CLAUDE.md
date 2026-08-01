@@ -208,10 +208,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
       Financeira do Lucro em PDF. `valores` da NFSe passou a gravar
       ir/inss/csll/issRetido/valorIssRetido (docs antigos não têm — o
       relatório de Retenções SINALIZA "ausente ≠ zero retido").
-   b) **Varredura do E-Fiscal SAGE** — MÉTODO ESCOLHIDO (Paulo, 01/08):
-      **vídeo de navegação** pelos menus. Aguardando o Paulo gravar/enviar;
-      entregável segue: inventário funcional × "CFI cobre / falta / não vale
-      cobrir". Começar pelo menu Relatórios do E-Fiscal (alimenta o item a).
+   b) **Varredura do E-Fiscal SAGE** — 1ª leva ANALISADA 01/08 (2 Gravadores
+      de Passos do Paulo): inventário completo do menu Relatórios em
+      `docs/inventario-relatorios-efiscal.md`. Achados: CFI já cobre livros/
+      retenções/carteira/produtor rural (nosso 🌾 calcula FUNRURAL+1400, o
+      SAGE só lista); **vale construir** na ordem — NF Saídas Canceladas/
+      Faltantes (completude de numeração, casa com a Cobertura de Saída),
+      Resumo por fornecedor/cliente, Resumo por alíquota, Lançamento por
+      produto, listagem Clientes/Fornecedores; **não vale** — DIPJ (grupo
+      inteiro é obrigação EXTINTA que o SAGE nunca removeu), fila de
+      empresas, cadastros estáticos. PERGUNTAR ao Paulo: alguém usa "Simples
+      Paulista – DIFAL" e "Método Permanente CAT 17/99"? REGRAVAR (limites
+      do Gravador de Passos): topo da árvore de Relatórios (só guarda os
+      últimos 25 prints — subir o limite nas configurações) e REINF de novo
+      ABRINDO cada tela (menu suspenso aberto não sai no print; a gravação
+      veio vazia). Achado REINF vai pro Consultor Contábil, não pro CFI.
+      Demais menus (Movimentos/Imposto/Impressos/Diversos/Estaduais/
+      Utilitários) seguem pendentes de gravação.
 
 1. ~~Retificação DCTFWeb/MIT pelo CFI~~ **FEITA 24/07** (#292): seção
    "Retificar com os valores do app" (admin) na Conferência DCTFWeb ×
