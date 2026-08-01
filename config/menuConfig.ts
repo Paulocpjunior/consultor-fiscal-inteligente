@@ -61,6 +61,7 @@ export const searchDescriptions: Record<SearchType, string> = {
     [SearchType.GIA_ST]: 'GIA-ST — importa o Livro de ICMS Substituto do Office Fiscal (IOB/SAGE) e gera a guia por UF favorecida validada no padrão do aplicativo GIA-ST 3 (SEFAZ-RS).',
     [SearchType.RECUPERACAO_TRIBUTARIA]: 'Recuperação Tributária — identifica impostos pagos a maior e oportunidades de restituição/compensação.',
     [SearchType.NFP_PRO_CLOUD]: 'Consulta de situação fiscal: débitos, certidões, obrigações, parcelamentos e plano de ação. Acesso restrito — liberado pelo administrador.',
+    [SearchType.RELATORIOS]: 'Relatórios do departamento em PDF com a identidade da SP: Livro de Entradas/Saídas, Faturamento por carteira, Impostos apurados × enviados e DIPAM/FUNRURAL.',
 };
 
 export interface MenuCard {
@@ -131,6 +132,7 @@ export const MENU_GRUPOS: MenuGrupo[] = [
     {
         titulo: 'Gestão', cor: '#475569', cards: [
             { type: SearchType.DASHBOARD_CEO, Icon: RocketIcon },
+            { type: SearchType.RELATORIOS, Icon: DocumentTextIcon },
             { type: SearchType.CARTEIRA, Icon: UserGroupIcon },
             { type: SearchType.AGENTES_A3, Icon: BriefcaseIcon },
         ],
