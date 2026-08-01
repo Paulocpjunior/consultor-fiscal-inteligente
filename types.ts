@@ -1482,8 +1482,17 @@ export interface DocumentoFiscal {
     /** Tomador (NFSe). Mutuamente exclusivo com destinatario. */
     tomador?: DocumentoFiscalParticipante;
     totais?: DocumentoFiscalTotais;
-    /** Valores NFSe (liquido, pis, cofins, iss). */
-    valores?: { liquido?: number; pis?: number; cofins?: number; iss?: number; baseCalculo?: number; deducoes?: number };
+    /**
+     * Valores NFSe. ir/inss/csll/valorIssRetido entraram em 01/08 (relatório
+     * de Retenções): docs importados antes não os têm gravados — ausente NÃO
+     * significa zero retido, e o relatório avisa.
+     */
+    valores?: {
+        liquido?: number; pis?: number; cofins?: number; iss?: number;
+        baseCalculo?: number; deducoes?: number;
+        ir?: number; inss?: number; csll?: number;
+        issRetido?: boolean; valorIssRetido?: number;
+    };
     /** Valor total normalizado: vNF (NFe), vTPrest (CTe), vRec (NFSe). Gravado pelo importer. */
     valorTotal?: number;
     /** Tipo do documento (normalizado para o frontend). Espelha `tipo` mas vem do schema do XML. */
