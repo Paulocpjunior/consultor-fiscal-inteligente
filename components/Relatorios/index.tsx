@@ -238,18 +238,6 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {aba === 'participante' && docsRecorte && empresa && (
                 <AbaParticipante docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
-            {aba === 'canceladas' && docsRecorte && empresa && (
-                <AbaCanceladas docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
-            )}
-            {aba === 'aliquota' && docsRecorte && empresa && (
-                <AbaAliquota docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
-            )}
-            {aba === 'produto' && docsRecorte && empresa && (
-                <AbaProduto docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
-            )}
-            {aba === 'participante' && docsRecorte && empresa && (
-                <AbaParticipante docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
-            )}
             {(aba === 'serv-tomados' || aba === 'serv-prestados' || aba === 'retencoes') && docsRecorte && empresa && (
                 <AbaServicos docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} modo={aba} />
             )}
@@ -540,11 +528,7 @@ const RESSALVAS_NUMERACAO = [
     'A SEFAZ não entrega saída ao emitente (Rej. 641): se o cofre/autXML da empresa está incompleto, faltante pode ser nota emitida e não capturada — ver Cobertura de Saída.',
 ];
 
-<<<<<<< HEAD
 const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
-=======
-const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
->>>>>>> origin/main
     const { gerando, rodar } = usePdf();
     const linhas = useMemo(() => nfCanceladasFaltantes(docs, empresa.cnpj), [docs, empresa.cnpj]);
     const totalFaltantes = linhas.reduce((s, l) => s + l.faltantesTotal, 0);
@@ -569,10 +553,7 @@ const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tru
             (formatarFaixas(l.faltantes) || '—') + (l.faltantesTotal > l.faltantes.length ? ` … (+${l.faltantesTotal - l.faltantes.length})` : ''),
             l.faltantesTotal,
         ]),
-<<<<<<< HEAD
         identificacao,
-=======
->>>>>>> origin/main
         observacoes: [...RESSALVAS_NUMERACAO, ...obsTruncado(truncado)],
         fileName: `nf-canceladas-faltantes-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
     }));
@@ -626,11 +607,7 @@ const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tru
 
 // ─── Resumo por alíquota ────────────────────────────────────────────────────
 
-<<<<<<< HEAD
 const AbaAliquota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
-=======
-const AbaAliquota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
->>>>>>> origin/main
     const { gerando, rodar } = usePdf();
     const linhas = useMemo(() => resumoPorAliquota(docs), [docs]);
 
@@ -646,10 +623,7 @@ const AbaAliquota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunc
             { titulo: 'ICMS (R$)', largura: 13, alinhamento: 'direita' },
         ],
         linhas: linhas.map(l => [l.direcao === 'entrada' ? 'Entrada' : 'Saída', l.rotulo, l.itens, l.valor, l.base, l.icms]),
-<<<<<<< HEAD
         identificacao,
-=======
->>>>>>> origin/main
         observacoes: [
             'Isentas = CST 40/41/50; Outras = sem destaque (ST, diferimento, CSOSN do Simples) — mesma régua do Exportar SAGE.',
             'Alíquota derivada de ICMS/Base quando a nota não gravou pICMS.',
@@ -695,11 +669,7 @@ const AbaAliquota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunc
 
 const LIMITE_TELA = 50;
 
-<<<<<<< HEAD
 const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
-=======
-const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
->>>>>>> origin/main
     const { gerando, rodar } = usePdf();
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
     const linhas = useMemo(() => resumoPorProduto(docs, direcao), [docs, direcao]);
@@ -718,10 +688,7 @@ const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunca
             { titulo: 'Valor (R$)', largura: 12, alinhamento: 'direita' },
         ],
         linhas: linhas.map(l => [l.produto, l.ncm, l.cfops, l.qtd, l.unidade, l.notas, l.valor]),
-<<<<<<< HEAD
         identificacao,
-=======
->>>>>>> origin/main
         observacoes: ['Qtd somada só faz sentido quando a unidade é única — "várias" indica unidades misturadas.', ...obsTruncado(truncado)],
         fileName: `por-produto-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
     }));
@@ -772,11 +739,7 @@ const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunca
 
 // ─── Por participante (fornecedores/clientes) ───────────────────────────────
 
-<<<<<<< HEAD
 const AbaParticipante: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
-=======
-const AbaParticipante: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
->>>>>>> origin/main
     const { gerando, rodar } = usePdf();
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
     const linhas = useMemo(() => resumoPorParticipante(docs, direcao), [docs, direcao]);
@@ -795,10 +758,7 @@ const AbaParticipante: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, t
             { titulo: 'Valor (R$)', largura: 13, alinhamento: 'direita' },
         ],
         linhas: linhas.map(l => [l.nome, l.doc ? fmtCnpj(l.doc) || l.doc : '—', l.municipio || '—', l.uf || '—', l.notas, l.valor]),
-<<<<<<< HEAD
         identificacao,
-=======
->>>>>>> origin/main
         observacoes: [
             'Contraparte da operação: na nota própria de entrada (tpNF=0, ex.: compra de produtor rural) é o remetente do bloco destinatário.',
             ...obsTruncado(truncado),
