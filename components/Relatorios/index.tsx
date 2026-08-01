@@ -1,28 +1,36 @@
 /**
  * Menu RELATÓRIOS — card próprio no menu principal (Paulo, 01/08).
  *
- * v1 com os 4 relatórios que a equipe tira do SAGE hoje, todos com saída em
- * PDF com a identidade da SP (casca única em services/relatorioPdf.ts):
- *   1. Livro de Entradas/Saídas (por empresa × competência)
- *   2. Faturamento por cliente/carteira
- *   3. Impostos apurados × enviados (rito #293)
- *   4. DIPAM/FUNRURAL consolidado
+ * Lista de relatórios definida pelo Paulo (01/08, espelho do que a equipe tira
+ * do E-Fiscal): Livro de Entradas/Saídas · Resumo por CFOP · ICMS/IPI/ISS ·
+ * Serviços tomados · Serviços prestados · Retenções · Resumo por UF · Ficha
+ * Financeira — mais os gerenciais (Faturamento por carteira, Impostos
+ * apurados × enviados, DIPAM/FUNRURAL). Saída: PDF com a identidade da SP
+ * (casca única em services/relatorioPdf.ts).
  *
- * Regra de dado: NENHUM relatório tem conta própria — cada aba lê o MESMO
- * endpoint/serviço da tela correspondente (lição do card 4: contador paralelo
- * mente). Livro usa a régua de direção efetiva + alocação Base/Isentos/Outras
- * do Exportar SAGE; DIPAM usa a varredura da aba 🌾; impostos usa o painel da
- * Rotina. A lista na tela é prévia — o produto final é o PDF.
+ * Regras estruturais:
+ *  - relatório NUNCA tem conta própria — as agregações vivem em
+ *    services/relatoriosAgregacoes.ts (puras, testadas) sobre os MESMOS docs
+ *    das telas, com a MESMA alocação Base/Isentos/Outras do Exportar SAGE;
+ *  - o recorte (empresa × competência) é buscado UMA vez e serve todas as
+ *    abas de movimento — trocar de aba não relê o banco;
+ *  - farol honesto: leitura truncada e retenções não gravadas (docs antigos)
+ *    aparecem na tela E no PDF.
  */
 import React, { useMemo, useState } from 'react';
-import type { User, DocumentoFiscal } from '../../types';
+import type { User, DocumentoFiscal, LucroPresumidoEmpresa } from '../../types';
 import { listDocumentos, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { alocarTributacaoIcms } from '../../services/iobSageExportService';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
+import {
+    resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, resumoPorUf,
+    contraparteDoc, docValido,
+} from '../../services/relatoriosAgregacoes';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
 import { carregarFaturamento, type FaturamentoResp } from '../../services/relatoriosService';
 import { gerarRelatorioPdf } from '../../services/relatorioPdf';
+import * as lucroPresumidoService from '../../services/lucroPresumidoService';
 import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
 
 interface Props {
@@ -30,14 +38,38 @@ interface Props {
     onShowToast?: (msg: string) => void;
 }
 
-type AbaId = 'livro' | 'faturamento' | 'impostos' | 'dipam';
+type AbaId =
+    | 'livro' | 'cfop' | 'impostos-resumo' | 'uf'
+    | 'serv-tomados' | 'serv-prestados' | 'retencoes'
+    | 'faturamento' | 'impostos-enviados' | 'dipam' | 'ficha';
 
-const ABAS: Array<{ id: AbaId; label: string }> = [
-    { id: 'livro', label: '📒 Livro Entradas/Saídas' },
-    { id: 'faturamento', label: '📈 Faturamento por carteira' },
-    { id: 'impostos', label: '💸 Impostos apurados × enviados' },
-    { id: 'dipam', label: '🌾 DIPAM/FUNRURAL' },
+const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
+    {
+        titulo: 'Movimento (por empresa)', abas: [
+            { id: 'livro', label: '📒 Livro Entradas/Saídas' },
+            { id: 'cfop', label: '🔢 Resumo por CFOP' },
+            { id: 'impostos-resumo', label: '🧾 ICMS · IPI · ISS' },
+            { id: 'uf', label: '🗺️ Resumo por UF' },
+        ],
+    },
+    {
+        titulo: 'Serviços (por empresa)', abas: [
+            { id: 'serv-tomados', label: '🛠️ Serviços tomados' },
+            { id: 'serv-prestados', label: '🧰 Serviços prestados' },
+            { id: 'retencoes', label: '✂️ Retenções' },
+        ],
+    },
+    {
+        titulo: 'Gerencial', abas: [
+            { id: 'faturamento', label: '📈 Faturamento por carteira' },
+            { id: 'impostos-enviados', label: '💸 Apurados × enviados' },
+            { id: 'dipam', label: '🌾 DIPAM/FUNRURAL' },
+            { id: 'ficha', label: '📑 Ficha Financeira (Lucro)' },
+        ],
+    },
 ];
+
+const ABAS_POR_EMPRESA: AbaId[] = ['livro', 'cfop', 'impostos-resumo', 'uf', 'serv-tomados', 'serv-prestados', 'retencoes'];
 
 const fmtBRL = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -50,10 +82,47 @@ const competenciaAtual = () => {
 const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [aba, setAba] = useState<AbaId>('livro');
     const [competencia, setCompetencia] = useState(competenciaAtual());
+    const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
+    const [empresaId, setEmpresaId] = useState('');
+    // Recorte compartilhado: buscado UMA vez, serve todas as abas de movimento.
+    const [docs, setDocs] = useState<DocumentoFiscal[] | null>(null);
+    const [recorteKey, setRecorteKey] = useState('');
+    const [truncado, setTruncado] = useState(false);
+    const [loading, setLoading] = useState(false);
+
+    React.useEffect(() => {
+        let alive = true;
+        if (currentUser) getEmpresasDisponiveis(currentUser).then(l => { if (alive) setEmpresas(l); });
+        return () => { alive = false; };
+    }, [currentUser]);
 
     if (!currentUser) {
         return <p className="text-center text-xs text-slate-400 py-6">Faça login para acessar os Relatórios.</p>;
     }
+
+    const empresa = empresas.find(e => e.id === empresaId) || null;
+    const precisaEmpresa = ABAS_POR_EMPRESA.includes(aba);
+    const chaveAtual = `${empresaId}|${competencia}`;
+    const recorteValido = docs !== null && recorteKey === chaveAtual;
+
+    const buscar = async () => {
+        if (!empresa) { onShowToast?.('Escolha a empresa.'); return; }
+        setLoading(true);
+        try {
+            const meta: { truncado?: boolean } = {};
+            const todos = await listDocumentos(currentUser, { competencia }, meta);
+            setTruncado(!!meta.truncado);
+            const cnpj = empresa.cnpj.replace(/\D/g, '');
+            setDocs(todos
+                .filter(d => d.empresaId === empresa.id || String(d.empresaCnpj || '').replace(/\D/g, '') === cnpj)
+                .map(d => ({ ...d, direcao: (direcaoEfetivaDoc(d) as any) || d.direcao })));
+            setRecorteKey(chaveAtual);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const docsRecorte = recorteValido ? (docs as DocumentoFiscal[]) : null;
 
     return (
         <div className="space-y-4 animate-fade-in">
@@ -64,35 +133,81 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 </p>
             </div>
 
-            <div className="flex gap-1 overflow-x-auto bg-slate-100 dark:bg-slate-800/60 p-1 rounded-lg">
-                {ABAS.map(a => (
-                    <button
-                        key={a.id}
-                        onClick={() => setAba(a.id)}
-                        className={`px-3 py-1.5 text-xs font-bold whitespace-nowrap rounded-md transition-colors ${
-                            aba === a.id
-                                ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
-                                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
-                        }`}
-                    >
-                        {a.label}
-                    </button>
+            <div className="bg-slate-100 dark:bg-slate-800/60 p-2 rounded-lg space-y-1.5">
+                {GRUPOS.map(g => (
+                    <div key={g.titulo} className="flex items-center gap-1 flex-wrap">
+                        <span className="text-[9px] uppercase font-bold text-slate-400 w-40 shrink-0">{g.titulo}</span>
+                        {g.abas.map(a => (
+                            <button
+                                key={a.id}
+                                onClick={() => setAba(a.id)}
+                                className={`px-2.5 py-1 text-[11px] font-bold whitespace-nowrap rounded-md transition-colors ${
+                                    aba === a.id
+                                        ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
+                                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                                }`}
+                            >
+                                {a.label}
+                            </button>
+                        ))}
+                    </div>
                 ))}
-                <div className="ml-auto flex items-center gap-2 pr-1">
-                    <label className="text-[10px] uppercase font-bold text-slate-500">Competência</label>
-                    <input
-                        type="month"
-                        value={competencia}
-                        onChange={e => setCompetencia(e.target.value)}
-                        className="p-1.5 text-xs rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
-                    />
-                </div>
             </div>
 
-            {aba === 'livro' && <AbaLivro currentUser={currentUser} competencia={competencia} onShowToast={onShowToast} />}
-            {aba === 'faturamento' && <AbaFaturamento competencia={competencia} onShowToast={onShowToast} />}
-            {aba === 'impostos' && <AbaImpostos competencia={competencia} onShowToast={onShowToast} />}
-            {aba === 'dipam' && <AbaDipam competencia={competencia} onShowToast={onShowToast} />}
+            {/* Recorte compartilhado */}
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3 flex flex-wrap items-end gap-2">
+                <div>
+                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Competência</label>
+                    <input
+                        type="month" value={competencia}
+                        onChange={e => setCompetencia(e.target.value)}
+                        className="p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
+                    />
+                </div>
+                {precisaEmpresa && (
+                    <>
+                        <div className="min-w-[280px] flex-1">
+                            <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa</label>
+                            <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId} />
+                        </div>
+                        <button onClick={buscar} disabled={loading || !empresaId}
+                            className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm rounded-lg font-semibold disabled:opacity-40">
+                            {loading ? 'Buscando…' : recorteValido ? '↻ Rebuscar' : '🔎 Buscar'}
+                        </button>
+                        {recorteValido && (
+                            <span className="text-[11px] text-slate-500 pb-2">
+                                {docsRecorte!.length} doc(s) no recorte{truncado ? ' · ⚠ leitura truncada' : ''}
+                            </span>
+                        )}
+                    </>
+                )}
+            </div>
+
+            {precisaEmpresa && !recorteValido && (
+                <p className="text-sm text-slate-500 text-center py-4">
+                    Escolha a empresa e clique em Buscar — o mesmo recorte serve todas as abas de Movimento e Serviços.
+                </p>
+            )}
+
+            {aba === 'livro' && docsRecorte && empresa && (
+                <AbaLivro docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
+            )}
+            {aba === 'cfop' && docsRecorte && empresa && (
+                <AbaCfop docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
+            )}
+            {aba === 'impostos-resumo' && docsRecorte && empresa && (
+                <AbaImpostosResumo docs={docsRecorte} empresa={empresa} competencia={competencia} />
+            )}
+            {aba === 'uf' && docsRecorte && empresa && (
+                <AbaUf docs={docsRecorte} empresa={empresa} competencia={competencia} />
+            )}
+            {(aba === 'serv-tomados' || aba === 'serv-prestados' || aba === 'retencoes') && docsRecorte && empresa && (
+                <AbaServicos docs={docsRecorte} empresa={empresa} competencia={competencia} modo={aba} />
+            )}
+            {aba === 'faturamento' && <AbaFaturamento competencia={competencia} />}
+            {aba === 'impostos-enviados' && <AbaImpostosEnviados competencia={competencia} />}
+            {aba === 'dipam' && <AbaDipam competencia={competencia} />}
+            {aba === 'ficha' && <AbaFicha currentUser={currentUser} />}
         </div>
     );
 };
@@ -109,151 +224,146 @@ const BotaoPdf: React.FC<{ onClick: () => void; disabled?: boolean; gerando?: bo
     </button>
 );
 
-const Aviso: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
-        {children}
-    </p>
+const Card: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">{children}</div>
 );
+
+const usePdf = () => {
+    const [gerando, setGerando] = useState(false);
+    const rodar = async (fn: () => Promise<void>) => {
+        setGerando(true);
+        try { await fn(); } finally { setGerando(false); }
+    };
+    return { gerando, rodar };
+};
+
+interface AbaDocsProps {
+    docs: DocumentoFiscal[];
+    empresa: EmpresaXmlOption;
+    competencia: string;
+    truncado?: boolean;
+}
+
+const obsTruncado = (truncado?: boolean) => truncado
+    ? ['ATENÇÃO: a leitura da competência atingiu o limite — os números podem estar INCOMPLETOS.']
+    : [];
 
 // ─── 1. Livro de Entradas/Saídas ────────────────────────────────────────────
 
-const AbaLivro: React.FC<{ currentUser: User; competencia: string; onShowToast?: (m: string) => void }> = ({ currentUser, competencia, onShowToast }) => {
-    const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
-    const [empresaId, setEmpresaId] = useState('');
+const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
-    const [docs, setDocs] = useState<DocumentoFiscal[] | null>(null);
-    const [truncado, setTruncado] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [gerando, setGerando] = useState(false);
+    const { gerando, rodar } = usePdf();
 
-    React.useEffect(() => {
-        let alive = true;
-        getEmpresasDisponiveis(currentUser).then(l => { if (alive) setEmpresas(l); });
-        return () => { alive = false; };
-    }, [currentUser]);
+    const linhas = useMemo(() => docs
+        .filter(d => d.direcao === direcao && docValido(d) && ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo))
+        .map(d => {
+            const contabil = d.totais?.vNF || d.valorTotal || 0;
+            const a = alocarTributacaoIcms(d.itens || [], contabil);
+            const parte: any = contraparteDoc(d);
+            return {
+                data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
+                numero: d.numero || '—',
+                participante: parte?.nome || '—',
+                cfops: Array.from(new Set((d.itens || []).map(i => i.cfop).filter(Boolean))).join(' ') || '—',
+                contabil, ...a,
+            };
+        })
+        .sort((x, y) => x.data.localeCompare(y.data) || String(x.numero).localeCompare(String(y.numero))),
+        [docs, direcao]);
 
-    const empresa = empresas.find(e => e.id === empresaId) || null;
-
-    const buscar = async () => {
-        if (!empresa) { onShowToast?.('Escolha a empresa.'); return; }
-        setLoading(true);
-        try {
-            const meta: { truncado?: boolean } = {};
-            const todos = await listDocumentos(currentUser, { competencia }, meta);
-            setTruncado(!!meta.truncado);
-            const cnpj = empresa.cnpj.replace(/\D/g, '');
-            setDocs(todos
-                .filter(d => d.empresaId === empresa.id || String(d.empresaCnpj || '').replace(/\D/g, '') === cnpj)
-                .filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo))
-                .map(d => ({ ...d, direcao: (direcaoEfetivaDoc(d) as any) || d.direcao })));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const linhas = useMemo(() => {
-        if (!docs) return [];
-        return docs
-            .filter(d => d.direcao === direcao && !['cancelado', 'cancelada', 'denegado', 'inutilizado'].includes(d.status))
-            .map(d => {
-                const contabil = d.totais?.vNF || d.valorTotal || 0;
-                const a = alocarTributacaoIcms(d.itens || [], contabil);
-                const parte: any = direcao === 'saida' || String((d as any).tpNF ?? '') === '0' ? d.destinatario : d.emitente;
-                const cfops = Array.from(new Set((d.itens || []).map(i => i.cfop).filter(Boolean))).join(' ');
-                return {
-                    data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
-                    numero: d.numero || '—',
-                    participante: parte?.nome || '—',
-                    cfops: cfops || '—',
-                    contabil, base: a.base, icms: a.icms, isentos: a.isentos, outras: a.outras, ipi: a.ipi,
-                };
-            })
-            .sort((x, y) => x.data.localeCompare(y.data) || String(x.numero).localeCompare(String(y.numero)));
-    }, [docs, direcao]);
-
-    const totais = useMemo(() => linhas.reduce((t, l) => ({
+    const tot = useMemo(() => linhas.reduce((t, l) => ({
         contabil: t.contabil + l.contabil, base: t.base + l.base, icms: t.icms + l.icms,
         isentos: t.isentos + l.isentos, outras: t.outras + l.outras, ipi: t.ipi + l.ipi,
     }), { contabil: 0, base: 0, icms: 0, isentos: 0, outras: 0, ipi: 0 }), [linhas]);
 
-    const pdf = async () => {
-        if (!empresa || linhas.length === 0) return;
-        setGerando(true);
-        try {
-            await gerarRelatorioPdf({
-                titulo: `Livro de ${direcao === 'entrada' ? 'Entradas' : 'Saídas'} — ${fmtComp(competencia)}`,
-                subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${linhas.length} nota(s)`,
-                colunas: [
-                    { titulo: 'Data', largura: 8 },
-                    { titulo: 'Nº NF', largura: 8 },
-                    { titulo: direcao === 'entrada' ? 'Fornecedor/Remetente' : 'Cliente/Destinatário', largura: 26 },
-                    { titulo: 'CFOP', largura: 8 },
-                    { titulo: 'Vlr. Contábil', largura: 10, alinhamento: 'direita' },
-                    { titulo: 'Base ICMS', largura: 10, alinhamento: 'direita' },
-                    { titulo: 'ICMS', largura: 8, alinhamento: 'direita' },
-                    { titulo: 'Isentas', largura: 10, alinhamento: 'direita' },
-                    { titulo: 'Outras', largura: 10, alinhamento: 'direita' },
-                    { titulo: 'IPI', largura: 7, alinhamento: 'direita' },
-                ],
-                linhas: linhas.map(l => [l.data, l.numero, l.participante, l.cfops, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi]),
-                totais: ['', '', `TOTAIS (${linhas.length} notas)`, '', totais.contabil, totais.base, totais.icms, totais.isentos, totais.outras, totais.ipi],
-                observacoes: [
-                    'Colunas Base/Isentas/Outras alocadas pela tributação de cada item (CST do XML), fechando no valor contábil — mesma régua do Exportar SAGE.',
-                    ...(truncado ? ['ATENÇÃO: a leitura da competência atingiu o limite — o livro pode estar INCOMPLETO. Confira o total de notas na Central de XMLs.'] : []),
-                ],
-                fileName: `livro-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
-            });
-        } finally {
-            setGerando(false);
-        }
-    };
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `Livro de ${direcao === 'entrada' ? 'Entradas' : 'Saídas'} — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${linhas.length} nota(s)`,
+        colunas: [
+            { titulo: 'Data', largura: 8 }, { titulo: 'Nº NF', largura: 8 },
+            { titulo: direcao === 'entrada' ? 'Fornecedor/Remetente' : 'Cliente/Destinatário', largura: 26 },
+            { titulo: 'CFOP', largura: 8 },
+            { titulo: 'Vlr. Contábil', largura: 10, alinhamento: 'direita' },
+            { titulo: 'Base ICMS', largura: 10, alinhamento: 'direita' },
+            { titulo: 'ICMS', largura: 8, alinhamento: 'direita' },
+            { titulo: 'Isentas', largura: 10, alinhamento: 'direita' },
+            { titulo: 'Outras', largura: 10, alinhamento: 'direita' },
+            { titulo: 'IPI', largura: 7, alinhamento: 'direita' },
+        ],
+        linhas: linhas.map(l => [l.data, l.numero, l.participante, l.cfops, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi]),
+        totais: ['', '', `TOTAIS (${linhas.length} notas)`, '', tot.contabil, tot.base, tot.icms, tot.isentos, tot.outras, tot.ipi],
+        observacoes: [
+            'Base/Isentas/Outras alocadas pela tributação de cada item (CST do XML), fechando no valor contábil — mesma régua do Exportar SAGE.',
+            ...obsTruncado(truncado),
+        ],
+        fileName: `livro-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
 
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
-            <div className="flex flex-wrap items-end gap-2">
-                <div className="min-w-[260px] flex-1">
-                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa</label>
-                    <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId} />
-                </div>
-                <div>
-                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Direção</label>
-                    <select
-                        value={direcao}
-                        onChange={e => setDirecao(e.target.value as any)}
-                        className="p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
-                    >
-                        <option value="entrada">Entradas</option>
-                        <option value="saida">Saídas</option>
-                    </select>
-                </div>
-                <button onClick={buscar} disabled={loading || !empresaId}
-                    className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm rounded-lg font-semibold disabled:opacity-40">
-                    {loading ? 'Buscando…' : '🔎 Buscar'}
-                </button>
-                <BotaoPdf onClick={pdf} disabled={linhas.length === 0} gerando={gerando} />
+        <Card>
+            <div className="flex items-center gap-2">
+                <select value={direcao} onChange={e => setDirecao(e.target.value as any)}
+                    className="p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
+                    <option value="entrada">Entradas</option>
+                    <option value="saida">Saídas</option>
+                </select>
+                <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
+                <span className="text-xs text-slate-500">
+                    {linhas.length} nota(s) · contábil {fmtBRL(tot.contabil)} · base {fmtBRL(tot.base)} · isentas {fmtBRL(tot.isentos)} · outras {fmtBRL(tot.outras)}
+                </span>
             </div>
+        </Card>
+    );
+};
 
-            {truncado && <Aviso>⚠ Leitura truncada — o recorte pode estar incompleto (mostrando o que foi lido).</Aviso>}
-            {docs && linhas.length === 0 && (
-                <p className="text-sm text-slate-500">Nenhuma nota de {direcao} nesta competência para esta empresa.</p>
-            )}
+// ─── 2. Resumo por CFOP ─────────────────────────────────────────────────────
+
+const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
+    const { gerando, rodar } = usePdf();
+    const linhas = useMemo(() => resumoPorCfop(docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo))), [docs]);
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `Resumo por CFOP — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${linhas.length} CFOP(s)`,
+        colunas: [
+            { titulo: 'E/S', largura: 5 }, { titulo: 'CFOP', largura: 7 },
+            { titulo: 'Notas', largura: 6, alinhamento: 'direita' },
+            { titulo: 'Itens', largura: 6, alinhamento: 'direita' },
+            { titulo: 'Vlr. Contábil', largura: 12, alinhamento: 'direita' },
+            { titulo: 'Base ICMS', largura: 12, alinhamento: 'direita' },
+            { titulo: 'ICMS', largura: 10, alinhamento: 'direita' },
+            { titulo: 'Isentas', largura: 12, alinhamento: 'direita' },
+            { titulo: 'Outras', largura: 12, alinhamento: 'direita' },
+            { titulo: 'IPI', largura: 8, alinhamento: 'direita' },
+        ],
+        linhas: linhas.map(l => [l.direcao === 'entrada' ? 'E' : 'S', l.cfop, l.notas, l.itens, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi]),
+        observacoes: [
+            'Contábil da nota rateado entre os CFOPs dela na proporção do valor dos itens (mesma regra do E201 do Exportar SAGE).',
+            ...obsTruncado(truncado),
+        ],
+        fileName: `resumo-cfop-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex items-center gap-2 flex-wrap">
+                <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
+                <span className="text-xs text-slate-500">{linhas.length} CFOP(s) no recorte</span>
+            </div>
             {linhas.length > 0 && (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto max-h-80 overflow-y-auto">
                     <table className="w-full text-xs">
-                        <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                            <tr>
-                                <th className="text-left py-1">Data</th><th className="text-left">Nº</th>
-                                <th className="text-left">Participante</th><th className="text-left">CFOP</th>
-                                <th className="text-right">Contábil</th><th className="text-right">Base</th>
-                                <th className="text-right">ICMS</th><th className="text-right">Isentas</th>
-                                <th className="text-right">Outras</th>
-                            </tr>
+                        <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800">
+                            <tr><th className="text-left py-1">E/S</th><th className="text-left">CFOP</th><th className="text-right">Notas</th>
+                                <th className="text-right">Contábil</th><th className="text-right">Base</th><th className="text-right">ICMS</th>
+                                <th className="text-right">Isentas</th><th className="text-right">Outras</th></tr>
                         </thead>
                         <tbody>
-                            {linhas.slice(0, 100).map((l, i) => (
+                            {linhas.map((l, i) => (
                                 <tr key={i} className="border-b border-slate-100 dark:border-slate-700/50">
-                                    <td className="py-1">{l.data}</td><td>{l.numero}</td>
-                                    <td className="max-w-[220px] truncate">{l.participante}</td><td>{l.cfops}</td>
+                                    <td className="py-1">{l.direcao === 'entrada' ? 'E' : 'S'}</td>
+                                    <td className="font-mono">{l.cfop}</td>
+                                    <td className="text-right">{l.notas}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.contabil)}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.base)}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.icms)}</td>
@@ -262,73 +372,228 @@ const AbaLivro: React.FC<{ currentUser: User; competencia: string; onShowToast?:
                                 </tr>
                             ))}
                         </tbody>
-                        <tfoot>
-                            <tr className="font-bold border-t-2 border-slate-300 dark:border-slate-600">
-                                <td colSpan={4} className="py-1">TOTAIS · {linhas.length} nota(s){linhas.length > 100 ? ' (prévia de 100 — o PDF sai completo)' : ''}</td>
-                                <td className="text-right font-mono">{fmtBRL(totais.contabil)}</td>
-                                <td className="text-right font-mono">{fmtBRL(totais.base)}</td>
-                                <td className="text-right font-mono">{fmtBRL(totais.icms)}</td>
-                                <td className="text-right font-mono">{fmtBRL(totais.isentos)}</td>
-                                <td className="text-right font-mono">{fmtBRL(totais.outras)}</td>
-                            </tr>
-                        </tfoot>
                     </table>
                 </div>
             )}
-        </div>
+        </Card>
     );
 };
 
-// ─── 2. Faturamento por cliente/carteira ────────────────────────────────────
+// ─── 3. ICMS / IPI / ISS ────────────────────────────────────────────────────
 
-const AbaFaturamento: React.FC<{ competencia: string; onShowToast?: (m: string) => void }> = ({ competencia }) => {
+const AbaImpostosResumo: React.FC<AbaDocsProps> = ({ docs, empresa, competencia }) => {
+    const { gerando, rodar } = usePdf();
+    const r = useMemo(() => resumoImpostos(docs), [docs]);
+
+    const linhas = [
+        ['ICMS', r.icms.creditoEntradas, r.icms.debitoSaidas, r.icms.saldo],
+        ['IPI', r.ipi.creditoEntradas, r.ipi.debitoSaidas, r.ipi.saldo],
+        ['ISS (prestados)', 0, r.iss.prestados, r.iss.prestados],
+        ['ISS retido (tomados)', r.iss.retidoTomados, 0, -r.iss.retidoTomados],
+    ] as (string | number)[][];
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `ICMS · IPI · ISS destacados — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)}`,
+        orientacao: 'portrait',
+        colunas: [
+            { titulo: 'Imposto', largura: 16 },
+            { titulo: 'Entradas (crédito destacado)', largura: 14, alinhamento: 'direita' },
+            { titulo: 'Saídas (débito destacado)', largura: 14, alinhamento: 'direita' },
+            { titulo: 'Saldo (débito − crédito)', largura: 14, alinhamento: 'direita' },
+        ],
+        linhas,
+        observacoes: [
+            'Valores DESTACADOS nos documentos da competência — é resumo de escrituração, NÃO a apuração: direito a crédito depende da destinação (a apuração oficial vive nas fichas do regime).',
+        ],
+        fileName: `impostos-destacados-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex items-center gap-2"><BotaoPdf onClick={pdf} gerando={gerando} /></div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
+                {[['ICMS crédito', r.icms.creditoEntradas], ['ICMS débito', r.icms.debitoSaidas],
+                  ['IPI crédito', r.ipi.creditoEntradas], ['IPI débito', r.ipi.debitoSaidas],
+                  ['ISS prestados', r.iss.prestados], ['ISS retido (tomados)', r.iss.retidoTomados],
+                  ['Saldo ICMS', r.icms.saldo], ['Saldo IPI', r.ipi.saldo]].map(([rot, v]) => (
+                    <div key={rot as string} className="rounded bg-slate-50 dark:bg-slate-900/40 p-2">
+                        <p className="text-[10px] uppercase text-slate-500">{rot as string}</p>
+                        <p className="text-sm font-mono font-bold text-slate-700 dark:text-slate-200">{fmtBRL(v as number)}</p>
+                    </div>
+                ))}
+            </div>
+            <p className="text-[11px] text-slate-400">
+                Destacado nos documentos ≠ apuração — o crédito real depende da destinação de cada entrada.
+            </p>
+        </Card>
+    );
+};
+
+// ─── 4. Resumo por UF ───────────────────────────────────────────────────────
+
+const AbaUf: React.FC<AbaDocsProps> = ({ docs, empresa, competencia }) => {
+    const { gerando, rodar } = usePdf();
+    const linhas = useMemo(() => resumoPorUf(docs), [docs]);
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `Resumo por UF — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · UF da contraparte (fornecedor/cliente)`,
+        orientacao: 'portrait',
+        colunas: [
+            { titulo: 'UF', largura: 6 },
+            { titulo: 'Entradas (qtd)', largura: 10, alinhamento: 'direita' },
+            { titulo: 'Entradas (R$)', largura: 14, alinhamento: 'direita' },
+            { titulo: 'Saídas (qtd)', largura: 10, alinhamento: 'direita' },
+            { titulo: 'Saídas (R$)', largura: 14, alinhamento: 'direita' },
+        ],
+        linhas: linhas.map(l => [l.uf, l.entradasQtd, l.entradasValor, l.saidasQtd, l.saidasValor]),
+        observacoes: ['UF do outro participante da operação (na nota própria de entrada, o remetente). "??" = documento sem UF gravada.'],
+        fileName: `resumo-uf-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex items-center gap-2"><BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} /></div>
+            {linhas.length > 0 && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs max-w-xl">
+                        <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                            <tr><th className="text-left py-1">UF</th><th className="text-right">Entradas</th><th className="text-right">Saídas</th></tr>
+                        </thead>
+                        <tbody>
+                            {linhas.map(l => (
+                                <tr key={l.uf} className="border-b border-slate-100 dark:border-slate-700/50">
+                                    <td className="py-1 font-bold">{l.uf}</td>
+                                    <td className="text-right font-mono">{fmtBRL(l.entradasValor)} <span className="text-slate-400">({l.entradasQtd})</span></td>
+                                    <td className="text-right font-mono">{fmtBRL(l.saidasValor)} <span className="text-slate-400">({l.saidasQtd})</span></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </Card>
+    );
+};
+
+// ─── 5-7. Serviços tomados / prestados / retenções ──────────────────────────
+
+const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-prestados' | 'retencoes' }> = ({ docs, empresa, competencia, modo }) => {
+    const { gerando, rodar } = usePdf();
+    const [dirRet, setDirRet] = useState<'entrada' | 'saida'>('entrada');
+    const direcao = modo === 'serv-prestados' ? 'saida' : modo === 'serv-tomados' ? 'entrada' : dirRet;
+    const linhas = useMemo(
+        () => (modo === 'retencoes' ? linhasRetencoes(docs, direcao) : linhasServicos(docs, direcao)),
+        [docs, direcao, modo],
+    );
+    const semRetGravada = linhas.filter(l => !l.retencoesFederaisGravadas).length;
+
+    const titulos: Record<string, string> = {
+        'serv-tomados': 'Serviços tomados',
+        'serv-prestados': 'Serviços prestados',
+        'retencoes': `Retenções — serviços ${direcao === 'entrada' ? 'tomados' : 'prestados'}`,
+    };
+
+    const tot = useMemo(() => linhas.reduce((t, l) => ({
+        base: t.base + l.base, iss: t.iss + l.iss, issRetido: t.issRetido + l.issRetido,
+        pis: t.pis + l.pis, cofins: t.cofins + l.cofins, ir: t.ir + l.ir, inss: t.inss + l.inss, csll: t.csll + l.csll,
+        liquido: t.liquido + l.liquido,
+    }), { base: 0, iss: 0, issRetido: 0, pis: 0, cofins: 0, ir: 0, inss: 0, csll: 0, liquido: 0 }), [linhas]);
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `${titulos[modo]} — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${linhas.length} NFS-e`,
+        colunas: [
+            { titulo: 'Data', largura: 7 }, { titulo: 'Nº', largura: 7 },
+            { titulo: direcao === 'entrada' ? 'Prestador' : 'Tomador', largura: 22 },
+            { titulo: 'Base', largura: 9, alinhamento: 'direita' },
+            { titulo: 'ISS', largura: 7, alinhamento: 'direita' },
+            { titulo: 'ISS ret.', largura: 7, alinhamento: 'direita' },
+            { titulo: 'PIS', largura: 7, alinhamento: 'direita' },
+            { titulo: 'COFINS', largura: 7, alinhamento: 'direita' },
+            { titulo: 'IR', largura: 7, alinhamento: 'direita' },
+            { titulo: 'INSS', largura: 7, alinhamento: 'direita' },
+            { titulo: 'CSLL', largura: 7, alinhamento: 'direita' },
+            { titulo: 'Líquido', largura: 9, alinhamento: 'direita' },
+        ],
+        linhas: linhas.map(l => [l.data, l.numero, l.participante, l.base, l.iss, l.issRetido, l.pis, l.cofins, l.ir, l.inss, l.csll, l.liquido]),
+        totais: ['', '', `TOTAIS (${linhas.length})`, tot.base, tot.iss, tot.issRetido, tot.pis, tot.cofins, tot.ir, tot.inss, tot.csll, tot.liquido],
+        observacoes: [
+            ...(semRetGravada > 0 ? [`${semRetGravada} nota(s) importadas antes de 01/08/2026 não têm IR/INSS/CSLL gravados — ausência NÃO significa zero retido; reimporte o XML para completar.`] : []),
+        ],
+        fileName: `${modo}-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex items-center gap-2 flex-wrap">
+                {modo === 'retencoes' && (
+                    <select value={dirRet} onChange={e => setDirRet(e.target.value as any)}
+                        className="p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
+                        <option value="entrada">Serviços tomados</option>
+                        <option value="saida">Serviços prestados</option>
+                    </select>
+                )}
+                <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
+                <span className="text-xs text-slate-500">
+                    {linhas.length} NFS-e · base {fmtBRL(tot.base)} · ISS {fmtBRL(tot.iss)}
+                    {modo === 'retencoes' && ` · retenções ${fmtBRL(tot.issRetido + tot.pis + tot.cofins + tot.ir + tot.inss + tot.csll)}`}
+                </span>
+            </div>
+            {semRetGravada > 0 && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    ⚠ {semRetGravada} nota(s) antigas sem IR/INSS/CSLL gravados — ausência não significa zero retido (reimporte o XML pra completar).
+                </p>
+            )}
+            {linhas.length === 0 && <p className="text-sm text-slate-500">Nenhuma NFS-e {direcao === 'entrada' ? 'tomada' : 'prestada'}{modo === 'retencoes' ? ' com retenção' : ''} neste recorte.</p>}
+        </Card>
+    );
+};
+
+// ─── 8. Faturamento por carteira ────────────────────────────────────────────
+
+const AbaFaturamento: React.FC<{ competencia: string }> = ({ competencia }) => {
     const [dados, setDados] = useState<FaturamentoResp | null>(null);
     const [loading, setLoading] = useState(false);
-    const [gerando, setGerando] = useState(false);
+    const { gerando, rodar } = usePdf();
 
     const buscar = async () => {
         setLoading(true);
         try { setDados(await carregarFaturamento(competencia)); } finally { setLoading(false); }
     };
 
-    const pdf = async () => {
+    const pdf = () => {
         if (!dados?.ok || !dados.linhas?.length || !dados.totais) return;
         const totais = dados.totais;
-        setGerando(true);
-        try {
-            await gerarRelatorioPdf({
-                titulo: `Faturamento por cliente — ${fmtComp(competencia)}`,
-                subtitulo: `${dados.linhas.length} empresa(s) com movimento · escopo: ${dados.escopo === 'carteira' ? 'sua carteira' : 'todas'}`,
-                colunas: [
-                    { titulo: 'Cliente', largura: 26 },
-                    { titulo: 'CNPJ', largura: 12 },
-                    { titulo: 'Regime', largura: 6 },
-                    { titulo: 'Responsável', largura: 12 },
-                    { titulo: 'Entradas (qtd)', largura: 7, alinhamento: 'direita' },
-                    { titulo: 'Entradas (R$)', largura: 11, alinhamento: 'direita' },
-                    { titulo: 'Saídas (qtd)', largura: 7, alinhamento: 'direita' },
-                    { titulo: 'Saídas (R$)', largura: 11, alinhamento: 'direita' },
-                ],
-                linhas: dados.linhas.map(l => [
-                    l.nome, fmtCnpj(l.cnpj), l.regime === 'simples' ? 'SN' : 'LP/LR', l.colaborador || '—',
-                    l.entradasQtd, l.entradasValor, l.saidasQtd, l.saidasValor,
-                ]),
-                totais: [`TOTAIS · ${totais.empresas} empresa(s)`, '', '', '',
-                    totais.entradasQtd, totais.entradasValor, totais.saidasQtd, totais.saidasValor],
-                observacoes: [
-                    'Valores das notas capturadas (canceladas fora; nota própria de entrada contada como entrada).',
-                    `${dados.semMovimento} empresa(s) sem movimento na competência não listadas.`,
-                    ...(dados.ignoradosSemEmpresa ? [`${dados.ignoradosSemEmpresa} documento(s) sem vínculo de empresa ficaram fora — ver "docs sem dono" na Central.`] : []),
-                ],
-                fileName: `faturamento-carteira-${competencia}.pdf`,
-            });
-        } finally {
-            setGerando(false);
-        }
+        rodar(() => gerarRelatorioPdf({
+            titulo: `Faturamento por cliente — ${fmtComp(competencia)}`,
+            subtitulo: `${dados.linhas!.length} empresa(s) com movimento · escopo: ${dados.escopo === 'carteira' ? 'sua carteira' : 'todas'}`,
+            colunas: [
+                { titulo: 'Cliente', largura: 26 }, { titulo: 'CNPJ', largura: 12 },
+                { titulo: 'Regime', largura: 6 }, { titulo: 'Responsável', largura: 12 },
+                { titulo: 'Entradas (qtd)', largura: 7, alinhamento: 'direita' },
+                { titulo: 'Entradas (R$)', largura: 11, alinhamento: 'direita' },
+                { titulo: 'Saídas (qtd)', largura: 7, alinhamento: 'direita' },
+                { titulo: 'Saídas (R$)', largura: 11, alinhamento: 'direita' },
+            ],
+            linhas: dados.linhas!.map(l => [
+                l.nome, fmtCnpj(l.cnpj), l.regime === 'simples' ? 'SN' : 'LP/LR', l.colaborador || '—',
+                l.entradasQtd, l.entradasValor, l.saidasQtd, l.saidasValor,
+            ]),
+            totais: [`TOTAIS · ${totais.empresas} empresa(s)`, '', '', '',
+                totais.entradasQtd, totais.entradasValor, totais.saidasQtd, totais.saidasValor],
+            observacoes: [
+                'Valores das notas capturadas (canceladas fora; nota própria de entrada contada como entrada).',
+                `${dados.semMovimento} empresa(s) sem movimento na competência não listadas.`,
+                ...(dados.ignoradosSemEmpresa ? [`${dados.ignoradosSemEmpresa} documento(s) sem vínculo de empresa ficaram fora — ver "docs sem dono" na Central.`] : []),
+            ],
+            fileName: `faturamento-carteira-${competencia}.pdf`,
+        }));
     };
 
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+        <Card>
             <div className="flex items-center gap-2">
                 <button onClick={buscar} disabled={loading}
                     className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm rounded-lg font-semibold disabled:opacity-40">
@@ -338,43 +603,20 @@ const AbaFaturamento: React.FC<{ competencia: string; onShowToast?: (m: string) 
             </div>
             {dados && !dados.ok && <p className="text-sm text-red-600">{dados.error}</p>}
             {dados?.ok && (
-                <>
-                    <p className="text-xs text-slate-500">
-                        {dados.linhas!.length} empresa(s) com movimento · entradas {fmtBRL(dados.totais!.entradasValor)} · saídas {fmtBRL(dados.totais!.saidasValor)}
-                        · {dados.semMovimento} sem movimento
-                    </p>
-                    <div className="overflow-x-auto max-h-96 overflow-y-auto">
-                        <table className="w-full text-xs">
-                            <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800">
-                                <tr>
-                                    <th className="text-left py-1">Cliente</th><th className="text-left">Responsável</th>
-                                    <th className="text-right">Entradas</th><th className="text-right">Saídas</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {dados.linhas!.map(l => (
-                                    <tr key={l.empresaId} className="border-b border-slate-100 dark:border-slate-700/50">
-                                        <td className="py-1 max-w-[280px] truncate">{l.nome}</td>
-                                        <td>{l.colaborador || <span className="text-amber-500">sem responsável</span>}</td>
-                                        <td className="text-right font-mono">{fmtBRL(l.entradasValor)} <span className="text-slate-400">({l.entradasQtd})</span></td>
-                                        <td className="text-right font-mono">{fmtBRL(l.saidasValor)} <span className="text-slate-400">({l.saidasQtd})</span></td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </>
+                <p className="text-xs text-slate-500">
+                    {dados.linhas!.length} empresa(s) com movimento · entradas {fmtBRL(dados.totais!.entradasValor)} · saídas {fmtBRL(dados.totais!.saidasValor)} · {dados.semMovimento} sem movimento
+                </p>
             )}
-        </div>
+        </Card>
     );
 };
 
-// ─── 3. Impostos apurados × enviados (rito #293) ────────────────────────────
+// ─── 9. Impostos apurados × enviados ────────────────────────────────────────
 
-const AbaImpostos: React.FC<{ competencia: string; onShowToast?: (m: string) => void }> = ({ competencia }) => {
+const AbaImpostosEnviados: React.FC<{ competencia: string }> = ({ competencia }) => {
     const [dados, setDados] = useState<PainelRotina | null>(null);
     const [loading, setLoading] = useState(false);
-    const [gerando, setGerando] = useState(false);
+    const { gerando, rodar } = usePdf();
 
     const buscar = async () => {
         setLoading(true);
@@ -385,54 +627,40 @@ const AbaImpostos: React.FC<{ competencia: string; onShowToast?: (m: string) => 
         const ap = r.etapas.find(e => e.id === 'apuracao');
         const gu = r.etapas.find(e => e.id === 'guias');
         return {
-            nome: r.empresa?.nome || '—',
-            cnpj: r.empresa?.cnpj || '',
+            nome: r.empresa?.nome || '—', cnpj: r.empresa?.cnpj || '',
             regime: r.empresa?.regime === 'simples' ? 'SN' : 'LP/LR',
             apurado: ap?.status === 'concluida' ? (ap?.totalImpostos ?? null) : null,
             statusApuracao: ap?.status || '—',
-            envios: gu?.envios ?? 0,
-            completos: gu?.completos ?? 0,
+            envios: gu?.envios ?? 0, completos: gu?.completos ?? 0,
             statusGuias: gu?.status || '—',
         };
     }), [dados]);
 
-    const pdf = async () => {
+    const pdf = () => {
         if (!linhas.length) return;
-        setGerando(true);
-        try {
-            const rotulo: Record<string, string> = { concluida: 'OK', atencao: 'ATENÇÃO', pendente: 'PENDENTE', na: 'N/A' };
-            await gerarRelatorioPdf({
-                titulo: `Impostos apurados × enviados — ${fmtComp(competencia)}`,
-                subtitulo: `${linhas.length} empresa(s) · escopo: ${dados?.escopo === 'carteira' ? 'sua carteira' : 'todas'} · rito: SharePoint + gestor + baixa`,
-                colunas: [
-                    { titulo: 'Cliente', largura: 28 },
-                    { titulo: 'CNPJ', largura: 12 },
-                    { titulo: 'Regime', largura: 6 },
-                    { titulo: 'Apuração', largura: 9 },
-                    { titulo: 'Impostos (R$)', largura: 10, alinhamento: 'direita' },
-                    { titulo: 'Envios', largura: 6, alinhamento: 'direita' },
-                    { titulo: 'Rito completo', largura: 7, alinhamento: 'direita' },
-                    { titulo: 'Situação guias', largura: 9 },
-                ],
-                linhas: linhas.map(l => [
-                    l.nome, fmtCnpj(l.cnpj), l.regime,
-                    rotulo[l.statusApuracao] || l.statusApuracao,
-                    l.apurado ?? '—',
-                    l.envios, l.completos,
-                    rotulo[l.statusGuias] || l.statusGuias,
-                ]),
-                observacoes: [
-                    'Apuração e envios saem do painel Rotina do Mês — nenhuma etapa se marca à mão; "rito completo" = cópia no SharePoint + baixa da obrigação.',
-                ],
-                fileName: `impostos-apurados-enviados-${competencia}.pdf`,
-            });
-        } finally {
-            setGerando(false);
-        }
+        const rotulo: Record<string, string> = { concluida: 'OK', atencao: 'ATENÇÃO', pendente: 'PENDENTE', na: 'N/A' };
+        rodar(() => gerarRelatorioPdf({
+            titulo: `Impostos apurados × enviados — ${fmtComp(competencia)}`,
+            subtitulo: `${linhas.length} empresa(s) · escopo: ${dados?.escopo === 'carteira' ? 'sua carteira' : 'todas'} · rito: SharePoint + gestor + baixa`,
+            colunas: [
+                { titulo: 'Cliente', largura: 28 }, { titulo: 'CNPJ', largura: 12 },
+                { titulo: 'Regime', largura: 6 }, { titulo: 'Apuração', largura: 9 },
+                { titulo: 'Impostos (R$)', largura: 10, alinhamento: 'direita' },
+                { titulo: 'Envios', largura: 6, alinhamento: 'direita' },
+                { titulo: 'Rito completo', largura: 7, alinhamento: 'direita' },
+                { titulo: 'Situação guias', largura: 9 },
+            ],
+            linhas: linhas.map(l => [
+                l.nome, fmtCnpj(l.cnpj), l.regime, rotulo[l.statusApuracao] || l.statusApuracao,
+                l.apurado ?? '—', l.envios, l.completos, rotulo[l.statusGuias] || l.statusGuias,
+            ]),
+            observacoes: ['Apuração e envios saem do painel Rotina do Mês — nenhuma etapa se marca à mão; "rito completo" = cópia no SharePoint + baixa da obrigação.'],
+            fileName: `impostos-apurados-enviados-${competencia}.pdf`,
+        }));
     };
 
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+        <Card>
             <div className="flex items-center gap-2">
                 <button onClick={buscar} disabled={loading}
                     className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm rounded-lg font-semibold disabled:opacity-40">
@@ -443,65 +671,57 @@ const AbaImpostos: React.FC<{ competencia: string; onShowToast?: (m: string) => 
             {dados && !dados.ok && <p className="text-sm text-red-600">{dados.error}</p>}
             {linhas.length > 0 && (
                 <p className="text-xs text-slate-500">
-                    {linhas.length} empresa(s) · {linhas.filter(l => l.statusGuias === 'concluida').length} com guias enviadas pelo rito completo ·
-                    {' '}{linhas.filter(l => l.statusApuracao !== 'concluida').length} sem apuração fechada
+                    {linhas.length} empresa(s) · {linhas.filter(l => l.statusGuias === 'concluida').length} com guias pelo rito completo · {linhas.filter(l => l.statusApuracao !== 'concluida').length} sem apuração fechada
                 </p>
             )}
-        </div>
+        </Card>
     );
 };
 
-// ─── 4. DIPAM/FUNRURAL consolidado ──────────────────────────────────────────
+// ─── 10. DIPAM/FUNRURAL ─────────────────────────────────────────────────────
 
-const AbaDipam: React.FC<{ competencia: string; onShowToast?: (m: string) => void }> = ({ competencia }) => {
+const AbaDipam: React.FC<{ competencia: string }> = ({ competencia }) => {
     const [dados, setDados] = useState<any>(null);
     const [loading, setLoading] = useState(false);
-    const [gerando, setGerando] = useState(false);
+    const { gerando, rodar } = usePdf();
 
     const buscar = async () => {
         setLoading(true);
         try { setDados(await varrerDipam(competencia)); } finally { setLoading(false); }
     };
 
-    const pdf = async () => {
+    const pdf = () => {
         const linhas: DipamVarreduraLinha[] = dados?.linhas || [];
         if (!linhas.length) return;
-        setGerando(true);
-        try {
-            await gerarRelatorioPdf({
-                titulo: `DIPAM 1.1 e FUNRURAL — ${fmtComp(competencia)}`,
-                subtitulo: `${linhas.length} cliente(s) com compra de produtor rural · Manual da DIPAM 2026 (SPDIPAM11) · LC 224/2025`,
-                colunas: [
-                    { titulo: 'Cliente', largura: 28 },
-                    { titulo: 'CNPJ', largura: 12 },
-                    { titulo: 'DIPAM 1.1 (R$)', largura: 11, alinhamento: 'direita' },
-                    { titulo: 'Municípios', largura: 7, alinhamento: 'direita' },
-                    { titulo: 'Notas', largura: 6, alinhamento: 'direita' },
-                    { titulo: 'FUNRURAL (R$)', largura: 11, alinhamento: 'direita' },
-                    { titulo: 'Pendências', largura: 7, alinhamento: 'direita' },
-                    { titulo: 'Situação', largura: 14 },
-                ],
-                linhas: linhas.map(l => [
-                    l.nome, fmtCnpj(l.cnpj), l.dipamTotal, l.municipios, l.notasDipam,
-                    l.funruralTotal, l.pendencias, l.farol?.resumo || '',
-                ]),
-                totais: [`TOTAIS · ${linhas.length} cliente(s)`, '',
-                    linhas.reduce((s, l) => s + l.dipamTotal, 0), '', linhas.reduce((s, l) => s + l.notasDipam, 0),
-                    linhas.reduce((s, l) => s + l.funruralTotal, 0), linhas.reduce((s, l) => s + l.pendencias, 0), ''],
-                observacoes: [
-                    'DIPAM 1.1: valor mensal por município paulista de origem (GIA ficha DIPAM B + Registro 1400 da EFD). FUNRURAL: sub-rogação Lei 8.212/91 art. 25 (LC 224/2025 desde 04/2026).',
-                    'Cliente com pendência tem valor INCOMPLETO — resolva na aba 🌾 DIPAM / Produtor rural antes de declarar.',
-                    ...(dados?.truncado ? [`${dados.truncado} cliente(s) não analisados neste lote — rode de novo na aba 🌾.`] : []),
-                ],
-                fileName: `dipam-funrural-${competencia}.pdf`,
-            });
-        } finally {
-            setGerando(false);
-        }
+        rodar(() => gerarRelatorioPdf({
+            titulo: `DIPAM 1.1 e FUNRURAL — ${fmtComp(competencia)}`,
+            subtitulo: `${linhas.length} cliente(s) com compra de produtor rural · Manual da DIPAM 2026 (SPDIPAM11) · LC 224/2025`,
+            colunas: [
+                { titulo: 'Cliente', largura: 28 }, { titulo: 'CNPJ', largura: 12 },
+                { titulo: 'DIPAM 1.1 (R$)', largura: 11, alinhamento: 'direita' },
+                { titulo: 'Municípios', largura: 7, alinhamento: 'direita' },
+                { titulo: 'Notas', largura: 6, alinhamento: 'direita' },
+                { titulo: 'FUNRURAL (R$)', largura: 11, alinhamento: 'direita' },
+                { titulo: 'Pendências', largura: 7, alinhamento: 'direita' },
+                { titulo: 'Situação', largura: 14 },
+            ],
+            linhas: linhas.map(l => [
+                l.nome, fmtCnpj(l.cnpj), l.dipamTotal, l.municipios, l.notasDipam,
+                l.funruralTotal, l.pendencias, l.farol?.resumo || '',
+            ]),
+            totais: [`TOTAIS · ${linhas.length} cliente(s)`, '',
+                linhas.reduce((s, l) => s + l.dipamTotal, 0), '', linhas.reduce((s, l) => s + l.notasDipam, 0),
+                linhas.reduce((s, l) => s + l.funruralTotal, 0), linhas.reduce((s, l) => s + l.pendencias, 0), ''],
+            observacoes: [
+                'DIPAM 1.1: valor mensal por município paulista de origem (GIA ficha DIPAM B + Registro 1400 da EFD). FUNRURAL: sub-rogação Lei 8.212/91 art. 25 (LC 224/2025 desde 04/2026).',
+                'Cliente com pendência tem valor INCOMPLETO — resolva na aba 🌾 DIPAM / Produtor rural antes de declarar.',
+            ],
+            fileName: `dipam-funrural-${competencia}.pdf`,
+        }));
     };
 
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+        <Card>
             <div className="flex items-center gap-2">
                 <button onClick={buscar} disabled={loading}
                     className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm rounded-lg font-semibold disabled:opacity-40">
@@ -512,12 +732,90 @@ const AbaDipam: React.FC<{ competencia: string; onShowToast?: (m: string) => voi
             {dados && !dados.ok && <p className="text-sm text-red-600">{dados.error}</p>}
             {dados?.ok && (
                 <p className="text-xs text-slate-500">
-                    {dados.linhas.length} cliente(s) com compra de produtor · DIPAM {fmtBRL(dados.linhas.reduce((s: number, l: any) => s + l.dipamTotal, 0))}
-                    · FUNRURAL {fmtBRL(dados.linhas.reduce((s: number, l: any) => s + l.funruralTotal, 0))}
-                    {dados.linhas.some((l: any) => l.pendencias > 0) && ' · ⚠ há pendências — resolva na aba 🌾 antes de declarar'}
+                    {dados.linhas.length} cliente(s) · DIPAM {fmtBRL(dados.linhas.reduce((s: number, l: any) => s + l.dipamTotal, 0))} · FUNRURAL {fmtBRL(dados.linhas.reduce((s: number, l: any) => s + l.funruralTotal, 0))}
+                    {dados.linhas.some((l: any) => l.pendencias > 0) && ' · ⚠ há pendências'}
                 </p>
             )}
-        </div>
+        </Card>
+    );
+};
+
+// ─── 11. Ficha Financeira (Lucro) ───────────────────────────────────────────
+
+const AbaFicha: React.FC<{ currentUser: User }> = ({ currentUser }) => {
+    const [empresas, setEmpresas] = useState<LucroPresumidoEmpresa[]>([]);
+    const [empresaId, setEmpresaId] = useState('');
+    const [loading, setLoading] = useState(false);
+    const { gerando, rodar } = usePdf();
+
+    React.useEffect(() => {
+        let alive = true;
+        setLoading(true);
+        lucroPresumidoService.getEmpresas(currentUser)
+            .then(l => { if (alive) setEmpresas(l); })
+            .finally(() => { if (alive) setLoading(false); });
+        return () => { alive = false; };
+    }, [currentUser]);
+
+    const empresa = empresas.find(e => e.id === empresaId) || null;
+    const fichas = useMemo(
+        () => (empresa?.fichaFinanceira || []).slice().sort((a, b) => a.mesReferencia.localeCompare(b.mesReferencia)),
+        [empresa],
+    );
+
+    const pdf = () => {
+        if (!empresa || !fichas.length) return;
+        rodar(() => gerarRelatorioPdf({
+            titulo: `Ficha Financeira — ${empresa.nome}`,
+            subtitulo: `${fmtCnpj(empresa.cnpj)} · ${empresa.regimePadrao === 'Real' ? 'Lucro Real' : 'Lucro Presumido'} · ${fichas.length} mês(es)`,
+            colunas: [
+                { titulo: 'Mês', largura: 7 },
+                { titulo: 'Faturamento', largura: 11, alinhamento: 'direita' },
+                { titulo: 'Monofásico', largura: 9, alinhamento: 'direita' },
+                { titulo: 'Devoluções', largura: 9, alinhamento: 'direita' },
+                { titulo: 'IPI', largura: 8, alinhamento: 'direita' },
+                { titulo: 'ICMS vendas', largura: 9, alinhamento: 'direita' },
+                { titulo: 'Ret. PIS', largura: 8, alinhamento: 'direita' },
+                { titulo: 'Ret. COFINS', largura: 8, alinhamento: 'direita' },
+                { titulo: 'Ret. IRPJ', largura: 8, alinhamento: 'direita' },
+                { titulo: 'Ret. CSLL', largura: 8, alinhamento: 'direita' },
+                { titulo: 'Total impostos', largura: 10, alinhamento: 'direita' },
+                { titulo: 'Carga %', largura: 6, alinhamento: 'direita' },
+            ],
+            linhas: fichas.map(f => [
+                f.mesReferencia.split('-').reverse().join('/'),
+                f.faturamentoMesTotal || 0, f.faturamentoMonofasico || 0, f.valorDevolucoes || 0,
+                f.valorIpi || 0, f.icmsVendas || 0,
+                f.retencaoPis || 0, f.retencaoCofins || 0, f.retencaoIrpj || 0, f.retencaoCsll || 0,
+                f.totalImpostos || 0, f.cargaTributaria || 0,
+            ]),
+            observacoes: [
+                'Mesmos números da Ficha Financeira do módulo Lucro Presumido/Real (retenções deduzidas na apuração — regra #298: conferência usa o LÍQUIDO).',
+            ],
+            fileName: `ficha-financeira-${empresa.cnpj.replace(/\D/g, '')}.pdf`,
+        }));
+    };
+
+    return (
+        <Card>
+            <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[280px] flex-1">
+                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa (Lucro Presumido/Real)</label>
+                    <select value={empresaId} onChange={e => setEmpresaId(e.target.value)}
+                        className="w-full p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
+                        <option value="">{loading ? 'Carregando…' : '— Selecione —'}</option>
+                        {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                    </select>
+                </div>
+                <BotaoPdf onClick={pdf} disabled={!fichas.length} gerando={gerando} />
+            </div>
+            {empresa && !fichas.length && <p className="text-sm text-slate-500">Esta empresa não tem fichas lançadas.</p>}
+            {fichas.length > 0 && (
+                <p className="text-xs text-slate-500">
+                    {fichas.length} mês(es) · último: {fichas[fichas.length - 1]?.mesReferencia.split('-').reverse().join('/')} · faturamento acumulado {fmtBRL(fichas.reduce((s, f) => s + (f.faturamentoMesTotal || 0), 0))}
+                </p>
+            )}
+        </Card>
     );
 };
 

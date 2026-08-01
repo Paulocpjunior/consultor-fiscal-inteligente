@@ -201,8 +201,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
       identidade SP** (casca única `services/relatorioPdf.ts` — logo +
       #0E3BFA/#091D8D + paginação; toda aba nova DEVE usá-la). REGRA: relatório
       NUNCA tem conta própria — lê o endpoint da tela de origem (lição do card
-      4). PRÓXIMO: completar a lista com o que o menu Relatórios do E-Fiscal
-      oferece (sai do vídeo do item b).
+      4). **v2 01/08 (#390)**: lista completa do Paulo — Resumo por CFOP,
+      ICMS/IPI/ISS destacados, Serviços tomados/prestados, Retenções e Resumo
+      por UF (agregações puras em `services/relatoriosAgregacoes.ts`, recorte
+      buscado 1× por empresa/competência servindo todas as abas) + Ficha
+      Financeira do Lucro em PDF. `valores` da NFSe passou a gravar
+      ir/inss/csll/issRetido/valorIssRetido (docs antigos não têm — o
+      relatório de Retenções SINALIZA "ausente ≠ zero retido").
    b) **Varredura do E-Fiscal SAGE** — MÉTODO ESCOLHIDO (Paulo, 01/08):
       **vídeo de navegação** pelos menus. Aguardando o Paulo gravar/enviar;
       entregável segue: inventário funcional × "CFI cobre / falta / não vale

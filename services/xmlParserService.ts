@@ -810,6 +810,14 @@ export function buildDocumentoFiscal(input: {
                 iss: nfseValores.iss,
                 baseCalculo: nfseValores.baseCalculo,
                 deducoes: nfseValores.deducoes,
+                // Retenções federais + ISS retido: o parser sempre extraiu,
+                // mas eram descartados aqui — o relatório de Retenções (01/08)
+                // precisa deles gravados.
+                ir: nfseValores.ir,
+                inss: nfseValores.inss,
+                csll: nfseValores.csll,
+                issRetido: nfseValores.issRetido,
+                valorIssRetido: nfseValores.valorIssRetido,
             },
         } : {}),
         itens: parsed.itens,
