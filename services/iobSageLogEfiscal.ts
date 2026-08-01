@@ -18,6 +18,9 @@ export type CategoriaErroEfiscal =
     | 'codigo-existente'       // CNPJ já cadastrado com outro Código de Faturamento
     | 'participante-nao-consta'// E200 campo 08 aponta código que não existe lá
     | 'nota-nao-cadastrada'    // E342 (consequência do E200 recusado)
+    | 'redf'                   // E222 campo 56 "deve ser informado 1, 2, 3 ou 4" (JOTASUL 01/08)
+    | 'tipo-empresa'           // E201 "lançamento incorreto para este tipo de empresa" (aviso)
+    | 'valor-contabil'         // E200 "valor contábil não confere com os lançamentos de ICMS" (aviso)
     | 'outro';
 
 export interface ErroLogEfiscal {
@@ -25,6 +28,8 @@ export interface ErroLogEfiscal {
     registro: string;          // E010, E200, E342…
     mensagem: string;
     categoria: CategoriaErroEfiscal;
+    /** '(X)' = recusa; '(!)' = aviso (importa, mas merece conferência). */
+    gravidade: 'recusa' | 'aviso';
 }
 
 export interface ParticipanteComCodigoExistente {
@@ -48,6 +53,9 @@ function categorizar(registro: string, mensagem: string): CategoriaErroEfiscal {
     if (/uf inv[aá]lida/.test(m)) return 'uf-invalida';
     if (/j[aá] cadastrado com outro c[oó]digo/.test(m)) return 'codigo-existente';
     if (/n[aã]o consta no cadastro de clientes/.test(m)) return 'participante-nao-consta';
+    if (/deve ser informado 1, 2, 3 ou 4/.test(m)) return 'redf';
+    if (/lan[çc]amento incorreto para este tipo de empresa/.test(m)) return 'tipo-empresa';
+    if (/valor cont[aá]bil desta nota n[aã]o confere/.test(m)) return 'valor-contabil';
     if (registro === 'E342' || /nota fiscal n[aã]o cadastrada/.test(m)) return 'nota-nao-cadastrada';
     return 'outro';
 }
@@ -64,7 +72,12 @@ function categorizar(registro: string, mensagem: string): CategoriaErroEfiscal {
 export function parseLogEfiscal(txt: string): ErroLogEfiscal[] {
     const out: ErroLogEfiscal[] = [];
     for (const linha of String(txt || '').split(/\r?\n/)) {
-        if (!linha.startsWith('(X)')) continue;
+        // (X) = recusa; (!) = aviso (a nota entra, mas o E-Fiscal aponta
+        // inconsistência — no log da JOTASUL 01/08, avisos vinham em (!)).
+        const gravidade = linha.startsWith('(X)') ? 'recusa' as const
+            : linha.startsWith('(!)') ? 'aviso' as const
+            : null;
+        if (!gravidade) continue;
         const m = linha.match(/Linha\s+(\d+)\s*-\s*Registro\s+(\w+)\s*-\s*(.+)$/i);
         if (!m) continue;
         const mensagem = m[3].trim();
@@ -73,6 +86,7 @@ export function parseLogEfiscal(txt: string): ErroLogEfiscal[] {
             registro: m[2].toUpperCase(),
             mensagem,
             categoria: categorizar(m[2].toUpperCase(), mensagem),
+            gravidade,
         });
     }
     return out;
@@ -96,7 +110,8 @@ export function cruzarLogComFml(erros: ErroLogEfiscal[], conteudoFml: string): C
     const linhas = String(conteudoFml || '').split(/\r?\n/);
     const porCategoria: Record<CategoriaErroEfiscal, number> = {
         'uf-invalida': 0, 'codigo-existente': 0, 'participante-nao-consta': 0,
-        'nota-nao-cadastrada': 0, 'outro': 0,
+        'nota-nao-cadastrada': 0, 'redf': 0, 'tipo-empresa': 0, 'valor-contabil': 0,
+        'outro': 0,
     };
     const codigoExistente = new Map<string, ParticipanteComCodigoExistente>();
     const semUf = new Map<string, ParticipanteComCodigoExistente>();
@@ -118,6 +133,15 @@ export function cruzarLogComFml(erros: ErroLogEfiscal[], conteudoFml: string): C
     if (nCod > 0) partes.push(`${nCod} participante(s) que o E-Fiscal já tem com OUTRO código — informe o código existente no De→Para abaixo e regere`);
     if (porCategoria['nota-nao-cadastrada'] > 0 || porCategoria['participante-nao-consta'] > 0) {
         partes.push(`as ${porCategoria['participante-nao-consta']} nota(s) recusadas são CONSEQUÊNCIA do cadastro — resolvendo o de cima, elas entram`);
+    }
+    if (porCategoria.redf > 0) {
+        partes.push(`${porCategoria.redf} item(ns) recusados por REDF (E222 campo 56): preencha o campo "REDF NF Paulista" acima com o valor de um lançamento manual desta empresa no E-Fiscal (1-4) e regere`);
+    }
+    if (porCategoria['valor-contabil'] > 0) {
+        partes.push(`${porCategoria['valor-contabil']} aviso(s) de valor contábil × ICMS: a geração nova distribui Base/Isentos/Outras pela tributação real — regere e o aviso deve sumir`);
+    }
+    if (porCategoria['tipo-empresa'] > 0) {
+        partes.push(`${porCategoria['tipo-empresa']} aviso(s) "lançamento incorreto para este tipo de empresa": a nota tem ICMS destacado e a empresa no E-Fiscal não credita (Simples) — confira o regime dela lá; a geração nova zera alíquota nas notas sem destaque`);
     }
     return {
         totalErros: erros.length,

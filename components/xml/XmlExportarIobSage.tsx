@@ -38,6 +38,8 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // no E-Fiscal; mandar um código inexistente recusa TODOS os produtos.
     // Em branco (padrão) o campo não é informado — e o layout permite.
     const [tipoInventario, setTipoInventario] = useState<string>('');
+    // E222 campo 56 — alguns E-Fiscal exigem 1-4 (caso JOTASUL 01/08).
+    const [redfNfPaulista, setRedfNfPaulista] = useState<string>('');
     // Notas que ficaram FORA do arquivo. Antes isso era console.warn: o .FML
     // saía só com produtos e o E-Fiscal ainda dizia "importado com sucesso".
     const [falhas, setFalhas] = useState<Array<{ documento: string; motivo: string }>>([]);
@@ -208,6 +210,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 tipoInventario: tipoInventario.trim(),
                 cfopCtx,
                 codigosParticipantes: codigosPart,
+                redfNfPaulista,
             });
             // Guarda o conteúdo: o log de erros do E-Fiscal referencia LINHAS
             // deste arquivo, e o leitor cruza os dois.
@@ -499,6 +502,28 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm"
                             title="E020 campo 11. Só preencha com um código que EXISTA em Cadastros → Tipos de Inventário do E-Fiscal do cliente."
                         />
+                    </div>
+
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
+                            REDF NF Paulista (opcional)
+                        </label>
+                        <select
+                            value={redfNfPaulista}
+                            onChange={(e) => setRedfNfPaulista(e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm"
+                            title="E222 campo 56. Alguns E-Fiscal exigem 1-4 ('deve ser informado 1, 2, 3 ou 4'); o valor certo é o que aparece num lançamento MANUAL desta empresa lá (aba Lançamento Produtos/Serviços). Vazio = não informar."
+                        >
+                            <option value="">deixe vazio (padrão)</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                        </select>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                            Só preencha se o log do E-Fiscal pedir "1, 2, 3 ou 4" no E222 campo 56 —
+                            copie o valor de um lançamento manual da MESMA empresa lá.
+                        </p>
                     </div>
                 </div>
 

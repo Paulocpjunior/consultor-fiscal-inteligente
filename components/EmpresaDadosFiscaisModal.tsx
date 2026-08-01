@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react';
 import type { EmpresaDadosFiscais } from '../types';
 import { CloseIcon, BuildingIcon } from './Icons';
 import { sanitizarDadosFiscais } from '../services/empresaDadosFiscaisSanitize';
+import { buscarCep } from '../services/cepService';
 
 interface Props {
     isOpen: boolean;
@@ -54,6 +55,36 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
         // Campo intocado continua ausente do objeto e segue inalterado.
         setDados(prev => ({ ...prev, [key]: value }));
         if (key === 'uf') setAvisoUfVazia(false);
+    };
+
+    // Autocomplete por CEP (ViaCEP): preenche endereço + UF + código IBGE —
+    // os dois últimos são os campos que TRAVAM trilho quando ficam vazios.
+    // Só preenche campo VAZIO (não sobrescreve o que a equipe digitou), com a
+    // exceção de UF/IBGE, que são verdade derivada do próprio CEP.
+    const [buscandoCep, setBuscandoCep] = useState(false);
+    const [cepInfo, setCepInfo] = useState<string | null>(null);
+    const handleCep = async (valor: string) => {
+        handleField('cep', valor);
+        const digitos = valor.replace(/\D/g, '');
+        if (digitos.length !== 8) { setCepInfo(null); return; }
+        setBuscandoCep(true);
+        setCepInfo(null);
+        try {
+            const end = await buscarCep(digitos);
+            if (!end) { setCepInfo('CEP não encontrado — preencha o endereço manualmente.'); return; }
+            setDados(prev => ({
+                ...prev,
+                cep: digitos,
+                logradouro: prev.logradouro?.trim() ? prev.logradouro : end.logradouro,
+                bairro: prev.bairro?.trim() ? prev.bairro : end.bairro,
+                uf: end.uf || prev.uf,
+                codMunIBGE: end.codMunIBGE || prev.codMunIBGE,
+            }));
+            setCepInfo(`✓ ${end.municipio}/${end.uf}${end.codMunIBGE ? ` · IBGE ${end.codMunIBGE}` : ''} — endereço preenchido.`);
+            setAvisoUfVazia(false);
+        } finally {
+            setBuscandoCep(false);
+        }
     };
 
     // Condição rural: o bloco inteiro é gravado junto (booleano desmarcado tem
@@ -268,9 +299,9 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                             <Field
                                 label="CEP"
                                 value={dados.cep || ''}
-                                onChange={v => handleField('cep', v)}
+                                onChange={handleCep}
                                 placeholder="01310-100"
-                                hint="Apenas números."
+                                hint={buscandoCep ? 'Buscando endereço…' : (cepInfo || 'Apenas números — ao completar 8 dígitos, o endereço, a UF e o código IBGE preenchem sozinhos (ViaCEP).')}
                             />
                         </div>
                     </Section>
