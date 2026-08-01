@@ -25,8 +25,49 @@ export interface RelatorioPdfParams {
     totais?: (string | number)[];
     /** Observações no rodapé do relatório (uma por linha). */
     observacoes?: string[];
+    /**
+     * Identificação obrigatória do relatório (Paulo, 01/08): responsável legal
+     * da empresa e contador responsável. Quando o param vem, o bloco SEMPRE
+     * sai — campo não cadastrado é escrito como "não cadastrado" (farol
+     * honesto: o buraco fica visível no papel, não some).
+     */
+    identificacao?: IdentificacaoPdf;
     orientacao?: 'portrait' | 'landscape';
     fileName: string;
+}
+
+export interface IdentificacaoPdf {
+    /** Ex.: 'JOÃO DA SILVA — CPF 123.456.789-00 · Sócio administrador'. */
+    responsavel?: string | null;
+    /** Ex.: 'MARIA SOUZA — CRC 1SP123456/O-8'. */
+    contador?: string | null;
+}
+
+const fmtCpf = (c: string) => c.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+
+/**
+ * Monta as linhas de identificação a partir do cadastro (dadosFiscais).
+ * PURA — devolve null nos campos sem nome cadastrado, e a casca imprime
+ * "não cadastrado" no lugar.
+ */
+export function montarIdentificacao(df?: {
+    respLegalNome?: string | null; respLegalCpf?: string | null; respLegalCargo?: string | null;
+    contadorNome?: string | null; contadorCrc?: string | null; contadorCpf?: string | null;
+} | null): IdentificacaoPdf {
+    const nomeResp = (df?.respLegalNome || '').trim();
+    const nomeCont = (df?.contadorNome || '').trim();
+    const cpfResp = String(df?.respLegalCpf || '').replace(/\D/g, '');
+    const cpfCont = String(df?.contadorCpf || '').replace(/\D/g, '');
+    const crc = (df?.contadorCrc || '').trim();
+    const cargo = (df?.respLegalCargo || '').trim();
+    return {
+        responsavel: nomeResp
+            ? [nomeResp, cpfResp ? `CPF ${fmtCpf(cpfResp)}` : '', cargo].filter(Boolean).join(' — ')
+            : null,
+        contador: nomeCont
+            ? [nomeCont, crc ? `CRC ${crc}` : '', cpfCont ? `CPF ${fmtCpf(cpfCont)}` : ''].filter(Boolean).join(' — ')
+            : null,
+    };
 }
 
 const AZUL: [number, number, number] = [14, 59, 250];      // #0E3BFA
@@ -145,6 +186,24 @@ export async function gerarRelatorioPdf(p: RelatorioPdfParams): Promise<void> {
     cabecalho();
     for (const linha of p.linhas) linhaTabela(linha);
     if (p.totais) linhaTabela(p.totais, true);
+
+    if (p.identificacao) {
+        if (y > H - 22) { rodape(); pdf.addPage(); cabecalho(); }
+        y += 4;
+        pdf.setFontSize(7.2).setTextColor(...TINTA);
+        const naoCad = 'não cadastrado — completar em Dados Fiscais da empresa';
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Responsável pela empresa:', M, y);
+        pdf.setFont('helvetica', p.identificacao.responsavel ? 'normal' : 'italic');
+        pdf.text(p.identificacao.responsavel || naoCad, M + 34, y);
+        y += 4;
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Contador responsável:', M, y);
+        pdf.setFont('helvetica', p.identificacao.contador ? 'normal' : 'italic');
+        pdf.text(p.identificacao.contador || naoCad, M + 34, y);
+        y += 2;
+        pdf.setFont('helvetica', 'normal');
+    }
 
     if (p.observacoes?.length) {
         if (y > H - 20 - p.observacoes.length * 3.5) { rodape(); pdf.addPage(); cabecalho(); }

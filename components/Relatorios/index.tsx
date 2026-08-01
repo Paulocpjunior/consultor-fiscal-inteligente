@@ -19,7 +19,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import type { User, DocumentoFiscal, LucroPresumidoEmpresa } from '../../types';
-import { listDocumentos, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
+import { listDocumentos, getEmpresasDisponiveis, getIdentificacaoEmpresa, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { alocarTributacaoIcms } from '../../services/iobSageExportService';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 import {
@@ -30,7 +30,7 @@ import {
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
 import { carregarFaturamento, type FaturamentoResp } from '../../services/relatoriosService';
-import { gerarRelatorioPdf } from '../../services/relatorioPdf';
+import { gerarRelatorioPdf, montarIdentificacao, type IdentificacaoPdf } from '../../services/relatorioPdf';
 import * as lucroPresumidoService from '../../services/lucroPresumidoService';
 import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
 
@@ -99,6 +99,9 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [recorteKey, setRecorteKey] = useState('');
     const [truncado, setTruncado] = useState(false);
     const [loading, setLoading] = useState(false);
+    // Identificação obrigatória dos relatórios (responsável legal + contador,
+    // Paulo 01/08) — buscada junto com o recorte, do cadastro da empresa.
+    const [identificacao, setIdentificacao] = useState<IdentificacaoPdf>({});
 
     React.useEffect(() => {
         let alive = true;
@@ -120,7 +123,11 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
         setLoading(true);
         try {
             const meta: { truncado?: boolean } = {};
-            const todos = await listDocumentos(currentUser, { competencia }, meta);
+            const [todos, dadosFiscais] = await Promise.all([
+                listDocumentos(currentUser, { competencia }, meta),
+                getIdentificacaoEmpresa(empresa),
+            ]);
+            setIdentificacao(montarIdentificacao(dadosFiscais));
             setTruncado(!!meta.truncado);
             const cnpj = empresa.cnpj.replace(/\D/g, '');
             setDocs(todos
@@ -189,6 +196,14 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 {docsRecorte!.length} doc(s) no recorte{truncado ? ' · ⚠ leitura truncada' : ''}
                             </span>
                         )}
+                        {recorteValido && (!identificacao.responsavel || !identificacao.contador) && (
+                            <span className="text-[11px] text-amber-600 font-semibold pb-2 basis-full">
+                                ⚠ Identificação incompleta no cadastro ({[
+                                    !identificacao.responsavel && 'responsável legal',
+                                    !identificacao.contador && 'contador/CRC',
+                                ].filter(Boolean).join(' e ')}) — o PDF sai com "não cadastrado". Completar em Empresas → Dados Fiscais.
+                            </span>
+                        )}
                     </>
                 )}
             </div>
@@ -200,31 +215,31 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
             )}
 
             {aba === 'livro' && docsRecorte && empresa && (
-                <AbaLivro docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
+                <AbaLivro docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
             {aba === 'cfop' && docsRecorte && empresa && (
-                <AbaCfop docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
+                <AbaCfop docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
             {aba === 'impostos-resumo' && docsRecorte && empresa && (
-                <AbaImpostosResumo docs={docsRecorte} empresa={empresa} competencia={competencia} />
+                <AbaImpostosResumo docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} />
             )}
             {aba === 'uf' && docsRecorte && empresa && (
-                <AbaUf docs={docsRecorte} empresa={empresa} competencia={competencia} />
+                <AbaUf docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} />
             )}
             {aba === 'canceladas' && docsRecorte && empresa && (
-                <AbaCanceladas docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
+                <AbaCanceladas docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
             {aba === 'aliquota' && docsRecorte && empresa && (
-                <AbaAliquota docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
+                <AbaAliquota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
             {aba === 'produto' && docsRecorte && empresa && (
-                <AbaProduto docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
+                <AbaProduto docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
             {aba === 'participante' && docsRecorte && empresa && (
-                <AbaParticipante docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
+                <AbaParticipante docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
             {(aba === 'serv-tomados' || aba === 'serv-prestados' || aba === 'retencoes') && docsRecorte && empresa && (
-                <AbaServicos docs={docsRecorte} empresa={empresa} competencia={competencia} modo={aba} />
+                <AbaServicos docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} modo={aba} />
             )}
             {aba === 'faturamento' && <AbaFaturamento competencia={competencia} />}
             {aba === 'impostos-enviados' && <AbaImpostosEnviados competencia={competencia} />}
@@ -264,6 +279,8 @@ interface AbaDocsProps {
     empresa: EmpresaXmlOption;
     competencia: string;
     truncado?: boolean;
+    /** Bloco obrigatório do PDF (responsável legal + contador do cadastro). */
+    identificacao?: IdentificacaoPdf;
 }
 
 const obsTruncado = (truncado?: boolean) => truncado
@@ -272,7 +289,7 @@ const obsTruncado = (truncado?: boolean) => truncado
 
 // ─── 1. Livro de Entradas/Saídas ────────────────────────────────────────────
 
-const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
+const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
     const { gerando, rodar } = usePdf();
 
@@ -314,6 +331,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
         ],
         linhas: linhas.map(l => [l.data, l.numero, l.participante, l.cfops, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi]),
         totais: ['', '', `TOTAIS (${linhas.length} notas)`, '', tot.contabil, tot.base, tot.icms, tot.isentos, tot.outras, tot.ipi],
+        identificacao,
         observacoes: [
             'Base/Isentas/Outras alocadas pela tributação de cada item (CST do XML), fechando no valor contábil — mesma régua do Exportar SAGE.',
             ...obsTruncado(truncado),
@@ -340,7 +358,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
 
 // ─── 2. Resumo por CFOP ─────────────────────────────────────────────────────
 
-const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
+const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
     const { gerando, rodar } = usePdf();
     const linhas = useMemo(() => resumoPorCfop(docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo))), [docs]);
 
@@ -359,6 +377,7 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado 
             { titulo: 'IPI', largura: 8, alinhamento: 'direita' },
         ],
         linhas: linhas.map(l => [l.direcao === 'entrada' ? 'E' : 'S', l.cfop, l.notas, l.itens, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi]),
+        identificacao,
         observacoes: [
             'Contábil da nota rateado entre os CFOPs dela na proporção do valor dos itens (mesma regra do E201 do Exportar SAGE).',
             ...obsTruncado(truncado),
@@ -403,7 +422,7 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado 
 
 // ─── 3. ICMS / IPI / ISS ────────────────────────────────────────────────────
 
-const AbaImpostosResumo: React.FC<AbaDocsProps> = ({ docs, empresa, competencia }) => {
+const AbaImpostosResumo: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, identificacao }) => {
     const { gerando, rodar } = usePdf();
     const r = useMemo(() => resumoImpostos(docs), [docs]);
 
@@ -425,6 +444,7 @@ const AbaImpostosResumo: React.FC<AbaDocsProps> = ({ docs, empresa, competencia 
             { titulo: 'Saldo (débito − crédito)', largura: 14, alinhamento: 'direita' },
         ],
         linhas,
+        identificacao,
         observacoes: [
             'Valores DESTACADOS nos documentos da competência — é resumo de escrituração, NÃO a apuração: direito a crédito depende da destinação (a apuração oficial vive nas fichas do regime).',
         ],
@@ -454,7 +474,7 @@ const AbaImpostosResumo: React.FC<AbaDocsProps> = ({ docs, empresa, competencia 
 
 // ─── 4. Resumo por UF ───────────────────────────────────────────────────────
 
-const AbaUf: React.FC<AbaDocsProps> = ({ docs, empresa, competencia }) => {
+const AbaUf: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, identificacao }) => {
     const { gerando, rodar } = usePdf();
     const linhas = useMemo(() => resumoPorUf(docs), [docs]);
 
@@ -470,6 +490,7 @@ const AbaUf: React.FC<AbaDocsProps> = ({ docs, empresa, competencia }) => {
             { titulo: 'Saídas (R$)', largura: 14, alinhamento: 'direita' },
         ],
         linhas: linhas.map(l => [l.uf, l.entradasQtd, l.entradasValor, l.saidasQtd, l.saidasValor]),
+        identificacao,
         observacoes: ['UF do outro participante da operação (na nota própria de entrada, o remetente). "??" = documento sem UF gravada.'],
         fileName: `resumo-uf-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
     }));
@@ -507,7 +528,7 @@ const RESSALVAS_NUMERACAO = [
     'A SEFAZ não entrega saída ao emitente (Rej. 641): se o cofre/autXML da empresa está incompleto, faltante pode ser nota emitida e não capturada — ver Cobertura de Saída.',
 ];
 
-const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
+const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
     const { gerando, rodar } = usePdf();
     const linhas = useMemo(() => nfCanceladasFaltantes(docs, empresa.cnpj), [docs, empresa.cnpj]);
     const totalFaltantes = linhas.reduce((s, l) => s + l.faltantesTotal, 0);
@@ -532,6 +553,7 @@ const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tru
             (formatarFaixas(l.faltantes) || '—') + (l.faltantesTotal > l.faltantes.length ? ` … (+${l.faltantesTotal - l.faltantes.length})` : ''),
             l.faltantesTotal,
         ]),
+        identificacao,
         observacoes: [...RESSALVAS_NUMERACAO, ...obsTruncado(truncado)],
         fileName: `nf-canceladas-faltantes-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
     }));
@@ -585,7 +607,7 @@ const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tru
 
 // ─── Resumo por alíquota ────────────────────────────────────────────────────
 
-const AbaAliquota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
+const AbaAliquota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
     const { gerando, rodar } = usePdf();
     const linhas = useMemo(() => resumoPorAliquota(docs), [docs]);
 
@@ -601,6 +623,7 @@ const AbaAliquota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunc
             { titulo: 'ICMS (R$)', largura: 13, alinhamento: 'direita' },
         ],
         linhas: linhas.map(l => [l.direcao === 'entrada' ? 'Entrada' : 'Saída', l.rotulo, l.itens, l.valor, l.base, l.icms]),
+        identificacao,
         observacoes: [
             'Isentas = CST 40/41/50; Outras = sem destaque (ST, diferimento, CSOSN do Simples) — mesma régua do Exportar SAGE.',
             'Alíquota derivada de ICMS/Base quando a nota não gravou pICMS.',
@@ -646,7 +669,7 @@ const AbaAliquota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunc
 
 const LIMITE_TELA = 50;
 
-const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
+const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
     const { gerando, rodar } = usePdf();
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
     const linhas = useMemo(() => resumoPorProduto(docs, direcao), [docs, direcao]);
@@ -665,6 +688,7 @@ const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunca
             { titulo: 'Valor (R$)', largura: 12, alinhamento: 'direita' },
         ],
         linhas: linhas.map(l => [l.produto, l.ncm, l.cfops, l.qtd, l.unidade, l.notas, l.valor]),
+        identificacao,
         observacoes: ['Qtd somada só faz sentido quando a unidade é única — "várias" indica unidades misturadas.', ...obsTruncado(truncado)],
         fileName: `por-produto-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
     }));
@@ -715,7 +739,7 @@ const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunca
 
 // ─── Por participante (fornecedores/clientes) ───────────────────────────────
 
-const AbaParticipante: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
+const AbaParticipante: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
     const { gerando, rodar } = usePdf();
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
     const linhas = useMemo(() => resumoPorParticipante(docs, direcao), [docs, direcao]);
@@ -734,6 +758,7 @@ const AbaParticipante: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, t
             { titulo: 'Valor (R$)', largura: 13, alinhamento: 'direita' },
         ],
         linhas: linhas.map(l => [l.nome, l.doc ? fmtCnpj(l.doc) || l.doc : '—', l.municipio || '—', l.uf || '—', l.notas, l.valor]),
+        identificacao,
         observacoes: [
             'Contraparte da operação: na nota própria de entrada (tpNF=0, ex.: compra de produtor rural) é o remetente do bloco destinatário.',
             ...obsTruncado(truncado),
@@ -786,7 +811,7 @@ const AbaParticipante: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, t
 
 // ─── 5-7. Serviços tomados / prestados / retenções ──────────────────────────
 
-const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-prestados' | 'retencoes' }> = ({ docs, empresa, competencia, modo }) => {
+const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-prestados' | 'retencoes' }> = ({ docs, empresa, competencia, modo, identificacao }) => {
     const { gerando, rodar } = usePdf();
     const [dirRet, setDirRet] = useState<'entrada' | 'saida'>('entrada');
     const direcao = modo === 'serv-prestados' ? 'saida' : modo === 'serv-tomados' ? 'entrada' : dirRet;
@@ -826,6 +851,7 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
         ],
         linhas: linhas.map(l => [l.data, l.numero, l.participante, l.base, l.iss, l.issRetido, l.pis, l.cofins, l.ir, l.inss, l.csll, l.liquido]),
         totais: ['', '', `TOTAIS (${linhas.length})`, tot.base, tot.iss, tot.issRetido, tot.pis, tot.cofins, tot.ir, tot.inss, tot.csll, tot.liquido],
+        identificacao,
         observacoes: [
             ...(semRetGravada > 0 ? [`${semRetGravada} nota(s) importadas antes de 01/08/2026 não têm IR/INSS/CSLL gravados — ausência NÃO significa zero retido; reimporte o XML para completar.`] : []),
         ],
@@ -1096,6 +1122,7 @@ const AbaFicha: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 f.retencaoPis || 0, f.retencaoCofins || 0, f.retencaoIrpj || 0, f.retencaoCsll || 0,
                 f.totalImpostos || 0, f.cargaTributaria || 0,
             ]),
+            identificacao: montarIdentificacao((empresa as any).dadosFiscais),
             observacoes: [
                 'Mesmos números da Ficha Financeira do módulo Lucro Presumido/Real (retenções deduzidas na apuração — regra #298: conferência usa o LÍQUIDO).',
             ],

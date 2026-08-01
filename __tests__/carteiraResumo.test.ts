@@ -12,6 +12,7 @@ const completa = (id: string, nome: string) => ({
     cnpj: '11111111000111', regime: 'simples',
     uf: 'SP', codMunIBGE: '3550308', inscricaoEstadual: 'ISENTO', ccmSp: '12345678',
     email: 'x@y.com', cnae: '6201-5/01', anexo: 'III', dataAbertura: '2020-01-01',
+    respLegalNome: 'João Sócio', contadorNome: 'Maria Contadora', contadorCrc: '1SP123456/O-8',
 });
 
 const vinculo = (empresaId: string, uid: string, nome: string, papel = 'principal') => ({
@@ -27,6 +28,7 @@ describe('regime vem de `fonte` na lista de empresas', () => {
         cnpj: '11111111000111',
         uf: 'SP', codMunIBGE: '3550308', inscricaoEstadual: 'ISENTO', ccmSp: '12345678',
         email: 'x@y.com', cnae: '6201-5/01', anexo: 'III', dataAbertura: '2020-01-01',
+        respLegalNome: 'João Sócio', contadorNome: 'Maria Contadora', contadorCrc: '1SP123456/O-8',
         ...over,
     });
 

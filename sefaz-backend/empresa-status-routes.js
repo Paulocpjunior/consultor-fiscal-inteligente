@@ -535,6 +535,10 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     'naturezaAtividade', 'inscEstSubstTrib', 'codSuframa',
     'cnae', 'dataAbertura',
     'condicaoRural',
+    // Responsável legal + contador (identificação obrigatória dos relatórios,
+    // Paulo 01/08). Ficam SÓ em dadosFiscais — nenhum trilho lê top-level.
+    'respLegalNome', 'respLegalCpf', 'respLegalCargo',
+    'contadorNome', 'contadorCrc', 'contadorCpf',
 ]);
 
 // Cadastro (IE, UF, CCM, endereço) é trabalho da EQUIPE — colaborador grava.

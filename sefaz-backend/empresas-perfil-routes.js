@@ -57,6 +57,14 @@ function camposConferencia(data) {
         // passou a editá-la (31/07) e os painéis Simples/Lucro salvam só o
         // objeto dadosFiscais — sem o fallback a pendência nunca sairia.
         dataAbertura: data.dataAbertura || data.dadosFiscais?.dataAbertura || undefined,
+        // Responsável legal + contador (identificação obrigatória dos
+        // relatórios, Paulo 01/08) — vivem só em dadosFiscais.
+        respLegalNome: data.dadosFiscais?.respLegalNome || undefined,
+        respLegalCpf: data.dadosFiscais?.respLegalCpf || undefined,
+        respLegalCargo: data.dadosFiscais?.respLegalCargo || undefined,
+        contadorNome: data.dadosFiscais?.contadorNome || undefined,
+        contadorCrc: data.dadosFiscais?.contadorCrc || undefined,
+        contadorCpf: data.dadosFiscais?.contadorCpf || undefined,
     };
 }
 

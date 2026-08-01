@@ -35,6 +35,11 @@ export interface EmpresaParaConferir {
     cnae?: string | null;
     anexo?: string | null;
     dataAbertura?: string | null;
+    /** Responsável LEGAL (sócio/administrador) — identificação dos relatórios. */
+    respLegalNome?: string | null;
+    /** Contador responsável — identificação dos relatórios. */
+    contadorNome?: string | null;
+    contadorCrc?: string | null;
     /** Colaboradores responsáveis (vínculos da carteira). */
     responsaveis?: Array<{ nome?: string | null; papel?: string | null }>;
 }
@@ -134,6 +139,26 @@ export function conferirCadastroCliente(e: EmpresaParaConferir): PendenciaCadast
             impacto: 'Sem anexo o DAS não é calculado.',
             gravidade: 'bloqueia',
             onde: 'Cadastro da empresa → Anexo.',
+        });
+    }
+
+    // Identificação obrigatória dos relatórios (Paulo, 01/08): responsável
+    // LEGAL da empresa + contador. Sem eles o PDF sai com "não cadastrado"
+    // escrito — e relatório de faturamento/obrigação não deve ir assim.
+    if (vazio(e.respLegalNome)) {
+        p.push({
+            campo: 'Responsável legal da empresa',
+            impacto: 'Todo relatório emitido (faturamento, livros, obrigações) leva a identificação do responsável — sem o nome, o PDF sai com "não cadastrado" escrito.',
+            gravidade: 'atencao',
+            onde: 'Dados fiscais → Responsável legal e contador.',
+        });
+    }
+    if (vazio(e.contadorNome) || vazio(e.contadorCrc)) {
+        p.push({
+            campo: vazio(e.contadorNome) ? 'Contador responsável' : 'CRC do contador',
+            impacto: 'A identificação do contador (nome + CRC) é obrigatória nos relatórios e obrigações acessórias emitidos pelo app.',
+            gravidade: 'atencao',
+            onde: 'Dados fiscais → Responsável legal e contador.',
         });
     }
 

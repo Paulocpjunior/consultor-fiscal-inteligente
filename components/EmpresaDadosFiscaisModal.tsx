@@ -325,6 +325,56 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                         </div>
                     </Section>
 
+                    {/* Responsável legal e contador — identificação dos relatórios */}
+                    <Section titulo="✍️ Responsável legal e contador">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                            Identificação OBRIGATÓRIA na emissão dos relatórios (faturamento, livros,
+                            obrigações acessórias). Não é o colaborador da carteira — é o sócio/administrador
+                            da empresa e o contador que assina.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Field
+                                label="Responsável pela empresa"
+                                value={dados.respLegalNome || ''}
+                                onChange={v => handleField('respLegalNome', v)}
+                                placeholder="Nome do sócio/administrador"
+                            />
+                            <Field
+                                label="CPF do responsável"
+                                value={dados.respLegalCpf || ''}
+                                onChange={v => handleField('respLegalCpf', v)}
+                                placeholder="000.000.000-00"
+                                hint="Apenas números."
+                            />
+                            <Field
+                                label="Cargo/qualificação"
+                                value={dados.respLegalCargo || ''}
+                                onChange={v => handleField('respLegalCargo', v)}
+                                placeholder="Sócio administrador"
+                            />
+                            <Field
+                                label="Contador responsável"
+                                value={dados.contadorNome || ''}
+                                onChange={v => handleField('contadorNome', v)}
+                                placeholder="Nome do contador"
+                            />
+                            <Field
+                                label="CRC"
+                                value={dados.contadorCrc || ''}
+                                onChange={v => handleField('contadorCrc', v)}
+                                placeholder="1SP123456/O-8"
+                                hint="Formato livre — como está no registro do CRC."
+                            />
+                            <Field
+                                label="CPF do contador"
+                                value={dados.contadorCpf || ''}
+                                onChange={v => handleField('contadorCpf', v)}
+                                placeholder="000.000.000-00"
+                                hint="Apenas números."
+                            />
+                        </div>
+                    </Section>
+
                     {/* SPED config */}
                     <Section titulo="📊 Configuração SPED Fiscal">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
