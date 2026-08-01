@@ -24,6 +24,7 @@ import { alocarTributacaoIcms } from '../../services/iobSageExportService';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 import {
     resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, resumoPorUf,
+    nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante, resumoPorAliquota, resumoPorProduto,
     contraparteDoc, docValido,
 } from '../../services/relatoriosAgregacoes';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
@@ -40,6 +41,7 @@ interface Props {
 
 type AbaId =
     | 'livro' | 'cfop' | 'impostos-resumo' | 'uf'
+    | 'canceladas' | 'aliquota' | 'produto' | 'participante'
     | 'serv-tomados' | 'serv-prestados' | 'retencoes'
     | 'faturamento' | 'impostos-enviados' | 'dipam' | 'ficha';
 
@@ -50,6 +52,10 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
             { id: 'cfop', label: '🔢 Resumo por CFOP' },
             { id: 'impostos-resumo', label: '🧾 ICMS · IPI · ISS' },
             { id: 'uf', label: '🗺️ Resumo por UF' },
+            { id: 'canceladas', label: '🚫 Canceladas/Faltantes' },
+            { id: 'aliquota', label: '➗ Por alíquota' },
+            { id: 'produto', label: '📦 Por produto' },
+            { id: 'participante', label: '👥 Por participante' },
         ],
     },
     {
@@ -69,7 +75,11 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
     },
 ];
 
-const ABAS_POR_EMPRESA: AbaId[] = ['livro', 'cfop', 'impostos-resumo', 'uf', 'serv-tomados', 'serv-prestados', 'retencoes'];
+const ABAS_POR_EMPRESA: AbaId[] = [
+    'livro', 'cfop', 'impostos-resumo', 'uf',
+    'canceladas', 'aliquota', 'produto', 'participante',
+    'serv-tomados', 'serv-prestados', 'retencoes',
+];
 
 const fmtBRL = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -200,6 +210,18 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
             )}
             {aba === 'uf' && docsRecorte && empresa && (
                 <AbaUf docs={docsRecorte} empresa={empresa} competencia={competencia} />
+            )}
+            {aba === 'canceladas' && docsRecorte && empresa && (
+                <AbaCanceladas docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
+            )}
+            {aba === 'aliquota' && docsRecorte && empresa && (
+                <AbaAliquota docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
+            )}
+            {aba === 'produto' && docsRecorte && empresa && (
+                <AbaProduto docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
+            )}
+            {aba === 'participante' && docsRecorte && empresa && (
+                <AbaParticipante docs={docsRecorte} empresa={empresa} competencia={competencia} truncado={truncado} />
             )}
             {(aba === 'serv-tomados' || aba === 'serv-prestados' || aba === 'retencoes') && docsRecorte && empresa && (
                 <AbaServicos docs={docsRecorte} empresa={empresa} competencia={competencia} modo={aba} />
@@ -467,6 +489,291 @@ const AbaUf: React.FC<AbaDocsProps> = ({ docs, empresa, competencia }) => {
                                     <td className="py-1 font-bold">{l.uf}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.entradasValor)} <span className="text-slate-400">({l.entradasQtd})</span></td>
                                     <td className="text-right font-mono">{fmtBRL(l.saidasValor)} <span className="text-slate-400">({l.saidasQtd})</span></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </Card>
+    );
+};
+
+// ─── NF Canceladas/Faltantes (completude da numeração) ──────────────────────
+
+const RESSALVAS_NUMERACAO = [
+    'Buraco NÃO é sempre nota perdida: numeração INUTILIZADA na SEFAZ não gera XML e aparece aqui como faltante — confira a inutilização no portal antes de concluir.',
+    'A sequência atravessa o mês: buraco entre o fim do mês anterior e a 1ª nota do mês não aparece neste recorte.',
+    'A SEFAZ não entrega saída ao emitente (Rej. 641): se o cofre/autXML da empresa está incompleto, faltante pode ser nota emitida e não capturada — ver Cobertura de Saída.',
+];
+
+const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
+    const { gerando, rodar } = usePdf();
+    const linhas = useMemo(() => nfCanceladasFaltantes(docs, empresa.cnpj), [docs, empresa.cnpj]);
+    const totalFaltantes = linhas.reduce((s, l) => s + l.faltantesTotal, 0);
+    const totalCanceladas = linhas.reduce((s, l) => s + l.canceladas.length, 0);
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `NF Saídas — Canceladas/Faltantes — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · notas EMITIDAS pela empresa (mod 55/65, inclui nota própria de entrada)`,
+        orientacao: 'landscape',
+        colunas: [
+            { titulo: 'Mod', largura: 5 },
+            { titulo: 'Série', largura: 5 },
+            { titulo: 'De–Até', largura: 12 },
+            { titulo: 'Autorizadas', largura: 9, alinhamento: 'direita' },
+            { titulo: 'Canceladas', largura: 24 },
+            { titulo: 'Faltantes', largura: 30 },
+            { titulo: 'Qtd falt.', largura: 7, alinhamento: 'direita' },
+        ],
+        linhas: linhas.map(l => [
+            l.modelo, l.serie, `${l.primeiro}–${l.ultimo}`, l.autorizadas,
+            formatarFaixas(l.canceladas) || '—',
+            (formatarFaixas(l.faltantes) || '—') + (l.faltantesTotal > l.faltantes.length ? ` … (+${l.faltantesTotal - l.faltantes.length})` : ''),
+            l.faltantesTotal,
+        ]),
+        observacoes: [...RESSALVAS_NUMERACAO, ...obsTruncado(truncado)],
+        fileName: `nf-canceladas-faltantes-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex items-center gap-3 flex-wrap">
+                <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
+                {linhas.length > 0 && (
+                    <span className={`text-xs font-bold ${totalFaltantes > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {totalFaltantes > 0
+                            ? `⚠ ${totalFaltantes} número(s) faltante(s) · ${totalCanceladas} cancelada(s)`
+                            : `✓ numeração contínua · ${totalCanceladas} cancelada(s)`}
+                    </span>
+                )}
+            </div>
+            {!linhas.length && <p className="text-xs text-slate-500">Nenhuma nota emitida pela empresa (mod 55/65) no recorte.</p>}
+            {linhas.length > 0 && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                        <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                                <th className="text-left py-1">Mod/Série</th><th className="text-right">De–Até</th>
+                                <th className="text-right">Autorizadas</th><th className="text-left pl-3">Canceladas</th>
+                                <th className="text-left pl-3">Faltantes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {linhas.map(l => (
+                                <tr key={`${l.modelo}|${l.serie}`} className="border-b border-slate-100 dark:border-slate-700/50">
+                                    <td className="py-1 font-bold">{l.modelo} · série {l.serie}</td>
+                                    <td className="text-right font-mono">{l.primeiro}–{l.ultimo}</td>
+                                    <td className="text-right font-mono">{l.autorizadas}</td>
+                                    <td className="pl-3 font-mono text-slate-500">{formatarFaixas(l.canceladas) || '—'}</td>
+                                    <td className={`pl-3 font-mono ${l.faltantesTotal ? 'text-amber-600 font-bold' : 'text-emerald-600'}`}>
+                                        {formatarFaixas(l.faltantes) || '✓ nenhum'}
+                                        {l.faltantesTotal > l.faltantes.length ? ` … (+${l.faltantesTotal - l.faltantes.length})` : ''}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+            <ul className="text-[10px] text-slate-500 list-disc pl-4 space-y-0.5">
+                {RESSALVAS_NUMERACAO.map((r, i) => <li key={i}>{r}</li>)}
+            </ul>
+        </Card>
+    );
+};
+
+// ─── Resumo por alíquota ────────────────────────────────────────────────────
+
+const AbaAliquota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
+    const { gerando, rodar } = usePdf();
+    const linhas = useMemo(() => resumoPorAliquota(docs), [docs]);
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `Resumo por alíquota (ICMS) — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · NF-e/NFC-e, régua de CST do livro`,
+        colunas: [
+            { titulo: 'Direção', largura: 8 },
+            { titulo: 'Alíquota', largura: 14 },
+            { titulo: 'Itens', largura: 7, alinhamento: 'direita' },
+            { titulo: 'Valor (R$)', largura: 13, alinhamento: 'direita' },
+            { titulo: 'Base (R$)', largura: 13, alinhamento: 'direita' },
+            { titulo: 'ICMS (R$)', largura: 13, alinhamento: 'direita' },
+        ],
+        linhas: linhas.map(l => [l.direcao === 'entrada' ? 'Entrada' : 'Saída', l.rotulo, l.itens, l.valor, l.base, l.icms]),
+        observacoes: [
+            'Isentas = CST 40/41/50; Outras = sem destaque (ST, diferimento, CSOSN do Simples) — mesma régua do Exportar SAGE.',
+            'Alíquota derivada de ICMS/Base quando a nota não gravou pICMS.',
+            ...obsTruncado(truncado),
+        ],
+        fileName: `resumo-aliquota-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex items-center gap-2"><BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} /></div>
+            {!linhas.length && <p className="text-xs text-slate-500">Nenhum item de NF-e/NFC-e no recorte.</p>}
+            {linhas.length > 0 && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs max-w-3xl">
+                        <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                                <th className="text-left py-1">Direção</th><th className="text-left">Alíquota</th>
+                                <th className="text-right">Itens</th><th className="text-right">Valor</th>
+                                <th className="text-right">Base</th><th className="text-right">ICMS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {linhas.map((l, i) => (
+                                <tr key={i} className="border-b border-slate-100 dark:border-slate-700/50">
+                                    <td className="py-1">{l.direcao === 'entrada' ? '📥 Entrada' : '📤 Saída'}</td>
+                                    <td className="font-bold">{l.rotulo}</td>
+                                    <td className="text-right font-mono">{l.itens}</td>
+                                    <td className="text-right font-mono">{fmtBRL(l.valor)}</td>
+                                    <td className="text-right font-mono">{fmtBRL(l.base)}</td>
+                                    <td className="text-right font-mono">{fmtBRL(l.icms)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </Card>
+    );
+};
+
+// ─── Por produto ────────────────────────────────────────────────────────────
+
+const LIMITE_TELA = 50;
+
+const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
+    const { gerando, rodar } = usePdf();
+    const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
+    const linhas = useMemo(() => resumoPorProduto(docs, direcao), [docs, direcao]);
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `Lançamento por produto — ${direcao === 'entrada' ? 'entradas' : 'saídas'} — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${linhas.length} produto(s)`,
+        orientacao: 'landscape',
+        colunas: [
+            { titulo: 'Produto', largura: 30 },
+            { titulo: 'NCM', largura: 8 },
+            { titulo: 'CFOPs', largura: 10 },
+            { titulo: 'Qtd', largura: 8, alinhamento: 'direita' },
+            { titulo: 'Un', largura: 5 },
+            { titulo: 'Notas', largura: 6, alinhamento: 'direita' },
+            { titulo: 'Valor (R$)', largura: 12, alinhamento: 'direita' },
+        ],
+        linhas: linhas.map(l => [l.produto, l.ncm, l.cfops, l.qtd, l.unidade, l.notas, l.valor]),
+        observacoes: ['Qtd somada só faz sentido quando a unidade é única — "várias" indica unidades misturadas.', ...obsTruncado(truncado)],
+        fileName: `por-produto-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex items-center gap-2 flex-wrap">
+                {(['entrada', 'saida'] as const).map(d => (
+                    <button key={d} onClick={() => setDirecao(d)}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg ${direcao === d ? 'bg-blue-700 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                        {d === 'entrada' ? '📥 Entradas' : '📤 Saídas'}
+                    </button>
+                ))}
+                <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
+                {linhas.length > LIMITE_TELA && (
+                    <span className="text-[11px] text-slate-500">mostrando {LIMITE_TELA} de {linhas.length} — o PDF traz todos</span>
+                )}
+            </div>
+            {!linhas.length && <p className="text-xs text-slate-500">Nenhum item de NF-e/NFC-e nessa direção.</p>}
+            {linhas.length > 0 && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                        <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                                <th className="text-left py-1">Produto</th><th className="text-left">NCM</th>
+                                <th className="text-left">CFOPs</th><th className="text-right">Qtd</th>
+                                <th className="text-right">Notas</th><th className="text-right">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {linhas.slice(0, LIMITE_TELA).map((l, i) => (
+                                <tr key={i} className="border-b border-slate-100 dark:border-slate-700/50">
+                                    <td className="py-1 font-semibold max-w-[280px] truncate" title={l.produto}>{l.produto}</td>
+                                    <td className="font-mono">{l.ncm}</td>
+                                    <td className="font-mono">{l.cfops}</td>
+                                    <td className="text-right font-mono">{l.qtd.toLocaleString('pt-BR')} {l.unidade !== '—' ? l.unidade : ''}</td>
+                                    <td className="text-right font-mono">{l.notas}</td>
+                                    <td className="text-right font-mono">{fmtBRL(l.valor)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </Card>
+    );
+};
+
+// ─── Por participante (fornecedores/clientes) ───────────────────────────────
+
+const AbaParticipante: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado }) => {
+    const { gerando, rodar } = usePdf();
+    const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
+    const linhas = useMemo(() => resumoPorParticipante(docs, direcao), [docs, direcao]);
+    const rotulo = direcao === 'entrada' ? 'fornecedor' : 'cliente';
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `Resumo por ${rotulo} — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${linhas.length} participante(s), NF-e e NFS-e`,
+        orientacao: 'landscape',
+        colunas: [
+            { titulo: rotulo === 'fornecedor' ? 'Fornecedor' : 'Cliente', largura: 30 },
+            { titulo: 'CNPJ/CPF', largura: 13 },
+            { titulo: 'Município', largura: 16 },
+            { titulo: 'UF', largura: 4 },
+            { titulo: 'Notas', largura: 6, alinhamento: 'direita' },
+            { titulo: 'Valor (R$)', largura: 13, alinhamento: 'direita' },
+        ],
+        linhas: linhas.map(l => [l.nome, l.doc ? fmtCnpj(l.doc) || l.doc : '—', l.municipio || '—', l.uf || '—', l.notas, l.valor]),
+        observacoes: [
+            'Contraparte da operação: na nota própria de entrada (tpNF=0, ex.: compra de produtor rural) é o remetente do bloco destinatário.',
+            ...obsTruncado(truncado),
+        ],
+        fileName: `por-${rotulo}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex items-center gap-2 flex-wrap">
+                {(['entrada', 'saida'] as const).map(d => (
+                    <button key={d} onClick={() => setDirecao(d)}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg ${direcao === d ? 'bg-blue-700 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                        {d === 'entrada' ? '🚚 Fornecedores' : '🤝 Clientes'}
+                    </button>
+                ))}
+                <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
+                {linhas.length > LIMITE_TELA && (
+                    <span className="text-[11px] text-slate-500">mostrando {LIMITE_TELA} de {linhas.length} — o PDF traz todos</span>
+                )}
+            </div>
+            {!linhas.length && <p className="text-xs text-slate-500">Nenhum documento nessa direção no recorte.</p>}
+            {linhas.length > 0 && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                        <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                                <th className="text-left py-1">{rotulo === 'fornecedor' ? 'Fornecedor' : 'Cliente'}</th>
+                                <th className="text-left">CNPJ/CPF</th><th className="text-left">Município/UF</th>
+                                <th className="text-right">Notas</th><th className="text-right">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {linhas.slice(0, LIMITE_TELA).map((l, i) => (
+                                <tr key={i} className="border-b border-slate-100 dark:border-slate-700/50">
+                                    <td className="py-1 font-semibold max-w-[280px] truncate" title={l.nome}>{l.nome}</td>
+                                    <td className="font-mono">{l.doc ? (fmtCnpj(l.doc) || l.doc) : '—'}</td>
+                                    <td>{[l.municipio, l.uf].filter(Boolean).join('/') || '—'}</td>
+                                    <td className="text-right font-mono">{l.notas}</td>
+                                    <td className="text-right font-mono">{fmtBRL(l.valor)}</td>
                                 </tr>
                             ))}
                         </tbody>

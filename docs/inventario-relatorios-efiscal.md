@@ -88,11 +88,12 @@ cobre na aba Retenções.
 - **CFI já cobre**: livros de entrada/saída p/ conferência, retenções (3
   demonstrativos), responsável/carteira e produtor rural (com FUNRURAL e
   1400, que o SAGE não calcula).
-- **Vale construir** (ordem sugerida): 1) **NF Saídas Canceladas/Faltantes**
-  (completude de numeração por série — encaixa na Cobertura de Saída);
-  2) **Resumo por fornecedor/cliente** (ranking por participante);
-  3) **Resumo por alíquota** (conferência de GIA); 4) Lançamento por
-  produto/NCM; 5) listagem Clientes e Fornecedores.
+- **Construídos em 01/08** (Paulo confirmou: extinto/desuso fica fora):
+  1) ✅ **NF Saídas Canceladas/Faltantes**; 2) ✅ **Resumo por
+  fornecedor/cliente** (a aba 👥 Por participante também cobre a listagem
+  "Clientes e Fornecedores"); 3) ✅ **Resumo por alíquota**;
+  4) ✅ **Lançamento por produto** (NCM+descrição). Todos no card
+  Relatórios, grupo Movimento, PDF com identidade SP.
 - **Perguntar ao Paulo**: Simples Paulista – DIFAL (a equipe usa?);
   Método Permanente CAT 17/99 (algum cliente usa?).
 - **Não vale**: DIPJ (extinta), fila de empresas, cadastros estáticos,

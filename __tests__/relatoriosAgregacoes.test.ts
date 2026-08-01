@@ -5,6 +5,8 @@
  */
 import {
     resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, resumoPorUf,
+    nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante,
+    resumoPorAliquota, resumoPorProduto,
 } from '../services/relatoriosAgregacoes';
 
 const nfe = (over: any = {}) => ({
@@ -94,6 +96,103 @@ describe('serviços e retenções', () => {
         const antigo = nfse({ id: 'old', valores: { baseCalculo: 900, iss: 45, pis: 6, cofins: 27, liquido: 867 } });
         const l = linhasServicos([antigo] as any, 'entrada');
         expect(l[0].retencoesFederaisGravadas).toBe(false);
+    });
+});
+
+describe('nfCanceladasFaltantes', () => {
+    const propria = (numero: string, over: any = {}) => nfe({
+        id: `n${numero}`, numero, serie: '001', modelo: '55', direcao: 'saida',
+        emitente: { cnpjCpf: '22222222000122', nome: 'NOS', uf: 'SP' },
+        destinatario: { cnpjCpf: '1', nome: 'CLIENTE', uf: 'SP' },
+        ...over,
+    });
+
+    it('acha buracos e canceladas por série; cancelada NÃO é faltante', () => {
+        const r = nfCanceladasFaltantes([
+            propria('100'), propria('101', { status: 'cancelado' }), propria('104'),
+        ] as any, '22.222.222/0001-22');
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({
+            modelo: '55', serie: '1', primeiro: 100, ultimo: 104,
+            autorizadas: 2, canceladas: [101], faltantes: [102, 103], faltantesTotal: 2,
+        });
+    });
+
+    it('nota própria de entrada (tpNF=0, direção já normalizada) consome número do talão', () => {
+        const r = nfCanceladasFaltantes([
+            propria('200'),
+            propria('201', { direcao: 'entrada', tpNF: '0', destinatario: { cnpjCpf: '3', nome: 'PRODUTOR', uf: 'SP' } }),
+            propria('202'),
+        ] as any, '22222222000122');
+        expect(r[0].faltantesTotal).toBe(0);
+    });
+
+    it('nota de FORNECEDOR não entra na conta da numeração', () => {
+        const r = nfCanceladasFaltantes([propria('300'), nfe({ numero: '999' })] as any, '22222222000122');
+        expect(r).toHaveLength(1);
+        expect(r[0].ultimo).toBe(300);
+    });
+
+    it('formatarFaixas compacta sequências', () => {
+        expect(formatarFaixas([3, 4, 5, 9, 11, 12])).toBe('3–5, 9, 11–12');
+        expect(formatarFaixas([7])).toBe('7');
+        expect(formatarFaixas([])).toBe('');
+    });
+});
+
+describe('resumoPorParticipante', () => {
+    it('ranqueia a contraparte por valor, juntando NFe e NFSe', () => {
+        const r = resumoPorParticipante([
+            nfe(), nfe({ id: 'b', valorTotal: 400, totais: { vNF: 400 } }), nfse(),
+        ] as any, 'entrada');
+        expect(r).toHaveLength(2);
+        expect(r[0]).toMatchObject({ nome: 'PRESTADOR X', notas: 1, valor: 2000 });
+        expect(r[1]).toMatchObject({ doc: '11111111000111', notas: 2, valor: 1400 });
+    });
+
+    it('nota própria de entrada aponta o DESTINATÁRIO (produtor) como contraparte', () => {
+        const r = resumoPorParticipante([nfe({
+            tpNF: '0',
+            emitente: { cnpjCpf: '22222222000122', nome: 'NOS', uf: 'SP' },
+            destinatario: { cnpjCpf: '52998224725', nome: 'PRODUTOR PF', uf: 'MG' },
+        })] as any, 'entrada');
+        expect(r[0]).toMatchObject({ nome: 'PRODUTOR PF', uf: 'MG' });
+    });
+});
+
+describe('resumoPorAliquota', () => {
+    it('agrupa tributadas por alíquota e separa isentas/outras (régua do SAGE)', () => {
+        const r = resumoPorAliquota([nfe({
+            itens: [
+                { cfop: '1102', vProd: 500, vBC: 500, vICMS: 90, aliqIcms: 18, cst: '00' },
+                { cfop: '1102', vProd: 300, vBC: 300, vICMS: 54, aliqIcms: 18, cst: '00' },
+                { cfop: '1102', vProd: 200, vICMS: 0, cst: '41' },
+                { cfop: '1403', vProd: 100, vICMS: 0, cst: '60' },
+            ],
+        })] as any);
+        const t18 = r.find(l => l.aliquota === 18)!;
+        expect(t18).toMatchObject({ itens: 2, base: 800, icms: 144 });
+        expect(r.find(l => l.rotulo.startsWith('Isentas'))!.valor).toBe(200);
+        expect(r.find(l => l.rotulo.startsWith('Outras'))!.valor).toBe(100);
+    });
+
+    it('sem pICMS gravado, deriva a alíquota de vICMS/vBC', () => {
+        const r = resumoPorAliquota([nfe({
+            itens: [{ cfop: '1102', vProd: 1000, vBC: 1000, vICMS: 120, cst: '00' }],
+        })] as any);
+        expect(r[0].aliquota).toBe(12);
+    });
+});
+
+describe('resumoPorProduto', () => {
+    it('agrega por NCM+descrição com qtd, notas e CFOPs', () => {
+        const r = resumoPorProduto([
+            nfe({ itens: [{ cfop: '1102', ncm: '08039000', xProd: 'Banana', vProd: 600, qCom: 10, uCom: 'KG', vICMS: 0, cst: '41' }] }),
+            nfe({ id: 'b', itens: [{ cfop: '1403', ncm: '08039000', xProd: 'banana ', vProd: 400, qCom: 5, uCom: 'kg', vICMS: 0, cst: '60' }] }),
+            nfe({ id: 'c', itens: [{ cfop: '1102', ncm: '10063021', xProd: 'Arroz', vProd: 100, qCom: 2, uCom: 'SC', vICMS: 0, cst: '41' }] }),
+        ] as any, 'entrada');
+        expect(r).toHaveLength(2);
+        expect(r[0]).toMatchObject({ produto: 'BANANA', ncm: '08039000', qtd: 15, notas: 2, unidade: 'KG', valor: 1000, cfops: '1102 1403' });
     });
 });
 

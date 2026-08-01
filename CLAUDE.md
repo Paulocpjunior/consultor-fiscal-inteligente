@@ -207,7 +207,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
       buscado 1× por empresa/competência servindo todas as abas) + Ficha
       Financeira do Lucro em PDF. `valores` da NFSe passou a gravar
       ir/inss/csll/issRetido/valorIssRetido (docs antigos não têm — o
-      relatório de Retenções SINALIZA "ausente ≠ zero retido").
+      relatório de Retenções SINALIZA "ausente ≠ zero retido"). **v3 01/08**:
+      os 4 do inventário do E-Fiscal (Paulo confirmou: extinto/desuso fica
+      FORA) — 🚫 NF Canceladas/Faltantes (numeração POR EMITENTE, não por
+      direção: nota própria de entrada tpNF=0 consome número do talão;
+      buraco ≠ nota perdida — pode ser inutilização na SEFAZ ou captura
+      incompleta, ressalvas na tela e no PDF), ➗ Por alíquota (mesma régua
+      CST do SAGE; deriva de vICMS/vBC quando pICMS não foi gravado), 📦 Por
+      produto (NCM+descrição; qtd só com unidade única) e 👥 Por participante
+      (fornecedores|clientes, cobre também a listagem "Clientes e
+      fornecedores" do SAGE). Lista de tela cortada em 50 SEMPRE diz
+      "mostrando X de N — o PDF traz todos".
    b) **Varredura do E-Fiscal SAGE** — 1ª leva ANALISADA 01/08 (2 Gravadores
       de Passos do Paulo): inventário completo do menu Relatórios em
       `docs/inventario-relatorios-efiscal.md`. Achados: CFI já cobre livros/
