@@ -133,6 +133,13 @@ interface ExportarParams {
      * equipe não surtia efeito nenhum no arquivo.
      */
     cfopCtx?: CfopCtx;
+    /**
+     * E222 campo 56 ("DADOS PARA REDF NF PAULISTA"): alguns E-Fiscal exigem
+     * 1-4 (caso JOTASUL 01/08 — "deve ser informado 1, 2, 3 ou 4"); outros
+     * aceitam em branco. O valor certo é o mesmo que aparece num lançamento
+     * MANUAL da própria empresa no E-Fiscal. Vazio (padrão) = não informar.
+     */
+    redfNfPaulista?: string;
     /** Numero da empresa no E-Fiscal (campo NÚMERO DA EMPRESA do E001). */
     numeroEmpresaEfiscal: number;
     /** UF da empresa (para emitter de saidas). */
@@ -375,6 +382,66 @@ function buildE020(
     });
 }
 
+/**
+ * Aloca o valor contábil de um conjunto de itens nas TRÊS colunas do livro
+ * fiscal — Base tributada × Isentos × Outras — pela tributação REAL de cada
+ * item (CST/CSOSN do XML), fechando EXATAMENTE no valor contábil alvo.
+ *
+ * Antes, TUDO ia como Base (vProd) com Isentos/Outras zerados. O E-Fiscal
+ * valida `Valor Contábil = Base + Isentos + Outras` e reclamava nota a nota:
+ * "O valor contábil desta nota não confere com os lançamentos de ICMS" (caso
+ * JOTASUL 01/08 — contábil 1.207,66 × base 1.097,52, diferença 110,14 = a
+ * parcela de IPI/despesas que não estava em coluna nenhuma). E a compra
+ * ISENTA (produtor rural, art. 36) ia como base tributada com alíquota
+ * inventada — no SAGE ela é lançada na coluna Isentos.
+ *
+ * Régua por CST (colunas do livro de entradas/saídas):
+ *   00/10/20/70 (com destaque)  → BASE = vBC do XML; ICMS = vICMS
+ *   40/41/50 (isenta/não trib.) → ISENTOS = valor do item
+ *   demais (51/60/90, CSOSN…)   → OUTRAS = valor do item
+ * O que sobrar do contábil (IPI, frete, seguro, despesas, ST) vai em OUTRAS —
+ * é a regra do livro. Centavo de ajuste fecha na maior coluna.
+ */
+export function alocarTributacaoIcms(
+    itens: DocumentoFiscalItem[],
+    contabilAlvo: number,
+): { base: number; icms: number; aliquota: number; isentos: number; outras: number; ipi: number } {
+    const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    let base = 0, icms = 0, isentos = 0, outras = 0, ipi = 0;
+    for (const it of itens) {
+        const valorItem = r2((it.vProd || 0) - (it.vDesc || 0));
+        const cst = String(it.cst || '').replace(/\D/g, '');
+        ipi += it.vIPI || 0;
+        if ((it.vICMS || 0) > 0) {
+            base += (it.vBC || 0) > 0 ? (it.vBC as number) : valorItem;
+            icms += it.vICMS || 0;
+            // Base reduzida (CST 20/70): a parte fora da base é OUTRAS.
+            const foraDaBase = valorItem - ((it.vBC || 0) > 0 ? (it.vBC as number) : valorItem);
+            if (foraDaBase > 0.005) outras += foraDaBase;
+        } else if (['40', '41', '50'].includes(cst)) {
+            isentos += valorItem;
+        } else {
+            // Sem destaque e sem CST de isenção: ST (60), diferimento (51),
+            // outras (90) e TODO CSOSN do Simples → coluna Outras.
+            outras += valorItem;
+        }
+    }
+    base = r2(base); icms = r2(icms); isentos = r2(isentos); outras = r2(outras); ipi = r2(ipi);
+    // Fecha no contábil: IPI/frete/seguro/despesas/ST entram em OUTRAS.
+    const resto = r2(contabilAlvo - (base + isentos + outras));
+    if (resto > 0) outras = r2(outras + resto);
+    else if (resto < 0) {
+        // Contábil menor que a soma (desconto sobre o total etc.): abate de
+        // Outras, depois Isentos — nunca deixa coluna negativa.
+        let abate = -resto;
+        const deOutras = Math.min(outras, abate); outras = r2(outras - deOutras); abate = r2(abate - deOutras);
+        const deIsentos = Math.min(isentos, abate); isentos = r2(isentos - deIsentos); abate = r2(abate - deIsentos);
+        if (abate > 0) base = r2(Math.max(0, base - abate));
+    }
+    const aliquota = base > 0 && icms > 0 ? (icms / base) * 100 : 0;
+    return { base, icms, aliquota, isentos, outras, ipi };
+}
+
 function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>) {
     // Guard: mesmo motivo do buildE010.
     if (d.tipo === 'NFSe') {
@@ -479,14 +546,26 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
         porCfop.get(cfop)!.push(it);
     }
 
+    // Contábil da NOTA rateado por CFOP na proporção do valor dos itens; a
+    // última linha fecha a diferença de centavos. O E-Fiscal valida
+    // `Valor Contábil (E200) = Σ(Base + Isentos + Outras) das E201`.
+    const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const contabilNota = d.totais?.vNF || 0;
+    const valorGrupo = (itens: DocumentoFiscalItem[]) =>
+        itens.reduce((a, i) => a + (i.vProd || 0) - (i.vDesc || 0), 0);
+    const totalItens = r2(Array.from(porCfop.values()).reduce((a, g) => a + valorGrupo(g), 0));
+    const grupos = Array.from(porCfop.entries());
+    let contabilDistribuido = 0;
+
     let seq = 0;
-    for (const [cfop, itens] of porCfop.entries()) {
+    for (const [cfop, itens] of grupos) {
         seq++;
-        const sumProd = itens.reduce((a, i) => a + (i.vProd || 0), 0);
-        const sumICMS = itens.reduce((a, i) => a + (i.vICMS || 0), 0);
-        const sumIPI = itens.reduce((a, i) => a + (i.vIPI || 0), 0);
-        // Aliquota efetiva: ICMS / base. Se sem base, deixa zero.
-        const aliquota = sumProd > 0 && sumICMS > 0 ? (sumICMS / sumProd) * 100 : 0;
+        const ultimo = seq === grupos.length;
+        const contabilLinha = ultimo
+            ? r2(contabilNota - contabilDistribuido)
+            : (totalItens > 0 ? r2(contabilNota * (valorGrupo(itens) / totalItens)) : 0);
+        contabilDistribuido = r2(contabilDistribuido + contabilLinha);
+        const a = alocarTributacaoIcms(itens, contabilLinha);
 
         linhas.push(buildRecord(L('E201'), {
             'ENTRADAS OU SAÍDAS': c.es,
@@ -497,17 +576,17 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             'CÓDIGO DO CLIENTE/FORNECEDOR': c.codigoPart,
             'CFOP': parseInt(cfop, 10) || 0,
             'TIPO DE PAGAMENTO': 0,
-            'BC ICMS': sumProd,
+            'BC ICMS': a.base,
             'CÓDIGO TURBO': 0,
             'REDUÇÃO BASE CÁLC. ICMS': 0,
-            'ALÍQUOTA DO ICMS': aliquota,
-            'VALOR DO ICMS': sumICMS,
-            'ISENTOS DE ICMS': 0,
-            'OUTRAS DE ICMS': 0,
+            'ALÍQUOTA DO ICMS': a.aliquota,
+            'VALOR DO ICMS': a.icms,
+            'ISENTOS DE ICMS': a.isentos,
+            'OUTRAS DE ICMS': a.outras,
             'ICMS SUBST. TRIB.': 0,
             'BASE SUBST. TRIB.': 0,
             'BC IPI': 0,
-            'VALOR DO IPI': sumIPI,
+            'VALOR DO IPI': a.ipi,
             'ISENTOS DE IPI': 0,
             'OUTRAS DE IPI': 0,
             'CONTRIBUINTE DO ICMS': 'S',
@@ -547,10 +626,21 @@ function buildE221(d: DocumentoFiscal, codigos?: Record<string, string>): string
     });
 }
 
-function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Record<string, string>): string[] {
+function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Record<string, string>, redf?: string): string[] {
     const c = commonNF(d, codigos);
     return (d.itens || []).map((it, idx) => {
-        const aliquota = it.vProd > 0 && it.vICMS > 0 ? (it.vICMS / it.vProd) * 100 : 0;
+        // Tributação REAL do item: base = vBC do XML quando há destaque
+        // (cobre base reduzida), isenta (CST 40/41/50) vai em Isentos,
+        // demais sem destaque em Outras — espelho do alocarTributacaoIcms.
+        const valorItem = (it.vProd || 0) - (it.vDesc || 0);
+        const temDestaque = (it.vICMS || 0) > 0;
+        const baseItem = temDestaque ? ((it.vBC || 0) > 0 ? (it.vBC as number) : valorItem) : 0;
+        const cstNum = String(it.cst || '').replace(/\D/g, '');
+        const isentoItem = !temDestaque && ['40', '41', '50'].includes(cstNum) ? valorItem : 0;
+        const outrasItem = !temDestaque && !isentoItem ? valorItem : 0;
+        const aliquota = it.aliqIcms && it.aliqIcms > 0
+            ? it.aliqIcms
+            : (baseItem > 0 && temDestaque ? ((it.vICMS || 0) / baseItem) * 100 : 0);
         return buildRecord(L('E222'), {
             'ENTRADAS OU SAÍDAS': c.es,
             'ESPÉCIE N.F.': c.especie,
@@ -565,14 +655,14 @@ function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             'QUANTIDADE': it.qCom || 0,
             'VLR.MERCADORIA/SERVIÇO': it.vProd || 0,
             'VALOR DO DESCONTO': it.vDesc || 0,
-            'BASE DE CÁLCULO DO ICMS': it.vProd || 0,
-            'BASE SUBST. TRIB.': 0,
+            'BASE DE CÁLCULO DO ICMS': baseItem,
+            'BASE SUBST. TRIB.': it.vBCST || 0,
             'VALOR DO IPI': it.vIPI || 0,
             'VALOR UNITÁRIO': it.vUnCom || 0,
             'BC DO IPI': 0,
             'VALOR DO ICMS': it.vICMS || 0,
-            'ISENTOS DE ICMS': 0,
-            'OUTROS DE ICMS': 0,
+            'ISENTOS DE ICMS': isentoItem,
+            'OUTROS DE ICMS': outrasItem,
             'ICMS SUBST. TRIB.': 0,
             'MOVIMENTAÇÃO FÍSICA DA MERCADORIA': 'S',
             'ISENTOS DE IPI': 0,
@@ -585,6 +675,9 @@ function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             'SEGURO NO TOTAL DA NF': 'N',
             'DESPESAS ACESSÓRIAS NO TOTAL DA NF': 'N',
             'DESCONTO INCONDICIONAL': it.vDesc && it.vDesc > 0 ? 'S' : 'N',
+            // Alguns E-Fiscal exigem 1-4 aqui (config da empresa lá); em
+            // branco = não informar, que é o aceito nos demais.
+            'DADOS PARA REDF NF PAULISTA': redf && /^[1-4]$/.test(redf.trim()) ? parseInt(redf, 10) : '',
             'CONTROLE DO SISTEMA': 0,
         });
     });
@@ -631,7 +724,7 @@ export interface ExportarResult {
 }
 
 export function exportarParaIobSage(params: ExportarParams): ExportarResult {
-    const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes } = params;
+    const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes, redfNfPaulista = '' } = params;
     if (!documentos.length) {
         throw new Error('Nenhum documento para exportar.');
     }
@@ -688,7 +781,7 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
 
             if ((d.itens || []).length > 0) {
                 bloco.push(buildE221(d, codigosParticipantes));
-                const e222s = buildE222sFromDoc(d, cfopCtx, codigosParticipantes);
+                const e222s = buildE222sFromDoc(d, cfopCtx, codigosParticipantes, redfNfPaulista);
                 bloco.push(...e222s);
                 count222 += e222s.length;
             }
