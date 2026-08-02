@@ -2843,8 +2843,13 @@ app.use(express.static(join(__dirname, 'dist'), {
     index: 'index.html',
     maxAge: '1y',
     setHeaders: (res, filePath) => {
-        // index.html e version.json NUNCA cacheam — UpdateBanner depende disso
-        if (filePath.endsWith('index.html') || filePath.endsWith('version.json')) {
+        // TODO .html e version.json NUNCA cacheiam. A regra antiga liberava
+        // no-store só pro index.html — as páginas internas (novidades, guias
+        // 📗) caíam no cache de 1 ano "immutable" e o navegador da equipe
+        // segurava a versão VELHA depois de cada atualização (caso do Paulo,
+        // 02/08: seção corrigida no ar e a antiga na tela). Sem hash no nome,
+        // HTML não pode ser immutable.
+        if (filePath.endsWith('.html') || filePath.endsWith('version.json')) {
             res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
             res.setHeader('Pragma', 'no-cache');
             res.setHeader('Expires', '0');
