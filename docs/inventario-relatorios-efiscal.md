@@ -99,6 +99,32 @@ cobre na aba Retenções.
 - **Não vale**: DIPJ (extinta), fila de empresas, cadastros estáticos,
   rastros da integração contábil própria do SAGE.
 
+## Menu REINF (capturado 02/08 — gravação `Recording_20260802_0613.mht`)
+
+Itens do menu suspenso REINF do E-Fiscal (Serviço de Comunicação REINF
+"Ativo — Ambiente Produção" no rodapé da janela):
+
+- **Configuração para Transmissão**
+- **Carga Inicial – Dados do Contribuinte** → evento R-1000
+- **Transmissão dos Processos Administrativos/Judiciais** → R-1070
+- **Transmissão Entidades Ligadas**
+- **Transmissão de Eventos Periódicos** → R-2010/R-2020/R-2099 (retenções
+  de serviços e fechamento)
+- **Comercialização – Produtor Rural PJ/Agroindústria** → R-2050
+- **Informações Complementares ▸** (submenu — NÃO aberto na gravação)
+- **Relatórios ▸** (submenu — NÃO aberto na gravação)
+- Exportação XML (IOB Auditor) · Analyzer
+
+Decisão do Paulo (01/08): o achado REINF alimenta o módulo EFD-Reinf do
+**Consultor Contábil** (app separado), não o CFI. Ponto de contato com o
+CFI: a compra de produtor rural PF com FUNRURAL por sub-rogação (nossa aba
+🌾) é declarada à Receita no evento **R-2055 (aquisição de produção
+rural)** — quando o módulo Reinf do Consultor Contábil for atualizado, o
+valor apurado pelo CFI é a fonte natural do R-2055.
+
+Falta abrir: os dois submenus (Informações Complementares e Relatórios) —
+gravar de novo ABRINDO cada um.
+
 ## Pendências de varredura
 
 1. **Topo da árvore de Relatórios** não capturado (limite de 25 prints do
@@ -106,8 +132,8 @@ cobre na aba Retenções.
    devagar até "Demonstrativo dos Impostos Retidos", parando ali. Em
    Configurações do Gravador dá pra subir "Número de capturas de tela
    recentes para armazenar" (padrão 25).
-2. **REINF**: regravar ABRINDO cada tela do módulo (menu suspenso aberto
-   não sai no print). O achado vai pro módulo EFD-Reinf do Consultor
-   Contábil (decisão do Paulo, 01/08).
+2. ~~REINF: regravar abrindo o menu~~ **FEITO 02/08** (seção acima) —
+   restam os submenus "Informações Complementares ▸" e "Relatórios ▸" do
+   REINF, que não foram abertos.
 3. Demais menus do E-Fiscal (Movimentos, Imposto, Impressos, Diversos,
    Módulos Estaduais, Utilitários) — mesmas gravações, uma por menu.
