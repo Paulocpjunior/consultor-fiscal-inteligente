@@ -385,6 +385,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Contexto vivo (jul/2026)
 
+- **GIA caiu em DESUSO** (Paulo, 02/08): não listar como rotina nem gastar
+  feature com ela. **SPED Fiscal/Contribuições JÁ É módulo do CFI** (card
+  SPED Fiscal: gera mensal/trimestral + conferências; transmissão é no PVA
+  da Receita) — o E-Fiscal só fica com a escrituração dos clientes que
+  ainda rodam lá (Exportar SAGE) e o REINF. A página /novidades-cfi.html
+  reflete essa divisão — manter em dia quando módulos migrarem.
+
 - Migração SIEG → CFI em andamento. Saída mod 55 = cofre de e-mail
   (`xml@spassessoriacontabil.com.br`); SEFAZ não entrega saída ao emissor
   (Rejeição 641). Checklist de migração do cofre lista os "falta migrar".

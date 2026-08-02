@@ -23,8 +23,12 @@ arquivo, SPED/EFD, GIA e REINF.
    (gerar → importar → 📄 Abrir log → corrigir → regerar).
 5. **Miudezas**: CEP autocompleta, CNAE/data de abertura editáveis,
    download de XML, e-mail de DAS com layout do escritório.
-6. **O que AINDA é no E-Fiscal**: importação, SPED/EFD, GIA, REINF.
-   Relatórios NÃO — e falta de relatório vira pedido pro Paulo.
+6. **Onde cada coisa acontece** (revisado 02/08 com o Paulo): "já é no
+   CFI" = relatórios + SPED Fiscal/Contribuições (o card gera E confere;
+   transmissão é no PVA da Receita, nunca foi do E-Fiscal); "continua no
+   E-Fiscal" = SÓ escrituração dos clientes que ainda rodam lá + REINF.
+   GIA saiu da página: obrigação em DESUSO (Paulo, 02/08) — não listar
+   como rotina. Falta de algo vira pedido pro Paulo.
 7. **Validações da semana**: JOTASUL reimport, EDUARDO GUERRA De→Para +
    DIPAM×SAGE, Canceladas/Faltantes×SAGE, responsável+contador.
 
