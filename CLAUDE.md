@@ -242,7 +242,11 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
       do Gravador de Passos): topo da árvore de Relatórios (só guarda os
       últimos 25 prints — subir o limite nas configurações) e REINF de novo
       ABRINDO cada tela (menu suspenso aberto não sai no print; a gravação
-      veio vazia). Achado REINF vai pro Consultor Contábil, não pro CFI.
+      veio vazia). **REINF capturado 02/08** (menu completo no inventário):
+      R-1000/R-1070/entidades ligadas/eventos periódicos/R-2050 + submenus
+      Informações Complementares e Relatórios AINDA fechados. Achado REINF
+      vai pro Consultor Contábil, não pro CFI — gancho: o FUNRURAL
+      sub-rogado do 🌾 é a fonte natural do R-2055 lá.
       Demais menus (Movimentos/Imposto/Impressos/Diversos/Estaduais/
       Utilitários) seguem pendentes de gravação.
 
