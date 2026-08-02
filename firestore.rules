@@ -459,6 +459,19 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // sped_ajustes_apuracao: ajustes do E111 (apuração ICMS) por
+    // empresa × competência. Lançar ajuste é trabalho da equipe
+    // (mesmo padrão do gia_st_guias); exclusão só admin.
+    // ───────────────────────────────────────────────────────────────
+
+    match /sped_ajustes_apuracao/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // gia_st_guias: GIA-ST (ICMS-ST) por CNPJ × UF favorecida × mês.
     // Colaborador cria/atualiza; exclusão só admin (mesmo padrão do
     // sped_arquivos — guia salva é registro de apuração).

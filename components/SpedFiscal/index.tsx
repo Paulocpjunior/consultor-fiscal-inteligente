@@ -22,6 +22,7 @@ const EditarViaExcel = lazy(() => import('./EditarViaExcel'));
 const CruzarObrigacoes = lazy(() => import('./CruzarObrigacoes'));
 const CruzarComCapturadas = lazy(() => import('./CruzarComCapturadas'));
 const ConciliarFaturamento = lazy(() => import('./ConciliarFaturamento'));
+const AjustesE111 = lazy(() => import('./AjustesE111'));
 
 interface Props {
     currentUser: User | null;
@@ -46,7 +47,7 @@ function getTrimestreFromCompetencia(comp: string): { inicio: string; fim: strin
     return { inicio: fmt(mesInicio), fim: fmt(mesFim) };
 }
 
-type SpedTab = 'gerar' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
+type SpedTab = 'gerar' | 'ajustes' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
 
 // MensagemBlock vive em ./MensagemBlock.tsx (reutilizado pelas abas).
 
@@ -349,6 +350,17 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             Gerar SPED Fiscal
                         </button>
                         <button
+                            onClick={() => setSpedTab('ajustes')}
+                            className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
+                            style={{
+                                background: spedTab === 'ajustes' ? 'var(--accent)' : 'var(--bg-card)',
+                                color: spedTab === 'ajustes' ? '#fff' : 'var(--text-muted)',
+                                border: `1px solid ${spedTab === 'ajustes' ? 'var(--accent)' : 'var(--border-default)'}`,
+                            }}
+                        >
+                            Ajustes E111
+                        </button>
+                        <button
                             onClick={() => setSpedTab('contribuicoes')}
                             className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
                             style={{
@@ -425,6 +437,12 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </span>
                 </div>
             </div>
+
+            {spedTab === 'ajustes' && (
+                <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
+                    <AjustesE111 currentUser={currentUser} empresas={empresas} onShowToast={onShowToast} />
+                </Suspense>
+            )}
 
             {spedTab === 'analisar' && (
                 <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
