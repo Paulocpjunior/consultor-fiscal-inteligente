@@ -22,6 +22,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { classificarAjustes, aplicarAjustesApuracao, montarLinhasE111 } from './sped-ajustes-apuracao.js';
 
 const ZERO = '0,00';
 
@@ -113,50 +114,56 @@ export function buildBlocoE(dados) {
         fmt.formatCompetenciaFim(dados.competenciaFim),
     ]));
 
-    let vl_tot_debitos = 0;
-    let vl_tot_creditos = 0;
-    let vl_sld_credor_ant = 0;
-    let vl_sld_apurado = 0;
-    let vl_icms_recolher = 0;
-    let vl_sld_credor_transportar = 0;
+    // Ajustes da apuração (E111): lançados na aba do card SPED Fiscal,
+    // classificados pelo TIPO embutido no código (4º caractere) e aplicados
+    // na fórmula do E110. Só pra Lucro — Simples não apura ICMS aqui.
+    const uf = (dados?.empresa?.dadosFiscais?.uf || '').toUpperCase();
+    const cls = classificarAjustes(regime === 'lucro' ? dados.ajustesApuracao : [], uf);
 
+    let ap = {
+        vlTotDebitos: 0, vlTotAjDebitos: 0, vlEstornosCred: 0,
+        vlTotCreditos: 0, vlTotAjCreditos: 0, vlEstornosDeb: 0,
+        vlSldCredorAnt: 0, vlSldApurado: 0, vlTotDed: 0,
+        vlIcmsRecolher: 0, vlSldCredorTransportar: 0, vlDebEsp: 0,
+    };
     if (regime === 'lucro') {
-        vl_tot_debitos = somarIcmsPorDirecao(dados.notas, 'saida');
-        vl_tot_creditos = somarIcmsPorDirecao(dados.notas, 'entrada');
-        vl_sld_credor_ant = parseFloat(dados.saldoCredorIcmsAnterior || 0);
-
-        const saldo = vl_tot_debitos - vl_tot_creditos - vl_sld_credor_ant;
-        vl_sld_apurado = Math.abs(saldo);
-
-        if (saldo >= 0) {
-            vl_icms_recolher = saldo;
-            vl_sld_credor_transportar = 0;
-        } else {
-            vl_icms_recolher = 0;
-            vl_sld_credor_transportar = -saldo;
-        }
+        ap = aplicarAjustesApuracao({
+            vlTotDebitos: somarIcmsPorDirecao(dados.notas, 'saida'),
+            vlTotCreditos: somarIcmsPorDirecao(dados.notas, 'entrada'),
+            vlSldCredorAnt: parseFloat(dados.saldoCredorIcmsAnterior || 0),
+        }, cls);
     }
 
     linhas.push(fmt.buildLine([
         'E110',
-        fmt.formatValue(vl_tot_debitos, 2),
-        ZERO,
-        fmt.formatValue(vl_tot_debitos, 2),
-        ZERO,
-        fmt.formatValue(vl_tot_creditos, 2),
-        ZERO,
-        fmt.formatValue(vl_tot_creditos, 2),
-        ZERO,
-        fmt.formatValue(vl_sld_credor_ant, 2),
-        fmt.formatValue(vl_sld_apurado, 2),
-        ZERO,
-        fmt.formatValue(vl_icms_recolher, 2),
-        fmt.formatValue(vl_sld_credor_transportar, 2),
-        ZERO,
+        fmt.formatValue(ap.vlTotDebitos, 2),
+        ZERO,                                       // VL_AJ_DEBITOS (ajuste de documento — não gerado)
+        fmt.formatValue(ap.vlTotAjDebitos, 2),      // VL_TOT_AJ_DEBITOS (E111 tipo 0)
+        fmt.formatValue(ap.vlEstornosCred, 2),      // VL_ESTORNOS_CRED  (E111 tipo 1)
+        fmt.formatValue(ap.vlTotCreditos, 2),
+        ZERO,                                       // VL_AJ_CREDITOS (ajuste de documento — não gerado)
+        fmt.formatValue(ap.vlTotAjCreditos, 2),     // VL_TOT_AJ_CREDITOS (E111 tipo 2)
+        fmt.formatValue(ap.vlEstornosDeb, 2),       // VL_ESTORNOS_DEB   (E111 tipo 3)
+        fmt.formatValue(ap.vlSldCredorAnt, 2),
+        fmt.formatValue(ap.vlSldApurado, 2),        // saldo DEVEDOR (0,00 quando credor)
+        fmt.formatValue(ap.vlTotDed, 2),            // VL_TOT_DED        (E111 tipo 4)
+        fmt.formatValue(ap.vlIcmsRecolher, 2),
+        fmt.formatValue(ap.vlSldCredorTransportar, 2),
+        fmt.formatValue(ap.vlDebEsp, 2),            // DEB_ESP           (E111 tipo 5)
     ]));
 
-    if (regime === 'lucro' && vl_icms_recolher > 0) {
-        linhas.push(buildE116(dados, vl_icms_recolher));
+    // E111 — filhos do E110, um por ajuste lançado.
+    for (const campos of montarLinhasE111(cls.validos)) {
+        linhas.push(fmt.buildLine([
+            campos[0],
+            fmt.sanitizeString(campos[1], 8),
+            fmt.sanitizeString(campos[2], 255),
+            fmt.formatValue(campos[3], 2),
+        ]));
+    }
+
+    if (regime === 'lucro' && ap.vlIcmsRecolher > 0) {
+        linhas.push(buildE116(dados, ap.vlIcmsRecolher));
     }
 
     // ── IPI (E200/E210) — só para Lucro COM atividade de IPI (indústria/

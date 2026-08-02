@@ -385,6 +385,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Contexto vivo (jul/2026)
 
+- **MIGRAÇÃO E-Fiscal → CFI tem DE-PARA VIVO** (Paulo, 02/08: "sempre
+  atualizando um de-para"): `docs/de-para-efiscal-cfi.md` — toda entrega que
+  fechar/abrir lacuna atualiza o arquivo NO MESMO PR. **E111 FEITO 02/08**
+  (era o bloqueio técnico nº 1): núcleo puro `sped-ajustes-apuracao.js`
+  (tipo do ajuste sai do 4º caractere do COD_AJ_APUR; código de outra
+  UF/ST recusado com aviso; dedução só abate saldo DEVEDOR e excedente é
+  sinalizado), aba "Ajustes E111" no card SPED Fiscal, coleção
+  `sped_ajustes_apuracao` ({empresaId}_{competencia}). CORREÇÃO embutida:
+  E110 campo 11 é saldo DEVEDOR — gerador antigo punha o credor lá (abs);
+  agora credor sai 0,00 e vai só pro campo 14. Faltam (por prioridade do
+  F0): E220/ST, C800/SAT, bloco G/CIAP, bloco K.
 - **GIA caiu em DESUSO** (Paulo, 02/08): não listar como rotina nem gastar
   feature com ela. **SPED Fiscal/Contribuições JÁ É módulo do CFI** (card
   SPED Fiscal: gera mensal/trimestral + conferências; transmissão é no PVA

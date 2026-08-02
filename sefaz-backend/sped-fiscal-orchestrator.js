@@ -18,6 +18,7 @@ import {
 import { buildBlocoD } from './sped-fiscal-blocoD.js';
 import { buildBlocoE } from './sped-fiscal-blocoE.js';
 import { buildBlocoH } from './sped-fiscal-blocoH.js';
+import { classificarAjustes } from './sped-ajustes-apuracao.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
@@ -225,6 +226,31 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         }
     }
 
+    // ─── 7b. Ajustes da apuração (Registro E111) — lançados na aba do card ──
+    // Coleção sped_ajustes_apuracao, doc {empresaId}_{competencia}. No modo
+    // trimestral concatena os meses do período. Erro de código NÃO entra
+    // calado no arquivo: vira warning e a linha fica de fora (farol honesto).
+    let ajustesApuracao = [];
+    if (regime === 'lucro') {
+        try {
+            const comps = listarCompetenciasPeriodo(periodoInicio, periodoFim);
+            const snaps = await Promise.all(
+                comps.map((c) => db.collection('sped_ajustes_apuracao').doc(`${empresaId}_${c}`).get()),
+            );
+            for (const s of snaps) {
+                if (s.exists) ajustesApuracao.push(...(s.data().ajustes || []));
+            }
+            const clsPrev = classificarAjustes(ajustesApuracao, (empresa.dadosFiscais?.uf || '').toUpperCase());
+            for (const erro of clsPrev.erros) {
+                warnings.push(`Ajuste E111 IGNORADO: ${erro}`);
+            }
+        } catch (err) {
+            console.warn(`[sped-fiscal] ajustes E111 falharam: ${err.message}`);
+            warnings.push(`Ajustes de apuração (E111) não puderam ser lidos (${err.message}) — o arquivo sai SEM eles. Confira antes de transmitir.`);
+            ajustesApuracao = [];
+        }
+    }
+
     // ─── 8. DIPAM (Registro 1400) — compras de produtor rural paulista ──────
     // O Manual da DIPAM 2026 (pág. 29) manda informar o valor MENSAL por
     // município de origem no Registro 1400. Sem isso o município perde a fatia
@@ -261,6 +287,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         participantes,
         unidades,
         saldoCredorIcmsAnterior,
+        ajustesApuracao,
         dipam,
         warnings,
     };
@@ -343,6 +370,22 @@ function computarCompetenciaAnterior(competenciaYYYYMM) {
     mes -= 1;
     if (mes === 0) { mes = 12; ano -= 1; }
     return `${ano}-${String(mes).padStart(2, '0')}`;
+}
+
+/** Lista as competências YYYY-MM de inicio a fim (inclusive). */
+function listarCompetenciasPeriodo(inicio, fim) {
+    const out = [];
+    let atual = inicio;
+    for (let i = 0; i < 12 && atual && atual <= fim; i++) {
+        out.push(atual);
+        const m = atual.match(/^(\d{4})-(\d{2})$/);
+        if (!m) break;
+        let ano = parseInt(m[1], 10);
+        let mes = parseInt(m[2], 10) + 1;
+        if (mes > 12) { mes = 1; ano += 1; }
+        atual = `${ano}-${String(mes).padStart(2, '0')}`;
+    }
+    return out;
 }
 
 function getContadorPadrao() {
