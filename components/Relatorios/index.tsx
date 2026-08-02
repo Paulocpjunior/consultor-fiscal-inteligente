@@ -143,11 +143,20 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     return (
         <div className="space-y-4 animate-fade-in">
-            <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-5 rounded-xl text-white">
-                <h2 className="text-lg font-bold">📊 Relatórios</h2>
-                <p className="text-blue-100 text-sm">
-                    Os relatórios do departamento em PDF com a identidade da SP — mesmos números das telas de origem.
-                </p>
+            <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-5 rounded-xl text-white flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                    <h2 className="text-lg font-bold">📊 Relatórios</h2>
+                    <p className="text-blue-100 text-sm">
+                        Os relatórios do departamento em PDF com a identidade da SP — mesmos números das telas de origem.
+                    </p>
+                </div>
+                <a
+                    href="/novidades-cfi.html" target="_blank" rel="noopener"
+                    className="shrink-0 px-3 py-1.5 bg-white/15 hover:bg-white/25 rounded-lg text-xs font-bold"
+                    title="O que mudou no CFI e o que fazer — comunicado interno"
+                >
+                    📣 Novidades
+                </a>
             </div>
 
             <div className="bg-slate-100 dark:bg-slate-800/60 p-2 rounded-lg space-y-1.5">
