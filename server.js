@@ -73,6 +73,7 @@ import saeNfceRouter from './sefaz-backend/sefaz-sp-nfce-routes.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 import { podeAcessarCnpj, getCnpjsDaCarteira } from './sefaz-backend/carteira-auth.js';
 import { enviarEmail } from './sefaz-backend/graph-provider.js';
+import { montarEmailGuia, anexoLogo } from './sefaz-backend/email-layout.js';
 import { parseDestinatarios } from './sefaz-backend/email-destinatarios-helper.js';
 import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sanitize-error.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
@@ -1140,14 +1141,17 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
             contentBytes: pdfLimpo,
         }] : [];
         const assuntoFinal = assunto || `DAS Simples Nacional - ${empresaNome}`;
-        const corpoHtml = [
-            `<p>${textoParaHtml(mensagem)}</p>`,
-            '<hr>',
-            '<p style="font-size:12px;color:#64748b">',
-            `Enviado pelo Consultor Fiscal Inteligente em ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.`,
-            pdfLimpo ? ' PDF do DAS anexado.' : ' PDF nao estava disponivel no retorno SERPRO.',
-            '</p>',
-        ].join('');
+        // Casca com a identidade da SP (rito #293 — portada da Legalização):
+        // logo inline por cid:, faixa azul da marca, selo com competência/
+        // vencimento e aviso HONESTO quando o PDF não veio do SERPRO.
+        const corpoHtml = montarEmailGuia({
+            tipo: 'DAS Simples Nacional',
+            empresaNome,
+            competencia,
+            mensagem,
+            temPdf: Boolean(pdfLimpo),
+            vencimento: vencimento || null,
+        });
 
         const envio = await enviarEmail({
             remetente,
@@ -1155,7 +1159,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
             bcc: copiaGestor,
             assunto: assuntoFinal,
             corpoHtml,
-            anexos,
+            anexos: [...anexos, ...anexoLogo()],
         });
         if (!envio.ok) return res.status(502).json({ error: envio.error || 'Falha ao enviar e-mail' });
 

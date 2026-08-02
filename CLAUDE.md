@@ -184,9 +184,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Botão "✉️ Enviar teste pra mim" (rota `/alertas/teste`) manda SÓ pro
   e-mail do admin do token — dá pra validar layout com os envios PAUSADOS.
   `departamento`/`motivoRodape` são parâmetros: a casca serve lembrete de
-  QUALQUER departamento. PENDENTE (Paulo escolheu "deixar pronto por ora",
-  30/07): portar a casca pro CFI pros e-mails de guia do rito #293 — hoje
-  eles não têm template nenhum e os repos não compartilham código.
+  QUALQUER departamento. ~~PENDENTE: portar a casca pro CFI~~ **FEITO
+  02/08** (CFI, autorizado pelo Paulo): `sefaz-backend/email-layout.js`
+  (casca + `montarEmailGuia` + `anexoLogo`, logo 21KB em
+  sefaz-backend/assets/) aplicada na rota `/das/enviar-cliente`;
+  graph-provider do CFI ganhou isInline/contentId. Os repos NÃO compartilham
+  código: mudança de layout é NAS DUAS cascas. Farol honesto no e-mail: sem
+  PDF do SERPRO, o corpo AVISA que a guia não foi anexada. DARF/DARE seguem
+  mailto (sem HTML) — quando ganharem trilho Graph, usar montarEmailGuia.
 
 ## Fila de features acordadas (com requisitos)
 

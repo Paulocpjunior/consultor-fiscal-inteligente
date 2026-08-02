@@ -117,6 +117,10 @@ export async function enviarEmail({ remetente, para, cc = [], bcc = [], assunto,
                         name: a.name,
                         contentType: a.contentType || 'application/octet-stream',
                         contentBytes: a.contentBytes,
+                        // Anexo INLINE (logo do template): o corpo referencia
+                        // cid:{contentId}. Sem isInline o cliente de e-mail
+                        // lista a imagem como anexo comum.
+                        ...(a.contentId ? { isInline: true, contentId: a.contentId } : {}),
                     })),
             },
             saveToSentItems: true,
