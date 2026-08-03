@@ -219,7 +219,7 @@ router.post('/mit/encerrar', requireAuth, express.json(), async (req, res) => {
 // são chutados de tabela.
 router.post('/mit/preencher-encerrar', requireAuth, express.json(), async (req, res) => {
     try {
-        const { empresaId, empresaCnpj, anoPA, mesPA, tributosApp, transmitir } = req.body || {};
+        const { empresaId, empresaCnpj, anoPA, mesPA, tributosApp, transmitir, familiasSelecionadas } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
         if (!tributosApp || typeof tributosApp !== 'object') {
             return res.status(400).json({ error: 'tributosApp {IRPJ,CSLL,PIS,COFINS,IPI} é obrigatório' });
@@ -230,6 +230,7 @@ router.post('/mit/preencher-encerrar', requireAuth, express.json(), async (req, 
             empresaId, empresaCnpj,
             anoPA: Number(anoPA), mesPA: Number(mesPA),
             tributosApp,
+            familiasSelecionadas: Array.isArray(familiasSelecionadas) ? familiasSelecionadas : null,
             transmitir: transmitir === true,
             usuario: { uid: req.user.uid, email: req.user.email },
         });

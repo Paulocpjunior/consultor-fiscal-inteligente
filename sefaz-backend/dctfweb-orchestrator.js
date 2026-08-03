@@ -432,6 +432,13 @@ export async function consultarStatusEncerramentoMit({ empresaCnpj, protocolo, a
 // família com valor, falha com orientação.
 export async function preencherEncerrarMit({
     empresaId, empresaCnpj, anoPA, mesPA, tributosApp, transmitir = false, usuario = null,
+    // Seleção explícita de quais famílias vão nesta transmissão (pedido do
+    // colaborador, 03/08/2026: "ter uma opção para selecionar quais débitos com
+    // valores do app eu vou transmitir esse mês"). Caso clássico: Presumido em
+    // mês que não fecha trimestre — só PIS/COFINS vão. A lista só RESTRINGE o
+    // que já seria enviado (nunca inclui família a mais), então é segura mesmo
+    // vindo do cliente; o servidor remonta tudo na transmissão.
+    familiasSelecionadas = null,
 }) {
     const provider = getDctfwebProvider();
     if (typeof provider.consultarApuracaoMitPorId !== 'function') {
@@ -508,8 +515,33 @@ export async function preencherEncerrarMit({
                 + 'complemente manualmente no e-CAC para não arriscar duplicar débito.',
         };
     }
-    const familiasFaltantes = FAMILIAS
+    let familiasFaltantes = FAMILIAS
         .filter((f) => tributos[f] > 0 && !familiasDeclaradas.includes(f));
+
+    // Filtro da seleção do usuário — só restringe (intersecção). Se o que sobrou
+    // for vazio, para com o motivo em vez de transmitir uma apuração vazia.
+    const selecao = Array.isArray(familiasSelecionadas)
+        ? FAMILIAS.filter((f) => familiasSelecionadas.includes(f))
+        : null;
+    const familiasDesmarcadas = selecao
+        ? familiasFaltantes.filter((f) => !selecao.includes(f))
+        : [];
+    if (selecao) {
+        if (familiasFaltantes.length > 0 && selecao.length === 0) {
+            return {
+                ok: false, etapa: 'selecao',
+                motivo: 'Nenhum tributo selecionado para transmitir. Marque ao menos um débito na proposta.',
+            };
+        }
+        familiasFaltantes = familiasFaltantes.filter((f) => selecao.includes(f));
+        if (familiasFaltantes.length === 0) {
+            return {
+                ok: false, etapa: 'selecao',
+                motivo: 'Os tributos selecionados já estão lançados no MIT desta competência — nada a adicionar.',
+            };
+        }
+    }
+
     if (familiasFaltantes.length === 0) {
         return {
             ok: false, etapa: 'alvo',
@@ -618,6 +650,9 @@ export async function preencherEncerrarMit({
         mapeamento: montagem.mapeamento,
         totalProposto: montagem.totalProposto,
         jaDeclarados: familiasDeclaradas.map((f) => ({ familia: f, valor: normAlvo.tributos[f] })),
+        // Farol honesto: o que o usuário DESMARCOU fica visível na proposta e na
+        // auditoria — transmissão parcial nunca passa como se fosse completa.
+        familiasDesmarcadas: familiasDesmarcadas.map((f) => ({ familia: f, valor: tributos[f] })),
         modeloPeriodo,
         alvoIdApuracao: alvo?.idApuracao ?? null,
         // Resumo dos DadosIniciais que serão usados (conferência na UI —
@@ -679,6 +714,7 @@ export async function preencherEncerrarMit({
             tributosApp: tributos,
             mapeamento: montagem.mapeamento,
             jaDeclarados: proposta.jaDeclarados,
+            familiasDesmarcadas: proposta.familiasDesmarcadas,
             totalProposto: montagem.totalProposto,
             modeloPeriodo,
             camposRemovidos: r.camposRemovidos || null,

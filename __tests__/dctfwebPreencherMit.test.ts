@@ -146,4 +146,72 @@ describe('preencherEncerrarMit — fase de proposta', () => {
         expect(r.motivo).toMatch(/ENCERRADA/i);
         expect(r.motivo).toMatch(/retifique/i);
     });
+
+    // ── Seleção de quais débitos vão nesta transmissão ────────────────────
+    // Pedido do colaborador (03/08/2026): "ter uma opção para selecionar quais
+    // débitos com valores do app eu vou transmitir esse mês". Caso típico:
+    // Presumido em mês que não fecha trimestre — só PIS/COFINS vão.
+    it('familiasSelecionadas RESTRINGE a proposta e registra o que ficou de fora', async () => {
+        mockInvokeIntegraContador
+            .mockResolvedValueOnce({ dados: { Apuracoes: [{ periodoApuracao: 202605, idApuracao: 222 }] } })
+            .mockResolvedValueOnce({ dados: { Apuracoes: [] } })
+            .mockResolvedValueOnce({ dados: { Apuracoes: [{ periodoApuracao: 202605, idApuracao: 222 }] } })
+            .mockResolvedValueOnce(DETALHE_MODELO_MAIO);
+
+        const r = await preencherEncerrarMit({
+            empresaCnpj: '13344638000191',
+            anoPA: 2026, mesPA: 7,
+            tributosApp: { IRPJ: 1150.92, CSLL: 778.21, PIS: 274.56, COFINS: 1267.2 },
+            familiasSelecionadas: ['PIS', 'COFINS'],
+            transmitir: false,
+        });
+
+        expect(r.ok).toBe(true);
+        expect(r.proposta.mapeamento.map((m: any) => m.familia)).toEqual(['PIS', 'COFINS']);
+        expect(r.proposta.totalProposto).toBe(1541.76);
+        // Farol honesto: o desmarcado aparece na proposta (e na auditoria).
+        expect(r.proposta.familiasDesmarcadas).toEqual([
+            { familia: 'IRPJ', valor: 1150.92 },
+            { familia: 'CSLL', valor: 778.21 },
+        ]);
+    });
+
+    it('seleção vazia não transmite apuração vazia — para com o motivo', async () => {
+        mockInvokeIntegraContador
+            .mockResolvedValueOnce({ dados: { Apuracoes: [{ periodoApuracao: 202605, idApuracao: 222 }] } })
+            .mockResolvedValueOnce({ dados: { Apuracoes: [] } });
+
+        const r = await preencherEncerrarMit({
+            empresaCnpj: '13344638000191',
+            anoPA: 2026, mesPA: 7,
+            tributosApp: { IRPJ: 100, CSLL: 50, PIS: 10, COFINS: 40 },
+            familiasSelecionadas: [],
+            transmitir: false,
+        });
+
+        expect(r.ok).toBe(false);
+        expect(r.etapa).toBe('selecao');
+        expect(r.motivo).toMatch(/Marque ao menos um/i);
+    });
+
+    it('seleção NUNCA inclui família a mais do que o app apurou', async () => {
+        mockInvokeIntegraContador
+            .mockResolvedValueOnce({ dados: { Apuracoes: [{ periodoApuracao: 202605, idApuracao: 222 }] } })
+            .mockResolvedValueOnce({ dados: { Apuracoes: [] } })
+            .mockResolvedValueOnce({ dados: { Apuracoes: [{ periodoApuracao: 202605, idApuracao: 222 }] } })
+            .mockResolvedValueOnce(DETALHE_MODELO_MAIO);
+
+        const r = await preencherEncerrarMit({
+            empresaCnpj: '13344638000191',
+            anoPA: 2026, mesPA: 7,
+            // IRPJ/CSLL zerados no app (mês que não fecha trimestre): marcá-los
+            // no cliente não pode fazê-los aparecer no MIT.
+            tributosApp: { IRPJ: 0, CSLL: 0, PIS: 274.56, COFINS: 1267.2 },
+            familiasSelecionadas: ['IRPJ', 'CSLL', 'PIS', 'COFINS'],
+            transmitir: false,
+        });
+
+        expect(r.ok).toBe(true);
+        expect(r.proposta.mapeamento.map((m: any) => m.familia)).toEqual(['PIS', 'COFINS']);
+    });
 });
