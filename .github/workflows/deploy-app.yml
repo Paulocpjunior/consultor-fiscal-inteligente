@@ -54,9 +54,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Auditoria de dependências (bloqueia em critical/high)
-        # Trava o deploy se surgir CVE high/critical nas deps. Vulns transitivas
-        # conhecidas sem fix upstream são fixadas via "overrides" no package.json.
+      - name: Auditoria de dependências (bloqueia em high/critical de PRODUÇÃO)
+        # Trava o deploy se surgir advisory high/critical no que REALMENTE VAI NA
+        # IMAGEM (--omit=dev). Vulns transitivas sem fix upstream são fixadas via
+        # "overrides" no package.json — sempre em FAIXA (^x.y.z), nunca versão
+        # exata: pino exato cria teto e impede o `npm audit fix` de resolver
+        # sozinho quando o próprio pinado ganha advisory (3 deploys caíram assim
+        # — postcss 24/07, brace-expansion 25/07 e 03/08).
+        #
+        # Advisory em dep de DESENVOLVIMENTO não bloqueia: ferramenta de build não
+        # roda no Cloud Run, e segurar a entrega de imposto por causa dela custa
+        # mais do que resolve (Paulo, 03/08 — "estamos FULL SERVICE"). Ela vai pro
+        # resumo do job e quem cobra o conserto é o robô diário (audit-deps.yml),
+        # que abre PR já testado antes de virar bloqueio.
+        #
         # Escape hatch: `[skip-audit]` no ASSUNTO (1ª linha) do commit libera um
         # hotfix urgente. Checamos só o assunto (git log --pretty=%s), não o corpo
         # — assim a DESCRIÇÃO de um PR que apenas MENCIONE o marcador não aciona o
@@ -67,7 +78,33 @@ jobs:
             echo "→ [skip-audit] no assunto do commit — auditoria pulada (hotfix)."
             exit 0
           fi
-          npm audit --audit-level=high
+
+          if ! npm audit --omit=dev --audit-level=high; then
+            echo "::error::Advisory high/critical em dependência de PRODUÇÃO — vai dentro da imagem."
+            cat >&2 <<'ACAO'
+
+          COMO RESOLVER (nesta ordem):
+            1. npm audit fix          → resolve sozinho quando há versão corrigida
+            2. se um "overrides" do package.json estiver segurando a versão velha,
+               suba o PISO da faixa (ex.: "^5.0.8" -> "^5.0.9") e rode npm install
+            3. sem correção upstream: [skip-audit] no assunto do commit libera o
+               deploy e o risco fica registrado no PR — use só se a entrega não
+               puder esperar.
+          ACAO
+            exit 1
+          fi
+
+          # Árvore completa (inclui dev): informativo, nunca bloqueia.
+          if ! npm audit --audit-level=high > /tmp/audit-dev.txt 2>&1; then
+            echo "::warning::Advisory high/critical em dependência de DESENVOLVIMENTO — não bloqueia o deploy; o robô diário abre o PR de correção."
+            {
+              echo "### ⚠️ Auditoria — dependência de desenvolvimento"
+              echo "Não bloqueia o deploy (não vai na imagem). O robô \`audit-deps.yml\` abre PR de correção."
+              echo '```'
+              cat /tmp/audit-dev.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Typecheck + testes
         run: |
