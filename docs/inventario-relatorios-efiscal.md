@@ -111,8 +111,14 @@ Itens do menu suspenso REINF do E-Fiscal (Serviço de Comunicação REINF
 - **Transmissão de Eventos Periódicos** → R-2010/R-2020/R-2099 (retenções
   de serviços e fechamento)
 - **Comercialização – Produtor Rural PJ/Agroindústria** → R-2050
-- **Informações Complementares ▸** (submenu — AINDA não capturado; destacado
-  na gravação de 03/08 mas o flyout não expandiu a tempo do print)
+- **Informações Complementares ▸** (capturado 03/08, print direto): a série
+  **R-4000** — retenções na fonte que substituíram a DIRF: **R-4010**
+  (pagamentos a beneficiário PF, IRRF) · **R-4020** (beneficiário PJ —
+  IR/CSLL/PIS/COFINS retidos) · **R-4040** (beneficiários não
+  identificados) · **R-4080** (autorretenção — propaganda/comissões).
+  Ponto de contato com o CFI: o relatório de Retenções (NFS-e tomados) já
+  carrega IR/INSS/CSLL/PIS/COFINS por prestador — é a fonte natural do
+  R-4020 no módulo do Consultor Contábil
 - **Relatórios ▸** (capturado 03/08): **Recibos de Entrega** · **Relatório
   de Rendimentos Enviados – REINF** — os dois são pós-transmissão
   (comprovante e conferência do que foi enviado); no módulo do Consultor
@@ -136,9 +142,9 @@ gravar de novo ABRINDO cada um.
    devagar até "Demonstrativo dos Impostos Retidos", parando ali. Em
    Configurações do Gravador dá pra subir "Número de capturas de tela
    recentes para armazenar" (padrão 25).
-2. ~~REINF: regravar abrindo o menu~~ **FEITO 02/08**; ~~submenu
-   Relatórios~~ **FEITO 03/08** (Recibos de Entrega · Rendimentos
-   Enviados). Resta SÓ o submenu "Informações Complementares ▸" — pairar
-   nele e esperar o flyout abrir antes de mexer o mouse.
+2. ~~REINF~~ **CAPÍTULO COMPLETO 03/08**: menu principal (02/08) + submenu
+   Relatórios (Recibos de Entrega · Rendimentos Enviados) + submenu
+   Informações Complementares (série R-4000: R-4010/4020/4040/4080).
+   Mapa inteiro pronto pro módulo EFD-Reinf do Consultor Contábil.
 3. Demais menus do E-Fiscal (Movimentos, Imposto, Impressos, Diversos,
    Módulos Estaduais, Utilitários) — mesmas gravações, uma por menu.
