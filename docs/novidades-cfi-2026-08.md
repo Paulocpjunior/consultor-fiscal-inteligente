@@ -32,6 +32,8 @@ arquivo, SPED/EFD, GIA e REINF.
 5B. **SPED Fiscal — abas novas 03/08**: Ajustes E111 (código 5.1.1 →
    tipo na tela → entra no próximo arquivo) e 🚦 Migração (prontidão por
    empresa; régua da migração do E-Fiscal).
+5C. **🧭 DIFAL aquisição (03/08)**: varredura + apuração mensal
+   consolidada do Simples; ST separada (426-A individual).
 7. **Validações da semana**: JOTASUL reimport, EDUARDO GUERRA De→Para +
    DIPAM×SAGE, Canceladas/Faltantes×SAGE, MANTOAN MIT,
    responsável+contador, teste do e-mail de DAS.

@@ -30,6 +30,7 @@ const BacklogEntradaPanel = lazy(() => import('./BacklogEntradaPanel'));
 const ProvaCapturaPanel = lazy(() => import('./ProvaCapturaPanel'));
 const CofreChecklistPanel = lazy(() => import('./CofreChecklistPanel'));
 const DipamProdutorRuralPanel = lazy(() => import('./DipamProdutorRuralPanel'));
+const DifalPanel = lazy(() => import('./DifalPanel'));
 
 type TabId =
     | 'dashboard'
@@ -39,6 +40,7 @@ type TabId =
     | 'prova-captura'
     | 'documentos'
     | 'dipam'
+    | 'difal'
     | 'importacao'
     | 'empresas'
     | 'sharepoint'
@@ -77,6 +79,7 @@ const GRUPOS: Array<{ id: GrupoId; label: string; subs: Array<{ id: TabId; label
             // Compra de produtor rural: DIPAM 1.1 + FUNRURAL sub-rogação, lidos
             // das próprias notas capturadas (#378).
             { id: 'dipam', label: '🌾 DIPAM / Produtor rural' },
+            { id: 'difal', label: '🧭 DIFAL aquisição' },
         ],
     },
     {
@@ -272,6 +275,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 {tab === 'dipam' && (
                     <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando DIPAM…</p>}>
                         <DipamProdutorRuralPanel isAdmin={currentUser?.role === 'admin'} />
+                    </Suspense>
+                )}
+                {tab === 'difal' && (
+                    <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando DIFAL…</p>}>
+                        <DifalPanel />
                     </Suspense>
                 )}
                 {tab === 'importacao' && (
