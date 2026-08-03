@@ -20,7 +20,10 @@ async function authHeaders(_user: User | null): Promise<Record<string, string>> 
 
 export async function getResumoDas(user: User | null): Promise<DasResumo> {
     const res = await fetch(`${BASE}/resumo`, { headers: await authHeaders(user) });
-    if (!res.ok) throw new Error(`getResumoDas: ${res.status}`);
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ? `Resumo DAS: ${err.error}` : `getResumoDas: ${res.status}`);
+    }
     return res.json();
 }
 
@@ -34,7 +37,12 @@ export async function listarDas(
     if (filters.status) qs.set('status', filters.status);
 
     const res = await fetch(`${BASE}/listar?${qs}`, { headers: await authHeaders(user) });
-    if (!res.ok) throw new Error(`listarDas: ${res.status}`);
+    if (!res.ok) {
+        // O toast precisa da MENSAGEM do servidor, não só do número — '500'
+        // sozinho não diz a ação (lição 03/08: erro na Central de DAS sem pista).
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ? `Listagem DAS: ${err.error}` : `listarDas: ${res.status}`);
+    }
     return res.json();
 }
 
