@@ -24,6 +24,7 @@ const CruzarComCapturadas = lazy(() => import('./CruzarComCapturadas'));
 const ConciliarFaturamento = lazy(() => import('./ConciliarFaturamento'));
 const AjustesE111 = lazy(() => import('./AjustesE111'));
 const ProntidaoMigracao = lazy(() => import('./ProntidaoMigracao'));
+const CiapBlocoG = lazy(() => import('./CiapBlocoG'));
 
 interface Props {
     currentUser: User | null;
@@ -48,7 +49,7 @@ function getTrimestreFromCompetencia(comp: string): { inicio: string; fim: strin
     return { inicio: fmt(mesInicio), fim: fmt(mesFim) };
 }
 
-type SpedTab = 'gerar' | 'ajustes' | 'migracao' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
+type SpedTab = 'gerar' | 'ajustes' | 'ciap' | 'migracao' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
 
 // MensagemBlock vive em ./MensagemBlock.tsx (reutilizado pelas abas).
 
@@ -362,6 +363,17 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             Ajustes E111
                         </button>
                         <button
+                            onClick={() => setSpedTab('ciap')}
+                            className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
+                            style={{
+                                background: spedTab === 'ciap' ? 'var(--accent)' : 'var(--bg-card)',
+                                color: spedTab === 'ciap' ? '#fff' : 'var(--text-muted)',
+                                border: `1px solid ${spedTab === 'ciap' ? 'var(--accent)' : 'var(--border-default)'}`,
+                            }}
+                        >
+                            🏭 CIAP (Bloco G)
+                        </button>
+                        <button
                             onClick={() => setSpedTab('migracao')}
                             className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
                             style={{
@@ -453,6 +465,12 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {spedTab === 'migracao' && (
                 <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
                     <ProntidaoMigracao onShowToast={onShowToast} />
+                </Suspense>
+            )}
+
+            {spedTab === 'ciap' && (
+                <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
+                    <CiapBlocoG currentUser={currentUser} empresas={empresas} onShowToast={onShowToast} />
                 </Suspense>
             )}
 

@@ -18,6 +18,8 @@ import {
 import { buildBlocoD } from './sped-fiscal-blocoD.js';
 import { buildBlocoE } from './sped-fiscal-blocoE.js';
 import { buildBlocoH } from './sped-fiscal-blocoH.js';
+import { apurarCiap, classificarSaidasCiap, montarLinhasBlocoG } from './sped-bloco-g.js';
+import * as fmtSped from './sped-fiscal-format.js';
 import { classificarAjustes } from './sped-ajustes-apuracao.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
@@ -251,6 +253,38 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         }
     }
 
+    // ─── 7c. CIAP / Bloco G — crédito de ICMS do ativo permanente ───────────
+    // Coleção sped_ciap_bens, doc {empresaId}: os bens ficam no CADASTRO (não
+    // na competência) porque atravessam 48 meses — o que muda mês a mês é o
+    // número da parcela. Empresa sem bens cadastrados segue com o bloco VAZIO,
+    // que é o caso da maioria (só a EXPERTE tem CIAP hoje).
+    let ciap = null;
+    if (regime === 'lucro') {
+        try {
+            const snap = await db.collection('sped_ciap_bens').doc(String(empresaId)).get();
+            const bens = snap.exists ? (snap.data().bens || []) : [];
+            if (bens.length > 0) {
+                const cfg = snap.data() || {};
+                // As saídas saem das MESMAS notas do arquivo; se a equipe
+                // informar os valores à mão no cadastro, o informado vence
+                // (fecha com o controle próprio do cliente).
+                const derivadas = classificarSaidasCiap(notas);
+                ciap = apurarCiap({
+                    bens,
+                    saldoInicial: cfg.saldoInicial || 0,
+                    saidasTributadas: cfg.saidasTributadasManual ?? derivadas.tributadasEExportacao,
+                    saidasTotais: cfg.saidasTotaisManual ?? derivadas.total,
+                    outrosCreditos: cfg.outrosCreditos || 0,
+                });
+                for (const aviso of ciap.avisos) warnings.push(`CIAP (Bloco G): ${aviso}`);
+            }
+        } catch (err) {
+            console.warn(`[sped-fiscal] CIAP falhou: ${err.message}`);
+            warnings.push(`CIAP (Bloco G) não pôde ser lido (${err.message}) — o arquivo sai com o bloco VAZIO. Confira antes de transmitir.`);
+            ciap = null;
+        }
+    }
+
     // ─── 8. DIPAM (Registro 1400) — compras de produtor rural paulista ──────
     // O Manual da DIPAM 2026 (pág. 29) manda informar o valor MENSAL por
     // município de origem no Registro 1400. Sem isso o município perde a fatia
@@ -288,6 +322,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         unidades,
         saldoCredorIcmsAnterior,
         ajustesApuracao,
+        ciap,
         dipam,
         warnings,
     };
@@ -306,7 +341,14 @@ export async function montarBlocos({ dados }) {
     const linhasBlocoC = buildBlocoC(dados);
     const linhasBlocoD = buildBlocoD(dados);  // CTe modelo 57
     const linhasBlocoE = buildBlocoE(dados);  // ICMS (E100/E110/E116) + IPI (E200/E210 se houver)
-    const linhasBlocoG = buildBlocoG();   // vazio
+    // Bloco G — CIAP real quando a empresa tem bens cadastrados; senão, vazio.
+    const linhasBlocoG = dados.ciap
+        ? montarLinhasBlocoG({
+            apuracao: dados.ciap,
+            dtIni: fmtSped.formatCompetenciaInicio(dados.competenciaInicio),
+            dtFin: fmtSped.formatCompetenciaFim(dados.competenciaFim),
+        })
+        : buildBlocoG();
     const linhasBlocoH = buildBlocoH(dados);   // inventario (Bloco H real)
     const linhasBlocoK = buildBlocoK();   // vazio
     // Bloco 1 traz o Registro 1400 (DIPAM por município) quando houver compra

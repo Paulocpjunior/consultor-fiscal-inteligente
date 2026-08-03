@@ -45,6 +45,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Fluxos ligados: DAS (Graph + "abrir no meu e-mail" + WhatsApp), DARF
   (DetalheDeclaracao) e DARE (DareSpModal). Feature nova de guia DEVE
   chamar o rito.
+- **Bloco G / CIAP construído a partir do relatório REAL** (Paulo mandou o
+  CIAP da EXPERTE 06/2026 em PDF, 03/08): crédito de ICMS do imobilizado sai
+  em 48 parcelas (LC 87/96 art. 20 §5º) e cada parcela entra na PROPORÇÃO das
+  saídas tributadas+exportação sobre o total — mês com muita saída isenta/ST
+  credita menos. Núcleo puro `sped-bloco-g.js` (14 testes) REPRODUZ o
+  relatório do PVA: parcela = crédito/48, Σ 527,53 × índice 0,86032111 (8
+  casas) = 453,85. Cadastro em `sped_ciap_bens` (1 doc por EMPRESA — o bem
+  atravessa 4 anos; o que muda é a parcela) + aba 🏭 CIAP no card SPED, com
+  "⏭ Avançar parcelas" no fim do mês (48ª vira baixa). Saídas do índice
+  derivam das notas do período (tributada = ICMS destacado; exportação =
+  CFOP 7xxx) e podem ser sobrescritas à mão pra fechar com o controle do
+  cliente. G110 tem a ordem CONFERIDA contra o relatório; G125 segue o Guia
+  Prático (OP, ST, FRT, DIF) e só o PVA confirma. Empresa sem bens = bloco
+  vazio (a maioria).
 - **PGDAS-D: retenção de ISS vai no ID da atividade, NUNCA em dobro** (caso
   S&P, 03/08): id 15 (Anexo III), 12 (V) e 18 (IV) JÁ significam "ISS retido
   pelo tomador" — mandar também a qualificação {1010, 11} faz o SERPRO recusar

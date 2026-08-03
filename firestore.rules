@@ -480,6 +480,16 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // sped_ciap_bens: CIAP / Bloco G — bens do ativo imobilizado com o crédito
+    // de ICMS em 48 parcelas. 1 doc por EMPRESA (não por competência: o bem
+    // atravessa 4 anos). Manutenção é da equipe; exclusão só admin.
+    match /sped_ciap_bens/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
     // ───────────────────────────────────────────────────────────────
     // gia_st_guias: GIA-ST (ICMS-ST) por CNPJ × UF favorecida × mês.
     // Colaborador cria/atualiza; exclusão só admin (mesmo padrão do
