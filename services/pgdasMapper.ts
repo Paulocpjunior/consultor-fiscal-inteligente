@@ -82,6 +82,8 @@ export interface PgdasPayload {
     // tipoDeclaracao e setado pelo backend
     _competencia: string;  // YYYY-MM original
     _cnpjLimpo: string;
+    /** Meta do app (NÃO vai ao SERPRO): marcações que o mapper ainda não traduz. */
+    _avisos?: string[];
 }
 
 function paFromDate(d: Date): number {
@@ -305,9 +307,22 @@ function montarFolhasSalario(
     return [];
 }
 
+/**
+ * Atividades de SERVIÇO cujo id JÁ significa "ISS retido pelo tomador"
+ * (Anexo III=15, V=12, IV=18). Nelas a retenção está declarada pelo próprio
+ * id — mandar TAMBÉM a qualificação tributária de ISS retido é declaração em
+ * dobro e o SERPRO recusa a entrega inteira:
+ *   MSG_ISN_032 "Qualificação tributária inválida: Retenção de ISS não é
+ *   permitida para o idAtividade 15 com o tributo ISS" (caso S&P, 03/08/2026).
+ * Nas atividades de exterior (29/30/31) não há ISS a reter (exportação).
+ */
+const ATIVIDADES_COM_ISS_RETIDO_NO_ID = new Set([12, 15, 18]);
+const ATIVIDADES_EXTERIOR = new Set([3, 6, 29, 30, 31]);
+
 function montarReceitaAtividade(
     state: Pick<CnaeInputState, 'issRetido' | 'icmsSt' | 'isMonofasico'>,
     valor: number,
+    idAtividade: number,
 ): ReceitaAtividade {
     const qualificacoesTributarias: ReceitaAtividade['qualificacoesTributarias'] = [];
 
@@ -320,7 +335,9 @@ function montarReceitaAtividade(
             { codigoTributo: 1005, id: 9 },
         );
     }
-    if (state.issRetido) {
+    if (state.issRetido
+        && !ATIVIDADES_COM_ISS_RETIDO_NO_ID.has(idAtividade)
+        && !ATIVIDADES_EXTERIOR.has(idAtividade)) {
         qualificacoesTributarias.push({ codigoTributo: 1010, id: 11 });
     }
 
@@ -350,7 +367,7 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         const anexo = anexoFromKey(key, empresa.anexo);
         const idAtividade = idAtividadePgdas(anexo, state, resumo.fator_r || 0);
         if (anexoExigeFolhaSalario(anexo)) exigeFolhaSalario = true;
-        addAtividade(grupos, idAtividade, valor, montarReceitaAtividade(state, valor));
+        addAtividade(grupos, idAtividade, valor, montarReceitaAtividade(state, valor, idAtividade));
         if (state.isExterior) totalExterno = round2(totalExterno + valor);
         else totalInterno = round2(totalInterno + valor);
     });
@@ -455,5 +472,35 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         declaracao,
         _competencia: competencia,
         _cnpjLimpo: cnpjLimpo,
+        _avisos: avisosDoPayload(faturamentoPorCnae),
     };
+}
+
+/**
+ * Marcações que REDUZEM o DAS no cálculo do app mas que este mapper ainda NÃO
+ * traduz para o PGDAS-D — o SERPRO recalcula a declaração sem elas e cobra mais
+ * do que a tela mostrou. Farol honesto: em vez de transmitir calado, a tela
+ * avisa antes de emitir (caso S&P: benefício do ISS(SUP), 03/08/2026).
+ * Os campos `_*` são meta do app; o backend só envia `declaracao` ao SERPRO.
+ */
+export function avisosDoPayload(faturamentoPorCnae: Record<string, CnaeInputState>): string[] {
+    const avisos: string[] = [];
+    const comValor = Object.values(faturamentoPorCnae || {})
+        .filter((s) => s && round2(parseValorBr(s.valor)) > 0);
+
+    if (comValor.some((s) => s.isSup)) {
+        avisos.push(
+            'Há receita marcada como ISS(SUP): o app tira o ISS do DAS, mas a declaração '
+            + 'enviada ao PGDAS-D ainda não carrega o ISS fixo (campo "valor fixo de ISS"). '
+            + 'O DAS que a Receita calcular pode vir COM o ISS. Confira o valor devolvido '
+            + 'antes de pagar e avise o Paulo — o campo depende de como o município fixou o ISS.',
+        );
+    }
+    if (comValor.some((s) => s.isImune)) {
+        avisos.push(
+            'Há receita marcada como IMUNE: o app tira ICMS/IPI do DAS, mas a declaração '
+            + 'ainda não envia a qualificação de imunidade — confira o DAS calculado pela Receita.',
+        );
+    }
+    return avisos;
 }

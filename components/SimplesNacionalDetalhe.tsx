@@ -9,7 +9,7 @@ import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 import { useConfirm } from './dialog/DialogProvider';
 import { emitirDasRegular } from '../services/dasService';
-import { mapPgdasPayload } from '../services/pgdasMapper';
+import { mapPgdasPayload, avisosDoPayload } from '../services/pgdasMapper';
 import EmitirNfseModal from './NfseNacional/EmitirModal';
 import PrevisaoDasModal from './Das/PrevisaoModal';
 import PgdasConferirModal from './Pgdas/ConferirModal';
@@ -311,6 +311,9 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
             return;
         }
         const competencia = `${mesApuracao.getFullYear()}-${String(mesApuracao.getMonth() + 1).padStart(2, '0')}`;
+        // Marcações que reduzem o DAS aqui mas ainda não viajam na declaração —
+        // aparecem ANTES de transmitir (a entrega ao PGDAS-D não se desfaz).
+        const avisos = avisosDoPayload(faturamentoPorCnae as Record<string, any>);
         const ok = await confirm({
             title: 'Emitir DAS Regular?',
             message: (
@@ -318,9 +321,17 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                     Empresa: <b>{empresa.nome}</b><br />
                     Competência: <b>{competencia}</b><br />
                     Valor: <b>R$ {resumo.das_mensal.toFixed(2).replace('.', ',')}</b>
+                    {avisos.length > 0 && (
+                        <div style={{ marginTop: 10, padding: 8, borderRadius: 6, background: '#FEF3C7', color: '#92400E', fontSize: 12 }}>
+                            <b>⚠ Confira antes de transmitir</b>
+                            <ul style={{ margin: '4px 0 0 16px' }}>
+                                {avisos.map((a, i) => <li key={i}>{a}</li>)}
+                            </ul>
+                        </div>
+                    )}
                 </>
             ),
-            variant: 'info',
+            variant: avisos.length > 0 ? 'warning' : 'info',
             confirmLabel: 'Emitir',
         });
         if (!ok) return;
