@@ -56,6 +56,27 @@ export function sanitizarDadosFiscais(dados: EmpresaDadosFiscais): EmpresaDadosF
         contadorNome: trim(dados.contadorNome),
         contadorCrc: trim(dados.contadorCrc),
         contadorCpf: numerico(dados.contadorCpf),
+        contadorId: trim(dados.contadorId),
+        // MÚLTIPLOS responsáveis (03/08): linhas totalmente vazias caem fora; o
+        // PRIMEIRO da lista espelha nos campos legados respLegal* — conferência
+        // e PDFs antigos continuam lendo de lá. Lista tocada e vazia = ordem de
+        // apagar (legado vira '' também).
+        ...(dados.responsaveisLegais == null ? {} : (() => {
+            const lista = (dados.responsaveisLegais || [])
+                .map((r) => ({
+                    nome: (r?.nome || '').trim(),
+                    cpf: digitos(r?.cpf || ''),
+                    cargo: (r?.cargo || '').trim(),
+                }))
+                .filter((r) => r.nome || r.cpf || r.cargo);
+            const primeiro = lista[0];
+            return {
+                responsaveisLegais: lista,
+                respLegalNome: primeiro?.nome ?? '',
+                respLegalCpf: primeiro?.cpf ?? '',
+                respLegalCargo: primeiro?.cargo ?? '',
+            };
+        })()),
         // Condição rural: booleano vai EXPLÍCITO (true/false), nunca undefined
         // — desmarcar precisa chegar ao backend como false, mesma lição do CCM.
         // Bloco intocado continua ausente (undefined) e nada muda.

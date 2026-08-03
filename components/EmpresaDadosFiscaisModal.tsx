@@ -10,6 +10,7 @@ import type { EmpresaDadosFiscais } from '../types';
 import { CloseIcon, BuildingIcon } from './Icons';
 import { sanitizarDadosFiscais } from '../services/empresaDadosFiscaisSanitize';
 import { buscarCep } from '../services/cepService';
+import { listarContadores, salvarContador, type Contador } from '../services/contadoresService';
 
 interface Props {
     isOpen: boolean;
@@ -46,6 +47,54 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
             setAvisoUfVazia(false);
         }
     }, [isOpen, valoresAtuais]);
+
+    // ── Responsáveis legais (lista dinâmica; legado respLegal* vira 1ª linha) ─
+    const responsaveis = dados.responsaveisLegais
+        ?? ((dados.respLegalNome || dados.respLegalCpf || dados.respLegalCargo)
+            ? [{ nome: dados.respLegalNome || '', cpf: dados.respLegalCpf || '', cargo: dados.respLegalCargo || '' }]
+            : [{ nome: '', cpf: '', cargo: '' }]);
+    const setResponsaveis = (lista: Array<{ nome?: string; cpf?: string; cargo?: string }>) =>
+        setDados(prev => ({ ...prev, responsaveisLegais: lista }));
+    const handleResp = (i: number, campo: 'nome' | 'cpf' | 'cargo', valor: string) =>
+        setResponsaveis(responsaveis.map((r, x) => x === i ? { ...r, [campo]: valor } : r));
+    const adicionarResp = () => setResponsaveis([...responsaveis, { nome: '', cpf: '', cargo: '' }]);
+    const removerResp = (i: number) =>
+        setResponsaveis(responsaveis.length > 1 ? responsaveis.filter((_, x) => x !== i) : [{ nome: '', cpf: '', cargo: '' }]);
+
+    // ── Catálogo de contadores do escritório ─────────────────────────────────
+    const [contadores, setContadores] = useState<Contador[]>([]);
+    const [salvandoContador, setSalvandoContador] = useState(false);
+    useEffect(() => {
+        if (!isOpen) return;
+        let alive = true;
+        listarContadores().then(l => { if (alive) setContadores(l); }).catch(() => {});
+        return () => { alive = false; };
+    }, [isOpen]);
+    const escolherContador = (id: string) => {
+        const c = contadores.find(x => x.id === id);
+        setDados(prev => ({
+            ...prev,
+            contadorId: id,
+            ...(c ? { contadorNome: c.nome, contadorCrc: c.crc, contadorCpf: c.cpf } : {}),
+        }));
+    };
+    const salvarContadorNoCatalogo = async () => {
+        setSalvandoContador(true);
+        try {
+            const c = await salvarContador({
+                nome: dados.contadorNome || '', crc: dados.contadorCrc || '', cpf: dados.contadorCpf || '',
+            });
+            setContadores(prev => {
+                const sem = prev.filter(x => x.id !== c.id);
+                return [...sem, c].sort((a, b) => a.nome.localeCompare(b.nome));
+            });
+            setDados(prev => ({ ...prev, contadorId: c.id }));
+        } catch (e: any) {
+            setErro(`Falha ao salvar no catálogo: ${e.message}`);
+        } finally {
+            setSalvandoContador(false);
+        }
+    };
 
     const handleField = (key: keyof EmpresaDadosFiscais, value: string) => {
         // Guarda a string COMO ESTÁ, inclusive vazia. O `value || undefined`
@@ -325,53 +374,97 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                         </div>
                     </Section>
 
-                    {/* Responsável legal e contador — identificação dos relatórios */}
-                    <Section titulo="✍️ Responsável legal e contador">
+                    {/* Responsável legal e contador — identificação dos relatórios.
+                        MÚLTIPLOS responsáveis (03/08): lista dinâmica; o PDF
+                        imprime todos. Contador: catálogo do escritório + escolha. */}
+                    <Section titulo="✍️ Responsáveis legais e contador">
                         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-                            Identificação OBRIGATÓRIA na emissão dos relatórios (faturamento, livros,
-                            obrigações acessórias). Não é o colaborador da carteira — é o sócio/administrador
-                            da empresa e o contador que assina.
+                            Identificação OBRIGATÓRIA na emissão dos relatórios. Não é o colaborador da
+                            carteira — são os sócios/administradores da empresa (pode ter mais de um; o
+                            PDF imprime todos) e o contador que assina (escolhido do catálogo do escritório).
                         </p>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <Field
-                                label="Responsável pela empresa"
-                                value={dados.respLegalNome || ''}
-                                onChange={v => handleField('respLegalNome', v)}
-                                placeholder="Nome do sócio/administrador"
-                            />
-                            <Field
-                                label="CPF do responsável"
-                                value={dados.respLegalCpf || ''}
-                                onChange={v => handleField('respLegalCpf', v)}
-                                placeholder="000.000.000-00"
-                                hint="Apenas números."
-                            />
-                            <Field
-                                label="Cargo/qualificação"
-                                value={dados.respLegalCargo || ''}
-                                onChange={v => handleField('respLegalCargo', v)}
-                                placeholder="Sócio administrador"
-                            />
-                            <Field
-                                label="Contador responsável"
-                                value={dados.contadorNome || ''}
-                                onChange={v => handleField('contadorNome', v)}
-                                placeholder="Nome do contador"
-                            />
-                            <Field
-                                label="CRC"
-                                value={dados.contadorCrc || ''}
-                                onChange={v => handleField('contadorCrc', v)}
-                                placeholder="1SP123456/O-8"
-                                hint="Formato livre — como está no registro do CRC."
-                            />
-                            <Field
-                                label="CPF do contador"
-                                value={dados.contadorCpf || ''}
-                                onChange={v => handleField('contadorCpf', v)}
-                                placeholder="000.000.000-00"
-                                hint="Apenas números."
-                            />
+
+                        {responsaveis.map((r, i) => (
+                            <div key={i} className="grid grid-cols-1 md:grid-cols-[1fr_10rem_10rem_auto] gap-3 mb-2 items-end">
+                                <Field
+                                    label={i === 0 ? 'Responsável pela empresa' : `Responsável ${i + 1}`}
+                                    value={r.nome || ''}
+                                    onChange={v => handleResp(i, 'nome', v)}
+                                    placeholder="Nome do sócio/administrador"
+                                />
+                                <Field
+                                    label="CPF"
+                                    value={r.cpf || ''}
+                                    onChange={v => handleResp(i, 'cpf', v)}
+                                    placeholder="000.000.000-00"
+                                />
+                                <Field
+                                    label="Cargo"
+                                    value={r.cargo || ''}
+                                    onChange={v => handleResp(i, 'cargo', v)}
+                                    placeholder="Sócio administrador"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => removerResp(i)}
+                                    className="h-10 px-3 text-xs font-bold rounded-lg text-slate-400 hover:text-red-600 border border-slate-200 dark:border-slate-600"
+                                    title="Remover este responsável"
+                                >✕</button>
+                            </div>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={adicionarResp}
+                            className="mb-4 px-3 py-1.5 text-xs font-bold rounded-lg text-blue-700 border border-blue-300 hover:bg-blue-50 dark:text-blue-300 dark:border-blue-700 dark:hover:bg-blue-900/20"
+                        >＋ Adicionar responsável</button>
+
+                        <div className="border-t border-slate-200 dark:border-slate-700 pt-3">
+                            {contadores.length > 0 && (
+                                <div className="mb-3">
+                                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                                        Escolher contador do catálogo
+                                    </label>
+                                    <select
+                                        value={dados.contadorId || ''}
+                                        onChange={e => escolherContador(e.target.value)}
+                                        className="w-full md:w-96 p-2.5 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
+                                    >
+                                        <option value="">— escolher ou preencher abaixo —</option>
+                                        {contadores.map(c => (
+                                            <option key={c.id} value={c.id}>{c.nome} — CRC {c.crc}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <Field
+                                    label="Contador responsável"
+                                    value={dados.contadorNome || ''}
+                                    onChange={v => { handleField('contadorNome', v); handleField('contadorId', ''); }}
+                                    placeholder="Nome do contador"
+                                />
+                                <Field
+                                    label="CRC"
+                                    value={dados.contadorCrc || ''}
+                                    onChange={v => { handleField('contadorCrc', v); handleField('contadorId', ''); }}
+                                    placeholder="1SP123456/O-8"
+                                    hint="Formato livre — como está no registro do CRC."
+                                />
+                                <Field
+                                    label="CPF do contador"
+                                    value={dados.contadorCpf || ''}
+                                    onChange={v => { handleField('contadorCpf', v); handleField('contadorId', ''); }}
+                                    placeholder="000.000.000-00"
+                                    hint="Apenas números."
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={salvarContadorNoCatalogo}
+                                disabled={salvandoContador || !(dados.contadorNome || '').trim() || !(dados.contadorCrc || '').trim()}
+                                className="mt-2 px-3 py-1.5 text-xs font-bold rounded-lg text-emerald-700 border border-emerald-300 hover:bg-emerald-50 dark:text-emerald-300 dark:border-emerald-700 dark:hover:bg-emerald-900/20 disabled:opacity-40"
+                                title="Salva este contador no catálogo pra reutilizar nas outras empresas"
+                            >{salvandoContador ? 'Salvando…' : '💾 Salvar contador no catálogo'}</button>
                         </div>
                     </Section>
 

@@ -1369,6 +1369,15 @@ export interface EmpresaDadosFiscais {
     respLegalCpf?: string;
     /** Cargo/qualificação (ex.: Sócio administrador). */
     respLegalCargo?: string;
+    /**
+     * MÚLTIPLOS responsáveis legais (pedido do Paulo, 03/08 — empresa pode ter
+     * mais de um sócio/administrador). O PRIMEIRO da lista é espelhado nos
+     * campos legados respLegal* (sanitize) — conferência e leitores antigos
+     * continuam funcionando; o PDF imprime TODOS.
+     */
+    responsaveisLegais?: Array<{ nome?: string; cpf?: string; cargo?: string }>;
+    /** Id do contador escolhido no catálogo do escritório (coleção contadores). */
+    contadorId?: string;
     /** Contador responsável — nome como sai no relatório. */
     contadorNome?: string;
     /** Registro no CRC (ex.: 1SP123456/O-8) — formato livre, varia por regional. */

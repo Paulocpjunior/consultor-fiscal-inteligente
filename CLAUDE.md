@@ -66,6 +66,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   5min), elegibilidade ADN (param `certsMeta`) e painel Status
   (`temA1MesmaRaizValido` → via 'cloud-a1-raiz'). TRILHO NOVO que exigir
   certificado DEVE aceitar o da matriz pela raiz.
+- **Campo novo do perfil precisa de TRÊS lugares** (03/08, caso KAWAI
+  KODOMO — colaborador preencheu resp. legal e o selo não limpava): rota
+  `empresas-perfil` (camposConferencia), `normalizarEmpresasPerfilResponse`
+  (frontend — montava o objeto com lista explícita e DESCARTAVA os campos
+  novos) e o fallback local do xmlFiscalService. É a lição da whitelist
+  #382 do lado do cliente. Múltiplos responsáveis: `responsaveisLegais[]`
+  com 1º espelhado em respLegal* (sanitize); contador tem CATÁLOGO
+  (coleção `contadores`, escolhe no modal, empresa guarda cópia+contadorId).
 - **Campo novo no modal Dados Fiscais EXIGE a whitelist do backend** (#382,
   31/07): a rota `/empresa-dados-fiscais` (o "Completar cadastro" do Status)
   filtra por `CAMPOS_DADOS_FISCAIS` — campo fora da lista é DESCARTADO EM

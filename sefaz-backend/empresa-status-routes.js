@@ -539,6 +539,7 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // Paulo 01/08). Ficam SÓ em dadosFiscais — nenhum trilho lê top-level.
     'respLegalNome', 'respLegalCpf', 'respLegalCargo',
     'contadorNome', 'contadorCrc', 'contadorCpf',
+    'responsaveisLegais', 'contadorId',
 ]);
 
 // Cadastro (IE, UF, CCM, endereço) é trabalho da EQUIPE — colaborador grava.

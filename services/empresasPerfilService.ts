@@ -66,6 +66,17 @@ export function normalizarEmpresasPerfilResponse(data: unknown): EmpresaPerfilOp
             cnae: textoOpcional(item.cnae),
             anexo: textoOpcional(item.anexo),
             dataAbertura: textoOpcional(item.dataAbertura),
+            // LIÇÃO (03/08, caso KAWAI KODOMO): campo novo no perfil precisa de
+            // TRÊS lugares — a rota do backend, ESTE normalizador e o fallback
+            // local do xmlFiscalService. O normalizador montava o objeto com
+            // lista explícita e DESCARTAVA respLegal*/contador* — o colaborador
+            // preenchia, o backend mandava, e a pendência nunca limpava.
+            respLegalNome: textoOpcional(item.respLegalNome),
+            respLegalCpf: textoOpcional(item.respLegalCpf),
+            respLegalCargo: textoOpcional(item.respLegalCargo),
+            contadorNome: textoOpcional(item.contadorNome),
+            contadorCrc: textoOpcional(item.contadorCrc),
+            contadorCpf: textoOpcional(item.contadorCpf),
         };
         const key = empresa.cnpj || empresa.id;
         if (!map.has(key)) map.set(key, empresa);
