@@ -13,9 +13,9 @@ import {
     listarDas, getResumoDas, getDasPdf, marcarPago,
     processarCronDas,
 } from './das-orchestrator.js';
-import { getDasMode } from './das-provider.js';
+import { getDasMode, getDasProvider } from './das-provider.js';
 import { errorPayload } from './das-error-payload.js';
-import { podeAcessarEmpresaId } from './carteira-auth.js';
+import { podeAcessarEmpresaId, podeAcessarCnpj } from './carteira-auth.js';
 import { secretsMatch } from './cron-secret.js';
 export { errorPayload } from './das-error-payload.js';
 
@@ -80,6 +80,34 @@ router.get('/pdf', requireAuth, async (req, res) => {
     } catch (err) {
         console.error('[das/pdf] falhou:', err.stack || err);
         res.status(500).json({ error: `pdf: ${err.message}` });
+    }
+});
+
+// Atividades de uma declaração PGDAS-D JÁ transmitida (consulta, não declara).
+// Descobre o número oficial de uma atividade que o app ainda não mapeia lendo o
+// que a própria empresa declarou — caso S&P/ISS fixo do escritório contábil.
+router.get('/atividades-declaradas', requireAuth, async (req, res) => {
+    const cnpj = String(req.query.cnpj || '').replace(/\D/g, '');
+    const competencia = String(req.query.competencia || '');
+    if (cnpj.length !== 14 || !/^\d{4}-?\d{2}$/.test(competencia)) {
+        return res.status(400).json({ error: 'Informe cnpj (14 dígitos) e competencia (AAAA-MM).' });
+    }
+    const c = await podeAcessarCnpj(req.user, cnpj);
+    if (!c.ok) return res.status(c.status).json({ error: c.error });
+    try {
+        const provider = getDasProvider();
+        if (typeof provider.consultarAtividadesDeclaradas !== 'function') {
+            return res.status(400).json({ error: 'Consulta disponível apenas no modo serpro.' });
+        }
+        res.json(await provider.consultarAtividadesDeclaradas({ empresaCnpj: cnpj, competencia }));
+    } catch (err) {
+        console.error('[das/atividades-declaradas] falhou:', err.stack || err);
+        const semDeclaracao = /n[aã]o.*encontrad|404|sem.*declarac/i.test(err.message || '');
+        res.status(semDeclaracao ? 404 : 500).json({
+            error: semDeclaracao
+                ? `Não há declaração transmitida para ${competencia} nesta empresa — tente outra competência.`
+                : `atividades-declaradas: ${err.message}`,
+        });
     }
 });
 

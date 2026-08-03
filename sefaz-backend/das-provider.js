@@ -22,6 +22,10 @@ import {
     montarDadosDeclaracaoPgdas,
     normalizarValoresDevidosPgdas,
 } from './pgdas-utils.js';
+import {
+    extrairAtividadesDeclaradas,
+    resumirAtividadesDeclaradas,
+} from './pgdas-atividades-declaradas.js';
 import { assertValorMinimoDas } from './das-valor-utils.js';
 import { normalizarRespostaDasSerpro } from './das-response-normalizer.js';
 
@@ -251,6 +255,34 @@ class SerproProvider {
             // Outros erros sao propagados
             throw err;
         }
+    }
+
+    /**
+     * Lê as ATIVIDADES de uma declaração PGDAS-D já transmitida (mesma consulta
+     * CONSULTIMADECREC14). Serve pra descobrir o número oficial de uma atividade
+     * que o app ainda não mapeia, na única fonte confiável disponível: o que a
+     * própria empresa declarou e a Receita aceitou (caso S&P — ISS fixo do
+     * escritório contábil). NÃO transmite nada; é consulta pura.
+     */
+    async consultarAtividadesDeclaradas({ empresaCnpj, competencia }) {
+        const pa = String(competencia).replace(/\D/g, '').slice(0, 6);
+        const result = await invokeIntegraContador({
+            idSistema: 'PGDASD',
+            idServico: 'CONSULTIMADECREC14',
+            contribuinteCnpj: empresaCnpj,
+            acao: 'Consultar',
+            dados: { periodoApuracao: pa },
+        });
+        const atividades = extrairAtividadesDeclaradas(result);
+        return {
+            pa,
+            atividades,
+            resumo: resumirAtividadesDeclaradas(atividades),
+            // Farol honesto: nenhuma atividade encontrada NÃO significa "empresa
+            // sem receita" — pode ser que a consulta devolva só o recibo, sem o
+            // detalhamento. Quem chama mostra o motivo em vez de um zero mudo.
+            detalhamentoIndisponivel: atividades.length === 0,
+        };
     }
 
     async validarDeclaracaoPgdas({ cnpjLimpo, pa, declaracao }) {
