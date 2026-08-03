@@ -37,6 +37,10 @@ arquivo, SPED/EFD, GIA e REINF.
    empresa; régua da migração do E-Fiscal).
 5C. **🧭 DIFAL aquisição (03/08)**: varredura + apuração mensal
    consolidada do Simples; ST separada (426-A individual).
+5E. **🧾 DAS de serviço com ISS retido (03/08)**: erro MSG_ISN_032 do
+   SERPRO (retenção declarada em dobro) corrigido — pode reemitir; quem
+   tem ISS(SUP)/IMUNE recebe aviso âmbar antes de transmitir porque a
+   marcação ainda não viaja na declaração.
 5D. **📅 Presumido mensal × trimestral (03/08)**: botão "Mensal
    (PIS/COFINS)" de volta ao lado do "Trimestral (fecha IRPJ/CSLL)";
    mês que não fecha trimestre não apura IRPJ/CSLL (linha zerada
