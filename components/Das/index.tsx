@@ -5,7 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { User, DasEmitido, DasResumo, DasStatusPagamento, SimplesNacionalEmpresa } from '../../types';
 import {
-    getResumoDas, listarDas, marcarDasPago, emitirDasAvulso,
+    getResumoDas, listarDas, marcarDasPago, emitirDasAvulso, getDasPdf,
     formatBRL, formatBarras, parseValorMoedaBr, statusBadgeClass, statusLabel,
 } from '../../services/dasService';
 import { getEmpresas as getEmpresasSimples } from '../../services/simplesNacionalService';
@@ -200,7 +200,23 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         return new Blob([bytes], { type: 'application/pdf' });
     };
 
-    const abrirPdfDas = (doc: DasEmitido) => {
+    // A listagem vem SEM pdfBase64 (o doc inteiro derrubava a instância por
+    // memória — 03/08). O PDF é buscado AQUI, um por vez, e cacheado no doc.
+    const garantirPdf = async (doc: DasEmitido): Promise<DasEmitido> => {
+        if (doc.pdfBase64 || doc.pdfUrl) return doc;
+        try {
+            const p = await getDasPdf(currentUser, doc.id);
+            const atualizado = { ...doc, pdfBase64: p.pdfBase64, pdfUrl: p.pdfUrl };
+            setDocs(prev => prev.map(d => d.id === doc.id ? atualizado : d));
+            return atualizado;
+        } catch (e: any) {
+            onShowToast?.(`Falha ao buscar o PDF: ${e.message}`);
+            return doc;
+        }
+    };
+
+    const abrirPdfDas = async (docIn: DasEmitido) => {
+        const doc = await garantirPdf(docIn);
         if (doc.pdfUrl) {
             window.open(doc.pdfUrl, '_blank', 'noopener');
             return;
@@ -214,7 +230,8 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         window.setTimeout(() => URL.revokeObjectURL(url), 60000);
     };
 
-    const baixarPdfDas = (doc: DasEmitido) => {
+    const baixarPdfDas = async (docIn: DasEmitido) => {
+        const doc = await garantirPdf(docIn);
         if (doc.pdfUrl) {
             window.open(doc.pdfUrl, '_blank', 'noopener');
             return;
@@ -506,7 +523,7 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
                             <div>
                                 <div className="text-xs text-slate-500 mb-1">Guia em PDF</div>
-                                {selecionado.pdfBase64 || selecionado.pdfUrl ? (
+                                {true ? (
                                     <div className="flex flex-wrap gap-2">
                                         <button
                                             onClick={() => abrirPdfDas(selecionado)}
@@ -577,7 +594,7 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 Fechar
                             </button>
                             <button
-                                onClick={() => setCobrancaDas(selecionado)}
+                                onClick={async () => setCobrancaDas(await garantirPdf(selecionado))}
                                 className="btn-press px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700"
                             >
                                 Enviar ao cliente

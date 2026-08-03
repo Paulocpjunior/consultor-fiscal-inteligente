@@ -10,7 +10,7 @@ import admin from 'firebase-admin';
 import { ultimasCompetencias as ultimasCompetenciasHelper } from './competencias-helper.js';
 import {
     emitirDasRegular, emitirDasAvulso,
-    listarDas, getResumoDas, marcarPago,
+    listarDas, getResumoDas, getDasPdf, marcarPago,
     processarCronDas,
 } from './das-orchestrator.js';
 import { getDasMode } from './das-provider.js';
@@ -62,6 +62,24 @@ router.get('/listar', requireAuth, async (req, res) => {
     } catch (err) {
         console.error('[das/listar] falhou:', err.stack || err);
         res.status(500).json({ error: `listar: ${err.message}` });
+    }
+});
+
+// PDF de UM DAS sob demanda — a listagem não carrega mais o base64 (memória).
+router.get('/pdf', requireAuth, async (req, res) => {
+    try {
+        const doc = await getDasPdf(req.query.id);
+        if (!doc) return res.status(404).json({ error: 'DAS não encontrado.' });
+        if (doc.empresaId) {
+            const c = await podeAcessarEmpresaId(req.user, doc.empresaId);
+            if (!c.ok) return res.status(c.status).json({ error: c.error });
+        } else if (req.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Sem acesso a este DAS.' });
+        }
+        res.json({ pdfBase64: doc.pdfBase64, pdfUrl: doc.pdfUrl });
+    } catch (err) {
+        console.error('[das/pdf] falhou:', err.stack || err);
+        res.status(500).json({ error: `pdf: ${err.message}` });
     }
 });
 

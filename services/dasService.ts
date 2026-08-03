@@ -46,6 +46,16 @@ export async function listarDas(
     return res.json();
 }
 
+/** PDF de um DAS sob demanda — a listagem vem SEM o base64 (memória, 03/08). */
+export async function getDasPdf(user: User | null, id: string): Promise<{ pdfBase64?: string | null; pdfUrl?: string | null }> {
+    const res = await fetch(`${BASE}/pdf?id=${encodeURIComponent(id)}`, { headers: await authHeaders(user) });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `getDasPdf: ${res.status}`);
+    }
+    return res.json();
+}
+
 export async function emitirDasRegular(user: User | null, payload: {
     empresaId: string; empresaCnpj: string; empresaNome: string;
     competencia: string; valor: number;
