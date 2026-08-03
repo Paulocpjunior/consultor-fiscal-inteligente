@@ -94,12 +94,12 @@ export function montarProntidaoMigracao(docs, empresas) {
             comIpiOuIndustria: linhas.filter((l) => l.ipiSaidas > 0 || l.industriaCadastro).length,
             comInterestadual: linhas.filter((l) => l.entradasInterestaduais > 0).length,
         },
-        // O que os dados NÃO respondem — perguntas abertas à equipe.
+        // Respostas da equipe (03/08) — o que os dados não viam, agora visto.
         perguntasEquipe: [
-            'SAT/CF-e (mod 59): algum cliente do varejo emite cupom SAT? O CFI não captura mod 59.',
-            'Regime de CAIXA no Lucro Presumido: temos optantes? A apuração do CFI é por emissão.',
-            'CIAP (crédito de ativo, CAT 17/99): algum cliente controla? O bloco G sai vazio.',
-            'DeSTDA: alguém entrega para clientes do Simples com ST/DIFAL?',
+            'SAT: NÃO existe mais na carteira — virou NFC-e mod 65, que o CFI já captura e escritura. Lacuna C800 DESCARTADA (equipe, 03/08).',
+            'Regime de CAIXA no Presumido: NENHUM cliente optante (equipe, 03/08) — descartado.',
+            'CIAP: SÓ a EXPERTE controla (equipe, 03/08) — o bloco G é caso único; a EXPERTE fica pra onda final da migração.',
+            'DIFAL de aquisição: EXISTE — clientes compram de fora e pagam DIFAL (equipe, 03/08). As compras interestaduais marcadas ⚠ acima são o rastro; plano no de-para.',
         ],
     };
 }

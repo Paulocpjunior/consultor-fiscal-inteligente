@@ -135,7 +135,7 @@ const ProntidaoMigracao: React.FC<{ onShowToast?: (m: string) => void }> = ({ on
             {dados?.perguntasEquipe && (
                 <div className="p-4 rounded-xl" style={{ background: 'var(--accent-soft)', borderLeft: '4px solid var(--accent)' }}>
                     <p className="text-xs font-bold mb-1" style={{ color: 'var(--accent)' }}>
-                        O que os dados NÃO respondem — perguntas pra equipe:
+                        Respostas da equipe (03/08) — o que os dados não viam:
                     </p>
                     <ul className="text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
                         {dados.perguntasEquipe.map((p, i) => <li key={i}>• {p}</li>)}

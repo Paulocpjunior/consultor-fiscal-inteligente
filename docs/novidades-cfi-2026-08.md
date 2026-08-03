@@ -35,7 +35,8 @@ arquivo, SPED/EFD, GIA e REINF.
 7. **Validações da semana**: JOTASUL reimport, EDUARDO GUERRA De→Para +
    DIPAM×SAGE, Canceladas/Faltantes×SAGE, MANTOAN MIT,
    responsável+contador, teste do e-mail de DAS.
-8. **4 perguntas ao Paulo** (mesmas da aba 🚦): SAT? regime de caixa?
-   CIAP? DeSTDA/DIFAL? — "ninguém usa" também é resposta.
+8. **Perguntas RESPONDIDAS (equipe, 03/08)**: SAT não (virou NFC-e 65);
+   caixa não; CIAP só EXPERTE (onda final); DIFAL de aquisição SIM →
+   próxima construção. Seção virou agradecimento + "mapa é vivo".
 
 Link no app: botão 📣 Novidades no cabeçalho do card Relatórios.

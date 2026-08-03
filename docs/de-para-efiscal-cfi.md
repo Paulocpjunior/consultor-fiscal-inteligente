@@ -11,12 +11,12 @@
 |---|---|---|---|
 | Bloco 0 (cadastros, participantes, itens) | ✔ | card SPED Fiscal | ✅ |
 | Bloco C (NF-e/NFC-e mod 55/65) | ✔ | idem | ✅ |
-| Bloco C — SAT/CF-e mod 59 (C800/C860) | ✔ | não captura nem gera | 🔴 depende do F0 (quantos clientes têm SAT?) |
+| Bloco C — SAT/CF-e mod 59 (C800/C860) | ✔ | — | ⚫ **DESCARTADO 03/08** (equipe): não há mais SAT na carteira — virou NFC-e mod 65, já coberta |
 | Bloco D (CT-e) | ✔ | idem | ✅ |
 | Bloco E — apuração ICMS (E100/E110/E116) + IPI (E200/E210) | ✔ | idem | ✅ |
 | **Bloco E — ajustes de apuração (E111)** | ✔ | aba "Ajustes E111" do card SPED Fiscal (crédito outorgado, estornos, deduções, débitos especiais; tipo derivado do código 5.1.1) | ✅ **02/08** |
 | Bloco E — ST/DIFAL (E200-ST/E220/E310) | ✔ | não gera — código de ST é recusado na aba com aviso | 🔴 |
-| Bloco G (CIAP — crédito de ativo) | ✔ | bloco vazio | 🔴 aguarda resposta do Paulo (alguém usa CAT 17/99?) |
+| Bloco G (CIAP — crédito de ativo) | ✔ | bloco vazio | 🟡 **SÓ A EXPERTE** (equipe, 03/08) — caso único; EXPERTE fica pra onda FINAL (ou bloco G vira feature pontual quando chegar a vez dela) |
 | Bloco H (inventário) | ✔ | gera H005/H010 (qtd/valor a preencher) | 🟡 |
 | Bloco K (produção) | ✔ | bloco vazio | 🔴 depende do F0 (quantas indústrias reais) |
 | Bloco 1 — Registro 1400 (DIPAM) | lançamento manual | automático da aba 🌾 | ✅ (melhor que o E-Fiscal) |
@@ -39,8 +39,8 @@ pedir). DIPJ/fila/cadastros estáticos ⚫.
 | GIA | ⚫ DESUSO (Paulo, 02/08) | não gastar feature |
 | DIRF | ⚫ EXTINTA | substituída pela série R-4000 do REINF |
 | DCTF/MIT · DARF · GARE→DARE · DAS | ✅ | DCTFWeb+MIT (#292), SERPRO, API DARE-SP |
-| DeSTDA (Simples ST/DIFAL) + DIFAL aquisições + EC 87/15 | 🔴 | 3 trilhos ATIVOS no E-Fiscal (menus 03/08) — a pergunta do DIFAL ficou mais urgente |
-| Regime de caixa do Lucro (recebidos/a receber) | 🟡 NOVO (03/08) | CFI apura por emissão; presumido por caixa precisa do controle de recebimento — avaliar com o Paulo |
+| DIFAL de aquisição (+ DeSTDA/EC 87/15) | 🔴 **CONFIRMADO 03/08** (equipe): clientes compram de fora e PAGAM DIFAL | Próxima lacuna a fechar: apuração do DIFAL de aquisição (as compras interestaduais da aba 🚦 são o rastro); no SPED do Lucro o débito entra via E111 (JÁ dá pra lançar) — falta a CONTA da guia e o C197 |
+| Regime de caixa do Lucro | ⚫ **DESCARTADO 03/08** (equipe) | nenhum cliente optante |
 | e-CredAc/crédito acumulado SP (CAT 207/2009 + 17/99) | 🟡 | junto com a decisão do CIAP |
 | PER/DCOMP · ressarcimento ST (CAT 42/18) | 🟡 | sob demanda; hoje e-CAC/manual |
 | SINTEGRA · IN 86/01 · DNF · REDF · DES · DMED · CPRB · STDA | ⚫ | legados/nichos |
@@ -65,6 +65,11 @@ próximo alvo técnico: E220/ST ou C800/SAT, conforme o F0 disser qual dói.
 varre as notas da competência e classifica cada empresa — ST em saída
 (bloqueio: E220), IPI/indústria (bloqueio: bloco K/CIAP), compra
 interestadual (atenção: DIFAL), ST em entrada (coberto) — e aponta as
-🟢 **candidatas a piloto** (Lucro + movimento + zero bloqueio). O que os
-dados não respondem fica listado na própria aba como pergunta à equipe:
-SAT, regime de caixa, CIAP, DeSTDA.
+🟢 **candidatas a piloto** (Lucro + movimento + zero bloqueio).
+
+**F0 HUMANO RESPONDIDO (equipe, 03/08)**: SAT NÃO (virou NFC-e 65 —
+descartado) · regime de caixa NÃO (descartado) · CIAP só a EXPERTE (onda
+final) · DIFAL de aquisição SIM (lacuna confirmada). Com isso o quadro de
+lacunas encolheu pra: **DIFAL de aquisição** (próximo alvo), **E220/ST**
+(substitutos que a 🚦 apontar), **bloco K** (indústrias que a 🚦 apontar)
+e **bloco G** (um cliente, onda final). Pilotos: escolher da lista 🟢.
