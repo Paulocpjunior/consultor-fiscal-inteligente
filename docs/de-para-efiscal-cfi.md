@@ -16,7 +16,7 @@
 | Bloco E — apuração ICMS (E100/E110/E116) + IPI (E200/E210) | ✔ | idem | ✅ |
 | **Bloco E — ajustes de apuração (E111)** | ✔ | aba "Ajustes E111" do card SPED Fiscal (crédito outorgado, estornos, deduções, débitos especiais; tipo derivado do código 5.1.1) | ✅ **02/08** |
 | Bloco E — ST/DIFAL (E200-ST/E220/E310) | ✔ | não gera — código de ST é recusado na aba com aviso | 🔴 |
-| Bloco G (CIAP — crédito de ativo) | ✔ | bloco vazio | 🟡 **SÓ A EXPERTE** (equipe, 03/08) — caso único; EXPERTE fica pra onda FINAL (ou bloco G vira feature pontual quando chegar a vez dela) |
+| Bloco G (CIAP — crédito de ativo) | ✔ | aba 🏭 CIAP do card SPED Fiscal (bens em 48 parcelas + índice das saídas tributadas; G001/G110/G125/G990) | ✅ **03/08** — régua conferida contra o CIAP real da EXPERTE 06/2026 (Σ parcelas 527,53 × índice 0,86032111 = 453,85). Falta: cadastrar os bens da EXPERTE e validar o arquivo no PVA |
 | Bloco H (inventário) | ✔ | gera H005/H010 (qtd/valor a preencher) | 🟡 |
 | Bloco K (produção) | ✔ | bloco vazio | 🔴 depende do F0 (quantas indústrias reais) |
 | Bloco 1 — Registro 1400 (DIPAM) | lançamento manual | automático da aba 🌾 | ✅ (melhor que o E-Fiscal) |
@@ -59,8 +59,9 @@ Canceladas/Faltantes limpo. Cliente com buraco de captura NÃO migra.
 
 F0 inventário por cliente (SAT? CIAP? bloco K? ajustes? quem entrega EFD?)
 → F1 dois pilotos com conferência-espelho no PVA → F2 extração do PG12 →
-F3 ondas. **E111 (02/08) era o bloqueio técnico nº 1 e está fechado** —
-próximo alvo técnico: E220/ST ou C800/SAT, conforme o F0 disser qual dói.
+F3 ondas. **E111 (02/08) era o bloqueio técnico nº 1 e está fechado**; o Bloco G
+(CIAP) fechou em 03/08 com o relatório real da EXPERTE — próximo alvo
+técnico: E220/ST ou bloco K, conforme a 🚦 apontar.
 
 **F0 AUTOMÁTICO no ar (03/08)**: aba 🚦 Migração do card SPED Fiscal
 (`migracao-prontidao.js` puro + rota `/api/admin/sped/prontidao-migracao`)
