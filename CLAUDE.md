@@ -396,6 +396,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   E110 campo 11 é saldo DEVEDOR — gerador antigo punha o credor lá (abs);
   agora credor sai 0,00 e vai só pro campo 14. Faltam (por prioridade do
   F0): E220/ST, C800/SAT, bloco G/CIAP, bloco K.
+- **F0 HUMANO RESPONDIDO (equipe via Paulo, 03/08)** — respostas que
+  APAGARAM lacunas do de-para: (1) SAT NÃO existe mais na carteira (virou
+  NFC-e mod 65, coberta) — C800 descartado; (2) regime de CAIXA no
+  Presumido: NENHUM cliente — descartado; (3) CIAP: SÓ a EXPERTE — bloco G
+  é caso único, EXPERTE fica pra onda FINAL da migração; (4) **DIFAL de
+  aquisição EXISTE** (clientes compram de fora e pagam) — é a PRÓXIMA
+  lacuna a construir: apuração/conta da guia + C197 (o débito no E110 já
+  entra via E111). Validações 5-10 (JOTASUL, EDUARDO GUERRA, Canceladas,
+  MANTOAN ok, resp+contador, e-mail DAS) em andamento com a equipe.
 - **GIA caiu em DESUSO** (Paulo, 02/08): não listar como rotina nem gastar
   feature com ela. **SPED Fiscal/Contribuições JÁ É módulo do CFI** (card
   SPED Fiscal: gera mensal/trimestral + conferências; transmissão é no PVA
