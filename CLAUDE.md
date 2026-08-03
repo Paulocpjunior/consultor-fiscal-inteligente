@@ -45,6 +45,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Fluxos ligados: DAS (Graph + "abrir no meu e-mail" + WhatsApp), DARF
   (DetalheDeclaracao) e DARE (DareSpModal). Feature nova de guia DEVE
   chamar o rito.
+- **PGDAS-D: retenção de ISS vai no ID da atividade, NUNCA em dobro** (caso
+  S&P, 03/08): id 15 (Anexo III), 12 (V) e 18 (IV) JÁ significam "ISS retido
+  pelo tomador" — mandar também a qualificação {1010, 11} faz o SERPRO recusar
+  a ENTREGA INTEIRA (MSG_ISN_032). Valia pra toda empresa de serviço com ISS
+  retido; só o caminho da matriz caía (o de filial já montava sem
+  qualificação). LACUNA CONHECIDA e AVISADA: `isSup` (ISS SUP) e `isImune`
+  reduzem o DAS no cálculo do app mas NÃO viajam na declaração (`valorFixoIss`
+  vai null) — `avisosDoPayload` mostra o buraco na confirmação do "Emitir DAS
+  Regular" antes de transmitir. PENDENTE do Paulo: como o ISS(SUP) da S&P é
+  declarado no e-CAC (valor fixo informado? qual?) pra preencher valorFixoIss
+  de verdade. Campos `_*` do payload são meta do app — o backend só manda
+  `declaracao` ao SERPRO.
 - **PRESUMIDO tem os DOIS períodos e o mês decide** (colaborador via Paulo,
   03/08 — caso CLINICA MANTOAN 07/2026): IRPJ/CSLL são TRIMESTRAIS (Lei
   9.430/96 art. 1º) e PIS/COFINS/IPI são MENSAIS, então a ficha precisa dos
