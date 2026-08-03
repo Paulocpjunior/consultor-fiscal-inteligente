@@ -499,13 +499,13 @@ describe('mapPgdasPayload — declaração por estabelecimento (filiais com CNPJ
 });
 
 describe('avisosDoPayload — o que reduz o DAS aqui mas ainda nao viaja na declaracao', () => {
-    it('receita com ISS(SUP) avisa que o PGDAS-D nao recebe o ISS fixo', () => {
+    it('receita com ISS fixo (SUP) avisa que falta o codigo oficial da atividade', () => {
         const avisos = avisosDoPayload({
             'principal::0::9602501::III': { ...emptyState, valor: '10.000,00', isSup: true },
         } as any);
         expect(avisos).toHaveLength(1);
-        expect(avisos[0]).toContain('ISS(SUP)');
-        expect(avisos[0]).toContain('Confira');
+        expect(avisos[0]).toContain('ISS fixo (SUP)');
+        expect(avisos[0]).toContain('escritórios de serviços contábeis');
     });
 
     it('receita IMUNE tambem avisa', () => {
@@ -525,5 +525,68 @@ describe('avisosDoPayload — o que reduz o DAS aqui mas ainda nao viaja na decl
         expect(avisosDoPayload({
             'principal::0::9602501::III': { ...emptyState, valor: '10.000,00' },
         } as any)).toEqual([]);
+    });
+});
+
+describe('ISS fixo do escritorio contabil (SUP) — caso S&P', () => {
+    // Indicacao correta (Paulo, 03/08/2026): "Prestacao de Servicos, exceto para o
+    // exterior - Escritorios de servicos contabeis autorizados pela legislacao
+    // municipal a pagar o ISS em valor fixo em guia do Municipio" (LC 123 §22-A).
+    // Enquanto o CODIGO oficial dessa atividade nao entra no app, a receita
+    // marcada como SUP viaja como ISS retido: MESMO DAS, natureza a corrigir.
+    it('SUP tira o ISS do DAS pela mesma atividade do ISS retido (valor preservado)', () => {
+        const payload = mapPgdasPayload({
+            empresa: baseEmpresa,
+            resumo: baseResumo,
+            mesApuracao: new Date(2026, 6, 1),
+            faturamentoPorCnae: {
+                'principal::0::6920601::III': { ...emptyState, valor: '20.000,00', isSup: true },
+            },
+            filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
+        });
+
+        const atividade = payload.declaracao.estabelecimentos[0].atividades[0];
+        expect(atividade.idAtividade).toBe(15);
+        expect(atividade.valorAtividade).toBe(20000);
+        // e sem a qualificacao de retencao (que derrubava a entrega inteira)
+        expect(atividade.receitasAtividade[0].qualificacoesTributarias).toBeUndefined();
+    });
+
+    it('avisa que a NATUREZA vai errada, deixando claro que o valor esta certo', () => {
+        const avisos = avisosDoPayload({
+            'principal::0::6920601::III': { ...emptyState, valor: '20.000,00', isSup: true },
+        } as any);
+        expect(avisos).toHaveLength(1);
+        expect(avisos[0]).toContain('VALOR do DAS está certo');
+        expect(avisos[0]).toContain('valor fixo em guia do Município');
+        expect(avisos[0]).toContain('Pode transmitir');
+    });
+
+    it('SUP no Anexo V e no IV tambem mantem o ISS fora do DAS', () => {
+        for (const [anexo, id] of [['V', 12], ['IV', 18]] as Array<[string, number]>) {
+            const payload = mapPgdasPayload({
+                empresa: { ...baseEmpresa, anexo: anexo as any },
+                resumo: baseResumo,
+                mesApuracao: new Date(2026, 6, 1),
+                faturamentoPorCnae: {
+                    [`principal::0::6920601::${anexo}`]: { ...emptyState, valor: '20.000,00', isSup: true },
+                },
+                filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
+            });
+            expect(payload.declaracao.estabelecimentos[0].atividades[0].idAtividade).toBe(id);
+        }
+    });
+
+    it('servico para o EXTERIOR ignora a marcacao de SUP (nao ha ISS a fixar)', () => {
+        const payload = mapPgdasPayload({
+            empresa: baseEmpresa,
+            resumo: baseResumo,
+            mesApuracao: new Date(2026, 6, 1),
+            faturamentoPorCnae: {
+                'principal::0::6920601::III': { ...emptyState, valor: '20.000,00', isSup: true, isExterior: true },
+            },
+            filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
+        });
+        expect(payload.declaracao.estabelecimentos[0].atividades[0].idAtividade).toBe(30);
     });
 });
