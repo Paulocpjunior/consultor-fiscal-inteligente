@@ -39,7 +39,9 @@ pedir). DIPJ/fila/cadastros estáticos ⚫.
 | GIA | ⚫ DESUSO (Paulo, 02/08) | não gastar feature |
 | DIRF | ⚫ EXTINTA | substituída pela série R-4000 do REINF |
 | DCTF/MIT · DARF · GARE→DARE · DAS | ✅ | DCTFWeb+MIT (#292), SERPRO, API DARE-SP |
-| DIFAL de aquisição (+ DeSTDA/EC 87/15) | 🔴 **CONFIRMADO 03/08** (equipe): clientes compram de fora e PAGAM DIFAL | Próxima lacuna a fechar: apuração do DIFAL de aquisição (as compras interestaduais da aba 🚦 são o rastro); no SPED do Lucro o débito entra via E111 (JÁ dá pra lançar) — falta a CONTA da guia e o C197 |
+| DIFAL de aquisição — consolidado mensal do Simples | ✅ **FASE 1 no ar 03/08** | desenho do Alexandre: aba 🧭 DIFAL aquisição (Central XMLs) — varredura da carteira + apuração por cliente (interna 18% editável/nota, interestadual da nota ou derivada UF/origem, clamp ≥0); guia sai pelo trilho DARE existente |
+| Antecipação art. 426-A (mercadoria com ST) | 🔴 FASE 2 | individual POR DOCUMENTO (Alexandre); a aba já separa e lista as notas com ST — falta a conta com IVA-ST e a guia por nota |
+| DIFAL uso/consumo do Lucro (EC 87/15) no SPED | 🟡 | débito entra via E111 (aba de 02/08); falta C197 por documento |
 | Regime de caixa do Lucro | ⚫ **DESCARTADO 03/08** (equipe) | nenhum cliente optante |
 | e-CredAc/crédito acumulado SP (CAT 207/2009 + 17/99) | 🟡 | junto com a decisão do CIAP |
 | PER/DCOMP · ressarcimento ST (CAT 42/18) | 🟡 | sob demanda; hoje e-CAC/manual |

@@ -405,6 +405,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   lacuna a construir: apuração/conta da guia + C197 (o débito no E110 já
   entra via E111). Validações 5-10 (JOTASUL, EDUARDO GUERRA, Canceladas,
   MANTOAN ok, resp+contador, e-mail DAS) em andamento com a equipe.
+  **DIFAL FASE 1 no ar (03/08, desenho do Alexandre)**: consolidado NO MÊS
+  pro Simples (consumo+revenda); 426-A (com ST) é INDIVIDUAL por documento
+  — aba 🧭 DIFAL aquisição na Central XMLs (`difal-aquisicao.js` puro, 7
+  testes + rotas `/api/admin/difal/*`): varredura da carteira Simples +
+  apuração por cliente, interna 18% editável POR NOTA, interestadual da
+  nota ou derivada (UF 12/7 + orig importado 4%), nota com ST separada da
+  consolidação. Guia = trilho DARE existente. FASE 2 pendente: 426-A com
+  IVA-ST por documento; C197 do Lucro.
 - **GIA caiu em DESUSO** (Paulo, 02/08): não listar como rotina nem gastar
   feature com ela. **SPED Fiscal/Contribuições JÁ É módulo do CFI** (card
   SPED Fiscal: gera mensal/trimestral + conferências; transmissão é no PVA
