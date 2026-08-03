@@ -37,7 +37,10 @@ router.get('/resumo', requireAuth, async (req, res) => {
         return res.status(403).json({ error: 'Resumo consolidado disponivel apenas para admin.' });
     }
     try { res.json(await getResumoDas()); }
-    catch (err) { res.status(500).json({ error: err.message }); }
+    catch (err) {
+        console.error('[das/resumo] falhou:', err.stack || err);
+        res.status(500).json({ error: `resumo: ${err.message}` });
+    }
 });
 
 router.get('/listar', requireAuth, async (req, res) => {
@@ -56,7 +59,10 @@ router.get('/listar', requireAuth, async (req, res) => {
             competencia: req.query.competencia,
             status: req.query.status,
         }));
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+        console.error('[das/listar] falhou:', err.stack || err);
+        res.status(500).json({ error: `listar: ${err.message}` });
+    }
 });
 
 router.post('/emitir-regular', requireEmissao, express.json(), async (req, res) => {
