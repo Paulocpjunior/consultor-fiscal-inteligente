@@ -167,13 +167,42 @@ function anexoExigeFolhaSalario(anexo: SimplesNacionalEmpresa['anexo']): boolean
     return anexo === 'III_V' || anexo === 'V';
 }
 
+/**
+ * Atividade oficial do PGDAS-D para "Prestação de Serviços, exceto para o
+ * exterior — Escritórios de serviços contábeis autorizados pela legislação
+ * municipal a pagar o ISS em valor fixo em guia do Município" (LC 123 art. 18
+ * §22-A): usa as alíquotas do Anexo III DESCONSIDERANDO o percentual do ISS,
+ * que o escritório paga direto ao município. É a indicação correta da S&P
+ * (Paulo, 03/08/2026) — hoje essa receita ia como "ISS retido pelo tomador".
+ *
+ * O NÚMERO desta atividade ainda não foi confirmado na tabela oficial do
+ * SERPRO (a documentação não abre deste ambiente). Enquanto ficar null, a
+ * receita marcada como SUP viaja como ISS retido: **mesmo valor de DAS** (o
+ * ISS sai dos dois jeitos) com a natureza declarada errada — exatamente o que
+ * a equipe já fazia à mão, sem piorar nada. `avisosDoPayload` diz isso na
+ * confirmação antes de transmitir. Com o número em mãos, basta preencher aqui:
+ * o resto do caminho (marcação na tela, cálculo e envio) já está pronto.
+ */
+const ID_ATIVIDADE_ISS_FIXO_CONTABIL: number | null = null;
+
+/** A receita tem o ISS fora do DAS? (retido pelo tomador OU fixo em guia do município) */
+const issForaDoDas = (state: Pick<CnaeInputState, 'issRetido' | 'isSup'>): boolean =>
+    !!state.issRetido || !!state.isSup;
+
 function idAtividadePgdas(
     anexoOriginal: SimplesNacionalEmpresa['anexo'],
-    state: Pick<CnaeInputState, 'issRetido' | 'icmsSt' | 'isMonofasico' | 'isExterior'>,
+    state: Pick<CnaeInputState, 'issRetido' | 'icmsSt' | 'isSup' | 'isMonofasico' | 'isExterior'>,
     fatorR: number,
 ): number {
     const anexo = resolveAnexoEfetivo(anexoOriginal, fatorR);
     const temStOuMono = state.icmsSt || state.isMonofasico;
+
+    // ISS fixo do escritório contábil é tributado pelo Anexo III (§22-A). Só
+    // vale quando a atividade oficial já estiver mapeada; senão cai no
+    // tratamento de "ISS fora do DAS" abaixo, que preserva o valor.
+    if (state.isSup && !state.isExterior && ID_ATIVIDADE_ISS_FIXO_CONTABIL !== null) {
+        return ID_ATIVIDADE_ISS_FIXO_CONTABIL;
+    }
 
     if (anexo === 'I') {
         if (state.isExterior) return 3;
@@ -187,17 +216,17 @@ function idAtividadePgdas(
 
     if (anexo === 'IV') {
         if (state.isExterior) return 31;
-        return state.issRetido ? 18 : 17;
+        return issForaDoDas(state) ? 18 : 17;
     }
 
     if (anexo === 'V') {
         if (state.isExterior) return 29;
-        return state.issRetido ? 12 : 11;
+        return issForaDoDas(state) ? 12 : 11;
     }
 
     // Anexo III sem fator R: ISS devido ao proprio municipio por padrao.
     if (state.isExterior) return 30;
-    return state.issRetido ? 15 : 14;
+    return issForaDoDas(state) ? 15 : 14;
 }
 
 function serviceFallbackAnexo(empresa: SimplesNacionalEmpresa): SimplesNacionalEmpresa['anexo'] {
@@ -231,7 +260,7 @@ function atividadesEstabelecimento(
         if (anexoExigeFolhaSalario(empresa.anexo)) exigeFolha = true;
         const idAtividade = idAtividadePgdas(
             serviceFallbackAnexo(empresa),
-            { issRetido: true, icmsSt: false, isMonofasico: false, isExterior: false },
+            { issRetido: true, icmsSt: false, isSup: false, isMonofasico: false, isExterior: false },
             fatorR,
         );
         addAtividade(grupos, idAtividade, s);
@@ -407,7 +436,7 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
             if (anexoExigeFolhaSalario(empresa.anexo)) exigeFolhaSalario = true;
             const idAtividade = idAtividadePgdas(
                 serviceFallbackAnexo(empresa),
-                { issRetido: true, icmsSt: false, isMonofasico: false, isExterior: false },
+                { issRetido: true, icmsSt: false, isSup: false, isMonofasico: false, isExterior: false },
                 resumo.fator_r || 0,
             );
             addAtividade(grupos, idAtividade, filialServicoSafe);
@@ -488,12 +517,13 @@ export function avisosDoPayload(faturamentoPorCnae: Record<string, CnaeInputStat
     const comValor = Object.values(faturamentoPorCnae || {})
         .filter((s) => s && round2(parseValorBr(s.valor)) > 0);
 
-    if (comValor.some((s) => s.isSup)) {
+    if (comValor.some((s) => s.isSup) && ID_ATIVIDADE_ISS_FIXO_CONTABIL === null) {
         avisos.push(
-            'Há receita marcada como ISS(SUP): o app tira o ISS do DAS, mas a declaração '
-            + 'enviada ao PGDAS-D ainda não carrega o ISS fixo (campo "valor fixo de ISS"). '
-            + 'O DAS que a Receita calcular pode vir COM o ISS. Confira o valor devolvido '
-            + 'antes de pagar e avise o Paulo — o campo depende de como o município fixou o ISS.',
+            'Há receita marcada como ISS fixo (SUP). O VALOR do DAS está certo — o ISS fica '
+            + 'de fora do mesmo jeito —, mas a declaração vai com a atividade "ISS retido pelo '
+            + 'tomador" em vez de "escritórios de serviços contábeis... ISS em valor fixo em '
+            + 'guia do Município", porque o código oficial dessa atividade ainda não está '
+            + 'cadastrado no app. Pode transmitir; a natureza é corrigida assim que o código entrar.',
         );
     }
     if (comValor.some((s) => s.isImune)) {

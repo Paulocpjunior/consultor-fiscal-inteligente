@@ -53,10 +53,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   qualificação). LACUNA CONHECIDA e AVISADA: `isSup` (ISS SUP) e `isImune`
   reduzem o DAS no cálculo do app mas NÃO viajam na declaração (`valorFixoIss`
   vai null) — `avisosDoPayload` mostra o buraco na confirmação do "Emitir DAS
-  Regular" antes de transmitir. PENDENTE do Paulo: como o ISS(SUP) da S&P é
-  declarado no e-CAC (valor fixo informado? qual?) pra preencher valorFixoIss
-  de verdade. Campos `_*` do payload são meta do app — o backend só manda
-  `declaracao` ao SERPRO.
+  Regular" antes de transmitir. Campos `_*` do payload são meta do app — o
+  backend só manda `declaracao` ao SERPRO.
+- **ISS(SUP) = atividade própria do PGDAS-D, não é retenção** (Paulo, 03/08 —
+  resposta do caso S&P): a indicação correta é "Prestação de Serviços, exceto
+  para o exterior — **Escritórios de serviços contábeis autorizados pela
+  legislação municipal a pagar o ISS em valor fixo em guia do Município**"
+  (LC 123 art. 18 §22-A: alíquotas do Anexo III DESCONSIDERANDO o ISS, que o
+  escritório paga direto ao município). NÃO usa `valorFixoIss` (esse é o §18,
+  outro caso) e o DAS dá o MESMO valor da rota de ISS retido — por isso o erro
+  passou despercebido. CAUSA de fundo: a tela do Simples não tinha marcação de
+  SUP (só "ISS Retido"), então a equipe marcava retenção pra tirar o ISS do
+  DAS e a declaração saía com natureza falsa ("o tomador reteve"). Feito:
+  marcação **ISS fixo (SUP)** na tela (excludente com ISS Retido),
+  `issForaDoDas` no mapper e aviso na confirmação. FALTA SÓ O NÚMERO da
+  atividade na tabela do SERPRO — `ID_ATIVIDADE_ISS_FIXO_CONTABIL` (null hoje,
+  em pgdasMapper). Enquanto null, SUP viaja como 15/12/18 (valor certo,
+  natureza a corrigir). A doc do SERPRO e o manual da Receita são BLOQUEADOS
+  pela política de rede do ambiente — o número tem que vir do Paulo (doc do
+  Integra Contador) ou de uma declaração anterior da própria empresa via
+  CONSULTIMADECREC14. Ids já mapeados: 1/2/3 comércio, 4/5/6 indústria, 11/12
+  Anexo V, 14/15 Anexo III, 17/18 Anexo IV, 29/30/31 exterior (V/III/IV).
 - **PRESUMIDO tem os DOIS períodos e o mês decide** (colaborador via Paulo,
   03/08 — caso CLINICA MANTOAN 07/2026): IRPJ/CSLL são TRIMESTRAIS (Lei
   9.430/96 art. 1º) e PIS/COFINS/IPI são MENSAIS, então a ficha precisa dos

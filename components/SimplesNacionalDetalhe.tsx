@@ -273,6 +273,22 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
         }));
     };
 
+    /**
+     * "ISS Retido" e "ISS fixo (SUP)" são naturezas EXCLUDENTES do mesmo ISS —
+     * marcar as duas descreveria a receita de dois jeitos ao mesmo tempo. Ligar
+     * uma desliga a outra; o efeito no DAS (ISS fora) é igual nas duas.
+     */
+    const handleIssExclusivo = (key: string, field: 'issRetido' | 'isSup') => {
+        const oposto = field === 'issRetido' ? 'isSup' : 'issRetido';
+        setFaturamentoPorCnae((prev) => {
+            const ligando = !prev[key][field];
+            return {
+                ...prev,
+                [key]: { ...prev[key], [field]: ligando, ...(ligando ? { [oposto]: false } : {}) },
+            };
+        });
+    };
+
     const handleOptionToggle = (key: string, field: keyof CnaeInputState) => {
         setFaturamentoPorCnae((prev) => ({
             ...prev,
@@ -728,8 +744,22 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                                             
                                             {['III', 'IV', 'V', 'III_V'].includes(anexoCode) && (
                                                 <label className={`cursor-pointer px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center gap-2 select-none ${state.issRetido ? 'bg-teal-100 text-teal-700 border-teal-200' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-600'}`}>
-                                                    <input type="checkbox" checked={state.issRetido} onChange={() => handleOptionToggle(key, 'issRetido')} className="hidden" />
+                                                    <input type="checkbox" checked={state.issRetido} onChange={() => handleIssExclusivo(key, 'issRetido')} className="hidden" />
                                                     ISS Retido
+                                                </label>
+                                            )}
+
+                                            {/* ISS fixo em guia do município (escritório contábil — LC 123
+                                                art. 18 §22-A). Sem esta marcação a equipe só tinha "ISS
+                                                Retido" pra tirar o ISS do DAS, e a declaração saía com a
+                                                natureza errada (caso S&P, 03/08/2026). */}
+                                            {['III', 'IV', 'V', 'III_V'].includes(anexoCode) && (
+                                                <label
+                                                    title="Escritórios de serviços contábeis autorizados pela legislação municipal a pagar o ISS em valor fixo em guia do Município (LC 123, art. 18, §22-A). Usa o Anexo III sem o percentual do ISS."
+                                                    className={`cursor-pointer px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center gap-2 select-none ${state.isSup ? 'bg-violet-100 text-violet-700 border-violet-200' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-600'}`}
+                                                >
+                                                    <input type="checkbox" checked={state.isSup} onChange={() => handleIssExclusivo(key, 'isSup')} className="hidden" />
+                                                    ISS fixo (SUP)
                                                 </label>
                                             )}
 
