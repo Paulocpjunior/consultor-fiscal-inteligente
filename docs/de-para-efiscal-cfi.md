@@ -37,6 +37,13 @@ pedir). DIPJ/fila/cadastros estáticos ⚫.
 | Função | Status | Nota |
 |---|---|---|
 | GIA | ⚫ DESUSO (Paulo, 02/08) | não gastar feature |
+| DIRF | ⚫ EXTINTA | substituída pela série R-4000 do REINF |
+| DCTF/MIT · DARF · GARE→DARE · DAS | ✅ | DCTFWeb+MIT (#292), SERPRO, API DARE-SP |
+| DeSTDA (Simples ST/DIFAL) + DIFAL aquisições + EC 87/15 | 🔴 | 3 trilhos ATIVOS no E-Fiscal (menus 03/08) — a pergunta do DIFAL ficou mais urgente |
+| Regime de caixa do Lucro (recebidos/a receber) | 🟡 NOVO (03/08) | CFI apura por emissão; presumido por caixa precisa do controle de recebimento — avaliar com o Paulo |
+| e-CredAc/crédito acumulado SP (CAT 207/2009 + 17/99) | 🟡 | junto com a decisão do CIAP |
+| PER/DCOMP · ressarcimento ST (CAT 42/18) | 🟡 | sob demanda; hoje e-CAC/manual |
+| SINTEGRA · IN 86/01 · DNF · REDF · DES · DMED · CPRB · STDA | ⚫ | legados/nichos |
 | REINF | 🔴 fora do CFI | módulo em construção no Consultor Contábil; menu mapeado (faltam 2 submenus); FUNRURAL do 🌾 = fonte do R-2055 |
 | Histórico de escrituração (PG12, 84 GB, 1.735 empresas) | 🔴 | extração = fase F2 do plano (aguarda 3 arquivos do Paulo); até lá o E-Fiscal fica vivo de consulta |
 | Importação Folhamatic (.FML) | — ponte | Exportar SAGE + leitor de log — existe PARA a transição; morre com ela |

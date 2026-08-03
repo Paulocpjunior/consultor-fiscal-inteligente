@@ -135,6 +135,83 @@ valor apurado pelo CFI é a fonte natural do R-2055.
 Falta abrir: os dois submenus (Informações Complementares e Relatórios) —
 gravar de novo ABRINDO cada um.
 
+## Menus principais (prints diretos, 03/08)
+
+Legenda: ✅ CFI cobre · 🟡 parcial/avaliar · 🔴 lacuna relevante ·
+⚫ extinto/desuso/nicho (não vale) · ⚪ cinza no próprio E-Fiscal (desabilitado).
+
+### Menu MOVIMENTOS (lançamento e apurações especiais)
+
+| Item | × CFI |
+|---|---|
+| NF Entradas e Saídas · Saídas por Talão | ✅ captura automática + importações (digitação manual morre com a migração) |
+| ISS ▸ | ✅ NFS-e capturada + apuração |
+| Recálculo | ✅ apuração recalcula sozinha |
+| **Controle de Crédito de ICMS do Ativo Permanente-CIAP** | 🔴 ATIVO no menu — reforça a lacuna do bloco G (pergunta CAT 17/99 em aberto) |
+| **Controle da Produção e do Estoque (Bloco K)** | 🔴 ATIVO — lacuna do bloco K (F0 dirá quantas indústrias) |
+| **DeSTDA** (ST/DIFAL/antecipação do Simples) | 🔴 avaliar — obrigação VIVA pra Simples com ST/DIFAL; casa com a pergunta do DIFAL |
+| Apuração ref. Estoque ST · CAT 28/2020 | 🟡 eventos de inclusão/exclusão do regime ST — sob demanda |
+| Movimentação de Combustíveis · Usinas (açúcar/álcool) | ⚫ nicho (só se houver posto/usina na carteira) |
+| STDA | ⚫ anual antiga do Simples SP |
+| Método Permanente/Anual ▸ · DIPI · Apuração ICMS ST Interestaduais · créditos PIS/COFINS especiais | ⚪ cinza no próprio E-Fiscal |
+
+### Menu IMPOSTO (apurações)
+
+| Item | × CFI |
+|---|---|
+| Digitações Sócios/Empresas · Valores Complementares · Recálculo Federais | ✅ cadastro + apuração do CFI |
+| Simples Nacional ▸ · MEI | ✅ módulo Simples/DAS |
+| **Diferencial de Alíquotas (nas aquisições)** · **Apuração DIFAL EC 87/15** | 🔴 mesma pergunta pendente do DIFAL — o E-Fiscal tem DOIS trilhos ativos disso |
+| Módulo Imposto PIS/COFINS | ✅ SPED Contribuições + apuração Lucro |
+
+### Menu RELATÓRIOS (o dropdown — a árvore interna já está mapeada acima)
+
+| Item | × CFI |
+|---|---|
+| Relatórios (janela/árvore) | ✅ card Relatórios (15) — topo da árvore ainda pendente de print |
+| Clientes e Fornecedores · Produtos (a partir de 2009) | ✅ Por participante · Por produto |
+| E-Mails Enviados | ✅ auditorias das_envios_cliente/impostos_enviados |
+| Cadastro de empresas | ✅ painéis + listagem |
+| **Regime de Caixa — Valores Recebidos/À Receber** | 🟡 avaliar: Lucro Presumido por regime de caixa precisa do controle de recebimento — hoje o CFI apura por emissão |
+| Relatórios para Conferência ▸ | 🟡 submenu não aberto |
+| Config. de Datas · Controle de Acesso | ⚫ internos do E-Fiscal |
+
+### Menu IMPRESSOS (guias)
+
+| Item | × CFI |
+|---|---|
+| Guia ICMS/GARE | ✅ DARE-SP pela API credenciada (a GARE virou DARE) |
+| Emissão de DARF's | ✅ DARF SERPRO |
+| Emissão da Guia de ISS | 🟡 guia municipal varia por prefeitura — CFI registra envio; emissão é no portal |
+| Impostos Retidos ▸ | 🟡 DARF de retenções — conferir se o trilho DARF cobre os códigos |
+| CPRB (desoneração) | ⚫ nicho |
+| Recibos ▸ · Guias em Branco ▸ | ⚫ |
+| Simples Paulista · GRPR · ICMS RS · ICMS ST | ⚪ cinza |
+
+### Menu DIVERSOS (arquivos e declarações — o coração da migração)
+
+| Item | × CFI |
+|---|---|
+| **EFD - ICMS/IPI ▸ · EFD - Contribuições ▸** | ✅ card SPED Fiscal (a prova do piloto pendente) |
+| Exportação de dados p/ contabilidade | 🟡 ponte pro contábil — mapear quando o Consultor Contábil precisar |
+| **DCTF ▸ · Módulo de Inclusão de Tributos - MIT** | ✅ DCTFWeb + MIT do CFI (retificação #292) |
+| PER/DCOMP | 🟡 compensações — hoje e-CAC manual |
+| Gias ▸ | ⚫ DESUSO (Paulo 02/08) |
+| **DIRF** | ⚫ EXTINTA — substituída pela série R-4000 do REINF (já mapeada) |
+| Comprovante de Rendimentos ▸ | 🟡 ligado à DIRF/R-4000 — avaliar no módulo Reinf |
+| e-CredAc (CAT 207/2009) · Arquivo Digital CAT 156/2010 | 🟡 crédito acumulado SP — junto com a decisão do CAT 17/99 |
+| Ressarcimento/Complemento ICMS-ST (CAT 42/18) | 🟡 ressarcimento ST — nicho, sob demanda |
+| SINTEGRA · IN 86/01 · DNF · REDF · DES · Simples Paulista | ⚫ legados |
+| DSN São Paulo · DMED ▸ · Geração PJ ▸ | ⚫ nichos/legados |
+| Encerramento/Reabertura de Mês · Digitação Turbo · Exclusão em Lote · Ajustes ▸ | ⚫ operação interna do E-Fiscal |
+
+**Resumo do achado (03/08):** os menus confirmam o de-para — as lacunas
+reais continuam sendo as MESMAS cinco: CIAP (bloco G), bloco K, DeSTDA +
+DIFAL (a pergunta pendente virou mais urgente: são 3 trilhos ativos disso
+no E-Fiscal), SAT (não apareceu nos menus — segue só na árvore de
+relatórios) e regime de caixa do Lucro (novidade desta leva — avaliar).
+Todo o resto ou o CFI cobre, ou está cinza/extinto no próprio E-Fiscal.
+
 ## Pendências de varredura
 
 1. **Topo da árvore de Relatórios** não capturado (limite de 25 prints do
@@ -146,5 +223,7 @@ gravar de novo ABRINDO cada um.
    Relatórios (Recibos de Entrega · Rendimentos Enviados) + submenu
    Informações Complementares (série R-4000: R-4010/4020/4040/4080).
    Mapa inteiro pronto pro módulo EFD-Reinf do Consultor Contábil.
-3. Demais menus do E-Fiscal (Movimentos, Imposto, Impressos, Diversos,
-   Módulos Estaduais, Utilitários) — mesmas gravações, uma por menu.
+3. ~~Movimentos, Imposto, Relatórios (dropdown), Impressos, Diversos~~
+   **FEITO 03/08** (prints diretos — seção "Menus principais"). Restam:
+   **Módulos Estaduais** e **Utilitários** + submenus que interessarem
+   (ISS ▸, Relatórios p/ Conferência ▸, EFD ▸, Impostos Retidos ▸).
