@@ -1,5 +1,5 @@
 import type { SimplesNacionalEmpresa, SimplesNacionalResumo } from '../types';
-import { mapPgdasPayload } from '../services/pgdasMapper';
+import { mapPgdasPayload, avisosDoPayload } from '../services/pgdasMapper';
 
 const baseEmpresa: SimplesNacionalEmpresa = {
     id: 'emp-1',
@@ -435,5 +435,95 @@ describe('mapPgdasPayload — declaração por estabelecimento (filiais com CNPJ
         // comércio→1, indústria→4, serviço Anexo III próprio município (ISS retido)→15.
         expect(filial.atividades.map(a => a.idAtividade)).toEqual([1, 4, 15]);
         expect(payload.declaracao.receitaPaCompetenciaInterno).toBe(6000);
+    });
+
+    // ── Retenção de ISS: vai no ID, NUNCA em dobro ────────────────────────
+    // Caso S&P (03/08/2026): o SERPRO recusava a entrega inteira com
+    // MSG_ISN_032 "Retenção de ISS não é permitida para o idAtividade 15 com o
+    // tributo ISS" — o mapper mandava a atividade 15 (que JÁ significa ISS
+    // retido pelo tomador) E a qualificação tributária 1010/11.
+    it('atividade 15 (Anexo III, ISS retido) NAO leva a qualificacao 1010/11 junto', () => {
+        const payload = mapPgdasPayload({
+            empresa: baseEmpresa,
+            resumo: baseResumo,
+            mesApuracao: new Date(2026, 6, 1),
+            faturamentoPorCnae: {
+                'principal::0::9602501::III': { ...emptyState, valor: '10.000,00', issRetido: true },
+            },
+            filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
+        });
+
+        const atividade = payload.declaracao.estabelecimentos[0].atividades[0];
+        expect(atividade.idAtividade).toBe(15);
+        const quals = atividade.receitasAtividade[0].qualificacoesTributarias || [];
+        expect(quals.find((q) => q.codigoTributo === 1010)).toBeUndefined();
+    });
+
+    it('o mesmo vale pro Anexo V (12) e pro Anexo IV (18)', () => {
+        const casos: Array<[string, number]> = [['V', 12], ['IV', 18]];
+        for (const [anexo, id] of casos) {
+            const payload = mapPgdasPayload({
+                empresa: { ...baseEmpresa, anexo: anexo as any },
+                resumo: baseResumo,
+                mesApuracao: new Date(2026, 6, 1),
+                faturamentoPorCnae: {
+                    [`principal::0::9602501::${anexo}`]: { ...emptyState, valor: '10.000,00', issRetido: true },
+                },
+                filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
+            });
+            const atividade = payload.declaracao.estabelecimentos[0].atividades[0];
+            expect(atividade.idAtividade).toBe(id);
+            expect(atividade.receitasAtividade[0].qualificacoesTributarias).toBeUndefined();
+        }
+    });
+
+    it('ST e monofasico seguem indo na qualificacao (so o ISS retido saiu)', () => {
+        const payload = mapPgdasPayload({
+            empresa: baseEmpresa,
+            resumo: baseResumo,
+            mesApuracao: new Date(2026, 6, 1),
+            faturamentoPorCnae: {
+                'principal::0::4711302::I': { ...emptyState, valor: '5.000,00', icmsSt: true, isMonofasico: true },
+            },
+            filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
+        });
+
+        const quals = payload.declaracao.estabelecimentos[0].atividades[0]
+            .receitasAtividade[0].qualificacoesTributarias || [];
+        expect(quals).toEqual([
+            { codigoTributo: 1007, id: 8 },
+            { codigoTributo: 1004, id: 9 },
+            { codigoTributo: 1005, id: 9 },
+        ]);
+    });
+});
+
+describe('avisosDoPayload — o que reduz o DAS aqui mas ainda nao viaja na declaracao', () => {
+    it('receita com ISS(SUP) avisa que o PGDAS-D nao recebe o ISS fixo', () => {
+        const avisos = avisosDoPayload({
+            'principal::0::9602501::III': { ...emptyState, valor: '10.000,00', isSup: true },
+        } as any);
+        expect(avisos).toHaveLength(1);
+        expect(avisos[0]).toContain('ISS(SUP)');
+        expect(avisos[0]).toContain('Confira');
+    });
+
+    it('receita IMUNE tambem avisa', () => {
+        const avisos = avisosDoPayload({
+            'principal::0::4711302::I': { ...emptyState, valor: '10.000,00', isImune: true },
+        } as any);
+        expect(avisos[0]).toContain('IMUNE');
+    });
+
+    it('marcacao SEM valor nao vira aviso (linha zerada nao declara nada)', () => {
+        expect(avisosDoPayload({
+            'principal::0::9602501::III': { ...emptyState, valor: '0,00', isSup: true },
+        } as any)).toEqual([]);
+    });
+
+    it('apuracao normal nao inventa aviso', () => {
+        expect(avisosDoPayload({
+            'principal::0::9602501::III': { ...emptyState, valor: '10.000,00' },
+        } as any)).toEqual([]);
     });
 });
