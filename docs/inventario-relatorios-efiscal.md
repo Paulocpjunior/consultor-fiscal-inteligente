@@ -111,8 +111,12 @@ Itens do menu suspenso REINF do E-Fiscal (Serviço de Comunicação REINF
 - **Transmissão de Eventos Periódicos** → R-2010/R-2020/R-2099 (retenções
   de serviços e fechamento)
 - **Comercialização – Produtor Rural PJ/Agroindústria** → R-2050
-- **Informações Complementares ▸** (submenu — NÃO aberto na gravação)
-- **Relatórios ▸** (submenu — NÃO aberto na gravação)
+- **Informações Complementares ▸** (submenu — AINDA não capturado; destacado
+  na gravação de 03/08 mas o flyout não expandiu a tempo do print)
+- **Relatórios ▸** (capturado 03/08): **Recibos de Entrega** · **Relatório
+  de Rendimentos Enviados – REINF** — os dois são pós-transmissão
+  (comprovante e conferência do que foi enviado); no módulo do Consultor
+  Contábil equivalem a guardar o recibo do evento e listar os enviados
 - Exportação XML (IOB Auditor) · Analyzer
 
 Decisão do Paulo (01/08): o achado REINF alimenta o módulo EFD-Reinf do
@@ -132,8 +136,9 @@ gravar de novo ABRINDO cada um.
    devagar até "Demonstrativo dos Impostos Retidos", parando ali. Em
    Configurações do Gravador dá pra subir "Número de capturas de tela
    recentes para armazenar" (padrão 25).
-2. ~~REINF: regravar abrindo o menu~~ **FEITO 02/08** (seção acima) —
-   restam os submenus "Informações Complementares ▸" e "Relatórios ▸" do
-   REINF, que não foram abertos.
+2. ~~REINF: regravar abrindo o menu~~ **FEITO 02/08**; ~~submenu
+   Relatórios~~ **FEITO 03/08** (Recibos de Entrega · Rendimentos
+   Enviados). Resta SÓ o submenu "Informações Complementares ▸" — pairar
+   nele e esperar o flyout abrir antes de mexer o mouse.
 3. Demais menus do E-Fiscal (Movimentos, Imposto, Impressos, Diversos,
    Módulos Estaduais, Utilitários) — mesmas gravações, uma por menu.
