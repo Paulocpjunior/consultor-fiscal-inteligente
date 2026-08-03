@@ -76,7 +76,12 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   uma declaração já aceita da própria empresa e destaca o que o app ainda não
   monta. Mesmo princípio do mês-modelo do MIT: NUNCA chutar código de tributo.
   Extrator puro `pgdas-atividades-declaradas.js` (varredura profunda — o shape
-  do SERPRO varia; 9 testes). Ids já mapeados: 1/2/3 comércio, 4/5/6 indústria,
+  do SERPRO varia; 9 testes). **Enquanto o código não entra, a emissão do DAS é
+  RECUSADA** pra receita marcada SUP (`bloqueiosDoPayload` + `_bloqueios` no
+  payload, revalidado no `emitirDasRegular` do backend): Paulo viu o extrato
+  saindo como "com retenção/substituição tributária de ISS" e cortou —
+  "leva errado pro SIMPLES". Entrega ao PGDAS-D não se desfaz: sem o código, a
+  competência vai pelo e-CAC. Ids já mapeados: 1/2/3 comércio, 4/5/6 indústria,
   11/12 Anexo V, 14/15 Anexo III, 17/18 Anexo IV, 29/30/31 exterior (V/III/IV).
 - **PRESUMIDO tem os DOIS períodos e o mês decide** (colaborador via Paulo,
   03/08 — caso CLINICA MANTOAN 07/2026): IRPJ/CSLL são TRIMESTRAIS (Lei

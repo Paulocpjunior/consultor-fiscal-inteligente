@@ -9,7 +9,7 @@ import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 import { useConfirm, usePrompt } from './dialog/DialogProvider';
 import { emitirDasRegular, getAtividadesDeclaradas } from '../services/dasService';
-import { mapPgdasPayload, avisosDoPayload } from '../services/pgdasMapper';
+import { mapPgdasPayload, avisosDoPayload, bloqueiosDoPayload } from '../services/pgdasMapper';
 import EmitirNfseModal from './NfseNacional/EmitirModal';
 import PrevisaoDasModal from './Das/PrevisaoModal';
 import PgdasConferirModal from './Pgdas/ConferirModal';
@@ -405,6 +405,24 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
             return;
         }
         const competencia = `${mesApuracao.getFullYear()}-${String(mesApuracao.getMonth() + 1).padStart(2, '0')}`;
+        // Natureza que o app ainda não sabe declarar: RECUSA em vez de mandar
+        // errado pro Simples (Paulo, 03/08 — caso do ISS fixo da S&P).
+        const bloqueios = bloqueiosDoPayload(faturamentoPorCnae as Record<string, any>);
+        if (bloqueios.length > 0) {
+            await confirm({
+                title: 'Não dá pra transmitir esta competência ainda',
+                message: (
+                    <div style={{ fontSize: 13 }}>
+                        {bloqueios.map((b, i) => <p key={i} style={{ marginBottom: 8 }}>{b}</p>)}
+                    </div>
+                ),
+                variant: 'warning',
+                confirmLabel: 'Entendi',
+                cancelLabel: 'Fechar',
+            });
+            return;
+        }
+
         // Marcações que reduzem o DAS aqui mas ainda não viajam na declaração —
         // aparecem ANTES de transmitir (a entrega ao PGDAS-D não se desfaz).
         const avisos = avisosDoPayload(faturamentoPorCnae as Record<string, any>);

@@ -1,5 +1,5 @@
 import type { SimplesNacionalEmpresa, SimplesNacionalResumo } from '../types';
-import { mapPgdasPayload, avisosDoPayload } from '../services/pgdasMapper';
+import { mapPgdasPayload, avisosDoPayload, bloqueiosDoPayload } from '../services/pgdasMapper';
 
 const baseEmpresa: SimplesNacionalEmpresa = {
     id: 'emp-1',
@@ -499,13 +499,10 @@ describe('mapPgdasPayload — declaração por estabelecimento (filiais com CNPJ
 });
 
 describe('avisosDoPayload — o que reduz o DAS aqui mas ainda nao viaja na declaracao', () => {
-    it('receita com ISS fixo (SUP) avisa que falta o codigo oficial da atividade', () => {
-        const avisos = avisosDoPayload({
+    it('receita com ISS fixo (SUP) nao vira AVISO — vira BLOQUEIO (ver bloqueiosDoPayload)', () => {
+        expect(avisosDoPayload({
             'principal::0::9602501::III': { ...emptyState, valor: '10.000,00', isSup: true },
-        } as any);
-        expect(avisos).toHaveLength(1);
-        expect(avisos[0]).toContain('ISS fixo (SUP)');
-        expect(avisos[0]).toContain('escritórios de serviços contábeis');
+        } as any)).toEqual([]);
     });
 
     it('receita IMUNE tambem avisa', () => {
@@ -552,14 +549,14 @@ describe('ISS fixo do escritorio contabil (SUP) — caso S&P', () => {
         expect(atividade.receitasAtividade[0].qualificacoesTributarias).toBeUndefined();
     });
 
-    it('avisa que a NATUREZA vai errada, deixando claro que o valor esta certo', () => {
-        const avisos = avisosDoPayload({
+    it('enquanto falta o codigo, a transmissao e RECUSADA (nao vai errado pro Simples)', () => {
+        const entrada = {
             'principal::0::6920601::III': { ...emptyState, valor: '20.000,00', isSup: true },
-        } as any);
-        expect(avisos).toHaveLength(1);
-        expect(avisos[0]).toContain('VALOR do DAS está certo');
-        expect(avisos[0]).toContain('valor fixo em guia do Município');
-        expect(avisos[0]).toContain('Pode transmitir');
+        } as any;
+        // O valor calculado segue certo (id 15 tira o ISS do DAS)...
+        expect(avisosDoPayload(entrada)).toEqual([]);
+        // ...mas a entrega para: natureza errada na declaracao nao se desfaz.
+        expect(bloqueiosDoPayload(entrada)[0]).toContain('valor fixo em guia do Município');
     });
 
     it('SUP no Anexo V e no IV tambem mantem o ISS fora do DAS', () => {
@@ -588,5 +585,53 @@ describe('ISS fixo do escritorio contabil (SUP) — caso S&P', () => {
             filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
         });
         expect(payload.declaracao.estabelecimentos[0].atividades[0].idAtividade).toBe(30);
+    });
+});
+
+describe('bloqueiosDoPayload — o app se RECUSA a declarar natureza que nao sabe montar', () => {
+    // Paulo, 03/08: "Continua com a MSG acima, e leva errado pro SIMPLES."
+    // Enquanto o codigo da atividade de ISS fixo nao entra, transmitir mandaria
+    // "ISS retido pelo tomador" — valor certo, natureza errada. Entrega ao
+    // PGDAS-D nao se desfaz: melhor recusar e mandar entregar pelo e-CAC.
+    it('receita com ISS fixo (SUP) bloqueia a transmissao com a acao pratica', () => {
+        const bloqueios = bloqueiosDoPayload({
+            'principal::0::6920601::III': { ...emptyState, valor: '151.619,17', isSup: true },
+        } as any);
+
+        expect(bloqueios).toHaveLength(1);
+        expect(bloqueios[0]).toContain('Escritórios de serviços contábeis');
+        expect(bloqueios[0]).toContain('Atividades declaradas');
+        expect(bloqueios[0]).toContain('e-CAC');
+    });
+
+    it('o bloqueio viaja no payload pra defesa do backend', () => {
+        const payload = mapPgdasPayload({
+            empresa: baseEmpresa,
+            resumo: baseResumo,
+            mesApuracao: new Date(2026, 6, 1),
+            faturamentoPorCnae: {
+                'principal::0::6920601::III': { ...emptyState, valor: '151.619,17', isSup: true },
+            },
+            filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
+        });
+        expect(payload._bloqueios).toHaveLength(1);
+    });
+
+    it('ISS retido de verdade NAO bloqueia (o app sabe declarar isso)', () => {
+        expect(bloqueiosDoPayload({
+            'principal::0::9602501::III': { ...emptyState, valor: '10.000,00', issRetido: true },
+        } as any)).toEqual([]);
+    });
+
+    it('marcacao SUP sem valor nao bloqueia (linha zerada nao declara nada)', () => {
+        expect(bloqueiosDoPayload({
+            'principal::0::9602501::III': { ...emptyState, valor: '0,00', isSup: true },
+        } as any)).toEqual([]);
+    });
+
+    it('apuracao normal transmite sem bloqueio', () => {
+        expect(bloqueiosDoPayload({
+            'principal::0::9602501::III': { ...emptyState, valor: '10.000,00' },
+        } as any)).toEqual([]);
     });
 });
