@@ -34,6 +34,16 @@ export async function emitirDasRegular(req) {
     }
     const valor = assertValorMinimoDas(req.valor);
 
+    // Defesa em profundidade: a tela já recusa, mas um cliente desatualizado
+    // (ou outro caminho) não pode transmitir declaração cuja natureza o app
+    // ainda não sabe montar. Os motivos vêm no meta `_bloqueios` do payload.
+    const bloqueios = Array.isArray(dadosPgdas?._bloqueios) ? dadosPgdas._bloqueios : [];
+    if (bloqueios.length > 0) {
+        const err = new Error(bloqueios.join(' '));
+        err.httpStatus = 400;
+        throw err;
+    }
+
     const provider = getDasProvider();
     const mode = getDasMode();
 

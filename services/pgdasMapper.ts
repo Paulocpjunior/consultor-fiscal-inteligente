@@ -84,6 +84,8 @@ export interface PgdasPayload {
     _cnpjLimpo: string;
     /** Meta do app (NÃO vai ao SERPRO): marcações que o mapper ainda não traduz. */
     _avisos?: string[];
+    /** Meta do app: motivos que IMPEDEM a transmissão (o backend também recusa). */
+    _bloqueios?: string[];
 }
 
 function paFromDate(d: Date): number {
@@ -502,6 +504,7 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         _competencia: competencia,
         _cnpjLimpo: cnpjLimpo,
         _avisos: avisosDoPayload(faturamentoPorCnae),
+        _bloqueios: bloqueiosDoPayload(faturamentoPorCnae),
     };
 }
 
@@ -512,20 +515,37 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
  * avisa antes de emitir (caso S&P: benefício do ISS(SUP), 03/08/2026).
  * Os campos `_*` são meta do app; o backend só envia `declaracao` ao SERPRO.
  */
+/**
+ * BLOQUEIOS: motivos pelos quais a declaração NÃO pode ser transmitida como
+ * está. Diferente do aviso (que informa e deixa seguir), aqui o app se recusa —
+ * entrega ao PGDAS-D não se desfaz, e declarar natureza errada é pior do que
+ * não declarar pelo app (Paulo, 03/08: "leva errado pro SIMPLES").
+ */
+export function bloqueiosDoPayload(faturamentoPorCnae: Record<string, CnaeInputState>): string[] {
+    const bloqueios: string[] = [];
+    const comValor = Object.values(faturamentoPorCnae || {})
+        .filter((s) => s && round2(parseValorBr(s.valor)) > 0);
+
+    if (comValor.some((s) => s.isSup) && ID_ATIVIDADE_ISS_FIXO_CONTABIL === null) {
+        bloqueios.push(
+            'Receita marcada como ISS fixo (SUP): a atividade correta é "Escritórios de serviços '
+            + 'contábeis autorizados pela legislação municipal a pagar o ISS em valor fixo em guia '
+            + 'do Município", e o código oficial dela ainda não está cadastrado no app. Transmitir '
+            + 'agora declararia "ISS retido pelo tomador" — valor certo, natureza errada. '
+            + 'O que fazer: use o botão "🔎 Atividades declaradas" numa competência já declarada no '
+            + 'e-CAC para descobrir o código e mande ao Paulo; enquanto isso, entregue esta '
+            + 'competência direto no e-CAC.',
+        );
+    }
+    return bloqueios;
+}
+
 export function avisosDoPayload(faturamentoPorCnae: Record<string, CnaeInputState>): string[] {
     const avisos: string[] = [];
     const comValor = Object.values(faturamentoPorCnae || {})
         .filter((s) => s && round2(parseValorBr(s.valor)) > 0);
 
-    if (comValor.some((s) => s.isSup) && ID_ATIVIDADE_ISS_FIXO_CONTABIL === null) {
-        avisos.push(
-            'Há receita marcada como ISS fixo (SUP). O VALOR do DAS está certo — o ISS fica '
-            + 'de fora do mesmo jeito —, mas a declaração vai com a atividade "ISS retido pelo '
-            + 'tomador" em vez de "escritórios de serviços contábeis... ISS em valor fixo em '
-            + 'guia do Município", porque o código oficial dessa atividade ainda não está '
-            + 'cadastrado no app. Pode transmitir; a natureza é corrigida assim que o código entrar.',
-        );
-    }
+
     if (comValor.some((s) => s.isImune)) {
         avisos.push(
             'Há receita marcada como IMUNE: o app tira ICMS/IPI do DAS, mas a declaração '
