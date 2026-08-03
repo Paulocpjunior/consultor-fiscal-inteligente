@@ -59,3 +59,12 @@ F0 inventário por cliente (SAT? CIAP? bloco K? ajustes? quem entrega EFD?)
 → F1 dois pilotos com conferência-espelho no PVA → F2 extração do PG12 →
 F3 ondas. **E111 (02/08) era o bloqueio técnico nº 1 e está fechado** —
 próximo alvo técnico: E220/ST ou C800/SAT, conforme o F0 disser qual dói.
+
+**F0 AUTOMÁTICO no ar (03/08)**: aba 🚦 Migração do card SPED Fiscal
+(`migracao-prontidao.js` puro + rota `/api/admin/sped/prontidao-migracao`)
+varre as notas da competência e classifica cada empresa — ST em saída
+(bloqueio: E220), IPI/indústria (bloqueio: bloco K/CIAP), compra
+interestadual (atenção: DIFAL), ST em entrada (coberto) — e aponta as
+🟢 **candidatas a piloto** (Lucro + movimento + zero bloqueio). O que os
+dados não respondem fica listado na própria aba como pergunta à equipe:
+SAT, regime de caixa, CIAP, DeSTDA.
