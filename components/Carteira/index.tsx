@@ -333,7 +333,9 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 sozinho fez a equipe achar que o cadastro certo
                                 estava sendo acusado à toa (31/07). */}
                             {farol && (
-                                <span title={farol.resumo}
+                                <span title={farol.campos.length > 0
+                                    ? `Pendências (${farol.campos.length}): ${farol.campos.join(' · ')}`
+                                    : farol.resumo}
                                     className={`text-[11px] px-2 py-0.5 rounded-full font-semibold max-w-[18rem] truncate ${
                                         farol.farol === 'bloqueado' ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
                                         : farol.farol === 'atencao' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'

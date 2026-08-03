@@ -272,32 +272,51 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
             .filter(d => !(d.data() as any)._merged_into && !(d.data() as any)._deleted)
             .map(d => {
             const data = d.data() as SimplesNacionalEmpresa;
+            const df: any = data.dadosFiscais || {};
             return {
                 id: d.id,
                 nome: data.nome,
                 cnpj: data.cnpj,
                 fonte: 'simples' as const,
                 regimeSugerido: 'SIMPLES' as RegimeSugerido,
-                uf: data.dadosFiscais?.uf,
-                inscricaoEstadual: data.dadosFiscais?.inscricaoEstadual,
-                ccmSp: data.dadosFiscais?.ccmSp || data.ccmSp,
+                uf: df.uf,
+                inscricaoEstadual: df.inscricaoEstadual,
+                ccmSp: df.ccmSp || (data as any).ccmSp,
                 createdBy: data.createdBy,
+                // Campos da conferência de cadastro — sem eles o FALLBACK fazia
+                // toda empresa parecer pendente quando o backend caía (03/08).
+                codMunIBGE: df.codMunIBGE || (data as any).codMunIBGE,
+                email: (data as any).email || df.email,
+                cnae: (data as any).cnae || df.cnae,
+                anexo: (data as any).anexo,
+                dataAbertura: (data as any).dataAbertura || df.dataAbertura,
+                respLegalNome: df.respLegalNome || df.responsaveisLegais?.[0]?.nome,
+                contadorNome: df.contadorNome,
+                contadorCrc: df.contadorCrc,
             };
         }).filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
         const lucro: EmpresaPerfilOption[] = lucroSnap
             .filter(d => !(d.data() as any)._merged_into && !(d.data() as any)._deleted)
             .map(d => {
             const data = d.data() as LucroPresumidoEmpresa;
+            const df: any = data.dadosFiscais || {};
             return {
                 id: d.id,
                 nome: data.nome,
                 cnpj: data.cnpj,
                 fonte: 'lucro' as const,
                 regimeSugerido: inferirRegimeLucro(data),
-                uf: data.dadosFiscais?.uf,
-                inscricaoEstadual: data.dadosFiscais?.inscricaoEstadual,
-                ccmSp: data.dadosFiscais?.ccmSp || data.ccmSp,
+                uf: df.uf,
+                inscricaoEstadual: df.inscricaoEstadual,
+                ccmSp: df.ccmSp || data.ccmSp,
                 createdBy: data.createdBy,
+                codMunIBGE: df.codMunIBGE || (data as any).codMunIBGE,
+                email: (data as any).email || df.email,
+                cnae: (data as any).cnae || df.cnae,
+                dataAbertura: (data as any).dataAbertura || df.dataAbertura,
+                respLegalNome: df.respLegalNome || df.responsaveisLegais?.[0]?.nome,
+                contadorNome: df.contadorNome,
+                contadorCrc: df.contadorCrc,
             };
         }).filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
 

@@ -52,18 +52,28 @@ const fmtCpf = (c: string) => c.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2
  */
 export function montarIdentificacao(df?: {
     respLegalNome?: string | null; respLegalCpf?: string | null; respLegalCargo?: string | null;
+    responsaveisLegais?: Array<{ nome?: string | null; cpf?: string | null; cargo?: string | null }> | null;
     contadorNome?: string | null; contadorCrc?: string | null; contadorCpf?: string | null;
 } | null): IdentificacaoPdf {
-    const nomeResp = (df?.respLegalNome || '').trim();
+    const fmtResp = (r: { nome?: string | null; cpf?: string | null; cargo?: string | null }) => {
+        const nome = (r?.nome || '').trim();
+        if (!nome) return null;
+        const cpf = String(r?.cpf || '').replace(/\D/g, '');
+        const cargo = (r?.cargo || '').trim();
+        return [nome, cpf ? `CPF ${fmtCpf(cpf)}` : '', cargo].filter(Boolean).join(' — ');
+    };
+    // MÚLTIPLOS responsáveis (03/08): a lista vence e o PDF imprime TODOS;
+    // os campos respLegal* seguem como legado/espelho do primeiro.
+    const lista = (df?.responsaveisLegais || []).map(fmtResp).filter(Boolean) as string[];
+    const responsavel = lista.length > 0
+        ? lista.join('  ·  ')
+        : fmtResp({ nome: df?.respLegalNome, cpf: df?.respLegalCpf, cargo: df?.respLegalCargo });
+
     const nomeCont = (df?.contadorNome || '').trim();
-    const cpfResp = String(df?.respLegalCpf || '').replace(/\D/g, '');
     const cpfCont = String(df?.contadorCpf || '').replace(/\D/g, '');
     const crc = (df?.contadorCrc || '').trim();
-    const cargo = (df?.respLegalCargo || '').trim();
     return {
-        responsavel: nomeResp
-            ? [nomeResp, cpfResp ? `CPF ${fmtCpf(cpfResp)}` : '', cargo].filter(Boolean).join(' — ')
-            : null,
+        responsavel: responsavel || null,
         contador: nomeCont
             ? [nomeCont, crc ? `CRC ${crc}` : '', cpfCont ? `CPF ${fmtCpf(cpfCont)}` : ''].filter(Boolean).join(' — ')
             : null,

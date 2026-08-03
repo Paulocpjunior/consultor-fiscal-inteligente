@@ -82,6 +82,28 @@ describe('sanitizarDadosFiscais — apagar × não mexer', () => {
         expect(limpo.respLegalNome).toBeUndefined();  // intocado não vai
     });
 
+    it('MÚLTIPLOS responsáveis: linha vazia cai fora e o 1º espelha no legado', () => {
+        const r = sanitizarDadosFiscais({
+            responsaveisLegais: [
+                { nome: ' João ', cpf: '529.982.247-25', cargo: ' Sócio ' },
+                { nome: '', cpf: '', cargo: '' },
+                { nome: 'Maria', cpf: '', cargo: 'Sócia' },
+            ],
+        } as any);
+        expect(r.responsaveisLegais).toEqual([
+            { nome: 'João', cpf: '52998224725', cargo: 'Sócio' },
+            { nome: 'Maria', cpf: '', cargo: 'Sócia' },
+        ]);
+        expect(r.respLegalNome).toBe('João');       // espelho do 1º
+        expect(r.respLegalCpf).toBe('52998224725');
+        // Lista tocada e esvaziada = ordem de apagar (legado zera junto)
+        const vazio = sanitizarDadosFiscais({ responsaveisLegais: [{ nome: ' ' }] } as any);
+        expect(vazio.responsaveisLegais).toEqual([]);
+        expect(vazio.respLegalNome).toBe('');
+        // Intocada não mexe em nada
+        expect(sanitizarDadosFiscais({} as any).responsaveisLegais).toBeUndefined();
+    });
+
     it('inscrição municipal alfanumérica (varia por prefeitura) não é mutilada', () => {
         expect(sanitizarDadosFiscais({ inscricaoMunicipal: ' 12345/001-A ' }).inscricaoMunicipal).toBe('12345/001-A');
     });

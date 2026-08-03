@@ -464,6 +464,15 @@ service cloud.firestore {
     // (mesmo padrão do gia_st_guias); exclusão só admin.
     // ───────────────────────────────────────────────────────────────
 
+    match /contadores/{docId} {
+      // Catálogo de contadores do escritório (03/08): equipe cadastra e
+      // escolhe por empresa; exclusão só admin.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
     match /sped_ajustes_apuracao/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;

@@ -59,7 +59,8 @@ function camposConferencia(data) {
         dataAbertura: data.dataAbertura || data.dadosFiscais?.dataAbertura || undefined,
         // Responsável legal + contador (identificação obrigatória dos
         // relatórios, Paulo 01/08) — vivem só em dadosFiscais.
-        respLegalNome: data.dadosFiscais?.respLegalNome || undefined,
+        respLegalNome: data.dadosFiscais?.respLegalNome
+            || data.dadosFiscais?.responsaveisLegais?.[0]?.nome || undefined,
         respLegalCpf: data.dadosFiscais?.respLegalCpf || undefined,
         respLegalCargo: data.dadosFiscais?.respLegalCargo || undefined,
         contadorNome: data.dadosFiscais?.contadorNome || undefined,

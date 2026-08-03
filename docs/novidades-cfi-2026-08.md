@@ -15,8 +15,11 @@ arquivo, SPED/EFD, GIA e REINF.
 1. **Menu Relatórios** (card Gestão): 3 passos (competência+empresa →
    Buscar 1× → aba → Baixar PDF); tabela das 15 abas; ressalva do
    Canceladas/Faltantes (buraco ≠ nota perdida).
-2. **✍️ Tarefa de todos**: preencher responsável legal + contador (senão o
-   PDF sai "não cadastrado"); é o motivo do selo "revisar" novo.
+2. **✍️ Tarefa de todos**: preencher responsáveis legais + contador.
+   03/08: bug do selo que não limpava CORRIGIDO (normalizador do perfil
+   descartava os campos — caso KAWAI KODOMO); múltiplos responsáveis
+   (＋ Adicionar; PDF imprime todos); catálogo de contadores (salva 1×,
+   escolhe no seletor); tooltip do selo lista TODAS as pendências.
 3. **🌾 Produtor rural**: DIPAM 1.1 + FUNRURAL + Registro 1400 automáticos;
    guia 📗 na aba.
 4. **Exportar SAGE**: erros de importação corrigidos + leitor de log
