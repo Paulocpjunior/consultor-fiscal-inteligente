@@ -51,6 +51,9 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
     const [mitTransmitindo, setMitTransmitindo] = useState(false);
     const [mitResultado, setMitResultado] = useState<MitPreencherResult | null>(null);
     const [mitErro, setMitErro] = useState<string | null>(null);
+    /** Famílias marcadas pra transmitir (pedido do colaborador 03/08: escolher
+     *  quais débitos do app vão no MIT deste mês). Nasce com tudo marcado. */
+    const [mitSelecao, setMitSelecao] = useState<string[]>([]);
 
     // ── Retificação (apuração JÁ transmitida, valores mudaram no app — admin)
     const [retProposta, setRetProposta] = useState<MitRetificarResult | null>(null);
@@ -83,6 +86,33 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
         || (data.resultado?.divergencias || []).some(d => d.status === 'sem-dctfweb')
     );
 
+    const totalSelecionado = (mitProposta?.proposta?.mapeamento || [])
+        .filter(m => mitSelecao.includes(m.familia))
+        .reduce((s, m) => s + (m.valor || 0), 0);
+
+    // Tributo que o PRÓPRIO app marcou como trimestral (o nome da linha traz
+    // "(Trimestral…)") numa competência que NÃO encerra trimestre (mar/jun/set/
+    // dez). Débito trimestral declarado no PA errado vira cobrança indevida e
+    // duplica quando o trimestre fechar de verdade.
+    const familiaDoNome = (nome: string): string | null => {
+        const n = nome.toUpperCase().trim();
+        if (n.startsWith('COFINS')) return 'COFINS';
+        if (n.startsWith('PIS')) return 'PIS';
+        if (n.startsWith('IRPJ')) return 'IRPJ';
+        if (n.startsWith('CSLL')) return 'CSLL';
+        if (n.startsWith('IPI')) return 'IPI';
+        return null;
+    };
+    const familiasTrimestrais = new Set(
+        (detalhamento || [])
+            .filter(d => /\(trimestral/i.test(String(d?.imposto || '')))
+            .map(d => familiaDoNome(String(d?.imposto || '')))
+            .filter((f): f is string => !!f),
+    );
+    const mesFechaTrimestre = mesPA % 3 === 0;
+    const alertaTrimestral = !mesFechaTrimestre
+        && (mitProposta?.proposta?.mapeamento || []).some(m => familiasTrimestrais.has(m.familia));
+
     const prepararMit = async () => {
         if (!data) return;
         setMitPreparando(true);
@@ -95,8 +125,10 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                 tributosApp: data.tributosApp,
                 transmitir: false,
             });
-            if (r.ok) setMitProposta(r);
-            else setMitErro(r.motivo || 'Não foi possível montar a proposta.');
+            if (r.ok) {
+                setMitProposta(r);
+                setMitSelecao((r.proposta?.mapeamento || []).map(m => m.familia));
+            } else setMitErro(r.motivo || 'Não foi possível montar a proposta.');
         } catch (e: any) {
             setMitErro(e?.message || 'Falha ao preparar o preenchimento do MIT.');
         } finally {
@@ -164,7 +196,16 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
     const transmitirMit = async () => {
         if (!data || !mitProposta?.proposta) return;
         const p = mitProposta.proposta;
-        const linhas = p.mapeamento.map(m => `${m.familia} (cód. ${m.codigo}): ${brl(m.valor)}`).join('\n');
+        const selecionados = p.mapeamento.filter(m => mitSelecao.includes(m.familia));
+        if (selecionados.length === 0) {
+            setMitErro('Marque ao menos um débito para transmitir.');
+            return;
+        }
+        const linhas = selecionados.map(m => `${m.familia} (cód. ${m.codigo}): ${brl(m.valor)}`).join('\n');
+        const desmarcados = p.mapeamento.filter(m => !mitSelecao.includes(m.familia));
+        const foraDaTransmissao = desmarcados.length > 0
+            ? `\n\nNÃO serão transmitidos (desmarcados): ${desmarcados.map(m => `${m.familia} ${brl(m.valor)}`).join(', ')}`
+            : '';
         const preservados = (p.jaDeclarados || []).length > 0
             ? `\n\nJá lançados no MIT (preservados): ${(p.jaDeclarados || []).map(j => `${j.familia} ${brl(j.valor)}`).join(', ')}`
             : '';
@@ -173,7 +214,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
             : '';
         if (!confirm(
             `Transmitir o encerramento do MIT ${competencia} de ${empresaNome || empresaCnpj} com os débitos abaixo?\n\n`
-            + `${linhas}\n\nTotal a adicionar: ${brl(p.totalProposto)}${preservados}${criacao}\n\n`
+            + `${linhas}\n\nTotal a adicionar: ${brl(totalSelecionado)}${foraDaTransmissao}${preservados}${criacao}\n\n`
             + 'Os valores serão declarados à Receita Federal via SERPRO.'
         )) return;
         setMitTransmitindo(true);
@@ -183,6 +224,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                 empresaId, empresaCnpj,
                 anoPA, mesPA,
                 tributosApp: data.tributosApp,
+                familiasSelecionadas: mitSelecao,
                 transmitir: true,
             });
             if (r.ok) setMitResultado(r);
@@ -343,28 +385,66 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                             )}.
                                         </div>
                                     )}
+                                    {alertaTrimestral && (
+                                        <div className="mb-2 p-2 rounded border border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
+                                            <b>A competência {competencia} não encerra trimestre.</b> A apuração do app
+                                            traz IRPJ/CSLL como <b>trimestrais</b> — esses débitos pertencem ao MIT do mês
+                                            de fechamento (março/junho/setembro/dezembro), não a este. Desmarque-os aqui
+                                            se está declarando apenas os tributos do mês.
+                                        </div>
+                                    )}
+                                    <p className="text-[10px] text-violet-700 dark:text-violet-300 mb-1">
+                                        Marque o que entra <b>nesta</b> transmissão — o desmarcado não é declarado agora
+                                        e continua disponível na próxima conferência.
+                                    </p>
                                     <table className="w-full text-xs">
                                         <thead>
                                             <tr className="text-left text-violet-700 dark:text-violet-300 border-b border-violet-200 dark:border-violet-800">
+                                                <th className="py-1 w-6">✓</th>
                                                 <th className="py-1">Tributo</th>
                                                 <th className="py-1">Código de débito</th>
                                                 <th className="py-1 text-right">Valor a adicionar</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {mitProposta.proposta.mapeamento.map(m => (
-                                                <tr key={m.familia} className="border-b border-violet-100 dark:border-violet-900/40">
-                                                    <td className="py-1 font-medium">{m.familia}</td>
-                                                    <td className="py-1 font-mono">{m.codigo}</td>
-                                                    <td className="py-1 text-right font-mono">{brl(m.valor)}</td>
-                                                </tr>
-                                            ))}
+                                            {mitProposta.proposta.mapeamento.map(m => {
+                                                const marcado = mitSelecao.includes(m.familia);
+                                                return (
+                                                    <tr key={m.familia} className={`border-b border-violet-100 dark:border-violet-900/40 ${marcado ? '' : 'opacity-50'}`}>
+                                                        <td className="py-1">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={marcado}
+                                                                onChange={() => setMitSelecao(prev => marcado
+                                                                    ? prev.filter(f => f !== m.familia)
+                                                                    : [...prev, m.familia])}
+                                                                aria-label={`Transmitir ${m.familia}`}
+                                                                className="accent-violet-600"
+                                                            />
+                                                        </td>
+                                                        <td className="py-1 font-medium">
+                                                            {m.familia}
+                                                            {familiasTrimestrais.has(m.familia) && !mesFechaTrimestre && (
+                                                                <span className="ml-1 text-[9px] text-amber-600 dark:text-amber-400">(trimestral)</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="py-1 font-mono">{m.codigo}</td>
+                                                        <td className={`py-1 text-right font-mono ${marcado ? '' : 'line-through'}`}>{brl(m.valor)}</td>
+                                                    </tr>
+                                                );
+                                            })}
                                             <tr>
-                                                <td className="py-1 font-bold" colSpan={2}>Total a adicionar</td>
-                                                <td className="py-1 text-right font-mono font-bold">{brl(mitProposta.proposta.totalProposto)}</td>
+                                                <td className="py-1 font-bold" colSpan={3}>Total a adicionar (selecionado)</td>
+                                                <td className="py-1 text-right font-mono font-bold">{brl(totalSelecionado)}</td>
                                             </tr>
                                         </tbody>
                                     </table>
+                                    {totalSelecionado !== mitProposta.proposta.totalProposto && (
+                                        <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1">
+                                            Transmissão parcial: {brl(mitProposta.proposta.totalProposto - totalSelecionado)} em
+                                            débitos ficam de fora desta apuração.
+                                        </p>
+                                    )}
                                     {(mitProposta.proposta.jaDeclarados || []).length > 0 && (
                                         <p className="text-[10px] text-violet-700 dark:text-violet-300 mt-1">
                                             Já lançados no MIT e <b>preservados sem alteração</b>: {(mitProposta.proposta.jaDeclarados || [])
@@ -398,7 +478,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                     <div className="flex gap-2 mt-2">
                                         <button
                                             onClick={transmitirMit}
-                                            disabled={mitTransmitindo}
+                                            disabled={mitTransmitindo || mitSelecao.length === 0}
                                             className="px-3 py-1.5 text-xs font-semibold bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-50"
                                         >
                                             {mitTransmitindo ? 'Transmitindo…' : 'Confirmar e transmitir encerramento'}

@@ -304,6 +304,64 @@ const extrairAnoTrimestre = (mesReferencia?: string): { ano: number; trimestre: 
     return { ano, trimestre, mes };
 };
 
+/**
+ * Meses que ENCERRAM trimestre-calendário (Lei 9.430/96 art. 1º): março, junho,
+ * setembro e dezembro. No Lucro Presumido é neles — e só neles — que IRPJ/CSLL
+ * são apurados; nos outros dois meses do trimestre vencem apenas os tributos
+ * mensais (PIS/COFINS/IPI/ICMS/ISS).
+ */
+export const mesEncerraTrimestre = (mes?: number): boolean =>
+    !!mes && mes >= 1 && mes <= 12 && mes % 3 === 0;
+
+/**
+ * Rótulo do mês em que o trimestre da competência fecha ("09/2026").
+ * Devolve null quando a competência não é conhecida.
+ */
+export const rotuloFechamentoTrimestre = (ano?: number, mes?: number): string | null => {
+    if (!ano || !mes || mes < 1 || mes > 12) return null;
+    const mesFecha = Math.ceil(mes / 3) * 3;
+    return `${String(mesFecha).padStart(2, '0')}/${ano}`;
+};
+
+const MESES_NOME = [
+    'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+    'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+];
+
+/**
+ * Aviso honesto quando o período escolhido contradiz a competência (Presumido).
+ * Vale nos DOIS sentidos: fechar trimestre em mês que não fecha (apura IRPJ/CSLL
+ * a maior e joga o débito no MIT do mês errado) e deixar de fechar no mês que
+ * fecha (IRPJ/CSLL do trimestre não seriam apurados). Devolve null quando não há
+ * contradição — ou quando o regime é Lucro Real, onde mensal (estimativa) e
+ * trimestral são ambos legítimos em qualquer mês.
+ */
+export const avisoPeriodoApuracao = (
+    regime: string | undefined,
+    periodoApuracao: 'Mensal' | 'Trimestral',
+    mesReferencia?: string,
+): string | null => {
+    if (regime !== 'Presumido') return null;
+    const { ano, mes } = extrairAnoTrimestre(mesReferencia);
+    if (!ano || !mes) return null;
+    const nomeMes = MESES_NOME[mes - 1];
+    const fecha = mesEncerraTrimestre(mes);
+    const quando = rotuloFechamentoTrimestre(ano, mes);
+
+    if (periodoApuracao === 'Trimestral' && !fecha) {
+        return `${nomeMes} não encerra trimestre. No Lucro Presumido o IRPJ/CSLL são trimestrais e `
+            + `fecham em ${quando}. Deste jeito o app apura IRPJ/CSLL sobre a receita de ${nomeMes} `
+            + 'e o débito iria para o MIT do mês errado — se você está apurando só o mês, use '
+            + '"Mensal (PIS/COFINS)".';
+    }
+    if (periodoApuracao === 'Mensal' && fecha) {
+        return `${nomeMes} ENCERRA o trimestre: use "Trimestral (fecha IRPJ/CSLL)" e informe os `
+            + 'acumulados dos dois meses anteriores. Em "Mensal" o app apura só PIS/COFINS e o '
+            + 'IRPJ/CSLL do trimestre ficaria sem apuração.';
+    }
+    return null;
+};
+
 const fmt = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
 /**
@@ -573,7 +631,31 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
 
     const baseIrpjTotal = baseIrpjComercio + baseIrpjIndustria + baseIrpjServico + baseIrpjServicoHosp + baseCalculoReceitaFinanceira;
 
-    if (baseIrpjTotal > 0) {
+    // No Lucro Presumido o IRPJ/CSLL é TRIMESTRAL (Lei 9.430/96 art. 1º): nos dois
+    // primeiros meses do trimestre ele NÃO é devido — a receita do mês entra no
+    // acumulado do fechamento. Apurar aqui gera imposto a maior E manda o débito
+    // pro MIT do mês errado (queixa do colaborador 03/08/2026: ficha de julho
+    // marcada "Trimestral" com acumulado zerado apurava IRPJ/CSLL de julho).
+    const fechaTrimestre = input.periodoApuracao === 'Trimestral';
+    const quandoFecha = rotuloFechamentoTrimestre(ano, mes);
+    const rotuloDiferido = `(Trimestral${quandoFecha ? ` — fecha em ${quandoFecha}` : ''})`;
+    const obsDiferido = (tributo: string, retencao: number) =>
+        `Não devido neste mês: no Lucro Presumido o ${tributo} é apurado por TRIMESTRE `
+        + `(Lei 9.430/96 art. 1º)${quandoFecha ? `, com fechamento em ${quandoFecha}` : ''}. `
+        + 'Ao fechar o trimestre, lance a receita deste mês no campo "Acumulado do Trimestre"'
+        + (retencao > 0 ? `; a retenção de ${fmt(retencao)} sofrida no mês é deduzida lá.` : '.');
+
+    if (baseIrpjTotal > 0 && !fechaTrimestre) {
+        detalhamento.push({
+            imposto: `IRPJ ${rotuloDiferido}`,
+            baseCalculo: 0,
+            aliquota: ALIQ_IRPJ * 100,
+            valor: 0,
+            valorBruto: 0,
+            retencao: retencaoIrpj,
+            observacao: obsDiferido('IRPJ', retencaoIrpj),
+        });
+    } else if (baseIrpjTotal > 0) {
         let valorIrpj = baseIrpjTotal * ALIQ_IRPJ;
         const limiteAdicional = input.periodoApuracao === 'Trimestral' ? LIMITE_ADICIONAL_TRIMESTRAL : LIMITE_ADICIONAL_MENSAL;
 
@@ -608,7 +690,17 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
 
     const baseCsllTotal = baseCsllComercio + baseCsllIndustria + baseCsllServico + baseCsllServicoHosp + baseCalculoReceitaFinanceira;
 
-    if (baseCsllTotal > 0) {
+    if (baseCsllTotal > 0 && !fechaTrimestre) {
+        detalhamento.push({
+            imposto: `CSLL ${rotuloDiferido}`,
+            baseCalculo: 0,
+            aliquota: ALIQ_CSLL * 100,
+            valor: 0,
+            valorBruto: 0,
+            retencao: retencaoCsll,
+            observacao: obsDiferido('CSLL', retencaoCsll),
+        });
+    } else if (baseCsllTotal > 0) {
         const obsHosp = baseCsllServicoHosp > 0 ? " + Hosp. 12%" : "";
         const obsLc224Csll = proporcaoMajoradaCsll > 0
             ? ` LC 224/25: ${(proporcaoMajoradaCsll * 100).toFixed(1)}% da receita com presunção majorada (+10%). ${textoLimite(limiteCsll)}`

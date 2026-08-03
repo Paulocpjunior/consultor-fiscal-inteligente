@@ -247,6 +247,8 @@ export interface MitPreencherProposta {
     totalProposto: number;
     /** Famílias já lançadas no MIT — preservadas sem alteração */
     jaDeclarados?: Array<{ familia: string; valor: number }>;
+    /** Famílias que o usuário DESMARCOU — ficam de fora desta transmissão */
+    familiasDesmarcadas?: Array<{ familia: string; valor: number }>;
     modeloPeriodo: string | null;
     alvoIdApuracao: number | null;
     /** Dados iniciais usados na transmissão (conferência — vital no modo criação) */
@@ -260,7 +262,7 @@ export interface MitPreencherProposta {
 export interface MitPreencherResult {
     ok: boolean;
     transmitido?: boolean;
-    etapa?: 'alvo' | 'modelo' | 'montagem';
+    etapa?: 'alvo' | 'modelo' | 'montagem' | 'selecao';
     motivo?: string;
     proposta?: MitPreencherProposta;
     protocolo?: string;
@@ -273,6 +275,8 @@ export async function preencherEncerrarMit(user: User | null, payload: {
     empresaId?: string; empresaCnpj: string;
     anoPA: number; mesPA: number;
     tributosApp: { IRPJ: number; CSLL: number; PIS: number; COFINS: number; IPI?: number };
+    /** Quais famílias transmitir agora. Omitido = todas as faltantes. Só restringe. */
+    familiasSelecionadas?: string[] | null;
     transmitir: boolean;
 }): Promise<MitPreencherResult> {
     const res = await fetch(`${BASE}/mit/preencher-encerrar`, {

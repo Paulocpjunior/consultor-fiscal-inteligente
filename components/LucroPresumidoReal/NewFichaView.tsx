@@ -27,7 +27,7 @@ import {
     InfoIcon, TagIcon, BriefcaseIcon, PlusIcon, TrashIcon,
 } from '../Icons';
 import { CurrencyInput, ToggleSwitch } from './inputs';
-import { avaliarPresuncaoReduzida16 } from '../../services/lucroService';
+import { avaliarPresuncaoReduzida16, avisoPeriodoApuracao } from '../../services/lucroService';
 
 interface NewFichaViewProps {
     // Contexto
@@ -126,6 +126,7 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
     // DARE-SP: único estado local desta view (efêmero de UI — não precisa
     // subir pro dashboard pai como os campos da ficha).
     const [dareModal, setDareModal] = useState<{ valor: number; derivacao: 'proprio' | 'st' } | null>(null);
+    const avisoPeriodo = avisoPeriodoApuracao(p.selectedEmpresa?.regimePadrao, p.periodoApuracao, p.fichaMes);
     return (
     <div className="max-w-7xl mx-auto animate-fade-in pb-20">
         <div className="flex justify-between items-center mb-6">
@@ -251,27 +252,35 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
                                 <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Mês de Referência</label>
                                 <input type="month" value={p.fichaMes} onChange={e => p.setFichaMes(e.target.value)} className="w-full p-2 rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white" />
                             </div>
+                            {/* Presumido apura IRPJ/CSLL por TRIMESTRE, mas PIS/COFINS/IPI
+                                sao MENSAIS. Os dois botoes existem pros dois momentos do
+                                trimestre: mes comum (so os mensais) e mes de fechamento
+                                (fecha IRPJ/CSLL com o acumulado). No Lucro Real, 'Mensal'
+                                continua sendo a estimativa. */}
                             <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex items-center h-[42px]">
-                                {/* "Estimativa Mensal" so faz sentido pra Lucro Real
-                                    (pagamento por estimativa, encerramento anual). Lucro
-                                    Presumido e trimestral por lei (Lei 9.430/96 art. 1º) —
-                                    o botao fica oculto pra impedir cenario ilegal. */}
-                                {p.selectedEmpresa?.regimePadrao !== 'Presumido' && (
-                                    <button
-                                        onClick={() => p.setPeriodoApuracao('Mensal')}
-                                        className={`px-3 h-full text-xs font-bold rounded transition-all ${p.periodoApuracao === 'Mensal' ? 'bg-white dark:bg-slate-600 text-sky-700 dark:text-sky-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
-                                    >
-                                        Estimativa Mensal
-                                    </button>
-                                )}
+                                <button
+                                    onClick={() => p.setPeriodoApuracao('Mensal')}
+                                    className={`px-3 h-full text-xs font-bold rounded transition-all ${p.periodoApuracao === 'Mensal' ? 'bg-white dark:bg-slate-600 text-sky-700 dark:text-sky-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+                                >
+                                    {p.selectedEmpresa?.regimePadrao === 'Presumido' ? 'Mensal (PIS/COFINS)' : 'Estimativa Mensal'}
+                                </button>
                                 <button
                                     onClick={() => p.setPeriodoApuracao('Trimestral')}
                                     className={`px-3 h-full text-xs font-bold rounded transition-all ${p.periodoApuracao === 'Trimestral' ? 'bg-white dark:bg-slate-600 text-sky-700 dark:text-sky-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
                                 >
-                                    {p.selectedEmpresa?.regimePadrao === 'Presumido' ? 'Trimestral (obrigatorio)' : 'Encerramento Trimestral'}
+                                    {p.selectedEmpresa?.regimePadrao === 'Presumido' ? 'Trimestral (fecha IRPJ/CSLL)' : 'Encerramento Trimestral'}
                                 </button>
                             </div>
                         </div>
+
+                        {/* Farol honesto: a escolha que contradiz a competencia nunca passa
+                            calada — nos dois sentidos (fechar trimestre em mes que nao
+                            fecha, e deixar de fechar no mes que fecha). */}
+                        {avisoPeriodo && (
+                            <div className="col-span-1 md:col-span-2 -mt-1 p-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+                                {avisoPeriodo}
+                            </div>
+                        )}
 
                         {/* Inputs Específicos para Fechamento Trimestral (Acumulado) */}
                         {p.periodoApuracao === 'Trimestral' && (

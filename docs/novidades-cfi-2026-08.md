@@ -37,6 +37,12 @@ arquivo, SPED/EFD, GIA e REINF.
    empresa; régua da migração do E-Fiscal).
 5C. **🧭 DIFAL aquisição (03/08)**: varredura + apuração mensal
    consolidada do Simples; ST separada (426-A individual).
+5D. **📅 Presumido mensal × trimestral (03/08)**: botão "Mensal
+   (PIS/COFINS)" de volta ao lado do "Trimestral (fecha IRPJ/CSLL)";
+   mês que não fecha trimestre não apura IRPJ/CSLL (linha zerada
+   dizendo quando fecha) e o MIT passa a propor só os mensais; aviso
+   âmbar nos dois sentidos + caixinhas de seleção por débito na
+   Conferência DCTFWeb.
 7. **Validações da semana**: JOTASUL reimport, EDUARDO GUERRA De→Para +
    DIPAM×SAGE, Canceladas/Faltantes×SAGE, MANTOAN MIT,
    responsável+contador, teste do e-mail de DAS.

@@ -45,6 +45,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Fluxos ligados: DAS (Graph + "abrir no meu e-mail" + WhatsApp), DARF
   (DetalheDeclaracao) e DARE (DareSpModal). Feature nova de guia DEVE
   chamar o rito.
+- **PRESUMIDO tem os DOIS períodos e o mês decide** (colaborador via Paulo,
+  03/08 — caso CLINICA MANTOAN 07/2026): IRPJ/CSLL são TRIMESTRAIS (Lei
+  9.430/96 art. 1º) e PIS/COFINS/IPI são MENSAIS, então a ficha precisa dos
+  dois botões. A trava de 27/07 (só "Trimestral (obrigatorio)") produziu
+  JUSTAMENTE o cenário ilegal que queria evitar: julho lançado como
+  fechamento com acumulados zerados = IRPJ/CSLL apurados sobre o mês e
+  oferecidos ao MIT de 07 (débito trimestral no PA errado, duplicando em
+  setembro). Regra: mês que NÃO encerra trimestre (≠ 3/6/9/12) não apura
+  IRPJ/CSLL — a linha sai ZERADA com a observação de quando fecha e a
+  receita vai pro "Acumulado do Trimestre"; `extrairTributosApp` então
+  entrega IRPJ=0/CSLL=0 e o MIT propõe só os mensais. Núcleo puro em
+  lucroService: `mesEncerraTrimestre`, `rotuloFechamentoTrimestre` e
+  `avisoPeriodoApuracao` (aviso âmbar nos DOIS sentidos — fechar em mês que
+  não fecha e não fechar no mês que fecha). NUNCA voltar a esconder o botão
+  Mensal do Presumido; LIMITE_ADICIONAL_MENSAL (20k) só vale pro Lucro Real
+  (estimativa). **MIT transmite o que for MARCADO**: `familiasSelecionadas`
+  em `preencherEncerrarMit` só RESTRINGE (nunca inclui família que o app não
+  apurou), seleção vazia é recusa, e o desmarcado fica na proposta e na
+  auditoria (`familiasDesmarcadas`).
 - **Retenções IRPJ/CSLL: conferência/MIT usam o LÍQUIDO** (Paulo, 24/07 —
   #298, reverte o critério do #205): retenção sofrida é deduzida NA
   APURAÇÃO (não é vinculação da DCTFWeb) e o débito do MIT vira o DARF.

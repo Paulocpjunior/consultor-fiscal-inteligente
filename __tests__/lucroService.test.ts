@@ -11,7 +11,11 @@
  *   - LC 224/2025 majoracao
  */
 
-import { calcularLucro, calcularCotasDisponiveis } from '../services/lucroService';
+import {
+    calcularLucro, calcularCotasDisponiveis,
+    mesEncerraTrimestre, rotuloFechamentoTrimestre, avisoPeriodoApuracao,
+} from '../services/lucroService';
+import { extrairTributosApp } from '../services/dctfwebConference';
 import { LucroInput, LucroResult, IssConfig } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -21,7 +25,12 @@ import { LucroInput, LucroResult, IssConfig } from '../types';
 function criarInputBase(overrides: Partial<LucroInput> = {}): LucroInput {
     return {
         regimeSelecionado: 'Presumido',
-        periodoApuracao: 'Mensal',
+        // Presumido apura IRPJ/CSLL por TRIMESTRE (Lei 9.430/96 art. 1º): o
+        // fixture usa o mês de FECHAMENTO, que é quando esses tributos existem.
+        // Em 'Mensal' a ficha do Presumido é só dos tributos mensais e o
+        // IRPJ/CSLL sai zerado com a observação do diferimento (regra própria,
+        // testada em "Presumido mensal (mês que não fecha trimestre)").
+        periodoApuracao: 'Trimestral',
         faturamentoComercio: 0,
         faturamentoIndustria: 0,
         faturamentoServico: 0,
@@ -126,10 +135,9 @@ describe('lucroService', () => {
             const irpj = findImposto(result, 'IRPJ');
             // Base = 100000 * 0.32 = 32000
             // IRPJ = 32000 * 0.15 = 4800
-            // Additional: base > 20000 => (32000 - 20000) * 0.10 = 1200
-            // Total = 4800 + 1200 = 6000
+            // Sem adicional: base 32000 < 60000 (limite do TRIMESTRE)
             expect(irpj!.baseCalculo).toBeCloseTo(32000, 2);
-            expect(irpj!.valor).toBeCloseTo(6000, 2);
+            expect(irpj!.valor).toBeCloseTo(4800, 2);
         });
 
         it('services with reduced presuncao 16% (receita <= R$ 120k)', () => {
@@ -175,34 +183,6 @@ describe('lucroService', () => {
     // Adicional IRPJ (10% surcharge)
     // ========================================================================
     describe('Lucro Presumido - Adicional IRPJ', () => {
-
-        it('monthly: 10% on base exceeding R$ 20k', () => {
-            const input = criarInputBase({
-                faturamentoServico: 100000, // base = 32000
-                periodoApuracao: 'Mensal',
-            });
-            const result = calcularLucro(input);
-
-            const irpj = findImposto(result, 'IRPJ');
-            // Base = 32000
-            // IRPJ = 32000 * 0.15 = 4800
-            // Adicional = (32000 - 20000) * 0.10 = 1200
-            // Total = 6000
-            expect(irpj!.valor).toBeCloseTo(6000, 2);
-        });
-
-        it('monthly: no additional when base <= R$ 20k', () => {
-            const input = criarInputBase({
-                faturamentoComercio: 200000, // base = 200000 * 0.08 = 16000
-                periodoApuracao: 'Mensal',
-            });
-            const result = calcularLucro(input);
-
-            const irpj = findImposto(result, 'IRPJ');
-            // Base = 16000 < 20000, no additional
-            // IRPJ = 16000 * 0.15 = 2400
-            expect(irpj!.valor).toBeCloseTo(2400, 2);
-        });
 
         it('trimestral: 10% on base exceeding R$ 60k', () => {
             const input = criarInputBase({
@@ -379,8 +359,9 @@ describe('lucroService', () => {
             expect(pis!.valor).toBeCloseTo(550, 2);
             // COFINS = 100000 * 0.03 - 500 = 3000 - 500 = 2500
             expect(cofins!.valor).toBeCloseTo(2500, 2);
-            // IRPJ base = 32000, IRPJ = 32000*0.15 + (32000-20000)*0.10 - 1000 = 6000 - 1000 = 5000
-            expect(irpj!.valor).toBeCloseTo(5000, 2);
+            // IRPJ base = 32000 (< 60000, sem adicional no trimestre)
+            // IRPJ = 32000*0.15 - 1000 = 4800 - 1000 = 3800
+            expect(irpj!.valor).toBeCloseTo(3800, 2);
             // CSLL base = 32000, CSLL = 32000 * 0.09 - 500 = 2880 - 500 = 2380
             expect(csll!.valor).toBeCloseTo(2380, 2);
         });
@@ -483,6 +464,10 @@ describe('lucroService', () => {
         it('calculates IRPJ on lucro real (receita - custos - despesas)', () => {
             const input = criarInputBase({
                 regimeSelecionado: 'Real',
+                // Estimativa MENSAL do Lucro Real — é aqui que o limite de
+                // R$ 20k do adicional continua valendo (no Presumido ele não
+                // existe: lá a apuração é sempre por trimestre).
+                periodoApuracao: 'Mensal',
                 faturamentoComercio: 500000,
                 custoMercadoriaVendida: 200000,
                 despesasOperacionais: 50000,
@@ -573,7 +558,7 @@ describe('lucroService', () => {
             const result = calcularLucro(input);
 
             expect(result.regime).toBe('Presumido');
-            expect(result.periodo).toBe('Mensal');
+            expect(result.periodo).toBe('Trimestral');
             expect(result.totalImpostos).toBeGreaterThan(0);
             expect(result.cargaTributaria).toBeGreaterThan(0);
         });
@@ -839,5 +824,137 @@ describe('lucroService', () => {
             const pis = findImposto(result, 'PIS');
             expect(pis!.cotaInfo).toBeUndefined();
         });
+    });
+});
+
+// ===========================================================================
+// Presumido: mês que NÃO fecha trimestre (colaborador, 03/08/2026)
+//
+// A trava de 27/07 tirou a opção "Mensal" do Presumido e deixou só "Trimestral
+// (obrigatorio)". Efeito colateral no caso real CLINICA MANTOAN 07/2026: a
+// ficha de julho — 1º mês do 3º trimestre — era salva como Trimestral com os
+// acumulados ZERADOS, então o app apurava IRPJ/CSLL sobre a receita de julho e
+// oferecia esses débitos ao MIT de 07/2026. IRPJ/CSLL do Presumido são
+// TRIMESTRAIS: pertencem ao MIT de setembro.
+// ===========================================================================
+describe('Presumido mensal (mês que não fecha trimestre)', () => {
+
+    it('não apura IRPJ/CSLL no mês: valor zero com a observação do diferimento', () => {
+        const input = criarInputBase({
+            faturamentoServico: 100000,
+            periodoApuracao: 'Mensal',
+            mesReferencia: '2026-07',
+        });
+        const result = calcularLucro(input);
+
+        const irpj = findImposto(result, 'IRPJ');
+        const csll = findImposto(result, 'CSLL');
+        expect(irpj!.valor).toBe(0);
+        expect(csll!.valor).toBe(0);
+        // A linha CONTINUA na tela (farol honesto: o motivo fica visível) e diz
+        // quando fecha + o que fazer.
+        expect(irpj!.imposto).toContain('09/2026');
+        expect(irpj!.observacao).toContain('Acumulado do Trimestre');
+        expect(csll!.observacao).toContain('TRIMESTRE');
+    });
+
+    it('PIS/COFINS continuam sendo apurados no mês (são mensais)', () => {
+        const input = criarInputBase({
+            faturamentoComercio: 100000,
+            periodoApuracao: 'Mensal',
+            mesReferencia: '2026-07',
+        });
+        const result = calcularLucro(input);
+
+        expect(findImposto(result, 'PIS')!.valor).toBeCloseTo(650, 2);
+        expect(findImposto(result, 'COFINS')!.valor).toBeCloseTo(3000, 2);
+    });
+
+    it('a conferência do MIT não recebe IRPJ/CSLL desse mês (é o que ia pro MIT errado)', () => {
+        const input = criarInputBase({
+            faturamentoServico: 100000,
+            periodoApuracao: 'Mensal',
+            mesReferencia: '2026-07',
+        });
+        const tributos = extrairTributosApp(calcularLucro(input).detalhamento);
+        expect(tributos.IRPJ).toBe(0);
+        expect(tributos.CSLL).toBe(0);
+        expect(tributos.PIS).toBeGreaterThan(0);
+    });
+
+    it('no mês de FECHAMENTO o IRPJ/CSLL volta a ser apurado normalmente', () => {
+        const input = criarInputBase({
+            faturamentoServico: 100000,
+            periodoApuracao: 'Trimestral',
+            mesReferencia: '2026-09',
+            acumuladoTrimestre: {
+                comercio: 0, industria: 0, servico: 200000,
+                servicoHospitalar: 0, financeira: 0,
+                mesesConsiderados: ['2026-07', '2026-08'],
+            },
+        });
+        const result = calcularLucro(input);
+
+        // Base = (100000 + 200000) * 0.32 = 96000 → 14400 + adicional 3600
+        expect(findImposto(result, 'IRPJ')!.baseCalculo).toBeCloseTo(96000, 2);
+        expect(findImposto(result, 'IRPJ')!.valor).toBeCloseTo(18000, 2);
+    });
+
+    it('retenção sofrida no mês é sinalizada como dedução do fechamento', () => {
+        const input = criarInputBase({
+            faturamentoServico: 100000,
+            periodoApuracao: 'Mensal',
+            mesReferencia: '2026-07',
+            retencaoIrpj: 1500,
+        });
+        const irpj = findImposto(calcularLucro(input), 'IRPJ');
+        expect(irpj!.valor).toBe(0);
+        expect(irpj!.observacao).toContain('1.500,00');
+    });
+});
+
+describe('mesEncerraTrimestre / rotuloFechamentoTrimestre', () => {
+    it('só março, junho, setembro e dezembro encerram trimestre', () => {
+        expect([3, 6, 9, 12].every(m => mesEncerraTrimestre(m))).toBe(true);
+        expect([1, 2, 4, 5, 7, 8, 10, 11].some(m => mesEncerraTrimestre(m))).toBe(false);
+        expect(mesEncerraTrimestre(undefined)).toBe(false);
+        expect(mesEncerraTrimestre(0)).toBe(false);
+    });
+
+    it('o rótulo aponta o mês de fechamento do trimestre da competência', () => {
+        expect(rotuloFechamentoTrimestre(2026, 7)).toBe('09/2026');
+        expect(rotuloFechamentoTrimestre(2026, 1)).toBe('03/2026');
+        expect(rotuloFechamentoTrimestre(2026, 12)).toBe('12/2026');
+        expect(rotuloFechamentoTrimestre(undefined, 7)).toBeNull();
+    });
+});
+
+describe('avisoPeriodoApuracao', () => {
+    it('avisa quando o Presumido fecha trimestre num mês que não fecha', () => {
+        const aviso = avisoPeriodoApuracao('Presumido', 'Trimestral', '2026-07');
+        expect(aviso).toContain('julho');
+        expect(aviso).toContain('09/2026');
+        expect(aviso).toContain('MIT');
+    });
+
+    it('avisa quando o mês FECHA o trimestre e a ficha está mensal', () => {
+        const aviso = avisoPeriodoApuracao('Presumido', 'Mensal', '2026-09');
+        expect(aviso).toContain('ENCERRA');
+        expect(aviso).toContain('acumulados');
+    });
+
+    it('cala quando a escolha combina com a competência', () => {
+        expect(avisoPeriodoApuracao('Presumido', 'Mensal', '2026-07')).toBeNull();
+        expect(avisoPeriodoApuracao('Presumido', 'Trimestral', '2026-09')).toBeNull();
+    });
+
+    it('não opina sobre Lucro Real (mensal = estimativa, legítima em qualquer mês)', () => {
+        expect(avisoPeriodoApuracao('Real', 'Mensal', '2026-07')).toBeNull();
+        expect(avisoPeriodoApuracao('Real', 'Trimestral', '2026-07')).toBeNull();
+    });
+
+    it('sem competência conhecida não inventa aviso', () => {
+        expect(avisoPeriodoApuracao('Presumido', 'Trimestral', undefined)).toBeNull();
+        expect(avisoPeriodoApuracao('Presumido', 'Trimestral', 'lixo')).toBeNull();
     });
 });

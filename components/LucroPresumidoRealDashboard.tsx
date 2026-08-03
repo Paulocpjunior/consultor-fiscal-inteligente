@@ -4,7 +4,7 @@ import { LucroPresumidoEmpresa, User, FichaFinanceiraRegistro, LucroInput, ItemF
 import * as lucroPresumidoService from '../services/lucroPresumidoService';
 import { fetchCnpjFromBrasilAPI } from '../services/externalApiService';
 import { useConfirm } from './dialog/DialogProvider';
-import { calcularLucro } from '../services/lucroService';
+import { calcularLucro, mesEncerraTrimestre } from '../services/lucroService';
 import ConferirDctfwebModal from './DCTFWeb/ConferirDctfwebModal';
 import ListView from './LucroPresumidoReal/ListView';
 import NewCompanyView from './LucroPresumidoReal/NewCompanyView';
@@ -245,22 +245,25 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         }
     }, [view, selectedFichaId, selectedEmpresa]);
 
-    // Defesa em profundidade: se a empresa selecionada e Lucro Presumido e
-    // o state esta em 'Mensal' (vindo de ficha antiga salva ou default), forca
-    // Trimestral. Lucro Presumido nao admite apuracao mensal (Lei 9.430/96 art. 1º).
-    useEffect(() => {
-        if (selectedEmpresa?.regimePadrao === 'Presumido' && periodoApuracao === 'Mensal') {
-            setPeriodoApuracao('Trimestral');
-        }
-    }, [selectedEmpresa, periodoApuracao]);
+    // NAO forcar mais 'Trimestral' no Presumido (a trava de 27/07 tirava a opcao
+    // Mensal da tela). O Presumido apura IRPJ/CSLL por TRIMESTRE, mas PIS/COFINS/
+    // IPI sao MENSAIS: nos dois primeiros meses do trimestre a ficha e mensal e
+    // nao gera IRPJ/CSLL (lucroService trata). Forcar Trimestral em julho fazia o
+    // app apurar IRPJ/CSLL do mes com acumulado zerado — imposto a maior e debito
+    // no MIT do mes errado (colaborador, 03/08/2026).
 
     const resetForm = () => {
-        setFichaMes(new Date().toISOString().substring(0, 7));
-        // Lucro Presumido e trimestral por lei (Lei 9.430/96 art. 1º). Default
-        // pra Trimestral quando o regime da empresa for Presumido — evita
-        // que o contador gere calculo num cenario impossivel legalmente.
-        // Lucro Real pode ser mensal (estimativa) ou trimestral.
-        setPeriodoApuracao(selectedEmpresa?.regimePadrao === 'Real' ? 'Mensal' : 'Trimestral');
+        const mesAtual = new Date().toISOString().substring(0, 7);
+        setFichaMes(mesAtual);
+        // Default honesto pela competencia: mes que ENCERRA trimestre (3/6/9/12)
+        // nasce Trimestral (fecha IRPJ/CSLL); os demais nascem Mensal (PIS/COFINS).
+        // Lucro Real segue no default Mensal (estimativa).
+        const mesNum = Number(mesAtual.split('-')[1]);
+        setPeriodoApuracao(
+            selectedEmpresa?.regimePadrao === 'Real'
+                ? 'Mensal'
+                : (mesEncerraTrimestre(mesNum) ? 'Trimestral' : 'Mensal'),
+        );
         setFichaComercio(0); setFichaIndustria(0); setFichaServico(0); setFichaServicoRetido(0); setFichaLocacao(0); setFichaServicoHospitalar(0);
         setFichaFilialComercio(0); setFichaFilialIndustria(0); setFichaFilialServico(0); setFichaFilialServicoHospitalar(0);
         setFichaIpi(0); setFichaIcmsStFaturado(0); setFichaDevolucoes(0); setFichaCmv(0); setFichaFolha(0); setFichaDespesas(0); setFichaDespesasDedutiveis(0); setFichaIcmsVendas(0);
