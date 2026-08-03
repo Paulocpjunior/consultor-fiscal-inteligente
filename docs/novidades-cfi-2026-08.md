@@ -29,7 +29,13 @@ arquivo, SPED/EFD, GIA e REINF.
    E-Fiscal" = SÓ escrituração dos clientes que ainda rodam lá + REINF.
    GIA saiu da página: obrigação em DESUSO (Paulo, 02/08) — não listar
    como rotina. Falta de algo vira pedido pro Paulo.
+5B. **SPED Fiscal — abas novas 03/08**: Ajustes E111 (código 5.1.1 →
+   tipo na tela → entra no próximo arquivo) e 🚦 Migração (prontidão por
+   empresa; régua da migração do E-Fiscal).
 7. **Validações da semana**: JOTASUL reimport, EDUARDO GUERRA De→Para +
-   DIPAM×SAGE, Canceladas/Faltantes×SAGE, responsável+contador.
+   DIPAM×SAGE, Canceladas/Faltantes×SAGE, MANTOAN MIT,
+   responsável+contador, teste do e-mail de DAS.
+8. **4 perguntas ao Paulo** (mesmas da aba 🚦): SAT? regime de caixa?
+   CIAP? DeSTDA/DIFAL? — "ninguém usa" também é resposta.
 
 Link no app: botão 📣 Novidades no cabeçalho do card Relatórios.
