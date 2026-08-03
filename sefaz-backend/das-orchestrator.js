@@ -115,9 +115,20 @@ export async function emitirDasAvulso(req) {
 /**
  * Lista DAS emitidos com filtros opcionais.
  */
+// Campos LEVES da listagem — o doc guarda o PDF inteiro em base64 (spread
+// `...das` do emitir), e ler 500 docs completos derrubava a instância por
+// memória (Central de DAS 500 sem JSON, 03/08 — estourou quando o cron
+// mensal emitiu a leva de agosto). O PDF sai por getDasPdf, um doc por vez.
+const CAMPOS_LISTAGEM = [
+    'empresaId', 'empresaCnpj', 'empresaNome', 'competencia', 'tipo',
+    'valor', 'vencimento', 'statusPagamento', 'dataPagamento', 'emitidoEm',
+    'modeUsado', 'numeroDocumento', 'codigoBarras', 'descricao', 'pdfUrl',
+    'ultimoEnvioCliente', 'pgdasRecibo',
+];
+
 export async function listarDas({ empresaId, competencia, status } = {}) {
     const db = fa().firestore();
-    let q = db.collection(COLLECTION);
+    let q = db.collection(COLLECTION).select(...CAMPOS_LISTAGEM);
     if (empresaId) q = q.where('empresaId', '==', empresaId);
     if (competencia) q = q.where('competencia', '==', competencia);
     if (status) q = q.where('statusPagamento', '==', status);
@@ -128,12 +139,26 @@ export async function listarDas({ empresaId, competencia, status } = {}) {
     return docs;
 }
 
+/** PDF/base64 de UM DAS — buscado sob demanda (baixar/imprimir/enviar). */
+export async function getDasPdf(id) {
+    const db = fa().firestore();
+    const snap = await db.collection(COLLECTION).doc(String(id)).get();
+    if (!snap.exists) return null;
+    const d = snap.data() || {};
+    return { id: snap.id, empresaId: d.empresaId || null, pdfBase64: d.pdfBase64 || null, pdfUrl: d.pdfUrl || null };
+}
+
 /**
  * Resumo agregado pra dashboard "Central de DAS".
  */
 export async function getResumoDas() {
     const db = fa().firestore();
-    const docs = (await fetchAllDocs(db.collection(COLLECTION), { label: 'das_emitidos/resumo' })).map(d => d.data());
+    // select: a conta só usa 3 campos — ler os docs inteiros (com pdfBase64)
+    // tinha o mesmo risco de memória da listagem (03/08).
+    const docs = (await fetchAllDocs(
+        db.collection(COLLECTION).select('statusPagamento', 'vencimento', 'valor'),
+        { label: 'das_emitidos/resumo' },
+    )).map(d => d.data());
 
     const hoje = new Date().toISOString().slice(0, 10);
     let pendentes = 0, vencidos = 0, pagos = 0;
