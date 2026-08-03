@@ -1,0 +1,105 @@
+// ============================================================================
+// sefaz-backend/migracao-prontidao.js  (PURO — testável)
+//
+// F0 AUTOMÁTICO da migração E-Fiscal → CFI (03/08): as próprias notas
+// capturadas dizem quem usa o quê — ST, IPI/indústria, compra interestadual,
+// emissão própria — e o painel aponta sozinho os CANDIDATOS A PILOTO do SPED
+// (fase F1 do plano), sem esperar levantamento manual.
+//
+// O que os DADOS não contam (fica de pergunta à equipe, e a tela lista):
+// SAT/CF-e (mod 59 não é capturado), regime de CAIXA do Presumido (opção de
+// cadastro), CIAP (controle interno) e DeSTDA (hábito de entrega).
+//
+// Farol honesto: detecção por competência — mês atípico pode esconder sinal.
+// O painel diz o período olhado e nunca chama a lista de "definitiva".
+// ============================================================================
+
+const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
+const so = (v) => String(v || '').replace(/\D/g, '');
+
+/**
+ * Avalia a prontidão de migração por empresa a partir dos docs do período.
+ * @param {Array} docs      campos mínimos: empresaId, direcao, tpNF, status,
+ *                          modelo, totais{vST,vBCST,vIPI}, emitente{cnpjCpf,uf}
+ * @param {Array} empresas  {id, nome, cnpj, regime, uf, industriaCadastro}
+ */
+export function montarProntidaoMigracao(docs, empresas) {
+    const porEmpresa = new Map();
+    for (const e of empresas || []) {
+        porEmpresa.set(e.id, {
+            empresaId: e.id,
+            nome: e.nome || '—',
+            cnpj: so(e.cnpj),
+            regime: e.regime || null,
+            uf: String(e.uf || '').toUpperCase(),
+            industriaCadastro: !!e.industriaCadastro,
+            docs: 0,
+            emiteProprio: 0,        // mod 55/65 com emitente == empresa
+            stSaidas: 0,            // saída própria com ST → SUBSTITUTO (E220/GIA-ST)
+            stEntradas: 0,          // entrada com ST → substituído (coberto: CST 60 em Outras)
+            ipiSaidas: 0,           // IPI destacado em saída → indústria/equiparado
+            entradasInterestaduais: 0, // candidata a DIFAL de aquisição
+        });
+    }
+
+    for (const d of docs || []) {
+        const emp = porEmpresa.get(d.empresaId);
+        if (!emp || CANCELADOS.has(d.status)) continue;
+        emp.docs++;
+        const t = d.totais || {};
+        const emitEhEmpresa = so(d.emitente?.cnpjCpf) === emp.cnpj;
+        const propriaEntrada = String(d.tpNF ?? '') === '0';
+        const saidaPropria = emitEhEmpresa && !propriaEntrada;
+        const temSt = (Number(t.vST) || 0) > 0 || (Number(t.vBCST) || 0) > 0;
+
+        if (emitEhEmpresa && ['55', '65'].includes(String(d.modelo))) emp.emiteProprio++;
+        if (temSt) { if (saidaPropria) emp.stSaidas++; else emp.stEntradas++; }
+        if (saidaPropria && (Number(t.vIPI) || 0) > 0) emp.ipiSaidas++;
+        if (!saidaPropria && !emitEhEmpresa) {
+            const ufEmit = String(d.emitente?.uf || '').toUpperCase();
+            if (ufEmit && emp.uf && ufEmit !== emp.uf) emp.entradasInterestaduais++;
+        }
+    }
+
+    const linhas = Array.from(porEmpresa.values())
+        .filter((e) => e.docs > 0)
+        .map((e) => {
+            const bloqueios = [];
+            if (e.stSaidas > 0) bloqueios.push(`ST em ${e.stSaidas} saída(s) — precisa E220/apuração ST`);
+            if (e.ipiSaidas > 0 || e.industriaCadastro) bloqueios.push(e.industriaCadastro
+                ? 'indústria no cadastro — avaliar bloco K'
+                : `IPI destacado em ${e.ipiSaidas} saída(s) — avaliar bloco K/CIAP`);
+            const atencoes = [];
+            if (e.entradasInterestaduais > 0) atencoes.push(`${e.entradasInterestaduais} compra(s) interestadual(is) — conferir DIFAL de aquisição`);
+            if (e.stEntradas > 0) atencoes.push(`${e.stEntradas} entrada(s) com ST (substituído — coberto pelo CFI)`);
+            return {
+                ...e,
+                bloqueios,
+                atencoes,
+                candidataPiloto: e.regime === 'lucro' && bloqueios.length === 0,
+            };
+        })
+        .sort((a, b) => {
+            // Candidatas primeiro (mais movimento no topo); depois as bloqueadas.
+            if (a.candidataPiloto !== b.candidataPiloto) return a.candidataPiloto ? -1 : 1;
+            return b.docs - a.docs;
+        });
+
+    return {
+        linhas,
+        resumo: {
+            comMovimento: linhas.length,
+            candidatasPiloto: linhas.filter((l) => l.candidataPiloto).length,
+            comStSaida: linhas.filter((l) => l.stSaidas > 0).length,
+            comIpiOuIndustria: linhas.filter((l) => l.ipiSaidas > 0 || l.industriaCadastro).length,
+            comInterestadual: linhas.filter((l) => l.entradasInterestaduais > 0).length,
+        },
+        // O que os dados NÃO respondem — perguntas abertas à equipe.
+        perguntasEquipe: [
+            'SAT/CF-e (mod 59): algum cliente do varejo emite cupom SAT? O CFI não captura mod 59.',
+            'Regime de CAIXA no Lucro Presumido: temos optantes? A apuração do CFI é por emissão.',
+            'CIAP (crédito de ativo, CAT 17/99): algum cliente controla? O bloco G sai vazio.',
+            'DeSTDA: alguém entrega para clientes do Simples com ST/DIFAL?',
+        ],
+    };
+}
