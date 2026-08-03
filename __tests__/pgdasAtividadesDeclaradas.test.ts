@@ -8,7 +8,6 @@
  * varia (objeto, string JSON, aninhamentos diferentes), a extração é varredura
  * profunda e os testes cobrem os formatos plausíveis.
  */
-// @ts-expect-error — modulo .js puro
 import {
     extrairAtividadesDeclaradas,
     resumirAtividadesDeclaradas,
