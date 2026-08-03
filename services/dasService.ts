@@ -56,6 +56,44 @@ export async function getDasPdf(user: User | null, id: string): Promise<{ pdfBas
     return res.json();
 }
 
+export interface AtividadeDeclarada {
+    idAtividade: number;
+    valorAtividade: number;
+    ocorrencias: number;
+    qualificacoes: Array<{ codigoTributo: number | null; id: number | null }>;
+    rotulo?: string | null;
+}
+
+export interface AtividadesDeclaradasResposta {
+    pa: string;
+    atividades: AtividadeDeclarada[];
+    resumo: {
+        total: number;
+        conhecidas: AtividadeDeclarada[];
+        novas: AtividadeDeclarada[];
+        temNova: boolean;
+    };
+    detalhamentoIndisponivel: boolean;
+}
+
+/**
+ * Lê as atividades de uma declaração PGDAS-D JÁ transmitida desta empresa.
+ * Consulta pura (não declara nada) — serve pra descobrir o número oficial de
+ * uma atividade que o app ainda não mapeia, na fonte que não mente: o que a
+ * Receita já aceitou da própria empresa.
+ */
+export async function getAtividadesDeclaradas(
+    user: User | null, cnpj: string, competencia: string,
+): Promise<AtividadesDeclaradasResposta> {
+    const qs = new URLSearchParams({ cnpj, competencia }).toString();
+    const res = await fetch(`${BASE}/atividades-declaradas?${qs}`, { headers: await authHeaders(user) });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `atividades declaradas: ${res.status}`);
+    }
+    return res.json();
+}
+
 export async function emitirDasRegular(user: User | null, payload: {
     empresaId: string; empresaCnpj: string; empresaNome: string;
     competencia: string; valor: number;

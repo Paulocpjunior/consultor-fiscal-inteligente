@@ -7,8 +7,8 @@ import LoadingSpinner from './LoadingSpinner';
 import NfseSpAdminPanel from './NfseSpAdminPanel';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
-import { useConfirm } from './dialog/DialogProvider';
-import { emitirDasRegular } from '../services/dasService';
+import { useConfirm, usePrompt } from './dialog/DialogProvider';
+import { emitirDasRegular, getAtividadesDeclaradas } from '../services/dasService';
 import { mapPgdasPayload, avisosDoPayload } from '../services/pgdasMapper';
 import EmitirNfseModal from './NfseNacional/EmitirModal';
 import PrevisaoDasModal from './Das/PrevisaoModal';
@@ -70,6 +70,8 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     empresa, notas, onBack, onImport, onUpdateFolha12, onSaveFaturamentoManual, onUpdateEmpresa, onShowClienteView, onShowToast, currentUser
 }) => {
     const confirm = useConfirm();
+    const pedirTexto = usePrompt();
+    const [consultandoAtividades, setConsultandoAtividades] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
     const [isCfopCorrelacaoModalOpen, setIsCfopCorrelacaoModalOpen] = useState(false);
@@ -319,6 +321,82 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
             delete newState[key];
             return newState;
         });
+    };
+
+    /**
+     * Lê as atividades de uma declaração PGDAS-D JÁ transmitida desta empresa.
+     * Consulta pura — não declara nada. Existe porque a tabela de atividades do
+     * SERPRO não é acessível de dentro do app: quando falta o código de uma
+     * atividade (ex.: ISS fixo do escritório contábil, caso S&P), a fonte
+     * confiável é o que a Receita já aceitou desta própria empresa.
+     */
+    const handleVerAtividadesDeclaradas = async () => {
+        const sugestao = (() => {
+            const d = new Date(mesApuracao.getFullYear(), mesApuracao.getMonth() - 1, 1);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        })();
+        const competencia = await pedirTexto({
+            title: 'Atividades de uma declaração já transmitida',
+            message: (
+                <>
+                    Informe a competência (AAAA-MM) de um mês <b>já declarado</b> desta empresa.
+                    O app mostra os <b>códigos de atividade</b> que constam na declaração aceita
+                    pela Receita. Nada é transmitido — é só consulta.
+                </>
+            ),
+            defaultValue: sugestao,
+            placeholder: 'AAAA-MM',
+            confirmLabel: 'Consultar',
+        });
+        if (!competencia) return;
+
+        setConsultandoAtividades(true);
+        try {
+            const r = await getAtividadesDeclaradas(currentUser ?? null, empresa.cnpj, competencia.trim());
+            await confirm({
+                title: `Atividades declaradas em ${competencia.trim()}`,
+                message: (
+                    <div style={{ fontSize: 13 }}>
+                        {r.detalhamentoIndisponivel ? (
+                            <p>
+                                A consulta respondeu, mas <b>não veio o detalhamento por atividade</b> —
+                                a Receita devolveu só o recibo/valores. Tente outra competência; se
+                                repetir, o código precisa vir da tabela de atividades do SERPRO.
+                            </p>
+                        ) : (
+                            <>
+                                <p style={{ marginBottom: 8 }}>
+                                    Códigos que a Receita <b>já aceitou</b> desta empresa:
+                                </p>
+                                <ul style={{ margin: '0 0 8px 16px' }}>
+                                    {r.atividades.map((a) => (
+                                        <li key={a.idAtividade}>
+                                            <b>{a.idAtividade}</b>
+                                            {a.rotulo ? ` — ${a.rotulo}` : ''}
+                                            {' · '}R$ {a.valorAtividade.toFixed(2).replace('.', ',')}
+                                            {!a.rotulo && <b style={{ color: '#7c3aed' }}> ← ainda não mapeado no app</b>}
+                                        </li>
+                                    ))}
+                                </ul>
+                                {r.resumo.temNova && (
+                                    <p style={{ padding: 8, borderRadius: 6, background: '#F5F3FF', color: '#5B21B6' }}>
+                                        Achado: {r.resumo.novas.map((a) => a.idAtividade).join(', ')} —
+                                        código(s) que esta empresa usa e o app ainda não monta. Mande
+                                        este número ao Paulo para cadastrarmos a atividade.
+                                    </p>
+                                )}
+                            </>
+                        )}
+                    </div>
+                ),
+                variant: 'info',
+                confirmLabel: 'Fechar',
+            });
+        } catch (err: any) {
+            onShowToast(err?.message || 'Falha ao consultar as atividades declaradas.');
+        } finally {
+            setConsultandoAtividades(false);
+        }
     };
 
     const handleEmitirDasRegular = async () => {
@@ -585,6 +663,14 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                     </button>
                     <button onClick={() => setIsCfopCorrelacaoModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Correlacao automatica/manual de CFOPs no SPED Fiscal">
                         🔄 Correlacao CFOP
+                    </button>
+                    <button
+                        onClick={handleVerAtividadesDeclaradas}
+                        disabled={consultandoAtividades}
+                        className="btn-press flex items-center gap-2 px-4 py-2 bg-violet-100 text-violet-700 font-bold rounded-lg hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
+                        title="Mostra os códigos de atividade que a Receita já aceitou nas declarações desta empresa (consulta, não declara nada)"
+                    >
+                        {consultandoAtividades ? '⏳ Consultando...' : '🔎 Atividades declaradas'}
                     </button>
                     <button
                         onClick={handleEmitirDasRegular}

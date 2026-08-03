@@ -70,10 +70,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   atividade na tabela do SERPRO — `ID_ATIVIDADE_ISS_FIXO_CONTABIL` (null hoje,
   em pgdasMapper). Enquanto null, SUP viaja como 15/12/18 (valor certo,
   natureza a corrigir). A doc do SERPRO e o manual da Receita são BLOQUEADOS
-  pela política de rede do ambiente — o número tem que vir do Paulo (doc do
-  Integra Contador) ou de uma declaração anterior da própria empresa via
-  CONSULTIMADECREC14. Ids já mapeados: 1/2/3 comércio, 4/5/6 indústria, 11/12
-  Anexo V, 14/15 Anexo III, 17/18 Anexo IV, 29/30/31 exterior (V/III/IV).
+  pela política de rede do ambiente — então o número sai da FONTE QUE NÃO
+  MENTE: botão **🔎 Atividades declaradas** na tela do Simples (rota
+  `/das/atividades-declaradas`, CONSULTIMADECREC14, consulta pura) lê os ids de
+  uma declaração já aceita da própria empresa e destaca o que o app ainda não
+  monta. Mesmo princípio do mês-modelo do MIT: NUNCA chutar código de tributo.
+  Extrator puro `pgdas-atividades-declaradas.js` (varredura profunda — o shape
+  do SERPRO varia; 9 testes). Ids já mapeados: 1/2/3 comércio, 4/5/6 indústria,
+  11/12 Anexo V, 14/15 Anexo III, 17/18 Anexo IV, 29/30/31 exterior (V/III/IV).
 - **PRESUMIDO tem os DOIS períodos e o mês decide** (colaborador via Paulo,
   03/08 — caso CLINICA MANTOAN 07/2026): IRPJ/CSLL são TRIMESTRAIS (Lei
   9.430/96 art. 1º) e PIS/COFINS/IPI são MENSAIS, então a ficha precisa dos
