@@ -144,12 +144,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   equipe pra campo que parecia obrigatório) = vazio. Empresa de outro
   município usa `inscricaoMunicipal` genérica; o modal avisa quando
   codMunIBGE != 3550308 e o CCM tem valor.
-- **Gate de auditoria do deploy**: bloqueia em high/critical de QUALQUER
-  dep (dev incluso). 2 falhas em 30 runs, ambas por advisory novo
-  publicado entre deploys (postcss 24/07 #295; brace-expansion 25/07
-  #301). LIÇÃO: pino de segurança em `overrides` do package.json trava o
-  audit fix quando o pinado ganha advisory — revisitar os pinos ao
-  destravar (hoje: brace-expansion 5.0.8, protobufjs 7.6.5).
+- **Gate de auditoria do deploy — REDESENHADO 03/08** (Paulo: "resolva de
+  forma que não volta a acontecer, estamos FULL SERVICE"). Três deploys
+  caíram por advisory publicado ENTRE deploys, nenhum ligado ao código
+  entregue (postcss 24/07 #295; brace-expansion 25/07 #301 e 03/08 #416).
+  Três mudanças de fundo: (1) **`overrides` SEMPRE em faixa `^x.y.z`, NUNCA
+  versão exata** — pino exato cria TETO e impede o `npm audit fix` de
+  resolver sozinho quando o próprio pinado ganha advisory (causa das 3
+  quedas); a faixa preserva o PISO, que é o motivo do pino. (2) O gate
+  bloqueia só em **produção** (`npm audit --omit=dev` — o que vai na
+  imagem); advisory de dep de DESENVOLVIMENTO vai pro resumo do job e não
+  segura entrega de imposto. CUIDADO: dev ≠ irrelevante — brace-expansion
+  parecia dev e está na árvore de PRODUÇÃO (@google-cloud/secret-manager →
+  google-gax → rimraf); conferir com `npm ls <pkg> --omit=dev` antes de
+  concluir. (3) Robô diário `audit-deps.yml` (9h UTC, dias úteis): roda
+  `npm audit fix` (sem `--force` — major é decisão humana), valida com
+  lint+jest+build e só então abre PR já testado; sem correção possível abre
+  ISSUE antes de virar bloqueio. Escape hatch `[skip-audit]` no ASSUNTO do
+  commit segue valendo pra hotfix.
 - CNPJ escritório: 44.388.152/0001-89. Projeto GCP `consultorfiscalapp`
   (us-west1). Scheduler: `scripts/setup-cloud-schedulers.sh` (idempotente;
   o Paulo roda no Mac dele — clone em `~/consultor-fiscal-inteligente`).

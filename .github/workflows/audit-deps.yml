@@ -1,0 +1,170 @@
+# Robô diário de dependências.
+#
+# POR QUE EXISTE: o gate do deploy já barrou 3 entregas por advisory publicado
+# ENTRE deploys (postcss 24/07, brace-expansion 25/07 e 03/08) — nenhuma delas
+# tinha relação com o código que estava sendo entregue. Descobrir isso na hora
+# do deploy é o pior momento possível: a correção fiscal fica parada esperando
+# uma atualização de biblioteca.
+#
+# O QUE FAZ: todo dia útil de manhã roda a auditoria; havendo advisory
+# high/critical, tenta corrigir (`npm audit fix`, sem --force), VALIDA com a
+# mesma bateria do deploy (lint + jest + build) e só então abre um PR já
+# testado. Se não houver correção possível, abre uma ISSUE avisando ANTES de
+# alguém esbarrar no bloqueio.
+#
+# Nunca commita direto na main (regra do projeto) e nunca usa --force: upgrade
+# de major entra por decisão humana, não por robô de madrugada.
+name: Auditoria diária de dependências
+
+on:
+  schedule:
+    # 09:00 UTC = 06:00 BRT, dias úteis — pronto antes do expediente.
+    - cron: '0 9 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: audit-deps
+  cancel-in-progress: false
+
+jobs:
+  auditar:
+    name: Auditar e corrigir
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Auditoria
+        id: auditoria
+        run: |
+          if npm audit --audit-level=high > /tmp/audit.txt 2>&1; then
+            echo "limpo=true" >> "$GITHUB_OUTPUT"
+            echo "→ Nenhum advisory high/critical."
+          else
+            echo "limpo=false" >> "$GITHUB_OUTPUT"
+            cat /tmp/audit.txt
+          fi
+
+      - name: Tentar correção automática
+        if: steps.auditoria.outputs.limpo == 'false'
+        id: correcao
+        run: |
+          # Sem --force: major com breaking change é decisão humana.
+          # E sem `npm install --package-lock-only` depois: re-resolver o lock
+          # pode DESFAZER a correção que o audit fix acabou de aplicar.
+          npm audit fix || true
+
+          if git diff --quiet -- package-lock.json package.json; then
+            echo "mudou=false" >> "$GITHUB_OUTPUT"
+            echo "→ npm audit fix não alterou nada (sem correção upstream)."
+          else
+            echo "mudou=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          if npm audit --audit-level=high > /tmp/audit-depois.txt 2>&1; then
+            echo "resolvido=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "resolvido=false" >> "$GITHUB_OUTPUT"
+            cat /tmp/audit-depois.txt
+          fi
+
+      # Só abre PR de algo que PASSA na mesma bateria do deploy — PR vermelho
+      # seria só mais uma pendência na fila do humano.
+      - name: Validar (lint + testes + build)
+        if: steps.correcao.outputs.mudou == 'true'
+        id: validacao
+        run: |
+          npm ci
+          npm run lint
+          npx jest --ci
+          npm run build
+
+      - name: Abrir PR com a correção
+        if: steps.correcao.outputs.mudou == 'true' && steps.validacao.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="chore/audit-deps"
+          HOJE=$(date +%d/%m/%Y)
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add package.json package-lock.json
+          git commit -m "chore(deps): correcao automatica de advisory ($HOJE)
+
+          Aberto pelo robo diario de auditoria. Rodou npm audit fix (sem --force)
+          e validou com lint + jest + build antes de abrir o PR.
+
+          Auditoria depois da correcao:
+          $(sed 's/^/  /' /tmp/audit-depois.txt | head -30)"
+          # A branch é exclusiva do robô. force-with-lease protege de sobrescrever
+          # trabalho alheio; no 1º run a branch não existe no remoto, daí o fallback.
+          git push --force-with-lease origin "$BRANCH" || git push origin "$BRANCH"
+
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create \
+              --head "$BRANCH" \
+              --base main \
+              --title "chore(deps): correção automática de advisory ($HOJE)" \
+              --body "$(cat <<'CORPO'
+          Robô diário de auditoria. `npm audit fix` (sem `--force`) resolveu um advisory
+          high/critical **antes** que ele pudesse barrar um deploy.
+
+          Já validado neste mesmo run: `npm run lint`, `npx jest --ci` e `npm run build`.
+
+          Confira o diff do `package-lock.json` e mescle. Se o advisory for de dependência
+          de produção, isto está segurando o próximo deploy — prioridade.
+          CORPO
+          )"
+          else
+            echo "→ PR já aberto para $BRANCH; branch atualizada."
+          fi
+
+      # Sem correção possível: avisa ANTES de virar bloqueio de deploy.
+      - name: Abrir issue quando não há correção
+        if: steps.correcao.outputs.mudou == 'false' || steps.correcao.outputs.resolvido == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITULO="Advisory sem correção automática nas dependências"
+          EXISTE=$(gh issue list --search "$TITULO in:title" --state open --json number --jq '.[0].number // empty')
+          CORPO=$(cat <<CORPO
+          O \`npm audit fix\` não resolveu sozinho. Enquanto isso não for tratado, um
+          advisory de **produção** vai barrar o próximo deploy (dep de desenvolvimento
+          não bloqueia, mas continua pendente).
+
+          Caminhos, nesta ordem:
+          1. Subir o PISO da faixa em \`overrides\` do package.json (nunca versão exata —
+             pino exato cria teto e trava o audit fix).
+          2. Atualizar a dependência direta que puxa a vulnerável.
+          3. Sem correção upstream: \`[skip-audit]\` no assunto do commit libera a entrega,
+             com o risco registrado no PR.
+
+          \`\`\`
+          $(cat /tmp/audit-depois.txt 2>/dev/null || cat /tmp/audit.txt)
+          \`\`\`
+          CORPO
+          )
+
+          if [ -n "$EXISTE" ]; then
+            gh issue comment "$EXISTE" --body "$CORPO"
+          else
+            gh issue create --title "$TITULO" --body "$CORPO"
+          fi
