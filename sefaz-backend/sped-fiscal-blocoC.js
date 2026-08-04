@@ -19,6 +19,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { montarC197Difal } from './sped-difal-c197.js';
 import { correlacionarCfop, derivarNaturezaAtividade } from './cfop-correlacao.js';
 
 
@@ -131,6 +132,23 @@ export function buildBlocoC(dados) {
     // Usa _ no nome pra deixar claro que eh metadata interno.
     for (const nota of notas) { nota._dados = dados; }
 
+    // DIFAL de aquisicao: calculado UMA vez pro periodo, indexado por chave.
+    // O debito na apuracao continua vindo do E111 (o C197 e a origem
+    // documental, nao a conta) — o aviso diz isso na tela.
+    const difal = montarC197Difal({
+        notas,
+        ufEmpresa: (dados.empresa?.dadosFiscais?.uf || '').toUpperCase(),
+        aliqInternaPadrao: Number(dados.difalAliqInternaPadrao) || 18,
+        aliqInternaPorChave: dados.difalAliqInternaPorChave || {},
+        codigoAjuste: dados.difalCodigoAjusteC197 || '',
+        codObservacao: dados.difalCodObservacao || '',
+    });
+    const difalPorChave = difal.linhasPorChave;
+    if (Array.isArray(dados.warnings)) {
+        for (const a of difal.avisos) dados.warnings.push(`DIFAL aquisição (C197): ${a}`);
+    }
+    dados.difalAquisicaoResumo = { total: difal.totalDifal, notas: difal.porNota };
+
     // C100 + C170s + C190s pra cada nota
     for (const nota of notas) {
         try {
@@ -157,6 +175,12 @@ export function buildBlocoC(dados) {
                 for (const linha of c190s) {
                     linhas.push(linha);
                 }
+
+                // C195/C197 — DIFAL de aquisicao interestadual (uso/consumo e
+                // ativo). So sai com o codigo de ajuste da tabela 5.3 do
+                // estado cadastrado; sem ele vira aviso (nao se inventa).
+                const c197 = difalPorChave[String(nota.chave || nota.id || '')];
+                if (c197) for (const linha of c197) linhas.push(linha);
             }
         } catch (err) {
             console.warn(`[blocoC] Falha gerando linhas pra nota ${nota.numero}:`, err.message);

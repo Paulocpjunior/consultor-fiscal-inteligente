@@ -233,6 +233,10 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // trimestral concatena os meses do período. Erro de código NÃO entra
     // calado no arquivo: vira warning e a linha fica de fora (farol honesto).
     let ajustesApuracao = [];
+    // Config do DIFAL de aquisição (C197) mora no MESMO doc dos ajustes — é
+    // ajuste de documento, não merece coleção própria. Sem o código da tabela
+    // 5.3 do estado, o C197 não é gerado (o aviso sai na geração).
+    let difalCfg = {};
     if (regime === 'lucro') {
         try {
             const comps = listarCompetenciasPeriodo(periodoInicio, periodoFim);
@@ -241,6 +245,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
             );
             for (const s of snaps) {
                 if (s.exists) ajustesApuracao.push(...(s.data().ajustes || []));
+                if (s.exists && s.data().difalCodigoAjusteC197) difalCfg = s.data();
             }
             const clsPrev = classificarAjustes(ajustesApuracao, (empresa.dadosFiscais?.uf || '').toUpperCase());
             for (const erro of clsPrev.erros) {
@@ -322,6 +327,10 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         unidades,
         saldoCredorIcmsAnterior,
         ajustesApuracao,
+        difalCodigoAjusteC197: difalCfg.difalCodigoAjusteC197 || '',
+        difalCodObservacao: difalCfg.difalCodObservacao || '',
+        difalAliqInternaPadrao: difalCfg.difalAliqInternaPadrao || 18,
+        difalAliqInternaPorChave: difalCfg.difalAliqInternaPorChave || {},
         ciap,
         dipam,
         warnings,

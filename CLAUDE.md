@@ -515,8 +515,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   testes + rotas `/api/admin/difal/*`): varredura da carteira Simples +
   apuração por cliente, interna 18% editável POR NOTA, interestadual da
   nota ou derivada (UF 12/7 + orig importado 4%), nota com ST separada da
-  consolidação. Guia = trilho DARE existente. FASE 2 pendente: 426-A com
-  IVA-ST por documento; C197 do Lucro.
+  consolidação. Guia = trilho DARE existente. **FASE 2 (426-A por documento) e
+  C197 do Lucro FEITOS 04/08**: `difal-426a.js` (IA = VA × (1+IVA-ST) × ALQ −
+  IC; o IVA-ST vem da Portaria CAT e NÃO está na nota — sem ele o documento
+  fica PENDENTE, fora do total) e `sped-difal-c197.js` (16 testes) escriturando
+  C195/C197 das entradas interestaduais de uso/consumo e ativo (CFOP
+  2551/2552/2555/2556/2557; revenda é outro trilho). CUIDADO: o C197 é a ORIGEM
+  DOCUMENTAL, não a conta — o débito no E110 continua entrando pelo E111, e o
+  aviso da geração lembra disso. COD_AJ da tabela 5.3 é ESTADUAL e não se
+  inventa: sem ele cadastrado (no MESMO doc de `sped_ajustes_apuracao`, que já
+  é a aba de ajustes), o registro não sai e vira aviso.
 - **GIA caiu em DESUSO** (Paulo, 02/08): não listar como rotina nem gastar
   feature com ela. **SPED Fiscal/Contribuições JÁ É módulo do CFI** (card
   SPED Fiscal: gera mensal/trimestral + conferências; transmissão é no PVA
