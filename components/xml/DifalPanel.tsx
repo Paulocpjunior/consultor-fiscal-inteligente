@@ -13,6 +13,8 @@ interface VarreduraLinha {
     notasInterestaduais: number; notasComSt: number; baseAproximada: number;
     /** Cliente sem UF no cadastro: não dá pra separar dentro × fora do estado. */
     semUfCadastrada?: boolean;
+    /** 'simples' = guia consolidada aqui · 'lucro' = escritura no SPED. */
+    regime?: 'simples' | 'lucro';
 }
 interface LinhaDifal {
     chave: string; numero: string; dhEmi: string | null; fornecedor: string;
@@ -142,6 +144,12 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                                 <tr key={l.empresaId} className="border-b border-slate-100 dark:border-slate-700/50">
                                     <td className="py-1.5 font-semibold">
                                         {l.nome}
+                                        {l.regime === 'lucro' && (
+                                            <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300"
+                                                title="Cliente do Lucro Presumido/Real: o DIFAL existe, mas não sai em guia consolidada — ele é escriturado no SPED (C195/C197) e o débito entra pela aba Ajustes E111.">
+                                                Lucro · vai pelo SPED
+                                            </span>
+                                        )}
                                         {l.semUfCadastrada && (
                                             <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
                                                 title="A empresa está sem UF no cadastro — sem ela não dá pra separar compra de dentro e de fora do estado. Preencha em Dados Fiscais.">
@@ -165,6 +173,15 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                     </table>
                 </div>
             )}
+            {varredura && varredura.some(l => l.regime === 'lucro') && !painel && (
+                <p className="text-[11px] text-violet-700 dark:text-violet-300 px-1 -mt-2">
+                    Clientes marcados <strong>Lucro · vai pelo SPED</strong> pagam DIFAL do mesmo jeito,
+                    mas a guia não é consolidada aqui: a nota é escriturada no <strong>C195/C197</strong> do
+                    SPED Fiscal e o débito entra pela aba <strong>Ajustes E111</strong>. A apuração abaixo
+                    serve pra conferir o valor.
+                </p>
+            )}
+
             {varredura && varredura.length === 0 && !painel && (
                 <p className="text-xs text-slate-500 text-center py-3">Nenhum cliente do Simples com compra interestadual em {competencia.split('-').reverse().join('/')}.</p>
             )}

@@ -56,3 +56,33 @@ describe('régua da varredura sobre a projeção do Firestore', () => {
         expect(ufEmitente(projecaoAntiga)).toBe('');
     });
 });
+
+describe('vínculo documento × empresa na varredura', () => {
+    // Caso KAOLI HIRATA (04/08): "o consultor puxou as notas de aquisição,
+    // ambas de fora do estado, mas o DIFAL não aponta a empresa".
+    // Documento capturado server-side (autXML/ZIP/cofre) muitas vezes tem só
+    // `empresaCnpj` — sem `empresaId`. A junção só por id o descartava.
+    const so = (v: unknown) => String(v || '').replace(/\D/g, '');
+
+    const empresas = new Map<string, { empresaId: string; cnpj: string }>();
+    const porCnpj = new Map<string, { empresaId: string; cnpj: string }>();
+    const kaoli = { empresaId: 'emp-kaoli', cnpj: '46350468000107' };
+    empresas.set(kaoli.empresaId, kaoli);
+    porCnpj.set(kaoli.cnpj, kaoli);
+
+    const resolver = (d: { empresaId?: string; empresaCnpj?: string }) =>
+        empresas.get(d.empresaId as string) || porCnpj.get(so(d.empresaCnpj));
+
+    it('acha pelo empresaId quando ele existe', () => {
+        expect(resolver({ empresaId: 'emp-kaoli' })).toBe(kaoli);
+    });
+
+    it('acha pelo CNPJ quando o doc veio SEM empresaId — era o caso perdido', () => {
+        expect(resolver({ empresaCnpj: '46.350.468/0001-07' })).toBe(kaoli);
+    });
+
+    it('documento de outra empresa continua fora (não virou "acha qualquer um")', () => {
+        expect(resolver({ empresaCnpj: '11111111000111' })).toBeUndefined();
+        expect(resolver({})).toBeUndefined();
+    });
+});
