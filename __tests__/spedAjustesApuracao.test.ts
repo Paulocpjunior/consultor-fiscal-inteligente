@@ -9,15 +9,33 @@ import {
 
 describe('validarCodigoAjuste', () => {
     it('aceita código de apuração própria da UF da empresa e devolve o tipo', () => {
-        expect(validarCodigoAjuste('SP020799', 'SP')).toEqual({ ok: true, tipo: 2 });
-        expect(validarCodigoAjuste('sp000207', 'SP')).toEqual({ ok: true, tipo: 0 });
+        expect(validarCodigoAjuste('SP020799', 'SP')).toEqual({ ok: true, tipo: 2, apuracao: 'proprio' });
+        expect(validarCodigoAjuste('sp000207', 'SP')).toEqual({ ok: true, tipo: 0, apuracao: 'proprio' });
     });
 
-    it('recusa formato errado, UF divergente, ST e tipo desconhecido', () => {
+    it('recusa formato errado, UF divergente e tipo desconhecido', () => {
         expect(validarCodigoAjuste('SP123', 'SP').ok).toBe(false);
         expect(validarCodigoAjuste('MG020799', 'SP').erro).toMatch(/UF MG/);
-        expect(validarCodigoAjuste('SP120799', 'SP').erro).toMatch(/PRÓPRIO/);
         expect(validarCodigoAjuste('SP090799', 'SP').erro).toMatch(/desconhecido/);
+        // DIFAL/FCP (3º caractere fora de 0/1) segue recusado — E310 não existe.
+        expect(validarCodigoAjuste('SP520799', 'SP').erro).toMatch(/E310/);
+    });
+
+    it('código de ST (3º caractere 1) agora é ACEITO e marcado como da apuração ST', () => {
+        // Antes ia pro erro "lance no PVA"; desde 04/08 vira linha do E220.
+        expect(validarCodigoAjuste('SP120799', 'SP')).toEqual({ ok: true, tipo: 2, apuracao: 'st' });
+    });
+
+    it('classificarAjustes só soma a apuração pedida — o resto é do outro registro', () => {
+        const ajustes = [
+            { codigo: 'SP000207', valor: 100 },  // próprio, outros débitos
+            { codigo: 'SP100207', valor: 250 },  // ST, outros débitos
+        ];
+        expect(classificarAjustes(ajustes, 'SP').outrosDebitos).toBe(100);
+        expect(classificarAjustes(ajustes, 'SP', 'st').outrosDebitos).toBe(250);
+        // e nenhum dos dois vira ERRO — cada um tem seu registro
+        expect(classificarAjustes(ajustes, 'SP').erros).toEqual([]);
+        expect(classificarAjustes(ajustes, 'SP', 'st').erros).toEqual([]);
     });
 });
 
