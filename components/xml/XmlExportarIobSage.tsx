@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getAuth } from 'firebase/auth';
 import type { User, DocumentoFiscal } from '../../types';
 import { listDocumentos, getEmpresasDisponiveis, getDadosFiscaisEmpresa, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { exportarParaIobSage, downloadBlob } from '../../services/iobSageExportService';
@@ -186,6 +187,39 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         const novos = await carregarCodigosParticipantes(empresaSelecionada.id);
         setCodigosPart(novos);
         onShowToast?.('De→Para salvo. Gere o arquivo de novo — os participantes mapeados saem com o código do E-Fiscal.');
+    };
+
+    // Relê os XMLs guardados e preenche o endereço do destinatário do RECORTE
+    // atual. Sem isso, o colaborador com o botão bloqueado só teria a opção de
+    // esperar o cron drenar — e a tela está aberta agora (caso 04/08).
+    const [corrigindoEnderecos, setCorrigindoEnderecos] = useState(false);
+    const handleCorrigirEnderecos = async () => {
+        if (!competencia) return;
+        setCorrigindoEnderecos(true);
+        try {
+            const u = getAuth().currentUser;
+            if (!u) throw new Error('Sessão expirada — entre de novo.');
+            const token = await u.getIdToken();
+            const res = await fetch('/api/admin/sefaz/corrigir-endereco-destinatario', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    empresaId: empresaSelecionada?.id || null,
+                    competencia,
+                }),
+            });
+            const j = await res.json();
+            if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+            onShowToast?.(j.mensagem || 'Endereços conferidos.');
+            await buscar();
+        } catch (e: any) {
+            onShowToast?.(`Não foi possível corrigir os endereços: ${e?.message || e}`);
+        } finally {
+            setCorrigindoEnderecos(false);
+        }
     };
 
     const handleExportar = async () => {
@@ -614,6 +648,16 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 >
                                     {loading ? 'Conferindo…' : '↻ Reconferir'}
                                 </button>
+                                {(preflight?.bloqueios ?? 0) > 0 && (
+                                    <button
+                                        onClick={handleCorrigirEnderecos}
+                                        disabled={corrigindoEnderecos || !competencia}
+                                        className="px-3 py-2 text-sm bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 disabled:opacity-40"
+                                        title="Relê os XMLs guardados e preenche o endereço do destinatário das notas deste recorte — resolve o 'participante sem UF'."
+                                    >
+                                        {corrigindoEnderecos ? 'Corrigindo…' : '🔧 Corrigir endereços'}
+                                    </button>
+                                )}
                                 <button
                                     onClick={handleExportar}
                                     disabled={exporting || filtrados.length === 0 || (preflight?.bloqueios ?? 0) > 0}

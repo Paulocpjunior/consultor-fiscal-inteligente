@@ -98,6 +98,14 @@ function formatNcm(ncm: string | undefined): string {
  * O De→Para (mapa cnpj→código existente, alimentado pelo log de erros) faz a
  * nota referenciar o cadastro que o E-Fiscal já tem.
  */
+/** CNPJ/CPF legível na mensagem de erro — dígito solto confunde na conferência. */
+function fmtCnpjCpf(v: string): string {
+    const d = onlyDigits(v);
+    if (d.length === 14) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+    if (d.length === 11) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+    return d || '(sem CNPJ)';
+}
+
 function codigoParticipante(cnpjCpf: string, codigos?: Record<string, string>): string {
     const digits = onlyDigits(cnpjCpf);
     const mapeado = codigos?.[digits];
@@ -750,6 +758,11 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
 
     // 2. E010 — um por participante unico (CNPJ/CPF).
     const e010Set = new Map<string, string>();
+    // Participante que o E-Fiscal RECUSARIA (hoje: sem UF). A nota dele também
+    // não pode ir ao arquivo: sem o cadastro, o E200 aponta pra um código que
+    // não existe lá e a nota é recusada do mesmo jeito — só que aí o
+    // colaborador recebe um log de erro em vez de um aviso claro aqui.
+    const participantesBloqueados = new Set<string>();
     for (const d of documentos) {
         try {
             const part = participanteDoDoc(d);
@@ -763,14 +776,8 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
             // Melhor deixar a nota FORA e dizer QUEM falta do que mandar um
             // arquivo que o E-Fiscal rejeita inteiro com 162 erros.
             if (!part.uf) {
-                falhas.push({
-                    documento: rotuloDoc(d),
-                    motivo: `participante ${part.cnpjCpf} sem UF — o E-Fiscal recusa o cadastro `
-                        + '(E010 campo 10). O endereço do destinatário passou a ser capturado em '
-                        + '04/08; para notas antigas, rode a sincronização e gere de novo. '
-                        + 'Se persistir, informe o código do participante no De→Para.',
-                });
-                continue;
+                participantesBloqueados.add(part.cnpjCpf);
+                continue;   // a falha é reportada UMA vez por nota, no laço das notas
             }
             e010Set.set(part.cnpjCpf, buildE010(d));
         } catch (err: any) {
@@ -798,6 +805,18 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
     let count201 = 0;
     let count222 = 0;
     for (const d of documentos) {
+        const partDoc = participanteDoDoc(d);
+        if (partDoc && participantesBloqueados.has(partDoc.cnpjCpf)) {
+            falhas.push({
+                documento: rotuloDoc(d),
+                motivo: `participante ${fmtCnpjCpf(partDoc.cnpjCpf)} sem UF no cadastro — o `
+                    + 'E-Fiscal recusa o E010 (campo 10) e, sem o participante, a nota também é '
+                    + 'recusada. O endereço do destinatário passou a ser capturado em 04/08: '
+                    + 'clique em "Corrigir endereços" (relê os XMLs guardados) e confira de novo. '
+                    + 'Se o XML não tiver o endereço, informe o código do participante no De→Para.',
+            });
+            continue;
+        }
         const bloco: string[] = [];
         try {
             bloco.push(buildE200(d, codigosParticipantes));

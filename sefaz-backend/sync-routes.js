@@ -832,6 +832,32 @@ router.post('/consulta-nfe-por-chave', requireAuth, express.json(), async (req, 
 // Caso real do dia: o cert estava configurado pra outro CNPJ (nao a S&P),
 // entao DistDFe sempre rejeitava com 593. So foi diagnosticado porque
 // o usuario tentou consultar uma NFe especifica e viu o cStat literal.
+// Preenche o endereço do destinatário SOB DEMANDA, no recorte que o
+// colaborador está exportando — relendo os XMLs já guardados no Storage.
+// Existe porque esperar o cron drenar não serve pra quem está com a tela
+// aberta e o botão de gerar bloqueado (caso 04/08, EDUARDO GUERRA 08/2026).
+router.post('/corrigir-endereco-destinatario', requireAuth, express.json(), async (req, res) => {
+  try {
+    const { empresaId, competencia } = req.body || {};
+    if (!empresaId && !competencia) {
+      return res.status(400).json({ error: 'Informe empresaId e/ou competencia — a correção é do recorte, não da base inteira.' });
+    }
+    const r = await preencherEnderecoDestinatario({ empresaId, competencia, limit: 1000 });
+    res.json({
+      ok: true,
+      ...r,
+      mensagem: r.preenchidas > 0
+        ? `${r.preenchidas} nota(s) com endereço preenchido. Clique em Buscar documentos e confira de novo.`
+        : (r.examinadas === 0
+          ? 'Nenhuma nota pendente neste recorte — o endereço já estava preenchido.'
+          : `Nenhuma nota pôde ser preenchida (${r.semXml} sem XML guardado). Informe o código do participante no De→Para.`),
+    });
+  } catch (e) {
+    console.error('[corrigir-endereco-destinatario]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/cert-escritorio-info', requireAuth, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
