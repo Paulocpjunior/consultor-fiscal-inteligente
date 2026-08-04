@@ -19,6 +19,7 @@ import { podeAcessarEmpresaId, getEmpresaIdsDaCarteira } from './carteira-auth.j
 import { fetchAllDocs } from './firestore-paginate.js';
 import { montarDifalMensal, ALIQ_INTERNA_PADRAO_SP } from './difal-aquisicao.js';
 import { apurarAntecipacoes426A } from './difal-426a.js';
+import { cnpjEmitente, ufEmitente, modeloDoDoc } from './participante-doc-helper.js';
 
 const router = Router();
 
@@ -53,25 +54,37 @@ router.get('/varredura', requireAuth, async (req, res) => {
                 notasInterestaduais: 0,
                 notasComSt: 0,
                 baseAproximada: 0,
+                semUfCadastrada: false,
             });
         });
 
         const snaps = await fetchAllDocs(
             db.collection('documentos_fiscais')
                 .where('competencia', '==', competencia)
-                .select('empresaId', 'status', 'modelo', 'tpNF', 'valorTotal',
-                    'emitente.cnpjCpf', 'emitente.uf', 'totais.vST', 'totais.vBCST'),
+                // A projeção PRECISA trazer os campos ACHATADOS e a CHAVE: doc
+                // capturado da SEFAZ não tem o objeto `emitente`, e a UF do
+                // emitente sai das 2 primeiras posições da chave (cUF). Sem
+                // isso a varredura só enxergava as notas importadas por XML e
+                // dizia "1 cliente" onde havia mais (caso 04/08).
+                .select('empresaId', 'status', 'modelo', 'tpNF', 'valorTotal', 'chave',
+                    'emitente.cnpjCpf', 'emitente.uf', 'cnpjEmit', 'ufEmit', 'codMunEmit',
+                    'totais.vST', 'totais.vBCST'),
             { label: `difal varredura ${competencia}`, maxDocs: 80000 },
         );
         for (const s of snaps) {
             const d = s.data() || {};
             const emp = empresas.get(d.empresaId);
             if (!emp || CANCELADOS.has(d.status)) continue;
-            if (String(d.modelo) !== '55') continue;
-            const emit = so(d.emitente?.cnpjCpf);
+            if (modeloDoDoc(d) !== '55') continue;
+            const emit = cnpjEmitente(d);
             if (!emit || emit === emp.cnpj || emit.length !== 14) continue;
-            const ufOrig = String(d.emitente?.uf || '').toUpperCase();
-            if (!ufOrig || ufOrig === emp.uf) continue;
+            const ufOrig = ufEmitente(d);
+            if (!ufOrig) continue;
+            // Empresa SEM UF no cadastro: não dá pra dizer o que é
+            // interestadual. Conta, mas sinaliza — senão toda compra dela
+            // apareceria como "de fora" e ninguém saberia por quê.
+            if (!emp.uf) emp.semUfCadastrada = true;
+            else if (ufOrig === emp.uf) continue;
             emp.notasInterestaduais++;
             emp.baseAproximada = Math.round((emp.baseAproximada + (Number(d.valorTotal) || 0)) * 100) / 100;
             if ((Number(d.totais?.vST) || 0) > 0 || (Number(d.totais?.vBCST) || 0) > 0) emp.notasComSt++;

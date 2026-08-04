@@ -11,6 +11,8 @@ import { auth } from '../../services/firebaseConfig';
 interface VarreduraLinha {
     empresaId: string; nome: string; cnpj: string;
     notasInterestaduais: number; notasComSt: number; baseAproximada: number;
+    /** Cliente sem UF no cadastro: não dá pra separar dentro × fora do estado. */
+    semUfCadastrada?: boolean;
 }
 interface LinhaDifal {
     chave: string; numero: string; dhEmi: string | null; fornecedor: string;
@@ -138,7 +140,16 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                         <tbody>
                             {varredura.map(l => (
                                 <tr key={l.empresaId} className="border-b border-slate-100 dark:border-slate-700/50">
-                                    <td className="py-1.5 font-semibold">{l.nome}<span className="block text-[10px] font-mono text-slate-400">{fmtCnpj(l.cnpj)}</span></td>
+                                    <td className="py-1.5 font-semibold">
+                                        {l.nome}
+                                        {l.semUfCadastrada && (
+                                            <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                                title="A empresa está sem UF no cadastro — sem ela não dá pra separar compra de dentro e de fora do estado. Preencha em Dados Fiscais.">
+                                                UF do cliente não cadastrada
+                                            </span>
+                                        )}
+                                        <span className="block text-[10px] font-mono text-slate-400">{fmtCnpj(l.cnpj)}</span>
+                                    </td>
                                     <td className="text-right font-mono">{l.notasInterestaduais}</td>
                                     <td className="text-right font-mono">{l.notasComSt || '—'}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.baseAproximada)}</td>
