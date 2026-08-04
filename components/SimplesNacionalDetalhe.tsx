@@ -453,6 +453,43 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
         }
     };
 
+    /**
+     * Cadastro do código do ISS fixo (SUP) quando o número veio da TELA do
+     * e-CAC (F12 → inspecionar a atividade marcada), e não de uma declaração
+     * lida pelo 🔎. Caso real: a empresa vinha declarando como ISS retido, então
+     * o código do SUP nunca apareceu nas declarações dela.
+     */
+    const handleCadastrarCodigoSup = async () => {
+        const digitado = await pedirTexto({
+            title: 'Cadastrar o código do ISS fixo (SUP)',
+            message: (
+                <>
+                    Número da atividade <b>"Escritórios de serviços contábeis autorizados pela
+                    legislação municipal a pagar o ISS em valor fixo em guia do Município"</b> na
+                    tabela do PGDAS-D.
+                    <br /><br />
+                    Onde achar: no e-CAC, na tela de atividades da declaração, <b>F12 → inspecionar
+                    o item marcado</b> e ler o <code>value</code>. O app recusa códigos de retenção
+                    (12/15/18) e códigos já usados em outra atividade.
+                    <br /><br />
+                    Ele passa a valer para <b>todas as empresas</b> e destrava a emissão do DAS.
+                </>
+            ),
+            defaultValue: '',
+            placeholder: 'ex.: 16',
+            confirmLabel: 'Cadastrar',
+        });
+        const idNum = Number(String(digitado || '').trim());
+        if (!Number.isInteger(idNum) || idNum <= 0) return;
+        try {
+            await salvarCodigoAtividadeIssFixo(currentUser ?? null, { id: idNum, origem: 'ecac' });
+            definirCodigoAtividadeIssFixo(idNum);
+            onShowToast(`Código ${idNum} cadastrado — o DAS com ISS fixo (SUP) está liberado.`);
+        } catch (e: any) {
+            onShowToast(e?.message || 'Não foi possível cadastrar o código.');
+        }
+    };
+
     const handleEmitirDasRegular = async () => {
         if (!resumo?.das_mensal || resumo.das_mensal < 10) {
             onShowToast('DAS calculado é menor que R\$ 10,00 — verifique a apuração antes de emitir.');
@@ -744,6 +781,15 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                     >
                         {consultandoAtividades ? '⏳ Consultando...' : '🔎 Atividades declaradas'}
                     </button>
+                    {currentUser?.role === 'admin' && (
+                        <button
+                            onClick={handleCadastrarCodigoSup}
+                            className="btn-press flex items-center gap-2 px-4 py-2 bg-violet-100 text-violet-700 font-bold rounded-lg hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
+                            title="Cadastrar o código da atividade ISS fixo (SUP) lido no e-CAC — destrava a emissão do DAS dessas receitas"
+                        >
+                            ⚙️ Código ISS fixo
+                        </button>
+                    )}
                     <button
                         onClick={handleEmitirDasRegular}
                         disabled={emitindoDas}
