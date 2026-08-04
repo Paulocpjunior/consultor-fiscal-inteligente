@@ -21,6 +21,7 @@ import { fetchAllDocs } from './firestore-paginate.js';
 import { montarDifalMensal, ALIQ_INTERNA_PADRAO_SP } from './difal-aquisicao.js';
 import { apurarAntecipacoes426APorItem } from './difal-426a.js';
 import { cnpjEmitente, ufEmitente, modeloDoDoc } from './participante-doc-helper.js';
+import { COLECAO_NCM, sugerirIvaPorItem } from './ncm-parametros.js';
 
 const router = Router();
 
@@ -177,9 +178,35 @@ router.get('/painel', requireAuth, async (req, res) => {
                 aliqInterna: aliqInternaPorChave[chaveDoItem.split('|')[0]],
             };
         }
+        // CADASTRO DE NCM: preenche o IVA-ST que o colaborador ainda não
+        // digitou. O que ele informou SEMPRE vence — o cadastro sugere.
+        // A vigência é resolvida pela DATA DA NOTA, não pela de hoje: a
+        // Portaria CAT muda e aplicar o índice atual numa nota antiga
+        // recolhe errado (ncm-parametros.js).
+        let catalogoNcm = [];
+        try {
+            const snapNcm = await db.collection(COLECAO_NCM).limit(20000).get();
+            catalogoNcm = snapNcm.docs.map((x) => ({ id: x.id, ...x.data() }));
+        } catch (err) {
+            console.warn('[difal/painel] cadastro de NCM não pôde ser lido:', err.message);
+        }
+
+        const comStComUf = (resultado.antecipacaoIndividual || []).map((l) => ({
+            ...l, ufDestino: empresa.uf,
+        }));
+        const { sugerido, usados } = sugerirIvaPorItem(comStComUf, catalogoNcm, ivaPorItem);
+        const ivaFinal = { ...sugerido, ...ivaPorItem };
+
         const antecipacao426A = apurarAntecipacoes426APorItem(
-            resultado.antecipacaoIndividual || [], ivaPorItem, ALIQ_INTERNA_PADRAO_SP,
+            comStComUf, ivaFinal, ALIQ_INTERNA_PADRAO_SP,
         );
+        antecipacao426A.sugestoesDoCadastroNcm = usados;
+        if (usados.length > 0) {
+            antecipacao426A.ressalvas = [
+                `${usados.length} item(ns) tiveram o IVA-ST preenchido pelo CADASTRO DE NCM (com a Portaria e a vigência da data da nota) — confira antes de recolher.`,
+                ...antecipacao426A.ressalvas,
+            ];
+        }
 
         return res.json({
             ok: true, empresa, competencia, ...resultado,

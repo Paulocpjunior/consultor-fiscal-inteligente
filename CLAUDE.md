@@ -542,6 +542,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   item (captura antiga) vai INTEIRA ao 426-A (lado que não subtributa) com
   `stSemDetalhePorItem` + aviso. O importer passou a gravar vFrete/vSeg/vOutro
   POR ITEM.
+- **CADASTRO DE NCM** (Paulo, 04/08: "o que nós não temos e devemos
+  implementar: um cadastro de NCM, para melhor consulta e parâmetro de
+  impostos e ST"): coleção `ncm_parametros` + `ncm-parametros.js` (26 testes)
+  + aba 🏷️ Cadastro NCM na Central XMLs. Guarda alíquota interna, IVA-ST,
+  CEST, redução de base e "sujeita a ST", POR UF (vazio = todas). DUAS regras
+  que mandam: (1) **VIGÊNCIA** — o IVA-ST é de Portaria CAT e MUDA; a
+  resolução é sempre pela DATA DO DOCUMENTO (`vigenteEm`), nunca "o mais
+  recente", senão nota antiga recolhe com índice novo e o erro só aparece na
+  fiscalização; (2) o cadastro **SUGERE, não decide** — `sugerirIvaPorItem`
+  NUNCA sobrescreve o que o colaborador digitou, e cada valor sai carimbado
+  com a portaria de origem (selo "do cadastro NCM" na linha). Campo vazio
+  continua NULO, não vira zero. IVA-ST sem Portaria é RECUSADO na gravação
+  (índice órfão não se confere depois). NCM casa por PREFIXO (cadastro de
+  4/6 dígitos vale pra posição) e o mais ESPECÍFICO vence. Ligado no painel
+  do DIFAL: era ali que o colaborador digitava o mesmo índice toda
+  competência.
 - **GIA caiu em DESUSO** (Paulo, 02/08): não listar como rotina nem gastar
   feature com ela. **SPED Fiscal/Contribuições JÁ É módulo do CFI** (card
   SPED Fiscal: gera mensal/trimestral + conferências; transmissão é no PVA

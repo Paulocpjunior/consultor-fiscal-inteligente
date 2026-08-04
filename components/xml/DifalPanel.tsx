@@ -31,6 +31,8 @@ interface Painel {
         totalAntecipacao: number;
         resumo: { documentos: number; documentosCompletos: number; itensCalculados: number; itensPendentes: number };
         ressalvas: string[];
+        /** Itens cujo IVA-ST veio do cadastro de NCM (com a portaria de origem). */
+        sugestoesDoCadastroNcm?: Array<{ id: string; ncm: string | null; portaria: string | null }>;
     };
 }
 
@@ -347,6 +349,13 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                                                                 className="w-16 px-1 py-0.5 text-right rounded border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800"
                                                                 title="IVA-ST da Portaria CAT do SEGMENTO desta mercadoria (NCM). O ajuste pela interestadual é automático."
                                                             />
+                                                            {(painel.antecipacao426A?.sugestoesDoCadastroNcm || [])
+                                                                .some(x => x.id === `${doc.chave}|${it.nItem}`) && (
+                                                                <div className="text-[9px] text-emerald-700 dark:text-emerald-400"
+                                                                    title="Índice preenchido pelo cadastro de NCM, com a vigência da data da nota. Confira antes de recolher.">
+                                                                    do cadastro NCM
+                                                                </div>
+                                                            )}
                                                             {it.ivaFoiAjustado && (
                                                                 <div className="text-[9px] text-amber-700 dark:text-amber-400">
                                                                     aj. {it.ivaAplicado.toFixed(2)}%

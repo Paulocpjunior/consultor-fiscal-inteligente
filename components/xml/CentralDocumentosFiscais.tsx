@@ -31,6 +31,7 @@ const ProvaCapturaPanel = lazy(() => import('./ProvaCapturaPanel'));
 const CofreChecklistPanel = lazy(() => import('./CofreChecklistPanel'));
 const DipamProdutorRuralPanel = lazy(() => import('./DipamProdutorRuralPanel'));
 const DifalPanel = lazy(() => import('./DifalPanel'));
+const NcmCadastroPanel = lazy(() => import('./NcmCadastroPanel'));
 
 type TabId =
     | 'dashboard'
@@ -41,6 +42,7 @@ type TabId =
     | 'documentos'
     | 'dipam'
     | 'difal'
+    | 'ncm'
     | 'importacao'
     | 'empresas'
     | 'sharepoint'
@@ -80,6 +82,7 @@ const GRUPOS: Array<{ id: GrupoId; label: string; subs: Array<{ id: TabId; label
             // das próprias notas capturadas (#378).
             { id: 'dipam', label: '🌾 DIPAM / Produtor rural' },
             { id: 'difal', label: '🧭 DIFAL aquisição' },
+            { id: 'ncm', label: '🏷️ Cadastro NCM' },
         ],
     },
     {
@@ -280,6 +283,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 {tab === 'difal' && (
                     <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando DIFAL…</p>}>
                         <DifalPanel />
+                    </Suspense>
+                )}
+                {tab === 'ncm' && (
+                    <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando cadastro de NCM…</p>}>
+                        <NcmCadastroPanel currentUser={currentUser} onShowToast={onShowToast} />
                     </Suspense>
                 )}
                 {tab === 'importacao' && (
