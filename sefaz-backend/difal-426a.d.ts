@@ -42,3 +42,40 @@ export function apurarAntecipacoes426A(
     parametrosPorChave?: Record<string, { ivaSt?: number; ivaJaAjustado?: boolean; aliqInterna?: number; aliqInterestadual?: number }>,
     aliqInternaPadrao?: number,
 ): ApuracaoAntecipacoes426A;
+
+export interface ItemAntecipacao426A extends ResultadoAntecipacao426A {
+    nItem: string;
+    cProd: string;
+    xProd: string;
+    ncm: string;
+    cfop: string;
+    cst: string;
+    encargosRateados: boolean;
+}
+
+export interface DocumentoAntecipacao426A {
+    chave: string;
+    numero: string;
+    dhEmi: string | null;
+    fornecedor: string;
+    ufOrigem: string;
+    notaMista: boolean;
+    itens: ItemAntecipacao426A[];
+    itensPendentes: number;
+    guiaLiberada: boolean;
+    antecipacaoDocumento: number;
+}
+
+export function apurarAntecipacoes426APorItem(
+    linhasComSt: unknown[],
+    ivaPorItem?: Record<string, { ivaSt?: number; ivaJaAjustado?: boolean; aliqInterna?: number }>,
+    aliqInternaPadrao?: number,
+): {
+    documentos: DocumentoAntecipacao426A[];
+    totalAntecipacao: number;
+    resumo: {
+        documentos: number; documentosCompletos: number;
+        itensCalculados: number; itensPendentes: number;
+    };
+    ressalvas: string[];
+};
