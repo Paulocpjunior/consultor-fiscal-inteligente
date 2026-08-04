@@ -255,7 +255,7 @@ function decidirDirecao(cnpjEmit, cnpjDest, empresaCnpj, tpNF) {
   return 'desconhecida';
 }
 
-function extrairMetadados(xml, schema) {
+export function extrairMetadados(xml, schema) {
   // Chave: cada modelo de DFe tem seu container raiz.
   //   NFe/NFCe -> <infNFe Id="NFe...">  ou <chNFe>
   //   CTe      -> <infCte Id="CTe...">  ou <chCTe>
@@ -346,6 +346,16 @@ function extrairMetadados(xml, schema) {
     vNF: vNF ? Number(vNF) : null,
     tpNF, tipoDoc, tipoNormalizado, schema, evento,
     numero, serie, natOp, cStat,
+    // Endereço dos DOIS participantes. Vem daqui (e não de uma variável solta
+    // no importer) porque `participantes` só existe NESTE escopo — usá-la lá
+    // fora quebrou a captura inteira com "participantes is not defined"
+    // (04/08, 25 falhas seguidas no cofre de e-mail).
+    xNomeDest: participantes.destinatario.nome || null,
+    ufDest: participantes.destinatario.uf || null,
+    codMunDest: participantes.destinatario.codMunIBGE || null,
+    ieDest: participantes.destinatario.ie || null,
+    ufEmit: participantes.emitente.uf || null,
+    codMunEmit: participantes.emitente.codMunIBGE || null,
   };
 }
 
@@ -711,12 +721,12 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     // Participante do lado do DESTINATÁRIO — sem isso o Exportar SAGE monta o
     // E010 das SAÍDAS com nome "CLIENTE" e UF em branco, e o E-Fiscal recusa
     // o cadastro (derrubando as notas atrás dele). Ver participanteDoDoc.
-    xNomeDest: participantes.destinatario.nome || null,
-    ufDest: participantes.destinatario.uf || null,
-    codMunDest: participantes.destinatario.codMunIBGE || null,
-    ieDest: participantes.destinatario.ie || null,
-    ufEmit: participantes.emitente.uf || null,
-    codMunEmit: participantes.emitente.codMunIBGE || null,
+    xNomeDest: meta.xNomeDest,
+    ufDest: meta.ufDest,
+    codMunDest: meta.codMunDest,
+    ieDest: meta.ieDest,
+    ufEmit: meta.ufEmit,
+    codMunEmit: meta.codMunEmit,
     dhEmi: meta.dhEmi,
     competencia: competenciaFromDhEmi(meta.dhEmi),
     valorTotal: meta.vNF,

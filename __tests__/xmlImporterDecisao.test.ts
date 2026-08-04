@@ -11,7 +11,6 @@
  * '57' = CT-e (nunca tem itens), '58' = MDF-e.
  */
 
-// @ts-expect-error — módulo .js puro
 import { decidirGravacaoNFe } from '../sefaz-backend/xml-importer.js';
 
 const CHAVE_NFE = '3'.padEnd(20, '0') + '55' + '1'.padEnd(22, '0'); // modelo 55
