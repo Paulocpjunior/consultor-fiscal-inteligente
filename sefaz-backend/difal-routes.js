@@ -39,24 +39,38 @@ router.get('/varredura', requireAuth, async (req, res) => {
         const db = getDb();
         const idsCarteira = await getEmpresaIdsDaCarteira(req.user);
 
-        // Só clientes do SIMPLES (o consolidado mensal é deles — Alexandre 03/08).
-        const empresas = new Map();
-        const snap = await db.collection('simples_empresas').get();
-        snap.forEach((doc) => {
-            const d = doc.data() || {};
-            if (d._deleted || d._merged_into) return;
-            if (idsCarteira && !idsCarteira.includes(doc.id)) return;
-            empresas.set(doc.id, {
-                empresaId: doc.id,
-                nome: d.razaoSocial || d.nome || '—',
-                cnpj: so(d.cnpj),
-                uf: (d.dadosFiscais?.uf || d.uf || '').toUpperCase(),
-                notasInterestaduais: 0,
-                notasComSt: 0,
-                baseAproximada: 0,
-                semUfCadastrada: false,
+        // A guia CONSOLIDADA do mês é do Simples (desenho do Alexandre, 03/08),
+        // mas o cliente do LUCRO também paga DIFAL de aquisição — só que a
+        // escrituração dele vai pelo SPED (C197 + Ajustes E111). Varrer só o
+        // Simples fazia o cliente do Lucro sumir da tela sem explicação
+        // ("o consultor puxou as notas e o DIFAL não aponta a empresa").
+        const empresas = new Map();      // por empresaId
+        const porCnpj = new Map();       // por CNPJ (14 dígitos)
+        for (const [col, regime] of [['simples_empresas', 'simples'], ['lucro_empresas', 'lucro']]) {
+            const snap = await db.collection(col).get();
+            snap.forEach((doc) => {
+                const d = doc.data() || {};
+                if (d._deleted || d._merged_into) return;
+                if (idsCarteira && !idsCarteira.includes(doc.id)) return;
+                const linha = {
+                    empresaId: doc.id,
+                    nome: d.razaoSocial || d.nome || '—',
+                    cnpj: so(d.cnpj),
+                    uf: (d.dadosFiscais?.uf || d.uf || '').toUpperCase(),
+                    regime,
+                    notasInterestaduais: 0,
+                    notasComSt: 0,
+                    baseAproximada: 0,
+                    semUfCadastrada: false,
+                };
+                empresas.set(doc.id, linha);
+                // Índice por CNPJ: documento capturado server-side (autXML,
+                // ZIP, cofre) muitas vezes tem só `empresaCnpj`, sem
+                // `empresaId` — e a junção só por id o descartava. Mesma
+                // lição da tela Exportar SAGE.
+                if (linha.cnpj.length === 14) porCnpj.set(linha.cnpj, linha);
             });
-        });
+        }
 
         const snaps = await fetchAllDocs(
             db.collection('documentos_fiscais')
@@ -66,14 +80,14 @@ router.get('/varredura', requireAuth, async (req, res) => {
                 // emitente sai das 2 primeiras posições da chave (cUF). Sem
                 // isso a varredura só enxergava as notas importadas por XML e
                 // dizia "1 cliente" onde havia mais (caso 04/08).
-                .select('empresaId', 'status', 'modelo', 'tpNF', 'valorTotal', 'chave',
+                .select('empresaId', 'empresaCnpj', 'status', 'modelo', 'tpNF', 'valorTotal', 'chave',
                     'emitente.cnpjCpf', 'emitente.uf', 'cnpjEmit', 'ufEmit', 'codMunEmit',
                     'totais.vST', 'totais.vBCST'),
             { label: `difal varredura ${competencia}`, maxDocs: 80000 },
         );
         for (const s of snaps) {
             const d = s.data() || {};
-            const emp = empresas.get(d.empresaId);
+            const emp = empresas.get(d.empresaId) || porCnpj.get(so(d.empresaCnpj));
             if (!emp || CANCELADOS.has(d.status)) continue;
             if (modeloDoDoc(d) !== '55') continue;
             const emit = cnpjEmitente(d);
