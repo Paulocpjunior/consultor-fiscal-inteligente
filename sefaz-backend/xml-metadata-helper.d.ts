@@ -1,6 +1,19 @@
+/**
+ * Participante do documento. O ENDEREÇO (uf/codMunIBGE) não é opcional na
+ * prática: sem UF o Exportar SAGE não consegue cadastrar o participante
+ * (registro E010) e a importação inteira cai em cascata.
+ */
+export interface XmlParticipanteNfe {
+    cnpj: string | null;
+    nome: string | null;
+    uf: string | null;
+    codMunIBGE: string | null;
+    ie: string | null;
+}
+
 export interface XmlParticipantesNfe {
-    emitente: { cnpj: string | null; nome: string | null };
-    destinatario: { cnpj: string | null; nome: string | null };
+    emitente: XmlParticipanteNfe;
+    destinatario: XmlParticipanteNfe;
 }
 
 export function competenciaFromDhEmi(value: unknown): string | null;
