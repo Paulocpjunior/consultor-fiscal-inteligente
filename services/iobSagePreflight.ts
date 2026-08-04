@@ -18,7 +18,7 @@
 import type { DocumentoFiscal } from '../types';
 import {
     exportarParaIobSage, participanteDoDoc, numeroDaNota, cfopParaEscriturar,
-    motivoConsumidorNfce,
+    motivoConsumidorNfce, rotuloDocumentoFalha,
     type CfopCtx,
 } from './iobSageExportService';
 
@@ -95,10 +95,18 @@ export function conferirAntesDeGerar(
         try {
             const r = exportarParaIobSage({ documentos: docs, ...opts });
             notasNoArquivo = r.estatisticas.notasNoArquivo;
-            const porRotulo = new Map(docs.map((d) => [rotulo(d), d]));
+            // Reencontra a nota pelo MESMO rótulo que a geração usou. Montar
+            // um rótulo próprio aqui fazia a busca falhar sempre: a nota
+            // entrava na conta como texto solto E de novo pelo id, no laço
+            // das regras de conteúdo — contada duas vezes.
+            const porRotulo = new Map(docs.map((d) => [rotuloDocumentoFalha(d), d]));
+            const notaDaFalha = (s: string) => {
+                const partes = String(s).split(' · ');
+                // Falha de produto vem como "<rótulo> · produto X": corta o extra.
+                return partes.length >= 2 ? `${partes[0]} · ${partes[1]}` : String(s);
+            };
             for (const f of r.falhas) {
-                const doc = porRotulo.get(String(f.documento).split(' · ')[0] + ' · '
-                    + String(f.documento).split(' · ')[1]) || porRotulo.get(f.documento);
+                const doc = porRotulo.get(notaDaFalha(f.documento)) || porRotulo.get(f.documento);
                 if (doc) marcar(doc); else notasBloqueadas.add(f.documento);
                 balde.add({
                     causa: 'Nota que o app não consegue montar',
@@ -205,6 +213,13 @@ export function conferirAntesDeGerar(
     // e somar as duas dizia "314 recusadas" de 157 notas — número maior que o
     // recorte, o que é impossível e destrói a confiança no painel.
     const bloqueios = Math.min(notasBloqueadas.size, docs.length);
+    // "Vão chegar no E-Fiscal" tem que FECHAR com "seriam recusadas". O
+    // gerador só derruba a nota que ele não consegue montar; a que ele monta
+    // e o E-Fiscal recusa depois (CFOP inválido, número zerado) continuava
+    // contada como "vai chegar" — caso NOVA ERA 07/2026: 3651 chegando + 803
+    // recusadas num recorte de 4165 (289 notas contadas nos DOIS lados).
+    // Uma nota bloqueada NÃO chega: nem o arquivo sai enquanto ela existir.
+    notasNoArquivo = Math.max(0, Math.min(notasNoArquivo, docs.length - bloqueios));
     const farol: ResultadoPreflight['farol'] = bloqueios > 0 ? 'bloqueado'
         : problemas.length > 0 ? 'atencao' : 'ok';
 

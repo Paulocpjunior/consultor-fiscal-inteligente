@@ -765,7 +765,9 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 : preflight.farol === 'bloqueado' ? 'bg-red-50 dark:bg-red-900/20'
                                 : preflight.farol === 'atencao' ? 'bg-amber-50 dark:bg-amber-900/20'
                                 : 'bg-emerald-50 dark:bg-emerald-900/20'}`}>
-                                <p className="text-[10px] uppercase text-slate-500">Vão chegar no E-Fiscal</p>
+                                <p className="text-[10px] uppercase text-slate-500">
+                                    {preflight?.farol === 'bloqueado' ? 'Chegariam (depois de corrigir)' : 'Vão chegar no E-Fiscal'}
+                                </p>
                                 <p className={`text-lg font-bold ${
                                     preflight?.farol === 'bloqueado' ? 'text-red-700 dark:text-red-400'
                                     : 'text-emerald-700 dark:text-emerald-400'}`}>
@@ -777,7 +779,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         <div className="flex justify-between items-center gap-3 flex-wrap pt-2">
                             <p className="text-[11px] text-slate-600 dark:text-slate-300 flex-1 min-w-[240px]">
                                 {preflight?.farol === 'bloqueado'
-                                    ? <><strong className="text-red-700 dark:text-red-400">Geração bloqueada:</strong> {preflight.bloqueios} nota(s) seriam recusadas pelo E-Fiscal. Corrija o que está no quadro acima e clique em <strong>Reconferir</strong> — o arquivo só sai limpo.</>
+                                    ? <><strong className="text-red-700 dark:text-red-400">Geração bloqueada:</strong> {preflight.bloqueios} nota(s) seriam recusadas pelo E-Fiscal — sobram {preflight.notasNoArquivo} de {preflight.documentos}. <strong>Reconferir só relê</strong>: quem corrige são os botões ao lado (e os campos acima) conforme a causa do quadro. Sem isso, as recusas continuam iguais.</>
                                     : preflight?.farol === 'atencao'
                                         ? <>Nada trava a importação — as ressalvas do quadro acima são para conferir.</>
                                         : preflight
