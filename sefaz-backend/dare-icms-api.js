@@ -90,9 +90,14 @@ export function limparCacheApiKey() {
  * Traduz a falha do gateway pra português com a AÇÃO (padrão interpretarCstat).
  * A api-key nunca entra na mensagem.
  */
-export function traduzirErroDare(status, corpo) {
+export function traduzirErroDare(status, corpo, ambiente) {
   const texto = typeof corpo === 'string' ? corpo : JSON.stringify(corpo || {});
-  const trecho = texto.slice(0, 400);
+  const bruto = texto.slice(0, 400);
+  // Corpo VAZIO ('{}' / '' / 'null') não ajuda ninguém: quem lê "Retorno: {}"
+  // fica sem saber se o problema é o payload ou a SEFAZ. Diz o que é.
+  const vazio = !texto || texto === '{}' || texto === 'null' || texto === '""';
+  const trecho = vazio ? '(a SEFAZ não devolveu corpo na resposta)' : bruto;
+  const ondeAmb = ambiente ? ` [ambiente: ${ambiente}]` : '';
   if (status === 401 || status === 403) {
     return 'A SEFAZ recusou a chave da API DARE (401/403). Confira se o secret do ambiente escolhido tem a chave certa '
       + 'e se ela não foi rotacionada — a chave de homologação não vale em produção e vice-versa.';
@@ -104,8 +109,10 @@ export function traduzirErroDare(status, corpo) {
     return 'A SEFAZ limitou a quantidade de chamadas (429). Aguarde alguns minutos e emita de novo — sem reenviar em série.';
   }
   if (status >= 500) {
-    return `A API DARE da SEFAZ está indisponível no momento (HTTP ${status}). Tente de novo em alguns minutos; `
-      + `se persistir, emita pelo portal DARE e registre depois. Retorno: ${trecho}`;
+    return `A API DARE da SEFAZ está fora do ar no momento (HTTP ${status})${ondeAmb} — o erro é do `
+      + 'lado da SEFAZ, não dos dados da guia. O que fazer AGORA: use "📋 Copiar linha p/ portal", '
+      + 'cole no portal DARE e emita por lá; depois registre a guia aqui. '
+      + `Tentar de novo em alguns minutos também costuma resolver. Retorno: ${trecho}`;
   }
   if (status === 400 || status === 422) {
     return `A SEFAZ recusou os dados do DARE (HTTP ${status}): ${trecho}. Confira código de serviço, referência, `
@@ -181,7 +188,7 @@ async function chamar(caminho, { metodo = 'GET', corpo = null, ambiente = AMBIEN
   try { dados = bruto ? JSON.parse(bruto) : null; } catch { dados = bruto; }
 
   if (!resp.ok) {
-    const erro = new Error(traduzirErroDare(resp.status, dados));
+    const erro = new Error(traduzirErroDare(resp.status, dados, ambiente));
     erro.httpStatus = resp.status;
     erro.corpo = dados;
     throw erro;

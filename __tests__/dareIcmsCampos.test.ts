@@ -141,7 +141,15 @@ describe('ambientes e tradução de erro', () => {
         expect(traduzirErroDare(401, 'Unauthorized')).toMatch(/recusou a chave/);
         expect(traduzirErroDare(401, 'Unauthorized')).toMatch(/homologação não vale em produção/);
         expect(traduzirErroDare(429, '')).toMatch(/Aguarde alguns minutos/);
-        expect(traduzirErroDare(500, 'erro')).toMatch(/emita pelo portal DARE/);
+        expect(traduzirErroDare(500, 'erro')).toMatch(/portal DARE/);
+
+        // Caso real 04/08: a colaboradora viu "Retorno: {}" e ficou sem saber
+        // se o problema era a guia dela ou a SEFAZ.
+        const semCorpo = traduzirErroDare(500, {}, 'homologacao');
+        expect(semCorpo).toMatch(/não devolveu corpo/);
+        expect(semCorpo).toMatch(/homologacao/);
+        expect(semCorpo).toMatch(/não dos dados da guia/);
+        expect(semCorpo).toMatch(/Copiar linha p\/ portal/);
         expect(traduzirErroDare(400, { erro: 'referencia invalida' })).toMatch(/linha06\/linha08/);
     });
 });
