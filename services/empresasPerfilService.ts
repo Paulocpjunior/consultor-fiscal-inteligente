@@ -77,6 +77,7 @@ export function normalizarEmpresasPerfilResponse(data: unknown): EmpresaPerfilOp
             contadorNome: textoOpcional(item.contadorNome),
             contadorCrc: textoOpcional(item.contadorCrc),
             contadorCpf: textoOpcional(item.contadorCpf),
+            codCliente: textoOpcional(item.codCliente),
         };
         const key = empresa.cnpj || empresa.id;
         if (!map.has(key)) map.set(key, empresa);

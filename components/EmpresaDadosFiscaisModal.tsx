@@ -225,6 +225,21 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                         Campos opcionais ficam em branco se não souber.
                     </p>
 
+                    {/* Cod.Cliente — o código da empresa no E-Fiscal (Paulo,
+                        04/08): chave do confronto CNPJ ↔ schema na migração do
+                        PG12 e o "Nº Empresa" do Exportar SAGE. */}
+                    <Section titulo="🔢 Código no E-Fiscal">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Field
+                                label="Cod.Cliente (E-Fiscal)"
+                                value={dados.codCliente || ''}
+                                onChange={v => handleField('codCliente', v)}
+                                placeholder="0001"
+                                hint="O código que aparece ANTES do nome da empresa no E-Fiscal (4 dígitos, 0001–9999 — o zero à esquerda é preservado). É único por empresa e é a amarração da migração; o Exportar SAGE preenche o Nº Empresa sozinho a partir dele. Vazio = empresa sem código lá."
+                            />
+                        </div>
+                    </Section>
+
                     {/* Inscrição Estadual */}
                     <Section titulo="📋 Inscrições e Localização">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

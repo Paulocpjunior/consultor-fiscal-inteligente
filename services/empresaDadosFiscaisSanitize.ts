@@ -11,6 +11,7 @@
  * de dizer "não mexe neste campo".
  */
 import type { EmpresaDadosFiscais } from '../types';
+import { normalizarCodCliente } from '../sefaz-backend/cod-cliente.js';
 
 /** Só dígitos; '' quando não sobrar nada. */
 function digitos(v: string): string {
@@ -29,8 +30,15 @@ export function sanitizarDadosFiscais(dados: EmpresaDadosFiscais): EmpresaDadosF
     };
 
     const ccmBruto = str(dados.ccmSp);
+    // Cod.Cliente: aplica a régua do E-Fiscal (zero à esquerda, 0001–9999) já
+    // aqui — "1" digitado vira "0001" na tela antes de viajar. Valor inválido
+    // segue como está: o backend recusa com a mensagem certa (não silenciar).
+    const codClienteBruto = str(dados.codCliente);
+    const codClienteNorm = codClienteBruto == null ? undefined
+        : (() => { const r = normalizarCodCliente(codClienteBruto); return r.ok ? r.valor : codClienteBruto.trim(); })();
     return {
         ...dados,
+        codCliente: codClienteNorm,
         inscricaoEstadual: trim(dados.inscricaoEstadual)?.toUpperCase(),
         uf: trim(dados.uf)?.toUpperCase(),
         codMunIBGE: numerico(dados.codMunIBGE),

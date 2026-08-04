@@ -51,6 +51,20 @@ pedir). DIPJ/fila/cadastros estáticos ⚫.
 | Importação Folhamatic (.FML) | — ponte | Exportar SAGE + leitor de log — existe PARA a transição; morre com ela |
 | NFC-e de balcão no .FML (participante CONSUMIDOR) | ✅ **04/08** | cupom **sem** documento e cupom **com o CPF** do comprador vão os DOIS pro participante genérico "Consumidor" do E-Fiscal (o CPF da NF Paulista vem sem endereço — viraria E010 sem UF e derrubaria a nota). Código do participante fica no cadastro da empresa (`dadosFiscais.codigoParticipanteConsumidor`), digitado uma vez. NFC-e contra CNPJ continua participante de verdade |
 
+## Chave da migração: Cod.Cliente ↔ CNPJ (Paulo, 04/08)
+
+"Todas as empresas no E-Fiscal trabalham com código da empresa antes do nome,
+os códigos devem permanecer OS MESMOS ... toda amarração será pelo CNPJ, esse
+será o ponto de confronto." Campo **Cod.Cliente** no cadastro do CFI
+(`dadosFiscais.codCliente`, modal Dados Fiscais → 🔢 Código no E-Fiscal):
+TEXTO de 4 dígitos com zero à esquerda, faixa 0001–9999, ÚNICO na carteira
+(duplicado é recusado na gravação com o nome de quem já usa). Núcleo puro
+`sefaz-backend/cod-cliente.js` (`normalizarCodCliente`/`schemaDoCodCliente` —
+e{código} é o schema do PG12). O MESMO código é o "Nº Empresa no E-Fiscal"
+(E001): o Exportar SAGE passou a preenchê-lo sozinho a partir do cadastro.
+Pré-requisito da F2: TODA empresa ativa com Cod.Cliente preenchido antes da
+extração — o confronto CNPJ ↔ e{código} é o que valida cada onda.
+
 ## Pré-requisito transversal: completude de captura
 
 Migrar cliente = prova de captura OK + cofre de saída ativo (hoje 0/388) +

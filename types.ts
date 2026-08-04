@@ -1267,6 +1267,13 @@ export interface CondicaoRuralEmpresa {
 }
 
 export interface EmpresaDadosFiscais {
+    /**
+     * Cod.Cliente — código da empresa no E-Fiscal (Paulo, 04/08). TEXTO de 4
+     * dígitos com zero à esquerda ('0001'–'9999'), ÚNICO na carteira. É a
+     * chave do confronto CNPJ ↔ schema e{código} na migração do PG12, e o
+     * "Nº Empresa no E-Fiscal" (E001) do Exportar SAGE.
+     */
+    codCliente?: string;
     /** Inscrição Estadual (numero ou 'ISENTO'). */
     inscricaoEstadual?: string;
     /** UF (sigla 2 letras, ex: 'SP'). */

@@ -66,6 +66,9 @@ function camposConferencia(data) {
         contadorNome: data.dadosFiscais?.contadorNome || undefined,
         contadorCrc: data.dadosFiscais?.contadorCrc || undefined,
         contadorCpf: data.dadosFiscais?.contadorCpf || undefined,
+        // Cod.Cliente (E-Fiscal) — chave da migração do PG12; vive só em
+        // dadosFiscais.
+        codCliente: data.dadosFiscais?.codCliente || undefined,
     };
 }
 
