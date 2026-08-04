@@ -8,7 +8,10 @@
  * credenciamento sair).
  */
 import React, { useState } from 'react';
-import { previewDare, registrarDare, receitasApiDare, emitirDarePelaApi, type DarePayload, type AmbienteDare } from '../../services/dareSpService';
+import {
+    previewDare, registrarDare, receitasApiDare, emitirDarePelaApi, listarCodigosDare,
+    type DarePayload, type AmbienteDare, type CodigoDareIcms,
+} from '../../services/dareSpService';
 import { enviarPorEmailDoColaborador, GESTOR_EMAIL } from '../../services/envioImpostoService';
 
 interface Props {
@@ -17,19 +20,45 @@ interface Props {
     empresaId?: string;
     competencia: string;             // 'AAAA-MM' (fichaMes)
     valorInicial: number;
-    derivacaoInicial: 'proprio' | 'st';
+    derivacaoInicial: 'proprio' | 'st' | 'difal';
     onClose: () => void;
 }
 
-const OPCOES = [
+/**
+ * Fallback usado só enquanto a lista do backend não chegou. A FONTE é
+ * `CODIGOS_DARE_ICMS` (sefaz-backend/dare-sp.js) — lista fixa aqui foi o que
+ * escondeu o 04602 (DIFAL do Simples) da equipe: o backend já validava o
+ * código e a tela não o oferecia, então a apuração mostrava o valor e não
+ * havia como gerar a guia.
+ */
+const OPCOES_FALLBACK: Array<{ codigoServico: string; label: string }> = [
     { codigoServico: '04601', label: 'ICMS Próprio (RPA) — 046-2 / 04601' },
     { codigoServico: '14601', label: 'ICMS-ST (RPA) — 146-6 / 14601' },
+    { codigoServico: '04602', label: 'ICMS DIFAL — Simples Nacional — 046-2 / 04602' },
 ];
+
+const CODIGO_POR_DERIVACAO: Record<string, string> = {
+    proprio: '04601', st: '14601', difal: '04602',
+};
 
 const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competencia, valorInicial, derivacaoInicial, onClose }) => {
-    const [codigoServico, setCodigoServico] = useState(derivacaoInicial === 'st' ? '14601' : '04601');
+    const [codigoServico, setCodigoServico] = useState(
+        CODIGO_POR_DERIVACAO[derivacaoInicial] || '04601',
+    );
+    const [opcoes, setOpcoes] = useState(OPCOES_FALLBACK);
+    // Lista vem do backend (fonte única). Se a chamada falhar, o fallback
+    // acima segue valendo — o modal nunca fica sem opção.
+    React.useEffect(() => {
+        listarCodigosDare().then((cs: CodigoDareIcms[]) => {
+            if (cs.length === 0) return;
+            setOpcoes(cs.map((c) => ({
+                codigoServico: c.codigoServico,
+                label: `${c.descricao} — ${c.codigoReceita} / ${c.codigoServico}`,
+            })));
+        }).catch(() => { /* fallback */ });
+    }, []);
     const [valor, setValor] = useState(String(valorInicial.toFixed(2)));
     // Vencimento NUNCA é chutado: depende do CPR/calendário da empresa —
     // o colaborador informa a data oficial do vencimento do imposto.
@@ -220,7 +249,7 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                         Derivação do ICMS
                         <select value={codigoServico} onChange={e => { setCodigoServico(e.target.value); setPreview(null); }}
                             className="mt-1 w-full p-2 rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm">
-                            {OPCOES.map(o => <option key={o.codigoServico} value={o.codigoServico}>{o.label}</option>)}
+                            {opcoes.map(o => <option key={o.codigoServico} value={o.codigoServico}>{o.label}</option>)}
                         </select>
                     </label>
                     <div className="grid grid-cols-2 gap-3">

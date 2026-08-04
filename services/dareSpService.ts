@@ -46,6 +46,33 @@ async function post(path: string, body: unknown): Promise<{ ok: boolean; payload
     return data;
 }
 
+export interface CodigoDareIcms {
+    codigoServico: string;
+    codigoReceita: string;
+    sefaz: string;
+    descricao: string;
+    derivacao: 'proprio' | 'st' | 'difal';
+    regimes: string[];
+}
+
+/**
+ * Códigos de serviço do DARE-SP — FONTE ÚNICA no backend (`CODIGOS_DARE_ICMS`).
+ * A tela mantinha uma lista própria com 2 opções e o código do DIFAL do
+ * Simples (04602) existia no backend sem aparecer pra ninguém: a apuração
+ * mostrava o valor e não havia como gerar a guia (04/08). Lista duplicada
+ * diverge — aqui ela vem de lá.
+ */
+export async function listarCodigosDare(regime?: string): Promise<CodigoDareIcms[]> {
+    const token = await getToken();
+    const qs = regime ? `?regime=${encodeURIComponent(regime)}` : '';
+    const res = await fetch(`/api/admin/dare/codigos${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return [];
+    const j = await res.json().catch(() => ({}));
+    return Array.isArray(j.codigos) ? j.codigos : [];
+}
+
 export const previewDare = (input: DareInput) => post('/api/admin/dare/preview', input);
 export const registrarDare = (input: DareInput) => post('/api/admin/dare/registrar', input);
 
