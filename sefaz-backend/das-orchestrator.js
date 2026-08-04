@@ -10,6 +10,7 @@ import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
 import { calcularMultaDarf } from './multa-calculator.js';
 import { assertValorMinimoDas } from './das-valor-utils.js';
 import { criarErroDuplicidadeDas, encontrarConflitoDasAvulso } from './das-duplicidade-utils.js';
+import { lerCodigoAtividadeSup } from './pgdas-atividade-config.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -42,6 +43,23 @@ export async function emitirDasRegular(req) {
         const err = new Error(bloqueios.join(' '));
         err.httpStatus = 400;
         throw err;
+    }
+
+    // O cliente pode estar desatualizado (ou ter cache velho): quem decide se o
+    // código do ISS fixo existe é o BANCO, não a lista que veio do navegador.
+    if (dadosPgdas?._temSup) {
+        const cfg = await lerCodigoAtividadeSup(fa().firestore());
+        if (!cfg) {
+            const err = new Error(
+                'Receita marcada como ISS fixo (SUP) e o código oficial dessa atividade ainda não '
+                + 'está cadastrado. Transmitir agora declararia "ISS retido pelo tomador" — valor '
+                + 'certo, natureza errada. O que fazer: um administrador cadastra o código na tela '
+                + 'do Simples (botão "🔎 Atividades declaradas"); enquanto isso, entregue esta '
+                + 'competência direto no e-CAC.',
+            );
+            err.httpStatus = 400;
+            throw err;
+        }
     }
 
     const provider = getDasProvider();

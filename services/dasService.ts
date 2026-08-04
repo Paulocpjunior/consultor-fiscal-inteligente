@@ -94,6 +94,34 @@ export async function getAtividadesDeclaradas(
     return res.json();
 }
 
+/** Código cadastrado da atividade "ISS fixo (SUP)". null = DAS dessa receita bloqueado. */
+export async function getCodigoAtividadeIssFixo(user: User | null): Promise<number | null> {
+    try {
+        const res = await fetch(`${BASE}/atividade-iss-fixo`, { headers: await authHeaders(user) });
+        if (!res.ok) return null;
+        const j = await res.json();
+        return Number.isInteger(j?.idAtividade) ? j.idAtividade : null;
+    } catch {
+        return null;   // sem resposta = segue bloqueado (nunca libera por falha)
+    }
+}
+
+/** Cadastra o código (só admin). O backend revalida o número antes de gravar. */
+export async function salvarCodigoAtividadeIssFixo(user: User | null, p: {
+    id: number; origem: 'declaracao' | 'ecac';
+    cnpjOrigem?: string; competenciaOrigem?: string; idsDeclarados?: number[];
+}): Promise<void> {
+    const res = await fetch(`${BASE}/atividade-iss-fixo`, {
+        method: 'PUT',
+        headers: { ...(await authHeaders(user)), 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `cadastro do código: ${res.status}`);
+    }
+}
+
 export async function emitirDasRegular(user: User | null, payload: {
     empresaId: string; empresaCnpj: string; empresaNome: string;
     competencia: string; valor: number;
