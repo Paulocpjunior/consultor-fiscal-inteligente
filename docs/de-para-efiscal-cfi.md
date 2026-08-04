@@ -41,7 +41,7 @@ pedir). DIPJ/fila/cadastros estáticos ⚫.
 | DCTF/MIT · DARF · GARE→DARE · DAS | ✅ | DCTFWeb+MIT (#292), SERPRO, API DARE-SP |
 | DIFAL de aquisição — consolidado mensal do Simples | ✅ **FASE 1 no ar 03/08** | desenho do Alexandre: aba 🧭 DIFAL aquisição (Central XMLs) — varredura da carteira + apuração por cliente (interna 18% editável/nota, interestadual da nota ou derivada UF/origem, clamp ≥0); guia sai pelo trilho DARE existente |
 | Antecipação art. 426-A (mercadoria com ST) | ✅ **03/08** | individual POR DOCUMENTO (Alexandre): IA = VA × (1+IVA-ST) × ALQ − IC, com IVA ajustado pela interestadual. IVA-ST é INFORMADO (vem da Portaria CAT) — documento sem ele fica PENDENTE e fora do total. Falta: guia DARE por documento a partir da linha calculada |
-| DIFAL uso/consumo do Lucro (EC 87/15) no SPED | 🟡 | débito entra via E111 (aba de 02/08); falta C197 por documento |
+| DIFAL uso/consumo do Lucro (EC 87/15) no SPED | ✔ | C195/C197 por documento a partir das entradas interestaduais de uso/consumo e ativo (CFOP 2551/2552/2555/2556/2557); interna 18% editável por nota, interestadual da nota ou derivada. **Só sai com o COD_AJ da tabela 5.3 do estado cadastrado** — sem ele vira aviso (código de ajuste não se inventa). O DÉBITO na apuração continua vindo do E111: o C197 é a origem documental, não a conta | ✅ **04/08** — validar no PVA |
 | Regime de caixa do Lucro | ⚫ **DESCARTADO 03/08** (equipe) | nenhum cliente optante |
 | e-CredAc/crédito acumulado SP (CAT 207/2009 + 17/99) | 🟡 | junto com a decisão do CIAP |
 | PER/DCOMP · ressarcimento ST (CAT 42/18) | 🟡 | sob demanda; hoje e-CAC/manual |
