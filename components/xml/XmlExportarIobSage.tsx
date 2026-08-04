@@ -41,6 +41,10 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [tipoInventario, setTipoInventario] = useState<string>('');
     // E222 campo 56 — alguns E-Fiscal exigem 1-4 (caso JOTASUL 01/08).
     const [redfNfPaulista, setRedfNfPaulista] = useState<string>('');
+    // NFC-e a consumidor final não tem CNPJ do comprador — é o normal dela.
+    // O código do participante "Consumidor" vem do cadastro do E-Fiscal de
+    // CADA cliente (não é tabela oficial), igual ao Tipo p/ Inventário.
+    const [codigoConsumidor, setCodigoConsumidor] = useState<string>('');
     // Notas que ficaram FORA do arquivo. Antes isso era console.warn: o .FML
     // saía só com produtos e o E-Fiscal ainda dizia "importado com sucesso".
     const [falhas, setFalhas] = useState<Array<{ documento: string; motivo: string }>>([]);
@@ -137,11 +141,12 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 numeroEmpresaEfiscal,
                 tipoInventario: tipoInventario.trim(),
                 cfopCtx,
+                codigoParticipanteConsumidor: codigoConsumidor.trim(),
             });
         } catch {
             return null;
         }
-    }, [buscou, filtrados, numeroEmpresaEfiscal, tipoInventario, cfopCtx]);
+    }, [buscou, filtrados, numeroEmpresaEfiscal, tipoInventario, cfopCtx, codigoConsumidor]);
 
     // Evidência da correlação: origem → destino, com o motivo da decisão.
     const correlacao = useMemo(
@@ -255,6 +260,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 cfopCtx,
                 codigosParticipantes: codigosPart,
                 redfNfPaulista,
+                codigoParticipanteConsumidor: codigoConsumidor.trim(),
             });
             // Guarda o conteúdo: o log de erros do E-Fiscal referencia LINHAS
             // deste arquivo, e o leitor cruza os dois.
@@ -546,6 +552,24 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm"
                             title="E020 campo 11. Só preencha com um código que EXISTA em Cadastros → Tipos de Inventário do E-Fiscal do cliente."
                         />
+                    </div>
+
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
+                            Consumidor final (NFC-e) — opcional
+                        </label>
+                        <input
+                            type="text"
+                            value={codigoConsumidor}
+                            onChange={(e) => setCodigoConsumidor(e.target.value)}
+                            placeholder="código do participante CONSUMIDOR no E-Fiscal"
+                            className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm"
+                            title="NFC-e (modelo 65) de venda a consumidor não tem CNPJ do comprador — isso é o normal dela. Informe aqui o código do participante 'Consumidor' que EXISTE no cadastro de Clientes/Fornecedores do E-Fiscal deste cliente."
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                            Só para quem emite <strong>NFC-e</strong> (bar, restaurante, varejo): a venda de balcão
+                            não identifica o comprador. Sem este código, essas notas ficam de fora do arquivo.
+                        </p>
                     </div>
 
                     <div>

@@ -148,6 +148,13 @@ interface ExportarParams {
      * MANUAL da própria empresa no E-Fiscal. Vazio (padrão) = não informar.
      */
     redfNfPaulista?: string;
+    /**
+     * Código do participante "CONSUMIDOR" no E-Fiscal DESTE cliente, usado nas
+     * NFC-e sem identificação do comprador. Não é tabela oficial: cada
+     * escritório cadastra o seu (mesma regra do Tipo p/ Inventário). Vazio =
+     * as NFC-e a consumidor final ficam FORA do arquivo, com o motivo.
+     */
+    codigoParticipanteConsumidor?: string;
     /** Numero da empresa no E-Fiscal (campo NÚMERO DA EMPRESA do E001). */
     numeroEmpresaEfiscal: number;
     /** UF da empresa (para emitter de saidas). */
@@ -264,6 +271,25 @@ export function dataDoDoc(d: DocumentoFiscal): Date {
         if (!Number.isNaN(dt.getTime())) return dt;
     }
     return new Date();
+}
+
+/**
+ * NFC-e (modelo 65) de venda a CONSUMIDOR FINAL — sem CNPJ/CPF do destinatário.
+ *
+ * Isso é o NORMAL da NFC-e: venda de balcão não identifica o comprador. O
+ * exportador tratava como "nota sem participante" e jogava a nota FORA — caso
+ * 04/08, HYPE CAFE: 157 de 157 NFC-e recusadas, nenhuma delas defeituosa.
+ *
+ * O modelo sai do campo, da chave (posições 21-22) ou do tipo do documento.
+ */
+export function ehNfceConsumidorFinal(d: DocumentoFiscal): boolean {
+    const x: any = d as any;
+    const modelo = onlyDigits(x.modelo)
+        || String(x.chave || '').slice(20, 22)
+        || (x.tipoDoc === 'NFCe' || x.tipo === 'NFCe' ? '65' : '');
+    if (modelo !== '65') return false;
+    const cnpjDest = onlyDigits(d.destinatario?.cnpjCpf || x.cnpjDest || x.cpfDest);
+    return !cnpjDest;
 }
 
 /**
@@ -462,26 +488,40 @@ export function alocarTributacaoIcms(
     return { base, icms, aliquota, isentos, outras, ipi };
 }
 
-function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>) {
+function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>, codConsumidor = '', ufEmpresa = '') {
     // Guard: mesmo motivo do buildE010.
     if (d.tipo === 'NFSe') {
         throw new Error(`commonNF: documento ${d.id} e NFSe, nao suportado em IOB/SAGE.`);
     }
     const part = participanteDoDoc(d);
-    if (!part) {
+    // NFC-e a consumidor final não tem participante — e isso é o normal dela.
+    // Com o código do "CONSUMIDOR" do E-Fiscal informado, a nota entra
+    // referenciando esse cadastro (que já existe lá, logo SEM E010).
+    const consumidor = !part && ehNfceConsumidorFinal(d);
+    if (!part && !consumidor) {
         throw new Error(`nota ${d.numero || d.chave}: sem CNPJ do ${d.direcao === 'entrada' ? 'emitente' : 'destinatário'}.`);
+    }
+    if (consumidor && !codConsumidor) {
+        throw new Error(
+            `NFC-e ${d.numero || d.chave} é venda a CONSUMIDOR FINAL (modelo 65) — não tem CNPJ do `
+            + 'comprador, e isso é o normal dela. Para essas notas entrarem, informe o código do '
+            + 'participante "Consumidor" do E-Fiscal deste cliente no campo "Consumidor final (NFC-e)".',
+        );
     }
     const especie = d.tipo === 'NFCe' ? 'NFCE' : d.tipo === 'NFe' ? 'NFE' : 'NF';
     const dEmi = parseIsoDate(d.dhEmi) || new Date();
+    // A UF da NFC-e a consumidor é a da PRÓPRIA EMPRESA: a venda é no balcão.
+    const ufConsumidor = sanitizeAlfa(ufEmpresa || '').slice(0, 2).toUpperCase()
+        || ufDaChave(d.chave);
     return {
         es: d.direcao === 'entrada' ? 'E' : 'S',
         especie,
         serie: serieDaNota(d),
         subserie: '',
         numero: numeroDaNota(d),
-        codigoPart: codigoParticipante(part.cnpjCpf, codigos),
+        codigoPart: consumidor ? codConsumidor : codigoParticipante(part!.cnpjCpf, codigos),
         dEmi,
-        ufNF: sanitizeAlfa(part.uf || '').slice(0, 2).toUpperCase() || '  ',
+        ufNF: (consumidor ? ufConsumidor : sanitizeAlfa(part!.uf || '').slice(0, 2).toUpperCase()) || '  ',
         modelo: d.modelo || (d.tipo === 'NFCe' ? '65' : '55'),
     };
 }
@@ -503,8 +543,8 @@ function mapTipoFrete(tpFrete: unknown): number {
     }
 }
 
-function buildE200(d: DocumentoFiscal, codigos?: Record<string, string>): string {
-    const c = commonNF(d, codigos);
+function buildE200(d: DocumentoFiscal, codigos?: Record<string, string>, codConsumidor = '', ufEmpresa = ''): string {
+    const c = commonNF(d, codigos, codConsumidor, ufEmpresa);
     const situacao =
         d.status === 'cancelado' ? 2
         : d.status === 'denegado' ? 4
@@ -554,8 +594,8 @@ function isVendaFutura(cfop: string | undefined): boolean {
     return ['5922', '6922', '5117', '6117', '5118', '6118'].includes(c);
 }
 
-function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Record<string, string>): string[] {
-    const c = commonNF(d, codigos);
+function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Record<string, string>, codConsumidor = '', ufEmpresa = ''): string[] {
+    const c = commonNF(d, codigos, codConsumidor, ufEmpresa);
     const linhas: string[] = [];
 
     // Agrupa itens por CFOP.
@@ -624,8 +664,8 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
     return linhas;
 }
 
-function buildE221(d: DocumentoFiscal, codigos?: Record<string, string>): string {
-    const c = commonNF(d, codigos);
+function buildE221(d: DocumentoFiscal, codigos?: Record<string, string>, codConsumidor = '', ufEmpresa = ''): string {
+    const c = commonNF(d, codigos, codConsumidor, ufEmpresa);
     return buildRecord(L('E221'), {
         'ENTRADAS OU SAÍDAS': c.es,
         'ESPÉCIE N.F.': c.especie,
@@ -646,8 +686,8 @@ function buildE221(d: DocumentoFiscal, codigos?: Record<string, string>): string
     });
 }
 
-function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Record<string, string>, redf?: string): string[] {
-    const c = commonNF(d, codigos);
+function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Record<string, string>, redf?: string, codConsumidor = '', ufEmpresa = ''): string[] {
+    const c = commonNF(d, codigos, codConsumidor, ufEmpresa);
     return (d.itens || []).map((it, idx) => {
         // Tributação REAL do item: base = vBC do XML quando há destaque
         // (cobre base reduzida), isenta (CST 40/41/50) vai em Isentos,
@@ -703,9 +743,9 @@ function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
     });
 }
 
-function buildE342(d: DocumentoFiscal, codigos?: Record<string, string>): string | null {
+function buildE342(d: DocumentoFiscal, codigos?: Record<string, string>, codConsumidor = '', ufEmpresa = ''): string | null {
     if (!d.chave || d.chave.length !== 44) return null;
-    const c = commonNF(d, codigos);
+    const c = commonNF(d, codigos, codConsumidor, ufEmpresa);
     return buildRecord(L('E342'), {
         'ENTRADAS OU SAÍDAS': c.es,
         'ESPÉCIE N.F.': c.especie,
@@ -744,7 +784,13 @@ export interface ExportarResult {
 }
 
 export function exportarParaIobSage(params: ExportarParams): ExportarResult {
-    const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes, redfNfPaulista = '' } = params;
+    const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes, redfNfPaulista = '', codigoParticipanteConsumidor = '' } = params;
+    const codConsumidor = String(codigoParticipanteConsumidor || '').trim().slice(0, 20);
+    // UF da empresa: sai da chave de uma nota PRÓPRIA de saída (cUF do
+    // emitente). Serve pra NFC-e a consumidor, que não tem destinatário.
+    const ufEmpresaExport = (documentos.find((d) => d.direcao === 'saida' && d.chave)?.chave
+        ? ufDaChave(documentos.find((d) => d.direcao === 'saida' && d.chave)!.chave)
+        : '') || '';
     if (!documentos.length) {
         throw new Error('Nenhum documento para exportar.');
     }
@@ -766,6 +812,8 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
     for (const d of documentos) {
         try {
             const part = participanteDoDoc(d);
+            // NFC-e a consumidor final não tem participante pra cadastrar — o
+            // código do "Consumidor" já existe no E-Fiscal do cliente.
             if (!part) continue; // reportado no bloco da nota, não duas vezes
             if (e010Set.has(part.cnpjCpf)) continue;
             // Participante com código MAPEADO já existe no E-Fiscal — mandar
@@ -819,19 +867,19 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
         }
         const bloco: string[] = [];
         try {
-            bloco.push(buildE200(d, codigosParticipantes));
-            const e201s = buildE201sFromDoc(d, cfopCtx, codigosParticipantes);
+            bloco.push(buildE200(d, codigosParticipantes, codConsumidor, ufEmpresaExport));
+            const e201s = buildE201sFromDoc(d, cfopCtx, codigosParticipantes, codConsumidor, ufEmpresaExport);
             bloco.push(...e201s);
             count201 += e201s.length;
 
             if ((d.itens || []).length > 0) {
-                bloco.push(buildE221(d, codigosParticipantes));
-                const e222s = buildE222sFromDoc(d, cfopCtx, codigosParticipantes, redfNfPaulista);
+                bloco.push(buildE221(d, codigosParticipantes, codConsumidor, ufEmpresaExport));
+                const e222s = buildE222sFromDoc(d, cfopCtx, codigosParticipantes, redfNfPaulista, codConsumidor, ufEmpresaExport);
                 bloco.push(...e222s);
                 count222 += e222s.length;
             }
 
-            const e342 = buildE342(d, codigosParticipantes);
+            const e342 = buildE342(d, codigosParticipantes, codConsumidor, ufEmpresaExport);
             if (e342) bloco.push(e342);
 
             blocosPorNota.push(bloco);
