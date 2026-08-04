@@ -129,7 +129,18 @@ export function cruzarLogComFml(erros: ErroLogEfiscal[], conteudoFml: string): C
     const nCod = codigoExistente.size;
     const nUf = semUf.size;
     const partes: string[] = [];
-    if (nUf > 0) partes.push(`${nUf} participante(s) sem UF — a geração nova preenche pela cidade (IBGE); basta REGERAR o arquivo`);
+    if (nUf > 0) {
+        // Farol honesto: até 04/08 a captura NÃO gravava o endereço do
+        // destinatário, então "basta regerar" era mentira — o E010 saía sem UF
+        // de novo. Agora a captura grava e um backfill preenche os documentos
+        // antigos no cron de sincronização; a mensagem diz a ordem certa.
+        partes.push(
+            `${nUf} participante(s) sem UF — a captura passou a gravar o endereço do destinatário `
+            + 'em 04/08 e um backfill preenche as notas antigas a cada sincronização. '
+            + 'Rode a sincronização, REGERE o arquivo e confira: quem ainda ficar sem UF sai '
+            + 'listado nas falhas da geração (a nota fica FORA do arquivo em vez de derrubar tudo)',
+        );
+    }
     if (nCod > 0) partes.push(`${nCod} participante(s) que o E-Fiscal já tem com OUTRO código — informe o código existente no De→Para abaixo e regere`);
     if (porCategoria['nota-nao-cadastrada'] > 0 || porCategoria['participante-nao-consta'] > 0) {
         partes.push(`as ${porCategoria['participante-nao-consta']} nota(s) recusadas são CONSEQUÊNCIA do cadastro — resolvendo o de cima, elas entram`);

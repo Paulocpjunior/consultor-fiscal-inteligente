@@ -23,14 +23,29 @@ export function extrairParticipantesNfe(xml) {
     const emit = pickFirstBlock(xml, 'emit');
     const dest = pickFirstBlock(xml, 'dest');
 
+    // ENDEREÇO importa: o Exportar SAGE cadastra o participante (registro
+    // E010) e o E-Fiscal RECUSA sem UF ("Campo 10, UF inválida"). Até 04/08 só
+    // guardávamos o CNPJ do destinatário — nas SAÍDAS, que é justamente onde o
+    // participante É o destinatário, o E010 saía com nome "CLIENTE" e UF em
+    // branco e derrubava a importação inteira em cascata (caso 04/08: 30 sem
+    // UF ⇒ 54 notas recusadas). O bloco <enderDest> sempre veio no XML.
+    const endEmit = pickFirstBlock(emit, 'enderEmit');
+    const endDest = pickFirstBlock(dest, 'enderDest');
+
     return {
         emitente: {
             cnpj: pickTag(emit, 'CNPJ') || pickTag(emit, 'CPF') || null,
             nome: pickTag(emit, 'xNome') || null,
+            uf: pickTag(endEmit, 'UF') || null,
+            codMunIBGE: pickTag(endEmit, 'cMun') || null,
+            ie: pickTag(emit, 'IE') || null,
         },
         destinatario: {
             cnpj: pickTag(dest, 'CNPJ') || pickTag(dest, 'CPF') || null,
             nome: pickTag(dest, 'xNome') || null,
+            uf: pickTag(endDest, 'UF') || null,
+            codMunIBGE: pickTag(endDest, 'cMun') || null,
+            ie: pickTag(dest, 'IE') || null,
         },
     };
 }

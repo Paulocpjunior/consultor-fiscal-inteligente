@@ -66,9 +66,16 @@ describe('cruzarLogComFml', () => {
     });
 
     it('o resumo explica a CASCATA: nota recusada é consequência do cadastro', () => {
-        expect(cruz.resumo).toMatch(/REGERAR/);
+        expect(cruz.resumo).toMatch(/REGERE/);
         expect(cruz.resumo).toMatch(/De→Para/);
         expect(cruz.resumo).toMatch(/CONSEQUÊNCIA/);
+    });
+
+    it('a orientação de UF manda SINCRONIZAR antes de regerar (o endereço vem da captura)', () => {
+        // "basta regerar" era mentira enquanto a captura não gravava o
+        // endereço do destinatário — regerar produzia o mesmo E010 sem UF.
+        expect(cruz.resumo).toMatch(/sincroniza/i);
+        expect(cruz.resumo).not.toMatch(/basta REGERAR/);
     });
 
     it('log sem erros orienta a conferir se o arquivo foi lido', () => {
