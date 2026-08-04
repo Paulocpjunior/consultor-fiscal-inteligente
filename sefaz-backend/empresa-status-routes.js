@@ -540,6 +540,12 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     'respLegalNome', 'respLegalCpf', 'respLegalCargo',
     'contadorNome', 'contadorCrc', 'contadorCpf',
     'responsaveisLegais', 'contadorId',
+    // Código do participante "Consumidor" no E-Fiscal DESTE cliente (Exportar
+    // SAGE). Não é código oficial — cada escritório tem o seu, e sem ele TODA
+    // NFC-e de balcão fica fora do arquivo. Fica no cadastro pra ser digitado
+    // UMA vez, não a cada competência (Paulo, 04/08: "em alguns casos vamos nos
+    // deparar com empresas que não colocam o CPF ou CNPJ no cupom fiscal").
+    'codigoParticipanteConsumidor',
 ]);
 
 // Cadastro (IE, UF, CCM, endereço) é trabalho da EQUIPE — colaborador grava.

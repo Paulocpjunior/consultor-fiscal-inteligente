@@ -279,23 +279,43 @@ export function dataDoDoc(d: DocumentoFiscal): Date {
     return new Date();
 }
 
+/** Por que a NFC-e vai para o participante genérico "Consumidor". */
+export type MotivoConsumidorNfce = 'sem-documento' | 'cpf-no-cupom';
+
 /**
- * NFC-e (modelo 65) de venda a CONSUMIDOR FINAL — sem CNPJ/CPF do destinatário.
+ * NFC-e (modelo 65) que se escritura no participante genérico CONSUMIDOR.
  *
- * Isso é o NORMAL da NFC-e: venda de balcão não identifica o comprador. O
- * exportador tratava como "nota sem participante" e jogava a nota FORA — caso
- * 04/08, HYPE CAFE: 157 de 157 NFC-e recusadas, nenhuma delas defeituosa.
+ * Paulo, 04/08: "em alguns casos vamos nos deparar com empresas que não colocam
+ * o CPF ou CNPJ no cupom fiscal". Os DOIS casos existem, e os dois terminam no
+ * mesmo lugar:
+ *
+ *   • cupom SEM documento  → é o normal da venda de balcão (caso HYPE CAFE:
+ *     157 de 157 NFC-e recusadas, nenhuma delas defeituosa);
+ *   • cupom COM o CPF do comprador → o CPF no cupom é da Nota Fiscal Paulista/
+ *     sorteio. Ele NÃO faz do comprador um participante cadastrável: a NFC-e
+ *     não traz endereço nenhum do consumidor, então o E010 sairia sem UF e o
+ *     E-Fiscal recusaria o participante — e a nota atrás dele.
+ *
+ * NFC-e emitida contra um CNPJ é outra coisa: aí existe participante de
+ * verdade (a compra de uma empresa no balcão) e ele é cadastrado normalmente.
  *
  * O modelo sai do campo, da chave (posições 21-22) ou do tipo do documento.
  */
-export function ehNfceConsumidorFinal(d: DocumentoFiscal): boolean {
+export function motivoConsumidorNfce(d: DocumentoFiscal): MotivoConsumidorNfce | null {
     const x: any = d as any;
     const modelo = onlyDigits(x.modelo)
         || String(x.chave || '').slice(20, 22)
         || (x.tipoDoc === 'NFCe' || x.tipo === 'NFCe' ? '65' : '');
-    if (modelo !== '65') return false;
-    const cnpjDest = onlyDigits(d.destinatario?.cnpjCpf || x.cnpjDest || x.cpfDest);
-    return !cnpjDest;
+    if (modelo !== '65') return null;
+    const docDest = onlyDigits(d.destinatario?.cnpjCpf || x.cnpjDest || x.cpfDest);
+    if (!docDest) return 'sem-documento';
+    // 14 dígitos = CNPJ: participante real, com endereço no XML.
+    if (docDest.length === 14) return null;
+    return 'cpf-no-cupom';
+}
+
+export function ehNfceConsumidorFinal(d: DocumentoFiscal): boolean {
+    return motivoConsumidorNfce(d) !== null;
 }
 
 /**
@@ -511,19 +531,27 @@ function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>, codConsu
     if (d.tipo === 'NFSe') {
         throw new Error(`commonNF: documento ${d.id} e NFSe, nao suportado em IOB/SAGE.`);
     }
-    const part = participanteDoDoc(d);
-    // NFC-e a consumidor final não tem participante — e isso é o normal dela.
-    // Com o código do "CONSUMIDOR" do E-Fiscal informado, a nota entra
-    // referenciando esse cadastro (que já existe lá, logo SEM E010).
-    const consumidor = !part && ehNfceConsumidorFinal(d);
+    // NFC-e a consumidor final não tem participante cadastrável — e isso é o
+    // normal dela, com CPF no cupom ou sem. Com o código do "CONSUMIDOR" do
+    // E-Fiscal informado, a nota entra referenciando esse cadastro (que já
+    // existe lá, logo SEM E010). A decisão vem ANTES do participante: com CPF
+    // no cupom, `participanteDoDoc` devolveria o comprador e a nota tentaria
+    // cadastrar um participante sem endereço nenhum.
+    const motivoConsumidor = motivoConsumidorNfce(d);
+    const consumidor = motivoConsumidor !== null;
+    const part = consumidor ? null : participanteDoDoc(d);
     if (!part && !consumidor) {
         throw new Error(`nota ${d.numero || d.chave}: sem CNPJ do ${d.direcao === 'entrada' ? 'emitente' : 'destinatário'}.`);
     }
     if (consumidor && !codConsumidor) {
         throw new Error(
-            `NFC-e ${d.numero || d.chave} é venda a CONSUMIDOR FINAL (modelo 65) — não tem CNPJ do `
-            + 'comprador, e isso é o normal dela. Para essas notas entrarem, informe o código do '
-            + 'participante "Consumidor" do E-Fiscal deste cliente no campo "Consumidor final (NFC-e)".',
+            `NFC-e ${d.numero || d.chave} é venda a CONSUMIDOR FINAL (modelo 65)`
+            + (motivoConsumidor === 'cpf-no-cupom'
+                ? ' — traz só o CPF do comprador, que não tem endereço no cupom e por isso não vira '
+                  + 'participante no E-Fiscal.'
+                : ' — não tem CNPJ do comprador, e isso é o normal dela.')
+            + ' Para essas notas entrarem, informe o código do participante "Consumidor" do '
+            + 'E-Fiscal deste cliente no campo "Consumidor final (NFC-e)".',
         );
     }
     const especie = d.tipo === 'NFCe' ? 'NFCE' : d.tipo === 'NFe' ? 'NFE' : 'NF';
@@ -798,6 +826,10 @@ export interface ExportarResult {
         produtos: number;
         e201: number;
         e222: number;
+        /** NFC-e escrituradas no participante genérico CONSUMIDOR. */
+        nfceConsumidor: number;
+        /** ...destas, quantas traziam o CPF do comprador no cupom. */
+        nfceConsumidorComCpf: number;
     };
 }
 
@@ -828,11 +860,21 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
     // não existe lá e a nota é recusada do mesmo jeito — só que aí o
     // colaborador recebe um log de erro em vez de um aviso claro aqui.
     const participantesBloqueados = new Set<string>();
+    // Quantas NFC-e foram para o participante genérico, e por quê. Farol
+    // honesto: "entraram no CONSUMIDOR" não pode ficar invisível no resumo.
+    let nfceSemDocumento = 0;
+    let nfceComCpf = 0;
     for (const d of documentos) {
         try {
-            const part = participanteDoDoc(d);
             // NFC-e a consumidor final não tem participante pra cadastrar — o
-            // código do "Consumidor" já existe no E-Fiscal do cliente.
+            // código do "Consumidor" já existe no E-Fiscal do cliente. Vale
+            // também quando o cupom traz o CPF: ele não tem endereço.
+            const motivo = motivoConsumidorNfce(d);
+            if (motivo) {
+                if (motivo === 'cpf-no-cupom') nfceComCpf++; else nfceSemDocumento++;
+                continue;
+            }
+            const part = participanteDoDoc(d);
             if (!part) continue; // reportado no bloco da nota, não duas vezes
             if (e010Set.has(part.cnpjCpf)) continue;
             // Participante com código MAPEADO já existe no E-Fiscal — mandar
@@ -872,7 +914,7 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
     let count201 = 0;
     let count222 = 0;
     for (const d of documentos) {
-        const partDoc = participanteDoDoc(d);
+        const partDoc = ehNfceConsumidorFinal(d) ? null : participanteDoDoc(d);
         if (partDoc && participantesBloqueados.has(partDoc.cnpjCpf)) {
             falhas.push({
                 documento: rotuloDoc(d),
@@ -939,6 +981,8 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
             produtos: e020Set.size,
             e201: count201,
             e222: count222,
+            nfceConsumidor: nfceSemDocumento + nfceComCpf,
+            nfceConsumidorComCpf: nfceComCpf,
         },
     };
 }

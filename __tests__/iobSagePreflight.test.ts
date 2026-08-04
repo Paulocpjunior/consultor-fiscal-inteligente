@@ -10,6 +10,7 @@
  * entrada (89), número zerado (56) e nota sem participante.
  */
 import { conferirAntesDeGerar } from '../services/iobSagePreflight';
+import { exportarParaIobSage } from '../services/iobSageExportService';
 import type { DocumentoFiscal } from '../types';
 
 const chave = (serie: string, numero: string) =>
@@ -201,6 +202,76 @@ describe('NFC-e a consumidor final não é nota defeituosa', () => {
         } as unknown as DocumentoFiscal;
         const r = conferirAntesDeGerar([nfeSemDest], { numeroEmpresaEfiscal: 1385 });
         expect(r.problemas.map(p => p.causa).join(' ')).toMatch(/Nota sem CNPJ do participante/);
+    });
+});
+
+describe('cupom COM o CPF do comprador — o outro lado do mesmo caso', () => {
+    // Paulo, 04/08: "em alguns casos vamos nos deparar com empresas que não
+    // colocam o CPF ou CNPJ no cupom fiscal". Os dois casos existem no mesmo
+    // cliente, às vezes na mesma competência. O CPF do cupom é da Nota Fiscal
+    // Paulista: vem SEM endereço, então não vira participante — o E010 sairia
+    // sem UF e derrubaria o participante e a nota atrás dele.
+    const nfceCpf = (over: any = {}) => ({
+        id: 'c1',
+        chave: '35260766641236000115650050000002001514653738',   // modelo 65
+        numero: '200', serie: '5', tipo: 'NFCe', modelo: '65',
+        direcao: 'saida', status: 'autorizado', dhEmi: '2026-07-16T12:00:00',
+        cnpjEmit: '66641236000115',
+        cnpjDest: '12345678901',            // CPF (11 dígitos)
+        valorTotal: 30,
+        itens: [{ nItem: '1', cProd: 'CAFE', xProd: 'CAFE', cfop: '5102', vProd: 30, uCom: 'UN', qCom: 1 }],
+        ...over,
+    }) as unknown as DocumentoFiscal;
+
+    it('NÃO é tratada como participante sem UF — vai pro CONSUMIDOR', () => {
+        const r = conferirAntesDeGerar([nfceCpf()], { numeroEmpresaEfiscal: 1385 });
+        const causas = r.problemas.map(p => p.causa).join(' | ');
+        expect(causas).toMatch(/CPF do comprador no cupom/);
+        expect(causas).not.toMatch(/sem UF/);
+    });
+
+    it('COM o código do consumidor, ela entra no arquivo (antes era descartada)', () => {
+        const r = conferirAntesDeGerar([nfceCpf()], {
+            numeroEmpresaEfiscal: 1385,
+            codigoParticipanteConsumidor: 'CONSUMIDOR',
+        });
+        expect(r.notasNoArquivo).toBe(1);
+        expect(r.bloqueios).toBe(0);
+    });
+
+    it('cupom SEM CPF e cupom COM CPF convivem no mesmo recorte', () => {
+        const semCpf = nfceCpf({ id: 'c2', numero: '201', cnpjDest: undefined });
+        const r = conferirAntesDeGerar([nfceCpf(), semCpf], {
+            numeroEmpresaEfiscal: 1385,
+            codigoParticipanteConsumidor: 'CONSUMIDOR',
+        });
+        expect(r.notasNoArquivo).toBe(2);
+        expect(r.bloqueios).toBe(0);
+        // As duas causas ficam SEPARADAS: são conversas diferentes com o cliente.
+        expect(r.problemas.map(p => p.causa).sort().join(' | ')).toMatch(/CPF do comprador/);
+    });
+
+    it('o resumo do arquivo DIZ quantas foram pro CONSUMIDOR (farol honesto)', () => {
+        const st = exportarParaIobSage({
+            documentos: [nfceCpf(), nfceCpf({ id: 'c9', numero: '202', cnpjDest: undefined })],
+            numeroEmpresaEfiscal: 1385,
+            codigoParticipanteConsumidor: 'CONSUMIDOR',
+        }).estatisticas;
+        expect(st.notasNoArquivo).toBe(2);
+        expect(st.nfceConsumidor).toBe(2);
+        expect(st.nfceConsumidorComCpf).toBe(1);
+        // Escrituradas no participante genérico ⇒ nenhum E010 novo.
+        expect(st.participantes).toBe(0);
+    });
+
+    it('NFC-e contra um CNPJ continua sendo participante DE VERDADE', () => {
+        // Empresa comprando no balcão: aí existe cadastro e endereço no XML.
+        const paraPj = nfceCpf({ id: 'c3', cnpjDest: '58125260000193' });
+        const r = conferirAntesDeGerar([paraPj], {
+            numeroEmpresaEfiscal: 1385,
+            codigoParticipanteConsumidor: 'CONSUMIDOR',
+        });
+        expect(r.problemas.map(p => p.causa).join(' ')).not.toMatch(/consumidor final|CPF do comprador/i);
     });
 });
 

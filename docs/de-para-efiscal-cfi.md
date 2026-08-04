@@ -49,6 +49,7 @@ pedir). DIPJ/fila/cadastros estáticos ⚫.
 | REINF | 🔴 fora do CFI | módulo em construção no Consultor Contábil; menu mapeado (faltam 2 submenus); FUNRURAL do 🌾 = fonte do R-2055 |
 | Histórico de escrituração (PG12, 84 GB, 1.735 empresas) | 🔴 | extração = fase F2 do plano (aguarda 3 arquivos do Paulo); até lá o E-Fiscal fica vivo de consulta |
 | Importação Folhamatic (.FML) | — ponte | Exportar SAGE + leitor de log — existe PARA a transição; morre com ela |
+| NFC-e de balcão no .FML (participante CONSUMIDOR) | ✅ **04/08** | cupom **sem** documento e cupom **com o CPF** do comprador vão os DOIS pro participante genérico "Consumidor" do E-Fiscal (o CPF da NF Paulista vem sem endereço — viraria E010 sem UF e derrubaria a nota). Código do participante fica no cadastro da empresa (`dadosFiscais.codigoParticipanteConsumidor`), digitado uma vez. NFC-e contra CNPJ continua participante de verdade |
 
 ## Pré-requisito transversal: completude de captura
 
