@@ -226,6 +226,8 @@ export interface EmpresaPerfilOption {
     contadorNome?: string;
     contadorCrc?: string;
     contadorCpf?: string;
+    /** Cod.Cliente (E-Fiscal) — chave da migração do PG12 (4 dígitos, texto). */
+    codCliente?: string;
 }
 
 function inferirRegimeLucro(data: LucroPresumidoEmpresa): RegimeSugerido {
@@ -293,6 +295,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 respLegalNome: df.respLegalNome || df.responsaveisLegais?.[0]?.nome,
                 contadorNome: df.contadorNome,
                 contadorCrc: df.contadorCrc,
+                codCliente: df.codCliente,
             };
         }).filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
         const lucro: EmpresaPerfilOption[] = lucroSnap
@@ -317,6 +320,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 respLegalNome: df.respLegalNome || df.responsaveisLegais?.[0]?.nome,
                 contadorNome: df.contadorNome,
                 contadorCrc: df.contadorCrc,
+                codCliente: df.codCliente,
             };
         }).filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
 
@@ -902,6 +906,7 @@ export async function getDadosFiscaisEmpresa(
     naturezaAtividade?: string | null;
     cfopOverrides?: Record<string, string> | null;
     codigoParticipanteConsumidor?: string | null;
+    codCliente?: string | null;
 } | null> {
     if (!isFirebaseConfigured || !db || !empresaId) return null;
     try {
@@ -916,6 +921,7 @@ export async function getDadosFiscaisEmpresa(
             naturezaAtividade: df.naturezaAtividade ?? null,
             cfopOverrides: df.cfopOverrides ?? null,
             codigoParticipanteConsumidor: df.codigoParticipanteConsumidor ?? null,
+            codCliente: df.codCliente ?? null,
         };
     } catch {
         return null;

@@ -28,6 +28,7 @@ import { lookupCnpj } from './brasilapi-cache.js';
 import { classificarCapturaNfseNacionalAdn } from './empresa-status-helper.js';
 import { selecionarCertA1PorBase } from './cert-base-helper.js';
 import { caminhoNfseRecomendado, CAMINHO_NFSE } from './municipio-nfse-caminho.js';
+import { normalizarCodCliente } from './cod-cliente.js';
 
 const router = express.Router();
 
@@ -546,6 +547,11 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // UMA vez, não a cada competência (Paulo, 04/08: "em alguns casos vamos nos
     // deparar com empresas que não colocam o CPF ou CNPJ no cupom fiscal").
     'codigoParticipanteConsumidor',
+    // Cod.Cliente — o código da empresa no E-Fiscal (Paulo, 04/08): CHAVE da
+    // migração do PG12 (schema e{código} ↔ CNPJ). 4 dígitos com zero à
+    // esquerda, 0001–9999, ÚNICO na carteira — validação em cod-cliente.js e
+    // recusa de duplicado logo abaixo, antes do update.
+    'codCliente',
 ]);
 
 // Cadastro (IE, UF, CCM, endereço) é trabalho da EQUIPE — colaborador grava.
@@ -586,6 +592,32 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
                 return res.status(400).json({
                     error: `CCM inválido: "${dadosFiscais.ccmSp}". A Inscrição Municipal de SP tem 8 dígitos (aceito 6-11, só números).`,
                 });
+            }
+        }
+
+        // Cod.Cliente: valida a régua (4 dígitos, 0001–9999, zero à esquerda)
+        // e recusa DUPLICADO antes de gravar — dois clientes com o mesmo
+        // código tornam o confronto CNPJ ↔ schema do E-Fiscal ambíguo, e o
+        // erro só apareceria na extração do PG12.
+        if ('codCliente' in dadosFiscais) {
+            const r = normalizarCodCliente(dadosFiscais.codCliente);
+            if (!r.ok) return res.status(400).json({ error: r.erro });
+            dadosFiscais.codCliente = r.valor;
+            if (r.valor !== '') {
+                const db2 = fa().firestore();
+                for (const col of ['simples_empresas', 'lucro_empresas']) {
+                    const dup = await db2.collection(col)
+                        .where('dadosFiscais.codCliente', '==', r.valor).get();
+                    for (const d of dup.docs) {
+                        const dd = d.data() || {};
+                        if (dd._merged_into || dd._deleted) continue;
+                        if (limparCnpj(dd.cnpj) === cnpjLimpo) continue;   // a própria empresa
+                        return res.status(409).json({
+                            error: `Cod.Cliente ${r.valor} já pertence a "${dd.razaoSocial || dd.nome || dd.fantasia || limparCnpj(dd.cnpj)}". `
+                                + 'O código do E-Fiscal é único por empresa — confira o cadastro de lá antes de reaproveitar.',
+                        });
+                    }
+                }
             }
         }
 

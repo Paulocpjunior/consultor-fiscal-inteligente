@@ -147,6 +147,11 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 const cod = String(df?.codigoParticipanteConsumidor || '');
                 setCodigoConsumidor(cod);
                 setConsumidorSalvo(cod);
+                // Cod.Cliente do cadastro = Nº Empresa no E-Fiscal (E001).
+                // A equipe digitava de cabeça a cada exportação; agora vem do
+                // cadastro (modal Dados Fiscais → Código no E-Fiscal).
+                const codEmp = parseInt(String(df?.codCliente || ''), 10);
+                if (Number.isFinite(codEmp) && codEmp > 0) setNumeroEmpresaEfiscal(codEmp);
             });
         return () => { alive = false; };
     }, [empresaSelecionada?.id, empresaSelecionada?.fonte]);
@@ -623,8 +628,12 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             value={numeroEmpresaEfiscal}
                             onChange={(e) => setNumeroEmpresaEfiscal(parseInt(e.target.value) || 1)}
                             className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm"
-                            title="Código da empresa no cadastro do E-Fiscal Folhamatic (campo do registro E001)"
+                            title="Código da empresa no cadastro do E-Fiscal Folhamatic (campo do registro E001). Preenchido sozinho quando o Cod.Cliente está no cadastro da empresa (modal Dados Fiscais → Código no E-Fiscal)."
                         />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                            Vem sozinho do <strong>Cod.Cliente</strong> do cadastro (Dados Fiscais). Se precisou
+                            digitar aqui, cadastre lá — vale pra sempre e é a amarração da migração.
+                        </p>
                     </div>
 
                     <div>
