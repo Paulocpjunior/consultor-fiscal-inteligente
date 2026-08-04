@@ -5,6 +5,10 @@ import Logo from './Logo';
 import Tooltip from './Tooltip';
 import { MenuIcon, UserIcon, ShieldIcon, UserGroupIcon } from './Icons';
 import { User } from '../types';
+import {
+    NOVIDADES_URL, NOVIDADES_VERSAO, marcarNovidadesComoLidas,
+    temNovidadeNaoLida, versaoVistaLocal,
+} from '../services/novidadesService';
 
 interface HeaderProps {
     theme: 'light' | 'dark';
@@ -18,6 +22,18 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, description, user, onLogout, onShowLogs, onShowUsers }) => {
+  // 📣 Novidades vivia SÓ dentro do card Relatórios — quem não abria aquele
+  // card nunca achava o comunicado. Agora fica no cabeçalho, em toda tela.
+  const [novoAviso, setNovoAviso] = React.useState(false);
+  React.useEffect(() => {
+      setNovoAviso(temNovidadeNaoLida(NOVIDADES_VERSAO, versaoVistaLocal()));
+  }, []);
+
+  const abrirNovidades = () => {
+      marcarNovidadesComoLidas();
+      setNovoAviso(false);
+  };
+
   return (
     <header className="w-full py-6 md:py-8" style={{borderBottom:"1px solid var(--border-subtle)"}}>
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -49,6 +65,31 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
                   </div>
               </div>
           )}
+
+          <a
+              href={NOVIDADES_URL}
+              target="_blank"
+              rel="noopener"
+              onClick={abrirNovidades}
+              className="btn-press relative flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition-colors"
+              style={{
+                  background: 'var(--accent-soft)',
+                  color: 'var(--accent)',
+                  border: '1px solid var(--border-default)',
+              }}
+              title="Novidades no CFI — o que mudou e o que fazer"
+              aria-label="Novidades no CFI"
+          >
+              <span aria-hidden="true">📣</span>
+              <span className="hidden sm:inline">Novidades</span>
+              {novoAviso && (
+                  <span
+                      className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full"
+                      style={{ background: 'var(--danger)' }}
+                      title="Tem comunicado novo que você ainda não abriu"
+                  />
+              )}
+          </a>
 
           {user?.role === 'admin' && (
               <>

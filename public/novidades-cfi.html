@@ -68,7 +68,7 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 03/08/2026 · leitura de 5 minutos</p>
+            <p>Departamento Fiscal · atualizado em 04/08/2026 · leitura de 5 minutos</p>
         </div>
     </div>
 </header>
@@ -83,6 +83,10 @@
     <div class="ganho">💡 <strong>O que você ganha:</strong> menos idas ao E-Fiscal, relatório
     com a cara do escritório pronto pra mandar ao cliente, e o próprio app dizendo o que falta
     em vez de você ter que descobrir.</div>
+    <div class="onde">📍 <strong>Como voltar aqui:</strong> o botão <strong>📣 Novidades</strong> fica
+    no <strong>cabeçalho do CFI</strong>, ao lado do seu nome — em qualquer tela. Quando tiver
+    comunicado novo ele aparece com uma <strong>bolinha vermelha</strong>, que some depois que você
+    abre. (Até 03/08 o link só existia dentro do card Relatórios; por isso ninguém achava.)</div>
 </section>
 
 <section>
@@ -234,10 +238,50 @@
     normalmente</strong>.</p>
     <p><strong>Atenção quem tem cliente com ISS(SUP) ou receita IMUNE:</strong> essas marcações
     tiram o imposto do DAS na nossa tela, mas ainda <strong>não são enviadas</strong> na declaração
-    — a Receita pode calcular o DAS com o ISS. A tela agora <strong>avisa em amarelo antes de
-    transmitir</strong>. Nesse caso, confira o valor devolvido antes de mandar ao cliente e avise o
-    Paulo.</p>
+    — a Receita pode calcular o DAS com o ISS. Leia a seção 5F: para o <strong>ISS(SUP) o app agora
+    RECUSA a emissão</strong>, de propósito.</p>
     <div class="ganho">💡 Se um DAS de serviço travou nos últimos dias, tente de novo — era isso.</div>
+</section>
+
+<section>
+    <h2>5F. ⛔ ISS fixo (SUP): marcação própria na tela — e o DAS fica BLOQUEADO por enquanto</h2>
+    <div class="onde">📍 <strong>Onde:</strong> Simples Nacional → empresa → receita de serviço → <strong>ISS fixo (SUP)</strong></div>
+    <p>Escritório contábil autorizado a pagar o ISS <strong>em valor fixo na guia do município</strong>
+    (LC 123, art. 18 §22-A) <u>não é</u> “ISS retido pelo tomador”. Como a tela só tinha a marcação
+    <em>ISS Retido</em>, a equipe marcava retenção pra tirar o ISS do DAS — o valor saía certo, mas a
+    declaração ia com a <strong>natureza errada</strong> (“o tomador reteve”), e isso aparece no extrato
+    do PGDAS-D.</p>
+    <p><strong>O que mudou:</strong> existe agora a marcação <strong>ISS fixo (SUP)</strong>, excludente
+    com <em>ISS Retido</em>. Use ela nesses clientes.</p>
+    <p><strong>Por que o DAS não emite:</strong> falta o <strong>número da atividade</strong> do SUP na
+    tabela do SERPRO, e código fiscal <strong>não se chuta</strong>. Enquanto ele não entra, o app
+    <strong>recusa transmitir</strong> em vez de mandar a natureza errada — a competência sai pelo
+    <strong>e-CAC</strong>, na mão. Entrega ao PGDAS-D não se desfaz; por isso a trava.</p>
+    <div class="ganho">💡 <strong>Ajuda aqui:</strong> se você tem cliente cuja declaração <u>já foi
+    aceita</u> com essa atividade, abra a empresa no Simples e clique em
+    <strong>🔎 Atividades declaradas</strong> — ele lê os códigos da própria declaração e mostra o que
+    falta. Mande o print pro Paulo e a trava cai.</div>
+</section>
+
+<section>
+    <h2>5G. 📊 SPED Fiscal: ICMS-ST, IPI e CIAP entraram no arquivo (04/08)</h2>
+    <div class="onde">📍 <strong>Onde:</strong> card <strong>SPED Fiscal</strong> → abas <strong>Ajustes E111</strong> e <strong>🏭 CIAP</strong></div>
+    <ul>
+        <li><strong>ICMS-ST (E200/E210/E220/E250):</strong> quem retém ST na saída agora fecha o arquivo
+        pelo CFI. A apuração é <strong>por UF de destino</strong> — cada estado vira uma guia própria.</li>
+        <li><strong>IPI (E500/E520):</strong> estava sendo gravado no registro do ICMS-ST. Corrigido.
+        Nenhum cliente com IPI tinha gerado ainda.</li>
+        <li><strong>CIAP / bloco G:</strong> crédito de ICMS do imobilizado em 48 parcelas, cada uma na
+        proporção das saídas tributadas. Cadastro dos bens na aba <strong>🏭 CIAP</strong>, com
+        <em>“⏭ Avançar parcelas”</em> no fim do mês. Hoje só a EXPERTE tem bens.</li>
+        <li><strong>DIFAL de aquisição:</strong> a aba 🧭 da Central de XMLs ganhou a antecipação do
+        <strong>art. 426-A</strong>, calculada <strong>documento a documento</strong>. Sem o IVA-ST da
+        Portaria CAT o documento fica <strong>PENDENTE</strong> — nunca sai zero como se não houvesse
+        imposto.</li>
+    </ul>
+    <div class="ganho">⚠️ <strong>Antes de mandar a cliente:</strong> valide o arquivo de ST, IPI e CIAP
+    <strong>no PVA</strong>. Se ele recusar algum registro, mande a mensagem de erro pro Paulo — a
+    correção é rápida.</div>
 </section>
 
 <section>
