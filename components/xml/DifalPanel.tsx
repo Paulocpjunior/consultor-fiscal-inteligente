@@ -6,6 +6,7 @@
  * nota (NCM 12%/25% ajusta na linha).
  */
 import React, { useState } from 'react';
+import DareSpModal from '../LucroPresumidoReal/DareSpModal';
 import { auth } from '../../services/firebaseConfig';
 
 interface VarreduraLinha {
@@ -54,6 +55,7 @@ const compAnterior = () => {
 const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToast }) => {
     const [competencia, setCompetencia] = useState(compAnterior());
     const [varredura, setVarredura] = useState<VarreduraLinha[] | null>(null);
+    const [dareAberto, setDareAberto] = useState(false);
     const [painel, setPainel] = useState<Painel | null>(null);
     const [overrides, setOverrides] = useState<Record<string, number>>({});
     // IVA-ST informado por nota com ST (vem da Portaria CAT — o app não deduz).
@@ -228,12 +230,36 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                         <span className="text-xs font-bold text-blue-800 dark:text-blue-300">
                             DIFAL consolidado de {competencia.split('-').reverse().join('/')}
                         </span>
-                        <span className="text-base font-bold font-mono text-blue-800 dark:text-blue-300">{fmtBRL(painel.totalDifal || 0)}</span>
+                        <div className="flex items-center gap-3">
+                            <span className="text-base font-bold font-mono text-blue-800 dark:text-blue-300">{fmtBRL(painel.totalDifal || 0)}</span>
+                            {(painel.totalDifal || 0) > 0 && (
+                                <button
+                                    onClick={() => setDareAberto(true)}
+                                    className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-700 hover:bg-blue-800 text-white"
+                                    title="Abre o DARE-SP já com CNPJ, competência e valor preenchidos — o código do serviço vem selecionado como DIFAL do Simples (04602)."
+                                >
+                                    🧾 Gerar guia (DARE)
+                                </button>
+                            )}
+                        </div>
                     </div>
                     <p className="text-[11px] text-slate-500">
                         A guia sai pelo trilho DARE já existente (unitário assistido / API) com este valor —
                         e o envio ao cliente segue o rito padrão (SharePoint + baixa + auditoria).
+                        O <strong>vencimento</strong> não é chutado pelo app: informe a data oficial no modal.
                     </p>
+
+                    {dareAberto && painel.empresa && (
+                        <DareSpModal
+                            cnpj={painel.empresa.cnpj}
+                            razaoSocial={painel.empresa.nome}
+                            empresaId={painel.empresa.id}
+                            competencia={competencia}
+                            valorInicial={painel.totalDifal || 0}
+                            derivacaoInicial="difal"
+                            onClose={() => setDareAberto(false)}
+                        />
+                    )}
 
                     {(painel.antecipacaoIndividual || []).length > 0 && (
                         <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-3 bg-amber-50/50 dark:bg-amber-900/10">
