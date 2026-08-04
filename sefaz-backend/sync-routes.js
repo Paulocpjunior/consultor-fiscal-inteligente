@@ -858,6 +858,85 @@ router.post('/corrigir-endereco-destinatario', requireAuth, express.json(), asyn
   }
 });
 
+// UF de participantes a partir da PRÓPRIA BASE — sem reler XML nenhum.
+//
+// Caso 04/08 (COMERCIO DE FRUTAS NOVA ERA): 4.077 participantes sem UF num
+// mês só. Reler 4 mil XMLs do Storage pra descobrir a UF é caro e lento —
+// e desnecessário: quase todo destinatário é uma EMPRESA que também EMITE
+// nota, e as duas primeiras posições da chave de acesso são o cUF do
+// emitente. Ou seja: se o CNPJ já apareceu como emitente em qualquer
+// documento nosso, a UF dele está na chave — informação da própria SEFAZ.
+router.post('/uf-participantes', requireAuth, express.json({ limit: '2mb' }), async (req, res) => {
+  try {
+    const pedidos = Array.isArray(req.body?.cnpjs) ? req.body.cnpjs : [];
+    const alvos = new Set(pedidos.map((c) => String(c || '').replace(/\D/g, '')).filter((c) => c.length === 14));
+    if (alvos.size === 0) return res.status(400).json({ error: 'Informe os CNPJs em `cnpjs`.' });
+    if (alvos.size > 20000) return res.status(400).json({ error: 'Máximo de 20.000 CNPJs por consulta.' });
+
+    if (admin.apps.length === 0) {
+      admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    }
+    const db = admin.firestore();
+
+    const UF_POR_CUF = {
+      '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
+      '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL',
+      '28': 'SE', '29': 'BA', '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP', '41': 'PR',
+      '42': 'SC', '43': 'RS', '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF',
+    };
+
+    const encontradas = {};
+    let lidos = 0;
+
+    // Varre em páginas, projetando só o necessário.
+    let cursor = null;
+    for (let pagina = 0; pagina < 60; pagina++) {
+      let q = db.collection('documentos_fiscais')
+        .select('cnpjEmit', 'chave', 'ufEmit', 'cnpjDest', 'ufDest')
+        .orderBy('__name__')
+        .limit(2000);
+      if (cursor) q = q.startAfter(cursor);
+      const snap = await q.get();
+      if (snap.empty) break;
+      cursor = snap.docs[snap.docs.length - 1];
+      lidos += snap.size;
+
+      for (const d of snap.docs) {
+        const x = d.data() || {};
+        const emit = String(x.cnpjEmit || '').replace(/\D/g, '');
+        if (emit && alvos.has(emit) && !encontradas[emit]) {
+          const uf = String(x.ufEmit || '').toUpperCase()
+            || UF_POR_CUF[String(x.chave || '').slice(0, 2)] || '';
+          if (uf) encontradas[emit] = { uf, fonte: x.ufEmit ? 'cadastro-emitente' : 'chave-de-acesso' };
+        }
+        const dest = String(x.cnpjDest || '').replace(/\D/g, '');
+        if (dest && alvos.has(dest) && !encontradas[dest] && x.ufDest) {
+          encontradas[dest] = { uf: String(x.ufDest).toUpperCase(), fonte: 'endereco-destinatario' };
+        }
+      }
+      if (Object.keys(encontradas).length >= alvos.size) break;
+    }
+
+    const faltando = Array.from(alvos).filter((c) => !encontradas[c]);
+    return res.json({
+      ok: true,
+      encontradas,
+      resolvidos: Object.keys(encontradas).length,
+      pedidos: alvos.size,
+      faltando,
+      lidos,
+      // Farol honesto: quem não foi resolvido continua sem UF, e a nota dele
+      // segue fora do arquivo — não vira palpite.
+      mensagem: faltando.length === 0
+        ? `UF encontrada para todos os ${alvos.size} participante(s).`
+        : `${Object.keys(encontradas).length} de ${alvos.size} resolvido(s). Os ${faltando.length} restantes nunca apareceram como emitente na nossa base — use "Corrigir endereços" (relê os XMLs) ou informe o código deles no De→Para.`,
+    });
+  } catch (e) {
+    console.error('[uf-participantes]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/cert-escritorio-info', requireAuth, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
