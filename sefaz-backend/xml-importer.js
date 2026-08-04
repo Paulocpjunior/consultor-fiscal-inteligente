@@ -166,6 +166,11 @@ function extrairItens(xml) {
       vUnCom: num(pickTag(prod, 'vUnCom')),
       vProd: num(pickTag(prod, 'vProd')),
       vDesc: num(pickTag(prod, 'vDesc')) || null,
+      // Encargos POR ITEM (a NF-e traz em <prod>). Sem eles, o VA do art.
+      // 426-A precisa ratear o total — estimativa, não o que está na nota.
+      vFrete: num(pickTag(prod, 'vFrete')),
+      vSeg: num(pickTag(prod, 'vSeg')),
+      vOutro: num(pickTag(prod, 'vOutro')),
       vBC: num(pickTag(icmsInner, 'vBC')),
       aliqIcms: num(pickTag(icmsInner, 'pICMS')),
       vICMS: num(pickTag(icmsInner, 'vICMS')),

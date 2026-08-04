@@ -193,3 +193,105 @@ export function apurarAntecipacoes426A(documentos, parametrosPorChave = {}, aliq
         ],
     };
 }
+
+/**
+ * Antecipação do 426-A POR ITEM, agregada por documento (a guia é por
+ * documento, mas a CONTA é por item).
+ *
+ * Paulo, 04/08: "não pode aglutinar". Uma nota com dois NCMs pode precisar de
+ * dois IVA-ST diferentes — o índice é do SEGMENTO da mercadoria, não da nota.
+ * Somar tudo com um IVA só produz um número que não corresponde a documento
+ * nenhum, e o erro só aparece na fiscalização.
+ *
+ * @param {Array}  linhasComSt  saída do `antecipacaoIndividual` (cabeçalho +
+ *                              `itens` já filtrados como COM ST)
+ * @param {object} ivaPorItem   { "CHAVE|NITEM": { ivaSt, ivaJaAjustado, aliqInterna } }
+ * @param {number} aliqInternaPadrao
+ */
+export function apurarAntecipacoes426APorItem(linhasComSt, ivaPorItem = {}, aliqInternaPadrao = 18) {
+    const documentos = [];
+    let totalCalculado = 0;
+    let itensCalculados = 0;
+    let itensPendentes = 0;
+
+    for (const nota of linhasComSt || []) {
+        const itens = [];
+        let somaDoc = 0;
+        let pendentesDoc = 0;
+
+        for (const it of nota?.itens || []) {
+            const p = ivaPorItem[`${nota.chave}|${it.nItem}`] || {};
+            const aliqInterna = num(p.aliqInterna) > 0 ? p.aliqInterna : num(nota.aliqInterna) || aliqInternaPadrao;
+            const aliqInter = num(it.aliqIcms) > 0
+                ? num(it.aliqIcms)
+                : aliqInterestadualDerivada(it.orig, nota.ufOrigem);
+
+            const r = calcularAntecipacao426A(
+                {
+                    totais: {
+                        vProd: it.valorAquisicao, vDesc: 0, vFrete: 0,
+                        vSeg: 0, vOutro: 0, vIPI: 0, vICMS: it.icmsPago,
+                    },
+                },
+                {
+                    ivaSt: p.ivaSt,
+                    ivaJaAjustado: !!p.ivaJaAjustado,
+                    aliqInterna,
+                    aliqInterestadual: aliqInter,
+                },
+            );
+
+            itens.push({
+                nItem: it.nItem, cProd: it.cProd, xProd: it.xProd, ncm: it.ncm,
+                cfop: it.cfop, cst: it.cst,
+                encargosRateados: !!it.encargosRateados,
+                ...r,
+            });
+
+            if (r.calculavel) { somaDoc = r2(somaDoc + r.antecipacao); itensCalculados++; }
+            else { pendentesDoc++; itensPendentes++; }
+        }
+
+        const completo = pendentesDoc === 0 && itens.length > 0;
+        documentos.push({
+            chave: nota.chave,
+            numero: nota.numero,
+            dhEmi: nota.dhEmi,
+            fornecedor: nota.fornecedor,
+            ufOrigem: nota.ufOrigem,
+            notaMista: !!nota.notaMista,
+            itens,
+            itensPendentes: pendentesDoc,
+            // GUIA só sai com o documento INTEIRO calculado: recolher a
+            // antecipação de 2 de 3 itens é recolher a menos, e o extrato
+            // não denuncia. Parcial fica sinalizado e fora do total.
+            guiaLiberada: completo,
+            antecipacaoDocumento: somaDoc,
+        });
+        if (completo) totalCalculado = r2(totalCalculado + somaDoc);
+    }
+
+    return {
+        documentos,
+        totalAntecipacao: totalCalculado,
+        resumo: {
+            documentos: documentos.length,
+            documentosCompletos: documentos.filter((d) => d.guiaLiberada).length,
+            itensCalculados,
+            itensPendentes,
+        },
+        ressalvas: [
+            'A conta é POR ITEM: o IVA-ST vem da Portaria CAT do SEGMENTO (NCM), e uma nota com vários NCMs pode ter IVA-ST diferentes.',
+            'A GUIA é por DOCUMENTO e só é liberada com TODOS os itens calculados — documento com item pendente sairia a menor.',
+            'Item pendente NÃO é item isento: ele fica fora do total até o IVA-ST ser informado.',
+            'VA inclui frete, seguro, IPI e demais encargos do adquirente (art. 426-A §2º). Quando a nota antiga não traz esses valores por item, o rateio é sinalizado na linha.',
+            'Mercadoria com preço final fixado (pauta/PMC) usa a base do §3º, não o IVA-ST.',
+        ],
+    };
+}
+
+/** Interestadual derivada quando o item não destaca pICMS. */
+function aliqInterestadualDerivada(orig, ufOrigem) {
+    if (['1', '2', '3', '8'].includes(String(orig ?? ''))) return 4;
+    return ['SP', 'RJ', 'MG', 'RS', 'SC', 'PR'].includes(String(ufOrigem || '').toUpperCase()) ? 12 : 7;
+}

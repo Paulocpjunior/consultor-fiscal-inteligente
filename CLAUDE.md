@@ -525,6 +525,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   aviso da geração lembra disso. COD_AJ da tabela 5.3 é ESTADUAL e não se
   inventa: sem ele cadastrado (no MESMO doc de `sped_ajustes_apuracao`, que já
   é a aba de ajustes), o registro não sai e vira aviso.
+- **DIFAL é POR ITEM, NUNCA por documento** (Paulo, 04/08 — NF 6831 UNIVERSAL
+  RJ→JOTASUL SP): "algumas notas podem ter mais de um CFOP, mais de um
+  produto, mais de um NCM, isso deve ser tratado OBRIGATORIAMENTE, não pode
+  aglutinar; alguns itens podem conter ST ou não". Naquela nota o item 1 é
+  CFOP 6102/CST 00 (sem ST) e os itens 2-3 são 6403/CST 10 (com ST) — o app
+  classificava pelo TOTAL (`totais.vST>0`) e jogava a nota inteira num lado
+  só. Núcleo `difal-itens.js` (26 testes): `itemTemSt` (valor destacado →
+  CST/CSOSN 10/30/60/70/201/202/203/500 → CFOP x40x), `encargosDoItem` (usa
+  o valor do PRÓPRIO item; sem ele rateia o total e MARCA `encargosRateados`)
+  e `classificarItensDifal` → {comSt, semSt, mista}. A MESMA nota aparece nas
+  DUAS listas e isso NÃO é duplicidade. **IVA-ST é POR ITEM** (o índice é do
+  SEGMENTO/NCM): `apurarAntecipacoes426APorItem`, query `?iva=CHAVE|NITEM:V`,
+  e a **guia só libera com TODOS os itens do documento calculados** — faltando
+  um, sairia a menor e o extrato não denuncia. ST no total sem destaque por
+  item (captura antiga) vai INTEIRA ao 426-A (lado que não subtributa) com
+  `stSemDetalhePorItem` + aviso. O importer passou a gravar vFrete/vSeg/vOutro
+  POR ITEM.
 - **GIA caiu em DESUSO** (Paulo, 02/08): não listar como rotina nem gastar
   feature com ela. **SPED Fiscal/Contribuições JÁ É módulo do CFI** (card
   SPED Fiscal: gera mensal/trimestral + conferências; transmissão é no PVA

@@ -26,7 +26,27 @@ interface Painel {
     empresa?: { id: string; nome: string; cnpj: string; regime: string };
     linhas?: LinhaDifal[]; totalBase?: number; totalDifal?: number;
     antecipacaoIndividual?: LinhaDifal[]; avisos?: string[]; ressalvas?: string[];
-    antecipacao426A?: Antecipacao426A;
+    antecipacao426A?: {
+        documentos: Documento426A[];
+        totalAntecipacao: number;
+        resumo: { documentos: number; documentosCompletos: number; itensCalculados: number; itensPendentes: number };
+        ressalvas: string[];
+    };
+}
+
+/** Item do 426-A: a conta é por item (IVA-ST vem do NCM), a guia é por documento. */
+interface Item426A {
+    nItem: string; cProd: string; xProd: string; ncm: string; cfop: string; cst: string;
+    encargosRateados: boolean;
+    calculavel: boolean; motivo: string | null;
+    va: number; ic: number; ivaSt: number; ivaAplicado: number; ivaFoiAjustado?: boolean;
+    aliqInterna: number; aliqInterestadual: number; baseSt: number; antecipacao: number;
+}
+
+interface Documento426A {
+    chave: string; numero: string; dhEmi: string | null; fornecedor: string; ufOrigem: string;
+    notaMista: boolean; itens: Item426A[]; itensPendentes: number;
+    guiaLiberada: boolean; antecipacaoDocumento: number;
 }
 
 /** Fase 2: antecipação do art. 426-A, uma guia POR documento. */
@@ -267,15 +287,17 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                                 ⚠ {painel.antecipacaoIndividual!.length} nota(s) com ST — antecipação do art. 426-A, uma guia POR DOCUMENTO (fora da consolidação acima)
                             </p>
                             <p className="text-[11px] text-slate-600 dark:text-slate-300 mb-2">
-                                Informe o <b>IVA-ST</b> da Portaria CAT do segmento de cada mercadoria — o índice não está
-                                na nota e o app não o deduz. O ajuste pela alíquota interestadual é feito aqui.
+                                Informe o <b>IVA-ST</b> da Portaria CAT <b>item a item</b>: o índice é do SEGMENTO da
+                                mercadoria (NCM), então a mesma nota pode ter índices diferentes. O índice não está na
+                                nota e o app não o deduz. A <b>guia só é liberada com todos os itens do documento
+                                calculados</b> — faltando um, ela sairia a menor.
                             </p>
 
                             <div className="overflow-x-auto">
                                 <table className="w-full text-[11px]">
                                     <thead>
                                         <tr className="text-left text-slate-500 border-b border-amber-200 dark:border-amber-800">
-                                            <th className="py-1">NF · fornecedor</th>
+                                            <th className="py-1">Item · NCM · CFOP</th>
                                             <th className="py-1 text-right">VA</th>
                                             <th className="py-1 text-right">ICMS pago</th>
                                             <th className="py-1 text-center">IVA-ST %</th>
@@ -284,36 +306,62 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {[...(painel.antecipacao426A?.calculadas || []), ...(painel.antecipacao426A?.pendentes || [])]
-                                            .map(l => (
-                                            <tr key={l.chave} className="border-b border-amber-100 dark:border-amber-900/40">
-                                                <td className="py-1">
-                                                    <span className="font-mono">NF {l.numero}</span> · {l.fornecedor} ({l.ufOrigem})
-                                                </td>
-                                                <td className="py-1 text-right font-mono">{fmtBRL(l.va)}</td>
-                                                <td className="py-1 text-right font-mono">{fmtBRL(l.ic)}</td>
-                                                <td className="py-1 text-center">
-                                                    <input
-                                                        type="number" step="0.01" min={0}
-                                                        defaultValue={ivas[l.chave] || ''}
-                                                        placeholder="—"
-                                                        onBlur={e => mudarIva(l.chave, Number(e.target.value))}
-                                                        className="w-16 px-1 py-0.5 text-right rounded border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800"
-                                                        title="IVA-ST original da Portaria CAT; o ajuste pela interestadual é automático"
-                                                    />
-                                                    {l.ivaFoiAjustado && (
-                                                        <div className="text-[9px] text-amber-700 dark:text-amber-400">
-                                                            aj. {l.ivaAplicado.toFixed(2)}%
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="py-1 text-right font-mono">{l.calculavel ? fmtBRL(l.baseSt) : '—'}</td>
-                                                <td className="py-1 text-right font-mono font-bold">
-                                                    {l.calculavel
-                                                        ? fmtBRL(l.antecipacao)
-                                                        : <span className="text-amber-700 dark:text-amber-400 font-normal">pendente</span>}
-                                                </td>
-                                            </tr>
+                                        {(painel.antecipacao426A?.documentos || []).map(doc => (
+                                            <React.Fragment key={doc.chave}>
+                                                <tr className="bg-amber-100/60 dark:bg-amber-900/30">
+                                                    <td colSpan={5} className="py-1 font-bold">
+                                                        <span className="font-mono">NF {doc.numero}</span> · {doc.fornecedor} ({doc.ufOrigem})
+                                                        {doc.notaMista && (
+                                                            <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] bg-white/70 dark:bg-slate-800 text-amber-800 dark:text-amber-300"
+                                                                title="Esta nota tem itens COM e SEM ST. Os sem ST estão no consolidado acima — não é duplicidade.">
+                                                                nota mista
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-1 text-right font-mono font-bold">
+                                                        {doc.guiaLiberada
+                                                            ? fmtBRL(doc.antecipacaoDocumento)
+                                                            : <span className="text-amber-700 dark:text-amber-400 font-normal">
+                                                                {doc.itensPendentes} item(ns) sem IVA-ST
+                                                            </span>}
+                                                    </td>
+                                                </tr>
+                                                {doc.itens.map(it => (
+                                                    <tr key={`${doc.chave}|${it.nItem}`} className="border-b border-amber-100 dark:border-amber-900/40">
+                                                        <td className="py-1 pl-3">
+                                                            <span className="font-mono text-slate-500">#{it.nItem}</span>{' '}
+                                                            {it.xProd || it.cProd}
+                                                            <span className="block text-[9px] font-mono text-slate-400">
+                                                                NCM {it.ncm || '—'} · CFOP {it.cfop || '—'} · CST {it.cst || '—'}
+                                                                {it.encargosRateados && ' · encargos rateados'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-1 text-right font-mono">{fmtBRL(it.va)}</td>
+                                                        <td className="py-1 text-right font-mono">{fmtBRL(it.ic)}</td>
+                                                        <td className="py-1 text-center">
+                                                            <input
+                                                                type="number" step="0.01" min={0}
+                                                                defaultValue={ivas[`${doc.chave}|${it.nItem}`] || ''}
+                                                                placeholder="—"
+                                                                onBlur={e => mudarIva(`${doc.chave}|${it.nItem}`, Number(e.target.value))}
+                                                                className="w-16 px-1 py-0.5 text-right rounded border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800"
+                                                                title="IVA-ST da Portaria CAT do SEGMENTO desta mercadoria (NCM). O ajuste pela interestadual é automático."
+                                                            />
+                                                            {it.ivaFoiAjustado && (
+                                                                <div className="text-[9px] text-amber-700 dark:text-amber-400">
+                                                                    aj. {it.ivaAplicado.toFixed(2)}%
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="py-1 text-right font-mono">{it.calculavel ? fmtBRL(it.baseSt) : '—'}</td>
+                                                        <td className="py-1 text-right font-mono font-bold">
+                                                            {it.calculavel
+                                                                ? fmtBRL(it.antecipacao)
+                                                                : <span className="text-amber-700 dark:text-amber-400 font-normal">pendente</span>}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </React.Fragment>
                                         ))}
                                     </tbody>
                                 </table>
@@ -322,10 +370,11 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                             {painel.antecipacao426A && (
                                 <p className="text-[11px] mt-2 text-slate-700 dark:text-slate-200">
                                     <b>{fmtBRL(painel.antecipacao426A.totalAntecipacao)}</b> em antecipação —
-                                    {' '}{painel.antecipacao426A.resumo.calculados} de {painel.antecipacao426A.resumo.documentos} documento(s) calculado(s)
-                                    {painel.antecipacao426A.resumo.pendentes > 0 && (
+                                    {' '}{painel.antecipacao426A.resumo.documentosCompletos} de {painel.antecipacao426A.resumo.documentos} documento(s) com guia liberada
+                                    {' '}· {painel.antecipacao426A.resumo.itensCalculados} item(ns) calculado(s)
+                                    {painel.antecipacao426A.resumo.itensPendentes > 0 && (
                                         <span className="text-amber-700 dark:text-amber-400">
-                                            {' '}· {painel.antecipacao426A.resumo.pendentes} sem IVA-ST informado (fora do total — pendente não é isento)
+                                            {' '}· {painel.antecipacao426A.resumo.itensPendentes} item(ns) sem IVA-ST (fora do total — pendente não é isento)
                                         </span>
                                     )}
                                 </p>

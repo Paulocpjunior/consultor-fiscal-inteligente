@@ -4,7 +4,8 @@
 //   GET /api/admin/difal/varredura?competencia=   quais clientes do SIMPLES
 //       têm compra interestadual no mês (fase leve — emitente.uf + vST)
 //   GET /api/admin/difal/painel?empresaId=&competencia=&aliq=CHAVE:ALIQ,...
-//                                &iva=CHAVE:IVA[:aj],...
+//                                &iva=CHAVE|NITEM:IVA[:aj],...   (IVA-ST é POR ITEM:
+//                                o índice é do SEGMENTO/NCM, não da nota)
 //       apuração mensal consolidada de UM cliente (difal-aquisicao.js puro) +
 //       antecipação do art. 426-A por documento (difal-426a.js puro)
 //
@@ -18,7 +19,7 @@ import { requireAuth } from './require-admin.js';
 import { podeAcessarEmpresaId, getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { montarDifalMensal, ALIQ_INTERNA_PADRAO_SP } from './difal-aquisicao.js';
-import { apurarAntecipacoes426A } from './difal-426a.js';
+import { apurarAntecipacoes426APorItem } from './difal-426a.js';
 import { cnpjEmitente, ufEmitente, modeloDoDoc } from './participante-doc-helper.js';
 
 const router = Router();
@@ -159,25 +160,26 @@ router.get('/painel', requireAuth, async (req, res) => {
 
         // FASE 2 — antecipação do art. 426-A das notas com ST (uma guia POR
         // documento). O IVA-ST vem da Portaria CAT e é informado na tela:
-        // ?iva=CHAVE:VALOR ou CHAVE:VALOR:aj (quando já é o ajustado).
-        const parametrosPorChave = {};
+        // ?iva=CHAVE|NITEM:VALOR[:aj]  — o IVA-ST é POR ITEM porque vem da
+        // Portaria CAT do SEGMENTO (NCM). Uma nota com dois NCMs pode precisar
+        // de dois índices; pedir "o IVA da nota" seria pedir a coisa errada
+        // (Paulo, 04/08: "não pode aglutinar").
+        const ivaPorItem = {};
         for (const par of String(req.query.iva || '').split(',')) {
-            const [chave, valor, marca] = par.split(':');
-            if (chave && Number(valor) > 0) {
-                parametrosPorChave[chave.trim()] = {
-                    ivaSt: Number(valor),
-                    ivaJaAjustado: String(marca || '').trim().toLowerCase() === 'aj',
-                    aliqInterna: aliqInternaPorChave[chave.trim()],
-                };
-            }
+            const [ref, valor, marca] = par.split(':');
+            const alvo = String(ref || '').trim();
+            if (!alvo || !(Number(valor) > 0)) continue;
+            const chaveDoItem = alvo.includes('|') ? alvo : null;
+            if (!chaveDoItem) continue;   // formato antigo (nota inteira) é recusado
+            ivaPorItem[chaveDoItem] = {
+                ivaSt: Number(valor),
+                ivaJaAjustado: String(marca || '').trim().toLowerCase() === 'aj',
+                aliqInterna: aliqInternaPorChave[chaveDoItem.split('|')[0]],
+            };
         }
-        // Reanexa o documento cru de cada linha com ST — o 426-A precisa dos
-        // totais (frete, seguro, IPI) que a consolidação não carrega.
-        const porChave = new Map(docs.map((d) => [d.chave || d.id, d]));
-        const comSt = (resultado.antecipacaoIndividual || []).map((l) => ({
-            ...l, doc: porChave.get(l.chave) || null,
-        }));
-        const antecipacao426A = apurarAntecipacoes426A(comSt, parametrosPorChave, ALIQ_INTERNA_PADRAO_SP);
+        const antecipacao426A = apurarAntecipacoes426APorItem(
+            resultado.antecipacaoIndividual || [], ivaPorItem, ALIQ_INTERNA_PADRAO_SP,
+        );
 
         return res.json({
             ok: true, empresa, competencia, ...resultado,
