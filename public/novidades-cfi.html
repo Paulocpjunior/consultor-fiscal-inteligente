@@ -257,10 +257,28 @@
     tabela do SERPRO, e código fiscal <strong>não se chuta</strong>. Enquanto ele não entra, o app
     <strong>recusa transmitir</strong> em vez de mandar a natureza errada — a competência sai pelo
     <strong>e-CAC</strong>, na mão. Entrega ao PGDAS-D não se desfaz; por isso a trava.</p>
-    <div class="ganho">💡 <strong>Ajuda aqui:</strong> se você tem cliente cuja declaração <u>já foi
-    aceita</u> com essa atividade, abra a empresa no Simples e clique em
-    <strong>🔎 Atividades declaradas</strong> — ele lê os códigos da própria declaração e mostra o que
-    falta. Mande o print pro Paulo e a trava cai.</div>
+    <h3>⚠️ Três números diferentes — não confunda</h3>
+    <p>Essa é a dúvida que mais aparece. Nenhum dos três substitui o outro:</p>
+    <ul>
+        <li><strong>CCM / Inscrição Municipal</strong> (ex.: 1.234.567-8) — o cadastro da empresa
+        <u>na Prefeitura de São Paulo</u>. Diz <em>quem</em> é a empresa. Fica no CFI em
+        <em>Dados Fiscais → CCM-SP</em> e no rodapé de qualquer NFS-e emitida.</li>
+        <li><strong>Código de serviço do município</strong> (ex.: 05266 — serviços contábeis) — diz
+        <em>o que</em> a empresa faz, na lista da PMSP. É ele que sustenta o enquadramento como
+        sociedade uniprofissional e o ISS em valor fixo.</li>
+        <li><strong>idAtividade do PGDAS-D</strong> — número da <u>Receita Federal</u>, que só existe
+        dentro da declaração do Simples. <strong>É este que falta</strong> e é o único que destrava a
+        emissão do DAS.</li>
+    </ul>
+    <p><strong>Por que o cadastro da Prefeitura não resolve:</strong> o PGDAS-D é declaração federal.
+    A Prefeitura não tem — e nunca teve — o número que a Receita usa lá dentro. Buscar o CCM não
+    adianta para esta trava.</p>
+    <div class="ganho">💡 <strong>Onde achar o número que falta:</strong> no e-CAC, na tela de
+    atividades da declaração (aquela lista com "Prestação de Serviços, exceto para o exterior"),
+    aperte <strong>F12</strong>, clique na caixinha marcada e leia o <code>value</code> dela.
+    Depois: CFI → Simples → empresa → <strong>⚙️ Código ISS fixo</strong> → digita → pronto, libera
+    para todas as empresas. Ou, se alguma empresa já declarou certo alguma vez, o botão
+    <strong>🔎 Atividades declaradas</strong> acha sozinho.</div>
 </section>
 
 <section>
