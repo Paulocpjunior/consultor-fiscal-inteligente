@@ -4,7 +4,9 @@
 //   GET /api/admin/difal/varredura?competencia=   quais clientes do SIMPLES
 //       têm compra interestadual no mês (fase leve — emitente.uf + vST)
 //   GET /api/admin/difal/painel?empresaId=&competencia=&aliq=CHAVE:ALIQ,...
-//       apuração mensal consolidada de UM cliente (difal-aquisicao.js puro)
+//                                &iva=CHAVE:IVA[:aj],...
+//       apuração mensal consolidada de UM cliente (difal-aquisicao.js puro) +
+//       antecipação do art. 426-A por documento (difal-426a.js puro)
 //
 // Duas fases pelo mesmo motivo da DIPAM: ler documentos inteiros de todo
 // mundo por causa de alguns compradores interestaduais seria caro.
@@ -15,7 +17,8 @@ import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { podeAcessarEmpresaId, getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
-import { montarDifalMensal } from './difal-aquisicao.js';
+import { montarDifalMensal, ALIQ_INTERNA_PADRAO_SP } from './difal-aquisicao.js';
+import { apurarAntecipacoes426A } from './difal-426a.js';
 
 const router = Router();
 
@@ -126,7 +129,34 @@ router.get('/painel', requireAuth, async (req, res) => {
         const docs = snap.docs.map((s) => ({ id: s.id, ...s.data() })).filter((d) => !d._merged_into);
 
         const resultado = montarDifalMensal({ docs, empresa, aliqInternaPorChave });
-        return res.json({ ok: true, empresa, competencia, ...resultado, geradoEm: new Date().toISOString() });
+
+        // FASE 2 — antecipação do art. 426-A das notas com ST (uma guia POR
+        // documento). O IVA-ST vem da Portaria CAT e é informado na tela:
+        // ?iva=CHAVE:VALOR ou CHAVE:VALOR:aj (quando já é o ajustado).
+        const parametrosPorChave = {};
+        for (const par of String(req.query.iva || '').split(',')) {
+            const [chave, valor, marca] = par.split(':');
+            if (chave && Number(valor) > 0) {
+                parametrosPorChave[chave.trim()] = {
+                    ivaSt: Number(valor),
+                    ivaJaAjustado: String(marca || '').trim().toLowerCase() === 'aj',
+                    aliqInterna: aliqInternaPorChave[chave.trim()],
+                };
+            }
+        }
+        // Reanexa o documento cru de cada linha com ST — o 426-A precisa dos
+        // totais (frete, seguro, IPI) que a consolidação não carrega.
+        const porChave = new Map(docs.map((d) => [d.chave || d.id, d]));
+        const comSt = (resultado.antecipacaoIndividual || []).map((l) => ({
+            ...l, doc: porChave.get(l.chave) || null,
+        }));
+        const antecipacao426A = apurarAntecipacoes426A(comSt, parametrosPorChave, ALIQ_INTERNA_PADRAO_SP);
+
+        return res.json({
+            ok: true, empresa, competencia, ...resultado,
+            antecipacao426A,
+            geradoEm: new Date().toISOString(),
+        });
     } catch (e) {
         console.error('[difal/painel]', e);
         return res.status(500).json({ ok: false, error: `Falha no painel: ${e.message}` });
