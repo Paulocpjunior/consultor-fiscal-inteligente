@@ -113,6 +113,8 @@ export interface EmpresaXmlOption {
     uf?: string;
     municipio?: string;
     createdBy?: string;
+    /** Cod.Cliente (E-Fiscal) — a equipe busca empresa por ele (04/08). */
+    codCliente?: string;
 }
 
 /**
@@ -157,6 +159,7 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
                 fonte: e.fonte,
                 uf: e.uf,
                 createdBy: e.createdBy,
+                codCliente: e.codCliente,
             })));
         }
     } catch (err: any) {
@@ -175,14 +178,14 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
             .filter(d => !(d.data() as any)._merged_into && !(d.data() as any)._deleted)
             .map(d => {
                 const data = d.data() as SimplesNacionalEmpresa;
-                return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
+                return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'simples' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy, codCliente: data.dadosFiscais?.codCliente };
             })
             .filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
         const lucro: EmpresaXmlOption[] = lucroSnap
             .filter(d => !(d.data() as any)._merged_into && !(d.data() as any)._deleted)
             .map(d => {
                 const data = d.data() as LucroPresumidoEmpresa;
-                return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy };
+                return { id: d.id, nome: data.nome, cnpj: data.cnpj, fonte: 'lucro' as const, uf: data.dadosFiscais?.uf, municipio: (data as any).municipio || undefined, createdBy: data.createdBy, codCliente: data.dadosFiscais?.codCliente };
             })
             .filter(e => !scope || podeVerEmpresaPorCarteira(e, scope));
 
