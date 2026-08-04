@@ -160,3 +160,46 @@ describe('participante sem UF — a nota NÃO pode ir ao arquivo', () => {
         expect(texto).toMatch(/Corrigir endereços/);
     });
 });
+
+describe('NFC-e a consumidor final não é nota defeituosa', () => {
+    // Caso HYPE CAFE (04/08): 157 de 157 NFC-e recusadas como "nota sem CNPJ
+    // do participante". Nenhuma delas tinha defeito — venda de balcão não
+    // identifica o comprador, e o modelo 65 é exatamente isso.
+    const nfce = {
+        id: 'n1',
+        chave: '35260766641236000115650050000001791514653738',   // modelo 65
+        numero: '179', serie: '5', tipo: 'NFCe', modelo: '65',
+        direcao: 'saida', status: 'autorizado', dhEmi: '2026-07-15T12:00:00',
+        cnpjEmit: '66641236000115',
+        valorTotal: 42.5,
+        itens: [{ nItem: '1', cProd: 'CAFE', xProd: 'CAFE', cfop: '5102', vProd: 42.5, uCom: 'UN', qCom: 1 }],
+    } as unknown as DocumentoFiscal;
+
+    it('SEM o código do consumidor: bloqueia, mas com a causa CERTA', () => {
+        const r = conferirAntesDeGerar([nfce], { numeroEmpresaEfiscal: 1385 });
+        const causas = r.problemas.map(p => p.causa).join(' | ');
+        expect(causas).toMatch(/consumidor final/i);
+        expect(causas).not.toMatch(/^Nota sem CNPJ do participante$/);
+        const acao = r.problemas.map(p => p.acao).join(' ');
+        expect(acao).toMatch(/Consumidor final \(NFC-e\)/);
+    });
+
+    it('COM o código informado, a nota entra no arquivo', () => {
+        const r = conferirAntesDeGerar([nfce], {
+            numeroEmpresaEfiscal: 1385,
+            codigoParticipanteConsumidor: 'CONSUMIDOR',
+        });
+        expect(r.notasNoArquivo).toBe(1);
+        expect(r.bloqueios).toBe(0);
+    });
+
+    it('NF-e (modelo 55) sem destinatário CONTINUA sendo erro de verdade', () => {
+        const nfeSemDest = {
+            ...nfce,
+            chave: '35260766641236000115550050000001791514653738',   // modelo 55
+            tipo: 'NFe', modelo: '55',
+        } as unknown as DocumentoFiscal;
+        const r = conferirAntesDeGerar([nfeSemDest], { numeroEmpresaEfiscal: 1385 });
+        expect(r.problemas.map(p => p.causa).join(' ')).toMatch(/Nota sem CNPJ do participante/);
+    });
+});
