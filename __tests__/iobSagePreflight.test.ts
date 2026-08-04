@@ -126,3 +126,37 @@ describe('agrupamento por causa (é assim que se resolve)', () => {
         expect(r.farol).toBe('bloqueado');
     });
 });
+
+describe('participante sem UF — a nota NÃO pode ir ao arquivo', () => {
+    // Caso 04/08 (EDUARDO GUERRA 08/2026): a tela dizia, na MESMA frase,
+    // "90 nota(s) seriam recusadas" e "90 de 90 chegariam lá inteiras".
+    // Era literal: o E010 do participante era pulado, mas o bloco da nota
+    // continuava indo — apontando pra um cadastro que nunca seria criado.
+    const saidaSemUfDoDestinatario = {
+        id: 'd1', chave: '35260800005430000104550010004302141180396820',
+        numero: '430214', serie: '1', tipo: 'NFe', modelo: '55',
+        direcao: 'saida', status: 'autorizado', dhEmi: '2026-08-03T10:00:00',
+        cnpjEmit: '00005430000104',
+        cnpjDest: '58125260000193',      // só o CNPJ — sem nome, sem UF
+        valorTotal: 1000,
+        itens: [{ nItem: '1', cProd: 'X', xProd: 'PROD', cfop: '5102', vProd: 1000, uCom: 'UN', qCom: 1 }],
+    } as unknown as DocumentoFiscal;
+
+    const r = conferirAntesDeGerar([saidaSemUfDoDestinatario], { numeroEmpresaEfiscal: 1137 });
+
+    it('bloqueia a geração', () => {
+        expect(r.farol).toBe('bloqueado');
+        expect(r.bloqueios).toBeGreaterThan(0);
+    });
+
+    it('a nota NÃO é contada como "vai chegar inteira" — o resumo era contraditório', () => {
+        expect(r.notasNoArquivo).toBe(0);
+        expect(r.resumo).not.toMatch(/1 de 1 chegariam/);
+    });
+
+    it('o motivo traz o CNPJ formatado e a ação do botão', () => {
+        const texto = r.problemas.flatMap((p) => p.exemplos).join(' ');
+        expect(texto).toMatch(/58\.125\.260\/0001-93/);
+        expect(texto).toMatch(/Corrigir endereços/);
+    });
+});

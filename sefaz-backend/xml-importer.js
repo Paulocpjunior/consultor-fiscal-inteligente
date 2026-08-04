@@ -909,20 +909,27 @@ export async function corrigirDirecaoEntradaPropria({ limit = 500 } = {}) {
  * idempotente e a query ENCOLHE a cada rodada (doc preenchido sai do filtro),
  * igual ao corrigirDirecaoEntradaPropria.
  */
-export async function preencherEnderecoDestinatario({ limit = 200 } = {}) {
+export async function preencherEnderecoDestinatario({ limit = 200, empresaId = null, competencia = null } = {}) {
   const db = fa().firestore();
-  let examinadas = 0, preenchidas = 0, semXml = 0;
+  let examinadas = 0, preenchidas = 0, semXml = 0, jaTinham = 0;
   try {
-    const snap = await db.collection('documentos_fiscais')
-      .where('direcao', '==', 'saida')
-      .where('ufDest', '==', null)
-      .limit(limit)
-      .get();
+    // ARMADILHA DO FIRESTORE: `where('ufDest', '==', null)` NÃO devolve os
+    // documentos em que o campo simplesmente NÃO EXISTE — e é esse o caso de
+    // tudo que foi capturado antes de 04/08. A primeira versão deste backfill
+    // rodava e não achava nada. Por isso a seleção é por direção (+ empresa e
+    // competência no modo sob demanda) e o filtro do campo é EM MEMÓRIA.
+    let q = db.collection('documentos_fiscais').where('direcao', '==', 'saida');
+    if (empresaId) q = q.where('empresaId', '==', String(empresaId));
+    if (competencia) q = q.where('competencia', '==', String(competencia));
+
+    const snap = await q.limit(empresaId || competencia ? Math.max(limit, 1000) : limit).get();
 
     const bucket = storage.bucket(STORAGE_BUCKET);
     for (const docSnap of snap.docs) {
-      examinadas++;
       const d = docSnap.data() || {};
+      // Já preenchido (inclusive com '' = "o XML não tinha") — não relê.
+      if (d.ufDest !== undefined && d.ufDest !== null) { jaTinham++; continue; }
+      examinadas++;
       if (!d.storagePath) { semXml++; continue; }
       try {
         const [buf] = await bucket.file(d.storagePath).download();
@@ -945,9 +952,9 @@ export async function preencherEnderecoDestinatario({ limit = 200 } = {}) {
     }
   } catch (e) {
     console.warn('[preencherEnderecoDestinatario] query falhou:', e.message);
-    return { examinadas, preenchidas, semXml, erro: e.message };
+    return { examinadas, preenchidas, semXml, jaTinham, erro: e.message };
   }
-  return { examinadas, preenchidas, semXml };
+  return { examinadas, preenchidas, semXml, jaTinham };
 }
 
 export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor }) {
