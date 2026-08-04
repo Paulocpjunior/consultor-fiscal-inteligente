@@ -22,3 +22,10 @@ export function extrairParticipantesNfe(xml: string): XmlParticipantesNfe;
 export function direcaoEfetivaDoc(
     d: { direcao?: string | null; tpNF?: string | number | null } | null | undefined,
 ): string | undefined;
+
+/**
+ * CNPJ/CPF do bloco <autXML> da NF-e — a PROVA de que o cliente autorizou o
+ * escritório a baixar o XML da saída dele (sem isso, Rejeição 641).
+ */
+export function extrairAutXml(xml: string): string[];
+export function autorizadoNoXml(xml: string, cnpjEscritorio: string): boolean;

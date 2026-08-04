@@ -558,6 +558,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   4/6 dígitos vale pra posição) e o mais ESPECÍFICO vence. Ligado no painel
   do DIFAL: era ali que o colaborador digitava o mesmo índice toda
   competência.
+- **APTIDÃO da saída ≠ ATIVIDADE** (Paulo, 04/08: "como assegurar que o
+  cliente fez correto, como podemos confirmar se o cadastro já está apto
+  conforme ele informa"): a Cobertura de Saída olha os últimos N dias e por
+  isso confundia "não configurou" com "configurou e não vendeu no mês" —
+  cobrar quem já fez queima a relação. `aptidao-saida.js` (19 testes) resolve
+  pela PROVA: **uma nota, de QUALQUER data**, que tenha chegado por trilho
+  automático já comprova. A prova literal é o CNPJ do escritório no
+  **`<autXML>`** da nota (`extrairAutXml`/`autorizadoNoXml` no metadata-helper;
+  a captura grava `autXml[]` + `autXmlEscritorio` desde 04/08). Doc antigo
+  segue provado pela ORIGEM: saída que chegou pela SEFAZ só existe com autXML
+  (Rejeição 641). Importação manual/conferência/consulta-chave NÃO provam
+  nada — o XML veio pela mão do colaborador. Cinco estados: apto-ativo,
+  **apto-sem-fluxo** (o caso injusto que existia), apto-parou (suspeita de
+  REGRESSÃO — confirmar, não reenviar instruções), sem-prova (é AQUI que se
+  cobra) e sem-saida-55. Rota `/api/admin/sefaz/aptidao-saida` + painel
+  "✅ O cliente fez certo?" na aba Importar.
 - **GIA caiu em DESUSO** (Paulo, 02/08): não listar como rotina nem gastar
   feature com ela. **SPED Fiscal/Contribuições JÁ É módulo do CFI** (card
   SPED Fiscal: gera mensal/trimestral + conferências; transmissão é no PVA
