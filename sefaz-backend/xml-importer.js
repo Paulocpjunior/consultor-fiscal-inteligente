@@ -703,6 +703,15 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     cnpjEmit: meta.cnpjEmit?.replace(/\D/g, '') || null,
     cnpjDest: meta.cnpjDest?.replace(/\D/g, '') || null,
     xNomeEmit: meta.xNome,
+    // Participante do lado do DESTINATÁRIO — sem isso o Exportar SAGE monta o
+    // E010 das SAÍDAS com nome "CLIENTE" e UF em branco, e o E-Fiscal recusa
+    // o cadastro (derrubando as notas atrás dele). Ver participanteDoDoc.
+    xNomeDest: participantes.destinatario.nome || null,
+    ufDest: participantes.destinatario.uf || null,
+    codMunDest: participantes.destinatario.codMunIBGE || null,
+    ieDest: participantes.destinatario.ie || null,
+    ufEmit: participantes.emitente.uf || null,
+    codMunEmit: participantes.emitente.codMunIBGE || null,
     dhEmi: meta.dhEmi,
     competencia: competenciaFromDhEmi(meta.dhEmi),
     valorTotal: meta.vNF,
@@ -885,6 +894,60 @@ export async function corrigirDirecaoEntradaPropria({ limit = 500 } = {}) {
     return { examinadas, corrigidas, erro: e.message };
   }
   return { examinadas, corrigidas };
+}
+
+/**
+ * BACKFILL — endereço do participante nos docs capturados ANTES de 04/08.
+ *
+ * Até então o importer gravava só `cnpjDest`: nas SAÍDAS (onde o participante
+ * do E-Fiscal É o destinatário) o Exportar SAGE montava o E010 com nome
+ * "CLIENTE" e UF em branco, o E-Fiscal recusava o cadastro e TODAS as notas
+ * atrás caíam em cascata. Caso real 04/08: 30 sem UF + 24 com código divergente
+ * ⇒ 54 notas recusadas, e o log com 162 linhas.
+ *
+ * Relê o XML do Storage e preenche xNomeDest/ufDest/codMunDest/ieDest. É
+ * idempotente e a query ENCOLHE a cada rodada (doc preenchido sai do filtro),
+ * igual ao corrigirDirecaoEntradaPropria.
+ */
+export async function preencherEnderecoDestinatario({ limit = 200 } = {}) {
+  const db = fa().firestore();
+  let examinadas = 0, preenchidas = 0, semXml = 0;
+  try {
+    const snap = await db.collection('documentos_fiscais')
+      .where('direcao', '==', 'saida')
+      .where('ufDest', '==', null)
+      .limit(limit)
+      .get();
+
+    const bucket = storage.bucket(STORAGE_BUCKET);
+    for (const docSnap of snap.docs) {
+      examinadas++;
+      const d = docSnap.data() || {};
+      if (!d.storagePath) { semXml++; continue; }
+      try {
+        const [buf] = await bucket.file(d.storagePath).download();
+        const p = extrairParticipantesNfe(buf.toString('utf8'));
+        // Sem UF no XML não há o que preencher — marca com '' pra sair da
+        // fila (senão o backfill relê o mesmo doc pra sempre).
+        await docSnap.ref.update({
+          xNomeDest: p.destinatario.nome || null,
+          ufDest: p.destinatario.uf || '',
+          codMunDest: p.destinatario.codMunIBGE || null,
+          ieDest: p.destinatario.ie || null,
+          ufEmit: p.emitente.uf || null,
+          codMunEmit: p.emitente.codMunIBGE || null,
+        });
+        if (p.destinatario.uf) preenchidas++;
+      } catch (e) {
+        console.warn(`[preencherEnderecoDestinatario] falha em ${docSnap.id}:`, e.message);
+        semXml++;
+      }
+    }
+  } catch (e) {
+    console.warn('[preencherEnderecoDestinatario] query falhou:', e.message);
+    return { examinadas, preenchidas, semXml, erro: e.message };
+  }
+  return { examinadas, preenchidas, semXml };
 }
 
 export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor }) {

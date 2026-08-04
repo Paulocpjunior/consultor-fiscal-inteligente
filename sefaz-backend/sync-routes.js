@@ -12,7 +12,7 @@ import { requireAuth } from './require-admin.js';
 import { consultaNFePorChave } from './sefaz-client.js';
 import { loadCertificate } from './secret-loader.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
-import { importarXmlSefaz, reatribuirDesconhecidas, corrigirDirecaoEntradaPropria } from './xml-importer.js';
+import { importarXmlSefaz, reatribuirDesconhecidas, corrigirDirecaoEntradaPropria, preencherEnderecoDestinatario } from './xml-importer.js';
 import { withCronHeartbeat, listarCronsOrfaos } from './cron-heartbeat.js';
 import { manifestarPendentes } from './manifesto-orchestrator.js';
 import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibility.js';
@@ -215,6 +215,18 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
       }
     } catch (e) {
       console.warn('[sync-cron] correção de direção tpNF=0 falhou:', e.message);
+    }
+
+    // Endereço do destinatário nos docs capturados antes de 04/08 — sem UF o
+    // Exportar SAGE não consegue cadastrar o participante (E010) e a
+    // importação inteira cai em cascata. Drena aos poucos, idempotente.
+    try {
+      const e = await preencherEnderecoDestinatario({ limit: 200 });
+      if (e.preenchidas > 0) {
+        console.log(`[sync-cron] endereço do destinatário: ${e.preenchidas}/${e.examinadas} nota(s) preenchida(s) (${e.semXml} sem XML)`);
+      }
+    } catch (e) {
+      console.warn('[sync-cron] backfill de endereço do destinatário falhou:', e.message);
     }
 
     console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);

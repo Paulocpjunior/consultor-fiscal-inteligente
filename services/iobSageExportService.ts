@@ -278,15 +278,27 @@ export function participanteDoDoc(d: DocumentoFiscal): ParticipanteNF | null {
     const nome = obj?.nome
         || (usaDestinatario ? x.xNomeDest : x.xNomeEmit)
         || (usaDestinatario ? 'CLIENTE' : 'FORNECEDOR');
+    // Campos achatados do destinatário: a captura passou a gravá-los em
+    // 04/08 (xNomeDest/ufDest/codMunDest). Docs anteriores continuam sem —
+    // por isso o backfill `preencherEnderecoDestinatario` no sync-cron.
+    const ufFlat = usaDestinatario ? x.ufDest : x.ufEmit;
+    const munFlat = usaDestinatario ? x.codMunDest : x.codMunEmit;
     // UF: campo do participante → derivada do MUNICÍPIO (IBGE, 2 primeiros
     // dígitos = mesma tabela do cUF) → chave de acesso (só vale pro emitente).
     // UF em branco no E010 é recusa certa: "Campo 10, UF inválida" derrubou 53
     // participantes (e as notas todas atrás) no caso 31/07.
     const uf = obj?.uf
         || ufDoMunicipioIBGE(obj?.codMunIBGE)
+        || ufFlat
+        || ufDoMunicipioIBGE(munFlat)
         || (!usaDestinatario ? ufDaChave(d.chave) : '')
         || '';
-    return { cnpjCpf, nome: String(nome), uf: String(uf), ie: obj?.ie };
+    return {
+        cnpjCpf,
+        nome: String(nome),
+        uf: String(uf),
+        ie: obj?.ie || (usaDestinatario ? x.ieDest : undefined),
+    };
 }
 
 /** UF pelo código IBGE do município (2 primeiros dígitos = código da UF). */
@@ -746,6 +758,20 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
             // Participante com código MAPEADO já existe no E-Fiscal — mandar
             // E010 de novo é o que dispara o "já cadastrado com outro Código".
             if (codigosParticipantes?.[part.cnpjCpf]?.trim()) continue;
+            // E010 SEM UF é recusa certa — e derruba as notas atrás dele em
+            // cascata (caso 04/08: 30 participantes sem UF ⇒ 54 notas fora).
+            // Melhor deixar a nota FORA e dizer QUEM falta do que mandar um
+            // arquivo que o E-Fiscal rejeita inteiro com 162 erros.
+            if (!part.uf) {
+                falhas.push({
+                    documento: rotuloDoc(d),
+                    motivo: `participante ${part.cnpjCpf} sem UF — o E-Fiscal recusa o cadastro `
+                        + '(E010 campo 10). O endereço do destinatário passou a ser capturado em '
+                        + '04/08; para notas antigas, rode a sincronização e gere de novo. '
+                        + 'Se persistir, informe o código do participante no De→Para.',
+                });
+                continue;
+            }
             e010Set.set(part.cnpjCpf, buildE010(d));
         } catch (err: any) {
             falhas.push({ documento: rotuloDoc(d), motivo: `participante: ${err?.message || err}` });
