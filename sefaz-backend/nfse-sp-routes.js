@@ -157,6 +157,22 @@ router.post('/nfsesp-importar-csv', requireAdmin, uploadCsv.single('csv'), async
     try {
         if (!req.file) return res.status(400).json({ erro: 'Arquivo CSV obrigatório no campo "csv"' });
 
+        // O portal mudou: em 04/08/2026 a tela "Resumo da consulta" oferece
+        // TXT (Layout V.004). Quem sobe o TXT aqui recebia "CSV inválido" e
+        // ficava sem saber o que fazer — a mensagem tem que dizer a AÇÃO.
+        const nomeArq = String(req.file.originalname || '').toLowerCase();
+        const primeiraLinha = req.file.buffer.toString('latin1').split(/\r?\n/)[0] || '';
+        const pareceTxtLargura = !primeiraLinha.includes(';') && primeiraLinha.length > 60;
+        if (nomeArq.endsWith('.txt') && pareceTxtLargura) {
+            return res.status(400).json({
+                erro: 'Este arquivo é o TXT de largura fixa do portal (Layout do Arquivo NFS-e), '
+                    + 'e esta importação lê o CSV (campos separados por ";"). O CFI ainda não '
+                    + 'monta o TXT. O que fazer agora: na tela de exportação do portal, escolha '
+                    + 'CSV se a opção existir; se só houver TXT, mande o arquivo ao Paulo para '
+                    + 'liberarmos a leitura desse layout.',
+            });
+        }
+
         // Parse direto do buffer (parser decodifica ISO-8859-1 internamente)
         let parsed;
         try {
