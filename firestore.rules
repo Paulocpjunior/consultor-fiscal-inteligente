@@ -424,6 +424,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ncm_parametros: cadastro de NCM (aliquota interna, IVA-ST, CEST).
+    // Leitura liberada a quem esta logado — a tela consulta direto; ESCRITA
+    // so pelo backend, que valida (IVA-ST sem Portaria e aliquota fora da
+    // faixa sao recusados la).
+    match /ncm_parametros/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if false;
+    }
+
     match /nfse_nacional_emitidas/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
