@@ -18,7 +18,7 @@
 import type { DocumentoFiscal } from '../types';
 import {
     exportarParaIobSage, participanteDoDoc, numeroDaNota, cfopParaEscriturar,
-    ehNfceConsumidorFinal,
+    motivoConsumidorNfce,
     type CfopCtx,
 } from './iobSageExportService';
 
@@ -129,30 +129,37 @@ export function conferirAntesDeGerar(
             continue;
         }
 
-        if (!participanteDoDoc(d)) {
-            // NFC-e a consumidor final NÃO é nota defeituosa: venda de balcão
-            // não identifica o comprador. Misturar as duas causas fez 157
-            // NFC-e da HYPE CAFE aparecerem como "nota sem CNPJ" (04/08) e a
-            // equipe procurar defeito onde não havia.
-            if (ehNfceConsumidorFinal(d)) {
-                if (!opts.codigoParticipanteConsumidor?.trim()) marcar(d);
-                balde.add({
-                    causa: 'NFC-e a consumidor final (sem CNPJ do comprador — é o normal)',
-                    oQueAconteceLa: 'Sem um código de participante, o E200 não tem a quem apontar e a nota fica de fora.',
-                    acao: 'Informe o código do participante "Consumidor" do E-Fiscal deste cliente no campo '
-                        + '"Consumidor final (NFC-e)" acima. Ele vem do cadastro de Clientes/Fornecedores de lá — '
-                        + 'não é código oficial, cada escritório tem o seu.',
-                    gravidade: opts.codigoParticipanteConsumidor?.trim() ? 'atencao' : 'bloqueia',
-                }, rotulo(d));
-            } else {
-                marcar(d);
-                balde.add({
-                    causa: 'Nota sem CNPJ do participante',
-                    oQueAconteceLa: 'Sem participante não dá pra gerar o E010 nem o E200 — a nota fica de fora.',
-                    acao: 'Confira o documento na Central de XMLs: emitente (entrada) ou destinatário (saída) sem CNPJ.',
-                    gravidade: 'bloqueia',
-                }, rotulo(d));
-            }
+        // NFC-e a consumidor final NÃO é nota defeituosa: venda de balcão não
+        // identifica o comprador. Misturar as duas causas fez 157 NFC-e da
+        // HYPE CAFE aparecerem como "nota sem CNPJ" (04/08) e a equipe procurar
+        // defeito onde não havia. A pergunta vem ANTES de "tem participante?":
+        // cupom COM CPF tem participante e mesmo assim não é cadastrável.
+        const motivoConsumidor = motivoConsumidorNfce(d);
+        if (motivoConsumidor) {
+            const temCodigo = !!opts.codigoParticipanteConsumidor?.trim();
+            if (!temCodigo) marcar(d);
+            balde.add({
+                causa: motivoConsumidor === 'cpf-no-cupom'
+                    ? 'NFC-e com o CPF do comprador no cupom (não vira participante)'
+                    : 'NFC-e a consumidor final (sem CNPJ do comprador — é o normal)',
+                oQueAconteceLa: motivoConsumidor === 'cpf-no-cupom'
+                    ? 'O CPF do cupom é da Nota Fiscal Paulista e vem SEM endereço: o E010 sairia sem UF e '
+                      + 'o E-Fiscal recusaria o participante — e a nota atrás dele.'
+                    : 'Sem um código de participante, o E200 não tem a quem apontar e a nota fica de fora.',
+                acao: 'Informe o código do participante "Consumidor" do E-Fiscal deste cliente no campo '
+                    + '"Consumidor final (NFC-e)" acima. Ele vem do cadastro de Clientes/Fornecedores de lá — '
+                    + 'não é código oficial, cada escritório tem o seu. O código fica guardado no cadastro '
+                    + 'da empresa: só se digita uma vez.',
+                gravidade: temCodigo ? 'atencao' : 'bloqueia',
+            }, rotulo(d));
+        } else if (!participanteDoDoc(d)) {
+            marcar(d);
+            balde.add({
+                causa: 'Nota sem CNPJ do participante',
+                oQueAconteceLa: 'Sem participante não dá pra gerar o E010 nem o E200 — a nota fica de fora.',
+                acao: 'Confira o documento na Central de XMLs: emitente (entrada) ou destinatário (saída) sem CNPJ.',
+                gravidade: 'bloqueia',
+            }, rotulo(d));
         }
 
         if (numeroDaNota(d) <= 0) {

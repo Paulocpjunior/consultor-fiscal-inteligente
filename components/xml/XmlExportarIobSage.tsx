@@ -45,6 +45,10 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // O código do participante "Consumidor" vem do cadastro do E-Fiscal de
     // CADA cliente (não é tabela oficial), igual ao Tipo p/ Inventário.
     const [codigoConsumidor, setCodigoConsumidor] = useState<string>('');
+    // O que está GRAVADO no cadastro da empresa — o botão só aparece quando o
+    // campo diverge, senão o colaborador não sabe se salvou.
+    const [consumidorSalvo, setConsumidorSalvo] = useState<string>('');
+    const [salvandoConsumidor, setSalvandoConsumidor] = useState(false);
     // Notas que ficaram FORA do arquivo. Antes isso era console.warn: o .FML
     // saía só com produtos e o E-Fiscal ainda dizia "importado com sucesso".
     const [falhas, setFalhas] = useState<Array<{ documento: string; motivo: string }>>([]);
@@ -132,14 +136,50 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     const empresaSelecionada = empresas.find(e => e.id === empresaId) || null;
 
-    // Configuração de CFOP da empresa escolhida.
+    // Configuração de CFOP + código do CONSUMIDOR da empresa escolhida.
     useEffect(() => {
         let alive = true;
-        if (!empresaSelecionada) { setCfopCtx(undefined); return; }
+        if (!empresaSelecionada) { setCfopCtx(undefined); setCodigoConsumidor(''); setConsumidorSalvo(''); return; }
         getDadosFiscaisEmpresa(empresaSelecionada.fonte, empresaSelecionada.id)
-            .then(df => { if (alive) setCfopCtx(df ? { naturezaAtividade: df.naturezaAtividade, cfopOverrides: df.cfopOverrides } : undefined); });
+            .then(df => {
+                if (!alive) return;
+                setCfopCtx(df ? { naturezaAtividade: df.naturezaAtividade, cfopOverrides: df.cfopOverrides } : undefined);
+                const cod = String(df?.codigoParticipanteConsumidor || '');
+                setCodigoConsumidor(cod);
+                setConsumidorSalvo(cod);
+            });
         return () => { alive = false; };
     }, [empresaSelecionada?.id, empresaSelecionada?.fonte]);
+
+    // O código do CONSUMIDOR não é código oficial: vem do cadastro do E-Fiscal
+    // de CADA cliente. Redigitar a cada competência é o caminho pra esquecer e
+    // gerar o arquivo sem as NFC-e — por isso ele fica no cadastro da empresa.
+    const handleSalvarConsumidor = async () => {
+        if (!empresaSelecionada) return;
+        setSalvandoConsumidor(true);
+        try {
+            const u = getAuth().currentUser;
+            if (!u) throw new Error('Sessão expirada — entre de novo.');
+            const res = await fetch('/api/admin/sefaz/empresa-dados-fiscais', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${await u.getIdToken()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cnpj: empresaSelecionada.cnpj,
+                    dadosFiscais: { codigoParticipanteConsumidor: codigoConsumidor.trim() },
+                }),
+            });
+            const j = await res.json();
+            if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+            setConsumidorSalvo(codigoConsumidor.trim());
+            onShowToast?.(codigoConsumidor.trim()
+                ? 'Código do Consumidor guardado no cadastro desta empresa.'
+                : 'Código do Consumidor apagado do cadastro desta empresa.');
+        } catch (e: any) {
+            onShowToast?.(`Não foi possível guardar o código: ${e?.message || e}`);
+        } finally {
+            setSalvandoConsumidor(false);
+        }
+    };
 
     const buscar = async () => {
         if (!competencia) {
@@ -320,6 +360,14 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
             onShowToast?.(
                 `Arquivo ${result.fileName}: ${st.notasNoArquivo} de ${st.documentos} NF, ` +
                 `${st.participantes} participantes, ${st.produtos} produtos.`
+                // Farol honesto: "foi tudo pro CONSUMIDOR" não pode ficar
+                // invisível — é escrituração no participante genérico.
+                + (st.nfceConsumidor > 0
+                    ? ` ${st.nfceConsumidor} NFC-e no participante CONSUMIDOR`
+                      + (st.nfceConsumidorComCpf > 0
+                          ? ` (${st.nfceConsumidorComCpf} com CPF no cupom).`
+                          : '.')
+                    : '')
                 + (result.falhas.length > 0 ? ` ⚠ ${result.falhas.length} item(ns) ficaram de fora.` : ''),
             );
         } catch (err: any) {
@@ -605,12 +653,29 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             onChange={(e) => setCodigoConsumidor(e.target.value)}
                             placeholder="código do participante CONSUMIDOR no E-Fiscal"
                             className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm"
-                            title="NFC-e (modelo 65) de venda a consumidor não tem CNPJ do comprador — isso é o normal dela. Informe aqui o código do participante 'Consumidor' que EXISTE no cadastro de Clientes/Fornecedores do E-Fiscal deste cliente."
+                            title="NFC-e (modelo 65) de venda a consumidor não vira participante — nem quando o cupom traz o CPF do comprador, porque ele vem sem endereço. Informe aqui o código do participante 'Consumidor' que EXISTE no cadastro de Clientes/Fornecedores do E-Fiscal deste cliente."
                         />
                         <p className="text-[10px] text-slate-400 mt-1">
                             Só para quem emite <strong>NFC-e</strong> (bar, restaurante, varejo): a venda de balcão
-                            não identifica o comprador. Sem este código, essas notas ficam de fora do arquivo.
+                            não identifica o comprador. Vale também quando o cupom traz <strong>só o CPF</strong> —
+                            o CPF da Nota Fiscal Paulista vem sem endereço e o E-Fiscal recusaria o participante.
+                            Sem este código, essas notas ficam de fora do arquivo.
                         </p>
+                        {empresaSelecionada && (
+                            codigoConsumidor.trim() !== consumidorSalvo.trim() ? (
+                                <button
+                                    onClick={handleSalvarConsumidor}
+                                    disabled={salvandoConsumidor}
+                                    className="mt-1 px-2 py-1 text-[10px] rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-semibold disabled:opacity-40"
+                                >
+                                    {salvandoConsumidor ? 'Guardando…' : '💾 Guardar no cadastro desta empresa'}
+                                </button>
+                            ) : consumidorSalvo.trim() ? (
+                                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">
+                                    ✓ guardado no cadastro — não precisa digitar de novo na próxima competência
+                                </p>
+                            ) : null
+                        )}
                     </div>
 
                     <div>

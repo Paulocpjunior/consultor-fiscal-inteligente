@@ -898,16 +898,24 @@ export const xmlCollections = COLLECTIONS;
 export async function getDadosFiscaisEmpresa(
     fonte: 'simples' | 'lucro',
     empresaId: string,
-): Promise<{ naturezaAtividade?: string | null; cfopOverrides?: Record<string, string> | null } | null> {
+): Promise<{
+    naturezaAtividade?: string | null;
+    cfopOverrides?: Record<string, string> | null;
+    codigoParticipanteConsumidor?: string | null;
+} | null> {
     if (!isFirebaseConfigured || !db || !empresaId) return null;
     try {
         const colecao = fonte === 'simples' ? 'simples_empresas' : 'lucro_empresas';
         const snap = await getDoc(doc(db, colecao, empresaId));
         if (!snap.exists()) return null;
         const df = (snap.data() as any)?.dadosFiscais || {};
+        // CUIDADO (lição da whitelist #382, do lado do cliente): esta lista é
+        // EXPLÍCITA — campo novo que não entrar aqui é lido como vazio e a tela
+        // se comporta como se nunca tivesse sido cadastrado.
         return {
             naturezaAtividade: df.naturezaAtividade ?? null,
             cfopOverrides: df.cfopOverrides ?? null,
+            codigoParticipanteConsumidor: df.codigoParticipanteConsumidor ?? null,
         };
     } catch {
         return null;
