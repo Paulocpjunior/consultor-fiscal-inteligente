@@ -833,6 +833,20 @@ export interface ExportarResult {
     };
 }
 
+/**
+ * Rótulo com que uma falha da geração identifica a nota.
+ *
+ * EXPORTADO de propósito: o freio (preflight) precisa reencontrar a nota a
+ * partir da falha para não contá-la duas vezes. Quando cada lado montava o
+ * seu próprio rótulo, a busca falhava SEMPRE e a nota entrava na conta como
+ * texto solto — e de novo pelo id, no laço das regras de conteúdo. Era daí o
+ * "3651 vão chegar + 803 recusadas" num recorte de 4165 (caso NOVA ERA
+ * 07/2026, print do Paulo).
+ */
+export function rotuloDocumentoFalha(d: DocumentoFiscal): string {
+    return `NF ${d.numero || '?'}${d.serie ? `/${d.serie}` : ''} · ${d.chave || d.id}`;
+}
+
 export function exportarParaIobSage(params: ExportarParams): ExportarResult {
     const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes, redfNfPaulista = '', codigoParticipanteConsumidor = '', ufPorParticipante } = params;
     if (ufPorParticipante) definirUfPorParticipante(ufPorParticipante);
@@ -850,8 +864,7 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
     const e001 = buildE001(numeroEmpresaEfiscal);
 
     const falhas: Array<{ documento: string; motivo: string }> = [];
-    const rotuloDoc = (d: DocumentoFiscal) =>
-        `NF ${d.numero || '?'}${d.serie ? `/${d.serie}` : ''} · ${d.chave || d.id}`;
+    const rotuloDoc = rotuloDocumentoFalha;
 
     // 2. E010 — um por participante unico (CNPJ/CPF).
     const e010Set = new Map<string, string>();

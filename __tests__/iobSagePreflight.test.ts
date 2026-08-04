@@ -307,3 +307,42 @@ describe('contagem por NOTA, não por ocorrência', () => {
         expect(r.bloqueios + r.notasNoArquivo).toBe(docs.length);
     });
 });
+
+describe('"vão chegar" tem que fechar com "seriam recusadas"', () => {
+    // Caso NOVA ERA 07/2026 (print do Paulo): "3651/4165 vão chegar" ao lado de
+    // "803 seriam recusadas" — 4454 num recorte de 4165. A nota com CFOP
+    // inválido o gerador MONTA (ela ia pro arquivo), mas o E-Fiscal recusa
+    // depois: ela estava contada nos dois lados.
+    const comCfopRuim = (n: number) => doc({
+        id: `k${n}`, numero: String(1000 + n),
+        itens: [{ cProd: 'A', cfop: '9999', vProd: 10 }],
+    });
+
+    it('A RAIZ: nota que o gerador rejeita é contada UMA vez, não duas', () => {
+        // Ela dispara as duas causas ("o app não consegue montar" + "sem CNPJ
+        // do participante"). O freio não reencontrava a nota pela falha —
+        // rótulos diferentes dos dois lados — e somava as duas.
+        const r = conferirAntesDeGerar([doc(), doc({ id: 'd2', cnpjEmit: undefined })], opts);
+        expect(r.bloqueios).toBe(1);
+        expect(r.notasNoArquivo).toBe(1);
+        expect(r.problemas.length).toBe(2);   // duas causas, uma nota
+    });
+
+    it('nota que o gerador MONTA mas o E-Fiscal recusa não conta como "vai chegar"', () => {
+        const r = conferirAntesDeGerar([doc(), comCfopRuim(1), comCfopRuim(2)], opts);
+        expect(r.bloqueios).toBe(2);
+        expect(r.notasNoArquivo).toBe(1);          // era 3 — o gerador monta as três
+        expect(r.bloqueios + r.notasNoArquivo).toBe(3);
+    });
+
+    it('a soma nunca estoura o recorte, misturando as causas', () => {
+        const mistura = [
+            doc(),                                   // ok
+            comCfopRuim(3),                          // monta, mas é recusada lá
+            doc({ id: 'k9', cnpjEmit: undefined }),  // o gerador nem monta
+        ];
+        const r = conferirAntesDeGerar(mistura, opts);
+        expect(r.bloqueios + r.notasNoArquivo).toBe(mistura.length);
+        expect(r.notasNoArquivo).toBeLessThanOrEqual(mistura.length - r.bloqueios);
+    });
+});
