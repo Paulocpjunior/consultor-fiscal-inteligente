@@ -19,7 +19,12 @@ export interface AjustesClassificados {
     erros: string[];
 }
 
-export function classificarAjustes(ajustes: AjusteApuracao[] | null | undefined, ufEmpresa?: string): AjustesClassificados;
+export function classificarAjustes(
+    ajustes: AjusteApuracao[] | null | undefined,
+    ufEmpresa?: string,
+    /** 'proprio' = E111 (padrão) · 'st' = E220. Ajuste da outra apuração é ignorado em silêncio. */
+    apuracaoAlvo?: 'proprio' | 'st',
+): AjustesClassificados;
 
 export function aplicarAjustesApuracao(
     base: { vlTotDebitos?: number; vlTotCreditos?: number; vlSldCredorAnt?: number },

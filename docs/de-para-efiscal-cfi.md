@@ -15,7 +15,7 @@
 | Bloco D (CT-e) | ✔ | idem | ✅ |
 | Bloco E — apuração ICMS (E100/E110/E116) + IPI (E200/E210) | ✔ | idem | ✅ |
 | **Bloco E — ajustes de apuração (E111)** | ✔ | aba "Ajustes E111" do card SPED Fiscal (crédito outorgado, estornos, deduções, débitos especiais; tipo derivado do código 5.1.1) | ✅ **02/08** |
-| Bloco E — ST/DIFAL (E200-ST/E220/E310) | ✔ | não gera — código de ST é recusado na aba com aviso | 🔴 |
+| Bloco E — ST (E200/E210/E220/E250) | ✔ | apuração por UF de destino a partir do ST retido nas saídas; ajustes de ST na mesma aba do E111 (código com '1' no 3º caractere) | ✅ **04/08** — validar no PVA. E310 (DIFAL/FCP partilha) segue 🔴 |
 | Bloco G (CIAP — crédito de ativo) | ✔ | aba 🏭 CIAP do card SPED Fiscal (bens em 48 parcelas + índice das saídas tributadas; G001/G110/G125/G990) | ✅ **03/08** — régua conferida contra o CIAP real da EXPERTE 06/2026 (Σ parcelas 527,53 × índice 0,86032111 = 453,85). Falta: cadastrar os bens da EXPERTE e validar o arquivo no PVA |
 | Bloco H (inventário) | ✔ | gera H005/H010 (qtd/valor a preencher) | 🟡 |
 | Bloco K (produção) | ✔ | bloco vazio | 🔴 depende do F0 (quantas indústrias reais) |

@@ -7,12 +7,16 @@
 //   E100 — Periodo da apuracao do ICMS
 //   E110 — Apuracao do ICMS - Operacoes Proprias
 //   E116 — Obrigacao do ICMS a Recolher (gerado SE vl_icms_recolher > 0)
-//   E200 — Periodo da apuracao do IPI       (gerado SE ha atividade de IPI)
-//   E210 — Apuracao do IPI                   (gerado SE ha atividade de IPI)
+//   E200 — Periodo da apuracao do ICMS ST, por UF (gerado SE ha ST retido)
+//   E210 — Apuracao do ICMS ST da UF
+//   E220 — Ajustes da apuracao do ST (codigos com '1' no 3o caractere)
+//   E250 — Obrigacao do ST a recolher (so com vencimento+codigo cadastrados)
+//   E500 — Periodo da apuracao do IPI        (gerado SE ha atividade de IPI)
+//   E520 — Apuracao do IPI                   (gerado SE ha atividade de IPI)
 //   E990 — Encerramento do Bloco E
 //
 // Comportamento:
-//   - Simples Nacional: E110 zerada, SEM E116/E200/E210 (paga DAS, nao GARE).
+//   - Simples Nacional: E110 zerada, SEM E116/ST/IPI (paga DAS, nao GARE).
 //   - Lucro: calcula apuracao real de ICMS. Se saldo devedor > 0, gera E116
 //     com vencimento e codigo de receita derivados da UF da empresa.
 //     IPI: gera E200/E210 apenas quando ha debito ou credito de IPI nas notas
@@ -23,6 +27,7 @@
 
 import * as fmt from './sped-fiscal-format.js';
 import { classificarAjustes, aplicarAjustesApuracao, montarLinhasE111 } from './sped-ajustes-apuracao.js';
+import { montarLinhasStBlocoE } from './sped-bloco-e-st.js';
 
 const ZERO = '0,00';
 
@@ -166,11 +171,28 @@ export function buildBlocoE(dados) {
         linhas.push(buildE116(dados, ap.vlIcmsRecolher));
     }
 
-    // ── IPI (E200/E210) — só para Lucro COM atividade de IPI (indústria/
+    // ── ICMS-ST (E200/E210/E220/E250) — quem RETÉM ST na saída apura por UF
+    //    de destino. Era o bloqueio nº 1 depois do E111 (painel 🚦).
+    if (regime === 'lucro') {
+        const st = montarLinhasStBlocoE({
+            notas: dados.notas,
+            ufEmpresa: uf,
+            ajustes: dados.ajustesApuracao,
+            dtIni: fmt.formatCompetenciaInicio(dados.competenciaInicio),
+            dtFin: fmt.formatCompetenciaFim(dados.competenciaFim),
+            obrigacoesPorUf: dados.obrigacoesStPorUf || {},
+        });
+        linhas.push(...st.linhas);
+        if (Array.isArray(dados.warnings)) dados.warnings.push(...st.avisos);
+    }
+
+    // ── IPI (E500/E520) — só para Lucro COM atividade de IPI (indústria/
     //    importador). Comércio/serviço sem IPI não gera o bloco, evitando
     //    registro indevido pra empresa não-contribuinte de IPI.
+    //    CORREÇÃO 04/08: o gerador antigo punha o IPI em E200/E210, que são
+    //    registros do ICMS-ST. IPI é E500 (período) + E520 (apuração).
     if (regime === 'lucro') {
-        linhas.push(...buildE200E210(dados));
+        linhas.push(...buildE500E520(dados));
     }
 
     const total = linhas.length + 1;
@@ -180,8 +202,8 @@ export function buildBlocoE(dados) {
 }
 
 /**
- * E200 — Período de Apuração do IPI
- * E210 — Apuração do IPI
+ * E500 — Período de Apuração do IPI
+ * E520 — Apuração do IPI
  *
  * Só emite se houver atividade de IPI (débito ou crédito > 0). Empresas
  * não-contribuintes de IPI (a maioria do comércio/serviço) não recebem o
@@ -191,7 +213,7 @@ export function buildBlocoE(dados) {
  *   IND_APUR_IPI(0=mensal), VL_SD_ANT_IPI, VL_DEB_IPI, VL_CRED_IPI,
  *   VL_OD_IPI, VL_OC_IPI, VL_SC_IPI, VL_SD_IPI.
  */
-function buildE200E210(dados) {
+function buildE500E520(dados) {
     const vlDeb = somarImpostoPorDirecao(dados.notas, 'saida', 'vIPI', 'vIPI');
     const vlCred = somarImpostoPorDirecao(dados.notas, 'entrada', 'vIPI', 'vIPI');
     if (vlDeb <= 0 && vlCred <= 0) return [];
@@ -203,13 +225,13 @@ function buildE200E210(dados) {
 
     return [
         fmt.buildLine([
-            'E200',
+            'E500',
+            '0',                          // IND_APUR: 0 = mensal
             fmt.formatCompetenciaInicio(dados.competenciaInicio),
             fmt.formatCompetenciaFim(dados.competenciaFim),
         ]),
         fmt.buildLine([
-            'E210',
-            '0',                          // IND_APUR_IPI: 0 = mensal
+            'E520',
             fmt.formatValue(vlSdAnt, 2),  // VL_SD_ANT_IPI
             fmt.formatValue(vlDeb, 2),    // VL_DEB_IPI
             fmt.formatValue(vlCred, 2),   // VL_CRED_IPI

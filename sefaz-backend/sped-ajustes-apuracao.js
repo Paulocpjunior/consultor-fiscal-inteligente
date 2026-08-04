@@ -9,8 +9,9 @@
 // O CÓDIGO do ajuste (COD_AJ_APUR, tabela 5.1.1 de cada UF) carrega a
 // semântica na própria estrutura (Guia Prático EFD ICMS/IPI):
 //   posição 1-2: UF (tem de bater com a UF da empresa)
-//   posição 3:   imposto/apuração — '0' = ICMS próprio (E111).
-//                ST ('1') e outros vão em E220/E310, que o CFI ainda não gera
+//   posição 3:   imposto/apuração — '0' = ICMS próprio (E111),
+//                '1' = ICMS-ST (E220, gerado desde 04/08). Outros valores
+//                (DIFAL/FCP em E310) o CFI ainda não gera.
 //   posição 4:   TIPO do ajuste — é ela que decide o campo do E110:
 //                  0 = Outros débitos          → VL_TOT_AJ_DEBITOS
 //                  1 = Estorno de créditos     → VL_ESTORNOS_CRED
@@ -47,21 +48,24 @@ export function validarCodigoAjuste(codigo, ufEmpresa) {
     if (ufEmpresa && uf !== String(ufEmpresa).toUpperCase()) {
         return { ok: false, erro: `Código ${cod} é da UF ${uf}, mas a empresa é ${String(ufEmpresa).toUpperCase()} — a tabela 5.1.1 é estadual.` };
     }
-    if (cod[2] !== '0') {
-        return { ok: false, erro: `Código ${cod} não é de apuração do ICMS PRÓPRIO (3º caractere '${cod[2]}'). ST/DIFAL vão em E220/E310, que o CFI ainda não gera — lance no PVA por enquanto.` };
+    // 3º caractere decide QUAL apuração recebe o ajuste: próprio (E111) ou
+    // ST (E220). Os dois usam a mesma tabela 5.1.1 e o mesmo tipo no 4º.
+    const apuracao = cod[2] === '0' ? 'proprio' : (cod[2] === '1' ? 'st' : null);
+    if (!apuracao) {
+        return { ok: false, erro: `Código ${cod} não é de apuração do ICMS próprio nem de ST (3º caractere '${cod[2]}'). DIFAL/FCP vão em E310, que o CFI ainda não gera — lance no PVA por enquanto.` };
     }
     const tipo = parseInt(cod[3], 10);
     if (!TIPOS_AJUSTE[tipo]) {
         return { ok: false, erro: `Código ${cod} tem tipo de ajuste desconhecido ('${cod[3]}') — 4º caractere deve ser 0 a 5.` };
     }
-    return { ok: true, tipo };
+    return { ok: true, tipo, apuracao };
 }
 
 /**
  * Classifica a lista de ajustes {codigo, descricao, valor} nos baldes do
  * E110. Valor não-positivo e código inválido viram erro (linha NÃO entra).
  */
-export function classificarAjustes(ajustes, ufEmpresa) {
+export function classificarAjustes(ajustes, ufEmpresa, apuracaoAlvo = 'proprio') {
     const out = {
         outrosDebitos: 0, estornosCredito: 0, outrosCreditos: 0,
         estornosDebito: 0, deducoes: 0, debitosEspeciais: 0,
@@ -71,6 +75,9 @@ export function classificarAjustes(ajustes, ufEmpresa) {
         const valor = Math.round((parseFloat(a?.valor) || 0) * 100) / 100;
         const v = validarCodigoAjuste(a?.codigo, ufEmpresa);
         if (!v.ok) { out.erros.push(v.erro); continue; }
+        // Ajuste da OUTRA apuração não é erro — é de outro registro (E111 x
+        // E220). Sai desta lista em silêncio e entra na do dono dele.
+        if (v.apuracao !== apuracaoAlvo) continue;
         if (valor <= 0) {
             out.erros.push(`Ajuste ${String(a.codigo).toUpperCase()}: valor deve ser POSITIVO (o tipo do código já diz se soma ou abate).`);
             continue;

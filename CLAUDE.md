@@ -45,6 +45,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Fluxos ligados: DAS (Graph + "abrir no meu e-mail" + WhatsApp), DARF
   (DetalheDeclaracao) e DARE (DareSpModal). Feature nova de guia DEVE
   chamar o rito.
+- **ICMS-ST no Bloco E + IPI estava no registro ERRADO** (04/08): a apuração
+  de ST é POR UF DE DESTINO (cada estado vira uma GNRE) — `sped-bloco-e-st.js`
+  (14 testes) monta E200/E210/E220/E250 do ST retido nas saídas. Ajuste de ST
+  usa a MESMA aba do E111: o 3º caractere do COD_AJ_APUR decide o registro
+  ('0'=E111 próprio, '1'=E220 ST) e `classificarAjustes(ajustes, uf, alvo)`
+  filtra — ajuste da outra apuração NÃO é erro, é de outro registro. E250 só
+  sai com vencimento+código de receita cadastrados (código de GNRE não se
+  inventa); sem eles, aviso. CORREÇÃO GRAVE no mesmo PR: o gerador punha o
+  **IPI em E200/E210**, que são registros do ICMS-ST — IPI é **E500/E520**.
+  Nenhum cliente com IPI tinha gerado ainda, senão o PVA teria recusado.
+  E510 (consolidação por CFOP/CST-IPI) não é gerado: o CST do IPI não é
+  capturado hoje. Leiaute de ST e IPI PRECISA passar pelo PVA (a doc oficial é
+  bloqueada pela rede do ambiente) — os testes travam a estrutura.
 - **Bloco G / CIAP construído a partir do relatório REAL** (Paulo mandou o
   CIAP da EXPERTE 06/2026 em PDF, 03/08): crédito de ICMS do imobilizado sai
   em 48 parcelas (LC 87/96 art. 20 §5º) e cada parcela entra na PROPORÇÃO das
