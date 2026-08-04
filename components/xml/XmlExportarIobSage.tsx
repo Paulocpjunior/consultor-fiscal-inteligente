@@ -80,7 +80,17 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
             // cliente por id OU CNPJ — docs capturados server-side (autXML/ZIP/
             // SAE) podem não ter empresaId preenchido, só o CNPJ.
             const meta: { truncado?: boolean } = {};
-            const d = await listDocumentos(currentUser, { competencia }, meta);
+            // Empresa selecionada vai ao SERVIDOR (por id E por CNPJ): a leitura
+            // fica do tamanho da empresa, não do mês inteiro. Sem isso, em
+            // competência cheia batia no teto e o recorte saía incompleto —
+            // "limite de leitura atingido", relato comum dos colaboradores.
+            const d = await listDocumentos(currentUser, {
+                competencia,
+                ...(empresaSelecionada ? {
+                    empresaId: empresaSelecionada.id,
+                    empresaCnpj: empresaSelecionada.cnpj,
+                } : {}),
+            }, meta);
             setTruncado(!!meta.truncado);
             const cnpjSel = (empresaSelecionada?.cnpj || '').replace(/\D/g, '');
             const raizSel = cnpjSel.slice(0, 8);
@@ -591,7 +601,12 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         <p className="text-[11px] text-red-700 dark:text-red-400 mt-1">
                             A competência {competencia} retornou o máximo de documentos que o navegador
                             carrega de uma vez. O arquivo gerado pode <strong>não conter todas as notas</strong>.
-                            Selecione uma <strong>empresa específica</strong> acima e busque de novo para garantir a exportação completa.
+                            {empresaSelecionada
+                                ? <> Isso com uma empresa <strong>já selecionada</strong> significa que ela sozinha
+                                    passa do teto no mês — <strong>não gere o arquivo assim</strong>. Avise o Paulo
+                                    com o nome da empresa e a competência.</>
+                                : <> Selecione uma <strong>empresa específica</strong> acima e busque de novo: a
+                                    consulta passa a ser do tamanho da empresa, não do mês inteiro.</>}
                         </p>
                     </div>
                 )}

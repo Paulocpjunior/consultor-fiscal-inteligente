@@ -603,6 +603,30 @@ export async function listDocumentos(
         const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000, meta: pageMeta });
         if (meta) meta.truncado = pageMeta.truncated;
         docs = snaps.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
+
+        // Documento capturado server-side (autXML, ZIP, cofre, SAE) muitas
+        // vezes tem só `empresaCnpj`, sem `empresaId` — a consulta acima o
+        // deixaria de fora. Por isso a tela filtrava a EMPRESA em memória,
+        // e aí precisava ler o MÊS INTEIRO: em competência cheia batia no
+        // teto e o recorte saía incompleto ("limite de leitura atingido",
+        // relato de 04/08). Buscar pelos dois campos no SERVIDOR resolve os
+        // dois problemas: nada é descartado e a leitura fica do tamanho da
+        // empresa, não do mês.
+        const cnpjFiltro = String(filters.empresaCnpj || '').replace(/\D/g, '');
+        if (cnpjFiltro.length === 14 && (filters.empresaId || filters.empresaIds?.length)) {
+            const porCnpj: QueryConstraint[] = [where('empresaCnpj', '==', cnpjFiltro)];
+            if (filters.competencia) porCnpj.push(where('competencia', '==', filters.competencia));
+            const metaCnpj = { truncated: false, count: 0, maxDocs: 0 };
+            const snapsCnpj = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, porCnpj, { batchSize: 2000, meta: metaCnpj });
+            if (meta && metaCnpj.truncated) meta.truncado = true;
+            const vistos = new Set(docs.map(d => d.id));
+            for (const d of snapsCnpj) {
+                if (vistos.has(d.id)) continue;
+                vistos.add(d.id);
+                docs.push({ id: d.id, ...(d.data() as any) } as DocumentoFiscal);
+            }
+        }
+
         if (scope) docs = docs.filter(d => podeVerDocumentoPorCarteira(d, scope));
     } catch (err: any) {
         console.warn('listDocumentos:', err?.message);
