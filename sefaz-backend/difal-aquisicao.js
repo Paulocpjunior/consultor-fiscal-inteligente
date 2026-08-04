@@ -17,6 +17,10 @@
 // linha é marcada `aliqInterDerivada`.
 // ============================================================================
 
+import {
+    cnpjEmitente, nomeEmitente, ufEmitente, modeloDoDoc,
+} from './participante-doc-helper.js';
+
 const so = (v) => String(v || '').replace(/\D/g, '');
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
@@ -56,11 +60,18 @@ export function montarDifalMensal({ docs, empresa, aliqInternaPadrao = ALIQ_INTE
 
     for (const d of docs || []) {
         if (CANCELADOS.has(d?.status)) continue;
-        if (String(d?.modelo || (d?.tipo === 'NFCe' ? '65' : '55')) !== '55') continue;
-        const emitDoc = so(d?.emitente?.cnpjCpf);
+        if (modeloDoDoc(d) !== '55') continue;
+        // Emitente pela RÉGUA ÚNICA: objeto (importação por XML) OU campo
+        // achatado (captura SEFAZ). Ler só o objeto descartava TODA nota
+        // capturada da SEFAZ em silêncio — o painel dizia "0 clientes com
+        // compra interestadual" com a nota na tela (caso 04/08, NF 110497
+        // RJ→SP da SAINT PATRICK).
+        const emitDoc = cnpjEmitente(d);
         // Entrada de TERCEIRO: emitente é outro CNPJ (nota própria tpNF=0 fora).
         if (!emitDoc || emitDoc === cnpjEmpresa || emitDoc.length !== 14) continue;
-        const ufOrigem = String(d?.emitente?.uf || '').toUpperCase();
+        // UF do emitente cai na CHAVE quando o cadastro não veio: as 2
+        // primeiras posições são o cUF, e documento da SEFAZ sempre tem chave.
+        const ufOrigem = ufEmitente(d);
         if (!ufOrigem || ufOrigem === ufEmpresa) continue;
 
         const temSt = (Number(d?.totais?.vST) || 0) > 0
@@ -89,7 +100,7 @@ export function montarDifalMensal({ docs, empresa, aliqInternaPadrao = ALIQ_INTE
             chave,
             numero: d.numero || '—',
             dhEmi: d.dhEmi || null,
-            fornecedor: d?.emitente?.nome || '—',
+            fornecedor: nomeEmitente(d) || '—',
             fornecedorDoc: emitDoc,
             ufOrigem,
             base,
