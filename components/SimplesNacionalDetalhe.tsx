@@ -8,8 +8,13 @@ import NfseSpAdminPanel from './NfseSpAdminPanel';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 import { useConfirm, usePrompt } from './dialog/DialogProvider';
-import { emitirDasRegular, getAtividadesDeclaradas } from '../services/dasService';
-import { mapPgdasPayload, avisosDoPayload, bloqueiosDoPayload } from '../services/pgdasMapper';
+import {
+    emitirDasRegular, getAtividadesDeclaradas,
+    getCodigoAtividadeIssFixo, salvarCodigoAtividadeIssFixo,
+} from '../services/dasService';
+import {
+    mapPgdasPayload, avisosDoPayload, bloqueiosDoPayload, definirCodigoAtividadeIssFixo,
+} from '../services/pgdasMapper';
 import EmitirNfseModal from './NfseNacional/EmitirModal';
 import PrevisaoDasModal from './Das/PrevisaoModal';
 import PgdasConferirModal from './Pgdas/ConferirModal';
@@ -72,6 +77,17 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     const confirm = useConfirm();
     const pedirTexto = usePrompt();
     const [consultandoAtividades, setConsultandoAtividades] = useState(false);
+
+    // O código da atividade "ISS fixo (SUP)" mora no BANCO, não no bundle:
+    // cadastrar destrava a emissão sem esperar deploy. Falha de leitura NÃO
+    // libera nada — o mapper segue com null e o bloqueio continua de pé.
+    useEffect(() => {
+        let vivo = true;
+        getCodigoAtividadeIssFixo(currentUser ?? null).then((id) => {
+            if (vivo) definirCodigoAtividadeIssFixo(id);
+        });
+        return () => { vivo = false; };
+    }, [currentUser]);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
     const [isCfopCorrelacaoModalOpen, setIsCfopCorrelacaoModalOpen] = useState(false);
@@ -392,6 +408,44 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                 variant: 'info',
                 confirmLabel: 'Fechar',
             });
+
+            // A trava do ISS fixo (SUP) morre aqui: o admin cadastra o número
+            // LIDO da declaração, sem esperar deploy. Só oferece quando há
+            // código novo — cadastrar de memória é o que não pode acontecer.
+            if (currentUser?.role === 'admin' && r.resumo?.temNova) {
+                const digitado = await pedirTexto({
+                    title: 'Cadastrar o código do ISS fixo (SUP)',
+                    message: (
+                        <>
+                            Se um destes códigos é a atividade <b>"Escritórios de serviços contábeis
+                            autorizados pela legislação municipal a pagar o ISS em valor fixo em guia
+                            do Município"</b>, informe o número: {r.resumo.novas.map((a) => a.idAtividade).join(', ')}.
+                            <br /><br />
+                            Ele passa a valer para <b>todas as empresas</b> e destrava a emissão do DAS
+                            dessas receitas. Deixe em branco se não for nenhum.
+                        </>
+                    ),
+                    defaultValue: '',
+                    placeholder: 'ex.: 16',
+                    confirmLabel: 'Cadastrar',
+                });
+                const idNum = Number(String(digitado || '').trim());
+                if (Number.isInteger(idNum) && idNum > 0) {
+                    try {
+                        await salvarCodigoAtividadeIssFixo(currentUser ?? null, {
+                            id: idNum,
+                            origem: 'declaracao',
+                            cnpjOrigem: empresa.cnpj,
+                            competenciaOrigem: competencia.trim(),
+                            idsDeclarados: r.atividades.map((a) => a.idAtividade),
+                        });
+                        definirCodigoAtividadeIssFixo(idNum);
+                        onShowToast(`Código ${idNum} cadastrado — o DAS com ISS fixo (SUP) está liberado.`);
+                    } catch (e: any) {
+                        onShowToast(e?.message || 'Não foi possível cadastrar o código.');
+                    }
+                }
+            }
         } catch (err: any) {
             onShowToast(err?.message || 'Falha ao consultar as atividades declaradas.');
         } finally {

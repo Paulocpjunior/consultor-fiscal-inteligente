@@ -417,6 +417,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // pgdas_atividades_codigos: codigo oficial de atividade do PGDAS-D
+    // (ISS fixo/SUP). Vai NA DECLARACAO ao SERPRO — leitura e escrita passam
+    // SO pelo backend, que valida o numero contra a declaracao lida.
+    match /pgdas_atividades_codigos/{docId} {
+      allow read, write: if false;
+    }
+
     match /nfse_nacional_emitidas/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;

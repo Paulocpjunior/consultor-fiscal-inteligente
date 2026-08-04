@@ -17,6 +17,9 @@ import { getDasMode, getDasProvider } from './das-provider.js';
 import { errorPayload } from './das-error-payload.js';
 import { podeAcessarEmpresaId, podeAcessarCnpj } from './carteira-auth.js';
 import { secretsMatch } from './cron-secret.js';
+import {
+    validarIdAtividadeSup, lerCodigoAtividadeSup, gravarCodigoAtividadeSup,
+} from './pgdas-atividade-config.js';
 export { errorPayload } from './das-error-payload.js';
 
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
@@ -108,6 +111,48 @@ router.get('/atividades-declaradas', requireAuth, async (req, res) => {
                 ? `Não há declaração transmitida para ${competencia} nesta empresa — tente outra competência.`
                 : `atividades-declaradas: ${err.message}`,
         });
+    }
+});
+
+// Código da atividade "ISS fixo (SUP)". Enquanto não existir, o DAS dessas
+// receitas fica bloqueado — e destravar NÃO pode depender de deploy.
+router.get('/atividade-iss-fixo', requireAuth, async (_req, res) => {
+    try {
+        if (admin.apps.length === 0) {
+            admin.initializeApp({ credential: admin.credential.applicationDefault() });
+        }
+        const cfg = await lerCodigoAtividadeSup(admin.firestore());
+        res.json({ cadastrado: !!cfg, ...(cfg || { idAtividade: null }) });
+    } catch (err) {
+        res.status(500).json({ error: `atividade-iss-fixo: ${err.message}` });
+    }
+});
+
+router.put('/atividade-iss-fixo', requireAuth, express.json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({
+                error: 'Só administrador cadastra código de atividade — o número vale pra todas as '
+                    + 'empresas e vai na declaração ao SERPRO.',
+            });
+        }
+        const { id, origem, cnpjOrigem, competenciaOrigem, idsDeclarados } = req.body || {};
+        const v = validarIdAtividadeSup(id, { origem, idsDeclarados });
+        if (!v.ok) return res.status(400).json({ error: v.erro });
+
+        if (admin.apps.length === 0) {
+            admin.initializeApp({ credential: admin.credential.applicationDefault() });
+        }
+        const doc = await gravarCodigoAtividadeSup(admin.firestore(), {
+            id: v.id,
+            origem,
+            cnpjOrigem: String(cnpjOrigem || '').replace(/\D/g, '') || null,
+            competenciaOrigem: competenciaOrigem || null,
+            usuario: req.user?.email || req.user?.uid || null,
+        });
+        res.json({ ok: true, ...doc });
+    } catch (err) {
+        res.status(500).json({ error: `atividade-iss-fixo: ${err.message}` });
     }
 });
 

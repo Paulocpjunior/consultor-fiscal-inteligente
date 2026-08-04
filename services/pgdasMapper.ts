@@ -86,6 +86,8 @@ export interface PgdasPayload {
     _avisos?: string[];
     /** Meta do app: motivos que IMPEDEM a transmissão (o backend também recusa). */
     _bloqueios?: string[];
+    /** Meta do app: há receita marcada ISS fixo (SUP)? O backend revalida por isso. */
+    _temSup?: boolean;
 }
 
 function paFromDate(d: Date): number {
@@ -177,15 +179,24 @@ function anexoExigeFolhaSalario(anexo: SimplesNacionalEmpresa['anexo']): boolean
  * que o escritório paga direto ao município. É a indicação correta da S&P
  * (Paulo, 03/08/2026) — hoje essa receita ia como "ISS retido pelo tomador".
  *
- * O NÚMERO desta atividade ainda não foi confirmado na tabela oficial do
- * SERPRO (a documentação não abre deste ambiente). Enquanto ficar null, a
- * receita marcada como SUP viaja como ISS retido: **mesmo valor de DAS** (o
- * ISS sai dos dois jeitos) com a natureza declarada errada — exatamente o que
- * a equipe já fazia à mão, sem piorar nada. `avisosDoPayload` diz isso na
- * confirmação antes de transmitir. Com o número em mãos, basta preencher aqui:
- * o resto do caminho (marcação na tela, cálculo e envio) já está pronto.
+ * O NÚMERO desta atividade não está na tela do PGDAS-D nem na doc do SERPRO
+ * acessível deste ambiente. Ele vem do BANCO (coleção pgdas_atividades_codigos,
+ * cadastrada pelo admin a partir de uma declaração real) — não de uma constante
+ * do código: destravar um cliente não pode depender de deploy. Enquanto não
+ * existir, `bloqueiosDoPayload` RECUSA a emissão dessa receita, e o backend
+ * revalida contra o banco (cliente desatualizado não fura a trava).
  */
-const ID_ATIVIDADE_ISS_FIXO_CONTABIL: number | null = null;
+let idAtividadeIssFixoCadastrado: number | null = null;
+
+/** Carrega o código vindo do backend (GET /das/atividade-iss-fixo). */
+export function definirCodigoAtividadeIssFixo(id: number | null | undefined): void {
+    idAtividadeIssFixoCadastrado = Number.isInteger(id as number) ? (id as number) : null;
+}
+
+/** Código em uso agora (null = SUP bloqueado). */
+export function codigoAtividadeIssFixo(): number | null {
+    return idAtividadeIssFixoCadastrado;
+}
 
 /** A receita tem o ISS fora do DAS? (retido pelo tomador OU fixo em guia do município) */
 const issForaDoDas = (state: Pick<CnaeInputState, 'issRetido' | 'isSup'>): boolean =>
@@ -202,8 +213,8 @@ function idAtividadePgdas(
     // ISS fixo do escritório contábil é tributado pelo Anexo III (§22-A). Só
     // vale quando a atividade oficial já estiver mapeada; senão cai no
     // tratamento de "ISS fora do DAS" abaixo, que preserva o valor.
-    if (state.isSup && !state.isExterior && ID_ATIVIDADE_ISS_FIXO_CONTABIL !== null) {
-        return ID_ATIVIDADE_ISS_FIXO_CONTABIL;
+    if (state.isSup && !state.isExterior && idAtividadeIssFixoCadastrado !== null) {
+        return idAtividadeIssFixoCadastrado;
     }
 
     if (anexo === 'I') {
@@ -505,6 +516,10 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         _cnpjLimpo: cnpjLimpo,
         _avisos: avisosDoPayload(faturamentoPorCnae),
         _bloqueios: bloqueiosDoPayload(faturamentoPorCnae),
+        // O backend revalida a trava do SUP contra o banco — não confia na
+        // lista de bloqueios que veio do navegador (pode estar desatualizada).
+        _temSup: Object.values(faturamentoPorCnae || {})
+            .some((s) => s && s.isSup && round2(parseValorBr(s.valor)) > 0),
     };
 }
 
@@ -526,15 +541,15 @@ export function bloqueiosDoPayload(faturamentoPorCnae: Record<string, CnaeInputS
     const comValor = Object.values(faturamentoPorCnae || {})
         .filter((s) => s && round2(parseValorBr(s.valor)) > 0);
 
-    if (comValor.some((s) => s.isSup) && ID_ATIVIDADE_ISS_FIXO_CONTABIL === null) {
+    if (comValor.some((s) => s.isSup) && idAtividadeIssFixoCadastrado === null) {
         bloqueios.push(
             'Receita marcada como ISS fixo (SUP): a atividade correta é "Escritórios de serviços '
             + 'contábeis autorizados pela legislação municipal a pagar o ISS em valor fixo em guia '
             + 'do Município", e o código oficial dela ainda não está cadastrado no app. Transmitir '
             + 'agora declararia "ISS retido pelo tomador" — valor certo, natureza errada. '
-            + 'O que fazer: use o botão "🔎 Atividades declaradas" numa competência já declarada no '
-            + 'e-CAC para descobrir o código e mande ao Paulo; enquanto isso, entregue esta '
-            + 'competência direto no e-CAC.',
+            + 'O que fazer: use o botão "🔎 Atividades declaradas" numa competência já declarada '
+            + 'para descobrir o número e cadastre-o ali mesmo (só admin); enquanto isso, entregue '
+            + 'esta competência direto no e-CAC.',
         );
     }
     return bloqueios;
