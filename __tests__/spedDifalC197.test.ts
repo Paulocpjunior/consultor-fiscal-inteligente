@@ -128,3 +128,35 @@ describe('montarC197Difal', () => {
         expect(r.totalDifal).toBe(130);   // 1000 × (25 − 12)%
     });
 });
+
+describe('CFOP na ótica de quem recebe (o XML traz o do emitente)', () => {
+    // A venda interestadual de material de uso/consumo sai do emitente como
+    // 6556; pra quem recebe é 2556. Comparar direto com o CFOP do XML não
+    // achava nada — mesmo defeito que escondeu a NF 110497 do painel DIFAL.
+    const notaEmitida = {
+        chave: 'CH9', numero: '77', direcao: 'entrada',
+        emitente: { uf: 'MG' },
+        itens: [{ cfop: '6556', vProd: 1000, aliqIcms: 12 }],
+    };
+
+    it('reconhece o CFOP 6556 do emitente como uso/consumo (2556)', () => {
+        expect(notaGeraDifalAquisicao(notaEmitida, 'SP')).toBe(true);
+        const r = calcularDifalDaNota(notaEmitida, { aliqInterna: 18, ufEmpresa: 'SP' });
+        expect(r.base).toBe(1000);
+        expect(r.difal).toBe(60);
+    });
+
+    it('venda para revenda (6102 → 2102) continua fora — é outro trilho', () => {
+        const revenda = { ...notaEmitida, itens: [{ cfop: '6102', vProd: 1000, aliqIcms: 12 }] };
+        expect(notaGeraDifalAquisicao(revenda, 'SP')).toBe(false);
+    });
+
+    it('UF do emitente cai na CHAVE quando não há cadastro', () => {
+        const semUf = {
+            chave: '33260608825779000196550010001104971117647682',
+            direcao: 'entrada',
+            itens: [{ cfop: '6556', vProd: 1000, aliqIcms: 12 }],
+        };
+        expect(notaGeraDifalAquisicao(semUf, 'SP')).toBe(true);
+    });
+});

@@ -84,3 +84,50 @@ describe('montarDifalMensal', () => {
         expect(r.linhas[0].difal).toBe(30);       // 500 × (18−12)%
     });
 });
+
+describe('nota capturada da SEFAZ (campos achatados) — caso SAINT PATRICK 04/08', () => {
+    // NF 110497, CMC INDUSTRIA (RJ) → cliente SP, CFOP 6101, R$ 945,43 com
+    // ICMS de 12%. O painel dizia "0 cliente(s) com compra interestadual"
+    // porque a apuração só lia `emitente.uf` — que a captura nunca gravou.
+    const notaCapturada = {
+        chave: '33260608825779000196550010001104971117647682',
+        numero: '110497',
+        dhEmi: '2026-06-29T11:18:00',
+        status: 'autorizado',
+        direcao: 'entrada',
+        // Sem objeto `emitente`: só os campos achatados da captura.
+        cnpjEmit: '08825779000196',
+        xNomeEmit: 'CMC INDUSTRIA E PROCESSOS PRODUTIVOS LTDA',
+        totais: { vProd: 945.43, vNF: 945.43, vICMS: 113.45, vST: 0 },
+        itens: [{ cfop: '6101', vProd: 945.43, vDesc: 0, vICMS: 113.45, aliqIcms: 12 }],
+    };
+
+    it('ACHA a nota mesmo sem o objeto emitente (UF vem da chave: cUF 33 = RJ)', () => {
+        const r = montarDifalMensal({
+            docs: [notaCapturada],
+            empresa: { cnpj: '96616974000173', uf: 'SP' },
+        });
+
+        expect(r.linhas).toHaveLength(1);
+        expect(r.linhas[0]).toMatchObject({
+            numero: '110497',
+            ufOrigem: 'RJ',
+            fornecedor: 'CMC INDUSTRIA E PROCESSOS PRODUTIVOS LTDA',
+            base: 945.43,
+        });
+        // 945,43 × (18% − 12%) = 56,73
+        expect(r.linhas[0].difal).toBeCloseTo(56.73, 2);
+    });
+
+    it('compra DENTRO do estado continua fora (não virou "acha tudo")', () => {
+        const dentroDeSP = {
+            ...notaCapturada,
+            chave: '35260608825779000196550010001104971117647682',
+        };
+        const r = montarDifalMensal({
+            docs: [dentroDeSP],
+            empresa: { cnpj: '96616974000173', uf: 'SP' },
+        });
+        expect(r.linhas).toEqual([]);
+    });
+});

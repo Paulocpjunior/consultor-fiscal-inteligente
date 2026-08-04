@@ -26,6 +26,8 @@
 // cliente — igual ao G125 e ao bloco de ST. Os testes travam a estrutura.
 // ============================================================================
 
+import { ufEmitente, cfopNaOticaDeEntrada } from './participante-doc-helper.js';
+
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'denegada', 'inutilizado']);
@@ -48,7 +50,10 @@ export const CFOPS_DIFAL_AQUISICAO = new Set([
 const UF_INTER_12 = new Set(['SP', 'RJ', 'MG', 'RS', 'SC', 'PR']);
 const ORIG_4PCT = new Set(['1', '2', '3', '8']);
 
-const cfopDoItem = (item) => String(item?.cfop ?? '').replace(/\D/g, '');
+// O XML traz o CFOP do EMITENTE (venda interestadual = 6xxx); pra quem
+// RECEBE, a mesma operação é 2xxx. Comparar direto com o CFOP do XML não
+// acha nada — foi o que escondeu a NF 110497 (6101) do painel de DIFAL.
+const cfopDoItem = (item) => cfopNaOticaDeEntrada(item?.cfop);
 
 /** A nota é entrada interestadual com pelo menos um item de uso/consumo ou ativo? */
 export function notaGeraDifalAquisicao(nota, ufEmpresa) {
@@ -56,7 +61,7 @@ export function notaGeraDifalAquisicao(nota, ufEmpresa) {
     if (String(nota.direcao) !== 'entrada') return false;
     if (CANCELADOS.has(String(nota.situacao || nota.status || '').toLowerCase())) return false;
 
-    const ufOrigem = String(nota?.emitente?.uf || nota?.ufEmitente || '').toUpperCase();
+    const ufOrigem = ufEmitente(nota);
     const ufDestino = String(ufEmpresa || '').toUpperCase();
     if (!ufOrigem || !ufDestino || ufOrigem === ufDestino) return false;
 
@@ -82,7 +87,7 @@ export function aliqInterestadual(item, ufOrigem) {
  *            aliqInterDerivada:boolean, aliqInterMedia:number}}
  */
 export function calcularDifalDaNota(nota, { aliqInterna, ufEmpresa }) {
-    const ufOrigem = String(nota?.emitente?.uf || nota?.ufEmitente || '').toUpperCase();
+    const ufOrigem = ufEmitente(nota);
     let base = 0;
     let difal = 0;
     let itens = 0;
