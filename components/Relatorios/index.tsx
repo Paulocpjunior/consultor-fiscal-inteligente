@@ -118,22 +118,31 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const chaveAtual = `${empresaId}|${competencia}`;
     const recorteValido = docs !== null && recorteKey === chaveAtual;
 
-    const buscar = async () => {
-        if (!empresa) { onShowToast?.('Escolha a empresa.'); return; }
+    const buscar = async (empresaIdOverride?: unknown) => {
+        // onClick passa o event como 1º argumento — só string interessa.
+        const idAlvo = typeof empresaIdOverride === 'string' ? empresaIdOverride : empresaId;
+        const alvo = empresas.find(e => e.id === idAlvo) || null;
+        if (!alvo) { onShowToast?.('Escolha a empresa.'); return; }
         setLoading(true);
         try {
             const meta: { truncado?: boolean } = {};
+            // Empresa vai ao SERVIDOR (id + CNPJ), como no Exportar SAGE (#437):
+            // buscar a competência INTEIRA pra filtrar uma empresa no navegador
+            // era pagar a leitura da carteira toda a cada relatório — e num mês
+            // cheio ainda batia no teto e truncava o recorte.
             const [todos, dadosFiscais] = await Promise.all([
-                listDocumentos(currentUser, { competencia }, meta),
-                getIdentificacaoEmpresa(empresa),
+                listDocumentos(currentUser, {
+                    competencia, empresaId: alvo.id, empresaCnpj: alvo.cnpj,
+                }, meta),
+                getIdentificacaoEmpresa(alvo),
             ]);
             setIdentificacao(montarIdentificacao(dadosFiscais));
             setTruncado(!!meta.truncado);
-            const cnpj = empresa.cnpj.replace(/\D/g, '');
+            const cnpj = alvo.cnpj.replace(/\D/g, '');
             setDocs(todos
-                .filter(d => d.empresaId === empresa.id || String(d.empresaCnpj || '').replace(/\D/g, '') === cnpj)
+                .filter(d => d.empresaId === alvo.id || String(d.empresaCnpj || '').replace(/\D/g, '') === cnpj)
                 .map(d => ({ ...d, direcao: (direcaoEfetivaDoc(d) as any) || d.direcao })));
-            setRecorteKey(chaveAtual);
+            setRecorteKey(`${alvo.id}|${competencia}`);
         } finally {
             setLoading(false);
         }
@@ -194,7 +203,8 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     <>
                         <div className="min-w-[280px] flex-1">
                             <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa</label>
-                            <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId} />
+                            <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId}
+                                onAtivar={id => void buscar(id)} />
                         </div>
                         <button onClick={buscar} disabled={loading || !empresaId}
                             className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm rounded-lg font-semibold disabled:opacity-40">

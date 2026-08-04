@@ -6,18 +6,27 @@ interface Props {
     empresas: EmpresaXmlOption[];
     value: string;                       // empresaId selecionado
     onChange: (id: string) => void;
+    /**
+     * "Ativar empresa" (Paulo, 04/08): selecionar JÁ dispara a busca dos dados
+     * daquela empresa — um gesto só, e o banco carrega SÓ o que é dela, nunca
+     * a carteira inteira. Quando presente, é chamado logo após o onChange.
+     */
+    onAtivar?: (id: string) => void;
     placeholder?: string;
     disabled?: boolean;
     maxResultados?: number;
 }
 
 /**
- * EmpresaSearchSelect — combobox com busca por NOME ou CNPJ.
- * Substitui o <select> gigante (centenas de empresas) por um campo pesquisável:
- * digite parte do nome ou dígitos do CNPJ e clique para selecionar.
+ * EmpresaSearchSelect — combobox com busca por CÓDIGO, NOME ou CNPJ.
+ *
+ * O código é o Cod.Cliente do E-Fiscal (4 dígitos, cadastro da empresa): a
+ * equipe decorou esses códigos ao longo dos anos — "587" encontra mais rápido
+ * que digitar o nome. Ele aparece ANTES do nome, como no E-Fiscal.
  */
 const EmpresaSearchSelect: React.FC<Props> = ({
-    empresas, value, onChange, placeholder = 'Buscar por nome ou CNPJ…', disabled, maxResultados = 60,
+    empresas, value, onChange, onAtivar,
+    placeholder = 'Buscar por código, nome ou CNPJ…', disabled, maxResultados = 60,
 }) => {
     const [aberto, setAberto] = useState(false);
     const [busca, setBusca] = useState('');
@@ -42,18 +51,40 @@ const EmpresaSearchSelect: React.FC<Props> = ({
         const digitos = termo.replace(/\D/g, '');
         let lista = empresas;
         if (termo) {
+            // Código bate por PREFIXO e também com o pad ("587" acha 0587).
+            const codPad = digitos.length > 0 && digitos.length <= 4
+                ? digitos.padStart(4, '0') : '';
+            const codigoBate = (e: EmpresaXmlOption) => {
+                const c = e.codCliente || '';
+                if (!c || !digitos) return false;
+                return c === codPad || c.startsWith(digitos) || String(parseInt(c, 10)) === digitos;
+            };
             lista = empresas.filter(e => {
                 const nomeOk = (e.nome || '').toLowerCase().includes(termo);
                 const cnpjOk = digitos.length > 0 && (e.cnpj || '').replace(/\D/g, '').includes(digitos);
-                return nomeOk || cnpjOk;
+                return nomeOk || cnpjOk || codigoBate(e);
             });
+            // Código EXATO primeiro: quem digitou "587" quer a 0587, não quem
+            // tem 587 no meio do CNPJ.
+            if (codPad) {
+                lista = [...lista].sort((a, b) =>
+                    Number(b.codCliente === codPad) - Number(a.codCliente === codPad));
+            }
         }
         return lista.slice(0, maxResultados);
     }, [empresas, busca, maxResultados]);
 
     const rotulo = selecionada
-        ? `${selecionada.nome} — ${formatCnpjCpf(selecionada.cnpj)}`
+        ? `${selecionada.codCliente ? `${selecionada.codCliente} · ` : ''}${selecionada.nome} — ${formatCnpjCpf(selecionada.cnpj)}`
         : '';
+
+    const escolher = (id: string) => {
+        onChange(id);
+        setAberto(false);
+        setBusca('');
+        // Seleção = ativação: a tela busca na hora os dados SÓ desta empresa.
+        onAtivar?.(id);
+    };
 
     return (
         <div ref={wrapRef} className="relative">
@@ -76,14 +107,22 @@ const EmpresaSearchSelect: React.FC<Props> = ({
                                 <button
                                     key={e.id}
                                     type="button"
-                                    onClick={() => { onChange(e.id); setAberto(false); setBusca(''); }}
+                                    onClick={() => escolher(e.id)}
                                     className={`w-full text-left px-3 py-2 text-sm border-b border-slate-100 dark:border-slate-700/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 ${
                                         e.id === value ? 'bg-emerald-50/60 dark:bg-emerald-900/30 font-semibold' : ''
                                     }`}
                                 >
-                                    <span className="text-slate-800 dark:text-slate-100">{e.nome}</span>
+                                    <span className="text-slate-800 dark:text-slate-100">
+                                        {e.codCliente && (
+                                            <span className="font-mono text-[11px] font-bold text-blue-700 dark:text-blue-400 mr-1.5">
+                                                {e.codCliente}
+                                            </span>
+                                        )}
+                                        {e.nome}
+                                    </span>
                                     <span className="block text-[11px] font-mono text-slate-500 dark:text-slate-400">
                                         {formatCnpjCpf(e.cnpj)} · {e.fonte === 'simples' ? 'Simples' : 'Lucro'}
+                                        {onAtivar && <span className="text-emerald-600 dark:text-emerald-400"> · ⚡ selecionar ativa</span>}
                                     </span>
                                 </button>
                             ))}

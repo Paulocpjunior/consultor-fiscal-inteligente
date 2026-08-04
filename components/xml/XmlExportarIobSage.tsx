@@ -186,7 +186,10 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
     };
 
-    const buscar = async () => {
+    const buscar = async (empresaIdOverride?: unknown) => {
+        // onClick passa o event como 1º argumento — só string interessa.
+        const idAlvo = typeof empresaIdOverride === 'string' ? empresaIdOverride : empresaId;
+        const alvo = empresas.find(e => e.id === idAlvo) || null;
         if (!competencia) {
             onShowToast?.('Informe a competência antes de buscar.');
             return;
@@ -205,17 +208,17 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
             // "limite de leitura atingido", relato comum dos colaboradores.
             const d = await listDocumentos(currentUser, {
                 competencia,
-                ...(empresaSelecionada ? {
-                    empresaId: empresaSelecionada.id,
-                    empresaCnpj: empresaSelecionada.cnpj,
+                ...(alvo ? {
+                    empresaId: alvo.id,
+                    empresaCnpj: alvo.cnpj,
                 } : {}),
             }, meta);
             setTruncado(!!meta.truncado);
-            const cnpjSel = (empresaSelecionada?.cnpj || '').replace(/\D/g, '');
+            const cnpjSel = (alvo?.cnpj || '').replace(/\D/g, '');
             const raizSel = cnpjSel.slice(0, 8);
-            const filtradosEmpresa = empresaSelecionada
+            const filtradosEmpresa = alvo
                 ? d.filter(doc =>
-                    doc.empresaId === empresaSelecionada.id
+                    doc.empresaId === alvo.id
                     || (raizSel && String(doc.empresaCnpj || '').replace(/\D/g, '').startsWith(raizSel)))
                 : d;
             // Régua única de direção: nota própria de ENTRADA (tpNF=0, compra
@@ -597,7 +600,9 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">Empresa (opcional — vazio = todas)</label>
                         <div className="flex gap-2">
                             <div className="flex-1">
-                                <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId} placeholder="Todas — busque por nome ou CNPJ…" />
+                                <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId}
+                                    placeholder="Todas — busque por código, nome ou CNPJ…"
+                                    onAtivar={id => { if (competencia) void buscar(id); }} />
                             </div>
                             {empresaId && (
                                 <button onClick={() => setEmpresaId('')} title="Limpar empresa (todas)"
