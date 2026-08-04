@@ -71,6 +71,32 @@ export interface MenuCard {
     adminOnly?: boolean;
 }
 
+/**
+ * Atalho pra PÁGINA externa do app (HTML em public/), não pra um card do SPA.
+ * Fica no menu junto dos cards porque é lá que o colaborador procura — o
+ * botão do cabeçalho some quando a tela rola (relato do Paulo, 04/08).
+ */
+export interface MenuLink {
+    id: string;
+    label: string;
+    href: string;
+    emoji: string;
+    titulo: string;
+    /** Grupo do menu em que o atalho aparece (casa com MenuGrupo.titulo). */
+    grupo: string;
+}
+
+export const MENU_LINKS: MenuLink[] = [
+    {
+        id: 'novidades',
+        label: 'Novidades do CFI',
+        href: '/novidades-cfi.html',
+        emoji: '📣',
+        titulo: 'Novidades no CFI — o que mudou e o que fazer (comunicado interno)',
+        grupo: 'Gestão',
+    },
+];
+
 export interface MenuGrupo {
     titulo: string;
     cor: string;
