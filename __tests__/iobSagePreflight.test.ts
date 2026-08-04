@@ -203,3 +203,36 @@ describe('NFC-e a consumidor final não é nota defeituosa', () => {
         expect(r.problemas.map(p => p.causa).join(' ')).toMatch(/Nota sem CNPJ do participante/);
     });
 });
+
+describe('contagem por NOTA, não por ocorrência', () => {
+    // Caso 04/08 (HYPE CAFE): o cabeçalho dizia "314 nota(s) seriam recusadas"
+    // num recorte de 157 — a MESMA nota disparava duas causas e as duas eram
+    // somadas. Número maior que o recorte é impossível, e destrói a confiança
+    // no painel inteiro.
+    const nfce = (n: number) => ({
+        id: `n${n}`,
+        chave: `3526076664123600011565005000000${String(n).padStart(4, '0')}1514653738`,
+        numero: String(n), serie: '5', tipo: 'NFCe', modelo: '65',
+        direcao: 'saida', status: 'autorizado', dhEmi: '2026-07-15T12:00:00',
+        cnpjEmit: '66641236000115',
+        valorTotal: 10,
+        itens: [{ nItem: '1', cProd: 'X', xProd: 'CAFE', cfop: '5102', vProd: 10, uCom: 'UN', qCom: 1 }],
+    }) as unknown as DocumentoFiscal;
+
+    const docs = [nfce(1), nfce(2), nfce(3)];
+    const r = conferirAntesDeGerar(docs, { numeroEmpresaEfiscal: 1385 });
+
+    it('nunca conta mais bloqueios do que notas no recorte', () => {
+        expect(r.bloqueios).toBeLessThanOrEqual(docs.length);
+        expect(r.bloqueios).toBe(3);
+    });
+
+    it('as causas continuam aparecendo separadas (é o diagnóstico)', () => {
+        const causas = r.problemas.map(p => p.causa);
+        expect(causas.length).toBeGreaterThan(1);
+    });
+
+    it('o resumo fecha: bloqueadas + no arquivo = total', () => {
+        expect(r.bloqueios + r.notasNoArquivo).toBe(docs.length);
+    });
+});

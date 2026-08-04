@@ -80,17 +80,26 @@ export function conferirAntesDeGerar(
         cfopCtx?: CfopCtx;
         /** Código do "Consumidor" no E-Fiscal do cliente (NFC-e sem comprador). */
         codigoParticipanteConsumidor?: string;
+        /** UF por CNPJ resolvida na base — o preflight precisa ver o mesmo que a geração. */
+        ufPorParticipante?: Record<string, string>;
     },
 ): ResultadoPreflight {
     const balde = new Balde();
     const docs = documentos || [];
+    /** Notas que NÃO vão ao arquivo — por qualquer causa. Contadas UMA vez. */
+    const notasBloqueadas = new Set<string>();
+    const marcar = (d: DocumentoFiscal) => notasBloqueadas.add(String(d.id || d.chave || rotulo(d)));
 
     let notasNoArquivo = 0;
     if (docs.length > 0) {
         try {
             const r = exportarParaIobSage({ documentos: docs, ...opts });
             notasNoArquivo = r.estatisticas.notasNoArquivo;
+            const porRotulo = new Map(docs.map((d) => [rotulo(d), d]));
             for (const f of r.falhas) {
+                const doc = porRotulo.get(String(f.documento).split(' · ')[0] + ' · '
+                    + String(f.documento).split(' · ')[1]) || porRotulo.get(f.documento);
+                if (doc) marcar(doc); else notasBloqueadas.add(f.documento);
                 balde.add({
                     causa: 'Nota que o app não consegue montar',
                     oQueAconteceLa: 'A nota simplesmente não vai no arquivo — e o E-Fiscal diz "importação concluída" sem ela.',
@@ -126,6 +135,7 @@ export function conferirAntesDeGerar(
             // NFC-e da HYPE CAFE aparecerem como "nota sem CNPJ" (04/08) e a
             // equipe procurar defeito onde não havia.
             if (ehNfceConsumidorFinal(d)) {
+                if (!opts.codigoParticipanteConsumidor?.trim()) marcar(d);
                 balde.add({
                     causa: 'NFC-e a consumidor final (sem CNPJ do comprador — é o normal)',
                     oQueAconteceLa: 'Sem um código de participante, o E200 não tem a quem apontar e a nota fica de fora.',
@@ -135,6 +145,7 @@ export function conferirAntesDeGerar(
                     gravidade: opts.codigoParticipanteConsumidor?.trim() ? 'atencao' : 'bloqueia',
                 }, rotulo(d));
             } else {
+                marcar(d);
                 balde.add({
                     causa: 'Nota sem CNPJ do participante',
                     oQueAconteceLa: 'Sem participante não dá pra gerar o E010 nem o E200 — a nota fica de fora.',
@@ -145,6 +156,7 @@ export function conferirAntesDeGerar(
         }
 
         if (numeroDaNota(d) <= 0) {
+            marcar(d);
             balde.add({
                 causa: 'Nota sem número',
                 oQueAconteceLa: 'E200, campo 06: "só pode conter números e deve ser maior que 0" — a nota é recusada.',
@@ -168,6 +180,7 @@ export function conferirAntesDeGerar(
             const primeiro = String(cfopFinal || '')[0];
             const esperado = d.direcao === 'entrada' ? ['1', '2', '3'] : ['5', '6', '7'];
             if (!primeiro || !esperado.includes(primeiro)) {
+                marcar(d);
                 balde.add({
                     causa: `CFOP inválido para nota de ${d.direcao === 'entrada' ? 'entrada' : 'saída'}`,
                     oQueAconteceLa: `E201, campo 08: "o CFOP é inválido para o tipo de nota. Informe um CFOP de ${d.direcao === 'entrada' ? 'entradas (com início 1, 2 e 3)' : 'saídas (com início 5, 6 e 7)'}".`,
@@ -180,7 +193,11 @@ export function conferirAntesDeGerar(
     }
 
     const problemas = balde.lista();
-    const bloqueios = problemas.filter((p) => p.gravidade === 'bloqueia').reduce((s, p) => s + p.qtd, 0);
+    // Contagem por NOTA, não por ocorrência: a mesma nota costuma disparar
+    // duas causas (ex.: "app não consegue montar" + "NFC-e a consumidor"),
+    // e somar as duas dizia "314 recusadas" de 157 notas — número maior que o
+    // recorte, o que é impossível e destrói a confiança no painel.
+    const bloqueios = Math.min(notasBloqueadas.size, docs.length);
     const farol: ResultadoPreflight['farol'] = bloqueios > 0 ? 'bloqueado'
         : problemas.length > 0 ? 'atencao' : 'ok';
 

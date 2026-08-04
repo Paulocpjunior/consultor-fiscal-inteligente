@@ -155,6 +155,12 @@ interface ExportarParams {
      * as NFC-e a consumidor final ficam FORA do arquivo, com o motivo.
      */
     codigoParticipanteConsumidor?: string;
+    /**
+     * UF por CNPJ do participante, resolvida na própria base (rota
+     * /sefaz/uf-participantes). Só é usada quando o documento não traz —
+     * nunca sobrescreve o que veio no XML.
+     */
+    ufPorParticipante?: Record<string, string>;
     /** Numero da empresa no E-Fiscal (campo NÚMERO DA EMPRESA do E001). */
     numeroEmpresaEfiscal: number;
     /** UF da empresa (para emitter de saidas). */
@@ -296,6 +302,15 @@ export function ehNfceConsumidorFinal(d: DocumentoFiscal): boolean {
  * Participante a cadastrar/referenciar: quem NÃO é a empresa monitorada.
  * Usa o objeto quando existe; senão remonta pelos campos achatados do doc.
  */
+/**
+ * UF resolvida na base para participantes cujo documento não a trouxe.
+ * Preenchida antes da exportação; NUNCA vence o que veio no XML.
+ */
+let ufResolvidaPorCnpj: Record<string, string> = {};
+export function definirUfPorParticipante(mapa: Record<string, string>): void {
+    ufResolvidaPorCnpj = mapa || {};
+}
+
 export function participanteDoDoc(d: DocumentoFiscal): ParticipanteNF | null {
     const x: any = d as any;
     // NOTA PRÓPRIA DE ENTRADA (tpNF=0): o cliente emite a nota da compra
@@ -326,6 +341,9 @@ export function participanteDoDoc(d: DocumentoFiscal): ParticipanteNF | null {
         || ufFlat
         || ufDoMunicipioIBGE(munFlat)
         || (!usaDestinatario ? ufDaChave(d.chave) : '')
+        // Último recurso: a UF que a base conhece deste CNPJ (ele já apareceu
+        // como emitente em algum documento nosso — a chave dele diz a UF).
+        || ufResolvidaPorCnpj[cnpjCpf]
         || '';
     return {
         cnpjCpf,
@@ -784,7 +802,8 @@ export interface ExportarResult {
 }
 
 export function exportarParaIobSage(params: ExportarParams): ExportarResult {
-    const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes, redfNfPaulista = '', codigoParticipanteConsumidor = '' } = params;
+    const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes, redfNfPaulista = '', codigoParticipanteConsumidor = '', ufPorParticipante } = params;
+    if (ufPorParticipante) definirUfPorParticipante(ufPorParticipante);
     const codConsumidor = String(codigoParticipanteConsumidor || '').trim().slice(0, 20);
     // UF da empresa: sai da chave de uma nota PRÓPRIA de saída (cUF do
     // emitente). Serve pra NFC-e a consumidor, que não tem destinatário.
