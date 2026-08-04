@@ -19,6 +19,36 @@ function pickTag(xml, tag) {
     return m ? m[1].trim() : null;
 }
 
+/**
+ * CNPJ/CPF autorizados a baixar o XML — bloco <autXML> da NF-e.
+ *
+ * É a PROVA de que o cliente configurou o escritório no emissor dele: com o
+ * nosso CNPJ aqui, a SEFAZ entrega a nota de SAÍDA para nós (sem isso não
+ * entrega — Rejeição 641). Paulo, 04/08: "como assegurar que o cliente fez
+ * correto, como podemos confirmar se o cadastro já está apto conforme ele
+ * informa". A resposta está escrita na própria nota.
+ *
+ * Uma NF-e aceita até 10 autorizados, então devolve LISTA.
+ */
+export function extrairAutXml(xml) {
+    const fora = [];
+    const re = /<autXML\b[^>]*>([\s\S]*?)<\/autXML>/gi;
+    let m;
+    while ((m = re.exec(String(xml || ''))) !== null) {
+        const doc = pickTag(m[1], 'CNPJ') || pickTag(m[1], 'CPF');
+        const d = String(doc || '').replace(/\D/g, '');
+        if (d) fora.push(d);
+    }
+    return fora;
+}
+
+/** O escritório está entre os autorizados desta nota? */
+export function autorizadoNoXml(xml, cnpjEscritorio) {
+    const alvo = String(cnpjEscritorio || '').replace(/\D/g, '');
+    if (!alvo) return false;
+    return extrairAutXml(xml).includes(alvo);
+}
+
 export function extrairParticipantesNfe(xml) {
     const emit = pickFirstBlock(xml, 'emit');
     const dest = pickFirstBlock(xml, 'dest');

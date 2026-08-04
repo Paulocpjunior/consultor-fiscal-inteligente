@@ -9,10 +9,12 @@ import crypto from 'crypto';
 import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 import { classificarTipoDoc } from './xml-tipo-doc.js';
-import { competenciaFromDhEmi, extrairParticipantesNfe } from './xml-metadata-helper.js';
+import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml } from './xml-metadata-helper.js';
 import { decidirDonoPorParticipantes } from './atribuicao-participantes.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
+// CNPJ do escritório — é ele que o cliente põe no autXML da nota dele.
+const CNPJ_ESCRITORIO_DIGITOS = String(process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
 const storage = new Storage();
 
@@ -356,6 +358,8 @@ export function extrairMetadados(xml, schema) {
     ieDest: participantes.destinatario.ie || null,
     ufEmit: participantes.emitente.uf || null,
     codMunEmit: participantes.emitente.codMunIBGE || null,
+    // PROVA de que o cliente autorizou o escritório no emissor dele.
+    autXml: extrairAutXml(xml),
   };
 }
 
@@ -727,6 +731,9 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     ieDest: meta.ieDest,
     ufEmit: meta.ufEmit,
     codMunEmit: meta.codMunEmit,
+    // Lista de autorizados + o atalho que a Cobertura de Saída consulta.
+    autXml: meta.autXml || [],
+    autXmlEscritorio: (meta.autXml || []).includes(CNPJ_ESCRITORIO_DIGITOS),
     dhEmi: meta.dhEmi,
     competencia: competenciaFromDhEmi(meta.dhEmi),
     valorTotal: meta.vNF,

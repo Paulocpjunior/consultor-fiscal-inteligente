@@ -29,6 +29,7 @@ const CofreControlePanel = lazy(() => import('./CofreControlePanel'));
 const BacklogEntradaPanel = lazy(() => import('./BacklogEntradaPanel'));
 const ProvaCapturaPanel = lazy(() => import('./ProvaCapturaPanel'));
 const CofreChecklistPanel = lazy(() => import('./CofreChecklistPanel'));
+const AptidaoSaidaPanel = lazy(() => import('./AptidaoSaidaPanel'));
 const DipamProdutorRuralPanel = lazy(() => import('./DipamProdutorRuralPanel'));
 const DifalPanel = lazy(() => import('./DifalPanel'));
 const NcmCadastroPanel = lazy(() => import('./NcmCadastroPanel'));
@@ -337,6 +338,13 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                             recebe via cofre → configurar e-mail no emissor. */}
                         <Suspense fallback={null}>
                             <CofreChecklistPanel />
+                        </Suspense>
+                        {/* "O cliente fez certo?" — aptidão se prova com UMA
+                            nota de qualquer data; o checklist acima olha a
+                            janela recente. Os dois juntos separam "não
+                            configurou" de "configurou e não vendeu". */}
+                        <Suspense fallback={null}>
+                            <AptidaoSaidaPanel />
                         </Suspense>
                     </div>
                 )}
