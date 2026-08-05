@@ -19,6 +19,14 @@ import { apurarIssSp, empresaEhSpCapital, type ApuracaoIssSp } from '../../servi
 import { enviarGuiaPeloServidor, mensagemEnvioServidor } from '../../services/envioImpostoService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 
+interface SaudeCaptura {
+    farol: 'ok' | 'atencao' | 'quebrado';
+    motivo: string;
+    acao: string | null;
+    zeroConfiavel: boolean;
+    empresaFalhou?: { erro: string; ccm: string | null } | null;
+}
+
 const PORTAL_NFSE_SP = 'https://nfe.prefeitura.sp.gov.br/';
 
 const brl = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -26,6 +34,30 @@ const compAtual = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
+
+/**
+ * Falha ao LER a saúde não vira "está tudo bem": sem resposta, a tela trata
+ * como não-confiável e diz isso.
+ */
+async function carregarSaude(cnpj: string): Promise<SaudeCaptura> {
+    try {
+        const { getAuth } = await import('firebase/auth');
+        const token = await getAuth().currentUser?.getIdToken();
+        const r = await fetch(`/api/admin/sefaz/nfsesp-saude?cnpj=${encodeURIComponent(cnpj)}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        const d = await r.json();
+        if (!r.ok || !d?.ok) throw new Error(d?.error || `HTTP ${r.status}`);
+        return d as SaudeCaptura;
+    } catch (e: any) {
+        return {
+            farol: 'atencao',
+            motivo: `Não consegui conferir a saúde da captura de NFS-e SP (${e?.message || e}).`,
+            acao: 'Confira a aba Captura antes de concluir que o cliente não emitiu nota.',
+            zeroConfiavel: false,
+        };
+    }
+}
 
 const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string) => void }> = ({ currentUser, onShowToast }) => {
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
@@ -35,6 +67,9 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     const [apuracao, setApuracao] = useState<ApuracaoIssSp | null>(null);
     const [foraDaPraca, setForaDaPraca] = useState(false);
     const [pdfGuia, setPdfGuia] = useState<{ base64: string; nome: string } | null>(null);
+    // Saúde do trilho de captura — sem ela, "0 notas" e "não conseguimos
+    // buscar" ficam idênticos na tela, e o colaborador só descobre tentando.
+    const [saude, setSaude] = useState<SaudeCaptura | null>(null);
     const [enviando, setEnviando] = useState(false);
 
     React.useEffect(() => {
@@ -58,9 +93,11 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
             // de vencimento e outro portal — dizer isso é melhor que apurar
             // um número que ninguém pode pagar aqui.
             setForaDaPraca(!empresaEhSpCapital(df));
-            const docs = await listDocumentos(currentUser, {
-                competencia, empresaId: alvo.id, empresaCnpj: alvo.cnpj,
-            });
+            const [docs, s] = await Promise.all([
+                listDocumentos(currentUser, { competencia, empresaId: alvo.id, empresaCnpj: alvo.cnpj }),
+                carregarSaude(alvo.cnpj),
+            ]);
+            setSaude(s);
             setApuracao(apurarIssSp(docs, competencia));
         } finally {
             setCarregando(false);
@@ -164,6 +201,31 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                     </p>
                 )}
             </div>
+
+            {saude && saude.farol !== 'ok' && (
+                <div className={`rounded-xl border p-3 text-xs space-y-1 ${
+                    saude.farol === 'quebrado'
+                        ? 'border-red-300 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'
+                        : 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'
+                }`}>
+                    <p className="font-bold">
+                        {saude.farol === 'quebrado' ? '🚨' : '⚠'} Captura de NFS-e SP: {saude.motivo}
+                    </p>
+                    {saude.acao && <p>{saude.acao}</p>}
+                    {saude.empresaFalhou && (
+                        <p className="font-semibold">
+                            Esta empresa está entre as que falharam na última varredura: {saude.empresaFalhou.erro}
+                            {saude.empresaFalhou.ccm ? ` (CCM ${saude.empresaFalhou.ccm})` : ''}.
+                        </p>
+                    )}
+                    {!saude.zeroConfiavel && (
+                        <p className="font-semibold">
+                            Enquanto isso, um total ZERO aqui embaixo NÃO significa que o cliente não emitiu nota —
+                            pode ser nota que não conseguimos buscar. Não prometa guia ao cliente com base neste número.
+                        </p>
+                    )}
+                </div>
+            )}
 
             {apuracao && (
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
