@@ -16,7 +16,7 @@ interface Linha {
 interface Resp {
     ok: boolean; error?: string; competencia?: string; lidos?: number;
     linhas?: Linha[]; perguntasEquipe?: string[];
-    resumo?: { comMovimento: number; candidatasPiloto: number; comStSaida: number; comIpiOuIndustria: number; comInterestadual: number };
+    resumo?: { comMovimento: number; candidatasPiloto: number; comStSaida: number; comIpiOuIndustria: number; comInterestadual: number; comVendaNaoContribuinte?: number };
 }
 
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -81,6 +81,11 @@ const ProntidaoMigracao: React.FC<{ onShowToast?: (m: string) => void }> = ({ on
                             {dados.resumo.comMovimento} empresa(s) com movimento · <strong style={{ color: 'var(--accent)' }}>
                             {dados.resumo.candidatasPiloto} candidata(s) a piloto</strong> · {dados.resumo.comStSaida} com ST em saída ·{' '}
                             {dados.resumo.comIpiOuIndustria} indústria/IPI · {dados.resumo.comInterestadual} c/ compra interestadual
+                            {' · '}
+                            <span className={(dados.resumo.comVendaNaoContribuinte ?? 0) > 0
+                                ? 'text-amber-700 dark:text-amber-400 font-bold' : ''}>
+                                {dados.resumo.comVendaNaoContribuinte ?? 0} c/ venda a não contribuinte (E310)
+                            </span>
                         </span>
                     )}
                 </div>

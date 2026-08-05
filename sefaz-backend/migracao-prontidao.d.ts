@@ -11,6 +11,8 @@ export interface ProntidaoLinha {
     stEntradas: number;
     ipiSaidas: number;
     entradasInterestaduais: number;
+    /** Vendas interestaduais a não contribuinte (EC 87/15 → E310/E316). */
+    saidasNaoContribuinte: number;
     bloqueios: string[];
     atencoes: string[];
     candidataPiloto: boolean;
@@ -24,6 +26,7 @@ export interface ProntidaoResultado {
         comStSaida: number;
         comIpiOuIndustria: number;
         comInterestadual: number;
+        comVendaNaoContribuinte: number;
     };
     perguntasEquipe: string[];
 }

@@ -18,6 +18,43 @@ const doc = (empresaId: string, over: any = {}) => ({
     ...over,
 });
 
+describe('EC 87/15 — venda interestadual a NÃO CONTRIBUINTE (E310/E316)', () => {
+    // Antes de construir o E310 é preciso saber se ALGUÉM faz essa operação —
+    // a mesma disciplina que descartou o SAT e o regime de caixa. O CFOP é a
+    // prova: 6107/6108 só existem pra venda a não contribuinte.
+    const comCfop = (id: string, cfop: string) =>
+        doc(id, { itens: [{ cfop }] });
+
+    it('CFOP 6108 numa saída própria vira BLOQUEIO nomeando o E310', () => {
+        const r = montarProntidaoMigracao([comCfop('a', '6108')] as any, EMP as any);
+        const a = r.linhas.find(l => l.empresaId === 'a')!;
+        expect(a.saidasNaoContribuinte).toBe(1);
+        expect(a.bloqueios.join(' ')).toMatch(/E310\/E316/);
+        expect(a.candidataPiloto).toBe(false);   // não migra sem o bloco
+        expect(r.resumo.comVendaNaoContribuinte).toBe(1);
+    });
+
+    it('venda interestadual a CONTRIBUINTE (6102) NÃO é EC 87/15', () => {
+        const r = montarProntidaoMigracao([comCfop('a', '6102')] as any, EMP as any);
+        const a = r.linhas.find(l => l.empresaId === 'a')!;
+        expect(a.saidasNaoContribuinte).toBe(0);
+        expect(a.candidataPiloto).toBe(true);
+    });
+
+    it('ENTRADA com 6108 (o fornecedor é que vendeu assim) não conta pra nós', () => {
+        const r = montarProntidaoMigracao([
+            doc('a', { direcao: 'entrada', emitente: { cnpjCpf: '9', uf: 'MG' }, itens: [{ cfop: '6108' }] }),
+        ] as any, EMP as any);
+        expect(r.linhas.find(l => l.empresaId === 'a')!.saidasNaoContribuinte).toBe(0);
+    });
+
+    it('carteira sem 6107/6108 = zero — é o dado que autoriza DESCARTAR o bloco', () => {
+        const r = montarProntidaoMigracao([doc('a'), doc('b')] as any, EMP as any);
+        expect(r.resumo.comVendaNaoContribuinte).toBe(0);
+        expect(r.perguntasEquipe.join(' ')).toMatch(/ZERO empresa marcada/);
+    });
+});
+
 describe('montarProntidaoMigracao', () => {
     it('aponta candidata a piloto: Lucro com movimento e sem bloqueio', () => {
         const r = montarProntidaoMigracao([
