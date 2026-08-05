@@ -10,6 +10,7 @@
 import React, { useState } from 'react';
 import {
     previewDare, registrarDare, receitasApiDare, emitirDarePelaApi, listarCodigosDare,
+    salvarCodigoAntecipacao,
     type DarePayload, type AmbienteDare, type CodigoDareIcms,
 } from '../../services/dareSpService';
 import { enviarPorEmailDoColaborador, GESTOR_EMAIL } from '../../services/envioImpostoService';
@@ -204,17 +205,54 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
 
     // Teste de fumaça da credencial: GET /receitas. NÃO emite guia — só prova
     // que a chave do Secret Manager chega à SEFAZ.
+    // A lista REAL de serviços da SEFAZ. Antes só mostrava a CONTAGEM — e aí
+    // pedir "escolha o código da antecipação nesta lista" era pedir o
+    // impossível: o número existia e a tela não o exibia.
+    const [receitas, setReceitas] = useState<any[] | null>(null);
+    const [filtroReceita, setFiltroReceita] = useState('');
+
     const testarCredencial = async () => {
         setOcupado(true); setErro(null); setStatusApi(null);
         try {
             const r = await receitasApiDare(ambiente);
             if (r.ok) {
-                const qtd = Array.isArray(r.receitas) ? r.receitas.length : null;
-                setStatusApi(`✓ Credencial OK em ${r.rotulo || ambiente}${qtd != null ? ` — ${qtd} receita(s) na tabela oficial` : ''}.`);
+                const lista = Array.isArray(r.receitas) ? r.receitas : [];
+                setReceitas(lista);
+                setStatusApi(`✓ Credencial OK em ${r.rotulo || ambiente} — ${lista.length} serviço(s) na tabela oficial.`);
             } else setErro(r.error || 'Falha ao consultar as receitas.');
         } catch (e: any) {
             setErro(e?.message || 'Falha ao consultar as receitas.');
         } finally { setOcupado(false); }
+    };
+
+    const usarComoAntecipacao = async (r: any) => {
+        const codigo = String(r?.codigoServicoDARE ?? r?.codigoServico ?? r?.codigo ?? '');
+        if (!codigo) return;
+        if (!confirm(
+            `Cadastrar o código ${codigo} como a ANTECIPAÇÃO do art. 426-A?\n\n`
+            + `${r?.descricao || r?.nome || ''}\n\n`
+            + 'Ele passa a valer para TODAS as empresas. Confira que é mesmo a antecipação — '
+            + 'código errado põe o imposto na receita errada, e a SEFAZ não desfaz emissão.',
+        )) return;
+        setOcupado(true); setErro(null);
+        const res = await salvarCodigoAntecipacao({
+            codigo,
+            codigoReceita: r?.codigoReceita ?? null,
+            sefaz: r?.sefaz ?? null,
+            ambiente,
+            receitasSefaz: receitas ?? undefined,
+        });
+        setOcupado(false);
+        if (!res.ok) { setErro(res.error || 'Falha ao cadastrar.'); return; }
+        setStatusApi(`✓ Código ${codigo} cadastrado como antecipação 426-A.`);
+        setFaltaCodigoAntecipacao(false);
+        setCodigoServico(codigo);
+        listarCodigosDare().then((cs: CodigoDareIcms[]) => {
+            if (cs.length) setOpcoes(cs.map((c) => ({
+                codigoServico: c.codigoServico,
+                label: `${c.descricao} — ${c.codigoReceita} / ${c.codigoServico}`,
+            })));
+        }).catch(() => { /* lista fica como está */ });
     };
 
     // Emissão pela API. Em produção o backend exige confirmação explícita
@@ -382,6 +420,55 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                     </div>
                     {!preview && (
                         <p className="text-[10px] text-slate-400">O preview é obrigatório antes de emitir — é ele que valida serviço, referência e vencimento.</p>
+                    )}
+
+                    {/* A lista REAL da SEFAZ. É daqui que sai o código da
+                        antecipação 426-A — nunca de memória. */}
+                    {receitas && receitas.length > 0 && (
+                        <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-2 space-y-1">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                    Serviços da SEFAZ ({receitas.length}) — {ambiente}
+                                </p>
+                                <input value={filtroReceita} onChange={e => setFiltroReceita(e.target.value)}
+                                    placeholder="filtrar (ex.: antecipa)"
+                                    className="text-[11px] px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700" />
+                            </div>
+                            <div className="max-h-52 overflow-y-auto">
+                                <table className="w-full text-[11px]">
+                                    <tbody>
+                                        {receitas
+                                            .filter(r => {
+                                                const t = filtroReceita.trim().toLowerCase();
+                                                if (!t) return true;
+                                                return JSON.stringify(r).toLowerCase().includes(t);
+                                            })
+                                            .slice(0, 200)
+                                            .map((r, i) => {
+                                                const cod = String(r?.codigoServicoDARE ?? r?.codigoServico ?? r?.codigo ?? '');
+                                                const desc = String(r?.descricao ?? r?.nome ?? '');
+                                                return (
+                                                    <tr key={`${cod}-${i}`} className="border-b border-slate-100 dark:border-slate-700/50">
+                                                        <td className="py-1 font-mono font-bold whitespace-nowrap pr-2">{cod || '—'}</td>
+                                                        <td className="py-1 text-slate-600 dark:text-slate-300">{desc}</td>
+                                                        <td className="py-1 text-right">
+                                                            <button onClick={() => usarComoAntecipacao(r)} disabled={ocupado || !cod}
+                                                                className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-40"
+                                                                title="Cadastra este código como a antecipação do art. 426-A (vale pra todas as empresas).">
+                                                                usar p/ 426-A
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p className="text-[10px] text-slate-400">
+                                Filtre por "antecipa" para achar a rubrica do art. 426-A. O botão só cadastra o
+                                código no CFI — não emite nada.
+                            </p>
+                        </div>
                     )}
                     {statusApi && (
                         <div className="text-xs text-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded p-2">{statusApi}</div>
