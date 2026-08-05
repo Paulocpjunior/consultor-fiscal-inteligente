@@ -4,7 +4,7 @@ import { User } from '../types';
 import * as authService from '../services/authService';
 import { isFirebaseConfigured } from '../services/firebaseConfig';
 import { GlobeIcon, ShieldIcon } from './Icons';
-import { APP_VERSION, APP_RELEASE, APP_BUILD_TIME, formatBuildDate } from '../version';
+import { APP_RELEASE, APP_BUILD_TIME, formatBuildDate, rotuloVersao } from '../version';
 
 interface LoginScreenProps {
     onLoginSuccess: (user: User) => void;
@@ -66,7 +66,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                             className="inline-flex items-center gap-1 bg-white/15 text-[var(--text-primary)] text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full backdrop-blur-sm border border-white/20"
                             title={`Build: ${formatBuildDate(APP_BUILD_TIME)}`}
                         >
-                            Versão {APP_VERSION}
+                            Versão {rotuloVersao()}
                         </span>
                         <span
                             className="inline-flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full border"

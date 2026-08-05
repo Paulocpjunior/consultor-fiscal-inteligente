@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useVersionCheck } from '../services/versionService';
+import { rotuloVersao } from '../version';
 
 const UpdateBanner: React.FC = () => {
     const { updateAvailable, latest, applyUpdate, dismiss } = useVersionCheck();
@@ -34,7 +35,7 @@ const UpdateBanner: React.FC = () => {
                     <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
                         Atualizamos o sistema para a versão{' '}
                         <span className="font-mono font-bold text-sky-700 dark:text-sky-300">
-                            {latest.version}
+                            {rotuloVersao(latest.version, latest.buildNumber || '')}
                         </span>
                         . Clique em <strong>Atualizar agora</strong> para recarregar (hard refresh) e aplicar as melhorias.
                     </p>

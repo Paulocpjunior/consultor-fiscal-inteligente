@@ -21,6 +21,12 @@ const commit = (() => {
         return 'local';
     }
 })();
+// Nº do build = nº da execução do workflow de deploy (GITHUB_RUN_NUMBER), que
+// SOBE a cada entrega. A versão semântica do package.json fica meses no mesmo
+// número, então "Versão 1.2.1" nunca denunciou deploy novo — quem olhava a
+// tela não tinha como saber se estava vendo o build do dia ou o da semana
+// passada (era preciso decifrar o commit). Vazio fora do CI.
+const buildNumber = String(process.env.APP_BUILD_NUMBER || '').trim();
 
 export default defineConfig({
     plugins: [
@@ -37,6 +43,7 @@ export default defineConfig({
                     release,
                     buildTime,
                     commit,
+                    buildNumber,
                 };
                 writeFileSync(target, JSON.stringify(data, null, 2));
                 // eslint-disable-next-line no-console
@@ -50,6 +57,7 @@ export default defineConfig({
         '__APP_RELEASE__': JSON.stringify(release),
         '__APP_BUILD_TIME__': JSON.stringify(buildTime),
         '__APP_COMMIT__': JSON.stringify(commit),
+        '__APP_BUILD_NUMBER__': JSON.stringify(buildNumber),
     },
     server: {
         host: '0.0.0.0',

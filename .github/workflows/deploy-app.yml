@@ -150,6 +150,7 @@ jobs:
             --build-arg VITE_SENTRY_DSN="$VITE_SENTRY_DSN" \
             --build-arg VITE_SENTRY_ENV="$VITE_SENTRY_ENV" \
             --build-arg APP_COMMIT="${{ github.sha }}" \
+            --build-arg APP_BUILD_NUMBER="${{ github.run_number }}" \
             -t ${{ env.IMAGE }}:${{ github.sha }} \
             .
 
