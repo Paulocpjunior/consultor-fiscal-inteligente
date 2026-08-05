@@ -13,7 +13,7 @@ import { parseLogEfiscal, cruzarLogComFml, type CruzamentoLogEfiscal } from '../
 import { carregarCodigosParticipantes, salvarCodigosParticipantes, carregarUfsParticipantes, salvarUfsParticipantes } from '../../services/sageCodigosService';
 import { ufValida } from '../../services/ufsBrasil';
 import { parsearCadastroClientesFornecedores } from '../../services/efiscalCadastroParticipantesParser';
-import { manifestarPendentes } from '../../services/manifestoService';
+import { manifestarPendentes, resumoManifestacao } from '../../services/manifestoService';
 
 interface Props {
     currentUser: User;
@@ -342,11 +342,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         setManifestando(true);
         try {
             const r = await manifestarPendentes({ tipo: 'ciencia', empresaId: empresaSelecionada.id, limit: 200 });
-            if (r.erro) { onShowToast?.(`Falha ao manifestar: ${r.erro}`); return; }
-            onShowToast?.(
-                `Ciência manifestada: ${r.sucessos || 0} de ${r.total || 0} resumo(s).`
-                + ' O XML completo (com os produtos) chega na PRÓXIMA captura — depois disso, clique em Reconferir.',
-            );
+            onShowToast?.(resumoManifestacao(r));
         } catch (e: any) {
             onShowToast?.(`Falha ao manifestar: ${e?.message || e}`);
         } finally {

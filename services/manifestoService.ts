@@ -22,6 +22,32 @@ export interface ManifestarPendentesResult {
     detalhes?: Array<{ chave: string; tipo: string; status: string; motivo?: string }>;
     dryRun?: boolean;
     erro?: string;
+    /** Por que NADA foi manifestado — motivo → quantidade (só quando total=0). */
+    diagnostico?: {
+        porMotivo?: Record<string, number>;
+        ultimaFalha?: string | null;
+        documentos?: number;
+    };
+}
+
+/**
+ * Frase honesta pro toast. "0 manifestadas" sem motivo é o tipo de resposta
+ * que faz o colaborador clicar de novo achando que foi lentidão.
+ */
+export function resumoManifestacao(r: ManifestarPendentesResult): string {
+    if (r.erro) return `Falha ao manifestar: ${r.erro}`;
+    if (r.total) {
+        return `Ciência manifestada: ${r.sucessos || 0} de ${r.total} resumo(s).`
+            + (r.falhas ? ` ${r.falhas} falharam.` : '')
+            + ' O XML completo (com os produtos) chega na PRÓXIMA captura — depois, clique em Reconferir.';
+    }
+    const motivos = Object.entries(r.diagnostico?.porMotivo || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([m, q]) => `${q}× ${m}`);
+    if (!motivos.length) return 'Nenhum documento pendente de manifestação nesta empresa.';
+    return `Nada a manifestar agora — ${motivos.join(' · ')}.`
+        + (r.diagnostico?.ultimaFalha ? ` Última falha: ${r.diagnostico.ultimaFalha}` : '');
 }
 
 async function getToken(): Promise<string> {
