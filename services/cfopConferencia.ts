@@ -26,8 +26,10 @@ import { cfopParaEscriturar, type CfopCtx } from './iobSageExportService';
 
 /** Sufixos de COMPRA DE PRODUTO — os únicos onde a natureza decide. */
 const SUFIXOS_COMPRA = ['101', '102', '116', '117', '118', '120', '122'];
+/** Espelho de SUFIXOS_ST_VENDA (cfop-correlacao.js) — venda com ST. */
+const SUFIXOS_ST_VENDA = ['401', '402', '403', '404', '405'];
 
-export type MotivoCorrelacao = 'override' | 'natureza' | 'espelho' | 'sem-conversao';
+export type MotivoCorrelacao = 'override' | 'natureza' | 'natureza-st' | 'espelho' | 'sem-conversao';
 
 export interface LinhaCorrelacao {
     origem: string;
@@ -98,9 +100,19 @@ export function conferirCorrelacaoCfop(
                 explicacao = natureza === 'misto'
                     ? 'Empresa de indústria E comércio: 101 (industrialização) e 102 (revenda) são ambos possíveis. Mantivemos o sufixo do emitente — confirme se é a operação certa.'
                     : 'Natureza da atividade não declarada no cadastro: mantivemos o sufixo do emitente. Preencha a natureza (ou grave um override) para o app decidir sozinho.';
+            } else if (SUFIXOS_ST_VENDA.includes(sufixo)) {
+                // 5405 → 1405 não existe: na entrada a família ST só tem
+                // 401/403/406/407. O sufixo do vendedor descreve a POSIÇÃO dele
+                // na substituição (substituto/substituído), que não tem
+                // equivalente do lado de quem compra.
+                motivo = 'natureza-st';
+                conferir = !natureza || natureza === 'misto';
+                explicacao = natureza && natureza !== 'misto'
+                    ? `Venda com ST: na entrada não existe o sufixo ${sufixo} — destino definido pela natureza da empresa (${rotuloNatureza[natureza] || natureza}).`
+                    : `Venda com ST: na entrada não existe o sufixo ${sufixo}. Sem natureza declarada, usamos 403 (compra para comercialização com ST) — confirme se a mercadoria é para revenda.`;
             } else {
                 motivo = 'espelho';
-                explicacao = 'Ativo, uso/consumo, devolução, ST: o sufixo do emitente já diz a operação e foi preservado.';
+                explicacao = 'Ativo, uso/consumo, devolução, transferência: o sufixo do emitente já diz a operação e foi preservado.';
             }
 
             const atual = mapa.get(chave) || { origem, destino, qtd: 0, valor: 0, motivo, explicacao, conferir };
