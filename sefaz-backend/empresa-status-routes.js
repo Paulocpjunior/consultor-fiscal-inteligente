@@ -677,6 +677,103 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
     }
 });
 
+// ─── Carga em massa do Cod.Cliente (Listagem de Empresas do E-Fiscal) ──────
+// Paulo, 05/08: exportou o "Cadastro de Empresas" do E-Fiscal (1.767 fichas,
+// HTML/XFRX). O front parseia o arquivo e manda {codigo, cnpj} — aqui o
+// confronto é por CNPJ e a régua é a mesma da gravação unitária:
+// normalizarCodCliente + nunca sobrescrever código divergente em silêncio.
+// Admin-only: uma carga errada renomeia a carteira inteira.
+router.post('/importar-cod-cliente', requireAuth, express.json({ limit: '4mb' }), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores fazem a carga em massa.' });
+        }
+        const itens = Array.isArray(req.body?.empresas) ? req.body.empresas : [];
+        if (itens.length === 0) return res.status(400).json({ error: 'Informe `empresas` [{codigo, cnpj}].' });
+        if (itens.length > 5000) return res.status(400).json({ error: 'Máximo de 5.000 itens por carga.' });
+
+        const db = fa().firestore();
+        // Uma leitura das duas coleções serve a carga toda (≈ centenas de docs).
+        const porCnpj = new Map();          // cnpj → [{col, ref, codAtual, nome}]
+        const codigoEmUso = new Map();      // codCliente já gravado → cnpj dono
+        for (const col of ['simples_empresas', 'lucro_empresas']) {
+            const snap = await db.collection(col).get();
+            snap.forEach((d) => {
+                const dd = d.data() || {};
+                if (dd._merged_into || dd._deleted) return;
+                const cnpj = limparCnpj(dd.cnpj);
+                if (cnpj.length !== 14) return;
+                if (!porCnpj.has(cnpj)) porCnpj.set(cnpj, []);
+                porCnpj.get(cnpj).push({
+                    ref: d.ref,
+                    codAtual: String(dd.dadosFiscais?.codCliente || ''),
+                    nome: dd.razaoSocial || dd.nome || dd.fantasia || cnpj,
+                });
+                const cod = String(dd.dadosFiscais?.codCliente || '');
+                if (cod) codigoEmUso.set(cod, cnpj);
+            });
+        }
+
+        let gravadas = 0, jaIguais = 0, invalidos = 0;
+        const naoEncontradas = [];
+        const divergentes = [];
+        const codigoOcupado = [];
+        for (const item of itens) {
+            const r = normalizarCodCliente(item?.codigo);
+            const cnpj = limparCnpj(item?.cnpj);
+            if (!r.ok || r.valor === '' || cnpj.length !== 14) { invalidos++; continue; }
+            const docs = porCnpj.get(cnpj);
+            if (!docs) {
+                // Esperado aos montes: o E-Fiscal guarda 20 anos de carteira,
+                // o CFI só as ativas. Não é erro — fica no relatório.
+                naoEncontradas.push({ codigo: r.valor, cnpj });
+                continue;
+            }
+            const donoDoCodigo = codigoEmUso.get(r.valor);
+            if (donoDoCodigo && donoDoCodigo !== cnpj) {
+                codigoOcupado.push({ codigo: r.valor, cnpj, ocupadoPor: donoDoCodigo });
+                continue;
+            }
+            let mudouAlgum = false;
+            for (const doc of docs) {
+                if (doc.codAtual === r.valor) continue;
+                if (doc.codAtual && doc.codAtual !== r.valor) {
+                    divergentes.push({ cnpj, nome: doc.nome, salvo: doc.codAtual, arquivo: r.valor });
+                    continue;
+                }
+                await doc.ref.update({
+                    'dadosFiscais.codCliente': r.valor,
+                    dadosFiscaisAlteradoEm: admin.firestore.FieldValue.serverTimestamp(),
+                    dadosFiscaisAlteradoPor: `${req.user.email} (carga E-Fiscal)`,
+                });
+                doc.codAtual = r.valor;
+                mudouAlgum = true;
+            }
+            if (mudouAlgum) { gravadas++; codigoEmUso.set(r.valor, cnpj); }
+            else if (docs.every((d) => d.codAtual === r.valor)) jaIguais++;
+        }
+
+        console.log(`[importar-cod-cliente] itens=${itens.length} gravadas=${gravadas} por=${req.user.email}`);
+        return res.json({
+            ok: true,
+            recebidas: itens.length,
+            gravadas,
+            jaIguais,
+            invalidos,
+            naoEncontradas: naoEncontradas.length,
+            divergentes,
+            codigoOcupado,
+            mensagem: `${gravadas} empresa(s) receberam o Cod.Cliente; ${jaIguais} já estavam iguais; `
+                + `${naoEncontradas.length} do arquivo não existem no CFI (carteira antiga do E-Fiscal — normal)`
+                + (divergentes.length ? `; ⚠ ${divergentes.length} divergem do já salvo e NÃO foram alteradas` : '')
+                + (codigoOcupado.length ? `; ⚠ ${codigoOcupado.length} código(s) já em uso por outro CNPJ` : '') + '.',
+        });
+    } catch (e) {
+        console.error('[importar-cod-cliente] erro:', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 // ─── Resetar lock SEFAZ de uma empresa ────────────────────────────────────
 // Sync-orchestrator marca lock de 1h por CNPJ pra evitar disparos
 // concorrentes. Quando admin precisa testar de novo dentro da janela
