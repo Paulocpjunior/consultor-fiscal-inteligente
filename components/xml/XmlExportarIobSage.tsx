@@ -13,6 +13,7 @@ import { parseLogEfiscal, cruzarLogComFml, type CruzamentoLogEfiscal } from '../
 import { carregarCodigosParticipantes, salvarCodigosParticipantes, carregarUfsParticipantes, salvarUfsParticipantes } from '../../services/sageCodigosService';
 import { ufValida } from '../../services/ufsBrasil';
 import { parsearCadastroClientesFornecedores } from '../../services/efiscalCadastroParticipantesParser';
+import { manifestarPendentes } from '../../services/manifestoService';
 
 interface Props {
     currentUser: User;
@@ -324,6 +325,34 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
         return Array.from(out.values()).sort((a, b) => b.notas - a.notas);
     }, [filtrados, ufResolvida, ufsManuais, codigosPart]);
+
+    // Nota que chegou como RESUMO (resNFe) não tem itens — e é por isso que o
+    // arquivo sairia com a nota sem produto nenhum. A SEFAZ só entrega o XML
+    // completo depois da manifestação de ciência. O quadro já dizia isso; o
+    // que faltava era o botão que FAZ (equipe via Paulo, 05/08: "puxou a nota
+    // normalmente, porém quando vou exportar me diz que não tem produto").
+    const [manifestando, setManifestando] = useState(false);
+    const notasResumoSemItens = useMemo(
+        () => filtrados.filter(d => (d.itens || []).length === 0).length,
+        [filtrados],
+    );
+
+    const handleManifestar = async () => {
+        if (!empresaSelecionada) { onShowToast?.('Escolha a empresa para manifestar.'); return; }
+        setManifestando(true);
+        try {
+            const r = await manifestarPendentes({ tipo: 'ciencia', empresaId: empresaSelecionada.id, limit: 200 });
+            if (r.erro) { onShowToast?.(`Falha ao manifestar: ${r.erro}`); return; }
+            onShowToast?.(
+                `Ciência manifestada: ${r.sucessos || 0} de ${r.total || 0} resumo(s).`
+                + ' O XML completo (com os produtos) chega na PRÓXIMA captura — depois disso, clique em Reconferir.',
+            );
+        } catch (e: any) {
+            onShowToast?.(`Falha ao manifestar: ${e?.message || e}`);
+        } finally {
+            setManifestando(false);
+        }
+    };
 
     const handleSalvarUfs = async () => {
         if (!empresaSelecionada) return;
@@ -964,6 +993,16 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                         title="Relê os XMLs guardados e preenche o endereço do destinatário das notas deste recorte — resolve o 'participante sem UF'."
                                     >
                                         {corrigindoEnderecos ? 'Corrigindo…' : '🔧 Corrigir endereços (relê XMLs)'}
+                                    </button>
+                                )}
+                                {notasResumoSemItens > 0 && (
+                                    <button
+                                        onClick={handleManifestar}
+                                        disabled={manifestando || !empresaSelecionada}
+                                        className="px-3 py-2 text-sm bg-violet-100 dark:bg-violet-900/30 text-violet-800 dark:text-violet-300 rounded-lg hover:bg-violet-200 dark:hover:bg-violet-900/50 disabled:opacity-40"
+                                        title="Nota sem produto é RESUMO da SEFAZ (resNFe). Manifestar a ciência libera o XML completo, que chega na próxima captura — aí os itens aparecem."
+                                    >
+                                        {manifestando ? 'Manifestando…' : `📨 Manifestar ciência (${notasResumoSemItens})`}
                                     </button>
                                 )}
                                 {participantesSemUf.length > 0 && (
