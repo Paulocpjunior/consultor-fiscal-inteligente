@@ -5,6 +5,7 @@ import * as simplesService from '../services/simplesNacionalService';
 import { PlusIcon, InfoIcon, ShieldIcon, PencilIcon, TrashIcon } from './Icons';
 import { previewMesclagem, executarMesclagem, descreverResumo } from '../services/empresasMergeService';
 import SimplesBaseVarreduraModal from './SimplesBaseVarreduraModal';
+import { empresaBateBusca, prefixoCodCliente } from '../services/buscaEmpresa';
 
 interface SimplesNacionalDashboardProps {
     empresas: SimplesNacionalEmpresa[];
@@ -79,16 +80,12 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
     // Conferência das bases (RBT12) — varre a carteira atrás de detalhamento
     // por CNAE acima do total lançado, que inflava a faixa e o DAS.
     const [varreduraAberta, setVarreduraAberta] = useState(false);
-    const empresasFiltradas = useMemo(() => {
-        const termo = busca.trim().toLowerCase();
-        if (!termo) return empresasComResumo;
-        const termoCnpj = termo.replace(/\D/g, '');
-        return empresasComResumo.filter(e => {
-            const nome = (e.nome || '').toLowerCase();
-            const cnpj = (e.cnpj || '').replace(/\D/g, '');
-            return nome.includes(termo) || (termoCnpj && cnpj.includes(termoCnpj));
-        });
-    }, [empresasComResumo, busca]);
+    // Régua ÚNICA (código, nome ou CNPJ) — a mesma do seletor das telas de
+    // XML. Paulo procurou "pelo número" aqui e não achou (05/08).
+    const empresasFiltradas = useMemo(
+        () => empresasComResumo.filter(e => empresaBateBusca(busca, e)),
+        [empresasComResumo, busca],
+    );
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -132,7 +129,7 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                         type="text"
                         value={busca}
                         onChange={(ev) => setBusca(ev.target.value)}
-                        placeholder="Buscar empresa por nome ou CNPJ..."
+                        placeholder="Buscar por código, nome ou CNPJ..."
                         className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     />
                 </div>
@@ -158,6 +155,11 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                 {empresasFiltradas.map(e => (
                                     <tr key={e.id} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600/20">
                                         <td className="px-6 py-4 font-medium text-slate-900 dark:text-white whitespace-nowrap">
+                                            {prefixoCodCliente(e) && (
+                                                <span className="font-mono text-[11px] font-bold text-blue-600 dark:text-blue-400 mr-1">
+                                                    {prefixoCodCliente(e)}
+                                                </span>
+                                            )}
                                             {e.nome}
                                             {cnpjsDuplicados.has(String(e.cnpj || '').replace(/\D/g, '')) && (() => {
                                                 // Responde "qual excluir?" com dado: quem tem 0 lançamentos
