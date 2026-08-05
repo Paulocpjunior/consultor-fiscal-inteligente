@@ -120,4 +120,71 @@ router.get('/faturamento', requireAuth, async (req, res) => {
     }
 });
 
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/relatorios/faturamento-mensal?empresaId=&de=AAAA-MM&ate=AAAA-MM
+//
+// Fonte da Declaração de Faturamento (documento assinado, Paulo 05/08). Mesma
+// RÉGUA do relatório de faturamento acima — saídas autorizadas da competência,
+// cancelados fora, direção efetiva pelo tpNF — só que por MÊS de uma empresa.
+// Não inventa conta própria: se os dois números divergirem um dia, é bug de um
+// só lugar.
+//
+// Farol honesto: `docs` por mês vai no payload, porque mês com ZERO documentos
+// não é o mesmo que mês sem faturamento — e isso vai num papel assinado.
+// ────────────────────────────────────────────────────────────────────────────
+router.get('/faturamento-mensal', requireAuth, async (req, res) => {
+    try {
+        const empresaId = String(req.query.empresaId || '').trim();
+        const de = String(req.query.de || '').trim();
+        const ate = String(req.query.ate || '').trim();
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'Informe a empresa.' });
+        if (!/^\d{4}-\d{2}$/.test(de) || !/^\d{4}-\d{2}$/.test(ate)) {
+            return res.status(400).json({ ok: false, error: 'Informe o período no formato AAAA-MM.' });
+        }
+
+        const idsCarteira = await getEmpresaIdsDaCarteira(req.user); // null = admin
+        if (idsCarteira && !idsCarteira.includes(empresaId)) {
+            return res.status(403).json({ ok: false, error: 'Empresa fora da sua carteira.' });
+        }
+
+        const meses = [];
+        const [aA, aM] = de.split('-').map(Number);
+        const [bA, bM] = ate.split('-').map(Number);
+        const ini = aA * 12 + (aM - 1);
+        const fim = bA * 12 + (bM - 1);
+        if (fim < ini) return res.status(400).json({ ok: false, error: 'O mês inicial é posterior ao final.' });
+        if (fim - ini >= 60) return res.status(400).json({ ok: false, error: 'Período máximo de 60 meses.' });
+        for (let i = ini; i <= fim; i++) {
+            meses.push(`${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`);
+        }
+
+        const db = getDb();
+        const porMes = {};
+        for (const competencia of meses) {
+            const snaps = await fetchAllDocs(
+                db.collection('documentos_fiscais')
+                    .where('empresaId', '==', empresaId)
+                    .where('competencia', '==', competencia)
+                    .select('direcao', 'tpNF', 'status', 'valorTotal', 'tipo', 'tipoDoc'),
+                { label: `declaracao-faturamento ${empresaId} ${competencia}`, maxDocs: 20000 },
+            );
+            let valor = 0;
+            let docs = 0;
+            for (const s of snaps) {
+                const d = s.data() || {};
+                if (CANCELADOS.has(d.status)) continue;
+                if (direcaoEfetivaDoc(d) !== 'saida') continue;
+                valor = r2(valor + (Number(d.valorTotal) || 0));
+                docs++;
+            }
+            porMes[competencia] = { valor, docs, lidos: snaps.length };
+        }
+
+        return res.json({ ok: true, empresaId, de, ate, meses, porMes, geradoEm: new Date().toISOString() });
+    } catch (e) {
+        console.error('[relatorios/faturamento-mensal]', e);
+        return res.status(500).json({ ok: false, error: `Falha ao apurar o faturamento mensal: ${e.message}` });
+    }
+});
+
 export default router;

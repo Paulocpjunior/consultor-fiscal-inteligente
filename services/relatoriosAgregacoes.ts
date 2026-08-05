@@ -180,6 +180,69 @@ export function linhasRetencoes(docs: DocumentoFiscal[], direcao: 'entrada' | 's
         .filter(l => l.issRetido + l.pis + l.cofins + l.ir + l.inss + l.csll > 0);
 }
 
+export interface DiagnosticoRetencoes {
+    /** NFS-e da direção no recorte (com ou sem retenção). */
+    totalNotas: number;
+    /** Notas com alguma retenção destacada. */
+    comRetencao: number;
+    /** Notas SEM os campos federais gravados — ausente ≠ zero retido. */
+    semCamposGravados: number;
+    /**
+     * O relatório pode afirmar "não houve retenção"? Só quando TODAS as notas
+     * do recorte têm os campos gravados. Com nota sem campo, "0,00" significa
+     * "não foi capturado", e dizer "nenhuma retenção" é responder uma pergunta
+     * que o dado não responde.
+     */
+    podeAfirmarZero: boolean;
+    /** Frase pronta pro vazio da tela e pra observação do PDF. */
+    mensagem: string;
+}
+
+/**
+ * Diagnóstico do recorte de retenções.
+ *
+ * POR QUE EXISTE (equipe, 05/08): a aba Retenções dizia "Nenhuma NFS-e
+ * prestada com retenção neste recorte" para uma empresa cujo relatório de
+ * Serviços prestados, no MESMO recorte, avisava que as 9 notas foram
+ * importadas antes de 01/08 e não têm IR/INSS/CSLL gravados. As duas telas
+ * liam o mesmo dado e davam respostas opostas — e a errada era a que
+ * AFIRMAVA. O aviso até existia, mas era contado sobre a lista JÁ FILTRADA
+ * (só notas com retenção), que nesse caso é vazia: o alerta nunca aparecia
+ * exatamente no caso em que ele importa.
+ */
+export function diagnosticoRetencoes(
+    docs: DocumentoFiscal[],
+    direcao: 'entrada' | 'saida',
+): DiagnosticoRetencoes {
+    const todas = linhasServicos(docs, direcao);
+    const comRetencao = todas.filter(
+        l => l.issRetido + l.pis + l.cofins + l.ir + l.inss + l.csll > 0,
+    ).length;
+    const semCamposGravados = todas.filter(l => !l.retencoesFederaisGravadas).length;
+    const podeAfirmarZero = todas.length > 0 && semCamposGravados === 0;
+    const rotulo = direcao === 'entrada' ? 'tomada' : 'prestada';
+
+    let mensagem: string;
+    if (todas.length === 0) {
+        mensagem = `Nenhuma NFS-e ${rotulo} neste recorte.`;
+    } else if (comRetencao > 0 && semCamposGravados > 0) {
+        mensagem = `${semCamposGravados} de ${todas.length} nota(s) não têm IR/INSS/CSLL gravados `
+            + '(importadas antes de 01/08/2026) — pode haver retenção além da listada. '
+            + 'Reimporte o XML para completar.';
+    } else if (semCamposGravados > 0) {
+        mensagem = `NÃO é possível afirmar que não houve retenção: ${semCamposGravados} de ${todas.length} `
+            + 'nota(s) foram importadas antes de 01/08/2026 e não têm IR/INSS/CSLL gravados. '
+            + 'Reimporte o XML da competência para completar.';
+    } else if (comRetencao === 0) {
+        mensagem = `Nenhuma das ${todas.length} NFS-e ${rotulo} do recorte tem retenção — `
+            + 'todas com os campos conferidos.';
+    } else {
+        mensagem = `${comRetencao} de ${todas.length} NFS-e ${rotulo} com retenção.`;
+    }
+
+    return { totalNotas: todas.length, comRetencao, semCamposGravados, podeAfirmarZero, mensagem };
+}
+
 // ─── NF Saídas Canceladas/Faltantes ─────────────────────────────────────────
 
 export interface LinhaSerieNumeracao {

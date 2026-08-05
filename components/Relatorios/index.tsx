@@ -23,14 +23,15 @@ import { listDocumentos, getEmpresasDisponiveis, getIdentificacaoEmpresa, type E
 import { alocarTributacaoIcms } from '../../services/iobSageExportService';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 import {
-    resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, resumoPorUf,
+    resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, diagnosticoRetencoes, resumoPorUf,
     nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante, resumoPorAliquota, resumoPorProduto,
     contraparteDoc, docValido,
 } from '../../services/relatoriosAgregacoes';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
-import { carregarFaturamento, type FaturamentoResp } from '../../services/relatoriosService';
-import { gerarRelatorioPdf, montarIdentificacao, type IdentificacaoPdf } from '../../services/relatorioPdf';
+import { carregarFaturamento, carregarFaturamentoMensal, type FaturamentoResp } from '../../services/relatoriosService';
+import { mesesDoPeriodo, montarMeses, totalDeclaracao, avisosDaDeclaracao, type MesDeclaracao } from '../../services/declaracaoFaturamento';
+import { gerarRelatorioPdf, gerarDeclaracaoFaturamentoPdf, montarIdentificacao, type IdentificacaoPdf } from '../../services/relatorioPdf';
 import * as lucroPresumidoService from '../../services/lucroPresumidoService';
 import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
 
@@ -43,7 +44,7 @@ type AbaId =
     | 'livro' | 'cfop' | 'impostos-resumo' | 'uf'
     | 'canceladas' | 'aliquota' | 'produto' | 'participante'
     | 'serv-tomados' | 'serv-prestados' | 'retencoes'
-    | 'faturamento' | 'impostos-enviados' | 'dipam' | 'ficha';
+    | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
@@ -68,6 +69,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
     {
         titulo: 'Gerencial', abas: [
             { id: 'faturamento', label: '📈 Faturamento por carteira' },
+            { id: 'declaracao', label: '📄 Declaração de faturamento' },
             { id: 'impostos-enviados', label: '💸 Apurados × enviados' },
             { id: 'dipam', label: '🌾 DIPAM/FUNRURAL' },
             { id: 'ficha', label: '📑 Ficha Financeira (Lucro)' },
@@ -261,6 +263,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <AbaServicos docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} modo={aba} />
             )}
             {aba === 'faturamento' && <AbaFaturamento competencia={competencia} />}
+            {aba === 'declaracao' && <AbaDeclaracao empresas={empresas} onShowToast={onShowToast} />}
             {aba === 'impostos-enviados' && <AbaImpostosEnviados competencia={competencia} />}
             {aba === 'dipam' && <AbaDipam competencia={competencia} />}
             {aba === 'ficha' && <AbaFicha currentUser={currentUser} />}
@@ -838,7 +841,13 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
         () => (modo === 'retencoes' ? linhasRetencoes(docs, direcao) : linhasServicos(docs, direcao)),
         [docs, direcao, modo],
     );
-    const semRetGravada = linhas.filter(l => !l.retencoesFederaisGravadas).length;
+    // O diagnóstico olha TODAS as NFS-e do recorte, não a lista já filtrada:
+    // na aba Retenções `linhas` só traz notas COM retenção, então contar o
+    // aviso ali dava zero justamente quando ele era necessário.
+    const diag = useMemo(() => diagnosticoRetencoes(docs, direcao), [docs, direcao]);
+    const semRetGravada = modo === 'retencoes'
+        ? diag.semCamposGravados
+        : linhas.filter(l => !l.retencoesFederaisGravadas).length;
 
     const titulos: Record<string, string> = {
         'serv-tomados': 'Serviços tomados',
@@ -873,6 +882,7 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
         identificacao,
         observacoes: [
             ...(semRetGravada > 0 ? [`${semRetGravada} nota(s) importadas antes de 01/08/2026 não têm IR/INSS/CSLL gravados — ausência NÃO significa zero retido; reimporte o XML para completar.`] : []),
+            ...(modo === 'retencoes' ? [diag.mensagem] : []),
         ],
         fileName: `${modo}-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
     }));
@@ -898,7 +908,15 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
                     ⚠ {semRetGravada} nota(s) antigas sem IR/INSS/CSLL gravados — ausência não significa zero retido (reimporte o XML pra completar).
                 </p>
             )}
-            {linhas.length === 0 && <p className="text-sm text-slate-500">Nenhuma NFS-e {direcao === 'entrada' ? 'tomada' : 'prestada'}{modo === 'retencoes' ? ' com retenção' : ''} neste recorte.</p>}
+            {linhas.length === 0 && (
+                modo === 'retencoes'
+                    ? (
+                        <p className={`text-sm ${diag.podeAfirmarZero ? 'text-slate-500' : 'text-amber-700 dark:text-amber-400'}`}>
+                            {diag.podeAfirmarZero ? '' : '⚠ '}{diag.mensagem}
+                        </p>
+                    )
+                    : <p className="text-sm text-slate-500">Nenhuma NFS-e {direcao === 'entrada' ? 'tomada' : 'prestada'} neste recorte.</p>
+            )}
         </Card>
     );
 };
@@ -1173,3 +1191,181 @@ const AbaFicha: React.FC<{ currentUser: User }> = ({ currentUser }) => {
 };
 
 export default RelatoriosHub;
+
+// ─── Declaração de faturamento ──────────────────────────────────────────────
+//
+// Pedido do Paulo (05/08) no modelo do PDF do SAGE, "de forma melhorada, com
+// nossa assinatura de layout". É o ÚNICO item do menu que sai assinado do
+// escritório (banco, licitação, locador) — por isso o app PROPÕE os valores a
+// partir dos registros fiscais e o responsável CONFIRMA mês a mês. Valor
+// ajustado à mão sai MARCADO no papel.
+const AbaDeclaracao: React.FC<{
+    empresas: EmpresaXmlOption[];
+    onShowToast?: (m: string) => void;
+}> = ({ empresas, onShowToast }) => {
+    const { gerando, rodar } = usePdf();
+    const hoje = new Date();
+    const [empresaId, setEmpresaId] = useState('');
+    const [de, setDe] = useState(`${hoje.getFullYear()}-01`);
+    const [ate, setAte] = useState(competenciaAtual());
+    const [destinatario, setDestinatario] = useState('');
+    const [cidade, setCidade] = useState('');
+    const [buscando, setBuscando] = useState(false);
+    const [meses, setMeses] = useState<MesDeclaracao[] | null>(null);
+    const [ajustes, setAjustes] = useState<Record<string, number>>({});
+    const [apurado, setApurado] = useState<Record<string, { valor: number; docs: number }>>({});
+    const [dadosFiscais, setDadosFiscais] = useState<any>(null);
+
+    const empresa = empresas.find(e => e.id === empresaId) || null;
+
+    const buscar = async (idOverride?: unknown) => {
+        const idAlvo = typeof idOverride === 'string' ? idOverride : empresaId;
+        const alvo = empresas.find(e => e.id === idAlvo) || null;
+        if (!alvo) { onShowToast?.('Escolha a empresa.'); return; }
+        const competencias = mesesDoPeriodo(de, ate);
+        if (!competencias.length) { onShowToast?.('Período inválido — confira o mês inicial e o final (máx. 60 meses).'); return; }
+        setBuscando(true);
+        try {
+            const [r, df] = await Promise.all([
+                carregarFaturamentoMensal(alvo.id, de, ate),
+                getIdentificacaoEmpresa(alvo),
+            ]);
+            if (!r.ok) { onShowToast?.(r.error || 'Falha ao apurar o faturamento.'); return; }
+            setDadosFiscais(df);
+            setApurado(r.porMes || {});
+            setAjustes({});
+            setMeses(montarMeses(competencias, (r.porMes || {}) as any, {}));
+        } finally {
+            setBuscando(false);
+        }
+    };
+
+    const editar = (competencia: string, texto: string) => {
+        const v = Number(String(texto).replace(/\./g, '').replace(',', '.'));
+        const novos = { ...ajustes };
+        if (texto.trim() === '') delete novos[competencia];
+        else if (Number.isFinite(v)) novos[competencia] = v;
+        setAjustes(novos);
+        setMeses(montarMeses(mesesDoPeriodo(de, ate), apurado as any, novos));
+    };
+
+    const total = meses ? totalDeclaracao(meses) : 0;
+    const avisos = meses ? avisosDaDeclaracao(meses) : [];
+
+    const pdf = () => rodar(() => gerarDeclaracaoFaturamentoPdf({
+        destinatario: destinatario.trim() || null,
+        empresa: {
+            nome: empresa?.nome || '—',
+            cnpj: empresa?.cnpj || '',
+            endereco: [dadosFiscais?.logradouro, dadosFiscais?.numero, dadosFiscais?.complemento].filter(Boolean).join(', ') || null,
+            bairro: dadosFiscais?.bairro || null,
+            cidade: cidade.trim() || null,
+            uf: dadosFiscais?.uf || null,
+            telefone: dadosFiscais?.telefone || null,
+            inscricaoEstadual: dadosFiscais?.inscricaoEstadual || null,
+            inscricaoMunicipal: dadosFiscais?.ccmSp || dadosFiscais?.inscricaoMunicipal || null,
+            cnae: dadosFiscais?.cnae || null,
+            regimeTributario: empresa?.fonte === 'lucro' ? 'Lucro Presumido/Real' : 'Simples Nacional',
+        },
+        meses: (meses || []).map(m => ({ competencia: m.competencia, valor: m.valor, ajustado: m.ajustado })),
+        localAssinatura: cidade.trim() || null,
+        identificacao: montarIdentificacao(dadosFiscais),
+        observacoes: avisos,
+        fileName: `declaracao-faturamento-${(empresa?.cnpj || '').replace(/\D/g, '')}-${de}_${ate}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex flex-wrap gap-3 items-end">
+                <div className="min-w-[260px] flex-1">
+                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa</label>
+                    <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId}
+                        onAtivar={id => void buscar(id)} />
+                </div>
+                <div>
+                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">De</label>
+                    <input type="month" value={de} onChange={e => setDe(e.target.value)}
+                        className="p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600" />
+                </div>
+                <div>
+                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Até</label>
+                    <input type="month" value={ate} onChange={e => setAte(e.target.value)}
+                        className="p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600" />
+                </div>
+                <button onClick={buscar} disabled={buscando || !empresaId}
+                    className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm rounded-lg font-semibold disabled:opacity-40">
+                    {buscando ? 'Apurando…' : '🔎 Apurar faturamento'}
+                </button>
+            </div>
+
+            {meses && (
+                <>
+                    <div className="flex flex-wrap gap-3 items-end">
+                        <div className="min-w-[240px] flex-1">
+                            <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Destinatário (opcional)</label>
+                            <input value={destinatario} onChange={e => setDestinatario(e.target.value)}
+                                placeholder="Ex.: BANCO DO BRASIL S.A."
+                                className="w-full p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600" />
+                        </div>
+                        <div className="min-w-[160px]">
+                            <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Cidade (assinatura)</label>
+                            <input value={cidade} onChange={e => setCidade(e.target.value)} placeholder="São Paulo"
+                                className="w-full p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600" />
+                        </div>
+                        <BotaoPdf onClick={pdf} disabled={!meses.length} gerando={gerando} />
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="text-left text-[11px] uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                                    <th className="py-1">Mês</th>
+                                    <th className="py-1 text-right">Apurado (registros fiscais)</th>
+                                    <th className="py-1 text-right">Vai no documento</th>
+                                    <th className="py-1">&nbsp;</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {meses.map(m => (
+                                    <tr key={m.competencia} className="border-b border-slate-100 dark:border-slate-700/50">
+                                        <td className="py-1">{fmtComp(m.competencia)}</td>
+                                        <td className="py-1 text-right tabular-nums text-slate-500">{fmtBRL(m.apurado)}</td>
+                                        <td className="py-1 text-right">
+                                            <input
+                                                value={ajustes[m.competencia] !== undefined ? String(ajustes[m.competencia]) : ''}
+                                                onChange={e => editar(m.competencia, e.target.value)}
+                                                placeholder={m.apurado.toFixed(2)}
+                                                className="w-32 p-1 text-sm text-right rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 tabular-nums"
+                                            />
+                                        </td>
+                                        <td className="py-1 text-[11px]">
+                                            {m.semDocumentos && <span className="text-amber-600">⚠ sem documento capturado</span>}
+                                            {m.ajustado && <span className="text-indigo-600 ml-2">ajustado</span>}
+                                        </td>
+                                    </tr>
+                                ))}
+                                <tr className="font-bold">
+                                    <td className="py-1">TOTAL</td>
+                                    <td className="py-1 text-right tabular-nums text-slate-500">
+                                        {fmtBRL(meses.reduce((t, m) => t + m.apurado, 0))}
+                                    </td>
+                                    <td className="py-1 text-right tabular-nums">{fmtBRL(total)}</td>
+                                    <td />
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {avisos.map((a, i) => (
+                        <p key={i} className="text-[11px] text-amber-700 dark:text-amber-400">⚠ {a}</p>
+                    ))}
+                    <p className="text-[11px] text-slate-500">
+                        O valor apurado é a soma das saídas autorizadas da competência (NF-e, NFC-e e NFS-e) — a mesma
+                        régua do relatório de Faturamento por carteira. Este documento sai ASSINADO: confira mês a mês
+                        antes de gerar.
+                    </p>
+                </>
+            )}
+        </Card>
+    );
+};

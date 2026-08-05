@@ -228,3 +228,191 @@ export async function gerarRelatorioPdf(p: RelatorioPdfParams): Promise<void> {
     rodape();
     pdf.save(p.fileName);
 }
+
+// ─── Declaração de faturamento (documento assinado) ─────────────────────────
+//
+// Diferente de todo o resto do menu: não é um relatório de conferência
+// interna, é um DOCUMENTO que sai do escritório assinado — vai a banco,
+// licitação, locador. Por isso tem destinatário, texto declaratório, local/
+// data e DUAS assinaturas (representante da empresa + contador com CRC).
+//
+// Modelo dado pelo Paulo (05/08, PDF do SAGE) — mesma estrutura, com a
+// identidade da SP e leitura de relatório sério: bloco de identificação em
+// duas colunas, tabela de meses com régua fina, total destacado.
+
+export interface MesFaturamento {
+    /** 'AAAA-MM' */
+    competencia: string;
+    valor: number;
+    /** true quando o colaborador ajustou o valor proposto pelo app. */
+    ajustado?: boolean;
+}
+
+export interface DeclaracaoFaturamentoParams {
+    destinatario?: string | null;
+    empresa: {
+        nome: string; cnpj: string;
+        endereco?: string | null; bairro?: string | null; cidade?: string | null; uf?: string | null;
+        telefone?: string | null; inscricaoEstadual?: string | null; inscricaoMunicipal?: string | null;
+        cnae?: string | null; regimeTributario?: string | null;
+    };
+    meses: MesFaturamento[];
+    /** Cidade da assinatura (padrão: a cidade da empresa ou São Paulo). */
+    localAssinatura?: string | null;
+    identificacao?: IdentificacaoPdf;
+    observacoes?: string[];
+    fileName: string;
+}
+
+const MESES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+const fmtMesExtenso = (competencia: string): string => {
+    const [ano, mes] = String(competencia || '').split('-');
+    const i = Number(mes) - 1;
+    return MESES_PT[i] ? `${MESES_PT[i]}/${ano}` : competencia;
+};
+
+const fmtDataExtenso = (d: Date): string =>
+    `${String(d.getDate()).padStart(2, '0')} DE ${MESES_PT[d.getMonth()].toUpperCase()} DE ${d.getFullYear()}`;
+
+const fmtCnpjDoc = (c: string) =>
+    String(c || '').replace(/\D/g, '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+
+export async function gerarDeclaracaoFaturamentoPdf(p: DeclaracaoFaturamentoParams): Promise<void> {
+    const { default: jsPDF } = await import('jspdf');
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = pdf.internal.pageSize.getWidth();
+    const H = pdf.internal.pageSize.getHeight();
+    const M = 18;
+    const logo = await carregarLogo();
+
+    pdf.setFillColor(...AZUL_ESCURO);
+    pdf.rect(0, 0, W, 20, 'F');
+    if (logo) {
+        try { pdf.addImage(logo, 'PNG', M - 6, 4, 12, 12); } catch { /* logo corrompido não derruba o PDF */ }
+    }
+    pdf.setTextColor(255, 255, 255).setFontSize(13).setFont('helvetica', 'bold');
+    pdf.text('DECLARAÇÃO DE FATURAMENTO', logo ? M + 9 : M, 12);
+    pdf.setFontSize(7).setFont('helvetica', 'normal');
+    pdf.text('SP Assessoria Contábil', W - M + 6, 12, { align: 'right' });
+
+    let y = 32;
+    pdf.setTextColor(...TINTA).setFontSize(9.5);
+    if (p.destinatario) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`A(o) ${p.destinatario}`, M, y);
+        pdf.setFont('helvetica', 'normal');
+        y += 9;
+    }
+    const texto = 'Declaramos pela presente que o faturamento da empresa abaixo identificada, '
+        + 'conforme registros fiscais, apresenta os valores a seguir demonstrados:';
+    for (const linha of pdf.splitTextToSize(texto, W - 2 * M)) { pdf.text(linha, M, y); y += 5; }
+
+    // ── Identificação da empresa ────────────────────────────────────────────
+    y += 5;
+    const periodo = p.meses.length
+        ? `${fmtMesExtenso(p.meses[0].competencia)} a ${fmtMesExtenso(p.meses[p.meses.length - 1].competencia)}`
+        : '—';
+    const cidadeUf = [p.empresa.cidade, p.empresa.uf].filter(Boolean).join(' - ');
+    // Campo em branco é escrito como "não informado": o buraco de cadastro
+    // fica no papel (mesma regra do bloco de identificação dos relatórios).
+    const campos: Array<[string, string | null | undefined]> = [
+        ['Empresa', p.empresa.nome],
+        ['CNPJ', fmtCnpjDoc(p.empresa.cnpj)],
+        ['Endereço', p.empresa.endereco],
+        ['Bairro', p.empresa.bairro],
+        ['Cidade', cidadeUf],
+        ['Telefone', p.empresa.telefone],
+        ['Inscrição Estadual', p.empresa.inscricaoEstadual],
+        ['Inscrição Municipal', p.empresa.inscricaoMunicipal],
+        ['C.N.A.E.', p.empresa.cnae],
+        ['Regime tributário', p.empresa.regimeTributario],
+        ['Período', periodo],
+    ];
+    pdf.setFontSize(8.5);
+    for (const [rotulo, valor] of campos) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(rotulo, M, y);
+        const txt = String(valor || '').trim();
+        pdf.setFont('helvetica', txt ? 'normal' : 'italic');
+        pdf.setTextColor(...(txt ? TINTA : CINZA));
+        pdf.text(txt || 'não informado', M + 42, y);
+        pdf.setTextColor(...TINTA);
+        y += 5;
+    }
+
+    // ── Tabela de meses ─────────────────────────────────────────────────────
+    y += 6;
+    const larguraTabela = 96;
+    pdf.setFillColor(...AZUL);
+    pdf.rect(M, y - 4.4, larguraTabela, 6.4, 'F');
+    pdf.setTextColor(255, 255, 255).setFontSize(8).setFont('helvetica', 'bold');
+    pdf.text('Mês', M + 2, y);
+    pdf.text('Faturamento (R$)', M + larguraTabela - 2, y, { align: 'right' });
+    y += 5.5;
+    pdf.setTextColor(...TINTA).setFont('helvetica', 'normal');
+
+    const brl = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    let total = 0;
+    for (const m of p.meses) {
+        if (y > H - 60) { pdf.addPage(); y = 24; }
+        total += Number(m.valor) || 0;
+        pdf.setFontSize(8.5);
+        pdf.text(fmtMesExtenso(m.competencia) + (m.ajustado ? ' *' : ''), M + 2, y);
+        pdf.text(brl(Number(m.valor) || 0), M + larguraTabela - 2, y, { align: 'right' });
+        pdf.setDrawColor(...BORDA).setLineWidth(0.1);
+        pdf.line(M, y + 1.6, M + larguraTabela, y + 1.6);
+        y += 5.4;
+    }
+    pdf.setFillColor(226, 232, 240);
+    pdf.rect(M, y - 3.6, larguraTabela, 5.8, 'F');
+    pdf.setFont('helvetica', 'bold').setFontSize(9);
+    pdf.text('TOTAL', M + 2, y);
+    pdf.text(brl(total), M + larguraTabela - 2, y, { align: 'right' });
+    pdf.setFont('helvetica', 'normal');
+    y += 12;
+
+    if (p.meses.some((m) => m.ajustado)) {
+        pdf.setFontSize(6.8).setTextColor(...CINZA);
+        pdf.text('* valor ajustado pelo responsável em relação ao apurado nos registros fiscais.', M, y);
+        pdf.setTextColor(...TINTA);
+        y += 6;
+    }
+
+    // ── Local, data e assinaturas ───────────────────────────────────────────
+    if (y > H - 55) { pdf.addPage(); y = 30; }
+    const local = (p.localAssinatura || p.empresa.cidade || 'SÃO PAULO').toUpperCase();
+    pdf.setFontSize(9);
+    pdf.text(`${local}, ${fmtDataExtenso(new Date())}.`, M, y);
+    y += 26;
+
+    const colDir = W / 2 + 4;
+    pdf.setDrawColor(...TINTA).setLineWidth(0.3);
+    pdf.line(M, y, M + 70, y);
+    pdf.line(colDir, y, colDir + 70, y);
+    y += 4.5;
+    pdf.setFontSize(8);
+    const naoCad = 'não cadastrado — completar em Dados Fiscais';
+    const resp = p.identificacao?.responsavel;
+    const cont = p.identificacao?.contador;
+    pdf.setFont('helvetica', resp ? 'bold' : 'italic');
+    for (const linha of pdf.splitTextToSize(resp || naoCad, 70)) { pdf.text(linha, M, y); y += 4; }
+    let yCont = y - (resp ? pdf.splitTextToSize(resp, 70).length : 1) * 4;
+    pdf.setFont('helvetica', cont ? 'bold' : 'italic');
+    for (const linha of pdf.splitTextToSize(cont || naoCad, 70)) { pdf.text(linha, colDir, yCont); yCont += 4; }
+    pdf.setFont('helvetica', 'normal').setFontSize(7);
+    pdf.setTextColor(...CINZA);
+    pdf.text('Representante da empresa', M, Math.max(y, yCont) + 2);
+    pdf.text('Contador responsável', colDir, Math.max(y, yCont) + 2);
+
+    if (p.observacoes?.length) {
+        let yo = Math.max(y, yCont) + 10;
+        pdf.setFontSize(6.8);
+        for (const obs of p.observacoes) { pdf.text(`• ${obs}`, M, yo); yo += 3.6; }
+    }
+
+    pdf.setFontSize(6.5).setTextColor(...CINZA);
+    pdf.text('Gerado pelo Consultor Fiscal Inteligente — conferir antes de assinar.', M, H - 8);
+    pdf.save(p.fileName);
+}
