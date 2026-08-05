@@ -11,6 +11,7 @@ import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 import { parseLogEfiscal, cruzarLogComFml, type CruzamentoLogEfiscal } from '../../services/iobSageLogEfiscal';
 import { carregarCodigosParticipantes, salvarCodigosParticipantes } from '../../services/sageCodigosService';
+import { parsearCadastroClientesFornecedores } from '../../services/efiscalCadastroParticipantesParser';
 
 interface Props {
     currentUser: User;
@@ -312,6 +313,80 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         setCodigosDigitados({});
     };
 
+    // Importa a listagem de Clientes/Fornecedores do E-Fiscal (XLSX/XFRX) e
+    // carrega o De→Para inteiro de uma vez (Paulo, 05/08 — S&P tinha 187).
+    const [importandoCadastro, setImportandoCadastro] = useState(false);
+    const [resultadoImportCadastro, setResultadoImportCadastro] = useState<string | null>(null);
+
+    const importarCadastroEfiscal = async (file: File | null) => {
+        if (!file || !empresaSelecionada) return;
+        setImportandoCadastro(true);
+        setResultadoImportCadastro(null);
+        try {
+            const XLSX = await import('xlsx');
+            const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: false, defval: '' });
+            const r = parsearCadastroClientesFornecedores(rows);
+
+            if (r.participantes.length === 0 && Object.keys(r.codigos).length === 0) {
+                throw new Error('Não achei blocos "Nome:/CNPJ:/Código:" — é a Listagem do Cadastro de '
+                    + 'Clientes/Fornecedores exportada em XLSX pelo E-Fiscal?');
+            }
+            // TRAVA: o cabeçalho diz de QUAL empresa é o arquivo. Importar o
+            // cadastro da empresa errada mapearia códigos de outro E-Fiscal.
+            const codSelecionada = String(numeroEmpresaEfiscal).padStart(4, '0');
+            if (r.empresaCodigo && codSelecionada !== '0001' && r.empresaCodigo !== codSelecionada) {
+                throw new Error(`Este arquivo é da empresa ${r.empresaCodigo} — ${r.empresaNome || ''}, `
+                    + `mas a selecionada tem o código ${codSelecionada}. Confira antes de importar.`);
+            }
+
+            // Nunca sobrescreve em silêncio: divergência com o já salvo é
+            // listada e fica como está — decisão humana.
+            const novos: Record<string, string> = {};
+            const divergentes: string[] = [];
+            let jaIguais = 0;
+            for (const [cnpj, cod] of Object.entries(r.codigos)) {
+                const atual = codigosPart[cnpj];
+                if (!atual) novos[cnpj] = cod;
+                else if (atual === cod) jaIguais++;
+                else divergentes.push(`${cnpj}: salvo "${atual}" × arquivo "${cod}"`);
+            }
+            if (Object.keys(novos).length > 0) {
+                const s = await salvarCodigosParticipantes(empresaSelecionada.id, novos);
+                if (!s.ok) throw new Error(s.error || 'Falha ao salvar o De→Para.');
+                setCodigosPart(await carregarCodigosParticipantes(empresaSelecionada.id));
+            }
+
+            const linhas = [
+                `Arquivo da empresa ${r.empresaCodigo || '?'} — ${r.empresaNome || ''}: `
+                + `${r.participantes.length} participante(s) no cadastro.`,
+                `✅ ${Object.keys(novos).length} código(s) novo(s) importados`
+                + (jaIguais > 0 ? ` · ${jaIguais} já estavam iguais` : '') + '.',
+            ];
+            if (divergentes.length > 0) {
+                linhas.push(`⚠ ${divergentes.length} divergem do De→Para salvo e NÃO foram alterados: `
+                    + divergentes.slice(0, 5).join(' · ') + (divergentes.length > 5 ? ' …' : ''));
+            }
+            if (r.conflitos.length > 0) {
+                linhas.push(`⚠ ${r.conflitos.length} documento(s) com códigos diferentes DENTRO do arquivo `
+                    + '(ficaram de fora): ' + r.conflitos.slice(0, 3).map(c => c.cnpjCpf).join(' · '));
+            }
+            if (r.ignorados.length > 0) {
+                linhas.push(`ℹ ${r.ignorados.length} participante(s) sem documento aproveitável no relatório `
+                    + '(não mapeiam): ' + r.ignorados.slice(0, 3).map(i => i.nome).join(' · ')
+                    + (r.ignorados.length > 3 ? ' …' : ''));
+            }
+            setResultadoImportCadastro(linhas.join('\n'));
+            onShowToast?.(`De→Para importado: ${Object.keys(novos).length} código(s) novo(s).`);
+        } catch (e: any) {
+            setResultadoImportCadastro(`✕ ${e?.message || e}`);
+            onShowToast?.(`Importação não concluída: ${e?.message || e}`);
+        } finally {
+            setImportandoCadastro(false);
+        }
+    };
+
     const salvarDePara = async () => {
         if (!empresaSelecionada) return;
         setSalvandoCodigos(true);
@@ -572,6 +647,36 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     🔗 De→Para ativo: {Object.keys(codigosPart).length} participante(s) desta empresa usam o código
                     já existente no E-Fiscal (não geram cadastro novo no arquivo).
                 </p>
+            )}
+
+            {/* Importação do cadastro OFICIAL do E-Fiscal (Paulo, 05/08): a
+                listagem de Clientes/Fornecedores em XLSX carrega o De→Para
+                inteiro de uma vez — na S&P eram 187 códigos digitados à mão. */}
+            {empresaSelecionada && (
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                📥 Importar cadastro do E-Fiscal — De→Para completo de uma vez
+                            </p>
+                            <p className="text-[11px] text-slate-500 mt-0.5 max-w-2xl">
+                                No E-Fiscal: Relatórios → <i>Clientes e fornecedores (completo)</i> → exportar
+                                <b> XLSX</b>. Suba o arquivo aqui: cada cliente/fornecedor entra no De→Para com o
+                                código que JÁ existe lá — nenhum é recadastrado, nenhuma nota cai por código.
+                            </p>
+                        </div>
+                        <label className={`px-3 py-2 text-sm rounded-lg font-semibold cursor-pointer ${importandoCadastro ? 'bg-slate-200 text-slate-500' : 'bg-blue-700 hover:bg-blue-800 text-white'}`}>
+                            {importandoCadastro ? 'Importando…' : '📥 Escolher XLSX'}
+                            <input type="file" accept=".xlsx,.xls" className="hidden" disabled={importandoCadastro}
+                                onChange={e => { void importarCadastroEfiscal(e.target.files?.[0] || null); e.target.value = ''; }} />
+                        </label>
+                    </div>
+                    {resultadoImportCadastro && (
+                        <div className="text-[11px] text-slate-600 dark:text-slate-300 whitespace-pre-line border-t border-slate-100 dark:border-slate-700 pt-2">
+                            {resultadoImportCadastro}
+                        </div>
+                    )}
+                </div>
             )}
 
             <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3">
