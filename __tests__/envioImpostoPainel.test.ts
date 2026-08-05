@@ -5,7 +5,6 @@
  * METADE não é sucesso — cópia no SharePoint e baixa da obrigação fazem parte
  * do envio, e cada pendência precisa sair com motivo e ação.
  */
-// @ts-expect-error — módulo .js puro
 import { montarPainelEnvios, pendenciaSharePoint, pendenciaBaixa } from '../sefaz-backend/envio-imposto-painel.js';
 
 const envio = (over: any = {}) => ({
@@ -28,19 +27,19 @@ describe('pendências por etapa', () => {
 
     it('empresa sem pasta configurada vira causa única com a ação', () => {
         const p = pendenciaSharePoint(envio({ sharePoint: { status: 'sem-config' } }));
-        expect(p.causa).toMatch(/sem pasta do SharePoint/i);
-        expect(p.acao).toMatch(/Integrações → SharePoint/);
+        expect(p!.causa).toMatch(/sem pasta do SharePoint/i);
+        expect(p!.acao).toMatch(/Integrações → SharePoint/);
     });
 
     it('erro de gravação leva o motivo técnico junto', () => {
         const p = pendenciaSharePoint(envio({ sharePoint: { status: 'erro', motivo: '403 Forbidden' } }));
-        expect(p.acao).toMatch(/403 Forbidden/);
+        expect(p!.acao).toMatch(/403 Forbidden/);
     });
 
     it('baixa sem tarefa explica que a obrigação do mês não existe', () => {
         const p = pendenciaBaixa(envio({ baixa: { status: 'sem-tarefa' } }));
-        expect(p.causa).toMatch(/Sem obrigação correspondente/);
-        expect(p.acao).toMatch(/Gere as tarefas da competência/);
+        expect(p!.causa).toMatch(/Sem obrigação correspondente/);
+        expect(p!.acao).toMatch(/Gere as tarefas da competência/);
     });
 });
 

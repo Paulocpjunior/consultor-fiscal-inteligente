@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { getAuth } from 'firebase/auth';
 import type { User } from '../../types';
 import { getCobrancaIa, formatBRL, formatBarras, enviarDasCliente } from '../../services/dasService';
-import { enviarPorEmailDoColaborador, registrarEnvioImposto, GESTOR_EMAIL } from '../../services/envioImpostoService';
+import { enviarPorEmailDoColaborador, registrarEnvioImposto, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 
 interface DasInfo {
     id?: string;
@@ -176,12 +176,13 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
     // gestor em CC, e o rito (SharePoint + baixa + auditoria) registrado no
     // backend. mailto não anexa arquivo — o colaborador anexa o PDF baixado.
     const [registrandoApp, setRegistrandoApp] = useState(false);
-    const enviarPeloMeuEmail = async () => {
+    const enviarPeloMeuEmail = async (modo: ModoComposicao = 'outlook-web') => {
         if (!mensagem) { onShowToast('Gere a mensagem primeiro.'); return; }
         if (!emailDest || !emailDest.includes('@')) { onShowToast('Informe o e-mail do cliente.'); return; }
         setRegistrandoApp(true);
         try {
             const r = await enviarPorEmailDoColaborador({
+                modo,
                 empresaCnpj: dasInfo.empresaCnpj,
                 empresaNome: dasInfo.empresaNome,
                 tipo: 'DAS',
@@ -194,7 +195,7 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                 valor: dasInfo.valor,
             });
             if (r.ok) {
-                onShowToast(`E-mail aberto no seu aplicativo com ${GESTOR_EMAIL} em cópia. Anexe o PDF antes de enviar!${resumoRito(r)}`);
+                onShowToast(`${mensagemComposicao(r.composicao)} Anexe o PDF antes de enviar.${resumoRito(r)}`);
                 onEnviado?.();
             } else {
                 onShowToast(`Registro do envio falhou: ${r.error}`);
@@ -411,14 +412,24 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                                 📋 Copiar
                             </button>
                             {canal === 'email' && (
-                                <button
-                                    onClick={enviarPeloMeuEmail}
-                                    disabled={registrandoApp}
-                                    title={`Abre o e-mail padrão do SEU computador com o cliente no Para e ${GESTOR_EMAIL} em cópia — anexe o PDF baixado antes de enviar. A cópia no SharePoint e a baixa da obrigação são feitas pelo app.`}
-                                    className="btn-press px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                                >
-                                    {registrandoApp ? '⏳…' : '📧 Abrir no meu e-mail'}
-                                </button>
+                                <>
+                                    <button
+                                        onClick={() => enviarPeloMeuEmail('outlook-web')}
+                                        disabled={registrandoApp}
+                                        title={`Abre a composição no Outlook do NAVEGADOR, com o cliente no Para e ${GESTOR_EMAIL} em cópia — anexe o PDF baixado antes de enviar. A cópia no SharePoint e a baixa da obrigação são feitas pelo app.`}
+                                        className="btn-press px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                                    >
+                                        {registrandoApp ? '⏳…' : '📧 Abrir no Outlook Web'}
+                                    </button>
+                                    <button
+                                        onClick={() => enviarPeloMeuEmail('app-instalado')}
+                                        disabled={registrandoApp}
+                                        title="Só funciona se houver um programa de e-mail INSTALADO neste computador (Outlook desktop, Mail). Quem usa o Outlook no navegador deve escolher a outra opção."
+                                        className="btn-press px-3 py-2 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50"
+                                    >
+                                        app instalado
+                                    </button>
+                                </>
                             )}
                             <button
                                 onClick={enviar}

@@ -75,21 +75,102 @@ export function montarMailtoEnvio(p: { para: string; assunto?: string; corpo?: s
     return `mailto:${encodeURIComponent(dest)}${query ? `?${query}` : ''}`;
 }
 
+export type ModoComposicao = 'outlook-web' | 'app-instalado';
+
 /**
- * Fluxo completo do envio pelo e-mail do colaborador: abre o mailto (cliente
- * no Para, gestor em CC) E registra o envio no backend (SharePoint + baixa +
- * auditoria). Retorna o resultado do rito pra UI mostrar o farol honesto.
+ * Link de composição do OUTLOOK WEB.
+ *
+ * POR QUE EXISTE (equipe, 05/08): *"clico nessa aba e nada acontece, não vai
+ * nem pra rascunhos"*. O `mailto:` depende de um programa de e-mail INSTALADO
+ * e registrado no sistema como handler do protocolo. Quem usa só o Outlook no
+ * navegador — 90% do escritório, pela licença — não tem esse handler: o clique
+ * não faz nada, silenciosamente, e o app ainda dizia "e-mail aberto".
+ *
+ * O deep link do Outlook Web abre a composição numa aba, já preenchida.
+ */
+export function montarLinkOutlookWeb(p: { para: string; assunto?: string; corpo?: string; cc?: string[] }): string {
+    const dest = String(p.para || '').trim();
+    const listaCc = [...new Set([GESTOR_EMAIL, ...(p.cc || [])]
+        .map((e) => String(e || '').trim().toLowerCase())
+        .filter((e) => e && e !== dest.toLowerCase()))];
+    const qs = new URLSearchParams();
+    qs.set('to', dest);
+    if (listaCc.length) qs.set('cc', listaCc.join(';'));
+    if (p.assunto) qs.set('subject', p.assunto);
+    if (p.corpo) qs.set('body', p.corpo);
+    return `https://outlook.office.com/mail/deeplink/compose?${qs.toString()}`;
+}
+
+export interface ComposicaoAberta {
+    modo: ModoComposicao;
+    /** false quando o navegador barrou a janela (pop-up bloqueado). */
+    aberta: boolean;
+    link: string;
+}
+
+/**
+ * Abre a janela de composição no e-mail do colaborador.
+ *
+ * O retorno diz se a janela ABRIU — só o Outlook Web dá esse sinal (o
+ * `window.open` devolve null quando o pop-up é barrado). No mailto não há
+ * sinal nenhum: o navegador não conta se existe handler, e é por isso que a
+ * mensagem da tela não pode afirmar que o e-mail abriu.
+ */
+export function abrirComposicaoEmail(
+    p: { para: string; assunto?: string; corpo?: string; cc?: string[] },
+    modo: ModoComposicao = 'outlook-web',
+): ComposicaoAberta {
+    if (modo === 'app-instalado') {
+        const link = montarMailtoEnvio(p);
+        window.open(link, '_self');
+        return { modo, aberta: true, link };
+    }
+    const link = montarLinkOutlookWeb(p);
+    const janela = window.open(link, '_blank', 'noopener');
+    return { modo, aberta: !!janela, link };
+}
+
+/**
+ * Fluxo completo do envio pelo e-mail do colaborador: abre a composição
+ * (cliente no Para, gestor em cópia) E registra o envio no backend
+ * (SharePoint + baixa + auditoria). Retorna o resultado do rito pra UI mostrar
+ * o farol honesto — inclusive se a janela de composição abriu.
+ *
+ * ATENÇÃO ao que este canal significa: o app abre a composição; quem clica em
+ * "Enviar" é a pessoa, fora do app. Por isso a auditoria marca `email-app`,
+ * que NÃO é prova de que a mensagem saiu (ver canalComprovaEnvio no painel).
+ * Quando existe trilho pelo servidor (o "Enviar email" do DAS, via Graph), ele
+ * é o caminho com prova — e o único que anexa o PDF sozinho.
  */
 export async function enviarPorEmailDoColaborador(
-    input: Omit<EnvioImpostoInput, 'canal'> & { assunto?: string; corpo?: string },
-): Promise<RitoResultado> {
+    input: Omit<EnvioImpostoInput, 'canal'> & { assunto?: string; corpo?: string; modo?: ModoComposicao },
+): Promise<RitoResultado & { composicao?: ComposicaoAberta }> {
     if (!input.para || !input.para.includes('@')) {
         return { ok: false, error: 'E-mail do cliente ausente — preencha o e-mail no cadastro da empresa (dados fiscais).' };
     }
-    const mailto = montarMailtoEnvio({ para: input.para, assunto: input.assunto, corpo: input.corpo });
-    window.open(mailto, '_self');
-    const { assunto: _a, corpo: _c, ...resto } = input;
-    return registrarEnvioImposto({ ...resto, canal: 'email-app' });
+    const composicao = abrirComposicaoEmail(
+        { para: input.para, assunto: input.assunto, corpo: input.corpo },
+        input.modo || 'outlook-web',
+    );
+    const { assunto: _a, corpo: _c, modo: _m, ...resto } = input;
+    const rito = await registrarEnvioImposto({ ...resto, canal: 'email-app' });
+    return { ...rito, composicao };
+}
+
+/**
+ * Frase honesta pro toast depois de abrir a composição. Nunca afirma que o
+ * e-mail foi enviado — porque o app não viu isso acontecer.
+ */
+export function mensagemComposicao(c: ComposicaoAberta | undefined): string {
+    if (!c) return '';
+    if (c.modo === 'app-instalado') {
+        return `Pedimos ao seu computador para abrir o programa de e-mail com ${GESTOR_EMAIL} em cópia.`
+            + ' Se nada abriu, você usa o Outlook no navegador — clique em "Abrir no Outlook Web".';
+    }
+    if (!c.aberta) {
+        return 'O navegador BLOQUEOU a janela do Outlook Web. Libere o pop-up deste site e clique de novo.';
+    }
+    return `Composição aberta no Outlook Web com ${GESTOR_EMAIL} em cópia. O e-mail só sai quando VOCÊ clicar em Enviar.`;
 }
 
 

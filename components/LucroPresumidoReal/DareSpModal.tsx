@@ -13,7 +13,7 @@ import {
     salvarCodigoAntecipacao,
     type DarePayload, type AmbienteDare, type CodigoDareIcms,
 } from '../../services/dareSpService';
-import { enviarPorEmailDoColaborador, GESTOR_EMAIL } from '../../services/envioImpostoService';
+import { enviarPorEmailDoColaborador, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 
 interface Props {
     cnpj: string;
@@ -154,7 +154,7 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
     // emitido no portal (reCAPTCHA) — o colaborador anexa o PDF baixado do
     // portal; o registro do envio fica na auditoria central.
     const [aviso, setAviso] = useState<string | null>(null);
-    const enviarPorEmail = async () => {
+    const enviarPorEmail = async (modo: ModoComposicao = 'outlook-web') => {
         if (!preview) return;
         setOcupado(true); setErro(null); setAviso(null);
         try {
@@ -174,6 +174,7 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
             // homologação é documento de teste, sem validade e não pagável.
             const pdfValido = pdfEmitido && pdfEmitido.ambiente === 'producao' ? pdfEmitido.base64 : undefined;
             const r = await enviarPorEmailDoColaborador({
+                modo,
                 empresaId,
                 empresaCnpj: cnpj,
                 empresaNome: razaoSocial,
@@ -190,10 +191,10 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
             });
             if (r.ok) {
                 setAviso(pdfValido
-                    ? `E-mail aberto com ${GESTOR_EMAIL} em cópia. O PDF do DARE já foi arquivado na pasta IMPOSTOS do SharePoint`
+                    ? `${mensagemComposicao(r.composicao)} O PDF do DARE já foi arquivado na pasta IMPOSTOS do SharePoint`
                       + `${r.sharePoint?.status === 'arquivado' ? '' : ` (${r.sharePoint?.motivo || r.sharePoint?.status || 'confira a configuração'})`}`
                       + ' — anexe o mesmo arquivo no e-mail antes de enviar. Envio registrado na auditoria.'
-                    : `E-mail aberto com ${GESTOR_EMAIL} em cópia — anexe o PDF do DARE antes de enviar. Envio registrado na auditoria.`);
+                    : `${mensagemComposicao(r.composicao)} Anexe o PDF do DARE antes de enviar. Envio registrado na auditoria.`);
             }
             else setErro(r.error || 'Falha ao registrar o envio.');
         } catch (e: any) {
@@ -375,10 +376,15 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                                 className="px-3 py-2 text-sm font-bold rounded-lg border border-sky-400 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/30">
                                 🌐 Portal DARE
                             </a>
-                            <button onClick={enviarPorEmail} disabled={ocupado}
-                                title={`Abre o e-mail padrão do seu computador com o cliente no Para e ${GESTOR_EMAIL} em cópia — anexe o PDF do DARE emitido no portal. O envio fica registrado na auditoria.`}
+                            <button onClick={() => enviarPorEmail('outlook-web')} disabled={ocupado}
+                                title={`Abre a composição no Outlook do NAVEGADOR com o cliente no Para e ${GESTOR_EMAIL} em cópia — anexe o PDF do DARE emitido no portal. O envio fica registrado na auditoria.`}
                                 className="px-3 py-2 text-sm font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white">
-                                ✉ E-mail
+                                ✉ E-mail (Outlook Web)
+                            </button>
+                            <button onClick={() => enviarPorEmail('app-instalado')} disabled={ocupado}
+                                title="Só funciona com um programa de e-mail INSTALADO neste computador. Quem usa o Outlook no navegador deve escolher a outra opção."
+                                className="px-3 py-2 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50">
+                                app instalado
                             </button>
                         </div>
                         {aviso && (

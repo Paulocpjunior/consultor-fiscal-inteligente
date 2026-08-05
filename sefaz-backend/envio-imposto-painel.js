@@ -52,6 +52,25 @@ export function pendenciaBaixa(e) {
 }
 
 /**
+ * O canal PROVA que a mensagem saiu?
+ *
+ * Pergunta da equipe (05/08): *"como posso ter certeza de que a guia foi
+ * enviada ao cliente?"*. A resposta honesta depende do canal e o app tratava
+ * todos igual:
+ *
+ * - `email-graph`: o SERVIDOR enviou. O Microsoft Graph aceitou a mensagem
+ *   (202) e a cópia fica em "Itens Enviados" da caixa remetente — há prova.
+ * - `email-app` (mailto / Outlook Web): o app só ABRIU a janela de composição
+ *   no e-mail do colaborador. Quem clica em "Enviar" é a pessoa, fora do app —
+ *   e se ela fechar a janela, nada sai. Registrar isso como "enviado" é
+ *   afirmar um fato que o app não viu.
+ * - `whatsapp`: idem — abre o wa.me, o envio é humano.
+ */
+export function canalComprovaEnvio(canal) {
+    return String(canal || '').trim().toLowerCase() === 'email-graph';
+}
+
+/**
  * Agrega os envios num painel acionável.
  *
  * @param {Array} envios  docs de impostos_enviados (já normalizados)
@@ -70,6 +89,11 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
         // causa → { qtd, acao, empresas: [...] }: a equipe ataca por CAUSA.
         pendencias: {},
         semGestorEmCopia: [],
+        // Envios cujo canal NÃO prova a saída (mailto/Outlook Web/WhatsApp):
+        // o app abriu a composição, quem enviou foi a pessoa. Não é pendência
+        // do rito — é o limite do que o app pode afirmar.
+        semProvaDeEnvio: [],
+        enviadosPeloServidor: 0,
         valorTotal: 0,
     };
 
@@ -94,6 +118,13 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
         const copias = (e.copiaPara || []).map((c) => String(c).toLowerCase());
         if (!copias.some((c) => c.includes('alexandre@'))) {
             painel.semGestorEmCopia.push(`${e.empresaNome || e.empresaCnpj} · ${tipo}`);
+        }
+
+        if (canalComprovaEnvio(e.canal)) painel.enviadosPeloServidor++;
+        else if (painel.semProvaDeEnvio.length < 200) {
+            painel.semProvaDeEnvio.push(
+                `${e.empresaNome || e.empresaCnpj} · ${tipo} ${e.competencia || ''}`.trim(),
+            );
         }
     }
 

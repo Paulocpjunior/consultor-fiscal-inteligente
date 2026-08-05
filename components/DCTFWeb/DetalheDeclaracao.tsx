@@ -23,7 +23,7 @@ import {
     situacaoColorClass,
 } from '../../services/dctfwebService';
 import { getAuth } from 'firebase/auth';
-import { enviarPorEmailDoColaborador, GESTOR_EMAIL } from '../../services/envioImpostoService';
+import { enviarPorEmailDoColaborador, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 
 interface Props {
     declaracao: DctfwebDeclaracao;
@@ -102,7 +102,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     // IMPOSTOS do cliente no SharePoint e dá baixa na obrigação DCTFWEB da
     // aba Vencimentos e Obrigações. mailto não anexa — colaborador anexa o
     // PDF baixado; a cópia de arquivo fica garantida pelo SharePoint.
-    const enviarDarfAoCliente = async (pdfBase64: string, filename: string) => {
+    const enviarDarfAoCliente = async (pdfBase64: string, filename: string, modo: ModoComposicao = 'outlook-web') => {
         setEnviandoDarf(true);
         try {
             const token = await getAuth().currentUser?.getIdToken();
@@ -132,6 +132,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                 user?.name || 'Equipe SP Assessoria Contábil',
             ].filter((l) => l !== '').join('\n');
             const r = await enviarPorEmailDoColaborador({
+                modo,
                 empresaCnpj: declaracao.empresaCnpj,
                 empresaNome: nomeEmpresa,
                 tipo: 'DARF',
@@ -150,7 +151,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                         ? 'SEM cópia no SharePoint: empresa sem pasta configurada.'
                         : '';
                 const baixa = r.baixa?.status === 'baixada' ? `Baixa de ${r.baixa.tarefas} obrigação(ões) DCTFWeb.` : '';
-                onShowToast?.(`E-mail aberto com ${GESTOR_EMAIL} em cópia — anexe o PDF baixado antes de enviar! ${sp} ${baixa}`.trim());
+                onShowToast?.(`${mensagemComposicao(r.composicao)} Anexe o PDF baixado antes de enviar. ${sp} ${baixa}`.trim());
             } else {
                 onShowToast?.(`Registro do envio falhou: ${r.error}`);
             }
@@ -422,10 +423,18 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                             <button
                                                 onClick={() => enviarDarfAoCliente(darfResult.pdfBase64!, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
                                                 disabled={enviandoDarf}
-                                                title={`Abre o e-mail padrão do seu computador com o cliente no Para e ${GESTOR_EMAIL} em cópia; arquiva o PDF na pasta IMPOSTOS do cliente no SharePoint e dá baixa na obrigação DCTFWeb do mês.`}
+                                                title={`Abre a composição no Outlook do NAVEGADOR com o cliente no Para e ${GESTOR_EMAIL} em cópia; arquiva o PDF na pasta IMPOSTOS do cliente no SharePoint e dá baixa na obrigação DCTFWeb do mês.`}
                                                 className="text-sm px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
                                             >
-                                                {enviandoDarf ? '⏳…' : '✉ Enviar ao cliente'}
+                                                {enviandoDarf ? '⏳…' : '✉ Enviar ao cliente (Outlook Web)'}
+                                            </button>
+                                            <button
+                                                onClick={() => enviarDarfAoCliente(darfResult.pdfBase64!, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`, 'app-instalado')}
+                                                disabled={enviandoDarf}
+                                                title="Só funciona com um programa de e-mail INSTALADO neste computador. Quem usa o Outlook no navegador deve escolher a outra opção."
+                                                className="text-xs px-3 py-1 rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50"
+                                            >
+                                                app instalado
                                             </button>
                                         </div>
                                     )}
