@@ -24,3 +24,8 @@ export function correlacionarCfop(
 
 /** Deriva a natureza da atividade a partir do cadastro da empresa. */
 export function derivarNaturezaAtividade(empresa: unknown): string | null;
+
+export function resolverNaturezaAtividade(dadosFiscais: unknown): {
+    natureza: 'comercio' | 'industria' | 'servicos' | 'misto';
+    origem: 'cadastro' | 'indicador' | 'padrao';
+};

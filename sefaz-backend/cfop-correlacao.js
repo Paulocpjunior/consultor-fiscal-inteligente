@@ -162,8 +162,30 @@ export function correlacionarCfop(cfopOrigem, direcao, ctx = {}) {
  * Quando empresa.naturezaAtividade existe, vence sobre essa derivação.
  */
 export function derivarNaturezaAtividade(empresa) {
-    const df = empresa?.dadosFiscais || {};
-    if (df.naturezaAtividade) return df.naturezaAtividade;
-    if (df.indAtividade === 'industrial') return 'industria';
-    return 'comercio';  // default conservador (revenda)
+    return resolverNaturezaAtividade(empresa?.dadosFiscais || {}).natureza;
+}
+
+/**
+ * Mesma derivação, dizendo DE ONDE veio o valor.
+ *
+ * Paulo, 05/08: *"você se parametrizar de acordo com o cadastro da empresa,
+ * a empresa em questão é optante do simples nacional"*. O SPED já derivava do
+ * cadastro; o Exportar SAGE lia SÓ `naturezaAtividade` e, com o campo em
+ * branco — comum em empresa do Simples, que não preenche os campos de SPED —,
+ * ficava sem parâmetro nenhum e caía no default sem dizer.
+ *
+ * A origem importa mais que o valor: "comércio porque está no cadastro" e
+ * "comércio porque é o nosso padrão" levam a decisões diferentes de quem
+ * confere. Por isso a tela mostra as duas coisas.
+ *
+ * @returns {{natureza: string, origem: 'cadastro'|'indicador'|'padrao'}}
+ */
+export function resolverNaturezaAtividade(dadosFiscais) {
+    const df = dadosFiscais || {};
+    if (df.naturezaAtividade) return { natureza: df.naturezaAtividade, origem: 'cadastro' };
+    if (df.indAtividade === 'industrial') return { natureza: 'industria', origem: 'indicador' };
+    if (df.indAtividade === 'outras') return { natureza: 'comercio', origem: 'indicador' };
+    // Sem nada declarado: revenda é o caso mais comum da carteira. NÃO é
+    // chute silencioso — a tela diz que veio do padrão e pede o cadastro.
+    return { natureza: 'comercio', origem: 'padrao' };
 }
