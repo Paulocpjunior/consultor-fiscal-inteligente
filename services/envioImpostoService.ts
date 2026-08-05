@@ -209,3 +209,63 @@ export async function painelEnviosImposto(competencia?: string): Promise<PainelE
     if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
     return { ...data, ok: true };
 }
+
+// ─── Envio PELO SERVIDOR (Graph) ────────────────────────────────────────────
+
+export interface EnvioGraphResultado extends RitoResultado {
+    para?: string;
+    /** Caixa que apareceu como remetente pro cliente. */
+    remetente?: string;
+    fonteRemetente?: 'colaborador' | 'padrao';
+    avisoRemetente?: string | null;
+    copiaPara?: string[];
+    anexouPdf?: boolean;
+}
+
+/**
+ * Envia a guia PELO SERVIDOR, com o PDF anexado e o gestor em cópia oculta.
+ *
+ * Diferença que importa (equipe, 05/08): aqui o app ENVIA — o Graph aceita a
+ * mensagem e a cópia fica em Itens Enviados da caixa do colaborador. Isso é
+ * prova. O mailto/Outlook Web só abre a composição.
+ *
+ * O remetente é a caixa de QUEM CLICOU (Paulo, 05/08) — a resposta do cliente
+ * volta pra pessoa da carteira, não pro dono do escritório.
+ */
+export async function enviarGuiaPeloServidor(input: {
+    empresaId?: string;
+    empresaCnpj: string;
+    empresaNome: string;
+    tipo: string;
+    competencia: string;
+    para: string;
+    assunto?: string;
+    mensagem: string;
+    pdfBase64?: string;
+    pdfFileName?: string;
+    valor?: number;
+    vencimento?: string | null;
+}): Promise<EnvioGraphResultado> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/envio-imposto/enviar-graph', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return data;
+}
+
+/** Frase do toast depois do envio pelo servidor — afirma o que de fato houve. */
+export function mensagemEnvioServidor(r: EnvioGraphResultado): string {
+    const partes = [`E-mail ENVIADO para ${r.para || 'o cliente'}`];
+    if (r.anexouPdf) partes.push('com a guia em anexo');
+    if (r.remetente) partes.push(`pela caixa ${r.remetente}`);
+    const base = `${partes.join(' ')}.`;
+    const copia = r.copiaPara?.length ? ` Cópia oculta a ${r.copiaPara.join(', ')}.` : '';
+    const aviso = r.avisoRemetente ? ` ⚠ ${r.avisoRemetente}.` : '';
+    return `${base}${copia}${aviso} A cópia fica em Itens Enviados da caixa remetente.`;
+}

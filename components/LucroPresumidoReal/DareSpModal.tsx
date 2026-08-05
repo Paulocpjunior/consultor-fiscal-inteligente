@@ -13,7 +13,7 @@ import {
     salvarCodigoAntecipacao,
     type DarePayload, type AmbienteDare, type CodigoDareIcms,
 } from '../../services/dareSpService';
-import { enviarPorEmailDoColaborador, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
+import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 
 interface Props {
     cnpj: string;
@@ -154,6 +154,55 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
     // emitido no portal (reCAPTCHA) — o colaborador anexa o PDF baixado do
     // portal; o registro do envio fica na auditoria central.
     const [aviso, setAviso] = useState<string | null>(null);
+    // Envio PELO SERVIDOR (Graph): o app manda, anexa o PDF e o gestor entra em
+    // cópia oculta — é o caminho que deixa PROVA (cópia em Itens Enviados da
+    // caixa do colaborador). O mailto/Outlook Web abaixo só abre a composição.
+    const enviarPeloServidor = async () => {
+        if (!preview) return;
+        setOcupado(true); setErro(null); setAviso(null);
+        try {
+            const { getAuth } = await import('firebase/auth');
+            const u = getAuth().currentUser;
+            if (!u) throw new Error('Sessão expirada');
+            const token = await u.getIdToken();
+            const resp = await fetch(`/api/admin/empresa-contato/${encodeURIComponent(cnpj)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const contato = resp.ok ? await resp.json() : { email: '' };
+            if (!contato.email) {
+                setErro('E-mail do cliente não cadastrado — preencha em "Dados Fiscais" da empresa.');
+                return;
+            }
+            const pdfValido = pdfEmitido && pdfEmitido.ambiente === 'producao' ? pdfEmitido.base64 : undefined;
+            if (!pdfValido) {
+                // Sem PDF de PRODUÇÃO não há guia pagável pra anexar — e mandar
+                // e-mail de imposto sem a guia é pior que não mandar.
+                setErro('Emita o DARE em PRODUÇÃO antes de enviar pelo sistema: sem o PDF válido o cliente receberia um e-mail sem a guia.');
+                return;
+            }
+            const r = await enviarGuiaPeloServidor({
+                empresaId,
+                empresaCnpj: cnpj,
+                empresaNome: razaoSocial,
+                tipo: 'DARE',
+                competencia,
+                para: contato.email,
+                assunto: `DARE-SP ICMS ${competencia.split('-').reverse().join('/')} - ${razaoSocial}`,
+                mensagem: `${textoConferencia(preview)}\n\nO DARE segue anexo. Por gentileza, confirme o pagamento após a regularização.\n\nAtenciosamente,\nSP Assessoria Contábil`,
+                pdfBase64: pdfValido,
+                pdfFileName: `dare_${cnpj.replace(/\D/g, '')}_${competencia}.pdf`,
+                valor: preview.valor,
+                vencimento: preview.vencimento,
+            });
+            if (r.ok) setAviso(mensagemEnvioServidor(r));
+            else setErro(r.error || 'Falha ao enviar.');
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao enviar.');
+        } finally {
+            setOcupado(false);
+        }
+    };
+
     const enviarPorEmail = async (modo: ModoComposicao = 'outlook-web') => {
         if (!preview) return;
         setOcupado(true); setErro(null); setAviso(null);
@@ -376,6 +425,11 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                                 className="px-3 py-2 text-sm font-bold rounded-lg border border-sky-400 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/30">
                                 🌐 Portal DARE
                             </a>
+                            <button onClick={enviarPeloServidor} disabled={ocupado}
+                                title="O SISTEMA envia o e-mail com o PDF do DARE anexado, pela SUA caixa, com o gestor em cópia oculta. A cópia fica nos seus Itens Enviados — é a prova de que saiu."
+                                className="px-3 py-2 text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white">
+                                📤 Enviar pelo sistema
+                            </button>
                             <button onClick={() => enviarPorEmail('outlook-web')} disabled={ocupado}
                                 title={`Abre a composição no Outlook do NAVEGADOR com o cliente no Para e ${GESTOR_EMAIL} em cópia — anexe o PDF do DARE emitido no portal. O envio fica registrado na auditoria.`}
                                 className="px-3 py-2 text-sm font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white">

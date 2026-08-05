@@ -23,7 +23,7 @@ import {
     situacaoColorClass,
 } from '../../services/dctfwebService';
 import { getAuth } from 'firebase/auth';
-import { enviarPorEmailDoColaborador, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
+import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 
 interface Props {
     declaracao: DctfwebDeclaracao;
@@ -102,6 +102,57 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     // IMPOSTOS do cliente no SharePoint e dá baixa na obrigação DCTFWEB da
     // aba Vencimentos e Obrigações. mailto não anexa — colaborador anexa o
     // PDF baixado; a cópia de arquivo fica garantida pelo SharePoint.
+    // Envio PELO SERVIDOR: o app manda o DARF anexado, pela caixa do próprio
+    // colaborador, com o gestor em cópia oculta — e a cópia fica em Itens
+    // Enviados. É o caminho com PROVA; os dois abaixo só abrem a composição.
+    const enviarDarfPeloServidor = async (pdfBase64: string, filename: string) => {
+        setEnviandoDarf(true);
+        try {
+            const token = await getAuth().currentUser?.getIdToken();
+            if (!token) throw new Error('Sessão expirada');
+            const resp = await fetch(`/api/admin/empresa-contato/${encodeURIComponent(declaracao.empresaCnpj)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const contato = resp.ok ? await resp.json() : { email: '' };
+            if (!contato.email) {
+                onShowToast?.('E-mail do cliente não cadastrado — preencha em "Dados Fiscais" da empresa.');
+                return;
+            }
+            const competencia = `${declaracao.anoPA}-${String(declaracao.mesPA).padStart(2, '0')}`;
+            const corpo = [
+                'Olá, tudo bem?',
+                '',
+                `Segue o DARF da DCTFWeb — competência ${formatPaLabel(declaracao.anoPA, declaracao.mesPA)}.`,
+                darfResult?.valor != null ? `Valor: ${formatCurrency(darfResult.valor)}` : '',
+                darfResult?.vencimento ? `Vencimento: ${darfResult.vencimento}` : '',
+                '',
+                'A guia segue anexa. Por gentileza, confirme o pagamento após a regularização.',
+                '',
+                'Atenciosamente,',
+                user?.name || 'Equipe SP Assessoria Contábil',
+            ].filter((l) => l !== '').join('\n');
+            const r = await enviarGuiaPeloServidor({
+                empresaCnpj: declaracao.empresaCnpj,
+                empresaNome: declaracao.empresaCnpj,
+                tipo: 'DARF',
+                competencia,
+                para: contato.email,
+                assunto: `DARF DCTFWeb ${formatPaLabel(declaracao.anoPA, declaracao.mesPA)}`,
+                mensagem: corpo,
+                pdfBase64,
+                pdfFileName: filename,
+                valor: darfResult?.valor ?? undefined,
+                vencimento: darfResult?.vencimento ?? null,
+            });
+            if (r.ok) onShowToast?.(mensagemEnvioServidor(r));
+            else onShowToast?.(`Falha no envio: ${r.error}`);
+        } catch (e: any) {
+            onShowToast?.(`Falha no envio: ${e.message}`);
+        } finally {
+            setEnviandoDarf(false);
+        }
+    };
+
     const enviarDarfAoCliente = async (pdfBase64: string, filename: string, modo: ModoComposicao = 'outlook-web') => {
         setEnviandoDarf(true);
         try {
@@ -419,6 +470,14 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                 className="text-sm px-3 py-1 bg-sky-600 text-white rounded hover:bg-sky-700"
                                             >
                                                 Baixar PDF DARF
+                                            </button>
+                                            <button
+                                                onClick={() => enviarDarfPeloServidor(darfResult.pdfBase64!, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
+                                                disabled={enviandoDarf}
+                                                title="O SISTEMA envia o e-mail com o DARF anexado, pela SUA caixa, com o gestor em cópia oculta. A cópia fica nos seus Itens Enviados — é a prova de que saiu."
+                                                className="text-sm px-3 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
+                                            >
+                                                {enviandoDarf ? '⏳…' : '📤 Enviar pelo sistema'}
                                             </button>
                                             <button
                                                 onClick={() => enviarDarfAoCliente(darfResult.pdfBase64!, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}

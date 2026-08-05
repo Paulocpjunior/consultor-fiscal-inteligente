@@ -326,6 +326,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   + baixa + gestor em cópia). Gestor não recebeu o BCC? Conferir os Itens
   Enviados de junior@ e o lixo eletrônico dele — o BCC não aparece na cópia
   do cliente, então "o cliente recebeu" nunca prova a cópia oculta.
+- **REMETENTE = a caixa do COLABORADOR, não a institucional** (Paulo, 05/08:
+  *"o cliente tende a entender que eu que enviei e acaba me questionando"*):
+  todo envio pelo Graph sai da caixa de QUEM CLICOU (`escolherRemetente` em
+  graph-remetente.js, 9 testes), e o cliente responde a quem cuida da
+  carteira. GUARDA: só caixa do domínio do escritório (env
+  `GRAPH_DOMINIOS_REMETENTE` soma outros) — login de domínio pessoal cai no
+  `GRAPH_REMETENTE`. Erro do Graph de caixa inexistente (`ErrorInvalidUser`,
+  `MailboxNotEnabledForRESTAPI`) REFAZ pela institucional e o payload diz que
+  caiu no fallback; erro de OUTRA natureza NUNCA repete (duplicaria a guia no
+  cliente). A auditoria grava `remetente` + `fonteRemetente`. **DARF e DARE
+  ganharam trilho Graph** (rota `/api/admin/envio-imposto/enviar-graph`,
+  botão "📤 Enviar pelo sistema"): PDF anexado, gestor em BCC e rito #293 no
+  mesmo passo. DARE só envia com PDF de PRODUÇÃO (homologação não é guia
+  pagável).
 
 ## Fila de features acordadas (com requisitos)
 

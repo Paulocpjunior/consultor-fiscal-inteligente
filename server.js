@@ -78,6 +78,7 @@ import { podeAcessarCnpj, getCnpjsDaCarteira } from './sefaz-backend/carteira-au
 import { enviarEmail } from './sefaz-backend/graph-provider.js';
 import { montarEmailGuia, anexoLogo } from './sefaz-backend/email-layout.js';
 import { parseDestinatarios } from './sefaz-backend/email-destinatarios-helper.js';
+import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './sefaz-backend/graph-remetente.js';
 import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sanitize-error.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -1134,7 +1135,19 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
             return res.status(413).json({ error: 'PDF muito grande para envio por e-mail automatico' });
         }
 
-        const remetente = process.env.GRAPH_REMETENTE || process.env.NOTIF_REMETENTE_EMAIL || 'junior@spassessoriacontabil.com.br';
+        // Remetente = a caixa do COLABORADOR que clicou (Paulo, 05/08: saindo
+        // sempre da caixa fixa, o cliente respondia ao dono do escritório um
+        // assunto que era do colaborador da carteira). Caixa fora do tenant ou
+        // inexistente cai no remetente institucional — a guia não fica presa.
+        const remetentePadrao = process.env.GRAPH_REMETENTE || process.env.NOTIF_REMETENTE_EMAIL || 'junior@spassessoriacontabil.com.br';
+        const escolhaRemetente = escolherRemetente({
+            emailColaborador: req.user?.email,
+            padrao: remetentePadrao,
+            dominios: dominiosPermitidos(),
+        });
+        let remetente = escolhaRemetente.remetente;
+        let fonteRemetente = escolhaRemetente.fonte;
+        let avisoRemetente = escolhaRemetente.motivo;
         // Copia oculta (BCC) automatica pro gestor em todo envio de DAS ao
         // cliente — o cliente nao ve o endereco interno. Configuravel via
         // DAS_ENVIO_BCC (lista separada por virgula; DAS_ENVIO_CC aceito por
@@ -1159,7 +1172,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
             vencimento: vencimento || null,
         });
 
-        const envio = await enviarEmail({
+        let envio = await enviarEmail({
             remetente,
             para: emailDest,
             bcc: copiaGestor,
@@ -1167,6 +1180,19 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
             corpoHtml,
             anexos: [...anexos, ...anexoLogo()],
         });
+        if (!envio.ok && fonteRemetente === 'colaborador' && ehErroDeCaixaInexistente(envio.error)) {
+            avisoRemetente = `a caixa ${remetente} não pôde enviar; usamos ${remetentePadrao}`;
+            remetente = remetentePadrao;
+            fonteRemetente = 'padrao';
+            envio = await enviarEmail({
+                remetente,
+                para: emailDest,
+                bcc: copiaGestor,
+                assunto: assuntoFinal,
+                corpoHtml,
+                anexos: [...anexos, ...anexoLogo()],
+            });
+        }
         if (!envio.ok) return res.status(502).json({ error: envio.error || 'Falha ao enviar e-mail' });
 
         try {
@@ -1185,6 +1211,10 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
                 canal: 'email',
                 para: emailDest,
                 copiaPara: copiaGestor,
+                // Quem apareceu como remetente pro cliente — a auditoria
+                // precisa disso pra responder "quem mandou?" sem adivinhar.
+                remetente,
+                fonteRemetente,
                 assunto: assuntoFinal,
                 mensagem: String(mensagem).slice(0, 10_000),
                 anexouPdf: Boolean(pdfLimpo),
@@ -1230,7 +1260,11 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
             console.warn('[das/enviar-cliente] envio OK, rito falhou:', ritoErr.message);
         }
 
-        return res.json({ ok: true, canal: 'email', para: emailDest, copiaPara: copiaGestor, anexouPdf: Boolean(pdfLimpo), rito });
+        return res.json({
+            ok: true, canal: 'email', para: emailDest, copiaPara: copiaGestor,
+            remetente, fonteRemetente, avisoRemetente,
+            anexouPdf: Boolean(pdfLimpo), rito,
+        });
     } catch (err) {
         console.error('[das/enviar-cliente]', err);
         return respondeErro(res, err);
