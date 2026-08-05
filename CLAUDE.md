@@ -599,9 +599,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   postgresql"). NÃO iniciar a migração do PG12 sem o Paulo mandar. O plano de
   4 fases fica registrado pra quando retomar: F0 inventário (quem entrega
   EFD); F1 gerador EFD ICMS/IPI + conferência-espelho (2 pilotos Lucro que o
-  Paulo escolher); F2 extração do PG12 — aguarda 3 arquivos do Paulo
-  (`pg_dump --schema-only -n gen -n gen_modelo -n pad_modelo -n e0299`,
-  pg_stat_user_tables do e0299, `\dt gen.*`); F3 ondas por cliente.
+  Paulo escolher); F2 extração do PG12 — **ARQUIVOS RECEBIDOS E VALIDADOS
+  05/08** (`docs/pg12/validacao-f2.md` + DDL guardado em
+  `docs/pg12/efiscal_ddl.zip`): DDL dos 4 schemas OK (618 tabelas por
+  empresa = pad_modelo; gen 273; tabelas de movimento mapeadas —
+  nfentrad/nfsaida/nf_iss/lcereg54/nfdipam); \dt gen.* OK; SÓ FALTA a
+  volumetria do e0299 refeita (a 1ª veio com 80/618 tabelas e contagem
+  zero — pg_stat sem ANALYZE; o SQL certo por pg_total_relation_size está
+  no doc). Cod.Cliente carregado em massa 05/08 (390 ativas, via Listagem
+  de Empresas HTML) = amarração e{código}↔CNPJ pronta; F3 ondas por
+  cliente.
   Arquitetura já mapeada (schemas_efiscal.csv): PG12 (EOL nov/2024), 1 schema
   por empresa (e0001–e9996, 1.735 schemas), `gen` compartilhado 625MB, total
   real 84GB (cuidado: o CSV tem linha TOTAL — não somar duas vezes), 29
