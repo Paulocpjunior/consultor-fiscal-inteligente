@@ -78,7 +78,14 @@ export function normalizarReferencia(ref) {
  * conferíveis (mesmos campos do documento real) ou lança erro em português
  * com a AÇÃO prática. Zero tolerância: campo inválido = não sai guia.
  */
-export function montarDare({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento }) {
+export function montarDare({
+  cnpj, razaoSocial, codigoServico, referencia, valor, vencimento,
+  // Serviços conhecidos ALÉM da tabela fixa — hoje só o da antecipação do
+  // 426-A, que mora no banco porque é rubrica própria e o número vem da
+  // lista real da SEFAZ (dare-antecipacao-config.js). Sem ele cadastrado, a
+  // guia da antecipação é recusada aqui mesmo.
+  codigosExtras = null,
+}) {
   const cnpjNum = String(cnpj || '').replace(/\D/g, '');
   if (cnpjNum.length !== 14) {
     throw new Error(`CNPJ inválido ("${cnpj || ''}"). Confira o cadastro da empresa.`);
@@ -86,9 +93,10 @@ export function montarDare({ cnpj, razaoSocial, codigoServico, referencia, valor
   const nome = String(razaoSocial || '').trim();
   if (!nome) throw new Error('Razão social vazia — confira o cadastro da empresa.');
 
-  const svc = CODIGOS_DARE_ICMS[String(codigoServico || '').trim()];
+  const tabela = codigosExtras ? { ...CODIGOS_DARE_ICMS, ...codigosExtras } : CODIGOS_DARE_ICMS;
+  const svc = tabela[String(codigoServico || '').trim()];
   if (!svc) {
-    const validos = Object.keys(CODIGOS_DARE_ICMS).join(', ');
+    const validos = Object.keys(tabela).join(', ');
     throw new Error(`Código de serviço DARE desconhecido ("${codigoServico}"). Válidos: ${validos}.`);
   }
 

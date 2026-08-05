@@ -76,6 +76,7 @@ export const CATALOGO_BANCO = [
     { colecao: 'dctfweb_mit_retificacoes', grupo: 'Lucro · Federal', funcionalidade: 'Auditoria de retificações do MIT' },
     { colecao: 'dctfweb_cron_logs', grupo: 'Lucro · Federal', funcionalidade: 'Execuções do cron DCTFWeb' },
     { colecao: 'dare_solicitacoes', grupo: 'Lucro · Federal', funcionalidade: 'DARE-ICMS emitidos pela API' },
+    { colecao: 'dare_codigos_servico', grupo: 'Lucro · Federal', funcionalidade: 'Código de serviço DARE cadastrado pelo admin (antecipação art. 426-A — rubrica própria)' },
     { colecao: 'impostos_enviados', grupo: 'Lucro · Federal', funcionalidade: 'Auditoria do rito de envio de imposto (#293)' },
 
     // ── Caixa postal & obrigações ──────────────────────────────────────────

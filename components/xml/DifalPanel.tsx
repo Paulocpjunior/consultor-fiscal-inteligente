@@ -78,6 +78,9 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
     const [competencia, setCompetencia] = useState(compAnterior());
     const [varredura, setVarredura] = useState<VarreduraLinha[] | null>(null);
     const [dareAberto, setDareAberto] = useState(false);
+    // Antecipação do 426-A é UMA GUIA POR DOCUMENTO (não consolida): o modal
+    // abre pra UMA nota, com o valor dela e a chave amarrada na auditoria.
+    const [dare426a, setDare426a] = useState<{ chave: string; numero: string; valor: number } | null>(null);
     const [painel, setPainel] = useState<Painel | null>(null);
     const [overrides, setOverrides] = useState<Record<string, number>>({});
     // IVA-ST informado por nota com ST (vem da Portaria CAT — o app não deduz).
@@ -283,6 +286,19 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                         />
                     )}
 
+                    {dare426a && painel.empresa && (
+                        <DareSpModal
+                            cnpj={painel.empresa.cnpj}
+                            razaoSocial={painel.empresa.nome}
+                            empresaId={painel.empresa.id}
+                            competencia={competencia}
+                            valorInicial={dare426a.valor}
+                            derivacaoInicial="antecipacao"
+                            chaveDocumento={dare426a.chave}
+                            onClose={() => setDare426a(null)}
+                        />
+                    )}
+
                     {(painel.antecipacaoIndividual || []).length > 0 && (
                         <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-3 bg-amber-50/50 dark:bg-amber-900/10">
                             <p className="text-xs font-bold text-amber-700 dark:text-amber-400 mb-1">
@@ -320,12 +336,27 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                                                             </span>
                                                         )}
                                                     </td>
-                                                    <td className="py-1 text-right font-mono font-bold">
-                                                        {doc.guiaLiberada
-                                                            ? fmtBRL(doc.antecipacaoDocumento)
-                                                            : <span className="text-amber-700 dark:text-amber-400 font-normal">
+                                                    <td className="py-1 text-right font-mono font-bold whitespace-nowrap">
+                                                        {doc.guiaLiberada ? (
+                                                            <>
+                                                                {fmtBRL(doc.antecipacaoDocumento)}
+                                                                <button
+                                                                    onClick={() => setDare426a({
+                                                                        chave: doc.chave,
+                                                                        numero: String(doc.numero || ''),
+                                                                        valor: doc.antecipacaoDocumento,
+                                                                    })}
+                                                                    className="ml-2 px-2 py-0.5 text-[10px] font-bold rounded bg-amber-700 hover:bg-amber-800 text-white"
+                                                                    title="Uma guia POR DOCUMENTO: abre o DARE com o valor desta nota e a chave amarrada na auditoria."
+                                                                >
+                                                                    🧾 Guia
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-amber-700 dark:text-amber-400 font-normal">
                                                                 {doc.itensPendentes} item(ns) sem IVA-ST
-                                                            </span>}
+                                                            </span>
+                                                        )}
                                                     </td>
                                                 </tr>
                                                 {doc.itens.map(it => (

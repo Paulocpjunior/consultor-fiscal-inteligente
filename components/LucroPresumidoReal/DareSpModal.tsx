@@ -20,7 +20,9 @@ interface Props {
     empresaId?: string;
     competencia: string;             // 'AAAA-MM' (fichaMes)
     valorInicial: number;
-    derivacaoInicial: 'proprio' | 'st' | 'difal';
+    derivacaoInicial: 'proprio' | 'st' | 'difal' | 'antecipacao';
+    /** Chave da NF-e (antecipação 426-A — uma guia por documento). */
+    chaveDocumento?: string;
     onClose: () => void;
 }
 
@@ -39,15 +41,24 @@ const OPCOES_FALLBACK: Array<{ codigoServico: string; label: string }> = [
 
 const CODIGO_POR_DERIVACAO: Record<string, string> = {
     proprio: '04601', st: '14601', difal: '04602',
+    // A antecipação do 426-A NÃO tem código fixo aqui de propósito: é rubrica
+    // própria e o número vem da lista real da SEFAZ, cadastrado no banco
+    // (dare-antecipacao-config.js). Sem cadastro, a lista chega sem ela e a
+    // tela avisa em vez de recolher no código errado.
+    antecipacao: '',
 };
 
 const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competencia, valorInicial, derivacaoInicial, onClose }) => {
+const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competencia, valorInicial, derivacaoInicial, chaveDocumento, onClose }) => {
     const [codigoServico, setCodigoServico] = useState(
         CODIGO_POR_DERIVACAO[derivacaoInicial] || '04601',
     );
     const [opcoes, setOpcoes] = useState(OPCOES_FALLBACK);
+    // Antecipação do 426-A sem código cadastrado: a tela AVISA e não deixa
+    // recolher — código de tributo não se chuta, e cair no 04602 (DIFAL)
+    // poria o valor na receita errada.
+    const [faltaCodigoAntecipacao, setFaltaCodigoAntecipacao] = useState(false);
     // Lista vem do backend (fonte única). Se a chamada falhar, o fallback
     // acima segue valendo — o modal nunca fica sem opção.
     React.useEffect(() => {
@@ -57,8 +68,15 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                 codigoServico: c.codigoServico,
                 label: `${c.descricao} — ${c.codigoReceita} / ${c.codigoServico}`,
             })));
-        }).catch(() => { /* fallback */ });
-    }, []);
+            if (derivacaoInicial === 'antecipacao') {
+                const svc = cs.find((c) => (c as any).derivacao === 'antecipacao');
+                if (svc) setCodigoServico(svc.codigoServico);
+                else setFaltaCodigoAntecipacao(true);
+            }
+        }).catch(() => {
+            if (derivacaoInicial === 'antecipacao') setFaltaCodigoAntecipacao(true);
+        });
+    }, [derivacaoInicial]);
     const [valor, setValor] = useState(String(valorInicial.toFixed(2)));
     // Vencimento NUNCA é chutado: depende do CPR/calendário da empresa —
     // o colaborador informa a data oficial do vencimento do imposto.
@@ -80,7 +98,7 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
     const [pdfEmitido, setPdfEmitido] = useState<{ base64: string; ambiente: AmbienteDare } | null>(null);
 
     const inputAtual = () => ({
-        cnpj, razaoSocial, empresaId, codigoServico,
+        cnpj, razaoSocial, empresaId, codigoServico, chaveDocumento,
         referencia: competencia,
         valor: Number(String(valor).replace(',', '.')),
         vencimento,
@@ -266,10 +284,24 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                     </div>
                 </div>
 
+                {faltaCodigoAntecipacao && (
+                    <div className="text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-800 rounded p-2 space-y-1">
+                        <p className="font-bold">⚠ Falta o código de serviço da antecipação (art. 426-A).</p>
+                        <p>
+                            A antecipação tem <b>rubrica própria</b> — não é o 04602 (DIFAL do Simples).
+                            Recolher no código errado põe o valor na receita errada, e a SEFAZ não desfaz.
+                        </p>
+                        <p>
+                            Um admin precisa cadastrar o número uma vez, escolhendo da lista real da SEFAZ
+                            (a mesma consulta “Serviços da SEFAZ” usada na emissão pela API). Enquanto isso,
+                            a guia desta antecipação não sai por aqui.
+                        </p>
+                    </div>
+                )}
                 {erro && <div className="text-xs text-red-700 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-2">{erro}</div>}
 
                 {!preview && (
-                    <button onClick={conferir} disabled={ocupado}
+                    <button onClick={conferir} disabled={ocupado || faltaCodigoAntecipacao}
                         className="w-full px-4 py-2 text-sm font-bold rounded-lg bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white">
                         {ocupado ? '⏳ Validando…' : '🔎 Conferir (preview obrigatório)'}
                     </button>
