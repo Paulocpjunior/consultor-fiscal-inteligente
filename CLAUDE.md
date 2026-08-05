@@ -304,6 +304,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   código: mudança de layout é NAS DUAS cascas. Farol honesto no e-mail: sem
   PDF do SERPRO, o corpo AVISA que a guia não foi anexada. DARF/DARE seguem
   mailto (sem HTML) — quando ganharem trilho Graph, usar montarEmailGuia.
+- **`mailto:` NÃO FUNCIONA pra quem usa Outlook no NAVEGADOR** (equipe via
+  Paulo, 05/08: *"clico nessa aba e nada acontece, não vai nem pra
+  rascunhos"*) — e é a licença de **90% do escritório**. O `mailto:` exige
+  programa de e-mail INSTALADO e registrado como handler do protocolo; sem
+  ele o clique não faz NADA, em silêncio, e o app ainda dizia "e-mail
+  aberto". Toda tela de envio ao cliente oferece **"Abrir no Outlook Web"**
+  (`montarLinkOutlookWeb` → deep link `outlook.office.com/mail/deeplink/
+  compose`, cópias separadas por `;`) como PRIMÁRIO e "app instalado"
+  (mailto) como secundário — DAS, DARF e DARE já estão nos dois.
+  `window.open` do deep link devolve null quando o pop-up é barrado: a
+  mensagem diz isso em vez de mentir (`mensagemComposicao`).
+  **DUAS COISAS DIFERENTES, e a equipe perguntou certo** ("como ter certeza
+  de que a guia foi enviada?"): `email-graph` = o SERVIDOR enviou (Graph 202
+  + cópia em Itens Enviados do remetente `GRAPH_REMETENTE`, hoje junior@) —
+  ISSO é prova; `email-app` (mailto/Outlook Web) e `whatsapp` = o app só
+  ABRIU a composição, quem clica em Enviar é a pessoa — NÃO é prova, e a
+  frase da tela nunca pode afirmar envio. `canalComprovaEnvio` decide, o
+  painel do rito conta `enviadosPeloServidor` e lista `semProvaDeEnvio` SEM
+  transformar isso em rito incompleto (são coisas separadas: rito = arquivo
+  + baixa + gestor em cópia). Gestor não recebeu o BCC? Conferir os Itens
+  Enviados de junior@ e o lixo eletrônico dele — o BCC não aparece na cópia
+  do cliente, então "o cliente recebeu" nunca prova a cópia oculta.
 
 ## Fila de features acordadas (com requisitos)
 
