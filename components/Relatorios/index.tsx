@@ -248,7 +248,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
             {precisaEmpresa && !recorteValido && (
                 <p className="text-sm text-slate-500 text-center py-4">
-                    Escolha a empresa e clique em Buscar — o mesmo recorte serve todas as abas de Movimento e Serviços.
+                    Escolha a empresa e clique em <strong>⚡ Ativar</strong> — o mesmo recorte serve todas as abas de Movimento e Serviços.
                 </p>
             )}
 
