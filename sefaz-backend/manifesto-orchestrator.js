@@ -130,6 +130,52 @@ export async function listarElegiveis({ empresaId = null, limit = 50, tipo = 'ci
   return [...intercalarPorRaiz(resumos), ...intercalarPorRaiz(completas)].slice(0, limit);
 }
 
+/**
+ * Por que os resumos desta empresa NÃO estão sendo manifestados.
+ *
+ * Caso que motivou (KJM, 05/08): nota de 28/07 seguia como resumo — o
+ * colaborador via "sem produto" e nenhuma explicação. O motivo SEMPRE existe
+ * no documento (idade, cooldown, poison de falhas, status), mas morria dentro
+ * do laço. Zero manifestada não pode sair como sucesso mudo.
+ *
+ * Devolve contagem por motivo + a última falha registrada, pra tela dizer se
+ * é esperar ou escalar.
+ */
+export async function diagnosticarPendencias({ empresaId, tipo = 'ciencia' } = {}) {
+  const db = fa().firestore();
+  let q = db.collection('documentos_fiscais')
+    .where('direcao', '==', 'entrada')
+    .where('tipoDoc', 'in', ['resNFe', 'NFe']);
+  if (empresaId) q = q.where('empresaId', '==', empresaId);
+
+  const docs = await fetchAllDocs(q, { label: 'documentos_fiscais/manifest-diagnostico' });
+  const agora = Date.now();
+  const porMotivo = {};
+  let ultimaFalha = null;
+  const conta = (motivo) => { porMotivo[motivo] = (porMotivo[motivo] || 0) + 1; };
+
+  for (const d of docs) {
+    const doc = { id: d.id, ...d.data() };
+    const check = ehElegivel(doc, tipo);
+    if (!check.ok) { conta(check.motivo); continue; }
+    const falhas = Number(doc.manifestacaoFalhas) || 0;
+    if (falhas >= MAX_FALHAS_MANIFESTACAO) {
+      conta(`Desistimos após ${falhas} falhas — veja o motivo no Backlog de Entrada`);
+      if (doc.ultimoErroManifestacao) ultimaFalha = String(doc.ultimoErroManifestacao).slice(0, 200);
+      continue;
+    }
+    const ultimaFalhaMs = Number(doc.ultimaFalhaManifestacaoMs) || 0;
+    if (ultimaFalhaMs && (agora - ultimaFalhaMs) < COOLDOWN_FALHA_MANIFESTACAO_MS) {
+      const horas = Math.ceil((COOLDOWN_FALHA_MANIFESTACAO_MS - (agora - ultimaFalhaMs)) / 3600000);
+      conta(`Falhou há pouco — volta ao lote em ~${horas}h`);
+      if (doc.ultimoErroManifestacao) ultimaFalha = String(doc.ultimoErroManifestacao).slice(0, 200);
+      continue;
+    }
+    conta('Elegível (deveria manifestar)');
+  }
+  return { porMotivo, ultimaFalha, documentos: docs.length };
+}
+
 // Resolve o certificado A1 que ASSINA o evento. A SEFAZ exige que o autor do
 // evento (CNPJ destinatário) tenha a mesma raiz CNPJ do certificado — o cert
 // do escritório era usado pra todos e a manifestação de clientes voltava

@@ -6,7 +6,7 @@ import { Router } from 'express';
 import admin from 'firebase-admin';
 import {
   manifestarUma, manifestarPendentes, listarElegiveis,
-  resetarFalhasInfraManifestacao,
+  resetarFalhasInfraManifestacao, diagnosticarPendencias,
 } from './manifesto-orchestrator.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { getEmpresaIdsDaCarteira, podeAcessarEmpresaId } from './carteira-auth.js';
@@ -95,13 +95,39 @@ router.post('/manifest-one', requireAdmin, async (req, res) => {
   }
 });
 
-router.post('/manifest-pending', requireAdmin, async (req, res) => {
+// Colaborador manifesta CIÊNCIA da PRÓPRIA carteira, empresa a empresa.
+//
+// Era admin-only e isso quebrava o caso real (05/08): quem fecha o mês e vê
+// "nota sem produto" no Exportar SAGE é o colaborador — mandar ele pedir a um
+// admin pra destravar o próprio cliente é o que o botão deveria ter evitado.
+//
+// LIMITE que continua: só CIÊNCIA (declara que viu a operação, não confirma
+// nada) e só com empresaId da carteira dele. Confirmação/desconhecimento
+// seguem admin — esses afirmam sobre a OPERAÇÃO e não se desfazem.
+router.post('/manifest-pending', authUser, async (req, res) => {
   try {
     const { empresaId = null, tipo = 'ciencia', limit = 20, dryRun = false } = req.body || {};
+    const isAdmin = req.user?.role === 'admin';
+    if (!isAdmin) {
+      if (tipo !== 'ciencia') {
+        return res.status(403).json({ erro: 'Só administradores manifestam confirmação/desconhecimento — esses afirmam sobre a operação e não se desfazem.' });
+      }
+      if (!empresaId) {
+        return res.status(400).json({ erro: 'Escolha a empresa: fora de admin a manifestação é por cliente da sua carteira.' });
+      }
+      const check = await podeAcessarEmpresaId(req.user, empresaId);
+      if (!check.ok) return res.status(check.status).json({ erro: check.error });
+    }
     const r = await manifestarPendentes({
       empresaId, tipo, limit, dryRun,
       capturadoPor: req.user,
     });
+    // Zero manifestada não pode sair como sucesso mudo: o motivo existe no
+    // documento (idade, poison de falhas, cooldown) e é o que o colaborador
+    // precisa ler pra saber se espera ou se escala.
+    if (!r.total && empresaId) {
+      r.diagnostico = await diagnosticarPendencias({ empresaId, tipo });
+    }
     res.json(r);
   } catch (e) {
     console.error('[manifest-pending] erro:', e);
