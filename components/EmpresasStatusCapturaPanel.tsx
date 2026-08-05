@@ -15,6 +15,7 @@
 
 import CadastroClienteModal from './CadastroClienteModal';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { parsearCadastroEmpresas } from '../services/efiscalCadastroEmpresasParser';
 import {
     fetchEmpresasStatusCaptura,
     toggleEmpresaFlag,
@@ -229,6 +230,56 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
             setFeedback({ tipo: 'erro', msg: formatarErroAcaoStatusCaptura(e?.message || 'falha inesperada', null, 'auto-preencher o município') });
         } finally {
             setAutoMunRunning(false);
+        }
+    };
+
+    // Carga em massa do Cod.Cliente a partir da Listagem de Empresas do
+    // E-Fiscal (HTML/XFRX). O parse é local; o backend confronta por CNPJ.
+    const [importandoCodigos, setImportandoCodigos] = useState(false);
+    const [resultadoCodigos, setResultadoCodigos] = useState<string | null>(null);
+
+    const importarCodigosEfiscal = async (file: File | null) => {
+        if (!file || !isAdmin) return;
+        setImportandoCodigos(true);
+        setResultadoCodigos(null);
+        try {
+            // O XFRX exporta em windows-1252 — ler como utf-8 quebra acentos.
+            const buf = await file.arrayBuffer();
+            const htmlBruto = new TextDecoder('windows-1252').decode(buf);
+            const r = parsearCadastroEmpresas(htmlBruto);
+            if (r.empresas.length === 0) {
+                throw new Error('Não achei fichas "Código/Nome/C.G.C./C.N.P.J." — é a Listagem do '
+                    + 'Cadastro de Empresas exportada em HTML pelo E-Fiscal?');
+            }
+            const { getAuth } = await import('firebase/auth');
+            const u = getAuth().currentUser;
+            if (!u) throw new Error('Sessão expirada — entre de novo.');
+            const res = await fetch('/api/admin/sefaz/importar-cod-cliente', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${await u.getIdToken()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ empresas: r.empresas.map(e => ({ codigo: e.codigo, cnpj: e.cnpj })) }),
+            });
+            const j = await res.json();
+            if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+            const linhas = [
+                `Arquivo lido: ${r.empresas.length} ficha(s) válidas`
+                + (r.conflitos.length ? ` · ⚠ ${r.conflitos.length} CNPJ(s) com DOIS códigos no arquivo ficaram de fora: `
+                    + r.conflitos.map(c => `${c.cnpj} (${c.codigos.join('/')})`).slice(0, 3).join(' · ') : '')
+                + (r.ignoradas.length ? ` · ${r.ignoradas.length} ficha(s) ignoradas` : '') + '.',
+                j.mensagem,
+            ];
+            if (Array.isArray(j.divergentes) && j.divergentes.length > 0) {
+                linhas.push('Divergências (salvo × arquivo): '
+                    + j.divergentes.slice(0, 8).map((d: any) => `${d.nome}: ${d.salvo} × ${d.arquivo}`).join(' · ')
+                    + (j.divergentes.length > 8 ? ' …' : ''));
+            }
+            setResultadoCodigos(linhas.join('\n'));
+            setFeedback({ tipo: 'sucesso', msg: `Cod.Cliente: ${j.gravadas} empresa(s) atualizadas.` });
+        } catch (e: any) {
+            setResultadoCodigos(`✕ ${e?.message || e}`);
+            setFeedback({ tipo: 'erro', msg: `Importação de códigos não concluída: ${e?.message || e}` });
+        } finally {
+            setImportandoCodigos(false);
         }
     };
 
@@ -467,6 +518,37 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <div className="text-lg font-bold text-gray-900">{r.ccmSpAutorizado} / {r.nfseNacionalAtivo}</div>
                 </div>
             </div>
+
+            {/* Carga em massa do Cod.Cliente — a chave da migração do PG12
+                (Paulo, 05/08: exportou o Cadastro de Empresas em HTML). */}
+            {isAdmin && (
+                <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                            <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                                🔢 Importar códigos das empresas do E-Fiscal (Cod.Cliente)
+                            </p>
+                            <p className="text-[11px] text-slate-500 mt-0.5 max-w-3xl">
+                                Suba a <b>Listagem do Cadastro de Empresas</b> exportada pelo E-Fiscal em <b>HTML</b>.
+                                O confronto é por CNPJ: cada empresa do CFI recebe o código de lá (o que aparece antes
+                                do nome). Código já salvo que <b>divirja</b> do arquivo NÃO é alterado — vira lista
+                                pra decisão. Empresas do arquivo que não existem no CFI (carteira antiga) só contam
+                                no relatório.
+                            </p>
+                        </div>
+                        <label className={`px-3 py-2 text-sm rounded-lg font-semibold cursor-pointer ${importandoCodigos ? 'bg-slate-200 text-slate-500' : 'bg-blue-700 hover:bg-blue-800 text-white'}`}>
+                            {importandoCodigos ? 'Importando…' : '📥 Escolher HTML'}
+                            <input type="file" accept=".html,.htm" className="hidden" disabled={importandoCodigos}
+                                onChange={e => { void importarCodigosEfiscal(e.target.files?.[0] || null); e.target.value = ''; }} />
+                        </label>
+                    </div>
+                    {resultadoCodigos && (
+                        <div className="text-[11px] text-slate-600 dark:text-slate-300 whitespace-pre-line border-t border-slate-100 dark:border-slate-700 pt-2">
+                            {resultadoCodigos}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Filtros */}
             <div className="flex flex-wrap gap-2 items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
