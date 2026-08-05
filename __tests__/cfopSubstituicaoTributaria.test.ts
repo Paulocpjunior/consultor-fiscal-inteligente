@@ -1,4 +1,4 @@
-import { correlacionarCfop } from '../sefaz-backend/cfop-correlacao.js';
+import { correlacionarCfop, resolverNaturezaAtividade } from '../sefaz-backend/cfop-correlacao.js';
 
 /**
  * Caso real (Paulo, 05/08): "correlacionei CFOP, porém o CFOP 1405 não existe,
@@ -68,5 +68,36 @@ describe('o que NÃO mudou (sufixo com par na entrada)', () => {
 
     it('saída não se converte — o CFOP é o da própria empresa', () => {
         expect(correlacionarCfop('5405', 'saida', { naturezaAtividade: 'comercio' })).toBe('5405');
+    });
+});
+
+describe('parametrização pelo CADASTRO da empresa', () => {
+    // Paulo, 05/08: "você se parametrizar de acordo com o cadastro da empresa,
+    // a empresa em questão é optante do simples nacional". Empresa do Simples
+    // costuma ter os campos de SPED em branco — e o Exportar SAGE lia SÓ
+    // `naturezaAtividade`, ficando sem parâmetro nenhum.
+    it('natureza declarada no cadastro vence e diz que veio de lá', () => {
+        expect(resolverNaturezaAtividade({ naturezaAtividade: 'industria' }))
+            .toEqual({ natureza: 'industria', origem: 'cadastro' });
+    });
+
+    it('sem natureza, deriva do indicador de atividade', () => {
+        expect(resolverNaturezaAtividade({ indAtividade: 'industrial' }))
+            .toEqual({ natureza: 'industria', origem: 'indicador' });
+        expect(resolverNaturezaAtividade({ indAtividade: 'outras' }))
+            .toEqual({ natureza: 'comercio', origem: 'indicador' });
+    });
+
+    it('cadastro vazio usa o padrão E ADMITE que é padrão', () => {
+        // O valor é o mesmo de sempre (revenda); o que muda é não fingir que
+        // veio do cadastro — quem confere precisa saber a diferença.
+        expect(resolverNaturezaAtividade({})).toEqual({ natureza: 'comercio', origem: 'padrao' });
+        expect(resolverNaturezaAtividade(null)).toEqual({ natureza: 'comercio', origem: 'padrao' });
+    });
+
+    it('a natureza do cadastro manda no CFOP de ST', () => {
+        const df = { naturezaAtividade: 'industria' };
+        const { natureza } = resolverNaturezaAtividade(df);
+        expect(correlacionarCfop('5405', 'entrada', { naturezaAtividade: natureza })).toBe('1401');
     });
 });

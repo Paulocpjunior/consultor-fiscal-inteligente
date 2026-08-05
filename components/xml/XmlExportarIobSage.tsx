@@ -9,6 +9,7 @@ import type { CfopCtx } from '../../services/iobSageExportService';
 import { formatCurrency } from '../../services/xmlParserService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
+import { resolverNaturezaAtividade } from '../../sefaz-backend/cfop-correlacao.js';
 import { parseLogEfiscal, cruzarLogComFml, type CruzamentoLogEfiscal } from '../../services/iobSageLogEfiscal';
 import { carregarCodigosParticipantes, salvarCodigosParticipantes, carregarUfsParticipantes, salvarUfsParticipantes } from '../../services/sageCodigosService';
 import { ufValida } from '../../services/ufsBrasil';
@@ -58,6 +59,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // Natureza da atividade + overrides da empresa (tela Correlação CFOP).
     // Sem isso, a configuração da equipe não chegava ao arquivo.
     const [cfopCtx, setCfopCtx] = useState<CfopCtx | undefined>(undefined);
+    const [naturezaOrigem, setNaturezaOrigem] = useState<'cadastro' | 'indicador' | 'padrao' | null>(null);
     const [exporting, setExporting] = useState(false);
 
     const [corrigindoEnderecos, setCorrigindoEnderecos] = useState(false);
@@ -153,7 +155,14 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         getDadosFiscaisEmpresa(empresaSelecionada.fonte, empresaSelecionada.id)
             .then(df => {
                 if (!alive) return;
-                setCfopCtx(df ? { naturezaAtividade: df.naturezaAtividade, cfopOverrides: df.cfopOverrides } : undefined);
+                // Parametriza pelo CADASTRO (Paulo, 05/08): natureza declarada,
+                // senão o indicador de atividade, senão o padrão — a MESMA
+                // régua do SPED. Antes lia só `naturezaAtividade` e empresa do
+                // Simples, que costuma ter esse campo vazio, ficava sem
+                // parâmetro nenhum.
+                const nat = resolverNaturezaAtividade(df || {});
+                setNaturezaOrigem(nat.origem);
+                setCfopCtx({ naturezaAtividade: nat.natureza, cfopOverrides: df?.cfopOverrides });
                 const cod = String(df?.codigoParticipanteConsumidor || '');
                 setCodigoConsumidor(cod);
                 setConsumidorSalvo(cod);
@@ -577,6 +586,14 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         </p>
                         <span className="text-[11px] text-slate-500 dark:text-slate-400">
                             Natureza da empresa: <strong>{correlacao.naturezaAtividade || 'não declarada'}</strong>
+                            {naturezaOrigem === 'cadastro' && ' (do cadastro)'}
+                            {naturezaOrigem === 'indicador' && ' (derivada do indicador de atividade)'}
+                            {naturezaOrigem === 'padrao' && (
+                                <span className="text-amber-600 dark:text-amber-400">
+                                    {' '}— PADRÃO do app, não veio do cadastro. Preencha a natureza em
+                                    Empresas → Dados Fiscais para o app decidir sozinho.
+                                </span>
+                            )}
                         </span>
                     </div>
                     <div className="overflow-x-auto">
