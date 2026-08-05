@@ -22,6 +22,10 @@ import {
   listarReceitas, emitirDareUnitario, montarDareApiDTO,
   resolverAmbiente, AMBIENTE_PADRAO, resumirRetornoDare,
 } from './dare-icms-api.js';
+import {
+  lerCodigoAntecipacao, gravarCodigoAntecipacao, validarCodigoAntecipacao,
+  servicoAntecipacao,
+} from './dare-antecipacao-config.js';
 
 const router = Router();
 
@@ -30,10 +34,28 @@ function fa() {
   return admin;
 }
 
+/**
+ * Serviços conhecidos ALÉM da tabela fixa: hoje só a antecipação do 426-A,
+ * que mora no banco (rubrica própria, número vindo da lista real da SEFAZ).
+ * Devolve null quando não há nada cadastrado — e aí a guia da antecipação é
+ * recusada pelo montarDare com a lista de códigos válidos.
+ */
+async function codigosExtrasDare() {
+  try {
+    const cfg = await lerCodigoAntecipacao(fa().firestore());
+    const svc = servicoAntecipacao(cfg);
+    return svc ? { [svc.codigoServico]: svc } : null;
+  } catch (e) {
+    console.warn('[dare] codigosExtras:', e.message);
+    return null;
+  }
+}
+
 router.post('/preview', requireAuth, async (req, res) => {
   try {
     const { cnpj, razaoSocial, codigoServico, referencia, valor, vencimento } = req.body || {};
-    const payload = montarDare({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento });
+    const codigosExtras = await codigosExtrasDare();
+    const payload = montarDare({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento, codigosExtras });
     // linhaTxt: a MESMA página de colar TXT do portal aceita 1 linha só —
     // é o caminho rápido da emissão INDIVIDUAL (colaborador cola 1 linha em
     // vez de digitar 6 campos no formulário unitário). Serviço bloqueado em
@@ -48,23 +70,59 @@ router.post('/preview', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/codigos', requireAuth, (req, res) => {
+router.get('/codigos', requireAuth, async (req, res) => {
   const regime = String(req.query.regime || '').toLowerCase();
-  return res.json({
-    ok: true,
-    codigos: regime ? derivacoesDisponiveis(regime) : Object.values(CODIGOS_DARE_ICMS),
-  });
+  const base = regime ? derivacoesDisponiveis(regime) : Object.values(CODIGOS_DARE_ICMS);
+  // A antecipação do 426-A entra na MESMA lista quando cadastrada — o modal
+  // não precisa saber que ela vem de outro lugar.
+  const extras = await codigosExtrasDare();
+  const doBanco = Object.values(extras || {})
+    .filter((c) => !regime || c.regimes.includes(regime));
+  return res.json({ ok: true, codigos: [...base, ...doBanco] });
+});
+
+// ── Código de serviço da ANTECIPAÇÃO 426-A ────────────────────────────────
+// Rubrica própria; o número vem da lista real da SEFAZ (GET /receitas).
+// Enquanto não cadastrado, a guia da antecipação é recusada.
+router.get('/codigo-antecipacao', requireAuth, async (_req, res) => {
+  try {
+    const cfg = await lerCodigoAntecipacao(fa().firestore());
+    return res.json({ ok: true, cadastrado: !!cfg, ...(cfg || { codigoServico: null }) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+router.put('/codigo-antecipacao', requireAdmin, async (req, res) => {
+  try {
+    const { codigo, codigoReceita, sefaz, ambiente, receitasSefaz } = req.body || {};
+    const v = validarCodigoAntecipacao(codigo, { receitasSefaz });
+    if (!v.ok) return res.status(400).json({ ok: false, error: v.erro });
+    const doc = await gravarCodigoAntecipacao(fa().firestore(), {
+      codigo: v.codigo, codigoReceita, sefaz, ambiente,
+      usuario: req.user?.email || req.user?.uid || null,
+    });
+    console.log(`[dare] codigo antecipacao 426-A = ${v.codigo} por ${req.user?.email}`);
+    return res.json({ ok: true, ...doc });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 router.post('/registrar', requireAuth, async (req, res) => {
   try {
-    const { cnpj, razaoSocial, codigoServico, referencia, valor, vencimento, empresaId } = req.body || {};
+    const { cnpj, razaoSocial, codigoServico, referencia, valor, vencimento, empresaId, chaveDocumento } = req.body || {};
     // Revalida TUDO no registro — auditoria nunca grava payload inválido.
-    const payload = montarDare({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento });
+    const codigosExtras = await codigosExtrasDare();
+    const payload = montarDare({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento, codigosExtras });
     const db = fa().firestore();
     const doc = await db.collection('dare_solicitacoes').add({
       ...payload,
       empresaId: empresaId || null,
+      // Antecipação do 426-A é UMA GUIA POR DOCUMENTO: a chave amarra a guia
+      // à nota que a originou (sem isso, duas notas do mesmo mês viram duas
+      // linhas iguais na auditoria e ninguém sabe qual foi paga).
+      chaveDocumento: String(chaveDocumento || '').replace(/\D/g, '') || null,
       solicitadoPor: req.user?.email || req.user?.uid || 'desconhecido',
       solicitadoEm: admin.firestore.FieldValue.serverTimestamp(),
       // status do ciclo: 'gerada-no-app' → equipe emite no portal → pode ser

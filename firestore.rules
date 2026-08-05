@@ -424,6 +424,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // dare_codigos_servico: codigo de servico DARE que nao e tabela fixa —
+    // hoje a antecipacao do art. 426-A (rubrica propria). So o backend le e
+    // grava, e ele valida contra a lista real da SEFAZ: codigo de tributo
+    // errado poe o dinheiro na receita errada e a SEFAZ nao desfaz emissao.
+    match /dare_codigos_servico/{docId} {
+      allow read, write: if false;
+    }
+
     // ncm_parametros: cadastro de NCM (aliquota interna, IVA-ST, CEST).
     // Leitura liberada a quem esta logado — a tela consulta direto; ESCRITA
     // so pelo backend, que valida (IVA-ST sem Portaria e aliquota fora da

@@ -26,6 +26,12 @@ export interface DareInput {
     valor: number;
     vencimento: string;      // AAAA-MM-DD
     empresaId?: string;
+    /**
+     * Chave da NF-e que originou a guia. Só a antecipação do 426-A usa: ela é
+     * UMA GUIA POR DOCUMENTO, e sem a chave duas notas do mesmo mês viram
+     * duas linhas idênticas na auditoria.
+     */
+    chaveDocumento?: string;
 }
 
 async function getToken(): Promise<string> {

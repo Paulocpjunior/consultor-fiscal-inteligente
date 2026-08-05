@@ -32,6 +32,8 @@ export function montarDare(input: {
     referencia: string;
     valor: number;
     vencimento: string;
+    /** Serviços conhecidos além da tabela fixa (antecipação 426-A, do banco). */
+    codigosExtras?: Record<string, unknown> | null;
 }): DarePayloadSp;
 
 export function montarLinhaLoteTxt(input: {
