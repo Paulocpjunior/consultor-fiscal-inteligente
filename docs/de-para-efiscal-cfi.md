@@ -76,6 +76,11 @@ Canceladas/Faltantes limpo. Cliente com buraco de captura NÃO migra.
 
 F0 inventário por cliente (SAT? CIAP? bloco K? ajustes? quem entrega EFD?)
 → F1 dois pilotos com conferência-espelho no PVA → F3 ondas.
+**A ORDEM das ondas está decidida em `docs/plano-migracao-ondas.md`** (05/08,
+Paulo: "essa ordem quem traz é você"), a partir da varredura REAL de 07/2026:
+começa por SERVIÇO PURO (157 empresas — não passam por nenhuma pendência de
+ICMS e o E-Fiscal já não recebe nada delas), depois comércio, depois DIFAL
+(36) e por último os nichos (3 indústria/IPI, 2 E310, 1 CIAP).
 **F2 (extração do PG12) saiu do plano em 05/08** (Paulo): o E-Fiscal fica
 ativo como consulta do histórico, então migra-se só a operação corrente. O
 gargalo das ondas passou a ser a COMPLETUDE DE CAPTURA (abaixo), não o
