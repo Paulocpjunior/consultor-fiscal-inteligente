@@ -112,6 +112,41 @@ describe('sem Inscrição Estadual não há SPED Fiscal para migrar', () => {
     });
 });
 
+describe('sinal de BLOCO só bloqueia quem entrega EFD ICMS/IPI', () => {
+    // Caso real 05/08: MV LIDER (Simples) apareceu com 58 vendas a não
+    // contribuinte marcadas como BLOQUEIO de E310. Mas Simples Nacional não
+    // entrega EFD ICMS/IPI — a escrituração dele é o PGDAS-D. O sinal é
+    // informativo, e tratá-lo como bloqueio inflava a lista de problemas com
+    // empresa que nunca vai gerar aquele arquivo.
+    const comSt = (id: string) => ({
+        empresaId: id, direcao: 'saida', tpNF: '1', status: 'autorizado',
+        totais: { vST: 100 }, cnpjEmit: EMP.find(e => e.id === id)!.cnpj,
+        ufEmit: 'SP', chave: `352607${EMP.find(e => e.id === id)!.cnpj}55` + '0'.repeat(22),
+    });
+
+    it('Lucro contribuinte: ST em saída é BLOQUEIO', () => {
+        const r = montarProntidaoMigracao([comSt('b')] as any, EMP as any);
+        const b = r.linhas.find(l => l.empresaId === 'b')!;
+        expect(b.entregaEfdIcms).toBe(true);
+        expect(b.bloqueios.join(' ')).toMatch(/E220/);
+    });
+
+    it('SIMPLES: o mesmo sinal vira ATENÇÃO, não bloqueio', () => {
+        const r = montarProntidaoMigracao([comSt('d')] as any, EMP as any);
+        const d = r.linhas.find(l => l.empresaId === 'd')!;
+        expect(d.entregaEfdIcms).toBe(false);       // Simples não entrega EFD
+        expect(d.bloqueios).toHaveLength(0);
+        expect(d.atencoes.join(' ')).toMatch(/E220/);
+    });
+
+    it('prestadora sem IE também não é bloqueada por bloco do SPED', () => {
+        const r = montarProntidaoMigracao([comSt('f')] as any, EMP as any);
+        const f = r.linhas.find(l => l.empresaId === 'f')!;
+        expect(f.bloqueios).toHaveLength(0);
+        expect(f.atencoes.join(' ')).toMatch(/E220/);
+    });
+});
+
 describe('as DUAS formas do documento (achatado × objeto)', () => {
     // Caso 05/08, com a carteira real: os 198 clientes apareceram com
     // "emissão própria 0" — inclusive um com 4.527 notas. A captura SEFAZ
