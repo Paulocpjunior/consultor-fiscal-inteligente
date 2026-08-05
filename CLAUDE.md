@@ -107,10 +107,12 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   pra receita marcada SUP (`bloqueiosDoPayload` + `_bloqueios` no payload,
   revalidado no `emitirDasRegular`) — Paulo viu o extrato saindo como "com
   retenção/substituição tributária de ISS" e cortou ("leva errado pro
-  SIMPLES"). Entrega ao PGDAS-D não se desfaz. Conferência pendente de olho
-  humano: o extrato do PGDAS-D da competência deve dizer ISS fixo, não "com
-  retenção" — o valor do DAS é o MESMO nas duas rotas, então só o extrato
-  denuncia. Ferramenta de conferência: botão **🔎 Atividades declaradas** (rota
+  SIMPLES"). Entrega ao PGDAS-D não se desfaz. **CASO ENCERRADO 05/08: Paulo
+  conferiu o extrato ("ISS validado")** — a natureza saiu certa, não mais "com
+  retenção". Essa conferência é obrigatória em caso novo de SUP: o valor do DAS
+  é o MESMO nas duas rotas, então gerar o DAS não prova nada; só o extrato
+  denuncia (foi por isso que o erro passou meses despercebido). Ferramenta:
+  botão **🔎 Atividades declaradas** (rota
   `/das/atividades-declaradas`, CONSULTIMADECREC14, consulta pura; extrator
   `pgdas-atividades-declaradas.js`, 9 testes) lê os ids de uma declaração já
   aceita e destaca o que o app não monta. Ids mapeados: 1/2/3 comércio, 4/5/6

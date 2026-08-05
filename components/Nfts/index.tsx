@@ -15,7 +15,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { User } from '../../types';
 import { getEmpresasParaPerfilCliente, type EmpresaPerfilOption } from '../../services/xmlFiscalService';
 import { listarEmpresasPerfilBackend } from '../../services/empresasPerfilService';
-import { carregarRecusasNfts } from '../../services/nftsRecusasService';
+import { carregarRecusasNfts, registrarRecusaNfts } from '../../services/nftsRecusasService';
 import { extrairTextoPdf, parseNftsFromText, montarNotaDeGemini } from '../../services/nftsPdfParserService';
 import { extractNftsDataFromPdf } from '../../services/geminiService';
 import {
@@ -223,6 +223,25 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
         return () => { vivo = false; };
     }, []);
 
+    // Registrar recusa nova da PMSP SEM esperar deploy: quem descobre o erro
+    // 310 é a equipe, no meio da importação. Sem esta escrita a lista do banco
+    // só seria lida e nunca alimentada — a metade que não serve pra nada.
+    const [recusaAberta, setRecusaAberta] = useState(false);
+    const [recusaCodigo, setRecusaCodigo] = useState('');
+    const [recusaLote, setRecusaLote] = useState('');
+    const [recusaMsg, setRecusaMsg] = useState('');
+    const [salvandoRecusa, setSalvandoRecusa] = useState(false);
+
+    const salvarRecusa = async () => {
+        setSalvandoRecusa(true);
+        const r = await registrarRecusaNfts({ codigo: recusaCodigo, lote: recusaLote, mensagem: recusaMsg });
+        setSalvandoRecusa(false);
+        if (!r.ok) { onShowToast?.(r.error || 'Falha ao registrar a recusa.'); return; }
+        setRecusadas(await carregarRecusasNfts());
+        setRecusaAberta(false); setRecusaCodigo(''); setRecusaLote(''); setRecusaMsg('');
+        onShowToast?.('Código registrado — as próximas importações já o bloqueiam.');
+    };
+
     const { mantidas, retidas } = useMemo(() => separarNotasIssRetido(notas), [notas]);
     const notasComErro = useMemo(
         () => mantidas.filter(n => validarNotaNfts(n, recusadas).erros.length > 0),
@@ -310,7 +329,45 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             </button>
                         </>
                     ) : null}
+                    {currentUser?.role === 'admin' && (
+                        <button onClick={() => setRecusaAberta(v => !v)} className="px-4 py-2 text-xs font-bold rounded-lg"
+                            style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}
+                            title="A PMSP recusou um código com erro 310? Registre aqui e as próximas importações já o bloqueiam — sem esperar entrega.">
+                            🚫 Código recusado pela PMSP
+                        </button>
+                    )}
                 </div>
+
+                {recusaAberta && currentUser?.role === 'admin' && (
+                    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 10, padding: 12, marginTop: 10 }}>
+                        <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                            Registrar código recusado (erro 310)
+                        </p>
+                        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, maxWidth: 720 }}>
+                            Guarde a <b>prova</b>: nº do lote e a mensagem literal da PMSP. Um código bloqueado
+                            por engano derruba a importação de todo mundo — por isso o registro é de admin e
+                            fica com a origem.
+                        </p>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <input value={recusaCodigo} onChange={e => setRecusaCodigo(e.target.value)}
+                                placeholder="código (5 díg.)" style={{ ...inputStyle, width: 120 }} />
+                            <input value={recusaLote} onChange={e => setRecusaLote(e.target.value)}
+                                placeholder="nº do lote" style={{ ...inputStyle, width: 150 }} />
+                            <input value={recusaMsg} onChange={e => setRecusaMsg(e.target.value)}
+                                placeholder="mensagem da PMSP (cole)" style={{ ...inputStyle, flex: 1, minWidth: 240 }} />
+                            <button onClick={salvarRecusa} disabled={salvandoRecusa || !recusaCodigo.trim()}
+                                className="px-3 py-1.5 text-xs font-bold rounded-lg"
+                                style={{ background: 'var(--accent)', color: '#fff', opacity: salvandoRecusa || !recusaCodigo.trim() ? 0.5 : 1 }}>
+                                {salvandoRecusa ? 'Registrando…' : 'Registrar'}
+                            </button>
+                        </div>
+                        {recusadas.size > 0 && (
+                            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+                                Já registrados no banco: {Array.from(recusadas).sort().join(', ')}
+                            </p>
+                        )}
+                    </div>
+                )}
 
                 {status.fase === 'processando' && (
                     <p className="text-sm mt-3" style={{ color: 'var(--text-secondary)' }}>
