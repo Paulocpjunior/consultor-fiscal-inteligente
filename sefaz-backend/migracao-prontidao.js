@@ -14,6 +14,8 @@
 // O painel diz o período olhado e nunca chama a lista de "definitiva".
 // ============================================================================
 
+import { cnpjEmitente, ufEmitente } from './participante-doc-helper.js';
+
 const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
 
 /**
@@ -97,7 +99,13 @@ export function montarProntidaoMigracao(docs, empresas) {
         const tipo = tipoDoDoc(d);
         emp.porTipo[tipo] = (emp.porTipo[tipo] || 0) + 1;
         const t = d.totais || {};
-        const emitEhEmpresa = so(d.emitente?.cnpjCpf) === emp.cnpj;
+        // RÉGUA ÚNICA (participante-doc-helper): o documento vem em DUAS
+        // formas — captura SEFAZ grava achatado (cnpjEmit/ufEmit), importação
+        // de XML grava objeto (emitente.cnpjCpf/uf). Ler só o objeto zerava
+        // TUDO que depende de "a empresa é a emitente": emissão própria, ST em
+        // saída, IPI, E310 e compra interestadual. Caso 05/08: os 198 clientes
+        // apareceram com "emissão própria 0", inclusive um com 4.527 notas.
+        const emitEhEmpresa = cnpjEmitente(d) === emp.cnpj;
         const propriaEntrada = String(d.tpNF ?? '') === '0';
         const saidaPropria = emitEhEmpresa && !propriaEntrada;
         const temSt = (Number(t.vST) || 0) > 0 || (Number(t.vBCST) || 0) > 0;
@@ -111,7 +119,7 @@ export function montarProntidaoMigracao(docs, empresas) {
             (it) => CFOP_VENDA_NAO_CONTRIBUINTE.has(so(it?.cfop)),
         )) emp.saidasNaoContribuinte++;
         if (!saidaPropria && !emitEhEmpresa) {
-            const ufEmit = String(d.emitente?.uf || '').toUpperCase();
+            const ufEmit = ufEmitente(d);
             if (ufEmit && emp.uf && ufEmit !== emp.uf) emp.entradasInterestaduais++;
         }
     }

@@ -55,9 +55,15 @@ router.get('/prontidao-migracao', requireAuth, async (req, res) => {
                 // `tipoDoc` classifica CT-e/NFS-e (cobertura documental) e
                 // `itens` é o que dá o CFOP 6107/6108 do E310 — sem ele o
                 // detector NÃO reporta zero, reporta "não apurado".
+                // O documento vem em DUAS formas: captura SEFAZ grava
+                // ACHATADO (cnpjEmit/ufEmit), importação de XML grava OBJETO
+                // (emitente.*). Pedir só o objeto na projeção fazia o núcleo
+                // ver "a empresa nunca é a emitente" e zerar emissão própria,
+                // ST em saída, IPI, E310 e compra interestadual (05/08).
                 .select('empresaId', 'direcao', 'tpNF', 'status', 'modelo', 'tipoDoc',
                     'totais.vST', 'totais.vBCST', 'totais.vIPI',
-                    'emitente.cnpjCpf', 'emitente.uf', 'itens'),
+                    'emitente.cnpjCpf', 'emitente.uf', 'cnpjEmit', 'ufEmit',
+                    'chave', 'codMunEmit', 'itens'),
             { label: `prontidao-migracao ${competencia}`, maxDocs: 80000 },
         );
         const docs = snaps.map((s) => ({ ...s.data() }));
