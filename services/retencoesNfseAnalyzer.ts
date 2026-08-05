@@ -419,6 +419,16 @@ export function analisarRetencoes(linha: LinhaNfseCsv): AnaliseRetencoes {
 //
 // Separador `;` (campos contem virgula e R$). Discriminação pode ter aspas
 // envolvendo o conteudo quando ele contem `;` ou `\n`.
+export interface DiagnosticoCsvNfse {
+    /** Cabeçalho lido do arquivo, como veio. */
+    cabecalho: string[];
+    /** Campos que o app NÃO conseguiu localizar — saem vazios na tela. */
+    colunasNaoReconhecidas: string[];
+}
+
+/** Último diagnóstico do parse — a tela mostra quando algo não casou. */
+export let ultimoDiagnosticoCsv: DiagnosticoCsvNfse = { cabecalho: [], colunasNaoReconhecidas: [] };
+
 export function parseCsvNfseSp(texto: string): LinhaNfseCsv[] {
     // Normaliza BOM e quebra linhas respeitando aspas
     let txt = texto.replace(/^﻿/, '');
@@ -455,19 +465,56 @@ export function parseCsvNfseSp(texto: string): LinhaNfseCsv[] {
         return out.map(s => s.trim());
     };
 
-    const header = splitLinha(linhas[0] || '').map(h => h.toLowerCase());
+    // Cabeçalho tolerante a variação de export.
+    //
+    // Caso FRONTINI (05/08): o CSV do portal trouxe Nº, Data e Tomador VAZIOS
+    // na tela — não era o extrator de retenção, era o MAPA DE COLUNAS: nome de
+    // cabeçalho fora do previsto vira findIndex = -1, e -1 sai como campo
+    // vazio, sem um aviso sequer. Agora cada coluna aceita as variações
+    // conhecidas E o parser DIZ o que não reconheceu.
+    const header = splitLinha(linhas[0] || '')
+        .map(h => h.toLowerCase().replace(/\s+/g, ' ').trim());
+    const achar = (...testes: Array<(h: string) => boolean>): number => {
+        for (const t of testes) {
+            const i = header.findIndex(t);
+            if (i >= 0) return i;
+        }
+        return -1;
+    };
     const idx = {
-        direcao: header.findIndex(h => h.startsWith('direç') || h.startsWith('direc')),
-        numero: header.findIndex(h => h.startsWith('número') || h.startsWith('numero')),
-        data: header.findIndex(h => h === 'data'),
-        prestadorCnpj: header.findIndex(h => h.includes('prestador') && h.includes('cnpj')),
-        prestadorNome: header.findIndex(h => h.includes('prestador') && h.includes('nome')),
-        tomadorCnpj: header.findIndex(h => h.includes('tomador') && h.includes('cnpj')),
-        tomadorNome: header.findIndex(h => h.includes('tomador') && h.includes('nome')),
-        valorServicos: header.findIndex(h => h.includes('valor') && h.includes('serv')),
-        iss: header.findIndex(h => h === 'iss'),
-        codServico: header.findIndex(h => h.includes('cód') || h.includes('cod')),
-        discriminacao: header.findIndex(h => h.startsWith('discrim')),
+        direcao: achar(h => h.startsWith('direç') || h.startsWith('direc'), h => h.includes('tipo') && h.includes('nfs')),
+        numero: achar(h => h.startsWith('número') || h.startsWith('numero'), h => h.includes('n° ') || h.includes('nº'), h => h.includes('numero') || h.includes('número')),
+        data: achar(h => h === 'data', h => h.includes('emiss'), h => h.startsWith('data')),
+        prestadorCnpj: achar(h => h.includes('prestador') && (h.includes('cnpj') || h.includes('cpf'))),
+        prestadorNome: achar(
+            h => h.includes('prestador') && (h.includes('nome') || h.includes('razão') || h.includes('razao')),
+        ),
+        tomadorCnpj: achar(h => h.includes('tomador') && (h.includes('cnpj') || h.includes('cpf'))),
+        tomadorNome: achar(
+            h => h.includes('tomador') && (h.includes('nome') || h.includes('razão') || h.includes('razao')),
+        ),
+        valorServicos: achar(
+            h => h.includes('valor') && h.includes('serv'),
+            h => h.includes('valor') && h.includes('total'),
+            h => h === 'valor',
+        ),
+        iss: achar(h => h === 'iss', h => h.includes('iss') && !h.includes('retid') && !h.includes('aliq') && !h.includes('alíq'), h => h.includes('iss') && h.includes('retid')),
+        codServico: achar(h => (h.includes('cód') || h.includes('cod')) && h.includes('serv'), h => h.includes('cód') || h.includes('cod')),
+        discriminacao: achar(h => h.startsWith('discrim'), h => h.includes('descri'), h => h.includes('serviço prestado') || h.includes('servico prestado')),
+    };
+
+    const ROTULOS: Record<string, string> = {
+        direcao: 'Direção', numero: 'Número', data: 'Data',
+        prestadorCnpj: 'CNPJ do prestador', prestadorNome: 'Nome do prestador',
+        tomadorCnpj: 'CNPJ do tomador', tomadorNome: 'Nome do tomador',
+        valorServicos: 'Valor dos serviços', iss: 'ISS',
+        codServico: 'Código do serviço', discriminacao: 'Discriminação',
+    };
+    ultimoDiagnosticoCsv = {
+        cabecalho: header,
+        colunasNaoReconhecidas: Object.entries(idx)
+            .filter(([, v]) => v < 0)
+            .map(([k]) => ROTULOS[k] || k),
     };
 
     const out: LinhaNfseCsv[] = [];
