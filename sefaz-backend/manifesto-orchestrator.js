@@ -151,8 +151,23 @@ export async function diagnosticarPendencias({ empresaId, tipo = 'ciencia' } = {
   const docs = await fetchAllDocs(q, { label: 'documentos_fiscais/manifest-diagnostico' });
   const agora = Date.now();
   const porMotivo = {};
+  // Motivo TÉCNICO da recusa (rejeição da SEFAZ, certificado, TLS) — é o que
+  // diz se dá pra resolver aqui ou se é problema do cliente. Fica separado da
+  // contagem por SITUAÇÃO (poison/cooldown/idade), que só diz onde a chave
+  // parou.
+  const porMotivoFalha = {};
   let ultimaFalha = null;
   const conta = (motivo) => { porMotivo[motivo] = (porMotivo[motivo] || 0) + 1; };
+  const contaFalha = (doc) => {
+    // CAMPO CERTO: `ultimaFalhaManifestacaoMotivo` é o que carimbarFalha
+    // grava. A 1ª versão deste diagnóstico lia `ultimoErroManifestacao`, que
+    // não existe — então a tela dizia "6× Desistimos após 8 falhas" e ficava
+    // muda justo sobre O QUE falhou (caso KJM, 05/08).
+    const m = String(doc.ultimaFalhaManifestacaoMotivo || '').trim();
+    if (!m) return;
+    porMotivoFalha[m] = (porMotivoFalha[m] || 0) + 1;
+    ultimaFalha = m.slice(0, 200);
+  };
 
   for (const d of docs) {
     const doc = { id: d.id, ...d.data() };
@@ -160,20 +175,20 @@ export async function diagnosticarPendencias({ empresaId, tipo = 'ciencia' } = {
     if (!check.ok) { conta(check.motivo); continue; }
     const falhas = Number(doc.manifestacaoFalhas) || 0;
     if (falhas >= MAX_FALHAS_MANIFESTACAO) {
-      conta(`Desistimos após ${falhas} falhas — veja o motivo no Backlog de Entrada`);
-      if (doc.ultimoErroManifestacao) ultimaFalha = String(doc.ultimoErroManifestacao).slice(0, 200);
+      conta(`Desistimos após ${falhas} falhas`);
+      contaFalha(doc);
       continue;
     }
     const ultimaFalhaMs = Number(doc.ultimaFalhaManifestacaoMs) || 0;
     if (ultimaFalhaMs && (agora - ultimaFalhaMs) < COOLDOWN_FALHA_MANIFESTACAO_MS) {
       const horas = Math.ceil((COOLDOWN_FALHA_MANIFESTACAO_MS - (agora - ultimaFalhaMs)) / 3600000);
       conta(`Falhou há pouco — volta ao lote em ~${horas}h`);
-      if (doc.ultimoErroManifestacao) ultimaFalha = String(doc.ultimoErroManifestacao).slice(0, 200);
+      contaFalha(doc);
       continue;
     }
     conta('Elegível (deveria manifestar)');
   }
-  return { porMotivo, ultimaFalha, documentos: docs.length };
+  return { porMotivo, porMotivoFalha, ultimaFalha, documentos: docs.length };
 }
 
 // Resolve o certificado A1 que ASSINA o evento. A SEFAZ exige que o autor do
