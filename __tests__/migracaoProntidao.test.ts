@@ -70,7 +70,6 @@ describe('EC 87/15 — venda interestadual a NÃO CONTRIBUINTE (E310/E316)', () 
     });
 });
 
-<<<<<<< HEAD
 describe('as DUAS formas do documento (achatado × objeto)', () => {
     // Caso 05/08, com a carteira real: os 198 clientes apareceram com
     // "emissão própria 0" — inclusive um com 4.527 notas. A captura SEFAZ
@@ -121,8 +120,6 @@ describe('as DUAS formas do documento (achatado × objeto)', () => {
     });
 });
 
-=======
->>>>>>> origin/main
 describe('cobertura documental — o que a ponte .FML NÃO leva', () => {
     // Paulo, 05/08: "o que mais o e-fiscal importa hoje? nada". Se nada mais
     // entra lá e a ponte só manda NF-e/NFC-e, então CT-e (crédito de frete) e
