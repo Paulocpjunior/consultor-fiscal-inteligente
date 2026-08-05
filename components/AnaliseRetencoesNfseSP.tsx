@@ -10,7 +10,7 @@
  */
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-    parseCsvNfseSp,
+    parseCsvNfseSp, ultimoDiagnosticoCsv, type DiagnosticoCsvNfse,
     analisarRetencoes,
     resumirRetencoes,
     validarRetencoesLinha,
@@ -48,6 +48,7 @@ const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
     const [linhas, setLinhas] = useState<LinhaAnalisada[]>([]);
     const [filtro, setFiltro] = useState<'todas' | 'comRetencao' | 'semRetencao' | 'inconsistencias'>('comRetencao');
     const [erro, setErro] = useState<string | null>(null);
+    const [diagnostico, setDiagnostico] = useState<DiagnosticoCsvNfse | null>(null);
     const [nomeArquivo, setNomeArquivo] = useState<string>('');
     const [exportandoPDF, setExportandoPDF] = useState(false);
     const [cnpjsSimples, setCnpjsSimples] = useState<Set<string>>(new Set());
@@ -82,6 +83,10 @@ const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
         try {
             const txt = await file.text();
             const parsed = parseCsvNfseSp(txt);
+            // Coluna não reconhecida saía como campo VAZIO, em silêncio — a
+            // tela mostrava Nº/Data/Tomador em branco e ninguém sabia por quê
+            // (caso FRONTINI, 05/08). Agora o mapa do cabeçalho fica visível.
+            setDiagnostico({ ...ultimoDiagnosticoCsv });
             if (parsed.length === 0) {
                 setErro('Nenhuma nota encontrada. Verifique se é o CSV exportado pela captura NFSe SP.');
                 setLinhas([]);
@@ -267,6 +272,22 @@ const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
                 )}
                 {erro && (
                     <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{erro}</div>
+                )}
+                {diagnostico && diagnostico.colunasNaoReconhecidas.length > 0 && (
+                    <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                        <p className="font-bold">
+                            ⚠ Não reconheci {diagnostico.colunasNaoReconhecidas.length} coluna(s) deste CSV:{' '}
+                            {diagnostico.colunasNaoReconhecidas.join(', ')}.
+                        </p>
+                        <p>
+                            Elas saem VAZIAS na tabela — e, se a <strong>Discriminação</strong> estiver entre elas,
+                            nenhuma retenção de PIS/COFINS/CSLL é encontrada (esses tributos só existem no texto
+                            da nota, não em coluna própria).
+                        </p>
+                        <p className="font-mono text-[10px] break-all opacity-80">
+                            Cabeçalho lido: {diagnostico.cabecalho.join(' | ')}
+                        </p>
+                    </div>
                 )}
             </div>
 

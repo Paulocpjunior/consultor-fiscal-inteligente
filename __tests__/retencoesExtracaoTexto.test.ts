@@ -1,4 +1,7 @@
-import { analisarRetencoes, validarRetencoesLinha, type LinhaNfseCsv } from '../services/retencoesNfseAnalyzer';
+import {
+    analisarRetencoes, validarRetencoesLinha, parseCsvNfseSp, ultimoDiagnosticoCsv,
+    type LinhaNfseCsv,
+} from '../services/retencoesNfseAnalyzer';
 
 /**
  * Caso FRONTINI (05/08): o Demonstrativo do E-Fiscal listou 4 notas com
@@ -75,5 +78,32 @@ describe('citado sem valor não sai como conforme', () => {
         const linha = nota('Servicos de engenharia prestados em julho.');
         const incs = validarRetencoesLinha(linha, analisarRetencoes(linha));
         expect(incs.find(i => i.codigo === 'RETENCAO_CITADA_SEM_VALOR')).toBeFalsy();
+    });
+});
+
+describe('mapa de colunas do CSV — coluna não reconhecida não some em silêncio', () => {
+    it('cabeçalho do portal (Razão Social / Data de Emissão) passa a casar', () => {
+        const csv = [
+            'Tipo de NFS-e;Numero da NFS-e;Data de Emissao;CPF/CNPJ do Prestador;Razao Social do Prestador;'
+            + 'CPF/CNPJ do Tomador;Razao Social do Tomador;Valor dos Servicos;ISS;Codigo do Servico;Discriminacao',
+            'Emitida;781;03/07/2026;09246389000124;FRONTINI;59575753000178;TOMADOR LTDA;990,00;0,00;7.02;'
+            + 'RETENCOES: PIS 6,44 COFINS 29,70 CSLL 9,90',
+        ].join('\n');
+        const linhas = parseCsvNfseSp(csv);
+        expect(ultimoDiagnosticoCsv.colunasNaoReconhecidas).toEqual([]);
+        expect(linhas[0].numero).toBe('781');
+        expect(linhas[0].data).toBe('03/07/2026');
+        expect(linhas[0].tomadorNome).toBe('TOMADOR LTDA');
+        expect(linhas[0].valorServicos).toBe(990);
+        const a = analisarRetencoes(linhas[0]);
+        expect(a.totalRetido).toBeCloseTo(46.04, 2);
+    });
+
+    it('coluna fora do previsto é DENUNCIADA, com o cabeçalho lido', () => {
+        const csv = ['Coluna A;Coluna B', 'x;y'].join('\n');
+        parseCsvNfseSp(csv);
+        expect(ultimoDiagnosticoCsv.colunasNaoReconhecidas).toContain('Discriminação');
+        expect(ultimoDiagnosticoCsv.colunasNaoReconhecidas).toContain('Número');
+        expect(ultimoDiagnosticoCsv.cabecalho).toEqual(['coluna a', 'coluna b']);
     });
 });
