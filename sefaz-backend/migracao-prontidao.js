@@ -74,6 +74,13 @@ const TIPOS_NA_PONTE_FML = new Set(['NFe', 'NFCe']);
  * Tratar essas empresas como "candidatas a piloto" foi o erro que este campo
  * corrige — o piloto seria comparar dois arquivos que não existem.
  */
+export function entregaEfdIcms(empresa) {
+    // Simples Nacional NÃO entrega EFD ICMS/IPI (a escrituração dele é o
+    // PGDAS-D). Sinal de bloco do SPED Fiscal em empresa do Simples é RUÍDO:
+    // aparece como atenção informativa, nunca como bloqueio de piloto.
+    return contribuinteIcms(empresa) && empresa?.regime === 'lucro';
+}
+
 export function contribuinteIcms(empresa) {
     const ie = String(empresa?.inscricaoEstadual || '').trim().toUpperCase();
     if (!ie) return false;
@@ -99,6 +106,7 @@ export function montarProntidaoMigracao(docs, empresas) {
             uf: String(e.uf || '').toUpperCase(),
             industriaCadastro: !!e.industriaCadastro,
             contribuinteIcms: contribuinteIcms(e),
+            entregaEfdIcms: entregaEfdIcms(e),
             docs: 0,
             emiteProprio: 0,        // mod 55/65 com emitente == empresa
             stSaidas: 0,            // saída própria com ST → SUBSTITUTO (E220/GIA-ST)
@@ -156,16 +164,21 @@ export function montarProntidaoMigracao(docs, empresas) {
             const foraDaPonte = Object.entries(e.porTipo)
                 .filter(([t, n]) => n > 0 && !TIPOS_NA_PONTE_FML.has(t) && t !== 'outro')
                 .reduce((s, [, n]) => s + n, 0);
+            // Sinais de BLOCO do SPED Fiscal só bloqueiam quem entrega EFD
+            // ICMS/IPI. Para o resto (Simples, prestadora sem IE) eles viram
+            // atenção — o dado continua visível, sem fingir que trava algo.
             const bloqueios = [];
-            if (e.stSaidas > 0) bloqueios.push(`ST em ${e.stSaidas} saída(s) — precisa E220/apuração ST`);
-            if (e.ipiSaidas > 0 || e.industriaCadastro) bloqueios.push(e.industriaCadastro
+            const atencoesEfd = [];
+            const paraEfd = (texto) => (e.entregaEfdIcms ? bloqueios : atencoesEfd).push(texto);
+            if (e.stSaidas > 0) paraEfd(`ST em ${e.stSaidas} saída(s) — precisa E220/apuração ST`);
+            if (e.ipiSaidas > 0 || e.industriaCadastro) paraEfd(e.industriaCadastro
                 ? 'indústria no cadastro — avaliar bloco K'
                 : `IPI destacado em ${e.ipiSaidas} saída(s) — avaliar bloco K/CIAP`);
-            if (algumDocComItens && e.saidasNaoContribuinte > 0) bloqueios.push(
+            if (algumDocComItens && e.saidasNaoContribuinte > 0) paraEfd(
                 `${e.saidasNaoContribuinte} venda(s) interestadual(is) a não contribuinte (CFOP 6107/6108) `
                 + '— EC 87/15: precisa E310/E316, que o CFI ainda não gera',
             );
-            const atencoes = [];
+            const atencoes = [...atencoesEfd];
             if (foraDaPonte > 0) atencoes.push(
                 `${foraDaPonte} documento(s) que a ponte .FML NÃO leva ao E-Fiscal`
                 + ` (${e.porTipo.CTe > 0 ? `${e.porTipo.CTe} CT-e` : ''}`

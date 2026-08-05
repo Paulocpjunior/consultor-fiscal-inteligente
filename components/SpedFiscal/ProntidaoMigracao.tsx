@@ -12,6 +12,10 @@ interface Linha {
     docs: number; emiteProprio: number; stSaidas: number; stEntradas: number;
     ipiSaidas: number; entradasInterestaduais: number;
     bloqueios: string[]; atencoes: string[]; candidataPiloto: boolean;
+    /** Tem IE (≠ ISENTO) → contribuinte de ICMS. Sem isso, fora do escopo. */
+    contribuinteIcms?: boolean;
+    /** Contribuinte E Lucro → entrega EFD ICMS/IPI de verdade. */
+    entregaEfdIcms?: boolean;
 }
 interface Resp {
     ok: boolean; error?: string; competencia?: string; lidos?: number;
@@ -167,11 +171,22 @@ const ProntidaoMigracao: React.FC<{ onShowToast?: (m: string) => void }> = ({ on
                                             {!l.bloqueios.length && !l.atencoes.length && <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>—</span>}
                                         </td>
                                         <td>
+                                            {/* "com ressalvas" misturava coisas OPOSTAS: contribuinte
+                                                com bloqueio real × empresa que nem entra no escopo
+                                                (sem IE). Agora cada uma tem o seu veredicto. */}
                                             {l.candidataPiloto
                                                 ? <span className="text-[11px] font-bold" style={{ color: 'var(--success, #059669)' }}>🟢 candidata a piloto</span>
-                                                : l.regime !== 'lucro'
-                                                    ? <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Simples (fora do piloto)</span>
-                                                    : <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>com ressalvas</span>}
+                                                : !l.contribuinteIcms
+                                                    ? <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}
+                                                        title="Sem Inscrição Estadual: não é contribuinte de ICMS e não entrega EFD ICMS/IPI. Fora da migração do SPED Fiscal.">
+                                                        ⚪ fora do escopo — sem IE
+                                                    </span>
+                                                    : l.regime !== 'lucro'
+                                                        ? <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}
+                                                            title="Simples Nacional não entrega EFD ICMS/IPI — a escrituração dele é o PGDAS-D.">
+                                                            Simples (não entrega EFD)
+                                                        </span>
+                                                        : <span className="text-[11px]" style={{ color: 'var(--warning, #b45309)' }}>⚠ contribuinte com bloqueio</span>}
                                         </td>
                                     </tr>
                                 ))}

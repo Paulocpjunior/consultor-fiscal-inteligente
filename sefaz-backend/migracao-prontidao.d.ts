@@ -19,6 +19,8 @@ export interface ProntidaoLinha {
     porTipo: Record<string, number>;
     /** Tem IE (≠ ISENTO) → entrega EFD ICMS/IPI. Sem isso, fora do escopo. */
     contribuinteIcms: boolean;
+    /** Contribuinte E Lucro — só quem entrega EFD ICMS/IPI é bloqueado por bloco. */
+    entregaEfdIcms: boolean;
     bloqueios: string[];
     atencoes: string[];
     candidataPiloto: boolean;
