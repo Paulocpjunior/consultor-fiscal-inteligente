@@ -15,6 +15,17 @@
 // ============================================================================
 
 const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
+
+/**
+ * CFOPs de venda interestadual a NÃO CONTRIBUINTE — a operação da EC 87/15,
+ * que obriga o remetente a partilhar o DIFAL com a UF de destino e a
+ * escriturar E310/E316. Eles existem exatamente pra essa operação, então
+ * servem de sinal sem depender de campo que a captura ainda não grava
+ * (idDest/indFinal/indIEDest).
+ *   6107 — venda de produção do estabelecimento a não contribuinte
+ *   6108 — venda de mercadoria de terceiros a não contribuinte
+ */
+const CFOP_VENDA_NAO_CONTRIBUINTE = new Set(['6107', '6108']);
 const so = (v) => String(v || '').replace(/\D/g, '');
 
 /**
@@ -39,6 +50,7 @@ export function montarProntidaoMigracao(docs, empresas) {
             stEntradas: 0,          // entrada com ST → substituído (coberto: CST 60 em Outras)
             ipiSaidas: 0,           // IPI destacado em saída → indústria/equiparado
             entradasInterestaduais: 0, // candidata a DIFAL de aquisição
+            saidasNaoContribuinte: 0,  // EC 87/15 → precisa E310/E316
         });
     }
 
@@ -55,6 +67,11 @@ export function montarProntidaoMigracao(docs, empresas) {
         if (emitEhEmpresa && ['55', '65'].includes(String(d.modelo))) emp.emiteProprio++;
         if (temSt) { if (saidaPropria) emp.stSaidas++; else emp.stEntradas++; }
         if (saidaPropria && (Number(t.vIPI) || 0) > 0) emp.ipiSaidas++;
+        // Venda interestadual a não contribuinte (EC 87/15): o CFOP é a prova
+        // — 6107/6108 só existem pra essa operação.
+        if (saidaPropria && (d.itens || []).some(
+            (it) => CFOP_VENDA_NAO_CONTRIBUINTE.has(so(it?.cfop)),
+        )) emp.saidasNaoContribuinte++;
         if (!saidaPropria && !emitEhEmpresa) {
             const ufEmit = String(d.emitente?.uf || '').toUpperCase();
             if (ufEmit && emp.uf && ufEmit !== emp.uf) emp.entradasInterestaduais++;
@@ -69,6 +86,10 @@ export function montarProntidaoMigracao(docs, empresas) {
             if (e.ipiSaidas > 0 || e.industriaCadastro) bloqueios.push(e.industriaCadastro
                 ? 'indústria no cadastro — avaliar bloco K'
                 : `IPI destacado em ${e.ipiSaidas} saída(s) — avaliar bloco K/CIAP`);
+            if (e.saidasNaoContribuinte > 0) bloqueios.push(
+                `${e.saidasNaoContribuinte} venda(s) interestadual(is) a não contribuinte (CFOP 6107/6108) `
+                + '— EC 87/15: precisa E310/E316, que o CFI ainda não gera',
+            );
             const atencoes = [];
             if (e.entradasInterestaduais > 0) atencoes.push(`${e.entradasInterestaduais} compra(s) interestadual(is) — conferir DIFAL de aquisição`);
             if (e.stEntradas > 0) atencoes.push(`${e.stEntradas} entrada(s) com ST (substituído — coberto pelo CFI)`);
@@ -93,6 +114,7 @@ export function montarProntidaoMigracao(docs, empresas) {
             comStSaida: linhas.filter((l) => l.stSaidas > 0).length,
             comIpiOuIndustria: linhas.filter((l) => l.ipiSaidas > 0 || l.industriaCadastro).length,
             comInterestadual: linhas.filter((l) => l.entradasInterestaduais > 0).length,
+            comVendaNaoContribuinte: linhas.filter((l) => l.saidasNaoContribuinte > 0).length,
         },
         // Respostas da equipe (03/08) — o que os dados não viam, agora visto.
         perguntasEquipe: [
@@ -100,6 +122,9 @@ export function montarProntidaoMigracao(docs, empresas) {
             'Regime de CAIXA no Presumido: NENHUM cliente optante (equipe, 03/08) — descartado.',
             'CIAP: SÓ a EXPERTE controla (equipe, 03/08) — o bloco G é caso único; a EXPERTE fica pra onda final da migração.',
             'DIFAL de aquisição: EXISTE — clientes compram de fora e pagam DIFAL (equipe, 03/08). As compras interestaduais marcadas ⚠ acima são o rastro; plano no de-para.',
+            'E310/E316 (EC 87/15, DIFAL de VENDA a não contribuinte): os dados respondem sozinhos — '
+            + 'ZERO empresa marcada acima significa que a carteira não faz essa operação e o bloco pode '
+            + 'ser descartado como o SAT. Uma que seja, ele vira alvo de construção.',
         ],
     };
 }
