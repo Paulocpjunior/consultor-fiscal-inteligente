@@ -24,6 +24,9 @@ ARG VITE_SENTRY_ENV
 # Commit exibido no rodape (.git fica fora da imagem via .dockerignore, entao
 # o SHA precisa entrar por build-arg — GITHUB_SHA nos workflows).
 ARG APP_COMMIT
+# Nº da execucao do deploy (GITHUB_RUN_NUMBER) — sobe a cada entrega e e o que
+# a tela mostra pra diferenciar build novo de HTML velho em cache.
+ARG APP_BUILD_NUMBER
 
 ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
 ENV VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
@@ -35,6 +38,7 @@ ENV VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
 ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
 ENV VITE_SENTRY_ENV=$VITE_SENTRY_ENV
 ENV APP_COMMIT=$APP_COMMIT
+ENV APP_BUILD_NUMBER=$APP_BUILD_NUMBER
 
 RUN npm run build
 

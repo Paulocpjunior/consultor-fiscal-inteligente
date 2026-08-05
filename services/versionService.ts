@@ -5,6 +5,8 @@ export interface RemoteVersion {
     version: string;
     release: string;
     buildTime: string;
+    /** Nº do build publicado. Ausente em version.json gerado antes de 05/08. */
+    buildNumber?: string;
 }
 
 export interface VersionCheckState {

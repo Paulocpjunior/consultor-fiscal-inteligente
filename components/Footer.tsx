@@ -1,5 +1,5 @@
 import React from 'react';
-import { APP_VERSION, APP_RELEASE, APP_BUILD_TIME, APP_COMMIT, formatBuildDate } from '../version';
+import { APP_RELEASE, APP_BUILD_TIME, APP_COMMIT, formatBuildDate, rotuloVersao } from '../version';
 
 const Footer: React.FC = () => {
   return (
@@ -13,7 +13,7 @@ const Footer: React.FC = () => {
         className="mt-2 text-[10px] text-slate-400 dark:text-slate-500 font-mono"
         title={`Build: ${formatBuildDate(APP_BUILD_TIME)}`}
       >
-        Versão {APP_VERSION} · Release {APP_RELEASE} · commit {APP_COMMIT} · atualizado {formatBuildDate(APP_BUILD_TIME)}
+        Versão {rotuloVersao()} · Release {APP_RELEASE} · commit {APP_COMMIT} · atualizado {formatBuildDate(APP_BUILD_TIME)}
       </p>
     </footer>
   );
