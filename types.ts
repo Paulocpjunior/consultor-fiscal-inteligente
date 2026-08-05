@@ -559,6 +559,15 @@ export interface DetalheImposto {
     valorBruto?: number;
     /** Retenção na fonte (IRRF/CSRF) que reduz o valor a pagar mas não o débito. */
     retencao?: number;
+    /**
+     * IRPJ: parcela do ADICIONAL de 10% embutida em `valorBruto`, e a base
+     * dele (o excedente ao limite de isenção). Existem pra o relatório poder
+     * mostrar as DUAS linhas separadas, como o demonstrativo do E-Fiscal e a
+     * planilha do escritório sempre mostraram (Paulo, 05/08). Não mudam o
+     * `valor` — DARF e MIT continuam lendo o total.
+     */
+    adicional?: number;
+    baseAdicional?: number;
     observacao?: string;
     cotaInfo?: PlanoCotas;
 }

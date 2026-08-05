@@ -21,7 +21,7 @@ export const trimestreDoMes = (mes: number): number => Math.floor((mes - 1) / 3)
 
 export interface MesTrimestre {
     competencia: string;
-    /** Faturamento total do mês lançado na ficha. */
+    /** Receita que forma a base de presunção (SEM a receita financeira). */
     faturamento: number;
     receitaFinanceira: number;
     retencaoIrpj: number;
@@ -49,6 +49,27 @@ export interface ApuracaoTrimestre {
 }
 
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+
+/**
+ * Receita que forma a BASE de presunção — a soma do faturamento por tipo
+ * (matriz + filiais).
+ *
+ * NÃO usar `faturamentoMesTotal`: naquele campo a receita FINANCEIRA já está
+ * somada (caso PEC 06/2026 — 216.016,16 = 211.713,62 de faturamento +
+ * 4.302,54 de receita financeira). Como a receita financeira aparece em linha
+ * PRÓPRIA no quadro e entra na base depois da presunção, usar o total faria o
+ * relatório contá-la duas vezes e divergir do demonstrativo — foi exatamente
+ * o que apareceu no 1º PDF: total 643.081,82 em vez de 638.779,28.
+ */
+function faturamentoTributavel(f: FichaFinanceiraRegistro): number {
+    const campos: Array<number | undefined> = [
+        f.faturamentoMesComercio, f.faturamentoMesIndustria, f.faturamentoMesServico,
+        f.faturamentoMesServicoRetido, f.faturamentoMesLocacao, f.faturamentoMesServicoHospitalar,
+        f.faturamentoFiliaisComercio, f.faturamentoFiliaisIndustria, f.faturamentoFiliaisServico,
+        f.faturamentoFiliaisServicoRetido, f.faturamentoFiliaisLocacao, f.faturamentoFiliaisServicoHospitalar,
+    ];
+    return r2(campos.reduce<number>((t, v) => t + (Number(v) || 0), 0));
+}
 
 /**
  * Monta o trimestre a partir das fichas da empresa.
@@ -88,7 +109,7 @@ export function montarApuracaoTrimestre(
         }
         return {
             competencia,
-            faturamento: r2(f.faturamentoMesTotal || 0),
+            faturamento: faturamentoTributavel(f),
             receitaFinanceira: r2(f.receitaFinanceira || 0),
             retencaoIrpj: r2(f.retencaoIrpj || 0),
             retencaoCsll: r2(f.retencaoCsll || 0),

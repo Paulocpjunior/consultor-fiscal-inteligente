@@ -659,8 +659,15 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
         let valorIrpj = baseIrpjTotal * ALIQ_IRPJ;
         const limiteAdicional = input.periodoApuracao === 'Trimestral' ? LIMITE_ADICIONAL_TRIMESTRAL : LIMITE_ADICIONAL_MENSAL;
 
+        // Adicional guardado à parte pra o relatório mostrar as duas linhas
+        // (IRPJ 15% e adicional 10%) como o demonstrativo do E-Fiscal — o
+        // `valor` segue sendo o total, que é o que DARF e MIT usam.
+        let baseAdicionalIrpj = 0;
+        let valorAdicionalIrpj = 0;
         if (baseIrpjTotal > limiteAdicional) {
-            valorIrpj += (baseIrpjTotal - limiteAdicional) * ADICIONAL_IRPJ;
+            baseAdicionalIrpj = baseIrpjTotal - limiteAdicional;
+            valorAdicionalIrpj = baseAdicionalIrpj * ADICIONAL_IRPJ;
+            valorIrpj += valorAdicionalIrpj;
         }
 
         const obsHosp = baseIrpjServicoHosp > 0 ? " + Hosp. 8%" : "";
@@ -678,6 +685,8 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
             valor: Math.max(0, valorIrpj - retencaoIrpj),
             valorBruto: valorIrpj,
             retencao: retencaoIrpj,
+            adicional: valorAdicionalIrpj,
+            baseAdicional: baseAdicionalIrpj,
             observacao: `Base Bruta${obsHosp}${obsReduzida}.${obsTrimestre}${obsLc224Irpj} Isenção: ${fmt(limiteAdicional)}` + (retencaoIrpj > 0 ? `. Retenção abatida: ${fmt(retencaoIrpj)}` : '')
         });
     }
