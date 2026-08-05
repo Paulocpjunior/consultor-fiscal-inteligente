@@ -70,6 +70,56 @@ describe('EC 87/15 — venda interestadual a NÃO CONTRIBUINTE (E310/E316)', () 
     });
 });
 
+describe('as DUAS formas do documento (achatado × objeto)', () => {
+    // Caso 05/08, com a carteira real: os 198 clientes apareceram com
+    // "emissão própria 0" — inclusive um com 4.527 notas. A captura SEFAZ
+    // grava ACHATADO (cnpjEmit/ufEmit); o núcleo lia só `emitente.*`, então
+    // "a empresa é a emitente?" dava NÃO para todo mundo, e ST em saída, IPI,
+    // E310 e compra interestadual saíam ZERADOS. Números falsos que quase
+    // viraram decisão ("descartar o E310").
+    const achatado = (empresaId: string, over: any = {}) => ({
+        empresaId, direcao: 'saida', tpNF: '1', status: 'autorizado', modelo: '55',
+        totais: {},
+        cnpjEmit: EMP.find(e => e.id === empresaId)!.cnpj,   // sem `emitente`
+        ufEmit: 'SP',
+        ...over,
+    });
+
+    it('emissão própria é contada na forma ACHATADA', () => {
+        const r = montarProntidaoMigracao([achatado('a'), achatado('a')] as any, EMP as any);
+        expect(r.linhas.find(l => l.empresaId === 'a')!.emiteProprio).toBe(2);
+    });
+
+    it('ST em saída própria é detectado na forma ACHATADA', () => {
+        const r = montarProntidaoMigracao(
+            [achatado('b', { totais: { vST: 100 } })] as any, EMP as any,
+        );
+        const b = r.linhas.find(l => l.empresaId === 'b')!;
+        expect(b.stSaidas).toBe(1);
+        expect(b.bloqueios.join(' ')).toMatch(/E220/);
+    });
+
+    it('E310 (CFOP 6108) é detectado na forma ACHATADA', () => {
+        const r = montarProntidaoMigracao(
+            [achatado('a', { itens: [{ cfop: '6108' }] })] as any, EMP as any,
+        );
+        expect(r.resumo.comVendaNaoContribuinte).toBe(1);
+    });
+
+    it('compra interestadual usa a UF do emitente ACHATADA', () => {
+        const r = montarProntidaoMigracao([
+            { empresaId: 'a', direcao: 'entrada', status: 'autorizado', modelo: '55',
+              totais: {}, cnpjEmit: '99999999000199', ufEmit: 'MG' },
+        ] as any, EMP as any);
+        expect(r.linhas.find(l => l.empresaId === 'a')!.entradasInterestaduais).toBe(1);
+    });
+
+    it('e a forma OBJETO continua funcionando (as duas convivem)', () => {
+        const r = montarProntidaoMigracao([achatado('a'), doc('a')] as any, EMP as any);
+        expect(r.linhas.find(l => l.empresaId === 'a')!.emiteProprio).toBe(2);
+    });
+});
+
 describe('cobertura documental — o que a ponte .FML NÃO leva', () => {
     // Paulo, 05/08: "o que mais o e-fiscal importa hoje? nada". Se nada mais
     // entra lá e a ponte só manda NF-e/NFC-e, então CT-e (crédito de frete) e
