@@ -195,7 +195,9 @@ export function conferirAntesDeGerar(
             balde.add({
                 causa: 'Nota sem itens',
                 oQueAconteceLa: 'A nota entra pelo total (E200/E201), mas sem produto nenhum (E221/E222).',
-                acao: 'É esperado em resumo da SEFAZ (resNFe). Manifeste a ciência para liberar o XML completo.',
+                acao: 'A nota veio como RESUMO da SEFAZ (resNFe) — resumo não traz produto. '
+                    + 'Clique em "📨 Manifestar ciência" aqui embaixo: o XML completo chega na PRÓXIMA '
+                    + 'captura e os itens aparecem. Enquanto isso a nota entra no arquivo só pelo total.',
                 gravidade: 'atencao',
             }, rotulo(d));
         }
