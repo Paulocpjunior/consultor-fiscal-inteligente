@@ -37,6 +37,12 @@ export type LinhaNfseCsv = {
 };
 
 export type TributoRetido = {
+    /**
+     * O tributo é CITADO na discriminação, mas não conseguimos ler o valor.
+     * Não é "não retido" — é "não lido", e o relatório tem que dizer isso
+     * (caso FRONTINI, 05/08: 4 notas com retenção no SAGE, 1 detectada aqui).
+     */
+    mencionadoSemValor?: boolean;
     retido: boolean;
     valor: number;       // 0 quando nao retido
     motivo?: string;     // ex: "declaracao explicita de NAO RETEN"
@@ -132,6 +138,23 @@ export function validarRetencoesLinha(
                 mensagem: `CSRF retido R$ ${csrfRetido.toFixed(2)} diverge de 4,65% × valor (esperado R$ ${esperado.toFixed(2)}).`,
             });
         }
+    }
+
+    // 2b) Tributo CITADO e sem valor lido: a nota não pode sair "✓ ok".
+    //     Caso FRONTINI (05/08): o SAGE listou 4 notas com PIS/COFINS/CSLL e o
+    //     app achou 1 — as outras 3 apareciam como conformes, que é a pior
+    //     saída possível (erra e parece certo).
+    const naoLidos = ([
+        ['PIS', analise.pis], ['COFINS', analise.cofins], ['CSLL', analise.csll],
+        ['IRRF', analise.irrf], ['INSS', analise.inss],
+    ] as const).filter(([, t]) => t.mencionadoSemValor).map(([nome]) => nome);
+    if (naoLidos.length) {
+        incs.push({
+            severidade: 'alerta',
+            codigo: 'RETENCAO_CITADA_SEM_VALOR',
+            mensagem: `${naoLidos.join(', ')} citado(s) na discriminação sem valor legível — `
+                + 'confira a nota: pode haver retenção que o app não conseguiu ler.',
+        });
     }
 
     // 3) IRRF: alíquota deve ser uma das usuais + piso de dispensa R$ 10
@@ -321,7 +344,52 @@ function detectarTributoEmTexto(texto: string, tributoRegex: RegExp): TributoRet
         };
     }
 
+    // 3) Sem "R$": muita prefeitura/ERP escreve "PIS 22,10" ou "(-) CSLL 34,00".
+    //    Exigir o cifrão fazia o app achar 1 das 4 notas retidas da FRONTINI.
+    //    GUARDAS: só valor em formato BR com centavos, nunca seguido de '%',
+    //    e nunca um número que seja a própria ALÍQUOTA (0,65 / 3,00 / 1,00) —
+    //    ler alíquota como valor seria pior que não ler nada.
+    const regexSemRS = new RegExp(
+        `(${tributoRegex.source})[^|\\n]{0,40}?([0-9]{1,3}(?:\\.[0-9]{3})*,[0-9]{2})(?!\\s*%)`,
+        tributoRegex.flags.includes('i') ? 'gi' : 'g',
+    );
+    while ((m = regexSemRS.exec(texto)) !== null) {
+        const trecho = texto.slice(Math.max(0, m.index - 30), m.index + m[0].length + 30);
+        if (REGEX_IBPT.test(trecho)) continue;
+        if (REGEX_EMITENTE_RECOLHEU.test(trecho)) {
+            return {
+                retido: false, valor: 0,
+                motivo: 'recolhido pelo emitente (nao retencao do tomador)',
+                trechoEvidencia: trecho.trim().slice(0, 120),
+            };
+        }
+        const valor = parseValorBR(m[2] || '');
+        if (valor > 0 && !pareceAliquota(valor)) {
+            return { retido: true, valor, trechoEvidencia: m[0].trim().slice(0, 120) };
+        }
+    }
+
+    // Citado e sem valor legível: NÃO é "não retido" — é "não lido".
+    if (tributoRegex.test(texto)) {
+        return {
+            retido: false, valor: 0,
+            mencionadoSemValor: true,
+            motivo: 'tributo citado na discriminação, mas não consegui ler o valor',
+        };
+    }
+
     return { retido: false, valor: 0 };
+}
+
+/**
+ * O número lido é a ALÍQUOTA em vez do valor?
+ *
+ * "PIS 0,65" e "COFINS 3,00" aparecem sem o símbolo de %; lidos como reais,
+ * virariam retenção de centavos e o relatório sairia errado com aparência de
+ * certo. Melhor recusar e sinalizar "citado sem valor".
+ */
+function pareceAliquota(v: number): boolean {
+    return [0.65, 3, 1, 4.65, 1.5, 4.8].some((a) => Math.abs(v - a) < 0.005);
 }
 
 export function analisarRetencoes(linha: LinhaNfseCsv): AnaliseRetencoes {
