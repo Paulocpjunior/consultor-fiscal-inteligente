@@ -18,6 +18,7 @@ import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
 import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
+import { saudeNfseSp, empresaComFalhaNaCaptura } from './nfse-sp-saude.js';
 
 const uploadCsv = multer({
     storage: multer.memoryStorage(),
@@ -436,6 +437,39 @@ router.post('/nfsesp-corrigir-direcoes', authUser, json(), async (req, res) => {
         });
     } catch (e) {
         return res.status(500).json({ erro: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/sefaz/nfsesp-saude?cnpj=
+//
+// Saúde do trilho de captura da NFS-e SP, pra ser mostrada ONDE A PESSOA
+// TRABALHA. Paulo, 05/08: "imagina o cliente esperando a guia p pagamento e o
+// colaborador não consegue capturar as nfs e só descobre tentando".
+//
+// Com `cnpj`, responde também se AQUELA empresa falhou na última varredura —
+// "algumas falharam" não é acionável; "a sua falhou, por isso" é.
+// ────────────────────────────────────────────────────────────────────────────
+router.get('/nfsesp-saude', authUser, async (req, res) => {
+    try {
+        const db = admin.apps.length
+            ? admin.firestore()
+            : (admin.initializeApp({ credential: admin.credential.applicationDefault() }), admin.firestore());
+        const snap = await db.collection('nfsesp_portal_cron_logs')
+            .orderBy('executadoEm', 'desc').limit(10).get();
+        const logs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const saude = saudeNfseSp(logs, Date.now());
+        const cnpj = String(req.query.cnpj || '');
+        return res.json({
+            ok: true,
+            ...saude,
+            empresaFalhou: cnpj ? empresaComFalhaNaCaptura(logs, cnpj) : null,
+        });
+    } catch (e) {
+        console.error('[nfsesp-saude]', e);
+        // Falha ao LER a saúde não pode virar "está tudo bem": sem resposta, a
+        // tela precisa tratar como não-confiável.
+        return res.status(500).json({ ok: false, error: e.message });
     }
 });
 
