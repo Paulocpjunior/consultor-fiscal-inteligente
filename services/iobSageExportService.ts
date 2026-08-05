@@ -931,11 +931,13 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
         if (partDoc && participantesBloqueados.has(partDoc.cnpjCpf)) {
             falhas.push({
                 documento: rotuloDoc(d),
-                motivo: `participante ${fmtCnpjCpf(partDoc.cnpjCpf)} sem UF no cadastro — o `
-                    + 'E-Fiscal recusa o E010 (campo 10) e, sem o participante, a nota também é '
-                    + 'recusada. O endereço do destinatário passou a ser capturado em 04/08: '
-                    + 'clique em "Corrigir endereços" (relê os XMLs guardados) e confira de novo. '
-                    + 'Se o XML não tiver o endereço, informe o código do participante no De→Para.',
+                motivo: `participante ${fmtCnpjCpf(partDoc.cnpjCpf)} sem UF — o E-Fiscal recusa o `
+                    + 'E010 (campo 10) e, sem o participante, a nota também é recusada. '
+                    + 'ATENÇÃO: cadastrar/corrigir esse participante DENTRO do E-Fiscal não resolve aqui — '
+                    + 'o app monta o E010 com o dado do XML capturado, não lê o cadastro de lá. '
+                    + 'Caminhos: 1) "⚡ Resolver UF pela base"; 2) "🔧 Corrigir endereços" (relê os XMLs); '
+                    + '3) "✍️ Informar UF" e digitar a sigla (fica gravada nesta empresa); '
+                    + '4) se ele JÁ existe no E-Fiscal, ponha o código dele no De→Para — aí nem precisa de E010.',
             });
             continue;
         }
