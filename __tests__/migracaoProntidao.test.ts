@@ -90,6 +90,35 @@ describe('as DUAS formas do documento (achatado × objeto)', () => {
         expect(r.linhas.find(l => l.empresaId === 'a')!.emiteProprio).toBe(2);
     });
 
+    it('SEM o campo `modelo`, o modelo vem da CHAVE (pos. 21-22)', () => {
+        // 2º achado do mesmo caso: `modelo` NÃO é campo gravado — a captura
+        // deriva da chave. Ler `d.modelo` direto dava undefined pra toda nota
+        // capturada, e "emissão própria" ficou 0 mesmo com o CNPJ já correto.
+        const cnpj = EMP.find(e => e.id === 'a')!.cnpj;
+        const chave55 = `352607${cnpj}55` + '0'.repeat(22);
+        const chave65 = `352607${cnpj}65` + '0'.repeat(22);
+        const r = montarProntidaoMigracao([
+            { empresaId: 'a', direcao: 'saida', tpNF: '1', status: 'autorizado',
+              totais: {}, cnpjEmit: cnpj, ufEmit: 'SP', chave: chave55 },
+            { empresaId: 'a', direcao: 'saida', tpNF: '1', status: 'autorizado',
+              totais: {}, cnpjEmit: cnpj, ufEmit: 'SP', chave: chave65 },
+        ] as any, EMP as any);
+        const a = r.linhas.find(l => l.empresaId === 'a')!;
+        expect(a.emiteProprio).toBe(2);
+        expect(a.porTipo).toMatchObject({ NFe: 1, NFCe: 1 });
+    });
+
+    it('NFS-e não tem chave de 44 dígitos — não pode virar NF-e por fallback', () => {
+        const r = montarProntidaoMigracao([
+            { empresaId: 'a', direcao: 'saida', status: 'autorizado',
+              totais: {}, cnpjEmit: EMP[0].cnpj, tipoDoc: 'NFSe' },
+        ] as any, EMP as any);
+        const a = r.linhas.find(l => l.empresaId === 'a')!;
+        expect(a.porTipo.NFSe).toBe(1);
+        expect(a.porTipo.NFe).toBe(0);
+        expect(a.emiteProprio).toBe(0);      // NFS-e não é emissão de NF-e
+    });
+
     it('ST em saída própria é detectado na forma ACHATADA', () => {
         const r = montarProntidaoMigracao(
             [achatado('b', { totais: { vST: 100 } })] as any, EMP as any,

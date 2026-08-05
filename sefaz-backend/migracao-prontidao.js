@@ -14,7 +14,7 @@
 // O painel diz o período olhado e nunca chama a lista de "definitiva".
 // ============================================================================
 
-import { cnpjEmitente, ufEmitente } from './participante-doc-helper.js';
+import { cnpjEmitente, ufEmitente, modeloDoDoc } from './participante-doc-helper.js';
 
 const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
 
@@ -34,7 +34,14 @@ const CFOP_VENDA_NAO_CONTRIBUINTE = new Set(['6107', '6108']);
  * 55 NF-e · 65 NFC-e · 57 CT-e · 58 MDF-e · NFS-e não tem modelo numérico.
  */
 function tipoDoDoc(d) {
-    const modelo = so(d?.modelo);
+    // NFS-e não tem chave de 44 dígitos — `modeloDoDoc` chutaria '55' pra ela.
+    // Por isso o tipo declarado decide ANTES de derivar o modelo.
+    const declarado = String(d?.tipoDoc || d?.tipo || '').replace(/^res/, '');
+    if (/^NFSe/i.test(declarado)) return 'NFSe';
+    // `modelo` NÃO é campo gravado no documento (a captura deriva da chave) —
+    // ler `d.modelo` direto dava undefined pra TODA nota capturada, e foi o
+    // que manteve "emissão própria 0" mesmo depois de arrumar o CNPJ (05/08).
+    const modelo = so(d?.chave || d?.modelo) ? modeloDoDoc(d) : '';
     if (modelo === '55') return 'NFe';
     if (modelo === '65') return 'NFCe';
     if (modelo === '57') return 'CTe';
@@ -110,7 +117,8 @@ export function montarProntidaoMigracao(docs, empresas) {
         const saidaPropria = emitEhEmpresa && !propriaEntrada;
         const temSt = (Number(t.vST) || 0) > 0 || (Number(t.vBCST) || 0) > 0;
 
-        if (emitEhEmpresa && ['55', '65'].includes(String(d.modelo))) emp.emiteProprio++;
+        // Usa o tipo já resolvido (campo → chave → tipoDoc), não `d.modelo`.
+        if (emitEhEmpresa && (tipo === 'NFe' || tipo === 'NFCe')) emp.emiteProprio++;
         if (temSt) { if (saidaPropria) emp.stSaidas++; else emp.stEntradas++; }
         if (saidaPropria && (Number(t.vIPI) || 0) > 0) emp.ipiSaidas++;
         // Venda interestadual a não contribuinte (EC 87/15): o CFOP é a prova
