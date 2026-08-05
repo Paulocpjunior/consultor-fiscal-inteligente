@@ -44,6 +44,10 @@ router.get('/prontidao-migracao', requireAuth, async (req, res) => {
                     cnpj: d.cnpj,
                     regime,
                     uf: df.uf || d.uf || '',
+                    // Sem IE a empresa NÃO é contribuinte de ICMS e não
+                    // entrega EFD ICMS/IPI — logo não é alvo da migração do
+                    // SPED Fiscal (Paulo, 05/08). É o que separa a carteira.
+                    inscricaoEstadual: df.inscricaoEstadual || d.inscricaoEstadual || '',
                     industriaCadastro: df.indAtividade === 'industrial' || df.naturezaAtividade === 'industria',
                 });
             });

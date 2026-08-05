@@ -4,12 +4,18 @@
  */
 import { montarProntidaoMigracao } from '../sefaz-backend/migracao-prontidao.js';
 
+// IE preenchida = contribuinte de ICMS (entrega EFD ICMS/IPI). Empresa de
+// SERVIÇO não tem IE e por isso NÃO é alvo do piloto do SPED Fiscal —
+// Paulo, 05/08: "essas empresas são prestadoras de serviços, não têm
+// Inscrição Estadual".
 const EMP = [
-    { id: 'a', nome: 'LIMPA LTDA', cnpj: '11111111000111', regime: 'lucro', uf: 'SP' },
-    { id: 'b', nome: 'SUBSTITUTA', cnpj: '22222222000122', regime: 'lucro', uf: 'SP' },
-    { id: 'c', nome: 'INDUSTRIA', cnpj: '33333333000133', regime: 'lucro', uf: 'SP', industriaCadastro: true },
-    { id: 'd', nome: 'SIMPLES', cnpj: '44444444000144', regime: 'simples', uf: 'SP' },
-    { id: 'e', nome: 'SEM MOVIMENTO', cnpj: '55555555000155', regime: 'lucro', uf: 'SP' },
+    { id: 'a', nome: 'LIMPA LTDA', cnpj: '11111111000111', regime: 'lucro', uf: 'SP', inscricaoEstadual: '111222333444' },
+    { id: 'b', nome: 'SUBSTITUTA', cnpj: '22222222000122', regime: 'lucro', uf: 'SP', inscricaoEstadual: '222333444555' },
+    { id: 'c', nome: 'INDUSTRIA', cnpj: '33333333000133', regime: 'lucro', uf: 'SP', inscricaoEstadual: '333444555666', industriaCadastro: true },
+    { id: 'd', nome: 'SIMPLES', cnpj: '44444444000144', regime: 'simples', uf: 'SP', inscricaoEstadual: '444555666777' },
+    { id: 'e', nome: 'SEM MOVIMENTO', cnpj: '55555555000155', regime: 'lucro', uf: 'SP', inscricaoEstadual: '555666777888' },
+    { id: 'f', nome: 'ADVOGADOS S/S', cnpj: '66666666000166', regime: 'lucro', uf: 'SP' },            // sem IE
+    { id: 'g', nome: 'CLINICA ISENTA', cnpj: '77777777000177', regime: 'lucro', uf: 'SP', inscricaoEstadual: 'ISENTO' },
 ];
 
 const doc = (empresaId: string, over: any = {}) => ({
@@ -67,6 +73,42 @@ describe('EC 87/15 — venda interestadual a NÃO CONTRIBUINTE (E310/E316)', () 
         expect(r.linhas.find(l => l.empresaId === 'a')!.saidasNaoContribuinte).toBeNull();
         // E não pode bloquear piloto por um sinal que não foi medido.
         expect(r.linhas.find(l => l.empresaId === 'a')!.candidataPiloto).toBe(true);
+    });
+});
+
+describe('sem Inscrição Estadual não há SPED Fiscal para migrar', () => {
+    // Paulo, 05/08, derrubando meu piloto: "essas empresas são prestadoras de
+    // serviços, não têm Inscrição Estadual". Sem IE a empresa não é
+    // contribuinte de ICMS e NÃO entrega EFD ICMS/IPI — piloto ali seria
+    // comparar dois arquivos que não existem em sistema nenhum.
+    const servico = (id: string) => ({
+        empresaId: id, direcao: 'saida', status: 'autorizado', totais: {},
+        cnpjEmit: EMP.find(e => e.id === id)!.cnpj, tipoDoc: 'NFSe',
+    });
+
+    it('prestadora de serviço (sem IE) NÃO é candidata a piloto', () => {
+        const r = montarProntidaoMigracao([servico('f')] as any, EMP as any);
+        const f = r.linhas.find(l => l.empresaId === 'f')!;
+        expect(f.contribuinteIcms).toBe(false);
+        expect(f.candidataPiloto).toBe(false);
+    });
+
+    it('IE "ISENTO" também não é contribuinte', () => {
+        const r = montarProntidaoMigracao([servico('g')] as any, EMP as any);
+        expect(r.linhas.find(l => l.empresaId === 'g')!.contribuinteIcms).toBe(false);
+    });
+
+    it('com IE de verdade, segue candidata', () => {
+        const r = montarProntidaoMigracao([doc('a')] as any, EMP as any);
+        const a = r.linhas.find(l => l.empresaId === 'a')!;
+        expect(a.contribuinteIcms).toBe(true);
+        expect(a.candidataPiloto).toBe(true);
+    });
+
+    it('o resumo separa quem entrega EFD ICMS/IPI de quem não entrega', () => {
+        const r = montarProntidaoMigracao([doc('a'), servico('f'), servico('g')] as any, EMP as any);
+        expect(r.resumo.contribuintesIcms).toBe(1);
+        expect(r.resumo.semInscricaoEstadual).toBe(2);
     });
 });
 

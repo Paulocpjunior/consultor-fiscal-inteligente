@@ -17,6 +17,8 @@ export interface ProntidaoLinha {
     /** Documentos que a ponte .FML não leva ao E-Fiscal (CT-e + NFS-e). */
     foraDaPonte: number;
     porTipo: Record<string, number>;
+    /** Tem IE (≠ ISENTO) → entrega EFD ICMS/IPI. Sem isso, fora do escopo. */
+    contribuinteIcms: boolean;
     bloqueios: string[];
     atencoes: string[];
     candidataPiloto: boolean;
@@ -32,6 +34,8 @@ export interface ProntidaoResultado {
         comInterestadual: number;
         comVendaNaoContribuinte: number | null;
         vendaNaoContribuinteApurada: boolean;
+        contribuintesIcms: number;
+        semInscricaoEstadual: number;
         comCte: number;
         comNfse: number;
         docsForaDaPonte: number;

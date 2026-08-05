@@ -16,7 +16,7 @@ interface Linha {
 interface Resp {
     ok: boolean; error?: string; competencia?: string; lidos?: number;
     linhas?: Linha[]; perguntasEquipe?: string[];
-    resumo?: { comMovimento: number; candidatasPiloto: number; comStSaida: number; comIpiOuIndustria: number; comInterestadual: number; comVendaNaoContribuinte?: number | null; vendaNaoContribuinteApurada?: boolean; comCte?: number; comNfse?: number; docsForaDaPonte?: number };
+    resumo?: { comMovimento: number; candidatasPiloto: number; comStSaida: number; comIpiOuIndustria: number; comInterestadual: number; comVendaNaoContribuinte?: number | null; vendaNaoContribuinteApurada?: boolean; comCte?: number; comNfse?: number; docsForaDaPonte?: number; contribuintesIcms?: number; semInscricaoEstadual?: number };
 }
 
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -91,6 +91,27 @@ const ProntidaoMigracao: React.FC<{ onShowToast?: (m: string) => void }> = ({ on
                         </span>
                     )}
                 </div>
+
+                {/* Escopo REAL da migração do SPED Fiscal: só contribuinte de
+                    ICMS entrega EFD ICMS/IPI (Paulo, 05/08). */}
+                {dados?.resumo && (dados.resumo.semInscricaoEstadual ?? 0) > 0 && (
+                    <div className="rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 p-3 mt-2">
+                        <p className="text-xs font-bold text-sky-800 dark:text-sky-300">
+                            🎯 Escopo do SPED Fiscal: {dados.resumo.contribuintesIcms ?? 0} de{' '}
+                            {dados.resumo.comMovimento} empresa(s)
+                        </p>
+                        <p className="text-[11px] text-slate-700 dark:text-slate-300 mt-1">
+                            <b>{dados.resumo.semInscricaoEstadual}</b> não têm Inscrição Estadual (ou são
+                            ISENTAS) — <b>não são contribuintes de ICMS e não entregam EFD ICMS/IPI</b>.
+                            Prestadoras de serviço entregam <b>EFD Contribuições</b> e apuram <b>ISS</b>;
+                            não há SPED Fiscal delas para gerar nem para conferir.
+                        </p>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                            Por isso elas ficam fora das candidatas a piloto: comparar SPED Fiscal ali seria
+                            comparar dois arquivos que não existem em sistema nenhum.
+                        </p>
+                    </div>
+                )}
 
                 {/* Cobertura documental: o que o CFI captura e a ponte .FML
                     NUNCA levou ao E-Fiscal (Paulo, 05/08). */}
