@@ -602,28 +602,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Decisões e memória de 31/07/2026
 
-- **Substituição do SAGE e-Fiscal: plano FECHADO, execução ADIADA** (Paulo,
-  31/07: "algumas coisas não faremos de imediato como a migração do
-  postgresql"). NÃO iniciar a migração do PG12 sem o Paulo mandar. O plano de
-  4 fases fica registrado pra quando retomar: F0 inventário (quem entrega
-  EFD); F1 gerador EFD ICMS/IPI + conferência-espelho (2 pilotos Lucro que o
-  Paulo escolher); F2 extração do PG12 — **ARQUIVOS RECEBIDOS E VALIDADOS
-  05/08** (`docs/pg12/validacao-f2.md` + DDL guardado em
-  `docs/pg12/efiscal_ddl.zip`): DDL dos 4 schemas OK (618 tabelas por
-  empresa = pad_modelo; gen 273; tabelas de movimento mapeadas —
-  nfentrad/nfsaida/nf_iss/lcereg54/nfdipam); \dt gen.* OK; SÓ FALTA a
-  volumetria do e0299 refeita (a 1ª veio com 80/618 tabelas e contagem
-  zero — pg_stat sem ANALYZE; o SQL certo por pg_total_relation_size está
-  no doc). Cod.Cliente carregado em massa 05/08 (390 ativas, via Listagem
-  de Empresas HTML) = amarração e{código}↔CNPJ pronta; F3 ondas por
-  cliente.
-  Arquitetura já mapeada (schemas_efiscal.csv): PG12 (EOL nov/2024), 1 schema
-  por empresa (e0001–e9996, 1.735 schemas), `gen` compartilhado 625MB, total
-  real 84GB (cuidado: o CSV tem linha TOTAL — não somar duas vezes), 29
-  empresas >500MB = 55% do volume. REGRAS ao retomar: PG12 NUNCA exposto à
-  internet; dado fiscal de cliente NUNCA transita pelo chat (só
-  schema/estrutura — extração vai pra bucket GCS privado do projeto
-  consultorfiscalapp); acesso por usuário read-only (`cfi_leitura`).
+- **Substituição do SAGE e-Fiscal: F2 (extração do PG12) está FORA DO PLANO**
+  (Paulo, 05/08: "não me preocuparia com o passado, o e-fiscal continua ativo
+  e servirá para consultas"). DECISÃO ESTRUTURAL — o E-Fiscal NÃO será
+  desligado: ele vira sistema de CONSULTA do histórico, e a migração é só do
+  que é OPERAÇÃO CORRENTE. Some do caminho crítico: extrair/transformar 89 GB,
+  mapear 618 tabelas, bucket GCS, usuário `cfi_leitura`, volumetria do e0299
+  (NÃO pedir de novo ao Paulo — o SQL em `docs/pg12/validacao-f2.md` ficou
+  obsoleto). O plano virou TRÊS fases: F0 inventário (FEITO — automático pela
+  aba 🚦 Migração + respostas da equipe) → F1 dois pilotos Lucro com
+  conferência-espelho no PVA → F3 ondas por cliente.
+  O QUE PASSOU A MANDAR NO RITMO: completude de captura por cliente (prova de
+  captura + cofre de saída, hoje 0/388) — cliente só migra com a captura
+  fechada, e é aí que está o gargalo agora, não mais no histórico.
+  O que foi feito na F2 e CONTINUA VALENDO: DDL dos 4 schemas validado e
+  guardado (`docs/pg12/efiscal_ddl.zip` — 618 tabelas por empresa =
+  pad_modelo, prova de que todo e#### é o mesmo molde) e o Cod.Cliente
+  carregado em massa (390 ativas), que virou busca por código nas telas e o
+  Nº Empresa automático do Exportar SAGE. PG12 (EOL nov/2024, 1.735 schemas,
+  89,5 GB) segue de pé e NUNCA exposto à internet; dado fiscal de cliente
+  NUNCA transita pelo chat.
 - **tpNF DECIDE a direção quando o cliente é o emitente** (#384, 31/07 —
   caso EDUARDO GUERRA no Exportar SAGE): compra de produtor rural PF é NOTA
   PRÓPRIA DE ENTRADA (RICMS/SP art. 136 — tpNF=0, cliente emite, produtor no

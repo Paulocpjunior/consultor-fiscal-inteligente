@@ -1,5 +1,17 @@
 # PG12 (E-Fiscal) — validação dos arquivos da fase F2
 
+> ## ⚫ F2 SAIU DO PLANO em 05/08/2026
+> Paulo: *"não me preocuparia com o passado, o e-fiscal continua ativo e
+> servirá para consultas."* O E-Fiscal **não será desligado** — vira o sistema
+> de consulta do histórico, e a migração passou a ser só da OPERAÇÃO CORRENTE.
+>
+> **NÃO pedir a volumetria do `e0299` ao Paulo** (o SQL abaixo ficou obsoleto)
+> e não iniciar extração/transformação de dados do PG12.
+>
+> O que este documento ainda serve: registrar que o **DDL foi validado** (o
+> `pad_modelo` prova que os 1.735 schemas são o mesmo molde) e onde a
+> estrutura está guardada, caso a decisão mude um dia.
+
 Paulo extraiu e mandou em **05/08/2026** ("antes de começarmos o dia, para que
 você valide"). REGRA mantida: só ESTRUTURA transita — nenhum dado fiscal de
 cliente veio nos arquivos, e é assim que continua (extração de dados vai
