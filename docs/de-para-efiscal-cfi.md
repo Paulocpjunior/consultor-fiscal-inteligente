@@ -47,7 +47,7 @@ pedir). DIPJ/fila/cadastros estáticos ⚫.
 | PER/DCOMP · ressarcimento ST (CAT 42/18) | 🟡 | sob demanda; hoje e-CAC/manual |
 | SINTEGRA · IN 86/01 · DNF · REDF · DES · DMED · CPRB · STDA | ⚫ | legados/nichos |
 | REINF | 🔴 fora do CFI | módulo em construção no Consultor Contábil; menu mapeado (faltam 2 submenus); FUNRURAL do 🌾 = fonte do R-2055 |
-| Histórico de escrituração (PG12, 84 GB, 1.735 empresas) | 🔴 | extração = fase F2 do plano (aguarda 3 arquivos do Paulo); até lá o E-Fiscal fica vivo de consulta |
+| Histórico de escrituração (PG12, 89,5 GB, 1.735 schemas) | ⚫ **FORA DO PLANO 05/08** | Paulo: "não me preocuparia com o passado, o e-fiscal continua ativo e servirá para consultas". O E-Fiscal NÃO será desligado — vira sistema de consulta do histórico. Migra-se só a operação corrente |
 | Importação Folhamatic (.FML) | — ponte | Exportar SAGE + leitor de log — existe PARA a transição; morre com ela |
 | NFC-e de balcão no .FML (participante CONSUMIDOR) | ✅ **04/08** | cupom **sem** documento e cupom **com o CPF** do comprador vão os DOIS pro participante genérico "Consumidor" do E-Fiscal (o CPF da NF Paulista vem sem endereço — viraria E010 sem UF e derrubaria a nota). Código do participante fica no cadastro da empresa (`dadosFiscais.codigoParticipanteConsumidor`), digitado uma vez. NFC-e contra CNPJ continua participante de verdade |
 
@@ -62,8 +62,10 @@ TEXTO de 4 dígitos com zero à esquerda, faixa 0001–9999, ÚNICO na carteira
 `sefaz-backend/cod-cliente.js` (`normalizarCodCliente`/`schemaDoCodCliente` —
 e{código} é o schema do PG12). O MESMO código é o "Nº Empresa no E-Fiscal"
 (E001): o Exportar SAGE passou a preenchê-lo sozinho a partir do cadastro.
-Pré-requisito da F2: TODA empresa ativa com Cod.Cliente preenchido antes da
-extração — o confronto CNPJ ↔ e{código} é o que valida cada onda.
+A F2 saiu do plano em 05/08 (o E-Fiscal fica de consulta), mas o campo NÃO
+virou trabalho perdido: é ele que faz a busca por código funcionar em todas
+as telas e o Exportar SAGE preencher o Nº Empresa sozinho — a ponte diária
+com o E-Fiscal, que segue viva enquanto houver cliente não migrado.
 
 ## Pré-requisito transversal: completude de captura
 
@@ -73,8 +75,11 @@ Canceladas/Faltantes limpo. Cliente com buraco de captura NÃO migra.
 ## Caminho fechado do plano (F0–F3, execução com ordem do Paulo)
 
 F0 inventário por cliente (SAT? CIAP? bloco K? ajustes? quem entrega EFD?)
-→ F1 dois pilotos com conferência-espelho no PVA → F2 extração do PG12 →
-F3 ondas. **E111 (02/08) era o bloqueio técnico nº 1 e está fechado**; o Bloco G
+→ F1 dois pilotos com conferência-espelho no PVA → F3 ondas.
+**F2 (extração do PG12) saiu do plano em 05/08** (Paulo): o E-Fiscal fica
+ativo como consulta do histórico, então migra-se só a operação corrente. O
+gargalo das ondas passou a ser a COMPLETUDE DE CAPTURA (abaixo), não o
+histórico. **E111 (02/08) era o bloqueio técnico nº 1 e está fechado**; o Bloco G
 (CIAP) fechou em 03/08 com o relatório real da EXPERTE — próximo alvo
 técnico: E220/ST ou bloco K, conforme a 🚦 apontar.
 
