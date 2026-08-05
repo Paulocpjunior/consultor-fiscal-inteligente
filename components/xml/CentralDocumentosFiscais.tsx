@@ -33,6 +33,7 @@ const AptidaoSaidaPanel = lazy(() => import('./AptidaoSaidaPanel'));
 const DipamProdutorRuralPanel = lazy(() => import('./DipamProdutorRuralPanel'));
 const DifalPanel = lazy(() => import('./DifalPanel'));
 const NcmCadastroPanel = lazy(() => import('./NcmCadastroPanel'));
+const IssSpPanel = lazy(() => import('./IssSpPanel'));
 
 type TabId =
     | 'dashboard'
@@ -43,6 +44,7 @@ type TabId =
     | 'documentos'
     | 'dipam'
     | 'difal'
+    | 'iss_sp'
     | 'ncm'
     | 'importacao'
     | 'empresas'
@@ -84,6 +86,7 @@ const GRUPOS: Array<{ id: GrupoId; label: string; subs: Array<{ id: TabId; label
             { id: 'dipam', label: '🌾 DIPAM / Produtor rural' },
             { id: 'difal', label: '🧭 DIFAL aquisição' },
             { id: 'ncm', label: '🏷️ Cadastro NCM' },
+            { id: 'iss_sp', label: '🏛️ ISS SP (guia)' },
         ],
     },
     {
@@ -289,6 +292,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 {tab === 'ncm' && (
                     <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando cadastro de NCM…</p>}>
                         <NcmCadastroPanel currentUser={currentUser} onShowToast={onShowToast} />
+                    </Suspense>
+                )}
+                {tab === 'iss_sp' && (
+                    <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando ISS SP…</p>}>
+                        <IssSpPanel currentUser={currentUser} onShowToast={onShowToast} />
                     </Suspense>
                 )}
                 {tab === 'importacao' && (

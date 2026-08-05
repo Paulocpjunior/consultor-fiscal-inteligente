@@ -910,6 +910,9 @@ export async function getDadosFiscaisEmpresa(
     cfopOverrides?: Record<string, string> | null;
     codigoParticipanteConsumidor?: string | null;
     codCliente?: string | null;
+    /** Município IBGE — decide a praça do ISS (SP capital = 3550308). */
+    codMunIBGE?: string | null;
+    indAtividade?: string | null;
 } | null> {
     if (!isFirebaseConfigured || !db || !empresaId) return null;
     try {
@@ -925,6 +928,8 @@ export async function getDadosFiscaisEmpresa(
             cfopOverrides: df.cfopOverrides ?? null,
             codigoParticipanteConsumidor: df.codigoParticipanteConsumidor ?? null,
             codCliente: df.codCliente ?? null,
+            codMunIBGE: df.codMunIBGE ?? null,
+            indAtividade: df.indAtividade ?? null,
         };
     } catch {
         return null;
