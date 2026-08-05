@@ -7,9 +7,13 @@ interface Props {
     value: string;                       // empresaId selecionado
     onChange: (id: string) => void;
     /**
-     * "Ativar empresa" (Paulo, 04/08): selecionar JÁ dispara a busca dos dados
-     * daquela empresa — um gesto só, e o banco carrega SÓ o que é dela, nunca
-     * a carteira inteira. Quando presente, é chamado logo após o onChange.
+     * "Ativar empresa" (Paulo, 04/08; tornado OBRIGATÓRIO em 05/08 — "senão
+     * clicar em ATIVAR não sai do lugar").
+     *
+     * Escolher na lista NÃO carrega nada: só o clique em ⚡ Ativar dispara a
+     * busca dos dados daquela empresa. Antes a seleção ativava sozinha, o que
+     * (a) batia no banco a cada troca de escolha, inclusive nas erradas, e
+     * (b) tornava o botão decorativo — ninguém sabia que existia um gesto.
      */
     onAtivar?: (id: string) => void;
     placeholder?: string;
@@ -78,12 +82,22 @@ const EmpresaSearchSelect: React.FC<Props> = ({
         ? `${selecionada.codCliente ? `${selecionada.codCliente} · ` : ''}${selecionada.nome} — ${formatCnpjCpf(selecionada.cnpj)}`
         : '';
 
+    // Empresa escolhida ainda NÃO ativada: enquanto isso a tela não carrega
+    // nada e o botão fica em destaque. Trocar de empresa zera de novo.
+    const [ativadoId, setAtivadoId] = useState<string | null>(null);
+    const pendente = !!onAtivar && !!selecionada && ativadoId !== selecionada.id;
+
     const escolher = (id: string) => {
         onChange(id);
         setAberto(false);
         setBusca('');
-        // Seleção = ativação: a tela busca na hora os dados SÓ desta empresa.
-        onAtivar?.(id);
+        setAtivadoId(null);
+    };
+
+    const ativar = () => {
+        if (!selecionada || !onAtivar) return;
+        setAtivadoId(selecionada.id);
+        onAtivar(selecionada.id);
     };
 
     return (
@@ -109,14 +123,23 @@ const EmpresaSearchSelect: React.FC<Props> = ({
                     <button
                         type="button"
                         disabled={disabled}
-                        onClick={() => onAtivar(selecionada.id)}
-                        title="Carrega no banco só os dados DESTA empresa — é o que evita puxar a carteira inteira a cada consulta."
-                        className="shrink-0 px-3 py-2 text-sm font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40"
+                        onClick={ativar}
+                        title="Carrega no banco só os dados DESTA empresa — é o que evita puxar a carteira inteira a cada consulta. Sem clicar aqui, a tela não busca nada."
+                        className={`shrink-0 px-3 py-2 text-sm font-bold rounded-lg text-white disabled:opacity-40 ${
+                            pendente
+                                ? 'bg-amber-500 hover:bg-amber-600 animate-pulse'
+                                : 'bg-emerald-600 hover:bg-emerald-700'
+                        }`}
                     >
-                        ⚡ Ativar
+                        {pendente ? '⚡ Ativar' : '⚡ Reativar'}
                     </button>
                 )}
             </div>
+            {pendente && !aberto && (
+                <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400 font-semibold">
+                    Clique em ⚡ Ativar para carregar os dados desta empresa.
+                </p>
+            )}
             {aberto && (
                 <div className="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg">
                     {filtradas.length === 0 ? (
@@ -142,7 +165,7 @@ const EmpresaSearchSelect: React.FC<Props> = ({
                                     </span>
                                     <span className="block text-[11px] font-mono text-slate-500 dark:text-slate-400">
                                         {formatCnpjCpf(e.cnpj)} · {e.fonte === 'simples' ? 'Simples' : 'Lucro'}
-                                        {onAtivar && <span className="text-emerald-600 dark:text-emerald-400"> · ⚡ selecionar ativa</span>}
+                                        {onAtivar && <span className="text-amber-600 dark:text-amber-400"> · clique em ⚡ Ativar depois</span>}
                                     </span>
                                 </button>
                             ))}
