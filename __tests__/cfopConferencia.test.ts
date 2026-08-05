@@ -63,10 +63,22 @@ describe('compras que não dependem da natureza', () => {
         expect(linha(r, '5551').explicacao).toMatch(/Ativo, uso\/consumo/);
     });
 
-    it('devolução e ST também só espelham', () => {
+    it('devolução espelha; VENDA COM ST não (o sufixo não tem par na entrada)', () => {
+        // Corrigido em 05/08 (caso 5405 → 1405, CFOP inexistente): os sufixos
+        // 401/402/403/404/405 descrevem a posição do VENDEDOR na substituição.
+        // Para quem compra vale o destino da mercadoria — comércio → 403.
         const r = conferirCorrelacaoCfop([doc(['5910', '6401'])], { naturezaAtividade: 'comercio' });
         expect(linha(r, '5910').destino).toBe('1910');
-        expect(linha(r, '6401').destino).toBe('2401');
+        expect(linha(r, '6401').destino).toBe('2403');
+        expect(linha(r, '6401').motivo).toBe('natureza-st');
+        expect(linha(r, '6401').explicacao).toMatch(/não existe o sufixo 401/);
+    });
+
+    it('venda com ST sem natureza declarada pede conferência humana', () => {
+        const r = conferirCorrelacaoCfop([doc(['5405'])]);
+        expect(linha(r, '5405').destino).toBe('1403');
+        expect(linha(r, '5405').conferir).toBe(true);
+        expect(linha(r, '5405').explicacao).toMatch(/confirme se a mercadoria é para revenda/);
     });
 });
 

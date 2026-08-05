@@ -39,6 +39,40 @@
  */
 const SUFIXOS_COMPRA_PRODUTO = ['101', '102', '116', '117', '118', '120', '122'];
 
+export { SUFIXOS_ST_VENDA };
+
+/**
+ * VENDA com substituição tributária — a família em que a inversão mecânica
+ * INVENTA CFOP.
+ *
+ * Caso real (Paulo, 05/08): nota de saída 5405 (venda de mercadoria de
+ * terceiros com ST, na condição de contribuinte SUBSTITUÍDO) virava 1405 na
+ * entrada — e 1405 NÃO EXISTE. Na entrada a família ST só tem 401
+ * (industrialização), 403 (comercialização), 406 (ativo), 407 (uso/consumo),
+ * 408/409 (transferência) e 410/411 (devolução). Não há 402, 404 nem 405.
+ *
+ * A razão é conceitual, não uma falha da tabela: os sufixos 402/405 descrevem
+ * a POSIÇÃO DO VENDEDOR na substituição (substituto entre substitutos,
+ * substituído) — coisa que não existe do lado de quem compra. Para o
+ * comprador o que importa é o DESTINO da mercadoria, exatamente como na
+ * compra normal. Por isso a família ST passa a seguir a natureza da
+ * atividade, igual aos sufixos de compra.
+ */
+const SUFIXOS_ST_VENDA = ['401', '402', '403', '404', '405'];
+
+/** Sufixo de ENTRADA com ST conforme o destino que o comprador dá. */
+function sufixoStPorNatureza(naturezaAtividade) {
+    switch (naturezaAtividade) {
+        case 'comercio':  return '403';  // Compra para comercialização com ST
+        case 'industria': return '401';  // Compra para industrialização com ST
+        case 'servicos':  return '407';  // Uso/consumo de mercadoria com ST
+        // Misto ou não declarado: 403 é o caso geral (revenda). NÃO cai na
+        // conversão mecânica porque ela produziria 1402/1404/1405, que não
+        // existem — e CFOP inexistente é recusa certa no E-Fiscal e no PVA.
+        default:          return '403';
+    }
+}
+
 /*
  * Histórico (removido em refactor): havia arrays SUFIXOS_ST, _DEVOLUCAO,
  * _ATIVO, _USO_CONSUMO listando 401/403.../910.../551.../556. Eles só
@@ -108,8 +142,15 @@ export function correlacionarCfop(cfopOrigem, direcao, ctx = {}) {
         // Sem natureza definida ou misto -> conversão mecânica
     }
 
-    // Default: ST (4xx), devolução (9xx), ativo (55x), uso/consumo (55x)
-    // e qualquer outro CFOP — preserva sufixo, só inverte primeiro dígito.
+    // Venda com ST: o sufixo do vendedor não tem par na entrada (ver
+    // SUFIXOS_ST_VENDA) — decide pelo destino da mercadoria.
+    if (SUFIXOS_ST_VENDA.includes(sufixo)) {
+        return primeiroDestino + sufixoStPorNatureza(ctx.naturezaAtividade);
+    }
+
+    // Default: devolução (9xx), transferência com ST (408/409), ativo (55x),
+    // uso/consumo (55x) e qualquer outro CFOP — nesses o sufixo do emitente
+    // TEM par na entrada, então preserva sufixo e só inverte o 1º dígito.
     return inverterPrimeiroDigito(c);
 }
 
