@@ -42,10 +42,18 @@ describe('trimestreDoMes', () => {
 
 describe('montarApuracaoTrimestre — o caso real do 2º trimestre', () => {
     // Números da planilha que o Paulo mandou (abril/maio/junho de 2026).
+    // A ficha guarda o faturamento POR TIPO; `faturamentoMesTotal` já traz a
+    // receita financeira somada (216.016,16 em junho) e por isso NÃO serve
+    // como linha de faturamento do quadro.
     const fichas = [
-        ficha('2026-04', { faturamentoMesTotal: 204867.73 }),
-        ficha('2026-05', { faturamentoMesTotal: 222197.93 }),
-        ficha('2026-06', { faturamentoMesTotal: 211713.62, receitaFinanceira: 4302.54, retencaoIrpj: 967.73 }),
+        ficha('2026-04', { faturamentoMesServico: 204867.73, faturamentoMesTotal: 204867.73 }),
+        ficha('2026-05', { faturamentoMesServico: 222197.93, faturamentoMesTotal: 222197.93 }),
+        ficha('2026-06', {
+            faturamentoMesServico: 211713.62,
+            faturamentoMesTotal: 216016.16,
+            receitaFinanceira: 4302.54,
+            retencaoIrpj: 967.73,
+        }),
     ];
 
     it('soma os 3 meses do trimestre', () => {
@@ -65,18 +73,28 @@ describe('montarApuracaoTrimestre — o caso real do 2º trimestre', () => {
 
     it('ignora meses de outro trimestre e de outro ano', () => {
         const t = montarApuracaoTrimestre(
-            [...fichas, ficha('2026-07', { faturamentoMesTotal: 999 }), ficha('2025-06', { faturamentoMesTotal: 888 })],
+            [...fichas, ficha('2026-07', { faturamentoMesServico: 999 }), ficha('2025-06', { faturamentoMesServico: 888 })],
             2026, 2,
         );
         expect(t.totalFaturamento).toBe(638779.28);
+    });
+
+    it('a receita financeira NÃO entra na linha de faturamento (senão conta 2×)', () => {
+        // O 1º PDF saiu com 643.081,82 porque somava `faturamentoMesTotal`,
+        // que já inclui a receita financeira — e ela ainda aparecia em linha
+        // própria. O demonstrativo do E-Fiscal traz 638.779,28.
+        const t = montarApuracaoTrimestre(fichas, 2026, 2);
+        expect(t.meses[2].faturamento).toBe(211713.62);
+        expect(t.totalFaturamento).toBe(638779.28);
+        expect(t.totalReceitaFinanceira).toBe(4302.54);
     });
 });
 
 describe('farol honesto do trimestre', () => {
     it('mês sem ficha NÃO vira zero silencioso — vira pendência e não fecha', () => {
         const t = montarApuracaoTrimestre([
-            ficha('2026-04', { faturamentoMesTotal: 100 }),
-            ficha('2026-06', { faturamentoMesTotal: 300 }),
+            ficha('2026-04', { faturamentoMesServico: 100 }),
+            ficha('2026-06', { faturamentoMesServico: 300 }),
         ], 2026, 2);
         expect(t.meses[1].ausente).toBe(true);
         expect(t.fechado).toBe(false);
@@ -86,9 +104,9 @@ describe('farol honesto do trimestre', () => {
 
     it('fechamento lançado como MENSAL não apura o trimestre e diz o porquê', () => {
         const t = montarApuracaoTrimestre([
-            ficha('2026-04', { faturamentoMesTotal: 100 }),
-            ficha('2026-05', { faturamentoMesTotal: 200 }),
-            ficha('2026-06', { faturamentoMesTotal: 300, periodoApuracao: 'Mensal' }),
+            ficha('2026-04', { faturamentoMesServico: 100 }),
+            ficha('2026-05', { faturamentoMesServico: 200 }),
+            ficha('2026-06', { faturamentoMesServico: 300, periodoApuracao: 'Mensal' }),
         ], 2026, 2);
         expect(t.fichaFechamento).toBeNull();
         expect(t.fechado).toBe(false);
@@ -104,10 +122,10 @@ describe('farol honesto do trimestre', () => {
 
     it('relançamento do mesmo mês: vence a ficha mais recente', () => {
         const t = montarApuracaoTrimestre([
-            ficha('2026-04', { faturamentoMesTotal: 100, dataRegistro: 1 }),
-            ficha('2026-04', { faturamentoMesTotal: 150, dataRegistro: 9 }),
-            ficha('2026-05', { faturamentoMesTotal: 0 }),
-            ficha('2026-06', { faturamentoMesTotal: 0 }),
+            ficha('2026-04', { faturamentoMesServico: 100, dataRegistro: 1 }),
+            ficha('2026-04', { faturamentoMesServico: 150, dataRegistro: 9 }),
+            ficha('2026-05', { faturamentoMesServico: 0 }),
+            ficha('2026-06', { faturamentoMesServico: 0 }),
         ], 2026, 2);
         expect(t.meses[0].faturamento).toBe(150);
     });

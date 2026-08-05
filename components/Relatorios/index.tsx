@@ -1428,8 +1428,43 @@ const AbaTrimestre: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         });
     }, [tri, empresa]);
 
-    const linhasTributo = (resultado?.detalhamento || []).filter(d =>
-        /IRPJ|CSLL|ADICIONAL/i.test(d.imposto));
+    // IRPJ sai em DUAS linhas — 15% e adicional de 10% —, como o demonstrativo
+    // do E-Fiscal e a planilha do escritório sempre mostraram (Paulo, 05/08:
+    // "consegue desmembrar o IRPJ?"). O motor devolve o IRPJ somado; o
+    // `adicional`/`baseAdicional` vêm junto só pra permitir esta separação.
+    const linhasTributo = useMemo(() => {
+        const out: Array<{ imposto: string; baseCalculo: number; aliquota: number; retencao: number; valor: number }> = [];
+        for (const d of resultado?.detalhamento || []) {
+            if (!/IRPJ|CSLL/i.test(d.imposto)) continue;
+            const adicional = Number(d.adicional || 0);
+            if (/IRPJ/i.test(d.imposto) && adicional > 0) {
+                const bruto = Number(d.valorBruto || 0) - adicional;
+                out.push({
+                    imposto: 'IRPJ (15%)',
+                    baseCalculo: d.baseCalculo,
+                    aliquota: d.aliquota,
+                    retencao: Number(d.retencao || 0),
+                    valor: Math.max(0, bruto - Number(d.retencao || 0)),
+                });
+                out.push({
+                    imposto: 'Adicional de IRPJ (10%)',
+                    baseCalculo: Number(d.baseAdicional || 0),
+                    aliquota: 10,
+                    retencao: 0,
+                    valor: adicional,
+                });
+                continue;
+            }
+            out.push({
+                imposto: d.imposto,
+                baseCalculo: d.baseCalculo,
+                aliquota: d.aliquota,
+                retencao: Number(d.retencao || 0),
+                valor: d.valor,
+            });
+        }
+        return out;
+    }, [resultado]);
 
     const pdf = () => {
         if (!tri || !empresa) return;
@@ -1452,7 +1487,7 @@ const AbaTrimestre: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 ['Receita financeira do trimestre', '', '', '', tri.totalReceitaFinanceira],
                 ['Retenções na fonte do trimestre (IRPJ / CSLL)', '', '',
                     tri.totalRetencaoIrpj, tri.totalRetencaoCsll],
-                ...linhasTributo.map(d => [d.imposto, d.baseCalculo, `${d.aliquota}%`, d.retencao || 0, d.valor]),
+                ...linhasTributo.map(d => [d.imposto, d.baseCalculo, `${d.aliquota}%`, d.retencao, d.valor]),
             ],
             totais: ['Faturamento total do trimestre', '', '', '', tri.totalFaturamento],
             identificacao: montarIdentificacao(empresa.dadosFiscais),
