@@ -24,7 +24,10 @@ export interface ManifestarPendentesResult {
     erro?: string;
     /** Por que NADA foi manifestado — motivo → quantidade (só quando total=0). */
     diagnostico?: {
+        /** Onde a chave parou: poison, cooldown, idade, já manifestada. */
         porMotivo?: Record<string, number>;
+        /** O QUE a SEFAZ (ou o certificado) respondeu — motivo técnico. */
+        porMotivoFalha?: Record<string, number>;
         ultimaFalha?: string | null;
         documentos?: number;
     };
@@ -46,8 +49,16 @@ export function resumoManifestacao(r: ManifestarPendentesResult): string {
         .slice(0, 3)
         .map(([m, q]) => `${q}× ${m}`);
     if (!motivos.length) return 'Nenhum documento pendente de manifestação nesta empresa.';
-    return `Nada a manifestar agora — ${motivos.join(' · ')}.`
-        + (r.diagnostico?.ultimaFalha ? ` Última falha: ${r.diagnostico.ultimaFalha}` : '');
+    // O motivo TÉCNICO é o que resolve: "Rejeição 573" e "certificado vencido"
+    // pedem ações diferentes, e nenhuma delas é clicar de novo.
+    const falhas = Object.entries(r.diagnostico?.porMotivoFalha || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 2)
+        .map(([m, q]) => `${q}× ${m}`);
+    const causa = falhas.length
+        ? ` Motivo da recusa: ${falhas.join(' · ')}.`
+        : (r.diagnostico?.ultimaFalha ? ` Última falha: ${r.diagnostico.ultimaFalha}` : '');
+    return `Nada a manifestar agora — ${motivos.join(' · ')}.${causa}`;
 }
 
 async function getToken(): Promise<string> {
