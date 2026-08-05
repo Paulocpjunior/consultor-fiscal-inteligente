@@ -150,14 +150,24 @@ export function conferirAntesDeGerar(
                 causa: motivoConsumidor === 'cpf-no-cupom'
                     ? 'NFC-e com o CPF do comprador no cupom (não vira participante)'
                     : 'NFC-e a consumidor final (sem CNPJ do comprador — é o normal)',
-                oQueAconteceLa: motivoConsumidor === 'cpf-no-cupom'
-                    ? 'O CPF do cupom é da Nota Fiscal Paulista e vem SEM endereço: o E010 sairia sem UF e '
-                      + 'o E-Fiscal recusaria o participante — e a nota atrás dele.'
-                    : 'Sem um código de participante, o E200 não tem a quem apontar e a nota fica de fora.',
-                acao: 'Informe o código do participante "Consumidor" do E-Fiscal deste cliente no campo '
-                    + '"Consumidor final (NFC-e)" acima. Ele vem do cadastro de Clientes/Fornecedores de lá — '
-                    + 'não é código oficial, cada escritório tem o seu. O código fica guardado no cadastro '
-                    + 'da empresa: só se digita uma vez.',
+                // Com o código do Consumidor preenchido NÃO há nada a fazer:
+                // cupom sem CPF é o normal do balcão (Paulo, 05/08 —
+                // "desconsiderem os cadastros que estão em branco, essa
+                // informação não é obrigatória"). Dizer "a nota fica de fora"
+                // aí seria falso e mandava a equipe procurar defeito.
+                oQueAconteceLa: temCodigo
+                    ? 'Nada a corrigir: estas notas vão para o participante genérico "Consumidor" do E-Fiscal, '
+                      + 'que é o tratamento certo — o comprador só se identifica quando pede a Nota Fiscal Paulista.'
+                    : motivoConsumidor === 'cpf-no-cupom'
+                        ? 'O CPF do cupom é da Nota Fiscal Paulista e vem SEM endereço: o E010 sairia sem UF e '
+                          + 'o E-Fiscal recusaria o participante — e a nota atrás dele.'
+                        : 'Sem um código de participante, o E200 não tem a quem apontar e a nota fica de fora.',
+                acao: temCodigo
+                    ? 'Nenhuma ação — informativo. As notas entram no arquivo pelo código do "Consumidor" já cadastrado.'
+                    : 'Informe o código do participante "Consumidor" do E-Fiscal deste cliente no campo '
+                      + '"Consumidor final (NFC-e)" acima. Ele vem do cadastro de Clientes/Fornecedores de lá — '
+                      + 'não é código oficial, cada escritório tem o seu. O código fica guardado no cadastro '
+                      + 'da empresa: só se digita uma vez.',
                 gravidade: temCodigo ? 'atencao' : 'bloqueia',
             }, rotulo(d));
         } else if (!participanteDoDoc(d)) {

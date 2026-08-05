@@ -10,7 +10,8 @@ import { formatCurrency } from '../../services/xmlParserService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 import { parseLogEfiscal, cruzarLogComFml, type CruzamentoLogEfiscal } from '../../services/iobSageLogEfiscal';
-import { carregarCodigosParticipantes, salvarCodigosParticipantes } from '../../services/sageCodigosService';
+import { carregarCodigosParticipantes, salvarCodigosParticipantes, carregarUfsParticipantes, salvarUfsParticipantes } from '../../services/sageCodigosService';
+import { ufValida } from '../../services/ufsBrasil';
 import { parsearCadastroClientesFornecedores } from '../../services/efiscalCadastroParticipantesParser';
 
 interface Props {
@@ -63,6 +64,13 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // destinatário é empresa que TAMBÉM emite nota, e a chave dela diz a UF.
     const [ufResolvida, setUfResolvida] = useState<Record<string, string>>({});
     const [resolvendoUf, setResolvendoUf] = useState(false);
+    // UF informada À MÃO (gravada no De→Para da empresa). É a saída para o
+    // resto que nem o XML nem a base resolvem — e o caso que travou a NOVA ERA
+    // em 170 notas: corrigir o cadastro DENTRO do E-Fiscal não chega aqui.
+    const [ufsManuais, setUfsManuais] = useState<Record<string, string>>({});
+    const [ufsDigitadas, setUfsDigitadas] = useState<Record<string, string>>({});
+    const [salvandoUfs, setSalvandoUfs] = useState(false);
+    const [mostrarUfs, setMostrarUfs] = useState(false);
 
     const handleResolverUf = async () => {
         setResolvendoUf(true);
@@ -261,12 +269,12 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 tipoInventario: tipoInventario.trim(),
                 cfopCtx,
                 codigoParticipanteConsumidor: codigoConsumidor.trim(),
-                ufPorParticipante: ufResolvida,
+                ufPorParticipante: { ...ufsManuais, ...ufResolvida },
             });
         } catch {
             return null;
         }
-    }, [buscou, filtrados, numeroEmpresaEfiscal, tipoInventario, cfopCtx, codigoConsumidor, ufResolvida]);
+    }, [buscou, filtrados, numeroEmpresaEfiscal, tipoInventario, cfopCtx, codigoConsumidor, ufResolvida, ufsManuais]);
 
     // Evidência da correlação: origem → destino, com o motivo da decisão.
     const correlacao = useMemo(
@@ -294,8 +302,42 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         if (!empresaSelecionada) return;
         carregarCodigosParticipantes(empresaSelecionada.id)
             .then(m => { if (alive) setCodigosPart(m); });
+        setUfsManuais({});
+        setUfsDigitadas({});
+        carregarUfsParticipantes(empresaSelecionada.id)
+            .then(m => { if (alive) setUfsManuais(m); });
         return () => { alive = false; };
     }, [empresaSelecionada?.id]);
+
+    // Participantes que AINDA estão sem UF depois de tudo (XML, base e o que
+    // já foi informado à mão) — é esta lista que trava a geração.
+    const participantesSemUf = useMemo(() => {
+        const out = new Map<string, { cnpjCpf: string; nome: string; notas: number }>();
+        for (const d of filtrados) {
+            const p = participanteDoDoc(d);
+            if (!p || p.uf) continue;
+            if (ufResolvida[p.cnpjCpf] || ufsManuais[p.cnpjCpf]) continue;
+            if (codigosPart[p.cnpjCpf]?.trim()) continue;   // já existe no E-Fiscal: não gera E010
+            const atual = out.get(p.cnpjCpf);
+            if (atual) atual.notas++;
+            else out.set(p.cnpjCpf, { cnpjCpf: p.cnpjCpf, nome: p.nome || '—', notas: 1 });
+        }
+        return Array.from(out.values()).sort((a, b) => b.notas - a.notas);
+    }, [filtrados, ufResolvida, ufsManuais, codigosPart]);
+
+    const handleSalvarUfs = async () => {
+        if (!empresaSelecionada) return;
+        setSalvandoUfs(true);
+        try {
+            const r = await salvarUfsParticipantes(empresaSelecionada.id, ufsDigitadas);
+            if (!r.ok) { onShowToast?.(r.error || 'Falha ao gravar as UFs.'); return; }
+            setUfsManuais(await carregarUfsParticipantes(empresaSelecionada.id));
+            setUfsDigitadas({});
+            onShowToast?.(`${r.gravadas} UF(s) gravadas no De→Para da empresa. Clique em Reconferir.`);
+        } finally {
+            setSalvandoUfs(false);
+        }
+    };
 
     const lerLogEfiscal = async (file: File | null) => {
         if (!file) return;
@@ -924,6 +966,15 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                         {corrigindoEnderecos ? 'Corrigindo…' : '🔧 Corrigir endereços (relê XMLs)'}
                                     </button>
                                 )}
+                                {participantesSemUf.length > 0 && (
+                                    <button
+                                        onClick={() => setMostrarUfs(v => !v)}
+                                        className="px-3 py-2 text-sm bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/50"
+                                        title="Informe a UF na mão para os participantes que nem o XML nem a base resolveram. Fica gravada no De→Para desta empresa."
+                                    >
+                                        {mostrarUfs ? '▲ Fechar UFs' : `✍️ Informar UF (${participantesSemUf.length})`}
+                                    </button>
+                                )}
                                 {(preflight?.bloqueios ?? 0) > 0 && (
                                     <button
                                         onClick={handleResolverUf}
@@ -949,6 +1000,45 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 </button>
                             </div>
                         </div>
+
+                        {mostrarUfs && participantesSemUf.length > 0 && (
+                            <div className="mt-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-900/20 p-3 space-y-2">
+                                <p className="text-xs text-indigo-900 dark:text-indigo-200">
+                                    <strong>Informe a UF destes participantes.</strong> O E-Fiscal recusa o E010 sem
+                                    a UF (campo 10) e as notas caem junto.{' '}
+                                    <strong>Cadastrar dentro do E-Fiscal não resolve aqui</strong> — o app monta o
+                                    E010 com o dado do XML capturado, não lê o cadastro de lá. Se o participante já
+                                    existe no E-Fiscal, o caminho é o <strong>De→Para</strong> (com o código de lá ele
+                                    nem precisa de E010). Fica gravado nesta empresa: só se digita uma vez.
+                                </p>
+                                <div className="max-h-64 overflow-y-auto space-y-1">
+                                    {participantesSemUf.map(p => {
+                                        const v = ufsDigitadas[p.cnpjCpf] ?? '';
+                                        const invalida = v.trim() !== '' && !ufValida(v);
+                                        return (
+                                            <div key={p.cnpjCpf} className="flex items-center gap-2 text-xs">
+                                                <input
+                                                    value={v}
+                                                    onChange={e => setUfsDigitadas(m => ({ ...m, [p.cnpjCpf]: e.target.value.toUpperCase().slice(0, 2) }))}
+                                                    placeholder="UF"
+                                                    className={`w-14 px-2 py-1 rounded border text-center font-mono uppercase bg-white dark:bg-slate-700 ${invalida ? 'border-red-400' : 'border-slate-300 dark:border-slate-600'}`}
+                                                />
+                                                <span className="font-mono">{p.cnpjCpf.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}</span>
+                                                <span className="text-slate-600 dark:text-slate-300 truncate">{p.nome}</span>
+                                                <span className="text-slate-400">· {p.notas} nota(s)</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <button
+                                    onClick={handleSalvarUfs}
+                                    disabled={salvandoUfs || Object.values(ufsDigitadas).every(v => !String(v).trim())}
+                                    className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-40"
+                                >
+                                    {salvandoUfs ? 'Gravando…' : '💾 Gravar UFs e reconferir'}
+                                </button>
+                            </div>
+                        )}
                     </>
                 )}
             </div>
