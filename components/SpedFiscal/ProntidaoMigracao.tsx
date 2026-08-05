@@ -16,7 +16,7 @@ interface Linha {
 interface Resp {
     ok: boolean; error?: string; competencia?: string; lidos?: number;
     linhas?: Linha[]; perguntasEquipe?: string[];
-    resumo?: { comMovimento: number; candidatasPiloto: number; comStSaida: number; comIpiOuIndustria: number; comInterestadual: number; comVendaNaoContribuinte?: number };
+    resumo?: { comMovimento: number; candidatasPiloto: number; comStSaida: number; comIpiOuIndustria: number; comInterestadual: number; comVendaNaoContribuinte?: number | null; vendaNaoContribuinteApurada?: boolean; comCte?: number; comNfse?: number; docsForaDaPonte?: number };
 }
 
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -84,11 +84,34 @@ const ProntidaoMigracao: React.FC<{ onShowToast?: (m: string) => void }> = ({ on
                             {' · '}
                             <span className={(dados.resumo.comVendaNaoContribuinte ?? 0) > 0
                                 ? 'text-amber-700 dark:text-amber-400 font-bold' : ''}>
-                                {dados.resumo.comVendaNaoContribuinte ?? 0} c/ venda a não contribuinte (E310)
+                                {dados.resumo.vendaNaoContribuinteApurada === false
+                                    ? '— venda a não contribuinte (E310): não apurado'
+                                    : `${dados.resumo.comVendaNaoContribuinte ?? 0} c/ venda a não contribuinte (E310)`}
                             </span>
                         </span>
                     )}
                 </div>
+
+                {/* Cobertura documental: o que o CFI captura e a ponte .FML
+                    NUNCA levou ao E-Fiscal (Paulo, 05/08). */}
+                {dados?.resumo && (dados.resumo.docsForaDaPonte ?? 0) > 0 && (
+                    <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 mt-2">
+                        <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                            📦 {dados.resumo.docsForaDaPonte} documento(s) que a ponte .FML NÃO leva ao E-Fiscal
+                        </p>
+                        <p className="text-[11px] text-slate-700 dark:text-slate-300 mt-1">
+                            <b>{dados.resumo.comCte ?? 0}</b> empresa(s) com <b>CT-e</b> e{' '}
+                            <b>{dados.resumo.comNfse ?? 0}</b> com <b>NFS-e</b> capturados nesta competência.
+                            O Exportar SAGE manda só NF-e e NFC-e — se ninguém digita esses documentos lá,
+                            eles não estão na escrituração do E-Fiscal: <b>crédito de frete</b> (CT-e) e{' '}
+                            <b>retenções de serviço</b> (NFS-e) ficam de fora, no mês corrente.
+                        </p>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                            No SPED do CFI eles ENTRAM (bloco D e serviços). Na conferência-espelho do piloto,
+                            essa diferença vai aparecer — e <b>não é erro nosso</b>: é o que faltava lá.
+                        </p>
+                    </div>
+                )}
             </div>
 
             {dados && linhas.length > 0 && (
