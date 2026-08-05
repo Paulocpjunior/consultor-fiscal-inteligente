@@ -1,0 +1,169 @@
+/**
+ * issSpApuracao — apuração do ISS próprio da NFS-e de SÃO PAULO CAPITAL.
+ *
+ * Paulo (05/08): *"devemos habilitar a emissão de ISS pelo CFI"* · *"somente
+ * São Paulo capital"*.
+ *
+ * LIMITE QUE MANDA NO DESENHO: quem gera a guia é a PREFEITURA, no portal da
+ * NFS-e — o próprio CSV do portal traz as colunas "nº da guia" e "data de
+ * quitação da guia". O CFI NÃO inventa número de guia, pela mesma regra do
+ * DARE-SP: número e código de barras são do sistema do fisco. O que o app faz
+ * é apurar o que há a recolher, apontar o que já está quitado e levar a guia
+ * ao cliente pelo rito #293.
+ *
+ * A conta em si é simples e é justamente por isso que precisa de guarda: ISS
+ * RETIDO pelo tomador não é recolhido pelo prestador (Lei 13.701/03 art. 9º) —
+ * somar tudo faria o cliente pagar duas vezes o mesmo imposto.
+ */
+import type { DocumentoFiscal } from '../types';
+
+/** Código IBGE de São Paulo capital — única praça coberta (Paulo, 05/08). */
+export const COD_MUN_SP_CAPITAL = '3550308';
+
+const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
+
+export interface NotaIssSp {
+    id: string;
+    numero: string;
+    data: string;
+    tomador: string;
+    valorServicos: number;
+    /** ISS da nota (devido pelo prestador). */
+    issDevido: number;
+    /** ISS retido pelo tomador — o prestador NÃO recolhe esta parte. */
+    issRetido: number;
+    /** Nº da guia da Prefeitura, quando a nota já foi vinculada a uma. */
+    guia?: string | null;
+    quitadaEm?: string | null;
+    /** ISS não gravado no documento: ausente ≠ zero. */
+    semValorGravado: boolean;
+}
+
+export interface ApuracaoIssSp {
+    competencia: string;
+    notas: NotaIssSp[];
+    totalServicos: number;
+    totalIssDevido: number;
+    totalIssRetido: number;
+    /** O que o prestador recolhe: devido − retido pelo tomador. */
+    aRecolher: number;
+    /** Vencimento do ISS da NFS-e paulistana: dia 10 do mês seguinte. */
+    vencimento: string;
+    /** Notas já vinculadas a uma guia da Prefeitura. */
+    jaComGuia: number;
+    avisos: string[];
+    /** Pode seguir para a emissão da guia? */
+    apta: boolean;
+}
+
+/**
+ * Vencimento do ISS da NFS-e de SP capital: dia 10 do mês seguinte ao da
+ * emissão. Conferido na própria nota (NFS-e 782, emitida 08/07/2026 — "Data de
+ * vencimento do ISS desta NFS-e: 10/08/2026").
+ */
+export function vencimentoIssSp(competencia: string): string {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(competencia || '').trim());
+    if (!m) return '';
+    let ano = Number(m[1]);
+    const mesBase = Number(m[2]);
+    if (mesBase < 1 || mesBase > 12) return '';
+    let mes = mesBase + 1;
+    if (mes > 12) { mes = 1; ano += 1; }
+    return `${ano}-${String(mes).padStart(2, '0')}-10`;
+}
+
+const primeiro = (...vs: Array<unknown>): number | undefined => {
+    for (const v of vs) {
+        if (v === undefined || v === null || v === '') continue;
+        const n = Number(v);
+        if (Number.isFinite(n)) return n;
+    }
+    return undefined;
+};
+
+/**
+ * Apura o ISS próprio da competência a partir das NFS-e EMITIDAS pela empresa.
+ *
+ * @param docs      documentos da competência (a função filtra o que serve)
+ * @param competencia 'AAAA-MM'
+ */
+export function apurarIssSp(docs: DocumentoFiscal[], competencia: string): ApuracaoIssSp {
+    const avisos: string[] = [];
+    const notas: NotaIssSp[] = [];
+
+    for (const d of docs || []) {
+        const tipo = String((d as any).tipoDoc || d.tipo || '');
+        if (!/NFSe/i.test(tipo)) continue;
+        if (d.direcao !== 'saida') continue;                 // ISS próprio é do que a empresa PRESTOU
+        if (CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
+
+        const v: any = d.valores || {};
+        const issDevido = primeiro(v.iss);
+        const retido = primeiro(v.valorIssRetido) ?? (v.issRetido === true ? issDevido : 0);
+        const parte: any = (d as any).tomador || d.destinatario || {};
+
+        notas.push({
+            id: d.id,
+            numero: d.numero || '—',
+            data: String(d.dhEmi || '').slice(0, 10),
+            tomador: parte?.nome || '—',
+            valorServicos: r2(v.baseCalculo ?? d.valorTotal ?? 0),
+            issDevido: r2(issDevido ?? 0),
+            issRetido: r2(retido ?? 0),
+            guia: (d as any).guiaIss || null,
+            quitadaEm: (d as any).guiaIssQuitadaEm || null,
+            semValorGravado: issDevido === undefined,
+        });
+    }
+
+    notas.sort((a, b) => a.data.localeCompare(b.data) || a.numero.localeCompare(b.numero));
+
+    const totalServicos = r2(notas.reduce((t, n) => t + n.valorServicos, 0));
+    const totalIssDevido = r2(notas.reduce((t, n) => t + n.issDevido, 0));
+    const totalIssRetido = r2(notas.reduce((t, n) => t + n.issRetido, 0));
+    // Retido pelo tomador não é recolhido pelo prestador — somar os dois faria
+    // o cliente pagar duas vezes o mesmo imposto.
+    const aRecolher = r2(Math.max(0, totalIssDevido - totalIssRetido));
+    const jaComGuia = notas.filter((n) => !!n.guia).length;
+
+    const semValor = notas.filter((n) => n.semValorGravado).length;
+    if (semValor) {
+        avisos.push(
+            `${semValor} de ${notas.length} nota(s) sem o ISS gravado no documento — ausência NÃO é zero. `
+            + 'Reimporte o CSV/XML da competência antes de emitir a guia.',
+        );
+    }
+    if (totalIssRetido > 0) {
+        avisos.push(
+            `R$ ${totalIssRetido.toFixed(2)} de ISS foi RETIDO pelo tomador e não entra nesta guia — `
+            + 'quem recolhe essa parte é quem contratou o serviço.',
+        );
+    }
+    if (jaComGuia) {
+        avisos.push(`${jaComGuia} nota(s) já vinculada(s) a uma guia da Prefeitura — confira antes de emitir outra.`);
+    }
+    if (notas.length === 0) {
+        avisos.push('Nenhuma NFS-e emitida nesta competência. Sem nota não há ISS a recolher — confirme se a captura do mês já rodou.');
+    }
+
+    return {
+        competencia,
+        notas,
+        totalServicos,
+        totalIssDevido,
+        totalIssRetido,
+        aRecolher,
+        vencimento: vencimentoIssSp(competencia),
+        jaComGuia,
+        avisos,
+        // Emissão só faz sentido com valor a recolher E sem buraco de dado:
+        // guia a menor é o erro que a Prefeitura cobra com multa depois.
+        apta: notas.length > 0 && semValor === 0 && aRecolher > 0,
+    };
+}
+
+/** A empresa está na praça coberta (SP capital)? */
+export function empresaEhSpCapital(dadosFiscais: { codMunIBGE?: string | null } | null | undefined): boolean {
+    return String(dadosFiscais?.codMunIBGE || '').trim() === COD_MUN_SP_CAPITAL;
+}
