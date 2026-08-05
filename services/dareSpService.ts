@@ -144,6 +144,25 @@ export interface EmissaoApiResultado {
     indeterminado?: boolean;
 }
 
+/**
+ * Cadastra o código de serviço da ANTECIPAÇÃO 426-A (admin). O número vem da
+ * lista real do GET /receitas — que viaja junto pra o backend conferir se o
+ * escolhido existe mesmo naquele ambiente.
+ */
+export async function salvarCodigoAntecipacao(p: {
+    codigo: string; codigoReceita?: string | null; sefaz?: string | null;
+    ambiente?: string; receitasSefaz?: unknown[];
+}): Promise<{ ok: boolean; error?: string }> {
+    const res = await fetch('/api/admin/dare/codigo-antecipacao', {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.ok) return { ok: false, error: j.error || `HTTP ${res.status}` };
+    return { ok: true };
+}
+
 export async function emitirDarePelaApi(
     input: DareInput & { ambiente: AmbienteDare; linha06?: string; linha08?: string; confirmoProducao?: boolean },
 ): Promise<EmissaoApiResultado> {
