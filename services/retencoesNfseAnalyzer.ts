@@ -33,6 +33,12 @@ export type LinhaNfseCsv = {
     valorServicos: number;
     /** Coluna "ISS retido" — o ISS que o TOMADOR reteve (≠ "ISS devido"). */
     iss: number;
+    /**
+     * Coluna "ISS devido" — o imposto da nota, recolhido pelo PRESTADOR até o
+     * vencimento (a NFS-e 782 da FRONTINI traz 240,00 com vencimento 10/08).
+     * NÃO é retenção; entra na tela como informação, fora do total retido.
+     */
+    issDevido?: number;
     codServico: string;
     discriminacao: string;
     /**
@@ -66,6 +72,8 @@ export type TributoRetido = {
 
 export type AnaliseRetencoes = {
     iss: TributoRetido;
+    /** ISS da nota a recolher pelo prestador — informativo, não é retenção. */
+    issDevido: number;
     inss: TributoRetido;
     pis: TributoRetido;
     cofins: TributoRetido;
@@ -435,7 +443,10 @@ export function analisarRetencoes(linha: LinhaNfseCsv): AnaliseRetencoes {
     const totalRetido = iss.valor + inss.valor + pis.valor + cofins.valor + csll.valor + irrf.valor;
     const temAlgumaRetencao = iss.retido || inss.retido || pis.retido || cofins.retido || csll.retido || irrf.retido;
 
-    return { iss, inss, pis, cofins, csll, irrf, totalRetido, temAlgumaRetencao };
+    return {
+        iss, inss, pis, cofins, csll, irrf, totalRetido, temAlgumaRetencao,
+        issDevido: Number(linha.issDevido || 0),
+    };
 }
 
 // ─── Parser do CSV NFSe SP ───────────────────────────────────────────────────
@@ -531,6 +542,7 @@ export function parseCsvNfseSp(texto: string): LinhaNfseCsv[] {
             h => h.includes('iss') && h.includes('retid'),
             h => h === 'iss',
         ),
+        issDevido: achar(h => h.includes('iss') && h.includes('devid')),
         codServico: achar(h => (h.includes('cód') || h.includes('cod')) && h.includes('serv'), h => h.includes('cód') || h.includes('cod')),
         discriminacao: achar(h => h.startsWith('discrim'), h => h.includes('descri'), h => h.includes('serviço prestado') || h.includes('servico prestado')),
         // Colunas dedicadas de retenção federal (cabeçalho real do portal).
@@ -545,7 +557,7 @@ export function parseCsvNfseSp(texto: string): LinhaNfseCsv[] {
     // `direcao` também é opcional: o portal exporta emitidas e recebidas em
     // ARQUIVOS separados, então não existe coluna de direção — cobrar isso
     // seria um alerta que nunca some.
-    const OPCIONAIS = new Set(['direcao', 'colPis', 'colCofins', 'colInss', 'colIr', 'colCsll']);
+    const OPCIONAIS = new Set(['direcao', 'issDevido', 'colPis', 'colCofins', 'colInss', 'colIr', 'colCsll']);
 
     const ROTULOS: Record<string, string> = {
         direcao: 'Direção', numero: 'Número', data: 'Data',
@@ -575,6 +587,7 @@ export function parseCsvNfseSp(texto: string): LinhaNfseCsv[] {
             tomadorNome: cols[idx.tomadorNome] || '',
             valorServicos: parseValorBR(cols[idx.valorServicos] || '0'),
             iss: parseValorBR(cols[idx.iss] || '0'),
+            issDevido: idx.issDevido >= 0 ? parseValorBR(cols[idx.issDevido] || '0') : undefined,
             codServico: cols[idx.codServico] || '',
             discriminacao: cols[idx.discriminacao] || '',
             colPis: idx.colPis >= 0 ? parseValorBR(cols[idx.colPis] || '0') : undefined,

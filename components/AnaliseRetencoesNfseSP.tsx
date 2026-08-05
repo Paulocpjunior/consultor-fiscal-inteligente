@@ -67,6 +67,28 @@ async function lerTextoCsv(file: File): Promise<string> {
     }
 }
 
+/**
+ * ISS DEVIDO da nota — informativo, FORA do total retido.
+ *
+ * Paulo gostou de ver o ISS na tela ("apareceu o ISS legal"), mas o valor
+ * que aparecia vinha da coluna "ISS devido": é o imposto que o PRESTADOR
+ * recolhe até o vencimento (a NFS-e 782 traz 240,00 vencendo 10/08), não
+ * algo que o tomador reteve. Somar isso ao "Total retido" seria contar como
+ * retenção um dinheiro que ninguém reteve — então ele aparece em cinza, ao
+ * lado, e não entra na conta.
+ */
+function badgeIssDevido(valor: number | undefined) {
+    if (!valor || valor <= 0) return null;
+    return (
+        <span
+            className="px-1.5 py-0.5 rounded text-[10px] font-semibold border bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600"
+            title="ISS da nota, a recolher pelo prestador. NÃO é retenção — não entra no total retido."
+        >
+            ISS devido {formatBRL(valor)}
+        </span>
+    );
+}
+
 const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
     const [linhas, setLinhas] = useState<LinhaAnalisada[]>([]);
     const [filtro, setFiltro] = useState<'todas' | 'comRetencao' | 'semRetencao' | 'inconsistencias'>('comRetencao');
@@ -415,9 +437,13 @@ const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
                                                                     {LABEL_TRIBUTO[t]} {formatBRL(l.analise[t].valor)}
                                                                 </span>
                                                             ))}
+                                                            {badgeIssDevido(l.analise.issDevido)}
                                                         </div>
                                                     ) : (
-                                                        <span className="text-gray-400 text-[10px]">—</span>
+                                                        <div className="flex flex-wrap gap-1 items-center">
+                                                            <span className="text-gray-400 text-[10px]">—</span>
+                                                            {badgeIssDevido(l.analise.issDevido)}
+                                                        </div>
                                                     )}
                                                 </td>
                                                 <td className="px-2 py-2 text-right font-mono font-semibold">
