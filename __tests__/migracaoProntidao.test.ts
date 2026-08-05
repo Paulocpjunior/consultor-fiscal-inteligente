@@ -48,10 +48,69 @@ describe('EC 87/15 — venda interestadual a NÃO CONTRIBUINTE (E310/E316)', () 
         expect(r.linhas.find(l => l.empresaId === 'a')!.saidasNaoContribuinte).toBe(0);
     });
 
-    it('carteira sem 6107/6108 = zero — é o dado que autoriza DESCARTAR o bloco', () => {
-        const r = montarProntidaoMigracao([doc('a'), doc('b')] as any, EMP as any);
+    it('carteira COM itens e sem 6107/6108 = zero — autoriza DESCARTAR o bloco', () => {
+        const r = montarProntidaoMigracao(
+            [comCfop('a', '5102'), comCfop('b', '6102')] as any, EMP as any,
+        );
         expect(r.resumo.comVendaNaoContribuinte).toBe(0);
+        expect(r.resumo.vendaNaoContribuinteApurada).toBe(true);
         expect(r.perguntasEquipe.join(' ')).toMatch(/ZERO empresa marcada/);
+    });
+
+    it('SEM itens na leitura é "NÃO APURADO" (null), NUNCA zero', () => {
+        // O bug que isto impede: a rota busca com projeção e, se `itens` não
+        // vier, o detector diria "ninguém faz essa operação" — e o bloco seria
+        // descartado com base num número que só significa "não se olhou".
+        const r = montarProntidaoMigracao([doc('a'), doc('b')] as any, EMP as any);
+        expect(r.resumo.comVendaNaoContribuinte).toBeNull();
+        expect(r.resumo.vendaNaoContribuinteApurada).toBe(false);
+        expect(r.linhas.find(l => l.empresaId === 'a')!.saidasNaoContribuinte).toBeNull();
+        // E não pode bloquear piloto por um sinal que não foi medido.
+        expect(r.linhas.find(l => l.empresaId === 'a')!.candidataPiloto).toBe(true);
+    });
+});
+
+describe('cobertura documental — o que a ponte .FML NÃO leva', () => {
+    // Paulo, 05/08: "o que mais o e-fiscal importa hoje? nada". Se nada mais
+    // entra lá e a ponte só manda NF-e/NFC-e, então CT-e (crédito de frete) e
+    // NFS-e (retenções) não estão no livro do E-Fiscal — no mês corrente.
+    const docTipo = (id: string, over: any) => doc(id, over);
+
+    it('conta CT-e e NFS-e separados e marca o que fica fora da ponte', () => {
+        const r = montarProntidaoMigracao([
+            docTipo('a', { modelo: '55' }),
+            docTipo('a', { modelo: '65' }),
+            docTipo('a', { modelo: '57' }),                    // CT-e
+            docTipo('a', { modelo: null, tipoDoc: 'NFSe' }),   // NFS-e
+        ] as any, EMP as any);
+        const a = r.linhas.find(l => l.empresaId === 'a')!;
+        expect(a.porTipo).toMatchObject({ NFe: 1, NFCe: 1, CTe: 1, NFSe: 1 });
+        expect(a.foraDaPonte).toBe(2);                          // CT-e + NFS-e
+        expect(r.resumo.comCte).toBe(1);
+        expect(r.resumo.comNfse).toBe(1);
+        expect(r.resumo.docsForaDaPonte).toBe(2);
+    });
+
+    it('vira ATENÇÃO nomeando o que o E-Fiscal não recebeu', () => {
+        const r = montarProntidaoMigracao([
+            docTipo('a', { modelo: '57' }), docTipo('a', { modelo: '57' }),
+        ] as any, EMP as any);
+        const txt = r.linhas.find(l => l.empresaId === 'a')!.atencoes.join(' ');
+        expect(txt).toMatch(/2 documento\(s\) que a ponte .FML NÃO leva/);
+        expect(txt).toMatch(/2 CT-e/);
+    });
+
+    it('resumo de CT-e/NFS-e é ausente ≠ zero só quando não há documento', () => {
+        const r = montarProntidaoMigracao([docTipo('a', { modelo: '55' })] as any, EMP as any);
+        expect(r.resumo.comCte).toBe(0);       // olhamos e não há — zero legítimo
+        expect(r.linhas.find(l => l.empresaId === 'a')!.foraDaPonte).toBe(0);
+    });
+
+    it('resumo do tipo vem do MODELO (fonte forte), não só do campo tipo', () => {
+        const r = montarProntidaoMigracao([
+            docTipo('a', { modelo: '57', tipoDoc: 'NFe' }),   // modelo manda
+        ] as any, EMP as any);
+        expect(r.linhas.find(l => l.empresaId === 'a')!.porTipo.CTe).toBe(1);
     });
 });
 

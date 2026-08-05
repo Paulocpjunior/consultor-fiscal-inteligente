@@ -11,8 +11,12 @@ export interface ProntidaoLinha {
     stEntradas: number;
     ipiSaidas: number;
     entradasInterestaduais: number;
-    /** Vendas interestaduais a não contribuinte (EC 87/15 → E310/E316). */
-    saidasNaoContribuinte: number;
+    /** Vendas interestaduais a não contribuinte (EC 87/15 → E310/E316).
+     *  null = NÃO APURADO (a leitura não trouxe itens) — nunca confundir com 0. */
+    saidasNaoContribuinte: number | null;
+    /** Documentos que a ponte .FML não leva ao E-Fiscal (CT-e + NFS-e). */
+    foraDaPonte: number;
+    porTipo: Record<string, number>;
     bloqueios: string[];
     atencoes: string[];
     candidataPiloto: boolean;
@@ -26,7 +30,11 @@ export interface ProntidaoResultado {
         comStSaida: number;
         comIpiOuIndustria: number;
         comInterestadual: number;
-        comVendaNaoContribuinte: number;
+        comVendaNaoContribuinte: number | null;
+        vendaNaoContribuinteApurada: boolean;
+        comCte: number;
+        comNfse: number;
+        docsForaDaPonte: number;
     };
     perguntasEquipe: string[];
 }

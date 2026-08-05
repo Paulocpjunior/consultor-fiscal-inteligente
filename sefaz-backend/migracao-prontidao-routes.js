@@ -52,9 +52,12 @@ router.get('/prontidao-migracao', requireAuth, async (req, res) => {
         const snaps = await fetchAllDocs(
             db.collection('documentos_fiscais')
                 .where('competencia', '==', competencia)
-                .select('empresaId', 'direcao', 'tpNF', 'status', 'modelo',
+                // `tipoDoc` classifica CT-e/NFS-e (cobertura documental) e
+                // `itens` é o que dá o CFOP 6107/6108 do E310 — sem ele o
+                // detector NÃO reporta zero, reporta "não apurado".
+                .select('empresaId', 'direcao', 'tpNF', 'status', 'modelo', 'tipoDoc',
                     'totais.vST', 'totais.vBCST', 'totais.vIPI',
-                    'emitente.cnpjCpf', 'emitente.uf'),
+                    'emitente.cnpjCpf', 'emitente.uf', 'itens'),
             { label: `prontidao-migracao ${competencia}`, maxDocs: 80000 },
         );
         const docs = snaps.map((s) => ({ ...s.data() }));
