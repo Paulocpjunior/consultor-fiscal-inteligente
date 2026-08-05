@@ -44,6 +44,29 @@ interface Props {
     currentUser?: User | null;
 }
 
+/**
+ * Lê o CSV respeitando a codificação do arquivo.
+ *
+ * O export do portal vem em WINDOWS-1252. Decodificado como UTF-8, todo
+ * acento vira "\uFFFD": o cabeçalho chega como "raz�o social do tomador",
+ * "c�digo do servi�o", "discrimina��o dos servi�os" — e aí NENHUM
+ * casamento com acento funciona (caso FRONTINI, 05/08: 5 colunas "não
+ * reconhecidas" que existiam no arquivo).
+ *
+ * Estratégia: tenta UTF-8; se aparecer caractere de substituição, refaz em
+ * windows-1252. Arquivo realmente UTF-8 passa intacto.
+ */
+async function lerTextoCsv(file: File): Promise<string> {
+    const buf = await file.arrayBuffer();
+    const utf8 = new TextDecoder('utf-8').decode(buf);
+    if (!utf8.includes('\uFFFD')) return utf8;
+    try {
+        return new TextDecoder('windows-1252').decode(buf);
+    } catch {
+        return utf8;
+    }
+}
+
 const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
     const [linhas, setLinhas] = useState<LinhaAnalisada[]>([]);
     const [filtro, setFiltro] = useState<'todas' | 'comRetencao' | 'semRetencao' | 'inconsistencias'>('comRetencao');
@@ -81,7 +104,7 @@ const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
         setErro(null);
         setNomeArquivo(file.name);
         try {
-            const txt = await file.text();
+            const txt = await lerTextoCsv(file);
             const parsed = parseCsvNfseSp(txt);
             // Coluna não reconhecida saía como campo VAZIO, em silêncio — a
             // tela mostrava Nº/Data/Tomador em branco e ninguém sabia por quê

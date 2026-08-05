@@ -31,9 +31,24 @@ export type LinhaNfseCsv = {
     tomadorCnpj: string;
     tomadorNome: string;
     valorServicos: number;
+    /** Coluna "ISS retido" — o ISS que o TOMADOR reteve (≠ "ISS devido"). */
     iss: number;
     codServico: string;
     discriminacao: string;
+    /**
+     * Retenções federais em COLUNA PRÓPRIA do CSV do portal (cabeçalho real,
+     * conferido em 05/08: "pis/pasep | cofins | inss | ir | csll").
+     *
+     * Descoberta que resolveu o caso FRONTINI: o app procurava esses valores
+     * no TEXTO da discriminação porque supunha que não havia coluna. Havia —
+     * e é dado estruturado, muito mais confiável que casar padrão em texto
+     * livre. O texto vira só fallback pra export que não traga as colunas.
+     */
+    colPis?: number;
+    colCofins?: number;
+    colInss?: number;
+    colIr?: number;
+    colCsll?: number;
 };
 
 export type TributoRetido = {
@@ -395,16 +410,27 @@ function pareceAliquota(v: number): boolean {
 export function analisarRetencoes(linha: LinhaNfseCsv): AnaliseRetencoes {
     const disc = linha.discriminacao || '';
 
-    // ISS vem na coluna própria (> 0 = retido).
+    // ISS retido vem na coluna própria (> 0 = retido pelo tomador).
     const iss: TributoRetido = linha.iss > 0
-        ? { retido: true, valor: linha.iss, trechoEvidencia: `coluna ISS = R$ ${linha.iss.toFixed(2)}` }
+        ? { retido: true, valor: linha.iss, trechoEvidencia: `coluna "ISS retido" = R$ ${linha.iss.toFixed(2)}` }
         : { retido: false, valor: 0 };
 
-    const irrf = detectarTributoEmTexto(disc, /\bIRRF\b/);
-    const pis = detectarTributoEmTexto(disc, /\bPIS\b/);
-    const cofins = detectarTributoEmTexto(disc, /\bCOFINS\b/);
-    const csll = detectarTributoEmTexto(disc, /\bCSLL\b/);
-    const inss = detectarTributoEmTexto(disc, /\bINSS\b/);
+    /**
+     * COLUNA vence TEXTO. A coluna é dado estruturado do portal; o texto é
+     * casamento de padrão em campo livre, que erra dos dois jeitos (não acha
+     * ou acha alíquota). Só cai no texto quando o export não traz a coluna.
+     */
+    const porColuna = (valor: number | undefined, rotulo: string): TributoRetido | null => {
+        if (valor === undefined || valor === null) return null;
+        if (valor > 0) return { retido: true, valor, trechoEvidencia: `coluna "${rotulo}" = R$ ${valor.toFixed(2)}` };
+        return { retido: false, valor: 0, motivo: `coluna "${rotulo}" = 0,00` };
+    };
+
+    const irrf = porColuna(linha.colIr, 'ir') || detectarTributoEmTexto(disc, /\bIRRF\b/);
+    const pis = porColuna(linha.colPis, 'pis/pasep') || detectarTributoEmTexto(disc, /\bPIS\b/);
+    const cofins = porColuna(linha.colCofins, 'cofins') || detectarTributoEmTexto(disc, /\bCOFINS\b/);
+    const csll = porColuna(linha.colCsll, 'csll') || detectarTributoEmTexto(disc, /\bCSLL\b/);
+    const inss = porColuna(linha.colInss, 'inss') || detectarTributoEmTexto(disc, /\bINSS\b/);
 
     const totalRetido = iss.valor + inss.valor + pis.valor + cofins.valor + csll.valor + irrf.valor;
     const temAlgumaRetencao = iss.retido || inss.retido || pis.retido || cofins.retido || csll.retido || irrf.retido;
@@ -498,10 +524,28 @@ export function parseCsvNfseSp(texto: string): LinhaNfseCsv[] {
             h => h.includes('valor') && h.includes('total'),
             h => h === 'valor',
         ),
-        iss: achar(h => h === 'iss', h => h.includes('iss') && !h.includes('retid') && !h.includes('aliq') && !h.includes('alíq'), h => h.includes('iss') && h.includes('retid')),
+        // "ISS retido" é o que o TOMADOR reteve. "ISS devido" é o imposto da
+        // nota, que o PRESTADOR recolhe — pôr esse numa análise de RETENÇÃO
+        // inflaria o total com dinheiro que ninguém reteve.
+        iss: achar(
+            h => h.includes('iss') && h.includes('retid'),
+            h => h === 'iss',
+        ),
         codServico: achar(h => (h.includes('cód') || h.includes('cod')) && h.includes('serv'), h => h.includes('cód') || h.includes('cod')),
         discriminacao: achar(h => h.startsWith('discrim'), h => h.includes('descri'), h => h.includes('serviço prestado') || h.includes('servico prestado')),
+        // Colunas dedicadas de retenção federal (cabeçalho real do portal).
+        colPis: achar(h => h.startsWith('pis')),
+        colCofins: achar(h => h === 'cofins' || h.startsWith('cofins')),
+        colInss: achar(h => h === 'inss'),
+        colIr: achar(h => h === 'ir' || h === 'irrf'),
+        colCsll: achar(h => h === 'csll'),
     };
+    // As colunas federais são OPCIONAIS: export antigo não as trazia e o texto
+    // segue valendo. Só as obrigatórias entram no aviso de "não reconheci".
+    // `direcao` também é opcional: o portal exporta emitidas e recebidas em
+    // ARQUIVOS separados, então não existe coluna de direção — cobrar isso
+    // seria um alerta que nunca some.
+    const OPCIONAIS = new Set(['direcao', 'colPis', 'colCofins', 'colInss', 'colIr', 'colCsll']);
 
     const ROTULOS: Record<string, string> = {
         direcao: 'Direção', numero: 'Número', data: 'Data',
@@ -513,7 +557,7 @@ export function parseCsvNfseSp(texto: string): LinhaNfseCsv[] {
     ultimoDiagnosticoCsv = {
         cabecalho: header,
         colunasNaoReconhecidas: Object.entries(idx)
-            .filter(([, v]) => v < 0)
+            .filter(([k, v]) => v < 0 && !OPCIONAIS.has(k))
             .map(([k]) => ROTULOS[k] || k),
     };
 
@@ -533,6 +577,11 @@ export function parseCsvNfseSp(texto: string): LinhaNfseCsv[] {
             iss: parseValorBR(cols[idx.iss] || '0'),
             codServico: cols[idx.codServico] || '',
             discriminacao: cols[idx.discriminacao] || '',
+            colPis: idx.colPis >= 0 ? parseValorBR(cols[idx.colPis] || '0') : undefined,
+            colCofins: idx.colCofins >= 0 ? parseValorBR(cols[idx.colCofins] || '0') : undefined,
+            colInss: idx.colInss >= 0 ? parseValorBR(cols[idx.colInss] || '0') : undefined,
+            colIr: idx.colIr >= 0 ? parseValorBR(cols[idx.colIr] || '0') : undefined,
+            colCsll: idx.colCsll >= 0 ? parseValorBR(cols[idx.colCsll] || '0') : undefined,
         });
     }
     return out;
