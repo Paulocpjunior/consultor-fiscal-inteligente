@@ -93,23 +93,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   SUP (só "ISS Retido"), então a equipe marcava retenção pra tirar o ISS do
   DAS e a declaração saía com natureza falsa ("o tomador reteve"). Feito:
   marcação **ISS fixo (SUP)** na tela (excludente com ISS Retido),
-  `issForaDoDas` no mapper e aviso na confirmação. FALTA SÓ O NÚMERO da
-  atividade na tabela do SERPRO — `ID_ATIVIDADE_ISS_FIXO_CONTABIL` (null hoje,
-  em pgdasMapper). Enquanto null, SUP viaja como 15/12/18 (valor certo,
-  natureza a corrigir). A doc do SERPRO e o manual da Receita são BLOQUEADOS
-  pela política de rede do ambiente — então o número sai da FONTE QUE NÃO
-  MENTE: botão **🔎 Atividades declaradas** na tela do Simples (rota
-  `/das/atividades-declaradas`, CONSULTIMADECREC14, consulta pura) lê os ids de
-  uma declaração já aceita da própria empresa e destaca o que o app ainda não
-  monta. Mesmo princípio do mês-modelo do MIT: NUNCA chutar código de tributo.
-  Extrator puro `pgdas-atividades-declaradas.js` (varredura profunda — o shape
-  do SERPRO varia; 9 testes). **Enquanto o código não entra, a emissão do DAS é
-  RECUSADA** pra receita marcada SUP (`bloqueiosDoPayload` + `_bloqueios` no
-  payload, revalidado no `emitirDasRegular` do backend): Paulo viu o extrato
-  saindo como "com retenção/substituição tributária de ISS" e cortou —
-  "leva errado pro SIMPLES". Entrega ao PGDAS-D não se desfaz: sem o código, a
-  competência vai pelo e-CAC. Ids já mapeados: 1/2/3 comércio, 4/5/6 indústria,
-  11/12 Anexo V, 14/15 Anexo III, 17/18 Anexo IV, 29/30/31 exterior (V/III/IV).
+  `issForaDoDas` no mapper e aviso na confirmação. **RESOLVIDO 05/08: o código
+  é o 9**, cadastrado pelo Paulo e com DAS gerado ("SUP - já foi deu certo já
+  gerei DAS"). O número saiu da FONTE QUE NÃO MENTE — input escondido do e-CAC
+  (`value="44388152000189-9"`), corroborado pela ordem da lista (7/8 locação,
+  9 SUP, 10-12 fator r, 13-15 Anexo III) — e NUNCA de chute: a doc do SERPRO e
+  o manual da Receita são bloqueados pela rede do ambiente. O código mora no
+  BANCO (`pgdas_atividades_codigos`, cadastro pelo botão ⚙️ Código ISS fixo na
+  ficha do Simples), não numa constante — foi essa decisão que permitiu
+  destravar sem deploy. `ID_ATIVIDADE_ISS_FIXO_CONTABIL` em pgdasMapper segue
+  null de propósito: a fonte é o banco.
+  TRAVA QUE CONTINUA VALENDO: sem código cadastrado a emissão do DAS é RECUSADA
+  pra receita marcada SUP (`bloqueiosDoPayload` + `_bloqueios` no payload,
+  revalidado no `emitirDasRegular`) — Paulo viu o extrato saindo como "com
+  retenção/substituição tributária de ISS" e cortou ("leva errado pro
+  SIMPLES"). Entrega ao PGDAS-D não se desfaz. Conferência pendente de olho
+  humano: o extrato do PGDAS-D da competência deve dizer ISS fixo, não "com
+  retenção" — o valor do DAS é o MESMO nas duas rotas, então só o extrato
+  denuncia. Ferramenta de conferência: botão **🔎 Atividades declaradas** (rota
+  `/das/atividades-declaradas`, CONSULTIMADECREC14, consulta pura; extrator
+  `pgdas-atividades-declaradas.js`, 9 testes) lê os ids de uma declaração já
+  aceita e destaca o que o app não monta. Ids mapeados: 1/2/3 comércio, 4/5/6
+  indústria, **9 ISS fixo (SUP)**, 11/12 Anexo V, 14/15 Anexo III, 17/18 Anexo
+  IV, 29/30/31 exterior (V/III/IV).
 - **PRESUMIDO tem os DOIS períodos e o mês decide** (colaborador via Paulo,
   03/08 — caso CLINICA MANTOAN 07/2026): IRPJ/CSLL são TRIMESTRAIS (Lei
   9.430/96 art. 1º) e PIS/COFINS/IPI são MENSAIS, então a ficha precisa dos
