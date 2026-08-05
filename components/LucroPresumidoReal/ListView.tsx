@@ -12,6 +12,7 @@
 import React, { useMemo, useState } from 'react';
 import type { LucroPresumidoEmpresa, User } from '../../types';
 import { PlusIcon, TrashIcon } from '../Icons';
+import { empresaBateBusca, prefixoCodCliente } from '../../services/buscaEmpresa';
 import LoteDareModal from './LoteDareModal';
 import { previewMesclagem, executarMesclagem, descreverResumo } from '../../services/empresasMergeService';
 
@@ -66,16 +67,12 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
             setMesclando(null);
         }
     };
-    const empresasFiltradas = useMemo(() => {
-        const termo = busca.trim().toLowerCase();
-        if (!termo) return empresas;
-        const termoCnpj = termo.replace(/\D/g, '');
-        return empresas.filter(e => {
-            const nome = (e.nome || '').toLowerCase();
-            const cnpj = (e.cnpj || '').replace(/\D/g, '');
-            return nome.includes(termo) || (termoCnpj !== '' && cnpj.includes(termoCnpj));
-        });
-    }, [empresas, busca]);
+    // Régua ÚNICA (código, nome ou CNPJ) — a mesma do painel Simples e do
+    // seletor das telas de XML.
+    const empresasFiltradas = useMemo(
+        () => empresas.filter(e => empresaBateBusca(busca, e)),
+        [empresas, busca],
+    );
 
     // Duplicatas por CNPJ NORMALIZADO: mesma empresa cadastrada 2+ vezes (em
     // formatos diferentes o olho não pega). Badge vermelho pro admin limpar
@@ -122,7 +119,7 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                         type="text"
                         value={busca}
                         onChange={(ev) => setBusca(ev.target.value)}
-                        placeholder="Buscar empresa por nome ou CNPJ..."
+                        placeholder="Buscar por código, nome ou CNPJ..."
                         className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     />
                 </div>
@@ -142,6 +139,11 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                         {empresasFiltradas.map(emp => (
                             <tr key={emp.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                                 <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">
+                                    {prefixoCodCliente(emp) && (
+                                        <span className="font-mono text-[11px] font-bold text-blue-600 dark:text-blue-400 mr-1">
+                                            {prefixoCodCliente(emp)}
+                                        </span>
+                                    )}
                                     {emp.nome}
                                     {cnpjsDuplicados.has(String(emp.cnpj || '').replace(/\D/g, '')) && (() => {
                                         // Responde "qual excluir?" com dado: quem tem 0 fichas é o
