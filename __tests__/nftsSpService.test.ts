@@ -121,7 +121,13 @@ describe('selecionarCodigoSp', () => {
     });
     it('NUNCA seleciona codigo rejeitado empiricamente pela PMSP (erro 310)', () => {
         const { CODIGOS_REJEITADOS_PMSP } = jest.requireActual('../services/nftsCatalogoSp');
-        expect(CODIGOS_REJEITADOS_PMSP.size).toBe(3);
+        // A lista CRESCE a cada recusa real da PMSP (3 em 07/2026, +02658 em
+        // 05/08). Fixar o tamanho fazia o teste quebrar justamente quando o
+        // app aprendia — o que importa é que nenhum deles seja escolhido.
+        expect(CODIGOS_REJEITADOS_PMSP.size).toBeGreaterThanOrEqual(3);
+        for (const c of ['02682', '02798', '02917', '02658']) {
+            expect(CODIGOS_REJEITADOS_PMSP.has(c)).toBe(true);
+        }
         for (const cod of CODIGOS_REJEITADOS_PMSP) {
             const r = selecionarCodigoSp('suporte tecnico em informatica e licenciamento de software', '', cod);
             if (r) expect(CODIGOS_REJEITADOS_PMSP.has(r.codigo)).toBe(false);

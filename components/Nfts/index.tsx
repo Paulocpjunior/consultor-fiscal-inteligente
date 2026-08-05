@@ -15,6 +15,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { User } from '../../types';
 import { getEmpresasParaPerfilCliente, type EmpresaPerfilOption } from '../../services/xmlFiscalService';
 import { listarEmpresasPerfilBackend } from '../../services/empresasPerfilService';
+import { carregarRecusasNfts } from '../../services/nftsRecusasService';
 import { extrairTextoPdf, parseNftsFromText, montarNotaDeGemini } from '../../services/nftsPdfParserService';
 import { extractNftsDataFromPdf } from '../../services/geminiService';
 import {
@@ -213,10 +214,19 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     const removerNota = (idx: number) => setNotas(prev => prev.filter((_, i) => i !== idx));
 
+    // Recusas aprendidas depois do deploy (banco): somam à lista fixa antes
+    // de validar o lote — bloquear um código recusado não espera entrega.
+    const [recusadas, setRecusadas] = useState<Set<string>>(new Set());
+    useEffect(() => {
+        let vivo = true;
+        carregarRecusasNfts().then(r => { if (vivo) setRecusadas(r); });
+        return () => { vivo = false; };
+    }, []);
+
     const { mantidas, retidas } = useMemo(() => separarNotasIssRetido(notas), [notas]);
     const notasComErro = useMemo(
-        () => mantidas.filter(n => validarNotaNfts(n).erros.length > 0),
-        [mantidas],
+        () => mantidas.filter(n => validarNotaNfts(n, recusadas).erros.length > 0),
+        [mantidas, recusadas],
     );
     const totalLote = useMemo(() => mantidas.reduce((acc, n) => acc + n.valorCentavos, 0), [mantidas]);
 
@@ -349,7 +359,7 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         <tbody>
                             {notas.map((n, idx) => {
                                 if (n.retido === '1') return null;
-                                const val = validarNotaNfts(n);
+                                const val = validarNotaNfts(n, recusadas);
                                 const comErro = val.erros.length > 0;
                                 return (
                                     <React.Fragment key={`${n.arquivo}-${n.pagina}-${idx}`}>

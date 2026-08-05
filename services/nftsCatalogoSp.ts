@@ -804,7 +804,17 @@ export const CODIGOS_ENCERRADOS_2025: Set<string> = new Set([
  * codigos de informatica de 01/01/2026. Bloqueados ate confirmacao do
  * codigo vigente na tela de emissao online.
  */
-export const CODIGOS_REJEITADOS_PMSP: Set<string> = new Set(['02682', '02798', '02917']);
+export const CODIGOS_REJEITADOS_PMSP: Set<string> = new Set([
+    '02682', '02798', '02917',
+    // 05/08/2026 — importação real da WALDESA (Paulo): erro 310 no 02658
+    // (item 1.01, "Análise e desenvolvimento de sistemas"). MESMA família
+    // dos três acima: todos são códigos de informática do grupo 1.x, e todos
+    // têm um "irmão" no mesmo item (02682→02684, 02798→02800, 02917→02919,
+    // 02658→02660). O padrão reforça a reformulação de 01/01/2026 — mas a
+    // alíquota do irmão PODE SER OUTRA, então o app SUGERE e nunca troca
+    // sozinho (ver `substitutosDoItem`).
+    '02658',
+]);
 
 export const CATALOGO_POR_CODIGO: Map<string, CatalogoNftsRow[]> = new Map();
 export const CATALOGO_POR_ITEM: Map<string, CatalogoNftsRow[]> = new Map();

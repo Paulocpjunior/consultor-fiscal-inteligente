@@ -248,9 +248,54 @@ export function selecionarCodigoSp(
     return candidatos.reduce((best, r) => (score(r) > score(best) ? r : best), candidatos[0]);
 }
 
+/**
+ * Códigos do MESMO item que continuam vigentes — candidatos a substituir um
+ * recusado. SUGESTÃO, nunca troca automática: os "irmãos" da reformulação de
+ * 2026 costumam ter ALÍQUOTA DIFERENTE (02917 é 3%, o irmão 02919 é 2,90%),
+ * e trocar sozinho mudaria o imposto do cliente. Quem confirma é a tela de
+ * emissão online da PMSP.
+ */
+export function substitutosDoItem(
+    codigo: string,
+    bloqueadosExtra: Set<string> | string[] = [],
+): Array<{ codigo: string; aliquota: string; descricao: string }> {
+    const cod = soDigitos(codigo).padStart(5, '0').slice(-5);
+    const linhas = CATALOGO_POR_CODIGO.get(cod);
+    if (!linhas?.length) return [];
+    const extra = bloqueadosExtra instanceof Set ? bloqueadosExtra : new Set(bloqueadosExtra);
+    const bloqueado = (c: string) =>
+        c === cod || CODIGOS_ENCERRADOS_2025.has(c) || CODIGOS_REJEITADOS_PMSP.has(c) || extra.has(c);
+    const vistos = new Set<string>();
+    const out: Array<{ codigo: string; aliquota: string; descricao: string }> = [];
+    for (const base of linhas) {
+        for (const r of CATALOGO_POR_ITEM.get(base.item) ?? []) {
+            if (r.natureza !== base.natureza || bloqueado(r.codigo) || vistos.has(r.codigo)) continue;
+            vistos.add(r.codigo);
+            out.push({ codigo: r.codigo, aliquota: r.aliquota, descricao: r.descricao });
+        }
+    }
+    return out;
+}
+
+/** "02660 (5,00%)" — como o substituto aparece pro colaborador. */
+export function descreverSubstitutos(
+    subs: Array<{ codigo: string; aliquota: string }>,
+): string {
+    // Vírgula decimal: o texto é lido pelo colaborador, não por máquina.
+    return subs.map(s => `${s.codigo} (${(Number(s.aliquota) / 100).toFixed(2).replace('.', ',')}%)`).join(', ');
+}
+
 // ─── Validacao fiscal ───────────────────────────────────────────────────────
 
-export function validarNotaNfts(n: NftsNota): { erros: string[]; avisos: string[] } {
+export function validarNotaNfts(
+    n: NftsNota,
+    /**
+     * Códigos recusados aprendidos DEPOIS do último deploy (vêm do banco).
+     * A lista fixa cobre o que já sabíamos; esta cobre a recusa de hoje, sem
+     * esperar entrega — é a lição do código do ISS fixo.
+     */
+    recusadosExtra: Set<string> = new Set(),
+): { erros: string[]; avisos: string[] } {
     const erros: string[] = [];
     const avisos: string[] = [];
     if (!validarCnpj(n.cnpj)) erros.push('CNPJ do prestador invalido');
@@ -261,8 +306,17 @@ export function validarNotaNfts(n: NftsNota): { erros: string[]; avisos: string[
         erros.push('codigo de servico ausente ou invalido');
     } else if (CODIGOS_ENCERRADOS_2025.has(n.codigo)) {
         erros.push(`codigo de servico ${n.codigo} ENCERRADO em 31/12/2025 (IN SF/SUREM 3/2026) - substituir pelo codigo vigente`);
-    } else if (CODIGOS_REJEITADOS_PMSP.has(n.codigo)) {
-        erros.push(`codigo ${n.codigo} REJEITADO pela PMSP na importacao (erro 310, teste 07/2026) - confirmar codigo vigente na tela de emissao da NFTS`);
+    } else if (CODIGOS_REJEITADOS_PMSP.has(n.codigo) || recusadosExtra.has(n.codigo)) {
+        const subs = substitutosDoItem(n.codigo, recusadosExtra);
+        erros.push(
+            `codigo ${n.codigo} REJEITADO pela PMSP (erro 310 "invalido ou nao permitido") - `
+            + (subs.length
+                ? `no MESMO item existem: ${descreverSubstitutos(subs)}. CONFIRA a aliquota na tela de `
+                  + 'emissao online antes de trocar: os codigos irmaos da reformulacao de 2026 nem sempre '
+                  + 'tem a mesma aliquota.'
+                : 'nao ha outro codigo vigente do mesmo item no catalogo local - pegue o vigente na tela '
+                  + 'de emissao online da NFTS.'),
+        );
     } else if (!CATALOGO_POR_CODIGO.has(n.codigo)) {
         avisos.push(`codigo ${n.codigo} fora do catalogo local (pode ser codigo novo de 2026) - confirmar na tabela vigente da PMSP`);
     }

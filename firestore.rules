@@ -442,6 +442,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // nfts_codigos_recusados: codigos que a PMSP recusou (erro 310) DEPOIS do
+    // ultimo deploy. Leitura por quem esta logado — a tela de NFTS soma esta
+    // lista a fixa antes de validar o lote. ESCRITA so admin: bloquear um
+    // codigo por engano derruba a importacao de todo mundo.
+    match /nfts_codigos_recusados/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if isAdmin();
+    }
+
     match /nfse_nacional_emitidas/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
