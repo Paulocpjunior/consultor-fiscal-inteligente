@@ -88,15 +88,35 @@ const EmpresaSearchSelect: React.FC<Props> = ({
 
     return (
         <div ref={wrapRef} className="relative">
-            <input
-                type="text"
-                disabled={disabled}
-                value={aberto ? busca : rotulo}
-                placeholder={selecionada ? rotulo : placeholder}
-                onFocus={() => { setAberto(true); setBusca(''); }}
-                onChange={(e) => { setBusca(e.target.value); setAberto(true); }}
-                className="w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 disabled:opacity-50"
-            />
+            <div className="flex gap-2">
+                <input
+                    type="text"
+                    disabled={disabled}
+                    value={aberto ? busca : rotulo}
+                    placeholder={selecionada ? rotulo : placeholder}
+                    onFocus={() => { setAberto(true); setBusca(''); }}
+                    onChange={(e) => { setBusca(e.target.value); setAberto(true); }}
+                    className="w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 disabled:opacity-50"
+                />
+                {/*
+                  Botão ATIVAR EMPRESA (Paulo, 04/08 — e cobrado de novo em
+                  05/08: "não localizei este botão"). A ativação já acontecia ao
+                  escolher na lista, mas sem botão nenhum ninguém tinha como
+                  saber disso, nem como REATIVAR a mesma empresa depois de
+                  mudar competência/filtro. Agora o gesto tem nome e lugar.
+                */}
+                {onAtivar && selecionada && (
+                    <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => onAtivar(selecionada.id)}
+                        title="Carrega no banco só os dados DESTA empresa — é o que evita puxar a carteira inteira a cada consulta."
+                        className="shrink-0 px-3 py-2 text-sm font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40"
+                    >
+                        ⚡ Ativar
+                    </button>
+                )}
+            </div>
             {aberto && (
                 <div className="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg">
                     {filtradas.length === 0 ? (

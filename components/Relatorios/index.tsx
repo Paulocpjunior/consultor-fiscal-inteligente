@@ -87,6 +87,19 @@ const ABAS_POR_EMPRESA: AbaId[] = [
     'serv-tomados', 'serv-prestados', 'retencoes',
 ];
 
+/**
+ * Empresas do módulo Lucro no formato do EmpresaSearchSelect — para a busca
+ * por CÓDIGO valer aqui também (Paulo, 04/08: "todos os campos que contenham
+ * consulta nome e cnpj agora devem aceitar código, nome, cnpj").
+ */
+const opcoesLucro = (lista: any[]): EmpresaXmlOption[] => (lista || []).map((e) => ({
+    id: e.id,
+    nome: e.nome,
+    cnpj: e.cnpj,
+    fonte: 'lucro',
+    codCliente: e.dadosFiscais?.codCliente,
+} as EmpresaXmlOption));
+
 const fmtBRL = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 const fmtComp = (c: string) => c.split('-').reverse().join('/');
@@ -1177,11 +1190,12 @@ const AbaFicha: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             <div className="flex flex-wrap items-end gap-2">
                 <div className="min-w-[280px] flex-1">
                     <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa (Lucro Presumido/Real)</label>
-                    <select value={empresaId} onChange={e => setEmpresaId(e.target.value)}
-                        className="w-full p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
-                        <option value="">{loading ? 'Carregando…' : '— Selecione —'}</option>
-                        {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                    </select>
+                    <EmpresaSearchSelect
+                        empresas={opcoesLucro(empresas)}
+                        value={empresaId}
+                        onChange={setEmpresaId}
+                        placeholder={loading ? 'Carregando…' : 'Buscar por código, nome ou CNPJ…'}
+                    />
                 </div>
                 <BotaoPdf onClick={pdf} disabled={!fichas.length} gerando={gerando} />
             </div>
@@ -1505,11 +1519,12 @@ const AbaTrimestre: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             <div className="flex flex-wrap items-end gap-2">
                 <div className="min-w-[280px] flex-1">
                     <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa (Lucro Presumido/Real)</label>
-                    <select value={empresaId} onChange={e => setEmpresaId(e.target.value)}
-                        className="w-full p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
-                        <option value="">{loading ? 'Carregando…' : '— Selecione —'}</option>
-                        {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                    </select>
+                    <EmpresaSearchSelect
+                        empresas={opcoesLucro(empresas)}
+                        value={empresaId}
+                        onChange={setEmpresaId}
+                        placeholder={loading ? 'Carregando…' : 'Buscar por código, nome ou CNPJ…'}
+                    />
                 </div>
                 <div>
                     <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Trimestre</label>
