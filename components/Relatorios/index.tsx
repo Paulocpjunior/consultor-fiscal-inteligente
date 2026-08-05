@@ -31,6 +31,9 @@ import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFi
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
 import { carregarFaturamento, carregarFaturamentoMensal, type FaturamentoResp } from '../../services/relatoriosService';
 import { mesesDoPeriodo, montarMeses, totalDeclaracao, avisosDaDeclaracao, type MesDeclaracao } from '../../services/declaracaoFaturamento';
+import { montarApuracaoTrimestre, trimestresDisponiveis } from '../../services/apuracaoTrimestral';
+import { calcularLucro } from '../../services/lucroService';
+import { convertFichaToInput, getRetencoesAcumuladasTrimestre } from '../LucroPresumidoReal/fichaCalc';
 import { gerarRelatorioPdf, gerarDeclaracaoFaturamentoPdf, montarIdentificacao, type IdentificacaoPdf } from '../../services/relatorioPdf';
 import * as lucroPresumidoService from '../../services/lucroPresumidoService';
 import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
@@ -44,7 +47,7 @@ type AbaId =
     | 'livro' | 'cfop' | 'impostos-resumo' | 'uf'
     | 'canceladas' | 'aliquota' | 'produto' | 'participante'
     | 'serv-tomados' | 'serv-prestados' | 'retencoes'
-    | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha';
+    | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
@@ -73,6 +76,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
             { id: 'impostos-enviados', label: '💸 Apurados × enviados' },
             { id: 'dipam', label: '🌾 DIPAM/FUNRURAL' },
             { id: 'ficha', label: '📑 Ficha Financeira (Lucro)' },
+            { id: 'trimestre', label: '🧮 Apuração trimestral (Presumido)' },
         ],
     },
 ];
@@ -267,6 +271,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {aba === 'impostos-enviados' && <AbaImpostosEnviados competencia={competencia} />}
             {aba === 'dipam' && <AbaDipam competencia={competencia} />}
             {aba === 'ficha' && <AbaFicha currentUser={currentUser} />}
+            {aba === 'trimestre' && <AbaTrimestre currentUser={currentUser} />}
         </div>
     );
 };
@@ -1366,6 +1371,185 @@ const AbaDeclaracao: React.FC<{
                     </p>
                 </>
             )}
+        </Card>
+    );
+};
+
+// ─── Apuração trimestral (Lucro Presumido) ──────────────────────────────────
+//
+// Paulo (05/08): "segue um resumo que já conseguimos extrair do CFI, porém o
+// relatório ainda não existe, era feito em modelo Excel". É a tabela de
+// apuração do trimestre — faturamento dos 3 meses, presunção, receita
+// financeira, IRPJ, adicional e CSLL.
+//
+// REGRA DO MENU: conta nenhuma aqui. O trimestre é MONTADO por
+// `montarApuracaoTrimestre` (seleção + somas) e os TRIBUTOS vêm de
+// `calcularLucro` — o mesmo motor da ficha e do DARF, chamado do mesmo jeito
+// que a ReportView do módulo Lucro (com as retenções acumuladas do trimestre).
+const AbaTrimestre: React.FC<{ currentUser: User }> = ({ currentUser }) => {
+    const { gerando, rodar } = usePdf();
+    const [empresas, setEmpresas] = useState<any[]>([]);
+    const [empresaId, setEmpresaId] = useState('');
+    const [chaveTri, setChaveTri] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    React.useEffect(() => {
+        let alive = true;
+        setLoading(true);
+        lucroPresumidoService.getEmpresas(currentUser)
+            .then(l => { if (alive) setEmpresas(l); })
+            .finally(() => { if (alive) setLoading(false); });
+        return () => { alive = false; };
+    }, [currentUser]);
+
+    const empresa = empresas.find(e => e.id === empresaId) || null;
+    const fichas = useMemo(() => empresa?.fichaFinanceira || [], [empresa]);
+    const trimestres = useMemo(() => trimestresDisponiveis(fichas), [fichas]);
+
+    React.useEffect(() => {
+        setChaveTri(trimestres.length ? `${trimestres[0].ano}-${trimestres[0].trimestre}` : '');
+    }, [empresaId, trimestres.length]);
+
+    const [anoSel, triSel] = chaveTri ? chaveTri.split('-').map(Number) : [0, 0];
+    const tri = useMemo(
+        () => (empresa && anoSel ? montarApuracaoTrimestre(fichas, anoSel, triSel) : null),
+        [empresa, fichas, anoSel, triSel],
+    );
+
+    // Tributos do trimestre: MESMA chamada da ReportView do módulo Lucro.
+    const resultado = useMemo(() => {
+        if (!tri?.fichaFechamento || !empresa) return null;
+        const base = convertFichaToInput(tri.fichaFechamento, empresa);
+        const ret = getRetencoesAcumuladasTrimestre(empresa, tri.fichaFechamento.mesReferencia, 'Trimestral');
+        return calcularLucro({
+            ...base,
+            retencaoIrpj: (base.retencaoIrpj || 0) + ret.irpj,
+            retencaoCsll: (base.retencaoCsll || 0) + ret.csll,
+        });
+    }, [tri, empresa]);
+
+    const linhasTributo = (resultado?.detalhamento || []).filter(d =>
+        /IRPJ|CSLL|ADICIONAL/i.test(d.imposto));
+
+    const pdf = () => {
+        if (!tri || !empresa) return;
+        rodar(() => gerarRelatorioPdf({
+            titulo: `Apuração trimestral — ${tri.rotulo}`,
+            subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${empresa.regimePadrao === 'Real' ? 'Lucro Real' : 'Lucro Presumido'}`,
+            orientacao: 'portrait',
+            colunas: [
+                { titulo: 'Composição do trimestre', largura: 30 },
+                { titulo: 'Base', largura: 14, alinhamento: 'direita' },
+                { titulo: 'Alíquota', largura: 8, alinhamento: 'direita' },
+                { titulo: 'Retenção', largura: 12, alinhamento: 'direita' },
+                { titulo: 'Valor', largura: 14, alinhamento: 'direita' },
+            ],
+            linhas: [
+                ...tri.meses.map(m => [
+                    `Faturamento ${fmtComp(m.competencia)}${m.ausente ? ' (sem ficha)' : ''}`,
+                    '', '', '', m.faturamento,
+                ]),
+                ['Receita financeira do trimestre', '', '', '', tri.totalReceitaFinanceira],
+                ['Retenções na fonte do trimestre (IRPJ / CSLL)', '', '',
+                    tri.totalRetencaoIrpj, tri.totalRetencaoCsll],
+                ...linhasTributo.map(d => [d.imposto, d.baseCalculo, `${d.aliquota}%`, d.retencao || 0, d.valor]),
+            ],
+            totais: ['Faturamento total do trimestre', '', '', '', tri.totalFaturamento],
+            identificacao: montarIdentificacao(empresa.dadosFiscais),
+            observacoes: [
+                'IRPJ e CSLL do Lucro Presumido são TRIMESTRAIS (Lei 9.430/96 art. 1º); PIS, COFINS e IPI seguem mensais e não entram nesta tabela.',
+                'Tributos calculados pelo mesmo motor da ficha do módulo Lucro e do DARF — retenção na fonte deduzida na apuração (regra #298).',
+                ...tri.pendencias,
+            ],
+            fileName: `apuracao-trimestral-${empresa.cnpj.replace(/\D/g, '')}-${tri.ano}T${tri.trimestre}.pdf`,
+        }));
+    };
+
+    return (
+        <Card>
+            <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[280px] flex-1">
+                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa (Lucro Presumido/Real)</label>
+                    <select value={empresaId} onChange={e => setEmpresaId(e.target.value)}
+                        className="w-full p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
+                        <option value="">{loading ? 'Carregando…' : '— Selecione —'}</option>
+                        {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Trimestre</label>
+                    <select value={chaveTri} onChange={e => setChaveTri(e.target.value)} disabled={!trimestres.length}
+                        className="p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
+                        {trimestres.map(t => (
+                            <option key={`${t.ano}-${t.trimestre}`} value={`${t.ano}-${t.trimestre}`}>{t.rotulo}</option>
+                        ))}
+                        {!trimestres.length && <option value="">— sem fichas —</option>}
+                    </select>
+                </div>
+                <BotaoPdf onClick={pdf} disabled={!tri} gerando={gerando} />
+            </div>
+
+            {empresa && !trimestres.length && (
+                <p className="text-sm text-slate-500">Esta empresa não tem fichas lançadas no módulo Lucro.</p>
+            )}
+
+            {tri && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <tbody>
+                            {tri.meses.map(m => (
+                                <tr key={m.competencia} className="border-b border-slate-100 dark:border-slate-700/50">
+                                    <td className="py-1">
+                                        Faturamento {fmtComp(m.competencia)}
+                                        {m.ausente && <span className="text-amber-600 text-[11px] ml-2">⚠ sem ficha lançada</span>}
+                                        {m.lancadoComoMensal && <span className="text-amber-600 text-[11px] ml-2">⚠ lançado como Mensal</span>}
+                                    </td>
+                                    <td className="py-1 text-right tabular-nums">{fmtBRL(m.faturamento)}</td>
+                                </tr>
+                            ))}
+                            <tr className="border-b border-slate-200 dark:border-slate-700 font-bold">
+                                <td className="py-1">Total do trimestre</td>
+                                <td className="py-1 text-right tabular-nums">{fmtBRL(tri.totalFaturamento)}</td>
+                            </tr>
+                            <tr className="border-b border-slate-100 dark:border-slate-700/50">
+                                <td className="py-1">Receita financeira</td>
+                                <td className="py-1 text-right tabular-nums">{fmtBRL(tri.totalReceitaFinanceira)}</td>
+                            </tr>
+                            <tr className="border-b border-slate-100 dark:border-slate-700/50">
+                                <td className="py-1">Retenções na fonte (IRPJ / CSLL)</td>
+                                <td className="py-1 text-right tabular-nums">
+                                    {fmtBRL(tri.totalRetencaoIrpj)} / {fmtBRL(tri.totalRetencaoCsll)}
+                                </td>
+                            </tr>
+                            {linhasTributo.map(d => (
+                                <tr key={d.imposto} className="border-b border-slate-100 dark:border-slate-700/50">
+                                    <td className="py-1">
+                                        {d.imposto}
+                                        <span className="text-[11px] text-slate-500 ml-2">
+                                            base {fmtBRL(d.baseCalculo)} · {d.aliquota}%
+                                        </span>
+                                    </td>
+                                    <td className="py-1 text-right tabular-nums font-semibold">{fmtBRL(d.valor)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {tri?.pendencias.map((p, i) => (
+                <p key={i} className="text-[11px] text-amber-700 dark:text-amber-400">⚠ {p}</p>
+            ))}
+            {tri && !tri.fechado && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold">
+                    O trimestre não está fechado — a tabela mostra o que existe, mas IRPJ/CSLL só saem
+                    corretos com os 3 meses lançados e o mês de fechamento como Trimestral.
+                </p>
+            )}
+            <p className="text-[11px] text-slate-500">
+                IRPJ e CSLL do Presumido são trimestrais (Lei 9.430/96 art. 1º) — PIS, COFINS e IPI seguem
+                mensais e não entram aqui. Os tributos vêm do mesmo motor da ficha do módulo Lucro.
+            </p>
         </Card>
     );
 };
