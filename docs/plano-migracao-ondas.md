@@ -15,7 +15,26 @@
 | ST em saída (E220) | **0** | nenhum substituto na carteira; o E220 (04/08) fica de reserva |
 | CT-e | 1 | irrelevante — a hipótese de "crédito de frete perdido" caiu |
 
-## Por que a ordem começa pelo SERVIÇO
+## ⚠ CORREÇÃO 05/08 — a ordem abaixo estava ERRADA e foi refeita
+
+Paulo: *"essas empresas são prestadoras de serviços, não têm Inscrição
+Estadual"*. **Sem IE a empresa não é contribuinte de ICMS e NÃO entrega EFD
+ICMS/IPI.** Não existe SPED Fiscal delas — nem no CFI, nem no E-Fiscal.
+Fazer piloto ali seria comparar dois arquivos que não existem.
+
+Isso derruba a "onda 1 = serviço puro" que eu tinha proposto e corrige,
+pela SEGUNDA vez, a leitura dos 4.024 documentos fora da ponte: para
+empresa sem IE, aquelas NFS-e **nunca deveriam** ir à escrituração de ICMS
+do E-Fiscal. Não é lacuna — é o desenho certo. Elas alimentam EFD
+Contribuições e ISS, que são outro trilho.
+
+**O escopo real da migração do SPED Fiscal é só quem tem IE.** A 🚦 passou a
+medir isso (`contribuinteIcms`, resumo `contribuintesIcms` ×
+`semInscricaoEstadual`) e prestadora de serviço saiu das candidatas a piloto.
+
+A ordem correta está em "## A ordem (revisada)" mais abaixo.
+
+## [HISTÓRICO — descartado] Por que a ordem começava pelo SERVIÇO
 
 As empresas de serviço puro (advogados, clínicas, imobiliárias, igrejas —
 `emissão própria 0`, faturamento todo em NFS-e) têm três propriedades que
@@ -30,7 +49,10 @@ nenhuma outra tem:
 
 ## A ordem
 
-### Piloto 1 — serviço puro · **CLINICA MEDICA MANTOAN** (37 docs)
+### [DESCARTADO] Piloto 1 — serviço puro · CLINICA MEDICA MANTOAN (37 docs)
+**Não vale**: sem IE, não entrega EFD ICMS/IPI. Mantido aqui só pra não se
+repetir o raciocínio.
+
 Escolhida por: serviço puro, volume conferível linha a linha numa tarde, e é
 caso já conhecido do time e do app (Presumido trimestral, validado em 03/08).
 Substituível por qualquer outra de 30-40 docs do mesmo perfil (RHEIN
@@ -68,3 +90,38 @@ Já entregue no CFI; entra depois que a onda 2 provar o trilho de ICMS.
 - **Cliente sem aptidão de saída comprovada não entra na onda de ICMS** (vai
   para a fila de configuração autXML/cofre). Não vale para a onda 1: empresa
   de serviço não emite NF-e de saída.
+
+
+---
+
+# A ordem (revisada 05/08, depois da correção da IE)
+
+O escopo do SPED Fiscal é **só contribuinte de ICMS**. A 🚦 agora mostra
+quantos são; o restante da carteira (prestadoras) não entra nesta migração —
+o que elas entregam é EFD Contribuições e ISS, trilho separado que o CFI já
+cobre e o E-Fiscal não alimenta.
+
+### Piloto 1 — contribuinte com ICMS SIMPLES · **COMÉRCIO DE PEÇAS PARANÁ** (77 docs)
+Emissão própria (30), ST em entrada (4) — tamanho conferível linha a linha.
+Sem DIFAL, sem indústria: valida o núcleo (blocos 0/C/E) sem ruído.
+
+### Piloto 2 — contribuinte com DIFAL · **DISTRIBUIDORA DE BANANAS ELS** (255 docs)
+Emissão própria (106) + 20 compras interestaduais. É neste que o DIFAL de
+aquisição e o C197 se provam. Alternativa menor: KROYA (95, 2 interestaduais).
+
+### Onda 1 — contribuintes sem sinal de atenção
+Os que têm IE e nenhum bloqueio na 🚦.
+
+### Onda 2 — contribuintes com DIFAL de aquisição (36)
+
+### Onda 3 — nichos: 3 indústria/IPI (bloco K), 2 E310, 1 CIAP (EXPERTE)
+Constrói-se o bloco quando a onda chegar.
+
+### Fora desta migração — prestadoras sem IE
+Não têm EFD ICMS/IPI. O que precisa ser conferido nelas é outra coisa:
+**onde a equipe apura PIS/COFINS e ISS hoje**, já que o E-Fiscal não recebe
+as NFS-e. Isso é uma pergunta em aberto, não uma onda.
+
+### Regra da onda (inalterada)
+1º mês roda nos DOIS e compara; o E-Fiscal segue vivo e serve de gabarito.
+Cliente sem aptidão de saída comprovada não entra na onda.

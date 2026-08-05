@@ -63,6 +63,23 @@ function tipoDoDoc(d) {
  * serviço fora da escrituração, no mês corrente.
  */
 const TIPOS_NA_PONTE_FML = new Set(['NFe', 'NFCe']);
+
+/**
+ * A empresa é contribuinte de ICMS? (Paulo, 05/08: "essas empresas são
+ * prestadoras de serviços, não têm Inscrição Estadual".)
+ *
+ * Sem IE — ou com IE 'ISENTO' — ela NÃO entrega EFD ICMS/IPI. Não há SPED
+ * Fiscal para gerar nem para conferir, então ela não é alvo da migração do
+ * SPED: o que ela entrega é EFD Contribuições (PIS/COFINS) e ISS municipal.
+ * Tratar essas empresas como "candidatas a piloto" foi o erro que este campo
+ * corrige — o piloto seria comparar dois arquivos que não existem.
+ */
+export function contribuinteIcms(empresa) {
+    const ie = String(empresa?.inscricaoEstadual || '').trim().toUpperCase();
+    if (!ie) return false;
+    if (/^ISENT/.test(ie)) return false;
+    return /\d/.test(ie);
+}
 const so = (v) => String(v || '').replace(/\D/g, '');
 
 /**
@@ -81,6 +98,7 @@ export function montarProntidaoMigracao(docs, empresas) {
             regime: e.regime || null,
             uf: String(e.uf || '').toUpperCase(),
             industriaCadastro: !!e.industriaCadastro,
+            contribuinteIcms: contribuinteIcms(e),
             docs: 0,
             emiteProprio: 0,        // mod 55/65 com emitente == empresa
             stSaidas: 0,            // saída própria com ST → SUBSTITUTO (E220/GIA-ST)
@@ -164,7 +182,9 @@ export function montarProntidaoMigracao(docs, empresas) {
                 saidasNaoContribuinte: algumDocComItens ? e.saidasNaoContribuinte : null,
                 bloqueios,
                 atencoes,
-                candidataPiloto: e.regime === 'lucro' && bloqueios.length === 0,
+                // Piloto do SPED FISCAL só faz sentido para contribuinte de
+                // ICMS: sem IE não há EFD ICMS/IPI para comparar.
+                candidataPiloto: e.regime === 'lucro' && e.contribuinteIcms && bloqueios.length === 0,
             };
         })
         .sort((a, b) => {
@@ -186,6 +206,8 @@ export function montarProntidaoMigracao(docs, empresas) {
                 : null,
             vendaNaoContribuinteApurada: algumDocComItens,
             // Cobertura documental — a pergunta do Paulo (05/08).
+            contribuintesIcms: linhas.filter((l) => l.contribuinteIcms).length,
+            semInscricaoEstadual: linhas.filter((l) => !l.contribuinteIcms).length,
             comCte: linhas.filter((l) => l.porTipo.CTe > 0).length,
             comNfse: linhas.filter((l) => l.porTipo.NFSe > 0).length,
             docsForaDaPonte: linhas.reduce((s, l) => s + l.foraDaPonte, 0),
