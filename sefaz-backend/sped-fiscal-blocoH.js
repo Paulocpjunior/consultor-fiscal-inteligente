@@ -42,7 +42,7 @@ export function buildBlocoH(dados) {
             competenciaFim: dados.competenciaFim,
             gerarInventario: dados.empresa?.dadosFiscais?.gerarInventario,
         }),
-        motInv: dados.empresa?.dadosFiscais?.motInv,
+        motInv: dados.inventarioMotInv || dados.empresa?.dadosFiscais?.motInv,
     });
 
     // Os avisos precisam CHEGAR a quem gera: inventario faltando e coisa pra

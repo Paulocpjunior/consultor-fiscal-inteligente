@@ -18,6 +18,7 @@ import {
 import { buildBlocoD } from './sped-fiscal-blocoD.js';
 import { buildBlocoE } from './sped-fiscal-blocoE.js';
 import { buildBlocoH } from './sped-fiscal-blocoH.js';
+import { dataInventario } from './sped-bloco-h.js';
 import { apurarCiap, classificarSaidasCiap, montarLinhasBlocoG } from './sped-bloco-g.js';
 import * as fmtSped from './sped-fiscal-format.js';
 import { classificarAjustes } from './sped-ajustes-apuracao.js';
@@ -195,6 +196,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         }
     }
     const itens = Array.from(itensMap.values());
+
     const unidades = Array.from(unidadesMap.values());
 
     // 0190 deve listar APENAS unidades efetivamente referenciadas em algum
@@ -206,6 +208,45 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     const warnings = [];
     if (notas.length === 0) {
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo. Arquivo sera gerado com estrutura minima (apenas registros 0000-0100 + Bloco 9).`);
+    }
+
+    // ─── 6b. Contagem física do inventário (Bloco H) ──────────────────────
+    // O inventário NÃO sai das notas: é a contagem que a empresa fez, gravada
+    // na aba 📦 Inventário. Sem ela o bloco H sai VAZIO — nunca zerado, que
+    // declararia ao Fisco que não havia estoque (correção de 06/08).
+    let inventarioMotInv = null;
+    try {
+        const dtInv = dataInventario(periodoFim);
+        if (dtInv) {
+            const invSnap = await admin.firestore().collection('sped_inventario')
+                .doc(`${empresaId}_${dtInv.replace(/\D/g, '')}`).get();
+            if (invSnap.exists) {
+                const inv = invSnap.data() || {};
+                const porItem = new Map((inv.itens || []).map((i) => [String(i.codItem), i]));
+                for (const it of itens) {
+                    const c = porItem.get(String(it.codItem));
+                    if (!c) continue;
+                    it.qtdInventario = c.qtdInventario;
+                    it.vlUnitInventario = c.vlUnitInventario;
+                    it.indPropInventario = c.indPropInventario || '0';
+                    it.codPartInventario = c.codPartInventario || '';
+                }
+                inventarioMotInv = inv.motInv || null;
+                // Contado que NÃO está no 0200 do período: o item existe no
+                // estoque mas não teve movimento no mês — sumiria do arquivo em
+                // silêncio se ninguém dissesse.
+                const foraDo0200 = (inv.itens || []).filter((i) => !itens.some((x) => String(x.codItem) === String(i.codItem)));
+                if (foraDo0200.length) {
+                    warnings.push(
+                        `Inventário: ${foraDo0200.length} item(ns) contado(s) não aparecem nas notas do período `
+                        + '(sem movimento no mês) e por isso não entram no 0200/H010. Confira se deveriam estar lá.',
+                    );
+                }
+            }
+        }
+    } catch (e) {
+        // Falhar em LER o inventário não pode virar "não tem inventário".
+        warnings.push(`Não consegui ler a contagem do inventário (${e.message}) — o bloco H pode sair incompleto.`);
     }
 
     // ─── 7. Saldo credor ICMS do mes anterior (so pra Lucro) ───
@@ -323,6 +364,9 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         competenciaFim: periodoFim,
         notas,
         itens,
+        // MOT_INV vem do doc do inventário (a pessoa escolhe ao contar); o
+        // cadastro da empresa fica de reserva pra quem já usava.
+        inventarioMotInv,
         participantes,
         unidades,
         saldoCredorIcmsAnterior,
