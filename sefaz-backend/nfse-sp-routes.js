@@ -19,6 +19,7 @@ import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
 import { saudeNfseSp, empresaComFalhaNaCaptura } from './nfse-sp-saude.js';
+import { consultarNfseEmitidas } from './nfse-sp-client.js';
 
 const uploadCsv = multer({
     storage: multer.memoryStorage(),
@@ -470,6 +471,67 @@ router.get('/nfsesp-saude', authUser, async (req, res) => {
         // Falha ao LER a saúde não pode virar "está tudo bem": sem resposta, a
         // tela precisa tratar como não-confiável.
         return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /api/admin/sefaz/nfsesp-ws-diagnostico
+//
+// UMA chamada ao Web Service da Prefeitura, só pra ver O QUE ELE RESPONDE.
+//
+// Por que existe (Paulo, 06/08 — "como reproduzir o erro WS p você"): o
+// trilho do WS foi aposentado em 22/07 com "erro 1102 pra tudo", e desde
+// então ninguém sabe se é autorização do escritório, CCM, certificado ou
+// endpoint. Pedir pro Paulo navegar no portal atrás disso é empurrar meu
+// trabalho pra ele; aqui ele clica uma vez e me manda a resposta crua.
+//
+// NÃO EMITE NADA: é consulta de notas emitidas, o método mais inofensivo do
+// WS. Admin-only porque usa o certificado.
+// ────────────────────────────────────────────────────────────────────────────
+router.post('/nfsesp-ws-diagnostico', requireAdmin, async (req, res) => {
+    const inicio = Date.now();
+    const { cnpj, ccm, anoMes } = req.body || {};
+    const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
+    const ccmLimpo = String(ccm || '').replace(/\D/g, '');
+    if (!/^\d{14}$/.test(cnpjLimpo)) {
+        return res.status(400).json({ ok: false, error: 'Informe o CNPJ da empresa (14 dígitos).' });
+    }
+    if (!ccmLimpo) {
+        return res.status(400).json({ ok: false, error: 'Informe o CCM da empresa (Dados Fiscais → Inscrição Municipal SP).' });
+    }
+    const m = /^(\d{4})-(\d{2})$/.exec(String(anoMes || ''));
+    if (!m) return res.status(400).json({ ok: false, error: 'Informe a competência (AAAA-MM).' });
+    const periodo = { ano: Number(m[1]), mes: Number(m[2]) };
+
+    try {
+        const r = await consultarNfseEmitidas({
+            cnpjRemetente: cnpjLimpo,
+            inscricaoMunicipalPrestador: ccmLimpo,
+            dtInicio: periodo,
+            dtFim: periodo,
+        });
+        // Resposta CRUA — é isso que diz se o 1102 é autorização, CCM ou
+        // certificado. Sem interpretar: interpretar aqui esconderia o dado.
+        return res.json({
+            ok: true,
+            httpStatus: r.statusCode ?? null,
+            sucesso: !!r.sucesso,
+            erros: r.erros || [],
+            alertas: r.alertas || [],
+            totalNFes: r.totalNFes ?? 0,
+            duracaoMs: Date.now() - inicio,
+            enviado: { cnpjRemetente: cnpjLimpo, ccm: ccmLimpo, competencia: anoMes },
+        });
+    } catch (e) {
+        // Falha de transporte/certificado também é resposta: é o que
+        // diferencia "a Prefeitura recusou" de "nem chegamos lá".
+        return res.json({
+            ok: false,
+            falhaAntesDaResposta: true,
+            erro: String(e?.message || e).slice(0, 600),
+            duracaoMs: Date.now() - inicio,
+            enviado: { cnpjRemetente: cnpjLimpo, ccm: ccmLimpo, competencia: anoMes },
+        });
     }
 });
 

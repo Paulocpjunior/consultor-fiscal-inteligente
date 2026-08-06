@@ -71,6 +71,12 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     // buscar" ficam idênticos na tela, e o colaborador só descobre tentando.
     const [saude, setSaude] = useState<SaudeCaptura | null>(null);
     const [enviando, setEnviando] = useState(false);
+    // Diagnóstico do WS da Prefeitura — UMA chamada, resposta crua. Existe pra
+    // o Paulo reproduzir o erro 1102 com um clique, em vez de navegar no
+    // portal atrás de um dado que o app consegue buscar sozinho.
+    const [ccmDiag, setCcmDiag] = useState('');
+    const [diagWs, setDiagWs] = useState<any>(null);
+    const [testandoWs, setTestandoWs] = useState(false);
 
     React.useEffect(() => {
         let alive = true;
@@ -93,6 +99,8 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
             // de vencimento e outro portal — dizer isso é melhor que apurar
             // um número que ninguém pode pagar aqui.
             setForaDaPraca(!empresaEhSpCapital(df));
+            setCcmDiag(String((df as any)?.ccmSp || (df as any)?.inscricaoMunicipal || ''));
+            setDiagWs(null);
             const [docs, s] = await Promise.all([
                 listDocumentos(currentUser, { competencia, empresaId: alvo.id, empresaCnpj: alvo.cnpj }),
                 carregarSaude(alvo.cnpj),
@@ -101,6 +109,26 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
             setApuracao(apurarIssSp(docs, competencia));
         } finally {
             setCarregando(false);
+        }
+    };
+
+    const testarWs = async () => {
+        if (!empresa) { onShowToast?.('Escolha a empresa.'); return; }
+        setTestandoWs(true);
+        setDiagWs(null);
+        try {
+            const { getAuth } = await import('firebase/auth');
+            const token = await getAuth().currentUser?.getIdToken();
+            const r = await fetch('/api/admin/sefaz/nfsesp-ws-diagnostico', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cnpj: empresa.cnpj, ccm: ccmDiag, anoMes: competencia }),
+            });
+            setDiagWs(await r.json());
+        } catch (e: any) {
+            setDiagWs({ ok: false, erro: String(e?.message || e) });
+        } finally {
+            setTestandoWs(false);
         }
     };
 
@@ -192,6 +220,39 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                         {carregando ? 'Apurando…' : '🔎 Apurar ISS'}
                     </button>
                 </div>
+
+                {empresa && (
+                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                            <strong>🔌 Testar o Web Service da Prefeitura</strong> — faz UMA consulta de notas
+                            emitidas e mostra a resposta CRUA. Não emite nada. É o que reproduz o erro do WS
+                            (aposentado em 22/07 com "1102 pra tudo") sem ninguém precisar navegar no portal.
+                        </p>
+                        <div className="flex flex-wrap gap-2 items-end">
+                            <div>
+                                <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">CCM</label>
+                                <input value={ccmDiag} onChange={e => setCcmDiag(e.target.value)}
+                                    placeholder="inscrição municipal"
+                                    className="w-40 p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 font-mono" />
+                            </div>
+                            <button onClick={testarWs} disabled={testandoWs || !ccmDiag}
+                                className="px-3 py-2 text-sm font-bold rounded-lg border border-sky-400 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/30 disabled:opacity-40">
+                                {testandoWs ? 'Consultando…' : '🔌 Testar WS'}
+                            </button>
+                        </div>
+                        {diagWs && (
+                            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded p-2 max-h-64 overflow-y-auto">
+{JSON.stringify(diagWs, null, 2)}
+                            </pre>
+                        )}
+                        {diagWs && (
+                            <p className="text-[11px] text-slate-500">
+                                Copie este bloco e mande no chat — é ele que diz se o problema é autorização do
+                                escritório, CCM, certificado ou endpoint.
+                            </p>
+                        )}
+                    </div>
+                )}
 
                 {foraDaPraca && apuracao && (
                     <p className="text-xs text-amber-700 dark:text-amber-400">
