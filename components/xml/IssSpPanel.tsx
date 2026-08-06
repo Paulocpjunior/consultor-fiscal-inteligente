@@ -78,6 +78,10 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     /** De onde veio o CCM da caixinha — cadastro, nota, ou nenhum dos dois. */
     const [ccmOrigem, setCcmOrigem] = useState<'cadastro' | 'nota' | 'ausente'>('ausente');
     const [diagWs, setDiagWs] = useState<any>(null);
+    // Visão de carteira: a apuração acima resolve UM cliente; esta responde
+    // quem falta. Sem ela, "quem tem ISS este mês?" seria 157 perguntas.
+    const [carteira, setCarteira] = useState<any>(null);
+    const [carregandoCarteira, setCarregandoCarteira] = useState(false);
     const [testandoWs, setTestandoWs] = useState(false);
 
     React.useEffect(() => {
@@ -118,6 +122,25 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
             setCcmOrigem(doCadastro ? 'cadastro' : (daNota ? 'nota' : 'ausente'));
         } finally {
             setCarregando(false);
+        }
+    };
+
+    const carregarCarteira = async () => {
+        setCarregandoCarteira(true);
+        setCarteira(null);
+        try {
+            const token = await (await import('firebase/auth')).getAuth().currentUser?.getIdToken();
+            const r = await fetch(`/api/admin/sefaz/iss-carteira?competencia=${encodeURIComponent(competencia)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const j = await r.json();
+            // Falha na varredura NÃO pode virar tela vazia parecendo "ninguém
+            // deve nada" — o motivo aparece.
+            setCarteira(j.ok ? j : { erro: j.error || `Falha ao varrer a carteira (HTTP ${r.status}).` });
+        } catch (e: any) {
+            setCarteira({ erro: `Falha ao varrer a carteira: ${e?.message || e}` });
+        } finally {
+            setCarregandoCarteira(false);
         }
     };
 
@@ -201,8 +224,106 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
         }
     };
 
+    const SITUACAO_ROTULO: Record<string, { txt: string; cls: string }> = {
+        'sem-ccm':         { txt: '🚨 sem CCM',        cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
+        'captura-incerta': { txt: '⚠ captura incerta', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' },
+        'a-recolher':      { txt: '💰 a recolher',     cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' },
+        'iss-fixo':        { txt: '🏛 ISS fixo (SUP)', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300' },
+        'so-retido':       { txt: '↩ só retido',       cls: 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300' },
+        'sem-movimento':   { txt: '— sem movimento',   cls: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
+    };
+
     return (
         <div className="space-y-4">
+            {/* Visão de CARTEIRA: a apuração abaixo resolve o cliente que está
+                na mão; esta responde QUEM FALTA — a onda 1 são 157 empresas. */}
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">📋 ISS da carteira — quem falta neste mês</h3>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Só empresas de SP capital. Zero notas só vale como "sem movimento" quando a captura do mês
+                            rodou — senão fica como <strong>incerto</strong>, porque guia que não sai não avisa.
+                        </p>
+                    </div>
+                    <button onClick={carregarCarteira} disabled={carregandoCarteira}
+                        className="px-3 py-2 text-sm font-bold rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40">
+                        {carregandoCarteira ? 'Varrendo…' : '📋 Varrer carteira'}
+                    </button>
+                </div>
+
+                {carteira?.resumo && (
+                    <>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                            <div className="rounded-lg border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 p-2">
+                                <p className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-400">A recolher</p>
+                                <p className="font-bold text-emerald-800 dark:text-emerald-300">
+                                    {carteira.resumo.aRecolher} empresa(s) · {brl(carteira.resumo.totalARecolher)}
+                                </p>
+                            </div>
+                            <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-900/20 p-2">
+                                <p className="text-[10px] uppercase font-bold text-red-700 dark:text-red-400">Sem CCM</p>
+                                <p className="font-bold text-red-800 dark:text-red-300">{carteira.resumo.semCcm}</p>
+                            </div>
+                            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-2">
+                                <p className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-400">Captura incerta</p>
+                                <p className="font-bold text-amber-800 dark:text-amber-300">{carteira.resumo.capturaIncerta}</p>
+                            </div>
+                            <div className="rounded-lg border border-slate-300 dark:border-slate-600 p-2">
+                                <p className="text-[10px] uppercase font-bold text-slate-500">ISS fixo · só retido · sem mov.</p>
+                                <p className="font-bold text-slate-700 dark:text-slate-200">
+                                    {carteira.resumo.issFixo} · {carteira.resumo.soRetido} · {carteira.resumo.semMovimento}
+                                </p>
+                            </div>
+                        </div>
+
+                        {(carteira.avisos || []).map((a: string, i: number) => (
+                            <p key={i} className="text-[11px] text-amber-700 dark:text-amber-400">⚠ {a}</p>
+                        ))}
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                                <thead>
+                                    <tr className="text-left text-[10px] uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                                        <th className="py-1">Empresa</th><th>Situação</th>
+                                        <th className="text-right">Notas</th>
+                                        <th className="text-right">ISS devido</th>
+                                        <th className="text-right">Retido</th>
+                                        <th className="text-right">A recolher</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {carteira.linhas.slice(0, 60).map((l: any) => (
+                                        <tr key={l.empresaId} className="border-b border-slate-100 dark:border-slate-700/50 align-top">
+                                            <td className="py-1 pr-2">
+                                                <span className="font-semibold">{l.nome}</span>
+                                                {l.acao && <span className="block text-[10px] text-slate-500">{l.acao}</span>}
+                                            </td>
+                                            <td className="pr-2">
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${SITUACAO_ROTULO[l.situacao]?.cls || ''}`}>
+                                                    {SITUACAO_ROTULO[l.situacao]?.txt || l.situacao}
+                                                </span>
+                                            </td>
+                                            <td className="text-right">{l.notas}</td>
+                                            <td className="text-right">{brl(l.issDevido)}</td>
+                                            <td className="text-right">{l.issRetido ? brl(l.issRetido) : '—'}</td>
+                                            <td className="text-right font-bold">{l.aRecolher ? brl(l.aRecolher) : '—'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {/* Lista cortada SEMPRE diz quanto ficou de fora. */}
+                            {carteira.linhas.length > 60 && (
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                    Mostrando 60 de {carteira.linhas.length} empresas.
+                                </p>
+                            )}
+                        </div>
+                    </>
+                )}
+                {carteira?.erro && <p className="text-xs text-red-600 dark:text-red-400">{carteira.erro}</p>}
+            </div>
+
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                 <div>
                     <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">🏛️ ISS próprio — NFS-e São Paulo capital</h3>
