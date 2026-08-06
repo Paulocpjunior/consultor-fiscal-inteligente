@@ -71,6 +71,10 @@ export interface ApuracaoIssTomado {
     notas: NotaIssTomado[];
     totalServicos: number;
     totalRetido: number;
+    /** TODAS as NFS-e tomadas no mês — com e sem retenção. */
+    notasNoMes: number;
+    /** Tomadas sem retenção: normal, mas precisa aparecer pra ausência falar. */
+    semRetencao: number;
     avisos: string[];
 }
 
@@ -191,12 +195,14 @@ export function apurarIssSp(
 
     // ── ISS retido COMO TOMADORA (outra obrigação, outra guia) ─────────────
     const notasTomadas: NotaIssTomado[] = [];
+    let tomadasNoMes = 0;
     for (const d of docs || []) {
         const tipo = String((d as any).tipoDoc || d.tipo || '');
         if (!/NFSe/i.test(tipo)) continue;
         if (d.direcao !== 'entrada') continue;              // serviço TOMADO
         if (CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
 
+        tomadasNoMes++;
         const x: any = d as any;
         const v: any = d.valores || {};
         // Só entra o que foi efetivamente RETIDO: nota tomada sem retenção não
@@ -235,10 +241,28 @@ export function apurarIssSp(
             + 'Não some com o ISS próprio.',
         );
     }
+    // A AUSÊNCIA precisa falar. O colaborador avisou que a empresa TEM ISS de
+    // tomador e o bloco não apareceu (Paulo, 06/08) — porque o app achou zero
+    // retenção e ficou calado. Calado, "não achei" vira "não tem", que é a
+    // mesma classe de erro do dia inteiro. Agora a tela distingue: nenhuma
+    // nota tomada capturada × capturadas mas nenhuma com retenção marcada.
+    if (totalRetido === 0) {
+        avisosTomado.push(
+            tomadasNoMes === 0
+                ? 'NENHUMA NFS-e TOMADA foi capturada nesta competência. Se o cliente contrata serviços com '
+                  + 'retenção de ISS, o problema é de CAPTURA das notas tomadas — não é ausência de obrigação.'
+                : `${tomadasNoMes} nota(s) tomada(s) capturada(s), NENHUMA com retenção de ISS marcada. `
+                  + 'Se o cliente retém, ou a marcação não veio na captura, ou a retenção é de outro imposto '
+                  + '(IR/INSS/PIS-COFINS-CSLL, que não são ISS).',
+        );
+    }
+
     const tomado: ApuracaoIssTomado = {
         notas: notasTomadas,
         totalServicos: r2(notasTomadas.reduce((t, n) => t + n.valorServicos, 0)),
         totalRetido,
+        notasNoMes: tomadasNoMes,
+        semRetencao: Math.max(0, tomadasNoMes - notasTomadas.length),
         avisos: avisosTomado,
     };
 
