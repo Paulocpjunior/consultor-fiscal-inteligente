@@ -6,7 +6,7 @@ import { Router } from 'express';
 import admin from 'firebase-admin';
 import {
   manifestarUma, manifestarPendentes, listarElegiveis,
-  resetarFalhasInfraManifestacao, diagnosticarPendencias,
+  resetarFalhasInfraManifestacao, diagnosticarPendencias, liberarPoisonManifestacao,
 } from './manifesto-orchestrator.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { getEmpresaIdsDaCarteira, podeAcessarEmpresaId } from './carteira-auth.js';
@@ -132,6 +132,31 @@ router.post('/manifest-pending', authUser, async (req, res) => {
   } catch (e) {
     console.error('[manifest-pending] erro:', e);
     res.status(500).json({ erro: e.message });
+  }
+});
+
+// "Tentar de novo" depois de CORRIGIDA a causa: devolve ao lote as chaves da
+// empresa que bateram no teto de falhas. Sem esta porta o poison era
+// definitivo — a pessoa renovava o certificado e nada voltava (caso KJM).
+//
+// Mesmo escopo do manifest-pending: colaborador libera a PRÓPRIA carteira,
+// empresa a empresa. É uma ação de RE-TENTATIVA (não afirma nada à SEFAZ), por
+// isso não precisa ser admin — e nunca é global.
+router.post('/manifest-liberar-poison', authUser, async (req, res) => {
+  try {
+    const { empresaId = null, dryRun = false } = req.body || {};
+    if (!empresaId) {
+      return res.status(400).json({ erro: 'Escolha a empresa: a liberação é por cliente, nunca geral.' });
+    }
+    if (req.user?.role !== 'admin') {
+      const check = await podeAcessarEmpresaId(req.user, empresaId);
+      if (!check.ok) return res.status(check.status).json({ erro: check.error });
+    }
+    const r = await liberarPoisonManifestacao({ empresaId, dryRun });
+    return res.json({ ok: true, ...r });
+  } catch (e) {
+    console.error('[manifest-liberar-poison] erro:', e);
+    return res.status(500).json({ erro: e.message });
   }
 });
 
