@@ -264,6 +264,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
         'a-recolher':      { txt: '💰 a recolher',     cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' },
         'iss-fixo':        { txt: '🏛 ISS fixo (SUP)', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300' },
         'so-retido':       { txt: '↩ só retido',       cls: 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300' },
+        'so-tomado':       { txt: '↩ só tomador',      cls: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300' },
         'sem-movimento':   { txt: '— sem movimento',   cls: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
     };
 
@@ -315,7 +316,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
 
                 {carteira?.resumo && (
                     <>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
                             <div className="rounded-lg border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 p-2">
                                 <p className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-400">A recolher</p>
                                 <p className="font-bold text-emerald-800 dark:text-emerald-300">
@@ -330,6 +331,12 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                 <p className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-400">Captura incerta · ISS zerado</p>
                                 <p className="font-bold text-amber-800 dark:text-amber-300">
                                     {carteira.resumo.capturaIncerta} · {carteira.resumo.issZerado ?? 0}
+                                </p>
+                            </div>
+                            <div className="rounded-lg border border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 p-2">
+                                <p className="text-[10px] uppercase font-bold text-indigo-700 dark:text-indigo-400">ISS retido (tomador)</p>
+                                <p className="font-bold text-indigo-800 dark:text-indigo-300">
+                                    {carteira.resumo.comIssTomado ?? 0} empresa(s) · {brl(carteira.resumo.totalIssTomado ?? 0)}
                                 </p>
                             </div>
                             <div className="rounded-lg border border-slate-300 dark:border-slate-600 p-2">

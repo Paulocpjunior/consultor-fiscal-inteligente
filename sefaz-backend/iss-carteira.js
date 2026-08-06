@@ -25,7 +25,7 @@
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /** Situações possíveis de uma empresa no mês. A ordem é a de prioridade. */
-export const SITUACOES = ['sem-ccm', 'captura-incerta', 'iss-zerado', 'a-recolher', 'iss-fixo', 'so-retido', 'sem-movimento'];
+export const SITUACOES = ['sem-ccm', 'captura-incerta', 'iss-zerado', 'a-recolher', 'so-tomado', 'iss-fixo', 'so-retido', 'sem-movimento'];
 
 const PESO = Object.fromEntries(SITUACOES.map((s, i) => [s, i]));
 
@@ -49,6 +49,12 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         const issRetido = r2(a.issRetido);
         const aRecolher = r2(a.aRecolher);
         const semValorGravado = Number(a.semValorGravado || 0);
+        // ISS retido COMO TOMADORA: outra obrigação, outra guia. Entrou na
+        // tela da empresa no mesmo dia, mas a carteira não sabia dele — e
+        // empresa que SÓ tem tomado aparecia como "sem movimento", que é o
+        // mesmo falso-negativo que acabamos de corrigir no ISS próprio.
+        const tomadoRetido = r2(a.tomadoRetido);
+        const tomadoNotas = Number(a.tomadoNotas || 0);
         const temCcm = !!String(e.ccm || '').replace(/\D/g, '').replace(/^0+$/, '');
         // A captura só é "confiável" pra quem tem CCM: sem ele a varredura do
         // portal nem tenta a empresa, então o zero dela não vale nada.
@@ -73,6 +79,12 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         } else if (notas > 0 && issRetido > 0) {
             situacao = 'so-retido';
             acao = 'Todo o ISS do mês foi retido pelo tomador — quem recolhe é quem contratou. Não há guia do prestador.';
+        } else if (notas === 0 && tomadoRetido > 0) {
+            // Não prestou, mas CONTRATOU com retenção: tem guia a recolher —
+            // só que a do ISS retido na fonte.
+            situacao = 'so-tomado';
+            acao = `Não emitiu nota no mês, mas reteve ISS de ${tomadoNotas} prestador(es). `
+                + 'Há guia de ISS RETIDO a recolher — é outra guia, não a do ISS próprio.';
         } else if (notas > 0) {
             // ACHADO 06/08 (varredura real do Paulo): empresa com 29 NOTAS
             // aparecia como "sem movimento". Isso é o farol MENTINDO — ela tem
@@ -93,6 +105,7 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
             // ISS fixo não entra no total por faturamento: o valor da guia dele
             // não está nestas notas.
             aRecolher: situacao === 'iss-fixo' ? 0 : aRecolher,
+            tomadoRetido, tomadoNotas,
             temCcm, zeroConfiavel, situacao, acao,
         });
     }
@@ -111,6 +124,10 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         semCcm: conta('sem-ccm'),
         capturaIncerta: conta('captura-incerta'),
         issZerado: conta('iss-zerado'),
+        // O tomado NÃO entra no totalARecolher: são guias diferentes, e somar
+        // inventaria um valor que ninguém paga junto.
+        comIssTomado: linhas.filter((l) => l.tomadoRetido > 0).length,
+        totalIssTomado: r2(linhas.reduce((t, l) => t + l.tomadoRetido, 0)),
         issFixo: conta('iss-fixo'),
         soRetido: conta('so-retido'),
         semMovimento: conta('sem-movimento'),
@@ -128,7 +145,7 @@ export function farolDaCarteira(resumo) {
     if (!resumo || !resumo.empresas) return 'sem-dados';
     if (resumo.semCcm > 0 || resumo.capturaIncerta > 0 || resumo.issZerado > 0) return 'atencao';
     // Ninguém com nota na carteira inteira: não se conclui "mês parado".
-    if (resumo.aRecolher === 0 && resumo.soRetido === 0 && resumo.issFixo === 0) return 'atencao';
+    if (resumo.aRecolher === 0 && resumo.soRetido === 0 && resumo.issFixo === 0 && !resumo.comIssTomado) return 'atencao';
     return 'ok';
 }
 
@@ -145,6 +162,12 @@ function avisosDaCarteira(r) {
             + 'Confira isenção/imunidade ou falha na captura do valor antes de fechar o mês.',
         );
     }
+    if (r.comIssTomado > 0) {
+        avisos.push(
+            `${r.comIssTomado} empresa(s) retiveram ISS como TOMADORAS (R$ ${r.totalIssTomado.toFixed(2)}) — `
+            + 'é OUTRA guia, que elas recolhem no lugar do prestador. Não soma com o ISS próprio.',
+        );
+    }
     if (r.capturaIncerta > 0) {
         avisos.push(
             `${r.capturaIncerta} empresa(s) com captura incerta no mês — não prometa (nem descarte) guia antes de rodar a captura.`,
@@ -155,7 +178,7 @@ function avisosDaCarteira(r) {
             `${r.issFixo} empresa(s) de ISS fixo (SUP) ficam FORA do total: a guia delas é por profissional, não por faturamento.`,
         );
     }
-    if (r.empresas > 0 && r.aRecolher === 0 && r.soRetido === 0 && r.issFixo === 0) {
+    if (r.empresas > 0 && r.aRecolher === 0 && r.soRetido === 0 && r.issFixo === 0 && !r.comIssTomado) {
         avisos.push(
             'NENHUMA empresa da carteira teve nota nesta competência. Isso quase nunca é mês parado — confira a captura antes de fechar o mês.',
         );

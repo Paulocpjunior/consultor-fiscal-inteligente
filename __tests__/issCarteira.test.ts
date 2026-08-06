@@ -179,3 +179,53 @@ describe('nota no mês com ISS zerado NÃO é "sem movimento"', () => {
         expect(p.avisos.join(' ')).toMatch(/não é "sem movimento"/);
     });
 });
+
+/**
+ * O ISS de TOMADOR entrou na tela de UMA empresa (#509) e a carteira ficou sem
+ * saber dele — ou seja, empresa que só tem retenção como tomadora continuava
+ * aparecendo como "sem movimento". É o MESMO falso-negativo que a gente
+ * acabou de corrigir no ISS próprio, na tela do lado.
+ */
+describe('ISS retido como TOMADORA na carteira', () => {
+    const base = { empresaId: 'a', nome: 'TOMADORA', cnpj: '1', ccm: '123', issFixoSup: false };
+
+    it('empresa SEM nota emitida mas COM retenção não é "sem movimento"', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [base],
+            apuracoes: [{ empresaId: 'a', notas: 0, issDevido: 0, issRetido: 0, aRecolher: 0, tomadoRetido: 800, tomadoNotas: 3 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('so-tomado');
+        expect(p.linhas[0].acao).toMatch(/reteve ISS de 3 prestador\(es\)/);
+        expect(p.linhas[0].acao).toMatch(/é outra guia/);
+    });
+
+    it('o tomado NÃO entra no total a recolher — são guias diferentes', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [base],
+            apuracoes: [{ empresaId: 'a', notas: 2, issDevido: 100, issRetido: 0, aRecolher: 100, tomadoRetido: 800, tomadoNotas: 3 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.resumo.totalARecolher).toBe(100);
+        expect(p.resumo.totalIssTomado).toBe(800);
+        expect(p.resumo.comIssTomado).toBe(1);
+        expect(p.avisos.join(' ')).toMatch(/Não soma com o ISS próprio/);
+    });
+
+    it('carteira só com tomado NÃO acende o alarme de "ninguém teve nota"', () => {
+        // Ali o alarme existe pra denunciar captura quebrada. Com retenção
+        // apurada, houve movimento — acender seria alarme falso.
+        const p = montarPainelIssCarteira({
+            empresas: [base],
+            apuracoes: [{ empresaId: 'a', notas: 0, issDevido: 0, issRetido: 0, aRecolher: 0, tomadoRetido: 800, tomadoNotas: 1 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.avisos.join(' ')).not.toMatch(/quase nunca é mês parado/);
+    });
+
+    it('sem tomado, nada muda no comportamento antigo', () => {
+        const p = montarPainelIssCarteira({ empresas: [emp()], apuracoes: [ap()], zeroConfiavelPara: confiavel });
+        expect(p.resumo.comIssTomado).toBe(0);
+        expect(p.linhas[0].situacao).toBe('a-recolher');
+    });
+});
