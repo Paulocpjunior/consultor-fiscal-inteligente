@@ -596,6 +596,24 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                     {/* ISS RETIDO COMO TOMADORA — outra obrigação, outra guia.
                         Paulo, 06/08: "essa empresa tem ISS de tomador e
                         prestador, aqui só aparece a de prestados". */}
+                    {/* AUSÊNCIA FALA: sem retenção encontrada, o bloco NÃO some —
+                        ele explica se é falta de captura ou de marcação. Sumir
+                        fez o colaborador achar que o app ignorava o ISS de
+                        tomador (Paulo, 06/08). */}
+                    {apuracao.tomado && apuracao.tomado.totalRetido === 0 && (
+                        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-3">
+                            <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
+                                ↩ ISS retido como TOMADORA — nada encontrado nesta competência
+                            </p>
+                            {(apuracao.tomado.avisos || []).map((a, i) => (
+                                <p key={i} className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">{a}</p>
+                            ))}
+                            <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
+                                Notas tomadas capturadas no mês: <strong>{apuracao.tomado.notasNoMes}</strong>
+                                {apuracao.tomado.semRetencao > 0 && <> · sem retenção de ISS: <strong>{apuracao.tomado.semRetencao}</strong></>}
+                            </p>
+                        </div>
+                    )}
                     {apuracao.tomado?.totalRetido > 0 && (
                         <div className="mt-3 rounded-lg border border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 p-3">
                             <p className="text-sm font-bold text-indigo-800 dark:text-indigo-300">

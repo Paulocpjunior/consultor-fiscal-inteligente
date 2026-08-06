@@ -311,3 +311,45 @@ describe('ISS retido COMO TOMADORA é outra obrigação', () => {
         expect(a.tomado.totalRetido).toBe(0);
     });
 });
+
+/**
+ * O bloco de ISS tomado SUMIA quando não achava retenção — e sumir fez o
+ * colaborador concluir que o app ignora o ISS de tomador (Paulo, 06/08:
+ * "colaborador alerta sobre ISS Tomador, não apareceu o ISS TOMADOR").
+ *
+ * Ausência tem que FALAR: "não achei" e "não tem" são coisas diferentes.
+ */
+describe('ausência de ISS tomado precisa dizer POR QUÊ', () => {
+    const emitida = (over: any = {}): any => ({
+        id: 's1', tipo: 'NFSe', tipoDoc: 'NFSe', direcao: 'saida', status: 'autorizado',
+        numero: '1', dhEmi: '2026-07-21T10:00:00', valorServicos: 1000, valorTotal: 1000,
+        valorIss: 50, issDevido: 50, itens: [], ...over,
+    });
+    const tomadaSemRetencao = (over: any = {}): any => ({
+        id: over.id || 't1', tipo: 'NFSe', tipoDoc: 'NFSe', direcao: 'entrada', status: 'autorizado',
+        numero: '900', dhEmi: '2026-07-15T10:00:00', valorServicos: 5000, valorTotal: 5000,
+        valorIss: 250, issDevido: 250, issRetido: false, itens: [], ...over,
+    });
+
+    it('NENHUMA nota tomada capturada aponta CAPTURA, não ausência de obrigação', () => {
+        const a = apurarIssSp([emitida()], '2026-07');
+        expect(a.tomado.notasNoMes).toBe(0);
+        expect(a.tomado.avisos.join(' ')).toMatch(/NENHUMA NFS-e TOMADA foi capturada/);
+        expect(a.tomado.avisos.join(' ')).toMatch(/problema é de CAPTURA/);
+    });
+
+    it('tomadas capturadas SEM retenção dizem isso, com a contagem', () => {
+        const a = apurarIssSp([emitida(), tomadaSemRetencao(), tomadaSemRetencao({ id: 't2' })], '2026-07');
+        expect(a.tomado.notasNoMes).toBe(2);
+        expect(a.tomado.semRetencao).toBe(2);
+        expect(a.tomado.avisos.join(' ')).toMatch(/2 nota\(s\) tomada\(s\) capturada\(s\), NENHUMA com retenção/);
+        // A pista que evita conclusão errada: pode ser retenção de OUTRO imposto.
+        expect(a.tomado.avisos.join(' ')).toMatch(/IR\/INSS\/PIS-COFINS-CSLL/);
+    });
+
+    it('com retenção, o aviso de ausência NÃO aparece', () => {
+        const a = apurarIssSp([tomadaSemRetencao({ valorIssRetido: 250 })], '2026-07');
+        expect(a.tomado.totalRetido).toBe(250);
+        expect(a.tomado.avisos.join(' ')).not.toMatch(/NENHUMA/);
+    });
+});
