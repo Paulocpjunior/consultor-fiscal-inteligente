@@ -214,3 +214,39 @@ describe('alíquota vem da NOTA e SUP não apura por faturamento (Paulo, 06/08)'
         expect(a.apta).toBe(false);
     });
 });
+
+describe('CCM do prestador sai da própria nota quando o cadastro está vazio', () => {
+    // Caso CLINICA MANTOAN (06/08): a apuração funcionou, mas a caixinha do
+    // "🔌 Testar WS" veio VAZIA e o botão nasceu desabilitado, mudo. O CCM
+    // canônico é o do cadastro; a nota serve de socorro pra destravar o teste,
+    // nunca de substituto (a captura do portal lê o cadastro).
+    const nota = (over: any = {}): any => ({
+        id: over.id || 'c1',
+        tipo: 'NFSe', tipoDoc: 'NFSe', direcao: 'saida', status: 'autorizado',
+        numero: over.numero || '782', dhEmi: '2026-08-08T10:00:00',
+        valorServicos: 2400, valorTotal: 2400, valorIss: 48, issDevido: 48,
+        itens: [], ...over,
+    });
+
+    it('lê o prestadorCcm gravado pelo importador do CSV do portal', () => {
+        const a = apurarIssSp([nota({ prestadorCcm: '1234567' })], '2026-08');
+        expect(a.ccmDasNotas).toEqual(['1234567']);
+    });
+
+    it('lê a InscricaoPrestador do XML e deduplica entre as notas', () => {
+        const a = apurarIssSp([
+            nota({ id: 'c1', numero: '1', inscricaoPrestador: '7654321' }),
+            nota({ id: 'c2', numero: '2', prestadorCcm: '7.654.321' }),
+        ], '2026-08');
+        expect(a.ccmDasNotas).toEqual(['7654321']);
+    });
+
+    it('CCM só-zeros não é inscrição (#311) — fica de fora', () => {
+        const a = apurarIssSp([nota({ prestadorCcm: '0000000' })], '2026-08');
+        expect(a.ccmDasNotas).toEqual([]);
+    });
+
+    it('sem nota nenhuma não inventa CCM', () => {
+        expect(apurarIssSp([], '2026-08').ccmDasNotas).toEqual([]);
+    });
+});
