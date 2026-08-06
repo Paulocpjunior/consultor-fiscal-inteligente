@@ -15,7 +15,7 @@
  * RETIDO pelo tomador não é recolhido pelo prestador (Lei 13.701/03 art. 9º) —
  * somar tudo faria o cliente pagar duas vezes o mesmo imposto.
  */
-import type { DocumentoFiscal } from '../types';
+import type { DocumentoFiscal, IssConfig } from '../types';
 
 /** Código IBGE de São Paulo capital — única praça coberta (Paulo, 05/08). */
 export const COD_MUN_SP_CAPITAL = '3550308';
@@ -33,6 +33,13 @@ export interface NotaIssSp {
     issDevido: number;
     /** ISS retido pelo tomador — o prestador NÃO recolhe esta parte. */
     issRetido: number;
+    /**
+     * Código do serviço e alíquota DA NOTA. Não se deriva alíquota de ISS:
+     * em SP ela varia por serviço (2%, 2,5%, 3%, 5% — médico é 2%), e supor
+     * 5% pra tudo é errar o imposto de uma carteira inteira.
+     */
+    codigoServico: string;
+    aliquota: number | null;
     /** Nº da guia da Prefeitura, quando a nota já foi vinculada a uma. */
     guia?: string | null;
     quitadaEm?: string | null;
@@ -52,6 +59,10 @@ export interface ApuracaoIssSp {
     vencimento: string;
     /** Notas já vinculadas a uma guia da Prefeitura. */
     jaComGuia: number;
+    /** Alíquotas distintas encontradas — serviço diferente, alíquota diferente. */
+    aliquotas: number[];
+    /** Empresa é ISS FIXO (sociedade uniprofissional): não se apura por receita. */
+    issFixoSup: boolean;
     avisos: string[];
     /** Pode seguir para a emissão da guia? */
     apta: boolean;
@@ -88,7 +99,11 @@ const primeiro = (...vs: Array<unknown>): number | undefined => {
  * @param docs      documentos da competência (a função filtra o que serve)
  * @param competencia 'AAAA-MM'
  */
-export function apurarIssSp(docs: DocumentoFiscal[], competencia: string): ApuracaoIssSp {
+export function apurarIssSp(
+    docs: DocumentoFiscal[],
+    competencia: string,
+    opts: { issConfig?: IssConfig | null } = {},
+): ApuracaoIssSp {
     const avisos: string[] = [];
     const notas: NotaIssSp[] = [];
 
@@ -121,6 +136,8 @@ export function apurarIssSp(docs: DocumentoFiscal[], competencia: string): Apura
             valorServicos: r2(primeiro(v.baseCalculo, x.valorServicos, d.valorTotal) ?? 0),
             issDevido: r2(issDevido ?? 0),
             issRetido: r2(retido ?? 0),
+            codigoServico: String(x.codigoServico || v.codigoServico || '').trim(),
+            aliquota: primeiro(x.aliquotaServicos, v.aliquota) ?? null,
             guia: (d as any).guiaIss || null,
             quitadaEm: (d as any).guiaIssQuitadaEm || null,
             semValorGravado: issDevido === undefined,
@@ -136,6 +153,15 @@ export function apurarIssSp(docs: DocumentoFiscal[], competencia: string): Apura
     // o cliente pagar duas vezes o mesmo imposto.
     const aRecolher = r2(Math.max(0, totalIssDevido - totalIssRetido));
     const jaComGuia = notas.filter((n) => !!n.guia).length;
+
+    const aliquotas = [...new Set(notas.map((n) => n.aliquota).filter((a): a is number => a !== null && a > 0))]
+        .sort((a, b) => a - b);
+
+    // ISS FIXO (sociedade uniprofissional): a guia é qtde de profissionais ×
+    // valor por profissional, NÃO o ISS das notas (Paulo, 06/08). Apurar por
+    // faturamento aqui cobraria do cliente um imposto que ele não deve daquele
+    // jeito — e o valor sairia MAIOR, o que ninguém devolve depois.
+    const issFixoSup = opts.issConfig?.tipo === 'sup_fixo';
 
     const semValor = notas.filter((n) => n.semValorGravado).length;
     if (semValor) {
@@ -156,6 +182,27 @@ export function apurarIssSp(docs: DocumentoFiscal[], competencia: string): Apura
     if (notas.length === 0) {
         avisos.push('Nenhuma NFS-e emitida nesta competência. Sem nota não há ISS a recolher — confirme se a captura do mês já rodou.');
     }
+    if (issFixoSup) {
+        const q = opts.issConfig?.qtdeSocios || 0;
+        const vp = opts.issConfig?.valorPorSocio || 0;
+        avisos.push(
+            'Esta empresa é ISS FIXO (sociedade uniprofissional): a guia NÃO sai do faturamento — é '
+            + `${q || '—'} profissional(is) × ${vp ? `R$ ${vp.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'valor por profissional'} `
+            + 'conforme a legislação do município. O ISS das notas abaixo é informativo.',
+        );
+    }
+    if (aliquotas.length > 1) {
+        avisos.push(
+            `Alíquotas diferentes no mês (${aliquotas.map((a) => `${a}%`).join(', ')}) — normal quando há `
+            + 'códigos de serviço distintos. Confira se cada nota saiu com a alíquota do serviço certo.',
+        );
+    }
+    if (notas.length > 0 && aliquotas.length === 0 && totalIssDevido === 0) {
+        avisos.push(
+            'Todas as notas do mês estão com ISS e alíquota ZERADOS. Isso pode ser ISS fixo (SUP), isenção, '
+            + 'imunidade ou retenção integral — confira antes de concluir que não há imposto a pagar.',
+        );
+    }
 
     return {
         competencia,
@@ -166,10 +213,14 @@ export function apurarIssSp(docs: DocumentoFiscal[], competencia: string): Apura
         aRecolher,
         vencimento: vencimentoIssSp(competencia),
         jaComGuia,
+        aliquotas,
+        issFixoSup,
         avisos,
         // Emissão só faz sentido com valor a recolher E sem buraco de dado:
         // guia a menor é o erro que a Prefeitura cobra com multa depois.
-        apta: notas.length > 0 && semValor === 0 && aRecolher > 0,
+        // ISS fixo nunca libera guia por faturamento — o valor correto não
+        // está nestas notas.
+        apta: !issFixoSup && notas.length > 0 && semValor === 0 && aRecolher > 0,
     };
 }
 

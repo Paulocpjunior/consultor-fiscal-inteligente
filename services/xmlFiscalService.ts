@@ -913,13 +913,20 @@ export async function getDadosFiscaisEmpresa(
     /** Município IBGE — decide a praça do ISS (SP capital = 3550308). */
     codMunIBGE?: string | null;
     indAtividade?: string | null;
+    /**
+     * Config de ISS da empresa (Lucro: `issPadraoConfig`). Vem do TOPO do doc,
+     * não de dadosFiscais — é o que diz se a empresa é ISS FIXO (sociedade
+     * uniprofissional), caso em que a guia não sai do faturamento.
+     */
+    issConfig?: import('../types').IssConfig | null;
 } | null> {
     if (!isFirebaseConfigured || !db || !empresaId) return null;
     try {
         const colecao = fonte === 'simples' ? 'simples_empresas' : 'lucro_empresas';
         const snap = await getDoc(doc(db, colecao, empresaId));
         if (!snap.exists()) return null;
-        const df = (snap.data() as any)?.dadosFiscais || {};
+        const doc0 = (snap.data() as any) || {};
+        const df = doc0.dadosFiscais || {};
         // CUIDADO (lição da whitelist #382, do lado do cliente): esta lista é
         // EXPLÍCITA — campo novo que não entrar aqui é lido como vazio e a tela
         // se comporta como se nunca tivesse sido cadastrado.
@@ -930,6 +937,7 @@ export async function getDadosFiscaisEmpresa(
             codCliente: df.codCliente ?? null,
             codMunIBGE: df.codMunIBGE ?? null,
             indAtividade: df.indAtividade ?? null,
+            issConfig: doc0.issPadraoConfig ?? df.issConfig ?? null,
         };
     } catch {
         return null;

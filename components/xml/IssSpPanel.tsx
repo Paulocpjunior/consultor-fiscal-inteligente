@@ -106,7 +106,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                 carregarSaude(alvo.cnpj),
             ]);
             setSaude(s);
-            setApuracao(apurarIssSp(docs, competencia));
+            setApuracao(apurarIssSp(docs, competencia, { issConfig: (df as any)?.issConfig || null }));
         } finally {
             setCarregando(false);
         }
@@ -199,6 +199,8 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                     <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">🏛️ ISS próprio — NFS-e São Paulo capital</h3>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                         Apura o ISS do mês a partir das NFS-e emitidas, separando o que o tomador reteve.
+                        A <strong>alíquota vem da nota</strong> (varia por código de serviço — não é 5% para todos)
+                        e empresa de <strong>ISS fixo (sociedade uniprofissional)</strong> não apura por faturamento.
                         A <strong>guia é emitida no portal da Prefeitura</strong> — o app não cria número de guia.
                         Depois de emitir, anexe o PDF aqui para arquivar no SharePoint, mandar ao cliente com o gestor
                         em cópia e dar baixa na obrigação.
@@ -295,7 +297,8 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                             ['Serviços', brl(apuracao.totalServicos)],
                             ['ISS devido', brl(apuracao.totalIssDevido)],
                             ['Retido pelo tomador', brl(apuracao.totalIssRetido)],
-                            ['A RECOLHER', brl(apuracao.aRecolher)],
+                            [apuracao.issFixoSup ? 'A RECOLHER (não se aplica)' : 'A RECOLHER',
+                                apuracao.issFixoSup ? '—' : brl(apuracao.aRecolher)],
                         ].map(([r, v], i) => (
                             <div key={r} className={`rounded-lg p-3 border ${i === 3 ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20' : 'border-slate-200 dark:border-slate-700'}`}>
                                 <div className="text-[10px] uppercase text-slate-500">{r}</div>
@@ -337,6 +340,8 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                     <tr>
                                         <th className="py-1">Data</th><th>Nº</th><th>Tomador</th>
                                         <th className="text-right">Serviços</th>
+                                        <th>Cód. serv.</th>
+                                        <th className="text-right">Alíq.</th>
                                         <th className="text-right">ISS devido</th>
                                         <th className="text-right">Retido</th>
                                         <th>Guia</th>
@@ -349,6 +354,10 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                             <td>{n.numero}</td>
                                             <td className="truncate max-w-[220px]">{n.tomador}</td>
                                             <td className="text-right tabular-nums">{brl(n.valorServicos)}</td>
+                                            <td className="font-mono text-[10px]">{n.codigoServico || '—'}</td>
+                                            <td className="text-right tabular-nums">
+                                                {n.aliquota != null ? `${n.aliquota}%` : '—'}
+                                            </td>
                                             <td className="text-right tabular-nums">
                                                 {n.semValorGravado
                                                     ? <span className="text-amber-600">não gravado</span>
