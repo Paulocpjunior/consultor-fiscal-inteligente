@@ -528,6 +528,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   baixa); apuração de Simples = faturamento lançado da competência
   (`saveHistoricoCalculo` não é chamado por tela nenhuma), do Lucro = ficha
   do mês. FEATURE NOVA de etapa fiscal DEVE aparecer nesse trilho.
+- **ISS PRÓPRIO DE OPTANTE DO SIMPLES JÁ ESTÁ DENTRO DO DAS** (06/08, achado
+  ao ligar o ISS na Rotina): o painel 🏛️ ISS SP somava no "a recolher" da
+  carteira o ISS de empresas do Simples — mas optante não recolhe ISS próprio
+  em guia do município (LC 123 art. 13), ele vai no DAS da MESMA competência.
+  Cobrar essa guia é cobrar DUAS VEZES. Situação nova `iss-no-das`: o valor
+  aparece na tela (`issForaDoTotal`), FORA do total. CONTINUA sendo guia do
+  município mesmo pra optante: ISS RETIDO como tomadora, ISS fixo/SUP, e
+  empresa impedida pelo sublimite (por isso a ação diz pra conferir). Foi o
+  REGIME que faltava — a rota lia as duas coleções sem distinguir.
+  **A ROTINA DO MÊS ENXERGA O ISS** (mesmo PR): a onda 1 são 157 empresas de
+  SERVIÇO PURO, as que NÃO fecham o mês no DAS, e elas apareciam com "✓ Mês
+  fechado" devendo ISS. `aplicarIssNaRotina` liga em TRÊS etapas, cada uma
+  pelo motivo dela — captura (sem CCM a varredura nem roda; captura incerta),
+  validação (nota com ISS zerado é conferência) e guias (ISS próprio e ISS
+  RETIDO são DUAS guias, fecham SEPARADAS pelo tipo do envio no rito: /iss/
+  sem "retid" = próprio, com = retido). Guias fica ÂMBAR, não vermelho: o app
+  não emite guia do município (é no portal da PMSP), então não pode PROVAR que
+  saiu — e vermelho eterno em coisa que ninguém consegue fechar vira ruído que
+  a equipe aprende a ignorar. Âmbar já impede o "mês fechado". A conta do ISS
+  virou núcleo (`acumularIssPorEmpresa` em iss-carteira.js) porque agora são
+  DOIS painéis lendo o mesmo dado — painel com conta própria diverge sozinho
+  (lição do card 4) e a leitura é justo a armadilha achatado/objeto.
 
 - ~~Paulo rodar `setup-cloud-schedulers.sh`~~ **FEITO 24/07** (3 crons
   órfãos criados e rodando OK: das/dctfweb/caixa-postal).
