@@ -260,6 +260,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     const SITUACAO_ROTULO: Record<string, { txt: string; cls: string }> = {
         'sem-ccm':         { txt: '🚨 sem CCM',        cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
         'captura-incerta': { txt: '⚠ captura incerta', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' },
+        'iss-zerado':      { txt: '❓ ISS zerado',      cls: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' },
         'a-recolher':      { txt: '💰 a recolher',     cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' },
         'iss-fixo':        { txt: '🏛 ISS fixo (SUP)', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300' },
         'so-retido':       { txt: '↩ só retido',       cls: 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300' },
@@ -299,8 +300,10 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                 <p className="font-bold text-red-800 dark:text-red-300">{carteira.resumo.semCcm}</p>
                             </div>
                             <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-2">
-                                <p className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-400">Captura incerta</p>
-                                <p className="font-bold text-amber-800 dark:text-amber-300">{carteira.resumo.capturaIncerta}</p>
+                                <p className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-400">Captura incerta · ISS zerado</p>
+                                <p className="font-bold text-amber-800 dark:text-amber-300">
+                                    {carteira.resumo.capturaIncerta} · {carteira.resumo.issZerado ?? 0}
+                                </p>
                             </div>
                             <div className="rounded-lg border border-slate-300 dark:border-slate-600 p-2">
                                 <p className="text-[10px] uppercase font-bold text-slate-500">ISS fixo · só retido · sem mov.</p>
