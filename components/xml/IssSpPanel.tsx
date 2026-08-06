@@ -279,6 +279,24 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                 {diagWs.leitura.acao && <p>{diagWs.leitura.acao}</p>}
                             </div>
                         )}
+                        {diagWs?.contrato && (
+                            <div className={`rounded-lg border p-2 text-[11px] ${
+                                diagWs.contrato.ok
+                                    ? 'border-slate-300 bg-slate-50 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300'
+                                    : 'border-rose-300 bg-rose-50 dark:bg-rose-900/20 text-rose-800 dark:text-rose-300'
+                            }`}>
+                                <p className="font-bold">
+                                    📜 Contrato do WSDL da Prefeitura {diagWs.contrato.conclusivo === false ? '(não lido)' : ''}
+                                </p>
+                                <p>{diagWs.contrato.motivo}</p>
+                                {Array.isArray(diagWs.contrato.esperados) && diagWs.contrato.esperados.length > 0 && (
+                                    <p className="font-mono mt-1">
+                                        declara: {diagWs.contrato.esperados.join(', ')} · enviamos:{' '}
+                                        {(diagWs.contrato.enviados || []).join(', ') || '—'}
+                                    </p>
+                                )}
+                            </div>
+                        )}
                         {diagWs && (
                             <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded p-2 max-h-64 overflow-y-auto">
 {JSON.stringify(diagWs, null, 2)}

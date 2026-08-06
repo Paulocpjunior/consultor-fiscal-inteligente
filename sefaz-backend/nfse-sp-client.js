@@ -144,6 +144,36 @@ function postSoap(body, pfxBuffer, password, soapAction = SOAP_ACTION_RECEBIDAS)
     });
 }
 
+/**
+ * Baixa o ?WSDL do próprio serviço — o CONTRATO publicado pela Prefeitura.
+ *
+ * É a fonte que não mente sobre nome de parâmetro e SOAPAction, e a única
+ * forma honesta de resolver o 1102 ("mensagem sem conteúdo") sem chutar
+ * layout de fisco. Não precisa de certificado: o WSDL é público.
+ */
+export function baixarWsdl() {
+    return new Promise((resolve, reject) => {
+        const req = https.request(
+            {
+                host: ENDPOINT_HOST,
+                path: `${ENDPOINT_PATH}?WSDL`,
+                method: 'GET',
+                minVersion: 'TLSv1.2',
+                rejectUnauthorized: true,
+                timeout: 30000,
+            },
+            (res) => {
+                const chunks = [];
+                res.on('data', (c) => chunks.push(c));
+                res.on('end', () => resolve({ statusCode: res.statusCode || 0, body: Buffer.concat(chunks).toString('utf8') }));
+            },
+        );
+        req.on('error', reject);
+        req.on('timeout', () => req.destroy(new Error('NFS-e SP: timeout ao baixar o WSDL')));
+        req.end();
+    });
+}
+
 function extrairRetornoXml(soapResposta, metodo = 'ConsultaNFeRecebidas') {
     const cdataMatch = soapResposta.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
     if (cdataMatch) return cdataMatch[1];
