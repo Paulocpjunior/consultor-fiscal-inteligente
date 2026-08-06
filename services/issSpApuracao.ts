@@ -47,6 +47,33 @@ export interface NotaIssSp {
     semValorGravado: boolean;
 }
 
+/**
+ * ISS que a empresa retém COMO TOMADORA e recolhe no lugar do prestador.
+ *
+ * É OUTRA obrigação, com OUTRA guia: o ISS retido na fonte é recolhido por
+ * quem contratou o serviço (Lei 13.701/03 art. 9º §1º). O painel só mostrava o
+ * ISS de PRESTADOR — empresa que é tomadora com retenção simplesmente não via
+ * o que devia recolher (Paulo, 06/08: "essa empresa tem ISS de tomador e
+ * prestador, aqui só aparece a de prestados").
+ */
+export interface NotaIssTomado {
+    id: string;
+    numero: string;
+    data: string;
+    prestador: string;
+    valorServicos: number;
+    /** ISS retido pela empresa — é ISSO que ela recolhe. */
+    issRetido: number;
+    semValorGravado: boolean;
+}
+
+export interface ApuracaoIssTomado {
+    notas: NotaIssTomado[];
+    totalServicos: number;
+    totalRetido: number;
+    avisos: string[];
+}
+
 export interface ApuracaoIssSp {
     competencia: string;
     notas: NotaIssSp[];
@@ -72,6 +99,12 @@ export interface ApuracaoIssSp {
     avisos: string[];
     /** Pode seguir para a emissão da guia? */
     apta: boolean;
+    /**
+     * ISS RETIDO pela empresa como TOMADORA — obrigação separada, guia
+     * separada. Não se soma ao ISS próprio: são impostos de operações
+     * diferentes, e juntar os dois inventaria valor.
+     */
+    tomado: ApuracaoIssTomado;
 }
 
 /**
@@ -156,6 +189,59 @@ export function apurarIssSp(
         });
     }
 
+    // ── ISS retido COMO TOMADORA (outra obrigação, outra guia) ─────────────
+    const notasTomadas: NotaIssTomado[] = [];
+    for (const d of docs || []) {
+        const tipo = String((d as any).tipoDoc || d.tipo || '');
+        if (!/NFSe/i.test(tipo)) continue;
+        if (d.direcao !== 'entrada') continue;              // serviço TOMADO
+        if (CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
+
+        const x: any = d as any;
+        const v: any = d.valores || {};
+        // Só entra o que foi efetivamente RETIDO: nota tomada sem retenção não
+        // gera obrigação nenhuma pra tomadora, e listá-la seria ruído.
+        const flag = v.issRetido === true || x.issRetido === true;
+        const retido = primeiro(v.valorIssRetido, x.valorIssRetido);
+        const issDaNota = primeiro(v.iss, x.valorIss, x.issDevido, (d.totais as any)?.vISS);
+        const valorRetido = retido ?? (flag ? issDaNota : undefined);
+        if (!valorRetido) continue;
+
+        const parte: any = x.prestador || d.emitente || {};
+        notasTomadas.push({
+            id: d.id,
+            numero: d.numero || '—',
+            data: String(d.dhEmi || '').slice(0, 10),
+            prestador: parte?.nome || x.prestadorNome || x.xNomeEmit || '—',
+            valorServicos: r2(primeiro(v.baseCalculo, x.valorServicos, d.valorTotal) ?? 0),
+            issRetido: r2(valorRetido),
+            semValorGravado: retido === undefined && flag && issDaNota === undefined,
+        });
+    }
+    notasTomadas.sort((a, b) => a.data.localeCompare(b.data) || a.numero.localeCompare(b.numero));
+
+    const avisosTomado: string[] = [];
+    const totalRetido = r2(notasTomadas.reduce((t, n) => t + n.issRetido, 0));
+    const tomadoSemValor = notasTomadas.filter((n) => n.semValorGravado).length;
+    if (tomadoSemValor) {
+        avisosTomado.push(
+            `${tomadoSemValor} nota tomada está marcada como RETIDA mas sem o valor gravado — ausência não é zero. `
+            + 'Reimporte antes de recolher.',
+        );
+    }
+    if (totalRetido > 0) {
+        avisosTomado.push(
+            'Este valor é de OUTRA guia: quem recolhe o ISS retido na fonte é a empresa, no lugar do prestador. '
+            + 'Não some com o ISS próprio.',
+        );
+    }
+    const tomado: ApuracaoIssTomado = {
+        notas: notasTomadas,
+        totalServicos: r2(notasTomadas.reduce((t, n) => t + n.valorServicos, 0)),
+        totalRetido,
+        avisos: avisosTomado,
+    };
+
     notas.sort((a, b) => a.data.localeCompare(b.data) || a.numero.localeCompare(b.numero));
 
     const totalServicos = r2(notas.reduce((t, n) => t + n.valorServicos, 0));
@@ -193,6 +279,12 @@ export function apurarIssSp(
     }
     if (notas.length === 0) {
         avisos.push('Nenhuma NFS-e emitida nesta competência. Sem nota não há ISS a recolher — confirme se a captura do mês já rodou.');
+    }
+    if (tomado.totalRetido > 0) {
+        avisos.push(
+            `Esta empresa TAMBÉM é tomadora com retenção: R$ ${tomado.totalRetido.toFixed(2)} de ISS retido de `
+            + `${tomado.notas.length} prestador(es), que ELA recolhe — é outra guia, mostrada abaixo.`,
+        );
     }
     if (issFixoSup) {
         const q = opts.issConfig?.qtdeSocios || 0;
@@ -234,6 +326,7 @@ export function apurarIssSp(
         // ISS fixo nunca libera guia por faturamento — o valor correto não
         // está nestas notas.
         apta: !issFixoSup && notas.length > 0 && semValor === 0 && aRecolher > 0,
+        tomado,
     };
 }
 

@@ -8,6 +8,12 @@
  */
 import type { DocumentoFiscal } from '../types';
 import { alocarTributacaoIcms } from './iobSageExportService';
+// RÉGUA ÚNICA das duas formas de gravação: captura SEFAZ/portal grava
+// ACHATADO (cnpjEmit) e importação de XML grava OBJETO (emitente.cnpjCpf).
+// Ler só o objeto zerava TUDO que depende de "a empresa é a emitente" — foi
+// o que fez "emissão própria 0" em 198 clientes (05/08) e o que fazia este
+// relatório dizer "nenhuma nota emitida" com 436 documentos no recorte.
+import { cnpjEmitente, modeloDoDoc } from '../sefaz-backend/participante-doc-helper.js';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
@@ -273,10 +279,11 @@ export function nfCanceladasFaltantes(docs: DocumentoFiscal[], empresaCnpj: stri
     for (const d of docs) {
         const tipoDoc = (d as any).tipoDoc || d.tipo;
         if (!['NFe', 'NFCe'].includes(tipoDoc)) continue;
-        if (String(d.emitente?.cnpjCpf || '').replace(/\D/g, '') !== cnpj) continue;
+        if (cnpjEmitente(d) !== cnpj) continue;
         const num = parseInt(String(d.numero || '').replace(/\D/g, ''), 10);
         if (!Number.isFinite(num) || num <= 0) continue;
-        const modelo = String(d.modelo || (tipoDoc === 'NFCe' ? '65' : '55'));
+        // `modelo` NÃO é campo gravado: a captura deriva da chave (pos 21-22).
+        const modelo = modeloDoDoc(d) || (tipoDoc === 'NFCe' ? '65' : '55');
         const serie = String(parseInt(String(d.serie || '0').replace(/\D/g, '') || '0', 10));
         const k = `${modelo}|${serie}`;
         const g = mapa.get(k) || { modelo, serie, presentes: new Set<number>(), canceladas: new Set<number>() };

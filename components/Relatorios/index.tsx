@@ -571,6 +571,12 @@ const RESSALVAS_NUMERACAO = [
 const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
     const { gerando, rodar } = usePdf();
     const linhas = useMemo(() => nfCanceladasFaltantes(docs, empresa.cnpj), [docs, empresa.cnpj]);
+    // "Nenhuma nota emitida" e "não capturamos as saídas desta empresa" são
+    // coisas DIFERENTES e a tela dizia a primeira nos dois casos. Caso SILVIO
+    // FREIRE (06/08): o E-Fiscal listava 12 NFC-e faltantes e o CFI dizia
+    // "nenhuma nota emitida" com 436 documentos no recorte — porque a SEFAZ
+    // NÃO entrega a saída ao emitente (Rej. 641), ela vem pelo cofre/autXML.
+    const semSaidaCapturada = linhas.length === 0 && docs.length > 0;
     const totalFaltantes = linhas.reduce((s, l) => s + l.faltantesTotal, 0);
     const totalCanceladas = linhas.reduce((s, l) => s + l.canceladas.length, 0);
 
@@ -610,7 +616,27 @@ const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tru
                     </span>
                 )}
             </div>
-            {!linhas.length && <p className="text-xs text-slate-500">Nenhuma nota emitida pela empresa (mod 55/65) no recorte.</p>}
+            {!linhas.length && !semSaidaCapturada && (
+                <p className="text-xs text-slate-500">Sem documentos no recorte — escolha empresa e competência.</p>
+            )}
+            {semSaidaCapturada && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-2 text-xs text-amber-800 dark:text-amber-300">
+                    <p className="font-bold">
+                        ⚠ Não há NENHUMA nota EMITIDA pela empresa neste recorte — e há {docs.length} documento(s).
+                    </p>
+                    <p>
+                        Isso quase nunca significa que o cliente não emitiu. A SEFAZ <strong>não entrega a saída ao
+                        próprio emitente</strong> (Rejeição 641): ela chega pelo cofre de e-mail ou por autXML. Se esse
+                        trilho não estiver configurado, a numeração não pode ser conferida e este relatório fica
+                        <strong> cego</strong>, não vazio.
+                    </p>
+                    <p className="mt-1">
+                        Confira em <strong>Captura → Cobertura de Saída</strong> se esta empresa já envia os XMLs de
+                        saída. Enquanto não enviar, o E-Fiscal (que recebe do ERP do cliente) vai listar faltantes que
+                        o CFI não tem como ver.
+                    </p>
+                </div>
+            )}
             {linhas.length > 0 && (
                 <div className="overflow-x-auto">
                     <table className="w-full text-xs">
