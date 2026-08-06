@@ -5,8 +5,8 @@
 > servirá para consultas."* O E-Fiscal **não será desligado** — vira o sistema
 > de consulta do histórico, e a migração passou a ser só da OPERAÇÃO CORRENTE.
 >
-> **NÃO pedir a volumetria do `e0299` ao Paulo** (o SQL abaixo ficou obsoleto)
-> e não iniciar extração/transformação de dados do PG12.
+> **A volumetria CHEGOU em 06/08** e está analisada abaixo — ela CONFIRMA a
+> decisão, não a reabre. Não iniciar extração/transformação de dados do PG12.
 >
 > O que este documento ainda serve: registrar que o **DDL foi validado** (o
 > `pad_modelo` prova que os 1.735 schemas são o mesmo molde) e onde a
@@ -17,17 +17,66 @@ você valide"). REGRA mantida: só ESTRUTURA transita — nenhum dado fiscal de
 cliente veio nos arquivos, e é assim que continua (extração de dados vai
 direto pra bucket GCS privado do projeto, nunca pelo chat).
 
-## Veredito: 2 dos 3 pedidos ✅ · 1 precisa ser refeito ❌
+## Veredito: os 3 pedidos entregues ✅ (volumetria chegou em 06/08)
 
 | Arquivo | Situação |
 |---|---|
 | `efiscal_ddl.sql` (pg_dump --schema-only) | ✅ **PERFEITO** — os 4 schemas pedidos: `e0299` (618 tabelas), `pad_modelo` (618 — confirma que é o MOLDE: todo e#### tem as mesmas 618), `gen` (273) e `gen_modelo` (273). Guardado aqui em `efiscal_ddl.zip` |
 | `\dt gen.*` (`efiscal_tabelas_gen.txt`) | ✅ 270 tabelas — guardado aqui |
-| `efiscal_tabelas_e0299.csv` (volumetria) | ❌ **REFAZER** — veio com só 80 das 618 tabelas e contagens ~zero para um schema de 13 GB. Causa provável: `pg_stat_user_tables` sem ANALYZE (estatística nunca coletada) e/ou export limitado à página visível da ferramenta. SQL correto abaixo |
+| `efiscal_volumetria_e0299.csv` (volumetria) | ✅ **RECEBIDA 06/08** — 618 tabelas, com o SQL de `pg_class` (não depende de ANALYZE). Guardada aqui; análise abaixo |
 | `efiscal_public_ddl.sql` + `efiscal_tabelas_public.txt` (bônus) | ✅ `public` tem UMA tabela (`mergedb`) — irrelevante pra migração |
 | `schemas_efiscal.csv` | ✅ já conhecido (84 GB, 1.735 schemas e####) |
 
-## SQL da volumetria a refazer (não depende de ANALYZE)
+## O que a volumetria mostrou (e0299, 06/08/2026)
+
+**12,70 GB · 23,0 milhões de linhas · 618 tabelas — mas só 118 COM DADOS.**
+As outras 500 estão vazias: o `pad_modelo` é um molde grande para um uso
+pequeno, e "618 tabelas por empresa" nunca foi o tamanho do problema.
+
+Oito tabelas somam **99,4%** do volume, e as seis maiores são todas de SAÍDA:
+
+| tabela | tamanho | linhas | acumulado |
+|---|---|---|---|
+| lcsreg54 | 5.575 MB | 6.948.161 | 42,9% |
+| lcsreg542 | 2.270 MB | 5.898.652 | 60,3% |
+| nfsaida | 2.191 MB | 1.809.641 | 77,2% |
+| nfsresuman | 1.212 MB | 3.037.961 | 86,5% |
+| lcsaida | 1.184 MB | 3.056.670 | 95,6% |
+| nfsreg54 | 333 MB | 1.804.716 | 98,1% |
+
+**Saída 1.809.641 notas × entrada 22.275** — razão de 81 para 1. É varejo
+de alto volume, e o peso do banco é a escrituração ITEM A ITEM dessas
+saídas.
+
+### O que isso confirma
+
+A decisão de 05/08 (F2 fora do plano) fica mais sólida, não menos: o que
+pesa é histórico de detalhe de saída — exatamente o que o E-Fiscal vai
+continuar servindo como consulta. Migrar isso seria mover 12,7 GB de
+detalhe que ninguém abre no dia a dia.
+
+E uma medida de escala que muda a leitura de risco: **e0299 sozinha é 12,7
+de 89,5 GB — 14% da base inteira em UM cliente**. A base é concentrada;
+não são 1.735 clientes pesados.
+
+### O que isso revela (e vale para as ondas)
+
+- **Cadastro é barato**: `cli_for` 315 participantes e `pro_ser` 16.632
+  itens. Se um dia for preciso migrar cadastro de um cliente, o volume não
+  é obstáculo — o obstáculo sempre foi o histórico.
+- **`inventar` com 5.900 linhas**: este cliente TEM inventário lançado no
+  E-Fiscal. Nosso bloco H ainda é 🟡 (gera H005/H010 com qtd/valor a
+  preencher). Cliente com inventário só migra depois que essa lacuna
+  fechar — ou o inventário vem dele, à mão.
+- **`apuracao_difal` com 2.403 linhas**: DIFAL apurado lá, e o CFI já
+  cobre (fases 1 e 2). Paridade esperada no piloto.
+- **`nfdipam` 0 · `ciapbens` 0 · `reg55` 0 · `ecftotalizador` 0**: sem
+  DIPAM, sem CIAP, sem ECF/SAT — coerente com as respostas do F0 humano
+  (CIAP só a EXPERTE; SAT virou NFC-e).
+- **`nf_iss` 0 e `nf_iss56` 669**: ISS existe em volume pequeno neste
+  cliente, na tabela nova.
+
+## SQL da volumetria (usado — não depende de ANALYZE)
 
 ```sql
 SELECT c.relname                                   AS tabela,
