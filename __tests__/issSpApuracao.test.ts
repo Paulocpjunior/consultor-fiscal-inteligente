@@ -160,3 +160,57 @@ describe('a NFS-e do PORTAL SP vem ACHATADA (caso CLINICA MANTOAN, 06/08)', () =
         expect(a.apta).toBe(false);
     });
 });
+
+describe('alíquota vem da NOTA e SUP não apura por faturamento (Paulo, 06/08)', () => {
+    // "não são todos os serviços em SP que são 5%, médico por exemplo 2%,
+    // aí você tem os clientes que pagam por quantidade de sócios, o SUP".
+    const nota = (over: any = {}): any => ({
+        id: over.id || 'a1',
+        tipo: 'NFSe', tipoDoc: 'NFSe', direcao: 'saida', status: 'autorizado',
+        numero: over.numero || '1', dhEmi: '2026-08-05T10:00:00',
+        valorServicos: 10000, valorTotal: 10000,
+        valorIss: 200, issDevido: 200, aliquotaServicos: 2, codigoServico: '05070',
+        tomadorNome: 'PACIENTE PJ', itens: [], ...over,
+    });
+
+    it('lê a alíquota e o código de serviço da nota, sem derivar nada', () => {
+        const a = apurarIssSp([nota()], '2026-08');
+        expect(a.notas[0].aliquota).toBe(2);
+        expect(a.notas[0].codigoServico).toBe('05070');
+        expect(a.totalIssDevido).toBe(200);   // 2% de 10.000 — NÃO 5%
+        expect(a.aliquotas).toEqual([2]);
+    });
+
+    it('alíquotas diferentes no mês viram aviso, não erro', () => {
+        const a = apurarIssSp([
+            nota(),
+            nota({ id: 'a2', numero: '2', aliquotaServicos: 5, valorIss: 500, issDevido: 500, codigoServico: '01406' }),
+        ], '2026-08');
+        expect(a.aliquotas).toEqual([2, 5]);
+        expect(a.avisos.join(' ')).toMatch(/Alíquotas diferentes no mês \(2%, 5%\)/);
+    });
+
+    it('ISS FIXO (SUP): não libera guia por faturamento e diz o porquê', () => {
+        const a = apurarIssSp([nota()], '2026-08', {
+            issConfig: { tipo: 'sup_fixo', qtdeSocios: 3, valorPorSocio: 250 },
+        });
+        expect(a.issFixoSup).toBe(true);
+        expect(a.apta).toBe(false);
+        expect(a.avisos.join(' ')).toMatch(/ISS FIXO \(sociedade uniprofissional\)/);
+        expect(a.avisos.join(' ')).toMatch(/3 profissional\(is\) × R\$ 250,00/);
+    });
+
+    it('empresa por alíquota municipal segue apurando normalmente', () => {
+        const a = apurarIssSp([nota()], '2026-08', {
+            issConfig: { tipo: 'aliquota_municipal', aliquota: 2 },
+        });
+        expect(a.issFixoSup).toBe(false);
+        expect(a.apta).toBe(true);
+    });
+
+    it('tudo zerado com alíquota zero pede conferência (SUP, isenção ou imunidade)', () => {
+        const a = apurarIssSp([nota({ valorIss: 0, issDevido: 0, aliquotaServicos: 0 })], '2026-08');
+        expect(a.avisos.join(' ')).toMatch(/pode ser ISS fixo \(SUP\), isenção, imunidade ou retenção integral/);
+        expect(a.apta).toBe(false);
+    });
+});
