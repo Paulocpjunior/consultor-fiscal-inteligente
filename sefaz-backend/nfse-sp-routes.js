@@ -561,7 +561,21 @@ router.get('/iss-carteira', authUser, async (req, res) => {
         const zeroConfiavelPara = (cnpj) => !!saude?.zeroConfiavel && !empresaComFalhaNaCaptura(logs, cnpj);
 
         const painel = montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara });
-        return res.json({ ok: true, competencia, saudeCaptura: saude, ...painel });
+        return res.json({
+            ok: true,
+            competencia,
+            // Falhar em LER a saúde deixa TODO zero não-confiável — e a tela
+            // precisa dizer isso, senão o painel mostra centenas de "captura
+            // incerta" sem causa nenhuma (foi o buraco do #506, no caminho do
+            // null). Silêncio aqui vira interpretação de quem lê.
+            saudeCaptura: saude || {
+                farol: 'quebrado',
+                motivo: 'Não consegui ler a saúde da captura de NFS-e SP.',
+                acao: 'Sem ela, NENHUM "zero nota" pode ser lido como "sem movimento" — confira a aba Captura.',
+                zeroConfiavel: false,
+            },
+            ...painel,
+        });
     } catch (e) {
         console.error('[iss-carteira]', e);
         return res.status(500).json({ ok: false, error: e.message });
