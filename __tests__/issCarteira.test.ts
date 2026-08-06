@@ -229,3 +229,151 @@ describe('ISS retido como TOMADORA na carteira', () => {
         expect(p.linhas[0].situacao).toBe('a-recolher');
     });
 });
+
+/**
+ * A CONTA do ISS saiu de dentro da rota e virou núcleo — porque agora são DOIS
+ * painéis lendo a mesma coisa (a aba 🏛️ ISS SP e a Rotina do mês), e a forma
+ * como se lê é justamente a armadilha que já mordeu seis vezes: a NFS-e do
+ * PORTAL vem ACHATADA e a do XML vem em OBJETO.
+ */
+// @ts-expect-error — módulo .js puro (sem tipos)
+import { acumularIssPorEmpresa } from '../sefaz-backend/iss-carteira';
+
+describe('acumularIssPorEmpresa — as DUAS formas do documento', () => {
+    const resolver = (d: any) => d.empresaId || null;
+
+    it('lê a NFS-e ACHATADA do portal (valorIss/issDevido)', () => {
+        const [a] = acumularIssPorEmpresa([
+            { empresaId: 'e1', tipoDoc: 'NFSe', direcao: 'saida', valorIss: 120 },
+            { empresaId: 'e1', tipoDoc: 'NFSe', direcao: 'saida', issDevido: 80 },
+        ], resolver);
+        expect(a.notas).toBe(2);
+        expect(a.issDevido).toBe(200);
+        expect(a.aRecolher).toBe(200);
+    });
+
+    it('lê a NFS-e em OBJETO do XML (valores.iss)', () => {
+        const [a] = acumularIssPorEmpresa([
+            { empresaId: 'e1', tipoDoc: 'NFSe', direcao: 'saida', valores: { iss: 55.5 } },
+        ], resolver);
+        expect(a.issDevido).toBe(55.5);
+    });
+
+    it('nota SEM nenhum campo de ISS é "sem valor gravado", não ISS zero', () => {
+        const [a] = acumularIssPorEmpresa([
+            { empresaId: 'e1', tipoDoc: 'NFSe', direcao: 'saida' },
+        ], resolver);
+        expect(a.semValorGravado).toBe(1);
+        expect(a.issDevido).toBe(0);
+    });
+
+    it('ISS zero EXPLÍCITO não conta como ausente', () => {
+        const [a] = acumularIssPorEmpresa([
+            { empresaId: 'e1', tipoDoc: 'NFSe', direcao: 'saida', valorIss: 0 },
+        ], resolver);
+        expect(a.semValorGravado).toBe(0);
+        expect(a.notas).toBe(1);
+    });
+
+    it('retido pelo tomador sai do a recolher (Lei 13.701/03)', () => {
+        const [a] = acumularIssPorEmpresa([
+            { empresaId: 'e1', tipoDoc: 'NFSe', direcao: 'saida', valorIss: 500, issRetido: true },
+        ], resolver);
+        expect(a.issDevido).toBe(500);
+        expect(a.issRetido).toBe(500);
+        expect(a.aRecolher).toBe(0);
+    });
+
+    it('ENTRADA com retenção vira ISS de TOMADORA, nunca ISS próprio', () => {
+        const [a] = acumularIssPorEmpresa([
+            { empresaId: 'e1', tipoDoc: 'NFSe', direcao: 'entrada', valorIss: 300, issRetido: true },
+        ], resolver);
+        expect(a.tomadoRetido).toBe(300);
+        expect(a.tomadoNotas).toBe(1);
+        expect(a.notas).toBe(0);
+        expect(a.issDevido).toBe(0);
+    });
+
+    it('entrada SEM retenção não gera obrigação nenhuma', () => {
+        expect(acumularIssPorEmpresa([
+            { empresaId: 'e1', tipoDoc: 'NFSe', direcao: 'entrada', valorIss: 300 },
+        ], resolver)).toEqual([]);
+    });
+
+    it('cancelada e não-NFS-e ficam de fora', () => {
+        expect(acumularIssPorEmpresa([
+            { empresaId: 'e1', tipoDoc: 'NFSe', direcao: 'saida', valorIss: 10, status: 'cancelado' },
+            { empresaId: 'e1', tipoDoc: 'NFe', direcao: 'saida', valorIss: 10 },
+        ], resolver)).toEqual([]);
+    });
+
+    it('documento sem dono não entra na conta de ninguém', () => {
+        expect(acumularIssPorEmpresa([
+            { tipoDoc: 'NFSe', direcao: 'saida', valorIss: 10 },
+        ], () => null)).toEqual([]);
+    });
+});
+
+/**
+ * ACHADO 06/08: o painel somava no "a recolher" da carteira o ISS de empresas
+ * do SIMPLES. Optante não recolhe o ISS próprio em guia do município — ele já
+ * está DENTRO do DAS (LC 123 art. 13). Cobrar essa guia é cobrar duas vezes: o
+ * DAS da mesma competência já contém aquele ISS.
+ */
+describe('optante do Simples: ISS próprio vai DENTRO do DAS', () => {
+    const base = (over: any = {}) => ({ empresaId: 'a', nome: 'SERVIÇOS ME', cnpj: '1', ccm: '123', issFixoSup: false, ...over });
+
+    it('Simples com ISS nas notas fica FORA do total a recolher', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [base({ regime: 'simples' })],
+            apuracoes: [{ empresaId: 'a', notas: 5, issDevido: 940, issRetido: 0, aRecolher: 940 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('iss-no-das');
+        expect(p.linhas[0].aRecolher).toBe(0);
+        expect(p.linhas[0].issForaDoTotal).toBe(940);
+        expect(p.resumo.totalARecolher).toBe(0);
+        expect(p.resumo.totalIssNoDas).toBe(940);
+        expect(p.avisos.join(' ')).toMatch(/DENTRO do DAS/);
+        expect(p.linhas[0].acao).toMatch(/sublimite/);
+    });
+
+    it('a MESMA nota no Lucro Presumido continua sendo guia do município', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [base({ regime: 'lucro' })],
+            apuracoes: [{ empresaId: 'a', notas: 5, issDevido: 940, issRetido: 0, aRecolher: 940 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('a-recolher');
+        expect(p.resumo.totalARecolher).toBe(940);
+    });
+
+    it('optante que retém como TOMADORA continua tendo guia — essa não é do DAS', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [base({ regime: 'simples' })],
+            apuracoes: [{ empresaId: 'a', notas: 3, issDevido: 200, issRetido: 0, aRecolher: 200, tomadoRetido: 700, tomadoNotas: 2 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('iss-no-das');
+        expect(p.resumo.totalIssTomado).toBe(700);
+        expect(p.resumo.comIssTomado).toBe(1);
+    });
+
+    it('ISS fixo (SUP) de optante continua sendo guia do município, não o DAS', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [base({ regime: 'simples', issFixoSup: true })],
+            apuracoes: [{ empresaId: 'a', notas: 3, issDevido: 200, issRetido: 0, aRecolher: 200 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('iss-fixo');
+    });
+
+    it('carteira só de optantes com ISS no DAS não acende "ninguém teve nota"', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [base({ regime: 'simples' })],
+            apuracoes: [{ empresaId: 'a', notas: 5, issDevido: 940, issRetido: 0, aRecolher: 940 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.avisos.join(' ')).not.toMatch(/quase nunca é mês parado/);
+    });
+});

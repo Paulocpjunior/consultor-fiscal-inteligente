@@ -25,7 +25,92 @@
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /** Situações possíveis de uma empresa no mês. A ordem é a de prioridade. */
-export const SITUACOES = ['sem-ccm', 'captura-incerta', 'iss-zerado', 'a-recolher', 'so-tomado', 'iss-fixo', 'so-retido', 'sem-movimento'];
+export const SITUACOES = ['sem-ccm', 'captura-incerta', 'iss-zerado', 'a-recolher', 'so-tomado', 'iss-no-das', 'iss-fixo', 'so-retido', 'sem-movimento'];
+
+const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
+
+/** Primeiro candidato numérico de verdade. Ausente ≠ zero: sem candidato, `undefined`. */
+const primeiroNumero = (...cands) => {
+    for (const x of cands) {
+        if (x === undefined || x === null || x === '') continue;
+        if (Number.isFinite(Number(x))) return Number(x);
+    }
+    return undefined;
+};
+
+const ehNfse = (d) => /NFSe/i.test(String(d?.tipoDoc || d?.tipo || ''));
+
+/**
+ * ISS de uma competência, POR EMPRESA, lido dos documentos.
+ *
+ * MORA AQUI porque já são DOIS painéis lendo a mesma coisa (a aba 🏛️ ISS SP da
+ * carteira e a Rotina do mês) — e o jeito de ler é justamente a armadilha que
+ * já mordeu seis vezes: a NFS-e do PORTAL vem ACHATADA (`valorIss`,
+ * `issDevido`, `issRetido`) e a do XML vem em OBJETO (`valores.iss`). Painel
+ * com conta própria erra sozinho; é a lição do card 4 e do relatório.
+ *
+ * @param {Array} documentos docs da competência (qualquer direção)
+ * @param {(d:object)=>string|null} resolverEmpresaId de quem é o documento
+ * @returns {Array} [{empresaId, notas, issDevido, issRetido, semValorGravado,
+ *                    tomadoRetido, tomadoNotas, aRecolher}]
+ */
+export function acumularIssPorEmpresa(documentos, resolverEmpresaId) {
+    const acc = new Map();
+    const pegar = (id) => {
+        let a = acc.get(id);
+        if (!a) {
+            a = { empresaId: id, notas: 0, issDevido: 0, issRetido: 0, semValorGravado: 0, tomadoRetido: 0, tomadoNotas: 0 };
+            acc.set(id, a);
+        }
+        return a;
+    };
+
+    for (const d of documentos || []) {
+        if (!ehNfse(d)) continue;
+        if (CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
+        const empresaId = resolverEmpresaId ? resolverEmpresaId(d) : d.empresaId;
+        if (!empresaId) continue;
+        const v = d.valores || {};
+
+        // ENTRADA com retenção = ISS que a empresa recolhe COMO TOMADORA.
+        // Outra obrigação, outra guia — mas ela precisa APARECER, senão empresa
+        // que só tem tomado fica como "sem movimento".
+        if (d.direcao === 'entrada') {
+            const flag = v.issRetido === true || d.issRetido === true;
+            const ret = primeiroNumero(v.valorIssRetido, d.valorIssRetido);
+            const iss = primeiroNumero(v.iss, d.valorIss, d.issDevido, d.totais?.vISS);
+            const valor = ret !== undefined ? ret : (flag && iss !== undefined ? iss : 0);
+            if (!valor) continue;
+            const a = pegar(empresaId);
+            a.tomadoRetido += valor;
+            a.tomadoNotas += 1;
+            continue;
+        }
+        if (d.direcao !== 'saida') continue;
+
+        const devido = primeiroNumero(v.iss, d.valorIss, d.issDevido, d.totais?.vISS);
+        const flag = v.issRetido === true || d.issRetido === true;
+        const ret = primeiroNumero(v.valorIssRetido, d.valorIssRetido);
+        const retido = ret !== undefined ? ret : (flag ? (devido || 0) : 0);
+
+        const a = pegar(empresaId);
+        a.notas += 1;
+        a.issDevido += devido || 0;
+        a.issRetido += retido || 0;
+        // Nota sem NENHUM campo de ISS não é nota de ISS zero: é nota sem o
+        // valor gravado. Vira bloqueio, não parcela do total.
+        if (devido === undefined) a.semValorGravado += 1;
+    }
+
+    return [...acc.values()].map((a) => ({
+        ...a,
+        issDevido: r2(a.issDevido),
+        issRetido: r2(a.issRetido),
+        tomadoRetido: r2(a.tomadoRetido),
+        // Retido pelo tomador não é recolhido pelo prestador (Lei 13.701/03).
+        aRecolher: Math.max(0, r2(a.issDevido - a.issRetido)),
+    }));
+}
 
 const PESO = Object.fromEntries(SITUACOES.map((s, i) => [s, i]));
 
@@ -56,6 +141,13 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         const tomadoRetido = r2(a.tomadoRetido);
         const tomadoNotas = Number(a.tomadoNotas || 0);
         const temCcm = !!String(e.ccm || '').replace(/\D/g, '').replace(/^0+$/, '');
+        // OPTANTE DO SIMPLES não recolhe o ISS próprio em guia do município: ele
+        // já está DENTRO do DAS (LC 123 art. 13). Somar esse ISS no "a recolher"
+        // da carteira inventa uma guia que ninguém emite — e é dinheiro contado
+        // duas vezes, porque o DAS da mesma competência já o contém.
+        // Continua VALENDO pra optante: ISS retido como TOMADORA (outra guia),
+        // ISS fixo/SUP (guia do município) e o retido pelo tomador nas saídas.
+        const regimeSimples = String(e.regime || '').toLowerCase() === 'simples';
         // A captura só é "confiável" pra quem tem CCM: sem ele a varredura do
         // portal nem tenta a empresa, então o zero dela não vale nada.
         const zeroConfiavel = temCcm && (zeroConfiavelPara ? !!zeroConfiavelPara(e.cnpj) : false);
@@ -74,6 +166,10 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         } else if (notas === 0 && !zeroConfiavel) {
             situacao = 'captura-incerta';
             acao = 'Zero notas E a captura do mês não teve sucesso — não dá pra afirmar que o cliente não emitiu. Rode a captura antes de dizer que não há guia.';
+        } else if (regimeSimples && aRecolher > 0) {
+            situacao = 'iss-no-das';
+            acao = 'Optante do Simples: este ISS já é recolhido DENTRO do DAS — não há guia do município. '
+                + 'Só confira se a empresa não foi impedida pelo sublimite (aí o ISS passa a ser recolhido à parte).';
         } else if (aRecolher > 0) {
             situacao = 'a-recolher';
         } else if (notas > 0 && issRetido > 0) {
@@ -99,12 +195,15 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
             situacao = 'sem-movimento';
         }
 
+        // Fica FORA do total quem não gera guia municipal por faturamento:
+        // o ISS fixo (guia por profissional) e o optante do Simples (dentro do
+        // DAS). O valor não some da tela — vai em campo próprio, pra conferir.
+        const foraDoTotal = situacao === 'iss-fixo' || situacao === 'iss-no-das';
         linhas.push({
             ...e,
             notas, issDevido, issRetido,
-            // ISS fixo não entra no total por faturamento: o valor da guia dele
-            // não está nestas notas.
-            aRecolher: situacao === 'iss-fixo' ? 0 : aRecolher,
+            aRecolher: foraDoTotal ? 0 : aRecolher,
+            issForaDoTotal: foraDoTotal ? aRecolher : 0,
             tomadoRetido, tomadoNotas,
             temCcm, zeroConfiavel, situacao, acao,
         });
@@ -128,6 +227,8 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         // inventaria um valor que ninguém paga junto.
         comIssTomado: linhas.filter((l) => l.tomadoRetido > 0).length,
         totalIssTomado: r2(linhas.reduce((t, l) => t + l.tomadoRetido, 0)),
+        issNoDas: conta('iss-no-das'),
+        totalIssNoDas: r2(linhas.filter((l) => l.situacao === 'iss-no-das').reduce((t, l) => t + l.issForaDoTotal, 0)),
         issFixo: conta('iss-fixo'),
         soRetido: conta('so-retido'),
         semMovimento: conta('sem-movimento'),
@@ -145,7 +246,8 @@ export function farolDaCarteira(resumo) {
     if (!resumo || !resumo.empresas) return 'sem-dados';
     if (resumo.semCcm > 0 || resumo.capturaIncerta > 0 || resumo.issZerado > 0) return 'atencao';
     // Ninguém com nota na carteira inteira: não se conclui "mês parado".
-    if (resumo.aRecolher === 0 && resumo.soRetido === 0 && resumo.issFixo === 0 && !resumo.comIssTomado) return 'atencao';
+    if (resumo.aRecolher === 0 && resumo.soRetido === 0 && resumo.issFixo === 0
+        && !resumo.issNoDas && !resumo.comIssTomado) return 'atencao';
     return 'ok';
 }
 
@@ -178,7 +280,14 @@ function avisosDaCarteira(r) {
             `${r.issFixo} empresa(s) de ISS fixo (SUP) ficam FORA do total: a guia delas é por profissional, não por faturamento.`,
         );
     }
-    if (r.empresas > 0 && r.aRecolher === 0 && r.soRetido === 0 && r.issFixo === 0 && !r.comIssTomado) {
+    if (r.issNoDas > 0) {
+        avisos.push(
+            `${r.issNoDas} empresa(s) do SIMPLES têm ISS nas notas (R$ ${r.totalIssNoDas.toFixed(2)}) que é recolhido `
+            + 'DENTRO do DAS — não gera guia do município e por isso fica FORA do total. Cobrar essa guia seria cobrar duas vezes.',
+        );
+    }
+    if (r.empresas > 0 && r.aRecolher === 0 && r.soRetido === 0 && r.issFixo === 0
+        && !r.issNoDas && !r.comIssTomado) {
         avisos.push(
             'NENHUMA empresa da carteira teve nota nesta competência. Isso quase nunca é mês parado — confira a captura antes de fechar o mês.',
         );

@@ -23,9 +23,28 @@ export interface EtapaRotina {
     [k: string]: any;
 }
 
+/**
+ * ISS de SP capital daquela empresa no mês. `null` fora de SP capital — o ISS
+ * de outro município é de outra prefeitura, com outro portal e outro
+ * vencimento, e inventar pendência lá seria pior que não mostrar nada.
+ */
+export interface IssDaRotina {
+    situacao: string | null;
+    notas: number;
+    aRecolher: number;
+    /** ISS que existe mas NÃO vira guia por faturamento (dentro do DAS, ou SUP fixo). */
+    foraDoTotal: number;
+    tomadoRetido: number;
+    tomadoNotas: number;
+    proprioEnviado: boolean;
+    retidoEnviado: boolean;
+    pendencias: string[];
+}
+
 export interface RotinaEmpresa {
     empresa: { id: string; nome: string; cnpj: string; regime: 'simples' | 'lucro' } | null;
     competencia: string;
+    iss: IssDaRotina | null;
     etapas: EtapaRotina[];
     proximoPasso: { id: string; ordem: number; nome: string; onde: string; acao: string | null; resumo: string } | null;
     progresso: { concluidas: number; total: number };
@@ -45,6 +64,23 @@ export interface PainelRotina {
     competencia?: string;
     escopo?: 'carteira' | 'todas';
     funil?: FunilRotina;
+    /** Resumo do ISS de SP capital da seleção. `null` = nenhuma empresa de SP capital. */
+    iss?: {
+        empresas: number;
+        aRecolher: number;
+        totalARecolher: number;
+        semCcm: number;
+        capturaIncerta: number;
+        issZerado: number;
+        comIssTomado: number;
+        totalIssTomado: number;
+        issNoDas: number;
+        totalIssNoDas: number;
+        issFixo: number;
+        farol: string;
+        avisos: string[];
+    } | null;
+    issSaudeCaptura?: { farol: string; motivo?: string; acao?: string; zeroConfiavel: boolean } | null;
     rotinas?: RotinaEmpresa[];
     lidos?: { documentos: number; tarefas: number; envios: number };
     geradoEm?: string;

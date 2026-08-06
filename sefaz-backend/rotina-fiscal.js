@@ -116,10 +116,13 @@ export function acharApuracaoDaCompetencia(empresa, competencia) {
  * @param {object}  [p.dipam]        { produtores, indefinidos } — compras de
  *   produtor rural detectadas no mês. Entra na etapa de OBRIGAÇÕES porque é lá
  *   que a DIPAM é entregue (ficha da GIA + Registro 1400 da EFD).
+ * @param {object} [p.iss]         ISS de SP capital daquela empresa, vindo do
+ *   MESMO núcleo do painel 🏛️ ISS SP (montarPainelIssCarteira). Ver
+ *   `aplicarIssNaRotina` logo abaixo.
  */
 export function montarRotinaFiscal({
     empresa, competencia, documentos = [], apuracao = null, tarefas = [], envios = [], capturaAtiva = true,
-    dipam = null,
+    dipam = null, iss = null,
 }) {
     const docs = documentos || [];
     const entradas = docs.filter((d) => d.direcao === 'entrada').length;
@@ -239,6 +242,12 @@ export function montarRotinaFiscal({
             { envios: envios.length, completos: enviosOk });
     }
 
+    // ── ISS de SP capital, DENTRO da linha ──────────────────────────────────
+    const ajusteIss = aplicarIssNaRotina({ iss, envios, captura: eCaptura, validacao: eValidacao, guias: eGuias });
+    eCaptura = ajusteIss.captura;
+    eValidacao = ajusteIss.validacao;
+    eGuias = ajusteIss.guias;
+
     const etapas = [eCaptura, eValidacao, eApuracao, eObrigacoes, eGuias];
 
     // PRÓXIMO PASSO = a primeira etapa não fechada, na ordem. É a "linha" que
@@ -249,6 +258,7 @@ export function montarRotinaFiscal({
     return {
         empresa: empresa || null,
         competencia,
+        iss: ajusteIss.iss,
         etapas,
         proximoPasso: proxima
             ? { id: proxima.id, ordem: proxima.ordem, nome: proxima.nome, onde: proxima.onde, acao: proxima.acao, resumo: proxima.resumo }
@@ -257,6 +267,111 @@ export function montarRotinaFiscal({
         // Só é 'ok' quando as CINCO fecham — mês pela metade não é mês fechado.
         farol: fechadas === etapas.length ? 'ok'
             : etapas.some((e) => e.status === 'pendente') ? 'pendente' : 'atencao',
+    };
+}
+
+/**
+ * O ISS de SP capital dentro da linha do mês.
+ *
+ * A rotina nasceu cega pro ISS: ela fecha o mês olhando DAS/DARF/obrigações, e
+ * a onda 1 da migração são 157 empresas de SERVIÇO PURO — justamente aquelas
+ * cujo mês NÃO fecha no DAS. Empresa de SP capital que devia ISS aparecia com
+ * "✓ Mês fechado".
+ *
+ * TRÊS ligações, cada uma na etapa a que pertence:
+ *
+ *  1. CAPTURA — sem CCM a captura da NFS-e paulistana nem roda (#311), e mês
+ *     com a captura falha deixa o zero sem valor. Nos dois casos a etapa NÃO
+ *     pode ficar verde só porque a NFe do cliente entrou.
+ *  2. VALIDAÇÃO — nota emitida com ISS zerado é conferência pendente (isenção,
+ *     imunidade ou valor que não veio na captura), nunca silêncio.
+ *  3. GUIAS — ISS próprio e ISS RETIDO como tomadora são DUAS guias, de
+ *     naturezas diferentes, e nenhuma das duas é o DAS. Enquanto não houver
+ *     envio registrado pelo rito, a etapa fica em ÂMBAR: o app não emite a guia
+ *     do município (isso é no portal da PMSP), então ele não pode PROVAR que
+ *     ela saiu — e o que não se prova não fica verde.
+ *
+ * Âmbar e não vermelho de propósito: vermelho eterno em coisa que o app não
+ * consegue fechar vira ruído, e ruído a equipe aprende a ignorar. Âmbar já
+ * impede o "mês fechado" e mantém a empresa no funil.
+ */
+export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias }) {
+    if (!iss || iss.aplicavel !== true) return { captura, validacao, guias, iss: null };
+
+    const aRecolher = Number(iss.aRecolher || 0);
+    const tomado = Number(iss.tomadoRetido || 0);
+    const tomadoNotas = Number(iss.tomadoNotas || 0);
+
+    // Prova de envio: registro no rito (#293) com o tipo dizendo ISS. Guia
+    // própria e guia de retido fecham SEPARADAS — conflatar as duas é o erro
+    // que a carteira já cometeu somando uma na outra.
+    const tiposIss = (envios || []).map((e) => String(e?.tipo || '')).filter((t) => /iss/i.test(t));
+    const proprioEnviado = tiposIss.some((t) => !/retid/i.test(t));
+    const retidoEnviado = tiposIss.some((t) => /retid/i.test(t));
+
+    // — 1. captura —
+    let eCaptura = captura;
+    if (iss.situacao === 'sem-ccm') {
+        eCaptura = piorar(captura,
+            'NFS-e de SP NÃO capturada: empresa sem CCM.',
+            'Cadastre o CCM em Dados fiscais (SP capital). Sem ele a varredura do portal nem tenta a empresa — '
+            + 'o ISS do mês fica invisível e "zero nota" não significa nada.');
+    } else if (iss.situacao === 'captura-incerta') {
+        eCaptura = piorar(captura,
+            'NFS-e de SP com captura incerta neste mês.',
+            iss.acao || 'A captura da NFS-e do mês não teve sucesso — rode a captura antes de concluir qualquer coisa sobre o ISS.');
+    }
+
+    // — 2. validação —
+    let eValidacao = validacao;
+    if (iss.situacao === 'iss-zerado') {
+        eValidacao = piorar(validacao,
+            `${Number(iss.notas || 0)} NFS-e emitida(s) com o ISS ZERADO.`,
+            iss.acao || 'Confira isenção, imunidade ou valor que não veio na captura antes de fechar o mês.');
+    }
+
+    // — 3. guias —
+    let eGuias = guias;
+    const pendentes = [];
+    if (aRecolher > 0 && !proprioEnviado) pendentes.push(`ISS próprio ${fmtBRL(aRecolher)}`);
+    if (tomado > 0 && !retidoEnviado) {
+        pendentes.push(`ISS RETIDO de ${tomadoNotas} prestador(es) ${fmtBRL(tomado)}`);
+    }
+    if (pendentes.length) {
+        eGuias = piorar(guias,
+            `${pendentes.join(' · ')} — guia(s) do município, fora do DAS/DARF.`,
+            'Apure em Central de XMLs → 🏛️ ISS SP e emita no portal da PMSP (vence dia 10 do mês seguinte). '
+            + 'Registre o envio pelo rito para esta etapa fechar.');
+    }
+
+    return {
+        captura: eCaptura,
+        validacao: eValidacao,
+        guias: eGuias,
+        iss: {
+            situacao: iss.situacao || null,
+            notas: Number(iss.notas || 0),
+            aRecolher,
+            // ISS de optante do Simples e de SUP fixo não vira guia por
+            // faturamento — vem separado, pra conferir sem entrar em total.
+            foraDoTotal: Number(iss.issForaDoTotal || 0),
+            tomadoRetido: tomado,
+            tomadoNotas,
+            proprioEnviado,
+            retidoEnviado,
+            pendencias: pendentes,
+        },
+    };
+}
+
+/** Agrava uma etapa sem apagar o que ela já dizia. Verde nunca sobrevive. */
+function piorar(e, resumoExtra, acao) {
+    const status = e.status === 'pendente' ? 'pendente' : 'atencao';
+    return {
+        ...e,
+        status,
+        resumo: `${e.resumo} · ${resumoExtra}`,
+        acao: e.acao ? `${e.acao} · ${acao}` : acao,
     };
 }
 

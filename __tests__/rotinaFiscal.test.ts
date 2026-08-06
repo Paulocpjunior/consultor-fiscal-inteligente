@@ -270,3 +270,109 @@ describe('funil da carteira', () => {
         expect(resumirFunil([]).completos).toBe(0);
     });
 });
+
+/**
+ * A rotina nasceu CEGA pro ISS — e a onda 1 da migração são 157 empresas de
+ * SERVIÇO PURO, justamente as que NÃO fecham o mês no DAS. Empresa de SP
+ * capital devendo ISS aparecia com "✓ Mês fechado".
+ *
+ * O ISS entra em três etapas diferentes, cada uma pelo motivo dela: captura
+ * (sem CCM a varredura nem roda), validação (nota com ISS zerado é conferência)
+ * e guias (ISS próprio e ISS retido são DUAS guias, nenhuma delas é o DAS).
+ */
+describe('ISS de SP capital dentro da linha', () => {
+    const iss = (over: any = {}) => ({
+        aplicavel: true, situacao: 'a-recolher', notas: 4, aRecolher: 0,
+        issForaDoTotal: 0, tomadoRetido: 0, tomadoNotas: 0, acao: null, ...over,
+    });
+
+    it('empresa fora de SP capital não muda em NADA (sem ISS, sem pendência inventada)', () => {
+        const semIss = completo();
+        const comNull = completo({ iss: null });
+        expect(comNull.farol).toBe(semIss.farol);
+        expect(comNull.proximoPasso).toBeNull();
+        expect(comNull.iss).toBeNull();
+    });
+
+    it('ISS próprio a recolher IMPEDE o "mês fechado" — é guia do município, não o DAS', () => {
+        const r = completo({ iss: iss({ aRecolher: 1520.33 }) });
+        expect(r.proximoPasso?.id).toBe('guias');
+        expect(etapaDe(r, 'guias').status).toBe('atencao');
+        expect(etapaDe(r, 'guias').resumo).toMatch(/ISS próprio/);
+        expect(etapaDe(r, 'guias').acao).toMatch(/portal da PMSP/);
+        expect(r.iss.pendencias).toHaveLength(1);
+    });
+
+    it('ISS RETIDO como tomadora é OUTRA guia e aparece com o nome dela', () => {
+        const r = completo({ iss: iss({ situacao: 'so-tomado', notas: 0, tomadoRetido: 800, tomadoNotas: 3 }) });
+        expect(etapaDe(r, 'guias').resumo).toMatch(/ISS RETIDO de 3 prestador\(es\)/);
+        expect(r.iss.pendencias).toHaveLength(1);
+    });
+
+    it('as duas guias fecham SEPARADAS — envio do próprio não quita o retido', () => {
+        const r = completo({
+            iss: iss({ aRecolher: 100, tomadoRetido: 800, tomadoNotas: 2 }),
+            envios: [envio(), envio({ tipo: 'ISS' })],
+        });
+        expect(r.iss.proprioEnviado).toBe(true);
+        expect(r.iss.retidoEnviado).toBe(false);
+        expect(r.iss.pendencias).toEqual([expect.stringMatching(/ISS RETIDO/)]);
+        expect(etapaDe(r, 'guias').status).toBe('atencao');
+    });
+
+    it('com as duas guias registradas pelo rito, o mês fecha', () => {
+        const r = completo({
+            iss: iss({ aRecolher: 100, tomadoRetido: 800, tomadoNotas: 2 }),
+            envios: [envio(), envio({ tipo: 'ISS' }), envio({ tipo: 'ISS-RETIDO' })],
+        });
+        expect(r.iss.pendencias).toEqual([]);
+        expect(r.proximoPasso).toBeNull();
+    });
+
+    it('apuração sem imposto a pagar NÃO libera a etapa quando há ISS — o "na" seria mentira', () => {
+        const r = completo({
+            apuracao: { fonte: 'simples', totalImpostos: 0 },
+            envios: [],
+            iss: iss({ aRecolher: 340 }),
+        });
+        expect(etapaDe(r, 'guias').status).not.toBe('na');
+        expect(etapaDe(r, 'guias').resumo).toMatch(/ISS próprio/);
+        expect(r.proximoPasso?.id).toBe('guias');
+    });
+
+    it('sem CCM a captura NÃO fica verde só porque a NFe entrou (#311)', () => {
+        const r = completo({ iss: iss({ situacao: 'sem-ccm', notas: 0 }) });
+        const e = etapaDe(r, 'captura');
+        expect(e.status).toBe('atencao');
+        expect(e.resumo).toMatch(/sem CCM/);
+        expect(e.acao).toMatch(/Cadastre o CCM/);
+        expect(r.proximoPasso?.id).toBe('captura');
+    });
+
+    it('captura de NFS-e incerta trava a etapa 1 com o motivo', () => {
+        const r = completo({ iss: iss({ situacao: 'captura-incerta', notas: 0, acao: 'Rode a captura.' }) });
+        expect(etapaDe(r, 'captura').status).toBe('atencao');
+        expect(etapaDe(r, 'captura').acao).toMatch(/Rode a captura\./);
+    });
+
+    it('NFS-e com ISS zerado é conferência de VALIDAÇÃO, nunca silêncio', () => {
+        const r = completo({ iss: iss({ situacao: 'iss-zerado', notas: 29 }) });
+        expect(etapaDe(r, 'validacao').status).toBe('atencao');
+        expect(etapaDe(r, 'validacao').resumo).toMatch(/29 NFS-e emitida\(s\) com o ISS ZERADO/);
+    });
+
+    it('etapa já vermelha não vira âmbar por causa do ISS', () => {
+        const r = completo({ documentos: [], iss: iss({ situacao: 'sem-ccm' }) });
+        expect(etapaDe(r, 'captura').status).toBe('pendente');
+        expect(etapaDe(r, 'captura').resumo).toMatch(/sem CCM/);
+    });
+
+    it('optante do Simples: ISS dentro do DAS não vira pendência de guia', () => {
+        // A régua de quem tem guia do município é do núcleo do ISS: aqui chega
+        // com aRecolher zerado e o valor em `issForaDoTotal`.
+        const r = completo({ iss: iss({ situacao: 'iss-no-das', aRecolher: 0, issForaDoTotal: 940 }) });
+        expect(r.iss.pendencias).toEqual([]);
+        expect(r.iss.foraDoTotal).toBe(940);
+        expect(r.proximoPasso).toBeNull();
+    });
+});

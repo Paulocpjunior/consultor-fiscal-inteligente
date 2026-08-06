@@ -37,6 +37,7 @@ const ultimasCompetencias = (n = 12): string[] => {
 
 const fmtComp = (c: string) => c.split('-').reverse().join('/');
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+const fmtBRL = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const PONTO: Record<string, string> = {
     concluida: 'bg-emerald-500 border-emerald-500',
@@ -186,6 +187,60 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara }) => {
                         )}
                     </div>
 
+                    {/* ISS DE SP CAPITAL — a onda 1 são 157 empresas de serviço
+                        puro, que NÃO fecham o mês no DAS. A rotina era cega pro
+                        ISS e elas apareciam com "mês fechado". */}
+                    {dados.iss && dados.iss.empresas > 0 && (
+                        <div className={`rounded-xl border p-4 space-y-2 ${
+                            dados.iss.farol === 'ok'
+                                ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-900/10'
+                                : 'border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/10'
+                        }`}>
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                    🏛️ ISS de São Paulo capital · {dados.iss.empresas} empresa(s) na seleção
+                                </p>
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    guia do município — não é o DAS nem o DARF
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <div className="rounded-lg bg-white/70 dark:bg-slate-800/60 p-2">
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">ISS próprio a recolher</p>
+                                    <p className="text-base font-bold text-slate-800 dark:text-slate-100">{fmtBRL(dados.iss.totalARecolher)}</p>
+                                    <p className="text-[10px] text-slate-500">{dados.iss.aRecolher} empresa(s)</p>
+                                </div>
+                                <div className="rounded-lg bg-white/70 dark:bg-slate-800/60 p-2">
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">ISS retido como tomadora</p>
+                                    <p className="text-base font-bold text-slate-800 dark:text-slate-100">{fmtBRL(dados.iss.totalIssTomado)}</p>
+                                    <p className="text-[10px] text-slate-500">{dados.iss.comIssTomado} empresa(s) · outra guia</p>
+                                </div>
+                                <div className="rounded-lg bg-white/70 dark:bg-slate-800/60 p-2">
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Dentro do DAS (Simples)</p>
+                                    <p className="text-base font-bold text-slate-500 dark:text-slate-400">{fmtBRL(dados.iss.totalIssNoDas)}</p>
+                                    <p className="text-[10px] text-slate-500">{dados.iss.issNoDas} empresa(s) · fora do total</p>
+                                </div>
+                                <div className="rounded-lg bg-white/70 dark:bg-slate-800/60 p-2">
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Bloqueadas / a conferir</p>
+                                    <p className="text-base font-bold text-amber-700 dark:text-amber-400">
+                                        {dados.iss.semCcm + dados.iss.capturaIncerta + dados.iss.issZerado}
+                                    </p>
+                                    <p className="text-[10px] text-slate-500">
+                                        {dados.iss.semCcm} sem CCM · {dados.iss.capturaIncerta} captura incerta · {dados.iss.issZerado} ISS zerado
+                                    </p>
+                                </div>
+                            </div>
+                            {(dados.iss.avisos || []).map((a, i) => (
+                                <p key={i} className="text-[11px] text-amber-800 dark:text-amber-300">⚠ {a}</p>
+                            ))}
+                            {dados.issSaudeCaptura && !dados.issSaudeCaptura.zeroConfiavel && (
+                                <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                                    ⚠ {dados.issSaudeCaptura.motivo} {dados.issSaudeCaptura.acao}
+                                </p>
+                            )}
+                        </div>
+                    )}
+
                     <input
                         value={busca}
                         onChange={(e) => setBusca(e.target.value)}
@@ -212,6 +267,42 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara }) => {
                                         </div>
                                         <Trilha etapas={r.etapas} destaque={p?.id} />
                                     </div>
+
+                                    {/* ISS de SP capital: guia do município, que
+                                        não fecha no DAS nem no DARF. Aparece
+                                        SEMPRE que a empresa é de SP capital —
+                                        inclusive quando não há nada a recolher,
+                                        senão ausência vira silêncio. */}
+                                    {r.iss && (
+                                        <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                                            🏛️ ISS SP:{' '}
+                                            {r.iss.pendencias.length > 0 ? (
+                                                <span className="text-amber-700 dark:text-amber-400 font-semibold">
+                                                    {r.iss.pendencias.join(' · ')} — guia do município, ainda sem envio registrado.
+                                                </span>
+                                            ) : r.iss.foraDoTotal > 0 ? (
+                                                <span>
+                                                    {fmtBRL(r.iss.foraDoTotal)} nas notas, recolhido dentro do DAS — sem guia do município.
+                                                </span>
+                                            ) : r.iss.situacao === 'sem-ccm' ? (
+                                                <span className="text-amber-700 dark:text-amber-400">
+                                                    empresa sem CCM — a captura da NFS-e nem roda, então não se sabe se há ISS.
+                                                </span>
+                                            ) : r.iss.situacao === 'captura-incerta' ? (
+                                                <span className="text-amber-700 dark:text-amber-400">
+                                                    captura do mês sem sucesso — “zero nota” aqui não significa “sem ISS”.
+                                                </span>
+                                            ) : r.iss.situacao === 'iss-zerado' ? (
+                                                <span className="text-amber-700 dark:text-amber-400">
+                                                    {r.iss.notas} nota(s) com ISS zerado — confira isenção/imunidade antes de fechar.
+                                                </span>
+                                            ) : r.iss.proprioEnviado || r.iss.retidoEnviado ? (
+                                                <span className="text-emerald-700 dark:text-emerald-400">guia registrada pelo rito.</span>
+                                            ) : (
+                                                <span>nada a recolher nesta competência.</span>
+                                            )}
+                                        </p>
+                                    )}
 
                                     {p ? (
                                         <div className="rounded-lg bg-slate-50 dark:bg-slate-700/40 p-2 flex items-start justify-between gap-3 flex-wrap">

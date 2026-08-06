@@ -262,6 +262,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
         'captura-incerta': { txt: '⚠ captura incerta', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' },
         'iss-zerado':      { txt: '❓ ISS zerado',      cls: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' },
         'a-recolher':      { txt: '💰 a recolher',     cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' },
+        'iss-no-das':      { txt: '📦 dentro do DAS',  cls: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
         'iss-fixo':        { txt: '🏛 ISS fixo (SUP)', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300' },
         'so-retido':       { txt: '↩ só retido',       cls: 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300' },
         'so-tomado':       { txt: '↩ só tomador',      cls: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300' },
@@ -316,12 +317,24 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
 
                 {carteira?.resumo && (
                     <>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                        <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
                             <div className="rounded-lg border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 p-2">
                                 <p className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-400">A recolher</p>
                                 <p className="font-bold text-emerald-800 dark:text-emerald-300">
                                     {carteira.resumo.aRecolher} empresa(s) · {brl(carteira.resumo.totalARecolher)}
                                 </p>
+                                <p className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80">guia do município</p>
+                            </div>
+                            {/* Optante do Simples NÃO recolhe o ISS próprio em
+                                guia: ele já está DENTRO do DAS (LC 123 art. 13).
+                                Somar aqui seria cobrar duas vezes — por isso o
+                                valor aparece, mas FORA do total a recolher. */}
+                            <div className="rounded-lg border border-slate-300 dark:border-slate-600 p-2">
+                                <p className="text-[10px] uppercase font-bold text-slate-500">Dentro do DAS (Simples)</p>
+                                <p className="font-bold text-slate-700 dark:text-slate-200">
+                                    {carteira.resumo.issNoDas ?? 0} empresa(s) · {brl(carteira.resumo.totalIssNoDas ?? 0)}
+                                </p>
+                                <p className="text-[10px] text-slate-500">fora do total — sem guia própria</p>
                             </div>
                             <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-900/20 p-2">
                                 <p className="text-[10px] uppercase font-bold text-red-700 dark:text-red-400">Sem CCM</p>

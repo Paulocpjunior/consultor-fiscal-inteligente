@@ -20,7 +20,7 @@ import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
 import { saudeNfseSp, empresaComFalhaNaCaptura } from './nfse-sp-saude.js';
-import { montarPainelIssCarteira } from './iss-carteira.js';
+import { montarPainelIssCarteira, acumularIssPorEmpresa } from './iss-carteira.js';
 import { getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { consultarNfseEmitidas, baixarWsdl, sondar1102 } from './nfse-sp-client.js';
@@ -477,7 +477,7 @@ router.get('/iss-carteira', authUser, async (req, res) => {
         // portal e outro vencimento (Paulo, 05/08 — "somente São Paulo capital").
         const empresas = [];
         const porCnpj = new Map();
-        for (const col of ['simples_empresas', 'lucro_empresas']) {
+        for (const [col, regime] of [['simples_empresas', 'simples'], ['lucro_empresas', 'lucro']]) {
             const snap = await db.collection(col).get();
             snap.forEach((doc) => {
                 const d = doc.data() || {};
@@ -490,6 +490,9 @@ router.get('/iss-carteira', authUser, async (req, res) => {
                     empresaId: doc.id,
                     nome: d.razaoSocial || d.nome || '—',
                     cnpj,
+                    // O REGIME decide se o ISS próprio vira guia do município ou
+                    // se já vai dentro do DAS (LC 123 art. 13).
+                    regime,
                     // CCM canônico em dadosFiscais, fallback top-level legado (#311).
                     ccm: String(df.ccmSp || d.ccmSp || '').replace(/\D/g, ''),
                     issFixoSup: (d.issPadraoConfig?.tipo || df.issConfig?.tipo) === 'sup_fixo',
@@ -513,63 +516,15 @@ router.get('/iss-carteira', authUser, async (req, res) => {
             { label: `iss-carteira ${competencia}`, maxDocs: 80000 },
         );
 
-        const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
-        const acc = new Map();
-        for (const s of snaps) {
-            const d = { id: s.id, ...s.data() };
-            if (!/NFSe/i.test(String(d.tipoDoc || d.tipo || ''))) continue;
-            if (CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
-
-            // ENTRADA com retenção = ISS que a empresa recolhe COMO TOMADORA.
-            // Outra obrigação, outra guia — mas ela precisa APARECER, senão
-            // empresa que só tem tomado fica como "sem movimento" (o mesmo
-            // falso-negativo do ISS próprio, corrigido no mesmo dia).
-            if (d.direcao === 'entrada') {
-                const alvoT = (d.empresaId && empresas.find((e) => e.empresaId === d.empresaId))
-                    || porCnpj.get(String(d.empresaCnpj || '').replace(/\D/g, ''));
-                if (!alvoT) continue;
-                const vt = d.valores || {};
-                const flagT = vt.issRetido === true || d.issRetido === true;
-                const retT = [vt.valorIssRetido, d.valorIssRetido]
-                    .find((x) => x !== undefined && x !== null && x !== '' && Number.isFinite(Number(x)));
-                const issT = [vt.iss, d.valorIss, d.issDevido, d.totais?.vISS]
-                    .find((x) => x !== undefined && x !== null && x !== '' && Number.isFinite(Number(x)));
-                const valorT = retT !== undefined ? Number(retT) : (flagT && issT !== undefined ? Number(issT) : 0);
-                if (!valorT) continue;
-                const at = acc.get(alvoT.empresaId)
-                    || { empresaId: alvoT.empresaId, notas: 0, issDevido: 0, issRetido: 0, semValorGravado: 0, tomadoRetido: 0, tomadoNotas: 0 };
-                at.tomadoRetido += valorT;
-                at.tomadoNotas += 1;
-                acc.set(alvoT.empresaId, at);
-                continue;
-            }
-            if (d.direcao !== 'saida') continue;
-            const alvo = (d.empresaId && empresas.find((e) => e.empresaId === d.empresaId))
-                || porCnpj.get(String(d.empresaCnpj || '').replace(/\D/g, ''));
-            if (!alvo) continue;
-
-            const v = d.valores || {};
-            const cand = [v.iss, d.valorIss, d.issDevido, d.totais?.vISS]
-                .find((x) => x !== undefined && x !== null && x !== '' && Number.isFinite(Number(x)));
-            const devido = cand === undefined ? undefined : Number(cand);
-            const flag = v.issRetido === true || d.issRetido === true;
-            const retCand = [v.valorIssRetido, d.valorIssRetido]
-                .find((x) => x !== undefined && x !== null && x !== '' && Number.isFinite(Number(x)));
-            const retido = retCand !== undefined ? Number(retCand) : (flag ? (devido || 0) : 0);
-
-            const a = acc.get(alvo.empresaId)
-                || { empresaId: alvo.empresaId, notas: 0, issDevido: 0, issRetido: 0, semValorGravado: 0, tomadoRetido: 0, tomadoNotas: 0 };
-            a.notas += 1;
-            a.issDevido += devido || 0;
-            a.issRetido += retido || 0;
-            if (devido === undefined) a.semValorGravado += 1;
-            acc.set(alvo.empresaId, a);
-        }
-        const apuracoes = [...acc.values()].map((a) => ({
-            ...a,
-            // Retido pelo tomador não é recolhido pelo prestador.
-            aRecolher: Math.max(0, Math.round((a.issDevido - a.issRetido) * 100) / 100),
-        }));
+        // A conta do ISS vive no núcleo puro (`acumularIssPorEmpresa`): a Rotina
+        // do mês lê a MESMA coisa, e painel com conta própria erra sozinho.
+        const porId = new Map(empresas.map((e) => [e.empresaId, e]));
+        const resolver = (d) => {
+            if (d.empresaId && porId.has(d.empresaId)) return d.empresaId;
+            const alvo = porCnpj.get(String(d.empresaCnpj || '').replace(/\D/g, ''));
+            return alvo ? alvo.empresaId : null;
+        };
+        const apuracoes = acumularIssPorEmpresa(snaps.map((s) => ({ id: s.id, ...s.data() })), resolver);
 
         // Saúde da captura decide se um ZERO pode ser lido como "sem movimento".
         let saude = null;
