@@ -236,8 +236,12 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                     <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
                         <p className="text-[11px] text-slate-600 dark:text-slate-300">
                             <strong>🔌 Testar o Web Service da Prefeitura</strong> — faz UMA consulta de notas
-                            emitidas e mostra a resposta CRUA. Não emite nada. É o que reproduz o erro do WS
-                            (aposentado em 22/07 com "1102 pra tudo") sem ninguém precisar navegar no portal.
+                            emitidas e mostra a resposta CRUA. Não emite nada.
+                            <br />
+                            <strong>Achado de 06/08:</strong> o WS <strong>não está aposentado</strong> — ele
+                            respondeu HTTP 200 e recusou o pedido com o erro 1102 ("mensagem XML sem conteúdo").
+                            Ou seja, o defeito é do lado do CFI, não da Prefeitura. Por isso o bloco abaixo
+                            devolve também o envelope que ENVIAMOS.
                         </p>
                         <div className="flex flex-wrap gap-2 items-end">
                             <div>
@@ -264,6 +268,16 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                 Sem CCM o WS não pode ser consultado e a captura da NFS-e SP não roda —
                                 preencha em Dados fiscais → CCM ou digite aqui para testar.
                             </p>
+                        )}
+                        {diagWs?.leitura && (
+                            <div className={`rounded-lg border p-2 text-[11px] ${
+                                diagWs.leitura.veredicto === 'servico-vivo-ok'
+                                    ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300'
+                                    : 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'
+                            }`}>
+                                <p className="font-bold">{diagWs.leitura.motivo}</p>
+                                {diagWs.leitura.acao && <p>{diagWs.leitura.acao}</p>}
+                            </div>
                         )}
                         {diagWs && (
                             <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded p-2 max-h-64 overflow-y-auto">

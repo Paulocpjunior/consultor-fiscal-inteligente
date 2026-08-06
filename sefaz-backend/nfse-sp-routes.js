@@ -12,6 +12,7 @@ import {
     consultarUma,
     consultarTodasElegiveis,
 } from './nfse-sp-orchestrator.js';
+import { interpretarRespostaWs, enxugarParaDiagnostico } from './nfse-sp-ws-leitura.js';
 import { parseCsvNfseSp } from './nfse-sp-csv-parser.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
@@ -480,10 +481,15 @@ router.get('/nfsesp-saude', authUser, async (req, res) => {
 // UMA chamada ao Web Service da Prefeitura, só pra ver O QUE ELE RESPONDE.
 //
 // Por que existe (Paulo, 06/08 — "como reproduzir o erro WS p você"): o
-// trilho do WS foi aposentado em 22/07 com "erro 1102 pra tudo", e desde
-// então ninguém sabe se é autorização do escritório, CCM, certificado ou
-// endpoint. Pedir pro Paulo navegar no portal atrás disso é empurrar meu
-// trabalho pra ele; aqui ele clica uma vez e me manda a resposta crua.
+// trilho do WS foi dado como aposentado em 22/07 com "erro 1102 pra tudo", e
+// desde então ninguém sabia se era autorização do escritório, CCM, certificado
+// ou endpoint. Aqui ele clica uma vez e me manda a resposta crua.
+//
+// O QUE O 1º TESTE REVELOU (06/08, CLINICA MANTOAN): HTTP 200 + erro 1102
+// "Mensagem XML de Pedido do serviço sem conteúdo". O WS NÃO está aposentado —
+// ele atende, aceita o certificado e recusa o NOSSO pedido. O defeito é do
+// lado do CFI. Por isso a rota passou a devolver também o envelope ENVIADO:
+// sem ver o que sai daqui, a investigação é adivinhação.
 //
 // NÃO EMITE NADA: é consulta de notas emitidas, o método mais inofensivo do
 // WS. Admin-only porque usa o certificado.
@@ -511,16 +517,30 @@ router.post('/nfsesp-ws-diagnostico', requireAdmin, async (req, res) => {
             dtFim: periodo,
         });
         // Resposta CRUA — é isso que diz se o 1102 é autorização, CCM ou
-        // certificado. Sem interpretar: interpretar aqui esconderia o dado.
-        return res.json({
+        // certificado. A `leitura` vem AO LADO do dado cru, nunca no lugar
+        // dele: ela é a conclusão de quem é o problema, e o cru é a prova.
+        const bruto = {
             ok: true,
             httpStatus: r.statusCode ?? null,
             sucesso: !!r.sucesso,
             erros: r.erros || [],
             alertas: r.alertas || [],
             totalNFes: r.totalNFes ?? 0,
+        };
+        return res.json({
+            ...bruto,
+            leitura: interpretarRespostaWs(bruto),
             duracaoMs: Date.now() - inicio,
             enviado: { cnpjRemetente: cnpjLimpo, ccm: ccmLimpo, competencia: anoMes },
+            // 1102 diz "a mensagem chegou vazia" — sem ver o que saiu daqui a
+            // investigação vira adivinhação. Certificado/assinatura omitidos
+            // (são enormes e não mudam a leitura).
+            envelope: {
+                xmlInterno: enxugarParaDiagnostico(r._enviado?.xmlInterno, 900),
+                xmlAssinado: enxugarParaDiagnostico(r._enviado?.xmlAssinado, 1400),
+                soap: enxugarParaDiagnostico(r._enviado?.soap, 1800),
+                respostaCrua: enxugarParaDiagnostico(r._respostaCrua, 1800),
+            },
         });
     } catch (e) {
         // Falha de transporte/certificado também é resposta: é o que
