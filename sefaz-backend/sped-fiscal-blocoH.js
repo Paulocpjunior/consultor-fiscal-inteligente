@@ -46,8 +46,9 @@ export function buildBlocoH(dados) {
     });
 
     // Os avisos precisam CHEGAR a quem gera: inventario faltando e coisa pra
-    // resolver antes de transmitir, nao detalhe de log.
-    if (Array.isArray(dados.avisos)) dados.avisos.push(...plano.avisos);
+    // resolver antes de transmitir, nao detalhe de log. `warnings` e o canal
+    // que a rota devolve no header X-SPED-Warnings e a tela mostra.
+    if (Array.isArray(dados.warnings)) dados.warnings.push(...plano.avisos);
     for (const a of plano.avisos) console.warn(`[bloco-H] ${a}`);
 
     // H001 — IND_MOV: 0 = Bloco COM dados, 1 = Bloco SEM dados

@@ -11,6 +11,7 @@ import { coletarDadosEmpresa, montarBlocos } from './sped-fiscal-orchestrator.js
 import { requireAdmin, requireAuth } from './require-admin.js';
 import { podeAcessarEmpresaId } from './carteira-auth.js';
 import { validarSpedFiscal } from './sped-fiscal-validador.js';
+import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
 function fa() {
@@ -77,6 +78,14 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         // Validacao PVA server-side
         const validacao = validarSpedFiscal(txt);
 
+        // AUDITORIA DO ARQUIVO QUE SAIU (Paulo, 06/08: "esses erros nao podem
+        // acontecer"). O validador confere o LEIAUTE; esta confere o
+        // RESULTADO: coluna de valor zerada em 100% das linhas, total que nao
+        // bate com os detalhes, bloco que promete conteudo e entrega vazio.
+        // E a familia de defeito que passou pelos testes unitarios 3x.
+        const auditoria = auditarSaidaSped(txt.split('\r\n').filter(Boolean));
+        for (const s of auditoria.suspeitas) dados.warnings.push(`[auditoria] ${s.detalhe}`);
+
         // Encoding Windows-1252 (legado SPED)
         const buffer = Buffer.from(txt, 'latin1');
 
@@ -101,6 +110,9 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         })));
         // Resultado da validacao PVA no header (arquivo ainda eh gerado mesmo com erros)
         res.setHeader('X-SPED-Validation', encodeURIComponent(JSON.stringify(validacao)));
+        res.setHeader('X-SPED-Auditoria', encodeURIComponent(JSON.stringify({
+            ok: auditoria.ok, resumo: resumoAuditoria(auditoria), suspeitas: auditoria.suspeitas,
+        })));
         return res.send(buffer);
     } catch (e) {
         return tratarErro(e, res);

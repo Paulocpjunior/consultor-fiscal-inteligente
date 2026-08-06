@@ -20,6 +20,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ultNSU=maxNSU, pendências de manifestação, resumos sem completo. NUNCA
   propor "comparar com a SIEG" como rito; a Conferência por chaves é só rede
   de segurança da migração.
+- **ARQUIVO FISCAL SE CONFERE PELO RESULTADO, NÃO PELO TESTE VERDE** (Paulo,
+  06/08: *"esses erros não podem acontecer"*). TRÊS defeitos da MESMA família
+  passaram por teste unitário verde e só apareceram na leitura humana do
+  código: IPI escriturado em E200/E210 (registro do ICMS-ST, 04/08); E110
+  campo 11 recebendo saldo CREDOR num campo de saldo DEVEDOR (02/08); Bloco H
+  com o inventário INTEIRO zerado (06/08 — qtd default 0 e nenhum lugar do app
+  gravando o campo). Teste de unidade não pega: cada função fazia exatamente o
+  que o próprio teste mandava. TRAVA PERMANENTE: `sped-auditoria-saida.js`
+  roda em TODO arquivo gerado e acusa a CLASSE do erro — coluna de valor
+  zerada (ou vazia) em 100% das linhas de um detalhe, total que não bate com a
+  soma dos detalhes, bloco com IND_MOV=0 e nenhum registro de conteúdo. Sai no
+  header `X-SPED-Auditoria` e nos warnings. REGRAS QUE VALEM PRA GERADOR NOVO:
+  (1) campo de VALOR/QUANTIDADE nunca recebe default — ausência bloqueia ou
+  vira bloco vazio + alerta, e zero só entra quando zero É a resposta ("não
+  houve ajuste"), nunca quando é "não sabemos"; (2) registro novo com
+  totalizador entra em `TOTAIS_VIGIADOS`, detalhe novo entra em
+  `DETALHES_VIGIADOS`, NO MESMO PR; (3) bloco só conta como PRONTO no de-para
+  depois de passar no PVA — "gera o arquivo" não é prova.
 - **CADASTRO ERRADO OU FALTANDO = ALERTA, NUNCA CONTORNO** (Paulo, 06/08:
   *"erro de cadastro e/ou falta de informação LIGA UM SINAL DE ALERTA E O
   COLABORADOR QUE ARRUME, não vamos perder tempo em criar ferramentas p
