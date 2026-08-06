@@ -175,8 +175,10 @@ describe('nota no mês com ISS zerado NÃO é "sem movimento"', () => {
             ],
             zeroConfiavelPara: () => true,
         });
-        expect(p.avisos.join(' ')).toMatch(/2 empresa\(s\) TÊM nota no mês com o ISS zerado/);
-        expect(p.avisos.join(' ')).toMatch(/não é "sem movimento"/);
+        expect(p.avisos.join(' ')).toMatch(/2 empresa\(s\) com ISS zerado que a própria nota NÃO explica/);
+        // Carteira COM nota (ainda que zerada) não pode disparar o alarme de
+        // "ninguém teve nota" — esse alarme é de captura quebrada.
+        expect(p.avisos.join(' ')).not.toMatch(/quase nunca é mês parado/);
     });
 });
 
@@ -446,5 +448,60 @@ describe('optante do Simples com a nota de ISS zerado', () => {
         });
         expect(p.avisos.join(' ')).toMatch(/nota sai com ISS zerado, que é o esperado/);
         expect(p.avisos.join(' ')).not.toMatch(/R\$ 0\.00 destacado/);
+    });
+});
+
+/**
+ * A ligação entre a varredura e a CAUSA do zero. Sem isto, "ISS zerado" é um
+ * balde de 67 empresas com a mesma frase — e não dá pra começar por lugar
+ * nenhum, que é o meio-farol que a gente vem fechando o dia inteiro.
+ */
+describe('a varredura diz POR QUE o ISS está zerado', () => {
+    const empresa = { empresaId: 'a', nome: 'X', cnpj: '1', ccm: '123', issFixoSup: false, regime: 'lucro' };
+    const nfse = (over: any = {}) => ({
+        empresaId: 'a', tipoDoc: 'NFSe', direcao: 'saida', valorIss: 0,
+        valorServicos: 1000, valorDeducoes: 0, municipioPrestacaoIbge: '3550308', ...over,
+    });
+    const painel = (docs: any[]) => montarPainelIssCarteira({
+        empresas: [empresa],
+        apuracoes: acumularIssPorEmpresa(docs, (d: any) => d.empresaId),
+        zeroConfiavelPara: () => true,
+    });
+
+    it('zero que a nota EXPLICA sai da fila de pendência', () => {
+        const p = painel([nfse({ aliquotaServicos: 0 }), nfse({ municipioPrestacaoIbge: '3509502' })]);
+        expect(p.linhas[0].situacao).toBe('iss-zerado-explicado');
+        expect(p.resumo.issZerado).toBe(0);
+        expect(p.resumo.issZeradoExplicado).toBe(1);
+        expect(p.avisos.join(' ')).toMatch(/não é pendência, não precisa conferir/);
+    });
+
+    it('nota que diz tributar com ISS zero continua sendo conferência, com o motivo', () => {
+        const p = painel([nfse({ aliquotaServicos: 5 })]);
+        expect(p.linhas[0].situacao).toBe('iss-zerado');
+        expect(p.linhas[0].acao).toMatch(/se contradiz/);
+        expect(p.linhas[0].causasIssZerado.exigemAcao).toBe(1);
+    });
+
+    it('uma nota inconsistente no meio de dez explicadas não some', () => {
+        const p = painel([
+            ...Array.from({ length: 10 }, () => nfse({ aliquotaServicos: 0 })),
+            nfse({ aliquotaServicos: 5 }),
+        ]);
+        expect(p.linhas[0].situacao).toBe('iss-zerado');
+        expect(p.linhas[0].causasIssZerado.dominante.causa).toBe('inconsistente');
+    });
+
+    it('nota SEM o campo de ISS continua bloqueando antes de tudo — ausente ≠ zero', () => {
+        const p = painel([nfse({ valorIss: undefined, aliquotaServicos: 0 })]);
+        expect(p.linhas[0].situacao).toBe('captura-incerta');
+    });
+
+    it('cadastro Lucro com nota de OPTANTE acende a divergência na linha', () => {
+        const p = painel([nfse({ aliquotaServicos: 0, prestadorOptanteSimples: true })]);
+        expect(p.linhas[0].divergenciaRegime.divergente).toBe(true);
+        expect(p.resumo.divergenciaRegime).toBe(1);
+        expect(p.farol).toBe('atencao');
+        expect(p.avisos.join(' ')).toMatch(/CADASTRO e a NOTA discordam/);
     });
 });

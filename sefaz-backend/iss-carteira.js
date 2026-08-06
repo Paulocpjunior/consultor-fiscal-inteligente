@@ -22,10 +22,15 @@
 // 4. RETIDO PELO TOMADOR NÃO É DO PRESTADOR (Lei 13.701/03 art. 9º).
 // ============================================================================
 
+import { resumirCausasIssZerado, divergenciaRegimePelaNota } from './iss-zerado-causa.js';
+
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /** Situações possíveis de uma empresa no mês. A ordem é a de prioridade. */
-export const SITUACOES = ['sem-ccm', 'captura-incerta', 'iss-zerado', 'a-recolher', 'so-tomado', 'iss-no-das', 'iss-fixo', 'so-retido', 'sem-movimento'];
+export const SITUACOES = [
+    'sem-ccm', 'captura-incerta', 'iss-zerado', 'a-recolher', 'so-tomado',
+    'iss-no-das', 'iss-fixo', 'so-retido', 'iss-zerado-explicado', 'sem-movimento',
+];
 
 const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
 
@@ -59,7 +64,14 @@ export function acumularIssPorEmpresa(documentos, resolverEmpresaId) {
     const pegar = (id) => {
         let a = acc.get(id);
         if (!a) {
-            a = { empresaId: id, notas: 0, issDevido: 0, issRetido: 0, semValorGravado: 0, tomadoRetido: 0, tomadoNotas: 0 };
+            a = {
+                empresaId: id, notas: 0, issDevido: 0, issRetido: 0, semValorGravado: 0,
+                tomadoRetido: 0, tomadoNotas: 0,
+                // Notas de SAÍDA com o ISS zerado, guardadas pra dizer POR QUÊ
+                // (iss-zerado-causa.js). Sem isso o painel junta 67 empresas
+                // sob a mesma frase e ninguém sabe por onde começar.
+                zeradas: [], saidas: [],
+            };
             acc.set(id, a);
         }
         return a;
@@ -97,9 +109,11 @@ export function acumularIssPorEmpresa(documentos, resolverEmpresaId) {
         a.notas += 1;
         a.issDevido += devido || 0;
         a.issRetido += retido || 0;
+        a.saidas.push(d);
         // Nota sem NENHUM campo de ISS não é nota de ISS zero: é nota sem o
         // valor gravado. Vira bloqueio, não parcela do total.
         if (devido === undefined) a.semValorGravado += 1;
+        else if (devido === 0) a.zeradas.push(d);
     }
 
     return [...acc.values()].map((a) => ({
@@ -148,6 +162,9 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         // Continua VALENDO pra optante: ISS retido como TOMADORA (outra guia),
         // ISS fixo/SUP (guia do município) e o retido pelo tomador nas saídas.
         const regimeSimples = String(e.regime || '').toLowerCase() === 'simples';
+        // POR QUE o ISS está zerado, e se o cadastro discorda da própria nota.
+        const causas = a.zeradas?.length ? resumirCausasIssZerado(a.zeradas) : null;
+        const divergencia = divergenciaRegimePelaNota(e.regime, a.saidas || []);
         // A captura só é "confiável" pra quem tem CCM: sem ele a varredura do
         // portal nem tenta a empresa, então o zero dela não vale nada.
         const zeroConfiavel = temCcm && (zeroConfiavelPara ? !!zeroConfiavelPara(e.cnpj) : false);
@@ -196,12 +213,28 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         } else if (notas > 0) {
             // ACHADO 06/08 (varredura real do Paulo): empresa com 29 NOTAS
             // aparecia como "sem movimento". Isso é o farol MENTINDO — ela tem
-            // movimento; o que está zerado é o ISS. Pode ser isenção, imunidade
-            // ou nota que veio sem o valor, e nenhuma dessas é "nada a fazer".
-            situacao = 'iss-zerado';
-            acao = `${notas} nota(s) emitida(s) no mês e ISS ZERADO em todas. `
-                + 'Isso pode ser isenção, imunidade, alíquota não gravada na captura ou serviço fora de SP — '
-                + 'confira antes de concluir que não há guia.';
+            // movimento; o que está zerado é o ISS.
+            //
+            // Mas parar aqui era MEIO farol: 67 empresas com a mesma frase
+            // "confira isenção/imunidade ou falha na captura". As causas são
+            // muito diferentes e a maioria não pede ação nenhuma — quem decide
+            // é `iss-zerado-causa.js`, com o motivo dominante AO LADO.
+            if (causas?.explicado) {
+                // O zero está EXPLICADO pelo próprio documento (retido, fora de
+                // SP, dedução integral, alíquota zero). Isso é resposta, não
+                // pendência — continuar cobrando conferência aqui é o alarme
+                // que a equipe aprende a ignorar.
+                situacao = 'iss-zerado-explicado';
+                acao = `${notas} nota(s) com ISS zerado, e o motivo está na própria nota: `
+                    + `${causas.dominante?.texto || ''} Nada a recolher.`;
+            } else {
+                situacao = 'iss-zerado';
+                acao = causas?.dominante
+                    ? `${notas} nota(s) com ISS zerado · ${causas.exigemAcao} pede(m) conferência: ${causas.dominante.texto}`
+                    : `${notas} nota(s) emitida(s) no mês e ISS ZERADO em todas. `
+                        + 'Isso pode ser isenção, imunidade, alíquota não gravada na captura ou serviço fora de SP — '
+                        + 'confira antes de concluir que não há guia.';
+            }
         } else {
             // Só aqui é "sem movimento": ZERO nota, com a captura confiável.
             situacao = 'sem-movimento';
@@ -218,6 +251,9 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
             issForaDoTotal: foraDoTotal ? aRecolher : 0,
             tomadoRetido, tomadoNotas,
             temCcm, zeroConfiavel, situacao, acao,
+            causasIssZerado: causas,
+            // Cadastro diz X e a nota diz Y ⇒ ACENDE, não escolhe sozinho.
+            divergenciaRegime: divergencia?.divergente ? divergencia : null,
         });
     }
 
@@ -243,6 +279,11 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         totalIssNoDas: r2(linhas.filter((l) => l.situacao === 'iss-no-das').reduce((t, l) => t + l.issForaDoTotal, 0)),
         issFixo: conta('iss-fixo'),
         soRetido: conta('so-retido'),
+        // Zero EXPLICADO pela própria nota (retido, fora de SP, dedução,
+        // alíquota zero): é resposta, não pendência — por isso conta separado
+        // de `issZerado` e não acende o farol.
+        issZeradoExplicado: conta('iss-zerado-explicado'),
+        divergenciaRegime: linhas.filter((l) => l.divergenciaRegime).length,
         semMovimento: conta('sem-movimento'),
     };
 
@@ -256,10 +297,12 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
  */
 export function farolDaCarteira(resumo) {
     if (!resumo || !resumo.empresas) return 'sem-dados';
-    if (resumo.semCcm > 0 || resumo.capturaIncerta > 0 || resumo.issZerado > 0) return 'atencao';
+    if (resumo.semCcm > 0 || resumo.capturaIncerta > 0 || resumo.issZerado > 0
+        || resumo.divergenciaRegime > 0) return 'atencao';
     // Ninguém com nota na carteira inteira: não se conclui "mês parado".
     if (resumo.aRecolher === 0 && resumo.soRetido === 0 && resumo.issFixo === 0
-        && !resumo.issNoDas && !resumo.comIssTomado) return 'atencao';
+        && !resumo.issNoDas && !resumo.issZerado && !resumo.issZeradoExplicado
+        && !resumo.comIssTomado) return 'atencao';
     return 'ok';
 }
 
@@ -272,8 +315,20 @@ function avisosDaCarteira(r) {
     }
     if (r.issZerado > 0) {
         avisos.push(
-            `${r.issZerado} empresa(s) TÊM nota no mês com o ISS zerado em todas — isso não é "sem movimento". `
-            + 'Confira isenção/imunidade ou falha na captura do valor antes de fechar o mês.',
+            `${r.issZerado} empresa(s) com ISS zerado que a própria nota NÃO explica — alíquota ausente na captura `
+            + 'ou nota que diz tributar e veio com ISS zero. É aqui que se confere; o resto do zerado já tem motivo.',
+        );
+    }
+    if (r.issZeradoExplicado > 0) {
+        avisos.push(
+            `${r.issZeradoExplicado} empresa(s) com ISS zerado JÁ EXPLICADO pela nota (retido, serviço fora de SP, `
+            + 'dedução integral ou alíquota zero) — não é pendência, não precisa conferir.',
+        );
+    }
+    if (r.divergenciaRegime > 0) {
+        avisos.push(
+            `🚨 ${r.divergenciaRegime} empresa(s) em que o CADASTRO e a NOTA discordam sobre optar pelo Simples. `
+            + 'Uma das duas está errada, e as duas respostas dão guias diferentes — corrija o cadastro antes de emitir.',
         );
     }
     if (r.comIssTomado > 0) {
@@ -299,8 +354,11 @@ function avisosDaCarteira(r) {
             + '— não gera guia do município e fica FORA do total. Cobrar essa guia seria cobrar duas vezes.',
         );
     }
+    // Este alarme é de CAPTURA QUEBRADA — e empresa com nota TEM movimento,
+    // mesmo que o ISS dela esteja zerado. Sem contar as zeradas, o alarme dizia
+    // "ninguém teve nota" numa carteira cheia de notas.
     if (r.empresas > 0 && r.aRecolher === 0 && r.soRetido === 0 && r.issFixo === 0
-        && !r.issNoDas && !r.comIssTomado) {
+        && !r.issNoDas && !r.issZerado && !r.issZeradoExplicado && !r.comIssTomado) {
         avisos.push(
             'NENHUMA empresa da carteira teve nota nesta competência. Isso quase nunca é mês parado — confira a captura antes de fechar o mês.',
         );
