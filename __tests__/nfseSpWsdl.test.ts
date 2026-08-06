@@ -1,5 +1,5 @@
 // @ts-expect-error — módulo .js puro (sem tipos)
-import { extrairContratoWsdl, conferirContrato, parametrosDoEnvelope } from '../sefaz-backend/nfse-sp-wsdl';
+import { extrairContratoWsdl, conferirContrato, parametrosDoEnvelope, elementoDaMensagem } from '../sefaz-backend/nfse-sp-wsdl';
 
 /**
  * O erro 1102 diz "Mensagem XML de Pedido do serviço sem conteúdo": o parâmetro
@@ -112,5 +112,47 @@ describe('conferir o que enviamos contra o contrato', () => {
         expect(r.ok).toBe(false);
         expect(r.conclusivo).toBe(false);
         expect(r.motivo).toMatch(/WSDL não veio/);
+    });
+});
+
+/**
+ * Teste do Paulo em 06/08: o WSDL baixou, mas o leitor disse "sem a sequência
+ * de parâmetros no formato esperado" — e o trecho cru mostrou que a 1ª menção
+ * ao nome já era a <wsdl:operation>. Ou seja, os TIPOS não estão no WSDL: a
+ * seção <types> importa o schema de outro documento (padrão ASMX ?xsd=1), e o
+ * elemento a procurar vem pela cadeia message → part → element.
+ */
+describe('WSDL sem tipos embutidos (caso real da Prefeitura)', () => {
+    const SO_OPERACOES = `<wsdl:definitions>
+      <wsdl:types><s:schema><s:import namespace="x" schemaLocation="https://nfews.prefeitura.sp.gov.br/lotenfe.asmx?xsd=1"/></s:schema></wsdl:types>
+      <wsdl:message name="ConsultaNFeEmitidasSoapIn"><wsdl:part name="parameters" element="tns:ConsultaNFeEmitidas"/></wsdl:message>
+      <wsdl:portType><wsdl:operation name="ConsultaNFeEmitidas">
+        <wsdl:input message="tns:ConsultaNFeEmitidasSoapIn" />
+      </wsdl:operation></wsdl:portType>
+    </wsdl:definitions>`;
+
+    it('sem o schema importado, NÃO conclui — e diz qual elemento procurou', () => {
+        const c = extrairContratoWsdl(SO_OPERACOES, 'ConsultaNFeEmitidas');
+        expect(c.encontrada).toBe(false);
+        expect(c.elementoProcurado).toBe('ConsultaNFeEmitidas');
+        const r = conferirContrato({ contrato: c, enviados: ['VersaoSchema'], soapActionEnviada: null });
+        expect(r.conclusivo).toBe(false);
+    });
+
+    it('com o schema importado anexado, lê os parâmetros', () => {
+        const XSD = `<s:schema><s:element name="ConsultaNFeEmitidas"><s:complexType><s:sequence>
+          <s:element name="VersaoSchema" type="s:int"/><s:element name="MensagemXML" type="s:string"/>
+        </s:sequence></s:complexType></s:element></s:schema>`;
+        const c = extrairContratoWsdl(`${SO_OPERACOES}\n${XSD}`, 'ConsultaNFeEmitidas');
+        expect(c.encontrada).toBe(true);
+        expect(c.parametros.map((p: any) => p.nome)).toEqual(['VersaoSchema', 'MensagemXML']);
+    });
+
+    it('a cadeia message → part → element manda quando o nome do tipo difere', () => {
+        const w = `<wsdl:message name="ConsultaNFeEmitidasSoapIn"><wsdl:part element="tns:PedidoEmitidas"/></wsdl:message>
+          <s:element name="PedidoEmitidas"><s:complexType><s:sequence>
+            <s:element name="VersaoSchema" type="s:int"/></s:sequence></s:complexType></s:element>`;
+        expect(elementoDaMensagem(w, 'ConsultaNFeEmitidas')).toBe('PedidoEmitidas');
+        expect(extrairContratoWsdl(w, 'ConsultaNFeEmitidas').encontrada).toBe(true);
     });
 });

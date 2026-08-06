@@ -426,6 +426,13 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                         {(diagWs.contrato.enviados || []).join(', ') || '—'}
                                     </p>
                                 )}
+                                {typeof diagWs.contrato.schemasEncontrados === 'number' && (
+                                    <p className="mt-1">
+                                        WSDL: {diagWs.contrato.tamanhoWsdl} bytes · schemas importados{' '}
+                                        {diagWs.contrato.schemasImportados}/{diagWs.contrato.schemasEncontrados}
+                                        {diagWs.contrato.elementoProcurado ? ` · elemento procurado: ${diagWs.contrato.elementoProcurado}` : ''}
+                                    </p>
+                                )}
                                 {diagWs.contrato.trechoWsdl && (
                                     <>
                                         <p className="mt-1 font-semibold">Trecho do WSDL (é a forma real que o leitor não entendeu):</p>

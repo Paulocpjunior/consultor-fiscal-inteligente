@@ -167,11 +167,11 @@ export async function baixarWsdl() {
         // mensagem já diz o que aconteceu, em vez de sumir com o motivo.
         console.warn('[nfse-sp] WSDL sem certificado:', e.message);
     }
-    return new Promise((resolve, reject) => {
+    const get = (path) => new Promise((resolve, reject) => {
         const req = https.request(
             {
                 host: ENDPOINT_HOST,
-                path: `${ENDPOINT_PATH}?WSDL`,
+                path,
                 method: 'GET',
                 ...(certs?.pfxBuffer ? { pfx: certs.pfxBuffer, passphrase: certs.password } : {}),
                 minVersion: 'TLSv1.2',
@@ -188,6 +188,35 @@ export async function baixarWsdl() {
         req.on('timeout', () => req.destroy(new Error('NFS-e SP: timeout ao baixar o WSDL')));
         req.end();
     });
+
+    const principal = await get(`${ENDPOINT_PATH}?WSDL`);
+    if (principal.statusCode !== 200 || !principal.body) return { ...principal, schemasImportados: 0 };
+
+    // O WSDL da Prefeitura NÃO traz os tipos embutidos: o teste de 06/08
+    // mostrou que a 1ª menção a "ConsultaNFeEmitidas" já é a <wsdl:operation>,
+    // ou seja, a seção <types> IMPORTA o schema de outro documento (padrão
+    // ASMX `?xsd=1`). Sem seguir o import, os nomes dos parâmetros não existem
+    // no que baixamos — e o leitor conclui "formato inesperado" sem ser
+    // formato inesperado nenhum.
+    const locais = [...principal.body.matchAll(/schemaLocation="([^"]+)"/g)]
+        .map((m) => m[1])
+        .filter((u) => u.includes(ENDPOINT_HOST) || u.startsWith('/') || u.startsWith('?'))
+        .slice(0, 5);
+
+    let combinado = principal.body;
+    let importados = 0;
+    for (const loc of locais) {
+        try {
+            const path = loc.startsWith('?') ? `${ENDPOINT_PATH}${loc}`
+                : loc.startsWith('/') ? loc
+                    : new URL(loc).pathname + new URL(loc).search;
+            const r = await get(path);
+            if (r.statusCode === 200 && r.body) { combinado += `\n${r.body}`; importados++; }
+        } catch (e) {
+            console.warn('[nfse-sp] schema importado falhou:', loc, e.message);
+        }
+    }
+    return { statusCode: 200, body: combinado, schemasImportados: importados, schemasEncontrados: locais.length };
 }
 
 function extrairRetornoXml(soapResposta, metodo = 'ConsultaNFeRecebidas') {
