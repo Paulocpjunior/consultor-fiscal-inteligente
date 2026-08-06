@@ -179,6 +179,21 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 if (raw) warnings = JSON.parse(decodeURIComponent(raw));
             } catch { /* ignora */ }
 
+            // AUDITORIA DO ARQUIVO — separada dos avisos comuns de propósito.
+            // Ela acusa a CLASSE de erro que passou por teste verde 3× (IPI no
+            // registro do ST, saldo credor no campo do devedor, inventário
+            // zerado). Se aparecer misturada em "gerado com avisos", vira mais
+            // uma linha de texto e ninguém para pra ler.
+            let auditoria: { ok: boolean; resumo: string; suspeitas: Array<{ detalhe: string; gravidade: string }> } | null = null;
+            try {
+                const raw = resp.headers.get('X-SPED-Auditoria');
+                if (raw) auditoria = JSON.parse(decodeURIComponent(raw));
+            } catch { /* ignora */ }
+            // Aviso que a auditoria gerou já entrou nos warnings pelo backend —
+            // tirar daqui evita dizer a mesma coisa duas vezes.
+            warnings = warnings.filter(w => !String(w).startsWith('[auditoria]'));
+            const travas = (auditoria?.suspeitas || []).filter(s => s.gravidade === 'bloqueia');
+
             const extras = stats ? [
                 { label: 'Notas processadas', value: String(stats.notas) },
                 { label: 'Itens únicos', value: String(stats.itens) },
@@ -186,15 +201,24 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 { label: 'Linhas no arquivo', value: String(stats.linhas) },
             ] : undefined;
 
+            // O arquivo é gerado mesmo assim (o colaborador pode precisar
+            // vê-lo), mas o título NÃO pode dizer "sucesso" quando a auditoria
+            // travou: farol honesto vale pro arquivo fiscal também.
             setMensagem({
-                tipo: warnings.length ? 'warning' : 'success',
-                titulo: warnings.length
-                    ? `SPED gerado com avisos: ${filename}`
-                    : `SPED gerado: ${filename}`,
-                detalhes: warnings.length ? warnings.join(' — ') : 'Download concluído.',
+                tipo: travas.length ? 'error' : (warnings.length ? 'warning' : 'success'),
+                titulo: travas.length
+                    ? `⚠ NÃO TRANSMITA — a auditoria travou ${travas.length} ponto(s): ${filename}`
+                    : warnings.length
+                        ? `SPED gerado com avisos: ${filename}`
+                        : `SPED gerado: ${filename}`,
+                detalhes: [
+                    ...travas.map(t => `🚨 ${t.detalhe}`),
+                    ...(auditoria && !travas.length ? [auditoria.resumo] : []),
+                    ...warnings,
+                ].join(' — ') || 'Download concluído.',
                 extras,
             });
-            if (onShowToast && !warnings.length) {
+            if (onShowToast && !warnings.length && !travas.length) {
                 onShowToast(`SPED Fiscal "${filename}" gerado com sucesso!`);
             }
         } catch (err: any) {
