@@ -20,7 +20,12 @@ import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
 import { saudeNfseSp, empresaComFalhaNaCaptura } from './nfse-sp-saude.js';
-import { consultarNfseEmitidas } from './nfse-sp-client.js';
+import { consultarNfseEmitidas, baixarWsdl } from './nfse-sp-client.js';
+import { extrairContratoWsdl, conferirContrato, parametrosDoEnvelope } from './nfse-sp-wsdl.js';
+
+// A SOAPAction que o cliente usa na consulta de emitidas — repetida aqui só
+// para o diagnóstico poder confrontá-la com a declarada no WSDL.
+const SOAP_ACTION_EMITIDAS_DIAG = 'http://www.prefeitura.sp.gov.br/nfe/ws/consultaNFeEmitidas';
 
 const uploadCsv = multer({
     storage: multer.memoryStorage(),
@@ -527,9 +532,31 @@ router.post('/nfsesp-ws-diagnostico', requireAdmin, async (req, res) => {
             alertas: r.alertas || [],
             totalNFes: r.totalNFes ?? 0,
         };
+        // Confere o que ENVIAMOS contra o contrato publicado pela própria
+        // Prefeitura. É o que fecha o 1102 sem chutar layout de fisco — e o
+        // ambiente de desenvolvimento não alcança o host, mas o Cloud Run sim.
+        // Falha aqui NUNCA derruba o diagnóstico: o teste do WS é o principal.
+        let contrato = null;
+        try {
+            const wsdl = await baixarWsdl();
+            if (wsdl.statusCode === 200 && wsdl.body) {
+                const c = extrairContratoWsdl(wsdl.body, 'ConsultaNFeEmitidas');
+                contrato = conferirContrato({
+                    contrato: c,
+                    enviados: parametrosDoEnvelope(r._enviado?.soap, 'ConsultaNFeEmitidas'),
+                    soapActionEnviada: SOAP_ACTION_EMITIDAS_DIAG,
+                });
+            } else {
+                contrato = { ok: false, conclusivo: false, motivo: `WSDL não veio (HTTP ${wsdl.statusCode}).` };
+            }
+        } catch (e) {
+            contrato = { ok: false, conclusivo: false, motivo: `Não consegui baixar o WSDL: ${String(e?.message || e).slice(0, 200)}` };
+        }
+
         return res.json({
             ...bruto,
             leitura: interpretarRespostaWs(bruto),
+            contrato,
             duracaoMs: Date.now() - inicio,
             enviado: { cnpjRemetente: cnpjLimpo, ccm: ccmLimpo, competencia: anoMes },
             // 1102 diz "a mensagem chegou vazia" — sem ver o que saiu daqui a
