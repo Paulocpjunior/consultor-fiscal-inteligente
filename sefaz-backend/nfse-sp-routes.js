@@ -508,7 +508,8 @@ router.get('/iss-carteira', authUser, async (req, res) => {
                 .where('competencia', '==', competencia)
                 .select('empresaId', 'empresaCnpj', 'tipoDoc', 'tipo', 'direcao', 'status',
                     'valorIss', 'issDevido', 'issRetido', 'valorIssRetido',
-                    'valores.iss', 'valores.issRetido', 'valores.valorIssRetido', 'totais.vISS'),
+                    'valores.iss', 'valores.issRetido', 'valores.valorIssRetido', 'valores.valorIss',
+                    'totais.vISS'),
             { label: `iss-carteira ${competencia}`, maxDocs: 80000 },
         );
 
@@ -517,8 +518,32 @@ router.get('/iss-carteira', authUser, async (req, res) => {
         for (const s of snaps) {
             const d = { id: s.id, ...s.data() };
             if (!/NFSe/i.test(String(d.tipoDoc || d.tipo || ''))) continue;
-            if (d.direcao !== 'saida') continue;
             if (CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
+
+            // ENTRADA com retenção = ISS que a empresa recolhe COMO TOMADORA.
+            // Outra obrigação, outra guia — mas ela precisa APARECER, senão
+            // empresa que só tem tomado fica como "sem movimento" (o mesmo
+            // falso-negativo do ISS próprio, corrigido no mesmo dia).
+            if (d.direcao === 'entrada') {
+                const alvoT = (d.empresaId && empresas.find((e) => e.empresaId === d.empresaId))
+                    || porCnpj.get(String(d.empresaCnpj || '').replace(/\D/g, ''));
+                if (!alvoT) continue;
+                const vt = d.valores || {};
+                const flagT = vt.issRetido === true || d.issRetido === true;
+                const retT = [vt.valorIssRetido, d.valorIssRetido]
+                    .find((x) => x !== undefined && x !== null && x !== '' && Number.isFinite(Number(x)));
+                const issT = [vt.iss, d.valorIss, d.issDevido, d.totais?.vISS]
+                    .find((x) => x !== undefined && x !== null && x !== '' && Number.isFinite(Number(x)));
+                const valorT = retT !== undefined ? Number(retT) : (flagT && issT !== undefined ? Number(issT) : 0);
+                if (!valorT) continue;
+                const at = acc.get(alvoT.empresaId)
+                    || { empresaId: alvoT.empresaId, notas: 0, issDevido: 0, issRetido: 0, semValorGravado: 0, tomadoRetido: 0, tomadoNotas: 0 };
+                at.tomadoRetido += valorT;
+                at.tomadoNotas += 1;
+                acc.set(alvoT.empresaId, at);
+                continue;
+            }
+            if (d.direcao !== 'saida') continue;
             const alvo = (d.empresaId && empresas.find((e) => e.empresaId === d.empresaId))
                 || porCnpj.get(String(d.empresaCnpj || '').replace(/\D/g, ''));
             if (!alvo) continue;
@@ -533,7 +558,7 @@ router.get('/iss-carteira', authUser, async (req, res) => {
             const retido = retCand !== undefined ? Number(retCand) : (flag ? (devido || 0) : 0);
 
             const a = acc.get(alvo.empresaId)
-                || { empresaId: alvo.empresaId, notas: 0, issDevido: 0, issRetido: 0, semValorGravado: 0 };
+                || { empresaId: alvo.empresaId, notas: 0, issDevido: 0, issRetido: 0, semValorGravado: 0, tomadoRetido: 0, tomadoNotas: 0 };
             a.notas += 1;
             a.issDevido += devido || 0;
             a.issRetido += retido || 0;
