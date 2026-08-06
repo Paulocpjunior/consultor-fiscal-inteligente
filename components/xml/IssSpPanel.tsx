@@ -286,6 +286,33 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                     </button>
                 </div>
 
+                {/* A CAUSA vem antes da consequência. Sem isto, a tela mostra
+                    "209 empresas com captura incerta" e ninguém sabe POR QUÊ —
+                    o colaborador vê 209 alertas e nenhuma ação. O farol honesto
+                    manda o motivo dominante ficar AO LADO do número. */}
+                {carteira?.saudeCaptura && carteira.saudeCaptura.farol !== 'ok' && (
+                    <div className={`rounded-lg border p-2 text-[11px] ${
+                        carteira.saudeCaptura.farol === 'quebrado'
+                            ? 'border-red-300 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'
+                            : 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'
+                    }`}>
+                        <p className="font-bold">
+                            {carteira.saudeCaptura.farol === 'quebrado' ? '🚨' : '⚠'} É POR ISSO que há empresas
+                            incertas: {carteira.saudeCaptura.motivo}
+                        </p>
+                        {carteira.saudeCaptura.acao && <p>{carteira.saudeCaptura.acao}</p>}
+                        <p className="mt-1">
+                            Enquanto a captura não rodar com sucesso, "zero nota" não vale como "sem movimento" —
+                            e é por isso que a coluna de incertas está cheia.
+                        </p>
+                    </div>
+                )}
+                {carteira?.saudeCaptura?.farol === 'ok' && (
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                        ✓ Captura de NFS-e SP saudável: {carteira.saudeCaptura.motivo}
+                    </p>
+                )}
+
                 {carteira?.resumo && (
                     <>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
