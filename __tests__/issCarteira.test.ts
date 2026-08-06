@@ -377,3 +377,74 @@ describe('optante do Simples: ISS próprio vai DENTRO do DAS', () => {
         expect(p.avisos.join(' ')).not.toMatch(/quase nunca é mês parado/);
     });
 });
+
+/**
+ * 2ª varredura real (06/08, com o ISS já ligado): "dentro do DAS" deu ZERO
+ * empresa e "ISS zerado" pulou de 35 pra 67. A NFS-e do optante sai com o ISS
+ * ZERADO — justamente PORQUE ele vai no DAS. Ou seja, o caso real do optante
+ * não é "ISS destacado que não vira guia": é NOTA SEM ISS DESTACADO.
+ *
+ * Mandar conferir isso é alarme sem ação — o valor do ISS na nota de um
+ * optante não muda guia nenhuma, porque o DAS sai do faturamento.
+ */
+describe('optante do Simples com a nota de ISS zerado', () => {
+    const optante = { empresaId: 'a', nome: 'SERVIÇOS ME', cnpj: '1', ccm: '123', issFixoSup: false, regime: 'simples' };
+
+    it('nota com ISS zerado no optante NÃO é conferência pendente', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [optante],
+            apuracoes: [{ empresaId: 'a', notas: 12, issDevido: 0, issRetido: 0, aRecolher: 0 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('iss-no-das');
+        expect(p.linhas[0].acao).toMatch(/é o ESPERADO/);
+        expect(p.resumo.issZerado).toBe(0);
+        expect(p.resumo.issNoDas).toBe(1);
+    });
+
+    it('a MESMA nota zerada no Lucro continua sendo conferência', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [{ ...optante, regime: 'lucro' }],
+            apuracoes: [{ empresaId: 'a', notas: 12, issDevido: 0, issRetido: 0, aRecolher: 0 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('iss-zerado');
+    });
+
+    it('optante com ISS zerado e valor NÃO GRAVADO continua bloqueando — ausente ≠ zero', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [optante],
+            apuracoes: [{ empresaId: 'a', notas: 12, issDevido: 0, issRetido: 0, aRecolher: 0, semValorGravado: 3 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('captura-incerta');
+    });
+
+    it('optante com ISS RETIDO pelo tomador diz isso, que é mais específico', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [optante],
+            apuracoes: [{ empresaId: 'a', notas: 4, issDevido: 300, issRetido: 300, aRecolher: 0 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('so-retido');
+    });
+
+    it('optante SEM nota nenhuma continua "sem movimento" — não se inventa DAS', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [optante],
+            apuracoes: [{ empresaId: 'a', notas: 0, issDevido: 0, issRetido: 0, aRecolher: 0 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('sem-movimento');
+    });
+
+    it('o aviso não anuncia valor quando o ISS das notas é zero', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [optante],
+            apuracoes: [{ empresaId: 'a', notas: 12, issDevido: 0, issRetido: 0, aRecolher: 0 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.avisos.join(' ')).toMatch(/nota sai com ISS zerado, que é o esperado/);
+        expect(p.avisos.join(' ')).not.toMatch(/R\$ 0\.00 destacado/);
+    });
+});

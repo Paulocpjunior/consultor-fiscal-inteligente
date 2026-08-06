@@ -533,7 +533,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   carteira o ISS de empresas do Simples — mas optante não recolhe ISS próprio
   em guia do município (LC 123 art. 13), ele vai no DAS da MESMA competência.
   Cobrar essa guia é cobrar DUAS VEZES. Situação nova `iss-no-das`: o valor
-  aparece na tela (`issForaDoTotal`), FORA do total. CONTINUA sendo guia do
+  aparece na tela (`issForaDoTotal`), FORA do total. **NA VIDA REAL O CASO É
+  OUTRO** (2ª varredura, mesmo dia): "dentro do DAS" deu ZERO empresa e "ISS
+  zerado" pulou de 35 pra 67 — a NFS-e do optante sai com o ISS **ZERADO**,
+  justamente PORQUE ele vai no DAS. Então optante com nota no mês é
+  `iss-no-das` tenha ou não ISS destacado; mandar conferir nota zerada de
+  optante é alarme sem ação (o DAS sai do FATURAMENTO, o ISS da nota não muda
+  guia nenhuma). A tabela ganhou coluna REGIME — sem ela, "0 empresas dentro
+  do DAS" é adivinhação. CONTINUA sendo guia do
   município mesmo pra optante: ISS RETIDO como tomadora, ISS fixo/SUP, e
   empresa impedida pelo sublimite (por isso a ação diz pra conferir). Foi o
   REGIME que faltava — a rota lia as duas coleções sem distinguir.

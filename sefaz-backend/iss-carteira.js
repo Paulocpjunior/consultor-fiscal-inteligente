@@ -181,6 +181,18 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
             situacao = 'so-tomado';
             acao = `Não emitiu nota no mês, mas reteve ISS de ${tomadoNotas} prestador(es). `
                 + 'Há guia de ISS RETIDO a recolher — é outra guia, não a do ISS próprio.';
+        } else if (regimeSimples && notas > 0) {
+            // ACHADO 06/08 (2ª varredura, com o ISS já ligado): "dentro do DAS"
+            // deu ZERO empresa e "ISS zerado" pulou pra 67. É que a NFS-e do
+            // optante sai com o ISS ZERADO — justamente PORQUE ele vai no DAS.
+            // Então o caso real do optante não é "ISS destacado que não vira
+            // guia", é "nota sem ISS destacado". Mandar conferir isso é alarme
+            // sem ação: o valor do ISS na nota de um optante não muda guia
+            // nenhuma, o DAS sai do faturamento.
+            situacao = 'iss-no-das';
+            acao = `${notas} nota(s) emitida(s) com o ISS zerado — no optante do Simples isso é o ESPERADO: `
+                + 'o ISS vai dentro do DAS e a nota sai sem valor destacado. Não é pendência. '
+                + 'Só confira se a empresa não foi impedida pelo sublimite.';
         } else if (notas > 0) {
             // ACHADO 06/08 (varredura real do Paulo): empresa com 29 NOTAS
             // aparecia como "sem movimento". Isso é o farol MENTINDO — ela tem
@@ -282,8 +294,9 @@ function avisosDaCarteira(r) {
     }
     if (r.issNoDas > 0) {
         avisos.push(
-            `${r.issNoDas} empresa(s) do SIMPLES têm ISS nas notas (R$ ${r.totalIssNoDas.toFixed(2)}) que é recolhido `
-            + 'DENTRO do DAS — não gera guia do município e por isso fica FORA do total. Cobrar essa guia seria cobrar duas vezes.',
+            `${r.issNoDas} empresa(s) do SIMPLES emitiram nota no mês e o ISS delas vai DENTRO do DAS `
+            + (r.totalIssNoDas > 0 ? `(R$ ${r.totalIssNoDas.toFixed(2)} destacado nas notas) ` : '(nota sai com ISS zerado, que é o esperado) ')
+            + '— não gera guia do município e fica FORA do total. Cobrar essa guia seria cobrar duas vezes.',
         );
     }
     if (r.empresas > 0 && r.aRecolher === 0 && r.soRetido === 0 && r.issFixo === 0
