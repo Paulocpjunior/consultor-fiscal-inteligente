@@ -902,6 +902,13 @@ export const xmlCollections = COLLECTIONS;
  * equipe configura na tela Correlação CFOP não estava chegando ao arquivo —
  * tudo caía na inversão mecânica, ignorando a configuração (Paulo, 29/07).
  */
+/** '', '0', '000…' → null (não é inscrição); demais valores voltam limpos. */
+const soZeros = (v: unknown): string | null => {
+    const s = String(v ?? '').trim();
+    if (!s) return null;
+    return /^0*$/.test(s.replace(/\D/g, '')) && !/[1-9]/.test(s) ? null : s;
+};
+
 export async function getDadosFiscaisEmpresa(
     fonte: 'simples' | 'lucro',
     empresaId: string,
@@ -913,6 +920,16 @@ export async function getDadosFiscaisEmpresa(
     /** Município IBGE — decide a praça do ISS (SP capital = 3550308). */
     codMunIBGE?: string | null;
     indAtividade?: string | null;
+    /**
+     * CCM de SP capital (e a inscrição municipal genérica dos demais
+     * municípios). Cadastro CANÔNICO é `dadosFiscais.ccmSp`, mas o dado LEGADO
+     * mora no topo do doc — é assim que a rota de status lê (#311). Ler só o
+     * canônico faz a empresa antiga aparecer SEM CCM, e o botão de testar o WS
+     * da Prefeitura nasce desabilitado sem dizer por quê (caso CLINICA MANTOAN,
+     * 06/08).
+     */
+    ccmSp?: string | null;
+    inscricaoMunicipal?: string | null;
     /**
      * Config de ISS da empresa (Lucro: `issPadraoConfig`). Vem do TOPO do doc,
      * não de dadosFiscais — é o que diz se a empresa é ISS FIXO (sociedade
@@ -935,8 +952,12 @@ export async function getDadosFiscaisEmpresa(
             cfopOverrides: df.cfopOverrides ?? null,
             codigoParticipanteConsumidor: df.codigoParticipanteConsumidor ?? null,
             codCliente: df.codCliente ?? null,
-            codMunIBGE: df.codMunIBGE ?? null,
+            codMunIBGE: df.codMunIBGE ?? doc0.codMunIBGE ?? null,
             indAtividade: df.indAtividade ?? null,
+            // CCM só-zeros é contorno antigo da equipe pra campo que parecia
+            // obrigatório: vale como VAZIO (#311), nunca como inscrição.
+            ccmSp: soZeros(df.ccmSp) ?? soZeros(doc0.ccmSp) ?? null,
+            inscricaoMunicipal: soZeros(df.inscricaoMunicipal) ?? soZeros(doc0.inscricaoMunicipal) ?? null,
             issConfig: doc0.issPadraoConfig ?? df.issConfig ?? null,
         };
     } catch {

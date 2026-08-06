@@ -63,6 +63,12 @@ export interface ApuracaoIssSp {
     aliquotas: number[];
     /** Empresa é ISS FIXO (sociedade uniprofissional): não se apura por receita. */
     issFixoSup: boolean;
+    /**
+     * CCM do PRESTADOR encontrado nas próprias notas. Serve de fallback quando
+     * o cadastro está vazio — e a tela DIZ que veio da nota, porque isso não
+     * substitui o cadastro (a captura do portal lê o cadastro, não a nota).
+     */
+    ccmDasNotas: string[];
     avisos: string[];
     /** Pode seguir para a emissão da guia? */
     apta: boolean;
@@ -106,6 +112,7 @@ export function apurarIssSp(
 ): ApuracaoIssSp {
     const avisos: string[] = [];
     const notas: NotaIssSp[] = [];
+    const ccms = new Set<string>();
 
     for (const d of docs || []) {
         const tipo = String((d as any).tipoDoc || d.tipo || '');
@@ -127,6 +134,11 @@ export function apurarIssSp(
             ?? (retidoFlag ? issDevido : 0);
         const parte: any = x.tomador || d.destinatario || {};
         const nomeTomador = parte?.nome || x.tomadorNome || x.xNomeDest || '—';
+
+        // CCM do prestador: o CSV do portal grava `prestadorCcm`; o XML traz a
+        // InscricaoPrestador. Só-zeros não é inscrição (#311).
+        const ccm = String(x.prestadorCcm || x.inscricaoPrestador || '').replace(/\D/g, '');
+        if (ccm && /[1-9]/.test(ccm)) ccms.add(ccm);
 
         notas.push({
             id: d.id,
@@ -215,6 +227,7 @@ export function apurarIssSp(
         jaComGuia,
         aliquotas,
         issFixoSup,
+        ccmDasNotas: [...ccms].sort(),
         avisos,
         // Emissão só faz sentido com valor a recolher E sem buraco de dado:
         // guia a menor é o erro que a Prefeitura cobra com multa depois.

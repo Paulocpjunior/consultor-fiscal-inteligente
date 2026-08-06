@@ -75,6 +75,8 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     // o Paulo reproduzir o erro 1102 com um clique, em vez de navegar no
     // portal atrás de um dado que o app consegue buscar sozinho.
     const [ccmDiag, setCcmDiag] = useState('');
+    /** De onde veio o CCM da caixinha — cadastro, nota, ou nenhum dos dois. */
+    const [ccmOrigem, setCcmOrigem] = useState<'cadastro' | 'nota' | 'ausente'>('ausente');
     const [diagWs, setDiagWs] = useState<any>(null);
     const [testandoWs, setTestandoWs] = useState(false);
 
@@ -99,14 +101,21 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
             // de vencimento e outro portal — dizer isso é melhor que apurar
             // um número que ninguém pode pagar aqui.
             setForaDaPraca(!empresaEhSpCapital(df));
-            setCcmDiag(String((df as any)?.ccmSp || (df as any)?.inscricaoMunicipal || ''));
             setDiagWs(null);
             const [docs, s] = await Promise.all([
                 listDocumentos(currentUser, { competencia, empresaId: alvo.id, empresaCnpj: alvo.cnpj }),
                 carregarSaude(alvo.cnpj),
             ]);
             setSaude(s);
-            setApuracao(apurarIssSp(docs, competencia, { issConfig: (df as any)?.issConfig || null }));
+            const ap = apurarIssSp(docs, competencia, { issConfig: (df as any)?.issConfig || null });
+            setApuracao(ap);
+            // CCM: cadastro primeiro (é o que a captura do portal usa), nota
+            // como socorro. Sem nenhum dos dois a caixa fica vazia E a tela diz
+            // por quê — botão desabilitado mudo foi o que travou o teste do WS.
+            const doCadastro = String((df as any)?.ccmSp || (df as any)?.inscricaoMunicipal || '').trim();
+            const daNota = ap.ccmDasNotas[0] || '';
+            setCcmDiag(doCadastro || daNota);
+            setCcmOrigem(doCadastro ? 'cadastro' : (daNota ? 'nota' : 'ausente'));
         } finally {
             setCarregando(false);
         }
@@ -242,6 +251,20 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                 {testandoWs ? 'Consultando…' : '🔌 Testar WS'}
                             </button>
                         </div>
+                        {ccmOrigem === 'nota' && (
+                            <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                                ⚠ Este CCM veio da <strong>própria NFS-e</strong>, não do cadastro. Dá pra testar o WS
+                                assim, mas a <strong>captura automática lê o cadastro</strong> — enquanto ele estiver
+                                vazio, o portal não roda pra esta empresa. Preencha em Dados fiscais → CCM.
+                            </p>
+                        )}
+                        {ccmOrigem === 'ausente' && apuracao && (
+                            <p className="text-[11px] text-red-700 dark:text-red-400">
+                                🚨 Esta empresa não tem CCM no cadastro e nenhuma nota da competência trouxe um.
+                                Sem CCM o WS não pode ser consultado e a captura da NFS-e SP não roda —
+                                preencha em Dados fiscais → CCM ou digite aqui para testar.
+                            </p>
+                        )}
                         {diagWs && (
                             <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded p-2 max-h-64 overflow-y-auto">
 {JSON.stringify(diagWs, null, 2)}
