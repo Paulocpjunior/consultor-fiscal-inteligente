@@ -222,7 +222,11 @@ router.get('/painel', requireAuth, async (req, res) => {
                     // (valores.iss). Ler só uma zera metade da base.
                     'tipo', 'valorIss', 'issDevido', 'issRetido', 'valorIssRetido',
                     'valores.iss', 'valores.issRetido', 'valores.valorIssRetido', 'valores.valorIss',
-                    'totais.vISS'),
+                    'totais.vISS',
+                    // POR QUE o ISS está zerado (iss-zerado-causa.js). Tudo já
+                    // é gravado pelo importer — nenhuma captura nova.
+                    'aliquotaServicos', 'valorServicos', 'valorDeducoes', 'valorTotal',
+                    'municipioPrestacaoIbge', 'prestadorOptanteSimples', 'codigoServico'),
             { label: `rotina-fiscal ${competencia}`, maxDocs: 60000 },
         );
         const documentos = docsSnaps.map((s) => s.data() || {});

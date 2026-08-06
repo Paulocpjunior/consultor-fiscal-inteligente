@@ -512,7 +512,11 @@ router.get('/iss-carteira', authUser, async (req, res) => {
                 .select('empresaId', 'empresaCnpj', 'tipoDoc', 'tipo', 'direcao', 'status',
                     'valorIss', 'issDevido', 'issRetido', 'valorIssRetido',
                     'valores.iss', 'valores.issRetido', 'valores.valorIssRetido', 'valores.valorIss',
-                    'totais.vISS'),
+                    'totais.vISS',
+                    // POR QUE o ISS está zerado (iss-zerado-causa.js). Tudo já
+                    // é gravado pelo importer — nenhuma captura nova.
+                    'aliquotaServicos', 'valorServicos', 'valorDeducoes', 'valorTotal',
+                    'municipioPrestacaoIbge', 'prestadorOptanteSimples', 'codigoServico'),
             { label: `iss-carteira ${competencia}`, maxDocs: 80000 },
         );
 

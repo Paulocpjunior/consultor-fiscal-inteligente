@@ -553,7 +553,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   sem "retid" = próprio, com = retido). Guias fica ÂMBAR, não vermelho: o app
   não emite guia do município (é no portal da PMSP), então não pode PROVAR que
   saiu — e vermelho eterno em coisa que ninguém consegue fechar vira ruído que
-  a equipe aprende a ignorar. Âmbar já impede o "mês fechado". A conta do ISS
+  a equipe aprende a ignorar. Âmbar já impede o "mês fechado".
+  **CAUSA JUNTO DO NÚMERO, senão é meio farol** (mesmo dia): dizer "67
+  empresas com ISS zerado, confira" é o mesmo erro de dizer "sem movimento" —
+  o colaborador vê 67 alertas iguais e não tem por onde começar.
+  `iss-zerado-causa.js` (22 testes) separa pelo PRÓPRIO documento: retido,
+  optante (a nota carrega `prestadorOptanteSimples`), serviço fora de SP,
+  dedução integral e alíquota zero NÃO pedem ação (situação
+  `iss-zerado-explicado`); só `aliquota-ausente` (ausente ≠ zero ⇒ buraco de
+  captura) e `inconsistente` (a nota diz que tributa e o ISS veio zero) viram
+  pendência. A DOMINANTE é a que EXIGE AÇÃO, mesmo sendo minoria — 40 notas de
+  optante e 2 inconsistentes ⇒ mostra as 2. Divergência cadastro × nota sobre
+  optar pelo Simples ACENDE (`divergenciaRegimePelaNota`): as duas respostas
+  dão guias diferentes. A conta do ISS
   virou núcleo (`acumularIssPorEmpresa` em iss-carteira.js) porque agora são
   DOIS painéis lendo o mesmo dado — painel com conta própria diverge sozinho
   (lição do card 4) e a leitura é justo a armadilha achatado/objeto.

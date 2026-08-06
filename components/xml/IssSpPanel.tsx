@@ -261,6 +261,8 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
         'sem-ccm':         { txt: '🚨 sem CCM',        cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
         'captura-incerta': { txt: '⚠ captura incerta', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' },
         'iss-zerado':      { txt: '❓ ISS zerado',      cls: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' },
+        // Zero que a PRÓPRIA NOTA explica não é pendência — é resposta.
+        'iss-zerado-explicado': { txt: '✓ zero explicado', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
         'a-recolher':      { txt: '💰 a recolher',     cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' },
         'iss-no-das':      { txt: '📦 dentro do DAS',  cls: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
         'iss-fixo':        { txt: '🏛 ISS fixo (SUP)', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300' },
@@ -345,6 +347,12 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                 <p className="font-bold text-amber-800 dark:text-amber-300">
                                     {carteira.resumo.capturaIncerta} · {carteira.resumo.issZerado ?? 0}
                                 </p>
+                                {/* O zerado que a nota EXPLICA sai do balde de
+                                    pendência — senão o número engorda com casos
+                                    que não pedem ação nenhuma. */}
+                                <p className="text-[10px] text-slate-500">
+                                    + {carteira.resumo.issZeradoExplicado ?? 0} com o zero já explicado pela nota
+                                </p>
                             </div>
                             <div className="rounded-lg border border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 p-2">
                                 <p className="text-[10px] uppercase font-bold text-indigo-700 dark:text-indigo-400">ISS retido (tomador)</p>
@@ -381,6 +389,24 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                             <td className="py-1 pr-2">
                                                 <span className="font-semibold">{l.nome}</span>
                                                 {l.acao && <span className="block text-[10px] text-slate-500">{l.acao}</span>}
+                                                {/* Cadastro diz X, a nota diz Y ⇒ acende. As duas
+                                                    respostas dão guias diferentes. */}
+                                                {l.divergenciaRegime && (
+                                                    <span className="block text-[10px] font-bold text-red-600 dark:text-red-400">
+                                                        🚨 {l.divergenciaRegime.texto}
+                                                    </span>
+                                                )}
+                                                {/* Causa por causa: sem isto, "ISS zerado" é um
+                                                    balde só e não dá pra começar por lugar nenhum. */}
+                                                {l.causasIssZerado?.porCausa && (
+                                                    <span className="block text-[10px] text-slate-400">
+                                                        {Object.entries(l.causasIssZerado.porCausa)
+                                                            .map(([c, n]) => `${n}× ${c}`).join(' · ')}
+                                                        {l.causasIssZerado.codigosServico?.length
+                                                            ? ` · cód. serviço ${l.causasIssZerado.codigosServico.join(', ')}`
+                                                            : ''}
+                                                    </span>
+                                                )}
                                             </td>
                                             {/* O REGIME manda: no optante o ISS
                                                 próprio vai no DAS. Sem esta
