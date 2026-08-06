@@ -670,6 +670,9 @@ router.post('/nfsesp-ws-diagnostico', requireAdmin, async (req, res) => {
                 // os bytes — não tentar outro palpite sobre leiaute de fisco.
                 if (c.trecho) contrato.trechoWsdl = enxugarParaDiagnostico(c.trecho, 1100);
                 contrato.tamanhoWsdl = wsdl.body.length;
+                contrato.schemasImportados = wsdl.schemasImportados ?? 0;
+                contrato.schemasEncontrados = wsdl.schemasEncontrados ?? 0;
+                if (c.elementoProcurado) contrato.elementoProcurado = c.elementoProcurado;
             } else if (wsdl.statusCode === 403) {
                 // 403 COM certificado é outra coisa: o cert existe e não está
                 // autorizado a ler o contrato — não confundir com "sem cert".

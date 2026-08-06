@@ -40,10 +40,15 @@ export function extrairContratoWsdl(wsdl, operacao) {
     //       <s:element name="X"><s:complexType><s:sequence>…
     //   (b) complexType NOMEADO, referenciado pelo element
     //       <s:element name="X" type="tns:X"/> … <s:complexType name="X">…
+    // (c) O tipo pode nem se chamar como a operação: o ASMX amarra por
+    //     <wsdl:message name="XSoapIn"><wsdl:part element="tns:ALGO"/>. É essa
+    //     cadeia que diz o nome REAL do elemento a procurar no schema.
+    const alvo = elementoDaMensagem(xml, nome) || nome;
+
     const bloco = new RegExp(
-        `<(?:\\w+:)?element[^>]*\\bname="${nome}"[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?element>`,
+        `<(?:\\w+:)?element[^>]*\\bname="${alvo}"[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?element>`,
     ).exec(xml) || new RegExp(
-        `<(?:\\w+:)?complexType[^>]*\\bname="${nome}"[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?complexType>`,
+        `<(?:\\w+:)?complexType[^>]*\\bname="${alvo}"[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?complexType>`,
     ).exec(xml);
 
     if (!bloco) {
@@ -57,7 +62,11 @@ export function extrairContratoWsdl(wsdl, operacao) {
                 : `O WSDL não declara a operação ${nome}.`,
             // Trecho CRU em volta do nome: se o leitor não entendeu a forma do
             // WSDL, o que resolve é ver os bytes — não tentar outro palpite.
-            trecho: existe ? trechoEmVolta(xml, nome) : null,
+            // Mostra o pedaço do ELEMENTO procurado (não a 1ª menção ao nome
+            // da operação, que no teste de 06/08 caiu na <wsdl:operation> e
+            // não dizia nada sobre parâmetros).
+            trecho: trechoEmVolta(xml, alvo) || (existe ? trechoEmVolta(xml, nome) : null),
+            elementoProcurado: alvo,
         };
     }
 
@@ -73,6 +82,23 @@ export function extrairContratoWsdl(wsdl, operacao) {
     }
 
     return { encontrada: true, parametros, soapAction: extrairSoapAction(xml, nome), motivo: null };
+}
+
+/**
+ * Segue a cadeia <wsdl:message name="{op}SoapIn"> → <wsdl:part element="tns:X">
+ * e devolve X, sem o prefixo de namespace.
+ *
+ * Num ASMX o elemento quase sempre tem o mesmo nome da operação, mas "quase"
+ * não serve pra fisco: quando não tem, procurar pelo nome da operação não acha
+ * nada e o leitor conclui "formato inesperado" sem ser formato inesperado.
+ */
+export function elementoDaMensagem(xml, operacao) {
+    const msg = new RegExp(
+        `<(?:\\w+:)?message[^>]*\\bname="${operacao}SoapIn"[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?message>`,
+    ).exec(String(xml || ''));
+    if (!msg) return null;
+    const part = /\belement="([^"]+)"/.exec(msg[1]);
+    return part ? part[1].replace(/^[^:]+:/, '') : null;
 }
 
 /** Pedaço do WSDL em volta da 1ª menção ao nome — pra ler a forma real. */
