@@ -525,6 +525,17 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // sped_inventario: contagem física do Bloco H (H005/H010). 1 doc por
+    // EMPRESA × DATA do inventário — o inventário é uma FOTO de uma data, não
+    // de uma competência. Dado que só existe fora do sistema (contagem do
+    // cliente): sem ele o bloco sai VAZIO, nunca zerado.
+    match /sped_inventario/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 500;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
     // ───────────────────────────────────────────────────────────────
     // gia_st_guias: GIA-ST (ICMS-ST) por CNPJ × UF favorecida × mês.
     // Colaborador cria/atualiza; exclusão só admin (mesmo padrão do

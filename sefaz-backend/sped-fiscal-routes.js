@@ -12,6 +12,7 @@ import { requireAdmin, requireAuth } from './require-admin.js';
 import { podeAcessarEmpresaId } from './carteira-auth.js';
 import { validarSpedFiscal } from './sped-fiscal-validador.js';
 import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
+import { MOTIVOS_INVENTARIO, inventarioInformado } from './sped-bloco-h.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
 function fa() {
@@ -61,6 +62,67 @@ router.get('/preview', requireAdmin, async (req, res) => {
  * Body: { empresaId, competencia | (competenciaInicio + competenciaFim) }
  * Retorna o .txt do SPED Fiscal montado, com Content-Disposition pra download.
  */
+// ────────────────────────────────────────────────────────────────────────────
+// Inventário do Bloco H — a CONTAGEM FÍSICA do cliente.
+//
+// Este dado NÃO existe em lugar nenhum do sistema: não sai das notas, não se
+// estima do histórico de compras, não se deduz. É a contagem que a empresa fez.
+// Sem ela o bloco H sai VAZIO de propósito (nunca zerado — zerado declararia
+// ao Fisco que não havia estoque).
+//
+// 1 doc por EMPRESA × DATA: o inventário é a foto de uma data.
+// ────────────────────────────────────────────────────────────────────────────
+const idInventario = (empresaId, data) => `${empresaId}_${String(data || '').replace(/\D/g, '')}`;
+
+router.get('/inventario', requireAuth, async (req, res) => {
+    try {
+        const { empresaId, data } = req.query || {};
+        if (!empresaId || !/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) {
+            return res.status(400).json({ ok: false, error: 'Informe a empresa e a data do inventário (AAAA-MM-DD).' });
+        }
+        const db = fa().firestore();
+        const snap = await db.collection('sped_inventario').doc(idInventario(empresaId, data)).get();
+        return res.json({ ok: true, existe: snap.exists, ...(snap.exists ? snap.data() : { itens: [], motInv: '01' }) });
+    } catch (e) {
+        console.error('[sped/inventario GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/inventario', requireAuth, express.json({ limit: '4mb' }), async (req, res) => {
+    try {
+        const { empresaId, data, motInv = '01', itens } = req.body || {};
+        if (!empresaId || !/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) {
+            return res.status(400).json({ ok: false, error: 'Informe a empresa e a data do inventário (AAAA-MM-DD).' });
+        }
+        if (!MOTIVOS_INVENTARIO.includes(String(motInv))) {
+            return res.status(400).json({ ok: false, error: `Motivo do inventário inválido (use ${MOTIVOS_INVENTARIO.join(', ')}).` });
+        }
+        // Só grava o que foi CONTADO. Item sem contagem não vira zero aqui —
+        // ele simplesmente não entra, e o bloco H dirá quantos ficaram de fora.
+        const limpos = (Array.isArray(itens) ? itens : [])
+            .filter((i) => i && i.codItem && inventarioInformado(i))
+            .map((i) => ({
+                codItem: String(i.codItem).slice(0, 60),
+                unidade: String(i.unidade || 'UN').slice(0, 6),
+                qtdInventario: Number(i.qtdInventario),
+                vlUnitInventario: Number(i.vlUnitInventario),
+                indPropInventario: ['0', '1', '2'].includes(String(i.indPropInventario)) ? String(i.indPropInventario) : '0',
+                codPartInventario: String(i.codPartInventario || '').slice(0, 60),
+            }));
+        const db = fa().firestore();
+        await db.collection('sped_inventario').doc(idInventario(empresaId, data)).set({
+            empresaId, data, motInv: String(motInv), itens: limpos,
+            atualizadoEm: new Date().toISOString(),
+            atualizadoPor: req.user?.email || null,
+        }, { merge: true });
+        return res.json({ ok: true, gravados: limpos.length, recebidos: (itens || []).length });
+    } catch (e) {
+        console.error('[sped/inventario POST]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
     try {
         const { empresaId, competencia, competenciaInicio, competenciaFim } = req.body || {};
