@@ -14,6 +14,10 @@ export interface ProntidaoLinha {
     /** Vendas interestaduais a não contribuinte (EC 87/15 → E310/E316).
      *  null = NÃO APURADO (a leitura não trouxe itens) — nunca confundir com 0. */
     saidasNaoContribuinte: number | null;
+    /** BLOCO K: vendas de produção DO ESTABELECIMENTO (CFOP 5101/6101). */
+    producaoPropria: number;
+    /** BLOCO K: industrialização por encomenda (5124/5125/6124/6125, 590x/690x). */
+    industrializacao: number;
     /** Documentos que a ponte .FML não leva ao E-Fiscal (CT-e + NFS-e). */
     foraDaPonte: number;
     porTipo: Record<string, number>;
@@ -33,6 +37,8 @@ export interface ProntidaoResultado {
         candidatasPiloto: number;
         comStSaida: number;
         comIpiOuIndustria: number;
+        /** Resposta do F0 pro bloco K: 0 = bloco descartável; >0 = alvo nomeado. */
+        comProducaoParaBlocoK: number;
         comInterestadual: number;
         comVendaNaoContribuinte: number | null;
         vendaNaoContribuinteApurada: boolean;
