@@ -10,6 +10,7 @@ import { loadCertEmpresa, loadCertEmpresaPorCnpjBase } from './cert-storage.js';
 import { loadCertificate, extrairPem } from './secret-loader.js';
 import { consultaNFePorChave } from './sefaz-client.js';
 import { carregarFlagsEmpresa, CNPJ_ESCRITORIO } from './empresa-flags.js';
+import { ehErroInfra, planejarLiberacao } from './manifesto-poison.js';
 
 const TIPOS_QUE_BLOQUEIAM_NOVA_MANIFESTACAO = new Set([
   'manifestacao_ciencia',
@@ -371,10 +372,9 @@ function ehRateLimit656(cStat, texto) {
 // PRA SEMPRE). Caso 24/07: host errado no manifesto-client gerou 486×
 // "unable to get local issuer certificate" e envenenou lotes inteiros de
 // chaves perfeitamente manifestáveis.
-export function ehErroInfra(motivo) {
-  return /unable to (get|verify) (local )?issuer|self.signed|certificate|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EPIPE|socket hang up|timeout|network/i
-    .test(String(motivo || ''));
-}
+// A definição mora em manifesto-poison.js (puro); aqui só reexporta pra não
+// quebrar quem já importava daqui.
+export { ehErroInfra };
 
 /**
  * Reseta o carimbo de falha das chaves cujo ÚLTIMO motivo foi erro de INFRA
@@ -406,6 +406,53 @@ export async function resetarFalhasInfraManifestacao() {
   if (noBatch > 0) await batch.commit();
   console.log(`[manifesto] reset falhas infra: ${r.resetados}/${r.candidatos} chaves limpas`);
   return r;
+}
+
+/**
+ * "Tentar de novo" depois de CORRIGIDA a causa: devolve ao lote as chaves que
+ * bateram no teto de falhas (poison) de UMA empresa.
+ *
+ * Sem isso, o poison era definitivo: o colaborador via "6× Desistimos após 8
+ * falhas", renovava o certificado, e nada voltava (caso KJM, 05/08). O reset
+ * automático só cobre erro de INFRA — poison de causa humana/cadastral
+ * precisava desta porta.
+ *
+ * `empresaId` é OBRIGATÓRIO de propósito: liberação global viraria "limpar
+ * tudo" e devolveria ao lote chaves cuja causa ninguém tocou, queimando
+ * requisição na SEFAZ e re-armando o mesmo poison.
+ */
+export async function liberarPoisonManifestacao({ empresaId, dryRun = false } = {}) {
+  if (!empresaId) throw new Error('liberarPoisonManifestacao exige empresaId — liberação global não é permitida.');
+  const db = fa().firestore();
+  const q = db.collection('documentos_fiscais')
+    .where('direcao', '==', 'entrada')
+    .where('tipoDoc', 'in', ['resNFe', 'NFe'])
+    .where('empresaId', '==', empresaId);
+  const docs = await fetchAllDocs(q, { label: 'documentos_fiscais/manifest-liberar-poison' });
+
+  const plano = planejarLiberacao(docs.map((d) => ({ id: d.id, ...d.data() })), { max: MAX_FALHAS_MANIFESTACAO });
+  if (dryRun || plano.total === 0) {
+    return { total: plano.total, porMotivo: plano.porMotivo, infra: plano.infra, dryRun };
+  }
+
+  let batch = db.batch();
+  let noBatch = 0;
+  for (const doc of plano.liberar) {
+    batch.update(db.collection('documentos_fiscais').doc(doc.id), {
+      manifestacaoFalhas: admin.firestore.FieldValue.delete(),
+      // Cooldown também sai: a chave volta JÁ na próxima janela, senão o
+      // colaborador clica, não acontece nada por 6h e conclui que não funcionou.
+      ultimaFalhaManifestacaoMs: admin.firestore.FieldValue.delete(),
+      // O MOTIVO fica gravado: é o histórico de por que ela estava fora, e é o
+      // que a tela mostra pra pessoa conferir se corrigiu a coisa certa.
+      poisonLiberadoEm: Date.now(),
+    });
+    noBatch++;
+    if (noBatch >= 400) { await batch.commit(); batch = db.batch(); noBatch = 0; }
+  }
+  if (noBatch > 0) await batch.commit();
+  console.log(`[manifesto] poison liberado: ${plano.total} chave(s) da empresa ${empresaId}`);
+  return { total: plano.total, porMotivo: plano.porMotivo, infra: plano.infra, dryRun: false };
 }
 
 export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun = false, tipo = 'ciencia', capturadoPor = null, skipRedownload = true } = {}) {

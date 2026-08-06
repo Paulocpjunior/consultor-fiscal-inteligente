@@ -14,7 +14,10 @@ import { parseLogEfiscal, cruzarLogComFml, type CruzamentoLogEfiscal } from '../
 import { carregarCodigosParticipantes, salvarCodigosParticipantes, carregarUfsParticipantes, salvarUfsParticipantes } from '../../services/sageCodigosService';
 import { ufValida } from '../../services/ufsBrasil';
 import { parsearCadastroClientesFornecedores } from '../../services/efiscalCadastroParticipantesParser';
-import { manifestarPendentes, resumoManifestacao } from '../../services/manifestoService';
+import {
+    manifestarPendentes, resumoManifestacao, temChaveEnvenenada,
+    liberarPoisonManifestacao, resumoLiberacaoPoison,
+} from '../../services/manifestoService';
 
 interface Props {
     currentUser: User;
@@ -346,16 +349,39 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         [filtrados],
     );
 
+    // Chave que falhou 8× sai do lote PRA SEMPRE. Enquanto a causa existe isso
+    // é certo; corrigida a causa, faltava a porta de volta — o colaborador via
+    // "6× Desistimos após 8 falhas" e não tinha o que fazer (caso KJM, 05/08).
+    const [temPoison, setTemPoison] = useState(false);
+    const [liberando, setLiberando] = useState(false);
+
     const handleManifestar = async () => {
         if (!empresaSelecionada) { onShowToast?.('Escolha a empresa para manifestar.'); return; }
         setManifestando(true);
         try {
             const r = await manifestarPendentes({ tipo: 'ciencia', empresaId: empresaSelecionada.id, limit: 200 });
+            setTemPoison(temChaveEnvenenada(r));
             onShowToast?.(resumoManifestacao(r));
         } catch (e: any) {
             onShowToast?.(`Falha ao manifestar: ${e?.message || e}`);
         } finally {
             setManifestando(false);
+        }
+    };
+
+    const handleLiberarPoison = async () => {
+        if (!empresaSelecionada) { onShowToast?.('Escolha a empresa.'); return; }
+        setLiberando(true);
+        try {
+            const r = await liberarPoisonManifestacao(empresaSelecionada.id);
+            onShowToast?.(resumoLiberacaoPoison(r));
+            // Liberou: o botão some. Se ainda faltar nota depois da próxima
+            // rodada, o diagnóstico volta a acender — com o motivo NOVO.
+            if (!r.erro) setTemPoison(false);
+        } catch (e: any) {
+            onShowToast?.(`Falha ao liberar: ${e?.message || e}`);
+        } finally {
+            setLiberando(false);
         }
     };
 
@@ -1016,6 +1042,16 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                         title="Nota sem produto é RESUMO da SEFAZ (resNFe). Manifestar a ciência libera o XML completo, que chega na próxima captura — aí os itens aparecem."
                                     >
                                         {manifestando ? 'Manifestando…' : `📨 Manifestar ciência (${notasResumoSemItens})`}
+                                    </button>
+                                )}
+                                {temPoison && (
+                                    <button
+                                        onClick={handleLiberarPoison}
+                                        disabled={liberando || !empresaSelecionada}
+                                        className="px-3 py-2 text-sm bg-rose-100 dark:bg-rose-900/30 text-rose-800 dark:text-rose-300 rounded-lg hover:bg-rose-200 dark:hover:bg-rose-900/50 disabled:opacity-40"
+                                        title="Chaves que falharam 8× saem do lote pra sempre. Depois de CORRIGIDA a causa (certificado renovado, cadastro arrumado), este botão devolve essas chaves ao lote — ele não conserta a causa."
+                                    >
+                                        {liberando ? 'Liberando…' : '🔓 Tentar de novo (chaves travadas)'}
                                     </button>
                                 )}
                                 {participantesSemUf.length > 0 && (

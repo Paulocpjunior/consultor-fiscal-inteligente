@@ -58,7 +58,58 @@ export function resumoManifestacao(r: ManifestarPendentesResult): string {
     const causa = falhas.length
         ? ` Motivo da recusa: ${falhas.join(' · ')}.`
         : (r.diagnostico?.ultimaFalha ? ` Última falha: ${r.diagnostico.ultimaFalha}` : '');
-    return `Nada a manifestar agora — ${motivos.join(' · ')}.${causa}`;
+    // Poison sem saída é o pior dos mundos: o motivo aparece e não há o que
+    // fazer. Depois de corrigida a causa existe o "Tentar de novo" — a frase
+    // precisa dizer isso, senão o botão continua invisível na prática.
+    const saida = temChaveEnvenenada(r)
+        ? ' Corrigiu a causa? Use "🔓 Tentar de novo" para devolver essas chaves ao lote.'
+        : '';
+    return `Nada a manifestar agora — ${motivos.join(' · ')}.${causa}${saida}`;
+}
+
+/**
+ * Há chave envenenada (fora do lote depois de 8 falhas) neste diagnóstico?
+ *
+ * É o gatilho do "Tentar de novo": enquanto o motivo for cooldown ou idade,
+ * clicar não adianta — só o poison precisa de alguém pra reabrir a porta.
+ */
+export function temChaveEnvenenada(r: ManifestarPendentesResult): boolean {
+    return Object.keys(r.diagnostico?.porMotivo || {}).some(m => /desistimos após/i.test(m));
+}
+
+export interface LiberacaoPoisonResult {
+    ok?: boolean;
+    total?: number;
+    porMotivo?: Record<string, number>;
+    infra?: number;
+    erro?: string;
+}
+
+/** Frase honesta: liberar devolve ao lote, não conserta a causa. */
+export function resumoLiberacaoPoison(r: LiberacaoPoisonResult): string {
+    if (r.erro) return `Falha ao liberar: ${r.erro}`;
+    if (!r.total) {
+        return 'Nenhuma chave envenenada nesta empresa — não há o que liberar. '
+            + 'Se ainda falta nota, o motivo é outro (cooldown, idade ou já manifestada).';
+    }
+    const motivos = Object.entries(r.porMotivo || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([m, q]) => `${q}× ${m}`);
+    return `${r.total} chave(s) voltaram ao lote (estavam fora por: ${motivos.join(' · ')}). `
+        + 'A próxima rodada do cron tenta de novo — se a causa não foi corrigida, elas falham igual.';
+}
+
+export async function liberarPoisonManifestacao(empresaId: string): Promise<LiberacaoPoisonResult> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/manifest-liberar-poison', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresaId }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { erro: data.error || data.erro || `HTTP ${res.status}` };
+    return data;
 }
 
 async function getToken(): Promise<string> {
