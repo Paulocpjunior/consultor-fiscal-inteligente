@@ -7,6 +7,7 @@
 
 import express from 'express';
 import { coletarDadosContribuicoes, montarBlocosContribuicoes } from './sped-contrib-orchestrator.js';
+import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
 import { requireAdmin } from './require-admin.js';
 
 const router = express.Router();
@@ -56,6 +57,13 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
 
         const txt = await montarBlocosContribuicoes({ dados });
 
+        // AUDITORIA DO ARQUIVO QUE SAIU — a mesma trava do SPED Fiscal. A
+        // regra diz "roda em TODO arquivo gerado", e até agora ela só rodava
+        // num deles: escrever a regra e não ligar em todo lugar é a folga que
+        // deixa o próximo defeito passar.
+        const auditoria = auditarSaidaSped(txt.split('\r\n').filter(Boolean));
+        for (const s of auditoria.suspeitas) dados.warnings.push(`[auditoria] ${s.detalhe}`);
+
         // Encoding Windows-1252 (legado SPED)
         const buffer = Buffer.from(txt, 'latin1');
 
@@ -75,6 +83,9 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
             participantes: dados.participantes.length,
             linhas: txt.split('\r\n').length - 1,
             regimeApuracao: dados.regimeApuracao,
+        })));
+        res.setHeader('X-SPED-Auditoria', encodeURIComponent(JSON.stringify({
+            ok: auditoria.ok, resumo: resumoAuditoria(auditoria), suspeitas: auditoria.suspeitas,
         })));
         return res.send(buffer);
     } catch (e) {

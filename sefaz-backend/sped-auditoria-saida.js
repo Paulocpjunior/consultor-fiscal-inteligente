@@ -36,6 +36,10 @@ export const DETALHES_VIGIADOS = {
     H010: { rotulo: 'itens do inventário', campos: { 4: 'QTD', 5: 'VL_UNIT', 6: 'VL_ITEM' } },
     C170: { rotulo: 'itens de documento', campos: { 5: 'QTD', 7: 'VL_ITEM' } },
     C190: { rotulo: 'resumo por CST/CFOP/alíquota', campos: { 5: 'VL_OPR' } },
+    // SPED Contribuições. Só o VALOR DO ITEM entra: base de PIS/COFINS zerada
+    // é legítima em CST sem crédito, e vigiar isso encheria a tela de alarme
+    // falso — que é o caminho pra ninguém mais ler alarme nenhum.
+    A170: { rotulo: 'itens de serviço (Contribuições)', campos: { 5: 'VL_ITEM' } },
     D190: { rotulo: 'resumo de transporte', campos: { 5: 'VL_OPR' } },
     G110: { rotulo: 'CIAP — apuração', campos: { 4: 'VL_ICMS_APROP' } },
 };
