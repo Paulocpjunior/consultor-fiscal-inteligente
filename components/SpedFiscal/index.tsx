@@ -25,6 +25,7 @@ const ConciliarFaturamento = lazy(() => import('./ConciliarFaturamento'));
 const AjustesE111 = lazy(() => import('./AjustesE111'));
 const ProntidaoMigracao = lazy(() => import('./ProntidaoMigracao'));
 const CiapBlocoG = lazy(() => import('./CiapBlocoG'));
+const ConferenciaEspelho = lazy(() => import('./ConferenciaEspelho'));
 
 interface Props {
     currentUser: User | null;
@@ -49,7 +50,7 @@ function getTrimestreFromCompetencia(comp: string): { inicio: string; fim: strin
     return { inicio: fmt(mesInicio), fim: fmt(mesFim) };
 }
 
-type SpedTab = 'gerar' | 'ajustes' | 'ciap' | 'migracao' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
+type SpedTab = 'gerar' | 'ajustes' | 'ciap' | 'migracao' | 'espelho' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
 
 // MensagemBlock vive em ./MensagemBlock.tsx (reutilizado pelas abas).
 
@@ -450,6 +451,17 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         >
                             SPED × Declarado
                         </button>
+                        <button
+                            onClick={() => setSpedTab('espelho')}
+                            className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
+                            style={{
+                                background: spedTab === 'espelho' ? 'var(--accent)' : 'var(--bg-card)',
+                                color: spedTab === 'espelho' ? '#fff' : 'var(--text-muted)',
+                                border: `1px solid ${spedTab === 'espelho' ? 'var(--accent)' : 'var(--border-default)'}`,
+                            }}
+                        >
+                            🪞 CFI × E-Fiscal
+                        </button>
                     </div>
                     <span
                         className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full"
@@ -461,6 +473,12 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </span>
                 </div>
             </div>
+
+            {spedTab === 'espelho' && (
+                <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
+                    <ConferenciaEspelho currentUser={currentUser} onShowToast={onShowToast} />
+                </Suspense>
+            )}
 
             {spedTab === 'migracao' && (
                 <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>

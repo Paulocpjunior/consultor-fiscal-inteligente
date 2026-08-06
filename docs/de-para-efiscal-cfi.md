@@ -20,7 +20,8 @@
 | Bloco H (inventário) | ✔ | gera H005/H010 (qtd/valor a preencher) | 🟡 |
 | Bloco K (produção) | ✔ | bloco vazio | 🔴 depende do F0 (quantas indústrias reais) |
 | Bloco 1 — Registro 1400 (DIPAM) | lançamento manual | automático da aba 🌾 | ✅ (melhor que o E-Fiscal) |
-| Conferências (PVA-espelho, cruzamentos) | — | Análise · SPED×Capturadas · SPED×Declarado · Conciliar faturamento | ✅ (só existe no CFI) |
+| Conferências (PVA-espelho, cruzamentos) | — | Análise · SPED×Capturadas · SPED×Declarado · Conciliar faturamento · **🪞 CFI × E-Fiscal** | ✅ (só existe no CFI) |
+| Conferência ARQUIVO × ARQUIVO (espelho da onda) | — | aba 🪞 CFI × E-Fiscal do card SPED Fiscal: sobe os dois .txt e compara documento a documento + E110 | ✅ **06/08** — casa pela CHAVE da NF-e (COD_PART não entra: é interno de cada sistema e daria 100% de divergência num arquivo idêntico). CNPJ/período diferentes = RECUSA, não relatório de divergência falsa. Modelo fora da ponte .FML (≠55/65) e CT-e do bloco D contam como ausência ESPERADA |
 | SPED Contribuições (PIS/COFINS) | ✔ | card SPED Fiscal → aba Contribuições | ✅ |
 | Transmissão | PVA da Receita | PVA da Receita | — (nunca foi do E-Fiscal) |
 
@@ -76,6 +77,9 @@ Canceladas/Faltantes limpo. Cliente com buraco de captura NÃO migra.
 
 F0 inventário por cliente (SAT? CIAP? bloco K? ajustes? quem entrega EFD?)
 → F1 dois pilotos com conferência-espelho no PVA → F3 ondas.
+**A ferramenta do espelho da F1 ficou pronta em 06/08** (aba 🪞 CFI × E-Fiscal):
+sem ela, comparar dois arquivos de milhares de linhas na mão não acontece e a
+"conferência" vira olhar o total e confiar.
 **A ORDEM das ondas está decidida em `docs/plano-migracao-ondas.md`** (05/08,
 Paulo: "essa ordem quem traz é você"), a partir da varredura REAL de 07/2026:
 começa por SERVIÇO PURO (157 empresas — não passam por nenhuma pendência de
