@@ -123,3 +123,34 @@ describe('a frase nunca mente', () => {
         expect(auditarSaidaSped([]).ok).toBe(true);
     });
 });
+
+/**
+ * A regra do CLAUDE.md diz que a auditoria roda em TODO arquivo gerado — e até
+ * 06/08 ela só estava ligada no SPED Fiscal. Escrever a regra e não ligar em
+ * todo lugar é a folga que deixa o próximo defeito passar.
+ */
+describe('SPED Contribuições entra na mesma trava', () => {
+    it('itens de serviço com VALOR zerado em todas as linhas é acusado', () => {
+        const r = auditarSaidaSped([
+            L('A001', '0'),
+            L('A100', '0', '', 'F1', '', '00', '55', '1', '10', '01012026', '0,00'),
+            L('A170', '1', 'S1', 'SERVICO', '0,00', '', '0', '01', '0,00', '0,6500', '0,00', '01', '0,00', '3,0000', '0,00', '', ''),
+            L('A170', '2', 'S2', 'SERVICO', '0,00', '', '0', '01', '0,00', '0,6500', '0,00', '01', '0,00', '3,0000', '0,00', '', ''),
+            L('A990', '5'),
+        ]);
+        const s = r.suspeitas.find((x: any) => x.registro === 'A170');
+        expect(s).toBeTruthy();
+        expect(s.detalhe).toMatch(/VL_ITEM/);
+    });
+
+    it('base de PIS zerada NÃO é vigiada — é legítima em CST sem crédito', () => {
+        // Se fosse, todo arquivo de empresa cumulativa acenderia alarme falso —
+        // e alarme falso ensina a ignorar alarme.
+        const r = auditarSaidaSped([
+            L('A001', '0'),
+            L('A170', '1', 'S1', 'SERVICO', '100,00', '', '0', '01', '0,00', '0,0000', '0,00', '01', '0,00', '0,0000', '0,00', '', ''),
+            L('A990', '3'),
+        ]);
+        expect(r.ok).toBe(true);
+    });
+});
