@@ -25,7 +25,7 @@
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /** Situações possíveis de uma empresa no mês. A ordem é a de prioridade. */
-export const SITUACOES = ['sem-ccm', 'captura-incerta', 'a-recolher', 'iss-fixo', 'so-retido', 'sem-movimento'];
+export const SITUACOES = ['sem-ccm', 'captura-incerta', 'iss-zerado', 'a-recolher', 'iss-fixo', 'so-retido', 'sem-movimento'];
 
 const PESO = Object.fromEntries(SITUACOES.map((s, i) => [s, i]));
 
@@ -73,7 +73,17 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         } else if (notas > 0 && issRetido > 0) {
             situacao = 'so-retido';
             acao = 'Todo o ISS do mês foi retido pelo tomador — quem recolhe é quem contratou. Não há guia do prestador.';
+        } else if (notas > 0) {
+            // ACHADO 06/08 (varredura real do Paulo): empresa com 29 NOTAS
+            // aparecia como "sem movimento". Isso é o farol MENTINDO — ela tem
+            // movimento; o que está zerado é o ISS. Pode ser isenção, imunidade
+            // ou nota que veio sem o valor, e nenhuma dessas é "nada a fazer".
+            situacao = 'iss-zerado';
+            acao = `${notas} nota(s) emitida(s) no mês e ISS ZERADO em todas. `
+                + 'Isso pode ser isenção, imunidade, alíquota não gravada na captura ou serviço fora de SP — '
+                + 'confira antes de concluir que não há guia.';
         } else {
+            // Só aqui é "sem movimento": ZERO nota, com a captura confiável.
             situacao = 'sem-movimento';
         }
 
@@ -100,6 +110,7 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         totalARecolher: r2(linhas.reduce((t, l) => t + l.aRecolher, 0)),
         semCcm: conta('sem-ccm'),
         capturaIncerta: conta('captura-incerta'),
+        issZerado: conta('iss-zerado'),
         issFixo: conta('iss-fixo'),
         soRetido: conta('so-retido'),
         semMovimento: conta('sem-movimento'),
@@ -115,7 +126,7 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
  */
 export function farolDaCarteira(resumo) {
     if (!resumo || !resumo.empresas) return 'sem-dados';
-    if (resumo.semCcm > 0 || resumo.capturaIncerta > 0) return 'atencao';
+    if (resumo.semCcm > 0 || resumo.capturaIncerta > 0 || resumo.issZerado > 0) return 'atencao';
     // Ninguém com nota na carteira inteira: não se conclui "mês parado".
     if (resumo.aRecolher === 0 && resumo.soRetido === 0 && resumo.issFixo === 0) return 'atencao';
     return 'ok';
@@ -126,6 +137,12 @@ function avisosDaCarteira(r) {
     if (r.semCcm > 0) {
         avisos.push(
             `${r.semCcm} empresa(s) de SP capital SEM CCM — a captura da NFS-e não roda pra elas e o zero delas não significa nada.`,
+        );
+    }
+    if (r.issZerado > 0) {
+        avisos.push(
+            `${r.issZerado} empresa(s) TÊM nota no mês com o ISS zerado em todas — isso não é "sem movimento". `
+            + 'Confira isenção/imunidade ou falha na captura do valor antes de fechar o mês.',
         );
     }
     if (r.capturaIncerta > 0) {

@@ -134,3 +134,48 @@ describe('ordem e farol da carteira', () => {
         expect(farolDaCarteira({ empresas: 0 })).toBe('sem-dados');
     });
 });
+
+/**
+ * Varredura REAL do Paulo (06/08): "AF PET SHOP — sem movimento — 29 notas",
+ * "3D PICTURES — sem movimento — 7 notas". Empresa com 29 notas não está sem
+ * movimento: ela TEM movimento, o que está zerado é o ISS. Chamar isso de "sem
+ * movimento" é o farol mentindo — e é a mesma classe de erro do dia inteiro.
+ */
+describe('nota no mês com ISS zerado NÃO é "sem movimento"', () => {
+    const empresa = { empresaId: 'a', nome: 'AF PET SHOP', cnpj: '1', ccm: '123', issFixoSup: false };
+
+    it('29 notas com ISS zerado vira pendência de conferência, não silêncio', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [empresa],
+            apuracoes: [{ empresaId: 'a', notas: 29, issDevido: 0, issRetido: 0, aRecolher: 0, semValorGravado: 0 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('iss-zerado');
+        expect(p.linhas[0].acao).toMatch(/29 nota\(s\) emitida\(s\)/);
+        expect(p.linhas[0].acao).toMatch(/isenção, imunidade/);
+        expect(p.resumo.issZerado).toBe(1);
+        expect(p.farol).toBe('atencao');
+    });
+
+    it('ZERO nota com captura confiável continua sendo "sem movimento"', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [empresa],
+            apuracoes: [{ empresaId: 'a', notas: 0, issDevido: 0, issRetido: 0, aRecolher: 0, semValorGravado: 0 }],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.linhas[0].situacao).toBe('sem-movimento');
+    });
+
+    it('o aviso da carteira nomeia quantas empresas estão nesse caso', () => {
+        const p = montarPainelIssCarteira({
+            empresas: [empresa, { ...empresa, empresaId: 'b', cnpj: '2' }],
+            apuracoes: [
+                { empresaId: 'a', notas: 7, issDevido: 0, issRetido: 0, aRecolher: 0 },
+                { empresaId: 'b', notas: 1, issDevido: 0, issRetido: 0, aRecolher: 0 },
+            ],
+            zeroConfiavelPara: () => true,
+        });
+        expect(p.avisos.join(' ')).toMatch(/2 empresa\(s\) TÊM nota no mês com o ISS zerado/);
+        expect(p.avisos.join(' ')).toMatch(/não é "sem movimento"/);
+    });
+});
