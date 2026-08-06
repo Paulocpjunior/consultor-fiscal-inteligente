@@ -98,17 +98,27 @@ export function apurarIssSp(docs: DocumentoFiscal[], competencia: string): Apura
         if (d.direcao !== 'saida') continue;                 // ISS próprio é do que a empresa PRESTOU
         if (CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
 
+        const x: any = d as any;
         const v: any = d.valores || {};
-        const issDevido = primeiro(v.iss);
-        const retido = primeiro(v.valorIssRetido) ?? (v.issRetido === true ? issDevido : 0);
-        const parte: any = (d as any).tomador || d.destinatario || {};
+        // DUAS FORMAS, de novo. A importação de XML grava OBJETO
+        // (`valores.iss`, `tomador.nome`); o importador do PORTAL SP grava
+        // ACHATADO (`issDevido`, `valorIss`, `tomadorNome`, `totais.vISS`).
+        // Ler só uma zera metade da base — foi o que aconteceu no 1º teste do
+        // Paulo (4 notas de 4 com "não gravado" e tomador vazio), e é a MESMA
+        // armadilha que já mordeu no DIFAL e na 🚦. Aqui a régua lê as duas.
+        const issDevido = primeiro(v.iss, x.valorIss, x.issDevido, (d.totais as any)?.vISS);
+        const retidoFlag = v.issRetido === true || x.issRetido === true;
+        const retido = primeiro(v.valorIssRetido, x.valorIssRetido)
+            ?? (retidoFlag ? issDevido : 0);
+        const parte: any = x.tomador || d.destinatario || {};
+        const nomeTomador = parte?.nome || x.tomadorNome || x.xNomeDest || '—';
 
         notas.push({
             id: d.id,
             numero: d.numero || '—',
             data: String(d.dhEmi || '').slice(0, 10),
-            tomador: parte?.nome || '—',
-            valorServicos: r2(v.baseCalculo ?? d.valorTotal ?? 0),
+            tomador: nomeTomador,
+            valorServicos: r2(primeiro(v.baseCalculo, x.valorServicos, d.valorTotal) ?? 0),
             issDevido: r2(issDevido ?? 0),
             issRetido: r2(retido ?? 0),
             guia: (d as any).guiaIss || null,
