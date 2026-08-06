@@ -426,6 +426,14 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                         {(diagWs.contrato.enviados || []).join(', ') || '—'}
                                     </p>
                                 )}
+                                {diagWs.contrato.trechoWsdl && (
+                                    <>
+                                        <p className="mt-1 font-semibold">Trecho do WSDL (é a forma real que o leitor não entendeu):</p>
+                                        <pre className="text-[10px] font-mono whitespace-pre-wrap break-all mt-1 p-1 rounded bg-white/50 dark:bg-slate-900/50 max-h-40 overflow-y-auto">
+{diagWs.contrato.trechoWsdl}
+                                        </pre>
+                                    </>
+                                )}
                             </div>
                         )}
                         {diagWs && (
