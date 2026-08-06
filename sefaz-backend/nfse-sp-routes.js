@@ -23,7 +23,8 @@ import { saudeNfseSp, empresaComFalhaNaCaptura } from './nfse-sp-saude.js';
 import { montarPainelIssCarteira } from './iss-carteira.js';
 import { getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
-import { consultarNfseEmitidas, baixarWsdl } from './nfse-sp-client.js';
+import { consultarNfseEmitidas, baixarWsdl, sondar1102 } from './nfse-sp-client.js';
+import { interpretarSonda } from './nfse-sp-sonda-leitura.js';
 import { extrairContratoWsdl, conferirContrato, parametrosDoEnvelope } from './nfse-sp-wsdl.js';
 
 /** SP capital — única praça coberta pelo ISS do CFI (Paulo, 05/08). */
@@ -619,6 +620,45 @@ router.get('/nfsesp-saude', authUser, async (req, res) => {
 // NÃO EMITE NADA: é consulta de notas emitidas, o método mais inofensivo do
 // WS. Admin-only porque usa o certificado.
 // ────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+// POST /api/admin/sefaz/nfsesp-ws-sonda
+//
+// Separa as duas causas que sobraram do 1102, comparando CÓDIGOS entre
+// variantes controladas. Com o contrato do WSDL conferido, o envelope está
+// descartado — resta saber se o conteúdo NÃO CHEGA (transporte) ou CHEGA e é
+// RECUSADO (formato do Pedido). Essas duas pedem ações opostas.
+//
+// SÓ CONSULTA: nenhuma variante emite, cancela ou altera nada. São 5 chamadas
+// sequenciais, uma por clique — não é laço nem lote.
+// ────────────────────────────────────────────────────────────────────────────
+router.post('/nfsesp-ws-sonda', requireAdmin, async (req, res) => {
+    const inicio = Date.now();
+    const { cnpj, ccm, anoMes } = req.body || {};
+    const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
+    const ccmLimpo = String(ccm || '').replace(/\D/g, '');
+    const m = /^(\d{4})-(\d{2})$/.exec(String(anoMes || ''));
+    if (!/^\d{14}$/.test(cnpjLimpo) || !ccmLimpo || !m) {
+        return res.status(400).json({ ok: false, error: 'Informe CNPJ (14 dígitos), CCM e competência (AAAA-MM).' });
+    }
+    const periodo = { ano: Number(m[1]), mes: Number(m[2]) };
+    try {
+        const resultados = await sondar1102({
+            cnpjRemetente: cnpjLimpo,
+            inscricaoMunicipalPrestador: ccmLimpo,
+            dtInicio: periodo,
+            dtFim: periodo,
+        });
+        return res.json({
+            ok: true,
+            resultados,
+            leitura: interpretarSonda(resultados),
+            duracaoMs: Date.now() - inicio,
+        });
+    } catch (e) {
+        return res.json({ ok: false, erro: String(e?.message || e).slice(0, 600), duracaoMs: Date.now() - inicio });
+    }
+});
+
 router.post('/nfsesp-ws-diagnostico', requireAdmin, async (req, res) => {
     const inicio = Date.now();
     const { cnpj, ccm, anoMes } = req.body || {};
