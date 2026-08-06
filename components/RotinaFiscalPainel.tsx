@@ -280,9 +280,12 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara }) => {
                                                 <span className="text-amber-700 dark:text-amber-400 font-semibold">
                                                     {r.iss.pendencias.join(' · ')} — guia do município, ainda sem envio registrado.
                                                 </span>
-                                            ) : r.iss.foraDoTotal > 0 ? (
+                                            ) : r.iss.situacao === 'iss-no-das' ? (
                                                 <span>
-                                                    {fmtBRL(r.iss.foraDoTotal)} nas notas, recolhido dentro do DAS — sem guia do município.
+                                                    {r.iss.foraDoTotal > 0
+                                                        ? `${fmtBRL(r.iss.foraDoTotal)} nas notas, recolhido dentro do DAS`
+                                                        : `${r.iss.notas} nota(s) com ISS zerado — no optante do Simples é o esperado`}
+                                                    {' '}— sem guia do município.
                                                 </span>
                                             ) : r.iss.situacao === 'sem-ccm' ? (
                                                 <span className="text-amber-700 dark:text-amber-400">

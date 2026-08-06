@@ -368,7 +368,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                             <table className="w-full text-xs">
                                 <thead>
                                     <tr className="text-left text-[10px] uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                                        <th className="py-1">Empresa</th><th>Situação</th>
+                                        <th className="py-1">Empresa</th><th>Regime</th><th>Situação</th>
                                         <th className="text-right">Notas</th>
                                         <th className="text-right">ISS devido</th>
                                         <th className="text-right">Retido</th>
@@ -381,6 +381,13 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                             <td className="py-1 pr-2">
                                                 <span className="font-semibold">{l.nome}</span>
                                                 {l.acao && <span className="block text-[10px] text-slate-500">{l.acao}</span>}
+                                            </td>
+                                            {/* O REGIME manda: no optante o ISS
+                                                próprio vai no DAS. Sem esta
+                                                coluna, "0 empresas dentro do
+                                                DAS" é adivinhação. */}
+                                            <td className="pr-2 text-[10px] text-slate-500 whitespace-nowrap">
+                                                {l.regime === 'simples' ? 'Simples' : l.regime === 'lucro' ? 'Lucro' : '—'}
                                             </td>
                                             <td className="pr-2">
                                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${SITUACAO_ROTULO[l.situacao]?.cls || ''}`}>
