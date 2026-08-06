@@ -32,13 +32,20 @@ export function extrairContratoWsdl(wsdl, operacao) {
         return { encontrada: false, parametros: [], soapAction: null, motivo: 'WSDL vazio ou operação não informada.' };
     }
 
-    // <s:element name="ConsultaNFeEmitidas"> … </s:element> (prefixo varia)
+    // Um WSDL de ASMX declara os parâmetros de DUAS formas, e as duas são
+    // comuns. Tratar só a primeira foi o que fez o leitor dizer "aparece no
+    // WSDL, mas sem a sequência de parâmetros" no teste de 06/08:
+    //
+    //   (a) complexType ANÔNIMO dentro do element da operação
+    //       <s:element name="X"><s:complexType><s:sequence>…
+    //   (b) complexType NOMEADO, referenciado pelo element
+    //       <s:element name="X" type="tns:X"/> … <s:complexType name="X">…
     const bloco = new RegExp(
         `<(?:\\w+:)?element[^>]*\\bname="${nome}"[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?element>`,
+    ).exec(xml) || new RegExp(
+        `<(?:\\w+:)?complexType[^>]*\\bname="${nome}"[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?complexType>`,
     ).exec(xml);
 
-    // Auto-fechado (<element name="X" type="tns:X"/>) = operação existe, mas o
-    // corpo está em outro lugar. Dizer "não encontrada" seria mentira.
     if (!bloco) {
         const existe = new RegExp(`\\bname="${nome}"`).test(xml);
         return {
@@ -48,6 +55,9 @@ export function extrairContratoWsdl(wsdl, operacao) {
             motivo: existe
                 ? `A operação ${nome} aparece no WSDL, mas sem a sequência de parâmetros no formato esperado.`
                 : `O WSDL não declara a operação ${nome}.`,
+            // Trecho CRU em volta do nome: se o leitor não entendeu a forma do
+            // WSDL, o que resolve é ver os bytes — não tentar outro palpite.
+            trecho: existe ? trechoEmVolta(xml, nome) : null,
         };
     }
 
@@ -63,6 +73,13 @@ export function extrairContratoWsdl(wsdl, operacao) {
     }
 
     return { encontrada: true, parametros, soapAction: extrairSoapAction(xml, nome), motivo: null };
+}
+
+/** Pedaço do WSDL em volta da 1ª menção ao nome — pra ler a forma real. */
+export function trechoEmVolta(xml, nome, antes = 200, depois = 900) {
+    const i = String(xml || '').indexOf(`name="${nome}"`);
+    if (i < 0) return null;
+    return String(xml).slice(Math.max(0, i - antes), i + depois);
 }
 
 function extrairSoapAction(xml, operacao) {
