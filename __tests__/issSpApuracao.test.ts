@@ -99,3 +99,64 @@ describe('praça coberta', () => {
         expect(empresaEhSpCapital(null)).toBe(false);
     });
 });
+
+describe('a NFS-e do PORTAL SP vem ACHATADA (caso CLINICA MANTOAN, 06/08)', () => {
+    // 1º teste do Paulo: 4 notas de 4 com "não gravado" e tomador vazio.
+    // O importador do portal grava issDevido/valorIss/tomadorNome no topo do
+    // documento; a importação de XML grava valores.iss/tomador.nome. Ler só
+    // uma das formas zera metade da base — a MESMA armadilha do DIFAL e da 🚦.
+    const doPortal = (over: any = {}): any => ({
+        id: over.id || 'p1',
+        tipo: 'NFSe',
+        tipoDoc: 'NFSe',
+        direcao: 'saida',
+        status: 'autorizado',
+        numero: over.numero || '7886',
+        dhEmi: '2026-08-05T10:00:00',
+        competencia: '2026-08',
+        fonte: 'csv-portal-sp',
+        valorServicos: 7200,
+        valorTotal: 7200,
+        valorIss: 360,
+        issDevido: 360,
+        issRetido: false,
+        tomadorNome: 'CONDOMINIO X',
+        xNomeDest: 'CONDOMINIO X',
+        totais: { vNF: 7200, vISS: 360 },
+        itens: [],
+        ...over,
+    });
+
+    it('lê ISS e tomador da forma achatada do portal', () => {
+        const a = apurarIssSp([doPortal()], '2026-08');
+        expect(a.notas[0].semValorGravado).toBe(false);
+        expect(a.notas[0].issDevido).toBe(360);
+        expect(a.notas[0].tomador).toBe('CONDOMINIO X');
+        expect(a.aRecolher).toBe(360);
+        expect(a.apta).toBe(true);
+    });
+
+    it('ISS retido pelo tomador no formato do portal (flag booleana)', () => {
+        const a = apurarIssSp([doPortal({ issRetido: true })], '2026-08');
+        expect(a.totalIssRetido).toBe(360);
+        expect(a.aRecolher).toBe(0);
+    });
+
+    it('a forma OBJETO (importação de XML) continua funcionando', () => {
+        const a = apurarIssSp([{
+            id: 'x1', tipo: 'NFSe', tipoDoc: 'NFSe', direcao: 'saida', status: 'autorizado',
+            numero: '99', dhEmi: '2026-08-05T10:00:00', valorTotal: 1000,
+            tomador: { nome: 'TOMADOR OBJ' },
+            valores: { baseCalculo: 1000, iss: 50 }, itens: [],
+        } as any], '2026-08');
+        expect(a.notas[0].issDevido).toBe(50);
+        expect(a.notas[0].tomador).toBe('TOMADOR OBJ');
+    });
+
+    it('sem ISS em NENHUMA das formas segue bloqueando (ausente ≠ zero)', () => {
+        const { valorIss, issDevido, totais, ...semIss } = doPortal();
+        const a = apurarIssSp([semIss], '2026-08');
+        expect(a.notas[0].semValorGravado).toBe(true);
+        expect(a.apta).toBe(false);
+    });
+});
