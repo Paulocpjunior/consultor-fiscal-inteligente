@@ -383,5 +383,9 @@ export async function consultarNfseEmitidas({
 
     const retornoXml = extrairRetornoXml(body, metodo);
     const parsed = parseRetorno(retornoXml);
-    return { ...parsed, statusCode };
+    // O que SAIU daqui volta junto: o erro 1102 diz "a mensagem chegou vazia",
+    // e sem ver o envelope enviado a investigação vira adivinhação (foi o que
+    // aconteceu por semanas). Só o diagnóstico pede — a captura não carrega
+    // esse peso.
+    return { ...parsed, statusCode, _enviado: { xmlInterno, xmlAssinado, soap }, _respostaCrua: body };
 }
