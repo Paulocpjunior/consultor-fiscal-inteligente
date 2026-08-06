@@ -666,6 +666,15 @@ router.post('/nfsesp-ws-diagnostico', requireAdmin, async (req, res) => {
                     enviados: parametrosDoEnvelope(r._enviado?.soap, 'ConsultaNFeEmitidas'),
                     soapActionEnviada: SOAP_ACTION_EMITIDAS_DIAG,
                 });
+            } else if (wsdl.statusCode === 403) {
+                // 403 COM certificado é outra coisa: o cert existe e não está
+                // autorizado a ler o contrato — não confundir com "sem cert".
+                contrato = {
+                    ok: false, conclusivo: false,
+                    motivo: 'A Prefeitura recusou a leitura do WSDL (HTTP 403) mesmo com o certificado. '
+                        + 'O contrato do serviço não pode ser conferido por aqui — a divergência de parâmetro '
+                        + 'precisa ser confirmada no manual do WS.',
+                };
             } else {
                 contrato = { ok: false, conclusivo: false, motivo: `WSDL não veio (HTTP ${wsdl.statusCode}).` };
             }

@@ -149,15 +149,31 @@ function postSoap(body, pfxBuffer, password, soapAction = SOAP_ACTION_RECEBIDAS)
  *
  * É a fonte que não mente sobre nome de parâmetro e SOAPAction, e a única
  * forma honesta de resolver o 1102 ("mensagem sem conteúdo") sem chutar
- * layout de fisco. Não precisa de certificado: o WSDL é público.
+ * layout de fisco.
+ *
+ * VAI COM CERTIFICADO: o WSDL é público como documento, mas o endpoint exige
+ * cert do contribuinte/contador pra QUALQUER requisição (403 sem ele, 06/08).
  */
-export function baixarWsdl() {
+export async function baixarWsdl() {
+    // O teste de 06/08 respondeu HTTP 403 no ?WSDL enquanto o POST no MESMO
+    // host devolvia 200. A diferença era uma só: o POST manda o certificado.
+    // O endpoint da Prefeitura exige o cert do contribuinte/contador em
+    // QUALQUER requisição — inclusive pra ler o contrato público.
+    let certs = null;
+    try {
+        certs = await loadCertificate();
+    } catch (e) {
+        // Sem certificado dá pra TENTAR sem ele: se voltar 403 de novo, a
+        // mensagem já diz o que aconteceu, em vez de sumir com o motivo.
+        console.warn('[nfse-sp] WSDL sem certificado:', e.message);
+    }
     return new Promise((resolve, reject) => {
         const req = https.request(
             {
                 host: ENDPOINT_HOST,
                 path: `${ENDPOINT_PATH}?WSDL`,
                 method: 'GET',
+                ...(certs?.pfxBuffer ? { pfx: certs.pfxBuffer, passphrase: certs.password } : {}),
                 minVersion: 'TLSv1.2',
                 rejectUnauthorized: true,
                 timeout: 30000,
