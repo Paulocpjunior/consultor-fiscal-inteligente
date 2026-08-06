@@ -333,3 +333,63 @@ describe('montarProntidaoMigracao', () => {
         expect(a.stEntradas).toBe(1);
     });
 });
+
+/**
+ * BLOCO K (produção e estoque) era o último 🔴 do de-para: "depende do F0 —
+ * quantas indústrias reais". Essa pergunta os DADOS respondem, do mesmo jeito
+ * que responderam a do E310.
+ *
+ * IPI destacado NÃO basta: comércio equiparado destaca IPI e não industrializa.
+ * A prova é o CFOP — 5101/6101 (venda de produção do estabelecimento) e
+ * 5124/5125/6124/6125 + 5901/5902/6901/6902 (industrialização por encomenda).
+ */
+describe('bloco K: produção se prova pelo CFOP, não pelo IPI', () => {
+    it('venda de produção própria (5101) marca a empresa como candidata REAL', () => {
+        const r = montarProntidaoMigracao(
+            [doc('c', { itens: [{ cfop: '5101' }] })],
+            EMP,
+        );
+        const linha = r.linhas.find((l: any) => l.empresaId === 'c')!;
+        expect(linha.producaoPropria).toBe(1);
+        expect(r.resumo.comProducaoParaBlocoK).toBe(1);
+        expect([...linha.bloqueios, ...linha.atencoes].join(' ')).toMatch(/PRODUÇÃO detectada pelos CFOPs/);
+        expect([...linha.bloqueios, ...linha.atencoes].join(' ')).toMatch(/candidata REAL a bloco K/);
+    });
+
+    it('industrialização por encomenda (5901) também conta, inclusive na entrada', () => {
+        const r = montarProntidaoMigracao(
+            [doc('a', { direcao: 'entrada', tpNF: '0', itens: [{ cfop: '5901' }] })],
+            EMP,
+        );
+        expect(r.linhas.find((l: any) => l.empresaId === 'a')!.industrializacao).toBe(1);
+    });
+
+    it('IPI SEM CFOP de produção é provável EQUIPARADO — não vira bloco K', () => {
+        const r = montarProntidaoMigracao(
+            [doc('a', { totais: { vIPI: 500 }, itens: [{ cfop: '5102' }] })],
+            EMP,
+        );
+        const linha = r.linhas.find((l: any) => l.empresaId === 'a')!;
+        expect(linha.producaoPropria).toBe(0);
+        expect(r.resumo.comProducaoParaBlocoK).toBe(0);
+        const txt = [...linha.bloqueios, ...linha.atencoes].join(' ');
+        expect(txt).toMatch(/provável equiparado \(não é bloco K\)/);
+        expect(txt).not.toMatch(/candidata REAL/);
+    });
+
+    it('indústria no CADASTRO sem CFOP de produção pede confirmação, não afirma', () => {
+        const r = montarProntidaoMigracao([doc('c', { itens: [{ cfop: '5102' }] })], EMP);
+        const linha = r.linhas.find((l: any) => l.empresaId === 'c')!;
+        expect([...linha.bloqueios, ...linha.atencoes].join(' '))
+            .toMatch(/SEM CFOP de produção no período — confirmar se industrializa/);
+    });
+
+    it('SEM itens lidos não afirma produção — ausente ≠ zero', () => {
+        // Documento sem `itens`: não dá pra ver CFOP. Dizer "não produz" aqui
+        // seria concluir a partir do que não se olhou.
+        const r = montarProntidaoMigracao([doc('c', { totais: { vIPI: 100 } })], EMP);
+        const txt = [...r.linhas[0].bloqueios, ...r.linhas[0].atencoes].join(' ');
+        expect(txt).not.toMatch(/PRODUÇÃO detectada/);
+        expect(r.resumo.comProducaoParaBlocoK).toBe(0);
+    });
+});

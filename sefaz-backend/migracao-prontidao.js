@@ -30,6 +30,23 @@ const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']
 const CFOP_VENDA_NAO_CONTRIBUINTE = new Set(['6107', '6108']);
 
 /**
+ * Sinais do BLOCO K (controle da produção e do estoque). O de-para marcava o
+ * bloco como 🔴 "depende do F0 (quantas indústrias reais)" — e essa pergunta
+ * os DADOS respondem, como já respondiam a do E310.
+ *
+ * IPI destacado não basta: o comércio equiparado destaca IPI e NÃO industrializa.
+ * O que caracteriza produção é o CFOP —
+ *   5101/6101 venda de produção DO ESTABELECIMENTO
+ *   5124/5125/6124/6125 industrialização efetuada PARA outra empresa
+ *   5901/5902/6901/6902 remessa/retorno de industrialização por encomenda
+ */
+const CFOP_PRODUCAO_PROPRIA = new Set(['5101', '6101']);
+const CFOP_INDUSTRIALIZACAO = new Set([
+    '5124', '5125', '6124', '6125',
+    '5901', '5902', '6901', '6902',
+]);
+
+/**
  * Tipo do documento a partir do modelo (fonte forte) ou do campo `tipo`.
  * 55 NF-e · 65 NFC-e · 57 CT-e · 58 MDF-e · NFS-e não tem modelo numérico.
  */
@@ -114,6 +131,10 @@ export function montarProntidaoMigracao(docs, empresas) {
             ipiSaidas: 0,           // IPI destacado em saída → indústria/equiparado
             entradasInterestaduais: 0, // candidata a DIFAL de aquisição
             saidasNaoContribuinte: 0,  // EC 87/15 → precisa E310/E316
+            // BLOCO K: produção própria e industrialização por encomenda. IPI
+            // sozinho não serve — comércio equiparado destaca IPI sem produzir.
+            producaoPropria: 0,
+            industrializacao: 0,
             // Cobertura documental: o que a ponte .FML leva × o que fica.
             porTipo: { NFe: 0, NFCe: 0, CTe: 0, NFSe: 0, MDFe: 0, outro: 0 },
         });
@@ -152,6 +173,10 @@ export function montarProntidaoMigracao(docs, empresas) {
         if (saidaPropria && (d.itens || []).some(
             (it) => CFOP_VENDA_NAO_CONTRIBUINTE.has(so(it?.cfop)),
         )) emp.saidasNaoContribuinte++;
+        // Bloco K: o CFOP é a prova de que há PRODUÇÃO, e não só IPI.
+        const cfops = (d.itens || []).map((it) => so(it?.cfop));
+        if (saidaPropria && cfops.some((c) => CFOP_PRODUCAO_PROPRIA.has(c))) emp.producaoPropria++;
+        if (cfops.some((c) => CFOP_INDUSTRIALIZACAO.has(c))) emp.industrializacao++;
         if (!saidaPropria && !emitEhEmpresa) {
             const ufEmit = ufEmitente(d);
             if (ufEmit && emp.uf && ufEmit !== emp.uf) emp.entradasInterestaduais++;
@@ -171,9 +196,20 @@ export function montarProntidaoMigracao(docs, empresas) {
             const atencoesEfd = [];
             const paraEfd = (texto) => (e.entregaEfdIcms ? bloqueios : atencoesEfd).push(texto);
             if (e.stSaidas > 0) paraEfd(`ST em ${e.stSaidas} saída(s) — precisa E220/apuração ST`);
-            if (e.ipiSaidas > 0 || e.industriaCadastro) paraEfd(e.industriaCadastro
-                ? 'indústria no cadastro — avaliar bloco K'
-                : `IPI destacado em ${e.ipiSaidas} saída(s) — avaliar bloco K/CIAP`);
+            // BLOCO K com PROVA nos CFOPs — diferente de "tem IPI, avalie".
+            // Só se pode afirmar isso com itens lidos: sem eles, ausente ≠ zero.
+            const sinalK = algumDocComItens && (e.producaoPropria > 0 || e.industrializacao > 0);
+            if (sinalK) paraEfd(
+                'PRODUÇÃO detectada pelos CFOPs ('
+                + [
+                    e.producaoPropria > 0 ? `${e.producaoPropria} venda(s) de produção própria` : null,
+                    e.industrializacao > 0 ? `${e.industrializacao} de industrialização por encomenda` : null,
+                ].filter(Boolean).join(' · ')
+                + ') — é candidata REAL a bloco K, que o CFI ainda não gera',
+            );
+            else if (e.ipiSaidas > 0 || e.industriaCadastro) paraEfd(e.industriaCadastro
+                ? 'indústria no cadastro, mas SEM CFOP de produção no período — confirmar se industrializa'
+                : `IPI destacado em ${e.ipiSaidas} saída(s) sem CFOP de produção — provável equiparado (não é bloco K)`);
             if (algumDocComItens && e.saidasNaoContribuinte > 0) paraEfd(
                 `${e.saidasNaoContribuinte} venda(s) interestadual(is) a não contribuinte (CFOP 6107/6108) `
                 + '— EC 87/15: precisa E310/E316, que o CFI ainda não gera',
@@ -213,6 +249,9 @@ export function montarProntidaoMigracao(docs, empresas) {
             candidatasPiloto: linhas.filter((l) => l.candidataPiloto).length,
             comStSaida: linhas.filter((l) => l.stSaidas > 0).length,
             comIpiOuIndustria: linhas.filter((l) => l.ipiSaidas > 0 || l.industriaCadastro).length,
+            // A resposta do F0 pro bloco K: zero aqui = bloco descartável como
+            // o SAT; um que seja = alvo nomeado, sem levantamento manual.
+            comProducaoParaBlocoK: linhas.filter((l) => l.producaoPropria > 0 || l.industrializacao > 0).length,
             comInterestadual: linhas.filter((l) => l.entradasInterestaduais > 0).length,
             comVendaNaoContribuinte: algumDocComItens
                 ? linhas.filter((l) => l.saidasNaoContribuinte > 0).length
