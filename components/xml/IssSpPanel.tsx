@@ -82,6 +82,8 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     const [diagWs, setDiagWs] = useState<any>(null);
     // Visão de carteira: a apuração acima resolve UM cliente; esta responde
     // quem falta. Sem ela, "quem tem ISS este mês?" seria 157 perguntas.
+    const [sonda, setSonda] = useState<any>(null);
+    const [sondando, setSondando] = useState(false);
     const [carteira, setCarteira] = useState<any>(null);
     const [carregandoCarteira, setCarregandoCarteira] = useState(false);
     const [testandoWs, setTestandoWs] = useState(false);
@@ -150,6 +152,28 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
             setCarteira({ erro: `Falha ao varrer a carteira: ${e?.message || e}` });
         } finally {
             setCarregandoCarteira(false);
+        }
+    };
+
+    // Com o envelope descartado pelo contrato do WSDL, sobram duas causas
+    // OPOSTAS pro 1102. A sonda separa as duas comparando códigos de erro
+    // entre variantes conhecidas — evidência, não tentativa.
+    const sondarWs = async () => {
+        if (!empresa) { onShowToast?.('Escolha a empresa.'); return; }
+        setSondando(true);
+        setSonda(null);
+        try {
+            const t = await (await import('firebase/auth')).getAuth().currentUser?.getIdToken();
+            const r = await fetch('/api/admin/sefaz/nfsesp-ws-sonda', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cnpj: empresa.cnpj, ccm: ccmDiag, anoMes: competencia }),
+            });
+            setSonda(await r.json());
+        } catch (e: any) {
+            setSonda({ ok: false, erro: String(e?.message || e) });
+        } finally {
+            setSondando(false);
         }
     };
 
@@ -384,6 +408,11 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                 className="px-3 py-2 text-sm font-bold rounded-lg border border-sky-400 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/30 disabled:opacity-40">
                                 {testandoWs ? 'Consultando…' : '🔌 Testar WS'}
                             </button>
+                            <button onClick={sondarWs} disabled={sondando || !ccmDiag}
+                                className="px-3 py-2 text-sm font-bold rounded-lg border border-violet-400 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 disabled:opacity-40"
+                                title="Manda 5 variantes CONTROLADAS e compara os códigos de erro. Só consulta — não emite nada.">
+                                {sondando ? 'Sondando…' : '🧪 Sondar o 1102'}
+                            </button>
                         </div>
                         {ccmOrigem === 'divergente' && (
                             <p className="text-[11px] text-amber-700 dark:text-amber-400">
@@ -443,6 +472,21 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                 )}
                             </div>
                         )}
+                        {sonda?.leitura && (
+                            <div className={`rounded-lg border p-2 text-[11px] ${
+                                sonda.leitura.conclusivo
+                                    ? 'border-violet-300 bg-violet-50 dark:bg-violet-900/20 text-violet-800 dark:text-violet-300'
+                                    : 'border-slate-300 bg-slate-50 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300'
+                            }`}>
+                                <p className="font-bold">🧪 Sonda do 1102 {sonda.leitura.conclusivo ? '' : '(não conclusiva)'}</p>
+                                <p>{sonda.leitura.veredicto}</p>
+                                <p className="font-semibold mt-1">{sonda.leitura.acao}</p>
+                                <pre className="text-[10px] font-mono whitespace-pre-wrap mt-1 p-1 rounded bg-white/50 dark:bg-slate-900/50">
+{(sonda.leitura.linhas || []).join('\n')}
+                                </pre>
+                            </div>
+                        )}
+                        {sonda?.erro && <p className="text-[11px] text-red-700 dark:text-red-400">Sonda falhou: {sonda.erro}</p>}
                         {diagWs && (
                             <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded p-2 max-h-64 overflow-y-auto">
 {JSON.stringify(diagWs, null, 2)}

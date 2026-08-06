@@ -384,6 +384,81 @@ export async function consultarNfseRecebidas({
  * Layout idêntico ao de recebidas, muda apenas o método SOAP e a inscricao
  * no pedido refere-se ao prestador (não tomador).
  */
+/**
+ * SONDA do erro 1102 — variantes CONTROLADAS pra separar as causas restantes.
+ *
+ * ONDE ESTAMOS (06/08, com o contrato do WSDL na mão): os parâmetros e a
+ * SOAPAction BATEM. Ou seja, o envelope está certo e o problema é o CONTEÚDO
+ * do MensagemXML. Sobram duas explicações, e elas pedem ações opostas:
+ *
+ *   (A) o conteúdo NÃO CHEGA (transporte: CDATA, encoding, escape) — aí o
+ *       serviço vê string vazia e diz "sem conteúdo", literalmente;
+ *   (B) o conteúdo chega mas é RECUSADO (root do Pedido, schema, assinatura)
+ *       — e o 1102 é só a mensagem genérica pra "não achei o Pedido".
+ *
+ * O jeito de separar é comparar CÓDIGOS DE ERRO entre variantes conhecidas, não
+ * chutar leiaute de fisco. Se a mensagem vazia e um XML de root inventado derem
+ * o MESMO 1102, o código é genérico e a pista é (B). Se derem códigos
+ * DIFERENTES, o nosso conteúdo não está chegando e a pista é (A).
+ *
+ * SÓ CONSULTA: nenhuma variante emite, cancela ou altera nada.
+ */
+export async function sondar1102({ cnpjRemetente, inscricaoMunicipalPrestador, dtInicio, dtFim }) {
+    const certs = await loadCertificate();
+    if (!certs.pemCert || !certs.pemKey) throw new Error('NFS-e SP: certificado sem PEM extraído.');
+
+    const pedido = montarPedidoXml({
+        cnpjRemetente,
+        inscricaoMunicipalTomador: inscricaoMunicipalPrestador,
+        dtInicio,
+        dtFim,
+    });
+    const assinado = assinarXmlSp(pedido, certs.pemCert, certs.pemKey);
+    const metodo = 'ConsultaNFeEmitidas';
+
+    const envelopeCom = (conteudo, comoCdata = true) => `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <${metodo} xmlns="${NS_NFE}">
+      <VersaoSchema>1</VersaoSchema>
+      <MensagemXML>${comoCdata ? `<![CDATA[${conteudo}]]>` : escapeXmlEntities(conteudo)}</MensagemXML>
+    </${metodo}>
+  </soap:Body>
+</soap:Envelope>`;
+
+    const variantes = [
+        { nome: 'vazio', hipotese: 'linha de base: o que o serviço diz quando a mensagem é REALMENTE vazia', soap: envelopeCom('') },
+        { nome: 'root-desconhecido', hipotese: 'XML válido com root inventado — separa "vazio" de "não reconheci"', soap: envelopeCom('<TesteSemSentido/>') },
+        { nome: 'pedido-sem-assinatura', hipotese: 'o Pedido correto, SEM assinatura — isola a assinatura', soap: envelopeCom(pedido) },
+        { nome: 'pedido-assinado-escapado', hipotese: 'o mesmo envio de hoje, mas com entidades no lugar do CDATA', soap: envelopeCom(assinado, false) },
+        { nome: 'pedido-assinado-cdata', hipotese: 'exatamente o que o app manda hoje (controle)', soap: envelopeCom(assinado) },
+    ];
+
+    const resultados = [];
+    for (const v of variantes) {
+        try {
+            const { statusCode, body } = await postSoap(v.soap, certs.pfxBuffer, certs.password, SOAP_ACTION_EMITIDAS);
+            let erros = [];
+            try {
+                erros = parseRetorno(extrairRetornoXml(body, metodo)).erros || [];
+            } catch {
+                // Resposta que nem parseia também é informação: entra crua.
+            }
+            resultados.push({
+                variante: v.nome,
+                hipotese: v.hipotese,
+                httpStatus: statusCode,
+                codigo: erros[0]?.codigo ?? null,
+                descricao: erros[0]?.descricao ?? null,
+                respostaCurta: String(body || '').replace(/\s+/g, ' ').slice(0, 300),
+            });
+        } catch (e) {
+            resultados.push({ variante: v.nome, hipotese: v.hipotese, erro: String(e?.message || e).slice(0, 300) });
+        }
+    }
+    return resultados;
+}
+
 export async function consultarNfseEmitidas({
     cnpjRemetente,
     inscricaoMunicipalPrestador,
