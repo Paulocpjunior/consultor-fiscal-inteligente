@@ -112,6 +112,12 @@ async function main() {
         console.log(`::add-mask::${found[key]}`);
         lines.push(`${key}=${found[key]}`);
     }
+    // Fora do CI (deploy manual do Mac, quando o Actions está fora), o mesmo
+    // resultado precisa ir pra um arquivo que o script de deploy consegue ler.
+    if (process.env.CONFIG_OUT) {
+        fs.writeFileSync(process.env.CONFIG_OUT, `${lines.join('\n')}\n`);
+        console.log(`✓ Config escrita em ${process.env.CONFIG_OUT}`);
+    }
     if (process.env.GITHUB_ENV) {
         fs.appendFileSync(process.env.GITHUB_ENV, `${lines.join('\n')}\n`);
     }

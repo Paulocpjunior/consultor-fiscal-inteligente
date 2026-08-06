@@ -232,6 +232,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   lint+jest+build e só então abre PR já testado; sem correção possível abre
   ISSUE antes de virar bloqueio. Escape hatch `[skip-audit]` no ASSUNTO do
   commit segue valendo pra hotfix.
+- **DEPLOY TEM SAÍDA DE EMERGÊNCIA** (06/08): o GitHub Actions parou de
+  atribuir runner — 3 deploys seguidos com `runner_id: 0`, cancelados aos
+  15m00s cravados, ZERO passo executado (não é falha do workflow: é conta/
+  cota, e o 340 tinha rodado normal 20 min antes). Com o CI fora a entrega
+  ficou 100% bloqueada. `scripts/deploy-manual.sh` faz o mesmo caminho sem
+  o GitHub: extrai VITE_* do bundle publicado, constrói no **Cloud Build**
+  (NÃO precisa de Docker local — o Mac do Paulo não tem, e foi onde a 1ª
+  tentativa parou com "command not found: docker"), sobe a revisão SEM
+  tráfego, confere o `/ready` dela e só então roteia. Deploy manual sem
+  health check seria pior que o CI: rotearia antes de saber. O rodapé mostra
+  "local" em vez de número de build — honesto, entrega por fora não tem
+  número de esteira. NUNCA usar como rotina: o gate de lint/testes/auditoria
+  do workflow não roda aqui, então só depois do gate verde na máquina.
 - CNPJ escritório: 44.388.152/0001-89. Projeto GCP `consultorfiscalapp`
   (us-west1). Scheduler: `scripts/setup-cloud-schedulers.sh` (idempotente;
   o Paulo roda no Mac dele — clone em `~/consultor-fiscal-inteligente`).
