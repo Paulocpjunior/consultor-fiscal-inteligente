@@ -76,7 +76,9 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     // portal atrás de um dado que o app consegue buscar sozinho.
     const [ccmDiag, setCcmDiag] = useState('');
     /** De onde veio o CCM da caixinha — cadastro, nota, ou nenhum dos dois. */
-    const [ccmOrigem, setCcmOrigem] = useState<'cadastro' | 'nota' | 'ausente'>('ausente');
+    const [ccmOrigem, setCcmOrigem] = useState<'cadastro' | 'divergente' | 'ausente'>('ausente');
+    /** CCM que aparece nas NOTAS — serve pra denunciar, não pra preencher. */
+    const [ccmDaNota, setCcmDaNota] = useState('');
     const [diagWs, setDiagWs] = useState<any>(null);
     // Visão de carteira: a apuração acima resolve UM cliente; esta responde
     // quem falta. Sem ela, "quem tem ISS este mês?" seria 157 perguntas.
@@ -113,13 +115,20 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
             setSaude(s);
             const ap = apurarIssSp(docs, competencia, { issConfig: (df as any)?.issConfig || null });
             setApuracao(ap);
-            // CCM: cadastro primeiro (é o que a captura do portal usa), nota
-            // como socorro. Sem nenhum dos dois a caixa fica vazia E a tela diz
-            // por quê — botão desabilitado mudo foi o que travou o teste do WS.
-            const doCadastro = String((df as any)?.ccmSp || (df as any)?.inscricaoMunicipal || '').trim();
+            // CCM vem do CADASTRO, e só. Preencher sozinho pela nota seria
+            // contornar cadastro em branco — e cadastro errado ou faltando
+            // ACENDE ALERTA pro colaborador arrumar, não vira ferramenta de
+            // conserto (Paulo, 06/08). A nota serve só pra DENUNCIAR: ausência
+            // e divergência viram aviso, nunca preenchimento automático.
+            const doCadastro = String((df as any)?.ccmSp || (df as any)?.inscricaoMunicipal || '').replace(/\D/g, '');
             const daNota = ap.ccmDasNotas[0] || '';
-            setCcmDiag(doCadastro || daNota);
-            setCcmOrigem(doCadastro ? 'cadastro' : (daNota ? 'nota' : 'ausente'));
+            setCcmDiag(doCadastro);
+            setCcmDaNota(daNota);
+            setCcmOrigem(
+                doCadastro
+                    ? (daNota && daNota !== doCadastro ? 'divergente' : 'cadastro')
+                    : 'ausente',
+            );
         } finally {
             setCarregando(false);
         }
@@ -376,18 +385,19 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                 {testandoWs ? 'Consultando…' : '🔌 Testar WS'}
                             </button>
                         </div>
-                        {ccmOrigem === 'nota' && (
+                        {ccmOrigem === 'divergente' && (
                             <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                                ⚠ Este CCM veio da <strong>própria NFS-e</strong>, não do cadastro. Dá pra testar o WS
-                                assim, mas a <strong>captura automática lê o cadastro</strong> — enquanto ele estiver
-                                vazio, o portal não roda pra esta empresa. Preencha em Dados fiscais → CCM.
+                                ⚠ <strong>Cadastro e nota discordam:</strong> o cadastro diz <strong>{ccmDiag}</strong> e
+                                as NFS-e da competência saíram com <strong>{ccmDaNota}</strong>. Um dos dois está errado
+                                e o app NÃO escolhe por você — confira e corrija em Dados fiscais → CCM.
                             </p>
                         )}
                         {ccmOrigem === 'ausente' && apuracao && (
                             <p className="text-[11px] text-red-700 dark:text-red-400">
-                                🚨 Esta empresa não tem CCM no cadastro e nenhuma nota da competência trouxe um.
-                                Sem CCM o WS não pode ser consultado e a captura da NFS-e SP não roda —
-                                preencha em Dados fiscais → CCM ou digite aqui para testar.
+                                🚨 <strong>CCM não cadastrado.</strong> Sem ele a captura da NFS-e SP não roda pra esta
+                                empresa e o WS não pode ser consultado — preencha em <strong>Dados fiscais → CCM</strong>.
+                                {ccmDaNota && <> As notas da competência saíram com <strong>{ccmDaNota}</strong>; confira
+                                antes de cadastrar — o app não preenche cadastro sozinho.</>}
                             </p>
                         )}
                         {diagWs?.leitura && (

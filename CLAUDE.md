@@ -20,6 +20,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ultNSU=maxNSU, pendências de manifestação, resumos sem completo. NUNCA
   propor "comparar com a SIEG" como rito; a Conferência por chaves é só rede
   de segurança da migração.
+- **CADASTRO ERRADO OU FALTANDO = ALERTA, NUNCA CONTORNO** (Paulo, 06/08:
+  *"erro de cadastro e/ou falta de informação LIGA UM SINAL DE ALERTA E O
+  COLABORADOR QUE ARRUME, não vamos perder tempo em criar ferramentas p
+  ajustar o que eles fizeram de errado"* — generaliza o que ele já tinha
+  dito da UF em 05/08). Campo em branco ou torto: o app ACENDE o alerta,
+  diz ONDE arrumar, e PARA. NÃO se constrói auto-preenchimento, dedução
+  "esperta" nem tela de conserto em massa — isso gasta token, esconde o
+  buraco e ensina a equipe que dá pra deixar em branco. TRÊS COISAS QUE
+  CONTINUAM VALENDO e não confundir com contorno: (1) reler a FONTE quando
+  o dado já existe nela (relê XML pra endereço, CCM/tomador do próprio
+  documento) — é recuperação, não conserto de cadastro; (2) DIVERGÊNCIA
+  entre cadastro e fonte é ALERTA de primeira classe (cadastro diz X, a
+  nota diz Y ⇒ acende, não escolhe sozinho); (3) SUGERIR conhecimento
+  fiscal carimbado com a origem (IVA-ST do cadastro NCM) — sugestão nunca
+  sobrescreve o que a pessoa digitou. Aplicado no mesmo dia: o CCM do
+  painel ISS deixou de se auto-preencher pela nota (#489) e passou a
+  denunciar ausência e divergência.
 - **Farol honesto vale pra TODO painel** (não só o Diagnóstico): all-failed
   (0 ok + N falhas) nunca é verde; falha sempre com o MOTIVO dominante ao
   lado. Lições 23/07: "Saúde dos crons" dizia OK com 0/500; NFe ficou
