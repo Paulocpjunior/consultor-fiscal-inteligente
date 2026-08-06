@@ -586,6 +586,47 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                         <strong>{apuracao.vencimento.split('-').reverse().join('/') || '—'}</strong> (dia 10 do mês seguinte).
                     </p>
 
+                    {/* ISS RETIDO COMO TOMADORA — outra obrigação, outra guia.
+                        Paulo, 06/08: "essa empresa tem ISS de tomador e
+                        prestador, aqui só aparece a de prestados". */}
+                    {apuracao.tomado?.totalRetido > 0 && (
+                        <div className="mt-3 rounded-lg border border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 p-3">
+                            <p className="text-sm font-bold text-indigo-800 dark:text-indigo-300">
+                                ↩ ISS retido como TOMADORA — {brl(apuracao.tomado.totalRetido)}
+                            </p>
+                            <p className="text-[11px] text-indigo-700 dark:text-indigo-400">
+                                {apuracao.tomado.notas.length} nota(s) de serviço tomada(s) com retenção.
+                                <strong> Esta é OUTRA guia</strong>: quem recolhe o ISS retido na fonte é a empresa,
+                                no lugar do prestador. Não some com o ISS próprio acima.
+                            </p>
+                            {(apuracao.tomado.avisos || []).filter(a => !/Não some com o ISS próprio/.test(a)).map((a, i) => (
+                                <p key={i} className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">⚠ {a}</p>
+                            ))}
+                            <div className="overflow-x-auto mt-2">
+                                <table className="w-full text-xs">
+                                    <thead>
+                                        <tr className="text-left text-[10px] uppercase text-slate-500 border-b border-indigo-200 dark:border-indigo-800">
+                                            <th className="py-1">Data</th><th>Nº</th><th>Prestador</th>
+                                            <th className="text-right">Serviços</th>
+                                            <th className="text-right">ISS retido</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {apuracao.tomado.notas.map(n => (
+                                            <tr key={n.id} className="border-b border-indigo-100 dark:border-indigo-900/40">
+                                                <td className="py-1">{n.data.split('-').reverse().join('/')}</td>
+                                                <td>{n.numero}</td>
+                                                <td>{n.prestador}</td>
+                                                <td className="text-right">{brl(n.valorServicos)}</td>
+                                                <td className="text-right font-bold">{brl(n.issRetido)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
                     {apuracao.avisos.map((a, i) => (
                         <p key={i} className="text-[11px] text-amber-700 dark:text-amber-400">⚠ {a}</p>
                     ))}

@@ -250,3 +250,64 @@ describe('CCM do prestador sai da própria nota quando o cadastro está vazio', 
         expect(apurarIssSp([], '2026-08').ccmDasNotas).toEqual([]);
     });
 });
+
+/**
+ * Paulo, 06/08 (PEC PRONTA ENTREGA): *"essa empresa tem ISS de tomador e
+ * prestador, aqui só aparece a de prestados"*.
+ *
+ * São DUAS obrigações com DUAS guias. O ISS retido na fonte é recolhido por
+ * quem CONTRATOU o serviço (Lei 13.701/03 art. 9º §1º) — a empresa tomadora
+ * paga no lugar do prestador. O painel só olhava saída, então quem é tomadora
+ * com retenção não via o que devia recolher.
+ */
+describe('ISS retido COMO TOMADORA é outra obrigação', () => {
+    const tomada = (over: any = {}): any => ({
+        id: over.id || 't1', tipo: 'NFSe', tipoDoc: 'NFSe',
+        direcao: 'entrada', status: 'autorizado',
+        numero: over.numero || '900', dhEmi: '2026-08-12T10:00:00',
+        valorServicos: 10000, valorTotal: 10000,
+        prestadorNome: 'PRESTADOR LTDA',
+        itens: [], ...over,
+    });
+
+    it('nota tomada COM retenção entra na apuração do tomado', () => {
+        const a = apurarIssSp([tomada({ valorIssRetido: 500 })], '2026-08');
+        expect(a.tomado.notas).toHaveLength(1);
+        expect(a.tomado.totalRetido).toBe(500);
+        expect(a.tomado.notas[0].prestador).toBe('PRESTADOR LTDA');
+    });
+
+    it('a flag booleana do portal também conta, usando o ISS da nota', () => {
+        const a = apurarIssSp([tomada({ issRetido: true, valorIss: 300 })], '2026-08');
+        expect(a.tomado.totalRetido).toBe(300);
+    });
+
+    it('nota tomada SEM retenção não gera obrigação — fica de fora', () => {
+        const a = apurarIssSp([tomada({ valorIss: 300 })], '2026-08');
+        expect(a.tomado.notas).toHaveLength(0);
+        expect(a.tomado.totalRetido).toBe(0);
+    });
+
+    it('NÃO soma com o ISS próprio — são impostos de operações diferentes', () => {
+        const a = apurarIssSp([
+            { id: 's1', tipo: 'NFSe', tipoDoc: 'NFSe', direcao: 'saida', status: 'autorizado',
+              numero: '1', dhEmi: '2026-08-05T10:00:00', valorServicos: 1000, valorTotal: 1000,
+              valorIss: 50, issDevido: 50, itens: [] } as any,
+            tomada({ valorIssRetido: 500 }),
+        ], '2026-08');
+        expect(a.aRecolher).toBe(50);          // guia do ISS próprio
+        expect(a.tomado.totalRetido).toBe(500); // guia do ISS retido — separada
+    });
+
+    it('a existência do tomado aparece nos avisos do painel', () => {
+        const a = apurarIssSp([tomada({ valorIssRetido: 500 })], '2026-08');
+        expect(a.avisos.join(' ')).toMatch(/TAMBÉM é tomadora com retenção/);
+        expect(a.avisos.join(' ')).toMatch(/é outra guia/);
+        expect(a.tomado.avisos.join(' ')).toMatch(/Não some com o ISS próprio/);
+    });
+
+    it('nota cancelada não conta como retenção', () => {
+        const a = apurarIssSp([tomada({ valorIssRetido: 500, status: 'cancelado' })], '2026-08');
+        expect(a.tomado.totalRetido).toBe(0);
+    });
+});
