@@ -20,8 +20,14 @@ import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
 import { saudeNfseSp, empresaComFalhaNaCaptura } from './nfse-sp-saude.js';
+import { montarPainelIssCarteira } from './iss-carteira.js';
+import { getEmpresaIdsDaCarteira } from './carteira-auth.js';
+import { fetchAllDocs } from './firestore-paginate.js';
 import { consultarNfseEmitidas, baixarWsdl } from './nfse-sp-client.js';
 import { extrairContratoWsdl, conferirContrato, parametrosDoEnvelope } from './nfse-sp-wsdl.js';
+
+/** SP capital — única praça coberta pelo ISS do CFI (Paulo, 05/08). */
+const COD_MUN_SP_CAPITAL = '3550308';
 
 // A SOAPAction que o cliente usa na consulta de emitidas — repetida aqui só
 // para o diagnóstico poder confrontá-la com a declarada no WSDL.
@@ -444,6 +450,120 @@ router.post('/nfsesp-corrigir-direcoes', authUser, json(), async (req, res) => {
         });
     } catch (e) {
         return res.status(500).json({ erro: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/sefaz/iss-carteira?competencia=AAAA-MM
+//
+// Painel do ISS próprio da CARTEIRA de SP capital. A aba 🏛️ ISS SP responde uma
+// empresa por vez — serve pra fechar o cliente que está na mão, não pra saber
+// QUEM FALTA. A onda 1 da migração são 157 empresas de serviço puro.
+//
+// Uma leitura por fonte, agrupada em memória (padrão do painel da Rotina):
+// nada de consultar por empresa.
+// ────────────────────────────────────────────────────────────────────────────
+router.get('/iss-carteira', authUser, async (req, res) => {
+    try {
+        const competencia = String(req.query.competencia || '').trim();
+        if (!/^\d{4}-\d{2}$/.test(competencia)) {
+            return res.status(400).json({ ok: false, error: 'Informe a competência (AAAA-MM).' });
+        }
+        const db = fa().firestore();
+        const idsCarteira = await getEmpresaIdsDaCarteira(req.user);
+
+        // Só SP capital: fora da praça a guia é de outra prefeitura, com outro
+        // portal e outro vencimento (Paulo, 05/08 — "somente São Paulo capital").
+        const empresas = [];
+        const porCnpj = new Map();
+        for (const col of ['simples_empresas', 'lucro_empresas']) {
+            const snap = await db.collection(col).get();
+            snap.forEach((doc) => {
+                const d = doc.data() || {};
+                if (d._deleted || d._merged_into) return;
+                if (idsCarteira && !idsCarteira.includes(doc.id)) return;
+                const df = d.dadosFiscais || {};
+                if (String(df.codMunIBGE || d.codMunIBGE || '').trim() !== COD_MUN_SP_CAPITAL) return;
+                const cnpj = String(d.cnpj || '').replace(/\D/g, '');
+                const linha = {
+                    empresaId: doc.id,
+                    nome: d.razaoSocial || d.nome || '—',
+                    cnpj,
+                    // CCM canônico em dadosFiscais, fallback top-level legado (#311).
+                    ccm: String(df.ccmSp || d.ccmSp || '').replace(/\D/g, ''),
+                    issFixoSup: (d.issPadraoConfig?.tipo || df.issConfig?.tipo) === 'sup_fixo',
+                };
+                empresas.push(linha);
+                if (cnpj.length === 14) porCnpj.set(cnpj, linha);
+            });
+        }
+
+        // Uma varredura de documentos da competência. A NFS-e do portal vem
+        // ACHATADA (valorIss/issDevido/issRetido) e a do XML vem em objeto
+        // (valores.iss) — a projeção precisa das DUAS formas, senão metade da
+        // base soma zero (armadilha que já mordeu no DIFAL, na 🚦 e aqui).
+        const snaps = await fetchAllDocs(
+            db.collection('documentos_fiscais')
+                .where('competencia', '==', competencia)
+                .select('empresaId', 'empresaCnpj', 'tipoDoc', 'tipo', 'direcao', 'status',
+                    'valorIss', 'issDevido', 'issRetido', 'valorIssRetido',
+                    'valores.iss', 'valores.issRetido', 'valores.valorIssRetido', 'totais.vISS'),
+            { label: `iss-carteira ${competencia}`, maxDocs: 80000 },
+        );
+
+        const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
+        const acc = new Map();
+        for (const s of snaps) {
+            const d = { id: s.id, ...s.data() };
+            if (!/NFSe/i.test(String(d.tipoDoc || d.tipo || ''))) continue;
+            if (d.direcao !== 'saida') continue;
+            if (CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
+            const alvo = (d.empresaId && empresas.find((e) => e.empresaId === d.empresaId))
+                || porCnpj.get(String(d.empresaCnpj || '').replace(/\D/g, ''));
+            if (!alvo) continue;
+
+            const v = d.valores || {};
+            const cand = [v.iss, d.valorIss, d.issDevido, d.totais?.vISS]
+                .find((x) => x !== undefined && x !== null && x !== '' && Number.isFinite(Number(x)));
+            const devido = cand === undefined ? undefined : Number(cand);
+            const flag = v.issRetido === true || d.issRetido === true;
+            const retCand = [v.valorIssRetido, d.valorIssRetido]
+                .find((x) => x !== undefined && x !== null && x !== '' && Number.isFinite(Number(x)));
+            const retido = retCand !== undefined ? Number(retCand) : (flag ? (devido || 0) : 0);
+
+            const a = acc.get(alvo.empresaId)
+                || { empresaId: alvo.empresaId, notas: 0, issDevido: 0, issRetido: 0, semValorGravado: 0 };
+            a.notas += 1;
+            a.issDevido += devido || 0;
+            a.issRetido += retido || 0;
+            if (devido === undefined) a.semValorGravado += 1;
+            acc.set(alvo.empresaId, a);
+        }
+        const apuracoes = [...acc.values()].map((a) => ({
+            ...a,
+            // Retido pelo tomador não é recolhido pelo prestador.
+            aRecolher: Math.max(0, Math.round((a.issDevido - a.issRetido) * 100) / 100),
+        }));
+
+        // Saúde da captura decide se um ZERO pode ser lido como "sem movimento".
+        let saude = null;
+        let logs = [];
+        try {
+            const ls = await db.collection('nfsesp_portal_cron_logs')
+                .orderBy('executadoEm', 'desc').limit(10).get();
+            logs = ls.docs.map((x) => ({ id: x.id, ...x.data() }));
+            saude = saudeNfseSp(logs, Date.now());
+        } catch (e) {
+            console.warn('[iss-carteira] saúde da captura indisponível:', e.message);
+        }
+        // Sem saúde legível, NENHUM zero é confiável — silêncio não é sucesso.
+        const zeroConfiavelPara = (cnpj) => !!saude?.zeroConfiavel && !empresaComFalhaNaCaptura(logs, cnpj);
+
+        const painel = montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara });
+        return res.json({ ok: true, competencia, saudeCaptura: saude, ...painel });
+    } catch (e) {
+        console.error('[iss-carteira]', e);
+        return res.status(500).json({ ok: false, error: e.message });
     }
 });
 
