@@ -740,6 +740,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   O QUE PASSOU A MANDAR NO RITMO: completude de captura por cliente (prova de
   captura + cofre de saída, hoje 0/388) — cliente só migra com a captura
   fechada, e é aí que está o gargalo agora, não mais no histórico.
+  **A FILA DE MIGRAÇÃO É UMA TELA** (Paulo, 07/08: *"precisamos acelerar"*):
+  a resposta "quem pode migrar hoje" já existia espalhada em TRÊS painéis —
+  🔎 Prova de captura, ✅ Aptidão da saída e 🚦 Migração — e ninguém abre três
+  abas × 388 clientes, então ninguém respondia. `fila-migracao.js` (18 testes)
+  + rota `/api/admin/sped/fila-migracao` + aba 🏁 no card SPED juntam as três
+  numa fila ordenada por ESFORÇO, com UM próximo passo por cliente (mesmo
+  desenho da Rotina do mês). REGRAS: ausência de sinal NUNCA vira prontidão
+  (sem prova = bloqueio, não silêncio verde); âmbar da captura TAMBÉM trava
+  (resumo sem completa = livro a menor, e migrar leva o erro junto); quem NÃO
+  entrega EFD ICMS/IPI não é bloqueado por bloco nenhum — misturar as ondas
+  fazia a fila parecer travada com metade dela já pronta. Nenhuma conta nova:
+  a régua de cada pedaço fica no núcleo dela (vereditoDoCnpj,
+  montarAptidaoSaida, montarProntidaoMigracao).
   O que foi feito na F2 e CONTINUA VALENDO: DDL dos 4 schemas validado e
   guardado (`docs/pg12/efiscal_ddl.zip` — 618 tabelas por empresa =
   pad_modelo, prova de que todo e#### é o mesmo molde) e o Cod.Cliente
