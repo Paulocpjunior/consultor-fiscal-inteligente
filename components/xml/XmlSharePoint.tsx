@@ -9,6 +9,7 @@ import {
 } from '../../services/sharePointXmlService';
 import { importXmlManual, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { isFirebaseConfigured, auth } from '../../services/firebaseConfig';
+import EmpresaSearchSelect from './EmpresaSearchSelect';
 
 interface SharePointLastSync {
     competencia?: string;
@@ -349,12 +350,12 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                             </div>
                             <div>
                                 <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Empresa (Firestore)</label>
-                                <select value={empresaId} onChange={e => setEmpresaId(e.target.value)}
-                                    className="w-full mt-1 p-2 text-xs rounded-lg outline-none"
-                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
-                                    <option value="">— Selecione —</option>
-                                    {empresas.map(e => <option key={e.id} value={e.id}>{e.nome} ({e.cnpj})</option>)}
-                                </select>
+                                <EmpresaSearchSelect
+                            empresas={empresas}
+                            value={empresaId}
+                            onChange={setEmpresaId}
+                            placeholder="Selecione — código, nome ou CNPJ"
+                        />
                             </div>
                         </div>
                     </>
@@ -672,12 +673,12 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                     <div className="border-t pt-3 mt-3" style={{ borderColor: 'var(--border-subtle)' }}>
                         <p className="text-[10px] font-bold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Adicionar empresa ao auto-sync</p>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                            <select value={configEmpresaId} onChange={e => setConfigEmpresaId(e.target.value)}
-                                className="p-2 text-xs rounded-lg"
-                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
-                                <option value="">Empresa</option>
-                                {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                            </select>
+                            <EmpresaSearchSelect
+                            empresas={empresas}
+                            value={configEmpresaId}
+                            onChange={setConfigEmpresaId}
+                            placeholder="Empresa — código, nome ou CNPJ"
+                        />
                             <input value={configGrupo} onChange={e => setConfigGrupo(e.target.value)} placeholder="Grupo (pasta)"
                                 className="p-2 text-xs rounded-lg"
                                 style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />

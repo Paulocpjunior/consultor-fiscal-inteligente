@@ -50,6 +50,7 @@ import TaxProfileCard from './TaxProfileCard';
 import DashboardTab from './DashboardTab';
 import AnaliseTab from './AnaliseTab';
 import type { NfpManualSituacaoFiscalPayload } from './ManualSituacaoFiscalForm';
+import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
 import {
     OBRIGACOES_BASE, CERTIDOES_BASE, uid, formatCurrency, gravityColor, certidaoColor, certidaoLabel,
     cardStyle, inputStyle, labelSmall, btnStyle, btnStyleSave,
@@ -104,6 +105,9 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [tab, setTab] = useState<Tab>('dashboard');
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
     const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>('');
+    // Escolha PENDENTE: aqui trocar de empresa dispara `nfpService.getAnalise`
+    // direto no efeito. Só o ⚡ Ativar move pro `selectedEmpresaId`.
+    const [empresaEscolhida, setEmpresaEscolhida] = useState<string>('');
     const [analise, setAnalise] = useState<NfpAnaliseEmpresa | null>(null);
     // Snapshot da análise como veio do servidor — baseline do merge
     // colaborativo: distingue item removido nesta tela de item lançado por
@@ -754,16 +758,18 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {/* Empresa selector (only in non-prospect mode) */}
             {!prospectMode && (
                 <div style={{ marginBottom: '1.5rem' }}>
-                    <select
-                        value={selectedEmpresaId}
-                        onChange={e => setSelectedEmpresaId(e.target.value)}
-                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '0.9rem', minWidth: '300px' }}
-                    >
-                        <option value="">Selecione uma empresa...</option>
-                        {empresas.map(e => (
-                            <option key={e.id} value={e.id}>{e.nome} ({e.cnpj})</option>
-                        ))}
-                    </select>
+                    <div style={{ maxWidth: 520 }}>
+                        {/* `empresas` aqui já é EmpresaXmlOption — sem adaptador. */}
+                        <EmpresaSearchSelect
+                            empresas={empresas}
+                            value={empresaEscolhida}
+                            onChange={setEmpresaEscolhida}
+                            onAtivar={(id) => setSelectedEmpresaId(id)}
+                            permitirLimpar
+                            rotuloVazio="Nenhuma empresa"
+                            placeholder="Selecione uma empresa — código, nome ou CNPJ"
+                        />
+                    </div>
                     {/* Tax Profile summary card for selected empresa */}
                     {selectedEmpresa && taxProfile && (
                         <div style={{ marginTop: '0.75rem' }}>{renderTaxProfileCard()}</div>

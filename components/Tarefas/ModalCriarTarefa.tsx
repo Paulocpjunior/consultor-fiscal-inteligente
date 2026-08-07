@@ -9,6 +9,8 @@
 import React, { useState } from 'react';
 import { criarTarefaManual, type ObrigacaoTarefa } from '../../services/tarefasService';
 import type { EmpresaPerfilOption } from '../../services/xmlFiscalService';
+import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
+import { paraEmpresaOptions } from '../../services/empresaOption';
 
 interface Props {
     empresas: EmpresaPerfilOption[];
@@ -67,11 +69,12 @@ const ModalCriarTarefa: React.FC<Props> = ({ empresas, onFechar, onCriou }) => {
                     </div>
                     <div>
                         <label className="text-xs text-gray-600 dark:text-gray-300">Empresa *</label>
-                        <select value={empresaId} onChange={e => setEmpresaId(e.target.value)}
-                            className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700">
-                            <option value="">Selecione…</option>
-                            {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                        </select>
+                        <EmpresaSearchSelect
+                        empresas={paraEmpresaOptions(empresas)}
+                        value={empresaId}
+                        onChange={setEmpresaId}
+                        placeholder="Selecione — código, nome ou CNPJ"
+                    />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                         <div>

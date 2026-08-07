@@ -26,6 +26,8 @@ import {
 } from '../../services/nftsSpService';
 import { fetchCnpjFromBrasilAPI } from '../../services/externalApiService';
 import { CATALOGO_POR_CODIGO } from '../../services/nftsCatalogoSp';
+import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
+import { paraEmpresaOptions } from '../../services/empresaOption';
 
 interface Props {
     currentUser: User | null;
@@ -290,10 +292,15 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <div className="flex flex-wrap gap-4 mt-4 items-end">
                     <div className="flex flex-col gap-1">
                         <label className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>Empresa tomadora</label>
-                        <select value={empresaId} onChange={e => setEmpresaId(e.target.value)} style={{ ...inputStyle, minWidth: 280 }} disabled={empresasLoading}>
-                            <option value="">{empresasLoading ? 'Carregando…' : 'Selecione (opcional)'}</option>
-                            {empresas.map(e => <option key={e.id} value={e.id}>{e.nome} — {e.cnpj}</option>)}
-                        </select>
+                        <div style={{ minWidth: 320 }}>
+                            <EmpresaSearchSelect
+                                empresas={paraEmpresaOptions(empresas)}
+                                value={empresaId}
+                                onChange={setEmpresaId}
+                                disabled={empresasLoading}
+                                placeholder={empresasLoading ? 'Carregando…' : 'Selecione (opcional) — código, nome ou CNPJ'}
+                            />
+                        </div>
                     </div>
                     <div className="flex flex-col gap-1">
                         <label className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>CCM do tomador (8 dígitos)</label>

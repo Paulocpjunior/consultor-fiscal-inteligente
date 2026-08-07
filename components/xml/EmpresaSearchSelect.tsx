@@ -19,6 +19,17 @@ interface Props {
     placeholder?: string;
     disabled?: boolean;
     maxResultados?: number;
+    /**
+     * Uso como FILTRO ("Todas as empresas"), e não como escolha obrigatória.
+     *
+     * O `<select>` cru que este componente substitui nos filtros tinha uma
+     * `<option value="">` pra voltar a ver tudo. Sem um jeito de limpar, trocar
+     * o select prenderia o colaborador na última empresa escolhida — quebrar a
+     * tela pra ganhar busca não é troca boa.
+     */
+    permitirLimpar?: boolean;
+    /** Texto quando nada está escolhido no modo filtro. Ex.: "Todas as empresas". */
+    rotuloVazio?: string;
 }
 
 /**
@@ -31,6 +42,7 @@ interface Props {
 const EmpresaSearchSelect: React.FC<Props> = ({
     empresas, value, onChange, onAtivar,
     placeholder = 'Buscar por código, nome ou CNPJ…', disabled, maxResultados = 60,
+    permitirLimpar = false, rotuloVazio = 'Todas as empresas',
 }) => {
     const [aberto, setAberto] = useState(false);
     const [busca, setBusca] = useState('');
@@ -94,6 +106,19 @@ const EmpresaSearchSelect: React.FC<Props> = ({
         setAtivadoId(null);
     };
 
+    /**
+     * Limpar é COMMIT imediato, não uma escolha pendente: voltar pra "todas" é
+     * barato e é o estado que a tela já sabe carregar. Exigir ⚡ Ativar pra
+     * limpar seria um clique a mais pra desfazer.
+     */
+    const limpar = () => {
+        onChange('');
+        setAtivadoId(null);
+        setBusca('');
+        setAberto(false);
+        onAtivar?.('');
+    };
+
     const ativar = () => {
         if (!selecionada || !onAtivar) return;
         setAtivadoId(selecionada.id);
@@ -107,7 +132,7 @@ const EmpresaSearchSelect: React.FC<Props> = ({
                     type="text"
                     disabled={disabled}
                     value={aberto ? busca : rotulo}
-                    placeholder={selecionada ? rotulo : placeholder}
+                    placeholder={selecionada ? rotulo : (permitirLimpar ? `${rotuloVazio} — ${placeholder}` : placeholder)}
                     onFocus={() => { setAberto(true); setBusca(''); }}
                     onChange={(e) => { setBusca(e.target.value); setAberto(true); }}
                     className="w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 disabled:opacity-50"
@@ -119,6 +144,17 @@ const EmpresaSearchSelect: React.FC<Props> = ({
                   saber disso, nem como REATIVAR a mesma empresa depois de
                   mudar competência/filtro. Agora o gesto tem nome e lugar.
                 */}
+                {permitirLimpar && selecionada && (
+                    <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={limpar}
+                        title={`Volta para "${rotuloVazio}".`}
+                        className="shrink-0 px-3 py-2 text-sm font-bold rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40"
+                    >
+                        ✕
+                    </button>
+                )}
                 {onAtivar && selecionada && (
                     <button
                         type="button"
