@@ -65,7 +65,7 @@ const VencimentosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 ))}
             </div>
 
-            <ErrorBoundary>
+            <ErrorBoundary modulo="VencimentosHub">
                 <Suspense fallback={<LoadingSpinner />}>
                     {sub === 'proximos' && <VencimentosSemanaPanel onShowToast={onShowToast} />}
                     {sub === 'empresa' && <MinhaAgendaPanel onShowToast={onShowToast} />}

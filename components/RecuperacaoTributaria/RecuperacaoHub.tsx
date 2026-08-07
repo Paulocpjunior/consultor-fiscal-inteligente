@@ -39,7 +39,7 @@ const RecuperacaoHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </button>
                 ))}
             </div>
-            <ErrorBoundary>
+            <ErrorBoundary modulo="RecuperacaoHub">
                 <Suspense fallback={<LoadingSpinner />}>
                     {sub === 'recuperacao' && <RecuperacaoTributaria currentUser={currentUser ?? null} onShowToast={onShowToast} />}
                     {sub === 'prazos' && <PrazosPrescricaoPanel onShowToast={onShowToast} />}

@@ -146,3 +146,50 @@ export function montarDeclaracaoSemMovimento({ cnpj, filiais = [] } = {}) {
         estabelecimentos,
     };
 }
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// O QUE O SERPRO RECUSOU, E O QUE FAZER
+//
+// Primeira transmissão real (07/08, ELS COMERCIO DE BANANAS 07/2026):
+//
+//   SERPRO 400: [EntradaIncorreta-PGDASD-MSG_ISN_023] - SN-Entregar:
+//   O valor da atividade deve ser maior que zero.
+//
+// O app enviou a declaração zerada com `estabelecimentos: [{cnpj, atividades:
+// []}]` — nenhuma atividade, nenhum valor. O SN-Entregar recusou mesmo assim,
+// e isso diz que a FORMA da declaração sem movimento não é a que eu supus.
+//
+// NÃO VOU ADIVINHAR A FORMA CERTA. Mexer no payload por tentativa e erro numa
+// entrega ao PGDAS-D é o oposto da regra da casa: entrega não se desfaz, e uma
+// declaração aceita com estrutura errada é pior que uma recusada.
+//
+// DESTRAVA COM: o extrato/recibo de um PGDAS-D sem movimento já transmitido
+// (o e-CAC mostra o XML da declaração), ou o manual do SN-Entregar na parte de
+// ausência de movimento. Foi assim que o R-4020 destravou — arquivo aceito
+// vale mais que leiaute deduzido.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Traduz a recusa do SERPRO em algo que a pessoa consiga atender. */
+export function interpretarRecusaSemMovimento(mensagemSerpro) {
+    const txt = String(mensagemSerpro ?? '');
+    if (/MSG_ISN_023|valor da atividade deve ser maior que zero/i.test(txt)) {
+        return {
+            conhecida: true,
+            codigo: 'MSG_ISN_023',
+            mensagem: 'O SN-Entregar recusou a declaração sem movimento: ele exige atividade com valor '
+                + 'maior que zero, e mês sem faturamento não tem nenhuma. A forma correta da declaração '
+                + 'sem movimento ainda não está confirmada neste app — nada foi transmitido.',
+            acao: 'Entregue ESTA competência no e-CAC (PGDAS-D → Declarar → sem movimento) para não '
+                + 'correr a MAED de R$ 50,00. Para destravar o botão, mande o extrato de um PGDAS-D sem '
+                + 'movimento já transmitido: com um arquivo aceito, a forma certa sai no mesmo dia.',
+        };
+    }
+    return {
+        conhecida: false,
+        codigo: null,
+        mensagem: `O SERPRO recusou a declaração: ${txt || 'sem detalhe'}`,
+        acao: 'Nada foi transmitido. Entregue esta competência no e-CAC e reporte a mensagem — '
+            + 'recusa que ninguém traduz vira recusa que ninguém resolve.',
+    };
+}

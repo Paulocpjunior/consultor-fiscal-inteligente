@@ -41,7 +41,7 @@ const DasHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </button>
                 ))}
             </div>
-            <ErrorBoundary>
+            <ErrorBoundary modulo="DasHub">
                 <Suspense fallback={<LoadingSpinner />}>
                     {sub === 'painel' && <DasDashboard currentUser={currentUser} onShowToast={onShowToast} />}
                     {sub === 'cobertura' && <CoberturaPgdasPanel onShowToast={onShowToast} />}

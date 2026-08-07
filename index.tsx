@@ -40,7 +40,7 @@ root.render(
         Sem ele, erro no boot mostra tela branca e nao reporta ao Sentry.
         DialogProvider por dentro fornece useConfirm/usePrompt globalmente
         (a11y, role=alertdialog, Esc/Enter, trap de foco). */}
-    <ErrorBoundary>
+    <ErrorBoundary modulo=".">
       <DialogProvider>
         <App />
       </DialogProvider>

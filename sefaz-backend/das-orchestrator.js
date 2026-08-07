@@ -11,7 +11,7 @@ import { calcularMultaDarf } from './multa-calculator.js';
 import { assertValorMinimoDas } from './das-valor-utils.js';
 import { criarErroDuplicidadeDas, encontrarConflitoDasAvulso } from './das-duplicidade-utils.js';
 import { lerCodigoAtividadeSup } from './pgdas-atividade-config.js';
-import { avaliarSemMovimento, montarDeclaracaoSemMovimento } from './pgdas-sem-movimento.js';
+import { avaliarSemMovimento, montarDeclaracaoSemMovimento, interpretarRecusaSemMovimento } from './pgdas-sem-movimento.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -398,9 +398,23 @@ export async function declararPgdasSemMovimento(req) {
     const declaracao = montarDeclaracaoSemMovimento({ cnpj: empresaCnpj, filiais });
 
     // O provider decide Original × Retificadora consultando o PA no SERPRO.
-    const pgdas = await provider.transmitirPgdasD({
-        empresaCnpj, competencia, valor: 0, dadosPgdas: { declaracao },
-    });
+    //
+    // A recusa do SN-Entregar sai TRADUZIDA: a primeira transmissão real levou
+    // "MSG_ISN_023 — O valor da atividade deve ser maior que zero", que é
+    // mensagem de sistema e não diz a ninguém o que fazer com a competência que
+    // continua vencendo (MAED de R$ 50,00).
+    let pgdas;
+    try {
+        pgdas = await provider.transmitirPgdasD({
+            empresaCnpj, competencia, valor: 0, dadosPgdas: { declaracao },
+        });
+    } catch (e) {
+        const r = interpretarRecusaSemMovimento(e?.message);
+        const err = new Error(`${r.mensagem} ${r.acao}`);
+        err.httpStatus = 400;
+        err.code = r.codigo || 'SEM_MOVIMENTO_RECUSADO';
+        throw err;
+    }
 
     // Auditoria em coleção PRÓPRIA: isto não é um DAS, e gravar em
     // `das_emitidos` faria a listagem de guias mostrar uma cobrança que não

@@ -56,7 +56,7 @@ const ObrigacoesETarefas: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 ))}
             </div>
 
-            <ErrorBoundary>
+            <ErrorBoundary modulo="ObrigacoesETarefas">
                 <Suspense fallback={<LoadingSpinner />}>
                     {modo === 'dashboard' && <FiscalObligationsDashboard />}
                     {modo === 'kanban' && <Tarefas currentUser={currentUser} />}

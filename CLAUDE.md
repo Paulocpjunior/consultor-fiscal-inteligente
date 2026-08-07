@@ -55,6 +55,11 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   sobrescreve o que a pessoa digitou. Aplicado no mesmo dia: o CCM do
   painel ISS deixou de se auto-preencher pela nota (#489) e passou a
   denunciar ausência e divergência.
+- **ERRO DE TELA TEM QUE DIZER QUAL TELA** (07/08): a `ErrorBoundary` mostrava
+  só "Erro ao carregar modulo" + a mensagem crua, e um `Cannot read properties
+  of undefined (reading 'slice')` num print virou caça com 261 candidatos no
+  código. Agora toda fronteira leva `modulo="<nome>"` (10 arquivos), e o nome
+  vai também pro Sentry. Módulo novo com ErrorBoundary DEVE nomear.
 - **Farol honesto vale pra TODO painel** (não só o Diagnóstico): all-failed
   (0 ok + N falhas) nunca é verde; falha sempre com o MOTIVO dominante ao
   lado. Lições 23/07: "Saúde dos crons" dizia OK com 0/500; NFe ficou
@@ -119,6 +124,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   **NÃO GERA DAS de propósito** — guia de valor zero seria cobrança que não
   existe — e grava em coleção PRÓPRIA (`pgdas_sem_movimento`), porque em
   `das_emitidos` a listagem de guias mostraria uma cobrança inexistente.
+  🚨 **O SN-Entregar RECUSOU a primeira transmissão real** (07/08, ELS COMERCIO
+  DE BANANAS 07/2026): `MSG_ISN_023 — O valor da atividade deve ser maior que
+  zero`. O app mandou `estabelecimentos: [{cnpj, atividades: []}]` e a forma
+  não é essa. **NÃO ADIVINHAR O PAYLOAD**: entrega ao PGDAS-D não se desfaz, e
+  declaração ACEITA com estrutura errada é pior que recusada. A recusa passou a
+  sair TRADUZIDA (`interpretarRecusaSemMovimento`) mandando entregar no e-CAC
+  enquanto isso — a competência continua vencendo. **DESTRAVA COM** o extrato
+  de um PGDAS-D sem movimento já transmitido (o e-CAC mostra o XML), igual ao
+  que destravou o R-4020: arquivo aceito vale mais que leiaute deduzido.
   🚨 **A TRAVA QUE MANDA**: "sem movimento" é uma AFIRMAÇÃO À RECEITA, e a
   diferença entre "não faturou" e "não capturamos" NÃO está no zero — está na
   SAÚDE DA CAPTURA (mesma lição da NFS-e SP, semanas verde com zero notas). O

@@ -44,7 +44,7 @@ const NfseNacionalHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </button>
                 ))}
             </div>
-            <ErrorBoundary>
+            <ErrorBoundary modulo="NfseNacionalHub">
                 <Suspense fallback={<LoadingSpinner />}>
                     {sub === 'painel' && <NfseNacionalDashboard currentUser={currentUser} onShowToast={onShowToast} />}
                     {sub === 'cobertura' && <CoberturaAdnPanel onShowToast={onShowToast} />}

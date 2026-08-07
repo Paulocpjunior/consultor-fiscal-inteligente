@@ -12,7 +12,7 @@
 // captura.
 // ============================================================================
 // @ts-expect-error módulo JS puro sem tipos
-import { avaliarSemMovimento, montarDeclaracaoSemMovimento, MAED_MINIMA } from '../sefaz-backend/pgdas-sem-movimento.js';
+import { avaliarSemMovimento, montarDeclaracaoSemMovimento, interpretarRecusaSemMovimento, MAED_MINIMA } from '../sefaz-backend/pgdas-sem-movimento.js';
 
 const limpo = {
     receitaLancada: 0,
@@ -132,4 +132,34 @@ describe('a declaração zerada ainda leva os estabelecimentos', () => {
 
 test('a multa que justifica a feature está registrada', () => {
     expect(MAED_MINIMA).toBe(50);
+});
+
+describe('a recusa do SERPRO sai traduzida, com a ação', () => {
+    // Primeira transmissão real (07/08, ELS COMERCIO DE BANANAS 07/2026):
+    // o SN-Entregar recusou a declaração zerada. A forma correta da declaração
+    // sem movimento não está confirmada, e adivinhar payload numa entrega ao
+    // PGDAS-D é o oposto da regra da casa — entrega não se desfaz.
+    const bruta = 'SERPRO 400: [EntradaIncorreta-PGDASD-MSG_ISN_023] - SN-Entregar: '
+        + 'O valor da atividade deve ser maior que zero.';
+
+    test('a MSG_ISN_023 é reconhecida e explicada', () => {
+        const r = interpretarRecusaSemMovimento(bruta);
+        expect(r.conhecida).toBe(true);
+        expect(r.codigo).toBe('MSG_ISN_023');
+        expect(r.mensagem).toMatch(/nada foi transmitido/i);
+    });
+
+    test('e a ação cobre a competência que continua vencendo', () => {
+        const r = interpretarRecusaSemMovimento(bruta);
+        expect(r.acao).toMatch(/e-CAC/);
+        expect(r.acao).toMatch(/MAED/);
+        // E diz o que destrava — o mesmo pedido que resolveu o R-4020.
+        expect(r.acao).toMatch(/já transmitido/);
+    });
+
+    test('recusa desconhecida também vira ação, não fica crua', () => {
+        const r = interpretarRecusaSemMovimento('SERPRO 500: erro interno');
+        expect(r.conhecida).toBe(false);
+        expect(r.acao).toMatch(/recusa que ninguém traduz/);
+    });
 });
