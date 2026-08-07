@@ -299,6 +299,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   lint+jest+build e só então abre PR já testado; sem correção possível abre
   ISSUE antes de virar bloqueio. Escape hatch `[skip-audit]` no ASSUNTO do
   commit segue valendo pra hotfix.
+  **O ROBÔ FALHAVA NA ÚLTIMA ETAPA — e do jeito mais traiçoeiro** (07/08): ele
+  achava o advisory, corrigia, validava, empurrava a branch… e morria em
+  `gh pr create` com *"GitHub Actions is not permitted to create or approve
+  pull requests"* (configuração do repo, não código). O efeito: a CORREÇÃO
+  ficava PRONTA numa branch que ninguém sabia que existia, e o run vermelho
+  diário não dizia o que fazer — robô que falha todo dia pelo mesmo motivo sem
+  apontar a ação vira ruído que a equipe ignora, e aí ele para de proteger.
+  Agora a falha vira ISSUE com a configuração exata (Settings → Actions →
+  General → Workflow permissions → *Allow GitHub Actions to create and approve
+  pull requests*) e o link de compare. O run segue VERMELHO de propósito: a
+  correção não foi entregue. **PENDENTE DO PAULO**: marcar essa caixa.
+  🚩 **A BRANCH DO ROBÔ ENVELHECE**: `chore/audit-deps` é recortada da main no
+  momento do run (`checkout -B`), então ela se auto-corrige no run seguinte —
+  mas enquanto está parada ela é uma MINA. A de 07/08 (9h53) ficou um dia de
+  trabalho atrás: mesclá-la à tarde teria revertido ~4.900 linhas. NUNCA abrir
+  PR de uma branch do robô sem conferir a data; a correção do lock cabe num
+  `npm audit fix` sobre a main de hoje, que é o que foi feito.
 - **DEPLOY: automático VOLTOU em 07/08** (runs 345-348 verdes). O bloqueio de
   runner do dia 06 passou sozinho — merge na main dispara `deploy-app.yml` e
   sobe. **CONFERIR ANTES DE MANDAR RODAR SCRIPT À MÃO**: continuar pedindo
