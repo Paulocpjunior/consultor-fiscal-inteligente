@@ -25,6 +25,7 @@ import { classificarAjustes } from './sped-ajustes-apuracao.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
+import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -208,6 +209,25 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     const warnings = [];
     if (notas.length === 0) {
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo. Arquivo sera gerado com estrutura minima (apenas registros 0000-0100 + Bloco 9).`);
+    }
+
+    // CARTA DE CORREÇÃO: o livro sai do XML ORIGINAL, e a CC-e pode ter
+    // corrigido justamente o CFOP/natureza (Ajuste SINIEF 07/05 14-A §1º) — que
+    // manda no C190, no DIFAL e na DIPAM. A CC-e era capturada e NENHUM ponto
+    // da escrituração olhava pra ela. O app NÃO aplica a correção (o texto é
+    // livre; deduzir o campo seria inventar dado fiscal): ele AVISA.
+    try {
+        const cce = varrerCcesDoPeriodo(notas);
+        for (const aviso of cce.avisos) warnings.push(`Carta de correção: ${aviso}`);
+        for (const l of cce.linhas.filter((x) => x.exigeConferencia).slice(0, 20)) {
+            warnings.push(
+                `CC-e na nota ${l.numero || l.chave}: "${l.texto || '(sem texto)'}" — ${l.motivo}`,
+            );
+        }
+        const restantes = cce.resumo.exigemConferencia - Math.min(20, cce.resumo.exigemConferencia);
+        if (restantes > 0) warnings.push(`Carta de correção: +${restantes} outra(s) pedindo conferência.`);
+    } catch (err) {
+        warnings.push(`Cartas de correção não puderam ser lidas (${err.message}) — confira manualmente se alguma nota do período foi corrigida.`);
     }
 
     // ─── 6b. Contagem física do inventário (Bloco H) ──────────────────────

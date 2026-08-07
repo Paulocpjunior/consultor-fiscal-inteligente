@@ -376,3 +376,51 @@ describe('ISS de SP capital dentro da linha', () => {
         expect(r.proximoPasso).toBeNull();
     });
 });
+
+/**
+ * A CARTA DE CORREÇÃO era capturada e NENHUM ponto da escrituração olhava pra
+ * ela. Pelo Ajuste SINIEF 07/05 a CC-e corrige natureza da operação e CFOP — e
+ * o CFOP manda no livro, no C190, no DIFAL e na DIPAM. O livro é gerado do XML
+ * ORIGINAL: se o cliente corrigiu o CFOP, sai errado.
+ */
+describe('carta de correção na etapa de validação', () => {
+    const cce = (xCorrecao: string) => ({ tipo: 'cce', tpEvento: '110110', xCorrecao });
+    const comCce = (texto: string, over: any = {}) => completo({
+        documentos: [
+            doc({ numero: '77', eventos: [cce(texto)] }),
+            doc({ direcao: 'saida', chave: CHAVE_55.replace(/1$/, '2') }),
+        ],
+        ...over,
+    });
+
+    it('CC-e de CFOP não deixa a validação fechar', () => {
+        const r = comCce('CORRIGIR O CFOP DE 5102 PARA 5405');
+        expect(etapaDe(r, 'validacao').status).toBe('atencao');
+        expect(etapaDe(r, 'validacao').resumo).toMatch(/1 carta\(s\) de correção a conferir/);
+        expect(etapaDe(r, 'validacao').acao).toMatch(/XML ORIGINAL/);
+        expect(r.proximoPasso?.id).toBe('validacao');
+    });
+
+    it('CC-e que menciona VALOR é nomeada — ela não podia corrigir isso', () => {
+        const r = comCce('Corrigir o valor total da nota');
+        expect(etapaDe(r, 'validacao').resumo).toMatch(/1 mencionam algo que a CC-e não pode corrigir/);
+    });
+
+    it('CC-e de transportador NÃO trava — não mexe no livro', () => {
+        const r = comCce('Incluir dados do transportador TRANSPORTES XYZ');
+        expect(etapaDe(r, 'validacao').status).toBe('concluida');
+        expect(r.proximoPasso).toBeNull();
+    });
+
+    it('o contador de CC-e vem no extra da etapa, mesmo quando não trava', () => {
+        const r = comCce('Incluir dados do transportador');
+        expect(etapaDe(r, 'validacao').cce.cces).toBe(1);
+        expect(etapaDe(r, 'validacao').cce.exigemConferencia).toBe(0);
+    });
+
+    it('sem CC-e nenhuma, nada muda no comportamento antigo', () => {
+        const r = completo();
+        expect(etapaDe(r, 'validacao').status).toBe('concluida');
+        expect(etapaDe(r, 'validacao').cce.cces).toBe(0);
+    });
+});

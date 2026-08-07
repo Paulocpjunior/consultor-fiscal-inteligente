@@ -209,6 +209,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Filtro ganhou `permitirLimpar` (o `<option value="">Todas</option>` que o
   select tinha): trocar de componente sem isso prenderia o colaborador na
   última empresa escolhida.
+- **CARTA DE CORREÇÃO MUDA A ESCRITURAÇÃO — e ninguém estava vendo** (07/08):
+  a CC-e é capturada desde sempre (`documentos_fiscais.eventos[]` com
+  `xCorrecao`) e tem selo na lista de XMLs, mas NENHUM ponto da escrituração
+  lia o array: nem o gerador do SPED, nem o Exportar SAGE. Pelo Ajuste SINIEF
+  07/05 (cl. 14-A §1º) a CC-e corrige **natureza da operação e CFOP** — e o
+  CFOP manda no C190, no DIFAL de aquisição, na DIPAM e no bloco K. O livro sai
+  do XML ORIGINAL, então cliente que corrigiu o CFOP tinha o livro saindo com o
+  CFOP errado, e só a fiscalização veria. `cce-escrituracao.js` (21 testes)
+  classifica pelo TEXTO: `muda-escrituracao` (CFOP/natureza/NCM/CST ⇒
+  conferir), `indevida-suspeita` (menciona valor/quantidade/partes/data —
+  coisas que a CC-e NÃO PODE corrigir ⇒ ou o texto está torto, ou a nota
+  precisava de cancelamento e reemissão) e `sem-efeito-fiscal`. A PROIBIDA
+  vence a de escrituração. **O APP NÃO APLICA A CORREÇÃO**: `xCorrecao` é texto
+  livre, não existe campo dizendo qual campo mudou, e deduzir seria inventar
+  dado fiscal — é a regra do ALERTA, NUNCA CONTORNO. Ligado em DOIS pontos: os
+  warnings da geração do SPED (antes do arquivo sair) e a etapa de VALIDAÇÃO da
+  Rotina (âmbar, e com isso chega no guia do mês sozinho). CC-e sem texto NÃO é
+  inofensiva: é CC-e que não dá pra avaliar, e também pede conferência.
 - **A CARTEIRA É O GUIA DO MÊS DO COLABORADOR** (Paulo, 07/08: *"deve ser o
   guia, o norte do colaborador durante o mês fiscal de acordo com as
   obrigações e vencimentos das empresas que a ele respondem"*). A tela nasceu
