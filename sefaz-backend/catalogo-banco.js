@@ -65,6 +65,7 @@ export const CATALOGO_BANCO = [
 
     // ── Simples / DAS ──────────────────────────────────────────────────────
     { colecao: 'das_emitidos', grupo: 'Simples · DAS', funcionalidade: 'DAS emitidos (PGDAS-D + guia)' },
+    { colecao: 'pgdas_sem_movimento', grupo: 'Simples · DAS', funcionalidade: 'PGDAS-D de mês sem movimento (declaração sem guia)' },
     { colecao: 'pgdas_atividades_codigos', grupo: 'Simples · DAS', funcionalidade: 'Código oficial de atividade do PGDAS-D cadastrado pelo admin (ISS fixo/SUP)' },
     { colecao: 'ncm_parametros', grupo: 'Cadastro & Acesso', funcionalidade: 'Cadastro de NCM: alíquota interna, IVA-ST (com Portaria e vigência), CEST e redução de base' },
     { colecao: 'das_envios_cliente', grupo: 'Simples · DAS', funcionalidade: 'Envios de DAS ao cliente' },

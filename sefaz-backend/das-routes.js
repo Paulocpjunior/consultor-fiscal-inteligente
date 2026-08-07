@@ -9,7 +9,7 @@ import { requireAuth, requireEmissao } from './require-admin.js';
 import admin from 'firebase-admin';
 import { ultimasCompetencias as ultimasCompetenciasHelper } from './competencias-helper.js';
 import {
-    emitirDasRegular, emitirDasAvulso,
+    emitirDasRegular, emitirDasAvulso, declararPgdasSemMovimento,
     listarDas, getResumoDas, getDasPdf, marcarPago,
     processarCronDas,
 } from './das-orchestrator.js';
@@ -159,6 +159,19 @@ router.put('/atividade-iss-fixo', requireAuth, express.json(), async (req, res) 
 router.post('/emitir-regular', requireEmissao, express.json(), async (req, res) => {
     try { res.json(await emitirDasRegular(req.body)); }
     catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
+});
+
+// PGDAS-D de mês SEM MOVIMENTO: transmite a declaração e NÃO gera guia.
+// A declaração vence todo mês (MAED de R$ 50,00 se não entregar); a guia só
+// existe se houver o que pagar. Antes disto, mês sem faturamento não tinha
+// caminho no app e ia pro e-CAC à mão.
+router.post('/declarar-sem-movimento', requireEmissao, express.json(), async (req, res) => {
+    try {
+        res.json(await declararPgdasSemMovimento({
+            ...req.body,
+            confirmadoPor: req.user?.email || req.user?.uid || null,
+        }));
+    } catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
 
 router.post('/emitir-avulso', requireEmissao, express.json(), async (req, res) => {

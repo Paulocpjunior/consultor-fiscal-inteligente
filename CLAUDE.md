@@ -107,6 +107,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   cliente. G110 tem a ordem CONFERIDA contra o relatório; G125 segue o Guia
   Prático (OP, ST, FRT, DIF) e só o PVA confirma. Empresa sem bens = bloco
   vazio (a maioria).
+- **DECLARAÇÃO E GUIA SÃO OBRIGAÇÕES DIFERENTES — e estavam soldadas** (Paulo,
+  07/08: *"empresas Simples Nacional, mês sem movimento, onde eu transmito
+  agora?"*). Resposta que o código deu: **em lugar nenhum — era no e-CAC, à
+  mão**. A transmissão do PGDAS-D só acontecia DENTRO do `emitirDasRegular`,
+  que recusa valor < R$ 10,00 (`assertValorMinimoDas`); mês sem faturamento não
+  passava pela porta. E não entregar custa **MAED de R$ 50,00 por
+  competência**. Agora: `pgdas-sem-movimento.js` (15 testes) +
+  `declararPgdasSemMovimento` + rota `/api/admin/das/declarar-sem-movimento` +
+  botão **📄 Declarar sem movimento** (só aparece com apuração zerada).
+  **NÃO GERA DAS de propósito** — guia de valor zero seria cobrança que não
+  existe — e grava em coleção PRÓPRIA (`pgdas_sem_movimento`), porque em
+  `das_emitidos` a listagem de guias mostraria uma cobrança inexistente.
+  🚨 **A TRAVA QUE MANDA**: "sem movimento" é uma AFIRMAÇÃO À RECEITA, e a
+  diferença entre "não faturou" e "não capturamos" NÃO está no zero — está na
+  SAÚDE DA CAPTURA (mesma lição da NFS-e SP, semanas verde com zero notas). O
+  núcleo RECUSA em quatro casos: receita lançada, nota capturada sem receita
+  (declarar aqui é afirmar à Receita o que o próprio app desmente), captura
+  incerta (zero não prova ausência) e falta de confirmação humana — o app prova
+  que NÃO CAPTUROU nada, quem afirma que não HOUVE faturamento é a pessoa, e
+  fica gravado quem foi. As duas primeiras travas também impedem que este vire
+  atalho pra escapar da conferência SERPRO × app.
 - **PGDAS-D: retenção de ISS vai no ID da atividade, NUNCA em dobro** (caso
   S&P, 03/08): id 15 (Anexo III), 12 (V) e 18 (IV) JÁ significam "ISS retido
   pelo tomador" — mandar também a qualificação {1010, 11} faz o SERPRO recusar

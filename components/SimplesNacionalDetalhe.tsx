@@ -9,7 +9,7 @@ import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 import { useConfirm, usePrompt } from './dialog/DialogProvider';
 import {
-    emitirDasRegular, getAtividadesDeclaradas,
+    emitirDasRegular, declararSemMovimento, getAtividadesDeclaradas,
     getCodigoAtividadeIssFixo, salvarCodigoAtividadeIssFixo,
 } from '../services/dasService';
 import {
@@ -92,6 +92,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     const [isDadosFiscaisModalOpen, setIsDadosFiscaisModalOpen] = useState(false);
     const [isCfopCorrelacaoModalOpen, setIsCfopCorrelacaoModalOpen] = useState(false);
     const [emitindoDas, setEmitindoDas] = useState(false);
+    const [declarandoSemMov, setDeclarandoSemMov] = useState(false);
     const [isEmitirNfseOpen, setIsEmitirNfseOpen] = useState(false);
     const [isPrevisaoOpen, setIsPrevisaoOpen] = useState(false);
     const [isConferirPgdasOpen, setIsConferirPgdasOpen] = useState(false);
@@ -490,6 +491,74 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
         }
     };
 
+    // ── PGDAS-D de mês SEM MOVIMENTO ────────────────────────────────────────
+    // Declaração e guia são obrigações diferentes: a declaração vence todo mês
+    // (MAED de R$ 50,00 se não entregar), a guia só existe se houver o que
+    // pagar. Antes disto, mês sem faturamento não tinha caminho no app.
+    //
+    // O botão só aparece com a apuração ZERADA — e mesmo aí a confirmação diz,
+    // com todas as letras, que o app prova que NÃO CAPTUROU nada, não que a
+    // empresa não faturou. Quem afirma é a pessoa, e fica registrado quem foi.
+    const handleDeclararSemMovimento = async () => {
+        // Mesma derivação do handleEmitirDasRegular: a competência é o mês em
+        // apuração na tela, não um campo à parte.
+        const competencia = `${mesApuracao.getFullYear()}-${String(mesApuracao.getMonth() + 1).padStart(2, '0')}`;
+        const notasDoMes = notas.filter(n => {
+            const d = new Date(n.data);
+            const comp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            return comp === competencia;
+        });
+        const ok = await confirm({
+            title: 'Declarar PGDAS-D sem movimento?',
+            message: (
+                <div style={{ fontSize: 13 }}>
+                    Empresa: <b>{empresa.nome}</b><br />
+                    Competência: <b>{competencia}</b><br />
+                    <div style={{ marginTop: 10, padding: 8, borderRadius: 6, background: '#FEF3C7', color: '#92400E' }}>
+                        <b>⚠ Isto é uma afirmação à Receita.</b>
+                        <p style={{ marginTop: 4 }}>
+                            O app prova que <b>não capturou</b> nenhuma nota nesta competência —
+                            não que a empresa não faturou. Confirme com o cliente antes.
+                        </p>
+                        <p style={{ marginTop: 4 }}>
+                            Nenhuma guia será gerada: mês sem movimento não tem o que pagar.
+                        </p>
+                    </div>
+                </div>
+            ),
+            variant: 'warning',
+            confirmLabel: 'Confirmo que não houve faturamento',
+            cancelLabel: 'Cancelar',
+        });
+        if (!ok) return;
+
+        setDeclarandoSemMov(true);
+        try {
+            const r = await declararSemMovimento(currentUser ?? null, {
+                empresaId: empresa.id,
+                empresaCnpj: empresa.cnpj,
+                empresaNome: empresa.nome,
+                competencia,
+                filiais: Object.keys(filiaisReceita || {}),
+                receitaLancada: Object.values(faturamentoPorCnae).reduce(
+                    (t, v: any) => t + (parseFloat(String(v?.valor ?? '0').replace(/\./g, '').replace(',', '.')) || 0), 0),
+                notasCapturadas: notasDoMes.length,
+                // A saúde da captura é decidida no backend; o front manda o que
+                // OBSERVA. Mandar `true` daqui seria o navegador atestando algo
+                // que ele não tem como conferir.
+                capturaConfiavel: notasDoMes.length === 0,
+                confirmadoPeloColaborador: true,
+            });
+            onShowToast(r.pgdasTipoDeclaracao === 2
+                ? 'PGDAS-D sem movimento transmitido (retificador).'
+                : 'PGDAS-D sem movimento transmitido. Nenhuma guia foi gerada.');
+        } catch (err: any) {
+            onShowToast(`Não foi possível declarar: ${err.message}`);
+        } finally {
+            setDeclarandoSemMov(false);
+        }
+    };
+
     const handleEmitirDasRegular = async () => {
         if (!resumo?.das_mensal || resumo.das_mensal < 10) {
             onShowToast('DAS calculado é menor que R\$ 10,00 — verifique a apuração antes de emitir.');
@@ -798,6 +867,20 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                     >
                         {emitindoDas ? '⏳ Emitindo...' : '📤 Emitir DAS'}
                     </button>
+                    {/* Mês SEM MOVIMENTO: a declaração vence igual (MAED de R$ 50,00
+                        se não entregar), mas não há guia. O botão só aparece com a
+                        apuração zerada — com receita lançada o caminho é o normal,
+                        e o backend recusa de qualquer forma. */}
+                    {resumo.das_mensal === 0 && (
+                        <button
+                            onClick={handleDeclararSemMovimento}
+                            disabled={declarandoSemMov}
+                            className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-600 text-white font-bold rounded-lg hover:bg-slate-700 disabled:opacity-50"
+                            title="Transmitir o PGDAS-D de um mês sem faturamento. Não gera guia — mês sem movimento não tem o que pagar, mas a declaração vence igual."
+                        >
+                            {declarandoSemMov ? '⏳ Declarando...' : '📄 Declarar sem movimento'}
+                        </button>
+                    )}
                     <button
                         onClick={() => setIsEmitirNfseOpen(true)}
                         className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700"
