@@ -448,8 +448,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   regra de matriz/filial por raiz (`selecionarCertA1PorBase`). Do túnel o
   certificado sai só como METADADO (titular, validade, raiz, apto), que
   responde 100% do "dá pra transmitir?". FASES: 1) empresas ✅ · 2) colaborador
-  responsável pela carteira · 3) metadados de certificado · 4) assinatura como
+  responsável pela carteira ✅ · 3) metadados de certificado · 4) assinatura como
   operação remota.
+  **FASE 2 NO AR (07/08)**: `GET /api/admin/cadastro/responsaveis[/:cnpj]` →
+  `cadastro-central-responsaveis.js` (20 testes). Ela responde a pergunta que
+  vem DEPOIS de "este CNPJ existe?": *"e quem eu procuro?"* — que hoje sai por
+  WhatsApp, de memória. Isso já era necessário pela regra de 05/08 (envio sai
+  da caixa de QUEM CUIDA da carteira): app irmão que não sabe quem cuida só
+  tem duas saídas, mandar pela institucional (o problema que o Paulo mandou
+  corrigir) ou não mandar. TRÊS DECISÕES: (1) **dois `principal` NÃO viram
+  escolha silenciosa** — `principal` sai NULO, os dois vêm em `principais[]` e
+  o conflito é nomeado; escolher aqui faria o outro app falar com a pessoa
+  errada sem ninguém desconfiar; (2) **empresa sem responsável NÃO some** —
+  vem com `pendenteDeAtribuicao`, e o `/responsaveis/:cnpj` dela responde
+  **200, não 404** (ela existe; o que falta é atribuição — 404 mandaria
+  procurar cadastro que está certo, o erro da manhã); (3) o **nome VIVO de
+  `users` vence a cópia do vínculo** e a divergência ACENDE. Vínculo apontando
+  pra empresa fora do cadastro vira `vinculosOrfaos` contado — quem olha a
+  Carteira ainda os vê como atribuídos. O e-mail vem de `users` (o vínculo não
+  guarda) porque é dele que o outro lado precisa; sem e-mail, acende.
 - **EFD-Reinf: o CFI EXPÕE as notas, o Consultor Contábil apura** (07/08 —
   Paulo passou o projeto do CODEX pro Claude). Os dois apps **NÃO
   compartilham Firestore** (o mapa do outro repo dizia que sim e estava

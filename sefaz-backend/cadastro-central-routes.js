@@ -5,6 +5,8 @@
 //
 //   GET /api/admin/cadastro/empresas
 //   GET /api/admin/cadastro/empresas/:cnpj
+//   GET /api/admin/cadastro/responsaveis          (fase 2)
+//   GET /api/admin/cadastro/responsaveis/:cnpj
 //
 // Ideia do Paulo (07/08), depois que a colaboradora recebeu "CNPJ não
 // cadastrado" para uma empresa cadastrada. O mesmo cliente vive no CFI, no
@@ -26,6 +28,7 @@ import { requireAdmin } from './require-admin.js';
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { montarCadastroEmpresas, soDigitos } from './cadastro-central.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
+import { montarResponsaveis, responsavelDoCnpj } from './cadastro-central-responsaveis.js';
 
 const router = Router();
 
@@ -93,6 +96,59 @@ router.get('/empresas/:cnpj', autorizar, async (req, res) => {
         });
     } catch (e) {
         console.error('[cadastro-central/cnpj]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── FASE 2: quem responde por cada cliente ──────────────────────────────────
+// A fase 1 responde "este CNPJ existe?". Esta responde a pergunta seguinte —
+// "e quem eu procuro?" —, que hoje sai por WhatsApp, de memória. Vale a regra
+// de 05/08: envio sai da caixa de QUEM CUIDA da carteira, e o app irmão não
+// tinha como saber quem é.
+
+async function lerResponsaveis(db) {
+    const { empresas } = await lerCadastro(db);
+    const [vincSnap, userSnap] = await Promise.all([
+        fetchAllDocs(db.collection('carteiras'), { label: 'cadastro-central/carteiras', maxDocs: 5000 }),
+        fetchAllDocs(db.collection('users'), { label: 'cadastro-central/users', maxDocs: 2000 }),
+    ]);
+    return montarResponsaveis({
+        empresas,
+        vinculos: vincSnap.map((s) => ({ id: s.id, ...(s.data() || {}) })),
+        usuarios: userSnap.map((s) => ({ uid: s.id, ...(s.data() || {}) })),
+    });
+}
+
+router.get('/responsaveis', autorizar, async (req, res) => {
+    try {
+        return res.json({ ok: true, ...(await lerResponsaveis(getDb())) });
+    } catch (e) {
+        console.error('[cadastro-central/responsaveis]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.get('/responsaveis/:cnpj', autorizar, async (req, res) => {
+    try {
+        const cnpj = soDigitos(req.params.cnpj);
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ com 14 dígitos.' });
+        }
+        const { linhas, avisos } = await lerResponsaveis(getDb());
+        const linha = responsavelDoCnpj(linhas, cnpj);
+        if (!linha) {
+            return res.status(404).json({
+                ok: false,
+                error: `O CNPJ ${cnpj} não foi encontrado no cadastro do CFI. Confira o número; se estiver `
+                    + 'certo, a empresa precisa ser cadastrada.',
+            });
+        }
+        // Empresa cadastrada e SEM responsável responde 200, não 404: ela
+        // existe, o que falta é atribuição. 404 aqui mandaria o outro lado
+        // procurar cadastro que está certo (o erro de hoje de manhã).
+        return res.json({ ok: true, ...linha, avisos });
+    } catch (e) {
+        console.error('[cadastro-central/responsaveis/cnpj]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
