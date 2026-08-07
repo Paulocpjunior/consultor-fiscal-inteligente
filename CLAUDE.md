@@ -344,6 +344,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   por subtração só é aceita quando os TRÊS lados fecham (feita no repo do
   REINF). O portal também exporta o MESMO layout de 73 colunas em CSV (";") e
   TXT (TAB): o parser só lia ";" e devolvia zero nota em SILÊNCIO.
+- **EFD-Reinf: o CFI EXPÕE as notas, o Consultor Contábil apura** (07/08 —
+  Paulo passou o projeto do CODEX pro Claude). Os dois apps **NÃO
+  compartilham Firestore** (o mapa do outro repo dizia que sim e estava
+  errado): `plano-contas-iob` fixa `projetos-app-sp`, o CFI roda em
+  `consultorfiscalapp`. Integração por ROTA:
+  `GET /api/admin/reinf/retencoes-pj?cnpj=&competencia=` →
+  `reinf-retencoes-pj.js` (16 testes). **A rota mora AQUI de propósito**: quem
+  conhece a forma do documento é o CFI (NFS-e do portal vem ACHATADA, a do XML
+  em OBJETO) — reler isso lá seria a 7ª mordida da mesma armadilha, com as duas
+  leituras divergindo sem ninguém ver. DOIS NOMES FEIOS que são o produto:
+  **`csllOuTotal`** (no export do portal o campo "CSLL" é o TOTAL da CSRF —
+  `csll` faria o outro lado declarar o total como CSLL) e
+  **`codigoServicoMunicipal` + `itemLc116: null`** (o código da NFS-e paulistana
+  é MUNICIPAL; a natureza do rendimento casa por LC 116 e esse de-para não
+  existe aqui, então o campo vai NULO em vez de fingir). Prestador PF vira
+  contagem `dePessoaFisica` (é R-4010, outro evento) — some da lista é o que faz
+  alguém achar que declarou tudo. AUTH: `crossProjectAuth(projetos)` com a lista
+  EXPLÍCITA por rota — pôr projeto na lista global abriria de lambuja o
+  `/api/dp-integration/*`, que entrega dado SERPRO de qualquer CNPJ.
+  🚨 **NADA DO REPO DO REINF ESTÁ NO AR**: as runs 2/3/4 do `deploy-app.yml` de
+  lá falharam todas em "Falta o secret `GCP_SA_KEY`". Paulo precisa cadastrar o
+  secret (Settings → Secrets → Actions; a SA de deploy do CFI serve). Merge
+  verde LÁ não é app atualizado — conferir a run antes de dizer que está no ar.
 - **Legalização é APP PRÓPRIO, fora do CFI** (Paulo, 26/07/2026 — corrigiu
   com ênfase a 1ª entrega como card interno): repo GitHub `legalizacao`,
   serviço Cloud Run `legalizacao` (us-west1, mesmo projeto), URL própria.
