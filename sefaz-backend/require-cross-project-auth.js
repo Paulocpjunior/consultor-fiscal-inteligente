@@ -27,6 +27,21 @@ const PROJETOS_PERMITIDOS = new Set([
     'consultor-dp-folha',
 ]);
 
+/**
+ * Projetos Firebase dos apps irmãos do escritório.
+ *
+ * CADA ROTA ESCOLHE O SEU CONJUNTO — não existe lista global. Somar um projeto
+ * aqui em cima abriria, de lambuja, TODA rota que já usa o middleware padrão:
+ * o /api/dp-integration/* entrega dado SERPRO (FGTS/eSocial/DCTFWeb) de
+ * qualquer CNPJ, e ninguém deve ganhar isso por tabela ao integrar outra coisa.
+ */
+export const PROJETO = {
+    fiscal: 'consultorfiscalapp',
+    dpFolha: 'consultor-dp-folha',
+    // Consultor Contábil / EFD-Reinf (repo plano-contas-iob).
+    contabil: 'projetos-app-sp',
+};
+
 const DOMINIO_PERMITIDO = '@spassessoriacontabil.com.br';
 
 // Cache das chaves públicas do Google (auto-refresh a cada hora)
@@ -51,7 +66,7 @@ function base64UrlDecode(str) {
     return Buffer.from(str, 'base64').toString('utf-8');
 }
 
-async function verificarTokenCrossProject(token) {
+async function verificarTokenCrossProject(token, permitidos = PROJETOS_PERMITIDOS) {
     const parts = token.split('.');
     if (parts.length !== 3) throw new Error('Token JWT inválido');
 
@@ -61,7 +76,7 @@ async function verificarTokenCrossProject(token) {
     // Verifica issuer
     const issuer = payload.iss || '';
     let projectId = null;
-    for (const p of PROJETOS_PERMITIDOS) {
+    for (const p of permitidos) {
         if (issuer === `https://securetoken.google.com/${p}`) {
             projectId = p;
             break;
@@ -127,16 +142,32 @@ async function verificarTokenCrossProject(token) {
  *   - Assinatura válida do Google
  */
 export async function requireCrossProjectAuth(req, res, next) {
-    try {
-        const auth = req.headers.authorization || '';
-        const m = auth.match(/^Bearer\s+(.+)$/i);
-        if (!m) return res.status(401).json({ error: 'Token ausente' });
+    return crossProjectAuth([...PROJETOS_PERMITIDOS])(req, res, next);
+}
 
-        const decoded = await verificarTokenCrossProject(m[1]);
-        req.user = decoded;
-        next();
-    } catch (e) {
-        console.error('[require-cross-project-auth]', e.message);
-        return res.status(401).json({ error: 'Token inválido: ' + e.message });
-    }
+/**
+ * Middleware cross-project com a lista de projetos EXPLÍCITA.
+ *
+ * Mesmas travas do padrão (assinatura do Google, audience, expiração, domínio
+ * do escritório, e-mail VERIFICADO, iat/nbf no futuro) — muda só QUEM entra.
+ *
+ * @param {string[]} projetos ids de projeto Firebase aceitos (use `PROJETO.*`)
+ */
+export function crossProjectAuth(projetos) {
+    const permitidos = new Set(projetos || []);
+    if (!permitidos.size) throw new Error('crossProjectAuth exige ao menos um projeto permitido');
+    return async function middleware(req, res, next) {
+        try {
+            const auth = req.headers.authorization || '';
+            const m = auth.match(/^Bearer\s+(.+)$/i);
+            if (!m) return res.status(401).json({ error: 'Token ausente' });
+
+            const decoded = await verificarTokenCrossProject(m[1], permitidos);
+            req.user = decoded;
+            next();
+        } catch (e) {
+            console.error('[require-cross-project-auth]', e.message);
+            return res.status(401).json({ error: 'Token inválido: ' + e.message });
+        }
+    };
 }

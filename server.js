@@ -66,6 +66,7 @@ import nfpComplianceRouter from './sefaz-backend/nfp-compliance-routes.js';
 import dpIntegrationRouter from './sefaz-backend/dp-integration-routes.js';
 import sharepointAutoSyncRouter from './sefaz-backend/sharepoint-auto-sync.js';
 import efdReinfRouter from './sefaz-backend/efd-reinf-routes.js';
+import reinfRetencoesPjRouter from './sefaz-backend/reinf-retencoes-pj-routes.js';
 import minhaAgendaRouter from './sefaz-backend/minha-agenda-routes.js';
 import diagnosticoDocsFiscaisRouter from './sefaz-backend/diagnostico-docs-fiscais-routes.js';
 import simplesSublimiteRouter from './sefaz-backend/simples-sublimite-routes.js';
@@ -345,6 +346,10 @@ app.use('/api/admin/nfp-compliance', nfpComplianceRouter);
 app.use('/api/dp-integration', dpIntegrationRouter);
 app.use('/api/admin/sharepoint', sharepointAutoSyncRouter);
 app.use('/api/admin/efd-reinf', efdReinfRouter);
+// Integração com o Consultor Contábil (EFD-Reinf): as NFS-e tomadas com
+// retenção, no formato do R-4020. Autoriza admin do CFI OU usuário do outro
+// app — os dois NÃO compartilham Firestore.
+app.use('/api/admin/reinf', reinfRetencoesPjRouter);
 app.use('/api/admin/minha-agenda', minhaAgendaRouter);
 app.use('/api/admin/diagnostico-docs-fiscais', diagnosticoDocsFiscaisRouter);
 app.use('/api/admin/simples-sublimite', simplesSublimiteRouter);
