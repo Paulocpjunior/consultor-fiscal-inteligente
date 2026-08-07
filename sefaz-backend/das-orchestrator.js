@@ -11,6 +11,7 @@ import { calcularMultaDarf } from './multa-calculator.js';
 import { assertValorMinimoDas } from './das-valor-utils.js';
 import { criarErroDuplicidadeDas, encontrarConflitoDasAvulso } from './das-duplicidade-utils.js';
 import { lerCodigoAtividadeSup } from './pgdas-atividade-config.js';
+import { avaliarSemMovimento, montarDeclaracaoSemMovimento } from './pgdas-sem-movimento.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -351,4 +352,80 @@ export async function marcarPago(docId, dataPagamento) {
         dataPagamento: dataPagamento || new Date().toISOString().slice(0, 10),
     });
     return { ok: true };
+}
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// PGDAS-D SEM MOVIMENTO — declaração sem guia.
+//
+// Declaração e guia são obrigações DIFERENTES, e no app estavam soldadas: a
+// transmissão do PGDAS-D só acontecia dentro do `emitirDasRegular`, que recusa
+// valor abaixo de R$ 10,00. Mês sem faturamento não passava pela porta, e a
+// declaração ficava pro e-CAC à mão — sem registro, sem auditoria, e invisível
+// na Rotina do Mês. Não entregar custa MAED de R$ 50,00 por competência.
+//
+// AQUI NÃO SE GERA DAS de propósito: não há o que pagar, e emitir guia de
+// valor zero criaria cobrança que não existe.
+// ────────────────────────────────────────────────────────────────────────────
+export async function declararPgdasSemMovimento(req) {
+    assertEmissaoLiberada('DAS');
+    const {
+        empresaId, empresaCnpj, empresaNome, competencia, filiais = [],
+        receitaLancada = 0, notasCapturadas = 0,
+        capturaConfiavel = false, motivoCapturaIncerta = '',
+        confirmadoPeloColaborador = false, confirmadoPor = null,
+    } = req || {};
+
+    if (!empresaId || !empresaCnpj || !competencia) {
+        throw new Error('Campos obrigatórios: empresaId, empresaCnpj, competencia');
+    }
+
+    // A régua vive no módulo puro; aqui é só I/O. Recusa vira 400 com o motivo
+    // E a ação — mensagem sem ação é alarme que ninguém sabe atender.
+    const veredito = avaliarSemMovimento({
+        receitaLancada, notasCapturadas, capturaConfiavel, motivoCapturaIncerta,
+        confirmadoPeloColaborador,
+    });
+    if (!veredito.pode) {
+        const err = new Error(`${veredito.motivo} ${veredito.acao || ''}`.trim());
+        err.httpStatus = 400;
+        err.code = `SEM_MOVIMENTO_${veredito.situacao.toUpperCase().replace(/-/g, '_')}`;
+        throw err;
+    }
+
+    const provider = getDasProvider();
+    const mode = getDasMode();
+    const declaracao = montarDeclaracaoSemMovimento({ cnpj: empresaCnpj, filiais });
+
+    // O provider decide Original × Retificadora consultando o PA no SERPRO.
+    const pgdas = await provider.transmitirPgdasD({
+        empresaCnpj, competencia, valor: 0, dadosPgdas: { declaracao },
+    });
+
+    // Auditoria em coleção PRÓPRIA: isto não é um DAS, e gravar em
+    // `das_emitidos` faria a listagem de guias mostrar uma cobrança que não
+    // existe — e o "a recolher" da carteira somar zero como se fosse guia.
+    const db = fa().firestore();
+    const docId = `${String(empresaCnpj).replace(/\D/g, '')}_${competencia}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const payload = {
+        empresaId,
+        empresaCnpj,
+        empresaNome: empresaNome || '',
+        competencia,
+        tipo: 'sem-movimento',
+        pgdasRecibo: pgdas.recibo,
+        pgdasNumeroDeclaracao: pgdas.numeroDeclaracao || '',
+        pgdasTipoDeclaracao: pgdas.tipoDeclaracao || 1,
+        pgdasTransmitidoEm: pgdas.transmitidoEm,
+        // A PROVA de que a afirmação foi humana e de que a captura estava sã no
+        // momento da declaração. Sem isso, daqui a um ano ninguém sabe em que
+        // base se afirmou à Receita que não houve faturamento.
+        capturaConfiavelNoMomento: true,
+        confirmadoPor: confirmadoPor || null,
+        alertas: veredito.alertas,
+        declaradoEm: new Date().toISOString(),
+        modeUsado: mode,
+    };
+    await db.collection('pgdas_sem_movimento').doc(docId).set(payload, { merge: true });
+    return { id: docId, ...payload };
 }

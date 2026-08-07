@@ -426,6 +426,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // PGDAS-D de mês sem movimento: leitura pra tela, escrita SÓ pelo backend.
+    // A declaração é uma afirmação à Receita — quem grava é o rito que conferiu
+    // a saúde da captura e registrou quem confirmou, nunca o navegador.
+    match /pgdas_sem_movimento/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if false;
+    }
+
     // pgdas_atividades_codigos: codigo oficial de atividade do PGDAS-D
     // (ISS fixo/SUP). Vai NA DECLARACAO ao SERPRO — leitura e escrita passam
     // SO pelo backend, que valida o numero contra a declaracao lida.

@@ -139,6 +139,36 @@ export async function emitirDasRegular(user: User | null, payload: {
     return res.json();
 }
 
+/**
+ * PGDAS-D de mês SEM MOVIMENTO — transmite a declaração e NÃO gera guia.
+ *
+ * A declaração vence todo mês (MAED de R$ 50,00 se não entregar); a guia só
+ * existe se houver o que pagar. O backend recusa quando há receita lançada,
+ * nota capturada, captura duvidosa ou falta a confirmação humana — "sem
+ * movimento" é uma AFIRMAÇÃO à Receita, não um atalho.
+ */
+export async function declararSemMovimento(user: User | null, payload: {
+    empresaId: string; empresaCnpj: string; empresaNome: string;
+    competencia: string;
+    filiais?: string[];
+    receitaLancada: number;
+    notasCapturadas: number;
+    capturaConfiavel: boolean;
+    motivoCapturaIncerta?: string;
+    confirmadoPeloColaborador: boolean;
+}): Promise<any> {
+    const res = await fetch(`${BASE}/declarar-sem-movimento`, {
+        method: 'POST',
+        headers: await authHeaders(user),
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `declararSemMovimento: ${res.status}`);
+    }
+    return res.json();
+}
+
 export async function emitirDasAvulso(user: User | null, payload: {
     empresaId: string; empresaCnpj: string; empresaNome: string;
     competencia: string; valor: number; descricao?: string;
