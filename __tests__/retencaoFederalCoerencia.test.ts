@@ -62,6 +62,63 @@ describe('a assinatura das alíquotas', () => {
     });
 });
 
+describe('os campos de PIS/COFINS são o tributo do PRESTADOR, não retenção', () => {
+    /**
+     * Nota REAL (07/08): NFS-e 00375235, ELEVADORES ATLAS SCHINDLER →
+     * CONDOMINIO EDIFICIO MONTE CARLO. Base 3.413,24 com PIS 56,32 (1,65%) e
+     * COFINS 259,41 (7,60%) — as alíquotas do NÃO-CUMULATIVO — e a retenção de
+     * verdade em outro campo: 158,72 = 4,65% (CSRF). A própria nota avisa em
+     * "Outras Informações" que PIS e COFINS ali são o TOTAL da operação.
+     *
+     * O importer grava esses campos como `pisRetido`/`cofinsRetida`. Mandados
+     * ao R-4020, declarariam como retido o imposto do prestador — 315,73 no
+     * lugar de 158,72.
+     */
+    const ATLAS = { base: 3413.24, pis: 56.32, cofins: 259.41, csll: 158.72 };
+
+    it('a assinatura 1,65% + 7,60% é nomeada, não vira "alíquota fora"', () => {
+        const r = conferirRetencaoFederal(ATLAS);
+        expect(r.situacao).toBe('campos-sao-totais-da-operacao');
+        expect(r.aliquotas.pis).toBeCloseTo(1.65, 1);
+        expect(r.aliquotas.cofins).toBeCloseTo(7.6, 1);
+        expect(r.motivo).toMatch(/NÃO-CUMULATIVO do prestador/);
+        expect(r.exigeAcao).toBe(true);
+    });
+
+    it('aponta ONDE está a retenção de verdade quando a CSRF está na nota', () => {
+        const r = conferirRetencaoFederal(ATLAS);
+        expect(r.aliquotas.csll).toBeCloseTo(ALIQ_CSRF, 1);
+        expect(r.motivo).toMatch(/contribuições sociais retidas/);
+        expect(r.acao).toMatch(/CSRF 4,65%/);
+    });
+
+    it('sem a CSRF na nota, NÃO inventa de onde tirar — manda conferir', () => {
+        const r = conferirRetencaoFederal({ base: 3413.24, pis: 56.32, cofins: 259.41 });
+        expect(r.situacao).toBe('campos-sao-totais-da-operacao');
+        expect(r.motivo).not.toMatch(/contribuições sociais retidas/);
+        expect(r.acao).toMatch(/Confira no documento/);
+    });
+
+    it('não devolve valor "corrigido": o rateio entre PIS, COFINS e CSLL não está no documento', () => {
+        const r = conferirRetencaoFederal(ATLAS);
+        expect(r).not.toHaveProperty('pisCorrigido');
+        expect(r).not.toHaveProperty('retencaoCorrigida');
+    });
+
+    it('a retenção CUMULATIVA de verdade (0,65% e 3%) continua coerente', () => {
+        // A distinção é o ponto: mesmos campos, leituras opostas.
+        const r = conferirRetencaoFederal({ base: 3413.24, pis: 22.19, cofins: 102.40, csll: 34.13 });
+        expect(r.situacao).toBe('coerente');
+    });
+
+    it('a varredura conta e avisa em separado do "CSLL é o total"', () => {
+        const v = varrerRetencaoFederal([ATLAS, CLINIPAR_COMO_VEM, CLINIPAR_VERDADE]);
+        expect(v.resumo.camposDaOperacao).toBe(1);
+        expect(v.resumo.csllEhOTotal).toBe(1);
+        expect(v.avisos.join(' ')).toMatch(/tributo do PRESTADOR/);
+    });
+});
+
 describe('o app ACUSA, não conserta', () => {
     it('não devolve uma "CSLL corrigida" — dividir o total seria inventar', () => {
         // A nota pode ter retenção parcial, dispensa por valor mínimo, ou só

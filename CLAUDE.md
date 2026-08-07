@@ -407,6 +407,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   por subtração só é aceita quando os TRÊS lados fecham (feita no repo do
   REINF). O portal também exporta o MESMO layout de 73 colunas em CSV (";") e
   TXT (TAB): o parser só lia ";" e devolvia zero nota em SILÊNCIO.
+  🚨 **E A NOTA DE 07/08 MOSTROU A SEGUNDA DOENÇA, PIOR QUE A PRIMEIRA**
+  (NFS-e 00375235, ELEVADORES ATLAS SCHINDLER → CONDOMINIO EDIFICIO MONTE
+  CARLO, base 3.413,24): os campos **PIS 56,32 (1,65%) e COFINS 259,41
+  (7,60%)** NÃO são retenção — são o tributo do PRESTADOR no regime
+  **NÃO-CUMULATIVO**, e a própria nota diz isso em "Outras Informações"
+  (*"Informações preenchidas nos campos de PIS e COFINS são referentes aos
+  valores totais sobre a operação"*). A retenção de verdade estava no campo de
+  **contribuições sociais retidas: 158,72 = 4,65% (CSRF)**. O importer grava
+  esses campos como `pisRetido`/`cofinsRetida` — nome que MENTE — e mandá-los
+  ao R-4020 declararia **315,73 no lugar de 158,72**, quase o dobro. A trava
+  é a mesma ASSINATURA DE ALÍQUOTA: 1,65% + 7,60% juntos só existem no
+  não-cumulativo, então `conferirRetencaoFederal` devolve a situação
+  `campos-sao-totais-da-operacao` — que antes caía no genérico "alíquota fora
+  ⇒ pode ser base com dedução ou valor digitado errado", alarme sem ação. A
+  CAUSA VAI JUNTO DO NÚMERO também no payload do R-4020 (`camposDaOperacao`
+  no resumo + ressalva própria), e a ressalva genérica desconta essas notas
+  pra não contar a mesma duas vezes. Continua valendo o ALERTA, NUNCA
+  CONTORNO: o app aponta o campo certo (CSRF) e NÃO rateia entre PIS/COFINS/
+  CSLL — esse rateio não está no documento.
 - **CADASTRO CENTRAL: o CFI é DONO do cadastro dos apps irmãos** (ideia do
   Paulo, 07/08, logo depois do "CNPJ não cadastrado" para empresa cadastrada:
   *"por que não construir um túnel que leva ao nosso BD — cadastros em geral,

@@ -132,6 +132,7 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos } = 
     notas.sort((a, b) => String(a.prestadorNome).localeCompare(String(b.prestadorNome), 'pt-BR'));
 
     const comProblema = notas.filter((n) => n.coerencia.exigeAcao).length;
+    const camposDaOperacao = notas.filter((n) => n.coerencia.situacao === 'campos-sao-totais-da-operacao').length;
     return {
         cnpjTomador: alvo || null,
         competencia: competencia || null,
@@ -142,14 +143,15 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos } = 
             semRetencao,
             dePessoaFisica,
             comIncoerencia: comProblema,
+            camposDaOperacao,
             totalBase: r2(notas.reduce((t, n) => t + (n.base || 0), 0)),
             totalIr: r2(notas.reduce((t, n) => t + n.ir, 0)),
         },
-        ressalvas: ressalvasDoPayload({ notas: notas.length, dePessoaFisica, comProblema }),
+        ressalvas: ressalvasDoPayload({ notas: notas.length, dePessoaFisica, comProblema, camposDaOperacao }),
     };
 }
 
-function ressalvasDoPayload({ notas, dePessoaFisica, comProblema }) {
+function ressalvasDoPayload({ notas, dePessoaFisica, comProblema, camposDaOperacao }) {
     const out = [
         'O campo `csllOuTotal` é o que o portal de SP entrega — e nele a CSLL individual NÃO vem: '
         + 'o valor é o TOTAL das três contribuições. Quem separa é o EFD-Reinf, e só quando as '
@@ -161,8 +163,19 @@ function ressalvasDoPayload({ notas, dePessoaFisica, comProblema }) {
     if (dePessoaFisica) {
         out.push(`${dePessoaFisica} nota(s) com prestador PESSOA FÍSICA ficaram de fora — são R-4010, outro evento.`);
     }
-    if (comProblema) {
-        out.push(`${comProblema} nota(s) com retenção que não bate com a alíquota legal — confira antes de declarar.`);
+    if (camposDaOperacao) {
+        // Causa junto do número: "N notas com alíquota fora" faria o colaborador
+        // conferir uma a uma sem saber o que procurar. Aqui a causa tem nome, e
+        // é a mais cara de todas — declarar o tributo do prestador como retido
+        // infla a retenção várias vezes (nota real: 315,73 no lugar de 158,72).
+        out.push(`🚨 ${camposDaOperacao} nota(s) em que PIS e COFINS são o tributo do PRESTADOR `
+            + '(não-cumulativo 1,65% e 7,60%), não retenção — a NFS-e paulistana tem campos que muitos '
+            + 'prestadores preenchem assim e avisam em "Outras Informações". Declarar esses valores como '
+            + 'retidos infla a retenção; a retenção real é a CSRF de 4,65%.');
+    }
+    const outrasIncoerencias = comProblema - camposDaOperacao;
+    if (outrasIncoerencias > 0) {
+        out.push(`${outrasIncoerencias} nota(s) com retenção que não bate com a alíquota legal — confira antes de declarar.`);
     }
     if (notas === 0) {
         // Zero nunca é sucesso: pode ser mês sem retenção OU captura faltando.
