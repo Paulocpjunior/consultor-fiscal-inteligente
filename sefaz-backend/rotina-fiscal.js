@@ -20,6 +20,7 @@
 // ============================================================================
 
 import { classificarUrgencia, diasAteVencimento, urgenciaDominante, URGENCIA_LABEL } from './urgencia-vencimento.js';
+import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
@@ -154,19 +155,32 @@ export function montarRotinaFiscal({
     // Resumo sem a completa não tem valor nem itens: entra na apuração a menor.
     const resumos = docs.filter(ehResumoSemCompleta).length;
     const canceladas = docs.filter(cancelado).length;
+    // CARTA DE CORREÇÃO é validação: ela pode ter mudado o CFOP/natureza, e o
+    // livro é gerado do XML ORIGINAL. Estava sendo capturada e ninguém via.
+    const cce = varrerCcesDoPeriodo(docs).resumo;
     let eValidacao;
     if (docs.length === 0) {
         eValidacao = etapa('validacao', 'pendente', 'Sem notas para validar.',
-            'Conclua a captura primeiro — a validação vem depois.', { resumos: 0, canceladas: 0 });
+            'Conclua a captura primeiro — a validação vem depois.', { resumos: 0, canceladas: 0, cce });
     } else if (resumos > 0) {
         eValidacao = etapa('validacao', 'atencao',
             `${resumos} nota(s) sem valor/itens (resumo da SEFAZ, aguardando a completa).`,
             'Manifeste a ciência (libera o XML completo) ou importe o arquivo do cliente. Sem isso a apuração sai a menor.',
-            { resumos, canceladas });
+            { resumos, canceladas, cce });
     } else {
         eValidacao = etapa('validacao', 'concluida',
             `${docs.length} nota(s) com valor${canceladas ? ` · ${canceladas} cancelada(s) fora do cálculo` : ''}.`,
-            null, { resumos, canceladas });
+            null, { resumos, canceladas, cce });
+    }
+
+    // CC-e que pede conferência trava a validação: o livro sai do XML ORIGINAL,
+    // e a correção pode ser justamente do CFOP. Âmbar e não vermelho — o app
+    // não aplica a correção sozinho (texto livre), então quem fecha é a pessoa.
+    if (cce.exigemConferencia > 0 && docs.length > 0) {
+        eValidacao = piorar(eValidacao,
+            `${cce.exigemConferencia} carta(s) de correção a conferir`
+            + `${cce.indevidaSuspeita ? ` (${cce.indevidaSuspeita} mencionam algo que a CC-e não pode corrigir)` : ''}.`,
+            'A CC-e pode ter mudado CFOP/natureza e o livro sai do XML ORIGINAL — abra a nota e confira antes de apurar.');
     }
 
     // ── 3. APURAÇÃO ─────────────────────────────────────────────────────────

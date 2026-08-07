@@ -226,7 +226,11 @@ router.get('/painel', requireAuth, async (req, res) => {
                     // POR QUE o ISS está zerado (iss-zerado-causa.js). Tudo já
                     // é gravado pelo importer — nenhuma captura nova.
                     'aliquotaServicos', 'valorServicos', 'valorDeducoes', 'valorTotal',
-                    'municipioPrestacaoIbge', 'prestadorOptanteSimples', 'codigoServico'),
+                    'municipioPrestacaoIbge', 'prestadorOptanteSimples', 'codigoServico',
+                    // CARTA DE CORREÇÃO: ela pode ter mudado o CFOP/natureza, e
+                    // o livro sai do XML ORIGINAL. Era capturada e nenhum ponto
+                    // da escrituração olhava — a validação passou a olhar.
+                    'eventos', 'numero'),
             { label: `rotina-fiscal ${competencia}`, maxDocs: 60000 },
         );
         const documentos = docsSnaps.map((s) => s.data() || {});

@@ -21,6 +21,7 @@
 | Bloco K (produção) | ✔ | bloco vazio | 🔴 **F0 AUTOMÁTICO 06/08**: a 🚦 Migração passou a DETECTAR produção pelos CFOPs (5101/6101 venda de produção do estabelecimento; 5124/5125/6124/6125 e 5901/5902/6901/6902 industrialização por encomenda) e conta em `comProducaoParaBlocoK`. IPI destacado NÃO serve de sinal — comércio equiparado destaca IPI sem industrializar, e ficava marcado à toa. Zero empresa = bloco descartável como o SAT; uma que seja = alvo nomeado. Sem `itens` lidos não afirma nada (ausente ≠ zero) |
 | Bloco 1 — Registro 1400 (DIPAM) | lançamento manual | automático da aba 🌾 | ✅ (melhor que o E-Fiscal) |
 | **Fila de migração (quem pode migrar hoje)** | — | aba 🏁 Fila de migração do card SPED Fiscal | ✅ **07/08** — junta as TRÊS provas que já existiam em telas separadas: entrada completa contra a SEFAZ (cursor do DistDFe), saída ligada pelo cliente (autXML/cofre) e blocos do SPED que o perfil exige. Uma fila ordenada por ESFORÇO, com UM próximo passo por cliente. Ausência de sinal NUNCA vira prontidão. Onda de serviço puro (sem IE) não é bloqueada por bloco de ICMS — misturar fazia a fila parecer travada com metade dela pronta |
+| **Carta de correção (CC-e) na escrituração** | — | avisos da geração do SPED + etapa de VALIDAÇÃO da Rotina do mês | ✅ **07/08** — a CC-e já era capturada (`documentos_fiscais.eventos[]`, com `xCorrecao`) e aparecia na lista de XMLs, mas NENHUM ponto da escrituração lia: nem o gerador do SPED, nem o Exportar SAGE. Pelo Ajuste SINIEF 07/05 (cl. 14-A §1º) a CC-e corrige **natureza da operação e CFOP** — e o CFOP manda no C190, no DIFAL e na DIPAM; o livro sai do XML ORIGINAL. `cce-escrituracao.js` (21 testes) classifica pelo texto em `muda-escrituracao` (CFOP/natureza/NCM/CST ⇒ conferir), `indevida-suspeita` (fala em valor/quantidade/partes/data — coisas que a CC-e NÃO PODE corrigir ⇒ a nota provavelmente precisava de cancelamento e reemissão) e `sem-efeito-fiscal`. **O app NÃO aplica a correção**: `xCorrecao` é texto livre e deduzir o campo seria inventar dado fiscal — ALERTA, nunca contorno |
 | Conferências (PVA-espelho, cruzamentos) | — | Análise · SPED×Capturadas · SPED×Declarado · Conciliar faturamento · **🪞 CFI × E-Fiscal** | ✅ (só existe no CFI) |
 | Conferência ARQUIVO × ARQUIVO (espelho da onda) | — | aba 🪞 CFI × E-Fiscal do card SPED Fiscal: sobe os dois .txt e compara documento a documento + E110 | ✅ **06/08** — casa pela CHAVE da NF-e (COD_PART não entra: é interno de cada sistema e daria 100% de divergência num arquivo idêntico). CNPJ/período diferentes = RECUSA, não relatório de divergência falsa. Modelo fora da ponte .FML (≠55/65) e CT-e do bloco D contam como ausência ESPERADA |
 | SPED Contribuições (PIS/COFINS) | ✔ | card SPED Fiscal → aba Contribuições | ✅ |
@@ -30,7 +31,7 @@
 
 Inventário completo em `docs/inventario-relatorios-efiscal.md`. Resumo:
 15 relatórios no card Relatórios ✅; candidatos restantes: Resumo por série
-(🟡 baixo), Carta de correção (🟡 avaliar), Simples Paulista–DIFAL
+(🟡 baixo), Carta de correção ✅ **07/08** (não era relatório, era buraco: a CC-e é capturada e NENHUM ponto da escrituração lia — ver linha própria abaixo), Simples Paulista–DIFAL
 (🔴 aguarda resposta), listagem de códigos de integração (🟡 se a equipe
 pedir). DIPJ/fila/cadastros estáticos ⚫.
 
