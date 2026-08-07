@@ -13,7 +13,7 @@ import {
     consultarTodasElegiveis,
 } from './nfse-sp-orchestrator.js';
 import { interpretarRespostaWs, enxugarParaDiagnostico } from './nfse-sp-ws-leitura.js';
-import { parseCsvNfseSp } from './nfse-sp-csv-parser.js';
+import { parseCsvNfseSp, detectarSeparador } from './nfse-sp-csv-parser.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
 import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
@@ -172,19 +172,17 @@ router.post('/nfsesp-importar-csv', requireAdmin, uploadCsv.single('csv'), async
     try {
         if (!req.file) return res.status(400).json({ erro: 'Arquivo CSV obrigatório no campo "csv"' });
 
-        // O portal mudou: em 04/08/2026 a tela "Resumo da consulta" oferece
-        // TXT (Layout V.004). Quem sobe o TXT aqui recebia "CSV inválido" e
-        // ficava sem saber o que fazer — a mensagem tem que dizer a AÇÃO.
-        const nomeArq = String(req.file.originalname || '').toLowerCase();
+        // O portal exporta o MESMO layout de 73 colunas em DOIS formatos: CSV
+        // com ";" e TXT com TAB. A guarda antiga barrava todo .txt chamando de
+        // "largura fixa" — e o TXT com TAB é uma tabela limpa, que o parser
+        // agora lê. Só o largura-fixa (sem separador nenhum) continua fora.
         const primeiraLinha = req.file.buffer.toString('latin1').split(/\r?\n/)[0] || '';
-        const pareceTxtLargura = !primeiraLinha.includes(';') && primeiraLinha.length > 60;
-        if (nomeArq.endsWith('.txt') && pareceTxtLargura) {
+        if (!detectarSeparador(primeiraLinha) && primeiraLinha.length > 60) {
             return res.status(400).json({
-                erro: 'Este arquivo é o TXT de largura fixa do portal (Layout do Arquivo NFS-e), '
-                    + 'e esta importação lê o CSV (campos separados por ";"). O CFI ainda não '
-                    + 'monta o TXT. O que fazer agora: na tela de exportação do portal, escolha '
-                    + 'CSV se a opção existir; se só houver TXT, mande o arquivo ao Paulo para '
-                    + 'liberarmos a leitura desse layout.',
+                erro: 'Este arquivo não tem separador de colunas — é o TXT de LARGURA FIXA do portal '
+                    + '("Layout do Arquivo NFS-e"), que o CFI ainda não lê. O que fazer agora: na tela '
+                    + 'de exportação do portal, peça o resultado da consulta em CSV ou em TXT separado '
+                    + 'por tabulação; os dois o CFI importa.',
             });
         }
 
@@ -197,11 +195,19 @@ router.post('/nfsesp-importar-csv', requireAdmin, uploadCsv.single('csv'), async
         }
 
         if (!parsed.notas?.length) {
-            return res.json({
-                ok: true,
-                aviso: 'CSV não contém notas',
-                resumo: { totalNotas: 0 },
-            });
+            // ZERO NUNCA É SUCESSO. Arquivo COM conteúdo e sem nenhuma linha de
+            // detalhe lida é falha de leitura, não "arquivo vazio" — e dizer
+            // ok:true aqui era o que fazia a equipe achar que tinha importado.
+            if (parsed.linhasComConteudo > 0) {
+                return res.status(400).json({
+                    erro: `Li o arquivo (separador "${parsed.separador === '\t' ? 'TAB' : parsed.separador}", `
+                        + `${parsed.linhasComConteudo} linha(s) com conteúdo) mas NENHUMA linha de nota foi reconhecida. `
+                        + 'As linhas de nota do portal começam com "2" na primeira coluna. '
+                        + 'O que fazer agora: confira se o arquivo é o export da consulta de NFS-e (e não outro relatório) '
+                        + 'e mande-o ao Paulo se o formato mudou.',
+                });
+            }
+            return res.json({ ok: true, aviso: 'Arquivo sem nenhuma linha de nota.', resumo: { totalNotas: 0 } });
         }
 
         // Contexto da empresa (opcional — se vier no body, usa pra setar direcao)
