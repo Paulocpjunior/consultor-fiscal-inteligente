@@ -415,10 +415,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Os nomes dos campos são os do CÁLCULO (inss/gilrat/senar), NUNCA os do
   leiaute: nome que finge ser do leiaute faz o outro lado escrever no campo
   errado achando que conferiu (lição do `csllOuTotal`).
-  🚨 **NADA DO REPO DO REINF ESTÁ NO AR**: as runs 2/3/4 do `deploy-app.yml` de
-  lá falharam todas em "Falta o secret `GCP_SA_KEY`". Paulo precisa cadastrar o
-  secret (Settings → Secrets → Actions; a SA de deploy do CFI serve). Merge
-  verde LÁ não é app atualizado — conferir a run antes de dizer que está no ar.
+  ✅ **A PONTE ESTÁ VIVA** (07/08, testada pela colaboradora): a tela do R-4020
+  chamou o app do REINF, que chamou o CFI, e a resposta que voltou foi a
+  mensagem de erro do CFI palavra por palavra — round-trip provado.
+  🐛 **E o primeiro teste real achou um defeito meu**: `acharEmpresa` consultava
+  `where('cnpj','==',<só dígitos>)` e o cadastro guarda CNPJ em DUAS formas
+  (`51227692000146` e `51.227.692/0001-46`). A empresa existia e a rota
+  respondia "CNPJ não cadastrado" — **culpando o cadastro por um defeito da
+  consulta**, que é pior que só falhar: manda a pessoa procurar problema que
+  não existe. NENHUMA outra rota do CFI consulta por igualdade de CNPJ; todas
+  varrem e normalizam na leitura. Corrigido em `empresa-por-cnpj.js` (12
+  testes), que também devolve as FILIAIS da raiz. **REGRA: nunca consultar
+  Firestore por igualdade de CNPJ neste projeto** — o dado tem duas formas.
 - **Legalização é APP PRÓPRIO, fora do CFI** (Paulo, 26/07/2026 — corrigiu
   com ênfase a 1ª entrega como card interno): repo GitHub `legalizacao`,
   serviço Cloud Run `legalizacao` (us-west1, mesmo projeto), URL própria.

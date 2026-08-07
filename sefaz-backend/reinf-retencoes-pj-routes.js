@@ -35,6 +35,7 @@ import { fetchAllDocs } from './firestore-paginate.js';
 import { requireAdmin } from './require-admin.js';
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { montarPayloadReinfPJ } from './reinf-retencoes-pj.js';
+import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { montarPayloadR2055 } from './reinf-aquisicao-rural.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
@@ -97,21 +98,28 @@ async function carregarDocumentos(db, { empresaId, cnpj, competencia }) {
     return [...porId.values()];
 }
 
-/** Empresa da carteira pelo CNPJ (Simples ou Lucro). */
+/**
+ * Empresa da carteira pelo CNPJ (Simples ou Lucro).
+ *
+ * VARRE E NORMALIZA — não consulta por igualdade. O CNPJ não é gravado num
+ * formato só: parte do cadastro tem `51227692000146`, parte tem
+ * `51.227.692/0001-46`. A primeira versão desta rota usava
+ * `where('cnpj','==',<dígitos>)` e respondia "CNPJ não cadastrado" para
+ * empresa cadastrada — culpando o cadastro por um defeito da consulta.
+ * Todas as outras rotas do CFI já faziam assim; esta é que destoava.
+ */
 async function acharEmpresa(db, cnpj) {
     for (const col of ['simples_empresas', 'lucro_empresas']) {
-        const snap = await db.collection(col).where('cnpj', '==', cnpj).limit(5).get();
-        for (const doc of snap.docs) {
-            const d = doc.data() || {};
-            if (d._deleted || d._merged_into) continue;
+        const snap = await db.collection(col).get();
+        const empresas = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+        const achada = acharEmpresaPorCnpj(empresas, cnpj);
+        if (achada) {
             return {
-                empresaId: doc.id,
-                nome: d.razaoSocial || d.nome || '—',
+                empresaId: achada.id,
+                nome: achada.razaoSocial || achada.nome || '—',
                 regime: col === 'simples_empresas' ? 'simples' : 'lucro',
-                // O doc cru vai junto porque `lerCondicaoRural` lê
-                // `dadosFiscais.condicaoRural` — sem ele a marcação do cliente
-                // sairia sempre falsa, e mês vazio deixaria de levantar suspeita.
-                _doc: { ...d, id: doc.id },
+                filiais: filiaisDaRaiz(empresas, cnpj),
+                _doc: achada,
             };
         }
     }
@@ -136,8 +144,9 @@ router.get('/retencoes-pj', autorizar, async (req, res) => {
         if (!empresa) {
             return res.status(404).json({
                 ok: false,
-                error: `O CNPJ ${cnpj} não está cadastrado no CFI (nem no Simples, nem no Lucro). `
-                    + 'Sem cadastro não há captura, e a ausência de notas aqui não prova ausência de retenção.',
+                error: `O CNPJ ${cnpj} não foi encontrado no cadastro do CFI (nem no Simples, nem no Lucro). `
+                    + 'Confira o número; se estiver certo, a empresa precisa ser cadastrada — sem cadastro '
+                    + 'não há captura, e a ausência de notas aqui não prova ausência de retenção.',
             });
         }
 
