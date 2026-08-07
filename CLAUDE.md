@@ -382,6 +382,30 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   por subtração só é aceita quando os TRÊS lados fecham (feita no repo do
   REINF). O portal também exporta o MESMO layout de 73 colunas em CSV (";") e
   TXT (TAB): o parser só lia ";" e devolvia zero nota em SILÊNCIO.
+- **CADASTRO CENTRAL: o CFI é DONO do cadastro dos apps irmãos** (ideia do
+  Paulo, 07/08, logo depois do "CNPJ não cadastrado" para empresa cadastrada:
+  *"por que não construir um túnel que leva ao nosso BD — cadastros em geral,
+  empresas, colaboradores, certificados?"*). O problema não é conveniência: o
+  MESMO cliente vive no CFI, no Consultor Contábil e no Legalização, com
+  cadastro e grafia próprios — e cadastro duplicado não fica igual, fica
+  **PARECIDO**, que é pior porque ninguém desconfia.
+  `GET /api/admin/cadastro/empresas[/:cnpj]` → `cadastro-central.js` (15
+  testes). **O CNPJ SAI SEMPRE EM DÍGITOS** — normalizar na saída é o serviço
+  que o túnel presta, e é a correção na raiz do erro que a colaboradora viu.
+  As FILIAIS da raiz vão junto (o SN-Entregar exige todos os estabelecimentos).
+  Duplicata e cadastro sem CNPJ **não somem**: vêm contados, porque esconder
+  faria o outro app achar o cadastro limpo quando não está.
+  🔒 **CERTIFICADO A1 NUNCA TRAFEGA NO TÚNEL**, e não é esquecimento: é CHAVE
+  PRIVADA que assina documento fiscal em nome do cliente. Chave copiada é chave
+  que não se controla mais — sai do Secret Manager, entra na memória de outro
+  app, vira log, vira cache, e se vazar ninguém sabe de qual cópia veio. O
+  desenho é **levar a OPERAÇÃO, não a chave**: o outro app pede "assine isto
+  para o CNPJ X" e quem assina é o CFI, onde a chave já mora e onde já existe a
+  regra de matriz/filial por raiz (`selecionarCertA1PorBase`). Do túnel o
+  certificado sai só como METADADO (titular, validade, raiz, apto), que
+  responde 100% do "dá pra transmitir?". FASES: 1) empresas ✅ · 2) colaborador
+  responsável pela carteira · 3) metadados de certificado · 4) assinatura como
+  operação remota.
 - **EFD-Reinf: o CFI EXPÕE as notas, o Consultor Contábil apura** (07/08 —
   Paulo passou o projeto do CODEX pro Claude). Os dois apps **NÃO
   compartilham Firestore** (o mapa do outro repo dizia que sim e estava
