@@ -35,6 +35,9 @@ import { fetchAllDocs } from './firestore-paginate.js';
 import { requireAdmin } from './require-admin.js';
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { montarPayloadReinfPJ } from './reinf-retencoes-pj.js';
+import { montarPayloadR2055 } from './reinf-aquisicao-rural.js';
+import { montarDipamCompetencia } from './dipam-produtor-rural.js';
+import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
 
 const router = Router();
 
@@ -101,7 +104,15 @@ async function acharEmpresa(db, cnpj) {
         for (const doc of snap.docs) {
             const d = doc.data() || {};
             if (d._deleted || d._merged_into) continue;
-            return { empresaId: doc.id, nome: d.razaoSocial || d.nome || '—', regime: col === 'simples_empresas' ? 'simples' : 'lucro' };
+            return {
+                empresaId: doc.id,
+                nome: d.razaoSocial || d.nome || '—',
+                regime: col === 'simples_empresas' ? 'simples' : 'lucro',
+                // O doc cru vai junto porque `lerCondicaoRural` lê
+                // `dadosFiscais.condicaoRural` — sem ele a marcação do cliente
+                // sairia sempre falsa, e mês vazio deixaria de levantar suspeita.
+                _doc: { ...d, id: doc.id },
+            };
         }
     }
     return null;
@@ -135,12 +146,75 @@ router.get('/retencoes-pj', autorizar, async (req, res) => {
 
         return res.json({
             ok: true,
-            empresa: { ...empresa, cnpj },
+            empresa: { empresaId: empresa.empresaId, nome: empresa.nome, regime: empresa.regime, cnpj },
             documentosLidos: documentos.length,
             ...payload,
         });
     } catch (e) {
         console.error('[reinf-retencoes-pj]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/reinf/aquisicao-rural?cnpj=...&competencia=AAAA-MM
+//
+// As aquisições de produção rural de produtor PF — o FUNRURAL que o cliente
+// recolhe por SUB-ROGAÇÃO — no formato do R-2055.
+//
+// É o único evento da série R-2000 com o cálculo JÁ PRONTO: a aba 🌾 apura
+// desde 31/07, com vigência de alíquota (LC 224/2025), tabela própria de
+// segurado especial, centavo desprezado (IN RFB 971) e conferência contra o
+// FUNRURAL declarado no infAdic da própria nota.
+//
+// A rota LÊ essa apuração e só troca o eixo (nota/município → PRODUTOR, que é
+// como o R-2055 é declarado). Recalcular do outro lado abriria a porta pro
+// pior defeito de um arquivo fiscal: dois números pro mesmo fato.
+// ────────────────────────────────────────────────────────────────────────────
+router.get('/aquisicao-rural', autorizar, async (req, res) => {
+    try {
+        const competencia = String(req.query.competencia || '').trim();
+        const cnpj = soDigitos(req.query.cnpj);
+        if (!COMPETENCIA.test(competencia)) {
+            return res.status(400).json({ ok: false, error: 'Informe a competência no formato AAAA-MM.' });
+        }
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ do ADQUIRENTE (14 dígitos) — é ele quem declara o R-2055.' });
+        }
+
+        const db = getDb();
+        const empresa = await acharEmpresa(db, cnpj);
+        if (!empresa) {
+            return res.status(404).json({
+                ok: false,
+                error: `O CNPJ ${cnpj} não está cadastrado no CFI. Sem cadastro não há captura, e a ausência `
+                    + 'de aquisições aqui não prova ausência de obrigação.',
+            });
+        }
+
+        const documentos = await carregarDocumentos(db, { empresaId: empresa.empresaId, cnpj, competencia });
+        const fornecedores = await carregarProdutoresRurais(documentosDaContraparte(documentos));
+        const condicao = lerCondicaoRural(empresa._doc);
+        // MESMA função da aba 🌾 — é isso que garante um número só.
+        const painel = montarDipamCompetencia({ documentos, competencia, empresa: condicao, fornecedores });
+        const payload = montarPayloadR2055({
+            cnpjAdquirente: cnpj,
+            competencia,
+            funrural: painel.funrural,
+            produtores: fornecedores,
+        });
+
+        return res.json({
+            ok: true,
+            empresa: { empresaId: empresa.empresaId, nome: empresa.nome, regime: empresa.regime, cnpj },
+            documentosLidos: documentos.length,
+            // O cadastro diz que o cliente COMPRA de produtor? Mês vazio com a
+            // marcação ligada é suspeita de captura, não ausência de obrigação.
+            marcadoComoComprador: condicao.adquireDeProdutor === true,
+            ...payload,
+        });
+    } catch (e) {
+        console.error('[reinf-aquisicao-rural]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
