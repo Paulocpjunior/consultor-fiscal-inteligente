@@ -281,6 +281,11 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   lint+jest+build e só então abre PR já testado; sem correção possível abre
   ISSUE antes de virar bloqueio. Escape hatch `[skip-audit]` no ASSUNTO do
   commit segue valendo pra hotfix.
+- **DEPLOY: automático VOLTOU em 07/08** (runs 345-348 verdes). O bloqueio de
+  runner do dia 06 passou sozinho — merge na main dispara `deploy-app.yml` e
+  sobe. **CONFERIR ANTES DE MANDAR RODAR SCRIPT À MÃO**: continuar pedindo
+  deploy manual depois que a esteira voltou é repetir fato velho como verdade,
+  o mesmo erro do "0/388". Um `list_workflow_runs` resolve.
 - **DEPLOY TEM SAÍDA DE EMERGÊNCIA** (06/08): o GitHub Actions parou de
   atribuir runner — 3 deploys seguidos com `runner_id: 0`, cancelados aos
   15m00s cravados, ZERO passo executado (não é falha do workflow: é conta/
