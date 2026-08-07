@@ -2,6 +2,7 @@ import React from 'react';
 import { getView } from '../../services/xmlDocumentoView';
 import type { DocumentoFiscal } from '../../types';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
+import { procedenciaDoDocumento, hashCurto, dataLegivel } from '../../services/documentoProcedencia';
 
 interface Props {
     documento: DocumentoFiscal;
@@ -9,6 +10,10 @@ interface Props {
 }
 
 const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
+    // Por que campos como chave e hash podem faltar. A NFS-e do portal entra
+    // por CSV/TXT: sem arquivo XML, sem hash, sem chave de 44 dígitos — e
+    // tratar isso como defeito foi o que derrubou a tela (07/08).
+    const procedencia = procedenciaDoDocumento(d);
     return (
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 border-b border-slate-200 dark:border-slate-700">
@@ -20,7 +25,9 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
                         <p className="text-xs text-slate-500 mt-0.5">
                             {d.natOp} • Emissão: {formatDate(d.dhEmi)} • Status: {d.status} • {d.direcao}
                         </p>
-                        <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Chave: {d.chave}</p>
+                        {procedencia.temChave && (
+                            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Chave: {d.chave}</p>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
                         {d.storageUrl && (
@@ -120,7 +127,7 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
                                         <td className="px-2 py-1.5 text-center text-slate-500">{p.ncm}</td>
                                         <td className="px-2 py-1.5 text-center text-slate-500">{p.cfop}</td>
                                         <td className="px-2 py-1.5 text-center text-slate-500">{p.cst}</td>
-                                        <td className="px-2 py-1.5 text-right text-slate-500">{p.qCom.toLocaleString('pt-BR')} {p.uCom}</td>
+                                        <td className="px-2 py-1.5 text-right text-slate-500">{typeof p.qCom === 'number' ? p.qCom.toLocaleString('pt-BR') : '—'} {p.uCom || ''}</td>
                                         <td className="px-2 py-1.5 text-right text-slate-500">{formatCurrency(p.vUnCom)}</td>
                                         <td className="px-2 py-1.5 text-right font-bold">{formatCurrency(p.vProd)}</td>
                                         <td className="px-2 py-1.5 text-right text-blue-600">{formatCurrency(p.vICMS)}</td>
@@ -144,9 +151,19 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
                 <div className="text-[10px] text-slate-400 grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
                     <div><span className="font-bold">Origem:</span> {d.origem}</div>
                     <div><span className="font-bold">Importado por:</span> {d.importadoPorEmail || d.importadoPor}</div>
-                    <div><span className="font-bold">Em:</span> {new Date(d.importadoEm).toLocaleString('pt-BR')}</div>
-                    <div className="truncate" title={d.xmlHash}><span className="font-bold">Hash:</span> {d.xmlHash.slice(0, 16)}...</div>
+                    <div><span className="font-bold">Em:</span> {dataLegivel(d.importadoEm) || '—'}</div>
+                    <div className="truncate" title={d.xmlHash}>
+                        <span className="font-bold">Hash:</span> {hashCurto(d.xmlHash) || '—'}
+                    </div>
                 </div>
+                {/* Campo vazio SEM explicação faz procurar problema que não existe.
+                    A NFS-e do portal entra por CSV/TXT: não tem XML, hash nem chave
+                    de 44 dígitos — e isso é a natureza dela, não falha de captura. */}
+                {procedencia.explicacao && (
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 pt-1 leading-snug">
+                        ℹ {procedencia.explicacao}
+                    </p>
+                )}
             </div>
         </div>
     );
