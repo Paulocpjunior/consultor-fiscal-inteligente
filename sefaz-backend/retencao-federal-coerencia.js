@@ -28,6 +28,19 @@
 // ============================================================================
 
 const ALIQ = { pis: 0.65, cofins: 3.00, csll: 1.00 };
+
+/**
+ * Alíquotas do PIS/COFINS **do prestador** no regime NÃO-CUMULATIVO. Não são
+ * retenção: são o tributo da operação, e a NFS-e paulistana tem campos que os
+ * prestadores preenchem com isso.
+ *
+ * Prova documental (07/08, NFS-e 00375235 — ELEVADORES ATLAS SCHINDLER →
+ * CONDOMINIO EDIFICIO MONTE CARLO, base 3.413,24): PIS 56,32 = 1,65% e COFINS
+ * 259,41 = 7,60%, com a própria nota dizendo em Outras Informações que "os
+ * campos de PIS e COFINS são referentes aos valores TOTAIS sobre a operação".
+ * A retenção verdadeira estava em outro campo: 158,72 = 4,65% (a CSRF).
+ */
+const ALIQ_NAO_CUMULATIVO = { pis: 1.65, cofins: 7.60 };
 /** CSRF — as três contribuições num código só (5952). */
 export const ALIQ_CSRF = ALIQ.pis + ALIQ.cofins + ALIQ.csll; // 4,65
 
@@ -107,6 +120,33 @@ export function conferirRetencaoFederal(n) {
         }
     }
 
+    // OS CAMPOS SÃO O TRIBUTO DA OPERAÇÃO, NÃO A RETENÇÃO.
+    //
+    // Assinatura inconfundível: PIS 1,65% + COFINS 7,60% (não-cumulativo). O
+    // importador grava esses campos como `pisRetido`/`cofinsRetida` — nome que
+    // mente —, e mandá-los ao R-4020 declararia como retido o imposto do
+    // PRESTADOR, várias vezes maior que a retenção real.
+    if (bate(aliquotas.pis, ALIQ_NAO_CUMULATIVO.pis) && bate(aliquotas.cofins, ALIQ_NAO_CUMULATIVO.cofins)) {
+        const temCsrf = bate(aliquotas.csll, ALIQ_CSRF);
+        return {
+            situacao: 'campos-sao-totais-da-operacao',
+            motivo: `PIS em ${aliquotas.pis}% e COFINS em ${aliquotas.cofins}% são as alíquotas do regime `
+                + 'NÃO-CUMULATIVO do prestador — é o tributo da operação, não retenção. A NFS-e paulistana '
+                + 'tem campos que muitos prestadores preenchem assim, e a própria nota costuma avisar em '
+                + '"Outras Informações".'
+                + (temCsrf
+                    ? ` A retenção de verdade é o campo de contribuições sociais retidas: ${aliquotas.csll}% da base (CSRF).`
+                    : ''),
+            acao: temCsrf
+                ? 'Use o valor de contribuições sociais retidas (CSRF 4,65%) como retenção, NÃO os campos de '
+                  + 'PIS e COFINS. O rateio individual entre PIS, COFINS e CSLL não está no documento — pegue '
+                  + 'do XML da nota se precisar declarar separado.'
+                : 'Não use PIS e COFINS desta nota como retenção. Confira no documento qual campo traz a '
+                  + 'retenção efetiva antes de declarar.',
+            aliquotas, exigeAcao: true,
+        };
+    }
+
     const fora = [];
     if (pis && !bate(aliquotas.pis, ALIQ.pis)) fora.push(`PIS ${aliquotas.pis}% (esperado ${ALIQ.pis}%)`);
     if (cofins && !bate(aliquotas.cofins, ALIQ.cofins)) fora.push(`COFINS ${aliquotas.cofins}% (esperado ${ALIQ.cofins}%)`);
@@ -146,6 +186,7 @@ export function varrerRetencaoFederal(notas) {
         comProblema: linhas.length,
         csllEhOTotal: conta('csll-e-o-total'),
         aliquotaFora: conta('aliquota-fora'),
+        camposDaOperacao: conta('campos-sao-totais-da-operacao'),
     };
     return { linhas, resumo, avisos: avisos(resumo) };
 }
@@ -157,6 +198,13 @@ function avisos(r) {
             `🚨 ${r.csllEhOTotal} nota(s) com a CSLL igual ao TOTAL das três contribuições (CSRF ${ALIQ_CSRF}%). `
             + 'Somada a PIS e COFINS, a retenção está contada em dobro — e é isso que iria para a declaração. '
             + 'O valor individual da CSLL não vem no export do portal.',
+        );
+    }
+    if (r.camposDaOperacao > 0) {
+        out.push(
+            `${r.camposDaOperacao} nota(s) em que os campos de PIS/COFINS são o tributo do PRESTADOR `
+            + '(não-cumulativo 1,65% e 7,60%), não retenção. Declarar esses valores como retidos infla a '
+            + 'retenção várias vezes — a retenção real é a CSRF de 4,65%.',
         );
     }
     if (r.aliquotaFora > 0) {
