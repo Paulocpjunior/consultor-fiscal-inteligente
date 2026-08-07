@@ -19,7 +19,14 @@ export interface EtapaRotina {
     status: StatusEtapa;
     resumo: string;
     acao: string | null;
-    /** extras por etapa (entradas/saidas, resumos, concluidas/total, envios…) */
+    /**
+     * Extras por etapa (entradas/saidas, resumos, concluidas/total, envios…).
+     *
+     * Na etapa `obrigacoes` vêm também o PRAZO das que estão abertas —
+     * `prazo: { obrigacao, dias, urgencia, dominante } | null`, `atrasadas` e
+     * `semData`. A rotina já lia as tarefas e jogava a data fora: sem prazo,
+     * "2/5 entregues" não diz se sobra uma semana ou se venceu ontem.
+     */
     [k: string]: any;
 }
 
@@ -86,11 +93,17 @@ export interface PainelRotina {
     geradoEm?: string;
 }
 
-export async function carregarRotinaFiscal(competencia: string): Promise<PainelRotina> {
+/**
+ * @param empresaIds recorte opcional (a rota já aceita `?empresaIds=` CSV).
+ *   Sem ele, o escopo é o do usuário: colaborador vê a própria carteira,
+ *   admin vê todas — quem decide é `getEmpresaIdsDaCarteira` no backend.
+ */
+export async function carregarRotinaFiscal(competencia: string, empresaIds?: string[]): Promise<PainelRotina> {
     const u = getAuth().currentUser;
     if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
     const token = await u.getIdToken();
-    const res = await fetch(`/api/admin/rotina-fiscal/painel?competencia=${encodeURIComponent(competencia)}`, {
+    const recorte = empresaIds?.length ? `&empresaIds=${encodeURIComponent(empresaIds.join(','))}` : '';
+    const res = await fetch(`/api/admin/rotina-fiscal/painel?competencia=${encodeURIComponent(competencia)}${recorte}`, {
         headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json().catch(() => ({}));

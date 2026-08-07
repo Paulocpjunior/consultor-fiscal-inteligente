@@ -1,10 +1,19 @@
 /**
- * vencimentosLogic.ts — classificação pura de obrigações fiscais por
- * urgência. Separado do painel pra testar fronteiras (≤3 dias, ≤7 dias).
+ * vencimentosLogic.ts — classificação de obrigações fiscais por urgência.
  *
- * As fronteiras são definitivas — mudá-las muda o que aparece na tela
- * "vencimentos da semana" e potencialmente o que NÃO é alertado.
+ * As fronteiras (atrasada / hoje / amanhã / ≤3d / ≤7d) NÃO moram mais aqui:
+ * elas estavam escritas à mão neste arquivo E no `forEach` do
+ * `vencimentos-orchestrator.js`, e o guia do mês da carteira seria a terceira
+ * cópia. Duas cópias da mesma régua é divergência esperando acontecer — mexer
+ * numa e esquecer a outra faz a tela dizer "vence em 3 dias" enquanto o resumo
+ * diário conta como "7 dias", e as duas parecem certas sozinhas.
+ *
+ * A régua agora vive em `sefaz-backend/urgencia-vencimento.js` (puro, sem io),
+ * e este arquivo é só a porta TypeScript dela — mantida para não quebrar quem
+ * já importa daqui.
  */
+// @ts-expect-error — módulo .js puro (sem tipos)
+import { classificarUrgencia, URGENCIA_LABEL } from '../sefaz-backend/urgencia-vencimento.js';
 
 export type Urg = 'atrasada' | 'hoje' | 'amanha' | '3d' | '7d' | 'futura';
 
@@ -19,20 +28,7 @@ export type Urg = 'atrasada' | 'hoje' | 'amanha' | '3d' | '7d' | 'futura';
  *   futura    dias > 7  (fora do horizonte da semana)
  */
 export function classificarUrgenciaVencimento(dias: number): Urg {
-    if (!Number.isFinite(dias)) return 'futura';
-    if (dias < 0) return 'atrasada';
-    if (dias === 0) return 'hoje';
-    if (dias === 1) return 'amanha';
-    if (dias <= 3) return '3d';
-    if (dias <= 7) return '7d';
-    return 'futura';
+    return classificarUrgencia(dias) as Urg;
 }
 
-export const URG_LABEL: Record<Urg, string> = {
-    atrasada: 'ATRASADA',
-    hoje: 'VENCE HOJE',
-    amanha: 'VENCE AMANHÃ',
-    '3d': 'EM 3 DIAS',
-    '7d': 'EM 7 DIAS',
-    futura: 'FUTURA',
-};
+export const URG_LABEL: Record<Urg, string> = URGENCIA_LABEL;

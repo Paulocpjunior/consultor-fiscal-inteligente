@@ -19,6 +19,8 @@
 // sempre a PRIMEIRA etapa não fechada na ordem — é isso que dá a linha.
 // ============================================================================
 
+import { classificarUrgencia, diasAteVencimento, urgenciaDominante, URGENCIA_LABEL } from './urgencia-vencimento.js';
+
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
     { id: 'validacao',  ordem: 2, nome: 'Validar as notas',      onde: 'Central de XMLs → XMLs (Entrada/Saída)' },
@@ -122,7 +124,7 @@ export function acharApuracaoDaCompetencia(empresa, competencia) {
  */
 export function montarRotinaFiscal({
     empresa, competencia, documentos = [], apuracao = null, tarefas = [], envios = [], capturaAtiva = true,
-    dipam = null, iss = null,
+    dipam = null, iss = null, agoraMs = Date.now(),
 }) {
     const docs = documentos || [];
     const entradas = docs.filter((d) => d.direcao === 'entrada').length;
@@ -178,21 +180,53 @@ export function montarRotinaFiscal({
     // ── 4. OBRIGAÇÕES ───────────────────────────────────────────────────────
     const concluidas = tarefas.filter((t) => t.status === 'concluida').length;
     const abertas = tarefas.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada');
+    // PRAZO das que estão abertas. A rotina já lia as tarefas e jogava a DATA
+    // fora — só contava quantas. Sem prazo, "2/5 entregues" não diz se sobra
+    // uma semana ou se venceu ontem, e é justamente o prazo que decide por
+    // onde o colaborador começa o dia.
+    const prazos = abertas.map((t) => {
+        const dias = diasAteVencimento(t.vencimento, agoraMs);
+        return {
+            obrigacao: t.obrigacao || t.titulo || '—',
+            vencimento: t.vencimento || null,
+            dias,
+            // Sem data legível NÃO vira 'futura' silenciosa: fica nulo e o
+            // painel mostra "sem data" (ausente ≠ no prazo).
+            urgencia: dias === null ? null : classificarUrgencia(dias),
+        };
+    });
+    const comData = prazos.filter((p) => p.urgencia);
+    const semData = prazos.length - comData.length;
+    const dominante = urgenciaDominante(comData.map((p) => p.urgencia));
+    const proximo = dominante
+        ? comData.filter((p) => p.urgencia === dominante).sort((a, b) => a.dias - b.dias)[0]
+        : null;
+    const atrasadas = comData.filter((p) => p.urgencia === 'atrasada').length;
     let eObrigacoes;
     if (tarefas.length === 0) {
         // Sem tarefa NÃO é "tudo certo" — é sinal de que o cron mensal não gerou.
         eObrigacoes = etapa('obrigacoes', 'atencao',
             'Nenhuma obrigação cadastrada nesta competência.',
             'As tarefas do mês não foram geradas. Rode a geração mensal em Vencimentos e Obrigações antes de dar qualquer coisa por entregue.',
-            { concluidas: 0, total: 0 });
+            { concluidas: 0, total: 0, prazo: null, atrasadas: 0, semData: 0 });
     } else if (abertas.length > 0) {
+        // ATRASADA é vermelho e vem no resumo, não escondida na lista: é a
+        // única faixa em que o prazo já foi perdido.
+        const selo = atrasadas > 0
+            ? ` · ${atrasadas} ATRASADA(S)`
+            : (proximo ? ` · próxima ${URGENCIA_LABEL[proximo.urgencia]} (${proximo.obrigacao})` : '');
         eObrigacoes = etapa('obrigacoes', 'pendente',
-            `${concluidas}/${tarefas.length} obrigação(ões) entregue(s).`,
+            `${concluidas}/${tarefas.length} obrigação(ões) entregue(s)${selo}.`,
             `Falta: ${abertas.map((t) => t.obrigacao || t.titulo || '—').join(', ')}.`,
-            { concluidas, total: tarefas.length, abertas: abertas.map((t) => t.obrigacao || t.titulo || '—') });
+            {
+                concluidas, total: tarefas.length,
+                abertas: abertas.map((t) => t.obrigacao || t.titulo || '—'),
+                prazo: proximo ? { ...proximo, dominante } : null,
+                atrasadas, semData,
+            });
     } else {
         eObrigacoes = etapa('obrigacoes', 'concluida', `${tarefas.length} obrigação(ões) entregue(s).`, null,
-            { concluidas, total: tarefas.length, abertas: [] });
+            { concluidas, total: tarefas.length, abertas: [], prazo: null, atrasadas: 0, semData: 0 });
     }
 
     // DIPAM: a compra de produtor rural entra na GIA e no Registro 1400 da EFD
@@ -208,6 +242,9 @@ export function montarRotinaFiscal({
                 acaoDipam,
                 {
                     concluidas: eObrigacoes.concluidas, total: eObrigacoes.total, abertas: eObrigacoes.abertas || [],
+                    prazo: eObrigacoes.prazo ?? null,
+                    atrasadas: eObrigacoes.atrasadas ?? 0,
+                    semData: eObrigacoes.semData ?? 0,
                     dipam: { produtores: dipamProdutores, indefinidos: dipamIndefinidos },
                 });
         } else {

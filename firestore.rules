@@ -182,6 +182,15 @@ service cloud.firestore {
     // Escrita: SO admin (so o admin atribui empresas a colaboradores).
     // ───────────────────────────────────────────────────────────────
 
+    // carteira_observacoes: recado do colaborador sobre um cliente no mês.
+    // NENHUM acesso pelo cliente — só o backend, que aplica o guard de
+    // carteira (podeAcessarEmpresaId). As subcoleções de empresa liberam por
+    // `createdBy`, e o colaborador da carteira quase nunca é quem cadastrou;
+    // liberar aqui pra "qualquer logado" abriria a carteira inteira.
+    match /carteira_observacoes/{obsId} {
+      allow read, write: if false;
+    }
+
     match /carteiras/{vinculoId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
