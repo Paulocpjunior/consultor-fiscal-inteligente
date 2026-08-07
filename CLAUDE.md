@@ -380,6 +380,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   alguém achar que declarou tudo. AUTH: `crossProjectAuth(projetos)` com a lista
   EXPLÍCITA por rota — pôr projeto na lista global abriria de lambuja o
   `/api/dp-integration/*`, que entrega dado SERPRO de qualquer CNPJ.
+  **R-2055 (FUNRURAL sub-rogado) LIGADO no mesmo desenho** (07/08):
+  `GET /api/admin/reinf/aquisicao-rural?cnpj=&competencia=` →
+  `reinf-aquisicao-rural.js` (12 testes). Era o único evento da série R-2000
+  com CÁLCULO PRONTO — a aba 🌾 já apura com vigência de alíquota (LC
+  224/2025), tabela de segurado especial e conferência contra o infAdic. A rota
+  chama a MESMA `montarDipamCompetencia` e só troca o EIXO: a aba responde por
+  NOTA e por MUNICÍPIO, o R-2055 é declarado por PRODUTOR. **Nenhuma conta
+  nova, e a ressalva PROÍBE recalcular do outro lado** — dois números pro mesmo
+  fato é o pior defeito de um arquivo fiscal. `indAquis` vai NULO (tabela
+  oficial que não está aqui) mas `seguradoEspecial` viaja, porque é ele que
+  decide o indicador. Produtor PJ vira contagem `dePessoaJuridica` (é R-2050).
+  Os nomes dos campos são os do CÁLCULO (inss/gilrat/senar), NUNCA os do
+  leiaute: nome que finge ser do leiaute faz o outro lado escrever no campo
+  errado achando que conferiu (lição do `csllOuTotal`).
   🚨 **NADA DO REPO DO REINF ESTÁ NO AR**: as runs 2/3/4 do `deploy-app.yml` de
   lá falharam todas em "Falta o secret `GCP_SA_KEY`". Paulo precisa cadastrar o
   secret (Settings → Secrets → Actions; a SA de deploy do CFI serve). Merge
