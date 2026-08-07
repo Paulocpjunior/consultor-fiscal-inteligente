@@ -215,7 +215,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   como ATRIBUIÇÃO (admin diz quem cuida de quem) e era admin-only; agora tem
   duas abas — 🧭 Guia do mês (TODO mundo, escopo na própria carteira) e 👥
   Atribuição (só admin). Uma linha por cliente, ordenada por cor e, dentro da
-  cor, por QUEM VENCE ANTES. NENHUMA CONTA NOVA: `services/guiaDoMes.ts` (19
+  cor, por QUEM VENCE ANTES. **O PDF DIZ DE QUEM É** (Paulo, 07/08): o
+  colaborador imprime só a carteira dele (o escopo é do backend), e o ADMIN
+  escolhe "Guia de: <colaborador>" — sem isso ele só imprimia a carteira
+  inteira, e o papel sairia com o NOME DE QUEM CLICOU no cabeçalho, mentindo
+  sobre a quem aquilo responde. Recorte impresso sempre diz o que ficou de
+  fora, e "Empresas SEM responsável" é opção do seletor pra elas não sumirem de
+  todas as visões (é pendência de atribuição, não invisibilidade).
+  NENHUMA CONTA NOVA: `services/guiaDoMes.ts` (19
   testes) só condensa o payload de `/api/admin/rotina-fiscal/painel`, que já é
   a fonte das 5 etapas, do ISS e (desde este PR) do PRAZO — a rotina lia as
   tarefas e jogava a DATA fora, só contava quantas. Imprime em PDF pela casca
