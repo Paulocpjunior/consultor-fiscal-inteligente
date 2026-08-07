@@ -597,9 +597,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   preenchido — equipe precisa preencher as configs; contador `semConfig`
   no resultado do cron mostra o gap. Resumos resNFe não sobem (só a
   completa pós-Ciência).
-- **Adoção do cofre (saída mod 55) = 0/388**: lista priorizada na Cobertura
-  de Saída (🎯 prioritárias = emitem mod 55 e pararam de ser capturadas);
-  equipe deve enviar as "📋 Instruções" por ordem de volume.
+- **Adoção do cofre (saída mod 55) — NÚMERO SÓ SAI DO PAINEL, NUNCA DAQUI**
+  (Paulo, 07/08: *"o cofre autXML não está em zero, eu mesmo te mandei print
+  de clientes que já configuraram"*). O "0/388" que morava nesta linha era de
+  ANTES da aptidão (#384, 04/08) e continuou sendo repetido como fato — é o
+  mesmo erro que a própria `aptidao-saida.js` foi construída pra corrigir: a
+  Cobertura de Saída olhava os últimos N dias e confundia "não configurou"
+  com "configurou e não vendeu no mês", então cliente APTO aparecia como não
+  apto. REGRA: número de adoção se lê no painel **✅ O cliente fez certo?**
+  (`/api/admin/sefaz/aptidao-saida`), que prova pelo autXML/cofre de QUALQUER
+  data — nunca de memória, nunca deste arquivo. A lista priorizada segue na
+  Cobertura de Saída (🎯 prioritárias = emitem mod 55 e pararam de ser
+  capturadas), e as "📋 Instruções" vão por ordem de volume só pra quem está
+  em `sem-prova`.
 - **Cofre de e-mail — 3 formatos reais** (prints do Paulo 27/07, #317/#318):
   anexo .xml, .zip com os XMLs do dia e LINK no corpo (ISS.NET-DF manda o
   .aspx do XML; ERP manda pacote do mês que expira em 7 dias). Cofre NÃO
@@ -738,8 +748,10 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   aba 🚦 Migração + respostas da equipe) → F1 dois pilotos Lucro com
   conferência-espelho no PVA → F3 ondas por cliente.
   O QUE PASSOU A MANDAR NO RITMO: completude de captura por cliente (prova de
-  captura + cofre de saída, hoje 0/388) — cliente só migra com a captura
-  fechada, e é aí que está o gargalo agora, não mais no histórico.
+  captura + cofre de saída) — cliente só migra com a captura fechada, e é aí
+  que está o gargalo agora, não mais no histórico. O placar de quem está
+  pronto se lê na aba 🏁 Fila de migração; NÃO carimbar número de adoção
+  neste arquivo (ver a regra da aptidão acima).
   **A FILA DE MIGRAÇÃO É UMA TELA** (Paulo, 07/08: *"precisamos acelerar"*):
   a resposta "quem pode migrar hoje" já existia espalhada em TRÊS painéis —
   🔎 Prova de captura, ✅ Aptidão da saída e 🚦 Migração — e ninguém abre três
