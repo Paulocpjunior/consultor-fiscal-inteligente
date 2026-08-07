@@ -17,6 +17,7 @@ import {
 } from '../../services/carteiraService';
 import { testarResumoDiario } from '../../services/notificacoesService';
 import { resumirCarteira, resumoCarteiraCsv } from '../../services/carteiraResumo';
+import GuiaDoMes from './GuiaDoMes';
 
 interface Props {
     currentUser: User;
@@ -36,6 +37,16 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [erroEmpresas, setErroEmpresas] = useState<string | null>(null);
 
     const isAdmin = currentUser.role === 'admin';
+    /**
+     * A tela nasceu como ATRIBUIÇÃO (admin diz quem cuida de quem) e por isso
+     * era admin-only. Paulo, 07/08: ela "deve ser o guia, o norte do
+     * colaborador durante o mês fiscal". Então ela tem duas caras:
+     *   🧭 Guia do mês  — de TODO mundo, com escopo na própria carteira
+     *   👥 Atribuição   — só admin, como sempre foi
+     * O escopo de quem vê o quê é do BACKEND (getEmpresaIdsDaCarteira na rota
+     * da Rotina): colaborador recebe só os clientes dele, sem filtro na tela.
+     */
+    const [aba, setAba] = useState<'guia' | 'atribuir'>('guia');
 
     // Guard contra setState apos unmount (3 fetches em paralelo - troca de aba
     // rapida deixava state stale e gerava warning React 18).
@@ -168,10 +179,15 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
     };
 
+    // Colaborador não atribui ninguém — pra ele a tela É o guia do mês.
     if (!isAdmin) {
         return (
-            <div className="p-6 text-center text-slate-600 dark:text-slate-400">
-                A Carteira de Clientes é restrita a administradores.
+            <div className="p-4 max-w-5xl mx-auto">
+                <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-1">Carteira de Clientes</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                    Os clientes que respondem a você neste mês fiscal.
+                </p>
+                <GuiaDoMes currentUser={currentUser} onShowToast={onShowToast} />
             </div>
         );
     }
@@ -179,9 +195,29 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     return (
         <div className="p-4 max-w-5xl mx-auto">
             <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Carteira de Clientes</h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 mb-4">
-                Atribua cada empresa a um ou mais colaboradores responsáveis.
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 mb-3">
+                O guia do mês de cada colaborador — e a atribuição de quem cuida de quem.
             </p>
+
+            <div className="flex gap-2 mb-4">
+                {([['guia', '🧭 Guia do mês'], ['atribuir', '👥 Atribuição']] as const).map(([id, rotulo]) => (
+                    <button
+                        key={id}
+                        onClick={() => setAba(id)}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg ${
+                            aba === id
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                        }`}
+                    >
+                        {rotulo}
+                    </button>
+                ))}
+            </div>
+
+            {aba === 'guia' && <GuiaDoMes currentUser={currentUser} onShowToast={onShowToast} />}
+            {aba === 'atribuir' && (
+            <>
 
             <div className="mb-4">
                 <button
@@ -376,6 +412,8 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </div>
                 );
             })}
+            </>
+            )}
         </div>
     );
 };

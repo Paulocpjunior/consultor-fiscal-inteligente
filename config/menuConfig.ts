@@ -51,7 +51,7 @@ export const searchDescriptions: Record<SearchType, string> = {
     [SearchType.CERT_MONITOR]: 'Certificados Digitais — monitora vencimento dos certs (S&P + por empresa). Cert vencido = SERPRO/SEFAZ/e-CAC param sem aviso.',
     [SearchType.DIAGNOSTICO_CONFIG]: 'Configurações Operacionais — detecta env vars faltando (SERPRO/SharePoint/CRON_SECRET/etc) e modos operacionais incorretos. Só admin, sem expor valores.',
     [SearchType.SAUDE_GERAL]: 'Saúde Geral — agrega os 4 diagnósticos (cadastros + documentos + certs + configs) numa única tela. Status global OK/MÉDIO/ALTO/CRÍTICO/DEGRADADO.',
-    [SearchType.CARTEIRA]: 'Carteira de Clientes — atribuição de empresas a colaboradores responsáveis (somente administradores).',
+    [SearchType.CARTEIRA]: 'Carteira de Clientes — o guia do mês: seus clientes na ordem de quem precisa de atenção, com prazo, captura, obrigações e o próximo passo (imprimível em PDF). A atribuição de quem cuida de quem é do admin.',
     [SearchType.AGENTES_A3]: 'Agentes A3 — gerenciar API keys do agente local cfi-a3 e marcar empresas como A3 (somente administradores).',
     [SearchType.NFSE_NACIONAL]: 'NFS-e Nacional (CGSN 189/2026) — emissão e gestão de notas de serviço no padrão nacional, obrigatório set/2026.',
     [SearchType.DASHBOARD_CEO]: 'Dashboard CEO — visão executiva unificada com KPIs e recomendações da IA.',

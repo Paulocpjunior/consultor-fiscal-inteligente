@@ -209,6 +209,32 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Filtro ganhou `permitirLimpar` (o `<option value="">Todas</option>` que o
   select tinha): trocar de componente sem isso prenderia o colaborador na
   última empresa escolhida.
+- **A CARTEIRA É O GUIA DO MÊS DO COLABORADOR** (Paulo, 07/08: *"deve ser o
+  guia, o norte do colaborador durante o mês fiscal de acordo com as
+  obrigações e vencimentos das empresas que a ele respondem"*). A tela nasceu
+  como ATRIBUIÇÃO (admin diz quem cuida de quem) e era admin-only; agora tem
+  duas abas — 🧭 Guia do mês (TODO mundo, escopo na própria carteira) e 👥
+  Atribuição (só admin). Uma linha por cliente, ordenada por cor e, dentro da
+  cor, por QUEM VENCE ANTES. NENHUMA CONTA NOVA: `services/guiaDoMes.ts` (19
+  testes) só condensa o payload de `/api/admin/rotina-fiscal/painel`, que já é
+  a fonte das 5 etapas, do ISS e (desde este PR) do PRAZO — a rotina lia as
+  tarefas e jogava a DATA fora, só contava quantas. Imprime em PDF pela casca
+  única (`gerarRelatorioPdf`). A cor sai do farol da rotina; a ÚNICA coisa que
+  a agrava é obrigação ATRASADA (âmbar ali esconderia multa correndo).
+  **RÉGUA DE PRAZO NUM LUGAR SÓ** (`sefaz-backend/urgencia-vencimento.js`, 32
+  testes): as fronteiras atrasada/hoje/amanhã/≤3d/≤7d estavam escritas à mão
+  em DOIS lugares (vencimentosLogic.ts e o forEach do
+  vencimentos-orchestrator.js) e o guia seria a terceira cópia — agora os três
+  leem o mesmo módulo, e um teste cruzado prova que a porta TS devolve o mesmo
+  que o núcleo. Dias contam DIA de calendário, não hora: vencer hoje às 23h é
+  "hoje", não "0,04 dias".
+  **OBSERVAÇÃO POR CLIENTE VAI PELO BACKEND** (coleção `carteira_observacoes`,
+  1 doc por empresa × competência, rules `if false`): as subcoleções de
+  empresa liberam escrita pelo `createdBy` da EMPRESA, e o colaborador da
+  carteira quase nunca é quem cadastrou — ele ficaria sem escrever justo na
+  tela que é o norte dele. A rota usa `podeAcessarEmpresaId`. Texto vazio
+  APAGA. Observação NÃO é cadastro e não conserta cadastro: campo em branco
+  continua acendendo alerta na tela de cadastro (regra de 06/08).
 - **Campo novo do perfil precisa de TRÊS lugares** (03/08, caso KAWAI
   KODOMO — colaborador preencheu resp. legal e o selo não limpava): rota
   `empresas-perfil` (camposConferencia), `normalizarEmpresasPerfilResponse`

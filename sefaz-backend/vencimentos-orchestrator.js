@@ -18,6 +18,7 @@ import admin from 'firebase-admin';
 import { enviarEmail, isGraphConfigured } from './graph-provider.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { calcularMultaPorObrigacao } from './multa-calculator.js';
+import { classificarUrgencia } from './urgencia-vencimento.js';
 
 const TZ_OFFSET_BRT = -3; // BRT = UTC-3
 const REMETENTE_DEFAULT = process.env.GRAPH_REMETENTE || 'contabil@spassessoriacontabil.com.br';
@@ -499,11 +500,15 @@ export async function resumoVencimentos({ uid, role } = {}) {
         if (role !== 'admin' && uid && t.responsavel && t.responsavel !== uid) return;
         const dias = diffDiasBrt(t.vencimento, hoje);
         resumo.total++;
-        if (dias < 0) resumo.atrasadas++;
-        else if (dias === 0) resumo.venceHoje++;
-        else if (dias === 1) resumo.venceAmanha++;
-        else if (dias <= 3) resumo.vence3d++;
-        else if (dias <= 7) resumo.vence7d++;
+        // A régua de faixas é ÚNICA (urgencia-vencimento.js) — antes estava
+        // escrita à mão aqui E no vencimentosLogic.ts. A faixa de 30 dias é
+        // só desta tela (horizonte do resumo diário), então fica de fora dela.
+        const urg = classificarUrgencia(dias);
+        if (urg === 'atrasada') resumo.atrasadas++;
+        else if (urg === 'hoje') resumo.venceHoje++;
+        else if (urg === 'amanha') resumo.venceAmanha++;
+        else if (urg === '3d') resumo.vence3d++;
+        else if (urg === '7d') resumo.vence7d++;
         else if (dias <= 30) resumo.vence30d++;
         if (dias <= 7) {
             proximas.push({
