@@ -55,6 +55,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   sobrescreve o que a pessoa digitou. Aplicado no mesmo dia: o CCM do
   painel ISS deixou de se auto-preencher pela nota (#489) e passou a
   denunciar ausência e divergência.
+- **AUSÊNCIA DE XML NA NFS-e DO PORTAL É NATUREZA, NÃO FALHA** (07/08, ELS
+  COMERCIO DE BANANAS, nota 55758/1): clicar na nota derrubava a tela com
+  `Cannot read properties of undefined (reading 'slice')` — era
+  `d.xmlHash.slice(0,16)` sem guarda. Mas o `.slice` era só o sintoma: a tela
+  assumia que TODO documento veio de um arquivo XML. A NFS-e do portal entra
+  por CSV/TXT — **não tem XML, não tem hash e não tem chave de 44 dígitos**, e
+  isso é a forma do trilho, não buraco de captura. Por isso a correção não foi
+  um `?.`: `services/documentoProcedencia.ts` (11 testes) DIZ por que o campo
+  está vazio, e distingue os dois casos — NFS-e sem XML é normal, **NF-e sem
+  XML é anormal e manda conferir Erros & Logs**. Campo vazio sem explicação faz
+  procurar problema que não existe (mesma lição do "CNPJ não cadastrado").
 - **ERRO DE TELA TEM QUE DIZER QUAL TELA** (07/08): a `ErrorBoundary` mostrava
   só "Erro ao carregar modulo" + a mensagem crua, e um `Cannot read properties
   of undefined (reading 'slice')` num print virou caça com 261 candidatos no
