@@ -324,6 +324,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   andamento — checar o banner do Diagnóstico antes de mesclar (deploy
   20:19 de 24/07 matou o manifest-cron das 20:10 → alerta de FALHA).
 
+- **REINF é do CONSULTOR CONTÁBIL, e agora é meu também** (Paulo, 07/08: *"o
+  CODEX estava tocando este projeto, você consegue administrar? para que não
+  fique mais confuso?"*). Repo `Paulocpjunior/plano-contas-iob`, Cloud Run
+  `plano-contas-iob` (us-west1, projeto `projetos-app-sp`), MESMO Firestore do
+  CFI. **Ele agora TEM CLAUDE.md** — o estado do módulo mora lá, não aqui; a
+  falta dele era a causa da confusão entre sessões.
+  O QUE O CFI DEVE AO REINF: as contas do R-4020 e do R-2055 já existem deste
+  lado (NFS-e tomadas com `valores.ir/inss/csll/pis/cofins`, relatório de
+  Retenções, aba 🌾 com FUNRURAL). A integração é LER A MESMA FONTE — o REINF
+  hoje come planilha por upload, e redigitar é o que não pode.
+  **ACHADO QUE MORDE OS DOIS LADOS (07/08)**: o export de NFS-e do portal de SP
+  **não traz a CSLL individual** — a coluna rotulada "CSLL" é o **TOTAL** das
+  três contribuições federais. Verdade conferida contra o print do IOB
+  (CLINIPAR, base 590,10: 27,44 = PIS 3,84 + COFINS 17,70 + CSLL 5,90). O
+  importer gravava `valorCsll` a partir dela, então o relatório de Retenções
+  superestima a CSLL. `retencao-federal-coerencia.js` acusa pela ASSINATURA DE
+  ALÍQUOTA (PIS 0,65 · COFINS 3 · CSLL 1 · CSRF 4,65) — e a derivação da CSLL
+  por subtração só é aceita quando os TRÊS lados fecham (feita no repo do
+  REINF). O portal também exporta o MESMO layout de 73 colunas em CSV (";") e
+  TXT (TAB): o parser só lia ";" e devolvia zero nota em SILÊNCIO.
 - **Legalização é APP PRÓPRIO, fora do CFI** (Paulo, 26/07/2026 — corrigiu
   com ênfase a 1ª entrega como card interno): repo GitHub `legalizacao`,
   serviço Cloud Run `legalizacao` (us-west1, mesmo projeto), URL própria.
