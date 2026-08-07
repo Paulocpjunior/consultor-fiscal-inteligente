@@ -14,6 +14,7 @@ import {
 } from './nfse-sp-orchestrator.js';
 import { interpretarRespostaWs, enxugarParaDiagnostico } from './nfse-sp-ws-leitura.js';
 import { parseCsvNfseSp, detectarSeparador } from './nfse-sp-csv-parser.js';
+import { varrerRetencaoFederal } from './retencao-federal-coerencia.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
 import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
@@ -210,6 +211,19 @@ router.post('/nfsesp-importar-csv', requireAdmin, uploadCsv.single('csv'), async
             return res.json({ ok: true, aviso: 'Arquivo sem nenhuma linha de nota.', resumo: { totalNotas: 0 } });
         }
 
+        // COERÊNCIA DAS RETENÇÕES FEDERAIS, antes de gravar. As alíquotas são
+        // fixas em lei (PIS 0,65 · COFINS 3 · CSLL 1), então o próprio dado
+        // denuncia campo trocado — e a coluna "CSLL" do portal é, na verdade,
+        // o TOTAL das três (achado 07/08, conferido contra o print do IOB).
+        const retencao = varrerRetencaoFederal((parsed.notas || []).map((n) => ({
+            numero: n.numero,
+            prestador: n.razaoSocialPrestador,
+            base: n.valorServicos,
+            pis: n.pisRetido,
+            cofins: n.cofinsRetida,
+            csll: n.contribSociaisRetidas,
+        })));
+
         // Contexto da empresa (opcional — se vier no body, usa pra setar direcao)
         const ctx = {
             empresaId: req.body?.empresaId || null,
@@ -285,7 +299,12 @@ router.post('/nfsesp-importar-csv', requireAdmin, uploadCsv.single('csv'), async
                 duracaoMs: resultado.duracaoMs,
                 contagemBate: parsed.contagemBate,
                 somaBate: parsed.somaBate,
+                separador: parsed.separador === '\t' ? 'TAB' : parsed.separador,
             },
+            // Retenção federal: acusa campo trocado ANTES de virar declaração.
+            // Não conserta — dividir o total seria inventar dado fiscal.
+            retencaoFederal: retencao.resumo,
+            avisosRetencao: retencao.avisos,
             // Não retorna detalhes individuais por padrão (pode ser grande)
         });
     } catch (e) {
