@@ -11,6 +11,8 @@ import {
 import { getEmpresas as getEmpresasSimples } from '../../services/simplesNacionalService';
 import CobrancaModal from './CobrancaModal';
 import EnviosHistoricoModal from './EnviosHistoricoModal';
+import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
+import { paraEmpresaOptions } from '../../services/empresaOption';
 
 interface Props {
     currentUser: User | null;
@@ -24,6 +26,11 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [loading, setLoading] = useState(false);
     const [filtroStatus, setFiltroStatus] = useState<DasStatusPagamento | ''>('');
     const [filtroEmpresa, setFiltroEmpresa] = useState('');
+    // Escolha PENDENTE: trocar de empresa no seletor não busca nada. Só o
+    // clique em ⚡ Ativar move o valor pra `filtroEmpresa`, que é quem dispara
+    // o recarregamento. Antes, cada escolha (inclusive a errada) refazia
+    // resumo + lista + carteira inteira de empresas.
+    const [empresaEscolhida, setEmpresaEscolhida] = useState('');
     const [selecionado, setSelecionado] = useState<DasEmitido | null>(null);
     const [cobrancaDas, setCobrancaDas] = useState<DasEmitido | null>(null);
     const [mostrarFormAvulso, setMostrarFormAvulso] = useState(false);
@@ -285,16 +292,15 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4 space-y-3">
                     <h3 className="font-bold text-emerald-800 dark:text-emerald-200">Emitir DAS Avulso</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <select
+                        {/* Formulário: escolher NÃO busca nada no banco, então
+                            aqui não há ⚡ Ativar — seria clique a mais por nada.
+                            O ganho é achar a empresa pelo Cod.Cliente. */}
+                        <EmpresaSearchSelect
+                            empresas={paraEmpresaOptions(empresas, 'simples')}
                             value={novoEmpresaId}
-                            onChange={e => setNovoEmpresaId(e.target.value)}
-                            className="px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
-                        >
-                            <option value="">— Selecione a empresa —</option>
-                            {empresas.map(e => (
-                                <option key={e.id} value={e.id}>{e.nome} ({e.cnpj})</option>
-                            ))}
-                        </select>
+                            onChange={setNovoEmpresaId}
+                            placeholder="Selecione a empresa — código, nome ou CNPJ"
+                        />
                         <input
                             type="month"
                             value={novoCompetencia}
@@ -356,19 +362,19 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
             {/* Filtros */}
             <div className="flex flex-wrap items-center gap-3">
-                <select
-                    value={filtroEmpresa}
-                    onChange={e => setFiltroEmpresa(e.target.value)}
-                    className="px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
-                >
-                    <option value="">Todas as empresas</option>
-                    {empresas.map(e => (
-                        <option key={e.id} value={e.id}>{e.nome}</option>
-                    ))}
-                </select>
+                <div className="min-w-[320px] flex-1">
+                    <EmpresaSearchSelect
+                        empresas={paraEmpresaOptions(empresas, 'simples')}
+                        value={empresaEscolhida}
+                        onChange={setEmpresaEscolhida}
+                        onAtivar={(id) => setFiltroEmpresa(id)}
+                        permitirLimpar
+                        rotuloVazio="Todas as empresas"
+                    />
+                </div>
                 {(filtroStatus || filtroEmpresa) && (
                     <button
-                        onClick={() => { setFiltroStatus(''); setFiltroEmpresa(''); }}
+                        onClick={() => { setFiltroStatus(''); setFiltroEmpresa(''); setEmpresaEscolhida(''); }}
                         className="text-xs text-slate-500 hover:text-slate-700 underline"
                     >
                         Limpar filtros ✕

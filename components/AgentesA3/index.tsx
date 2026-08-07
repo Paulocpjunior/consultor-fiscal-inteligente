@@ -11,6 +11,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { User } from '../../types';
 import { getAllUsers } from '../../services/authService';
 import { getEmpresasParaPerfilCliente, type EmpresaPerfilOption } from '../../services/xmlFiscalService';
+import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
+import { paraEmpresaOptions } from '../../services/empresaOption';
 import {
     listarAgentKeys,
     gerarAgentKey,
@@ -253,18 +255,12 @@ const AgentesA3: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                     <div className="md:col-span-2">
                         <label className="block text-sm font-medium mb-1">Empresa</label>
-                        <select
+                        <EmpresaSearchSelect
+                            empresas={paraEmpresaOptions(empresas)}
                             value={empresaSelecionada}
-                            onChange={(e) => setEmpresaSelecionada(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-800"
-                        >
-                            <option value="">Selecione...</option>
-                            {empresas.map((e) => (
-                                <option key={e.id} value={e.id}>
-                                    {e.nome} — {e.cnpj}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={setEmpresaSelecionada}
+                            placeholder="Selecione — código, nome ou CNPJ"
+                        />
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Tipo</label>

@@ -14,6 +14,8 @@ import {
 import { listarDarfs, marcarDarfPago } from '../../services/darfService';
 import { getEmpresas as getEmpresasLucro } from '../../services/lucroPresumidoService';
 import DarfModal from './DarfModal';
+import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
+import { paraEmpresaOptions } from '../../services/empresaOption';
 
 interface Props {
     currentUser: User | null;
@@ -32,6 +34,9 @@ const TaxEmissionDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
     const [loading, setLoading] = useState(false);
     const [filtroStatus, setFiltroStatus] = useState<DarfStatusPagamento | ''>('');
     const [filtroEmpresa, setFiltroEmpresa] = useState('');
+    // Escolha PENDENTE: trocar de empresa não busca nada. Só o ⚡ Ativar move
+    // pro `filtroEmpresa`, que é quem dispara resumo + lista + carteira.
+    const [empresaEscolhida, setEmpresaEscolhida] = useState('');
     const [filtroTributo, setFiltroTributo] = useState('');
     const [selecionado, setSelecionado] = useState<DarfEmitido | null>(null);
     const [mostrarModalEmitir, setMostrarModalEmitir] = useState(false);
@@ -180,16 +185,16 @@ const TaxEmissionDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
 
             {/* Filtros */}
             <div className="flex flex-wrap items-center gap-3">
-                <select
-                    value={filtroEmpresa}
-                    onChange={e => setFiltroEmpresa(e.target.value)}
-                    className="px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
-                >
-                    <option value="">Todas as empresas</option>
-                    {empresas.map(e => (
-                        <option key={e.id} value={e.id}>{e.nome}</option>
-                    ))}
-                </select>
+                <div className="min-w-[320px] flex-1">
+                    <EmpresaSearchSelect
+                        empresas={paraEmpresaOptions(empresas, 'lucro')}
+                        value={empresaEscolhida}
+                        onChange={setEmpresaEscolhida}
+                        onAtivar={(id) => setFiltroEmpresa(id)}
+                        permitirLimpar
+                        rotuloVazio="Todas as empresas"
+                    />
+                </div>
                 <select
                     value={filtroTributo}
                     onChange={e => setFiltroTributo(e.target.value)}
@@ -202,7 +207,7 @@ const TaxEmissionDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                 </select>
                 {(filtroStatus || filtroEmpresa || filtroTributo) && (
                     <button
-                        onClick={() => { setFiltroStatus(''); setFiltroEmpresa(''); setFiltroTributo(''); }}
+                        onClick={() => { setFiltroStatus(''); setFiltroEmpresa(''); setFiltroTributo(''); setEmpresaEscolhida(''); }}
                         className="text-xs text-slate-500 hover:text-slate-700 underline"
                     >
                         Limpar filtros ✕

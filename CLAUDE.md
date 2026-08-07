@@ -193,6 +193,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   5min), elegibilidade ADN (param `certsMeta`) e painel Status
   (`temA1MesmaRaizValido` → via 'cloud-a1-raiz'). TRILHO NOVO que exigir
   certificado DEVE aceitar o da matriz pela raiz.
+- **SELETOR DE EMPRESA É UM SÓ, e ⚡ Ativar só onde há CARGA** (07/08): o
+  `EmpresaSearchSelect` (busca por Cod.Cliente, nome ou CNPJ) nasceu na
+  Central de XMLs e ficou lá — 11 seletores de outras telas seguiam `<select>`
+  cru de ~400 opções, onde achar cliente é rolar a lista. O que impedia
+  reaproveitar não era o componente, era a FORMA: cada tela guarda a empresa
+  do jeito da coleção dela (`nome` × `razaoSocial`, codCliente em
+  `dadosFiscais` × topo legado). `services/empresaOption.ts` (20 testes)
+  normaliza — e NÃO filtra: empresa com cadastro torto continua na lista,
+  porque sumir do seletor faz o colaborador concluir que ela não existe
+  (cadastro torto é alerta na tela de cadastro). REGRA DO ⚡ ATIVAR: só onde
+  escolher DISPARA carga (DAS filtro, DARF filtro, Tarefas filtro,
+  NfpProCloud) — ali o valor escolhido fica PENDENTE e só o clique commita.
+  Em formulário e filtro em memória, ⚡ Ativar seria clique a mais por nada.
+  Filtro ganhou `permitirLimpar` (o `<option value="">Todas</option>` que o
+  select tinha): trocar de componente sem isso prenderia o colaborador na
+  última empresa escolhida.
 - **Campo novo do perfil precisa de TRÊS lugares** (03/08, caso KAWAI
   KODOMO — colaborador preencheu resp. legal e o selo não limpava): rota
   `empresas-perfil` (camposConferencia), `normalizarEmpresasPerfilResponse`

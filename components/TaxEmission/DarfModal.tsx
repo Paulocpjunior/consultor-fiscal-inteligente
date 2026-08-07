@@ -11,6 +11,8 @@ import type {
 import { DARF_TRIBUTO_LABELS } from '../../types';
 import { emitirDarf, sugerirCodigoReceita } from '../../services/darfService';
 import { sugerirValorDarf, formatBRL } from '../../services/taxEmissionService';
+import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
+import { paraEmpresaOptions } from '../../services/empresaOption';
 
 interface Props {
     currentUser: User | null;
@@ -149,18 +151,12 @@ const DarfModal: React.FC<Props> = ({ currentUser, empresas, onClose, onEmitido,
                     {/* Empresa */}
                     <div>
                         <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Empresa</label>
-                        <select
+                        <EmpresaSearchSelect
+                            empresas={paraEmpresaOptions(empresas, 'lucro')}
                             value={empresaId}
-                            onChange={e => setEmpresaId(e.target.value)}
-                            className="mt-1 w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900"
-                        >
-                            <option value="">— Selecione —</option>
-                            {empresas.map(e => (
-                                <option key={e.id} value={e.id}>
-                                    {e.nome} ({e.cnpj}) — {e.regimePadrao || 'Presumido'}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={setEmpresaId}
+                            placeholder="Selecione a empresa — código, nome ou CNPJ"
+                        />
                     </div>
 
                     {/* Regime + Tributo */}

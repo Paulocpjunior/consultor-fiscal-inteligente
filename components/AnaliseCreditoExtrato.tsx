@@ -64,6 +64,8 @@ import { useCategoriasCredito } from '../hooks/useCategoriasCredito';
 import { useOverridesInvoices } from '../hooks/useOverridesInvoices';
 import type { EmpresaPerfilOption } from '../services/xmlFiscalService';
 import type { User } from '../types';
+import EmpresaSearchSelect from './xml/EmpresaSearchSelect';
+import { paraEmpresaOptions } from '../services/empresaOption';
 
 // Alíquotas PIS/COFINS não-cumulativo (Lucro Real)
 const ALIQ_PIS    = 0.0165;
@@ -517,22 +519,13 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
           <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">
             Empresa tomadora dos servicos
           </label>
-          <select
-            value={empresaSelId}
-            onChange={e => setEmpresaSelId(e.target.value)}
-            disabled={empresasLoading}
-            className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-          >
-            <option value="">
-              {empresasLoading ? 'Carregando empresas...' : '— Selecione a empresa antes de subir o PDF —'}
-            </option>
-            {[...empresas].sort((a,b) => (a.nome || '').localeCompare(b.nome || '')).map(e => (
-              <option key={e.id} value={e.id}>
-                {e.nome} ({e.cnpj}) · {e.regimeSugerido === 'SIMPLES' ? 'Simples'
-                  : e.regimeSugerido === 'LUCRO_PRESUMIDO' ? 'Presumido' : 'Lucro Real'}
-              </option>
-            ))}
-          </select>
+          <EmpresaSearchSelect
+                        empresas={paraEmpresaOptions([...empresas].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')))}
+                        value={empresaSelId}
+                        onChange={setEmpresaSelId}
+                        disabled={empresasLoading}
+                        placeholder={empresasLoading ? 'Carregando empresas…' : 'Selecione a empresa antes de subir o PDF — código, nome ou CNPJ'}
+                    />
           {empresasLoading && (
             <p className="text-[11px] text-blue-500 mt-1">
               Carregando empresas liberadas para o seu perfil...

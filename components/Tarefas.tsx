@@ -20,6 +20,8 @@ import ModalReatribuir from './Tarefas/ModalReatribuir';
 import ModalMover from './Tarefas/ModalMover';
 import KanbanColuna from './Tarefas/KanbanColuna';
 import type { User } from '../types';
+import EmpresaSearchSelect from './xml/EmpresaSearchSelect';
+import { paraEmpresaOptions } from '../services/empresaOption';
 
 interface TarefasProps {
     currentUser: User | null;
@@ -46,6 +48,10 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
 
     const [filtroResp,       setFiltroResp]       = useState<string | 'todos' | 'sem_dono'>('todos');
     const [filtroEmpresa,    setFiltroEmpresa]    = useState<string>('');
+    // Escolha PENDENTE: trocar de empresa não busca nada. Só o ⚡ Ativar move
+    // pro `filtroEmpresa` — que aqui refaz `listarTarefas` E a auto-geração da
+    // competência, então cada escolha errada custava caro.
+    const [empresaEscolhida, setEmpresaEscolhida] = useState<string>('');
     const [filtroStatus,     setFiltroStatus]     = useState<StatusTarefa | 'todas' | 'atrasadas'>('todas');
     const [filtroObrigacao,  setFiltroObrigacao]  = useState<ObrigacaoTarefa | 'todas'>('todas');
     const [filtroCompetencia,setFiltroCompetencia]= useState<string>(mesAtual);
@@ -306,13 +312,14 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
                     </div>
                     <div>
                         <label className="text-xs text-gray-600 dark:text-gray-300">Empresa</label>
-                        <select value={filtroEmpresa} onChange={e => setFiltroEmpresa(e.target.value)}
-                            className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700">
-                            <option value="">Todas</option>
-                            {empresas.map(e => (
-                                <option key={e.id} value={e.id}>{e.nome}</option>
-                            ))}
-                        </select>
+                        <EmpresaSearchSelect
+                            empresas={paraEmpresaOptions(empresas)}
+                            value={empresaEscolhida}
+                            onChange={setEmpresaEscolhida}
+                            onAtivar={(id) => setFiltroEmpresa(id)}
+                            permitirLimpar
+                            rotuloVazio="Todas"
+                        />
                     </div>
                     <div>
                         <label className="text-xs text-gray-600 dark:text-gray-300">Status</label>
