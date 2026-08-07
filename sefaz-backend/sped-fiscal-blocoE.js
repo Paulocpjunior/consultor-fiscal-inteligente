@@ -66,7 +66,14 @@ function somarImpostoPorDirecao(notas, direcao, campoItem, campoTotais) {
 }
 
 // ICMS por direção (mantém a assinatura/comportamento original).
-function somarIcmsPorDirecao(notas, direcao) {
+/**
+ * Débito (saídas) ou crédito (entradas) de ICMS do período.
+ *
+ * EXPORTADA porque o detector de crédito acumulado precisa do MESMO número que
+ * vai no E110 — dois jeitos de somar ICMS é o painel divergindo do arquivo, e
+ * aí ninguém sabe qual dos dois está certo.
+ */
+export function somarIcmsPorDirecao(notas, direcao) {
     return somarImpostoPorDirecao(notas, direcao, 'vICMS', 'vICMS');
 }
 
