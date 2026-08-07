@@ -21,8 +21,28 @@ function decodeIso88591(buffer) {
     return buffer.toString('latin1');
 }
 
-// Parse uma linha de CSV considerando ; como separador e respeitando quotes.
-function parseCsvLine(line) {
+/**
+ * SEPARADOR do arquivo do portal, decidido pelo CABEÇALHO.
+ *
+ * O portal exporta o MESMO layout de 73 colunas em dois formatos: CSV com ";"
+ * e TXT com TAB. O parser só entendia ";", então o TXT caía fora — e a rota
+ * ainda o rotulava de "TXT de largura fixa", que ele não é. Resultado: a
+ * equipe recebia "não sei ler" sobre um arquivo perfeitamente legível.
+ *
+ * Quem decide é a linha 1: vence o separador que produzir MAIS colunas. Um
+ * arquivo de verdade tem dezenas; o separador errado devolve 1.
+ */
+export function detectarSeparador(primeiraLinha) {
+    const linha = String(primeiraLinha || '');
+    const porPontoVirgula = linha.split(';').length;
+    const porTab = linha.split('\t').length;
+    if (porTab > porPontoVirgula && porTab > 1) return '\t';
+    if (porPontoVirgula > 1) return ';';
+    return null; // nenhum separador reconhecido — quem chama decide o que dizer
+}
+
+// Parse uma linha considerando o separador do arquivo e respeitando quotes.
+function parseCsvLine(line, sep = ';') {
     const cells = [];
     let current = '';
     let inQuotes = false;
@@ -35,7 +55,7 @@ function parseCsvLine(line) {
             } else {
                 inQuotes = !inQuotes;
             }
-        } else if (ch === ';' && !inQuotes) {
+        } else if (ch === sep && !inQuotes) {
             cells.push(current);
             current = '';
         } else {
@@ -101,7 +121,15 @@ export function parseCsvNfseSp(input) {
         throw new Error('CSV vazio ou inválido');
     }
 
-    const header = parseCsvLine(rawLines[0]);
+    const separador = detectarSeparador(rawLines[0]);
+    if (!separador) {
+        throw new Error(
+            'Não reconheci o separador das colunas na primeira linha. Esta importação lê o export do '
+            + 'portal em CSV (";") ou TXT (TAB), ambos com as mesmas colunas. Se o arquivo veio do '
+            + '"Layout do Arquivo NFS-e" (largura fixa, sem separador), esse layout ainda não é lido.',
+        );
+    }
+    const header = parseCsvLine(rawLines[0], separador);
     const notas = [];
     let totalDeclarado = null;
     let valorTotalDeclarado = null;
@@ -110,7 +138,7 @@ export function parseCsvNfseSp(input) {
     for (let i = 1; i < rawLines.length; i++) {
         const line = rawLines[i];
         if (!line || !line.trim()) continue;
-        const cells = parseCsvLine(line);
+        const cells = parseCsvLine(line, separador);
 
         // Linha de Total (última): "Total;66;;;;;;;;;;;;;;;;;;;;;;;;;193.469,34;..."
         if (String(cells[0] || '').toLowerCase() === 'total') {
@@ -219,8 +247,15 @@ export function parseCsvNfseSp(input) {
 
     const valorSomaCalculada = notas.reduce((acc, n) => acc + (n.valorServicos || 0), 0);
 
+    // FAROL HONESTO: linha de detalhe é a que começa com "2". Se o arquivo tem
+    // conteúdo e NENHUMA linha de detalhe foi reconhecida, isso é falha de
+    // leitura — não "arquivo sem notas". Zero em silêncio é o que fazia a
+    // equipe achar que importou.
+    const linhasComConteudo = rawLines.slice(1).filter((l) => l && l.trim()).length;
     return {
         layout: 'V.006',
+        separador,
+        linhasComConteudo,
         ccmExportado,
         totalNotas: notas.length,
         totalDeclarado,
