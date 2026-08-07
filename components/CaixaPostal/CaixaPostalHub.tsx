@@ -38,7 +38,7 @@ const CaixaPostalHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </button>
                 ))}
             </div>
-            <ErrorBoundary>
+            <ErrorBoundary modulo="CaixaPostalHub">
                 <Suspense fallback={<LoadingSpinner />}>
                     {sub === 'caixa' && <CaixaPostalDashboard currentUser={currentUser} onShowToast={onShowToast} />}
                     {sub === 'radar' && <RadarCriticasPanel onShowToast={onShowToast} />}

@@ -57,7 +57,7 @@ const DctfwebHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 ))}
             </div>
 
-            <ErrorBoundary>
+            <ErrorBoundary modulo="DctfwebHub">
                 <Suspense fallback={<LoadingSpinner />}>
                     {sub === 'painel' && <DCTFWebDashboard currentUser={currentUser} onShowToast={onShowToast} />}
                     {sub === 'trimestrais' && <TrimestraisDoMesPanel currentUser={currentUser} onShowToast={onShowToast} />}

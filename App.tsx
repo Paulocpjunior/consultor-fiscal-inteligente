@@ -691,7 +691,7 @@ const App: React.FC = () => {
 
                 <div className="flex flex-col md:flex-row gap-6">
                     <main className="flex-grow min-w-0">
-                        <ErrorBoundary>
+                        <ErrorBoundary modulo="App">
                             <Suspense fallback={null}>
                                 <ReformaCountdownBanner
                                     onIrParaReforma={() => setSearchType(SearchType.SIMULADOR_IBS_CBS)}
@@ -703,7 +703,7 @@ const App: React.FC = () => {
                                 <CronCapturaBanner currentUser={currentUser} onShowToast={(msg) => setToastMessage(msg)} />
                             </Suspense>
                         </ErrorBoundary>
-                        <ErrorBoundary>
+                        <ErrorBoundary modulo="App">
                             <Suspense fallback={null}>
                                 <CaixaPostalAlerta
                                     currentUser={currentUser}
@@ -944,7 +944,7 @@ const App: React.FC = () => {
 
                         {/* Lucro Presumido View */}
                         {searchType === SearchType.LUCRO_PRESUMIDO_REAL && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <LucroPresumidoRealDashboard
                                     currentUser={currentUser}
@@ -960,7 +960,7 @@ const App: React.FC = () => {
                             Minha Agenda + Vencimentos da Semana (mesmo grupo: prazos
                             derivados do regime/cadastro de cada empresa). */}
                         {searchType === SearchType.OBRIGACOES_FISCAIS && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <VencimentosHub
                                     currentUser={currentUser}
@@ -973,7 +973,7 @@ const App: React.FC = () => {
                         {/* Rotina do Mês — a linha do processo (captura → validação →
                             apuração → obrigações → guias), por cliente. */}
                         {searchType === SearchType.ROTINA_FISCAL && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <RotinaFiscalPainel onIrPara={irParaEtapaDaRotina} />
                             </Suspense>
@@ -982,7 +982,7 @@ const App: React.FC = () => {
 
                         {/* Central de Documentos Fiscais (XML) */}
                         {searchType === SearchType.IMPORTA_XML && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CentralDocumentosFiscais
                                     currentUser={currentUser}
@@ -994,7 +994,7 @@ const App: React.FC = () => {
 
                         {/* Análise Relatório SAGE View */}
                         {searchType === SearchType.ANALISE_RELATORIO_SAGE && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnaliseRelatorioSAGE
                                     onShowToast={(msg) => setToastMessage(msg)}
@@ -1005,7 +1005,7 @@ const App: React.FC = () => {
 
                         {/* SPED Fiscal (EFD ICMS/IPI) View */}
                         {searchType === SearchType.SPED_FISCAL && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <SpedFiscal
                                     currentUser={currentUser}
@@ -1017,7 +1017,7 @@ const App: React.FC = () => {
 
                         {/* NFTS SP — Gerador de Lotes (Prefeitura de Sao Paulo) */}
                         {searchType === SearchType.NFTS_SP && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <NftsSp
                                     currentUser={currentUser}
@@ -1029,7 +1029,7 @@ const App: React.FC = () => {
 
                         {/* Caixa Postal — hub que funde Caixa Postal + Radar e-CAC. */}
                         {searchType === SearchType.CAIXA_POSTAL && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CaixaPostalHub
                                     currentUser={currentUser}
@@ -1041,7 +1041,7 @@ const App: React.FC = () => {
 
                         {/* GIA-ST — guia do ICMS-ST a partir do Livro de ICMS Substituto (Office Fiscal). */}
                         {searchType === SearchType.GIA_ST && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <GiaStPanel
                                     currentUser={currentUser}
@@ -1053,7 +1053,7 @@ const App: React.FC = () => {
 
                         {/* DAS Simples — hub que funde Painel DAS + Cobertura PGDAS-D + Sublimite. */}
                         {searchType === SearchType.DAS_SIMPLES && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DasHub
                                     currentUser={currentUser}
@@ -1065,7 +1065,7 @@ const App: React.FC = () => {
 
                         {/* DCTFWeb — hub que funde Painel + Cobertura + EFD-Reinf×DCTFWeb. */}
                         {searchType === SearchType.DCTFWEB && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DctfwebHub
                                     currentUser={currentUser}
@@ -1087,7 +1087,7 @@ const App: React.FC = () => {
                             DIAGNOSTICO_DOCS/CADASTROS/CERT_MONITOR/CONFIG/ANOMALIAS → DiagnosticoHub */}
 
                         {searchType === SearchType.SAUDE_GERAL && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DiagnosticoHub
                                     currentUser={currentUser}
@@ -1098,7 +1098,7 @@ const App: React.FC = () => {
                         )}
 
                         {searchType === SearchType.CARTEIRA && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <CarteiraDashboard
                                     currentUser={currentUser}
@@ -1109,7 +1109,7 @@ const App: React.FC = () => {
                         )}
 
                         {searchType === SearchType.AGENTES_A3 && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AgentesA3Dashboard
                                     currentUser={currentUser}
@@ -1122,7 +1122,7 @@ const App: React.FC = () => {
 
                         {/* NFS-e Nacional — hub que funde Painel + Cobertura ADN. */}
                         {searchType === SearchType.NFSE_NACIONAL && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <NfseNacionalHub
                                     currentUser={currentUser}
@@ -1133,7 +1133,7 @@ const App: React.FC = () => {
                         )}
 
                         {searchType === SearchType.RELATORIOS && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <RelatoriosHub
                                     currentUser={currentUser ?? null}
@@ -1144,7 +1144,7 @@ const App: React.FC = () => {
                         )}
 
                         {searchType === SearchType.DASHBOARD_CEO && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DashboardCeo
                                     currentUser={currentUser ?? null}
@@ -1163,7 +1163,7 @@ const App: React.FC = () => {
                         {/* ANOMALIAS agora é sub-aba do DiagnosticoHub (card SAUDE_GERAL). */}
 
                         {searchType === SearchType.SIMULADOR_IBS_CBS && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <SimuladorReforma
                                     currentUser={currentUser ?? null}
@@ -1174,7 +1174,7 @@ const App: React.FC = () => {
                         )}
 
                         {searchType === SearchType.EMISSAO_TRIBUTOS && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <TaxEmissionDashboard
                                     currentUser={currentUser ?? null}
@@ -1186,7 +1186,7 @@ const App: React.FC = () => {
 
                         {/* Recuperação — hub que funde Recuperação Tributária + Prazos de Prescrição. */}
                         {searchType === SearchType.RECUPERACAO_TRIBUTARIA && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <RecuperacaoHub
                                     currentUser={currentUser}
@@ -1197,7 +1197,7 @@ const App: React.FC = () => {
                         )}
 
                         {searchType === SearchType.NFP_PRO_CLOUD && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <NfpProCloud
                                     currentUser={currentUser ?? null}
@@ -1209,7 +1209,7 @@ const App: React.FC = () => {
 
                 {/* Analisador de Regime Tributario */}
                 {searchType === SearchType.ANALISADOR_REGIME && (
-                  <ErrorBoundary>
+                  <ErrorBoundary modulo="App">
                   <Suspense fallback={<LoadingSpinner />}>
                     <AnalisadorRegime />
                   </Suspense>
@@ -1218,7 +1218,7 @@ const App: React.FC = () => {
 
                         {/* Análise de Créditos Fiscais */}
                         {searchType === SearchType.ANALISE_CREDITOS && (
-                            <ErrorBoundary>
+                            <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <AnaliseCreditos currentUser={currentUser ?? null} />
                             </Suspense>
@@ -1226,7 +1226,7 @@ const App: React.FC = () => {
                         )}
 
                         {/* Results Display */}
-                        <ErrorBoundary>
+                        <ErrorBoundary modulo="App">
                         <Suspense fallback={<LoadingSpinner />}>
                             {/* InitialStateDisplay e o prompt "digite no campo de busca acima".
                                 So faz sentido nas abas que TEM barra de busca (CFOP/NCM/Servico/

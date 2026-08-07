@@ -57,7 +57,7 @@ const SimplesNacionalSection: React.FC<Props> = ({
     const confirm = useConfirm();
 
     return (
-        <ErrorBoundary>
+        <ErrorBoundary modulo="SimplesNacionalSection">
             <Suspense fallback={<LoadingSpinner />}>
                 {simplesView === 'dashboard' && (
                     <SimplesNacionalDashboard
