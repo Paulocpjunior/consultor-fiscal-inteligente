@@ -25,6 +25,18 @@ import { gerarRelatorioPdf } from '../../services/relatorioPdf';
 interface Props {
     currentUser: User;
     onShowToast?: (m: string) => void;
+    /**
+     * ADMIN: de quem é este guia. O backend já entrega TODAS as empresas pro
+     * admin, então quem recorta aqui é a tela — e o recorte precisa existir,
+     * senão o admin só consegue imprimir a carteira inteira e nunca a de UM
+     * colaborador, que é justamente o papel que se entrega pra pessoa.
+     *
+     * Colaborador não recebe estas props: pra ele a rota já devolve só os
+     * clientes dele (getEmpresaIdsDaCarteira), sem filtro de tela nenhum.
+     */
+    colaboradores?: { uid: string; nome: string }[];
+    /** empresaId → uids que respondem por ela (principal e backup). */
+    donosPorEmpresa?: Map<string, string[]>;
 }
 
 const competenciaAtual = () => {
@@ -58,7 +70,7 @@ const PRAZO_CLS: Record<string, string> = {
     cinza: 'text-slate-400',
 };
 
-const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast }) => {
+const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast, colaboradores, donosPorEmpresa }) => {
     const [competencia, setCompetencia] = useState(competenciaAtual());
     const [painel, setPainel] = useState<PainelRotina | null>(null);
     const [obs, setObs] = useState<Record<string, ObservacaoCliente>>({});
@@ -67,6 +79,9 @@ const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [soPendentes, setSoPendentes] = useState(false);
     const [editando, setEditando] = useState<string | null>(null);
     const [rascunho, setRascunho] = useState('');
+    // '' = carteira inteira · 'sem' = sem responsável · uid = a carteira de um.
+    const [deQuem, setDeQuem] = useState('');
+    const podeEscolherDono = !!colaboradores?.length && !!donosPorEmpresa;
 
     const carregar = useCallback(async (comp: string) => {
         setCarregando(true);
@@ -86,10 +101,29 @@ const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast }) => {
         const termo = busca.trim().toLowerCase();
         return guia.linhas.filter((l) => {
             if (soPendentes && l.cor === 'verde') return false;
+            if (podeEscolherDono && deQuem) {
+                const donos = donosPorEmpresa!.get(l.empresaId) || [];
+                // 'sem' existe pra empresa sem responsável não SUMIR de todas
+                // as visões — ela é pendência de atribuição, não invisível.
+                if (deQuem === 'sem' ? donos.length > 0 : !donos.includes(deQuem)) return false;
+            }
             if (!termo) return true;
             return `${l.nome} ${l.cnpj}`.toLowerCase().includes(termo);
         });
-    }, [guia.linhas, busca, soPendentes]);
+    }, [guia.linhas, busca, soPendentes, deQuem, podeEscolherDono, donosPorEmpresa]);
+
+    /**
+     * DE QUEM é o papel impresso. Sem isto o PDF sairia com o nome de quem
+     * clicou — o admin imprimiria a carteira da Sandra com o nome dele no
+     * cabeçalho, e o papel mentiria sobre a quem aquilo responde.
+     */
+    const donoDoGuia = !podeEscolherDono
+        ? (currentUser.name || currentUser.email || 'minha carteira')
+        : deQuem === 'sem'
+            ? 'Empresas SEM responsável'
+            : deQuem
+                ? (colaboradores!.find((c) => c.uid === deQuem)?.nome || deQuem)
+                : 'Todos os colaboradores';
 
     const gravarObs = async (l: LinhaGuia) => {
         const r = await salvarObservacao(l.empresaId, competencia, rascunho);
@@ -108,8 +142,8 @@ const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast }) => {
         if (!visiveis.length) { onShowToast?.('Nada para imprimir com este filtro.'); return; }
         try {
             await gerarRelatorioPdf({
-                titulo: `Guia do mês — carteira de clientes`,
-                subtitulo: `Competência ${fmtComp(competencia)} · ${currentUser.name || currentUser.email} · ${visiveis.length} cliente(s)`,
+                titulo: `Guia do mês — ${podeEscolherDono && !deQuem ? 'todas as carteiras' : 'carteira de clientes'}`,
+                subtitulo: `Competência ${fmtComp(competencia)} · ${donoDoGuia} · ${visiveis.length} cliente(s)`,
                 colunas: [
                     { titulo: 'Cliente', largura: 16 },
                     { titulo: 'Regime', largura: 6 },
@@ -126,11 +160,13 @@ const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     'Situação: ATENÇÃO = alguma etapa pendente ou obrigação atrasada · RESSALVA = etapa feita pela metade · FECHADO = as cinco etapas com prova.',
                     ...(guia.resumo.atrasadas > 0
                         ? [`ATENÇÃO: ${guia.resumo.atrasadas} obrigação(ões) já vencida(s) nesta carteira.`] : []),
+                    // Papel cortado SEMPRE diz o que ficou de fora — senão
+                    // quem recebe lê a folha como se fosse a carteira inteira.
                     ...(visiveis.length < guia.linhas.length
-                        ? [`Impresso com filtro: ${visiveis.length} de ${guia.linhas.length} cliente(s) da carteira.`] : []),
+                        ? [`Recorte: ${donoDoGuia} — ${visiveis.length} de ${guia.linhas.length} cliente(s) da seleção.`] : []),
                 ],
                 orientacao: 'landscape',
-                fileName: `guia-do-mes-${competencia}.pdf`,
+                fileName: `guia-do-mes-${competencia}${podeEscolherDono && deQuem ? `-${donoDoGuia.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : ''}.pdf`,
             });
         } catch (e: any) {
             onShowToast?.(`Falha ao gerar o PDF: ${e.message}`);
@@ -174,6 +210,17 @@ const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <>
                     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                         <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{guia.resumo.frase}</p>
+                        {/* Os números acima são da SELEÇÃO INTEIRA. Com filtro
+                            ligado, dizer isso evita que o admin leia "12
+                            precisam de ação" como se fosse da Sandra. */}
+                        {podeEscolherDono && deQuem && (
+                            <p className="text-[11px] text-blue-600 dark:text-blue-400">
+                                Mostrando <strong>{donoDoGuia}</strong>: {visiveis.length} cliente(s).
+                                Os números abaixo continuam sendo da carteira inteira —
+                                o PDF sai só com o que está filtrado.
+                                <button onClick={() => setDeQuem('')} className="underline ml-1">ver todos</button>
+                            </p>
+                        )}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                             <div className="rounded-lg border border-red-200 dark:border-red-800 p-2">
                                 <p className="text-[10px] uppercase font-bold text-red-700 dark:text-red-400">Precisam de ação</p>
@@ -198,6 +245,20 @@ const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             </div>
                         </div>
                         <div className="flex items-center gap-3 flex-wrap">
+                            {/* ADMIN escolhe DE QUEM é o guia. Sem isto ele só
+                                consegue ver e imprimir a carteira inteira, e
+                                nunca a de UM colaborador — que é justamente o
+                                papel que se entrega pra pessoa. */}
+                            {podeEscolherDono && (
+                                <select value={deQuem} onChange={(e) => setDeQuem(e.target.value)}
+                                    className="text-sm p-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800">
+                                    <option value="">Guia de: todos os colaboradores</option>
+                                    {colaboradores!.map((c) => (
+                                        <option key={c.uid} value={c.uid}>Guia de: {c.nome}</option>
+                                    ))}
+                                    <option value="sem">Empresas SEM responsável</option>
+                                </select>
+                            )}
                             <input value={busca} onChange={(e) => setBusca(e.target.value)}
                                 placeholder="Filtrar por cliente ou CNPJ…"
                                 className="flex-1 min-w-[220px] text-sm p-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800" />

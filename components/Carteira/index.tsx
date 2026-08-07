@@ -93,6 +93,17 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    /** empresaId → uids que respondem por ela (principal e backup). */
+    const donosPorEmpresa = useMemo(() => {
+        const m = new Map<string, string[]>();
+        for (const v of vinculos) {
+            const lista = m.get(v.empresaId) || [];
+            lista.push(v.colaboradorUid);
+            m.set(v.empresaId, lista);
+        }
+        return m;
+    }, [vinculos]);
+
     const vinculosPorEmpresa = useMemo(() => {
         const m = new Map<string, VinculoCarteira[]>();
         for (const v of vinculos) {
@@ -215,7 +226,16 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 ))}
             </div>
 
-            {aba === 'guia' && <GuiaDoMes currentUser={currentUser} onShowToast={onShowToast} />}
+            {aba === 'guia' && (
+                <GuiaDoMes
+                    currentUser={currentUser}
+                    onShowToast={onShowToast}
+                    // O admin recebe TODAS as empresas do backend — quem recorta
+                    // por colaborador é a tela, com os vínculos que ela já tem.
+                    colaboradores={resumo.porColaborador.map((l) => ({ uid: l.colaboradorUid, nome: l.colaboradorNome }))}
+                    donosPorEmpresa={donosPorEmpresa}
+                />
+            )}
             {aba === 'atribuir' && (
             <>
 
