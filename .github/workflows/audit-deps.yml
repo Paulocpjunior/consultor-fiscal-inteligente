@@ -118,8 +118,12 @@ jobs:
           # trabalho alheio; no 1º run a branch não existe no remoto, daí o fallback.
           git push --force-with-lease origin "$BRANCH" || git push origin "$BRANCH"
 
-          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
-            gh pr create \
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            echo "→ PR já aberto para $BRANCH; branch atualizada."
+            exit 0
+          fi
+
+          if gh pr create \
               --head "$BRANCH" \
               --base main \
               --title "chore(deps): correção automática de advisory ($HOJE)" \
@@ -132,10 +136,49 @@ jobs:
           Confira o diff do `package-lock.json` e mescle. Se o advisory for de dependência
           de produção, isto está segurando o próximo deploy — prioridade.
           CORPO
-          )"
-          else
-            echo "→ PR já aberto para $BRANCH; branch atualizada."
+          )"; then
+            exit 0
           fi
+
+          # ─── O PR NÃO PÔDE SER ABERTO ────────────────────────────────────────
+          # Aconteceu de verdade em 07/08: "GitHub Actions is not permitted to
+          # create or approve pull requests" — uma configuração do repositório,
+          # não um defeito do código. O robô morria aqui, e o efeito era o pior
+          # possível: a CORREÇÃO ficava pronta numa branch que ninguém sabia que
+          # existia, e o run vermelho diário não dizia o que fazer.
+          #
+          # Agora a falha vira uma ISSUE — durável e acionável. O run continua
+          # VERMELHO de propósito: a correção não foi entregue, e run verde aqui
+          # seria dizer que foi.
+          echo "::warning::gh pr create falhou — abrindo issue com o caminho manual."
+          TITULO="Robô de auditoria não consegue abrir PR"
+          CORPO_ISSUE=$(cat <<CORPO
+          O robô diário corrigiu um advisory e **empurrou a branch \`$BRANCH\`**, mas não
+          conseguiu abrir o PR. A correção existe e está parada.
+
+          **Causa mais provável** (foi a de 07/08): o repositório não permite que o GitHub
+          Actions abra pull requests.
+
+          **Como resolver, uma vez só:**
+          Settings → Actions → General → Workflow permissions →
+          marcar **"Allow GitHub Actions to create and approve pull requests"**.
+
+          **Enquanto isso, o PR sai à mão:**
+          https://github.com/${GITHUB_REPOSITORY}/compare/main...${BRANCH}?expand=1
+
+          Auditoria depois da correção:
+          \`\`\`
+          $(sed 's/^/  /' /tmp/audit-depois.txt | head -30)
+          \`\`\`
+          CORPO
+          )
+          EXISTE=$(gh issue list --search "$TITULO in:title" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTE" ]; then
+            gh issue comment "$EXISTE" --body "$CORPO_ISSUE"
+          else
+            gh issue create --title "$TITULO" --body "$CORPO_ISSUE"
+          fi
+          exit 1
 
       # Sem correção possível: avisa ANTES de virar bloqueio de deploy.
       - name: Abrir issue quando não há correção
