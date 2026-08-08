@@ -153,6 +153,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   que NÃO CAPTUROU nada, quem afirma que não HOUVE faturamento é a pessoa, e
   fica gravado quem foi. As duas primeiras travas também impedem que este vire
   atalho pra escapar da conferência SERPRO × app.
+- **FATOR R É SÉRIE MENSAL, E A FOLHA INCLUI CPP+FGTS** (colaboradora via
+  Paulo, 08/08, com o extrato do PGDAS-D): a tela do Simples só tinha o campo
+  ÚNICO "Folha 12m" — a folha DO MÊS (4.149,95) foi digitada nele e o Fator R
+  saiu 0,54% em vez de ~6% (o DAS saiu certo por sorte de anexo). O modelo
+  `folhaMensal` JÁ EXISTIA no serviço (janela móvel no cálculo + série mensal
+  na declaração ao SERPRO via pgdasMapper) — faltava a TELA. Agora o card
+  Folha tem editor dos 12 meses ANTERIORES ao PA (mesma janela do extrato),
+  com a régua legal no rótulo: salários + pró-labore + **CPP e FGTS
+  recolhidos** (Res. CGSN 140/2018 art. 26). Campo 12m virou LEGADO explícito
+  (só vale sem série). Farol: mês vazio na janela acende "ausente ≠ zero —
+  mês vazio derruba o Fator R". Zero digitado É resposta e o merge preserva
+  meses fora da janela visível.
 - **PGDAS-D: retenção de ISS vai no ID da atividade, NUNCA em dobro** (caso
   S&P, 03/08): id 15 (Anexo III), 12 (V) e 18 (IV) JÁ significam "ISS retido
   pelo tomador" — mandar também a qualificação {1010, 11} faz o SERPRO recusar
