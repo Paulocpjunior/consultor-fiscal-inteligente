@@ -160,6 +160,10 @@ const ALLOWED_ORIGINS = [
     // Consultor Financeiro (gate de departamento chama o túnel do navegador).
     'https://gen-lang-client-0888019226.web.app',
     'https://gen-lang-client-0888019226.firebaseapp.com',
+    // Legalização (MESMO Firebase Auth — o popup de pendências dela lê o
+    // resumo da Caixa Postal daqui, com o próprio token do usuário).
+    'https://legalizacao-631239634290.us-west1.run.app',
+    'https://legalizacao-zricstsjqa-uw.a.run.app',
     'http://localhost:3000',
     'http://localhost:5173',
 ].filter(Boolean);
