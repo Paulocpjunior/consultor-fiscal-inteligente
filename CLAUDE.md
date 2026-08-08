@@ -482,13 +482,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   credencial técnica daria "usuário não encontrado" pra usuário certo. No
   CFI: `PROJETO.financeiro='gen-lang-client-0888019226'` na lista da rota
   do cadastro + as duas origens `web.app`/`firebaseapp.com` no CORS.
-  **FASE 4 APROVADA COMO GATEWAY COMPLETO** (08/08): só "assinatura remota"
-  NÃO elimina a 2ª cópia do A1 — o mTLS com a Receita exige a chave na máquina
-  que abre a conexão. O desenho aprovado: o CFI assina E TRANSMITE o lote
-  (mTLS de lá), devolve o protocolo, e só então o REINF apaga o
-  `reinf-cert-a1`. Produção restrita (tpAmb=2) primeiro; caminho atual
-  intocado até provar. Enquanto isso, a conferência dos DOIS COFRES pelo
-  fingerprint (v3.4.83 do REINF) acusa divergência de renovação.
+  **FASE 4 NO AR NO LADO CFI (08/08)**: gateway completo — só "assinatura
+  remota" NÃO elimina a 2ª cópia do A1 (o mTLS com a Receita exige a chave na
+  máquina que abre a conexão), então o CFI assina E TRANSMITE.
+  `POST /api/admin/reinf/gateway/transmitir` (eventos SEM Signature +
+  contribuinte) e `GET /gateway/lote/:protocolo` → `reinf-gateway.js` (19
+  testes) + `reinf-gateway-routes.js`. Assinador/lote são PORTES do código
+  provado do plano-contas-iob (R-1000/R-4010 homologados) com UMA
+  generalização: o elemento do evento é achado pelo id (`<evt* id="ID+34">`),
+  não por lista de nomes — serve evtRetPJ/evtAqProd/série toda. Lições
+  MS0017 preservadas e testadas (minifica antes de assinar; wrapper do lote
+  não repete o id assinado; id duplicado é RECUSA). TRAVAS: produção restrita
+  (tpAmb=2) é padrão e produção exige `confirmoProducao:true` (desenho da API
+  DARE); auth = admin CFI ou túnel [fiscal, contabil] SÓ (DP/Financeiro não
+  transmitem Reinf); cert sai do cofre pela RAIZ (`loadCertEmpresaPorCnpjBase`,
+  padrão escritório 44388152000189); pfx→PEM reusa `pfx-to-pem.js` (NÃO criar
+  cópia); auditoria em `reinf_gateway_lotes` SEM o conteúdo do evento (é
+  declaração do cliente; guarda ids/elementos/protocolo/fingerprint).
+  PENDENTE: o plano-contas-iob consumir (env, default caminho atual) e provar
+  em produção restrita; só DEPOIS apagar o `reinf-cert-a1` de lá. Enquanto
+  isso, a conferência dos DOIS COFRES pelo fingerprint (v3.4.83 do REINF)
+  acusa divergência de renovação.
 - **CADASTRO CENTRAL: o CFI é DONO do cadastro dos apps irmãos** (ideia do
   Paulo, 07/08, logo depois do "CNPJ não cadastrado" para empresa cadastrada:
   *"por que não construir um túnel que leva ao nosso BD — cadastros em geral,

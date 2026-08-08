@@ -10,7 +10,11 @@
 // nao do escritorio).
 // ============================================================================
 
-import forge from 'node-forge';
+import * as forgeNs from 'node-forge';
+
+// Interop: em node ESM o node-forge (CJS) chega no default; no transform do
+// jest chega como namespace. As duas formas passam por aqui.
+const forge = forgeNs.default ?? forgeNs;
 
 /**
  * @param {Buffer} pfxBuffer
