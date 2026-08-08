@@ -37,6 +37,9 @@ service cloud.firestore {
         // Perfil novo nao pode nascer com modulos restritos liberados
         && (!('modulosPermitidos' in request.resource.data)
             || request.resource.data.modulosPermitidos.size() == 0)
+        // ...nem vinculado a departamento do SaaS (quem vincula e admin)
+        && (!('departamentos' in request.resource.data)
+            || request.resource.data.departamentos.size() == 0)
         && (
           // Perfil comum criado pelo proprio usuario nunca pode nascer admin.
           !('role' in request.resource.data)
@@ -61,6 +64,9 @@ service cloud.firestore {
         && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)
         && (!('modulosPermitidos' in request.resource.data)
             || request.resource.data.modulosPermitidos == resource.data.get('modulosPermitidos', []))
+        // nem o proprio departamento (o gate dos modulos do SaaS)
+        && (!('departamentos' in request.resource.data)
+            || request.resource.data.departamentos == resource.data.get('departamentos', []))
       );
 
       // Apenas admin pode deletar usuarios

@@ -431,6 +431,36 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   pra não contar a mesma duas vezes. Continua valendo o ALERTA, NUNCA
   CONTORNO: o app aponta o campo certo (CSRF) e NÃO rateia entre PIS/COFINS/
   CSLL — esse rateio não está no documento.
+- **O APP É UM SAAS MODULAR, E O DESENHO É POR TÚNEL** (Paulo, 08/08 — o
+  escopo de engenharia dele, palavra por palavra: banco Firebase; cadastro de
+  empresas unificado; cofre de certificados que só ele acessa mas todos os
+  módulos usam; usuários unificados com DEPARTAMENTO obrigatório em caixa de
+  seleção; *"passamos a ser um App-SaaS completo dividido em módulos"*; mesmas
+  URLs). DECISÕES FECHADAS: (1) **tudo VIA TÚNEL, nenhum projeto se move** —
+  são projetos pagos, cada módulo fica no GCP dele; (2) **empresa se cadastra
+  SÓ no CFI**; (3) os módulos são os 5 que existem — 🧾 Fiscal (CFI),
+  📊 Contábil (`plano-contas-iob`), 👥 DP/Folha (`consultor-dp-folha`),
+  📋 Legalização, 💰 Financeiro (`gen-lang-client-0888019226.web.app`).
+  **DEPARTAMENTOS NO AR (08/08)**: `users.departamentos[]` (catálogo em
+  `cadastro-central-departamentos.js`, 20 testes) + chips azuis no Gerenciar
+  Usuários + túnel `GET /api/admin/cadastro/usuarios[/:email?modulo=]` e
+  `POST /usuarios/:uid/departamentos` (SÓ requireAdmin — **app irmão pergunta,
+  não define**: gravação via túnel seria auto-concessão com máquina no meio).
+  Regras que mandam: departamento DESCONHECIDO é RECUSADO na gravação, nunca
+  descartado (lição #382); usuário SEM departamento não some e a recusa de
+  login no módulo DIZ "sem vínculo, peça ao admin" (não "usuário inexistente",
+  que manda trocar senha à toa); admin abre tudo; rules com anti-autoconcessão
+  espelhando modulosPermitidos (`departamentos` não nasce preenchido nem se
+  auto-edita). `modulosPermitidos` continua sendo OUTRA coisa: libera cards
+  DENTRO do CFI; departamento libera o app irmão INTEIRO. PENDENTE: cada
+  módulo irmão chamar o túnel no login (Contábil primeiro).
+  **FASE 4 APROVADA COMO GATEWAY COMPLETO** (08/08): só "assinatura remota"
+  NÃO elimina a 2ª cópia do A1 — o mTLS com a Receita exige a chave na máquina
+  que abre a conexão. O desenho aprovado: o CFI assina E TRANSMITE o lote
+  (mTLS de lá), devolve o protocolo, e só então o REINF apaga o
+  `reinf-cert-a1`. Produção restrita (tpAmb=2) primeiro; caminho atual
+  intocado até provar. Enquanto isso, a conferência dos DOIS COFRES pelo
+  fingerprint (v3.4.83 do REINF) acusa divergência de renovação.
 - **CADASTRO CENTRAL: o CFI é DONO do cadastro dos apps irmãos** (ideia do
   Paulo, 07/08, logo depois do "CNPJ não cadastrado" para empresa cadastrada:
   *"por que não construir um túnel que leva ao nosso BD — cadastros em geral,

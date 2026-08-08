@@ -335,6 +335,35 @@ export const setUserModulos = async (userId: string, modulos: string[]): Promise
 };
 
 /**
+ * Vincula o usuario aos DEPARTAMENTOS do SaaS (fiscal, contabil, dp-folha,
+ * legalizacao, financeiro) — o gate dos módulos irmãos, consultado pelo túnel
+ * no login deles. Só admin (rules bloqueiam auto-vínculo, mesmo desenho do
+ * modulosPermitidos). A validação de catálogo mora no backend
+ * (cadastro-central-departamentos.js); aqui só higiene básica.
+ */
+export const setUserDepartamentos = async (userId: string, departamentos: string[]): Promise<boolean> => {
+    const clean = Array.from(new Set((departamentos || []).map(d => (d || '').trim().toLowerCase()).filter(Boolean)));
+    if (!isFirebaseConfigured || !db) {
+        const users = getLocalUsers();
+        const idx = users.findIndex(u => u.id === userId);
+        if (idx === -1) return false;
+        users[idx].departamentos = clean;
+        saveLocalUsers(users);
+        return true;
+    }
+    try {
+        await setDoc(doc(db, 'users', userId), { departamentos: clean }, { merge: true });
+        return true;
+    } catch (e: any) {
+        console.warn('setUserDepartamentos:', e.message);
+        if (e.code === 'permission-denied') {
+            throw new Error('PERMISSION_DENIED: Apenas administradores podem vincular departamentos.');
+        }
+        return false;
+    }
+};
+
+/**
  * Atualiza o display name (campo `name`) do usuario. So admin pode chamar
  * (rules em users.update já garantem isso). Email NAO eh editavel daqui:
  * o email vive no Firebase Auth + e duplicado no doc; alterar so o doc

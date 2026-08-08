@@ -124,6 +124,14 @@ export interface User {
      * Só admin pode alterar (Firestore rules garantem).
      */
     modulosPermitidos?: string[];
+    /**
+     * Departamentos do SaaS (08/08): dizem qual MÓDULO do app a pessoa abre —
+     * fiscal, contabil, dp-folha, legalizacao, financeiro. Outra granularidade
+     * que modulosPermitidos (cards DENTRO do CFI): departamento libera o app
+     * inteiro, e é o que os módulos irmãos consultam pelo túnel no login.
+     * Só admin altera (rules); catálogo em cadastro-central-departamentos.js.
+     */
+    departamentos?: string[];
 }
 
 export interface AccessLog {

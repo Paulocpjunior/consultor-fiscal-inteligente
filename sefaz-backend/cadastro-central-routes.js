@@ -32,6 +32,9 @@ import { montarCadastroEmpresas, soDigitos } from './cadastro-central.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { montarResponsaveis, responsavelDoCnpj } from './cadastro-central-responsaveis.js';
 import { montarCertificados, aptidaoDeAssinatura } from './cadastro-central-certificados.js';
+import {
+    montarUsuariosCadastro, normalizarUsuarioCadastro, acessoAoModulo, validarDepartamentos,
+} from './cadastro-central-departamentos.js';
 
 const router = Router();
 
@@ -207,6 +210,83 @@ router.get('/certificados/:cnpj', autorizar, async (req, res) => {
         });
     } catch (e) {
         console.error('[cadastro-central/certificados/cnpj]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── USUÁRIOS E DEPARTAMENTOS (o gate do SaaS, 08/08) ────────────────────────
+// O departamento diz qual MÓDULO a pessoa abre (Fiscal, Contábil, DP/Folha,
+// Legalização, Financeiro). Grava-se SÓ aqui, por admin; o túnel responde
+// consultas — app irmão pergunta, não define.
+
+async function lerUsuarios(db) {
+    const snaps = await fetchAllDocs(db.collection('users'), {
+        label: 'cadastro-central/users-departamentos', maxDocs: 2000,
+    });
+    return snaps.map((s) => ({ uid: s.id, ...(s.data() || {}) }));
+}
+
+router.get('/usuarios', autorizar, async (req, res) => {
+    try {
+        return res.json({ ok: true, ...montarUsuariosCadastro(await lerUsuarios(getDb())) });
+    } catch (e) {
+        console.error('[cadastro-central/usuarios]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// A pergunta do login do app irmão: "este e-mail abre o meu módulo?".
+// `?modulo=` é obrigatório aqui — sem ele a resposta não teria pergunta.
+router.get('/usuarios/:email', autorizar, async (req, res) => {
+    try {
+        const email = String(req.params.email || '').trim().toLowerCase();
+        if (!email.includes('@')) {
+            return res.status(400).json({ ok: false, error: 'Informe o e-mail do usuário.' });
+        }
+        const modulo = String(req.query.modulo || '').trim().toLowerCase();
+        if (!modulo) {
+            return res.status(400).json({
+                ok: false,
+                error: 'Informe ?modulo= (fiscal, contabil, dp-folha, legalizacao ou financeiro) — '
+                    + 'a resposta é sobre um módulo, não sobre o usuário no vazio.',
+            });
+        }
+        const docs = await lerUsuarios(getDb());
+        const usuario = docs.map(normalizarUsuarioCadastro).filter(Boolean)
+            .find((u) => u.email === email) || null;
+        const acesso = acessoAoModulo(usuario, modulo);
+        // Usuário sem cadastro responde 200 com temAcesso:false e o motivo —
+        // 404 aqui viraria "erro de sistema" na tela do outro app, e a causa
+        // (conta não criada) é informação, não falha.
+        return res.json({ ok: true, usuario, modulo, ...acesso });
+    } catch (e) {
+        console.error('[cadastro-central/usuarios/email]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// GRAVAÇÃO: só admin do CFI, NUNCA o túnel. Deixar app irmão gravar seria
+// auto-concessão com uma máquina no meio.
+router.post('/usuarios/:uid/departamentos', requireAdmin, async (req, res) => {
+    try {
+        const uid = String(req.params.uid || '').trim();
+        if (!uid) return res.status(400).json({ ok: false, error: 'Informe o uid do usuário.' });
+
+        const v = validarDepartamentos(req.body?.departamentos);
+        // Desconhecido é RECUSA, não descarte em silêncio (lição da #382).
+        if (!v.ok) return res.status(400).json({ ok: false, error: v.erro });
+
+        const db = getDb();
+        const ref = db.collection('users').doc(uid);
+        const snap = await ref.get();
+        if (!snap.exists) {
+            return res.status(404).json({ ok: false, error: `Usuário ${uid} não existe no cadastro.` });
+        }
+        await ref.set({ departamentos: v.departamentos }, { merge: true });
+        console.log(`[cadastro-central] departamentos de ${uid} → [${v.departamentos.join(', ')}] por ${req.user?.email}`);
+        return res.json({ ok: true, uid, departamentos: v.departamentos });
+    } catch (e) {
+        console.error('[cadastro-central/departamentos]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

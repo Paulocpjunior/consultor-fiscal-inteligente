@@ -14,6 +14,21 @@ interface UserManagementModalProps {
 
 type Tab = 'users' | 'logs';
 
+/**
+ * Os DEPARTAMENTOS do SaaS (08/08): dizem qual MÓDULO do app a pessoa abre.
+ * Espelho do catálogo do backend (cadastro-central-departamentos.js) — quem
+ * valida de verdade é lá; isto aqui é só o desenho das caixas de seleção.
+ * Outra coisa que os módulos restritos abaixo: aquilo libera CARDS dentro do
+ * CFI; departamento libera o APP irmão inteiro, consultado pelo túnel.
+ */
+const DEPARTAMENTOS_SAAS = [
+    { id: 'fiscal', label: '🧾 Fiscal' },
+    { id: 'contabil', label: '📊 Contábil' },
+    { id: 'dp-folha', label: '👥 DP/Folha' },
+    { id: 'legalizacao', label: '📋 Legalização' },
+    { id: 'financeiro', label: '💰 Financeiro' },
+];
+
 const UserManagementModal: React.FC<UserManagementModalProps> = ({
     isOpen,
     onClose,
@@ -196,6 +211,49 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
         }
     };
 
+    /**
+     * Vincula/desvincula o usuário de um DEPARTAMENTO do SaaS. É o que decide
+     * qual módulo irmão (Contábil, DP, Legalização, Financeiro) ele consegue
+     * abrir — os apps consultam o vínculo pelo túnel no login deles.
+     */
+    const handleToggleDepartamento = async (user: User, depId: string, depLabel: string) => {
+        const atuais = user.departamentos ?? [];
+        const vinculado = atuais.includes(depId);
+        const ok = await confirm({
+            title: vinculado ? 'Desvincular do departamento?' : 'Vincular ao departamento?',
+            message: `${vinculado ? 'Desvincular' : 'Vincular'} "${user.name}" ${vinculado ? 'do' : 'ao'} departamento ${depLabel}? `
+                + (vinculado
+                    ? 'Ele perde o acesso ao módulo correspondente no próximo login.'
+                    : 'Ele passa a abrir o módulo correspondente no próximo login.'),
+            variant: vinculado ? 'warning' : 'info',
+            confirmLabel: vinculado ? 'Desvincular' : 'Vincular',
+        });
+        if (!ok) return;
+        const novos = vinculado ? atuais.filter(d => d !== depId) : [...atuais, depId];
+        try {
+            const result = await authService.setUserDepartamentos(user.id, novos);
+            if (result) {
+                const admin = authService.getCurrentUser();
+                if (admin) {
+                    authService.logAction(
+                        admin.id, admin.name,
+                        vinculado ? 'desvinculou de departamento' : 'vinculou a departamento',
+                        `${depLabel} — ${user.name} (${user.email})`,
+                    );
+                }
+                setMsg({
+                    text: `${user.name} ${vinculado ? 'desvinculado do' : 'vinculado ao'} departamento ${depLabel}.`,
+                    type: 'success',
+                });
+                loadUsers();
+            } else {
+                setMsg({ text: 'Erro ao atualizar departamento.', type: 'error' });
+            }
+        } catch (e: any) {
+            setMsg({ text: e?.message || 'Erro ao atualizar departamento.', type: 'error' });
+        }
+    };
+
     const handleEditName = async (user: User) => {
         const novoNome = await prompt({
             title: 'Editar nome',
@@ -307,6 +365,36 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                             </span>
                                         </td>
                                         <td className="px-4 py-2">
+                                            {/* Departamentos do SaaS: qual MÓDULO irmão a pessoa abre.
+                                                Admin abre todos, mas o vínculo continua editável — é
+                                                registro de onde a pessoa trabalha, não só permissão. */}
+                                            <div className="flex flex-wrap gap-1 mb-1.5">
+                                                {DEPARTAMENTOS_SAAS.map(dep => {
+                                                    const vinculado = (user.departamentos ?? []).includes(dep.id);
+                                                    return (
+                                                        <button
+                                                            key={dep.id}
+                                                            disabled={!isAdmin}
+                                                            onClick={() => handleToggleDepartamento(user, dep.id, dep.label)}
+                                                            className={`text-xs font-semibold px-2 py-1 rounded-full border transition-colors ${
+                                                                vinculado
+                                                                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 hover:bg-blue-200'
+                                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-600 hover:bg-slate-200'
+                                                            } ${!isAdmin ? 'cursor-default opacity-70' : ''}`}
+                                                            title={isAdmin
+                                                                ? (vinculado ? `Desvincular do departamento ${dep.label}` : `Vincular ao departamento ${dep.label}`)
+                                                                : `Apenas administradores vinculam. ${vinculado ? 'Vinculado.' : 'Não vinculado.'}`}
+                                                        >
+                                                            {vinculado ? '✓ ' : ''}{dep.label}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            {user.role !== 'admin' && (user.departamentos ?? []).length === 0 && (
+                                                <div className="text-[11px] text-amber-600 dark:text-amber-400 mb-1">
+                                                    ⚠ Sem departamento — não abre nenhum módulo irmão do app.
+                                                </div>
+                                            )}
                                             {user.role === 'admin' ? (
                                                 <span className="text-xs text-slate-400 italic">Todos (admin)</span>
                                             ) : (
