@@ -72,8 +72,11 @@ com o E-Fiscal, que segue viva enquanto houver cliente não migrado.
 
 ## Pré-requisito transversal: completude de captura
 
-Migrar cliente = prova de captura OK + cofre de saída ativo (hoje 0/388) +
-Canceladas/Faltantes limpo. Cliente com buraco de captura NÃO migra.
+Migrar cliente = prova de captura OK + cofre de saída ativo + Canceladas/
+Faltantes limpo. Cliente com buraco de captura NÃO migra. O NÚMERO de quem
+está pronto se lê na aba 🏁 Fila de migração (e a adoção do autXML no painel
+✅ "O cliente fez certo?") — nunca deste arquivo: número carimbado em texto
+envelhece e vira o erro do "0/388" (regra de 07/08).
 
 ## Caminho fechado do plano (F0–F3, execução com ordem do Paulo)
 
