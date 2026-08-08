@@ -471,6 +471,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   (`gen-lang-client-0888019226.web.app` — repo ainda não localizado; exige
   somar origem no CORS do CFI e projeto no crossProjectAuth do cadastro),
   depois Paulo vincula a equipe nos chips e as chaves viram bloqueio.
+  **CHAVES VIRADAS PARA BLOQUEIO (08/08, ordem do Paulo após teste com 2
+  vinculados)**: Contábil e Legalização por `--update-env-vars` no deploy
+  (`DEPARTAMENTO_GATE_MODO=bloqueio`); DP e Financeiro por
+  `VITE_DEPARTAMENTO_GATE_MODO=bloqueio` no build do workflow. A PARTIR DAÍ
+  colaborador sem chip fica FORA do módulo (a tela de bloqueio diz onde se
+  arruma); admin passa sempre; indeterminado segue liberando. Voltar pra
+  aviso = reverter a env no workflow do módulo (um commit).
   **💰 FINANCEIRO LIGADO (08/08, mesmo dia)**: repo
   `Paulocpjunior/https-github.com-Paulocpjunior-sp_dashboard_financeiro`
   (nome torto é do GitHub; o `sp_dashboard_financeiro` sem prefixo é
