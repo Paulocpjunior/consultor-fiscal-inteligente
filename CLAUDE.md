@@ -448,8 +448,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   regra de matriz/filial por raiz (`selecionarCertA1PorBase`). Do túnel o
   certificado sai só como METADADO (titular, validade, raiz, apto), que
   responde 100% do "dá pra transmitir?". FASES: 1) empresas ✅ · 2) colaborador
-  responsável pela carteira ✅ · 3) metadados de certificado · 4) assinatura como
-  operação remota.
+  responsável pela carteira ✅ · 3) metadados de certificado ✅ · 4) assinatura
+  como operação remota.
+  **FASE 3 NO AR (07/08)**: `GET /api/admin/cadastro/certificados[/:cnpj]` →
+  `cadastro-central-certificados.js` (21 testes). Responde *"dá pra transmitir?"*
+  SEM mover a chave: sai titular, emissor, validade, raiz, fingerprint e
+  `temArquivo`/`temSenha` (a EXISTÊNCIA das partes sigilosas, nunca o conteúdo)
+  — `storagePath` e `passwordEnc` não aparecem em caminho NENHUM, e um teste
+  serializa as quatro situações pra provar. **A REGRA DA RAIZ VALE AQUI**:
+  filial sem cert próprio é `apto-pela-raiz` e a resposta diz DE QUEM é o
+  certificado (assinar em nome de terceiro não pode ser dedução); túnel que
+  dissesse só "esta empresa tem cert?" faria o outro app deixar de transmitir
+  por impedimento inexistente. Cinco situações com AÇÃO própria: apto-proprio,
+  apto-pela-raiz, vencido (≠ sem-certificado — outra ação), a3-nao-assina-em-nuvem
+  e cadastro-incompleto (aparece cadastrado e não assina: o pior dos dois
+  mundos). Apto vencendo continua apto E já manda renovar. As faixas vêm de
+  `cert-vencimento-helper.js` — NÃO escrever "≤30 dias" à mão aqui seria a
+  terceira cópia da mesma régua.
   **FASE 2 NO AR (07/08)**: `GET /api/admin/cadastro/responsaveis[/:cnpj]` →
   `cadastro-central-responsaveis.js` (20 testes). Ela responde a pergunta que
   vem DEPOIS de "este CNPJ existe?": *"e quem eu procuro?"* — que hoje sai por
