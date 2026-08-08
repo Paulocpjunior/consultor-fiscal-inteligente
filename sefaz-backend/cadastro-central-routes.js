@@ -45,7 +45,10 @@ function getDb() {
 
 // Lista EXPLÍCITA por rota. Pôr projeto na lista global abriria de lambuja o
 // /api/dp-integration/*, que entrega dado SERPRO de qualquer CNPJ.
-const doIrmao = crossProjectAuth([PROJETO.fiscal, PROJETO.contabil]);
+// O DP entra AQUI (cadastro/gate de departamento) e continua FORA de
+// qualquer outra rota — é exatamente o que a lista por rota existe pra
+// permitir.
+const doIrmao = crossProjectAuth([PROJETO.fiscal, PROJETO.contabil, PROJETO.dpFolha]);
 
 /** Admin do CFI OU usuário de um app irmão com e-mail verificado do domínio. */
 async function autorizar(req, res, next) {
