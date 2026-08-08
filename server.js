@@ -67,6 +67,7 @@ import dpIntegrationRouter from './sefaz-backend/dp-integration-routes.js';
 import sharepointAutoSyncRouter from './sefaz-backend/sharepoint-auto-sync.js';
 import efdReinfRouter from './sefaz-backend/efd-reinf-routes.js';
 import reinfRetencoesPjRouter from './sefaz-backend/reinf-retencoes-pj-routes.js';
+import reinfGatewayRouter from './sefaz-backend/reinf-gateway-routes.js';
 import cadastroCentralRouter from './sefaz-backend/cadastro-central-routes.js';
 import minhaAgendaRouter from './sefaz-backend/minha-agenda-routes.js';
 import diagnosticoDocsFiscaisRouter from './sefaz-backend/diagnostico-docs-fiscais-routes.js';
@@ -354,6 +355,9 @@ app.use('/api/admin/efd-reinf', efdReinfRouter);
 // retenção, no formato do R-4020. Autoriza admin do CFI OU usuário do outro
 // app — os dois NÃO compartilham Firestore.
 app.use('/api/admin/reinf', reinfRetencoesPjRouter);
+// Fase 4 do túnel: o CFI assina E transmite o lote EFD-Reinf (a chave não
+// viaja — assinatura e mTLS acontecem aqui). Produção restrita por padrão.
+app.use('/api/admin/reinf/gateway', reinfGatewayRouter);
 // Cadastro central: o CFI como dono do cadastro dos apps irmãos. Certificado
 // NÃO trafega — é chave privada; leva-se a operação, nunca a chave.
 app.use('/api/admin/cadastro', cadastroCentralRouter);
