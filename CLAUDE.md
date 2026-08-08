@@ -355,7 +355,12 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Agora a falha vira ISSUE com a configuração exata (Settings → Actions →
   General → Workflow permissions → *Allow GitHub Actions to create and approve
   pull requests*) e o link de compare. O run segue VERMELHO de propósito: a
-  correção não foi entregue. **PENDENTE DO PAULO**: marcar essa caixa.
+  correção não foi entregue. **CAIXA MARCADA pelo Paulo em 08/08** — falta a
+  PROVA, que é a regra da casa: configuração salva não é robô funcionando. O
+  próximo run com advisory é que prova, e há um esperando (`nanoid`, high, só
+  de DESENVOLVIMENTO — `npm audit --omit=dev` dá 0, mas a auditoria do robô
+  roda sem `--omit`, então ele morde). NÃO corrigir esse advisory à mão antes
+  do run: seria tirar do robô justamente o caso que o valida.
   🚩 **A BRANCH DO ROBÔ ENVELHECE**: `chore/audit-deps` é recortada da main no
   momento do run (`checkout -B`), então ela se auto-corrige no run seguinte —
   mas enquanto está parada ela é uma MINA. A de 07/08 (9h53) ficou um dia de
