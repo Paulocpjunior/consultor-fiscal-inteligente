@@ -471,6 +471,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   (`gen-lang-client-0888019226.web.app` — repo ainda não localizado; exige
   somar origem no CORS do CFI e projeto no crossProjectAuth do cadastro),
   depois Paulo vincula a equipe nos chips e as chaves viram bloqueio.
+  **💰 FINANCEIRO LIGADO (08/08, mesmo dia)**: repo
+  `Paulocpjunior/https-github.com-Paulocpjunior-sp_dashboard_financeiro`
+  (nome torto é do GitHub; o `sp_dashboard_financeiro` sem prefixo é
+  VERSÃO ANTIGA, push de maio). Gate no `ProtectedRoute` (mesmo desenho do
+  DP: SPA chama o túnel direto do navegador; virada por
+  `VITE_DEPARTAMENTO_GATE_MODO` no build). PECULIARIDADE: o login de lá
+  aceita USERNAME (`loginIndex` → authEmail), então a pergunta ao túnel vai
+  com o e-mail do PERFIL (`users.email`), não o do Firebase Auth — a
+  credencial técnica daria "usuário não encontrado" pra usuário certo. No
+  CFI: `PROJETO.financeiro='gen-lang-client-0888019226'` na lista da rota
+  do cadastro + as duas origens `web.app`/`firebaseapp.com` no CORS.
   **FASE 4 APROVADA COMO GATEWAY COMPLETO** (08/08): só "assinatura remota"
   NÃO elimina a 2ª cópia do A1 — o mTLS com a Receita exige a chave na máquina
   que abre a conexão. O desenho aprovado: o CFI assina E TRANSMITE o lote

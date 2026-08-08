@@ -48,7 +48,7 @@ function getDb() {
 // O DP entra AQUI (cadastro/gate de departamento) e continua FORA de
 // qualquer outra rota — é exatamente o que a lista por rota existe pra
 // permitir.
-const doIrmao = crossProjectAuth([PROJETO.fiscal, PROJETO.contabil, PROJETO.dpFolha]);
+const doIrmao = crossProjectAuth([PROJETO.fiscal, PROJETO.contabil, PROJETO.dpFolha, PROJETO.financeiro]);
 
 /** Admin do CFI OU usuário de um app irmão com e-mail verificado do domínio. */
 async function autorizar(req, res, next) {

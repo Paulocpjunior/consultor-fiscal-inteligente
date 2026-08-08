@@ -156,6 +156,9 @@ const ALLOWED_ORIGINS = [
     'https://paulocpjunior.github.io',
     'https://consultor-dp-folha.web.app',
     'https://consultor-dp-folha.firebaseapp.com',
+    // Consultor Financeiro (gate de departamento chama o túnel do navegador).
+    'https://gen-lang-client-0888019226.web.app',
+    'https://gen-lang-client-0888019226.firebaseapp.com',
     'http://localhost:3000',
     'http://localhost:5173',
 ].filter(Boolean);

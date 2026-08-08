@@ -40,6 +40,8 @@ export const PROJETO = {
     dpFolha: 'consultor-dp-folha',
     // Consultor Contábil / EFD-Reinf (repo plano-contas-iob).
     contabil: 'projetos-app-sp',
+    // Consultor Financeiro (sp_dashboard_financeiro, Firebase Hosting).
+    financeiro: 'gen-lang-client-0888019226',
 };
 
 const DOMINIO_PERMITIDO = '@spassessoriacontabil.com.br';
