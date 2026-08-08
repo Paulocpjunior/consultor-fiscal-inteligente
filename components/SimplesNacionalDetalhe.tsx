@@ -100,6 +100,41 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     
     // Estados de Apuração Mensal
     const [mesApuracao, setMesApuracao] = useState(new Date());
+    // Série MENSAL da folha (salários + pró-labore + CPP + FGTS recolhidos —
+    // Res. CGSN 140/2018 art. 26). É ela que o PGDAS-D pede mês a mês e que o
+    // Fator R usa em janela móvel; o campo único de 12m é fallback legado.
+    // Caso real (08/08): sem este editor, a folha DO MÊS foi digitada no campo
+    // de 12m e o Fator R saiu 0,54% em vez de ~6%.
+    const [folhaMensalDraft, setFolhaMensalDraft] = useState<Record<string, number>>({ ...(empresa.folhaMensal || {}) });
+    const [folhaMensalAberta, setFolhaMensalAberta] = useState(false);
+    const [salvandoFolhaMensal, setSalvandoFolhaMensal] = useState(false);
+
+    // Os 12 meses ANTERIORES ao PA — a mesma janela do extrato do PGDAS-D.
+    const mesesJanelaFolha = React.useMemo(() => {
+        const out: string[] = [];
+        for (let i = 12; i >= 1; i--) {
+            const d = new Date(mesApuracao.getFullYear(), mesApuracao.getMonth() - i, 1);
+            out.push(`${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`);
+        }
+        return out;
+    }, [mesApuracao]);
+    const totalFolhaJanela = mesesJanelaFolha.reduce((t, k) => t + (folhaMensalDraft[k] || 0), 0);
+    const mesesSemFolha = mesesJanelaFolha.filter((k) => !(folhaMensalDraft[k] > 0)).length;
+    const usaSerieMensal = Object.keys(empresa.folhaMensal || {}).length > 0;
+
+    const salvarFolhaMensal = async () => {
+        setSalvandoFolhaMensal(true);
+        try {
+            // Zero digitado É resposta (mês sem folha); chave nunca some — o
+            // merge preserva meses fora da janela visível.
+            await onUpdateEmpresa(empresa.id, { folhaMensal: { ...(empresa.folhaMensal || {}), ...folhaMensalDraft } });
+            onShowToast?.('Folha mensal salva. O Fator R passa a usar a série mês a mês.');
+        } catch (e: any) {
+            onShowToast?.('Erro ao salvar a folha mensal: ' + (e?.message || e));
+        } finally {
+            setSalvandoFolhaMensal(false);
+        }
+    };
     const [faturamentoPorCnae, setFaturamentoPorCnae] = useState<Record<string, CnaeInputState>>({});
     
     // Filiais Detalhadas (LEGADO: buckets consolidados na matriz)
@@ -1328,16 +1363,47 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                         )}
                     </div>
 
-                    {/* Folha Card */}
+                    {/* Folha Card — a série MENSAL manda; o 12m é legado */}
                     <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-                        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
-                            <UserIcon className="w-4 h-4 text-sky-600" /> Folha de Salários (12m)
+                        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1 flex items-center gap-2">
+                            <UserIcon className="w-4 h-4 text-sky-600" /> Folha de Salários
                         </h3>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-3">
+                            Informe MÊS A MÊS: salários + pró-labore + <strong>CPP e FGTS recolhidos</strong> (Res. CGSN 140/2018, art. 26).
+                            É o que o PGDAS-D pede e o que o Fator R usa.
+                        </p>
                         <div className="space-y-3">
-                            <div className="flex gap-2">
-                                <CurrencyInput value={folha12Input} onChange={setFolha12Input} className="flex-1" />
-                                <button onClick={() => onUpdateFolha12(empresa.id, folha12Input)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 p-2 rounded-lg text-slate-600 dark:text-slate-300"><SaveIcon className="w-4 h-4" /></button>
+                            <button onClick={() => setFolhaMensalAberta(v => !v)} className="w-full text-left text-xs font-bold px-3 py-2 rounded-lg bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                                {folhaMensalAberta ? '▾' : '▸'} Folha mensal (12 meses anteriores ao PA) — total R$ {totalFolhaJanela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </button>
+                            {folhaMensalAberta && (
+                                <div className="space-y-1.5">
+                                    {mesesJanelaFolha.map((k) => (
+                                        <div key={k} className="flex items-center gap-2">
+                                            <span className="text-[11px] font-mono w-16 text-slate-500 dark:text-slate-400">{k.slice(5, 7)}/{k.slice(0, 4)}</span>
+                                            <CurrencyInput value={folhaMensalDraft[k] || 0} onChange={(v: number) => setFolhaMensalDraft(prev => ({ ...prev, [k]: v }))} className="flex-1" />
+                                        </div>
+                                    ))}
+                                    {mesesSemFolha > 0 && (
+                                        <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                                            ⚠ {mesesSemFolha} mês(es) sem valor na janela. Ausente ≠ zero: mês vazio derruba o Fator R — preencha ou confirme que não houve folha.
+                                        </p>
+                                    )}
+                                    <button onClick={salvarFolhaMensal} disabled={salvandoFolhaMensal} className="w-full mt-1 px-3 py-2 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white disabled:opacity-60">
+                                        {salvandoFolhaMensal ? 'Salvando…' : '💾 Salvar folha mensal'}
+                                    </button>
+                                </div>
+                            )}
+                            <div className="flex gap-2 items-center">
+                                <div className="flex-1">
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase">Acumulado 12m (legado — só vale sem a série mensal)</label>
+                                    <CurrencyInput value={folha12Input} onChange={setFolha12Input} className="w-full" />
+                                </div>
+                                <button onClick={() => onUpdateFolha12(empresa.id, folha12Input)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 p-2 rounded-lg text-slate-600 dark:text-slate-300 self-end"><SaveIcon className="w-4 h-4" /></button>
                             </div>
+                            {usaSerieMensal && (
+                                <p className="text-[10px] text-green-600 dark:text-green-400">✓ Fator R calculado pela série mensal (janela móvel).</p>
+                            )}
                             <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
                                 <div className="flex justify-between items-center mb-1">
                                     <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1">Fator R Calculado</label>
