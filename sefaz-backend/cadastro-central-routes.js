@@ -7,6 +7,8 @@
 //   GET /api/admin/cadastro/empresas/:cnpj
 //   GET /api/admin/cadastro/responsaveis          (fase 2)
 //   GET /api/admin/cadastro/responsaveis/:cnpj
+//   GET /api/admin/cadastro/certificados          (fase 3 — METADADO, nunca a chave)
+//   GET /api/admin/cadastro/certificados/:cnpj
 //
 // Ideia do Paulo (07/08), depois que a colaboradora recebeu "CNPJ não
 // cadastrado" para uma empresa cadastrada. O mesmo cliente vive no CFI, no
@@ -29,6 +31,7 @@ import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { montarCadastroEmpresas, soDigitos } from './cadastro-central.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { montarResponsaveis, responsavelDoCnpj } from './cadastro-central-responsaveis.js';
+import { montarCertificados, aptidaoDeAssinatura } from './cadastro-central-certificados.js';
 
 const router = Router();
 
@@ -149,6 +152,61 @@ router.get('/responsaveis/:cnpj', autorizar, async (req, res) => {
         return res.json({ ok: true, ...linha, avisos });
     } catch (e) {
         console.error('[cadastro-central/responsaveis/cnpj]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── FASE 3: "dá pra transmitir?" ────────────────────────────────────────────
+// Metadado de certificado, NUNCA a chave. O outro app precisa saber se o CNPJ
+// está apto a assinar hoje e até quando — e nada disso exige mover o A1.
+//
+// A leitura pega os campos sigilosos do Firestore porque é assim que o doc é;
+// quem os deixa para trás é `metadadoDoCertificado`, no módulo puro. O teste
+// tranca que nenhum caminho da resposta os carrega.
+
+async function lerCertificados(db) {
+    const snaps = await fetchAllDocs(db.collection('empresas_certificados'), {
+        label: 'cadastro-central/certificados', maxDocs: 5000,
+    });
+    return snaps.map((s) => ({ empresaId: s.id, ...(s.data() || {}) }));
+}
+
+router.get('/certificados', autorizar, async (req, res) => {
+    try {
+        const db = getDb();
+        const [{ empresas }, certificados] = await Promise.all([lerCadastro(db), lerCertificados(db)]);
+        return res.json({ ok: true, ...montarCertificados({ empresas, certificados }) });
+    } catch (e) {
+        console.error('[cadastro-central/certificados]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.get('/certificados/:cnpj', autorizar, async (req, res) => {
+    try {
+        const cnpj = soDigitos(req.params.cnpj);
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ com 14 dígitos.' });
+        }
+        const db = getDb();
+        const [{ empresas }, certificados] = await Promise.all([lerCadastro(db), lerCertificados(db)]);
+        const empresa = acharEmpresaPorCnpj(empresas, cnpj);
+        if (!empresa) {
+            return res.status(404).json({
+                ok: false,
+                error: `O CNPJ ${cnpj} não foi encontrado no cadastro do CFI. Confira o número; se estiver `
+                    + 'certo, a empresa precisa ser cadastrada.',
+            });
+        }
+        // Empresa cadastrada e SEM certificado responde 200 com o motivo, não
+        // 404: ela existe, e "sem certificado" é a resposta, não a ausência dela.
+        return res.json({
+            ok: true,
+            empresa: { cnpj: empresa.cnpj, nome: empresa.nome, regime: empresa.regime },
+            ...aptidaoDeAssinatura({ cnpj, certificados }),
+        });
+    } catch (e) {
+        console.error('[cadastro-central/certificados/cnpj]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
