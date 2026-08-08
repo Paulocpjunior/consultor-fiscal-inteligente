@@ -452,8 +452,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   que manda trocar senha à toa); admin abre tudo; rules com anti-autoconcessão
   espelhando modulosPermitidos (`departamentos` não nasce preenchido nem se
   auto-edita). `modulosPermitidos` continua sendo OUTRA coisa: libera cards
-  DENTRO do CFI; departamento libera o app irmão INTEIRO. PENDENTE: cada
-  módulo irmão chamar o túnel no login (Contábil primeiro).
+  DENTRO do CFI; departamento libera o app irmão INTEIRO.
+  **GATES LIGADOS EM TRÊS MÓDULOS (08/08), todos em MODO AVISO** — mesma
+  tabela de verdade (mudar um sem os outros faria os módulos responderem
+  coisas diferentes à mesma pessoa): 📊 Contábil v3.4.84 (rota
+  `/api/departamento/gate` + túnel; vira bloqueio com env
+  `DEPARTAMENTO_GATE_MODO=bloqueio` no Cloud Run); 📋 Legalização v1.0.24
+  (SEM túnel de propósito — mesmo Firestore do CFI, lê `users` direto;
+  mesma env); 👥 DP/Folha v2.1.4 (SPA sem backend: chama o túnel DIRETO do
+  navegador com o token do projeto `consultor-dp-folha`; CORS do CFI já
+  conhecia as origens; virada é `VITE_DEPARTAMENTO_GATE_MODO=bloqueio` no
+  BUILD, app estático não tem env de runtime). REGRA DOS GATES:
+  indeterminado LIBERA nos dois modos (túnel fora/e-mail não verificado/
+  banco piscando = log, nunca banner nem bloqueio — trancar o escritório
+  porque um serviço piscou é o dano maior; contraste deliberado com emissão
+  de guia, onde indeterminado PARA). SEQUÊNCIA COMBINADA (Paulo: "vamos na
+  sequência, por último eu vinculo o colaborador"): falta 💰 Financeiro
+  (`gen-lang-client-0888019226.web.app` — repo ainda não localizado; exige
+  somar origem no CORS do CFI e projeto no crossProjectAuth do cadastro),
+  depois Paulo vincula a equipe nos chips e as chaves viram bloqueio.
   **FASE 4 APROVADA COMO GATEWAY COMPLETO** (08/08): só "assinatura remota"
   NÃO elimina a 2ª cópia do A1 — o mTLS com a Receita exige a chave na máquina
   que abre a conexão. O desenho aprovado: o CFI assina E TRANSMITE o lote
