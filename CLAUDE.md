@@ -490,6 +490,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   colaborador sem chip fica FORA do módulo (a tela de bloqueio diz onde se
   arruma); admin passa sempre; indeterminado segue liberando. Voltar pra
   aviso = reverter a env no workflow do módulo (um commit).
+  **CONSUMO DO CADASTRO DE EMPRESAS FECHADO NOS 4 MÓDULOS (08/08)**: cada um
+  no desenho que a FONTE dele pede — 📊 Contábil consome empresas/responsável/
+  certificado nas telas do REINF (rotas /api/admin/reinf/* + túnel);
+  📋 Legalização (fonte Jotform, mesmo Firestore) cruza itens direto com
+  simples/lucro_empresas (v1.0.25); 👥 DP (cadastro próprio de empresas)
+  cruza pelo túnel na aba Empresas (v2.1.5); 💰 Financeiro (fonte Jotform,
+  Paulo confirmou 08/08) confere SÓ transações com CNPJ preenchido no
+  Dashboard — nome livre e CPF de PF ficariam como alarme sem ação, então PF
+  é CONTADA na frase e fica fora da lista. Regra comum: alerta nunca
+  reescreve nada; túnel fora do ar devolve null (bloco some — lista vazia
+  seria lida como "cadastro central vazio", mentira).
   **💰 FINANCEIRO LIGADO (08/08, mesmo dia)**: repo
   `Paulocpjunior/https-github.com-Paulocpjunior-sp_dashboard_financeiro`
   (nome torto é do GitHub; o `sp_dashboard_financeiro` sem prefixo é
