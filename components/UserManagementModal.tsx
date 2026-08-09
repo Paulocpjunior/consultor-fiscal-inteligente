@@ -36,6 +36,13 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     currentUserRole,
 }) => {
     const [tab, setTab] = useState<Tab>('users');
+    // Layout de 09/08 (pedido do Paulo: "o layout não ajuda em nada"): com 39
+    // usuários e ~20 chips por linha numa célula de ~250px, cada usuário
+    // virava um bloco gigante com chips cortados na borda. Agora a linha é
+    // COMPACTA (nome, e-mail, role, resumo) e os chips só aparecem no painel
+    // expandido do usuário clicado, em largura total.
+    const [busca, setBusca] = useState('');
+    const [expandido, setExpandido] = useState<string | null>(null);
     const [users, setUsers] = useState<User[]>([]);
     const [logs, setLogs] = useState<AccessLog[]>([]);
     const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -295,7 +302,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
     return (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70] animate-fade-in" onClick={onClose}>
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="bg-slate-100 dark:bg-slate-900 p-4 rounded-t-xl flex justify-between items-center border-b border-slate-200 dark:border-slate-700">
                     <h3 className="text-slate-800 dark:text-slate-100 font-bold text-lg flex items-center gap-2">
@@ -333,146 +340,185 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
                     {isLoading ? (
                         <div className="text-center py-12 text-slate-500">Carregando...</div>
-                    ) : tab === 'users' ? (
-                        <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
-                            <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-slate-300 sticky top-0">
-                                <tr>
-                                    <th className="px-4 py-2">Nome</th>
-                                    <th className="px-4 py-2">E-mail</th>
-                                    <th className="px-4 py-2">Role</th>
-                                    <th className="px-4 py-2">Permissões</th>
-                                    <th className="px-4 py-2 text-center">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {users.map((user) => (
-                                    <tr key={user.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                        <td className="px-4 py-2 font-medium text-slate-900 dark:text-white flex items-center gap-2">
-                                            <div className={`p-1 rounded-full ${user.role === 'admin' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
-                                                <UserIcon className="w-3 h-3" />
-                                            </div>
-                                            {user.name}
-                                            {user.email === currentUserEmail && <span className="text-xs text-sky-600">(Você)</span>}
-                                        </td>
-                                        <td className="px-4 py-2">{user.email}</td>
-                                        <td className="px-4 py-2">
-                                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                                                user.role === 'admin'
-                                                    ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
-                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
-                                            }`}>
-                                                {user.role === 'admin' ? 'Administrador' : 'Colaborador'}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-2">
-                                            {/* Departamentos do SaaS: qual MÓDULO irmão a pessoa abre.
-                                                Admin abre todos, mas o vínculo continua editável — é
-                                                registro de onde a pessoa trabalha, não só permissão. */}
-                                            <div className="flex flex-wrap gap-1 mb-1.5">
-                                                {DEPARTAMENTOS_SAAS.map(dep => {
-                                                    const vinculado = (user.departamentos ?? []).includes(dep.id);
-                                                    return (
-                                                        <button
-                                                            key={dep.id}
-                                                            disabled={!isAdmin}
-                                                            onClick={() => handleToggleDepartamento(user, dep.id, dep.label)}
-                                                            className={`text-xs font-semibold px-2 py-1 rounded-full border transition-colors ${
-                                                                vinculado
-                                                                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 hover:bg-blue-200'
-                                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-600 hover:bg-slate-200'
-                                                            } ${!isAdmin ? 'cursor-default opacity-70' : ''}`}
-                                                            title={isAdmin
-                                                                ? (vinculado ? `Desvincular do departamento ${dep.label}` : `Vincular ao departamento ${dep.label}`)
-                                                                : `Apenas administradores vinculam. ${vinculado ? 'Vinculado.' : 'Não vinculado.'}`}
-                                                        >
-                                                            {vinculado ? '✓ ' : ''}{dep.label}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                            {user.role !== 'admin' && (user.departamentos ?? []).length === 0 && (
-                                                <div className="text-[11px] text-amber-600 dark:text-amber-400 mb-1">
-                                                    ⚠ Sem departamento — não abre nenhum módulo irmão do app.
-                                                </div>
-                                            )}
-                                            {user.role === 'admin' ? (
-                                                <span className="text-xs text-slate-400 italic">Todos (admin)</span>
-                                            ) : (
-                                                <div className="flex flex-wrap gap-1">
-                                                    {[...MODULOS_RESTRITOS, ...PERMISSOES_FUNCIONAIS].map(mod => {
-                                                        const modLabel = mod.label ?? mod.type;
-                                                        const liberado = (user.modulosPermitidos ?? []).includes(mod.type);
-                                                        return (
-                                                            <button
-                                                                key={mod.type}
-                                                                disabled={!isAdmin}
-                                                                onClick={() => handleToggleModulo(user, mod.type, modLabel)}
-                                                                className={`text-xs font-semibold px-2 py-1 rounded-full border transition-colors ${
-                                                                    liberado
-                                                                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700 hover:bg-green-200'
-                                                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600 hover:bg-slate-200'
-                                                                } ${!isAdmin ? 'cursor-default opacity-70' : ''}`}
-                                                                title={isAdmin
-                                                                    ? (liberado ? `Clique para revogar o acesso a ${modLabel}` : `Clique para liberar o acesso a ${modLabel}`)
-                                                                    : `Apenas administradores podem alterar. ${liberado ? 'Acesso liberado.' : 'Sem acesso.'}`}
-                                                            >
-                                                                {liberado ? '✓ ' : ''}{modLabel}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-2 text-center">
-                                            {user.email !== currentUserEmail && (
-                                                <div className="flex justify-center gap-2">
-                                                    {isAdmin && (
-                                                        <button
-                                                            onClick={() => handleEditName(user)}
-                                                            className="px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-xs font-semibold"
-                                                            title="Editar nome de exibição"
-                                                        >
-                                                            Editar nome
-                                                        </button>
-                                                    )}
-                                                    {isAdmin && (
-                                                        <button
-                                                            onClick={() => handleToggleRole(user)}
-                                                            className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 text-xs font-semibold"
-                                                            title={user.role === 'admin' ? 'Rebaixar para colaborador' : 'Promover a administrador'}
-                                                        >
-                                                            {user.role === 'admin' ? 'Rebaixar' : 'Promover'}
-                                                        </button>
-                                                    )}
-                                                    <button
-                                                        onClick={() => handleResetPassword(user.id, user.name)}
-                                                        className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/50 text-xs font-semibold"
-                                                        title="Resetar senha para 123456"
-                                                    >
-                                                        Resetar Senha
-                                                    </button>
-                                                    {isAdmin && (
-                                                        <button
-                                                            onClick={() => handleDeleteUser(user.id, user.name)}
-                                                            className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
-                                                            title="Excluir usuário"
-                                                        >
-                                                            <TrashIcon className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                                {users.length === 0 && !error && (
-                                    <tr>
-                                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400">Nenhum usuário encontrado.</td>
-                                    </tr>
+                    ) : tab === 'users' ? (() => {
+                        const termo = busca.trim().toLowerCase();
+                        const filtrados = users.filter(u => !termo
+                            || (u.name || '').toLowerCase().includes(termo)
+                            || (u.email || '').toLowerCase().includes(termo));
+                        return (
+                        <div>
+                            <div className="mb-3 flex items-center gap-3">
+                                <input
+                                    value={busca}
+                                    onChange={e => setBusca(e.target.value)}
+                                    placeholder="🔎 Buscar por nome ou e-mail…"
+                                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                                />
+                                {termo && (
+                                    <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                        {filtrados.length} de {users.length}
+                                    </span>
                                 )}
-                            </tbody>
-                        </table>
-                    ) : (
+                            </div>
+                            <div className="space-y-1">
+                                {filtrados.map((user) => {
+                                    const deps = user.departamentos ?? [];
+                                    const mods = user.modulosPermitidos ?? [];
+                                    const aberto = expandido === user.id;
+                                    return (
+                                        <div key={user.id} className={`rounded-lg border ${aberto ? 'border-sky-300 dark:border-sky-700' : 'border-slate-200 dark:border-slate-700'}`}>
+                                            {/* Linha compacta: clique abre o editor de acessos */}
+                                            <div
+                                                className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg"
+                                                onClick={() => setExpandido(aberto ? null : user.id)}
+                                            >
+                                                <div className={`p-1 rounded-full shrink-0 ${user.role === 'admin' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                    <UserIcon className="w-3 h-3" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <span className="font-medium text-slate-900 dark:text-white text-sm">
+                                                        {user.name}
+                                                        {user.email === currentUserEmail && <span className="text-xs text-sky-600 ml-1">(Você)</span>}
+                                                    </span>
+                                                    <span className="block sm:inline sm:ml-2 text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</span>
+                                                </div>
+                                                <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${
+                                                    user.role === 'admin'
+                                                        ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                                }`}>
+                                                    {user.role === 'admin' ? 'Admin' : 'Colaborador'}
+                                                </span>
+                                                {/* Resumo honesto sem abrir: quantos vínculos, e o ⚠ de quem não tem nenhum */}
+                                                {user.role !== 'admin' && deps.length === 0 ? (
+                                                    <span className="shrink-0 text-xs text-amber-600 dark:text-amber-400 font-semibold" title="Sem departamento — não abre nenhum módulo irmão do app.">⚠ sem depto.</span>
+                                                ) : (
+                                                    <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">
+                                                        {user.role === 'admin' ? 'todos os módulos' : `${deps.length} depto. · ${mods.length} card(s)`}
+                                                    </span>
+                                                )}
+                                                <span className="shrink-0 text-xs font-bold text-sky-600 dark:text-sky-400">{aberto ? 'Fechar ▴' : 'Acessos ▾'}</span>
+                                            </div>
+
+                                            {/* Painel expandido: chips em LARGURA TOTAL, por seção nomeada */}
+                                            {aberto && (
+                                                <div className="px-3 pb-3 pt-1 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                                                    <div>
+                                                        <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1.5">
+                                                            Departamentos — módulos irmãos do SaaS
+                                                        </p>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {DEPARTAMENTOS_SAAS.map(dep => {
+                                                                const vinculado = deps.includes(dep.id);
+                                                                return (
+                                                                    <button
+                                                                        key={dep.id}
+                                                                        disabled={!isAdmin}
+                                                                        onClick={() => handleToggleDepartamento(user, dep.id, dep.label)}
+                                                                        className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                                                                            vinculado
+                                                                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 hover:bg-blue-200'
+                                                                                : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-600 hover:bg-slate-200'
+                                                                        } ${!isAdmin ? 'cursor-default opacity-70' : ''}`}
+                                                                        title={isAdmin
+                                                                            ? (vinculado ? `Desvincular do departamento ${dep.label}` : `Vincular ao departamento ${dep.label}`)
+                                                                            : `Apenas administradores vinculam. ${vinculado ? 'Vinculado.' : 'Não vinculado.'}`}
+                                                                    >
+                                                                        {vinculado ? '✓ ' : ''}{dep.label}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        {user.role !== 'admin' && deps.length === 0 && (
+                                                            <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                                                                ⚠ Sem departamento — não abre nenhum módulo irmão do app.
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1.5">
+                                                            Cards internos do CFI
+                                                        </p>
+                                                        {user.role === 'admin' ? (
+                                                            <span className="text-xs text-slate-400 italic">Todos (admin)</span>
+                                                        ) : (
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {[...MODULOS_RESTRITOS, ...PERMISSOES_FUNCIONAIS].map(mod => {
+                                                                    const modLabel = mod.label ?? mod.type;
+                                                                    const liberado = mods.includes(mod.type);
+                                                                    return (
+                                                                        <button
+                                                                            key={mod.type}
+                                                                            disabled={!isAdmin}
+                                                                            onClick={() => handleToggleModulo(user, mod.type, modLabel)}
+                                                                            className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                                                                                liberado
+                                                                                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700 hover:bg-green-200'
+                                                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600 hover:bg-slate-200'
+                                                                            } ${!isAdmin ? 'cursor-default opacity-70' : ''}`}
+                                                                            title={isAdmin
+                                                                                ? (liberado ? `Clique para revogar o acesso a ${modLabel}` : `Clique para liberar o acesso a ${modLabel}`)
+                                                                                : `Apenas administradores podem alterar. ${liberado ? 'Acesso liberado.' : 'Sem acesso.'}`}
+                                                                        >
+                                                                            {liberado ? '✓ ' : ''}{modLabel}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    {user.email !== currentUserEmail && (
+                                                        <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-100 dark:border-slate-700/50">
+                                                            {isAdmin && (
+                                                                <button
+                                                                    onClick={() => handleEditName(user)}
+                                                                    className="px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-xs font-semibold"
+                                                                    title="Editar nome de exibição"
+                                                                >
+                                                                    Editar nome
+                                                                </button>
+                                                            )}
+                                                            {isAdmin && (
+                                                                <button
+                                                                    onClick={() => handleToggleRole(user)}
+                                                                    className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 text-xs font-semibold"
+                                                                    title={user.role === 'admin' ? 'Rebaixar para colaborador' : 'Promover a administrador'}
+                                                                >
+                                                                    {user.role === 'admin' ? 'Rebaixar' : 'Promover'}
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={() => handleResetPassword(user.id, user.name)}
+                                                                className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/50 text-xs font-semibold"
+                                                                title="Resetar senha para 123456"
+                                                            >
+                                                                Resetar Senha
+                                                            </button>
+                                                            {isAdmin && (
+                                                                <button
+                                                                    onClick={() => handleDeleteUser(user.id, user.name)}
+                                                                    className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                                                                    title="Excluir usuário"
+                                                                >
+                                                                    <TrashIcon className="w-4 h-4" />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                {filtrados.length === 0 && !error && (
+                                    <p className="px-4 py-8 text-center text-slate-400 text-sm">
+                                        {users.length === 0 ? 'Nenhum usuário encontrado.' : `Nenhum usuário casa com "${busca}".`}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        );
+                    })() : (
                         // Logs tab
                         <div className="space-y-2">
                             {logs.length === 0 && !error && (
