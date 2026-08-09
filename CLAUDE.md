@@ -529,10 +529,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   padrão escritório 44388152000189); pfx→PEM reusa `pfx-to-pem.js` (NÃO criar
   cópia); auditoria em `reinf_gateway_lotes` SEM o conteúdo do evento (é
   declaração do cliente; guarda ids/elementos/protocolo/fingerprint).
-  PENDENTE: o plano-contas-iob consumir (env, default caminho atual) e provar
-  em produção restrita; só DEPOIS apagar o `reinf-cert-a1` de lá. Enquanto
-  isso, a conferência dos DOIS COFRES pelo fingerprint (v3.4.83 do REINF)
-  acusa divergência de renovação.
+  🧪 **GATEWAY PROVADO 09/08 (Paulo clicou, lote ACEITO)**: "PROVADO: lote
+  aceito em produção restrita via gateway", protocolo 2.202608.33245995 — o
+  CFI assinou com o A1 do cofre e a Receita aceitou. A chave
+  `REINF_TRANSMISSOR=gateway` foi LIGADA no deploy do plano-contas-iob no
+  mesmo dia (transmissões de lá agora saem por aqui; o A1 local deles nem é
+  carregado). O caminho até o PROVADO custou 5 versões (v3.4.88-92, lições no
+  CLAUDE.md de lá): 🧪 exigia beneficiário à toa; 401 de e-mail não
+  verificado era a trava CERTA do túnel sem CAMINHO na tela (banner +
+  verificação); e o 401 persistia após verificar porque getIdToken() cacheia
+  1h — o getToken de lá agora se autocura lendo o claim. PENDENTE: uma
+  transmissão REAL (R-1000 + movimento) via gateway com recibo conferido; só
+  DEPOIS apagar o `reinf-cert-a1` de lá. Enquanto isso, a conferência dos
+  DOIS COFRES pelo fingerprint (v3.4.83 do REINF) acusa divergência de
+  renovação.
 - **CADASTRO CENTRAL: o CFI é DONO do cadastro dos apps irmãos** (ideia do
   Paulo, 07/08, logo depois do "CNPJ não cadastrado" para empresa cadastrada:
   *"por que não construir um túnel que leva ao nosso BD — cadastros em geral,
