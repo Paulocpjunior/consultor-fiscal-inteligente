@@ -1547,6 +1547,10 @@ export interface DocumentoFiscal {
     };
     /** Valor total normalizado: vNF (NFe), vTPrest (CTe), vRec (NFSe). Gravado pelo importer. */
     valorTotal?: number;
+    /** NFS-e SP: código de serviço MUNICIPAL da nota (não é o item LC 116). */
+    codigoServico?: string;
+    /** NFS-e SP: discriminação (texto livre da nota). */
+    discriminacao?: string;
     /** Tipo do documento (normalizado para o frontend). Espelha `tipo` mas vem do schema do XML. */
     tipoDoc?: XmlTipoDocumento;
     itens: DocumentoFiscalItem[];

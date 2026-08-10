@@ -6,7 +6,7 @@
 import {
     resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, resumoPorUf,
     nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante,
-    resumoPorAliquota, resumoPorProduto,
+    resumoPorAliquota, resumoPorProduto, servicosPorCodigo,
 } from '../services/relatoriosAgregacoes';
 
 const nfe = (over: any = {}) => ({
@@ -96,6 +96,61 @@ describe('serviços e retenções', () => {
         const antigo = nfse({ id: 'old', valores: { baseCalculo: 900, iss: 45, pis: 6, cofins: 27, liquido: 867 } });
         const l = linhasServicos([antigo] as any, 'entrada');
         expect(l[0].retencoesFederaisGravadas).toBe(false);
+    });
+});
+
+describe('servicosPorCodigo (colaborador via Paulo, 10/08)', () => {
+    // Duas notas do 0107, uma do 0205 e uma SEM código — o grupo vazio não some.
+    const docs = [
+        nfse({ id: 'a', codigoServico: '0107', discriminacao: 'Assessoria contábil mensal' }),
+        nfse({
+            id: 'b', codigoServico: '0107', discriminacao: 'Assessoria contábil mensal',
+            valorTotal: 1000,
+            valores: { baseCalculo: 1000, iss: 50, valorIssRetido: 0, pis: 6.5, cofins: 30, ir: 15, inss: 0, csll: 10, liquido: 938.5 },
+        }),
+        nfse({
+            id: 'c', codigoServico: '0205', discriminacao: 'Consultoria tributária',
+            valorTotal: 500,
+            valores: { baseCalculo: 500, iss: 25, valorIssRetido: 25, pis: 0, cofins: 0, ir: 0, inss: 0, csll: 0, liquido: 475 },
+        }),
+        nfse({
+            id: 'd', discriminacao: 'Nota do trilho sem código',
+            valorTotal: 300,
+            valores: { baseCalculo: 300, iss: 15, valorIssRetido: 0, pis: 0, cofins: 0, ir: 0, inss: 0, csll: 0, liquido: 300 },
+        }),
+    ];
+
+    it('subtotal por código com todas as retenções e o total retido do grupo', () => {
+        const g = servicosPorCodigo(docs as any, 'entrada');
+        expect(g.map(x => x.codigo)).toEqual(['0107', '0205', '']);
+        const g0107 = g[0];
+        expect(g0107).toMatchObject({ notas: 2, bruto: 3000, issRetido: 100, ir: 45, pis: 19.5, cofins: 90, csll: 30 });
+        // ISS retido 100 + IR 45 + PIS 19.5 + COFINS 90 + CSLL 30 = 284.5
+        expect(g0107.totalRetido).toBeCloseTo(284.5, 2);
+        expect(g0107.descricaoExemplo).toBe('Assessoria contábil mensal');
+    });
+
+    it('nota sem código vira grupo nomeado, POR ÚLTIMO — nunca some do total', () => {
+        const g = servicosPorCodigo(docs as any, 'entrada');
+        const sem = g[g.length - 1];
+        expect(sem.codigo).toBe('');
+        expect(sem.rotulo).toBe('Sem código de serviço');
+        expect(sem.notas).toBe(1);
+        const totalBruto = g.reduce((t, x) => t + x.bruto, 0);
+        expect(totalBruto).toBe(3800); // 2000 + 1000 + 500 + 300 — a sem-código conta
+    });
+
+    it('nota antiga sem campos federais conta no aviso do grupo', () => {
+        const antigo = nfse({ id: 'old', codigoServico: '0107', valores: { baseCalculo: 900, iss: 45, liquido: 855 } });
+        const g = servicosPorCodigo([antigo] as any, 'entrada');
+        expect(g[0].semCamposGravados).toBe(1);
+    });
+
+    it('direção filtra: prestados não mistura com tomados', () => {
+        const prestada = nfse({ id: 'p', direcao: 'saida', codigoServico: '0107' });
+        const g = servicosPorCodigo([prestada, ...docs] as any, 'saida');
+        expect(g).toHaveLength(1);
+        expect(g[0].notas).toBe(1);
     });
 });
 
