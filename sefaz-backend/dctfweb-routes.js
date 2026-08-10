@@ -446,4 +446,100 @@ router.post('/cron', async (req, res) => {
     }
 });
 
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/dctfweb/insumos?cnpj=&competencia=YYYY-MM[&empresaId=]
+//
+// SEMÁFORO DE INSUMOS POR DEPARTAMENTO (Paulo, 10/08): a DCTFWeb consolida
+// eSocial (DP/Folha, via Folhamatic), Reinf (Contábil) e MIT (Fiscal) — e quem
+// transmite precisa VER o que já entrou. Prova por dado real, nunca checkbox:
+// eSocial e MIT pelo SERPRO; Reinf pela auditoria do gateway + as retenções
+// que o CFI apura nas NFS-e tomadas. Núcleo puro: dctfweb-insumos.js.
+// ────────────────────────────────────────────────────────────────────────────
+router.get('/insumos', requireAuth, async (req, res) => {
+    try {
+        const cnpj = limparCnpj(req.query.cnpj);
+        const competencia = String(req.query.competencia || '').trim();
+        const empresaId = String(req.query.empresaId || '').trim() || null;
+        if (cnpj.length !== 14) return res.status(400).json({ ok: false, error: 'cnpj (14 dígitos) é obrigatório' });
+        if (!/^\d{4}-\d{2}$/.test(competencia)) return res.status(400).json({ ok: false, error: 'competencia (YYYY-MM) é obrigatória' });
+        const acesso = await podeAcessarCnpj(req.user, cnpj);
+        if (!acesso.ok) return res.status(acesso.status).json({ ok: false, error: acesso.error });
+
+        const [anoPA, mesPA] = competencia.split('-').map(Number);
+        const db = admin.apps.length ? admin.firestore() : (admin.initializeApp({ credential: admin.credential.applicationDefault() }), admin.firestore());
+
+        // As quatro leituras em paralelo — cada falha vira 'indeterminado' no
+        // selo dela, nunca derruba o semáforo inteiro.
+        const [esocialR, mitR, lotesR, docsR] = await Promise.allSettled([
+            (async () => {
+                const { consultarESocial } = await import('./nfp-compliance-provider.js');
+                return consultarESocial(cnpj, competencia);
+            })(),
+            consultarApuracaoMit({ empresaCnpj: cnpj, anoPA, mesPA }),
+            (async () => {
+                const snap = await db.collection('reinf_gateway_lotes')
+                    .where('declarante', '==', cnpj).limit(200).get();
+                return snap.docs.map((d) => {
+                    const x = d.data();
+                    return { ...x, em: x.em?.toDate?.()?.toISOString?.() || null };
+                });
+            })(),
+            (async () => {
+                const consultas = [db.collection('documentos_fiscais')
+                    .where('empresaCnpj', '==', cnpj).where('competencia', '==', competencia)];
+                if (empresaId) {
+                    consultas.push(db.collection('documentos_fiscais')
+                        .where('empresaId', '==', empresaId).where('competencia', '==', competencia));
+                }
+                const porId = new Map();
+                for (const q of consultas) {
+                    const docs = await fetchAllDocs(q, { label: `dctfweb-insumos ${cnpj}`, maxDocs: 20000 });
+                    for (const s of docs) {
+                        const d = s.data() || {};
+                        if (d._deleted || d._merged_into) continue;
+                        porId.set(s.id, d);
+                    }
+                }
+                return [...porId.values()];
+            })(),
+        ]);
+
+        const { seloEsocial, seloMit, seloReinf, vereditoInsumos, contarRetencoesTomadas } = await import('./dctfweb-insumos.js');
+
+        const esocial = esocialR.status === 'fulfilled' ? esocialR.value : { ok: false, erro: esocialR.reason?.message };
+        let mit;
+        if (mitR.status === 'fulfilled') {
+            const alvo = mitR.value;
+            const situacao = Number(
+                alvo?.apuracaoResumo?.situacao ?? alvo?.apuracaoResumo?.situacaoApuracao
+                ?? alvo?.apuracaoMit?.situacaoApuracao ?? alvo?.apuracaoMit?.situacao ?? NaN,
+            );
+            mit = alvo?.apuracaoMit
+                ? { ok: true, situacao, descricao: alvo?.apuracaoResumo?.descricaoSituacao || null }
+                : { ok: true, situacao: 0, descricao: 'apuração não iniciada' };
+        } else {
+            mit = { ok: false, erro: mitR.reason?.message };
+        }
+        // Lote do gateway só conta pra ESTA competência quando o registro diz a
+        // competência (gravada no envio desde 10/08). Lote antigo sem o campo
+        // não é prova — melhor um 'pendente' conferível que um 'recebido' falso.
+        const lotes = lotesR.status === 'fulfilled'
+            ? lotesR.value.filter((l) => Array.isArray(l.competencias) && l.competencias.includes(competencia) && l.httpStatus === 201)
+            : [];
+        const retencoesApuradas = docsR.status === 'fulfilled'
+            ? contarRetencoesTomadas(docsR.value, competencia)
+            : null;
+
+        const selos = [
+            seloEsocial(esocial),
+            seloReinf({ lotesGateway: lotes, retencoesApuradas }),
+            seloMit(mit),
+        ];
+        return res.json({ ok: true, cnpj, competencia, selos, ...vereditoInsumos(selos) });
+    } catch (e) {
+        console.error('[dctfweb/insumos]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 export default router;
