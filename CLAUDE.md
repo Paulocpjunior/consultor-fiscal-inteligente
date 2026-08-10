@@ -1116,6 +1116,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ainda rodam lá (Exportar SAGE) e o REINF. A página /novidades-cfi.html
   reflete essa divisão — manter em dia quando módulos migrarem.
 
+- **XML DE CLIENTE NUNCA ENTRA DIRETO NO IOB SAGE — entra pelo CFI, e o
+  e-Fiscal recebe o .FML** (definição do Paulo, 10/08, após análise do zip de
+  um cliente: 3.855 XMLs LIMPOS, mas 260 canceladas no formato LEGADO
+  pré-2012 — `nfeProc` com o protocolo de CANCELAMENTO `cStat 101` no lugar
+  do de autorização, sem o evento 110111 — e o importador do Sage recusa como
+  "erro de schema"). A primeira leitura da equipe foi "cadastro sujo do
+  cliente" e estava ERRADA: o defeito era de forma, não de dado. O CFI lê o
+  legado nativamente (`xml-importer.js`: cStat 101 → status cancelado) e o
+  Exportar SAGE grava cancelada como situação 2 do .FML, fora da validação de
+  schema do Sage. Resposta padrão pro colaborador: nem alterar lançamento à
+  mão, nem pedir arquivo novo ao cliente — rodar o lote pela ponte. Guia:
+  `/guia-ponte-sage.html` (botão 📗 no Exportar SAGE; fonte dupla com
+  `docs/guia-colaborador-ponte-sage.md`).
 - Migração SIEG → CFI em andamento. Saída mod 55 = cofre de e-mail
   (`xml@spassessoriacontabil.com.br`); SEFAZ não entrega saída ao emissor
   (Rejeição 641). Checklist de migração do cofre lista os "falta migrar".
