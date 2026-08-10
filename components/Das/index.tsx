@@ -464,7 +464,7 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     onClick={() => setSelecionado(null)}
                 >
                     <div
-                        className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl"
+                        className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
