@@ -69,6 +69,7 @@ import efdReinfRouter from './sefaz-backend/efd-reinf-routes.js';
 import reinfRetencoesPjRouter from './sefaz-backend/reinf-retencoes-pj-routes.js';
 import reinfGatewayRouter from './sefaz-backend/reinf-gateway-routes.js';
 import cadastroCentralRouter from './sefaz-backend/cadastro-central-routes.js';
+import whatsappRouter from './sefaz-backend/whatsapp-routes.js';
 import minhaAgendaRouter from './sefaz-backend/minha-agenda-routes.js';
 import diagnosticoDocsFiscaisRouter from './sefaz-backend/diagnostico-docs-fiscais-routes.js';
 import simplesSublimiteRouter from './sefaz-backend/simples-sublimite-routes.js';
@@ -365,6 +366,7 @@ app.use('/api/admin/reinf/gateway', reinfGatewayRouter);
 // Cadastro central: o CFI como dono do cadastro dos apps irmãos. Certificado
 // NÃO trafega — é chave privada; leva-se a operação, nunca a chave.
 app.use('/api/admin/cadastro', cadastroCentralRouter);
+app.use('/api/admin/whatsapp', whatsappRouter);
 app.use('/api/admin/minha-agenda', minhaAgendaRouter);
 app.use('/api/admin/diagnostico-docs-fiscais', diagnosticoDocsFiscaisRouter);
 app.use('/api/admin/simples-sublimite', simplesSublimiteRouter);

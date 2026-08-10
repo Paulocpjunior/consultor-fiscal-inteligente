@@ -147,6 +147,48 @@ export async function subirPdf({ pdfBase64, nomeArquivo }, deps = {}) {
  * NUNCA reenvia sozinho: falha de rede aqui é INDETERMINADO (a mensagem pode
  * ter saído) — quem decide repetir é a pessoa, avisada.
  */
+/**
+ * Envio GENÉRICO por template (Paulo, 10/08): qualquer template aprovado da
+ * WABA, não só a guia fiscal. O token e o phoneNumberId continuam vindo da
+ * config (a credencial compartilhada mora no CFI) — o que varia é o TEMPLATE
+ * e o IDIOMA, passados pelo chamador (a rota resolve pelo cadastro por
+ * departamento). Só isto muda em relação ao enviarGuiaWhatsapp: o nome do
+ * template deixa de ser o do env.
+ */
+export async function enviarTemplateWhatsapp({ para, template, idioma, variaveis, pdfBase64, nomeArquivo }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    // Aqui NÃO exigimos cfg.template (o env da guia) — o template vem do
+    // chamador. Só token + phoneNumberId precisam estar configurados.
+    if (!cfg.token || !cfg.phoneNumberId) {
+        return { ok: false, erro: 'Canal WhatsApp não configurado: falta o token da Cloud API e/ou o id do número.', acao: 'Configure o secret e as envs no CFI.', configuracaoIncompleta: true };
+    }
+    if (!template) return { ok: false, erro: 'Template do WhatsApp não informado.', acao: 'Escolha um template aprovado do departamento.' };
+    const numero = normalizarNumeroBr(para);
+    if (!numero) return { ok: false, erro: `Número de WhatsApp inválido: "${para}".`, acao: 'Corrija o número no cadastro (DDD + número).' };
+    const doFetch = deps.fetchImpl || fetch;
+
+    let documentoId = null;
+    if (pdfBase64) documentoId = await subirPdf({ pdfBase64, nomeArquivo }, { ...deps, cfg });
+
+    const payload = montarMensagemTemplate({
+        para: numero, template, idioma: idioma || cfg.idioma,
+        variaveis, documentoId, nomeArquivo,
+    });
+    let resp;
+    try {
+        resp = await doFetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+    } catch (e) {
+        return { ok: false, indeterminado: true, erro: `Rede caiu durante o envio (${e.message}) — a mensagem PODE ter saído.`, acao: 'Confira no WhatsApp do número oficial antes de reenviar: reenviar duplica a mensagem.' };
+    }
+    const corpo = await resp.json().catch(() => ({}));
+    const r = interpretarRespostaWhatsapp(resp.status, corpo);
+    return { ...r, numeroEnviado: numero };
+}
+
 export async function enviarGuiaWhatsapp({ para, variaveis, pdfBase64, nomeArquivo }, deps = {}) {
     const cfg = deps.cfg || configWhatsapp(deps.env);
     const faltas = faltasDaConfig(cfg);
