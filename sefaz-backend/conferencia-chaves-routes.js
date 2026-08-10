@@ -18,6 +18,7 @@ import { consultaNFePorChave } from './sefaz-client.js';
 import { importarXmlSefaz } from './xml-importer.js';
 import { loadCertEmpresa, loadCertEmpresaPorCnpjBase } from './cert-storage.js';
 import { carregarFlagsEmpresa } from './empresa-flags.js';
+import { podeAcessarCnpj } from './carteira-auth.js';
 
 const router = express.Router();
 const MAX_CHAVES_CONFERIR = 2000;
@@ -87,6 +88,12 @@ router.post('/conferencia-chaves-importar', requireAuth, express.json({ limit: '
         if (cnpjDest.length !== 14) {
             return res.status(400).json({ error: 'cnpjDestinatario (14 dígitos) é obrigatório — a empresa dona das notas (destinatária).' });
         }
+        // TRAVA DE CARTEIRA (auditoria de segurança, 10/08): esta rota carrega o
+        // A1 da empresa-alvo e dispara consulta à SEFAZ em nome dela — sem o
+        // check, um colaborador fora da carteira queimava a cota anti-656 da
+        // raiz de outra empresa e escrevia documentos na base dela. Admin passa.
+        const acessoDest = await podeAcessarCnpj(req.user, cnpjDest);
+        if (!acessoDest.ok) return res.status(acessoDest.status).json({ error: acessoDest.error });
         const chaves = extrairChaves((req.body?.chaves || []).join('\n')).slice(0, MAX_CHAVES_IMPORTAR);
         if (chaves.length === 0) return res.status(400).json({ error: 'Nenhuma chave válida para importar.' });
 
