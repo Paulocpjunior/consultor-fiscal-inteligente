@@ -151,6 +151,10 @@ export interface LinhaServico {
     liquido: number;
     /** Doc gravado antes de 01/08 não tem IR/INSS/CSLL — ausente ≠ zero retido. */
     retencoesFederaisGravadas: boolean;
+    /** Código de serviço MUNICIPAL da nota (NFS-e SP); vazio quando o trilho não traz. */
+    codigoServico: string;
+    /** Discriminação da nota — texto livre, usado só como EXEMPLO no agrupamento. */
+    descricaoNota: string;
 }
 
 export function linhasServicos(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaServico[] {
@@ -175,9 +179,87 @@ export function linhasServicos(docs: DocumentoFiscal[], direcao: 'entrada' | 'sa
                 csll: v.csll || 0,
                 liquido: v.liquido ?? d.valorTotal ?? 0,
                 retencoesFederaisGravadas: v.ir !== undefined || v.inss !== undefined || v.csll !== undefined,
+                codigoServico: String((d as any).codigoServico || '').trim(),
+                descricaoNota: String((d as any).discriminacao || (d as any).descricao || '').trim(),
             };
         })
         .sort((a, b) => a.data.localeCompare(b.data) || a.numero.localeCompare(b.numero));
+}
+
+// ─── Serviços agrupados por CÓDIGO DE SERVIÇO ───────────────────────────────
+
+export interface GrupoServicoCodigo {
+    /** Código municipal ('' = a nota não trouxe — trilho ADN/nota antiga). */
+    codigo: string;
+    rotulo: string;
+    /**
+     * Descrição = a DISCRIMINAÇÃO mais frequente das notas do grupo (texto
+     * livre da própria nota, truncado). Não existe tabela oficial
+     * código→descrição no app — inventar uma seria chute; a da nota é real e
+     * vem carimbada como exemplo.
+     */
+    descricaoExemplo: string;
+    notas: number;
+    bruto: number;
+    issRetido: number;
+    ir: number;
+    pis: number;
+    cofins: number;
+    csll: number;
+    inss: number;
+    /** Soma de TODAS as retenções do grupo (ISS retido + federais). */
+    totalRetido: number;
+    liquido: number;
+    /** Notas do grupo sem IR/INSS/CSLL gravados — ausente ≠ zero retido. */
+    semCamposGravados: number;
+}
+
+/**
+ * Agrupa as NFS-e por código de serviço com subtotais (colaborador via Paulo,
+ * 10/08: conferência da apuração dos impostos de serviço por código). Nota sem
+ * código NÃO some: vira o grupo "Sem código de serviço" — sumir faria o total
+ * bater a menor sem ninguém ver. Ordem: maior valor bruto primeiro; o grupo
+ * sem código sempre por último.
+ */
+export function servicosPorCodigo(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): GrupoServicoCodigo[] {
+    const linhas = linhasServicos(docs, direcao);
+    const grupos = new Map<string, GrupoServicoCodigo & { _descricoes: Map<string, number> }>();
+    for (const l of linhas) {
+        const codigo = l.codigoServico;
+        if (!grupos.has(codigo)) {
+            grupos.set(codigo, {
+                codigo,
+                rotulo: codigo ? `Cód. ${codigo}` : 'Sem código de serviço',
+                descricaoExemplo: '',
+                notas: 0, bruto: 0, issRetido: 0, ir: 0, pis: 0, cofins: 0, csll: 0, inss: 0,
+                totalRetido: 0, liquido: 0, semCamposGravados: 0,
+                _descricoes: new Map(),
+            });
+        }
+        const g = grupos.get(codigo)!;
+        g.notas += 1;
+        g.bruto += l.base;
+        g.issRetido += l.issRetido;
+        g.ir += l.ir;
+        g.pis += l.pis;
+        g.cofins += l.cofins;
+        g.csll += l.csll;
+        g.inss += l.inss;
+        g.totalRetido += l.issRetido + l.ir + l.pis + l.cofins + l.csll + l.inss;
+        g.liquido += l.liquido;
+        if (!l.retencoesFederaisGravadas) g.semCamposGravados += 1;
+        const desc = l.descricaoNota.slice(0, 80);
+        if (desc) g._descricoes.set(desc, (g._descricoes.get(desc) || 0) + 1);
+    }
+    return Array.from(grupos.values())
+        .map(({ _descricoes, ...g }) => ({
+            ...g,
+            descricaoExemplo: [..._descricoes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '—',
+        }))
+        .sort((a, b) => {
+            if (!a.codigo !== !b.codigo) return a.codigo ? -1 : 1;
+            return b.bruto - a.bruto;
+        });
 }
 
 /** Só as notas com ALGUMA retenção (federal ou ISS retido). */

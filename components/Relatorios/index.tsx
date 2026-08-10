@@ -23,7 +23,7 @@ import { listDocumentos, getEmpresasDisponiveis, getIdentificacaoEmpresa, type E
 import { alocarTributacaoIcms } from '../../services/iobSageExportService';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 import {
-    resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, diagnosticoRetencoes, resumoPorUf,
+    resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, diagnosticoRetencoes, resumoPorUf, servicosPorCodigo,
     nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante, resumoPorAliquota, resumoPorProduto,
     contraparteDoc, docValido,
 } from '../../services/relatoriosAgregacoes';
@@ -46,7 +46,7 @@ interface Props {
 type AbaId =
     | 'livro' | 'cfop' | 'impostos-resumo' | 'uf'
     | 'canceladas' | 'aliquota' | 'produto' | 'participante'
-    | 'serv-tomados' | 'serv-prestados' | 'retencoes'
+    | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
@@ -66,6 +66,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
         titulo: 'Serviços (por empresa)', abas: [
             { id: 'serv-tomados', label: '🛠️ Serviços tomados' },
             { id: 'serv-prestados', label: '🧰 Serviços prestados' },
+            { id: 'serv-codigo', label: '🔣 Por código de serviço' },
             { id: 'retencoes', label: '✂️ Retenções' },
         ],
     },
@@ -84,7 +85,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
 const ABAS_POR_EMPRESA: AbaId[] = [
     'livro', 'cfop', 'impostos-resumo', 'uf',
     'canceladas', 'aliquota', 'produto', 'participante',
-    'serv-tomados', 'serv-prestados', 'retencoes',
+    'serv-tomados', 'serv-prestados', 'serv-codigo', 'retencoes',
 ];
 
 /**
@@ -278,6 +279,9 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
             )}
             {(aba === 'serv-tomados' || aba === 'serv-prestados' || aba === 'retencoes') && docsRecorte && empresa && (
                 <AbaServicos docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} modo={aba} />
+            )}
+            {aba === 'serv-codigo' && docsRecorte && empresa && (
+                <AbaServicosPorCodigo docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} />
             )}
             {aba === 'faturamento' && <AbaFaturamento competencia={competencia} />}
             {aba === 'declaracao' && <AbaDeclaracao empresas={empresas} onShowToast={onShowToast} />}
@@ -960,6 +964,138 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
                         </p>
                     )
                     : <p className="text-sm text-slate-500">Nenhuma NFS-e {direcao === 'entrada' ? 'tomada' : 'prestada'} neste recorte.</p>
+            )}
+        </Card>
+    );
+};
+
+// ─── Serviços por CÓDIGO DE SERVIÇO ─────────────────────────────────────────
+// Pedido do colaborador via Paulo (10/08): conferência da apuração dos
+// impostos de serviço consolidada por código, com subtotais e retenções.
+// NENHUMA conta nova: agrupa as MESMAS linhas de linhasServicos (o subtotal
+// do grupo É a linha; total geral no rodapé). O período é a competência do
+// recorte — o mesmo filtro das demais abas.
+
+const AbaServicosPorCodigo: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, identificacao }) => {
+    const { gerando, rodar } = usePdf();
+    const [direcao, setDirecao] = useState<'saida' | 'entrada'>('saida');
+    const grupos = useMemo(() => servicosPorCodigo(docs, direcao), [docs, direcao]);
+    const diag = useMemo(() => diagnosticoRetencoes(docs, direcao), [docs, direcao]);
+    const semCodigo = grupos.find(g => !g.codigo);
+
+    const tot = useMemo(() => grupos.reduce((t, g) => ({
+        notas: t.notas + g.notas, bruto: t.bruto + g.bruto, issRetido: t.issRetido + g.issRetido,
+        ir: t.ir + g.ir, pis: t.pis + g.pis, cofins: t.cofins + g.cofins,
+        csll: t.csll + g.csll, inss: t.inss + g.inss,
+        totalRetido: t.totalRetido + g.totalRetido, liquido: t.liquido + g.liquido,
+    }), { notas: 0, bruto: 0, issRetido: 0, ir: 0, pis: 0, cofins: 0, csll: 0, inss: 0, totalRetido: 0, liquido: 0 }), [grupos]);
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `Serviços ${direcao === 'saida' ? 'prestados' : 'tomados'} por código de serviço — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${grupos.length} código(s) · ${tot.notas} NFS-e`,
+        colunas: [
+            { titulo: 'Código', largura: 8 },
+            { titulo: 'Descrição (da nota)', largura: 24 },
+            { titulo: 'NFS-e', largura: 5, alinhamento: 'direita' },
+            { titulo: 'Bruto', largura: 10, alinhamento: 'direita' },
+            { titulo: 'ISS ret.', largura: 8, alinhamento: 'direita' },
+            { titulo: 'IRRF', largura: 8, alinhamento: 'direita' },
+            { titulo: 'PIS', largura: 7, alinhamento: 'direita' },
+            { titulo: 'COFINS', largura: 8, alinhamento: 'direita' },
+            { titulo: 'CSLL', largura: 7, alinhamento: 'direita' },
+            { titulo: 'INSS', largura: 7, alinhamento: 'direita' },
+            { titulo: 'Retido', largura: 8, alinhamento: 'direita' },
+            { titulo: 'Líquido', largura: 10, alinhamento: 'direita' },
+        ],
+        linhas: grupos.map(g => [
+            g.codigo || '—', g.descricaoExemplo, g.notas, g.bruto, g.issRetido,
+            g.ir, g.pis, g.cofins, g.csll, g.inss, g.totalRetido, g.liquido,
+        ]),
+        totais: ['', `TOTAL GERAL (${grupos.length} código(s))`, tot.notas, tot.bruto, tot.issRetido,
+            tot.ir, tot.pis, tot.cofins, tot.csll, tot.inss, tot.totalRetido, tot.liquido],
+        identificacao,
+        observacoes: [
+            `Total geral dos impostos retidos: ${fmtBRL(tot.totalRetido)} (ISS retido + IRRF + PIS + COFINS + CSLL + INSS).`,
+            'A descrição é a discriminação mais frequente das notas do grupo — não existe tabela oficial código→descrição no app.',
+            ...(semCodigo ? [`${semCodigo.notas} nota(s) sem código de serviço gravado (trilho ADN/nota antiga) agrupadas em "Sem código" — elas contam nos totais.`] : []),
+            ...(diag.semCamposGravados > 0 ? [`${diag.semCamposGravados} nota(s) importadas antes de 01/08/2026 não têm IR/INSS/CSLL gravados — ausência NÃO significa zero retido; reimporte o XML para completar.`] : []),
+        ],
+        fileName: `servicos-por-codigo-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex items-center gap-2 flex-wrap">
+                <select value={direcao} onChange={e => setDirecao(e.target.value as any)}
+                    className="p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
+                    <option value="saida">Serviços prestados</option>
+                    <option value="entrada">Serviços tomados</option>
+                </select>
+                <BotaoPdf onClick={pdf} disabled={!grupos.length} gerando={gerando} />
+                <span className="text-xs text-slate-500">
+                    {grupos.length} código(s) · {tot.notas} NFS-e · bruto {fmtBRL(tot.bruto)} · retido {fmtBRL(tot.totalRetido)} · líquido {fmtBRL(tot.liquido)}
+                </span>
+            </div>
+            {diag.semCamposGravados > 0 && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    ⚠ {diag.semCamposGravados} nota(s) antigas sem IR/INSS/CSLL gravados — ausência não significa zero retido (reimporte o XML pra completar).
+                </p>
+            )}
+            {grupos.length === 0 && (
+                <p className="text-sm text-slate-500">Nenhuma NFS-e {direcao === 'entrada' ? 'tomada' : 'prestada'} neste recorte.</p>
+            )}
+            {grupos.length > 0 && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                        <thead>
+                            <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                                <th className="py-1 pr-2">Código</th>
+                                <th className="py-1 pr-2">Descrição (da nota)</th>
+                                <th className="py-1 pr-2 text-right">NFS-e</th>
+                                <th className="py-1 pr-2 text-right">Bruto</th>
+                                <th className="py-1 pr-2 text-right">ISS ret.</th>
+                                <th className="py-1 pr-2 text-right">IRRF</th>
+                                <th className="py-1 pr-2 text-right">PIS</th>
+                                <th className="py-1 pr-2 text-right">COFINS</th>
+                                <th className="py-1 pr-2 text-right">CSLL</th>
+                                <th className="py-1 pr-2 text-right">INSS</th>
+                                <th className="py-1 pr-2 text-right font-bold">Retido</th>
+                                <th className="py-1 text-right">Líquido</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {grupos.map(g => (
+                                <tr key={g.codigo || 'sem'} className="border-b border-slate-100 dark:border-slate-700/50">
+                                    <td className="py-1 pr-2 font-mono font-bold">{g.codigo || '—'}</td>
+                                    <td className="py-1 pr-2 max-w-[260px] truncate" title={g.descricaoExemplo}>{g.descricaoExemplo}</td>
+                                    <td className="py-1 pr-2 text-right">{g.notas}</td>
+                                    <td className="py-1 pr-2 text-right">{fmtBRL(g.bruto)}</td>
+                                    <td className="py-1 pr-2 text-right">{fmtBRL(g.issRetido)}</td>
+                                    <td className="py-1 pr-2 text-right">{fmtBRL(g.ir)}</td>
+                                    <td className="py-1 pr-2 text-right">{fmtBRL(g.pis)}</td>
+                                    <td className="py-1 pr-2 text-right">{fmtBRL(g.cofins)}</td>
+                                    <td className="py-1 pr-2 text-right">{fmtBRL(g.csll)}</td>
+                                    <td className="py-1 pr-2 text-right">{fmtBRL(g.inss)}</td>
+                                    <td className="py-1 pr-2 text-right font-bold">{fmtBRL(g.totalRetido)}</td>
+                                    <td className="py-1 text-right">{fmtBRL(g.liquido)}</td>
+                                </tr>
+                            ))}
+                            <tr className="font-bold bg-slate-50 dark:bg-slate-700/40">
+                                <td className="py-1 pr-2" colSpan={2}>TOTAL GERAL</td>
+                                <td className="py-1 pr-2 text-right">{tot.notas}</td>
+                                <td className="py-1 pr-2 text-right">{fmtBRL(tot.bruto)}</td>
+                                <td className="py-1 pr-2 text-right">{fmtBRL(tot.issRetido)}</td>
+                                <td className="py-1 pr-2 text-right">{fmtBRL(tot.ir)}</td>
+                                <td className="py-1 pr-2 text-right">{fmtBRL(tot.pis)}</td>
+                                <td className="py-1 pr-2 text-right">{fmtBRL(tot.cofins)}</td>
+                                <td className="py-1 pr-2 text-right">{fmtBRL(tot.csll)}</td>
+                                <td className="py-1 pr-2 text-right">{fmtBRL(tot.inss)}</td>
+                                <td className="py-1 pr-2 text-right">{fmtBRL(tot.totalRetido)}</td>
+                                <td className="py-1 text-right">{fmtBRL(tot.liquido)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             )}
         </Card>
     );
