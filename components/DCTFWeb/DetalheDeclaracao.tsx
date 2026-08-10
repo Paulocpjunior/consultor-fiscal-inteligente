@@ -24,6 +24,7 @@ import {
 } from '../../services/dctfwebService';
 import { getAuth } from 'firebase/auth';
 import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
+import InsumosDepartamentos from './InsumosDepartamentos';
 
 interface Props {
     declaracao: DctfwebDeclaracao;
@@ -396,6 +397,16 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                             </span>
                         </div>
                         <button onClick={onClose} className="text-slate-500 hover:text-slate-800 text-xl">×</button>
+                    </div>
+
+                    {/* Semáforo por departamento (Paulo, 10/08): antes de mexer
+                        na declaração, VER o que DP/Contábil/Fiscal já entregaram
+                        — transmitir sem insumo é retificar depois. */}
+                    <div className="mt-4">
+                        <InsumosDepartamentos
+                            empresaCnpj={declaracao.empresaCnpj}
+                            competencia={`${declaracao.anoPA}-${String(declaracao.mesPA).padStart(2, '0')}`}
+                        />
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">

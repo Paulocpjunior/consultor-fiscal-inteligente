@@ -126,6 +126,12 @@ router.post('/transmitir', autorizar, async (req, res) => {
             tpAmb: amb.tpAmb,
             eventos: assinados.map((x) => extrairEvento(x).id),
             elementos: [...new Set(assinados.map((x) => extrairEvento(x).elemento))],
+            // Competências dos eventos (perApur) — SÓ o período, nunca o
+            // conteúdo. É o que amarra o lote ao semáforo de insumos da
+            // DCTFWeb (dctfweb-insumos.js): lote sem competência não prova.
+            competencias: [...new Set(assinados
+                .map((x) => (String(x).match(/<perApur>(\d{4}-\d{2})<\/perApur>/) || [])[1])
+                .filter(Boolean))],
             certFingerprint: cert.fingerprint || null,
             httpStatus: r.status,
             protocolo: protocolo || null,
