@@ -125,6 +125,8 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                 tributosApp: data.tributosApp,
                 transmitir: false,
             });
+            // transmitir=false nunca dispara a trava (é só conferência).
+            if ('travaInsumos' in r) return;
             if (r.ok) {
                 setMitProposta(r);
                 setMitSelecao((r.proposta?.mapeamento || []).map(m => m.familia));
@@ -217,16 +219,37 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
             + `${linhas}\n\nTotal a adicionar: ${brl(totalSelecionado)}${foraDaTransmissao}${preservados}${criacao}\n\n`
             + 'Os valores serão declarados à Receita Federal via SERPRO.'
         )) return;
+        await executarEncerramento(false);
+    };
+
+    // A trava de insumos (Paulo, 10/08) devolve 409 quando um insumo de OUTRO
+    // departamento (eSocial do DP, Reinf do Contábil) está pendente. Aí a
+    // pessoa vê o que falta e decide: confirmar mesmo assim fica AUDITADO.
+    const executarEncerramento = async (confirmarInsumosPendentes: boolean) => {
         setMitTransmitindo(true);
         setMitErro(null);
         try {
             const r = await preencherEncerrarMit(null, {
                 empresaId, empresaCnpj,
                 anoPA, mesPA,
-                tributosApp: data.tributosApp,
+                tributosApp: data!.tributosApp,
                 familiasSelecionadas: mitSelecao,
                 transmitir: true,
+                confirmarInsumosPendentes,
             });
+            if ('travaInsumos' in r) {
+                const t = r.travaInsumos;
+                const pend = t.selos.filter(s => s.estado === 'pendente')
+                    .map(s => `• ${s.rotulo}: ${s.detalhe}`).join('\n');
+                const seguir = confirm(
+                    `⚠ INSUMO PENDENTE — encerrar a DCTFWeb agora vira retificação depois.\n\n`
+                    + `${t.frase}\n\n${pend}\n\n`
+                    + 'Confirmar o encerramento MESMO ASSIM? Fica registrado que você seguiu com pendência.'
+                );
+                if (seguir) { await executarEncerramento(true); return; }
+                setMitErro('Encerramento não realizado — confira os insumos pendentes com o departamento responsável.');
+                return;
+            }
             if (r.ok) setMitResultado(r);
             else setMitErro(r.motivo || 'Transmissão não aceita.');
         } catch (e: any) {

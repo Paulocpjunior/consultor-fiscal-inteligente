@@ -23,7 +23,10 @@ export function seloReinf(p?: {
     retencoesApuradas?: { totalNotasComRetencao: number; semCamposGravados: number } | null;
 }): SeloInsumo;
 
-export function vereditoInsumos(selos: Array<Pick<SeloInsumo, 'estado' | 'rotulo'>>): {
+export function vereditoInsumos(
+    selos: Array<Pick<SeloInsumo, 'estado' | 'rotulo'> & { departamento?: string }>,
+    opts?: { ignorarDepartamentos?: string[] },
+): {
     veredito: 'pronto' | 'incompleto' | 'incerto';
     frase: string;
 };
