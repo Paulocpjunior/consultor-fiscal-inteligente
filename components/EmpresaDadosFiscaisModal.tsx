@@ -386,6 +386,13 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 placeholder="(11) 91234-5678"
                                 hint="Apenas números, com DDD."
                             />
+                            <Field
+                                label="WhatsApp (envio de guias)"
+                                value={dados.whatsappCliente || ''}
+                                onChange={v => handleField('whatsappCliente', v)}
+                                placeholder="(11) 91234-5678"
+                                hint="Número que RECEBE as guias pelo WhatsApp oficial do escritório. Campo próprio de propósito: pode ser diferente do telefone de contato."
+                            />
                         </div>
                     </Section>
 

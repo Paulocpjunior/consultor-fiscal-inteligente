@@ -23,7 +23,7 @@ import {
     situacaoColorClass,
 } from '../../services/dctfwebService';
 import { getAuth } from 'firebase/auth';
-import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
+import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 
 interface Props {
     declaracao: DctfwebDeclaracao;
@@ -148,6 +148,42 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
             else onShowToast?.(`Falha no envio: ${r.error}`);
         } catch (e: any) {
             onShowToast?.(`Falha no envio: ${e.message}`);
+        } finally {
+            setEnviandoDarf(false);
+        }
+    };
+
+    // WhatsApp OFICIAL (09/08): o servidor envia pela Cloud API (template
+    // aprovado + PDF) e a Meta devolve o comprovante — mesmo rito do e-mail.
+    const enviarDarfPorWhatsapp = async (pdfBase64: string, filename: string) => {
+        setEnviandoDarf(true);
+        try {
+            const token = await getAuth().currentUser?.getIdToken();
+            if (!token) throw new Error('Sessão expirada');
+            const resp = await fetch(`/api/admin/empresa-contato/${encodeURIComponent(declaracao.empresaCnpj)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const contato = resp.ok ? await resp.json() : { whatsapp: '' };
+            if (!contato.whatsapp) {
+                onShowToast?.('WhatsApp do cliente não cadastrado — preencha o campo "WhatsApp (envio de guias)" em Dados Fiscais da empresa.');
+                return;
+            }
+            const competencia = `${declaracao.anoPA}-${String(declaracao.mesPA).padStart(2, '0')}`;
+            const r = await enviarGuiaPorWhatsapp({
+                empresaCnpj: declaracao.empresaCnpj,
+                empresaNome: declaracao.empresaCnpj,
+                tipo: 'DARF',
+                competencia,
+                paraWhatsapp: contato.whatsapp,
+                pdfBase64,
+                pdfFileName: filename,
+                valor: darfResult?.valor ?? undefined,
+                vencimento: darfResult?.vencimento ?? null,
+            });
+            if (r.ok) onShowToast?.(mensagemEnvioWhatsapp(r));
+            else onShowToast?.(`Falha no envio por WhatsApp: ${r.error}`);
+        } catch (e: any) {
+            onShowToast?.(`Falha no envio por WhatsApp: ${e.message}`);
         } finally {
             setEnviandoDarf(false);
         }
@@ -478,6 +514,14 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                 className="text-sm px-3 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
                                             >
                                                 {enviandoDarf ? '⏳…' : '📤 Enviar pelo sistema'}
+                                            </button>
+                                            <button
+                                                onClick={() => enviarDarfPorWhatsapp(darfResult.pdfBase64!, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
+                                                disabled={enviandoDarf}
+                                                title="O SISTEMA envia pelo WhatsApp OFICIAL do escritório (template aprovado, PDF anexo) — a Meta devolve o comprovante. Mesmo rito: SharePoint + baixa + gestor avisado."
+                                                className="text-sm px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                                            >
+                                                {enviandoDarf ? '⏳…' : '📱 WhatsApp (sistema)'}
                                             </button>
                                             <button
                                                 onClick={() => enviarDarfAoCliente(darfResult.pdfBase64!, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}

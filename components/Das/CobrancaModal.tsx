@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { getAuth } from 'firebase/auth';
 import type { User } from '../../types';
 import { getCobrancaIa, formatBRL, formatBarras, enviarDasCliente } from '../../services/dasService';
-import { enviarPorEmailDoColaborador, registrarEnvioImposto, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
+import { enviarPorEmailDoColaborador, registrarEnvioImposto, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 
 interface DasInfo {
     id?: string;
@@ -37,6 +37,9 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
     const [canal, setCanal] = useState<'email' | 'whatsapp'>('email');
     const [emailDest, setEmailDest] = useState('');
     const [telefoneDest, setTelefoneDest] = useState('');
+    // Número do WhatsApp OFICIAL (campo próprio do cadastro, 09/08) — usado
+    // pelo envio PELO SISTEMA; o wa.me continua usando o telefone digitado.
+    const [whatsappDest, setWhatsappDest] = useState('');
     const [assunto, setAssunto] = useState('');
     const [mensagem, setMensagem] = useState('');
     const [loading, setLoading] = useState(false);
@@ -61,6 +64,7 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                     const j = await res.json();
                     setEmailDest(j.email || '');
                     setTelefoneDest(j.telefone || '');
+                    setWhatsappDest(j.whatsapp || '');
                 }
             } catch { /* segue sem contato */ }
             setLoadingDados(false);
@@ -261,6 +265,42 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
         }
     };
 
+    // WhatsApp OFICIAL pelo SISTEMA (09/08): a Cloud API envia o template
+    // aprovado com o PDF anexo e devolve o comprovante — prova de envio, mesma
+    // classe do e-mail Graph. O texto da mensagem É O DO TEMPLATE (a Meta não
+    // aceita texto livre na mensagem inicial) — a mensagem da IA serve pro
+    // wa.me/e-mail, não pra este caminho.
+    const enviarWhatsappOficial = async () => {
+        if (!whatsappDest) {
+            onShowToast('WhatsApp do cliente não cadastrado — preencha o campo "WhatsApp (envio de guias)" em Dados Fiscais da empresa.');
+            return;
+        }
+        if (!dasInfo.pdfBase64) {
+            onShowToast('Esta guia está sem o PDF do SERPRO — o envio oficial vai com a guia anexa; sem ela, use o e-mail ou o wa.me com os dados estruturados.');
+            return;
+        }
+        setEnviando(true);
+        try {
+            const r = await enviarGuiaPorWhatsapp({
+                empresaCnpj: dasInfo.empresaCnpj,
+                empresaNome: dasInfo.empresaNome,
+                tipo: 'DAS',
+                competencia: dasInfo.competencia || '',
+                paraWhatsapp: whatsappDest,
+                pdfBase64: dasInfo.pdfBase64,
+                pdfFileName,
+                valor: dasInfo.valor,
+                vencimento: dasInfo.vencimento || null,
+            });
+            if (r.ok) { onShowToast(mensagemEnvioWhatsapp(r)); onEnviado?.(); }
+            else onShowToast(`Falha no envio por WhatsApp: ${r.error}`);
+        } catch (e: any) {
+            onShowToast(`Falha no envio por WhatsApp: ${e.message}`);
+        } finally {
+            setEnviando(false);
+        }
+    };
+
     const copiar = async () => {
         try {
             await navigator.clipboard.writeText(canal === 'email' ? `Assunto: ${assunto}\n\n${mensagem}` : mensagem);
@@ -431,9 +471,20 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                                     </button>
                                 </>
                             )}
+                            {canal === 'whatsapp' && (
+                                <button
+                                    onClick={enviarWhatsappOficial}
+                                    disabled={enviando}
+                                    title="O SISTEMA envia pelo WhatsApp OFICIAL do escritório (template aprovado da Meta, PDF anexo) e recebe o comprovante. Mesmo rito do e-mail: SharePoint + baixa + gestor avisado. O texto é o do template — a mensagem acima serve pro wa.me."
+                                    className="btn-press px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                                >
+                                    {enviando ? '⏳…' : '📱 Enviar pelo sistema'}
+                                </button>
+                            )}
                             <button
                                 onClick={enviar}
                                 disabled={enviando}
+                                title={canal === 'whatsapp' ? 'Abre o wa.me com a mensagem acima — quem clica em Enviar é você, e o app não tem prova do envio.' : undefined}
                                 className={`btn-press px-4 py-2 font-bold rounded-lg text-white ${canal === 'email' ? 'bg-sky-600 hover:bg-sky-700' : 'bg-green-600 hover:bg-green-700'}`}
                             >
                                 {canal === 'email'

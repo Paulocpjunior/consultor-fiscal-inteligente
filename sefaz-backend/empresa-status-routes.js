@@ -527,7 +527,10 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // SP capital (chave da captura NFS-e SP). Campos SEPARADOS de propósito.
     'inscricaoEstadual', 'uf', 'codMunIBGE', 'ccmSp', 'inscricaoMunicipal',
     'logradouro', 'numero',
-    'complemento', 'bairro', 'cep', 'email', 'telefone', 'perfilEFD', 'indAtividade',
+    // whatsappCliente = número que recebe as guias pelo WhatsApp OFICIAL
+    // (Cloud API, 09/08). Separado do telefone de propósito: o contato de
+    // ligação nem sempre é o WhatsApp que o cliente quer usar.
+    'complemento', 'bairro', 'cep', 'email', 'telefone', 'whatsappCliente', 'perfilEFD', 'indAtividade',
     // CUIDADO com esta whitelist: campo que o modal Dados Fiscais salva e não
     // está aqui é DESCARTADO EM SILÊNCIO neste caminho (o "Completar cadastro"
     // do Status) — o colaborador salva, a tela agradece e nada persiste. Foi o

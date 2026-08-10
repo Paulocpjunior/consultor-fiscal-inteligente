@@ -259,6 +259,73 @@ export async function enviarGuiaPeloServidor(input: {
     return data;
 }
 
+// ─── Envio PELO SERVIDOR (WhatsApp oficial — Cloud API) ─────────────────────
+
+export interface EnvioWhatsappResultado extends RitoResultado {
+    whatsappMessageId?: string;
+    numeroEnviado?: string;
+    gestorNotificado?: boolean;
+    acao?: string;
+    indeterminado?: boolean;
+}
+
+/** O canal está pronto? Se não, `faltas` diz o quê — o botão explica. */
+export async function statusCanalWhatsapp(): Promise<{ ok: boolean; pronto: boolean; faltas: string[] }> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, pronto: false, faltas: ['sessão expirada'] };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/envio-imposto/whatsapp-status', {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, pronto: false, faltas: [data.error || `HTTP ${res.status}`] };
+    return { ok: true, pronto: Boolean(data.pronto), faltas: data.faltas || [] };
+}
+
+/**
+ * Envia a guia pelo WHATSAPP OFICIAL (Cloud API da Meta, WABA da S&P) — o
+ * servidor envia e a Meta devolve o id da mensagem: PROVA de envio, mesma
+ * classe do e-mail Graph. Roda o MESMO rito #293 (SharePoint com canal
+ * whatsapp-api + baixa da obrigação + auditoria) e notifica o gestor por
+ * e-mail. ≠ do botão wa.me, que só abre a composição.
+ */
+export async function enviarGuiaPorWhatsapp(input: {
+    empresaId?: string;
+    empresaCnpj: string;
+    empresaNome: string;
+    tipo: string;
+    competencia: string;
+    paraWhatsapp: string;
+    pdfBase64?: string;
+    pdfFileName?: string;
+    valor?: number;
+    vencimento?: string | null;
+}): Promise<EnvioWhatsappResultado> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/envio-imposto/enviar-whatsapp', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const acao = data.acao ? ` ${data.acao}` : '';
+        return { ok: false, error: `${data.error || `HTTP ${res.status}`}${acao}`, indeterminado: Boolean(data.indeterminado) };
+    }
+    return data;
+}
+
+/** Frase do toast do WhatsApp — afirma só o que a Meta confirmou. */
+export function mensagemEnvioWhatsapp(r: EnvioWhatsappResultado): string {
+    const partes = [`WhatsApp ENVIADO para ${r.numeroEnviado || 'o cliente'} (comprovante ${r.whatsappMessageId || '—'})`];
+    if (r.sharePoint?.status === 'arquivado') partes.push('cópia no SharePoint');
+    if (r.baixa?.status === 'baixada') partes.push(`baixa de ${r.baixa.tarefas} obrigação(ões)`);
+    partes.push(r.gestorNotificado ? 'gestor avisado por e-mail' : '⚠ aviso ao gestor FALHOU — confira com ele');
+    return `${partes.join(' · ')}.`;
+}
+
 /** Frase do toast depois do envio pelo servidor — afirma o que de fato houve. */
 export function mensagemEnvioServidor(r: EnvioGraphResultado): string {
     const partes = [`E-mail ENVIADO para ${r.para || 'o cliente'}`];

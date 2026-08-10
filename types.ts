@@ -1320,6 +1320,8 @@ export interface EmpresaDadosFiscais {
     /** Contato. */
     email?: string;
     telefone?: string;
+    /** WhatsApp que RECEBE guias pelo canal oficial (09/08) — ≠ telefone. */
+    whatsappCliente?: string;
     /**
      * Perfil EFD ICMS/IPI (registro 0000 campo 14):
      *   A = Detalhamento completo (notas item-a-item, ICMS-Difal, FCP)
