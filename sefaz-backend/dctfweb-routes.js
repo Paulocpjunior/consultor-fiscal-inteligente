@@ -201,12 +201,68 @@ router.get('/recibo', requireAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+/**
+ * TRAVA ANTI-RETRABALHO (Paulo, 10/08): encerrar/entregar o MIT com um insumo
+ * de OUTRO departamento ainda pendente fecha a DCTFWeb incompleta — e retificar
+ * é o retrabalho que a casa única quer matar. A régua é o semáforo (mesmo
+ * dado do painel). Só o estado 'incompleto' (PENDENTE de verdade) trava;
+ * 'incerto' (consulta caída) NÃO trava — trancar o encerramento porque um
+ * serviço piscou seria o dano maior. Prosseguir exige confirmação EXPLÍCITA,
+ * que fica AUDITADA com nome e departamento de quem seguiu.
+ *
+ * Devolve null quando pode seguir; devolve o objeto de resposta 409 quando
+ * barra (o handler faz o res.status(409).json).
+ */
+async function checarTravaInsumos(req, { empresaCnpj, empresaId, anoPA, mesPA }) {
+    const competencia = `${anoPA}-${String(mesPA).padStart(2, '0')}`;
+    const db = admin.apps.length ? admin.firestore() : (admin.initializeApp({ credential: admin.credential.applicationDefault() }), admin.firestore());
+    let semaforo;
+    try {
+        // A trava reavalia o veredito IGNORANDO o próprio MIT (fiscal) — é o
+        // insumo que está sendo entregue neste ato. Trava pelos OUTROS: DP e
+        // Contábil.
+        const { vereditoInsumos } = await import('./dctfweb-insumos.js');
+        const base = await montarSemaforoInsumos(db, { cnpj: limparCnpj(empresaCnpj), competencia, empresaId: empresaId || null });
+        semaforo = { ...base, ...vereditoInsumos(base.selos, { ignorarDepartamentos: ['fiscal'] }) };
+    } catch (e) {
+        // O semáforo caiu inteiro — NÃO trava (indeterminado libera, como no
+        // gate de departamento). Loga e segue.
+        console.warn('[dctfweb/trava-insumos] semáforo indisponível, seguindo:', e.message);
+        return null;
+    }
+    if (semaforo.veredito !== 'incompleto') return null;
+    const confirmou = req.body?.confirmarInsumosPendentes === true;
+    if (!confirmou) {
+        return {
+            bloqueado: true,
+            veredito: semaforo.veredito,
+            frase: semaforo.frase,
+            selos: semaforo.selos,
+            acao: 'Confira os insumos pendentes com o departamento responsável. Para encerrar mesmo assim, confirme explicitamente — fica registrado quem seguiu.',
+        };
+    }
+    // Confirmou seguir mesmo com pendência: auditar QUEM e o QUÊ.
+    try {
+        await db.collection('dctfweb_encerramento_forcado').add({
+            em: admin.firestore.FieldValue.serverTimestamp(),
+            por: req.user?.email || req.user?.uid || null,
+            departamento: (req.user?.departamentos || []).join(',') || null,
+            empresaCnpj: limparCnpj(empresaCnpj), competencia,
+            veredito: semaforo.veredito,
+            pendentes: semaforo.selos.filter((s) => s.estado === 'pendente').map((s) => s.rotulo),
+        });
+    } catch (e) { console.warn('[dctfweb/trava-insumos] auditoria falhou:', e.message); }
+    return null;
+}
+
 router.post('/mit/encerrar', requireAuth, express.json(), async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, dadosApuracaoMit } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
         const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+        const trava = await checarTravaInsumos(req, { empresaCnpj, empresaId, anoPA: Number(anoPA), mesPA: Number(mesPA) });
+        if (trava) return res.status(409).json(trava);
         res.json(await encerrarApuracaoMit({ empresaId, empresaCnpj, anoPA, mesPA, dadosApuracaoMit }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -226,6 +282,12 @@ router.post('/mit/preencher-encerrar', requireAuth, express.json(), async (req, 
         }
         const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+        // A trava só vale pra ENTREGA de verdade (transmitir=true) — a proposta
+        // (transmitir=false) é só conferência e não deve travar.
+        if (transmitir === true) {
+            const trava = await checarTravaInsumos(req, { empresaCnpj, empresaId, anoPA: Number(anoPA), mesPA: Number(mesPA) });
+            if (trava) return res.status(409).json(trava);
+        }
         const r = await preencherEncerrarMit({
             empresaId, empresaCnpj,
             anoPA: Number(anoPA), mesPA: Number(mesPA),
@@ -455,22 +517,15 @@ router.post('/cron', async (req, res) => {
 // eSocial e MIT pelo SERPRO; Reinf pela auditoria do gateway + as retenções
 // que o CFI apura nas NFS-e tomadas. Núcleo puro: dctfweb-insumos.js.
 // ────────────────────────────────────────────────────────────────────────────
-router.get('/insumos', requireAuth, async (req, res) => {
-    try {
-        const cnpj = limparCnpj(req.query.cnpj);
-        const competencia = String(req.query.competencia || '').trim();
-        const empresaId = String(req.query.empresaId || '').trim() || null;
-        if (cnpj.length !== 14) return res.status(400).json({ ok: false, error: 'cnpj (14 dígitos) é obrigatório' });
-        if (!/^\d{4}-\d{2}$/.test(competencia)) return res.status(400).json({ ok: false, error: 'competencia (YYYY-MM) é obrigatória' });
-        const acesso = await podeAcessarCnpj(req.user, cnpj);
-        if (!acesso.ok) return res.status(acesso.status).json({ ok: false, error: acesso.error });
-
-        const [anoPA, mesPA] = competencia.split('-').map(Number);
-        const db = admin.apps.length ? admin.firestore() : (admin.initializeApp({ credential: admin.credential.applicationDefault() }), admin.firestore());
-
-        // As quatro leituras em paralelo — cada falha vira 'indeterminado' no
-        // selo dela, nunca derruba o semáforo inteiro.
-        const [esocialR, mitR, lotesR, docsR] = await Promise.allSettled([
+/**
+ * Monta o semáforo de insumos (eSocial/Reinf/MIT) de uma empresa×competência.
+ * Compartilhado entre a rota /insumos e a TRAVA de encerramento do MIT — os
+ * dois têm que ler o MESMO estado, senão o painel diz uma coisa e a trava
+ * outra (lição do card 4: painel com conta própria diverge).
+ */
+async function montarSemaforoInsumos(db, { cnpj, competencia, empresaId }) {
+    const [anoPA, mesPA] = competencia.split('-').map(Number);
+    const [esocialR, mitR, lotesR, docsR] = await Promise.allSettled([
             (async () => {
                 const { consultarESocial } = await import('./nfp-compliance-provider.js');
                 return consultarESocial(cnpj, competencia);
@@ -535,7 +590,21 @@ router.get('/insumos', requireAuth, async (req, res) => {
             seloReinf({ lotesGateway: lotes, retencoesApuradas }),
             seloMit(mit),
         ];
-        return res.json({ ok: true, cnpj, competencia, selos, ...vereditoInsumos(selos) });
+        return { cnpj, competencia, selos, ...vereditoInsumos(selos) };
+}
+
+router.get('/insumos', requireAuth, async (req, res) => {
+    try {
+        const cnpj = limparCnpj(req.query.cnpj);
+        const competencia = String(req.query.competencia || '').trim();
+        const empresaId = String(req.query.empresaId || '').trim() || null;
+        if (cnpj.length !== 14) return res.status(400).json({ ok: false, error: 'cnpj (14 dígitos) é obrigatório' });
+        if (!/^\d{4}-\d{2}$/.test(competencia)) return res.status(400).json({ ok: false, error: 'competencia (YYYY-MM) é obrigatória' });
+        const acesso = await podeAcessarCnpj(req.user, cnpj);
+        if (!acesso.ok) return res.status(acesso.status).json({ ok: false, error: acesso.error });
+        const db = admin.apps.length ? admin.firestore() : (admin.initializeApp({ credential: admin.credential.applicationDefault() }), admin.firestore());
+        const resultado = await montarSemaforoInsumos(db, { cnpj, competencia, empresaId });
+        return res.json({ ok: true, ...resultado });
     } catch (e) {
         console.error('[dctfweb/insumos]', e);
         return res.status(500).json({ ok: false, error: e.message });

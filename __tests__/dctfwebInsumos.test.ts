@@ -92,6 +92,17 @@ describe('vereditoInsumos', () => {
     test('sem-movimento não trava nada', () => {
         expect(vereditoInsumos([recebido, { estado: 'sem-movimento' as const, rotulo: 'B' }, recebido]).veredito).toBe('pronto');
     });
+    test('ignorarDepartamentos tira o MIT da conta na TRAVA do encerramento', () => {
+        // O MIT (fiscal) está sendo entregue no ato — pendente nele não deve
+        // travar; só DP e Contábil travam.
+        const selos = [
+            { estado: 'recebido' as const, rotulo: '👥 DP', departamento: 'dp-folha' },
+            { estado: 'recebido' as const, rotulo: '📊 Contábil', departamento: 'contabil' },
+            { estado: 'pendente' as const, rotulo: '🧾 Fiscal — MIT', departamento: 'fiscal' },
+        ];
+        expect(vereditoInsumos(selos).veredito).toBe('incompleto');
+        expect(vereditoInsumos(selos, { ignorarDepartamentos: ['fiscal'] }).veredito).toBe('pronto');
+    });
 });
 
 describe('contarRetencoesTomadas', () => {

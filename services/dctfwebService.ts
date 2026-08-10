@@ -271,6 +271,15 @@ export interface MitPreencherResult {
     camposRemovidos?: string[];
 }
 
+/** 409 da trava de insumos: a DCTFWeb tem insumo pendente de outro departamento. */
+export interface TravaInsumosPendentes {
+    bloqueado: true;
+    veredito: 'incompleto';
+    frase: string;
+    selos: Array<{ rotulo: string; estado: string; detalhe: string }>;
+    acao: string;
+}
+
 export async function preencherEncerrarMit(user: User | null, payload: {
     empresaId?: string; empresaCnpj: string;
     anoPA: number; mesPA: number;
@@ -278,12 +287,18 @@ export async function preencherEncerrarMit(user: User | null, payload: {
     /** Quais famílias transmitir agora. Omitido = todas as faltantes. Só restringe. */
     familiasSelecionadas?: string[] | null;
     transmitir: boolean;
-}): Promise<MitPreencherResult> {
+    /** Confirma encerrar MESMO com insumo de outro departamento pendente (auditado). */
+    confirmarInsumosPendentes?: boolean;
+}): Promise<MitPreencherResult | { travaInsumos: TravaInsumosPendentes }> {
     const res = await fetch(`${BASE}/mit/preencher-encerrar`, {
         method: 'POST',
         headers: await authHeaders(user),
         body: JSON.stringify(payload),
     });
+    if (res.status === 409) {
+        const trava = await res.json().catch(() => null);
+        if (trava?.bloqueado) return { travaInsumos: trava as TravaInsumosPendentes };
+    }
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(err.error || `preencherEncerrarMit: ${res.status}`);

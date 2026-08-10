@@ -123,8 +123,12 @@ export function seloReinf({ lotesGateway = [], retencoesApuradas = null } = {}) 
  * - 'incompleto'  → algum PENDENTE de verdade — transmitir = retificar depois
  * - 'incerto'     → nenhum pendente, mas algum indeterminado — decidir é humano
  */
-export function vereditoInsumos(selos) {
-    const lista = (selos || []).filter(Boolean);
+export function vereditoInsumos(selos, opts = {}) {
+    // ignorarDepartamentos: pra TRAVA do encerramento do MIT, o próprio MIT
+    // está sendo entregue NESTE ato — ele estaria sempre 'pendente' e travaria
+    // sempre. A trava olha só os insumos dos OUTROS departamentos.
+    const ignorar = new Set(opts.ignorarDepartamentos || []);
+    const lista = (selos || []).filter(Boolean).filter((s) => !ignorar.has(s.departamento));
     if (lista.some((s) => s.estado === 'pendente')) {
         const quem = lista.filter((s) => s.estado === 'pendente').map((s) => s.rotulo).join(' e ');
         return {
