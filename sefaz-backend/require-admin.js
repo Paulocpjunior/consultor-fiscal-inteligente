@@ -11,12 +11,45 @@
 
 import admin from 'firebase-admin';
 import { temPermissaoEmissao, PERM_EMISSAO_TRIBUTOS } from './emissao-permissao.js';
+import { decidirAcessoHorario, travaArmada } from './horario-acesso.js';
 
 function fa() {
     if (!admin.apps.length) {
         admin.initializeApp({ credential: admin.credential.applicationDefault() });
     }
     return admin;
+}
+
+/**
+ * TRAVA DE HORÁRIO (Paulo, 10/08). Chamada depois que req.user existe. Se a
+ * chave estiver armada (env HORARIO_ACESSO_ATIVO=bloqueio) e o colaborador
+ * estiver fora do horário, RESPONDE 403 e registra a tentativa (prova
+ * jurídica) — devolve true (o middleware para aqui). Admin sempre passa.
+ * Erro na régua NUNCA bloqueia (fail-open pra não trancar o escritório por bug).
+ */
+async function barrarForaDoHorario(req, res) {
+    try {
+        const veredito = decidirAcessoHorario(req.user, { ativo: travaArmada() });
+        if (veredito.permitido) return false;
+        // Registra o bloqueio SEM travar a resposta se a gravação falhar.
+        try {
+            await fa().firestore().collection('horario_acesso_bloqueios').add({
+                em: admin.firestore.FieldValue.serverTimestamp(),
+                uid: req.user?.uid || null,
+                email: req.user?.email || null,
+                rota: req.originalUrl || req.url || null,
+                metodo: req.method || null,
+                motivo: veredito.motivo,
+                janela: veredito.janela || null,
+            });
+        } catch (e) { console.warn('[horario-acesso] registro do bloqueio falhou:', e.message); }
+        res.status(403).json({ error: veredito.mensagem, foraDoHorario: true, janela: veredito.janela });
+        return true;
+    } catch (e) {
+        // Régua quebrou — libera (não é papel da trava derrubar o acesso por bug).
+        console.warn('[horario-acesso] régua falhou, liberando:', e.message);
+        return false;
+    }
 }
 
 /**
@@ -102,7 +135,8 @@ export async function requireEmissao(req, res, next) {
                 email: decoded.email || null,
             });
         }
-        req.user = { uid: decoded.uid, role, email: decoded.email || null };
+        req.user = { uid: decoded.uid, role, email: decoded.email || null, horarioAcesso: dados ? dados.horarioAcesso || null : null };
+        if (await barrarForaDoHorario(req, res)) return;
         next();
     } catch (e) {
         console.error('[require-emissao] erro:', e.message);
@@ -125,8 +159,10 @@ export async function requireAuth(req, res, next) {
         const decoded = await fa().auth().verifyIdToken(m[1]);
         const userDoc = await fa().firestore()
             .collection('users').doc(decoded.uid).get();
-        const role = userDoc.exists ? userDoc.data().role : null;
-        req.user = { uid: decoded.uid, role, email: decoded.email || null };
+        const dados = userDoc.exists ? userDoc.data() : {};
+        const role = dados.role || null;
+        req.user = { uid: decoded.uid, role, email: decoded.email || null, horarioAcesso: dados.horarioAcesso || null };
+        if (await barrarForaDoHorario(req, res)) return;
         next();
     } catch (e) {
         console.error('[require-auth] erro:', e.message);
