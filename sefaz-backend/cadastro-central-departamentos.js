@@ -92,6 +92,9 @@ export function normalizarUsuarioCadastro(doc) {
         role: texto(doc.role) || 'colaborador',
         departamentos,
         semDepartamento: departamentos.length === 0,
+        // Config de horário (Paulo, 10/08) — vai pro túnel para os apps irmãos
+        // aplicarem a MESMA régua. null = padrão (seg–sex 07–20).
+        horarioAcesso: doc.horarioAcesso || null,
     };
 }
 

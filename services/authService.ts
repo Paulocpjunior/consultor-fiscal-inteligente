@@ -341,6 +341,31 @@ export const setUserModulos = async (userId: string, modulos: string[]): Promise
  * modulosPermitidos). A validação de catálogo mora no backend
  * (cadastro-central-departamentos.js); aqui só higiene básica.
  */
+/**
+ * Grava a EXCEÇÃO de horário do usuário (Paulo, 10/08). null limpa (volta ao
+ * padrão seg–sex 07–20). Só admin (as rules de users gateiam a escrita).
+ */
+export const setUserHorario = async (userId: string, horario: import('../types').HorarioAcesso | null): Promise<boolean> => {
+    if (!isFirebaseConfigured || !db) {
+        const users = getLocalUsers();
+        const idx = users.findIndex(u => u.id === userId);
+        if (idx === -1) return false;
+        users[idx].horarioAcesso = horario;
+        saveLocalUsers(users);
+        return true;
+    }
+    try {
+        await setDoc(doc(db, 'users', userId), { horarioAcesso: horario }, { merge: true });
+        return true;
+    } catch (e: any) {
+        console.warn('setUserHorario:', e.message);
+        if (e.code === 'permission-denied') {
+            throw new Error('PERMISSION_DENIED: Apenas administradores podem definir horário de acesso.');
+        }
+        return false;
+    }
+};
+
 export const setUserDepartamentos = async (userId: string, departamentos: string[]): Promise<boolean> => {
     const clean = Array.from(new Set((departamentos || []).map(d => (d || '').trim().toLowerCase()).filter(Boolean)));
     if (!isFirebaseConfigured || !db) {

@@ -154,6 +154,33 @@ export function decidirAcessoHorario(user, opts = {}) {
     };
 }
 
+/**
+ * Valida a EXCEÇÃO que o admin grava (diferente de normalizarConfig, que é
+ * tolerante na leitura): na gravação, config torta é RECUSADA com o motivo —
+ * gravar algo que "cai no padrão" esconderia o erro do admin.
+ *   null/undefined → limpa a exceção (volta ao padrão seg–sex 07–20).
+ *   { vale24h:true } → 24h.
+ *   { dias:[0-6], inicio:'HH:MM', fim:'HH:MM' }.
+ */
+export function validarHorarioAcesso(entrada) {
+    if (entrada === null || entrada === undefined) return { ok: true, horario: null };
+    if (typeof entrada !== 'object') return { ok: false, erro: 'horário inválido — envie null (padrão), {vale24h:true} ou {dias,inicio,fim}.' };
+    if (entrada.vale24h === true) return { ok: true, horario: { vale24h: true } };
+    const dias = Array.isArray(entrada.dias) ? entrada.dias.map(Number) : null;
+    if (!dias || !dias.length || dias.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) {
+        return { ok: false, erro: 'dias deve ser uma lista de 0 (domingo) a 6 (sábado).' };
+    }
+    const ini = minutosDoHorario(entrada.inicio);
+    const fim = minutosDoHorario(entrada.fim);
+    if (ini === null) return { ok: false, erro: `início inválido: "${entrada.inicio}" (use HH:MM).` };
+    if (fim === null) return { ok: false, erro: `fim inválido: "${entrada.fim}" (use HH:MM).` };
+    if (fim <= ini) return { ok: false, erro: 'o fim do expediente deve ser depois do início.' };
+    return {
+        ok: true,
+        horario: { dias: [...new Set(dias)].sort((a, b) => a - b), inicio: entrada.inicio, fim: entrada.fim },
+    };
+}
+
 /** A chave-mestra: env liga o bloqueio. Default DESARMADO (montado, não armado). */
 export function travaArmada(env = process.env) {
     return String(env.HORARIO_ACESSO_ATIVO || '').trim().toLowerCase() === 'bloqueio';

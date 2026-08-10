@@ -28,6 +28,7 @@ import admin from 'firebase-admin';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { requireAdmin } from './require-admin.js';
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
+import { decidirAcessoHorario, travaArmada, validarHorarioAcesso } from './horario-acesso.js';
 import { montarCadastroEmpresas, soDigitos } from './cadastro-central.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { montarResponsaveis, responsavelDoCnpj } from './cadastro-central-responsaveis.js';
@@ -258,10 +259,15 @@ router.get('/usuarios/:email', autorizar, async (req, res) => {
         const usuario = docs.map(normalizarUsuarioCadastro).filter(Boolean)
             .find((u) => u.email === email) || null;
         const acesso = acessoAoModulo(usuario, modulo);
+        // Veredito de HORÁRIO junto (Paulo, 10/08): o app irmão faz UMA
+        // pergunta no login e recebe as DUAS travas — departamento e horário —
+        // aplicando a régua idêntica à do CFI. Só bloqueia se a chave estiver
+        // armada (env); desarmada, `horario.permitido` é sempre true.
+        const horario = decidirAcessoHorario(usuario, { ativo: travaArmada() });
         // Usuário sem cadastro responde 200 com temAcesso:false e o motivo —
         // 404 aqui viraria "erro de sistema" na tela do outro app, e a causa
         // (conta não criada) é informação, não falha.
-        return res.json({ ok: true, usuario, modulo, ...acesso });
+        return res.json({ ok: true, usuario, modulo, ...acesso, horario });
     } catch (e) {
         console.error('[cadastro-central/usuarios/email]', e);
         return res.status(500).json({ ok: false, error: e.message });
@@ -290,6 +296,28 @@ router.post('/usuarios/:uid/departamentos', requireAdmin, async (req, res) => {
         return res.json({ ok: true, uid, departamentos: v.departamentos });
     } catch (e) {
         console.error('[cadastro-central/departamentos]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Exceção de HORÁRIO por colaborador (Paulo, 10/08). SÓ admin (o irmão nunca
+// grava — auto-concessão com máquina no meio). null limpa (volta ao padrão).
+router.post('/usuarios/:uid/horario', requireAdmin, async (req, res) => {
+    try {
+        const uid = String(req.params.uid || '').trim();
+        if (!uid) return res.status(400).json({ ok: false, error: 'Informe o uid do usuário.' });
+        const v = validarHorarioAcesso(req.body?.horarioAcesso);
+        if (!v.ok) return res.status(400).json({ ok: false, error: v.erro });
+        const db = getDb();
+        const ref = db.collection('users').doc(uid);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ ok: false, error: `Usuário ${uid} não existe no cadastro.` });
+        // null = apaga o campo (volta ao padrão); objeto = grava a exceção.
+        await ref.set({ horarioAcesso: v.horario }, { merge: true });
+        console.log(`[cadastro-central] horário de ${uid} → ${JSON.stringify(v.horario)} por ${req.user?.email}`);
+        return res.json({ ok: true, uid, horarioAcesso: v.horario });
+    } catch (e) {
+        console.error('[cadastro-central/horario]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

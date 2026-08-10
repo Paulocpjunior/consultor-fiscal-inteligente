@@ -132,6 +132,16 @@ export interface User {
      * Só admin altera (rules); catálogo em cadastro-central-departamentos.js.
      */
     departamentos?: string[];
+    /** Exceção de horário de acesso (Paulo, 10/08). null/ausente = padrão seg–sex 07–20. */
+    horarioAcesso?: HorarioAcesso | null;
+}
+
+/** Exceção de horário: 24h, ou dias (0=dom..6=sáb) + faixa HH:MM. */
+export interface HorarioAcesso {
+    vale24h?: boolean;
+    dias?: number[];
+    inicio?: string;
+    fim?: string;
 }
 
 export interface AccessLog {

@@ -29,6 +29,139 @@ const DEPARTAMENTOS_SAAS = [
     { id: 'financeiro', label: '💰 Financeiro' },
 ];
 
+/**
+ * Editor da EXCEÇÃO de horário de acesso (Paulo, 10/08). Padrão da casa =
+ * seg–sex 07:00–20:00; o admin abre exceção por colaborador (dias/faixa
+ * próprios, ou 24h). Espelha a régua do backend (horario-acesso.js): null =
+ * padrão, {vale24h:true} = 24h, {dias,inicio,fim} = janela própria. Quem
+ * valida de verdade é o backend (validarHorarioAcesso) — aqui é só a caixa.
+ */
+const DIAS_SEMANA = [
+    { n: 1, l: 'Seg' }, { n: 2, l: 'Ter' }, { n: 3, l: 'Qua' }, { n: 4, l: 'Qui' },
+    { n: 5, l: 'Sex' }, { n: 6, l: 'Sáb' }, { n: 0, l: 'Dom' },
+];
+const HORARIO_PADRAO_LABEL = 'Padrão da casa — seg a sex, 07:00 às 20:00';
+
+type ModoHorario = 'padrao' | '24h' | 'custom';
+
+function rotularHorario(h: User['horarioAcesso']): string {
+    if (!h) return HORARIO_PADRAO_LABEL;
+    if (h.vale24h) return 'Liberado 24h (todos os dias)';
+    const dias = (h.dias ?? []).slice().sort((a, b) => a - b);
+    const nomes = dias.map(d => DIAS_SEMANA.find(x => x.n === d)?.l ?? d).join(', ');
+    return `${nomes || '—'}, das ${h.inicio ?? '??'} às ${h.fim ?? '??'}`;
+}
+
+const HorarioEditor: React.FC<{
+    user: User;
+    disabled: boolean;
+    onSave: (user: User, horario: User['horarioAcesso']) => void | Promise<void>;
+}> = ({ user, disabled, onSave }) => {
+    const inicial = user.horarioAcesso ?? null;
+    const modoInicial: ModoHorario = !inicial ? 'padrao' : inicial.vale24h ? '24h' : 'custom';
+    const [modo, setModo] = useState<ModoHorario>(modoInicial);
+    const [dias, setDias] = useState<number[]>(inicial?.dias ?? [1, 2, 3, 4, 5]);
+    const [inicio, setInicio] = useState<string>(inicial?.inicio ?? '07:00');
+    const [fim, setFim] = useState<string>(inicial?.fim ?? '20:00');
+    const [salvando, setSalvando] = useState(false);
+
+    // Reinicia o rascunho quando troca de usuário no painel.
+    useEffect(() => {
+        const i = user.horarioAcesso ?? null;
+        setModo(!i ? 'padrao' : i.vale24h ? '24h' : 'custom');
+        setDias(i?.dias ?? [1, 2, 3, 4, 5]);
+        setInicio(i?.inicio ?? '07:00');
+        setFim(i?.fim ?? '20:00');
+    }, [user.id]);
+
+    const toggleDia = (n: number) => {
+        setDias(prev => prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n].sort((a, b) => a - b));
+    };
+
+    const erroCustom = modo === 'custom' && (dias.length === 0
+        ? 'Marque ao menos um dia.'
+        : (fim <= inicio ? 'O fim deve ser depois do início.' : null));
+
+    const salvar = async () => {
+        if (disabled || salvando) return;
+        let payload: User['horarioAcesso'];
+        if (modo === 'padrao') payload = null;
+        else if (modo === '24h') payload = { vale24h: true };
+        else {
+            if (erroCustom) return;
+            payload = { dias: dias.slice().sort((a, b) => a - b), inicio, fim };
+        }
+        setSalvando(true);
+        try { await onSave(user, payload); } finally { setSalvando(false); }
+    };
+
+    return (
+        <div>
+            <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1.5">
+                ⏰ Horário de acesso
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+                Atual: <span className="font-semibold">{rotularHorario(user.horarioAcesso)}</span>
+                {user.role === 'admin' && <span className="text-amber-600 dark:text-amber-400"> · admin sempre passa (a régua não o barra)</span>}
+            </p>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+                {([['padrao', 'Padrão'], ['24h', '24h'], ['custom', 'Personalizado']] as [ModoHorario, string][]).map(([m, l]) => (
+                    <button
+                        key={m}
+                        disabled={disabled}
+                        onClick={() => setModo(m)}
+                        className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                            modo === m
+                                ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
+                                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600 hover:bg-slate-200'
+                        } ${disabled ? 'cursor-default opacity-70' : ''}`}
+                    >
+                        {modo === m ? '✓ ' : ''}{l}
+                    </button>
+                ))}
+            </div>
+            {modo === 'custom' && (
+                <div className="space-y-2 mb-2 p-2 rounded bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700">
+                    <div className="flex flex-wrap gap-1">
+                        {DIAS_SEMANA.map(d => (
+                            <button
+                                key={d.n}
+                                disabled={disabled}
+                                onClick={() => toggleDia(d.n)}
+                                className={`text-[11px] font-semibold w-9 py-1 rounded border transition-colors ${
+                                    dias.includes(d.n)
+                                        ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
+                                        : 'bg-white dark:bg-slate-700 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-600'
+                                } ${disabled ? 'cursor-default opacity-70' : ''}`}
+                            >
+                                {d.l}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                        <span>das</span>
+                        <input type="time" value={inicio} disabled={disabled} onChange={e => setInicio(e.target.value)}
+                            className="px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800" />
+                        <span>às</span>
+                        <input type="time" value={fim} disabled={disabled} onChange={e => setFim(e.target.value)}
+                            className="px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800" />
+                    </div>
+                    {erroCustom && <p className="text-[11px] text-red-500">{erroCustom}</p>}
+                </div>
+            )}
+            {!disabled && (
+                <button
+                    onClick={salvar}
+                    disabled={salvando || !!erroCustom}
+                    className="text-xs font-semibold px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                    {salvando ? 'Salvando…' : 'Salvar horário'}
+                </button>
+            )}
+        </div>
+    );
+};
+
 const UserManagementModal: React.FC<UserManagementModalProps> = ({
     isOpen,
     onClose,
@@ -261,6 +394,32 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
         }
     };
 
+    /**
+     * Grava a EXCEÇÃO de horário do colaborador (ou volta ao padrão com null).
+     * A validação forte é do backend (validarHorarioAcesso); aqui já barramos
+     * o óbvio no editor pra não gastar ida ao servidor.
+     */
+    const handleSetHorario = async (user: User, horario: User['horarioAcesso']) => {
+        try {
+            const ok = await authService.setUserHorario(user.id, horario ?? null);
+            if (ok) {
+                const admin = authService.getCurrentUser();
+                if (admin) {
+                    authService.logAction(
+                        admin.id, admin.name, 'alterou horário de acesso',
+                        `${user.name} (${user.email}) → ${horario ? (horario.vale24h ? '24h' : `${(horario.dias ?? []).join('/')} ${horario.inicio}-${horario.fim}`) : 'padrão'}`,
+                    );
+                }
+                setMsg({ text: `Horário de ${user.name} atualizado.`, type: 'success' });
+                loadUsers();
+            } else {
+                setMsg({ text: 'Erro ao atualizar horário.', type: 'error' });
+            }
+        } catch (e: any) {
+            setMsg({ text: e?.message || 'Erro ao atualizar horário.', type: 'error' });
+        }
+    };
+
     const handleEditName = async (user: User) => {
         const novoNome = await prompt({
             title: 'Editar nome',
@@ -467,6 +626,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                                             </div>
                                                         )}
                                                     </div>
+                                                    <HorarioEditor user={user} disabled={!isAdmin} onSave={handleSetHorario} />
                                                     {user.email !== currentUserEmail && (
                                                         <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-100 dark:border-slate-700/50">
                                                             {isAdmin && (
