@@ -564,6 +564,19 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     return (
         <div className="space-y-3">
+            {/* Regra da casa (Paulo, 10/08): XML de cliente NUNCA entra direto
+                no Sage — entra pelo CFI e o e-Fiscal recebe o .FML daqui. O
+                guia conta o caso das 260 canceladas em formato legado. */}
+            <div className="flex justify-end">
+                <a
+                    href="/guia-ponte-sage.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800"
+                >
+                    📗 Guia — XML de cliente entra pelo CFI, nunca direto no Sage
+                </a>
+            </div>
             {preflight && preflight.problemas.length > 0 && (
                 <div className={`rounded-lg border p-3 space-y-2 ${
                     preflight.farol === 'bloqueado'
