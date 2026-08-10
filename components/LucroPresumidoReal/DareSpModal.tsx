@@ -13,7 +13,7 @@ import {
     salvarCodigoAntecipacao,
     type DarePayload, type AmbienteDare, type CodigoDareIcms,
 } from '../../services/dareSpService';
-import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
+import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 
 interface Props {
     cnpj: string;
@@ -198,6 +198,50 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
             else setErro(r.error || 'Falha ao enviar.');
         } catch (e: any) {
             setErro(e?.message || 'Falha ao enviar.');
+        } finally {
+            setOcupado(false);
+        }
+    };
+
+    // WhatsApp OFICIAL (09/08): o servidor envia pela Cloud API — comprovante
+    // da Meta + mesmo rito. Só com PDF de PRODUÇÃO, igual ao e-mail.
+    const enviarPorWhatsapp = async () => {
+        if (!preview) return;
+        setOcupado(true); setErro(null); setAviso(null);
+        try {
+            const { getAuth } = await import('firebase/auth');
+            const u = getAuth().currentUser;
+            if (!u) throw new Error('Sessão expirada');
+            const token = await u.getIdToken();
+            const resp = await fetch(`/api/admin/empresa-contato/${encodeURIComponent(cnpj)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const contato = resp.ok ? await resp.json() : { whatsapp: '' };
+            if (!contato.whatsapp) {
+                setErro('WhatsApp do cliente não cadastrado — preencha o campo "WhatsApp (envio de guias)" em Dados Fiscais da empresa.');
+                return;
+            }
+            const pdfValido = pdfEmitido && pdfEmitido.ambiente === 'producao' ? pdfEmitido.base64 : undefined;
+            if (!pdfValido) {
+                setErro('Emita o DARE em PRODUÇÃO antes de enviar: sem o PDF válido o cliente receberia uma mensagem sem a guia.');
+                return;
+            }
+            const r = await enviarGuiaPorWhatsapp({
+                empresaId,
+                empresaCnpj: cnpj,
+                empresaNome: razaoSocial,
+                tipo: 'DARE',
+                competencia,
+                paraWhatsapp: contato.whatsapp,
+                pdfBase64: pdfValido,
+                pdfFileName: `dare_${cnpj.replace(/\D/g, '')}_${competencia}.pdf`,
+                valor: preview.valor,
+                vencimento: preview.vencimento,
+            });
+            if (r.ok) setAviso(mensagemEnvioWhatsapp(r));
+            else setErro(r.error || 'Falha ao enviar por WhatsApp.');
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao enviar por WhatsApp.');
         } finally {
             setOcupado(false);
         }
@@ -429,6 +473,11 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                                 title="O SISTEMA envia o e-mail com o PDF do DARE anexado, pela SUA caixa, com o gestor em cópia oculta. A cópia fica nos seus Itens Enviados — é a prova de que saiu."
                                 className="px-3 py-2 text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white">
                                 📤 Enviar pelo sistema
+                            </button>
+                            <button onClick={enviarPorWhatsapp} disabled={ocupado}
+                                title="O SISTEMA envia pelo WhatsApp OFICIAL do escritório (template aprovado, PDF anexo) — a Meta devolve o comprovante. Mesmo rito: SharePoint + baixa + gestor avisado."
+                                className="px-3 py-2 text-sm font-bold rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white">
+                                📱 WhatsApp (sistema)
                             </button>
                             <button onClick={() => enviarPorEmail('outlook-web')} disabled={ocupado}
                                 title={`Abre a composição no Outlook do NAVEGADOR com o cliente no Para e ${GESTOR_EMAIL} em cópia — anexe o PDF do DARE emitido no portal. O envio fica registrado na auditoria.`}

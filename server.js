@@ -824,6 +824,9 @@ app.get('/api/admin/empresa-contato/:cnpj', requireAuth, async (req, res) => {
         return res.json({
             email: dadosFiscais?.email || '',
             telefone: dadosFiscais?.telefone || '',
+            // Número do WhatsApp OFICIAL (09/08) — campo próprio do cadastro;
+            // ausente = alerta na tela de envio, nunca cai no telefone sozinho.
+            whatsapp: dadosFiscais?.whatsappCliente || '',
         });
     } catch (err) {
         console.error('[empresa-contato]', err);
