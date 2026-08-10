@@ -18,6 +18,7 @@ import { validarAgentKey } from './agent-keys-storage.js';
 import { importarXmlSefaz, registrarErroSefaz } from './xml-importer.js';
 import { importarDfeNfseNacional, registrarErroNfseNacionalDfe } from './nfse-nacional-dfe-importer.js';
 import { pareceNfseNacional } from './agent-xml-helper.js';
+import { podeAcessarCnpj } from './carteira-auth.js';
 
 const router = express.Router();
 
@@ -157,6 +158,15 @@ router.post('/upload-batch', requireAgentKey, express.json({ limit: '20mb' }), a
         const { empresaId, empresaCnpj, ultNSU, maxNSU, docs } = req.body || {};
         if (!empresaId || !empresaCnpj) return res.status(400).json({ error: 'empresaId e empresaCnpj obrigatórios' });
         if (!Array.isArray(docs)) return res.status(400).json({ error: 'docs deve ser array' });
+
+        // TRAVA DE CARTEIRA (auditoria de segurança, 10/08): sem isto, uma agent
+        // key legítima gravava XML e — pior — SOBRESCREVIA o sefaz_state
+        // (ultNSU/maxNSU) de QUALQUER CNPJ do corpo. ultNSU alto faz o próximo
+        // DistDFe PULAR documentos = perda silenciosa de captura (o pecado
+        // capital "semanas verde com 0 notas"). A rota irmã /empresas-a3 já
+        // filtrava por carteira; o upload não. Admin passa (podeAcessarCnpj).
+        const acesso = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.error });
 
         const cnpjNum = String(empresaCnpj).replace(/\D/g, '');
 
