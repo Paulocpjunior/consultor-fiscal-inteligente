@@ -6,7 +6,7 @@ export interface PendenciaEnvio {
 export function pendenciaSharePoint(envio: unknown): PendenciaEnvio | null;
 export function pendenciaBaixa(envio: unknown): PendenciaEnvio | null;
 
-/** Só 'email-graph' (envio pelo servidor) prova que a mensagem saiu. */
+/** Envio pelo SERVIDOR prova que saiu: 'email-graph' e 'whatsapp-api'. */
 export function canalComprovaEnvio(canal?: string | null): boolean;
 
 export interface PainelEnviosResultado {

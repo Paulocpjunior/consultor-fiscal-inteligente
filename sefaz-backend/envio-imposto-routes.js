@@ -19,6 +19,7 @@ import { enviarEmail } from './graph-provider.js';
 import { montarEmailGuia, anexoLogo } from './email-layout.js';
 import { parseDestinatarios } from './email-destinatarios-helper.js';
 import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './graph-remetente.js';
+import { enviarGuiaWhatsapp, configWhatsapp, faltasDaConfig } from './whatsapp-cloud.js';
 
 const router = Router();
 
@@ -157,6 +158,99 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
         });
     } catch (e) {
         console.error('[envio-imposto/enviar-graph]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/envio-imposto/whatsapp-status
+//
+// O botão da tela pergunta ANTES de mostrar: canal pronto? Se não, a resposta
+// lista o que falta — botão que some ensina a equipe que a função não existe.
+// ────────────────────────────────────────────────────────────────────────────
+router.get('/whatsapp-status', requireAuth, (_req, res) => {
+    const faltas = faltasDaConfig(configWhatsapp());
+    return res.json({ ok: true, pronto: faltas.length === 0, faltas });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /api/admin/envio-imposto/enviar-whatsapp
+//
+// Envio PELO SERVIDOR via WhatsApp OFICIAL (Cloud API, WABA da própria S&P) —
+// pedido do Paulo (09/08): mesmo controle do e-mail. A Meta devolve o id da
+// mensagem = PROVA de envio (≠ wa.me, que só abre a composição). Depois do
+// aceite roda o MESMO rito #293: SharePoint (canal whatsapp-api), baixa da
+// obrigação (farol sai do vermelho), auditoria — e o GESTOR é notificado por
+// e-mail Graph (WhatsApp não tem BCC; a notificação vai pelo canal que prova).
+// ────────────────────────────────────────────────────────────────────────────
+router.post('/enviar-whatsapp', requireAuth, async (req, res) => {
+    try {
+        const {
+            empresaId, empresaCnpj, empresaNome, tipo, competencia,
+            paraWhatsapp, pdfBase64, pdfFileName, valor, vencimento,
+        } = req.body || {};
+        if (!empresaCnpj || !tipo || !competencia) {
+            return res.status(400).json({ ok: false, error: 'empresaCnpj + tipo + competencia são obrigatórios' });
+        }
+        if (!paraWhatsapp) {
+            return res.status(400).json({ ok: false, error: 'WhatsApp do cliente ausente — preencha no cadastro da empresa.' });
+        }
+        const acesso = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!acesso.ok) return res.status(acesso.status).json({ ok: false, error: acesso.error });
+
+        const pdfLimpo = limparPdf(pdfBase64);
+        const nomeArquivo = pdfFileName || `${String(tipo).toLowerCase()}_${String(empresaCnpj).replace(/\D/g, '')}_${competencia}.pdf`;
+
+        // Variáveis na ordem do template envio_guia_imposto:
+        // {{1}} cliente · {{2}} tipo da guia · {{3}} competência · {{4}} vencimento
+        const envio = await enviarGuiaWhatsapp({
+            para: paraWhatsapp,
+            variaveis: [empresaNome || 'cliente', String(tipo).toUpperCase(), competencia, vencimento || 'no documento'],
+            pdfBase64: pdfLimpo || null,
+            nomeArquivo,
+        });
+        if (!envio.ok) {
+            const status = envio.configuracaoIncompleta ? 503 : envio.indeterminado ? 502 : 422;
+            return res.status(status).json({ ok: false, error: envio.erro, acao: envio.acao, indeterminado: Boolean(envio.indeterminado) });
+        }
+
+        const rito = await executarRitoEnvioImposto({
+            empresaId, empresaCnpj, empresaNome, tipo, competencia,
+            canal: 'whatsapp-api',
+            para: envio.numeroEnviado,
+            pdfBase64: pdfLimpo || undefined,
+            pdfFileName: nomeArquivo,
+            valor,
+            enviadoPor: req.user?.email || req.user?.uid || null,
+            whatsappMessageId: envio.messageId,
+        });
+
+        // Gestor SEMPRE sabe do envio — por e-mail Graph, o canal que prova.
+        let gestorNotificado = false;
+        try {
+            const padrao = process.env.GRAPH_REMETENTE || process.env.NOTIF_REMETENTE_EMAIL || 'junior@spassessoriacontabil.com.br';
+            const corpoHtml = montarEmailGuia({
+                tipo: String(tipo).toUpperCase(), empresaNome, competencia,
+                mensagem: `Guia enviada ao cliente pelo WHATSAPP OFICIAL (número ${envio.numeroEnviado}, mensagem ${envio.messageId}) por ${req.user?.email || 'colaborador'}. Esta é a cópia de controle do gestor.`,
+                temPdf: Boolean(pdfLimpo), vencimento: vencimento || null,
+            });
+            const n = await enviarEmail({
+                remetente: padrao, para: GESTOR_EMAIL,
+                assunto: `[WhatsApp] ${String(tipo).toUpperCase()} ${competencia} — ${empresaNome || empresaCnpj}`,
+                corpoHtml,
+                anexos: pdfLimpo ? [{ name: nomeArquivo, contentType: 'application/pdf', contentBytes: pdfLimpo }] : [],
+            });
+            gestorNotificado = Boolean(n?.ok);
+        } catch { /* a falha da cópia não desfaz o envio — aparece no payload */ }
+
+        console.log(`[envio-imposto/whatsapp] ${tipo} ${empresaCnpj} ${competencia} → ${envio.numeroEnviado} (${envio.messageId}) gestor=${gestorNotificado}`);
+        return res.json({
+            ok: true, gestor: GESTOR_EMAIL, gestorNotificado,
+            whatsappMessageId: envio.messageId, numeroEnviado: envio.numeroEnviado,
+            ...rito,
+        });
+    } catch (e) {
+        console.error('[envio-imposto/enviar-whatsapp]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

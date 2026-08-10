@@ -254,6 +254,9 @@ export async function executarRitoEnvioImposto(p) {
             copiaPara: [...new Set([GESTOR_EMAIL, ...(p.copiaPara || [])])],
             valor: Number.isFinite(Number(p.valor)) ? Number(p.valor) : null,
             anexouPdf: Boolean(pdf),
+            // Canal whatsapp-api: o id que a Meta devolveu é o COMPROVANTE de
+            // envio (equivalente ao Graph 202 do e-mail) — fica na auditoria.
+            whatsappMessageId: p.whatsappMessageId || null,
             sharePoint: resultado.sharePoint,
             baixa: resultado.baixa,
             enviadoPor: p.enviadoPor || null,

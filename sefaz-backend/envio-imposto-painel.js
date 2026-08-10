@@ -65,9 +65,13 @@ export function pendenciaBaixa(e) {
  *   e se ela fechar a janela, nada sai. Registrar isso como "enviado" é
  *   afirmar um fato que o app não viu.
  * - `whatsapp`: idem — abre o wa.me, o envio é humano.
+ * - `whatsapp-api` (09/08): o SERVIDOR enviou pela Cloud API oficial da Meta
+ *   e ela devolveu o id da mensagem (fica na auditoria) — há prova, mesma
+ *   classe do email-graph. NÃO confundir com `whatsapp` (wa.me).
  */
 export function canalComprovaEnvio(canal) {
-    return String(canal || '').trim().toLowerCase() === 'email-graph';
+    const c = String(canal || '').trim().toLowerCase();
+    return c === 'email-graph' || c === 'whatsapp-api';
 }
 
 /**
