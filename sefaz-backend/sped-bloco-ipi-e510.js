@@ -69,9 +69,14 @@ export function montarLinhasE510(notas, deps = {}) {
                 grupos.set(key, { cfop, cst, vlCont: 0, vlBc: 0, vlIpi: 0 });
             }
             const g = grupos.get(key);
-            g.vlCont += num(item.vProd ?? item.valor); // VL_CONT_IPI = Σ vProd (provado)
-            g.vlBc += num(item.vBcIpi);                // VL_BC_IPI
-            g.vlIpi += vIpi;                           // VL_IPI
+            // VL_CONT_IPI = valor contábil = valor da operação INCLUINDO o IPI.
+            // PROVADO contra arquivo aceito (CFOP 1101: C170 ΣvProd 138.396,70 +
+            // IPI 4.389,15 = E510 VL_CONT 142.785,85). O IPI é "por fora" e entra
+            // no valor contábil do livro (entrada = custo pago; saída = total da
+            // nota). Somar só vProd deixava o bloco A MENOR.
+            g.vlCont += num(item.vProd ?? item.valor) + vIpi; // VL_CONT_IPI
+            g.vlBc += num(item.vBcIpi);                        // VL_BC_IPI (Σ base, provado = C170)
+            g.vlIpi += vIpi;                                   // VL_IPI (Σ, amarra com E520)
         }
     }
 
