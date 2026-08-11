@@ -780,6 +780,36 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   botão "📤 Enviar pelo sistema"): PDF anexado, gestor em BCC e rito #293 no
   mesmo passo. DARE só envia com PDF de PRODUÇÃO (homologação não é guia
   pagável).
+- **O DOCUMENTO CHEGA EM DUAS FORMAS — CHATA e ANINHADA — e ler só uma é a
+  armadilha que mais mordeu este projeto** (11/08, caso EDUARDO GUERRA ×
+  DAMIÃO): o importer PRINCIPAL (`xml-importer.js` — SEFAZ, cofre, XML
+  manual) grava os participantes em campos CHATOS (`cnpjDest`, `xNomeDest`,
+  `ieDest`, `ufDest`…); `sync-routes` e o abrasf gravam ANINHADO
+  (`emitente`/`destinatario`). A DIPAM lia SÓ o aninhado, então nota do
+  trilho principal chegava com a **contraparte VAZIA** e caía em
+  "fornecedor indefinido" — FUNRURAL R$ 0,00 com o CPF do produtor já
+  capturado no banco. **Os 39 testes não pegaram porque TODOS usavam a forma
+  aninhada** (o teste fazia exatamente o que ele mesmo mandava — a mesma
+  família de defeito do IPI no E200 e do Bloco H zerado). É a 7ª mordida da
+  mesma armadilha (NFS-e achatada × objeto, `csllOuTotal`, ISS por painel).
+  RÉGUA: `normalizarParticipantesDoc(doc)` (idempotente) monta o aninhado a
+  partir dos campos chatos — leitor NOVO de participante passa por ela, e
+  teste de leitor DEVE ter caso nas DUAS formas. CUIDADO com `select()` de
+  projection: sem os campos chatos na lista, a contraparte some de novo.
+- **CAMPO GRAVADO PODE MENTIR — A RÉGUA DECIDE NA LEITURA** (11/08, MV LIDER
+  639: Livro de Saídas e faturamento contando nota CANCELADA). O filtro
+  olhava só `d.status`, e o status mentia por DOIS buracos: cancelamento
+  homologado **fora de prazo é cStat 155** (o importer só virava com 135, e a
+  nota ficava 'autorizado' pra sempre); e evento chegando ANTES da nota criava
+  stub 'cancelado' que o merge da NF-e completa **sobrescrevia** com o status
+  do protocolo dela — a cancelada ressuscitava. Mesmo desenho da direção
+  efetiva (tpNF): `docCancelado(d)` (xml-metadata-helper) decide na LEITURA
+  por status OU cStat legado (101/151) OU `eventos[]` 110111 com 135/155 —
+  cStat de REJEIÇÃO não cancela, CC-e não cancela, evento sem cStat conta (a
+  SEFAZ só distribui evento registrado) — e o backfill idempotente
+  (`corrigirStatusCanceladoPorEvento`, no sync-cron) conserta o banco aos
+  poucos. Leitor novo de documento válido usa `docValido`/`docCancelado`;
+  reimplementar o filtro é criar a divergência de novo.
 
 ## Fila de features acordadas (com requisitos)
 
@@ -1247,3 +1277,76 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `catalogo-banco.js` no MESMO PR (o painel denuncia órfãs). Pendente Paulo:
   definir env `SISTEMA_DEV_EMAILS` no Cloud Run (sugerido p.c.pereira@me.com)
   pra restringir além de admin.
+
+## Decisões e memória de 11/08/2026
+
+- **E510 (IPI) — "ARQUIVO ACEITO > LEIAUTE DEDUZIDO" provou o próprio valor,
+  inclusive contra a MINHA primeira conclusão**. Era o último 🔴 que travava
+  indústria com IPI, e o de-para dizia "não gera: o CST do IPI não é
+  capturado" — mas o CST **estava no XML** (IPITrib 50/99 e IPINT 01-05/51-55);
+  o importer é que só lia vIPI/pIPI (#563). O gerador (`sped-bloco-ipi-e510.js`)
+  nasceu conferido contra um SPED jun/2026 do e-Fiscal **aceito no PVA**, e a
+  sequência de correções é a lição: (1) concluí `VL_CONT_IPI = Σ vProd` porque
+  batia campo a campo com o `VL_OPR` do C190 — **errado**: a leitura do C170
+  mostrou que o VL_CONT **INCLUI o IPI** (CFOP 1101: 138.396,70 + 4.389,15 =
+  142.785,85) e o VL_OPR do C190 também já incluía, por isso "batia" (#565);
+  **o PVA NÃO confere o VL_CONT** — só o arquivo real pega. (2) O CST do E510
+  **não é o CST cru do XML**: na compra, o CST de SAÍDA do fornecedor vira o de
+  ENTRADA do destinatário pela correspondência da IN RFB 932/2009 (50→00,
+  51→01, 52→02, 53→03, 54→04, 55→05, 99→49), provado em 4 XMLs da EXPERTE
+  (#566). SAÍDA fica com o CST da própria nota — **não** normalizo 99→55, que
+  seria corrigir a nota do cliente: acende alerta "confira na origem". Item com
+  IPI destacado SEM CST fica FORA com aviso (campo fiscal não recebe default).
+  A prova ponta a ponta virou tela: a aba 🪞 **CFI × E-Fiscal compara o E510**
+  por CFOP+CST (#568) — é exatamente a conferência que o PVA não dá.
+  **FALTA**: backfill dos XMLs de jun/jul já capturados (o doc guarda xmlHash,
+  não o XML cru ⇒ re-capturar os poucos clientes de IPI) e reproduzir um mês
+  INTEIRO a partir dos XMLs-fonte. RISCO ABERTO no de-para: o e-Fiscal inclui
+  itens sem CST no E510 derivando por operação (1124→05, 1407→49, 5901→55).
+- **COMPRA DE PRODUTOR RURAL TEM DUAS NOTAS DA MESMA ENTRADA — e o FUNRURAL
+  estava DOBRANDO** (#567): a NF-e do produtor (nota 1) e a nota própria de
+  entrada que o cliente emite (nota 2, tpNF=0). A **RC 33068/2025** é
+  categórica — o adquirente escritura SÓ a que ELE emitiu (RICMS/SP art. 136,
+  I, "a"). O CFI capturava as duas: par real DAMIÃO × EDUARDO GUERRA (banana,
+  R$ 8.400 cada) saía FUNRURAL R$ 273,84 no lugar de R$ 136,92.
+  `dedupNotaProdutorComEntrada` pareia por produtor×competência (não há refNFe
+  ligando) e exclui a NF-e do produtor **APENAS quando existe a nota de entrada
+  que a cobre** — produtor sem par fica INTACTO, porque muitos clientes
+  escrituram a nota do produtor direto e nagá-los seria alarme sem ação: a
+  dedup desfaz DUPLICIDADE, não impõe processo. E **total que muda sozinho faz
+  desconfiar do número certo**: o painel 🌾 lista as excluídas nomeadas em
+  bloco âmbar (`excluidasArt136`, #569) — some da conta, não da tela.
+- **⚙️ Config Admin** (#571, pedido do Paulo): o backend de templates do
+  WhatsApp (Cloud API da Meta) já existia inteiro — faltava a TELA, e os
+  horários "não apareciam" por morarem dentro do Gerenciar Usuários. Painel
+  admin-only no topo com Templates (cadastro/edição/desativação, status do
+  canal na cara pra não prometer envio que não sai) + atalho pros Horários
+  (a régua continua por usuário lá; duplicá-la criaria a segunda cópia).
+- **Isenção/imunidade no PGDAS-D — ACHADO ABERTO, esperando a fonte** (#573):
+  casos **Jaguarexport** (isenção de ICMS — banana) e **POLO CULTURAL**
+  (IMUNIDADE de ICMS e IPI, campos separados POR TRIBUTO). O app tira o valor
+  do cálculo mas **não envia a qualificação ao SERPRO** — e payload não se
+  chuta (entrega ao PGDAS-D não se desfaz; foi o que o MSG_ISN_023 do "sem
+  movimento" já ensinou). O caminho é o MESMO que destravou o ISS fixo código
+  9: ler a declaração **já ACEITA**. O botão 🔎 Atividades declaradas agora
+  guarda a qualificação **BRUTA** (parcelas, percentuais, nomes reais dos
+  campos), com dedup pelo CONTEÚDO. **PENDENTE DO PAULO**: rodar o 🔎 na
+  Jaguarexport 07/2026 e na POLO CULTURAL 06/2026 e mandar o bloco
+  "Qualificações por tributo" — só com ele nasce a marcação por tributo na
+  tela (isenção ≠ imunidade: natureza e campo diferentes) e a qualificação no
+  pgdasMapper, travada por teste contra o bruto real.
+- **"IOB" DITO PELO PAULO É O APP IRMÃO (a URL `plano-contas-iob`), NUNCA o
+  e-Fiscal IOB SAGE** — e a confusão custou um vai-e-volta em produção no
+  mesmo dia. O R-2055 tinha destravado o transmitir pelo gateway (#41 de lá);
+  ao ouvir *"vamos padronizar e deixar no IOB"* a sessão trocou o Transmitir
+  por "📄 Gerar XML pra importar no IOB" (#42, v3.4.98) — o que colocaria o
+  e-Fiscal no circuito OPERACIONAL, todo mês, do sistema que está sendo
+  APOSENTADO. Paulo cortou: *"não faz sentido retroagir e deixar um rabo solto
+  no e-Fiscal onde só vai gerar confusão no colaborador"*. Revertido em
+  v3.4.99 (#43): botões 🧪/🚀 Transmitir de volta pelo gateway do CFI. REGRAS:
+  (1) ordem que menciona "IOB"/nome de sistema e mudaria o DESTINO de uma
+  transmissão se confirma ANTES de virar produção; (2) evento com dois
+  transmissores possíveis tem UM dono — o risco de dupla transmissão se
+  resolve escolhendo o dono, não gerando arquivo pro outro sistema; (3) a
+  decisão de 05/08 (e-Fiscal = CONSULTA do histórico, operação migra) vale
+  também pro Reinf.
