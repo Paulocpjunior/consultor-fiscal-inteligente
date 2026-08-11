@@ -335,6 +335,39 @@ export function identificarNaturezaFornecedor(participante, cadastro = null) {
     };
 }
 
+// ─── Normalização da FORMA do documento ─────────────────────────────────────
+// O documento de `documentos_fiscais` chega em DUAS formas conforme o trilho de
+// captura: o importer PRINCIPAL (xml-importer.js — SEFAZ/cofre/XML manual) grava
+// os participantes em campos CHATOS (cnpjEmit/xNomeEmit/ufEmit/cnpjDest/xNomeDest
+// /ieDest/ufDest/...), enquanto sync-routes e abrasf gravam ANINHADO
+// (emitente/destinatario). classificarNota lê SÓ o aninhado — então a nota vinda
+// do importer principal chegava com a contraparte VAZIA e caía sempre em
+// "fornecedor indefinido" (FUNRURAL/DIPAM R$ 0,00), MESMO com o CPF do produtor
+// já capturado (caso real EDUARDO GUERRA × DAMIÃO, 07/2026: CPF no cnpjDest,
+// FUNRURAL saía 0,00 em vez de 136,92). Isto RELÊ o que o importer JÁ capturou
+// (recuperação da fonte, não conserto de cadastro — regra de 06/08): monta
+// emitente/destinatario a partir dos campos chatos SÓ quando o aninhado não veio.
+// Idempotente: doc já aninhado passa intacto.
+export function normalizarParticipantesDoc(doc) {
+    const d = doc || {};
+    const temLado = (p) => !!(p && (p.cnpjCpf || p.cnpj || p.cpf || p.nome || p.razaoSocial));
+    const emitente = temLado(d.emitente) ? d.emitente : (temLado(d.prestador) ? d.prestador : {
+        cnpjCpf: d.cnpjEmit || d.cnpjEmitente || '',
+        nome: d.xNomeEmit || d.nomeEmit || '',
+        ie: d.ieEmit || '',
+        uf: d.ufEmit || '',
+        codMunIBGE: d.codMunEmit || '',
+    });
+    const destinatario = temLado(d.destinatario) ? d.destinatario : (temLado(d.tomador) ? d.tomador : {
+        cnpjCpf: d.cnpjDest || d.cnpjDestinatario || '',
+        nome: d.xNomeDest || d.nomeDest || '',
+        ie: d.ieDest || '',
+        uf: d.ufDest || '',
+        codMunIBGE: d.codMunDest || '',
+    });
+    return { ...d, emitente, destinatario };
+}
+
 // ─── Classificação de um documento ──────────────────────────────────────────
 
 const pendencia = (codigo, mensagem, acao) => ({ codigo, mensagem, acao });
@@ -634,6 +667,7 @@ export function dedupNotaProdutorComEntrada(notas) {
 export function montarDipamCompetencia({ documentos = [], competencia, empresa = {}, fornecedores = {}, tabelaFunrural = ALIQUOTAS_FUNRURAL_PF }) {
     const notas = dedupNotaProdutorComEntrada((documentos || [])
         .filter((d) => d && !d._merged_into && !d._deleted)
+        .map((raw) => normalizarParticipantesDoc(raw))
         .map((d) => classificarNota(d, {
             cadastro: fornecedores[soDigitos((d.emitente || d.prestador || {}).cnpjCpf)]
                 || fornecedores[soDigitos((d.destinatario || d.tomador || {}).cnpjCpf)]

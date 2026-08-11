@@ -22,6 +22,7 @@ import {
     calcularFunrural,
     extrairFunruralDeclarado,
     identificarNaturezaFornecedor,
+    normalizarParticipantesDoc,
     aliquotasFunruralVigentes,
     ehIeProdutorRuralSP,
     ehNcmAgropecuario,
@@ -292,7 +293,50 @@ describe('nota própria de ENTRADA (tpNF=0) — o formato real da compra de prod
             expect(ex.motivo).toMatch(/art\. ?136|RC 33068/);
         });
 
-        it('produtor SEM par (só uma nota da operação) fica INTACTO — sem dedup, sem alarme', () => {
+        // ── FORMA CHATA do importer principal (bug 07/2026 EDUARDO GUERRA) ──
+    // xml-importer.js grava participantes em campos chatos (cnpjDest/xNomeDest/
+    // ufDest), não em emitente/destinatario aninhados. classificarNota lia só o
+    // aninhado ⇒ contraparte vazia ⇒ "fornecedor indefinido" ⇒ FUNRURAL R$ 0,00
+    // mesmo com o CPF do produtor capturado. O normalizador relê o que foi
+    // capturado. Caso real: DAMIÃO (CPF, BA) → FUNRURAL 136,92, DIPAM 0 (não é SP).
+    describe('doc na forma CHATA do importer principal (campos cnpjDest/ufDest/…)', () => {
+        const flat = {
+            chave: '35260700005430000104550010004286651179783634',
+            numero: '428665', competencia: '2026-07', tpNF: '0', direcao: 'entrada', status: 'autorizado',
+            cnpjEmit: '00005430000104', xNomeEmit: 'EDUARDO GUERRA HORTIFRUTI', ufEmit: 'SP',
+            cnpjDest: '01846375541', xNomeDest: 'DAMIAO QUEIROZ DE SANTANA', ieDest: '', ufDest: 'BA', codMunDest: '2924900',
+            itens: [{ cfop: '2102', ncm: '08039000', xProd: 'BANANA OURO CX 10 KG', vProd: 8400 }],
+            valorTotal: 8400, totais: { vNF: 8400 },
+            infCpl: 'art.136,I,a FUNRURAL 1.63% do total Nota Valor.: R$ 136.92',
+        };
+
+        it('normalizarParticipantesDoc reconstrói a contraparte a partir dos campos chatos', () => {
+            const n = normalizarParticipantesDoc(flat) as any;
+            expect(n.destinatario.cnpjCpf).toBe('01846375541');
+            expect(n.destinatario.uf).toBe('BA');
+            expect(n.emitente.cnpjCpf).toBe('00005430000104');
+        });
+
+        it('doc chato agora classifica: FUNRURAL 136,92, DIPAM 0 (BA), sem pendência', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [flat], competencia: '2026-07',
+                empresa: { id: 'eg', nome: 'EDUARDO GUERRA', cnpj: '00005430000104', adquireDeProdutor: true, funruralSubRogacao: 'aplica' } as any,
+            });
+            expect(painel.funrural.total).toBe(136.92);
+            expect(painel.funrural.notas).toHaveLength(1);
+            expect(painel.dipam.total).toBe(0);
+            expect(painel.pendencias.map((p: any) => p.codigo)).not.toContain('fornecedor-indefinido');
+        });
+
+        it('doc já ANINHADO passa intacto (idempotente)', () => {
+            const nested = { emitente: { cnpjCpf: '00005430000104', nome: 'X' }, destinatario: { cnpjCpf: '01846375541', uf: 'BA' } };
+            const n = normalizarParticipantesDoc(nested) as any;
+            expect(n.destinatario.cnpjCpf).toBe('01846375541');
+            expect(n.emitente.nome).toBe('X');
+        });
+    });
+
+    it('produtor SEM par (só uma nota da operação) fica INTACTO — sem dedup, sem alarme', () => {
             const painel = montarDipamCompetencia({
                 documentos: [notaEntrada()], // uma nota só → não dobra → não mexe
                 competencia: '2026-06',

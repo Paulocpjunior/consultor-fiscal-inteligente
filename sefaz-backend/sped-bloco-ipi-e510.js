@@ -6,11 +6,15 @@
 // DEFINIÇÃO PROVADA CONTRA ARQUIVO ACEITO (11/08, SPED jun/2026 do e-Fiscal,
 // CNPJ ...178 — regra da casa "arquivo aceito > leiaute deduzido"):
 //   |E510|CFOP|CST_IPI|VL_CONT_IPI|VL_BC_IPI|VL_IPI|
-//   · VL_CONT_IPI = valor da operação (Σ vProd) — **NÃO inclui o IPI**. Bateu
-//     campo a campo com o VL_OPR do C190 em TODOS os CFOPs (1101/5101/5122/6101).
+//   · VL_CONT_IPI = valor CONTÁBIL da operação = Σ(vProd + vIPI) — **INCLUI o
+//     IPI** (o IPI é "por fora" e compõe o valor contábil do livro). PROVADO
+//     campo a campo contra o C170 do arquivo aceito (CFOP 1101: ΣvProd
+//     138.396,70 + IPI 4.389,15 = VL_CONT 142.785,85). Somar só vProd deixava
+//     o bloco A MENOR — o PVA NÃO checa VL_CONT, então o erro passaria.
 //   · VL_BC_IPI   = Σ base do IPI (IPITrib/vBC). 0 para item não-tributado.
 //   · VL_IPI      = Σ IPI. A soma dos E510 de saída = VL_DEB do E520 (amarração
-//     que a SEFAZ valida; no arquivo real deu 11.742,05 cravado).
+//     que a SEFAZ valida; no arquivo real deu 11.742,05 cravado — e o gerador
+//     reproduziu 11.742,05 a partir SÓ dos XMLs de saída de jun/2026).
 //
 // O E510 é uma RE-AGREGAÇÃO do MESMO dado do C190, só com chave diferente
 // (CFOP+CST_IPI em vez de CST_ICMS+CFOP+alíquota). Por isso reaproveita o CFOP

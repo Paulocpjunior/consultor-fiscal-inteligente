@@ -49,6 +49,10 @@ export function parseValorLivre(txt: unknown): number | null;
 export function extrairFunruralDeclarado(infAdic: unknown): { percentual: number | null; valor: number | null; trecho: string } | null;
 export function calcularFunrural(base: unknown, competencia: string, tabela?: AliquotasFunrural[]): CalculoFunrural;
 export function identificarNaturezaFornecedor(participante: any, cadastro?: any): NaturezaFornecedor;
+/** Normaliza a FORMA do doc: monta emitente/destinatario a partir dos campos
+ *  chatos (cnpjEmit/cnpjDest/ieDest/…) do importer principal quando o aninhado
+ *  não veio. Idempotente. */
+export function normalizarParticipantesDoc(doc: any): any;
 export function classificarNota(doc: any, opts?: { cadastro?: any; empresa?: any; tabelaFunrural?: AliquotasFunrural[] }): any;
 export function montarDipamCompetencia(p: {
     documentos?: any[];
