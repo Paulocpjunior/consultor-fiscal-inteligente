@@ -336,6 +336,21 @@ const DetalheEmpresa: React.FC<{
                             </p>
                         </>
                     )}
+                    {(painel.funrural?.excluidasArt136?.length || 0) > 0 && (
+                        <div className="mt-3 rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-2">
+                            <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                                🧾 {painel.funrural!.excluidasArt136!.length} NF-e do produtor FORA do total — documento de origem (art. 136 / RC 33068)
+                            </p>
+                            <p className="text-[10px] text-amber-700 dark:text-amber-400 mb-1">
+                                A escriturada é a nota de ENTRADA própria; a nota do produtor não conta (senão dobraria a FUNRURAL).
+                            </p>
+                            {painel.funrural!.excluidasArt136!.map(n => (
+                                <div key={n.chave} className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                                    nº {n.numero} · {n.fornecedor} · {fmtCnpjCpf(n.doc)} · {fmtBRL(Math.abs(n.valor || 0))}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </Caixa>
             </div>
 

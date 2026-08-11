@@ -739,6 +739,15 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
                 divergencia: n.funrural.divergencia || null,
             })),
             revisarAliquotas: doFunrural.some((n) => n.funrural.revisar),
+            // NF-e do produtor deduplicadas (art. 136/RC 33068): documento de
+            // origem que NÃO se escritura — a de entrada própria já conta. Vem
+            // na resposta pra o painel MOSTRAR o porquê (farol honesto), não só
+            // um total que mudou sozinho.
+            excluidasArt136: notas.filter((n) => n.notaOrigemProdutor).map((n) => ({
+                chave: n.chave, numero: n.numero, dhEmi: n.dhEmi,
+                fornecedor: n.fornecedor.nome, doc: n.fornecedor.doc, valor: n.valor,
+                motivo: n.funrural.motivo || 'Documento de origem — a escriturada é a nota de entrada própria (art. 136/RC 33068).',
+            })),
         },
         notas,
         pendencias,
