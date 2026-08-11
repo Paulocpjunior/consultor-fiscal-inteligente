@@ -9,7 +9,7 @@ import crypto from 'crypto';
 import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 import { classificarTipoDoc } from './xml-tipo-doc.js';
-import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml } from './xml-metadata-helper.js';
+import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml, docCancelado, CSTAT_EVENTO_CANCELAMENTO } from './xml-metadata-helper.js';
 import { decidirDonoPorParticipantes } from './atribuicao-participantes.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
@@ -444,8 +444,11 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
       const updates = {
         eventos: [...eventosExistentes, eventoData],
       };
-      // Se cancelamento, atualiza status da NFe
-      if (evento.tipo === 'cancelamento' && evento.cStat === '135') {
+      // Se cancelamento REGISTRADO, atualiza status da NFe. 135 = registrado e
+      // vinculado; 155 = homologado FORA DE PRAZO — cancelamento igual (o gate
+      // só em '135' deixou cancelada de fora de prazo contando no Livro e no
+      // fechamento; bug 11/08, MV LIDER 639).
+      if (evento.tipo === 'cancelamento' && CSTAT_EVENTO_CANCELAMENTO.has(String(evento.cStat || ''))) {
         updates.status = 'cancelado';
         updates.canceladoEm = evento.dhEvento;
         updates.canceladoProtocolo = evento.nProt;
@@ -476,7 +479,7 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
       empresaCnpj: capturadoPor?.empresaCnpj?.replace(/\D/g, '') || null,
       tipoDoc: tipoFinal,
       tipo: tipoFinal,
-      status: evento.tipo === 'cancelamento' && evento.cStat === '135' ? 'cancelado' : 'pendente',
+      status: evento.tipo === 'cancelamento' && CSTAT_EVENTO_CANCELAMENTO.has(String(evento.cStat || '')) ? 'cancelado' : 'pendente',
       direcao: 'desconhecida', // sera atualizado quando NFe original chegar
       numero: null,
       serie: null,
@@ -810,6 +813,16 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
       return { status: 'duplicado', chave: meta.chave };
     }
     if (dec.merge) {
+      // Nota que chega DEPOIS do cancelamento NÃO ressuscita: o merge preservava
+      // os eventos[], mas o status 'autorizado' do protocolo da própria nota
+      // atropelava o 'cancelado' do stub (o evento tinha chegado antes). A
+      // cancelada voltava a contar no Livro e no fechamento (bug 11/08).
+      const ex = snap.exists ? (snap.data() || {}) : {};
+      if (docCancelado(ex)) {
+        docData.status = 'cancelado';
+        if (ex.canceladoEm !== undefined) docData.canceladoEm = ex.canceladoEm;
+        if (ex.canceladoProtocolo !== undefined) docData.canceladoProtocolo = ex.canceladoProtocolo;
+      }
       tx.set(docRef, docData, { merge: true });
     } else {
       tx.set(docRef, docData);
@@ -929,6 +942,50 @@ export async function corrigirDirecaoEntradaPropria({ limit = 500 } = {}) {
   } catch (e) {
     console.warn('[corrigirDirecaoEntradaPropria] query falhou:', e.message);
     return { examinadas, corrigidas, erro: e.message };
+  }
+  return { examinadas, corrigidas };
+}
+
+/**
+ * Backfill: corrige o STATUS de docs cujo cancelamento o app já capturou mas
+ * não refletiu (bug 11/08, MV LIDER 639 — cancelada contada no Livro e no
+ * fechamento). Duas origens do buraco: evento 155 (fora de prazo) não virava o
+ * status, e o merge stub→nota atropelava o 'cancelado'. A prova do cancelamento
+ * está no PRÓPRIO doc (eventos[]/cStat) — docCancelado decide; aqui só se grava.
+ * Varre por competência (não dá pra consultar dentro de eventos[] no Firestore)
+ * e é idempotente: corrigido deixa de casar com o predicado.
+ */
+export async function corrigirStatusCanceladoPorEvento({ competencias = [], maxDocs = 30000 } = {}) {
+  const db = fa().firestore();
+  const alvos = (competencias.length ? competencias : [new Date().toISOString().slice(0, 7)]);
+  let examinadas = 0, corrigidas = 0;
+  for (const competencia of alvos) {
+    try {
+      const snap = await db.collection('documentos_fiscais')
+        .where('competencia', '==', competencia)
+        .select('status', 'cStat', 'eventos')
+        .limit(maxDocs)
+        .get();
+      for (const docSnap of snap.docs) {
+        examinadas++;
+        const d = docSnap.data() || {};
+        const statusJaCancelado = ['cancelado', 'cancelada', 'denegado', 'inutilizado']
+          .includes(String(d.status || '').toLowerCase());
+        if (statusJaCancelado || !docCancelado(d)) continue;
+        try {
+          await docSnap.ref.update({
+            status: 'cancelado',
+            statusCorrigidoEm: fa().firestore.FieldValue.serverTimestamp(),
+            statusCorrigidoMotivo: 'cancelamento capturado (evento 110111/cStat) sem refletir no status',
+          });
+          corrigidas++;
+        } catch (e) {
+          console.warn(`[corrigirStatusCancelado] falha em ${docSnap.id}:`, e.message);
+        }
+      }
+    } catch (e) {
+      console.warn(`[corrigirStatusCancelado] query ${competencia} falhou:`, e.message);
+    }
   }
   return { examinadas, corrigidas };
 }

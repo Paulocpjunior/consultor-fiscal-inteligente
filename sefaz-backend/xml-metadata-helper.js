@@ -95,3 +95,39 @@ export function direcaoEfetivaDoc(d) {
     if (d.direcao === 'saida' && String(d.tpNF ?? '') === '0') return 'entrada';
     return d.direcao;
 }
+
+// ── Cancelamento EFETIVO — mesma lição da direção: o campo gravado pode mentir ──
+// Duas formas de o status ficar torto (bug 11/08, MV LIDER 639 — cancelada
+// contada no Livro de Saídas e no fechamento):
+//   1. o importer só virava status com evento cStat 135; cancelamento homologado
+//      FORA DE PRAZO é cStat 155 e é cancelamento igual — ficava 'autorizado';
+//   2. evento chegando ANTES da nota (stub 'cancelado') era atropelado pelo
+//      merge quando a NF-e completa chegava com o protocolo dela (autorizado).
+// Esta função decide na LEITURA, olhando o que o doc CARREGA: o status, o cStat
+// da própria nota (legado 101/151 = cancelamento homologado) e os eventos[]
+// (110111 registrado = 135/155). O backfill do sync-cron conserta o banco aos
+// poucos; a leitura não espera o próximo ciclo.
+
+const STATUS_CANCELADO = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
+/** cStat da PRÓPRIA nota que significa cancelamento (legado pré-evento). */
+const CSTAT_NOTA_CANCELADA = new Set(['101', '151']);
+/** cStat de EVENTO 110111 registrado (135) ou homologado fora de prazo (155). */
+export const CSTAT_EVENTO_CANCELAMENTO = new Set(['135', '155']);
+
+export function docCancelado(d) {
+    if (!d) return false;
+    if (STATUS_CANCELADO.has(String(d.status || '').toLowerCase())) return true;
+    if (CSTAT_NOTA_CANCELADA.has(String(d.cStat || ''))) return true;
+    const eventos = Array.isArray(d.eventos) ? d.eventos : [];
+    return eventos.some((e) => {
+        if (!e) return false;
+        const ehCancelamento = String(e.tpEvento || '') === '110111'
+            || String(e.tipo || '') === 'cancelamento';
+        if (!ehCancelamento) return false;
+        const cStat = String(e.cStat || '');
+        // Sem cStat gravado (captura antiga/cofre): a SEFAZ só distribui evento
+        // REGISTRADO, então cancelamento anexado sem cStat conta como cancelado.
+        // cStat presente e fora de 135/155 (ex.: rejeição) NÃO cancela.
+        return cStat === '' || CSTAT_EVENTO_CANCELAMENTO.has(cStat);
+    });
+}

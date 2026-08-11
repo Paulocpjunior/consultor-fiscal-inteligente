@@ -24,6 +24,15 @@ export function direcaoEfetivaDoc(
 ): string | undefined;
 
 /**
+ * Cancelamento EFETIVO do documento — mesma lição da direção: o status gravado
+ * pode mentir (evento 155 não virava o status; merge stub→nota ressuscitava a
+ * cancelada). Decide na LEITURA pelo status, pelo cStat legado da própria nota
+ * (101/151) e pelos eventos[] de cancelamento (110111 com cStat 135/155).
+ */
+export function docCancelado(d: unknown): boolean;
+export const CSTAT_EVENTO_CANCELAMENTO: Set<string>;
+
+/**
  * CNPJ/CPF do bloco <autXML> da NF-e — a PROVA de que o cliente autorizou o
  * escritório a baixar o XML da saída dele (sem isso, Rejeição 641).
  */

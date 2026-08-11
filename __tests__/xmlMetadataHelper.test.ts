@@ -68,3 +68,50 @@ describe('endereço do participante (E010 do Exportar SAGE)', () => {
         expect(p.destinatario.uf).not.toBe(p.emitente.uf);
     });
 });
+
+// ── docCancelado — o status gravado pode mentir (bug 11/08, MV LIDER 639) ────
+// Cancelada contava no Livro de Saídas e no fechamento por DOIS buracos: o
+// evento 155 (fora de prazo) não virava o status, e o merge stub→nota
+// atropelava o 'cancelado'. A régua decide na LEITURA pelo que o doc carrega.
+import { docCancelado } from '../sefaz-backend/xml-metadata-helper.js';
+
+describe('docCancelado — cancelamento efetivo na leitura', () => {
+    it('status gravado como cancelado/denegado/inutilizado cancela', () => {
+        for (const status of ['cancelado', 'cancelada', 'denegado', 'inutilizado']) {
+            expect(docCancelado({ status })).toBe(true);
+        }
+    });
+
+    it('autorizada sem evento NÃO é cancelada', () => {
+        expect(docCancelado({ status: 'autorizado', cStat: '100', eventos: [] })).toBe(false);
+        expect(docCancelado({ status: 'autorizado' })).toBe(false);
+        expect(docCancelado(null)).toBe(false);
+    });
+
+    it('cStat legado da própria nota (101/151) cancela mesmo com status torto', () => {
+        expect(docCancelado({ status: 'autorizado', cStat: '101' })).toBe(true);
+        expect(docCancelado({ status: 'autorizado', cStat: '151' })).toBe(true);
+    });
+
+    it('evento 110111 registrado (135) cancela mesmo com status autorizado', () => {
+        const d = { status: 'autorizado', cStat: '100', eventos: [{ tpEvento: '110111', cStat: '135' }] };
+        expect(docCancelado(d)).toBe(true);
+    });
+
+    it('evento 155 (homologado FORA DE PRAZO) TAMBÉM cancela — era o buraco', () => {
+        const d = { status: 'autorizado', cStat: '100', eventos: [{ tipo: 'cancelamento', cStat: '155' }] };
+        expect(docCancelado(d)).toBe(true);
+    });
+
+    it('evento de cancelamento sem cStat gravado (captura antiga) cancela — a SEFAZ só distribui evento registrado', () => {
+        expect(docCancelado({ status: 'autorizado', eventos: [{ tpEvento: '110111' }] })).toBe(true);
+    });
+
+    it('evento de cancelamento com cStat de REJEIÇÃO não cancela', () => {
+        expect(docCancelado({ status: 'autorizado', eventos: [{ tpEvento: '110111', cStat: '573' }] })).toBe(false);
+    });
+
+    it('CC-e (110110) não cancela nada', () => {
+        expect(docCancelado({ status: 'autorizado', eventos: [{ tpEvento: '110110', cStat: '135' }] })).toBe(false);
+    });
+});

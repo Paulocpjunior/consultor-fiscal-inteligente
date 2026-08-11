@@ -18,7 +18,7 @@ import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
-import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
+import { direcaoEfetivaDoc, docCancelado } from './xml-metadata-helper.js';
 
 const router = Router();
 
@@ -29,7 +29,6 @@ function getDb() {
 
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
-const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
 
 router.get('/faturamento', requireAuth, async (req, res) => {
     try {
@@ -74,7 +73,9 @@ router.get('/faturamento', requireAuth, async (req, res) => {
         const snaps = await fetchAllDocs(
             db.collection('documentos_fiscais')
                 .where('competencia', '==', competencia)
-                .select('empresaId', 'direcao', 'tpNF', 'status', 'valorTotal'),
+                // eventos/cStat no select: o cancelamento pode estar só no
+                // evento (status torto) — docCancelado decide na leitura.
+                .select('empresaId', 'direcao', 'tpNF', 'status', 'valorTotal', 'eventos', 'cStat'),
             { label: `relatorio-faturamento ${competencia}`, maxDocs: 80000 },
         );
         let ignoradosSemEmpresa = 0;
@@ -82,7 +83,7 @@ router.get('/faturamento', requireAuth, async (req, res) => {
             const d = s.data() || {};
             const emp = empresas.get(d.empresaId);
             if (!emp) { ignoradosSemEmpresa++; continue; }
-            if (CANCELADOS.has(d.status)) continue;
+            if (docCancelado(d)) continue;
             const direcao = direcaoEfetivaDoc(d);
             const valor = Number(d.valorTotal) || 0;
             if (direcao === 'saida') { emp.saidasQtd++; emp.saidasValor = r2(emp.saidasValor + valor); }
@@ -165,14 +166,14 @@ router.get('/faturamento-mensal', requireAuth, async (req, res) => {
                 db.collection('documentos_fiscais')
                     .where('empresaId', '==', empresaId)
                     .where('competencia', '==', competencia)
-                    .select('direcao', 'tpNF', 'status', 'valorTotal', 'tipo', 'tipoDoc'),
+                    .select('direcao', 'tpNF', 'status', 'valorTotal', 'tipo', 'tipoDoc', 'eventos', 'cStat'),
                 { label: `declaracao-faturamento ${empresaId} ${competencia}`, maxDocs: 20000 },
             );
             let valor = 0;
             let docs = 0;
             for (const s of snaps) {
                 const d = s.data() || {};
-                if (CANCELADOS.has(d.status)) continue;
+                if (docCancelado(d)) continue;
                 if (direcaoEfetivaDoc(d) !== 'saida') continue;
                 valor = r2(valor + (Number(d.valorTotal) || 0));
                 docs++;
