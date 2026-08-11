@@ -57,7 +57,7 @@ describe('extrairAtividadesDeclaradas', () => {
         expect(atividade).toMatchObject({ idAtividade: 14, valorAtividade: 200, ocorrencias: 2 });
     });
 
-    it('traz as qualificacoes tributarias sem repetir', () => {
+    it('traz as qualificacoes tributarias sem repetir, com o BRUTO da declaração aceita', () => {
         const resposta = {
             atividades: [{
                 idAtividade: 1,
@@ -68,8 +68,26 @@ describe('extrairAtividadesDeclaradas', () => {
                 ],
             }],
         };
+        // `bruto` carrega a qualificação como veio — é a DESCOBERTA que carimba
+        // os nomes de campo (parcela de isenção etc.) antes de o app declarar.
         expect(extrairAtividadesDeclaradas(resposta)[0].qualificacoes)
-            .toEqual([{ codigoTributo: 1007, id: 8 }]);
+            .toEqual([{ codigoTributo: 1007, id: 8, bruto: { codigoTributo: 1007, id: 8 } }]);
+    });
+
+    it('parcelas DIFERENTES do mesmo tributo são achados diferentes (não dedupe pelo par tributo+id)', () => {
+        const resposta = {
+            atividades: [{
+                idAtividade: 1,
+                valorAtividade: 10,
+                receitasAtividade: [
+                    // Isenção de ICMS com parcelas distintas (caso Jaguarexport):
+                    // o VALOR da parcela é parte do achado.
+                    { valor: 5, qualificacoesTributarias: [{ codigoTributo: 1007, id: 8, parcelaIsencao: 5 }] },
+                    { valor: 5, qualificacoesTributarias: [{ codigoTributo: 1007, id: 8, parcelaIsencao: 3 }] },
+                ],
+            }],
+        };
+        expect(extrairAtividadesDeclaradas(resposta)[0].qualificacoes).toHaveLength(2);
     });
 
     it('resposta sem atividade nenhuma devolve lista vazia (nao inventa)', () => {

@@ -427,6 +427,20 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                                             {a.rotulo ? ` — ${a.rotulo}` : ''}
                                             {' · '}R$ {a.valorAtividade.toFixed(2).replace('.', ',')}
                                             {!a.rotulo && <b style={{ color: '#7c3aed' }}> ← ainda não mapeado no app</b>}
+                                            {(a.qualificacoes?.length || 0) > 0 && (
+                                                <div style={{ margin: '4px 0 6px', padding: 6, borderRadius: 6, background: '#FFFBEB', fontSize: 11 }}>
+                                                    <b>Qualificações por tributo</b> (imunidade/isenção — como a Receita aceitou):
+                                                    {a.qualificacoes.map((q, i) => (
+                                                        <pre key={i} style={{ margin: '3px 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 10, background: '#FEF3C7', padding: 4, borderRadius: 4 }}>
+                                                            {`tributo ${q.codigoTributo ?? '?'} · id ${q.id ?? '?'} · ${JSON.stringify(q.bruto ?? {})}`}
+                                                        </pre>
+                                                    ))}
+                                                    <span style={{ color: '#92400e' }}>
+                                                        Copie este bloco e mande no chat — é a estrutura REAL que destrava
+                                                        a isenção/imunidade no app (nada de campo chutado).
+                                                    </span>
+                                                </div>
+                                            )}
                                         </li>
                                     ))}
                                 </ul>

@@ -39,7 +39,17 @@ function round2(n) {
     return Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
 }
 
-/** Qualificações tributárias da receita, quando vierem junto. */
+/**
+ * Qualificações tributárias da receita, quando vierem junto — imunidade,
+ * isenção/redução, exigibilidade suspensa etc., POR TRIBUTO (o PGDAS-D
+ * qualifica ICMS e IPI em campos separados — caso POLO CULTURAL, 11/08).
+ *
+ * Além do par (codigoTributo, id), leva a qualificação INTEIRA em `bruto`:
+ * é a etapa de DESCOBERTA — os nomes reais dos campos (parcela de isenção,
+ * percentual de redução...) saem de uma declaração ACEITA, nunca de chute
+ * (Jaguarexport 07/2026 isenção ICMS; POLO CULTURAL 06/2026 imunidade
+ * ICMS+IPI). É com esse bruto que o mapper vai ser ligado depois.
+ */
 function extrairQualificacoes(receitas) {
     const out = [];
     for (const receita of Array.isArray(receitas) ? receitas : []) {
@@ -47,7 +57,7 @@ function extrairQualificacoes(receitas) {
         for (const q of Array.isArray(quals) ? quals : []) {
             const codigoTributo = numeroOuNull(q?.codigoTributo ?? q?.codTributo);
             const id = numeroOuNull(q?.id ?? q?.idQualificacao);
-            if (codigoTributo !== null || id !== null) out.push({ codigoTributo, id });
+            if (codigoTributo !== null || id !== null) out.push({ codigoTributo, id, bruto: q });
         }
     }
     return out;
@@ -83,8 +93,11 @@ export function extrairAtividadesDeclaradas(resposta) {
             );
             atual.ocorrencias += 1;
             for (const q of extrairQualificacoes(parsed.receitasAtividade ?? parsed.receitas)) {
+                // Dedup pelo CONTEÚDO (não só tributo+id): duas parcelas do
+                // mesmo tributo com valores diferentes são achados diferentes.
+                const chaveQ = JSON.stringify([q.codigoTributo, q.id, q.bruto]);
                 const jaTem = atual.qualificacoes
-                    .some((x) => x.codigoTributo === q.codigoTributo && x.id === q.id);
+                    .some((x) => JSON.stringify([x.codigoTributo, x.id, x.bruto]) === chaveQ);
                 if (!jaTem) atual.qualificacoes.push(q);
             }
             porId.set(idAtividade, atual);
