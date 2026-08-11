@@ -872,6 +872,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   cálculo: é o app REPRODUZINDO a colcha de retalhos. **REGRA Nº 1: um catálogo
   só, no backend, puro e testado; o front lê dele** — e enquanto ele não cobrir
   o regime do cliente, a etapa 4 NÃO pode dar verde (trava T1 do escopo).
+  ✅ **FEITO 11/08 — `sefaz-backend/catalogo-obrigacoes.js` (23 testes)**: cron e
+  front leem do MESMO módulo (o front virou porta fina, sem catálogo próprio);
+  Presumido EXISTE; regime sai de `resolverRegime` e `lucro_empresas` sem
+  `regimePadrao` vira INDEFINIDO (recebe só o comum aos dois e entra em
+  `empresasSemRegime` no log — adivinhar regime é adivinhar imposto). Nome do
+  campo é `obrigacao` (o mesmo do Firestore e do dedup), não "codigo".
+  🚩 **ACHADO NO CAMINHO**: os dois catálogos ajustavam dia não útil em direções
+  OPOSTAS — o cron ANTECIPAVA, a tela PRORROGAVA, então a MESMA obrigação tinha
+  duas datas (FGTS 05/2026: 19/06 na tarefa, 22/06 na tela). Agora a direção é
+  CAMPO da obrigação com `baseLegal`; onde discordavam ficou o que a TELA faz (é
+  o que a equipe usa; trocar por dedução seria inventar prazo) e a pendência sai
+  em `pendenciasDeConfirmacao()`. **PENDENTE DO PAULO/ALEXANDRE**: direção do
+  FGTS/INSS/PIS-COFINS e a condição de folha do INSS patronal.
+  **MATA-BURRO** (palavra do Paulo, 11/08: *"colaborador que não sabe até hoje
+  não vai saber amanhã; o que muda o jogo são os freios — prazos, obrigações,
+  entregas, quem faz e como faz"*): trava é BARREIRA FÍSICA no caminho, não
+  aviso que se lê nem treinamento. Quem não sabe não precisa saber — precisa não
+  passar.
   **O PRINT É EVIDÊNCIA, NÃO NARRATIVA** (Paulo, 11/08: *"o colaborador não sabe
   falar o que quer pq não sabe fazer e não sabe explicar"*): NÃO propor campo de
   "descreva seu problema" — descrição errada de quem não sabe é premissa falsa,

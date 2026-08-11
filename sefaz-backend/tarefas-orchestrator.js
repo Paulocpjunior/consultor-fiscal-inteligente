@@ -1,13 +1,20 @@
 // ============================================================================
 // sefaz-backend/tarefas-orchestrator.js
-// Cron mensal: cria tarefas automaticas (DAS, DCTFWeb, FGTS, SPED) pra
-// todas as empresas, com base no regime.
+// Cron mensal: cria as tarefas do mes de cada cliente, por REGIME.
 //
-// Mapeamento de colecao Firestore -> regime:
-//   simples_empresas -> SIMPLES   -> DAS + FGTS
-//   lucro_empresas   -> LUCRO_REAL -> DCTFWeb + FGTS + SPED
-//     (nao distingue Presumido de Real; ambos tem as mesmas 3 obrigacoes
-//     mensais. Diferenciacao fica pra v2 quando houver campo subregime.)
+// O CATALOGO NAO MORA MAIS AQUI (11/08). Ele tinha uma copia propria, pobre e
+// divergente das outras duas do projeto: so conhecia SIMPLES=DAS+FGTS e
+// LUCRO_REAL=DCTFWeb+FGTS+SPED, e mapeava `lucro_empresas -> LUCRO_REAL`
+// SEMPRE -- ou seja, LUCRO PRESUMIDO NAO EXISTIA para o cron que gera o mes.
+// PIS/COFINS, EFD-Contribuicoes e IRPJ/CSLL trimestral nunca viravam tarefa,
+// entao nao apareciam em Vencimentos, nao chegavam ao Guia do mes, e o farol
+// dizia "mes fechado" com obrigacao nunca listada.
+//
+// Agora a fonte e `catalogo-obrigacoes.js` (puro, testado), a mesma que o front
+// le. Regime sai de `resolverRegime` -- e cliente do Lucro SEM `regimePadrao`
+// nao vira Real por default: vira INDEFINIDO, recebe so o que os dois regimes
+// tem em comum e entra em `empresasSemRegime` no log. Adivinhar regime e
+// adivinhar imposto.
 //
 // Idempotente: se rodar 2x no mesmo mes, nao duplica (dedup por
 // empresaId+obrigacao+competencia).
@@ -19,6 +26,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { resolverRegime, obrigacoesAplicaveis, calcularVencimento } from './catalogo-obrigacoes.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -27,41 +35,7 @@ function fa() {
     return admin;
 }
 
-// Mesmo mapa do services/calendarioFiscal.ts (mantido em sync manual).
-const OBRIGACOES_POR_REGIME = {
-    SIMPLES: [
-        { obrigacao: 'DAS',     diaVencimento: 20, mesesApos: 1, label: 'DAS' },
-        { obrigacao: 'FGTS',    diaVencimento: 20, mesesApos: 1, label: 'FGTS Digital' },
-    ],
-    LUCRO_REAL: [
-        { obrigacao: 'DCTFWEB', diaVencimento: 15, mesesApos: 1, label: 'DCTFWeb' },
-        { obrigacao: 'FGTS',    diaVencimento: 20, mesesApos: 1, label: 'FGTS Digital' },
-        { obrigacao: 'SPED',    diaVencimento: 25, mesesApos: 2, label: 'SPED Fiscal' },
-    ],
-};
-
-const COLECOES_REGIMES = [
-    { colecao: 'simples_empresas', regime: 'SIMPLES' },
-    { colecao: 'lucro_empresas',   regime: 'LUCRO_REAL' },
-];
-
-function anteciparFimDeSemana(d) {
-    const dia = d.getDay();
-    if (dia === 6) d.setDate(d.getDate() - 1);
-    else if (dia === 0) d.setDate(d.getDate() - 2);
-    return d;
-}
-
-function calcularVencimento(competencia, regra) {
-    const [mesStr, anoStr] = competencia.split('/');
-    const mes = parseInt(mesStr, 10);
-    const ano = parseInt(anoStr, 10);
-    if (isNaN(mes) || isNaN(ano)) {
-        throw new Error(`competencia invalida: "${competencia}"`);
-    }
-    const dataBase = new Date(ano, mes - 1 + regra.mesesApos, regra.diaVencimento);
-    return anteciparFimDeSemana(dataBase);
-}
+const COLECOES = ['simples_empresas', 'lucro_empresas'];
 
 function competenciaAtual() {
     const d = new Date();
@@ -143,13 +117,14 @@ export async function executarCronMensal(competencia, opts = {}) {
         empresasPuladas: 0,
         tarefasCriadas: 0,
         tarefasJaExistiam: 0,
+        // Farol honesto: cliente sem regime NAO some do log — ele aparece
+        // nomeado, porque o mes dele saiu incompleto de proposito.
+        empresasSemRegime: [],
+        porRegime: {},
         erros: [],
     };
 
-    for (const { colecao, regime } of COLECOES_REGIMES) {
-        const regras = OBRIGACOES_POR_REGIME[regime];
-        if (!regras || regras.length === 0) continue;
-
+    for (const colecao of COLECOES) {
         let snap;
         try {
             if (opts.empresaIdEspecifica) {
@@ -177,6 +152,15 @@ export async function executarCronMensal(competencia, opts = {}) {
                 const titular = await getTitularDaEmpresa(db, empresaId);
                 if (!titular) log.empresasSemCarteira++;
 
+                // Regime por CLIENTE, nao pela colecao: lucro_empresas pode ser
+                // Presumido ou Real, e sem `regimePadrao` nao se escolhe um.
+                const { regime, motivo } = resolverRegime({ colecao, regimePadrao: emp.regimePadrao });
+                if (regime === 'INDEFINIDO') {
+                    log.empresasSemRegime.push({ empresaId, empresaNome, empresaCnpj, motivo });
+                }
+                log.porRegime[regime] = (log.porRegime[regime] || 0) + 1;
+
+                const regras = obrigacoesAplicaveis(regime, comp);
                 for (const regra of regras) {
                     const r = await criarTarefaSeFalta(db, {
                         empresaId, empresaCnpj, empresaNome, regra,
