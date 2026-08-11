@@ -383,6 +383,11 @@ export function classificarNota(doc, opts = {}) {
         dhEmi: d.dhEmi || '',
         competencia: d.competencia || '',
         direcao,
+        // NOTA PRÓPRIA DE ENTRADA (tpNF=0, o CLIENTE emite — art. 136): é a que
+        // se escritura. A NF-e do PRODUTOR (NOTA 1) é documento de origem e NÃO
+        // se escritura (RC 33068/2025) — a dedup lá embaixo remove a do produtor
+        // quando há a de entrada, pra não dobrar a FUNRURAL.
+        notaPropria: notaPropriaEntrada,
         cfops,
         valor,
         fornecedor: {
@@ -579,8 +584,55 @@ function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevol
  * @param {object} [p.empresa]     { id, nome, cnpj, ehCooperativa, ehProdutorRuralPF, funruralSubRogacao, adquireDeProdutor }
  * @param {object} [p.fornecedores] mapa { [cpfCnpj]: cadastro }
  */
+function chaveProdutorComp(n) {
+    return `${soDigitos(n.fornecedor?.doc)}|${n.competencia || ''}`;
+}
+
+/**
+ * DEDUP art. 136 / RC 33068/2025 — a compra de produtor rural tem DUAS notas da
+ * MESMA entrada: a NF-e do PRODUTOR (NOTA 1) e a nota própria de ENTRADA que o
+ * cliente emite (NOTA 2, tpNF=0). A SEFAZ é categórica: o adquirente escritura
+ * SÓ a que ELE emitiu, NUNCA a do produtor (RC 33068/2025). Como o CFI captura
+ * as duas (confirmado no par real DAMIÃO×EDUARDO GUERRA, R$ 8.400 cada, sem
+ * refNFe ligando), sem isto a FUNRURAL/DIPAM dobrava (R$ 136,92 → R$ 273,84).
+ *
+ * Régua por PRODUTOR × COMPETÊNCIA (não há refNFe, então pareia pelo produtor):
+ *   · Conta TODAS as notas próprias de entrada (NOTA 2) — são as escrituradas.
+ *   · Exclui a NF-e do produtor (NOTA 1) APENAS quando há uma nota de entrada do
+ *     mesmo produtor pra cobri-la (é o PAR que dobra).
+ *   · NF-e de produtor SEM nota de entrada correspondente fica INTACTA: nada de
+ *     alerta. Muitos clientes escrituram a própria nota do produtor direto (só
+ *     uma nota por operação — não dobra); nagá-los seria alarme sem ação. A
+ *     dedup só desfaz DUPLICIDADE, não impõe processo.
+ */
+export function dedupNotaProdutorComEntrada(notas) {
+    const lista = Array.isArray(notas) ? notas : [];
+    const orcamento = new Map(); // produtor×comp -> quantas notas de entrada há
+    for (const n of lista) {
+        if (n.notaPropria && n.funrural?.aplica) {
+            const k = chaveProdutorComp(n);
+            orcamento.set(k, (orcamento.get(k) || 0) + 1);
+        }
+    }
+    return lista.map((n) => {
+        const ehNotaDoProdutor = !n.notaPropria && n.direcao === 'entrada' && n.funrural?.aplica;
+        if (!ehNotaDoProdutor) return n;
+        const k = chaveProdutorComp(n);
+        if ((orcamento.get(k) || 0) <= 0) return n; // sem par → não dobra → intacta
+        orcamento.set(k, orcamento.get(k) - 1);
+        const motivo = 'NF-e do produtor: documento de origem — a escriturada é a nota de entrada própria '
+            + '(art. 136, I, "a" do RICMS/SP; RC 33068/2025). Fora da FUNRURAL/DIPAM para não dobrar.';
+        return {
+            ...n,
+            notaOrigemProdutor: true,
+            dipam: { ...n.dipam, aplica: false, motivo },
+            funrural: { ...n.funrural, aplica: false, motivo },
+        };
+    });
+}
+
 export function montarDipamCompetencia({ documentos = [], competencia, empresa = {}, fornecedores = {}, tabelaFunrural = ALIQUOTAS_FUNRURAL_PF }) {
-    const notas = (documentos || [])
+    const notas = dedupNotaProdutorComEntrada((documentos || [])
         .filter((d) => d && !d._merged_into && !d._deleted)
         .map((d) => classificarNota(d, {
             cadastro: fornecedores[soDigitos((d.emitente || d.prestador || {}).cnpjCpf)]
@@ -588,7 +640,7 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
                 || null,
             empresa,
             tabelaFunrural,
-        }));
+        })));
 
     const doDipam = notas.filter((n) => n.dipam.aplica);
     const doFunrural = notas.filter((n) => n.funrural.aplica);

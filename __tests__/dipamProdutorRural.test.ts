@@ -266,6 +266,35 @@ describe('nota própria de ENTRADA (tpNF=0) — o formato real da compra de prod
         expect(n.direcao).toBe('saida');
         expect(n.funrural.aplica).toBe(false);
     });
+
+    // ── DEDUP art. 136 / RC 33068: duas notas da MESMA compra não podem dobrar ──
+    describe('dedup NF-e do produtor × nota de entrada (art. 136 / RC 33068)', () => {
+        it('produtor + nota de entrada do MESMO produtor → FUNRURAL conta UMA vez', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [notaEntrada(), notaPropria()], // NOTA 1 (produtor) + NOTA 2 (entrada), mesmo produtor 28585062649
+                competencia: '2026-06',
+                empresa,
+            });
+            const comFunrural = painel.notas.filter((n: any) => n.funrural.aplica);
+            expect(comFunrural).toHaveLength(1);                 // só a de entrada conta
+            expect(comFunrural[0].notaPropria).toBe(true);
+            const daProdutor = painel.notas.find((n: any) => n.notaOrigemProdutor);
+            expect(daProdutor).toBeTruthy();
+            expect(daProdutor.funrural.aplica).toBe(false);      // a do produtor sai da conta
+            expect(daProdutor.funrural.motivo).toMatch(/art\. ?136|RC 33068/);
+        });
+
+        it('produtor SEM par (só uma nota da operação) fica INTACTO — sem dedup, sem alarme', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [notaEntrada()], // uma nota só → não dobra → não mexe
+                competencia: '2026-06',
+                empresa,
+            });
+            const comFunrural = painel.notas.filter((n: any) => n.funrural.aplica);
+            expect(comFunrural).toHaveLength(1);                          // continua contada
+            expect(comFunrural[0].notaOrigemProdutor).toBeFalsy();       // NÃO foi excluída
+        });
+    });
 });
 
 describe('DIPAM 1.1 — quem entra e quem fica de fora', () => {
