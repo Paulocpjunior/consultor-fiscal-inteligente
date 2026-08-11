@@ -151,9 +151,16 @@ R-2055 FUNRURAL — apura aqui, declara no 📊 Contábil) · **CIAP/Bloco G** �
 
 ---
 
-## 5. As travas (o que o sistema RECUSA fazer)
+## 5. As travas — o **mata-burro** (o que o sistema RECUSA fazer)
 
-Trava = o app **para** e diz por quê. É o oposto do Excel, onde tudo é possível.
+> Paulo (11/08): *"colaborador que não sabe até hoje não vai saber amanhã. O que
+> muda o jogo são os freios que estamos criando — prazos, obrigações, entregas,
+> quem faz e como faz. Eu chamo de mata-burro."*
+
+A palavra manda no desenho: **mata-burro é barreira física no caminho, não aviso
+que se lê.** Quem não sabe não é obrigado a saber — é obrigado a *não passar*.
+Logo, trava não é texto de ajuda nem treinamento: é o app **parando** e dizendo
+por quê. É o oposto do Excel, onde tudo é possível e nada avisa.
 
 **Já no ar — não afrouxar:**
 - **Guia em lote pela API: proibido.** Imposto sai uma a uma, com preview.
@@ -168,14 +175,25 @@ Trava = o app **para** e diz por quê. É o oposto do Excel, onde tudo é possí
 - **Inventário/valor sem informação** ⇒ bloco vazio + alerta, nunca zero.
 - **Departamento desconhecido** é recusado na gravação, nunca descartado.
 
-**A construir (deste escopo):**
-- **T1 — Obrigação não listada não deixa o mês fechar.** Enquanto o catálogo
-  único (§3) não cobrir o regime do cliente, a etapa 4 não pode dar verde: hoje
-  ela dá.
-- **T2 — Competência sem catálogo aplicável = âmbar nomeado**, nunca silêncio.
-- **T3 — Cliente sem regime definido não entra na carteira como "ok"**: sem
-  regime não há mês, e adivinhar regime é adivinhar imposto.
-- **T4 — Fechamento do mês exige as 5 etapas com prova**; "mês fechado" vira um
+**No ar desde 11/08 — `sefaz-backend/catalogo-obrigacoes.js` (23 testes):**
+- **T1 — cobertura incompleta não deixa o mês fechar.** `mesDoCliente()` devolve
+  `coberturaIncompleta: true` quando o catálogo não cobre o cliente; a etapa 4
+  não pode dar verde nesse caso.
+- **T2 — competência inválida LANÇA.** Não devolve mês vazio em silêncio (a
+  obrigação mensal passava batido antes de validar a competência).
+- **T3 — regime não se adivinha.** `lucro_empresas` sem `regimePadrao` vira
+  `INDEFINIDO`: recebe só o que os dois regimes do Lucro têm em comum, entra em
+  `empresasSemRegime` no log do cron e acende com a ação ("defina o Regime
+  padrão na ficha"). Adivinhar regime é adivinhar imposto.
+- **T5 — obrigação com condição não avaliável não vira tarefa, mas é NOMEADA.**
+  INSS patronal exige folha, e a folha mora no módulo de DP — gerar pra todos
+  criaria "atrasada" falsa todo mês, que é como o farol morre.
+- **T6 — prazo não se inventa.** Cada obrigação declara `baseLegal` e a direção
+  do ajuste de dia não útil; o que não foi conferido sai em
+  `pendenciasDeConfirmacao()`.
+
+**A construir:**
+- **T4 — fechamento do mês exige as 5 etapas com prova**; "mês fechado" vira
   carimbo com data e autor (é o que define **migrado** — §8).
 
 ---
@@ -201,8 +219,13 @@ Trava = o app **para** e diz por quê. É o oposto do Excel, onde tudo é possí
 Cada linha aqui é uma promessa: enquanto existir, alguém está usando Excel ou
 memória.
 
-1. **Catálogo único de obrigações por regime** (§3) — o maior, e o que destrava
-   o "mês claro". Inclui Presumido existir.
+1. ~~Catálogo único de obrigações por regime~~ **FEITO 11/08**
+   (`sefaz-backend/catalogo-obrigacoes.js`): o cron e o front leem do MESMO
+   módulo, Presumido existe, e a divergência antecipa × prorroga virou campo
+   explícito. **Pendente do Paulo/Alexandre**: rodar `pendenciasDeConfirmacao()`
+   e confirmar (a) a direção do ajuste do FGTS/INSS/PIS-COFINS — o cron
+   antecipava e a tela prorrogava, ficou PRORROGA que é o que a equipe vê;
+   (b) a condição de folha do INSS patronal.
 2. **Carimbo de mês fechado / cliente migrado** (T4) — hoje não existe estado.
 3. **Fila de conferência no PVA** — E510 (+backfill jun/jul), H005, E250, G125
    estão 🟡 esperando prova humana e vivem em comentário de arquivo.
