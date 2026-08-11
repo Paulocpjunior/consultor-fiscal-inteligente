@@ -1452,6 +1452,10 @@ export interface DocumentoFiscalItem {
     vIPI: number;
     /** Alíquota do IPI em %. */
     aliqIPI?: number;
+    /** CST do IPI (IPITrib tributado / IPINT não-tributado) — insumo do E510 por CFOP+CST_IPI. Ausente quando o item não tem IPI. */
+    cstIpi?: string;
+    /** Código de enquadramento legal do IPI (cEnq). */
+    cEnqIpi?: string;
     vPIS: number;
     /** Alíquota do PIS em %. */
     aliqPIS?: number;

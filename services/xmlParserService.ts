@@ -205,12 +205,20 @@ export function parseNFeXml(xmlText: string): ParsedXml {
 
         let vIPI = 0;
         let aliqIPI = 0;
+        // CST do IPI para o E510 (por CFOP+CST_IPI): tributado em IPITrib,
+        // não-tributado em IPINT — os dois entram no E510. Ausente = undefined
+        // (item sem IPI), nunca "0".
+        let cstIpi: string | undefined;
+        let cEnqIpi: string | undefined;
         if (ipi) {
             const ipiTrib = ipi.getElementsByTagName('IPITrib')[0];
+            const ipiNt = ipi.getElementsByTagName('IPINT')[0];
             if (ipiTrib) {
                 vIPI = num(getTextContent(ipiTrib, 'vIPI'));
                 aliqIPI = num(getTextContent(ipiTrib, 'pIPI'));
             }
+            cstIpi = getTextContent(ipiTrib, 'CST') || getTextContent(ipiNt, 'CST') || undefined;
+            cEnqIpi = getTextContent(ipi, 'cEnq') || undefined;
         }
 
         let vPIS = 0;
@@ -255,6 +263,8 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             pRedBC,
             vIPI,
             aliqIPI,
+            cstIpi,
+            cEnqIpi,
             vPIS,
             aliqPIS,
             vCOFINS,

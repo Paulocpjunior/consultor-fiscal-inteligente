@@ -127,7 +127,7 @@ function num(v) {
  * Extrai todos os itens (<det>) de uma NFe completa.
  * Retorna [] se o XML for resumo (resNFe) ou nao tiver <det>.
  */
-function extrairItens(xml) {
+export function extrairItens(xml) {
   const dets = pickAllBlocks(xml, 'det');
   const itens = [];
 
@@ -148,6 +148,14 @@ function extrairItens(xml) {
 
     // IPI tem IPITrib aninhado
     const ipiTribInner = pickFirstBlock(ipi, 'IPITrib');
+    // CST do IPI para o E510 (consolidação por CFOP+CST_IPI). Pode vir em
+    // IPITrib (tributado: 50/99) OU IPINT (não-tributado/isento/imune:
+    // 01-05/51-55) — e o não-tributado TAMBÉM entra no E510, por isso lê os
+    // dois. Ausente = null (item sem IPI), NUNCA "0" (regra: campo fiscal não
+    // recebe default). cEnq é o código de enquadramento legal do IPI.
+    const ipiNtInner = pickFirstBlock(ipi, 'IPINT');
+    const cstIpi = pickTag(ipiTribInner, 'CST') || pickTag(ipiNtInner, 'CST') || null;
+    const cEnqIpi = pickTag(ipi, 'cEnq') || null;
 
     // PIS: primeiro filho (PISAliq, PISNT, PISOutr, etc.)
     const pisInnerMatch = pis.match(/<(PIS\w+)\b[^>]*>([\s\S]*?)<\/\1>/);
@@ -183,6 +191,8 @@ function extrairItens(xml) {
       pRedBC: num(pickTag(icmsInner, 'pRedBC')),
       vIPI: num(pickTag(ipiTribInner, 'vIPI')),
       aliqIPI: num(pickTag(ipiTribInner, 'pIPI')),
+      cstIpi,
+      cEnqIpi,
       vPIS: num(pickTag(pisInner, 'vPIS')),
       aliqPIS: num(pickTag(pisInner, 'pPIS')),
       vCOFINS: num(pickTag(cofinsInner, 'vCOFINS')),
