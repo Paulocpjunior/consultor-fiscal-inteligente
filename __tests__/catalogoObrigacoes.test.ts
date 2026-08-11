@@ -1,4 +1,5 @@
 import {
+    assertCompetencia,
     resolverRegime,
     obrigacoesAplicaveis,
     calcularVencimento,
@@ -90,6 +91,15 @@ describe('frequência decide se a obrigação nasce no mês', () => {
 
     it('competência inválida LANÇA — não devolve mês vazio em silêncio', () => {
         expect(() => obrigacoesAplicaveis('SIMPLES', '2026-05')).toThrow(/competencia invalida/i);
+    });
+
+    // Quem processa em LOTE (o cron do dia 1) valida UMA vez, na porta: sem
+    // isso o erro se repetiria por cliente e viraria centenas de linhas de log,
+    // com zero tarefa criada e nenhuma causa óbvia.
+    it('assertCompetencia recusa na porta e diz o formato esperado', () => {
+        expect(() => assertCompetencia('2026-05')).toThrow(/esperado MM\/AAAA/i);
+        expect(() => assertCompetencia('13/2026')).toThrow(/competencia invalida/i);
+        expect(assertCompetencia('07/2026')).toBe('07/2026');
     });
 });
 

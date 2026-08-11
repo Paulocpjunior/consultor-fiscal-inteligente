@@ -26,7 +26,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
-import { resolverRegime, obrigacoesAplicaveis, calcularVencimento } from './catalogo-obrigacoes.js';
+import { resolverRegime, obrigacoesAplicaveis, calcularVencimento, assertCompetencia } from './catalogo-obrigacoes.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -104,9 +104,13 @@ async function criarTarefaSeFalta(db, params) {
  * @returns log da execucao
  */
 export async function executarCronMensal(competencia, opts = {}) {
+    // Valida a competencia ANTES de inicializar admin/ler colecao: o catalogo
+    // lanca em competencia invalida, e sem esta linha o erro estouraria DENTRO
+    // do try por empresa — uma falha de entrada viraria centenas de erros de
+    // empresa, com zero tarefa criada e nenhuma causa obvia no log.
+    const comp = assertCompetencia(competencia || competenciaAtual());
     fa();
     const db = admin.firestore();
-    const comp = competencia || competenciaAtual();
 
     const inicio = new Date();
     const log = {
