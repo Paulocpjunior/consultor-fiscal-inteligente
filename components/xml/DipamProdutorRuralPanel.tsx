@@ -12,7 +12,7 @@
  * PF fica FORA do total e aparece na lista de pendências com a ação — lançar
  * PJ no código 1.1 é o erro que a SEFAZ desconsidera (Manual da DIPAM 2026).
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     carregarPainelDipam, varrerDipam, salvarProdutorRural, textoRegistro1400,
     type DipamPainel, type DipamVarreduraLinha,
@@ -70,6 +70,16 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
         setCarregandoPainel(true);
         try { setPainel(await carregarPainelDipam(id, competencia)); } finally { setCarregandoPainel(false); }
     }, [competencia]);
+
+    // O detalhe do cliente renderiza DEPOIS da lista (que tem até 60 linhas), então
+    // clicar "abrir" no fim da lista abria o painel ABAIXO da dobra — parecia que o
+    // botão não fazia nada. Rola até ele assim que carrega.
+    const detalheRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (painel?.ok && empresaId && !carregandoPainel) {
+            detalheRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, [painel, empresaId, carregandoPainel]);
 
     useEffect(() => { setVarredura(null); setPainel(null); setEmpresaId(null); }, [competencia]);
 
@@ -198,7 +208,9 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
             {painel && !painel.ok && <p className="text-sm text-red-600 dark:text-red-400">{painel.error}</p>}
 
             {painel?.ok && empresaId && (
-                <DetalheEmpresa painel={painel} isAdmin={isAdmin} onCopiar1400={copiar1400} copiado={copiado} onRecarregar={() => abrirEmpresa(empresaId)} />
+                <div ref={detalheRef} className="scroll-mt-4">
+                    <DetalheEmpresa painel={painel} isAdmin={isAdmin} onCopiar1400={copiar1400} copiado={copiado} onRecarregar={() => abrirEmpresa(empresaId)} />
+                </div>
             )}
         </div>
     );

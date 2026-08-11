@@ -11,6 +11,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 
 function getDb() {
     if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -125,7 +126,11 @@ export function lerCondicaoRural(empresa) {
  */
 export function documentosDaContraparte(notas = []) {
     const out = [];
-    for (const n of notas) {
+    for (const raw of notas) {
+        // Mesma armadilha do painel: doc do importer principal vem com os
+        // participantes em campos chatos. Normaliza antes de ler a contraparte,
+        // senão o mapa de fornecedores sai vazio e o cadastro nunca é achado.
+        const n = normalizarParticipantesDoc(raw);
         const usaDestinatario = n?.direcao === 'saida' || String(n?.tpNF ?? '') === '0';
         const p = usaDestinatario
             ? (n.destinatario || n.tomador)

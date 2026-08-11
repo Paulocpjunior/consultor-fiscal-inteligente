@@ -25,6 +25,7 @@ import { fetchAllDocs } from './firestore-paginate.js';
 import {
     montarDipamCompetencia,
     identificarNaturezaFornecedor,
+    normalizarParticipantesDoc,
 } from './dipam-produtor-rural.js';
 import {
     carregarProdutoresRurais, salvarProdutorRural, lerCondicaoRural,
@@ -171,12 +172,19 @@ router.get('/varredura', requireAuth, async (req, res) => {
                 // tpNF + destinatario: a compra de produtor costuma ser NOTA
                 // PRÓPRIA DE ENTRADA (tpNF=0, emitida pelo cliente, produtor no
                 // bloco destinatário) — sem esses campos ela passaria batida.
-                .select('empresaId', 'direcao', 'status', 'emitente', 'destinatario', 'tpNF', 'valorTotal'),
+                // Os campos CHATOS (cnpj*/xNome*/ie*/uf*) são a forma que o
+                // importer PRINCIPAL grava; sem eles no projection a contraparte
+                // some e todo mundo vira "indefinido" (bug 07/2026 EDUARDO GUERRA).
+                .select(
+                    'empresaId', 'direcao', 'status', 'emitente', 'destinatario', 'tpNF', 'valorTotal',
+                    'cnpjEmit', 'xNomeEmit', 'ufEmit', 'codMunEmit',
+                    'cnpjDest', 'xNomeDest', 'ieDest', 'ufDest', 'codMunDest',
+                ),
             { label: `dipam varredura ${competencia}`, maxDocs: 80000 },
         );
         const candidatos = new Map();
         for (const s of leves) {
-            const d = s.data() || {};
+            const d = normalizarParticipantesDoc(s.data() || {});
             const emp = empresas.get(d.empresaId);
             if (!emp) continue;
             // Nota própria de entrada = tpNF 0 com o CLIENTE de emitente
