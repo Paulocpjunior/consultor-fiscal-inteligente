@@ -63,6 +63,24 @@ describe('E510 — consolidação por CFOP + CST_IPI', () => {
         expect(Number(somaIpiSaida.toFixed(2))).toBe(11742.05);
     });
 
+    it('ENTRADA converte o CST de saída do fornecedor (IN RFB 932/09): 50→00, 55→05, 99→49', () => {
+        // Provado contra 4 XMLs × E510 aceito: ACOS emite 50 → EXPERTE escritura 00.
+        const compra50 = montarLinhasE510([nota('entrada', [{ cfop: '1101', cstIpi: '50', vProd: 100, vBcIpi: 100, vIPI: 3.25 }])]);
+        expect(limpo(compra50.linhas)[0]).toBe('|E510|1101|00|103,25|100,00|3,25|');
+        // Galvanização emite 55 (suspensão) → EXPERTE escritura 05.
+        const retorno55 = montarLinhasE510([nota('entrada', [{ cfop: '1124', cstIpi: '55', vProd: 2980.32, vBcIpi: 0, vIPI: 0 }])]);
+        expect(limpo(retorno55.linhas)[0]).toBe('|E510|1124|05|2980,32|0,00|0,00|');
+        // Fornecedor emite 99 (outras) → EXPERTE escritura 49.
+        const outras99 = montarLinhasE510([nota('entrada', [{ cfop: '1407', cstIpi: '99', vProd: 5348.28, vBcIpi: 0, vIPI: 0 }])]);
+        expect(limpo(outras99.linhas)[0]).toBe('|E510|1407|49|5348,28|0,00|0,00|');
+    });
+
+    it('SAÍDA mantém o CST da própria nota (não normaliza 99→55); 99 de saída ACENDE aviso', () => {
+        const { linhas, avisos } = montarLinhasE510([nota('saida', [{ cfop: '5901', cstIpi: '99', vProd: 15000, vBcIpi: 0, vIPI: 0 }])]);
+        expect(limpo(linhas)[0]).toBe('|E510|5901|99|15000,00|0,00|0,00|'); // fiel à nota, NÃO inventa 55
+        expect(avisos.join(' ')).toMatch(/99 \(outras saídas\)|confira na origem/i);
+    });
+
     it('IPI destacado sem CST capturado NÃO entra e ACENDE aviso (regra: CST não se chuta)', () => {
         const { linhas, avisos } = montarLinhasE510([
             nota('saida', [{ cfop: '5101', vIPI: 100 /* sem cstIpi */ }]),
