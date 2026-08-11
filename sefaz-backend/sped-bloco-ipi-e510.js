@@ -34,6 +34,34 @@ function cst2(v) {
     return String(v ?? '').trim().padStart(2, '0').slice(-2);
 }
 
+// ── CST-IPI de ESCRITURAÇÃO: saída → entrada ────────────────────────────────
+// PROVADO contra 4 XMLs-fonte × E510 aceito (11/08, cliente EXPERTE):
+//   · ACOS emite CST 50 (saída tributada) → EXPERTE escritura 00 (entrada c/ crédito)
+//   · GALVANIZAÇÃO emite CST 55 (saída suspensão) → EXPERTE escritura 05 (entrada suspensão)
+//   · fornecedor emite 99 (outras saídas) → EXPERTE escritura 49 (outras entradas)
+// A regra é a correspondência OFICIAL da IN RFB 932/2009: o dígito da UNIDADE
+// casa (5x ↔ 0x; 99 ↔ 49). Na compra, a nota do fornecedor é SAÍDA dele e vira
+// ENTRADA do destinatário — o CST-IPI acompanha, igual à conversão de CFOP.
+const SAIDA_PARA_ENTRADA_CST_IPI = {
+    50: '00', 51: '01', 52: '02', 53: '03', 54: '04', 55: '05', 99: '49',
+};
+
+/**
+ * O CST-IPI como ele deve aparecer no LIVRO do estabelecimento.
+ *  · ENTRADA: converte o CST de saída do fornecedor (50-55/99) para o de entrada.
+ *    CST que já é de entrada (00-05/49) passa direto.
+ *  · SAÍDA: é o CST da própria nota — fica como está (o estabelecimento é o
+ *    emitente). NÃO se normaliza "outras saídas" (99) para 55/etc.: seria
+ *    inventar/corrigir a nota do cliente — isso ACENDE alerta, não contorno.
+ */
+function cstIpiEscrituracao(cstRaw, direcao) {
+    const cst = cst2(cstRaw);
+    if (direcao === 'entrada' && Object.prototype.hasOwnProperty.call(SAIDA_PARA_ENTRADA_CST_IPI, cst)) {
+        return SAIDA_PARA_ENTRADA_CST_IPI[cst];
+    }
+    return cst;
+}
+
 /**
  * Monta as linhas do E510 a partir das notas.
  *
@@ -51,6 +79,7 @@ export function montarLinhasE510(notas, deps = {}) {
 
     const grupos = new Map(); // "CFOP|CST_IPI" -> acumulador
     let itensComIpiSemCst = 0; // IPI destacado sem CST = buraco de captura
+    let saidasOutras = 0;      // saída com CST 99 (outras) = conferir na origem
 
     for (const nota of (notas || [])) {
         for (const item of (nota.itens || [])) {
@@ -63,7 +92,9 @@ export function montarLinhasE510(notas, deps = {}) {
                 continue;
             }
             const cfop = String(conv(item.cfop || item.CFOP || '0000', nota.direcao, nota._dados));
-            const cst = cst2(item.cstIpi);
+            // CST de ESCRITURAÇÃO: entrada converte o CST de saída do fornecedor.
+            const cst = cstIpiEscrituracao(item.cstIpi, nota.direcao);
+            if (nota.direcao !== 'entrada' && cst === '99') saidasOutras += 1;
             const key = `${cfop}|${cst}`;
             if (!grupos.has(key)) {
                 grupos.set(key, { cfop, cst, vlCont: 0, vlBc: 0, vlIpi: 0 });
@@ -100,6 +131,13 @@ export function montarLinhasE510(notas, deps = {}) {
             `E510: ${itensComIpiSemCst} item(ns) com IPI destacado mas SEM CST do IPI capturado `
             + '(documentos importados antes da captura do CST). Eles ficaram FORA do E510 — o bloco '
             + 'pode estar A MENOR. Rode o backfill de IPI para reler os XMLs e preencher o CST.',
+        );
+    }
+    if (saidasOutras > 0) {
+        avisos.push(
+            `E510: ${saidasOutras} item(ns) de SAÍDA com CST-IPI 99 (outras saídas). Confira na origem — `
+            + 'remessa/retorno de industrialização costuma ser 55 (suspensão), e a nota pode ter sido emitida '
+            + 'com o CST genérico. O app NÃO corrige o CST da nota (alerta, não contorno).',
         );
     }
     return { linhas, avisos, grupos: ordenados };
