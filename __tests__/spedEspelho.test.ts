@@ -3,8 +3,10 @@ import type { SpedFiscalParseResult, SpedDocumentoC100 } from '../types';
 
 /**
  * Conferência-espelho: o SPED do CFI contra o do E-Fiscal, MESMA empresa e
- * MESMA competência. É a prova que a onda de migração exige — o E-Fiscal segue
- * vivo, então o gabarito está do lado e a migração é conferência, não fé.
+ * MESMA competência. O E-Fiscal é REFERÊNCIA, não gabarito (Paulo, 11/08 — o
+ * arquivo dele podia ter ajuste à mão em Excel/PVA/SPED): bater é CORROBORAÇÃO,
+ * divergir é PERGUNTA cujo juiz é o XML-fonte. Por isso os testes abaixo travam
+ * também a REDAÇÃO do motivo — veredito que culpa um dos lados ensina errado.
  */
 const doc = (over: Partial<SpedDocumentoC100> = {}): SpedDocumentoC100 => ({
     tipo: 'C100',
@@ -101,6 +103,27 @@ describe('veredicto', () => {
         expect(r.documentos[0].valores[0]).toMatchObject({
             campo: 'Valor do documento', cfi: 1000, efiscal: 1100, diferenca: -100,
         });
+    });
+
+    // O E-Fiscal é REFERÊNCIA, não gabarito (Paulo, 11/08): o arquivo dele podia
+    // ter ajuste à mão. Veredito que trata divergência como erro do CFI ensina o
+    // colaborador a "consertar" o CFI até copiar um ajuste manual de lá.
+    it('divergência manda ao XML-fonte e NÃO culpa o CFI', () => {
+        const r = compararEspelho(arquivo(), arquivo({
+            documentosC100: [doc({ valorDocumento: 1100 })],
+        }));
+        expect(r.motivo).toMatch(/XML/i);
+        expect(r.motivo).toMatch(/ajuste manual/i);
+        // Diz explicitamente que divergir NÃO condena o CFI…
+        expect(r.motivo).toMatch(/não quer dizer que o CFI errou/i);
+        // …e nunca manda "consertar" o CFI pra copiar o outro arquivo.
+        expect(r.motivo).not.toMatch(/corrija o CFI|ajuste o CFI|acerte o CFI/i);
+    });
+
+    it('bater dos dois lados é CORROBORAÇÃO, não prova de que o CFI está certo', () => {
+        const r = compararEspelho(arquivo(), arquivo());
+        expect(r.veredicto).toBe('espelho-bate');
+        expect(r.motivo).toMatch(/corrobora/i);
     });
 
     it('diferença de centavo é arredondamento, não divergência', () => {

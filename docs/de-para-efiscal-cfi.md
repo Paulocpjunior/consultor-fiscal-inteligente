@@ -71,6 +71,23 @@ virou trabalho perdido: é ele que faz a busca por código funcionar em todas
 as telas e o Exportar SAGE preencher o Nº Empresa sozinho — a ponte diária
 com o E-Fiscal, que segue viva enquanto houver cliente não migrado.
 
+## O E-Fiscal é REFERÊNCIA, não GABARITO (Paulo, 11/08)
+
+Antes de ler qualquer linha deste de-para: o E-Fiscal era usado como **colcha
+de retalhos** — nem todo campo/função era usado, cada colaborador tinha o seu
+jeito e o seu Excel, e havia **ajuste à mão em Excel, dentro do PVA e no
+próprio SPED**, sem processo nem coordenação. Logo:
+
+- **Arquivo aceito prova que a Receita aceitou, não que está certo.** Lição
+  ESTRUTURAL de arquivo aceito continua valendo (leiaute, ordem de campo,
+  CST de escrituração — ajuste manual mexe em VALOR, não inventa leiaute);
+  **VALOR de lá não é verdade**.
+- **"Migração 100% dos dados" é meta falsa** — paridade com a colcha é
+  importar a colcha. O alvo é estar certo contra o **XML-fonte** e a lei.
+- Uma linha `🟡`/`🔴` aqui mede distância pra **escriturar certo**, não
+  distância pro que o E-Fiscal fazia. Coisa que o E-Fiscal NÃO fazia (rotina,
+  faróis, prova de captura) não entra como lacuna — entra como produto novo.
+
 ## Pré-requisito transversal: completude de captura
 
 Migrar cliente = prova de captura OK + cofre de saída ativo + Canceladas/

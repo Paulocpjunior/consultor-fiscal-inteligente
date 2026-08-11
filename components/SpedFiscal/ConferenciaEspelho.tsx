@@ -8,10 +8,16 @@ import { formatCurrency } from '../../services/xmlParserService';
  * Conferência-espelho: o SPED gerado pelo CFI contra o gerado pelo E-Fiscal
  * (ou pelo PVA) da MESMA empresa e competência.
  *
- * É a prova que a onda de migração exige. O E-Fiscal segue vivo e virou sistema
- * de consulta (Paulo, 05/08), então o gabarito está do lado — migrar é
- * conferência, não fé. Sem ferramenta, comparar dois arquivos de milhares de
- * linhas na mão não acontece: a "conferência" vira olhar o total e confiar.
+ * O E-Fiscal é REFERÊNCIA, NUNCA GABARITO (Paulo, 11/08): o arquivo dele saiu de
+ * um processo de colcha de retalhos — nem todo campo era usado, cada colaborador
+ * tinha o seu jeito, e havia ajuste à mão em Excel, no PVA e no próprio SPED. Um
+ * arquivo aceito prova que a RECEITA aceitou aquilo, não que aquilo está certo.
+ * Por isso divergência aqui NÃO significa "o CFI errou": significa uma PERGUNTA,
+ * e quem responde é o XML-fonte (o documento) + a lei — não o outro arquivo.
+ * Bater dos dois lados é CORROBORAÇÃO forte (dois caminhos independentes, um
+ * deles manual, chegando no mesmo número), e é assim que a tela fala.
+ * Sem ferramenta, comparar dois arquivos de milhares de linhas na mão não
+ * acontece: a "conferência" vira olhar o total e confiar.
  */
 interface Props {
     currentUser: User | null;
@@ -76,7 +82,10 @@ const ConferenciaEspelho: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <p className="text-[11px] mb-4" style={{ color: 'var(--text-muted)' }}>
                     Compara <strong>arquivo com arquivo</strong> — é a única conferência que faz isso (as outras
                     cruzam o SPED com capturadas, declarado ou faturamento). No 1º mês da onda o cliente roda nos
-                    DOIS sistemas: o E-Fiscal continua vivo como consulta, então o gabarito está do lado.
+                    DOIS sistemas. <strong>O E-Fiscal é referência, não gabarito</strong>: o arquivo dele saiu de
+                    um processo com ajuste à mão (Excel, PVA, o próprio SPED), então divergir dele não quer dizer
+                    que o CFI errou — quer dizer que há uma pergunta, e quem responde é o <strong>XML da nota</strong>.
+                    Bater dos dois lados é corroboração forte: dois caminhos independentes no mesmo número.
                     Documento casa pela <strong>chave da NF-e</strong>; o código do participante NÃO entra (ele é
                     interno de cada sistema e daria 100% de divergência num arquivo idêntico).
                 </p>
@@ -250,8 +259,9 @@ const ConferenciaEspelho: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 </table>
                             </div>
                             <p className="text-[10px] mt-2" style={{ color: 'var(--text-muted)' }}>
-                                Casa por CFOP+CST_IPI. Se o E510 do CFI reproduz o do E-Fiscal aceito, o IPI está provado
-                                ponta a ponta (o PVA não confere o VL_CONT — só esta comparação pega).
+                                Casa por CFOP+CST_IPI. Reproduzir o E510 do E-Fiscal CORROBORA o IPI ponta a ponta
+                                (o PVA não confere o VL_CONT — só esta comparação pega). Corrobora, não prova:
+                                a prova do valor é o XML-fonte; o arquivo do E-Fiscal pode ter ajuste manual.
                             </p>
                         </div>
                     )}
