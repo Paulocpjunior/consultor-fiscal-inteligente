@@ -60,7 +60,10 @@ export interface AtividadeDeclarada {
     idAtividade: number;
     valorAtividade: number;
     ocorrencias: number;
-    qualificacoes: Array<{ codigoTributo: number | null; id: number | null }>;
+    /** `bruto` = a qualificação como veio da declaração aceita (imunidade/
+     *  isenção por TRIBUTO, com parcelas) — é a DESCOBERTA que carimba os
+     *  nomes de campo antes de o app declarar (nunca chutar payload). */
+    qualificacoes: Array<{ codigoTributo: number | null; id: number | null; bruto?: unknown }>;
     rotulo?: string | null;
 }
 
