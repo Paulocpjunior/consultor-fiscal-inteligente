@@ -210,12 +210,14 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         // (item sem IPI), nunca "0".
         let cstIpi: string | undefined;
         let cEnqIpi: string | undefined;
+        let vBcIpi = 0;
         if (ipi) {
             const ipiTrib = ipi.getElementsByTagName('IPITrib')[0];
             const ipiNt = ipi.getElementsByTagName('IPINT')[0];
             if (ipiTrib) {
                 vIPI = num(getTextContent(ipiTrib, 'vIPI'));
                 aliqIPI = num(getTextContent(ipiTrib, 'pIPI'));
+                vBcIpi = num(getTextContent(ipiTrib, 'vBC'));
             }
             cstIpi = getTextContent(ipiTrib, 'CST') || getTextContent(ipiNt, 'CST') || undefined;
             cEnqIpi = getTextContent(ipi, 'cEnq') || undefined;
@@ -265,6 +267,7 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             aliqIPI,
             cstIpi,
             cEnqIpi,
+            vBcIpi,
             vPIS,
             aliqPIS,
             vCOFINS,

@@ -90,7 +90,7 @@ function getCstIcms(item) {
  *
  * O contexto eh extraido de `dados.empresa.dadosFiscais` quando disponivel.
  */
-function convertCfopParaEntrada(rawCfop, direcao, dados) {
+export function convertCfopParaEntrada(rawCfop, direcao, dados) {
     const empresa = dados?.empresa;
     const df = empresa?.dadosFiscais || {};
     return correlacionarCfop(rawCfop, direcao, {
