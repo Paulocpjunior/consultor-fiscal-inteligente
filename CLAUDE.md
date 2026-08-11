@@ -1207,6 +1207,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Nº Empresa automático do Exportar SAGE. PG12 (EOL nov/2024, 1.735 schemas,
   89,5 GB) segue de pé e NUNCA exposto à internet; dado fiscal de cliente
   NUNCA transita pelo chat.
+  **O HISTÓRICO NO SAGE TEM BACKUP — não é ponto único de falha** (Paulo,
+  11/08, corrigindo uma preocupação minha): **todo sistema da SAGE tem backup
+  DIÁRIO em storage na REDE, feito POR PARTES, cobrindo `dbf` + `pg12`**. Ou
+  seja, a decisão de 05/08 (e-Fiscal vira consulta do histórico) não deixa o
+  passado fiscal pendurado numa máquina só, e NÃO existe pendência de "criar
+  política de backup" — ela já existe e é do Paulo. NÃO ressuscitar esse tema
+  como risco: é fato conferido com o dono da infra, e repetir preocupação já
+  respondida é o mesmo vício de carimbar número velho ("0/388").
 - **tpNF DECIDE a direção quando o cliente é o emitente** (#384, 31/07 —
   caso EDUARDO GUERRA no Exportar SAGE): compra de produtor rural PF é NOTA
   PRÓPRIA DE ENTRADA (RICMS/SP art. 136 — tpNF=0, cliente emite, produtor no
