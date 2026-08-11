@@ -1,4 +1,4 @@
-import { compararEspelho, chaveDocumento, ausenciaEsperada } from '../services/spedEspelho';
+import { compararEspelho, chaveDocumento, ausenciaEsperada, compararE510 } from '../services/spedEspelho';
 import type { SpedFiscalParseResult, SpedDocumentoC100 } from '../types';
 
 /**
@@ -27,6 +27,7 @@ const arquivo = (over: Partial<SpedFiscalParseResult> = {}): SpedFiscalParseResu
     documentosC100: [doc()],
     documentosD100: [],
     apuracaoIcms: { tipo: 'E110', valorTotalDebitos: 180, valorTotalCreditos: 0, valorIcmsRecolher: 180 },
+    consolidacaoIpiE510: [],
     erros: [],
     avisos: [],
     ...over,
@@ -160,5 +161,30 @@ describe('veredicto', () => {
         }));
         expect(r.avisos.join(' ')).toMatch(/mais de uma vez/);
         expect(r.veredicto).toBe('espelho-bate');
+    });
+});
+
+describe('compararE510 — prova ponta a ponta do IPI (CFI × E-Fiscal)', () => {
+    const l = (cfop: string, cstIpi: string, vc: number, vb: number, vi: number) =>
+        ({ tipo: 'E510' as const, cfop, cstIpi, valorContabil: vc, valorBcIpi: vb, valorIpi: vi });
+
+    it('linhas iguais (valores reais do arquivo aceito) batem', () => {
+        const cfi = [l('5101', '50', 317806.19, 286092.21, 9298.08), l('1101', '00', 142785.85, 135051.20, 4389.15)];
+        const efi = [l('1101', '00', 142785.85, 135051.20, 4389.15), l('5101', '50', 317806.19, 286092.21, 9298.08)];
+        const r = compararE510(cfi, efi);
+        expect(r.every((x) => x.classe === 'igual')).toBe(true);
+    });
+
+    it('divergência de VL_IPI é apontada; centavo é tolerado', () => {
+        const cfi = [l('5101', '50', 317806.19, 286092.21, 9000.00)];
+        const efi = [l('5101', '50', 317806.19, 286092.21, 9298.08)];
+        expect(compararE510(cfi, efi)[0].classe).toBe('divergente');
+        const centavo = compararE510([l('5101', '50', 317806.19, 286092.21, 9298.08)], [l('5101', '50', 317806.19, 286092.21, 9298.083)]);
+        expect(centavo[0].classe).toBe('igual');
+    });
+
+    it('linha só de um lado é so-cfi / so-efiscal (ausente ≠ zero)', () => {
+        expect(compararE510([l('6101', '50', 100, 90, 3)], [])[0].classe).toBe('so-cfi');
+        expect(compararE510([], [l('6101', '50', 100, 90, 3)])[0].classe).toBe('so-efiscal');
     });
 });

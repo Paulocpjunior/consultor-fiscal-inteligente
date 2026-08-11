@@ -10,6 +10,7 @@ import type {
     SpedDocumentoD100,
     SpedApuracaoE110,
     SpedApuracaoE520,
+    SpedConsolidacaoE510,
     User,
 } from '../types';
 
@@ -224,6 +225,18 @@ function parseApuracaoE520(fields: string[]): SpedApuracaoE520 {
     };
 }
 
+// E510 — |E510|CFOP|CST_IPI|VL_CONT_IPI|VL_BC_IPI|VL_IPI|
+function parseConsolidacaoE510(fields: string[]): SpedConsolidacaoE510 {
+    return {
+        tipo: 'E510',
+        cfop: (fields[1] || '').trim(),
+        cstIpi: (fields[2] || '').trim(),
+        valorContabil: parseNumber(fields[3]),
+        valorBcIpi: parseNumber(fields[4]),
+        valorIpi: parseNumber(fields[5]),
+    };
+}
+
 export function parseSpedFiscalText(
     text: string,
     nomeArquivo: string,
@@ -241,6 +254,7 @@ export function parseSpedFiscalText(
     const documentosD100: SpedDocumentoD100[] = [];
     let apuracaoIcms: SpedApuracaoE110 | undefined;
     let apuracaoIpi: SpedApuracaoE520 | undefined;
+    const consolidacaoIpiE510: SpedConsolidacaoE510[] = [];
 
     let currentC100: SpedDocumentoC100 | null = null;
     let totalRegistros = 0;
@@ -300,6 +314,9 @@ export function parseSpedFiscalText(
                 case 'E110':
                     apuracaoIcms = parseApuracaoE110(fields);
                     break;
+                case 'E510':
+                    consolidacaoIpiE510.push(parseConsolidacaoE510(fields));
+                    break;
                 case 'E520':
                     apuracaoIpi = parseApuracaoE520(fields);
                     break;
@@ -343,6 +360,7 @@ export function parseSpedFiscalText(
         documentosD100,
         apuracaoIcms,
         apuracaoIpi,
+        consolidacaoIpiE510,
         erros,
         avisos,
     };

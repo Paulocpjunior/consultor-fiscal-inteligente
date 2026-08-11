@@ -211,6 +211,50 @@ const ConferenciaEspelho: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             </p>
                         </div>
                     )}
+
+                    {resultado.consolidacaoIpi.length > 0 && (
+                        <div className="p-4 rounded-xl" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+                            <h4 className="text-xs font-bold uppercase mb-2" style={{ color: 'var(--text-secondary)' }}>
+                                Consolidação do IPI (E510) — CFOP × CST, o Bloco E do IPI
+                            </h4>
+                            <div style={{ overflowX: 'auto' }}>
+                                <table className="w-full text-[11px]">
+                                    <thead>
+                                        <tr style={{ color: 'var(--text-muted)' }}>
+                                            <th className="text-left py-1">CFOP</th><th className="text-left py-1">CST</th>
+                                            <th className="text-right py-1">VL_CONT (CFI · E-Fiscal)</th>
+                                            <th className="text-right py-1">VL_IPI (CFI · E-Fiscal)</th>
+                                            <th className="text-right py-1">Situação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {resultado.consolidacaoIpi.map((l, i) => {
+                                            const cor = l.classe === 'igual' ? 'var(--text-muted)'
+                                                : l.classe === 'divergente' ? '#ef4444' : '#eab308';
+                                            const par = (v: [number | null, number | null]) =>
+                                                `${v[0] === null ? '—' : formatCurrency(v[0])} · ${v[1] === null ? '—' : formatCurrency(v[1])}`;
+                                            const rot = l.classe === 'igual' ? 'bate'
+                                                : l.classe === 'divergente' ? 'diverge'
+                                                    : l.classe === 'so-cfi' ? 'só no CFI' : 'só no E-Fiscal';
+                                            return (
+                                                <tr key={`${l.cfop}-${l.cstIpi}-${i}`} style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                                                    <td className="py-1 font-mono">{l.cfop}</td>
+                                                    <td className="py-1 font-mono">{l.cstIpi}</td>
+                                                    <td className="py-1 text-right font-mono">{par(l.valorContabil)}</td>
+                                                    <td className="py-1 text-right font-mono">{par(l.valorIpi)}</td>
+                                                    <td className="py-1 text-right font-semibold" style={{ color: cor }}>{rot}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p className="text-[10px] mt-2" style={{ color: 'var(--text-muted)' }}>
+                                Casa por CFOP+CST_IPI. Se o E510 do CFI reproduz o do E-Fiscal aceito, o IPI está provado
+                                ponta a ponta (o PVA não confere o VL_CONT — só esta comparação pega).
+                            </p>
+                        </div>
+                    )}
                 </>
             )}
         </div>

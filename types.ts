@@ -2183,6 +2183,12 @@ export interface SpedApuracaoE520 {
     valorIpiRecolher?: number; valorSaldoCredorIpi?: number;
 }
 
+/** E510 — consolidação do IPI por CFOP + CST_IPI (uma linha por par). */
+export interface SpedConsolidacaoE510 {
+    tipo: 'E510'; cfop: string; cstIpi: string;
+    valorContabil?: number; valorBcIpi?: number; valorIpi?: number;
+}
+
 export interface SpedFiscalParseResult {
     arquivo: SpedFiscalArquivo;
     registro0000?: SpedRegistro0000;
@@ -2192,6 +2198,7 @@ export interface SpedFiscalParseResult {
     documentosD100: SpedDocumentoD100[];
     apuracaoIcms?: SpedApuracaoE110;
     apuracaoIpi?: SpedApuracaoE520;
+    consolidacaoIpiE510: SpedConsolidacaoE510[];
     erros: string[];
     avisos: string[];
 }

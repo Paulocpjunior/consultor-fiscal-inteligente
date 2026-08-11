@@ -14,7 +14,7 @@
  *
  * Módulo PURO — recebe os dois parses prontos e devolve o veredicto.
  */
-import type { SpedFiscalParseResult, SpedDocumentoC100, SpedApuracaoE110 } from '../types';
+import type { SpedFiscalParseResult, SpedDocumentoC100, SpedApuracaoE110, SpedConsolidacaoE510 } from '../types';
 
 /** Diferença de centavo é arredondamento, não divergência. */
 const TOLERANCIA = 0.005;
@@ -50,6 +50,17 @@ export interface LinhaApuracao {
     naoApurado: boolean;
 }
 
+/** Comparação de uma linha do E510 (consolidação do IPI) entre os dois arquivos. */
+export interface LinhaE510 {
+    cfop: string;
+    cstIpi: string;
+    /** [cfi, efiscal] de VL_CONT, VL_BC, VL_IPI. */
+    valorContabil: [number | null, number | null];
+    valorBcIpi: [number | null, number | null];
+    valorIpi: [number | null, number | null];
+    classe: 'igual' | 'divergente' | 'so-cfi' | 'so-efiscal';
+}
+
 export type VeredictoEspelho = 'espelho-bate' | 'divergente' | 'nao-conferivel';
 
 export interface ResultadoEspelho {
@@ -72,7 +83,42 @@ export interface ResultadoEspelho {
         soCfiEsperado: number;
     };
     apuracao: LinhaApuracao[];
+    /** E510 — consolidação do IPI por CFOP+CST, comparada linha a linha. */
+    consolidacaoIpi: LinhaE510[];
     avisos: string[];
+}
+
+/**
+ * Compara os E510 (consolidação do IPI) dos dois arquivos, casando por
+ * CFOP+CST_IPI. É a prova ponta a ponta do IPI: se o E510 do CFI reproduz o do
+ * E-Fiscal aceito, o gerador está certo. Ausente de um lado ≠ zero.
+ */
+export function compararE510(
+    cfiLinhas: SpedConsolidacaoE510[] = [],
+    efiscalLinhas: SpedConsolidacaoE510[] = [],
+): LinhaE510[] {
+    const chave = (l: SpedConsolidacaoE510) => `${so(l.cfop)}|${(l.cstIpi || '').trim()}`;
+    const mapCfi = new Map(cfiLinhas.map((l) => [chave(l), l]));
+    const mapEfi = new Map(efiscalLinhas.map((l) => [chave(l), l]));
+    const chaves = Array.from(new Set([...mapCfi.keys(), ...mapEfi.keys()])).sort();
+    return chaves.map((k) => {
+        const c = mapCfi.get(k);
+        const e = mapEfi.get(k);
+        const bate = (a?: number, b?: number) => Math.abs(num(a) - num(b)) <= TOLERANCIA;
+        let classe: LinhaE510['classe'];
+        if (c && !e) classe = 'so-cfi';
+        else if (!c && e) classe = 'so-efiscal';
+        else classe = (bate(c!.valorContabil, e!.valorContabil) && bate(c!.valorBcIpi, e!.valorBcIpi) && bate(c!.valorIpi, e!.valorIpi))
+            ? 'igual' : 'divergente';
+        return {
+            cfop: (c || e)!.cfop,
+            cstIpi: (c || e)!.cstIpi,
+            valorContabil: [c ? num(c.valorContabil) : null, e ? num(e.valorContabil) : null],
+            valorBcIpi: [c ? num(c.valorBcIpi) : null, e ? num(e.valorBcIpi) : null],
+            valorIpi: [c ? num(c.valorIpi) : null, e ? num(e.valorIpi) : null],
+            classe,
+        };
+    });
 }
 
 const num = (v: number | undefined | null): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
@@ -199,6 +245,7 @@ export function compararEspelho(
         documentos: [],
         resumoDocumentos: { iguais: 0, divergentes: 0, soCfi: 0, soEfiscal: 0, soCfiEsperado: 0 },
         apuracao: [],
+        consolidacaoIpi: [],
         avisos,
     });
 
@@ -303,6 +350,13 @@ export function compararEspelho(
         );
     }
 
+    const consolidacaoIpi = compararE510(cfi.consolidacaoIpiE510, efiscal.consolidacaoIpiE510);
+    const e510Divergente = consolidacaoIpi.some((l) => l.classe !== 'igual');
+    if (e510Divergente) {
+        const div = consolidacaoIpi.filter((l) => l.classe !== 'igual').length;
+        avisos.push(`E510 (IPI): ${div} linha(s) de consolidação divergem entre CFI e E-Fiscal — confira o Bloco E do IPI.`);
+    }
+
     const apuracao = compararApuracao(cfi.apuracaoIcms, efiscal.apuracaoIcms);
     const apuracaoNaoConferida = apuracao.some((l) => l.naoApurado);
     const apuracaoDivergente = apuracao.some((l) => !l.naoApurado && Math.abs(l.diferenca as number) > TOLERANCIA);
@@ -318,7 +372,7 @@ export function compararEspelho(
         return {
             veredicto: 'espelho-bate',
             motivo: `Os ${resumoDocumentos.iguais} documento(s) comparáveis e a apuração do E110 batem nos dois arquivos.`,
-            identificacao, documentos, resumoDocumentos, apuracao, avisos,
+            identificacao, documentos, resumoDocumentos, apuracao, consolidacaoIpi, avisos,
         };
     }
 
@@ -326,7 +380,7 @@ export function compararEspelho(
         return {
             veredicto: 'nao-conferivel',
             motivo: 'Os documentos batem, mas um dos arquivos não tem apuração (E110) — o número que fecha o mês não foi conferido.',
-            identificacao, documentos, resumoDocumentos, apuracao, avisos,
+            identificacao, documentos, resumoDocumentos, apuracao, consolidacaoIpi, avisos,
         };
     }
 
@@ -339,6 +393,6 @@ export function compararEspelho(
     return {
         veredicto: 'divergente',
         motivo: `${partes.join(' · ')}. Resolva antes de migrar o cliente.`,
-        identificacao, documentos, resumoDocumentos, apuracao, avisos,
+        identificacao, documentos, resumoDocumentos, apuracao, consolidacaoIpi, avisos,
     };
 }
