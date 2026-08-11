@@ -34,6 +34,30 @@
    cortada diz "mostrando X de N".
 7. **A ordem é a linha.** O colaborador não escolhe por onde começar: o
    `proximoPasso` é a primeira etapa não fechada.
+8. **A qualificação da equipe é RESTRIÇÃO DE PROJETO, não problema a consertar
+   com treinamento** (Paulo, 11/08: *"tem um ponto que breca isso: a
+   qualificação profissional e pessoal de cada um"*). Consequência de desenho:
+   **minimizar o número de julgamentos fiscais que o app EXIGE da pessoa**.
+   Preferir sempre "o app calcula e a pessoa confirma com a evidência na tela" a
+   "a pessoa informa". Onde informar é inevitável (IVA-ST, natureza do
+   rendimento, `indAquis`, contagem do inventário), o valor entra **carimbado
+   com a origem** e nunca vira verdade em silêncio. Tela que pede decisão que a
+   pessoa não tem como tomar produz erro com cara de dado.
+9. **O PRINT É EVIDÊNCIA, NÃO NARRATIVA — e por isso ele é essencial** (Paulo,
+   11/08: *"o colaborador não sabe falar o que quer pq não sabe fazer e não sabe
+   explicar"*). Campo de "descreva seu problema" produziria entrada PIOR que o
+   print: a descrição errada de quem não sabe vira trabalho em cima de premissa
+   falsa. É a mesma regra do XML-fonte — **a fonte não mente, o relato mente**.
+   Logo: nunca trocar evidência por narração; o que se melhora é a evidência
+   chegar com CONTEXTO automático (cliente, competência, tela, documento —
+   como a `ErrorBoundary` que passou a dizer o módulo), nunca pedindo à pessoa
+   que explique o que ela não sabe explicar.
+10. **Regra com base legal se encoda COM a citação e COM teste.** O embasamento
+    jurídico/técnico vem do Paulo e não é achismo — o trabalho do app é aplicá-lo
+    de forma idêntica para sempre (art. 136 / RC 33068, LC 224/2025, IN RFB
+    932/2009, LC 123 art. 13, Res. CGSN 140/2018 art. 26 já entraram assim).
+    Tradução cirúrgica feita UMA vez e travada por teste é o único jeito de a
+    precisão dele não depender do dia nem da pessoa.
 
 ---
 
