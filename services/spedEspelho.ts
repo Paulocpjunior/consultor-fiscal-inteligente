@@ -4,10 +4,18 @@
  * competência.
  *
  * POR QUE ISTO EXISTE: a regra da onda de migração é "no 1º mês o cliente roda
- * nos DOIS sistemas e compara" (docs/plano-migracao-ondas.md). O E-Fiscal segue
- * vivo, então o gabarito está do lado — é conferência, não fé. Só que comparar
+ * nos DOIS sistemas e compara" (docs/plano-migracao-ondas.md). Só que comparar
  * dois arquivos de milhares de linhas na mão não acontece: sem ferramenta, a
  * "conferência" vira olhar o total e confiar.
+ *
+ * O E-FISCAL É REFERÊNCIA, NUNCA GABARITO (Paulo, 11/08). O arquivo dele saiu de
+ * um processo de colcha de retalhos — nem todo campo do sistema era usado, cada
+ * colaborador tinha o seu jeito, e havia ajuste à mão em Excel, no PVA e no
+ * próprio SPED. Arquivo aceito prova que a RECEITA aceitou, não que está certo.
+ * Consequência que este módulo tem que respeitar: divergir do E-Fiscal NÃO é
+ * defeito do CFI — é uma PERGUNTA cujo juiz é o XML-fonte. Bater dos dois lados
+ * é CORROBORAÇÃO (dois caminhos independentes, um deles manual, no mesmo
+ * número), e nenhum motivo de veredito pode atribuir culpa a um dos lados.
  *
  * As conferências que já existiam cruzam o SPED com OUTRA fonte (capturadas,
  * declarado, faturamento). Esta é a única que compara ARQUIVO com ARQUIVO.
@@ -90,8 +98,9 @@ export interface ResultadoEspelho {
 
 /**
  * Compara os E510 (consolidação do IPI) dos dois arquivos, casando por
- * CFOP+CST_IPI. É a prova ponta a ponta do IPI: se o E510 do CFI reproduz o do
- * E-Fiscal aceito, o gerador está certo. Ausente de um lado ≠ zero.
+ * CFOP+CST_IPI. Reproduzir o E510 do E-Fiscal CORROBORA o gerador do IPI ponta a
+ * ponta — não o prova: o arquivo de lá pode ter ajuste manual, e quem prova o
+ * valor é o XML-fonte. Ausente de um lado ≠ zero.
  */
 export function compararE510(
     cfiLinhas: SpedConsolidacaoE510[] = [],
@@ -216,6 +225,12 @@ const periodoDe = (r: SpedFiscalParseResult): string => {
 
 /**
  * Compara o SPED do CFI com o do E-Fiscal.
+ *
+ * O E-Fiscal é REFERÊNCIA, não gabarito (Paulo, 11/08): o arquivo dele podia ter
+ * ajuste à mão (Excel, PVA, o próprio SPED). Então 'divergente' é uma PERGUNTA
+ * ABERTA — pode ser erro do CFI, ajuste manual do lado de lá ou captura
+ * incompleta em qualquer um dos dois — e o juiz é o XML-fonte, nunca o outro
+ * arquivo. O motivo do veredito NUNCA pode atribuir a culpa a um dos lados.
  *
  * @param cfi     parse do arquivo gerado pelo CFI
  * @param efiscal parse do arquivo gerado pelo E-Fiscal (ou pelo PVA)
@@ -371,7 +386,7 @@ export function compararEspelho(
     if (divergenciasReais === 0 && !apuracaoDivergente && !apuracaoNaoConferida) {
         return {
             veredicto: 'espelho-bate',
-            motivo: `Os ${resumoDocumentos.iguais} documento(s) comparáveis e a apuração do E110 batem nos dois arquivos.`,
+            motivo: `Os ${resumoDocumentos.iguais} documento(s) comparáveis e a apuração do E110 batem nos dois arquivos — dois caminhos independentes no mesmo número, o que CORROBORA o do CFI.`,
             identificacao, documentos, resumoDocumentos, apuracao, consolidacaoIpi, avisos,
         };
     }
@@ -392,7 +407,7 @@ export function compararEspelho(
 
     return {
         veredicto: 'divergente',
-        motivo: `${partes.join(' · ')}. Resolva antes de migrar o cliente.`,
+        motivo: `${partes.join(' · ')}. Confira no XML da nota qual dos dois está certo — o arquivo do E-Fiscal pode ter ajuste manual, então divergir dele não quer dizer que o CFI errou. Explique cada divergência antes de migrar o cliente.`,
         identificacao, documentos, resumoDocumentos, apuracao, consolidacaoIpi, avisos,
     };
 }

@@ -5,6 +5,43 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **O QUE EXISTIA ANTES DO CFI ERA COLCHA DE RETALHOS — e isso muda o que
+  significa "certo"** (Paulo, 11/08, posicionando a realidade): no E-Fiscal
+  *"não eram usados todos os campos e funções; cada colaborador agia de uma
+  forma, sem processos ou controles, cada um com o seu processo ou um controle
+  paralelo que nem sempre usavam ou sabiam o que faziam, cada um com um Excel
+  diferente, ajustes de arquivos na mão, tratativas para fechamento do mês sem
+  controle, processos ou coordenação"* — ajuste manual em Excel, DENTRO do PVA
+  e no próprio SPED. **CONSEQUÊNCIAS QUE MANDAM EM TODO O PROJETO:**
+  (1) **O E-FISCAL É REFERÊNCIA, NUNCA GABARITO.** Arquivo aceito prova que a
+  RECEITA aceitou, não que está CERTO. Divergir dele não é defeito do CFI — é
+  uma PERGUNTA, e o juiz é o **XML-fonte** (o documento) + a lei. Bater dos
+  dois lados é CORROBORAÇÃO (dois caminhos independentes, um deles manual, no
+  mesmo número), nunca "passei no teste". Aplicado no espelho 🪞 em 11/08
+  (`spedEspelho`/`ConferenciaEspelho`), que dizia "o gabarito está do lado" e
+  agora manda ao XML — veredito que culpa o CFI ensina o colaborador a
+  "consertar" o app até copiar um ajuste manual do outro sistema.
+  CUIDADO: a lição estrutural que se tira de arquivo aceito CONTINUA valendo
+  (VL_CONT_IPI inclui o IPI, CST de escrituração converte na entrada) — ajuste
+  manual mexe em VALOR, não inventa leiaute. O que não vale é tratar o VALOR
+  de lá como verdade.
+  (2) **"MIGRAÇÃO 100% DOS DADOS" É META FALSA** (Paulo: *"a migração 100% dos
+  dados e-Fiscal não é tão 100% assim"*). Paridade com uma colcha de retalhos é
+  IMPORTAR a colcha. O alvo é ESTAR CERTO contra a fonte, não igual ao passado.
+  (3) **O PRODUTO NÃO É "SUBSTITUIR O E-FISCAL", É SUBSTITUIR A AUSÊNCIA DE
+  PROCESSO.** Rotina do Mês, Guia do mês da Carteira, faróis honestos, prova de
+  captura, auditoria de envio — nada disso existia em lugar nenhum; não é
+  "alcançar o E-Fiscal", é o que a casa nunca teve. Por isso a régua de valor
+  de uma feature NÃO é "o E-Fiscal fazia?".
+  (4) **É POR ISSO QUE OS DEFEITOS APARECEM AGORA** (FUNRURAL dobrado, IPI a
+  menor, cancelada no faturamento): não são regressões do E-Fiscal — lá isso era
+  feito (ou não) à mão, invisível, cliente a cliente. O CFI é a primeira vez que
+  a conta é SISTEMÁTICA, e portanto a primeira vez que o erro é VISÍVEL. Achar
+  defeito é o sistema funcionando, não o projeto atrasando.
+  (5) **DIVERGÊNCIA PODE SER ACHADO SOBRE O PASSADO.** Se o CFI está certo e o
+  declarado não estava, isso é assunto de RETIFICAÇÃO — decisão do Paulo, caso a
+  caso, NUNCA automática e nunca escondida.
+
 - **Deploy e merge automáticos**: todo trabalho vai em PR → squash-merge →
   acompanhar o deploy (GitHub Actions `deploy-app.yml`) até ficar VERDE, sem
   perguntar. Branch de trabalho designada pela sessão; nunca commitar direto
