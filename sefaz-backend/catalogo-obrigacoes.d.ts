@@ -54,6 +54,9 @@ export function resolverRegime(
     empresa: { colecao?: string; regimePadrao?: string } | null | undefined,
 ): { regime: RegimeCatalogo; motivo: string | null };
 
+/** Valida MM/AAAA na porta e devolve a própria competência. Lança se inválida. */
+export function assertCompetencia(competencia: string): string;
+
 export function competenciaFechaTrimestre(competencia: string): boolean;
 export function competenciaFechaAno(competencia: string): boolean;
 

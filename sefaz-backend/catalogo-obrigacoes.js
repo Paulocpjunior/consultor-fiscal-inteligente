@@ -223,7 +223,13 @@ export const CATALOGO = {
     INDEFINIDO: COMUNS_LUCRO,
 };
 
-/** MM/AAAA → {mes, ano}. Lança em competência inválida (não devolve default). */
+/**
+ * MM/AAAA → {mes, ano}. LANÇA em competência inválida (não devolve default).
+ * Exposta como `assertCompetencia` pra quem processa em lote validar UMA vez,
+ * na porta: sem isso o erro se repete por cliente e vira 800 linhas de log em
+ * vez de uma falha clara — e o lote termina "sem erro visível" tendo criado
+ * zero tarefa.
+ */
 function partesDaCompetencia(competencia) {
     const [mesStr, anoStr] = String(competencia || '').split('/');
     const mes = parseInt(mesStr, 10);
@@ -232,6 +238,12 @@ function partesDaCompetencia(competencia) {
         throw new Error(`competencia invalida: "${competencia}" (esperado MM/AAAA)`);
     }
     return { mes, ano };
+}
+
+/** Valida na porta. Lança com a mensagem que diz o formato esperado. */
+export function assertCompetencia(competencia) {
+    partesDaCompetencia(competencia);
+    return competencia;
 }
 
 export function competenciaFechaTrimestre(competencia) {
