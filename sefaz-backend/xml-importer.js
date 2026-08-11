@@ -156,6 +156,10 @@ export function extrairItens(xml) {
     const ipiNtInner = pickFirstBlock(ipi, 'IPINT');
     const cstIpi = pickTag(ipiTribInner, 'CST') || pickTag(ipiNtInner, 'CST') || null;
     const cEnqIpi = pickTag(ipi, 'cEnq') || null;
+    // Base do IPI (VL_BC_IPI do E510). Só existe no IPITrib (tributado); item
+    // não-tributado (IPINT) tem base 0 — e nesse caso 0 É a resposta, não
+    // "não sei" (o E510 do arquivo real traz VL_BC=0 pra CST 05/49/55).
+    const vBcIpi = num(pickTag(ipiTribInner, 'vBC'));
 
     // PIS: primeiro filho (PISAliq, PISNT, PISOutr, etc.)
     const pisInnerMatch = pis.match(/<(PIS\w+)\b[^>]*>([\s\S]*?)<\/\1>/);
@@ -193,6 +197,7 @@ export function extrairItens(xml) {
       aliqIPI: num(pickTag(ipiTribInner, 'pIPI')),
       cstIpi,
       cEnqIpi,
+      vBcIpi,
       vPIS: num(pickTag(pisInner, 'vPIS')),
       aliqPIS: num(pickTag(pisInner, 'pPIS')),
       vCOFINS: num(pickTag(cofinsInner, 'vCOFINS')),

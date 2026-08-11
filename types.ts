@@ -1456,6 +1456,8 @@ export interface DocumentoFiscalItem {
     cstIpi?: string;
     /** Código de enquadramento legal do IPI (cEnq). */
     cEnqIpi?: string;
+    /** Base de cálculo do IPI (IPITrib/vBC) — VL_BC_IPI do E510. 0 para item não-tributado (IPINT). */
+    vBcIpi?: number;
     vPIS: number;
     /** Alíquota do PIS em %. */
     aliqPIS?: number;

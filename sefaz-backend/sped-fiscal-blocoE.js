@@ -28,6 +28,8 @@
 import * as fmt from './sped-fiscal-format.js';
 import { classificarAjustes, aplicarAjustesApuracao, montarLinhasE111 } from './sped-ajustes-apuracao.js';
 import { montarLinhasStBlocoE } from './sped-bloco-e-st.js';
+import { montarLinhasE510 } from './sped-bloco-ipi-e510.js';
+import { convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
 
 const ZERO = '0,00';
 
@@ -230,6 +232,15 @@ function buildE500E520(dados) {
     const vlSdIpi = saldo >= 0 ? saldo : 0;   // saldo devedor a recolher
     const vlScIpi = saldo < 0 ? -saldo : 0;   // saldo credor a transportar
 
+    // E510 — consolidação por CFOP+CST_IPI, ENTRE o E500 e o E520 (ordem do
+    // arquivo real). Reaproveita o MESMO convertCfop do C190: o E510 é o C190
+    // re-agregado. A soma do VL_IPI dos E510 de saída bate com o VL_DEB do
+    // E520 (amarração da SEFAZ) — os dois saem da mesma varredura de itens.
+    const e510 = montarLinhasE510(dados.notas, {
+        convertCfop: (cfop, direcao, notaDados) => convertCfopParaEntrada(cfop, direcao, notaDados),
+    });
+    if (Array.isArray(dados.warnings)) dados.warnings.push(...e510.avisos);
+
     return [
         fmt.buildLine([
             'E500',
@@ -237,6 +248,7 @@ function buildE500E520(dados) {
             fmt.formatCompetenciaInicio(dados.competenciaInicio),
             fmt.formatCompetenciaFim(dados.competenciaFim),
         ]),
+        ...e510.linhas,
         fmt.buildLine([
             'E520',
             fmt.formatValue(vlSdAnt, 2),  // VL_SD_ANT_IPI
