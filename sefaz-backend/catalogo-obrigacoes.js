@@ -36,6 +36,24 @@
 //     Alexandre, a entrada é marcada `revisar: true` e sai em
 //     `pendenciasDeConfirmacao()` — vira checklist, não default silencioso.
 //
+// ─── ESFERA: FEDERAL, ESTADUAL, MUNICIPAL (Paulo, 11/08) ────────────────────
+//
+// "Os vencimentos são datas definidas pelos órgãos governamentais, sempre
+// separados por esferas: federal, estadual, municipal. Isso nunca se altera e é
+// onde deve ser feita a consulta."
+//
+// A ESFERA é o que diz QUEM define o prazo — e portanto ONDE se confere:
+//   'federal'   — vale igual pra todo cliente (RFB/Caixa/CGSN).
+//   'estadual'  — varia por UF. O prazo do SPED aqui é o de SP (CAT 147/2009);
+//                 cliente de outra UF tem outro, e o catálogo AINDA não sabe
+//                 disso — por isso a entrada leva `abrangencia`.
+//   'municipal' — varia por MUNICÍPIO. É o caso do ISS, e é o buraco maior:
+//                 são 157 empresas de serviço puro na carteira.
+//
+// `abrangencia` diz até onde a entrada vale: 'BR', 'UF:SP', 'IBGE:3550308'.
+// Entrada com abrangência menor que o cliente NÃO se aplica a ele — e o app
+// prefere dizer "não sei o prazo deste município" a carimbar o de SP.
+//
 // ─── ANTECIPA × PRORROGA: A DIVERGÊNCIA QUE JÁ ESTAVA NO AR ─────────────────
 //
 // Os dois catálogos antigos ajustavam dia não útil em direções OPOSTAS:
@@ -122,6 +140,7 @@ const M = 'mensal', T = 'trimestral', A = 'anual';
 
 const DAS = {
     obrigacao: 'DAS', label: 'DAS', nome: 'DAS Simples Nacional',
+    esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 20, mesesApos: 1,
     ajusteDiaNaoUtil: 'prorroga',
     baseLegal: 'LC 123/2006 art. 21 §3º (prorroga quando não há expediente bancário)',
@@ -129,6 +148,7 @@ const DAS = {
 };
 const FGTS = {
     obrigacao: 'FGTS', label: 'FGTS Digital', nome: 'FGTS Digital',
+    esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 20, mesesApos: 1,
     // 🚩 CONFLITO REAL, PENDENTE DO PAULO/ALEXANDRE: o cron antigo ANTECIPAVA
     // (dia útil anterior) e a tela de Vencimentos PRORROGAVA — a mesma
@@ -143,6 +163,7 @@ const FGTS = {
 };
 const DCTFWEB = {
     obrigacao: 'DCTFWEB', label: 'DCTFWeb', nome: 'DCTFWeb',
+    esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 15, mesesApos: 1,
     ajusteDiaNaoUtil: 'prorroga',
     baseLegal: 'IN RFB 2.005/2021 (até o dia 15 do mês seguinte)',
@@ -150,6 +171,9 @@ const DCTFWEB = {
 };
 const SPED = {
     obrigacao: 'SPED', label: 'SPED Fiscal', nome: 'EFD ICMS/IPI',
+    // ESTADUAL: este prazo é o de SÃO PAULO. Cliente de outra UF tem outro e o
+    // catálogo ainda não os tem — a abrangência denuncia isso em vez de fingir.
+    esfera: 'estadual', abrangencia: 'UF:SP',
     frequencia: M, diaVencimento: 25, mesesApos: 2,
     ajusteDiaNaoUtil: 'prorroga',
     baseLegal: 'Portaria CAT 147/2009 (SP) — prazo estadual',
@@ -157,6 +181,7 @@ const SPED = {
 };
 const INSS_CPP = {
     obrigacao: 'INSS_CPP', label: 'INSS Patronal', nome: 'INSS Patronal (CPP)',
+    esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 20, mesesApos: 1,
     ajusteDiaNaoUtil: 'prorroga',
     baseLegal: 'Lei 8.212/91 art. 30, I, "b" — direção do ajuste A CONFERIR',
@@ -167,6 +192,7 @@ const INSS_CPP = {
 };
 const PIS_COFINS = {
     obrigacao: 'PIS_COFINS', label: 'PIS/COFINS', nome: 'PIS/COFINS',
+    esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 25, mesesApos: 1,
     ajusteDiaNaoUtil: 'prorroga',
     baseLegal: 'Lei 11.933/2009 (25º dia do mês seguinte) — direção do ajuste A CONFERIR',
@@ -174,6 +200,7 @@ const PIS_COFINS = {
 };
 const EFD_CONTRIB = {
     obrigacao: 'EFD_CONTRIB', label: 'EFD-Contribuições', nome: 'EFD-Contribuições',
+    esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 14, mesesApos: 2,
     ajusteDiaNaoUtil: 'prorroga',
     baseLegal: 'IN RFB 1.252/2012 art. 7º (10º dia útil do 2º mês subsequente)',
@@ -181,6 +208,7 @@ const EFD_CONTRIB = {
 };
 const IRPJ_TRIM = {
     obrigacao: 'IRPJ_TRIM', label: 'IRPJ Trimestral', nome: 'IRPJ Trimestral',
+    esfera: 'federal', abrangencia: 'BR',
     frequencia: T, diaVencimento: 0, mesesApos: 1, ultimoDiaUtilDoMes: true,
     ajusteDiaNaoUtil: 'antecipa',
     baseLegal: 'Lei 9.430/96 art. 5º (último dia útil do mês seguinte ao trimestre)',
@@ -191,6 +219,7 @@ const CSLL_TRIM = {
 };
 const DEFIS = {
     obrigacao: 'DEFIS', label: 'DEFIS', nome: 'DEFIS',
+    esfera: 'federal', abrangencia: 'BR',
     frequencia: A, diaVencimento: 31, mesesApos: 3, ultimoDiaUtilDoMes: true,
     ajusteDiaNaoUtil: 'antecipa',
     baseLegal: 'Res. CGSN 140/2018 art. 72 (até 31/03 do ano seguinte)',
@@ -198,6 +227,7 @@ const DEFIS = {
 };
 const ECF = {
     obrigacao: 'ECF', label: 'ECF', nome: 'ECF',
+    esfera: 'federal', abrangencia: 'BR',
     frequencia: A, diaVencimento: 31, mesesApos: 7, ultimoDiaUtilDoMes: true,
     ajusteDiaNaoUtil: 'antecipa',
     baseLegal: 'IN RFB 2.004/2021 (último dia útil de julho)',
@@ -205,13 +235,33 @@ const ECF = {
 };
 const ECD = {
     obrigacao: 'ECD', label: 'ECD', nome: 'ECD',
+    esfera: 'federal', abrangencia: 'BR',
     frequencia: A, diaVencimento: 30, mesesApos: 6, ultimoDiaUtilDoMes: true,
     ajusteDiaNaoUtil: 'antecipa',
     baseLegal: 'IN RFB 2.003/2021 (último dia útil de junho)',
     status: 'ativa', revisar: true,
 };
 
-const COMUNS_LUCRO = [DCTFWEB, FGTS, INSS_CPP, PIS_COFINS, EFD_CONTRIB, SPED];
+// ISS PRÓPRIO — a esfera MUNICIPAL, que não existia neste catálogo.
+// Dois motivos pra ele nascer 'proposta' e não gerar tarefa ainda:
+//   (1) o prazo é do MUNICÍPIO e varia — não existe "dia do ISS" nacional, e
+//       carimbar o de SP em cliente de outro município seria inventar prazo;
+//   (2) optante do Simples NÃO recolhe ISS próprio em guia do município: ele
+//       já está dentro do DAS (LC 123 art. 13). Gerar pra optante seria cobrar
+//       duas vezes — o defeito que o painel 🏛️ ISS já corrigiu em 06/08.
+// É exatamente a lacuna que a consulta mensal por esfera (Paulo, 11/08) existe
+// pra preencher: enquanto o calendário municipal não estiver cadastrado, o ISS
+// aparece NOMEADO como pendência em vez de sumir do mês.
+const ISS = {
+    obrigacao: 'ISS', label: 'ISS próprio', nome: 'ISS sobre serviços prestados',
+    esfera: 'municipal', abrangencia: 'IBGE:?',
+    frequencia: M, diaVencimento: 10, mesesApos: 1,
+    ajusteDiaNaoUtil: 'prorroga',
+    baseLegal: 'LC 116/2003 + legislação do MUNICÍPIO — prazo A CADASTRAR por município',
+    status: 'proposta', dependeDe: 'calendário do município', revisar: true,
+};
+
+const COMUNS_LUCRO = [DCTFWEB, FGTS, INSS_CPP, PIS_COFINS, EFD_CONTRIB, SPED, ISS];
 
 export const CATALOGO = {
     SIMPLES: [DAS, FGTS, DEFIS],
@@ -350,6 +400,20 @@ export function mesDoCliente(empresa, competencia) {
     };
 }
 
+/** As esferas que definem prazo. A taxonomia é estável — o que muda é a data. */
+export const ESFERAS = ['federal', 'estadual', 'municipal'];
+
+/**
+ * Agrupa as obrigações de uma competência por ESFERA — que é como o órgão
+ * publica e, portanto, como a conferência mensal se faz (Paulo, 11/08).
+ */
+export function porEsfera(regime, competencia, opts = {}) {
+    const lista = obrigacoesAplicaveis(regime, competencia, opts);
+    const out = { federal: [], estadual: [], municipal: [] };
+    for (const r of lista) if (out[r.esfera]) out[r.esfera].push(r);
+    return out;
+}
+
 /**
  * Checklist pro Paulo/Alexandre: tudo que este catálogo ainda não pode afirmar
  * sozinho. Existir é o que impede o "sync manual" de virar mentira de novo.
@@ -364,6 +428,8 @@ export function pendenciasDeConfirmacao() {
                     vistos.set(chave, {
                         obrigacao: r.obrigacao,
                         label: r.label,
+                        esfera: r.esfera,
+                        abrangencia: r.abrangencia,
                         status: r.status,
                         ajusteDiaNaoUtil: r.ajusteDiaNaoUtil,
                         baseLegal: r.baseLegal,

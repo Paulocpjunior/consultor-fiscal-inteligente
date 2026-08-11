@@ -1,7 +1,13 @@
 export type RegimeCatalogo = 'SIMPLES' | 'LUCRO_PRESUMIDO' | 'LUCRO_REAL' | 'INDEFINIDO';
 
+export type Esfera = 'federal' | 'estadual' | 'municipal';
+
 export interface ObrigacaoCatalogo {
     obrigacao: string;
+    /** Quem define o prazo — e portanto onde se confere. */
+    esfera: Esfera;
+    /** Até onde a entrada vale: 'BR', 'UF:SP', 'IBGE:3550308'. */
+    abrangencia: string;
     label: string;
     nome: string;
     frequencia: 'mensal' | 'trimestral' | 'anual';
@@ -38,6 +44,8 @@ export interface MesDoCliente {
 export interface PendenciaConfirmacao {
     obrigacao: string;
     label: string;
+    esfera: Esfera;
+    abrangencia: string;
     status: 'ativa' | 'proposta';
     ajusteDiaNaoUtil: 'prorroga' | 'antecipa';
     baseLegal: string;
@@ -76,5 +84,13 @@ export function mesDoCliente(
     empresa: { colecao?: string; regimePadrao?: string } | null | undefined,
     competencia: string,
 ): MesDoCliente;
+
+export const ESFERAS: Esfera[];
+
+export function porEsfera(
+    regime: string | null | undefined,
+    competencia: string,
+    opts?: { incluirPropostas?: boolean },
+): Record<Esfera, ObrigacaoCatalogo[]>;
 
 export function pendenciasDeConfirmacao(): PendenciaConfirmacao[];
