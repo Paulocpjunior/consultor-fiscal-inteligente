@@ -848,6 +848,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   poucos. Leitor novo de documento válido usa `docValido`/`docCancelado`;
   reimplementar o filtro é criar a divergência de novo.
 
+- **O MÊS DO COLABORADOR TEM ESCOPO ESCRITO — `docs/escopo-mes-fiscal.md`**
+  (Paulo, 11/08: *"criar regras, processos, deixar claro o mês pro colaborador
+  com base no tipo da empresa — Simples, Presumido ou Real — e na carteira dele;
+  cria um escopo com regras, travas, processos"*, logo depois de *"cálculos em
+  Excel! Eu abomino o uso do Excel para essas finalidades; relatórios sem
+  padrão, muito feito na mão"*). É DOCUMENTO DE GOVERNO: feature do fiscal se
+  justifica contra ele e mudança de regra/trava entra NO MESMO PR.
+  PRINCÍPIO QUE MANDA: **o Excel não é ferramenta, é SINTOMA** — onde a equipe
+  abre planilha existe lacuna do app, e a lacuna vira linha do §7, NUNCA um
+  "modelo de planilha melhor" (vale pra relatório também: sem padrão é planilha
+  com outro nome).
+  🚨 **ACHADO ESTRUTURAL DO ESCOPO — TRÊS CATÁLOGOS DE OBRIGAÇÃO QUE NÃO
+  CONCORDAM, e o mês nasce do MAIS POBRE**: `tarefas-orchestrator.js` (o cron do
+  dia 1, quem CRIA as tarefas) só conhece SIMPLES=DAS+FGTS e LUCRO_REAL=DCTFWeb+
+  FGTS+SPED, e mapeia `lucro_empresas → LUCRO_REAL` sempre — ou seja **LUCRO
+  PRESUMIDO NÃO EXISTE PRO CRON**, enquanto `services/calendarioFiscal.ts` (que
+  o comentário do backend jura ser "o mesmo mapa, sync manual") tem
+  LUCRO_PRESUMIDO com PIS/COFINS, EFD-Contribuições, IRPJ/CSLL trimestrais, ECF
+  e ECD; e `calendario-obrigacoes.js` é um TERCEIRO mapa. Cadeia do defeito:
+  obrigação não vira tarefa ⇒ não aparece em Vencimentos ⇒ não aparece no Guia
+  do mês ⇒ o farol diz "mês fechado" com obrigação nunca listada. Não é bug de
+  cálculo: é o app REPRODUZINDO a colcha de retalhos. **REGRA Nº 1: um catálogo
+  só, no backend, puro e testado; o front lê dele** — e enquanto ele não cobrir
+  o regime do cliente, a etapa 4 NÃO pode dar verde (trava T1 do escopo).
+
 ## Fila de features acordadas (com requisitos)
 
 0. **PENDÊNCIAS 31/07 — decisões tomadas 01/08:**
