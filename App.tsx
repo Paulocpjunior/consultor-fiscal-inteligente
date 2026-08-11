@@ -17,6 +17,7 @@ import InitialStateDisplay from './components/InitialStateDisplay';
 import SimilarServicesDisplay from './components/SimilarServicesDisplay';
 import AccessLogsModal from './components/AccessLogsModal';
 import UserManagementModal from './components/UserManagementModal';
+import ConfigAdminModal from './components/ConfigAdminModal';
 import { PopularSuggestions } from './components/PopularSuggestions';
 import Tooltip from './components/Tooltip';
 import Toast from './components/Toast';
@@ -105,6 +106,7 @@ const App: React.FC = () => {
     const [isAuthResolved, setIsAuthResolved] = useState(false);
     const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
     const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
+    const [isConfigAdminOpen, setIsConfigAdminOpen] = useState(false);
 
     const [searchType, setSearchType] = useState<SearchType>(SearchType.CFOP);
     const [mode, setMode] = useState<'single' | 'compare'>('single');
@@ -687,6 +689,7 @@ const App: React.FC = () => {
                     onLogout={handleLogout}
                     onShowLogs={currentUser.role === 'admin' ? () => setIsLogsModalOpen(true) : undefined}
                     onShowUsers={currentUser.role === 'admin' ? () => setIsUsersModalOpen(true) : undefined}
+                    onShowConfigAdmin={currentUser.role === 'admin' ? () => setIsConfigAdminOpen(true) : undefined}
                 />
 
                 <div className="flex flex-col md:flex-row gap-6">
@@ -1314,6 +1317,11 @@ const App: React.FC = () => {
                 onClose={() => setIsUsersModalOpen(false)}
                 currentUserEmail={currentUser.email}
                 currentUserRole={currentUser.role}
+            />
+            <ConfigAdminModal
+                isOpen={isConfigAdminOpen}
+                onClose={() => setIsConfigAdminOpen(false)}
+                onOpenUsers={() => setIsUsersModalOpen(true)}
             />
 
             {/* Aviso global de nova versão / hard refresh */}

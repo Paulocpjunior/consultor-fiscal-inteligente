@@ -3,7 +3,7 @@ import React from 'react';
 import ThemeSwitcher from './ThemeSwitcher';
 import Logo from './Logo';
 import Tooltip from './Tooltip';
-import { MenuIcon, UserIcon, ShieldIcon, UserGroupIcon } from './Icons';
+import { MenuIcon, UserIcon, ShieldIcon, UserGroupIcon, CogIcon } from './Icons';
 import { User } from '../types';
 import {
     NOVIDADES_URL, NOVIDADES_VERSAO, marcarNovidadesComoLidas,
@@ -19,9 +19,10 @@ interface HeaderProps {
     onLogout?: () => void;
     onShowLogs?: () => void;
     onShowUsers?: () => void;
+    onShowConfigAdmin?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, description, user, onLogout, onShowLogs, onShowUsers }) => {
+const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, description, user, onLogout, onShowLogs, onShowUsers, onShowConfigAdmin }) => {
   // 📣 Novidades vivia SÓ dentro do card Relatórios — quem não abria aquele
   // card nunca achava o comunicado. Agora fica no cabeçalho, em toda tela.
   const [novoAviso, setNovoAviso] = React.useState(false);
@@ -111,6 +112,16 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
                         aria-label="Logs de Acesso"
                     >
                         <ShieldIcon className="w-6 h-6" />
+                    </button>
+                )}
+                {onShowConfigAdmin && (
+                    <button
+                        onClick={onShowConfigAdmin}
+                        className="btn-press p-2 rounded-full transition-colors" style={{color:"var(--text-muted)"}}
+                        title="Configurações do Admin"
+                        aria-label="Configurações do Admin"
+                    >
+                        <CogIcon className="w-6 h-6" />
                     </button>
                 )}
               </>
