@@ -198,6 +198,38 @@ por quê. É o oposto do Excel, onde tudo é possível e nada avisa.
 
 ---
 
+## 5-B. O prazo vem do ÓRGÃO, por esfera — e a consulta é mensal
+
+> Paulo (11/08): *"os vencimentos são datas definidas pelos órgãos
+> governamentais, sempre separados por esferas: federal, estadual, municipal.
+> Isso nunca se altera e é onde deve ser feita a consulta."*
+
+A taxonomia é estável; a **data** é que se move (portaria de prorrogação,
+feriado municipal, calendário estadual). Por isso catálogo estático envelhece —
+e por isso a esfera virou campo de primeira classe (`esfera` + `abrangencia`).
+
+**Estado hoje:** `federal` completo (vale igual pra todos) · `estadual` só o
+prazo de **SP** (`UF:SP` — cliente de outra UF não tem prazo cadastrado, e a
+abrangência denuncia isso) · `municipal` é o buraco: o **ISS** entrou como
+pendência nomeada porque não existe "dia do ISS" nacional, e são 157 empresas de
+serviço puro na carteira.
+
+**Como a consulta mensal tem que ser feita** (o Gemini já está plugado com
+grounding — `googleSearch` + `groundingChunks` devolvendo as URLs):
+
+1. **A pergunta é por esfera e por abrangência**, porque é assim que o órgão
+   publica: RFB/Caixa (federal), SEFAZ da UF (estadual), prefeitura (municipal).
+2. **O resultado é PROPOSTA, com a fonte** — data + o ato que a define + a URL.
+   Sem a origem carimbada não entra (é a regra do IVA-ST e do CST do IPI).
+3. **Nenhuma data de pagamento muda sozinha.** O app compara o que veio com o
+   catálogo e mostra a DIFERENÇA pra confirmação humana. Data errada em guia é
+   multa de um lado ou "atrasada" falsa do outro — e alterar prazo é decisão com
+   nome, não resultado de consulta. Modelo com busca reduz o chute, não elimina:
+   ele pode citar um blog no lugar do ato.
+4. **O que a consulta acha de novo vira cadastro**, não resposta de tela: prazo
+   de UF e de município ficam gravados com vigência (a mesma régua do IVA-ST —
+   resolução pela DATA do fato, nunca "o mais recente").
+
 ## 6. Os ritos (processos com ordem fixa)
 
 - **Rito de envio de guia (#293):** 1) cópia na pasta IMPOSTOS do cliente no

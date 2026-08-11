@@ -1,5 +1,6 @@
 import {
     assertCompetencia,
+    porEsfera,
     resolverRegime,
     obrigacoesAplicaveis,
     calcularVencimento,
@@ -204,6 +205,46 @@ describe('pendenciasDeConfirmacao — o checklist que impede o "sync manual" de 
             expect(typeof x.oQueFalta).toBe('string');
             expect(x.baseLegal).toBeTruthy();
         }
+    });
+});
+
+describe('esfera — quem define o prazo é quem se consulta (Paulo, 11/08)', () => {
+    it('toda obrigação declara esfera e até onde ela vale', () => {
+        for (const regime of Object.keys(CATALOGO)) {
+            for (const r of (CATALOGO as any)[regime]) {
+                expect(['federal', 'estadual', 'municipal']).toContain(r.esfera);
+                expect(r.abrangencia).toBeTruthy();
+            }
+        }
+    });
+
+    it('o SPED é ESTADUAL e o prazo cadastrado é o de SP — não finge valer no Brasil', () => {
+        const sped = CATALOGO.LUCRO_REAL.find((r: any) => r.obrigacao === 'SPED')!;
+        expect(sped.esfera).toBe('estadual');
+        expect(sped.abrangencia).toBe('UF:SP');
+    });
+
+    it('o ISS é MUNICIPAL, não gera tarefa e aparece NOMEADO', () => {
+        // Sem calendário do município não há prazo; carimbar o de SP seria
+        // inventar. E optante do Simples não recolhe ISS próprio (está no DAS).
+        const m = mesDoCliente(presumido, '07/2026');
+        expect(codigos(m.obrigacoes)).not.toContain('ISS');
+        expect(codigos(m.propostas)).toContain('ISS');
+        const iss = CATALOGO.LUCRO_PRESUMIDO.find((r: any) => r.obrigacao === 'ISS')!;
+        expect(iss.esfera).toBe('municipal');
+        expect(iss.dependeDe).toMatch(/munic/i);
+    });
+
+    it('porEsfera separa como o órgão publica', () => {
+        const e = porEsfera('LUCRO_PRESUMIDO', '07/2026', { incluirPropostas: true });
+        expect(e.federal.map((r: any) => r.obrigacao)).toContain('DCTFWEB');
+        expect(e.estadual.map((r: any) => r.obrigacao)).toContain('SPED');
+        expect(e.municipal.map((r: any) => r.obrigacao)).toContain('ISS');
+    });
+
+    it('a pendência diz a esfera — é ela que aponta ONDE conferir', () => {
+        const iss = pendenciasDeConfirmacao().find((p: any) => p.obrigacao === 'ISS')!;
+        expect(iss.esfera).toBe('municipal');
     });
 });
 

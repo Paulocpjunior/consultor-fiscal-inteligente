@@ -885,6 +885,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   o que a equipe usa; trocar por dedução seria inventar prazo) e a pendência sai
   em `pendenciasDeConfirmacao()`. **PENDENTE DO PAULO/ALEXANDRE**: direção do
   FGTS/INSS/PIS-COFINS e a condição de folha do INSS patronal.
+  **ESFERA É CAMPO DE PRIMEIRA CLASSE** (Paulo, 11/08: *"os vencimentos são
+  datas definidas pelos órgãos governamentais, sempre separados por esferas —
+  federal, estadual, municipal; isso nunca se altera e é onde deve ser feita a
+  consulta"*): cada obrigação leva `esfera` + `abrangencia` ('BR', 'UF:SP',
+  'IBGE:...'). Hoje o federal está completo, o ESTADUAL só tem o prazo de SP (o
+  SPED — cliente de outra UF NÃO tem prazo cadastrado e a abrangência denuncia)
+  e o MUNICIPAL era buraco inteiro: o **ISS entrou como pendência nomeada**
+  (`dependeDe: 'calendário do município'`) porque não existe "dia do ISS"
+  nacional e carimbar o de SP seria inventar prazo — e porque optante do Simples
+  não recolhe ISS próprio (está no DAS, LC 123 art. 13). CONSULTA MENSAL pelo
+  Gemini (já plugado com grounding: `googleSearch` + `groundingChunks` com URL)
+  é PROPOSTA COM FONTE, nunca escrita direta: o app mostra a DIFERENÇA contra o
+  catálogo e humano confirma — data de pagamento não muda sozinha (multa de um
+  lado, "atrasada" falsa do outro), e modelo com busca reduz o chute mas pode
+  citar blog no lugar do ato. O que a consulta achar vira CADASTRO com vigência
+  (régua do IVA-ST: resolve pela DATA do fato, nunca "o mais recente").
   **MATA-BURRO** (palavra do Paulo, 11/08: *"colaborador que não sabe até hoje
   não vai saber amanhã; o que muda o jogo são os freios — prazos, obrigações,
   entregas, quem faz e como faz"*): trava é BARREIRA FÍSICA no caminho, não
