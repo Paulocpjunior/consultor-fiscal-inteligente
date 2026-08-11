@@ -59,6 +59,15 @@ export interface DipamPainel {
         base: number; inss: number; gilrat: number; senar: number; total: number;
         notas: FunruralNota[];
         revisarAliquotas: boolean;
+        excluidasArt136?: Array<{
+            chave: string;
+            numero: string;
+            dhEmi: string;
+            fornecedor: string;
+            doc: string;
+            valor: number;
+            motivo: string;
+        }>;
     };
     notas?: any[];
     pendencias?: DipamPendencia[];

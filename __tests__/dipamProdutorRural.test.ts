@@ -282,6 +282,14 @@ describe('nota própria de ENTRADA (tpNF=0) — o formato real da compra de prod
             expect(daProdutor).toBeTruthy();
             expect(daProdutor.funrural.aplica).toBe(false);      // a do produtor sai da conta
             expect(daProdutor.funrural.motivo).toMatch(/art\. ?136|RC 33068/);
+
+            // O painel PRECISA mostrar por que o total mudou (farol honesto):
+            // a NF-e excluída aparece em excluidasArt136 com nº/fornecedor/valor.
+            expect(painel.funrural.excluidasArt136).toHaveLength(1);
+            const ex = painel.funrural.excluidasArt136[0];
+            expect(ex.numero).toBe(daProdutor.numero);
+            expect(ex.doc).toBe(daProdutor.fornecedor.doc);
+            expect(ex.motivo).toMatch(/art\. ?136|RC 33068/);
         });
 
         it('produtor SEM par (só uma nota da operação) fica INTACTO — sem dedup, sem alarme', () => {
@@ -293,6 +301,7 @@ describe('nota própria de ENTRADA (tpNF=0) — o formato real da compra de prod
             const comFunrural = painel.notas.filter((n: any) => n.funrural.aplica);
             expect(comFunrural).toHaveLength(1);                          // continua contada
             expect(comFunrural[0].notaOrigemProdutor).toBeFalsy();       // NÃO foi excluída
+            expect(painel.funrural.excluidasArt136 || []).toHaveLength(0); // nada a mostrar
         });
     });
 });
