@@ -872,6 +872,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   cálculo: é o app REPRODUZINDO a colcha de retalhos. **REGRA Nº 1: um catálogo
   só, no backend, puro e testado; o front lê dele** — e enquanto ele não cobrir
   o regime do cliente, a etapa 4 NÃO pode dar verde (trava T1 do escopo).
+  **O PRINT É EVIDÊNCIA, NÃO NARRATIVA** (Paulo, 11/08: *"o colaborador não sabe
+  falar o que quer pq não sabe fazer e não sabe explicar"*): NÃO propor campo de
+  "descreva seu problema" — descrição errada de quem não sabe é premissa falsa,
+  e vale aqui a mesma régua do XML-fonte (a fonte não mente, o relato mente).
+  Melhora-se o CONTEXTO automático da evidência (cliente, competência, tela,
+  módulo — como a ErrorBoundary), nunca pedindo explicação a quem não consegue
+  dar. E a **qualificação da equipe é RESTRIÇÃO DE PROJETO**: minimizar
+  julgamento fiscal exigido da pessoa; onde informar é inevitável, o valor entra
+  CARIMBADO com a origem. O embasamento jurídico é do Paulo (não é achismo) — o
+  meu trabalho é encodá-lo COM a citação e COM teste, pra a tradução cirúrgica
+  dele ser feita UMA vez e valer pra sempre.
 
 ## Fila de features acordadas (com requisitos)
 
