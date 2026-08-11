@@ -12,7 +12,15 @@ import { requireAuth } from './require-admin.js';
 import { consultaNFePorChave } from './sefaz-client.js';
 import { loadCertificate } from './secret-loader.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
-import { importarXmlSefaz, reatribuirDesconhecidas, corrigirDirecaoEntradaPropria, preencherEnderecoDestinatario } from './xml-importer.js';
+import { importarXmlSefaz, reatribuirDesconhecidas, corrigirDirecaoEntradaPropria, corrigirStatusCanceladoPorEvento, preencherEnderecoDestinatario } from './xml-importer.js';
+
+// Competências que o backfill de cancelamento varre: a ATUAL e a ANTERIOR —
+// fechamento é sempre do mês anterior, e é lá que cancelada torta morde.
+function competenciasParaBackfillCancelado(agora = new Date()) {
+  const atual = agora.toISOString().slice(0, 7);
+  const d = new Date(agora); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1);
+  return [atual, d.toISOString().slice(0, 7)];
+}
 import { withCronHeartbeat, listarCronsOrfaos } from './cron-heartbeat.js';
 import { manifestarPendentes } from './manifesto-orchestrator.js';
 import { listarElegibilidadeNfseNacionalDfe } from './nfse-nacional-dfe-eligibility.js';
@@ -215,6 +223,17 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
       }
     } catch (e) {
       console.warn('[sync-cron] correção de direção tpNF=0 falhou:', e.message);
+    }
+
+    // Cancelamento capturado (evento 110111/cStat) sem refletir no status —
+    // cancelada torta conta no Livro e no fechamento (bug 11/08, MV LIDER).
+    try {
+      const c = await corrigirStatusCanceladoPorEvento({ competencias: competenciasParaBackfillCancelado() });
+      if (c.corrigidas > 0) {
+        console.log(`[sync-cron] cancelamento: ${c.corrigidas} doc(s) com cancelamento capturado tiveram o status corrigido para 'cancelado'`);
+      }
+    } catch (e) {
+      console.warn('[sync-cron] correção de status cancelado falhou:', e.message);
     }
 
     // Endereço do destinatário nos docs capturados antes de 04/08 — sem UF o
@@ -661,6 +680,15 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
       }
     } catch (e) {
       console.warn('[sync-cron-now] correção de direção tpNF=0 falhou:', e.message);
+    }
+
+    try {
+      const c = await corrigirStatusCanceladoPorEvento({ competencias: competenciasParaBackfillCancelado() });
+      if (c.corrigidas > 0) {
+        console.log(`[sync-cron-now] cancelamento: ${c.corrigidas} doc(s) tiveram o status corrigido para 'cancelado'`);
+      }
+    } catch (e) {
+      console.warn('[sync-cron-now] correção de status cancelado falhou:', e.message);
     }
 
     console.log(`[sync-cron-now] fim — ${sucessos}/${empresas.length} ok, ${totalNovos} novos`);

@@ -14,11 +14,15 @@ import { alocarTributacaoIcms } from './iobSageExportService';
 // o que fez "emissão própria 0" em 198 clientes (05/08) e o que fazia este
 // relatório dizer "nenhuma nota emitida" com 436 documentos no recorte.
 import { cnpjEmitente, modeloDoDoc } from '../sefaz-backend/participante-doc-helper.js';
+// Cancelamento EFETIVO — o status gravado pode mentir (evento 155 não virava o
+// status; merge stub→nota ressuscitava a cancelada). docCancelado decide na
+// LEITURA olhando também eventos[]/cStat — bug 11/08, MV LIDER 639: cancelada
+// contada no Livro de Saídas e no fechamento.
+import { docCancelado } from '../sefaz-backend/xml-metadata-helper.js';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
-const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
 
-export const docValido = (d: DocumentoFiscal) => !CANCELADOS.has(d.status);
+export const docValido = (d: DocumentoFiscal) => !docCancelado(d);
 const contabilDoc = (d: DocumentoFiscal) => d.totais?.vNF || d.valorTotal || 0;
 
 /** Contraparte (quem não é a empresa): destinatário na saída e na nota própria de entrada. */
@@ -370,7 +374,7 @@ export function nfCanceladasFaltantes(docs: DocumentoFiscal[], empresaCnpj: stri
         const k = `${modelo}|${serie}`;
         const g = mapa.get(k) || { modelo, serie, presentes: new Set<number>(), canceladas: new Set<number>() };
         g.presentes.add(num);
-        if (CANCELADOS.has(d.status)) g.canceladas.add(num);
+        if (docCancelado(d)) g.canceladas.add(num);
         mapa.set(k, g);
     }
     return Array.from(mapa.values()).map(g => {
