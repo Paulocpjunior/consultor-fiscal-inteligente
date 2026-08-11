@@ -3,9 +3,10 @@
  *
  * A regra da casa é "arquivo aceito > leiaute deduzido": a definição do
  * VL_CONT_IPI (que nem o PVA confere) saiu de um arquivo real, cruzando o E510
- * com o C190. Provou-se que VL_CONT_IPI = Σ vProd (NÃO inclui o IPI). Estes
- * testes travam essa definição e a ordem dos campos, e reproduzem duas linhas
- * reais do arquivo (CFOP 5101 e 6101) a partir de itens sintéticos.
+ * com o C170/C190. Provou-se que VL_CONT_IPI = Σ (vProd + IPI) — INCLUI o IPI
+ * (CFOP 1101: C170 ΣvProd 138.396,70 + IPI 4.389,15 = E510 VL_CONT 142.785,85).
+ * Estes testes travam essa definição e a ordem dos campos, reproduzindo linhas
+ * reais do arquivo a partir de itens sintéticos.
  */
 // @ts-expect-error — módulo .js do backend (sem tipos)
 import { montarLinhasE510 } from '../sefaz-backend/sped-bloco-ipi-e510.js';
@@ -16,12 +17,12 @@ const nota = (direcao: string, itens: any[]) => ({ direcao, _dados: {}, itens })
 const limpo = (linhas: string[]) => linhas.map((l) => l.replace(/\r?\n$/, ''));
 
 describe('E510 — consolidação por CFOP + CST_IPI', () => {
-    it('VL_CONT_IPI = Σ vProd (NÃO inclui IPI); campos na ordem provada', () => {
-        // CFOP 5101 / CST 50: reproduz a relação real (VL_CONT ≠ VL_CONT+IPI).
+    it('VL_CONT_IPI = Σ (vProd + IPI) — INCLUI o IPI; campos na ordem provada', () => {
+        // CFOP 5101 / CST 50: VL_CONT 317.806,19 = Σ vProd (308.508,11) + IPI (9.298,08).
         const { linhas } = montarLinhasE510([
             nota('saida', [
                 { cfop: '5101', cstIpi: '50', vProd: 300000, vBcIpi: 280000, vIPI: 9000 },
-                { cfop: '5101', cstIpi: '50', vProd: 17806.19, vBcIpi: 6092.21, vIPI: 298.08 },
+                { cfop: '5101', cstIpi: '50', vProd: 8508.11, vBcIpi: 6092.21, vIPI: 298.08 },
             ]),
         ]);
         expect(linhas).toHaveLength(1);
@@ -30,10 +31,11 @@ describe('E510 — consolidação por CFOP + CST_IPI', () => {
     });
 
     it('agrupa por par CFOP+CST_IPI e ordena por CFOP', () => {
+        // VL_CONT = vProd + IPI: 6101 → 111.041,65+2.356,36; 5122 → 2.695,68+87,61.
         const { linhas } = montarLinhasE510([
             nota('saida', [
-                { cfop: '6101', cstIpi: '50', vProd: 113398.01, vBcIpi: 72502.64, vIPI: 2356.36 },
-                { cfop: '5122', cstIpi: '50', vProd: 2783.29, vBcIpi: 2695.68, vIPI: 87.61 },
+                { cfop: '6101', cstIpi: '50', vProd: 111041.65, vBcIpi: 72502.64, vIPI: 2356.36 },
+                { cfop: '5122', cstIpi: '50', vProd: 2695.68, vBcIpi: 2695.68, vIPI: 87.61 },
             ]),
         ]);
         expect(limpo(linhas)).toEqual([
