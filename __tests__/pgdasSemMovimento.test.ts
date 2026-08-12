@@ -200,3 +200,48 @@ describe('competência que já tem declaração transmitida', () => {
         expect(avaliarDeclaracaoJaEntregue(undefined).jaEntregue).toBe(false);
     });
 });
+
+/**
+ * A RECUSA PRECISA CONTAR QUE HOUVE UMA CONFERÊNCIA ANTES.
+ *
+ * Paulo, 12/08: a trava "já entregue" pegou a MORDAM (*"agora sim"*) e não
+ * pegou a ELS COMERCIO DE BANANAS 07/2026 (*"aqui não foi não"*). Da tela não
+ * dava pra saber por quê — "a Receita disse que não há declaração" e "eu não
+ * consegui perguntar" chegavam com a MESMA cara, e as ações são OPOSTAS.
+ */
+describe('o que a conferência prévia respondeu chega junto da recusa', () => {
+    const bruta = 'SERPRO 400: [EntradaIncorreta-PGDASD-MSG_ISN_023] - SN-Entregar: '
+        + 'O valor da atividade deve ser maior que zero.';
+
+    it('a Receita respondeu que NÃO há declaração — e a mensagem diz isso', () => {
+        const r = interpretarRecusaSemMovimento(bruta, { ok: true, situacao: 'sem-declaracao' });
+        expect(r.acao).toMatch(/Conferi antes/);
+        expect(r.acao).toMatch(/NÃO há declaração transmitida/);
+        // Entregue agora há pouco? a consulta pode atrasar — sem isso a frase
+        // manda entregar duas vezes.
+        expect(r.acao).toMatch(/poucos minutos/);
+    });
+
+    it('consulta CAÍDA não vira "não há declaração" — indeterminado tem cara própria', () => {
+        const r = interpretarRecusaSemMovimento(bruta, { ok: false, erro: 'timeout no SERPRO' });
+        expect(r.acao).toMatch(/a consulta falhou \(timeout no SERPRO\)/);
+        expect(r.acao).toMatch(/JÁ entregou no e-CAC, ignore/);
+        expect(r.acao).not.toMatch(/NÃO há declaração transmitida/);
+    });
+
+    it('consulta que nem existe no ambiente também é nomeada', () => {
+        const r = interpretarRecusaSemMovimento(bruta, null);
+        expect(r.acao).toMatch(/não está disponível neste ambiente/);
+    });
+
+    it('sem o argumento, a tradução segue pura — não se inventa conferência', () => {
+        const r = interpretarRecusaSemMovimento(bruta);
+        expect(r.acao).not.toMatch(/Conferi antes|consulta falhou|neste ambiente/);
+    });
+
+    it('vale também para a recusa desconhecida', () => {
+        const r = interpretarRecusaSemMovimento('SERPRO 500: erro interno', { ok: true });
+        expect(r.conhecida).toBe(false);
+        expect(r.acao).toMatch(/Conferi antes/);
+    });
+});

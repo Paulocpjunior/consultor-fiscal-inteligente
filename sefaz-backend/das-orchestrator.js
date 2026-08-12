@@ -401,6 +401,12 @@ export async function declararPgdasSemMovimento(req) {
     // e-CAC, e o app ainda deixava tentar e falhava com MSG_ISN_023.
     // Consulta caída NÃO bloqueia: não saber se já foi entregue não é motivo pra
     // impedir a entrega de uma competência que continua vencendo.
+    //
+    // E o RESULTADO da conferência viaja até a recusa: a trava pegou a MORDAM e
+    // não pegou a ELS 07/2026 (12/08), e da tela não dava pra saber se a Receita
+    // tinha dito "não há declaração" ou se a consulta simplesmente não rodou.
+    // São ações opostas — ver `resumirConsultaPrevia`.
+    let consultaPrevia = null;
     if (typeof provider.consultarAtividadesDeclaradas === 'function') {
         try {
             const consulta = await provider.consultarAtividadesDeclaradas({
@@ -415,9 +421,11 @@ export async function declararPgdasSemMovimento(req) {
                 err.numeroDeclaracao = ja.numeroDeclaracao;
                 throw err;
             }
+            consultaPrevia = { ok: true, situacao: consulta?.leitura?.situacao || null };
         } catch (e) {
             if (e?.code === 'SEM_MOVIMENTO_JA_ENTREGUE') throw e;
             console.warn('[das/sem-movimento] consulta prévia indisponível, seguindo:', e?.message);
+            consultaPrevia = { ok: false, erro: e?.message || 'falha na consulta' };
         }
     }
 
@@ -435,7 +443,7 @@ export async function declararPgdasSemMovimento(req) {
             empresaCnpj, competencia, valor: 0, dadosPgdas: { declaracao },
         });
     } catch (e) {
-        const r = interpretarRecusaSemMovimento(e?.message);
+        const r = interpretarRecusaSemMovimento(e?.message, consultaPrevia);
         const err = new Error(`${r.mensagem} ${r.acao}`);
         err.httpStatus = 400;
         err.code = r.codigo || 'SEM_MOVIMENTO_RECUSADO';
