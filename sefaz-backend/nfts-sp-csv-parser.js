@@ -32,6 +32,8 @@ const COLUNAS = {
     tipoRegistro: 'Tipo de Registro',
     numero: 'Nº NFTS',
     dataEmissao: 'Data Hora Emissão NFTS',
+    numeroDocumento: 'Número do Documento',
+    serieDocumento: 'Série do Documento',
     dataPrestacao: 'Data da Prestação de Serviços',
     ccmTomador: 'Inscrição Municipal do Tomador',
     docTomador: 'CPF/CNPJ do Tomador',
@@ -140,6 +142,9 @@ export function parseCsvNftsSp(input) {
         notas.push({
             numero: at('numero'),
             dataEmissao: at('dataEmissao'),
+            // Documento do PRESTADOR que a NFTS cobre — é a chave da duplicidade.
+            numeroDocumento: at('numeroDocumento'),
+            serieDocumento: at('serieDocumento'),
             dataPrestacao: at('dataPrestacao'),
             ccmTomador: soDigitos(at('ccmTomador')) || null,
             docTomador: soDigitos(at('docTomador')) || null,
@@ -165,6 +170,33 @@ export function parseCsvNftsSp(input) {
     // Zero NFTS é RESPOSTA — mas nunca um "ok" mudo.
     const periodoSemNfts = notas.length === 0 && totalDeclarado === 0;
 
+    // DUPLICIDADE: duas NFTS pro MESMO documento do mesmo prestador, mesma data
+    // e mesmo valor. Achado real no export de 07/2026 (NFTS 66 e 67, doc 1269
+    // da REGULATORIO MAIS, R$ 690,00, emitidas com 16 min de diferença).
+    // NFTS em dobro declara o serviço duas vezes — e quando há ISS retido,
+    // declara o imposto duas vezes.
+    const porChave = new Map();
+    for (const n of notas) {
+        if (n.cancelada) continue;
+        const chave = [n.docPrestador, n.numeroDocumento, n.dataPrestacao, n.valorServicos].join('|');
+        if (!n.docPrestador || !n.numeroDocumento) continue;   // sem chave, não acusa
+        if (!porChave.has(chave)) porChave.set(chave, []);
+        porChave.get(chave).push(n);
+    }
+    const duplicadas = Array.from(porChave.values())
+        .filter((g) => g.length > 1)
+        .map((g) => ({
+            docPrestador: g[0].docPrestador,
+            nomePrestador: g[0].nomePrestador,
+            numeroDocumento: g[0].numeroDocumento,
+            dataPrestacao: g[0].dataPrestacao,
+            valorServicos: g[0].valorServicos,
+            valorIss: g[0].valorIss,
+            numeros: g.map((n) => n.numero),
+            acao: 'Duas NFTS para o MESMO documento do prestador. Cancele a duplicada no portal — '
+                + 'NFTS em dobro declara o serviço duas vezes (e o ISS retido, quando houver).',
+        }));
+
     return {
         notas,
         totalDeclarado,
@@ -176,6 +208,7 @@ export function parseCsvNftsSp(input) {
               + 'ATENÇÃO: zero NFTS não é conclusão. Se o cliente tomou serviço de prestador de fora de SP '
               + 'ou que não emite NFS-e paulistana, a NFTS DEVERIA ter sido emitida — e o ISS retido não foi declarado.'
             : null,
+        duplicadas,
         colunasFaltando,
         linhasComConteudo,
         colunas: cabecalho.length,

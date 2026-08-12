@@ -125,3 +125,57 @@ describe('linha de nota', () => {
         expect(() => parseCsvNftsSp('')).toThrow(/vazio/i);
     });
 });
+
+/**
+ * EXPORT REAL COM MOVIMENTO (Paulo, 12/08 — mesmo CCM, mesma competência).
+ *
+ * Este arquivo VALIDOU a decisão de casar coluna por NOME: ele tem **58
+ * colunas**, o export vazio tinha **147**. O mesmo portal, o mesmo período, o
+ * mesmo documento — e leiaute diferente. Índice fixo teria lido lixo.
+ */
+const arquivoComNotas = () => readFileSync(join(__dirname, 'fixtures', 'nfts-sp-export-com-notas.csv'));
+
+describe('export real COM notas', () => {
+    it('lê as 3 NFTS mesmo com layout de 58 colunas (o vazio tinha 147)', () => {
+        const r = parseCsvNftsSp(arquivoComNotas());
+        expect(r.colunas).toBe(58);
+        expect(r.colunasFaltando).toEqual([]);
+        expect(r.notas).toHaveLength(3);
+        expect(r.periodoSemNfts).toBe(false);
+    });
+
+    it('a soma das notas bate com o Total declarado pelo portal', () => {
+        const r = parseCsvNftsSp(arquivoComNotas());
+        const soma = r.notas.reduce((a: number, n: any) => a + (n.valorServicos || 0), 0);
+        expect(r.totalDeclarado).toBe(3);
+        expect(r.valorServicosDeclarado).toBe(6380);
+        expect(Number(soma.toFixed(2))).toBe(6380);
+    });
+
+    it('linha de nota vem com Tipo de Registro "4" — não "2" como a NFS-e', () => {
+        // O parser não filtra por tipo justamente por isso: exigir '2' (como faz
+        // o da NFS-e) descartaria TODAS as NFTS em silêncio.
+        const r = parseCsvNftsSp(arquivoComNotas());
+        expect(r.notas.map((n: any) => n.numero).sort()).toEqual(['65', '66', '67']);
+    });
+
+    // ACHADO REAL nos dados do Paulo.
+    it('acusa NFTS DUPLICADA — 66 e 67 cobrem o mesmo documento 1269', () => {
+        const r = parseCsvNftsSp(arquivoComNotas());
+        expect(r.duplicadas).toHaveLength(1);
+        const d = r.duplicadas[0];
+        expect(d.numeros.sort()).toEqual(['66', '67']);
+        expect(d.numeroDocumento).toBe('1269');
+        expect(d.docPrestador).toBe('54402122000133');
+        expect(d.valorServicos).toBe(690);
+        expect(d.acao).toMatch(/Cancele a duplicada/i);
+    });
+
+    it('sem chave (prestador ou documento vazio) NÃO acusa duplicidade', () => {
+        // Acusar sem chave produziria par falso, e par falso aqui manda cancelar
+        // NFTS legítima no portal — dano maior que o do achado.
+        const cab = 'Tipo de Registro;Nº NFTS;Valor dos Serviços;Valor ISS;CPF/CNPJ do Prestador;Número do Documento';
+        const r = parseCsvNftsSp(`${cab}\n4;1;100,00;0,00;;\n4;2;100,00;0,00;;`);
+        expect(r.duplicadas).toEqual([]);
+    });
+});
