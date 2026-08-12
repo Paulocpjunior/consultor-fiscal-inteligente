@@ -517,6 +517,28 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                     Total somado das linhas acima, lido do XML da declaração — não é o "resumo" do SERPRO,
                                     que vem sem valor. Confira contra o e-CAC antes de emitir a guia.
                                 </p>
+                                {/* DE QUAL declaração vieram os números. Print sem
+                                    identificação não é evidência — é número solto,
+                                    e foi o que travou a conferência de 12/08. */}
+                                {debitos.identificacao?.cnpj && (
+                                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                        Lido da declaração do CNPJ <strong>{debitos.identificacao.cnpj}</strong>
+                                        {debitos.identificacao.competencia && <> · competência <strong>{debitos.identificacao.competencia}</strong></>}
+                                        {debitos.identificacao.categoriaDCTF && <> · categoria {debitos.identificacao.categoriaDCTF}</>}
+                                    </p>
+                                )}
+                                {debitos.conferencia && !debitos.conferencia.confere && (
+                                    <p className="mt-2 text-xs font-bold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded p-2">
+                                        ⚠ Estes números NÃO são desta declaração: {debitos.conferencia.problemas.join('; ')}.
+                                        Não confira contra o e-CAC desta empresa — o app pediu uma coisa e a Receita devolveu outra.
+                                    </p>
+                                )}
+                                {debitos.conferencia && !debitos.conferencia.conferivel && (
+                                    <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                                        O XML não trouxe identificação (CNPJ/competência) — não dá pra provar que estes números
+                                        são desta declaração.
+                                    </p>
+                                )}
                             </div>
                         )}
                     </div>

@@ -196,6 +196,10 @@ export interface DctfwebDebitosResult {
     debitos: DctfwebDebitoApurado[];
     total: number;
     origem: 'xml-declaracao';
+    /** DE QUAL declaração vieram os números — lido do próprio XML. */
+    identificacao?: { cnpj: string | null; competencia: string | null; perApuracao: string | null; categoriaDCTF: string | null };
+    /** A resposta é da pergunta que foi feita? */
+    conferencia?: { confere: boolean; conferivel: boolean; problemas: string[] };
 }
 
 /**
