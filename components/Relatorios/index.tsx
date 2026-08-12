@@ -638,7 +638,20 @@ const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tru
             l.faltantesTotal,
         ]),
         identificacao,
-        observacoes: [...RESSALVAS_NUMERACAO, ...obsTruncado(truncado)],
+        observacoes: [
+            // A LISTA COMPLETA vai nas observações, que quebram linha. Na coluna
+            // ela era CORTADA pela largura (o "…" do gerador de PDF não diz
+            // quanto sobrou), e quem confere numeração precisa da sequência
+            // inteira — foi o que o Paulo pediu no caso LAV (12/08).
+            ...linhas.filter(l => l.faltantesTotal > 0).map(l =>
+                `Faltantes mod ${l.modelo} série ${l.serie} (${l.faltantesTotal} número(s)): `
+                + formatarFaixas(l.faltantes)
+                + (l.faltantesTotal > l.faltantes.length
+                    ? ` … e mais ${l.faltantesTotal - l.faltantes.length} não listado(s): a lista para em `
+                      + `${l.faltantes.length} por série. Neste caso confira o intervalo ${l.primeiro}–${l.ultimo} inteiro.`
+                    : ' — sequência COMPLETA.')),
+            ...RESSALVAS_NUMERACAO, ...obsTruncado(truncado),
+        ],
         fileName: `nf-canceladas-faltantes-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
     }));
 
@@ -692,9 +705,11 @@ const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tru
                                     <td className="text-right font-mono">{l.primeiro}–{l.ultimo}</td>
                                     <td className="text-right font-mono">{l.autorizadas}</td>
                                     <td className="pl-3 font-mono text-slate-500">{formatarFaixas(l.canceladas) || '—'}</td>
-                                    <td className={`pl-3 font-mono ${l.faltantesTotal ? 'text-amber-600 font-bold' : 'text-emerald-600'}`}>
+                                    <td className={`pl-3 font-mono break-words ${l.faltantesTotal ? 'text-amber-600 font-bold' : 'text-emerald-600'}`}>
                                         {formatarFaixas(l.faltantes) || '✓ nenhum'}
-                                        {l.faltantesTotal > l.faltantes.length ? ` … (+${l.faltantesTotal - l.faltantes.length})` : ''}
+                                        {l.faltantesTotal > l.faltantes.length
+                                            ? ` … e mais ${l.faltantesTotal - l.faltantes.length} (a lista para em ${l.faltantes.length} por série)`
+                                            : ''}
                                     </td>
                                 </tr>
                             ))}
