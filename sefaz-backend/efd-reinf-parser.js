@@ -28,6 +28,12 @@ import { validarXmlSeguro, XmlInseguroError } from './xml-seguranca.js';
 const SCHEMA_CODIGO = {
     evtTomadorServicos: 'R-2010',       // ✓ verificado
     evt4099FechamentoDirf: 'R-4099',    // ✓ verificado
+    // ✓ R-4010: namespace e campos vindos do gerador HOMOLOGADO do Consultor
+    // Contábil (reinf/reinf-utils.js). O IRRF do beneficiario PF e o <vlrIR>.
+    evt4010PagtoBeneficiarioPF: 'R-4010',
+    // ✓ R-4020: namespace conferido contra arquivo REAL transmitido
+    // (156_R4020_...XML, evtRetPJ, perApur 2023-10).
+    evt4020PagtoBeneficiarioPJ: 'R-4020',
     evtServicosPrestados: 'R-2020',
     evtFechamento: 'R-2099',
     evtTotalContrib: 'R-5001',
@@ -35,7 +41,9 @@ const SCHEMA_CODIGO = {
 };
 
 // Eventos cuja extracao financeira foi calibrada contra arquivo real.
-const CALIBRADOS = new Set(['R-2010', 'R-4099']);
+// R-4010 entra CALIBRADO porque a forma vem do gerador homologado, campo a
+// campo (evtRetPF > ideEstab > ideBenef > idePgto > infoPgto > vlrIR).
+const CALIBRADOS = new Set(['R-2010', 'R-4099', 'R-4010']);
 
 // ── helpers de DOM (namespace-agnosticos) ──────────────────────────────────
 function localName(node) {
@@ -73,6 +81,7 @@ function num(v) {
     return Number.isFinite(n) ? n : 0;
 }
 const r2 = (n) => Math.round(n * 100) / 100;
+const soDigitos = (v) => String(v == null ? '' : v).replace(/\D/g, '');
 
 function totaisZerados() {
     return { inssRetPrinc: 0, inssRetAdic: 0, baseRet: 0, bruto: 0, irrf: 0, csll: 0, pis: 0, cofins: 0 };
@@ -84,6 +93,10 @@ function totaisZerados() {
 function acharEvento(doc) {
     const reinf = doc.documentElement;
     if (!reinf) return null;
+    // Arquivo REAL de R-4020 transmitido vem SEM o envelope <Reinf>: a raiz é o
+    // próprio <evtRetPJ>. Exigir o envelope fazia o parser dizer "não encontrei
+    // evento" num arquivo perfeitamente válido.
+    if (String(localName(reinf) || '').toLowerCase().startsWith('evt')) return reinf;
     for (const filho of elemChildren(reinf)) {
         const ln = localName(filho);
         if (ln && ln.toLowerCase().startsWith('evt')) {
@@ -94,12 +107,82 @@ function acharEvento(doc) {
 }
 function schemaTokenDe(evento) {
     // namespaceURI tipo http://.../schemas/evtTomadorServicos/v2_01_02
-    const ns = evento.namespaceURI || '';
-    const m = ns.match(/\/schemas\/([^/]+)\//);
-    return m ? m[1] : '';
+    const tokenDe = (n) => {
+        const m = String((n && n.namespaceURI) || '').match(/\/schemas\/([^/]+)\//);
+        return m ? m[1] : '';
+    };
+    const noEvento = tokenDe(evento);
+    if (noEvento) return noEvento;
+    // No arquivo real do R-4020 o namespace do leiaute está nos FILHOS
+    // (<ideEvento xmlns="...evt4020...">), não no elemento do evento.
+    const fila = elemChildren(evento);
+    while (fila.length) {
+        const n = fila.shift();
+        const t = tokenDe(n);
+        if (t) return t;
+        fila.push(...elemChildren(n));
+    }
+    return '';
 }
 
 // ── extratores por tipo ─────────────────────────────────────────────────────
+
+/**
+ * R-4010 (evtRetPF) — IRRF sobre pagamento a beneficiário PESSOA FÍSICA.
+ *
+ * Forma conferida contra o gerador HOMOLOGADO do Consultor Contábil:
+ *   evtRetPF > ideEstab > ideBenef(cpfBenef) > idePgto(natRend)
+ *            > infoPgto(dtFG, vlrRendBruto, vlrRendTrib, vlrIR)
+ *
+ * O IRRF é o <vlrIR> — e ele é o valor EFETIVAMENTE RETIDO, nunca recalculado
+ * (é assim que o redutor da Lei 15.270/2025 aparece). Somar aqui é somar o que
+ * o arquivo diz; recalcular criaria um segundo número para o mesmo fato.
+ *
+ * PAGAMENTO SEM <vlrIR> NÃO É IRRF ZERO: é rendimento sem retenção (isento, ou
+ * abaixo da faixa). Ele conta como pagamento e NÃO inventa retenção — por isso
+ * `semRetencao` vem contado, e não somado como 0 no meio dos outros.
+ */
+function extrairR4010(evento) {
+    const retencoes = [];
+    const totais = totaisZerados();
+    let semRetencao = 0;
+
+    const ideEstab = deepFirst(evento, 'ideEstab');
+    if (!ideEstab) return { retencoes, totais, semRetencao };
+    const nrInscEstab = textOf(ideEstab, 'nrInscEstab');
+
+    for (const benef of childrenByTag(ideEstab, 'ideBenef')) {
+        // cpfBenef no R-4010; cnpjBenef no R-4020 — o mesmo extrator serve aos
+        // dois, e quem diz qual é o evento é o schema, não o campo.
+        const doc = textOf(benef, 'cpfBenef') || textOf(benef, 'cnpjBenef');
+        const nome = textOf(benef, 'nmBenef');
+        for (const pgto of childrenByTag(benef, 'idePgto')) {
+            const natRend = textOf(pgto, 'natRend');
+            for (const info of childrenByTag(pgto, 'infoPgto')) {
+                const irrfTxt = textOf(info, 'vlrIR');
+                const irrf = num(irrfTxt);
+                const bruto = num(textOf(info, 'vlrRendBruto'));
+                if (!irrfTxt) semRetencao += 1;
+                retencoes.push({
+                    beneficiario: soDigitos(doc),
+                    nome,
+                    nrInscEstab,
+                    natRend,
+                    dtFG: textOf(info, 'dtFG'),
+                    bruto,
+                    tributavel: num(textOf(info, 'vlrRendTrib')),
+                    irrf,
+                    temRetencao: !!irrfTxt,
+                });
+                totais.bruto += bruto;
+                totais.irrf += irrf;
+            }
+        }
+    }
+    totais.bruto = r2(totais.bruto);
+    totais.irrf = r2(totais.irrf);
+    return { retencoes, totais, semRetencao };
+}
 
 // R-2010: retencao previdenciaria (INSS) — tomador de servicos.
 function extrairR2010(evento) {
@@ -228,6 +311,15 @@ export function parseEventoReinf(xml) {
         tipoRetorno = 'retencao';
         const r = extrairR2010(evento);
         retencoes = r.retencoes; totais = r.totais;
+    } else if (codigo === 'R-4010') {
+        tipoRetorno = 'retencao';
+        const r = extrairR4010(evento);
+        retencoes = r.retencoes; totais = r.totais;
+        if (!r.retencoes.length) {
+            observacoes.push('R-4010 sem nenhum infoPgto legivel — nada foi somado (o zero aqui nao e resposta).');
+        } else if (r.semRetencao) {
+            observacoes.push(`${r.semRetencao} pagamento(s) sem <vlrIR>: rendimento sem retencao, nao IRRF zero.`);
+        }
     } else if (codigo === 'R-4099' || codigo === 'R-2099') {
         tipoRetorno = 'fechamento';
         fechamento = extrairFechamento(evento);

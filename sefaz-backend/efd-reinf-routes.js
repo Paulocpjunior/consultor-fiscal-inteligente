@@ -14,6 +14,10 @@
 import express from 'express';
 import { parseEventoReinf, validarEventoReinf, consolidarReinf } from './efd-reinf-parser.js';
 import { requireAdmin } from './require-admin.js';
+import { separarIrrfDctfweb } from './irrf-dctfweb-familias.js';
+import { consolidarR4010, cruzarIrrfR4010 } from './reinf-irrf-r4010-cruzamento.js';
+import { listarDebitosDeclaracao } from './dctfweb-orchestrator.js';
+import { podeAcessarCnpj } from './carteira-auth.js';
 
 const router = express.Router();
 
@@ -79,6 +83,70 @@ router.post('/analisar', requireAdmin, express.json({ limit: '20mb' }), async (r
     } catch (e) {
         console.error('[efd-reinf/analisar]', e);
         return res.status(500).json({ error: "Falha interna" });
+    }
+});
+
+/**
+ * POST /irrf-r4010 — cruza o IRRF dos eventos R-4010 com o IRRF de PESSOA
+ * FÍSICA declarado na DCTFWeb da competência.
+ *
+ * Body: { xmls: string[], empresaCnpj, anoPA, mesPA, categoria?, conjuntoCompleto? }
+ *
+ * A Reinf é a FONTE do IRRF de pagamento a PF e a DCTFWeb é alimentada por ela:
+ * evento que não chegou vira débito a menos, ou seja recolhimento a menor — e
+ * ninguém enxerga, porque são dois sistemas.
+ *
+ * `conjuntoCompleto` é AFIRMAÇÃO de quem clica, não dedução do app: sem ela o
+ * cruzamento nunca dá verde, porque "não achei divergência" no que foi subido
+ * não é o mesmo que "a competência está completa".
+ */
+router.post('/irrf-r4010', requireAdmin, express.json({ limit: '20mb' }), async (req, res) => {
+    try {
+        const b = req.body || {};
+        const xmls = Array.isArray(b.xmls) ? b.xmls : [];
+        const empresaCnpj = String(b.empresaCnpj || '').replace(/\D/g, '');
+        const anoPA = Number(b.anoPA);
+        const mesPA = Number(b.mesPA);
+        if (!xmls.length) return res.status(400).json({ error: 'Envie os XMLs dos eventos R-4010 em { xmls }.' });
+        if (xmls.length > 500) return res.status(400).json({ error: 'Máximo de 500 eventos por chamada.' });
+        if (empresaCnpj.length !== 14) return res.status(400).json({ error: 'Informe o CNPJ da empresa (14 dígitos).' });
+        if (!Number.isInteger(anoPA) || !Number.isInteger(mesPA)) {
+            return res.status(400).json({ error: 'Informe anoPA e mesPA da competência.' });
+        }
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+
+        const parsed = xmls.map((x) => parseEventoReinf(String(x || '')));
+        const reinf = consolidarR4010(parsed);
+
+        // Lado DCTFWeb: se a consulta falhar, NÃO vira zero — vira "não lido",
+        // e o cruzamento devolve pergunta em vez de divergência inventada.
+        let debitos = { lido: false, motivo: null, debitos: [] };
+        try {
+            debitos = await listarDebitosDeclaracao({
+                empresaCnpj, anoPA, mesPA, categoria: b.categoria,
+            });
+        } catch (e) {
+            debitos = { lido: false, motivo: e.message, debitos: [] };
+        }
+        const dctfweb = separarIrrfDctfweb(debitos.debitos || []);
+        const cruzamento = cruzarIrrfR4010({
+            reinf, dctfweb,
+            dctfwebLido: !!debitos.lido,
+            conjuntoCompleto: b.conjuntoCompleto === true,
+        });
+
+        return res.json({
+            ok: true,
+            competencia: `${anoPA}-${String(mesPA).padStart(2, '0')}`,
+            empresaCnpj,
+            reinf,
+            dctfweb: { ...dctfweb, lido: !!debitos.lido, motivo: debitos.motivo || null },
+            cruzamento,
+        });
+    } catch (e) {
+        console.error('[efd-reinf/irrf-r4010]', e);
+        return res.status(500).json({ error: 'Falha interna' });
     }
 });
 
