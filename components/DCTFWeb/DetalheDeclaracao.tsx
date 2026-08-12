@@ -549,6 +549,18 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                     <p className="text-sm text-amber-800 dark:text-amber-300 mb-3">
                                         Geração de DARF consome ~R$ 0,75 da SERPRO. Apenas para declarações que ainda não tiveram DARF gerado.
                                     </p>
+                                    {/* T2 — a distinção que evita a retificadora.
+                                        Transmitir cedo pra "conseguir a guia"
+                                        fecha a competência para os outros dois
+                                        departamentos; a guia não precisa disso. */}
+                                    {declaracao.situacao === 'EM_ANDAMENTO' && (
+                                        <p className="text-sm text-emerald-800 dark:text-emerald-300 mb-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded p-3">
+                                            <strong>Esta guia sai com a declaração EM ANDAMENTO</strong> — gerar o DARF
+                                            <strong> não transmite</strong> e <strong>não fecha</strong> a competência para os
+                                            outros departamentos. Se o que você precisa é pagar (IRRF de aluguéis, por exemplo),
+                                            é por aqui: transmitir só quando os três insumos estiverem dentro.
+                                        </p>
+                                    )}
                                     <button
                                         onClick={handleGerarDarf}
                                         disabled={loadingDarf}
