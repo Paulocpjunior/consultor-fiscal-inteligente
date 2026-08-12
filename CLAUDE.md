@@ -1455,6 +1455,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   "Qualificações por tributo" — só com ele nasce a marcação por tributo na
   tela (isenção ≠ imunidade: natureza e campo diferentes) e a qualificação no
   pgdasMapper, travada por teste contra o bruto real.
+  📄 **EXTRATO REAL DA JAGUAREXPORT 07/2026 recebido (11/08) — o que ele
+  RESOLVEU e o que ele NÃO resolve**. Números conferidos, que viram o alvo do
+  teste: receita 63.878,60 · `Parcela 1: R$ 63.878,60` · `Isenção de ICMS:
+  R$ 63.878,60` · coluna **ICMS = 0,00** (IRPJ 335,49 · CSLL 213,49 · COFINS
+  777,12 · PIS 168,35 · CPP 2.561,92 · total 4.056,37); atividade "Revenda de
+  mercadorias, exceto para o exterior — sem ST/monofásica/antecipação".
+  RESOLVIDO: a SEMÂNTICA. A qualificação é **por PARCELA da receita da
+  atividade** (natureza e tributo separados), e o payload do app **já comporta
+  isso** — `ReceitaAtividade = {valor, qualificacoesTributarias[]}`, uma receita
+  por parcela. NÃO resolvido: o **id numérico da isenção**. O extrato é a saída
+  HUMANA ("Isenção de ICMS"); o par `{codigoTributo, id}` só existe no payload.
+  Conhecidos hoje: 1004 PIS · 1005 COFINS · 1007 ICMS · 1010 ISS; ids 8 (ST),
+  9 (monofásico), 11 (ISS retido). Falta o id de ISENÇÃO e o de IMUNIDADE (e o
+  codigoTributo do IPI, pro caso POLO CULTURAL). **A FONTE É O 🔎 nessa MESMA
+  empresa/competência** — a declaração foi ACEITA, então o CONSULTIMADECREC14
+  devolve a qualificação que o SERPRO aceitou, e o #573 já faz o botão guardar
+  o `bruto`. NÃO deduzir o id: MSG_ISN_032 provou que qualificação errada
+  derruba a ENTREGA INTEIRA.
 - **"IOB" DITO PELO PAULO É O APP IRMÃO (a URL `plano-contas-iob`), NUNCA o
   e-Fiscal IOB SAGE** — e a confusão custou um vai-e-volta em produção no
   mesmo dia. O R-2055 tinha destravado o transmitir pelo gateway (#41 de lá);
