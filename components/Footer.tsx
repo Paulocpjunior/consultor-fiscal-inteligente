@@ -15,6 +15,20 @@ const Footer: React.FC = () => {
       >
         Versão {rotuloVersao()} · Release {APP_RELEASE} · commit {APP_COMMIT} · atualizado {formatBuildDate(APP_BUILD_TIME)}
       </p>
+      {/* O guia de conferência mora AO LADO DA VERSÃO de propósito: ele começa
+          mandando anotar a versão, e foi um print de tela desatualizada — com o
+          defeito já corrigido — que o originou (12/08). Print sem versão é
+          narrativa, não evidência. */}
+      <p className="mt-1 text-[10px]">
+        <a
+          href="/guia-conferencia-entregas.html"
+          target="_blank"
+          rel="noreferrer"
+          className="text-slate-400 dark:text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 underline underline-offset-2"
+        >
+          📗 Como conferir uma entrega nova (e o que reportar)
+        </a>
+      </p>
     </footer>
   );
 };

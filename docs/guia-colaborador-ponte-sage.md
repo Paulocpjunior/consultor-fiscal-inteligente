@@ -1,5 +1,8 @@
 # Guia do Colaborador — XML de cliente entra pelo CFI (ponte com o IOB Sage)
 
+<!-- guia-id: ponte-sage · guia-revisao: 2026-08-12 -->
+<!-- Mexeu aqui? mexa no par em public/ e suba a revisão nos DOIS. -->
+
 > Fonte dupla: este arquivo e `public/guia-ponte-sage.html` DEVEM ser
 > atualizados juntos (mesma regra dos demais guias).
 

@@ -1,5 +1,8 @@
 # Guia do Colaborador — Captura de SAÍDA (NF-e mod 55)
 
+<!-- guia-id: saida-mod55 · guia-revisao: 2026-08-12 -->
+<!-- Mexeu aqui? mexa no par em public/ e suba a revisão nos DOIS. -->
+
 **Onde:** Central de Documentos Fiscais → aba **📥 Importar** → **Manual & Cofre (saída 55)**
 
 ---

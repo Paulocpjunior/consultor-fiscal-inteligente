@@ -1,5 +1,8 @@
 # Apuração de PIS/COFINS — o que muda, e o que preciso saber de você
 
+<!-- guia-id: piscofins · guia-revisao: 2026-08-12 -->
+<!-- Mexeu aqui? mexa no par em public/ e suba a revisão nos DOIS. -->
+
 > **Fonte dupla.** Este arquivo e `public/guia-apuracao-piscofins.html` são o
 > MESMO documento — atualizar os dois juntos. O HTML é o que vai ao colaborador
 > (servido pelo próprio app; link de artifact chega como "link inválido" pra ele).

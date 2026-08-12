@@ -5,6 +5,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **MATA-BURRO: GUIA DO COLABORADOR ANDA EM PAR** (12/08). A regra "atualizar as
+  DUAS juntas" (página em `public/` + fonte em `docs/`) estava escrita TRÊS
+  vezes neste arquivo e nunca teve trava: dava pra corrigir o HTML e deixar o
+  `.md` velho, e a próxima pessoa a ler a fonte aprenderia o procedimento
+  ERRADO. Como os nomes não casam (`guia-dipam-produtor-rural.html` ×
+  `guia-colaborador-dipam.md`), o par se declara POR DENTRO — `<meta
+  name="guia-id">` + `guia-revisao` no HTML, comentário equivalente no `.md`.
+  `__tests__/guiaParDuplo.test.ts` barra: metade órfã (HTML sem fonte = texto
+  que ninguém acha; `.md` sem página = procedimento que a equipe nunca vê) e
+  revisões divergentes. Guia novo nasce com as duas metades e os dois
+  marcadores. Provado divergindo uma revisão de propósito.
+  📗 **`/guia-conferencia-entregas.html`** (link no RODAPÉ, ao lado da versão)
+  nasceu do caso do dia: chegou print de tela com defeito **já corrigido** —
+  o deploy do módulo é que tinha falhado, e não dava pra saber olhando. A régua
+  que fica é **"print sem versão não é evidência, é narrativa"**, e o guia
+  carrega a versão do `/version.json` na própria página, com botão de copiar.
+  Ele ensina o rito de conferência (versão → resultado, nunca status → o que
+  reportar) e traz o roteiro por entrega, com CRITÉRIO DE ACEITE por item. Vale
+  lembrar da regra de 11/08: NÃO se pede ao colaborador que explique a causa —
+  pede-se print inteiro com cliente, competência e versão.
 - **MATA-BURRO: RÉGUA FISCAL MORA NUM LUGAR SÓ — e agora um teste barra a
   segunda cópia** (Paulo, 12/08: *"a maioria das situações de hoje são brechas e
   buracos SEUS. Não dá p passar por isso mais! Eu gasto token e tempo"* → e a
