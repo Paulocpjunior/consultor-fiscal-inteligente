@@ -57,6 +57,25 @@ const DctfwebHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 ))}
             </div>
 
+            {/* A DCTFWeb é UMA declaração do CNPJ e TRÊS departamentos a
+                alimentam — é aqui que a ordem morde, então o manual fica na
+                porta. Sem ele, "transmitir para conseguir a guia" continua
+                parecendo razoável (e fecha a competência dos outros dois). */}
+            <div className="flex items-center justify-between gap-2 flex-wrap rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 px-3 py-2">
+                <p className="text-[11px] text-sky-900 dark:text-sky-200">
+                    <strong>Guia sai sem transmitir.</strong> Transmitir FECHA a competência para o Contábil e o
+                    Pessoal — só o Fiscal transmite, e só depois de encerrar o MIT.
+                </p>
+                <a
+                    href="/guia-ordem-do-mes.html"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300 font-semibold hover:bg-sky-100 dark:hover:bg-slate-700 whitespace-nowrap"
+                >
+                    📘 Manual do mês
+                </a>
+            </div>
+
             <ErrorBoundary modulo="DctfwebHub">
                 <Suspense fallback={<LoadingSpinner />}>
                     {sub === 'painel' && <DCTFWebDashboard currentUser={currentUser} onShowToast={onShowToast} />}

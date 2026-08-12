@@ -19,7 +19,16 @@ const Footer: React.FC = () => {
           mandando anotar a versão, e foi um print de tela desatualizada — com o
           defeito já corrigido — que o originou (12/08). Print sem versão é
           narrativa, não evidência. */}
-      <p className="mt-1 text-[10px]">
+      <p className="mt-1 text-[10px] flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+        <a
+          href="/guia-ordem-do-mes.html"
+          target="_blank"
+          rel="noreferrer"
+          className="text-slate-400 dark:text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 underline underline-offset-2"
+        >
+          📘 Manual do mês — EFD-Reinf e DCTFWeb por departamento
+        </a>
+        <span className="text-slate-300 dark:text-slate-600" aria-hidden="true">·</span>
         <a
           href="/guia-conferencia-entregas.html"
           target="_blank"
