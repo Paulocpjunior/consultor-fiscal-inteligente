@@ -413,6 +413,9 @@ export async function declararPgdasSemMovimento(req) {
         const err = new Error(`${r.mensagem} ${r.acao}`);
         err.httpStatus = 400;
         err.code = r.codigo || 'SEM_MOVIMENTO_RECUSADO';
+        // Redigida pra ser lida — não pode ser cortada por tamanho pelo
+        // sanitizador (foi o "Erro interno (ref …)" de 12/08).
+        err.mensagemUsuario = `${r.mensagem} ${r.acao}`;
         throw err;
     }
 
