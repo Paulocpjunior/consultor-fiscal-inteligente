@@ -903,6 +903,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   partir dos campos chatos — leitor NOVO de participante passa por ela, e
   teste de leitor DEVE ter caso nas DUAS formas. CUIDADO com `select()` de
   projection: sem os campos chatos na lista, a contraparte some de novo.
+- **A TELA DE CORRELAÇÃO DE CFOP MOSTRAVA UM CFOP E O ARQUIVO GRAVAVA OUTRO**
+  (Paulo, 12/08, DISTRIBUIDORA DE BANANAS ELS: *"confirma pra mim se é nesse
+  campo a correlação de CFOP"*). É essa a tela — mas o `CfopCorrelacaoModal`
+  carregava uma **"réplica simplificada da lógica do backend"**, escrita para
+  "não acoplar o frontend", e as duas divergiram em DOIS pontos: (1) **venda com
+  ST** — a cópia preservava o sufixo e exibia `1405`, **CFOP que não existe** (o
+  próprio caso de 05/08: na entrada a família ST não tem 402/404/405, porque
+  esses sufixos descrevem a POSIÇÃO DO VENDEDOR); (2) **natureza em branco** — a
+  cópia caía em conversão mecânica (1101) enquanto `resolverNaturezaAtividade`
+  DERIVA do `indAtividade` e, sem ele, usa o padrão comércio (1102), que é o
+  caso COMUM em empresa do Simples. Agora o modal importa `correlacionarCfop`,
+  igual ao `iobSageExportService`, e a natureza EFETIVA aparece na tela com a
+  ORIGEM (cadastro × indicador × padrão). REGRA: **conferência que promete
+  número diferente do arquivo é pior que não ter tela** — nenhuma tela de
+  conferência reimplementa a régua que gera o arquivo.
+  No mesmo PR, a lista vazia parou de ter uma cara só: "nenhum documento
+  capturado" (captura), "documentos sem nota de ENTRADA 55/65" (normal em
+  empresa de serviço) e "entradas sem CFOP legível" (buraco de captura) são
+  causas com ações opostas. E o filtro passou a usar `direcaoEfetivaDoc` +
+  `modeloDoDoc` em vez dos campos crus — nota própria de entrada (tpNF=0) e doc
+  sem `modelo` gravado sumiam da conferência em silêncio.
 - **CAMPO GRAVADO PODE MENTIR — A RÉGUA DECIDE NA LEITURA** (11/08, MV LIDER
   639: Livro de Saídas e faturamento contando nota CANCELADA). O filtro
   olhava só `d.status`, e o status mentia por DOIS buracos: cancelamento
