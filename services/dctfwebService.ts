@@ -160,6 +160,47 @@ export async function listarDebitosTrimestrais(user: User | null, params: {
     return res.json();
 }
 
+export interface DctfwebDebitoApurado {
+    codReceita: string;
+    codigo: string;
+    extensao: string;
+    descricao: string;
+    valor: number;
+}
+
+export interface DctfwebDebitosResult {
+    lido: boolean;
+    motivo: string | null;
+    debitos: DctfwebDebitoApurado[];
+    total: number;
+    origem: 'xml-declaracao';
+}
+
+/**
+ * DÉBITOS APURADOS da declaração — a mesma tabela que o e-CAC mostra (tributo,
+ * código de receita e valor). Sob demanda: 1 chamada SERPRO.
+ *
+ * O detalhe do CFI mostrava "Valor do resumo SERPRO: não retornado no resumo" e
+ * parava aí; o e-CAC listava tudo. O dado nunca faltou — vinha do mesmo XML da
+ * declaração e era descartado fora dos trimestrais.
+ */
+export async function listarDebitosDeclaracao(user: User | null, params: {
+    empresaCnpj: string; anoPA: number; mesPA: number; categoria?: DctfwebCategoria;
+}): Promise<DctfwebDebitosResult> {
+    const qs = new URLSearchParams({
+        empresaCnpj: params.empresaCnpj,
+        anoPA: String(params.anoPA),
+        mesPA: String(params.mesPA),
+    });
+    if (params.categoria) qs.set('categoria', params.categoria);
+    const res = await fetch(`${BASE}/debitos?${qs}`, { headers: await authHeaders(user) });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `listarDebitosDeclaracao: ${res.status}`);
+    }
+    return res.json();
+}
+
 /**
  * Emite 1 DARF avulso (SICALC) por débito da declaração transmitida, cada um
  * com o SEU vencimento (PIS/COFINS dia 25 antecipado × IRPJ/CSLL trimestrais

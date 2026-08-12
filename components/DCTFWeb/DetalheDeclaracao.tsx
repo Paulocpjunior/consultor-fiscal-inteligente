@@ -21,6 +21,8 @@ import {
     revokePdfObjectUrl,
     situacaoLabel,
     situacaoColorClass,
+    listarDebitosDeclaracao,
+    type DctfwebDebitosResult,
 } from '../../services/dctfwebService';
 import { getAuth } from 'firebase/auth';
 import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
@@ -96,6 +98,8 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     const [loadingRecibo, setLoadingRecibo] = useState(false);
     const [loadingDarf, setLoadingDarf] = useState(false);
     const [enviandoDarf, setEnviandoDarf] = useState(false);
+    const [debitos, setDebitos] = useState<DctfwebDebitosResult | null>(null);
+    const [loadingDebitos, setLoadingDebitos] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // ORDEM TÉCNICA do envio de imposto (24/07): abre o e-mail padrão do
@@ -106,6 +110,27 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     // Envio PELO SERVIDOR: o app manda o DARF anexado, pela caixa do próprio
     // colaborador, com o gestor em cópia oculta — e a cópia fica em Itens
     // Enviados. É o caminho com PROVA; os dois abaixo só abrem a composição.
+    // DÉBITOS APURADOS — a mesma tabela do e-CAC (tributo, código de receita e
+    // valor). O CFI mostrava só "não retornado no resumo" e parava ali; o dado
+    // sempre esteve no XML da declaração, era só não estar sendo pedido.
+    // Sob demanda porque custa 1 chamada SERPRO.
+    const carregarDebitos = async () => {
+        setLoadingDebitos(true);
+        setError(null);
+        try {
+            setDebitos(await listarDebitosDeclaracao(user, {
+                empresaCnpj: declaracao.empresaCnpj,
+                anoPA: declaracao.anoPA,
+                mesPA: declaracao.mesPA,
+                categoria: declaracao.categoria,
+            }));
+        } catch (e: any) {
+            setError(`Débitos apurados: ${e.message}`);
+        } finally {
+            setLoadingDebitos(false);
+        }
+    };
+
     const enviarDarfPeloServidor = async (pdfBase64: string, filename: string) => {
         setEnviandoDarf(true);
         try {
@@ -425,6 +450,75 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                             <p className="text-xs text-slate-500 dark:text-slate-400">Última sincronização</p>
                             <p className="mt-1 text-slate-800 dark:text-slate-100">{declaracao.ultimaSincronizacao || 'Não informada'}</p>
                         </div>
+                    </div>
+
+                    {/* DÉBITOS APURADOS — o que faltava pra bater com o e-CAC. */}
+                    <div className="mt-4 rounded border dark:border-slate-700 bg-white dark:bg-slate-800 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                            <div>
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-100">Débitos apurados</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    Tributo, código de receita e valor — a mesma tabela do e-CAC, lida do XML da declaração.
+                                </p>
+                            </div>
+                            <button
+                                onClick={carregarDebitos}
+                                disabled={loadingDebitos}
+                                className="text-xs px-3 py-1.5 rounded bg-sky-600 text-white font-bold hover:bg-sky-700 disabled:opacity-50 shrink-0"
+                            >
+                                {loadingDebitos ? 'Consultando…' : (debitos ? 'Consultar de novo' : 'Ver débitos apurados')}
+                            </button>
+                        </div>
+
+                        {debitos && !debitos.lido && (
+                            <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+                                Não deu pra ler os débitos: {debitos.motivo} — isto NÃO quer dizer que a declaração
+                                está sem débito. Confira pelo PDF abaixo.
+                            </p>
+                        )}
+
+                        {debitos?.lido && debitos.debitos.length === 0 && (
+                            <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+                                O XML da declaração não trouxe nenhum débito com saldo a pagar nesta competência.
+                            </p>
+                        )}
+
+                        {debitos?.lido && debitos.debitos.length > 0 && (
+                            <div className="mt-3 overflow-x-auto">
+                                <table className="w-full text-xs">
+                                    <thead>
+                                        <tr className="text-left text-slate-500 dark:text-slate-400 border-b dark:border-slate-700">
+                                            <th className="py-1">Código de receita</th>
+                                            <th>Tributo</th>
+                                            <th className="text-right">Débito apurado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {debitos.debitos.map((d, i) => (
+                                            <tr key={`${d.codReceita}-${i}`} className="border-b border-slate-100 dark:border-slate-700/60">
+                                                <td className="py-1 font-mono text-slate-700 dark:text-slate-200">
+                                                    {d.codigo}-{d.extensao}
+                                                </td>
+                                                <td className="text-slate-700 dark:text-slate-200">{d.descricao || '—'}</td>
+                                                <td className="text-right font-mono text-slate-800 dark:text-slate-100">
+                                                    {formatCurrency(d.valor)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        <tr>
+                                            <td colSpan={2} className="py-1 font-bold text-slate-800 dark:text-slate-100">Total</td>
+                                            <td className="text-right font-mono font-bold text-slate-800 dark:text-slate-100">
+                                                {formatCurrency(debitos.total)}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                                    Total somado das linhas acima, lido do XML da declaração — não é o "resumo" do SERPRO,
+                                    que vem sem valor. Confira contra o e-CAC antes de emitir a guia.
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex gap-1 mt-4 border-b">

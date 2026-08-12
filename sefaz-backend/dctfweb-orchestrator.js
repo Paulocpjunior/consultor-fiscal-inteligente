@@ -381,6 +381,42 @@ export async function listarDebitosTrimestrais({ empresaCnpj, anoPA, mesPA, cate
     };
 }
 
+/**
+ * DÉBITOS APURADOS da declaração — a MESMA tabela que o e-CAC mostra.
+ *
+ * Paulo, 12/08/2026: *"no consultor fiscal não está atualizado igual no e-CAC"*.
+ * O detalhe do CFI dizia "Valor do resumo SERPRO: não retornado no resumo" e
+ * parava aí, enquanto o e-CAC listava tributo a tributo (0561-07 IRRF 606,71 ·
+ * 0588-06 710,88 · 3208-06 18.859,51 · PIS 232,41 …) e o total.
+ *
+ * A informação NUNCA faltou: o `CONSXMLDECLARACAO38` já era consultado e o
+ * `extrairDebitosDctfweb` já lia código de receita, descrição e valor — só que
+ * o resultado era FILTRADO pelos trimestrais (IRPJ/CSLL) e o resto era jogado
+ * fora. Aqui vai tudo, sem filtro.
+ *
+ * O total sai da SOMA dos débitos, e a origem é carimbada: é o XML da
+ * declaração, não o resumo (que realmente vem sem valor). Somar aqui não é
+ * conta nova — é o mesmo número por outro caminho.
+ */
+export async function listarDebitosDeclaracao({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
+    const provider = getDctfwebProvider();
+    const consulta = await provider.consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria });
+    const ext = extrairDebitosDctfweb(consulta?.xml || consulta?._raw || '');
+    if (!ext.lido) {
+        // Farol honesto: XML ilegível ou ausente NÃO vira "declaração sem
+        // débito" — zero aqui faria alguém concluir que não há o que pagar.
+        return { lido: false, motivo: ext.motivo, debitos: [], total: 0, origem: 'xml-declaracao' };
+    }
+    const r2 = (n) => Math.round(n * 100) / 100;
+    return {
+        lido: true,
+        motivo: null,
+        debitos: ext.debitos,
+        total: r2(ext.debitos.reduce((s, d) => s + d.valor, 0)),
+        origem: 'xml-declaracao',
+    };
+}
+
 export async function consultarDeclaracaoCompleta({ empresaCnpj, anoPA, mesPA, categoria }) {
     const provider = getDctfwebProvider();
     return await provider.consultarDeclaracaoCompleta({ empresaCnpj, anoPA, mesPA, categoria });
