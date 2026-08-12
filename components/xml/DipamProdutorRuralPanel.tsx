@@ -233,6 +233,9 @@ const DetalheEmpresa: React.FC<{
     // digitar centenas de municípios seria pedir trabalho por um dado que já
     // existe no arquivo.
     const semMunicipio = (painel.pendencias || []).filter(p => p.codigo === 'municipio-ausente').length;
+    // Nota que chegou sem participante nenhum: o mesmo ♻️ resolve, porque ele
+    // relê emitente E destinatário do XML guardado.
+    const semContraparte = (painel.pendencias || []).filter(p => p.codigo === 'contraparte-ausente').length;
     const relerMunicipios = async () => {
         if (!empresaId || !painel.competencia) return;
         setRelendo(true); setResultadoReler(null);
@@ -394,20 +397,29 @@ const DetalheEmpresa: React.FC<{
 
             {(painel.pendencias?.length || 0) > 0 && (
                 <Caixa titulo={`Pendências (${painel.pendencias!.length}) — resolva antes de fechar a competência`}>
-                    {/* O município NÃO se digita: ele está no XML. */}
-                    {semMunicipio > 0 && (
+                    {/* O município NÃO se digita: ele está no XML. E o mesmo
+                        botão recupera o FORNECEDOR quando a nota chegou sem
+                        participante — caso VINCENZO 07/2026, em que a pendência
+                        dizia "—: vende gênero agropecuário" e mandava consultar
+                        o CADESP de ninguém. */}
+                    {(semMunicipio > 0 || semContraparte > 0) && (
                         <div className="mb-3 rounded-lg border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-900/20 p-3">
                             <p className="text-xs text-sky-900 dark:text-sky-200">
-                                <strong>{semMunicipio} pendência(s) são "nota sem código IBGE do município"</strong> — e esse
-                                dado está no XML guardado, não no cadastro. Reler o arquivo resolve em massa; digitar
-                                município a município seria trabalho por um dado que já existe.
+                                <strong>
+                                    {[
+                                        semMunicipio > 0 && `${semMunicipio} pendência(s) de "nota sem código IBGE do município"`,
+                                        semContraparte > 0 && `${semContraparte} pendência(s) de "nota sem o fornecedor"`,
+                                    ].filter(Boolean).join(' e ')}
+                                </strong>{' '}
+                                — esses dados estão no XML guardado, não no cadastro. Reler o arquivo resolve em massa;
+                                digitar um a um seria trabalho por dado que já existe.
                             </p>
                             <button
                                 onClick={relerMunicipios}
                                 disabled={relendo}
                                 className="mt-2 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-50"
                             >
-                                {relendo ? 'Relendo os XMLs…' : '♻️ Reler município dos XMLs'}
+                                {relendo ? 'Relendo os XMLs…' : '♻️ Reler participante e município dos XMLs'}
                             </button>
                             {resultadoReler && (
                                 <p className="mt-2 text-[11px] text-sky-900 dark:text-sky-200">{resultadoReler}</p>

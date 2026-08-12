@@ -684,6 +684,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `provaDeProdutorPF` com o carimbo da origem (confiança + motivo + IE). Quem
   recebe bloqueia com a causa na mão; **ninguém deduz o `tpInscProd`**. Doc
   ilegível fica fora mas NOMEADO em `semInscricao` — nunca contador mudo.
+  🐛 **"—: vende gênero agropecuário" — pendência sobre NINGUÉM** (12/08, mesmo
+  print): sobrou uma nota sem participante nenhum, e ela caía no genérico
+  "fornecedor com CNPJ e sem IE de produtor" mandando **consultar o CADESP de
+  ninguém** (sem nome, sem doc, sem o botão de confirmar) e segurando o farol em
+  vermelho. São causas com AÇÕES DIFERENTES: CNPJ sem IE se resolve no CADESP;
+  nota sem fornecedor se resolve **relendo o XML** (o mesmo ♻️). Confiança nova
+  `sem-contraparte` + pendência `contraparte-ausente` que DIZ qual nota; o
+  FUNRURAL também parou de afirmar "não é produtor rural" sobre quem não foi
+  lido. Continua BLOQUEANDO o farol — o que mudou é ter ação.
   🐛 **E nota excluída pelo art. 136 parou de cobrar pendência** (mesmo caso,
   notas 95-98): elas saíam do total pela dedup e ao mesmo tempo acusavam "CFOP
   5101 não está na régua de compra de produtor" — 5101 é o CFOP de quem VENDE, e

@@ -306,6 +306,26 @@ export function identificarNaturezaFornecedor(participante, cadastro = null) {
         };
     }
 
+    // A NOTA NÃO TRAZ CONTRAPARTE NENHUMA — e isso NÃO é "CNPJ sem IE de
+    // produtor". Caso VINCENZO 07/2026 (12/08): a pendência saía como
+    // "—: vende gênero agropecuário, mas não dá para provar que é Produtor
+    // Rural" e mandava consultar o CADESP **de ninguém** — sem nome, sem
+    // documento e sem o botão de confirmar. Alarme que não identifica o alvo
+    // não tem como ser atendido.
+    //
+    // A causa é outra e a ação é outra: o participante não foi gravado no
+    // documento (é buraco de CAPTURA/leitura do XML), e o conserto é reler a
+    // FONTE — o mesmo ♻️ que recupera o município.
+    if (!doc && !String(p.nome || p.razaoSocial || '').trim()) {
+        return {
+            ehProdutorRuralPF: false,
+            confianca: 'sem-contraparte',
+            sinais,
+            motivo: 'A nota não traz o fornecedor (sem CNPJ/CPF e sem nome). Não é caso de cadastro: '
+                + 'o participante não foi gravado a partir do XML.',
+        };
+    }
+
     if (ehIeProdutorRuralSP(ie)) sinais.push('ie-produtor-sp');
     if (doc.length === 11) sinais.push('cpf');
     if (doc.length === 14) sinais.push('cnpj');
@@ -465,6 +485,20 @@ function avaliarDipam({ base, cfopPrincipal, cfops, doc, empresa, ehDevolucaoSai
         return fora('Cliente é Produtor Rural (PF): declara DIPAM-A anual, não lança o código 1.1.');
     }
 
+    // Contraparte AUSENTE é outra pendência, com outra ação. Ela entra mesmo
+    // sem NCM agropecuário: se a nota não tem fornecedor, não dá nem pra saber
+    // se é compra de produtor — e é o único caso em que olhar os itens não
+    // ajuda a filtrar.
+    if (base.natureza.confianca === 'sem-contraparte') {
+        pendencias.push(pendencia(
+            'contraparte-ausente',
+            `Nota ${base.numero || base.chave || '—'}: o documento não traz o fornecedor (sem CNPJ/CPF e sem nome).`,
+            'Isso não se resolve no cadastro: use "♻️ Reler município dos XMLs" para reler o participante '
+            + 'da FONTE. Se continuar vazio depois disso, o buraco é de captura — confira em Erros & Logs.',
+        ));
+        return fora('Nota sem fornecedor — fora do total até o participante ser lido do XML.');
+    }
+
     if (base.natureza.confianca === 'indefinida') {
         // CUIDADO: "indefinida" é TODO fornecedor com CNPJ e sem IE de produtor
         // — ou seja, a maioria absoluta das compras de qualquer empresa. Virar
@@ -565,6 +599,11 @@ function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevol
         return fora('Adquirente é produtor rural PF — a sub-rogação é obrigação da empresa adquirente (Lei 8.212/91, art. 30, IV).');
     }
     if (!base.natureza.ehProdutorRuralPF) {
+        // Sem contraparte não se afirma NADA sobre o fornecedor. Dizer "não é
+        // produtor rural" aqui seria conclusão sobre quem o app não leu.
+        if (base.natureza.confianca === 'sem-contraparte') {
+            return fora('A nota não traz o fornecedor — sem ele não dá pra dizer se há sub-rogação.');
+        }
         if (base.natureza.confianca === 'indefinida') {
             return fora('Natureza do fornecedor indefinida — não calcula sub-rogação até confirmar.');
         }
@@ -754,7 +793,8 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
     }
 
     const total = round2(municipiosDeclaraveis.reduce((s, m) => s + m.valor, 0));
-    const bloqueantes = pendencias.filter((p) => p.codigo === 'fornecedor-indefinido' || p.codigo === 'municipio-ausente');
+    const bloqueantes = pendencias.filter((p) => p.codigo === 'fornecedor-indefinido'
+        || p.codigo === 'municipio-ausente' || p.codigo === 'contraparte-ausente');
 
     return {
         competencia,

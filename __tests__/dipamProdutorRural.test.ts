@@ -651,3 +651,61 @@ describe('Registro 1400', () => {
         expect(linhas[0].linha).toBe('|1400|SPDIPAM11|3548906|100,00|');
     });
 });
+
+/**
+ * NOTA SEM FORNECEDOR — pendência que não dava para atender.
+ *
+ * Caso VINCENZO 07/2026 (print do Paulo, 12/08): sobrou uma pendência
+ * "—: vende gênero agropecuário, mas não dá para provar que é Produtor Rural
+ * (Pessoa Física)" mandando **consultar o CADESP de ninguém** — sem nome, sem
+ * documento e sem o botão de confirmar, e ainda segurando o farol em vermelho.
+ *
+ * "Fornecedor com CNPJ e sem IE de produtor" e "a nota chegou sem fornecedor
+ * nenhum" são causas diferentes com AÇÕES diferentes: a primeira se resolve no
+ * CADESP, a segunda relendo o XML. Tratá-las igual manda a pessoa para o lugar
+ * errado.
+ */
+describe('nota que chegou sem participante', () => {
+    const semLado = {
+        chave: '35260700005430000104550010000000951179783634',
+        numero: '95', competencia: '2026-06', direcao: 'entrada', status: 'autorizado',
+        valorTotal: 5200, itens: [{ cfop: '5101', ncm: '08039000' }],
+    };
+
+    it('a natureza NÃO conclui "CNPJ sem IE de produtor" sobre quem não foi lido', () => {
+        const n = identificarNaturezaFornecedor({}) as any;
+        expect(n.confianca).toBe('sem-contraparte');
+        expect(n.motivo).toMatch(/não traz o fornecedor/);
+        expect(n.motivo).not.toMatch(/CADESP/);
+    });
+
+    it('vira pendência PRÓPRIA, e a ação é reler o XML — não o CADESP', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [semLado], competencia: '2026-06',
+            empresa: { id: 'v', nome: 'VINCENZO', cnpj: '63027940000194' } as any,
+        });
+        const p = painel.pendencias.find((x: any) => x.codigo === 'contraparte-ausente');
+        expect(p).toBeTruthy();
+        expect(p.mensagem).toMatch(/Nota 95/);            // diz QUAL nota
+        expect(p.acao).toMatch(/Reler município dos XMLs/);
+        expect(p.acao).not.toMatch(/CADESP/);
+        // E não se disfarça de "fornecedor a confirmar".
+        expect(painel.pendencias.map((x: any) => x.codigo)).not.toContain('fornecedor-indefinido');
+    });
+
+    it('continua BLOQUEANDO o farol — nota sem fornecedor não entra no total', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [semLado], competencia: '2026-06',
+            empresa: { id: 'v', nome: 'VINCENZO', cnpj: '63027940000194' } as any,
+        });
+        expect(painel.farol.cor).toBe('falha');
+        expect(painel.dipam.total).toBe(0);
+    });
+
+    it('o FUNRURAL também não afirma nada sobre quem não foi lido', () => {
+        const n = classificarNota(semLado, {}) as any;
+        expect(n.funrural.aplica).toBe(false);
+        expect(n.funrural.motivo).toMatch(/não traz o fornecedor/);
+        expect(n.funrural.motivo).not.toMatch(/não é produtor rural/);
+    });
+});
