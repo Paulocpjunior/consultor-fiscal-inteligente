@@ -147,6 +147,64 @@ export function podarBrutoDeclaracao(valor, profundidade = 0, limite = 400) {
 }
 
 /**
+ * O QUE A RECEITA DISSE quando não veio atividade.
+ *
+ * ELS COMERCIO DE BANANAS 07/2026 (12/08/2026): o bloco cru trouxe a resposta e
+ * ela não era nenhuma das duas hipóteses da tela —
+ *
+ *   {"status":200,"dados":"","mensagens":[{"codigo":"[Aviso-PGDASD-MSG_ISN_005]",
+ *    "texto":"Não há declaração transmitida para o período informado: 202607."}]}
+ *
+ * Ou seja: uma TERCEIRA causa — não existe declaração naquela competência. Ler
+ * a mensagem é o que separa "procure outra competência" de "some conferir o
+ * detalhamento", que mandam a pessoa para lados opostos.
+ *
+ * Mensagem que este módulo não conhece NÃO vira palpite: sai como
+ * `mensagemDaReceita` para a tela mostrar do jeito que veio.
+ */
+export function interpretarConsultaAtividades(resposta) {
+    const msgs = [];
+    const visitar = (v, d = 0) => {
+        if (d > PROFUNDIDADE_MAX || v == null) return;
+        const p = parseMaybeJson(v);
+        if (p == null || typeof p !== 'object') return;
+        if (Array.isArray(p)) { p.forEach((x) => visitar(x, d + 1)); return; }
+        const texto = p.texto ?? p.mensagem ?? p.descricao;
+        const codigo = p.codigo ?? p.cod;
+        if (typeof texto === 'string' && texto.trim()) msgs.push({ codigo: codigo || null, texto: texto.trim() });
+        Object.values(p).forEach((x) => visitar(x, d + 1));
+    };
+    visitar(resposta, 0);
+
+    const junto = msgs.map((m) => `${m.codigo || ''} ${m.texto}`).join(' | ');
+    const semDeclaracao = /MSG_ISN_005/i.test(junto)
+        || /n[ãa]o h[áa] declara[çc][ãa]o transmitida/i.test(junto);
+
+    if (semDeclaracao) {
+        return {
+            situacao: 'sem-declaracao',
+            mensagemDaReceita: msgs,
+            titulo: 'Não existe declaração transmitida nesta competência.',
+            explicacao: 'A Receita respondeu que não há PGDAS-D entregue para o período — '
+                + 'então não há o que consultar aqui. Isso NÃO é falha do app nem da empresa: '
+                + 'é ausência de entrega.',
+            acao: 'Escolha uma competência que já foi declarada e aceita. E se esta competência '
+                + 'deveria ter sido entregue, ela está VENCENDO — a MAED é de R$ 50,00 por competência.',
+        };
+    }
+    return {
+        situacao: msgs.length ? 'sem-atividade-com-mensagem' : 'sem-atividade',
+        mensagemDaReceita: msgs,
+        titulo: 'A consulta respondeu e não veio atividade nenhuma.',
+        explicacao: 'Duas causas opostas: a Receita devolveu só o recibo/valores, SEM o detalhamento; '
+            + 'ou a declaração é SEM MOVIMENTO — e aí ela realmente não tem atividade '
+            + '(o relatório da Receita imprime "Nenhuma atividade selecionada").',
+        acao: 'A resposta crua abaixo diz qual das duas é. Se for uma declaração sem movimento '
+            + 'aceita, é ela que destrava o "Declarar sem movimento" pelo app.',
+    };
+}
+
+/**
  * Ids que o app JÁ sabe montar (pgdasMapper). Um id declarado que não está
  * aqui é justamente o que estamos procurando — a atividade que a empresa usa
  * e o app ainda não mapeia.

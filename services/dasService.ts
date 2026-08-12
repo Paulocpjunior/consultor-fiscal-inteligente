@@ -84,6 +84,14 @@ export interface AtividadesDeclaradasResposta {
      * separa uma da outra. É ele que carrega a forma aceita pelo SERPRO.
      */
     bruto?: unknown;
+    /** O que a Receita disse — MSG_ISN_005 = não há declaração no período. */
+    leitura?: {
+        situacao: 'sem-declaracao' | 'sem-atividade-com-mensagem' | 'sem-atividade';
+        mensagemDaReceita: Array<{ codigo: string | null; texto: string }>;
+        titulo: string;
+        explicacao: string;
+        acao: string;
+    };
 }
 
 /**
