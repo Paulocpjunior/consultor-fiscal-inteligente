@@ -269,3 +269,44 @@ export function parseCsvNfseSp(input) {
             || Math.abs(valorSomaCalculada - valorTotalDeclarado) < 0.01,
     };
 }
+
+/**
+ * QUE DOCUMENTO É ESTE ARQUIVO?
+ *
+ * O portal da PMSP exporta MAIS DE UM documento com a mesma cara (CSV/TXT do
+ * "Exportação de..."), e o parser acima lê UM só: a **NFS-e**, layout V.006,
+ * cuja linha de nota começa com "2".
+ *
+ * O caso que motivou isto (11/08, Paulo): veio um `NFTS_66958369_...csv` e o
+ * app respondeu "nenhuma linha reconhecida — confira se é o export de NFS-e".
+ * Estava tecnicamente certo e praticamente inútil: quem exportou não tem como
+ * saber que NFTS é outro documento. NFTS é a **Nota Fiscal do Tomador de
+ * Serviços** — quem emite é o TOMADOR (o cliente), quando o prestador não emite
+ * NFS-e paulistana, e é ela que carrega o ISS RETIDO. Ou seja: não é "arquivo
+ * errado", é documento que o importador ainda não lê.
+ *
+ * Esta função NÃO tenta ler NFTS (o layout não está aqui, e layout de arquivo
+ * fiscal não se deduz — a regra da casa). Ela só NOMEIA o que chegou, pra
+ * mensagem de erro dizer a verdade e a ação certa.
+ *
+ * @param {string} nomeArquivo nome original enviado pelo navegador
+ * @returns {{tipo:'nfse'|'nfts'|'desconhecido', rotulo:string, acao:string}|null}
+ */
+export function identificarDocumentoDoPortal(nomeArquivo) {
+    const nome = String(nomeArquivo || '').toUpperCase();
+    if (!nome) return null;
+
+    if (/(^|[^A-Z])NFTS/.test(nome)) {
+        return {
+            tipo: 'nfts',
+            rotulo: 'NFTS — Nota Fiscal do TOMADOR de Serviços (documento diferente da NFS-e)',
+            acao: 'A NFTS é emitida pelo tomador e carrega o ISS retido; o importador de hoje lê só a '
+                + 'NFS-e (layout V.006). O arquivo NÃO foi descartado por estar errado — este documento '
+                + 'ainda não é importado. Mande o arquivo ao Paulo para o layout ser cadastrado.',
+        };
+    }
+    if (/(^|[^A-Z])NFS?E/.test(nome)) {
+        return { tipo: 'nfse', rotulo: 'NFS-e', acao: '' };
+    }
+    return { tipo: 'desconhecido', rotulo: '', acao: '' };
+}
