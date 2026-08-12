@@ -122,7 +122,10 @@ export async function listarDeclaracoes({ empresaCnpj, situacao, anoPA, mesPA } 
         .sort((a, b) => (b.anoPA - a.anoPA) || (b.mesPA - a.mesPA));
 }
 
-export async function transmitirDeclaracao({ empresaId, empresaCnpj, anoPA, mesPA, categoria }) {
+// `transmitidoPor` existe porque a DCTFWeb é UMA declaração do CNPJ alimentada
+// por TRÊS departamentos: quando chega insumo depois da transmissão, a primeira
+// pergunta é "quem transmitiu e quando?". Sem o nome, a resposta some.
+export async function transmitirDeclaracao({ empresaId, empresaCnpj, anoPA, mesPA, categoria, transmitidoPor = null }) {
     assertEmissaoLiberada('DCTFWEB');
     const db = fa().firestore();
     const provider = getDctfwebProvider();
@@ -135,6 +138,7 @@ export async function transmitirDeclaracao({ empresaId, empresaCnpj, anoPA, mesP
         situacao: 'ATIVA',
         numeroRecibo: r.numeroRecibo,
         transmitidoEm: r.transmitidoEm,
+        transmitidoPor: transmitidoPor || null,
         fonte: r.fonte,
         ultimaSincronizacao: new Date().toISOString(),
     }), { merge: true });

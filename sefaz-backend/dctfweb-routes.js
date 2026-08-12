@@ -129,7 +129,10 @@ router.post('/transmitir', requireAuth, express.json(), async (req, res) => {
         if (!empresaId || !empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaId+empresaCnpj+anoPA+mesPA' });
         const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
-        res.json(await transmitirDeclaracao({ empresaId, empresaCnpj, anoPA, mesPA, categoria }));
+        res.json(await transmitirDeclaracao({
+            empresaId, empresaCnpj, anoPA, mesPA, categoria,
+            transmitidoPor: req.user?.email || req.user?.uid || null,
+        }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -603,7 +606,20 @@ async function montarSemaforoInsumos(db, { cnpj, competencia, empresaId }) {
             seloReinf({ lotesGateway: lotes, retencoesApuradas }),
             seloMit(mit),
         ];
-        return { cnpj, competencia, selos, ...vereditoInsumos(selos) };
+        // T4 — "esta competência precisa de retificadora?". A resposta sai do
+        // MESMO semáforo, senão o painel diria uma coisa e o alerta outra.
+        const { avaliarRetificadora } = await import('./dctfweb-retificadora.js');
+        let declaracao = null;
+        try {
+            const docId = `${cnpj}_${competencia.replace('-', '')}_GERAL_MENSAL`.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const snap = await db.collection('dctfweb_declaracoes').doc(docId).get();
+            declaracao = snap.exists ? snap.data() : null;
+        } catch { declaracao = null; }
+
+        return {
+            cnpj, competencia, selos, ...vereditoInsumos(selos),
+            retificadora: avaliarRetificadora({ declaracao, selos }),
+        };
 }
 
 router.get('/insumos', requireAuth, async (req, res) => {
