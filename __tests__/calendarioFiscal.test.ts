@@ -17,10 +17,14 @@ describe('calendarioFiscal', () => {
             expect(v.getFullYear()).toBe(2026);
         });
 
-        it('FGTS competência 05/2026 dia 20/06 (sábado) → prorroga 22/06', () => {
+        // POLÍTICA DO ESCRITÓRIO (Paulo, 11/08): "sempre antecipa". Dia não útil
+        // recolhe no dia útil ANTERIOR — pagar antes nunca gera multa; depois,
+        // sim. Antes desta decisão o cron antecipava e esta tela prorrogava, e a
+        // mesma obrigação tinha duas datas (19/06 × 22/06).
+        it('FGTS competência 05/2026 dia 20/06 (sábado) → ANTECIPA 19/06', () => {
             const regra = OBRIGACOES_POR_REGIME.SIMPLES.find(r => r.obrigacao === 'FGTS')!;
             const v = calcularVencimento('05/2026', regra);
-            expect(v.getDate()).toBe(22);
+            expect(v.getDate()).toBe(19);
             expect(v.getMonth()).toBe(5);  // junho
         });
 
@@ -38,11 +42,11 @@ describe('calendarioFiscal', () => {
             expect(v.getMonth()).toBe(4);
         });
 
-        it('EFD-Contribuições competência 04/2026 vence 14/06 (domingo) → prorroga 15/06', () => {
+        it('EFD-Contribuições competência 04/2026 dia 14/06 (domingo) → ANTECIPA 12/06', () => {
             const regra = OBRIGACOES_POR_REGIME.LUCRO_PRESUMIDO.find(r => r.obrigacao === 'EFD_CONTRIB')!;
             const v = calcularVencimento('04/2026', regra);
-            // 14/06/2026 cai em domingo, segunda 15
-            expect(v.getDate()).toBe(15);
+            // 14/06/2026 cai em domingo ⇒ recua pra sexta 12
+            expect(v.getDate()).toBe(12);
             expect(v.getMonth()).toBe(5);  // junho
         });
 

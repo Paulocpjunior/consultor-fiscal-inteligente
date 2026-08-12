@@ -63,11 +63,15 @@
 // Aqui o ajuste é campo da obrigação, não default do módulo:
 //   'prorroga' — vence no próximo dia útil;
 //   'antecipa' — recolhe no dia útil ANTERIOR.
-// A direção errada custa multa (ou pinta "atrasada" falsa), então NENHUMA
-// entrada nasce sem ela e as não conferidas saem em pendenciasDeConfirmacao().
-// ONDE OS DOIS DISCORDAVAM, ficou o que a TELA fazia — é o que a equipe vê e
-// usa hoje; trocar a data por dedução minha seria inventar prazo. Corrigir é
-// uma palavra por linha, depois do aval do Paulo/Alexandre.
+//
+// ✅ DECIDIDO PELO PAULO (11/08): **"sempre antecipa"**. É POLÍTICA DO
+// ESCRITÓRIO, e ela é segura por construção: pagar no dia útil anterior nunca
+// gera multa, mesmo onde a lei permitiria prorrogar — o inverso, sim. Some
+// junto a divergência que existia (o cron antecipava, a tela prorrogava, e a
+// mesma obrigação tinha duas datas).
+// O campo CONTINUA existindo por obrigação em vez de virar constante do módulo:
+// se um prazo específico exigir prorrogação, muda-se UMA linha, com a base
+// legal do lado, sem tocar no resto.
 // ============================================================================
 
 import { ehDiaUtil } from './feriados-nacionais.js';
@@ -142,30 +146,27 @@ const DAS = {
     obrigacao: 'DAS', label: 'DAS', nome: 'DAS Simples Nacional',
     esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 20, mesesApos: 1,
-    ajusteDiaNaoUtil: 'prorroga',
-    baseLegal: 'LC 123/2006 art. 21 §3º (prorroga quando não há expediente bancário)',
+    ajusteDiaNaoUtil: 'antecipa',
+    // A lei permite prorrogar; a política do escritório é antecipar (nunca
+    // depois). Pagar antes não tem penalidade.
+    baseLegal: 'LC 123/2006 art. 21 §3º (dia 20) — política do escritório: antecipa',
     status: 'ativa',
 };
 const FGTS = {
     obrigacao: 'FGTS', label: 'FGTS Digital', nome: 'FGTS Digital',
     esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 20, mesesApos: 1,
-    // 🚩 CONFLITO REAL, PENDENTE DO PAULO/ALEXANDRE: o cron antigo ANTECIPAVA
-    // (dia útil anterior) e a tela de Vencimentos PRORROGAVA — a mesma
-    // competência tinha 19/06 na tarefa e 22/06 na tela. Aqui fica PRORROGA
-    // porque é o que a equipe vê hoje na tela (mudar a data que ela usa, por
-    // dedução minha, é o tipo de invenção que este catálogo existe pra impedir).
-    // Se a régua do FGTS for antecipar, é UMA palavra — e a pendência já está
-    // nomeada em pendenciasDeConfirmacao().
-    ajusteDiaNaoUtil: 'prorroga',
-    baseLegal: 'Lei 8.036/90 art. 15 (dia 20) — direção do ajuste A CONFERIR',
-    status: 'ativa', revisar: true,
+    // Resolvido em 11/08: o cron antecipava, a tela prorrogava (19/06 × 22/06).
+    // Paulo decidiu ANTECIPA, e para o FGTS é também a régua legal.
+    ajusteDiaNaoUtil: 'antecipa',
+    baseLegal: 'Lei 8.036/90 art. 15 (dia 20; sem expediente, antecipa)',
+    status: 'ativa',
 };
 const DCTFWEB = {
     obrigacao: 'DCTFWEB', label: 'DCTFWeb', nome: 'DCTFWeb',
     esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 15, mesesApos: 1,
-    ajusteDiaNaoUtil: 'prorroga',
+    ajusteDiaNaoUtil: 'antecipa',
     baseLegal: 'IN RFB 2.005/2021 (até o dia 15 do mês seguinte)',
     status: 'ativa',
 };
@@ -175,7 +176,7 @@ const SPED = {
     // catálogo ainda não os tem — a abrangência denuncia isso em vez de fingir.
     esfera: 'estadual', abrangencia: 'UF:SP',
     frequencia: M, diaVencimento: 25, mesesApos: 2,
-    ajusteDiaNaoUtil: 'prorroga',
+    ajusteDiaNaoUtil: 'antecipa',
     baseLegal: 'Portaria CAT 147/2009 (SP) — prazo estadual',
     status: 'ativa', revisar: true,
 };
@@ -183,8 +184,8 @@ const INSS_CPP = {
     obrigacao: 'INSS_CPP', label: 'INSS Patronal', nome: 'INSS Patronal (CPP)',
     esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 20, mesesApos: 1,
-    ajusteDiaNaoUtil: 'prorroga',
-    baseLegal: 'Lei 8.212/91 art. 30, I, "b" — direção do ajuste A CONFERIR',
+    ajusteDiaNaoUtil: 'antecipa',
+    baseLegal: 'Lei 8.212/91 art. 30, I, "b"',
     // Só existe com FOLHA, e a folha mora no módulo de DP — este app não tem
     // como afirmar que o cliente tem empregado. Gerar pra todos criaria uma
     // pendência falsa por mês em quem não tem folha.
@@ -194,15 +195,15 @@ const PIS_COFINS = {
     obrigacao: 'PIS_COFINS', label: 'PIS/COFINS', nome: 'PIS/COFINS',
     esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 25, mesesApos: 1,
-    ajusteDiaNaoUtil: 'prorroga',
-    baseLegal: 'Lei 11.933/2009 (25º dia do mês seguinte) — direção do ajuste A CONFERIR',
-    status: 'ativa', revisar: true,
+    ajusteDiaNaoUtil: 'antecipa',
+    baseLegal: 'Lei 11.933/2009 (25º dia do mês seguinte)',
+    status: 'ativa',
 };
 const EFD_CONTRIB = {
     obrigacao: 'EFD_CONTRIB', label: 'EFD-Contribuições', nome: 'EFD-Contribuições',
     esfera: 'federal', abrangencia: 'BR',
     frequencia: M, diaVencimento: 14, mesesApos: 2,
-    ajusteDiaNaoUtil: 'prorroga',
+    ajusteDiaNaoUtil: 'antecipa',
     baseLegal: 'IN RFB 1.252/2012 art. 7º (10º dia útil do 2º mês subsequente)',
     status: 'ativa', revisar: true,
 };
@@ -256,7 +257,7 @@ const ISS = {
     obrigacao: 'ISS', label: 'ISS próprio', nome: 'ISS sobre serviços prestados',
     esfera: 'municipal', abrangencia: 'IBGE:?',
     frequencia: M, diaVencimento: 10, mesesApos: 1,
-    ajusteDiaNaoUtil: 'prorroga',
+    ajusteDiaNaoUtil: 'antecipa',
     baseLegal: 'LC 116/2003 + legislação do MUNICÍPIO — prazo A CADASTRAR por município',
     status: 'proposta', dependeDe: 'calendário do município', revisar: true,
 };

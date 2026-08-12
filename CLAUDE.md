@@ -883,8 +883,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   duas datas (FGTS 05/2026: 19/06 na tarefa, 22/06 na tela). Agora a direção é
   CAMPO da obrigação com `baseLegal`; onde discordavam ficou o que a TELA faz (é
   o que a equipe usa; trocar por dedução seria inventar prazo) e a pendência sai
-  em `pendenciasDeConfirmacao()`. **PENDENTE DO PAULO/ALEXANDRE**: direção do
-  FGTS/INSS/PIS-COFINS e a condição de folha do INSS patronal.
+  em `pendenciasDeConfirmacao()`. ✅ **RESOLVIDO 11/08 — Paulo: "SEMPRE
+  ANTECIPA"**: é POLÍTICA DO ESCRITÓRIO e é segura por construção (pagar no dia
+  útil anterior nunca gera multa; o inverso, sim), então toda obrigação recua.
+  O campo continua POR OBRIGAÇÃO em vez de virar constante do módulo — se um
+  prazo exigir prorrogação, muda-se UMA linha com a base legal do lado, e um
+  teste prova que o mecanismo de prorrogar segue existindo. Segue pendente só a
+  condição de folha do INSS patronal.
   **ESFERA É CAMPO DE PRIMEIRA CLASSE** (Paulo, 11/08: *"os vencimentos são
   datas definidas pelos órgãos governamentais, sempre separados por esferas —
   federal, estadual, municipal; isso nunca se altera e é onde deve ser feita a

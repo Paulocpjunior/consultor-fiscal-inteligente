@@ -109,27 +109,28 @@ describe('prazo — a direção do ajuste é CAMPO da obrigação, não default 
     // OPOSTAS (cron antecipava, tela prorrogava) e a mesma obrigação tinha duas
     // datas. Agora a direção é declarada por obrigação — e onde eles
     // discordavam ficou o que a TELA fazia, com a pendência nomeada.
-    it('prorroga vai pro próximo dia útil (segunda 22)', () => {
+    // POLÍTICA DECIDIDA PELO PAULO (11/08): "sempre antecipa". Segura por
+    // construção — pagar no dia útil anterior nunca gera multa; o inverso, sim.
+    it('dia não útil ANTECIPA pro dia útil anterior (sábado 20/06 → sexta 19)', () => {
         const das = CATALOGO.SIMPLES.find((r: any) => r.obrigacao === 'DAS')!;
         const v = calcularVencimento('05/2026', das);
-        expect(v.getDate()).toBe(22);
+        expect(v.getDate()).toBe(19);
         expect(v.getMonth()).toBe(5); // junho
     });
 
-    it('antecipa recua pro dia útil anterior (sexta 19)', () => {
-        // Régua sintética: prova o MECANISMO sem afirmar prazo legal que ainda
-        // não foi conferido com o Paulo/Alexandre.
-        const regra = { diaVencimento: 20, mesesApos: 1, ajusteDiaNaoUtil: 'antecipa' as const };
-        const v = calcularVencimento('05/2026', regra);
-        expect(v.getDate()).toBe(19);
-        expect(v.getMonth()).toBe(5);
+    it('a política vale para TODAS as obrigações — nenhuma ficou prorrogando', () => {
+        for (const regime of Object.keys(CATALOGO)) {
+            for (const r of (CATALOGO as any)[regime]) {
+                expect(r.ajusteDiaNaoUtil).toBe('antecipa');
+            }
+        }
     });
 
-    it('a direção conflitante (FGTS) fica marcada pra conferência, não escondida', () => {
-        const fgts = CATALOGO.SIMPLES.find((r: any) => r.obrigacao === 'FGTS')!;
-        expect(fgts.revisar).toBe(true);
-        expect(fgts.baseLegal).toMatch(/A CONFERIR/i);
-        expect(pendenciasDeConfirmacao().map((p: any) => p.obrigacao)).toContain('FGTS');
+    it('o mecanismo de prorrogar CONTINUA existindo (é campo, não constante)', () => {
+        // Se um prazo específico exigir prorrogação, muda-se UMA linha — por
+        // isso a direção segue sendo campo da obrigação e não default do módulo.
+        const regra = { diaVencimento: 20, mesesApos: 1, ajusteDiaNaoUtil: 'prorroga' as const };
+        expect(calcularVencimento('05/2026', regra).getDate()).toBe(22);
     });
 
     it('último dia útil RECUA (prorrogar cairia no mês seguinte = outro prazo)', () => {
@@ -193,7 +194,8 @@ describe('pendenciasDeConfirmacao — o checklist que impede o "sync manual" de 
         const p = pendenciasDeConfirmacao();
         const cods = p.map((x: any) => x.obrigacao);
         expect(cods).toContain('INSS_CPP');             // proposta (depende de folha)
-        expect(cods).toContain('FGTS');                 // ativa, mas revisar (antecipa)
+        expect(cods).toContain('ISS');                  // proposta (calendário municipal)
+        expect(cods).not.toContain('FGTS');             // direção RESOLVIDA em 11/08
         expect(new Set(cods).size).toBe(cods.length);   // sem duplicata
         expect(cods).not.toContain('DAS');              // ativa e conferida
     });
