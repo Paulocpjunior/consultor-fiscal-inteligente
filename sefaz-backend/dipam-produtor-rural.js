@@ -719,6 +719,13 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
     const pendencias = [];
     const fornecedorJaListado = new Set();
     for (const n of notas) {
+        // Nota excluída pelo art. 136 (NF-e do produtor, documento de origem)
+        // não gera pendência: ela não é escriturada, então não há o que
+        // conferir nela. Caso real VINCENZO 07/2026 — as notas 95-98 saíam do
+        // total pela dedup E continuavam cobrando "CFOP 5101 não está na régua
+        // de compra", que é o CFOP normal de quem VENDE. Alarme sem ação em
+        // nota que já não conta ensina a equipe a ignorar a lista inteira.
+        if (n.notaOrigemProdutor) continue;
         for (const p of n.pendencias) {
             const porFornecedor = p.codigo === 'fornecedor-indefinido' || p.codigo === 'municipio-ausente';
             const chaveDedup = `${p.codigo}|${n.fornecedor.doc}`;
@@ -765,6 +772,14 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
             notas: doFunrural.map((n) => ({
                 chave: n.chave, numero: n.numero, dhEmi: n.dhEmi,
                 fornecedor: n.fornecedor.nome, doc: n.fornecedor.doc, uf: n.fornecedor.uf,
+                ie: n.fornecedor.ie || '',
+                // A PROVA de que este fornecedor é produtor rural PF viaja junto
+                // do número. Quem lê do outro lado (R-2055) não pode ter régua
+                // própria: dois critérios pro mesmo fato foi exatamente o
+                // defeito do caso VINCENZO (o 🌾 apurava, o R-2055 descartava
+                // por contar dígitos). Aqui vai o carimbo da origem.
+                naturezaConfianca: n.natureza?.confianca || null,
+                naturezaMotivo: n.natureza?.motivo || null,
                 base: n.funrural.base,
                 aliquotas: n.funrural.aliquotas,
                 inss: n.funrural.inss, gilrat: n.funrural.gilrat, senar: n.funrural.senar,

@@ -278,6 +278,42 @@ router.get('/varredura', requireAuth, async (req, res) => {
     }
 });
 
+// ─── Reler o município dos XMLs (mata a pendência em massa) ─────────────────
+//
+// "nota sem código IBGE do município de origem" NÃO é erro de cadastro: o
+// município está no XML guardado no Storage, e o campo é que não foi gravado
+// (o backfill de endereço só varria SAÍDAS, e compra de produtor é ENTRADA).
+// Reler a FONTE é recuperação — mandar digitar 323 municípios seria pedir
+// trabalho por um dado que já está no arquivo.
+router.post('/reler-municipios', requireAdmin, async (req, res) => {
+    try {
+        const empresaId = String(req.body?.empresaId || req.query?.empresaId || '').trim();
+        const competencia = String(req.body?.competencia || req.query?.competencia || '').trim();
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'Escolha a empresa.' });
+        if (!ehCompetencia(competencia)) {
+            return res.status(400).json({ ok: false, error: 'Informe a competência no formato AAAA-MM.' });
+        }
+        const acesso = await podeAcessarEmpresaId(req.user, empresaId);
+        if (!acesso.ok) return res.status(acesso.status).json({ ok: false, error: acesso.error });
+
+        const { preencherEnderecoParticipantes } = await import('./xml-importer.js');
+        const entrada = await preencherEnderecoParticipantes({ empresaId, competencia, direcao: 'entrada' });
+        return res.json({
+            ok: true,
+            ...entrada,
+            // Farol honesto: doc sem arquivo guardado NÃO é doc corrigido, e
+            // insistir nele não adianta — o problema ali é de captura.
+            acao: entrada.semXml
+                ? `${entrada.semXml} documento(s) não têm o XML guardado — nesses o município só entra pelo `
+                  + 'cadastro do produtor. Os demais foram relidos da fonte.'
+                : null,
+        });
+    } catch (e) {
+        console.error('[dipam/reler-municipios]', e);
+        return res.status(500).json({ ok: false, error: `Falha ao reler os XMLs: ${e.message}` });
+    }
+});
+
 // ─── Cadastro do produtor (fornecedor) ──────────────────────────────────────
 
 router.get('/produtores', requireAuth, async (req, res) => {

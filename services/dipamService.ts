@@ -149,6 +149,20 @@ export const salvarProdutorRural = (produtor: Partial<ProdutorRural> & { doc: st
         body: JSON.stringify(produtor),
     });
 
+/**
+ * Relê o município dos XMLs guardados no Storage.
+ *
+ * "nota sem código IBGE do município de origem" não é erro de cadastro — o dado
+ * está no arquivo. Reler a FONTE é recuperação; mandar digitar 323 municípios
+ * seria pedir trabalho por algo que já existe.
+ */
+export const relerMunicipiosDipam = (empresaId: string, competencia: string) =>
+    req<{ examinadas: number; preenchidas: number; semXml: number; jaTinham: number; acao: string | null }>(
+        '/api/admin/dipam/reler-municipios', {
+            method: 'POST',
+            body: JSON.stringify({ empresaId, competencia }),
+        });
+
 /** Texto do Registro 1400 pronto pra conferir/colar (uma linha por município). */
 export function textoRegistro1400(painel: DipamPainel): string {
     return (painel.dipam?.registro1400 || []).map(r => r.linha).join('\n');

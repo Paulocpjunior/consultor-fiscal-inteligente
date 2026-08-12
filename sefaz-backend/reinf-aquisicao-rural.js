@@ -33,6 +33,29 @@
 // temos seria a repetição do erro que o `csllOuTotal` evitou do outro lado —
 // e num campo de declaração o pior caso não é ser recusado, é ser ACEITO
 // errado.
+//
+// ═══ A RÉGUA DE QUEM É PRODUTOR PF NÃO MORA AQUI ════════════════════════════
+//
+// Caso VINCENZO GUERRA 07/2026 (Paulo, 12/08): *"ta puxando aqui os valores de
+// FUNRURAL certinho, mas quando vou CCI ele, fala que não tem"*. A aba 🌾
+// apurava R$ 308,07 de 4 notas de ANTONIO DIAS DA SILVA e esta casca respondia
+// "NENHUMA aquisição encontrada" — porque o doc dele tem 14 dígitos e a linha
+// era `if (doc.length !== 11) { dePessoaJuridica += 1; continue; }`.
+//
+// DUAS RÉGUAS PRO MESMO FATO, que é o defeito que esta casa mais combate. A do
+// 🌾 (`identificarNaturezaFornecedor`) honra o cadastro `produtores_rurais` e a
+// IE paulista de produtor ("P"), e o **CNPJ NÃO descaracteriza produtor rural
+// PF** (Comunicado CAT 45/2008 — já escrito na regra da casa). A daqui contava
+// dígitos. Quem apura é o 🌾; **esta casca não julga natureza** — se a nota
+// entrou no FUNRURAL, a sub-rogação já foi decidida lá, e reagrupar é tudo o
+// que se faz aqui.
+//
+// O que sobra desta casca é NOMEAR a forma da inscrição: o R-2055 identifica o
+// produtor por inscrição (tpInscProd/nrInscProd) e o app NÃO sabe qual tipo
+// carimbar num produtor com CNPJ. Então o produtor VIAJA, com `tipoInscricao`
+// dizendo a verdade e `cpfProdutor` NULO quando não é CPF — número de CNPJ num
+// campo chamado "cpf" é a mentira do `csllOuTotal` outra vez. Quem recebe
+// bloqueia com a causa na mão; ninguém deduz o tipo.
 // ============================================================================
 
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
@@ -81,20 +104,37 @@ export function montarPayloadR2055({ cnpjAdquirente, competencia, funrural, prod
     const notas = Array.isArray(funrural?.notas) ? funrural.notas : [];
 
     const porProdutor = new Map();
-    let dePessoaJuridica = 0;
+    const semInscricao = [];
 
     for (const n of notas) {
         const doc = soDigitos(n?.doc);
-        // PJ não entra: sem sub-rogação, quem recolhe é o próprio emitente, e
-        // a comercialização dele é R-2050 — outro evento. Some da lista é o que
-        // faz alguém achar que declarou tudo, então vira contagem.
-        if (doc.length !== 11) { dePessoaJuridica += 1; continue; }
+        // Doc que não é nem CPF nem CNPJ não identifica ninguém — não dá pra
+        // declarar. Mas NÃO some: vira lista nomeada (some é o que faz alguém
+        // achar que declarou tudo).
+        if (doc.length !== 11 && doc.length !== 14) {
+            semInscricao.push({ fornecedor: texto(n?.fornecedor) || '—', doc: doc || null, numero: texto(n?.numero) || null });
+            continue;
+        }
 
         const cad = produtores[doc] || {};
         const acc = porProdutor.get(doc) || {
-            cpfProdutor: doc,
+            docProdutor: doc,
+            // FORMA da inscrição — e o nome do campo não mente: CNPJ nunca sai
+            // num campo chamado "cpf". Quem recebe decide o tpInscProd; o app
+            // não deduz.
+            tipoInscricao: doc.length === 11 ? 'cpf' : 'cnpj',
+            cpfProdutor: doc.length === 11 ? doc : null,
+            inscricaoAtipica: doc.length === 14,
             nome: texto(n?.fornecedor) || null,
             uf: texto(n?.uf) || null,
+            ie: texto(n?.ie) || null,
+            // A PROVA de que ele é produtor rural PF, carimbada com a origem —
+            // é a régua do 🌾 que decidiu, e ela viaja junto do número pra o
+            // outro lado não precisar (nem poder) reinventá-la.
+            provaDeProdutorPF: {
+                confianca: texto(n?.naturezaConfianca) || null,
+                motivo: texto(n?.naturezaMotivo) || null,
+            },
             // O CFI SABE isto, e é o que decide a natureza da aquisição.
             seguradoEspecial: cad.seguradoEspecial === true,
             // Indicador de aquisição: tabela oficial que não está neste app.
@@ -121,10 +161,13 @@ export function montarPayloadR2055({ cnpjAdquirente, competencia, funrural, prod
         cnpjAdquirente: alvo || null,
         competencia: competencia || null,
         produtores: produtoresLista,
+        // Fora da conta, mas NOMEADOS — não é contador mudo.
+        semInscricao,
         resumo: {
             produtores: produtoresLista.length,
             aquisicoes: produtoresLista.reduce((t, p) => t + p.aquisicoes.length, 0),
-            dePessoaJuridica,
+            comCnpj: produtoresLista.filter((p) => p.tipoInscricao === 'cnpj').length,
+            semInscricao: semInscricao.length,
             comDivergencia: produtoresLista.filter((p) => p.comDivergencia > 0).length,
             seguradoEspecial: produtoresLista.filter((p) => p.seguradoEspecial).length,
             base: r2(produtoresLista.reduce((t, p) => t + p.base, 0)),
@@ -135,13 +178,13 @@ export function montarPayloadR2055({ cnpjAdquirente, competencia, funrural, prod
         },
         ressalvas: ressalvasDoPayload({
             produtores: produtoresLista,
-            dePessoaJuridica,
+            semInscricao,
             revisarAliquotas: funrural?.revisarAliquotas === true,
         }),
     };
 }
 
-function ressalvasDoPayload({ produtores, dePessoaJuridica, revisarAliquotas }) {
+function ressalvasDoPayload({ produtores, semInscricao, revisarAliquotas }) {
     const out = [
         'O `indAquis` (indicador/natureza da aquisição) vai NULO: ele vem de tabela oficial da '
         + 'EFD-Reinf que não existe neste app, e código de declaração não se inventa. O que decide '
@@ -150,9 +193,19 @@ function ressalvasDoPayload({ produtores, dePessoaJuridica, revisarAliquotas }) 
         + 'tabela própria de segurado especial, centavos desprezados pela IN RFB 971). NÃO recalcule '
         + 'do outro lado: dois números para o mesmo fato é o pior defeito de um arquivo fiscal.',
     ];
-    if (dePessoaJuridica) {
-        out.push(`${dePessoaJuridica} aquisição(ões) de produtor PESSOA JURÍDICA ficaram de fora — sem `
-            + 'sub-rogação, quem recolhe é o próprio emitente, e a comercialização dele é R-2050.');
+    const comCnpj = produtores.filter((p) => p.tipoInscricao === 'cnpj');
+    if (comCnpj.length) {
+        out.push(`${comCnpj.length} produtor(es) com CNPJ: ${comCnpj.map((p) => `${p.nome} (${p.docProdutor})`).join(', ')}. `
+            + 'O FUNRURAL DELES JÁ FOI APURADO pelo CFI (a natureza saiu do cadastro do produtor ou da IE '
+            + 'paulista de produtor rural, que começa com "P") — CNPJ não descaracteriza produtor rural PF, '
+            + 'Comunicado CAT 45/2008. O que o app NÃO sabe é qual tipo de inscrição carimbar no `ideProdutor`: '
+            + 'por isso `cpfProdutor` vai NULO e `tipoInscricao` diz "cnpj". Confirme a natureza no CADESP '
+            + 'antes de declarar — mas NÃO descarte: o valor está na guia do cliente.');
+    }
+    if (semInscricao?.length) {
+        out.push(`${semInscricao.length} aquisição(ões) sem CPF/CNPJ legível do produtor `
+            + `(${semInscricao.map((s) => s.fornecedor).join(', ')}) — sem inscrição o evento não identifica `
+            + 'o produtor. Confira o documento na origem (lista completa em `semInscricao`).');
     }
     const divergentes = produtores.filter((p) => p.comDivergencia > 0).length;
     if (divergentes) {

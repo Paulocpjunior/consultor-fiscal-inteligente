@@ -1019,7 +1019,31 @@ export async function corrigirStatusCanceladoPorEvento({ competencias = [], maxD
  * idempotente e a query ENCOLHE a cada rodada (doc preenchido sai do filtro),
  * igual ao corrigirDirecaoEntradaPropria.
  */
-export async function preencherEnderecoDestinatario({ limit = 200, empresaId = null, competencia = null } = {}) {
+export async function preencherEnderecoDestinatario(opts = {}) {
+  return preencherEnderecoParticipantes({ ...opts, direcao: 'saida' });
+}
+
+/**
+ * O MESMO backfill, agora também para ENTRADAS.
+ *
+ * Paulo, 12/08/2026: a aba 🌾 mostrou **323 pendências "nota sem código IBGE do
+ * município de origem"** e a DIPAM 1.1 saiu R$ 0,00 — com o FUNRURAL calculado
+ * do lado (ele não depende de município). O município ESTÁ no XML guardado no
+ * Storage; o que faltava era o campo gravado no documento.
+ *
+ * E faltava porque este backfill só varria `direcao == 'saida'` — ele nasceu
+ * pro Exportar SAGE, onde o participante é o destinatário. Compra de produtor
+ * rural é ENTRADA, então nenhuma delas foi tocada.
+ *
+ * É a regra da casa: reler a FONTE quando o dado já existe nela é RECUPERAÇÃO,
+ * não conserto de cadastro. Mandar o colaborador digitar o município de 323
+ * produtores seria pedir trabalho por um dado que já está no arquivo.
+ *
+ * O campo-sentinela muda com a direção: na saída o participante é o
+ * destinatário (`ufDest`), na entrada é o emitente (`ufEmit`). Usar o sentinela
+ * errado faria o backfill reler os mesmos documentos pra sempre.
+ */
+export async function preencherEnderecoParticipantes({ limit = 200, empresaId = null, competencia = null, direcao = 'saida' } = {}) {
   const db = fa().firestore();
   let examinadas = 0, preenchidas = 0, semXml = 0, jaTinham = 0;
   try {
@@ -1028,7 +1052,7 @@ export async function preencherEnderecoDestinatario({ limit = 200, empresaId = n
     // tudo que foi capturado antes de 04/08. A primeira versão deste backfill
     // rodava e não achava nada. Por isso a seleção é por direção (+ empresa e
     // competência no modo sob demanda) e o filtro do campo é EM MEMÓRIA.
-    let q = db.collection('documentos_fiscais').where('direcao', '==', 'saida');
+    let q = db.collection('documentos_fiscais').where('direcao', '==', direcao);
     if (empresaId) q = q.where('empresaId', '==', String(empresaId));
     if (competencia) q = q.where('competencia', '==', String(competencia));
 
@@ -1038,23 +1062,35 @@ export async function preencherEnderecoDestinatario({ limit = 200, empresaId = n
     for (const docSnap of snap.docs) {
       const d = docSnap.data() || {};
       // Já preenchido (inclusive com '' = "o XML não tinha") — não relê.
-      if (d.ufDest !== undefined && d.ufDest !== null) { jaTinham++; continue; }
+      // O sentinela é o do lado que INTERESSA naquela direção.
+      const sentinela = direcao === 'entrada' ? d.ufEmit : d.ufDest;
+      if (sentinela !== undefined && sentinela !== null) { jaTinham++; continue; }
       examinadas++;
       if (!d.storagePath) { semXml++; continue; }
       try {
         const [buf] = await bucket.file(d.storagePath).download();
         const p = extrairParticipantesNfe(buf.toString('utf8'));
-        // Sem UF no XML não há o que preencher — marca com '' pra sair da
-        // fila (senão o backfill relê o mesmo doc pra sempre).
-        await docSnap.ref.update({
-          xNomeDest: p.destinatario.nome || null,
-          ufDest: p.destinatario.uf || '',
-          codMunDest: p.destinatario.codMunIBGE || null,
-          ieDest: p.destinatario.ie || null,
-          ufEmit: p.emitente.uf || null,
-          codMunEmit: p.emitente.codMunIBGE || null,
-        });
-        if (p.destinatario.uf) preenchidas++;
+        // Grava os DOIS lados: a nota própria de entrada (tpNF=0) tem o
+        // produtor no bloco destinatário, e a compra normal tem no emitente.
+        // Preencher só um lado deixaria metade das notas rurais sem município.
+        //
+        // BACKFILL NÃO APAGA. Campo que o XML não trouxe não pode sobrescrever
+        // o que o importer já gravou — seria destruir dado bom pra "corrigir"
+        // dado ausente. Só a UF do lado varrido recebe '' quando o XML não tem:
+        // ela é o SENTINELA (sem ela o mesmo doc voltaria pra fila pra sempre).
+        const patch = {};
+        const por = (campo, valor) => { if (valor) patch[campo] = valor; };
+        por('xNomeDest', p.destinatario.nome);
+        por('codMunDest', p.destinatario.codMunIBGE);
+        por('ieDest', p.destinatario.ie);
+        por('xNomeEmit', p.emitente.nome);
+        por('codMunEmit', p.emitente.codMunIBGE);
+        por('ieEmit', p.emitente.ie);
+        por(direcao === 'entrada' ? 'ufDest' : 'ufEmit', direcao === 'entrada' ? p.destinatario.uf : p.emitente.uf);
+        patch[direcao === 'entrada' ? 'ufEmit' : 'ufDest'] = (direcao === 'entrada' ? p.emitente.uf : p.destinatario.uf) || '';
+        await docSnap.ref.update(patch);
+        const preencheu = direcao === 'entrada' ? p.emitente.uf : p.destinatario.uf;
+        if (preencheu) preenchidas++;
       } catch (e) {
         console.warn(`[preencherEnderecoDestinatario] falha em ${docSnap.id}:`, e.message);
         semXml++;
