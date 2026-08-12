@@ -86,7 +86,8 @@ export interface AtividadesDeclaradasResposta {
     bruto?: unknown;
     /** O que a Receita disse — MSG_ISN_005 = não há declaração no período. */
     leitura?: {
-        situacao: 'sem-declaracao' | 'sem-atividade-com-mensagem' | 'sem-atividade';
+        situacao: 'sem-declaracao' | 'so-pdf' | 'sem-atividade-com-mensagem' | 'sem-atividade';
+        numeroDeclaracao?: string | null;
         mensagemDaReceita: Array<{ codigo: string | null; texto: string }>;
         titulo: string;
         explicacao: string;

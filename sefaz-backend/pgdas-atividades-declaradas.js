@@ -192,6 +192,39 @@ export function interpretarConsultaAtividades(resposta) {
                 + 'deveria ter sido entregue, ela está VENCENDO — a MAED é de R$ 50,00 por competência.',
         };
     }
+    // ⚠️ PREMISSA DERRUBADA POR RESPOSTA REAL (12/08/2026).
+    //
+    // Eu supunha que o CONSULTIMADECREC14 devolvesse a declaração ESTRUTURADA —
+    // era essa a aposta do botão "🔎 Atividades declaradas". A resposta de uma
+    // competência ENTREGUE mostrou outra coisa:
+    //
+    //   "dados": { "numeroDeclaracao": "...", "recibo": {..pdf..},
+    //              "declaracao": {..pdf..}, "maed": null }
+    //
+    // Só PDF. Não vem idAtividade, não vem qualificação, não vem
+    // {codigoTributo, id}. Ou seja: o número da isenção/imunidade NÃO sai por
+    // esta porta, e insistir aqui é gastar clique do colaborador à toa.
+    //
+    // (E bate com a história: o código 9 do ISS fixo NUNCA veio desta consulta —
+    // veio do input escondido do e-CAC. A fonte sempre foi o formulário.)
+    const temPdf = /"?(recibo|declaracao)"?\s*[:=]/.test(JSON.stringify(resposta || ''))
+        || !!(resposta?.dados?.recibo || resposta?.dados?.declaracao);
+    const numeroDeclaracao = resposta?.dados?.numeroDeclaracao || null;
+    if (temPdf) {
+        return {
+            situacao: 'so-pdf',
+            numeroDeclaracao,
+            mensagemDaReceita: msgs,
+            titulo: 'A declaração EXISTE, mas esta consulta devolve só os PDFs.',
+            explicacao: 'O SERPRO respondeu com o recibo e a declaração em PDF — e nada de estrutura: '
+                + 'não vêm códigos de atividade nem qualificação tributária. '
+                + 'O número da isenção/imunidade não sai por aqui.',
+            acao: 'O número vive no FORMULÁRIO do e-CAC: abra o PGDAS-D da competência, botão direito no '
+                + 'campo do tributo (ICMS/IPI) → Inspecionar → copie o <select> inteiro (Copy outerHTML). '
+                + 'O value de cada <option> é o id. Foi assim que saiu o código 9 do ISS fixo.',
+        };
+    }
+
     return {
         situacao: msgs.length ? 'sem-atividade-com-mensagem' : 'sem-atividade',
         mensagemDaReceita: msgs,

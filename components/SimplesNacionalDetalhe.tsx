@@ -415,13 +415,18 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                                     dela separa "procure outra competência" de
                                     "confira o detalhamento" — que mandam a pessoa
                                     para lados opostos (ELS 07/2026, MSG_ISN_005). */}
-                                {r.leitura?.situacao === 'sem-declaracao' ? (
+                                {(r.leitura?.situacao === 'sem-declaracao' || r.leitura?.situacao === 'so-pdf') ? (
                                     <>
                                         <p style={{ marginBottom: 8, color: '#b45309' }}>
                                             <b>{r.leitura.titulo}</b>
                                         </p>
                                         <p style={{ marginBottom: 8 }}>{r.leitura.explicacao}</p>
                                         <p style={{ marginBottom: 8 }}><b>{r.leitura.acao}</b></p>
+                                        {r.leitura.numeroDeclaracao && (
+                                            <p style={{ marginBottom: 8, fontSize: 11, color: '#475569' }}>
+                                                Declaração nº <code>{r.leitura.numeroDeclaracao}</code>
+                                            </p>
+                                        )}
                                     </>
                                 ) : (
                                     <>

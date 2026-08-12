@@ -222,3 +222,49 @@ describe('leitura da resposta quando não veio atividade', () => {
         expect(l.mensagemDaReceita[0]).toMatchObject({ texto: 'Alguma coisa nova' });
     });
 });
+
+/**
+ * PREMISSA DERRUBADA POR RESPOSTA REAL (12/08/2026).
+ *
+ * Eu supunha que o CONSULTIMADECREC14 devolvesse a declaração ESTRUTURADA — era
+ * essa a aposta do botão 🔎. A resposta de uma competência ENTREGUE mostrou que
+ * vem só PDF (recibo + declaração). O id da isenção/imunidade NÃO sai por essa
+ * porta, e o app precisa DIZER isso em vez de deixar alguém clicando.
+ *
+ * (Bate com a história: o código 9 do ISS fixo veio do input escondido do
+ * e-CAC, nunca desta consulta.)
+ */
+describe('a consulta devolve só PDF — e o app precisa admitir', () => {
+    // Resposta REAL, copiada do print (declaração 49710197202606001).
+    const soPdf = {
+        status: 200,
+        dados: {
+            numeroDeclaracao: '49710197202606001',
+            recibo: { nomeArquivo: 'PGDASD-RECIBO-49710197202606001.pdf', pdf: '[omitido: 6860 caracteres]' },
+            declaracao: { nomeArquivo: 'PGDASD-DECLARACAO-49710197202606001.pdf', pdf: '[omitido: 12352 caracteres]' },
+            maed: null,
+        },
+        mensagens: [{ codigo: '[Sucesso-PGDASD]', texto: 'Requisição efetuada com sucesso.' }],
+    };
+
+    it('reconhece que a declaração EXISTE e que vieram só os PDFs', () => {
+        const l: any = interpretarConsultaAtividades(soPdf);
+        expect(l.situacao).toBe('so-pdf');
+        expect(l.numeroDeclaracao).toBe('49710197202606001');
+        expect(l.titulo).toMatch(/só os PDFs/i);
+    });
+
+    it('e manda pro lugar onde o número REALMENTE vive: o formulário do e-CAC', () => {
+        const l: any = interpretarConsultaAtividades(soPdf);
+        expect(l.acao).toMatch(/Inspecionar/);
+        expect(l.acao).toMatch(/outerHTML/);
+        expect(l.acao).toMatch(/código 9 do ISS fixo/);
+    });
+
+    it('"Requisição efetuada com sucesso" NÃO vira sucesso da busca', () => {
+        // 200 + "sucesso" é o sucesso da REQUISIÇÃO, não a resposta que se
+        // procurava. Confundir os dois é o mesmo defeito do HTTP 201 do Reinf.
+        const l: any = interpretarConsultaAtividades(soPdf);
+        expect(l.situacao).not.toBe('sem-atividade');
+    });
+});

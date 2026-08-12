@@ -1520,6 +1520,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   devolve a qualificação que o SERPRO aceitou, e o #573 já faz o botão guardar
   o `bruto`. NÃO deduzir o id: MSG_ISN_032 provou que qualificação errada
   derruba a ENTREGA INTEIRA.
+  ❌ **O 🔎 NÃO DEVOLVE O ID — premissa minha derrubada por resposta real
+  (12/08)**: eu supunha que o `CONSULTIMADECREC14` trouxesse a declaração
+  ESTRUTURADA, e o botão foi construído nessa aposta. A resposta de uma
+  competência ENTREGUE mostrou outra coisa: `dados` = `{numeroDeclaracao,
+  recibo:{pdf}, declaracao:{pdf}, maed}` — **só PDF**. Não vem idAtividade, não
+  vem qualificação, não vem `{codigoTributo,id}`. E isso BATE COM A HISTÓRIA: o
+  código 9 do ISS fixo nunca veio dessa consulta, veio do **input escondido do
+  e-CAC**. A FONTE DO NÚMERO É O FORMULÁRIO: no PGDAS-D do e-CAC, o `<select>`
+  de cada tributo (a coluna "Exigibilidade Suspensa, Imunidade, Isenção/Redução,
+  Isenção/Redução Cesta Básica, Lançamento de Ofício") tem o id no `value` de
+  cada `<option>` — um `Copy outerHTML` resolve isenção E imunidade de uma vez.
+  O 🔎 continua útil pra DUAS coisas (provar que a declaração existe e trazer o
+  nº) e agora DIZ que o id não sai por ele, em vez de gastar clique. Situação
+  `so-pdf` em `interpretarConsultaAtividades`.
+  🖥️ **A TELA DE RECEITAS DO e-CAC (print 12/08, JAGUAREXPORT 06/2026
+  retificadora) CONFIRMOU A SEMÂNTICA**: a qualificação é **uma coluna por
+  TRIBUTO** (COFINS · CSLL · ICMS · INSS/CPP · IRPJ · PIS), cada uma um
+  `<select>` com a mesma lista; o ICMS estava em **Isenção/Redução** e abaixo
+  aparece **"Parcela de receita com isenção" = 65.614,80** (a receita inteira do
+  PA) e "Parcela de receita com redução" (R$ + %) vazia. Ou seja: isenção tem
+  VALOR e a parcela é campo próprio — casa com o payload
+  `ReceitaAtividade = {valor, qualificacoesTributarias[]}`.
   📄 **EXTRATO REAL DA POLO CULTURAL 06/2026 recebido (12/08) — e ele DESMENTE
   o que esta linha supunha**. Eu tinha escrito "campos separados POR TRIBUTO";
   o extrato mostra **UMA linha só, sem valor, listando os tributos**:
