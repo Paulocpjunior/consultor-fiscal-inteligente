@@ -218,9 +218,11 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         } catch (err: any) {
             if (err instanceof TransmissaoBloqueada && err.status === 403) {
                 // T1 — não é o dono. A recusa carrega o caminho (a guia).
-                onShowToast?.(`${err.message} ${err.dados?.acao || ''}`);
+                // O app SABE que isto é recusa: carimba o tom em vez de deixar
+                // o classificador adivinhar por palavra.
+                onShowToast?.(`🛑 ${err.message} ${err.dados?.acao || ''}`);
             } else if (err instanceof TransmissaoBloqueada && err.dados?.jaTransmitida) {
-                onShowToast?.(err.message);
+                onShowToast?.(`⚠️ ${err.message}`);
             } else {
                 onShowToast?.(`Erro ao transmitir: ${err.message}`);
             }
