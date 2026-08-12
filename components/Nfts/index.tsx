@@ -28,6 +28,7 @@ import { fetchCnpjFromBrasilAPI } from '../../services/externalApiService';
 import { CATALOGO_POR_CODIGO } from '../../services/nftsCatalogoSp';
 import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
 import { paraEmpresaOptions } from '../../services/empresaOption';
+import CruzamentoNftsPanel from './CruzamentoNftsPanel';
 
 interface Props {
     currentUser: User | null;
@@ -110,6 +111,10 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [pendencias, setPendencias] = useState<NftsPendencia[]>([]);
     const [status, setStatus] = useState<ProcessStatus>({ total: 0, atual: 0, arquivoAtual: '', fase: 'idle' });
     const [erro, setErro] = useState<string | null>(null);
+    // A VOLTA da NFTS: até 12/08 o módulo só fazia a IDA (PDF → TXT do lote) e
+    // nunca lia de volta o que a PMSP aceitou. Sem isso, gerar o lote não prova
+    // emissão e o ISS retido do tomador não tinha fonte no app.
+    const [abaConferencia, setAbaConferencia] = useState(false);
 
     useEffect(() => {
         let vivo = true;
@@ -282,13 +287,30 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
     return (
         <div className="space-y-6 animate-fade-in">
             <div className="p-6 rounded-xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-                <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>NFTS São Paulo — Gerador de Lotes</h2>
+                <div className="flex items-start justify-between gap-3">
+                    <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>NFTS São Paulo — Gerador de Lotes</h2>
+                    <button
+                        onClick={() => setAbaConferencia((v) => !v)}
+                        title="Confere o que foi EMITIDO no portal contra os serviços tomados capturados — a volta do ciclo."
+                        className="text-xs font-bold px-3 py-1.5 rounded whitespace-nowrap"
+                        style={{ background: abaConferencia ? 'var(--accent-soft, #e0f2fe)' : 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                    >
+                        {abaConferencia ? '← Voltar ao gerador' : '🔎 Conferir NFTS emitidas'}
+                    </button>
+                </div>
                 <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
                     Lê notas de serviço tomado em PDF (nativo ou escaneado), valida os dados e gera o arquivo TXT (layout V.001)
                     para importação em lote no sistema NFTS da Prefeitura de SP. Notas com ISS retido são excluídas automaticamente.
                     A conferência e a importação final permanecem sob responsabilidade do usuário.
                 </p>
 
+                {abaConferencia && (
+                    <div className="mt-4">
+                        <CruzamentoNftsPanel empresas={paraEmpresaOptions(empresas)} />
+                    </div>
+                )}
+
+                {!abaConferencia && (<>
                 <div className="flex flex-wrap gap-4 mt-4 items-end">
                     <div className="flex flex-col gap-1">
                         <label className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>Empresa tomadora</label>
@@ -344,6 +366,7 @@ const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         </button>
                     )}
                 </div>
+                </>)}
 
                 {recusaAberta && currentUser?.role === 'admin' && (
                     <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 10, padding: 12, marginTop: 10 }}>
