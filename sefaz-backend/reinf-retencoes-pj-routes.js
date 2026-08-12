@@ -37,6 +37,7 @@ import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { montarPayloadReinfPJ } from './reinf-retencoes-pj.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { montarPayloadR2055 } from './reinf-aquisicao-rural.js';
+import { montarPayloadR2010 } from './reinf-servicos-tomados.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
 
@@ -161,6 +162,58 @@ router.get('/retencoes-pj', autorizar, async (req, res) => {
         });
     } catch (e) {
         console.error('[reinf-retencoes-pj]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/reinf/servicos-tomados?cnpj=...&competencia=AAAA-MM
+//
+// As NFS-e TOMADAS com RETENÇÃO PREVIDENCIÁRIA (11% do art. 31 da Lei
+// 8.212/91), prontas para o **R-2010** do EFD-Reinf.
+//
+// Mesmo desenho do R-4020 e do R-2055 — e pela mesma razão: quem conhece a
+// FORMA do documento é o CFI (portal ACHATADO × XML em OBJETO). Reler isso do
+// outro lado seria a nona mordida da mesma armadilha.
+//
+// A régua vive em `reinf-servicos-tomados.js`, calibrada contra um `evtServTom`
+// REAL com recibo de SUCESSO da Receita (06/2026) — arquivo aceito vale mais
+// que leiaute deduzido. É de lá que veio o achado que manda no módulo: a BASE
+// de retenção NÃO é o valor bruto quando há dedução de material/insumo.
+// ────────────────────────────────────────────────────────────────────────────
+router.get('/servicos-tomados', autorizar, async (req, res) => {
+    try {
+        const competencia = String(req.query.competencia || '').trim();
+        const cnpj = soDigitos(req.query.cnpj);
+        if (!COMPETENCIA.test(competencia)) {
+            return res.status(400).json({ ok: false, error: 'Informe a competência no formato AAAA-MM.' });
+        }
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ do TOMADOR (14 dígitos) — é ele quem declara o R-2010.' });
+        }
+
+        const db = getDb();
+        const empresa = await acharEmpresa(db, cnpj);
+        // Lista vazia com cara de sucesso seria lida como "não teve retenção".
+        if (!empresa) {
+            return res.status(404).json({
+                ok: false,
+                error: `O CNPJ ${cnpj} não está cadastrado no CFI. Sem cadastro não há captura, e a ausência `
+                    + 'de notas aqui não prova ausência de retenção.',
+            });
+        }
+
+        const documentos = await carregarDocumentos(db, { empresaId: empresa.empresaId, cnpj, competencia });
+        const payload = montarPayloadR2010({ cnpjTomador: cnpj, competencia, documentos });
+
+        return res.json({
+            ok: true,
+            empresa: { empresaId: empresa.empresaId, nome: empresa.nome, regime: empresa.regime, cnpj },
+            documentosLidos: documentos.length,
+            ...payload,
+        });
+    } catch (e) {
+        console.error('[reinf-servicos-tomados]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
