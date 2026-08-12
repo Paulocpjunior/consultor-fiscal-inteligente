@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Apuração de PIS/COFINS — o que muda e o que preciso saber de você · SP Assessoria Contábil</title>
+<style>
+    :root {
+        --azul: #0E3BFA; --azul-escuro: #091D8D;
+        --tinta: #1e293b; --cinza: #64748b; --borda: #e2e8f0;
+        --verde: #059669; --vermelho: #dc2626; --ambar: #b45309;
+        --fundo-suave: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; padding: 0; color: var(--tinta); background: var(--fundo-suave);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6; font-size: 16px;
+    }
+    header {
+        background: linear-gradient(135deg, var(--azul-escuro), var(--azul));
+        color: #fff; padding: 28px 20px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 4px; }
+    header .wrap { display: flex; align-items: center; gap: 16px; }
+    header img { height: 52px; background: #fff; border-radius: 10px; padding: 6px; }
+    header h1 { font-size: 1.35rem; margin: 0; line-height: 1.3; }
+    header p { margin: 4px 0 0; font-size: .85rem; opacity: .9; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+    section {
+        background: #fff; border: 1px solid var(--borda); border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 18px;
+    }
+    h2 { font-size: 1.15rem; color: var(--azul-escuro); margin: 0 0 10px; }
+    h3 { font-size: 1rem; margin: 18px 0 6px; }
+    .onde {
+        background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;
+        padding: 10px 14px; font-size: .9rem; margin-bottom: 18px;
+    }
+    .quando {
+        border-left: 4px solid var(--azul); background: var(--fundo-suave);
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .alerta {
+        border-left: 4px solid var(--ambar); background: #fffbeb;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .perigo {
+        border-left: 4px solid var(--vermelho); background: #fef2f2;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--borda); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--fundo-suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--cinza); }
+    .tabela-rolagem { overflow-x: auto; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+    pre {
+        background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 16px;
+        overflow-x: auto; font-size: .85rem; line-height: 1.55;
+    }
+    ul, ol { padding-left: 22px; }
+    li { margin: 4px 0; }
+    .selo { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .selo-verde { background: #ecfdf5; color: var(--verde); }
+    .selo-vermelho { background: #fef2f2; color: var(--vermelho); }
+    .selo-ambar { background: #fffbeb; color: var(--ambar); }
+    footer { text-align: center; font-size: .8rem; color: var(--cinza); padding: 0 20px 40px; }
+    strong { color: var(--azul-escuro); }
+    @media print {
+        body { background: #fff; }
+        section { border: none; padding: 8px 0; break-inside: avoid; }
+        header { background: var(--azul-escuro); -webkit-print-color-adjust: exact; }
+    }
+</style>
+</head>
+<body>
+<header>
+    <div class="wrap">
+        <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
+        <div>
+            <h1>Apuração de PIS/COFINS — o que muda, e o que preciso saber de você</h1>
+            <p>SP Assessoria Contábil · Consultor Fiscal Inteligente · caso WALDESA COMERCIO, ano 2025</p>
+        </div>
+    </div>
+</header>
+<main>
+
+<div class="onde">
+    <strong>Para que serve este documento:</strong> alinhar como a apuração de PIS/COFINS
+    do Lucro Real passa a ser feita dentro do CFI. Ele tem <strong>3 pontos que mudam</strong> e
+    <strong>5 perguntas</strong> que só quem faz a apuração sabe responder — elas valem mais que
+    tudo o que está escrito aqui.
+</div>
+
+<section>
+    <h2>Antes de tudo: a planilha não tem erro de conta</h2>
+    <p>
+        Refizemos a aritmética inteira da planilha de 2025, mês a mês: as somas da base, os
+        percentuais de 1,65% e 7,6% e as subtrações <strong>fecham centavo a centavo nos seis
+        meses</strong>. Isso não é elogio de consolo — é o diagnóstico.
+    </p>
+    <p>
+        O que precisa mudar não é a sua conta. É que uma planilha <strong>não tem como saber</strong>
+        certas coisas: ela não olha dentro da nota fiscal, não sabe quem é o fornecedor e não
+        segura o saldo de um mês para o outro. Esses três buracos são o assunto aqui.
+    </p>
+</section>
+
+<section>
+    <h2>Ponto 1 — Em junho sobrou crédito, e ele não foi para julho</h2>
+    <p>Em junho de 2025 a planilha fechou assim:</p>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th></th><th>PIS</th><th>COFINS</th></tr>
+        <tr><td>Contribuição do mês</td><td>27.625,58</td><td>127.245,10</td></tr>
+        <tr><td>Crédito do mês</td><td>80.557,79</td><td>371.054,07</td></tr>
+        <tr><td><strong>Resultado</strong></td><td class="mono">−52.932,21</td><td class="mono">−243.808,97</td></tr>
+    </table>
+    </div>
+    <p>
+        <strong>Contribuição a recolher não pode ser negativa.</strong> Quando o crédito passa do
+        débito, a diferença vira <strong>saldo credor</strong> — e a lei deixa usar esse saldo nos
+        meses seguintes (Lei 10.637/2002 art. 3º §4º e Lei 10.833/2003 art. 3º §4º).
+    </p>
+    <div class="alerta">
+        São <strong>R$ 296.741,18</strong> somando PIS e COFINS. Se esse valor não foi levado
+        para julho, o cliente pagou a mais daí em diante — é dinheiro dele.
+    </div>
+    <p>
+        A planilha até tem as linhas para isso: <em>“TOTAL CRÉDITO MÊS ANTERIOR”</em>,
+        <em>“CRÉDITOS UTILIZADOS”</em> e <em>“SALDO CRÉDITO MÊS”</em>. Elas estão em branco nos
+        seis meses. Ou seja: <strong>o controle existe no arquivo e nunca foi usado</strong> — e
+        isso é sinal de que faltou ferramenta, não atenção.
+    </p>
+    <p><span class="selo selo-verde">no CFI</span> O sistema nunca mostra imposto negativo: ele
+    converte em saldo credor e abate sozinho no mês seguinte. Não há linha para lembrar de preencher.</p>
+</section>
+
+<section>
+    <h2>Ponto 2 — O crédito está sendo calculado sobre a conta inteira de compras</h2>
+    <p>Hoje a base de crédito é montada assim:</p>
+    <pre>COMPRAS MERCADORIAS      (conta 1.1.4.02.0001)
++ DEVOLUÇÕES DE VENDAS   (conta 3.2.1.01.0002)
++ FRETES                 (conta 4.1.1.02.0013)
+= BASE  →  × 1,65% (PIS)  e  × 7,6% (COFINS)</pre>
+    <p>
+        O problema é que <strong>o PIS/COFINS não-cumulativo não credita por conta contábil —
+        credita por operação</strong>. Quem decide é o <strong>CST de PIS de cada item</strong> da
+        nota de entrada. Não geram crédito, entre outros:
+    </p>
+    <ul>
+        <li>compra de fornecedor <strong>optante do Simples Nacional</strong>;</li>
+        <li>mercadoria <strong>monofásica</strong> (combustível, bebida fria, autopeça, higiene);</li>
+        <li>mercadoria com <strong>substituição tributária</strong> já encerrada;</li>
+        <li>item cujo CST de aquisição é 70 a 75 (sem direito a crédito).</li>
+    </ul>
+    <p>
+        Todas essas compras estão <strong>dentro</strong> da conta “COMPRAS MERCADORIAS”. Somando a
+        conta inteira, elas entram no crédito. Só em junho isso deu
+        <strong>R$ 451.611,87</strong> de crédito sobre R$ 4.882.290,45 de base, sem nenhum filtro.
+    </p>
+    <div class="perigo">
+        Este é o ponto de <strong>risco para o escritório</strong>: crédito tomado sem direito é
+        glosa, com multa e juros. E repare que ele empurra o imposto no sentido <em>oposto</em> ao
+        do ponto 1 — por isso “o total parece razoável” não prova nada.
+    </div>
+    <p><span class="selo selo-verde">no CFI</span> A base de crédito passa a sair
+    <strong>item a item das notas que o sistema já capturou</strong>, separando o que credita do
+    que não credita, com o motivo ao lado de cada valor. Você <strong>confere</strong> — não digita.</p>
+</section>
+
+<section>
+    <h2>Ponto 3 — Onde o sistema vai dizer “não sei”</h2>
+    <p>
+        As notas capturadas antes de agosto de 2026 não trazem o CST de PIS gravado (o sistema lia
+        só o valor). Para essas, o CFI vai mostrar um terceiro grupo: <strong>indefinido</strong>.
+    </p>
+    <div class="quando">
+        <strong>Por que isso importa:</strong> “não sei” <strong>nunca</strong> vira “credita”.
+        Enquanto houver valor no indefinido, o sistema avisa que o número ainda não fecha a
+        apuração. Tratar dúvida como crédito é exatamente o que a planilha fazia sem querer.
+    </div>
+    <p>
+        Isso se resolve sozinho: o XML original está guardado, e o sistema reprocessa as notas para
+        preencher o CST. Não é preciso pedir nada ao cliente nem baixar nada de novo.
+    </p>
+</section>
+
+<section>
+    <h2>As 5 perguntas — é aqui que preciso de você</h2>
+    <p>São coisas que só quem faz a apuração sabe. Nenhuma tem resposta “certa ou errada”:</p>
+    <ol>
+        <li>
+            <strong>A receita da conta 3.1.1.01.0002 (VENDA DE MERCADORIAS) vem com ICMS ou já sem?</strong><br>
+            No topo da planilha está escrito “ICMS JÁ DEDUZIDO”, mas a linha “(−) ICMS” também está
+            preenchida todo mês. Se a receita já vier líquida e o ICMS for descontado de novo, a base
+            fica menor do que deveria — e o imposto também.
+        </li>
+        <li>
+            <strong>E essa mesma receita já vem líquida das devoluções de venda?</strong><br>
+            A devolução aparece somada à base de crédito. Está certo, desde que não tenha sido
+            abatida da receita também.
+        </li>
+        <li>
+            <strong>Este cliente tem receita isenta, não tributada ou monofásica na saída?</strong><br>
+            As linhas “(−) RECEITAS ISENTAS”, “(−) IPI” e “(−) OUTRAS DEDUÇÕES” estão em branco.
+            Se ele tem e não foi deduzido, pagou a mais.
+        </li>
+        <li>
+            <strong>As compras de junho foram mesmo 4,8× a média dos outros meses?</strong><br>
+            Média de janeiro a maio: R$ 1.009.359,65. Junho: R$ 4.873.059,98. Foi formação de
+            estoque, uma compra grande específica, ou pode ter entrado algo em duplicidade no
+            balancete? Foi esse volume que gerou todo o saldo credor do ponto 1.
+        </li>
+        <li>
+            <strong>Os fretes e o combustível chegam como nota fiscal, ou só aparecem no balancete?</strong><br>
+            Isso decide se o CFI consegue montar a base inteira sozinho ou se precisa buscar uma
+            parte no módulo Contábil.
+        </li>
+    </ol>
+</section>
+
+<section>
+    <h2>O que muda na sua rotina</h2>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>Hoje</th><th>No CFI</th></tr>
+        <tr><td>Montar a base de crédito somando contas do balancete</td><td>A base vem pronta das notas; você confere e ajusta o que discordar</td></tr>
+        <tr><td>Lembrar de transportar o saldo credor</td><td>O saldo anda sozinho de um mês para o outro</td></tr>
+        <tr><td>Saber de cabeça quais compras não dão crédito</td><td>O sistema separa e diz o motivo de cada uma</td></tr>
+        <tr><td>Uma planilha por cliente, por ano</td><td>A apuração fica no cliente, com histórico</td></tr>
+    </table>
+    </div>
+    <p>
+        <strong>O que não muda:</strong> ninguém vai precisar aprender regra fiscal nova. O
+        objetivo é o contrário — tirar do seu ombro o que hoje depende de você lembrar.
+    </p>
+</section>
+
+<footer>
+    Documento de trabalho interno · SP Assessoria Contábil · gerado pelo Consultor Fiscal Inteligente
+</footer>
+</main>
+</body>
+</html>
