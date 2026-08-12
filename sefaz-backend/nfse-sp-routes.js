@@ -13,7 +13,7 @@ import {
     consultarTodasElegiveis,
 } from './nfse-sp-orchestrator.js';
 import { interpretarRespostaWs, enxugarParaDiagnostico } from './nfse-sp-ws-leitura.js';
-import { parseCsvNfseSp, detectarSeparador } from './nfse-sp-csv-parser.js';
+import { parseCsvNfseSp, detectarSeparador, identificarDocumentoDoPortal } from './nfse-sp-csv-parser.js';
 import { varrerRetencaoFederal } from './retencao-federal-coerencia.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
@@ -200,6 +200,17 @@ router.post('/nfsesp-importar-csv', requireAdmin, uploadCsv.single('csv'), async
             // detalhe lida é falha de leitura, não "arquivo vazio" — e dizer
             // ok:true aqui era o que fazia a equipe achar que tinha importado.
             if (parsed.linhasComConteudo > 0) {
+                // O portal exporta MAIS DE UM documento com a mesma cara. Dizer
+                // "confira se é o export de NFS-e" é verdadeiro e inútil: quem
+                // exportou não sabe que NFTS é OUTRO documento. Se dá pra
+                // nomear, nomeia — erro tem que dizer O QUE aconteceu.
+                const doc = identificarDocumentoDoPortal(req.file.originalname);
+                if (doc?.tipo === 'nfts') {
+                    return res.status(400).json({
+                        erro: `Este arquivo é uma ${doc.rotulo}. ${doc.acao}`,
+                        documento: 'nfts',
+                    });
+                }
                 return res.status(400).json({
                     erro: `Li o arquivo (separador "${parsed.separador === '\t' ? 'TAB' : parsed.separador}", `
                         + `${parsed.linhasComConteudo} linha(s) com conteúdo) mas NENHUMA linha de nota foi reconhecida. `

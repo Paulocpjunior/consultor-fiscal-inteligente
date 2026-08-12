@@ -8,7 +8,7 @@
  * 07/08: NFS-e tomadas de 07/2026, 6 notas, separado por TAB).
  */
 // @ts-expect-error — módulo .js puro (sem tipos)
-import { parseCsvNfseSp, detectarSeparador } from '../sefaz-backend/nfse-sp-csv-parser';
+import { parseCsvNfseSp, detectarSeparador, identificarDocumentoDoPortal } from '../sefaz-backend/nfse-sp-csv-parser';
 
 const CABECALHO = ['Tipo de Registro', 'N NFS-e', 'Data Hora NFE'];
 const linha = (sep: string) => CABECALHO.join(sep) + sep + Array(70).fill('x').join(sep);
@@ -74,5 +74,34 @@ describe('zero nota NUNCA é silêncio', () => {
     it('arquivo só com cabeçalho tem zero linha de conteúdo — aí sim é vazio', () => {
         const r = parseCsvNfseSp(Buffer.from(linha(';') + '\n', 'latin1'));
         expect(r.linhasComConteudo).toBe(0);
+    });
+});
+
+/**
+ * QUE DOCUMENTO CHEGOU (11/08, caso do Paulo).
+ *
+ * Veio um `NFTS_66958369_...csv` e o app respondeu "nenhuma linha reconhecida —
+ * confira se é o export de NFS-e". Tecnicamente certo, praticamente inútil:
+ * quem exportou não tem como saber que NFTS é OUTRO documento (nota do TOMADOR,
+ * a que carrega o ISS retido). Mensagem de erro tem que dizer O QUE aconteceu.
+ */
+describe('identificarDocumentoDoPortal — o portal exporta mais de um documento', () => {
+    it('reconhece NFTS pelo nome do arquivo do portal', () => {
+        const d = identificarDocumentoDoPortal('NFTS_66958369_20260701_20260731 (1).csv')!;
+        expect(d.tipo).toBe('nfts');
+        expect(d.rotulo).toMatch(/TOMADOR/i);
+        // A ação não pode culpar quem exportou: o documento é válido, o
+        // importador é que ainda não o lê.
+        expect(d.acao).toMatch(/ainda não é importado/i);
+    });
+
+    it('não confunde NFS-e com NFTS', () => {
+        expect(identificarDocumentoDoPortal('NFSE_123_20260701.csv')!.tipo).toBe('nfse');
+        expect(identificarDocumentoDoPortal('NFE_123.csv')!.tipo).toBe('nfse');
+    });
+
+    it('nome sem pista devolve desconhecido — não chuta documento', () => {
+        expect(identificarDocumentoDoPortal('export (3).csv')!.tipo).toBe('desconhecido');
+        expect(identificarDocumentoDoPortal('')).toBeNull();
     });
 });
