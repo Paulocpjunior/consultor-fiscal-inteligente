@@ -5,6 +5,7 @@
  * Resultado: link mailto: ou wa.me/ pre-preenchido.
  */
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getAuth } from 'firebase/auth';
 import type { User } from '../../types';
 import { getCobrancaIa, formatBRL, formatBarras, enviarDasCliente } from '../../services/dasService';
@@ -309,8 +310,15 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
             onShowToast('Falha ao copiar — selecione e use Ctrl+C');
         }
     };
+    // PORTAL PRA <body>. Um ancestral com transform/will-change vira containing
+    // block de descendentes `position: fixed` (spec CSS, armadilha anotada no
+    // index.css): o `inset-0` deixa de ser a viewport e vira a caixa do painel,
+    // então o cartão é CENTRADO NELA — a parte de baixo (justamente os botões de
+    // enviar) cai fora da tela e não há como rolar até ela, porque o overlay é
+    // fixed. Foi o que o Paulo viu em 12/08 ("está escondida a parte de
+    // enviar"). No body, o modal não depende de ancestral nenhum.
 
-    return (
+    return createPortal((
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onClose}>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="p-5 border-b border-slate-200 dark:border-slate-700">
@@ -496,7 +504,7 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
                 </div>
             </div>
         </div>
-    );
+    ), document.body);
 };
 
 export default CobrancaModal;

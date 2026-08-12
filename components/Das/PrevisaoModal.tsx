@@ -3,6 +3,7 @@
  * Modal de previsão DAS — estatística (regressão linear) + IA opcional.
  */
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { User, DasPrevisaoResponse, DasPrevisaoIaResponse } from '../../types';
 import { getPrevisaoDas, getPrevisaoIa, formatBRL } from '../../services/dasService';
 import SafeMarkdown from '../SafeMarkdown';
@@ -50,8 +51,15 @@ const PrevisaoModal: React.FC<Props> = ({ empresaId, empresaNome, currentUser, o
         if (r2 > 0.4) return { label: 'Média', cor: 'text-amber-600' };
         return { label: 'Baixa', cor: 'text-red-600' };
     };
+    // PORTAL PRA <body>. Um ancestral com transform/will-change vira containing
+    // block de descendentes `position: fixed` (spec CSS, armadilha anotada no
+    // index.css): o `inset-0` deixa de ser a viewport e vira a caixa do painel,
+    // então o cartão é CENTRADO NELA — a parte de baixo (justamente os botões de
+    // enviar) cai fora da tela e não há como rolar até ela, porque o overlay é
+    // fixed. Foi o que o Paulo viu em 12/08 ("está escondida a parte de
+    // enviar"). No body, o modal não depende de ancestral nenhum.
 
-    return (
+    return createPortal((
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onClose}>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="p-6 border-b border-slate-200 dark:border-slate-700">
@@ -157,7 +165,7 @@ const PrevisaoModal: React.FC<Props> = ({ empresaId, empresaNome, currentUser, o
                 </div>
             </div>
         </div>
-    );
+    ), document.body);
 };
 
 export default PrevisaoModal;

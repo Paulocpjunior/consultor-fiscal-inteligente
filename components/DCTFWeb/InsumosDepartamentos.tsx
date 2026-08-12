@@ -99,7 +99,7 @@ const InsumosDepartamentos: React.FC<{
                 </p>
             )}
             {dados && !dados.ok && (
-                <p className="text-xs text-amber-700 dark:text-amber-400">
+                <p className="text-xs text-amber-700 dark:text-amber-300 dark:text-amber-400">
                     ⚠ Não deu pra consultar os insumos ({dados.error}) — o app não afirma o que não leu.
                 </p>
             )}

@@ -77,7 +77,7 @@ const LinhaEmpresa: React.FC<{
     const guiasTrim = emitido?.guias || [];
 
     return (
-        <div className="border rounded-lg p-3" style={{ borderColor: 'var(--border)' }}>
+        <div className="border dark:border-slate-700 rounded-lg p-3" style={{ borderColor: 'var(--border)' }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <p className="font-mono text-sm">{fmtCnpj(cand.empresaCnpj)}</p>
@@ -93,7 +93,7 @@ const LinhaEmpresa: React.FC<{
                 )}
             </div>
 
-            {erro && <p className="mt-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">{erro}</p>}
+            {erro && <p className="mt-2 text-xs text-rose-700 bg-rose-50 border dark:border-slate-700 border-rose-200 rounded p-2">{erro}</p>}
 
             {debitos && !emitido && (
                 debitos.lido && debitos.trimestrais.length > 0 ? (
@@ -101,7 +101,7 @@ const LinhaEmpresa: React.FC<{
                         <div className="text-sm space-y-1">
                             {debitos.trimestrais.map((d, i) => (
                                 <div key={i} className="flex justify-between">
-                                    <span><span className="font-mono text-xs text-slate-500 mr-2">{d.codigo}-{d.extensao}</span>{d.descricao}</span>
+                                    <span><span className="font-mono text-xs text-slate-500 dark:text-slate-400 mr-2">{d.codigo}-{d.extensao}</span>{d.descricao}</span>
                                     <span className="font-semibold">R$ {d.valor.toFixed(2)}</span>
                                 </div>
                             ))}
@@ -114,7 +114,7 @@ const LinhaEmpresa: React.FC<{
                             <label className="text-xs flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
                                 Quotas:
                                 <select value={quotas} onChange={e => setQuotas(Number(e.target.value) as 1 | 2 | 3)}
-                                    className="border rounded px-2 py-1 text-xs">
+                                    className="border dark:border-slate-700 rounded px-2 py-1 text-xs">
                                     <option value={1}>Única</option>
                                     <option value={2}>2</option>
                                     <option value={3}>3</option>
@@ -138,15 +138,15 @@ const LinhaEmpresa: React.FC<{
 
             {emitido && (
                 <div className="mt-3 space-y-2">
-                    {guiasTrim.length === 0 && <p className="text-xs text-amber-700">Nenhuma guia trimestral emitida.</p>}
+                    {guiasTrim.length === 0 && <p className="text-xs text-amber-700 dark:text-amber-300">Nenhuma guia trimestral emitida.</p>}
                     {guiasTrim.map((g, i) => (
-                        <div key={i} className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 rounded p-2 text-sm">
+                        <div key={i} className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-slate-900/50 rounded p-2 text-sm">
                             <span>
-                                <span className="font-mono text-xs text-slate-500 mr-2">{g.codigo}-{g.extensao}</span>
+                                <span className="font-mono text-xs text-slate-500 dark:text-slate-400 mr-2">{g.codigo}-{g.extensao}</span>
                                 {g.descricao}
-                                {g.cota != null && <span className="ml-2 text-xs px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded">quota {g.cota}/{g.totalCotas}</span>}
+                                {g.cota != null && <span className="ml-2 text-xs px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 rounded">quota {g.cota}/{g.totalCotas}</span>}
                                 <span className="ml-2 font-semibold">R$ {g.valor.toFixed(2)}</span>
-                                <span className="ml-2 text-xs text-slate-500">vence {fmtBr(g.vencimento)}</span>
+                                <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">vence {fmtBr(g.vencimento)}</span>
                             </span>
                             {g.pdfBase64 ? (
                                 <span className="flex gap-2">
