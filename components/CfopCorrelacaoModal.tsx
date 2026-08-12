@@ -12,6 +12,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { User, DocumentoFiscal, EmpresaDadosFiscais } from '../types';
 import { listDocumentos } from '../services/xmlFiscalService';
 import { CloseIcon } from './Icons';
+// A RÉGUA É A DO BACKEND — a mesma que o Exportar SAGE e o SPED usam.
+// Ver o comentário de `cfopFinal` logo abaixo: esta tela tinha uma cópia.
+import { correlacionarCfop, resolverNaturezaAtividade } from '../sefaz-backend/cfop-correlacao.js';
+import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+import { modeloDoDoc } from '../sefaz-backend/participante-doc-helper.js';
 
 interface Props {
     isOpen: boolean;
@@ -32,46 +37,31 @@ interface CfopRow {
     descricaoOrigem?: string;
 }
 
-// Replica simplificada da logica do backend pra calcular sufixo automatico
-// (sem importar de sefaz-backend pra nao acoplar o frontend).
-function calcularSufixoAutomatico(
+/**
+ * O CFOP automático — pela MESMA função que gera o arquivo.
+ *
+ * ⚠️ Esta tela tinha uma "réplica simplificada da lógica do backend", escrita
+ * para "não acoplar o frontend". As duas divergiram, e a tela passou a PROMETER
+ * um CFOP diferente do que o SPED e o Exportar SAGE gravam:
+ *
+ *  1. VENDA COM ST (5401-5405): a réplica preservava o sufixo, então mostrava
+ *     `1405` — CFOP que **não existe**. É o caso real que o Paulo achou em
+ *     05/08: na entrada a família ST não tem 402/404/405, porque esses sufixos
+ *     descrevem a POSIÇÃO DO VENDEDOR na substituição. O backend decide pelo
+ *     destino da mercadoria e grava `1403`.
+ *  2. NATUREZA EM BRANCO: a réplica caía em conversão mecânica (1101); o
+ *     backend DERIVA do `indAtividade` e, sem ele, usa o padrão da carteira
+ *     (comércio ⇒ 1102). Empresa do Simples quase nunca preenche o campo, então
+ *     esse era o caso COMUM.
+ *
+ * Conferência que mostra CFOP diferente do arquivo é pior que não ter tela.
+ * Agora é a mesma função — `services/iobSageExportService.ts` já a importava.
+ */
+function cfopFinal(
     cfopOrigem: string,
     naturezaAtividade?: 'comercio' | 'industria' | 'servicos' | 'misto',
 ): string {
-    const c = String(cfopOrigem || '').trim();
-    if (c.length !== 4) return '';
-    if (!['5', '6', '7'].includes(c[0])) return '';
-
-    const sufixo = c.slice(1);
-    const primeiroDestino = ({ '5': '1', '6': '2', '7': '3' } as const)[c[0] as '5'|'6'|'7'];
-
-    // Categorias preservadas
-    const PRESERVA_SUFIXO = [
-        '401','403','405','406','407','408','409','410','411',  // ST
-        '910','911','912','913','918','919',                    // devolucao
-        '551','552','553','554','555',                          // ativo
-        '556','557',                                            // uso/consumo
-    ];
-    if (PRESERVA_SUFIXO.includes(sufixo)) {
-        return primeiroDestino + sufixo;
-    }
-
-    const COMPRA_PRODUTO = ['101','102','116','117','118','120','122'];
-    if (COMPRA_PRODUTO.includes(sufixo)) {
-        const map: Record<string, string> = {
-            comercio: '102',
-            industria: '101',
-            servicos: '556',
-        };
-        if (naturezaAtividade && map[naturezaAtividade]) {
-            return primeiroDestino + map[naturezaAtividade];
-        }
-        // misto ou ausente -> conversao mecanica
-        return primeiroDestino + sufixo;
-    }
-
-    // Default: conversao mecanica
-    return primeiroDestino + sufixo;
+    return String(correlacionarCfop(cfopOrigem, 'entrada', { naturezaAtividade }) || '');
 }
 
 const CfopCorrelacaoModal: React.FC<Props> = ({
@@ -84,6 +74,23 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
     const [naturezaLocal, setNaturezaLocal] = useState<'comercio' | 'industria' | 'servicos' | 'misto' | undefined>(
         valoresAtuais?.naturezaAtividade,
     );
+    const [docsLidos, setDocsLidos] = useState<{ total: number; entradas: number; comItem: number } | null>(null);
+
+    /**
+     * A natureza QUE VAI VALER no arquivo, com a origem.
+     *
+     * Campo em branco não significa "sem heurística": o backend deriva do
+     * `indAtividade` e, sem ele, usa o padrão da carteira. A tela dizia
+     * "— Derivar de Ind. Atividade —" e então NÃO derivava nada, mostrando o
+     * CFOP da conversão mecânica. Origem importa mais que o valor: "comércio
+     * porque está no cadastro" e "comércio porque é o padrão" levam a decisões
+     * diferentes de quem confere.
+     */
+    const naturezaEfetiva = useMemo(() => {
+        if (naturezaLocal) return { natureza: naturezaLocal, origem: 'cadastro' as const };
+        return resolverNaturezaAtividade({ ...(valoresAtuais || {}), naturezaAtividade: undefined }) as
+            { natureza: 'comercio' | 'industria' | 'servicos' | 'misto'; origem: 'cadastro' | 'indicador' | 'padrao' };
+    }, [naturezaLocal, valoresAtuais]);
 
     // Carrega CFOPs reais das notas da empresa
     useEffect(() => {
@@ -97,12 +104,24 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                 const docs = await listDocumentos(user, { empresaId });
                 if (cancelado) return;
 
-                // Conta CFOPs em notas de ENTRADA (modelo 55/65)
+                // Conta CFOPs em notas de ENTRADA (modelo 55/65).
+                //
+                // As DUAS leituras usam a régua da casa, não o campo cru:
+                //  · `direcaoEfetivaDoc` — a nota própria de entrada (tpNF=0) é
+                //    gravada como 'saida' por trilhos antigos, e ela É compra;
+                //  · `modeloDoDoc` — o campo `modelo` nem sempre foi gravado, e
+                //    a CHAVE sempre traz o modelo nas posições 20-21.
+                // Com o campo cru, nota real sumia da conferência em silêncio.
                 const contagem = new Map<string, number>();
+                let entradas = 0;
+                let comItem = 0;
                 for (const d of docs as DocumentoFiscal[]) {
-                    if (d.direcao !== 'entrada') continue;
-                    if (!['55', '65'].includes(String(d.modelo))) continue;
-                    for (const item of (d.itens || [])) {
+                    if (direcaoEfetivaDoc(d) !== 'entrada') continue;
+                    if (!['55', '65'].includes(String(modeloDoDoc(d)))) continue;
+                    entradas += 1;
+                    const itens = d.itens || [];
+                    if (itens.length) comItem += 1;
+                    for (const item of itens) {
                         const cfop = String(item.cfop || '').trim();
                         if (cfop.length !== 4) continue;
                         contagem.set(cfop, (contagem.get(cfop) || 0) + 1);
@@ -115,11 +134,16 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                     .map(([cfopOrigem, quantidade]) => ({
                         cfopOrigem,
                         quantidade,
-                        sufixoAutomatico: calcularSufixoAutomatico(cfopOrigem, valoresAtuais?.naturezaAtividade),
+                        sufixoAutomatico: cfopFinal(cfopOrigem, valoresAtuais?.naturezaAtividade),
                         valorOverride: overrides[cfopOrigem] || '',
                     }));
 
-                if (!cancelado) setRows(lista);
+                if (!cancelado) {
+                    setRows(lista);
+                    // Lista vazia não pode ter uma cara só: "não comprou" e
+                    // "não capturamos" pedem ações opostas.
+                    setDocsLidos({ total: docs.length, entradas, comItem });
+                }
             } catch (e: any) {
                 if (!cancelado) setErro(e?.message || 'Erro ao carregar CFOPs');
             } finally {
@@ -133,7 +157,7 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
     useEffect(() => {
         setRows(prev => prev.map(r => ({
             ...r,
-            sufixoAutomatico: calcularSufixoAutomatico(r.cfopOrigem, naturezaLocal),
+            sufixoAutomatico: cfopFinal(r.cfopOrigem, naturezaLocal),
         })));
     }, [naturezaLocal]);
 
@@ -222,15 +246,52 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                         <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
                             A heuristica define o CFOP automatico. Voce pode sobrescrever individualmente abaixo.
                         </p>
+                        {/* Campo em branco NÃO é "sem heurística": o backend deriva
+                            e, sem nada, usa o padrão. Dizer qual vai valer — e de
+                            onde ela veio — é o que faz a conferência valer. */}
+                        {naturezaEfetiva.origem !== 'cadastro' && (
+                            <p className="text-xs mt-2 text-amber-800 dark:text-amber-300">
+                                Sem natureza no cadastro, o arquivo vai sair com <strong>{naturezaEfetiva.natureza}</strong>
+                                {naturezaEfetiva.origem === 'indicador'
+                                    ? ' (derivado do Ind. Atividade do cadastro).'
+                                    : ' — o PADRÃO da carteira, não uma leitura do cadastro. Preencha para não depender dele.'}
+                            </p>
+                        )}
                     </div>
 
                     {/* Tabela */}
                     {carregando && (
                         <div className="text-center py-8 text-slate-500">Carregando CFOPs das notas...</div>
                     )}
+                    {/* FAROL HONESTO: lista vazia tem TRÊS causas, com ações
+                        diferentes. Uma frase só mandava procurar o problema
+                        errado — e "não achei" tinha a mesma cara de "não tem". */}
                     {!carregando && rows.length === 0 && (
-                        <div className="text-center py-8 text-slate-500">
-                            Nenhum CFOP encontrado nas notas de entrada desta empresa.
+                        <div className="py-6 px-4 text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/40 rounded-lg">
+                            <p className="font-semibold text-slate-800 dark:text-slate-100">
+                                Nenhum CFOP para correlacionar.
+                            </p>
+                            {docsLidos && docsLidos.total === 0 && (
+                                <p className="mt-2">
+                                    Esta empresa <strong>não tem nenhum documento capturado</strong>. Não é ausência de
+                                    compras — é captura: confira a Prova de captura e o Diagnóstico antes de concluir
+                                    qualquer coisa sobre a escrituração.
+                                </p>
+                            )}
+                            {docsLidos && docsLidos.total > 0 && docsLidos.entradas === 0 && (
+                                <p className="mt-2">
+                                    Há <strong>{docsLidos.total} documento(s)</strong> capturados, mas <strong>nenhuma nota de
+                                    ENTRADA</strong> modelo 55/65. A correlação só existe na entrada — o CFOP de saída vem da
+                                    própria empresa e não se converte. Empresa que só emite serviço (NFS-e) fica assim mesmo.
+                                </p>
+                            )}
+                            {docsLidos && docsLidos.entradas > 0 && (
+                                <p className="mt-2">
+                                    Há <strong>{docsLidos.entradas} nota(s) de entrada</strong>, mas nenhuma com CFOP legível nos
+                                    itens ({docsLidos.comItem} com itens gravados). Isso é <strong>buraco de captura</strong>, não
+                                    ausência de operação: reprocesse os XMLs e confira Erros &amp; Logs.
+                                </p>
+                            )}
                         </div>
                     )}
                     {!carregando && rows.length > 0 && (
