@@ -1,6 +1,8 @@
 # Achados — apuração de PIS/COFINS em planilha (WALDESA COMERCIO, AC 2025)
 
-> **Origem:** planilha enviada pelo Paulo em 12/08/2026, abas `PIS E COFINS 2023`,
+> **Origem:** planilha de controle **feita pelo colaborador** que apura este
+> cliente — encaminhada pelo Paulo em 12/08/2026 para análise, não de autoria
+> dele. Abas `PIS E COFINS 2023`,
 > `LUCRO REAL_2023`, `PIS_COFINS(2024)`, `LUCRO REAL_2024`, `PIS_COFINS(2025)`,
 > `LUCRO REAL_2025`. Analisada a aba do ano-calendário **2025**, meses de
 > **janeiro a junho** (os demais estão em branco).
