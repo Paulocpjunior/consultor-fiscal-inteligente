@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { AnimatedCheckIcon } from './Icons';
+import { tomDoToast, TOAST_ESTILO } from '../services/toastTom';
 
 interface ToastProps {
     message: string;
@@ -20,10 +20,21 @@ const Toast: React.FC<ToastProps> = ({ message, onClose, duration = 3000 }) => {
         return () => clearTimeout(timer);
     }, [duration]);
 
+    // O TOM SAI DA MENSAGEM. Antes era check verde em tudo — inclusive em
+    // "Falha no envio por WhatsApp", que foi o caso do Paulo em 12/08. Ícone é
+    // afirmação: verde ao lado de falha é farol mentiroso, e o colaborador lê o
+    // ícone antes do texto.
+    const tom = tomDoToast(message);
+    const est = TOAST_ESTILO[tom];
+
     return (
-        <div className="fixed bottom-4 right-4 bg-white dark:bg-slate-800 border border-green-100 dark:border-green-900/30 shadow-lg rounded-lg p-4 flex items-center gap-3 animate-fade-in z-[100] max-w-sm" role="status" aria-live="polite">
-            <div className="bg-green-100 dark:bg-green-900/30 p-1 rounded-full">
-                <AnimatedCheckIcon size="w-5 h-5" />
+        <div
+            className={`fixed bottom-4 right-4 bg-white dark:bg-slate-800 border ${est.borda} shadow-lg rounded-lg p-4 flex items-start gap-3 animate-fade-in z-[100] max-w-sm`}
+            role={tom === 'erro' ? 'alert' : 'status'}
+            aria-live={tom === 'erro' ? 'assertive' : 'polite'}
+        >
+            <div className={`${est.fundoIcone} ${est.corIcone} w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-sm font-bold`} title={est.rotulo}>
+                {est.icone}
             </div>
             <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{message}</p>
             <button onClick={onClose} className="ml-auto p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" aria-label="Fechar notificação">
