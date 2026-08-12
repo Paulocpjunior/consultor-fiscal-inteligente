@@ -265,25 +265,25 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                 <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
                     <div>
                         <h3 className="font-bold text-slate-800 dark:text-slate-100">Conferência DCTFWeb × Apuração</h3>
-                        <p className="text-xs text-slate-500">{empresaNome || empresaCnpj} · competência {competencia}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{empresaNome || empresaCnpj} · competência {competencia}</p>
                     </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
+                    <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-xl leading-none">×</button>
                 </div>
 
                 <div className="p-5">
-                    {loading && <p className="text-sm text-slate-500 py-8 text-center">Consultando DCTFWeb MIT…</p>}
+                    {loading && <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">Consultando DCTFWeb MIT…</p>}
 
                     {erro && (
-                        <div className="p-3 rounded border border-red-200 bg-red-50 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300">
+                        <div className="p-3 rounded border border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300">
                             {erro}
                         </div>
                     )}
 
                     {!loading && !erro && data && !data.mitLido && (
-                        <div className="p-3 rounded border border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-800 dark:text-amber-300">
+                        <div className="p-3 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-800 dark:text-amber-300">
                             <b>DCTFWeb MIT não pôde ser lida para esta competência.</b>
                             <p className="mt-1 text-xs">{data.motivoMit}</p>
-                            <p className="mt-2 text-xs text-slate-500">
+                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                                 Os tributos apurados pelo app estão abaixo. A comparação só aparece quando o
                                 Emissor/SEFIN retorna a apuração MIT. Se isto persistir, o shape do response
                                 MIT pode diferir do esperado — rode o serpro-smoke com MIT/LISTAAPURACOES317
@@ -308,15 +308,15 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                 <span className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-700">App: <b>{brl(data.resultado.totalApp)}</b></span>
                                 <span className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-700">DCTFWeb: <b>{brl(data.resultado.totalDctfweb)}</b></span>
                                 {!data.resultado.temDivergencia
-                                    ? <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">✓ Sem divergências</span>
-                                    : <span className="px-2 py-1 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                                    ? <span className="px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">✓ Sem divergências</span>
+                                    : <span className="px-2 py-1 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:bg-red-900/40 dark:text-red-300">
                                         {data.resultado.resumo.alta} alta · {data.resultado.resumo.media} média · {data.resultado.resumo.baixa} baixa
                                       </span>}
                             </div>
 
                             <table className="w-full text-sm">
                                 <thead>
-                                    <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                                    <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
                                         <th className="py-2">Tributo</th>
                                         <th className="py-2 text-right">App</th>
                                         <th className="py-2 text-right">DCTFWeb</th>
@@ -330,7 +330,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                             <td className="py-2 font-medium">{d.tributo}</td>
                                             <td className="py-2 text-right font-mono">{brl(d.valorApp)}</td>
                                             <td className="py-2 text-right font-mono">{brl(d.valorDctfweb)}</td>
-                                            <td className="py-2 text-right font-mono">{d.diferenca === 0 ? '—' : brl(d.diferenca)}{d.diferencaPct !== 0 && <span className="text-[10px] text-slate-400 ml-1">({d.diferencaPct}%)</span>}</td>
+                                            <td className="py-2 text-right font-mono">{d.diferenca === 0 ? '—' : brl(d.diferenca)}{d.diferencaPct !== 0 && <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-1">({d.diferencaPct}%)</span>}</td>
                                             <td className="py-2 text-center">
                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${sevCor[d.severidade]}`}>
                                                     {statusLabel[d.status] || d.status}
@@ -342,7 +342,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                             </table>
 
                             {data.outrosDctfweb.length > 0 && (
-                                <div className="mt-3 text-xs text-slate-500">
+                                <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
                                     <b>Outros débitos na DCTFWeb</b> (não IRPJ/CSLL/PIS/COFINS/IPI — ex: INSS, não cruzados):
                                     <ul className="mt-1 space-y-0.5">
                                         {data.outrosDctfweb.map((o, i) => (
@@ -352,7 +352,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                 </div>
                             )}
 
-                            <p className="mt-4 text-[10px] text-slate-400">
+                            <p className="mt-4 text-[10px] text-slate-400 dark:text-slate-500">
                                 Cruzamento por família de tributo (IRPJ/CSLL/PIS/COFINS/IPI). INSS patronal não é
                                 cruzado (o app não calcula INSS). Valores app = soma do detalhamento de
                                 calcularLucro; DCTFWeb = apuração MIT normalizada pelo fluxo oficial MIT.
@@ -366,7 +366,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                         duas fases: proposta (códigos do mês-modelo × valores do
                         app) → confirmação explícita → transmissão do encerramento. */}
                     {!loading && !erro && data && mitPodePreencher && (
-                        <div className="mt-4 p-4 rounded-lg border border-violet-200 bg-violet-50 dark:bg-violet-900/20 dark:border-violet-800">
+                        <div className="mt-4 p-4 rounded-lg border border-violet-200 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 dark:border-violet-800">
                             <h4 className="font-bold text-sm text-violet-800 dark:text-violet-300">
                                 Preencher MIT com os valores do app
                             </h4>
@@ -378,13 +378,13 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                             </p>
 
                             {mitErro && (
-                                <div className="mt-2 p-2 rounded border border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
+                                <div className="mt-2 p-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
                                     {mitErro}
                                 </div>
                             )}
 
                             {mitResultado?.transmitido ? (
-                                <div className="mt-3 p-3 rounded border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-800 dark:text-emerald-300">
+                                <div className="mt-3 p-3 rounded border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-800 dark:text-emerald-300">
                                     <b>✓ Encerramento transmitido.</b>
                                     <p className="text-xs mt-1">
                                         Status: <b>{mitResultado.statusEncerramento || 'PROCESSANDO'}</b>
@@ -398,7 +398,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                             ) : mitProposta?.proposta ? (
                                 <div className="mt-3">
                                     {mitProposta.proposta.modo === 'criacao' && (
-                                        <div className="mb-2 p-2 rounded border border-violet-300 bg-white/60 dark:bg-slate-800/40 text-xs text-violet-800 dark:text-violet-300">
+                                        <div className="mb-2 p-2 rounded border border-violet-300 dark:border-violet-700 bg-white/60 dark:bg-slate-800/40 text-xs text-violet-800 dark:text-violet-300">
                                             <b>A apuração {competencia} não existe no MIT — será criada e encerrada agora.</b>{' '}
                                             Dados iniciais copiados de {mitProposta.proposta.modeloPeriodo || '—'}
                                             {mitProposta.proposta.dadosIniciaisResumo && (
@@ -409,7 +409,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                         </div>
                                     )}
                                     {alertaTrimestral && (
-                                        <div className="mb-2 p-2 rounded border border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
+                                        <div className="mb-2 p-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
                                             <b>A competência {competencia} não encerra trimestre.</b> A apuração do app
                                             traz IRPJ/CSLL como <b>trimestrais</b> — esses débitos pertencem ao MIT do mês
                                             de fechamento (março/junho/setembro/dezembro), não a este. Desmarque-os aqui
@@ -422,7 +422,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                     </p>
                                     <table className="w-full text-xs">
                                         <thead>
-                                            <tr className="text-left text-violet-700 dark:text-violet-300 border-b border-violet-200 dark:border-violet-800">
+                                            <tr className="text-left text-violet-700 dark:text-violet-300 border-b border-violet-200 dark:border-violet-700 dark:border-violet-800">
                                                 <th className="py-1 w-6">✓</th>
                                                 <th className="py-1">Tributo</th>
                                                 <th className="py-1">Código de débito</th>
@@ -463,7 +463,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                         </tbody>
                                     </table>
                                     {totalSelecionado !== mitProposta.proposta.totalProposto && (
-                                        <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1">
+                                        <p className="text-[10px] text-amber-700 dark:text-amber-300 dark:text-amber-400 mt-1">
                                             Transmissão parcial: {brl(mitProposta.proposta.totalProposto - totalSelecionado)} em
                                             débitos ficam de fora desta apuração.
                                         </p>
@@ -475,7 +475,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                         </p>
                                     )}
                                     {(mitProposta.proposta as any).ipiDiag && (
-                                        <details className="mt-2 text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded p-2">
+                                        <details className="mt-2 text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 dark:border-amber-800 rounded p-2">
                                             <summary className="cursor-pointer font-semibold">
                                                 IPI · diagnóstico do estabelecimento (envie print se o SERPRO recusar)
                                             </summary>
@@ -509,7 +509,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                         <button
                                             onClick={() => { setMitProposta(null); setMitErro(null); }}
                                             disabled={mitTransmitindo}
-                                            className="px-3 py-1.5 text-xs bg-white dark:bg-slate-700 border border-violet-200 dark:border-violet-800 rounded disabled:opacity-50"
+                                            className="px-3 py-1.5 text-xs bg-white dark:bg-slate-800 dark:bg-slate-700 border border-violet-200 dark:border-violet-700 dark:border-violet-800 rounded disabled:opacity-50"
                                         >
                                             Cancelar
                                         </button>
@@ -546,13 +546,13 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                             </p>
 
                             {retErro && (
-                                <div className="mt-2 p-2 rounded border border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
+                                <div className="mt-2 p-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
                                     {retErro}
                                 </div>
                             )}
 
                             {retResultado?.transmitido ? (
-                                <div className="mt-3 p-3 rounded border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-800 dark:text-emerald-300">
+                                <div className="mt-3 p-3 rounded border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-sm text-emerald-800 dark:text-emerald-300">
                                     <b>✓ Retificação transmitida.</b>
                                     <p className="text-xs mt-1">
                                         Status: <b>{retResultado.statusEncerramento || 'PROCESSANDO'}</b>
@@ -581,7 +581,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                                 <tr key={m.familia} className="border-b border-rose-100 dark:border-rose-900/40">
                                                     <td className="py-1 font-medium">
                                                         {m.familia}
-                                                        {m.acao === 'mantido' && <span className="ml-1 text-[9px] text-slate-400">(mantido)</span>}
+                                                        {m.acao === 'mantido' && <span className="ml-1 text-[9px] text-slate-400 dark:text-slate-500">(mantido)</span>}
                                                         {m.acao === 'incluido' && <span className="ml-1 text-[9px] text-rose-500">(novo)</span>}
                                                     </td>
                                                     <td className="py-1 font-mono">{m.codigo}</td>
@@ -618,7 +618,7 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
                                         <button
                                             onClick={() => { setRetProposta(null); setRetErro(null); }}
                                             disabled={retTransmitindo}
-                                            className="px-3 py-1.5 text-xs bg-white dark:bg-slate-700 border border-rose-200 dark:border-rose-800 rounded disabled:opacity-50"
+                                            className="px-3 py-1.5 text-xs bg-white dark:bg-slate-800 dark:bg-slate-700 border border-rose-200 dark:border-rose-800 rounded disabled:opacity-50"
                                         >
                                             Cancelar
                                         </button>

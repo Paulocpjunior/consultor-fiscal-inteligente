@@ -4,6 +4,7 @@
  * Le a colecao das_envios_cliente via GET /api/admin/das/envios-cliente.
  */
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { User, DasEnvioCliente, SimplesNacionalEmpresa } from '../../types';
 import { listarEnviosDas, formatBRL } from '../../services/dasService';
 
@@ -52,8 +53,15 @@ const EnviosHistoricoModal: React.FC<Props> = ({ currentUser, empresas, cnpjInic
             .filter(e => e.cnpjLimpo),
         [empresas]
     );
+    // PORTAL PRA <body>. Um ancestral com transform/will-change vira containing
+    // block de descendentes `position: fixed` (spec CSS, armadilha anotada no
+    // index.css): o `inset-0` deixa de ser a viewport e vira a caixa do painel,
+    // então o cartão é CENTRADO NELA — a parte de baixo (justamente os botões de
+    // enviar) cai fora da tela e não há como rolar até ela, porque o overlay é
+    // fixed. Foi o que o Paulo viu em 12/08 ("está escondida a parte de
+    // enviar"). No body, o modal não depende de ancestral nenhum.
 
-    return (
+    return createPortal((
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onClose}>
             <div
                 className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
@@ -172,7 +180,7 @@ const EnviosHistoricoModal: React.FC<Props> = ({ currentUser, empresas, cnpjInic
                 </div>
             </div>
         </div>
-    );
+    ), document.body);
 };
 
 export default EnviosHistoricoModal;

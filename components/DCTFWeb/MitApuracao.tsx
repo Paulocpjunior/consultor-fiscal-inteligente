@@ -139,44 +139,44 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-auto">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-auto">
                 <div className="p-6 border-b">
                     <div className="flex items-start justify-between">
                         <div>
-                            <h3 className="text-xl font-semibold text-slate-800">Apuração MIT</h3>
-                            <p className="text-sm text-slate-500 mt-1 font-mono">
+                            <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Apuração MIT</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 font-mono">
                                 {declaracao.empresaCnpj} · {formatPaLabel(declaracao.anoPA, declaracao.mesPA)}
                             </p>
                         </div>
-                        <button onClick={onClose} className="text-slate-500 hover:text-slate-800 text-xl">×</button>
+                        <button onClick={onClose} className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 text-xl">×</button>
                     </div>
                 </div>
 
                 <div className="p-6 space-y-6">
                     {error && (
-                        <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded p-3 text-sm">{error}</div>
+                        <div className="bg-rose-50 border dark:border-slate-700 border-rose-200 text-rose-800 rounded p-3 text-sm">{error}</div>
                     )}
 
                     {/* Apuração */}
-                    <div className="bg-white border rounded-lg p-4">
-                        <h4 className="font-medium text-slate-700 mb-2">Detalhes da Apuração</h4>
-                        {loadingApur && <p className="text-sm text-slate-500">Carregando...</p>}
+                    <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-4">
+                        <h4 className="font-medium text-slate-700 dark:text-slate-200 mb-2">Detalhes da Apuração</h4>
+                        {loadingApur && <p className="text-sm text-slate-500 dark:text-slate-400">Carregando...</p>}
                         {!loadingApur && apuracao && (
-                            <pre className="text-xs bg-slate-50 p-3 rounded overflow-auto max-h-60">
+                            <pre className="text-xs bg-slate-50 dark:bg-slate-900/50 p-3 rounded overflow-auto max-h-60">
                                 {JSON.stringify(apuracao, null, 2)}
                             </pre>
                         )}
                         {!loadingApur && !apuracao && (
-                            <p className="text-sm text-slate-500">
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
                                 {apuracaoMotivo || 'Sem dados de apuração.'}
                             </p>
                         )}
                     </div>
 
                     {/* Encerramento */}
-                    <div className="bg-violet-50 border border-violet-200 rounded-lg p-4">
-                        <h4 className="font-medium text-violet-800 mb-2">Encerramento MIT</h4>
-                        <p className="text-sm text-violet-700 mb-3">
+                    <div className="bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-700 rounded-lg p-4">
+                        <h4 className="font-medium text-violet-800 dark:text-violet-300 mb-2">Encerramento MIT</h4>
+                        <p className="text-sm text-violet-700 dark:text-violet-300 mb-3">
                             Encerrar a apuração antes da transmissão da DCTFWeb. O SERPRO exige a apuração MIT completa; a operação é assíncrona.
                         </p>
                         {encerramentoBloqueado && (
@@ -204,14 +204,14 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
                             <button
                                 onClick={() => { carregarApuracao(); carregarHistorico(); }}
                                 disabled={loadingRefresh}
-                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded disabled:opacity-50 text-sm"
+                                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 rounded disabled:opacity-50 text-sm"
                             >
                                 {loadingRefresh ? 'Atualizando...' : 'Atualizar MIT'}
                             </button>
                             {status && (
                                 <button
                                     onClick={checarStatus}
-                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded text-sm"
+                                    className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 rounded text-sm"
                                 >
                                     Atualizar status
                                 </button>
@@ -219,23 +219,23 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
                         </div>
                         {status && (
                             <div className="mt-3 text-sm">
-                                <p><span className="text-slate-500">Status:</span> <strong>{status.statusEncerramento}</strong></p>
+                                <p><span className="text-slate-500 dark:text-slate-400">Status:</span> <strong>{status.statusEncerramento}</strong></p>
                                 {status.protocolo && (
-                                    <p><span className="text-slate-500">Protocolo:</span> <span className="font-mono text-xs">{status.protocolo}</span></p>
+                                    <p><span className="text-slate-500 dark:text-slate-400">Protocolo:</span> <span className="font-mono text-xs">{status.protocolo}</span></p>
                                 )}
                             </div>
                         )}
                     </div>
 
                     {/* Histórico */}
-                    <div className="bg-white border rounded-lg p-4">
-                        <h4 className="font-medium text-slate-700 mb-2">Histórico {declaracao.anoPA}</h4>
-                        {loadingHist && <p className="text-sm text-slate-500">Carregando...</p>}
+                    <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-4">
+                        <h4 className="font-medium text-slate-700 dark:text-slate-200 mb-2">Histórico {declaracao.anoPA}</h4>
+                        {loadingHist && <p className="text-sm text-slate-500 dark:text-slate-400">Carregando...</p>}
                         {!loadingHist && historico.length === 0 && (
-                            <p className="text-sm text-slate-500">Nenhuma apuração registrada para o ano.</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Nenhuma apuração registrada para o ano.</p>
                         )}
                         {!loadingHist && historico.length > 0 && (
-                            <pre className="text-xs bg-slate-50 p-3 rounded overflow-auto max-h-60">
+                            <pre className="text-xs bg-slate-50 dark:bg-slate-900/50 p-3 rounded overflow-auto max-h-60">
                                 {JSON.stringify(historico, null, 2)}
                             </pre>
                         )}

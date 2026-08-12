@@ -176,13 +176,13 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {/* Cabeçalho */}
             <div className="flex items-start justify-between">
                 <div>
-                    <h2 className="text-2xl font-semibold text-slate-800">DCTFWeb</h2>
-                    <p className="text-sm text-slate-500 mt-1">
+                    <h2 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">DCTFWeb</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                         Declaração de Débitos e Créditos Tributários Federais — empresas Lucro Presumido/Real.
                     </p>
                 </div>
                 {resumo && (
-                    <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600">
+                    <span className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
                         modo: <strong>{resumo.mode}</strong>
                     </span>
                 )}
@@ -191,33 +191,33 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {/* KPIs */}
             {resumo && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white border rounded-lg p-4">
-                        <p className="text-xs text-slate-500">Total declarações</p>
-                        <p className="text-2xl font-semibold text-slate-800 mt-1">{resumo.totalDeclaracoes}</p>
+                    <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-4">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Total declarações</p>
+                        <p className="text-2xl font-semibold text-slate-800 dark:text-slate-100 mt-1">{resumo.totalDeclaracoes}</p>
                     </div>
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                        <p className="text-xs text-amber-700">Pendentes</p>
-                        <p className="text-2xl font-semibold text-amber-800 mt-1">{resumo.pendentes}</p>
+                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4">
+                        <p className="text-xs text-amber-700 dark:text-amber-300">Pendentes</p>
+                        <p className="text-2xl font-semibold text-amber-800 dark:text-amber-300 mt-1">{resumo.pendentes}</p>
                     </div>
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                        <p className="text-xs text-emerald-700">Transmitidas</p>
-                        <p className="text-2xl font-semibold text-emerald-800 mt-1">{resumo.transmitidas}</p>
+                    <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg p-4">
+                        <p className="text-xs text-emerald-700 dark:text-emerald-300">Transmitidas</p>
+                        <p className="text-2xl font-semibold text-emerald-800 dark:text-emerald-300 mt-1">{resumo.transmitidas}</p>
                     </div>
-                    <div className="bg-white border rounded-lg p-4">
-                        <p className="text-xs text-slate-500">Empresas c/ pendência</p>
-                        <p className="text-2xl font-semibold text-slate-800 mt-1">{resumo.empresasComPendente}</p>
+                    <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-4">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Empresas c/ pendência</p>
+                        <p className="text-2xl font-semibold text-slate-800 dark:text-slate-100 mt-1">{resumo.empresasComPendente}</p>
                     </div>
                 </div>
             )}
 
             {/* Filtros */}
-            <div className="bg-white border rounded-lg p-4 flex flex-wrap gap-3 items-end">
+            <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-4 flex flex-wrap gap-3 items-end">
                 <div>
-                    <label className="block text-xs text-slate-500 mb-1">Ano</label>
+                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Ano</label>
                     <select
                         value={anoFiltro}
                         onChange={e => setAnoFiltro(Number(e.target.value))}
-                        className="border rounded px-2 py-1 text-sm"
+                        className="border dark:border-slate-600 rounded px-2 py-1 text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100"
                     >
                         {[hoje.getFullYear(), hoje.getFullYear() - 1, hoje.getFullYear() - 2].map(a => (
                             <option key={a} value={a}>{a}</option>
@@ -225,11 +225,11 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs text-slate-500 mb-1">Mês</label>
+                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Mês</label>
                     <select
                         value={mesFiltro}
                         onChange={e => setMesFiltro(e.target.value ? Number(e.target.value) : '')}
-                        className="border rounded px-2 py-1 text-sm"
+                        className="border dark:border-slate-600 rounded px-2 py-1 text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100"
                     >
                         <option value="">Todos</option>
                         {meses.map((m, i) => (
@@ -238,11 +238,11 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs text-slate-500 mb-1">Situação</label>
+                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Situação</label>
                     <select
                         value={situacaoFiltro}
                         onChange={e => setSituacaoFiltro(e.target.value as any)}
-                        className="border rounded px-2 py-1 text-sm"
+                        className="border dark:border-slate-600 rounded px-2 py-1 text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100"
                     >
                         <option value="">Todas</option>
                         <option value="EM_ANDAMENTO">Em andamento</option>
@@ -250,11 +250,11 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </select>
                 </div>
                 <div className="flex-1 min-w-[220px]">
-                    <label className="block text-xs text-slate-500 mb-1">Empresa</label>
+                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Empresa</label>
                     <select
                         value={empresaCnpjFiltro}
                         onChange={e => setEmpresaCnpjFiltro(e.target.value)}
-                        className="w-full border rounded px-2 py-1 text-sm"
+                        className="w-full border dark:border-slate-600 rounded px-2 py-1 text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100"
                     >
                         <option value="">Todas as empresas</option>
                         {empresasDctfwebOptions.map(emp => (
@@ -274,15 +274,15 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
             </div>
 
             {error && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded p-3 text-sm">
+                <div className="bg-rose-50 border dark:border-slate-700 border-rose-200 text-rose-800 rounded p-3 text-sm">
                     {error}
                 </div>
             )}
 
             {/* Tabela */}
-            <div className="bg-white border rounded-lg overflow-hidden">
+            <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+                    <thead className="bg-slate-50 dark:bg-slate-900/50 text-xs uppercase text-slate-600 dark:text-slate-300">
                         <tr>
                             <th className="px-4 py-2 text-left">CNPJ</th>
                             <th className="px-4 py-2 text-left">Competência</th>
@@ -294,12 +294,12 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     </thead>
                     <tbody className="divide-y">
                         {declaracoes.length === 0 && !loading && (
-                            <tr><td colSpan={6} className="text-center text-slate-500 py-6">
+                            <tr><td colSpan={6} className="text-center text-slate-500 dark:text-slate-400 py-6">
                                 Nenhuma declaração encontrada. Use "Sincronizar todas Lucro" no menu lateral ou ajuste filtros.
                             </td></tr>
                         )}
                         {declaracoes.map(d => (
-                            <tr key={d.id} className="hover:bg-slate-50">
+                            <tr key={d.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/40">
                                 <td className="px-4 py-2 font-mono text-xs">{d.empresaCnpj}</td>
                                 <td className="px-4 py-2">{formatPaLabel(d.anoPA, d.mesPA)}</td>
                                 <td className="px-4 py-2 text-xs">{DCTFWEB_CATEGORIA_LABELS[d.categoria] || d.categoria}</td>
@@ -311,7 +311,7 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                         <span className="ml-1 text-xs text-rose-600" title={d._erro}>⚠</span>
                                     )}
                                     {!d._erro && d._info && (
-                                        <span className="ml-1 text-xs text-sky-600 cursor-help" title={d._info}>ℹ</span>
+                                        <span className="ml-1 text-xs text-sky-600 dark:text-sky-400 cursor-help" title={d._info}>ℹ</span>
                                     )}
                                 </td>
                                 <td className="px-4 py-2 text-right">
@@ -321,7 +321,7 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                     <div className="flex gap-1 justify-center">
                                         <button
                                             onClick={() => setDetalheAberto(d)}
-                                            className="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded"
+                                            className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 rounded"
                                             title="Ver detalhe (PDF + recibo + DARF)"
                                         >
                                             Detalhe
@@ -339,14 +339,14 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                         <button
                                             onClick={() => handleSincronizar(d)}
                                             disabled={syncingEmpresa === d.empresaCnpj}
-                                            className="text-xs px-2 py-1 bg-sky-100 hover:bg-sky-200 rounded"
+                                            className="text-xs px-2 py-1 bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 rounded"
                                             title="Re-sincronizar com SERPRO"
                                         >
                                             {syncingEmpresa === d.empresaCnpj ? '...' : 'Sync'}
                                         </button>
                                         <button
                                             onClick={() => setMitAberto(d)}
-                                            className="text-xs px-2 py-1 bg-violet-100 hover:bg-violet-200 rounded"
+                                            className="text-xs px-2 py-1 bg-violet-100 dark:bg-violet-900/30 hover:bg-violet-200 rounded"
                                             title="Apuração MIT"
                                         >
                                             MIT
@@ -361,19 +361,19 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
             {/* Sincronizar DCTFWeb de uma empresa nova (acao esporadica — fica ao fim,
                 fora do fluxo principal de visualizar/transmitir declaracoes). */}
-            <details className="bg-white border rounded-lg">
-                <summary className="px-4 py-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-50">
+            <details className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg">
+                <summary className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40">
                     + Sincronizar DCTFWeb de uma empresa especifica
                 </summary>
                 <div className="p-4 flex flex-wrap gap-3 items-end border-t">
                     <div className="flex-1 min-w-[260px]">
-                        <label className="block text-xs text-slate-500 mb-1">
+                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
                             Empresa
                         </label>
                         <select
                             value={empresaNovaSyncId}
                             onChange={e => setEmpresaNovaSyncId(e.target.value)}
-                            className="w-full border rounded px-2 py-1 text-sm"
+                            className="w-full border dark:border-slate-600 rounded px-2 py-1 text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100"
                         >
                             <option value="">Selecione a empresa...</option>
                             {empresasDctfwebOptions.map(emp => (
@@ -392,11 +392,11 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         {syncingEmpresa ? 'Sincronizando...' : 'Sincronizar DCTFWeb'}
                     </button>
                     {empresasErro && (
-                        <p className="text-xs text-amber-600 w-full">
+                        <p className="text-xs text-amber-600 dark:text-amber-400 w-full">
                             Cadastro completo indisponivel; exibindo empresas ja sincronizadas.
                         </p>
                     )}
-                    <p className="text-xs text-slate-400 w-full">
+                    <p className="text-xs text-slate-400 dark:text-slate-500 w-full">
                         Usa o Ano e o Mes selecionados nos filtros acima.
                     </p>
                 </div>

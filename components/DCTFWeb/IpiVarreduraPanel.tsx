@@ -96,7 +96,7 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
                 <button
                     onClick={() => carregar(false)}
                     disabled={loading || consultandoMit}
-                    className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-800 dark:text-gray-100 rounded"
+                    className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-800 dark:text-slate-100 dark:text-gray-100 rounded"
                 >
                     ↻ Atualizar
                 </button>
@@ -108,7 +108,7 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
             </div>
 
             {erro && (
-                <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/40 dark:border-red-800 px-3 py-2 text-sm text-red-800 dark:text-red-300">{erro}</div>
+                <div className="rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 dark:bg-red-950/40 dark:border-red-800 px-3 py-2 text-sm text-red-800 dark:text-red-300">{erro}</div>
             )}
             {loading && <div className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>}
 
