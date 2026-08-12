@@ -208,9 +208,31 @@ router.get('/varredura', requireAuth, async (req, res) => {
         }
 
         // ── Fase 2: painel completo só dos candidatos ───────────────────────
+        //
+        // A ORDEM É PARTE DA CORREÇÃO (Paulo, 12/08 — JAGUAREXPORT 10463170000166
+        // e VINCENZO GUERRA BANANAS 63027940000194 "não aparecem"): o corte em 60
+        // acontecia ANTES da ordenação, e os clientes MARCADOS no cadastro sem
+        // nota eram justamente os últimos a entrar no mapa. Ou seja, quem a
+        // equipe marcou à mão — o caso que ela quer ver — era o primeiro a cair
+        // fora, em silêncio de posição.
+        //
+        // Agora manda a CONFIRMAÇÃO HUMANA: marcado no cadastro vem primeiro e
+        // nunca é cortado; depois quem tem prova no documento; por último o
+        // indefinido. Cortar continua sendo possível, mas nessa ordem o que sai
+        // é o menos provável, não o mais certo.
         const LIMITE = 60;
-        const ids = Array.from(candidatos.keys());
-        const analisados = ids.slice(0, LIMITE);
+        const ids = Array.from(candidatos.keys()).sort((a, b) => {
+            const ma = empresas.get(a)?.condicao?.adquireDeProdutor ? 1 : 0;
+            const mb = empresas.get(b)?.condicao?.adquireDeProdutor ? 1 : 0;
+            if (ma !== mb) return mb - ma;
+            const ca = candidatos.get(a) || {}, cb = candidatos.get(b) || {};
+            return (cb.provaveis || 0) - (ca.provaveis || 0)
+                || (cb.indefinidos || 0) - (ca.indefinidos || 0);
+        });
+        const marcados = ids.filter((id) => empresas.get(id)?.condicao?.adquireDeProdutor);
+        // Marcado no cadastro NUNCA é truncado: se houver mais marcados que o
+        // limite, o limite cede — a lista existe pra mostrar exatamente eles.
+        const analisados = ids.slice(0, Math.max(LIMITE, marcados.length));
         const linhas = [];
         for (const id of analisados) {
             const empresa = empresas.get(id);
@@ -243,6 +265,10 @@ router.get('/varredura', requireAuth, async (req, res) => {
             // Nunca cortar em silêncio (regra do farol honesto, 30/07).
             total: ids.length,
             truncado: ids.length > analisados.length ? ids.length - analisados.length : 0,
+            // Quem foi marcado no cadastro é contado à parte: se a equipe marcou
+            // 5 e a lista mostra 3, isso é pergunta — não pode depender de alguém
+            // conferir na mão.
+            marcadosNoCadastro: marcados.length,
             lidos: { documentosLeves: leves.length, empresas: empresas.size },
             geradoEm: new Date().toISOString(),
         });

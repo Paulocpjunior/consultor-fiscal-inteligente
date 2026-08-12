@@ -410,11 +410,33 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                 message: (
                     <div style={{ fontSize: 13 }}>
                         {r.detalhamentoIndisponivel ? (
-                            <p>
-                                A consulta respondeu, mas <b>não veio o detalhamento por atividade</b> —
-                                a Receita devolveu só o recibo/valores. Tente outra competência; se
-                                repetir, o código precisa vir da tabela de atividades do SERPRO.
-                            </p>
+                            <>
+                                <p style={{ marginBottom: 8 }}>
+                                    A consulta respondeu e <b>não veio atividade nenhuma</b>. Isso tem
+                                    duas causas <b>opostas</b>, e a resposta crua abaixo diz qual é:
+                                </p>
+                                <ul style={{ margin: '0 0 8px 16px' }}>
+                                    <li>a Receita devolveu só o recibo/valores, <b>sem</b> o detalhamento; ou</li>
+                                    <li>
+                                        a declaração é <b>SEM MOVIMENTO</b> — e aí ela realmente não tem
+                                        atividade (o relatório da Receita imprime "Nenhuma atividade
+                                        selecionada").
+                                    </li>
+                                </ul>
+                                {r.bruto != null && (
+                                    <div style={{ padding: 6, borderRadius: 6, background: '#FFFBEB', fontSize: 11 }}>
+                                        <b>Resposta da Receita</b> (textos longos e PDF omitidos):
+                                        <pre style={{ margin: '3px 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 10, background: '#FEF3C7', padding: 4, borderRadius: 4, maxHeight: 260, overflow: 'auto' }}>
+                                            {JSON.stringify(r.bruto, null, 1)}
+                                        </pre>
+                                        <span style={{ color: '#92400e' }}>
+                                            Copie este bloco e mande no chat — se for uma declaração sem
+                                            movimento aceita, é ela que destrava o "Declarar sem movimento"
+                                            pelo app (hoje o SERPRO recusa com MSG_ISN_023).
+                                        </span>
+                                    </div>
+                                )}
+                            </>
                         ) : (
                             <>
                                 <p style={{ marginBottom: 8 }}>
