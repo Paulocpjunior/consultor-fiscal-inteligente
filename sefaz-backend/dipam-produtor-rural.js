@@ -450,6 +450,10 @@ export function classificarNota(doc, opts = {}) {
             uf: (contraparte.uf || '').toUpperCase(),
             codMunIBGE: soDigitos(cadastro?.codMunIBGE || contraparte.codMunIBGE),
             municipio: cadastro?.municipio || contraparte.municipio || '',
+            // CPF do titular quando o produtor está inscrito por CNPJ: é o que
+            // o `ideProdutor` do R-2055 pede (tpInscProd=2 é a única forma
+            // provada). Vem do CADESP, digitado no cadastro — nunca deduzido.
+            cpfTitular: soDigitos(cadastro?.cpfTitular) || null,
         },
         natureza,
         cadastrado: !!cadastro,
@@ -813,6 +817,7 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
                 chave: n.chave, numero: n.numero, dhEmi: n.dhEmi,
                 fornecedor: n.fornecedor.nome, doc: n.fornecedor.doc, uf: n.fornecedor.uf,
                 ie: n.fornecedor.ie || '',
+                cpfTitular: n.fornecedor.cpfTitular || null,
                 // A PROVA de que este fornecedor é produtor rural PF viaja junto
                 // do número. Quem lê do outro lado (R-2055) não pode ter régua
                 // própria: dois critérios pro mesmo fato foi exatamente o
