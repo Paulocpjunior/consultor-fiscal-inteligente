@@ -1,6 +1,6 @@
 # Guia do Colaborador — Conferir uma entrega nova
 
-<!-- guia-id: conferencia-entregas · guia-revisao: 2026-08-12 -->
+<!-- guia-id: conferencia-entregas · guia-revisao: 2026-08-13 -->
 <!-- Mexeu aqui? mexa no par em public/ e suba a revisão nos DOIS. -->
 
 > Fonte do guia servido em `/guia-conferencia-entregas.html`.
@@ -37,15 +37,15 @@ Antes de testar qualquer coisa:
 **Se você não fizer isso, tudo abaixo pode dar resultado errado** — e o erro
 não vai ser do app, vai ser da página velha que o navegador guardou.
 
-### Os apps são separados
+### Os apps são separados — e a versão fica em lugar diferente em cada um
 
-Cada módulo tem versão própria e sobe na hora dele:
-
-| Módulo | Onde a versão aparece |
+| Módulo | Onde achar a versão |
 | --- | --- |
-| 🧾 Fiscal (CFI) | rodapé |
-| 📊 Contábil (Consultor Contábil) | rodapé |
-| 👥 DP / 📋 Legalização / 💰 Financeiro | rodapé |
+| 🧾 Fiscal (CFI) | **rodapé** da tela — ou o selo no topo do guia servido |
+| 📊 Contábil (Consultor Contábil) | menu **ℹ️ Sobre o Sistema** → linha **"Versão atual"**. *Não é no rodapé* |
+
+O selo do guia lê a versão do **Fiscal** — o guia é servido por ele e não
+consegue ler a versão do outro módulo.
 
 Uma correção no Fiscal **não** aparece no Contábil, e vice-versa. Se o teste
 envolve os dois lados (é o caso do FUNRURAL → EFD-Reinf), anote as **duas**
