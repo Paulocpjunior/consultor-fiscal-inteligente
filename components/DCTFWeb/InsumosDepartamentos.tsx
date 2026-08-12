@@ -22,11 +22,25 @@ export interface SeloInsumo {
     quem?: string | null;
 }
 
+/** T4 — "esta competência precisa de retificadora?" (dctfweb-retificadora.js). */
+export interface VereditoRetificadora {
+    situacao: 'nao-transmitida' | 'precisa-retificar' | 'vai-precisar' | 'em-dia';
+    precisaRetificar: boolean;
+    severidade: 'ok' | 'atencao' | 'alta';
+    transmitidaEm: string | null;
+    transmitidaPor: string | null;
+    tardios: Array<{ rotulo: string; quando?: string }>;
+    mensagem: string;
+    acao: string;
+    ressalvas: string[];
+}
+
 interface Resposta {
     ok: boolean;
     selos?: SeloInsumo[];
     veredito?: 'pronto' | 'incompleto' | 'incerto';
     frase?: string;
+    retificadora?: VereditoRetificadora;
     error?: string;
 }
 
@@ -121,6 +135,29 @@ const InsumosDepartamentos: React.FC<{
                             </div>
                         ))}
                     </div>
+                    {/* T4 — insumo que chegou DEPOIS da transmissão. Era o
+                        buraco: a DCTFWeb é UMA declaração e três departamentos
+                        a alimentam em dias diferentes; quem transmite cedo
+                        fecha a competência para os outros, e nada dizia isso. */}
+                    {dados.retificadora && dados.retificadora.situacao !== 'em-dia' && (
+                        <div className={`mt-3 rounded-lg border-l-4 p-3 text-xs ${
+                            dados.retificadora.severidade === 'alta'
+                                ? 'border-red-500 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'
+                                : 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'
+                        }`}>
+                            <div className="font-bold">
+                                {dados.retificadora.precisaRetificar ? '🛑 Precisa de retificadora' : '⚠️ Atenção na ordem'}
+                            </div>
+                            <p className="mt-1">{dados.retificadora.mensagem}</p>
+                            <p className="mt-1 opacity-90">{dados.retificadora.acao}</p>
+                            {!!dados.retificadora.ressalvas.length && (
+                                <ul className="mt-2 ml-4 list-disc opacity-80">
+                                    {dados.retificadora.ressalvas.map((t, i) => <li key={i}>{t}</li>)}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+
                     <p className={`text-xs font-bold ${VEREDITO_COR[dados.veredito || 'incerto']}`}>
                         {dados.veredito === 'pronto' ? '✅' : dados.veredito === 'incompleto' ? '🛑' : '⚠️'} {dados.frase}
                     </p>
