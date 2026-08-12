@@ -180,18 +180,25 @@ export function interpretarRecusaSemMovimento(mensagemSerpro) {
             mensagem: 'O SN-Entregar recusou a declaração sem movimento: ele exige atividade com valor '
                 + 'maior que zero, e mês sem faturamento não tem nenhuma. A forma correta da declaração '
                 + 'sem movimento ainda não está confirmada neste app — nada foi transmitido.',
-            // ⚠️ ANTES pedia "o extrato de um PGDAS-D sem movimento". Paulo, 12/08:
-            // **sem movimento NÃO gera extrato** — o app estava mandando o
-            // colaborador buscar um documento que não existe, e pedido impossível
-            // vira pedido ignorado. O que existe é o RECIBO/declaração; e o que
-            // resolve de verdade é a consulta do próprio app numa competência já
-            // aceita, que devolve a estrutura que o SERPRO aceitou.
+            // ⚠️ DUAS CORREÇÕES no mesmo dia (12/08), e a segunda desmente a
+            // primeira. (1) Pedia "o extrato de um PGDAS-D sem movimento" —
+            // sem movimento NÃO gera extrato. (2) Passou a mandar usar o
+            // "🔎 Atividades declaradas"… até a resposta real do
+            // CONSULTIMADECREC14 mostrar que ele devolve **só PDF**
+            // (numeroDeclaracao + recibo + declaração), sem nenhuma estrutura.
+            // Ou seja: a forma aceita do sem movimento NÃO sai de consulta
+            // nenhuma que o app tenha hoje.
+            //
+            // Prometer um caminho que não leva a lugar nenhum é pior que
+            // admitir o bloqueio: gasta o tempo do colaborador e some com a
+            // pendência de vista. Então a ação diz o que resolve HOJE (entregar
+            // no e-CAC) e nomeia o que falta pra destravar, sem inventar atalho.
             acao: 'Entregue ESTA competência no e-CAC (PGDAS-D → Declarar → sem movimento) para não '
-                + 'correr a MAED de R$ 50,00. Para destravar o botão: depois de entregar, abra a ficha '
-                + 'do Simples desta empresa e clique em "🔎 Atividades declaradas" NESSA competência — '
-                + 'com a declaração já aceita, a consulta devolve a estrutura que o SERPRO aceitou e a '
-                + 'forma certa sai no mesmo dia. (Sem movimento não gera extrato; o que existe é o '
-                + 'recibo da declaração.)',
+                + 'correr a MAED de R$ 50,00 — leva menos de um minuto e resolve a obrigação. '
+                + 'O botão do app segue bloqueado: a forma que o SN-Entregar aceita para mês sem '
+                + 'faturamento não é a que o app monta, e ela NÃO sai das consultas disponíveis '
+                + '(o CONSULTIMADECREC14 devolve só os PDFs). Destrava com a especificação do '
+                + 'campo pelo SERPRO — payload de entrega não se deduz.',
         };
     }
     return {
