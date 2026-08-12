@@ -28,6 +28,7 @@ import {
 } from '../Icons';
 import { CurrencyInput, ToggleSwitch } from './inputs';
 import { avaliarPresuncaoReduzida16, avisoPeriodoApuracao } from '../../services/lucroService';
+import BaseCreditoModal from './BaseCreditoModal';
 
 interface NewFichaViewProps {
     // Contexto
@@ -127,6 +128,10 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
     // subir pro dashboard pai como os campos da ficha).
     const [dareModal, setDareModal] = useState<{ valor: number; derivacao: 'proprio' | 'st' } | null>(null);
     const avisoPeriodo = avisoPeriodoApuracao(p.selectedEmpresa?.regimePadrao, p.periodoApuracao, p.fichaMes);
+
+    // Conferência da base de crédito contra os DOCUMENTOS. Fica aqui, ao lado
+    // de onde o crédito é marcado — ferramenta longe da decisão não é usada.
+    const [baseCreditoAberto, setBaseCreditoAberto] = React.useState(false);
     return (
     <div className="max-w-7xl mx-auto animate-fade-in pb-20">
         <div className="flex justify-between items-center mb-6">
@@ -613,12 +618,23 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
                             <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
                                 <div className="flex justify-between items-center mb-3">
                                     <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Despesas Itemizadas</h4>
+                                    <div className="flex items-center gap-2">
+                                    {p.selectedEmpresa?.id && p.selectedEmpresa?.regimePadrao === 'Real' && (
+                                        <button
+                                            onClick={() => setBaseCreditoAberto(true)}
+                                            title="Confere a base de crédito de PIS/COFINS contra as notas de entrada capturadas. Não altera a ficha."
+                                            className="text-[10px] flex items-center gap-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded font-bold transition-colors"
+                                        >
+                                            🔎 Conferir crédito pelos documentos
+                                        </button>
+                                    )}
                                     <button
                                         onClick={p.onAddDespesa}
                                         className="text-[10px] flex items-center gap-1 bg-sky-50 text-sky-600 hover:bg-sky-100 px-2 py-1 rounded font-bold transition-colors"
                                     >
                                         <PlusIcon className="w-3 h-3" /> Adicionar Despesa
                                     </button>
+                                    </div>
                                 </div>
 
                                 <div className="space-y-2 mb-4">
@@ -723,6 +739,15 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
                 valorInicial={dareModal.valor}
                 derivacaoInicial={dareModal.derivacao}
                 onClose={() => setDareModal(null)}
+            />
+        )}
+
+        {baseCreditoAberto && p.selectedEmpresa?.id && (
+            <BaseCreditoModal
+                empresaId={p.selectedEmpresa.id}
+                empresaNome={p.selectedEmpresa.nome || ''}
+                competencia={p.fichaMes}
+                onClose={() => setBaseCreditoAberto(false)}
             />
         )}
     </div>
