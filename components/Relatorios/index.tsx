@@ -49,6 +49,8 @@ type AbaId =
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre';
 
+import { livroSemNotaDeProdutorDuplicada } from '../../services/livroNotaProdutor';
+
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
         titulo: 'Movimento (por empresa)', abas: [
@@ -337,9 +339,15 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
     const { gerando, rodar } = usePdf();
 
-    const linhas = useMemo(() => docs
-        .filter(d => d.direcao === direcao && docValido(d) && ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo))
-        .map(d => {
+    // A COMPRA DE PRODUTOR RURAL TEM DUAS NOTAS E O LIVRO ESCRITURA UMA.
+    // Sem esta dedup o livro DOBRA (VINCENZO 07/2026: 37.800,00 no lugar de
+    // 18.900,00) — mesma duplicidade que dobrou o FUNRURAL em 11/08, e a mesma
+    // régua do RICMS/SP art. 136, I, "a" (RC 33068/2025). Só nas ENTRADAS: na
+    // saída não existe nota própria de entrada.
+    const { linhas, excluidas } = useMemo(() => {
+        const filtrados = docs.filter(d => d.direcao === direcao && docValido(d)
+            && ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo));
+        const montar = (d: any) => {
             const contabil = d.totais?.vNF || d.valorTotal || 0;
             const a = alocarTributacaoIcms(d.itens || [], contabil);
             const parte: any = contraparteDoc(d);
@@ -347,14 +355,21 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                 data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
                 numero: d.numero || '—',
                 participante: parte?.nome || '—',
-                cfops: Array.from(new Set((d.itens || []).map(i => i.cfop).filter(Boolean))).join(' ') || '—',
+                cfops: Array.from(new Set((d.itens || []).map((i: any) => i.cfop).filter(Boolean))).join(' ') || '—',
                 contabil, ...a,
             };
-        })
-        .sort((x, y) => x.data.localeCompare(y.data) || String(x.numero).localeCompare(String(y.numero))),
-        [docs, direcao]);
+        };
+        const r = direcao === 'entrada'
+            ? livroSemNotaDeProdutorDuplicada(filtrados, montar, (d: any) => d.totais?.vNF || d.valorTotal || 0)
+            : { linhas: filtrados.map(montar), excluidas: [] as any[] };
+        return {
+            linhas: r.linhas.sort((x: any, y: any) => x.data.localeCompare(y.data)
+                || String(x.numero).localeCompare(String(y.numero))),
+            excluidas: r.excluidas,
+        };
+    }, [docs, direcao]);
 
-    const tot = useMemo(() => linhas.reduce((t, l) => ({
+    const tot = useMemo(() => linhas.reduce((t: any, l: any) => ({
         contabil: t.contabil + l.contabil, base: t.base + l.base, icms: t.icms + l.icms,
         isentos: t.isentos + l.isentos, outras: t.outras + l.outras, ipi: t.ipi + l.ipi,
     }), { contabil: 0, base: 0, icms: 0, isentos: 0, outras: 0, ipi: 0 }), [linhas]);
@@ -373,11 +388,18 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             { titulo: 'Outras', largura: 10, alinhamento: 'direita' },
             { titulo: 'IPI', largura: 7, alinhamento: 'direita' },
         ],
-        linhas: linhas.map(l => [l.data, l.numero, l.participante, l.cfops, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi]),
+        linhas: linhas.map((l: any) => [l.data, l.numero, l.participante, l.cfops, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi]),
         totais: ['', '', `TOTAIS (${linhas.length} notas)`, '', tot.contabil, tot.base, tot.icms, tot.isentos, tot.outras, tot.ipi],
         identificacao,
         observacoes: [
             'Base/Isentas/Outras alocadas pela tributação de cada item (CST do XML), fechando no valor contábil — mesma régua do Exportar SAGE.',
+            // Total que muda sozinho faz desconfiar do número certo: o que saiu
+            // do livro sai NOMEADO no papel, não só na tela.
+            ...(excluidas.length ? [
+                `${excluidas.length} NF-e de produtor rural FORA do livro (documento de origem; a escriturada é a `
+                + 'nota própria de entrada — RICMS/SP art. 136, I, "a" e RC 33068/2025): '
+                + excluidas.map((e: any) => `nº ${e.numero} ${e.participante} ${fmtBRL(e.valor)}`).join(' · '),
+            ] : []),
             ...obsTruncado(truncado),
         ],
         fileName: `livro-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
@@ -396,6 +418,18 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                     {linhas.length} nota(s) · contábil {fmtBRL(tot.contabil)} · base {fmtBRL(tot.base)} · isentas {fmtBRL(tot.isentos)} · outras {fmtBRL(tot.outras)}
                 </span>
             </div>
+            {!!excluidas.length && (
+                <div className="mt-3 rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-300">
+                    <strong>{excluidas.length} NF-e de produtor rural fora do livro</strong> — documento de ORIGEM.
+                    A escriturada é a nota própria de entrada (RICMS/SP art. 136, I, "a"; RC 33068/2025);
+                    escriturar as duas dobra a entrada.
+                    <ul className="mt-1 ml-4 list-disc">
+                        {excluidas.map((e: any) => (
+                            <li key={e.numero}>nº {e.numero} · {e.participante} · {fmtBRL(e.valor)}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
         </Card>
     );
 };

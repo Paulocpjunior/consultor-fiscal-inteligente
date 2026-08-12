@@ -28,9 +28,23 @@ const contabilDoc = (d: DocumentoFiscal) => d.totais?.vNF || d.valorTotal || 0;
 /** Contraparte (quem não é a empresa): destinatário na saída e na nota própria de entrada. */
 export function contraparteDoc(d: DocumentoFiscal): any {
     const propriaEntrada = String((d as any).tpNF ?? '') === '0';
-    return (d.direcao === 'saida' || propriaEntrada)
-        ? (d.destinatario || d.tomador)
-        : (d.emitente || d.prestador);
+    const x = d as any;
+    const temLado = (p: any) => !!(p && (p.cnpjCpf || p.cnpj || p.cpf || p.nome || p.razaoSocial));
+    // O importer PRINCIPAL grava os participantes em campos CHATOS; sync-routes
+    // e o abrasf gravam ANINHADO. Ler só o aninhado é a armadilha que mais
+    // mordeu este projeto — e era por isso que a coluna
+    // "Fornecedor/Remetente" do Livro saía toda com "—" (VINCENZO, 12/08).
+    const emitente = temLado(d.emitente) ? d.emitente : (temLado(d.prestador) ? d.prestador : {
+        cnpjCpf: x.cnpjEmit || x.cnpjEmitente || '',
+        nome: x.xNomeEmit || x.nomeEmit || '',
+        ie: x.ieEmit || '', uf: x.ufEmit || '', codMunIBGE: x.codMunEmit || '',
+    });
+    const destinatario = temLado(d.destinatario) ? d.destinatario : (temLado(d.tomador) ? d.tomador : {
+        cnpjCpf: x.cnpjDest || x.cnpjDestinatario || '',
+        nome: x.xNomeDest || x.nomeDest || '',
+        ie: x.ieDest || '', uf: x.ufDest || '', codMunIBGE: x.codMunDest || '',
+    });
+    return (d.direcao === 'saida' || propriaEntrada) ? destinatario : emitente;
 }
 
 // ─── Resumo por CFOP ────────────────────────────────────────────────────────
