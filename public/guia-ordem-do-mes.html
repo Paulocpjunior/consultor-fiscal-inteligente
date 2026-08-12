@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<!-- PAR OBRIGATÓRIO: este guia e a fonte em docs/ se atualizam JUNTOS. -->
+<meta name="guia-id" content="ordem-do-mes">
+<meta name="guia-revisao" content="2026-08-13">
+<title>Manual do Mês — EFD-Reinf e DCTFWeb por departamento · SP Assessoria Contábil</title>
+<style>
+    :root {
+        --azul: #0E3BFA; --azul-escuro: #091D8D;
+        --tinta: #1e293b; --cinza: #64748b; --borda: #e2e8f0;
+        --verde: #059669; --vermelho: #dc2626; --ambar: #b45309;
+        --fundo-suave: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; padding: 0; color: var(--tinta); background: var(--fundo-suave);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6; font-size: 16px;
+    }
+    header {
+        background: linear-gradient(135deg, var(--azul-escuro), var(--azul));
+        color: #fff; padding: 28px 20px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 4px; }
+    header .wrap { display: flex; align-items: center; gap: 16px; }
+    header img { height: 52px; background: #fff; border-radius: 10px; padding: 6px; }
+    header h1 { font-size: 1.35rem; margin: 0; line-height: 1.3; }
+    header p { margin: 4px 0 0; font-size: .85rem; opacity: .9; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+    section {
+        background: #fff; border: 1px solid var(--borda); border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 18px;
+    }
+    h2 { font-size: 1.15rem; color: var(--azul-escuro); margin: 0 0 10px; }
+    h3 { font-size: 1rem; margin: 18px 0 6px; }
+    .onde {
+        background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;
+        padding: 10px 14px; font-size: .9rem; margin-bottom: 18px;
+    }
+    .quando {
+        border-left: 4px solid var(--azul); background: var(--fundo-suave);
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .alerta {
+        border-left: 4px solid var(--ambar); background: #fffbeb;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .perigo {
+        border-left: 4px solid var(--vermelho); background: #fef2f2;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--borda); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--fundo-suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--cinza); }
+    .tabela-rolagem { overflow-x: auto; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+    pre {
+        background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 16px;
+        overflow-x: auto; font-size: .85rem; line-height: 1.55;
+    }
+    ul, ol { padding-left: 22px; }
+    li { margin: 4px 0; }
+    .selo { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .selo-verde { background: #ecfdf5; color: var(--verde); }
+    .selo-vermelho { background: #fef2f2; color: var(--vermelho); }
+    .selo-ambar { background: #fffbeb; color: var(--ambar); }
+    footer { text-align: center; font-size: .8rem; color: var(--cinza); padding: 0 20px 40px; }
+    strong { color: var(--azul-escuro); }
+    @media print {
+        body { background: #fff; }
+        section { border: none; padding: 8px 0; break-inside: avoid; }
+        header { background: var(--azul-escuro); -webkit-print-color-adjust: exact; }
+    }
+</style>
+</head>
+<body>
+<header>
+    <div class="wrap">
+        <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
+        <div>
+            <h1>Manual do Mês — EFD-Reinf e DCTFWeb</h1>
+            <p>SP Assessoria Contábil · a ordem de uso, departamento por departamento</p>
+        </div>
+    </div>
+</header>
+<main><section><p> | --- | --- |</p>
+<div class="tabela-rolagem"><table><tr><th><strong>Gerar a guia (DARF)</strong></th><th>sai com a declaração <strong>EM ANDAMENTO</strong></th><th>qualquer departamento, a qualquer hora</th></tr><tr><td><strong>Transmitir a declaração</strong></td><td><strong>FECHA</strong> a competência</td><td><strong>só o Fiscal</strong></td></tr></table></div>
+<div class="perigo">🚨 <strong>Transmitir para "conseguir a guia" é o erro que este manual existe para impedir.</strong> A guia sai sem transmitir. Quem transmite antes da hora fecha a competência para os outros dois departamentos e obriga retificadora.</div>
+<p>O app aplica isso: quem não é do Fiscal <strong>não consegue</strong> transmitir, e a recusa</p>
+<p>aponta a guia — que é o que a pessoa quase sempre queria.</p>
+</section>
+<section>
+<h2>ANTES DE COMEÇAR O MÊS — parametrização</h2>
+<p>Sem isto, nada abaixo funciona. Confira <strong>uma vez por cliente</strong>, e de novo</p>
+<p>sempre que algo mudar.</p>
+<div class="tabela-rolagem"><table><tr><th>O quê</th><th>Onde</th><th>Sem isso…</th></tr><tr><td><strong>Certificado A1 válido</strong></td><td>Fiscal → Cofre de certificados</td><td>Nada transmite. Filial usa o da matriz pela raiz do CNPJ</td></tr><tr><td><strong>Procuração e-CAC</strong> para a SP Contábil</td><td>e-CAC do cliente</td><td>O SERPRO recusa a consulta</td></tr><tr><td><strong>R-1000 aceito</strong> (cadastro do contribuinte no Reinf)</td><td>Contábil → EFD-Reinf → R-1000</td><td>O movimento é rejeitado em lote</td></tr><tr><td><strong>Departamento do colaborador</strong></td><td>Fiscal → Gerenciar Usuários (chips azuis)</td><td>A pessoa não entra no módulo, e o Fiscal não consegue transmitir</td></tr><tr><td><strong>Regime da empresa</strong></td><td>Fiscal → Dados Fiscais</td><td>O mês nasce sem as obrigações do regime</td></tr><tr><td><strong>Responsável pela carteira</strong></td><td>Fiscal → Carteira → Atribuição</td><td>O envio ao cliente sai da caixa errada</td></tr></table></div>
+</section>
+<section>
+<h2>O MÊS, EM ORDEM</h2>
+<pre>  Dia 1  ──────────────────────────────────────────────────────────────
+         O cron cria as tarefas do mês (Vencimentos e Obrigações)
+
+  Ao longo do mês ─────────────────────────────────────────────────────
+    👥 PESSOAL   fecha a folha  →  eSocial  →  Reinf (se houver)
+    📊 CONTÁBIL  aluguéis e dividendos  →  Reinf (R-4010 + R-4099)
+    🧾 FISCAL    serviços tomados e produtor rural  →  Reinf (R-2010/R-2055)
+
+  Precisa pagar antes? ────────────────────────────────────────────────
+         Qualquer departamento GERA A GUIA com a declaração em andamento.
+         NÃO transmita.
+
+  Fechamento ──────────────────────────────────────────────────────────
+    🧾 FISCAL    apura e encerra o MIT  →  confere os débitos
+                 →  TRANSMITE a DCTFWeb  →  gera a guia definitiva</pre>
+</section>
+<section>
+<h2>📊 DEPARTAMENTO CONTÁBIL</h2>
+<h3>Parte 1 — EFD-Reinf (no <strong>Consultor Contábil</strong>)</h3>
+<p><strong>IRRF de aluguéis pagos a pessoa física (R-4010)</strong></p>
+<ol><li>Abra <strong>EFD-Reinf → R-4010</strong></li><li>Informe o CNPJ da empresa e a competência</li><li>Lance os locadores por <strong>um</strong> dos três caminhos: - <strong>importar planilha</strong> (o app lê as colunas de CPF, nome e valor) - <strong>lançamento manual</strong>, locador a locador - <strong>lançamento unitário</strong> (<code>R-4010 unitário</code>), para um pagamento avulso</li><li>Confira o <strong>IRRF calculado</strong> — a tabela progressiva de 2026 já está no app, com a dedução mensal</li><li><strong>Acúmulo de IRRF:</strong> quando o imposto do locador fica abaixo do mínimo de recolhimento, ele <strong>não some</strong> — o app acumula para a competência seguinte. Confira a lista de acúmulos antes de fechar</li><li><strong>R-4099</strong> (fechamento dos eventos R-4000) é o que dá o "ponto final" no movimento do mês. Sem ele, o que você mandou não é considerado</li></ol>
+<p><strong>Dividendos</strong></p>
+<ol><li>Abra <strong>EFD-Reinf → Dividendos</strong>, informe o beneficiário e o valor pago</li><li>O app aplica a regra: <strong>acima de R$ 50.000,00 no mês</strong> para o mesmo beneficiário, incide <strong>IRRF de 10%</strong> sobre o valor</li><li>Abaixo do limite, <strong>não gera guia</strong> — e isso está certo. Não force</li><li>Acima do limite, a guia sai pelo caminho normal de DARF</li></ol>
+<div class="alerta">⚠️ Aplicações financeiras têm tela própria (<strong>Aplicações</strong>) com o mesmo rito: lançar → conferir → registrar.</div>
+<h3>Parte 2 — DCTFWeb (no <strong>Consultor Fiscal</strong>)</h3>
+<ol><li>Abra <strong>DCTFWeb → o cliente → a competência</strong></li><li>Clique em <strong>Ver débitos apurados</strong> e confirme que o que você mandou no Reinf <strong>apareceu</strong> (IRRF de aluguéis costuma sair no código 3208; de dividendos, conforme a natureza)</li><li><strong>Precisa da guia agora?</strong> Gere o DARF. A declaração fica <strong>em andamento</strong> e a guia é válida</li><li><strong>NÃO transmita.</strong> Se aparecer bloqueio, está funcionando — a transmissão é do Fiscal</li></ol>
+<div class="quando">Se o débito <strong>não</strong> apareceu: o evento pode não ter sido aceito, ou o R-4099 não foi transmitido. Volte ao Reinf e confira o recibo antes de qualquer outra coisa.</div>
+</section>
+<section>
+<h2>👥 DEPARTAMENTO PESSOAL / FOLHA</h2>
+<ol><li>Feche a <strong>folha do mês</strong></li><li>Transmita o <strong>eSocial</strong> — é ele que leva a folha para a DCTFWeb</li><li>Se houver retenção previdenciária que seja do seu escopo, trate no <strong>EFD-Reinf</strong></li><li>No <strong>Consultor Fiscal → DCTFWeb</strong>, confira em <strong>Ver débitos apurados</strong> que a parte previdenciária apareceu (CPP, segurados, terceiros)</li><li><strong>Precisa da guia?</strong> Gere o DARF com a declaração em andamento</li><li><strong>NÃO transmita</strong> — mesmo motivo do Contábil</li></ol>
+<div class="quando">O eSocial <strong>fechado</strong> é pré-requisito da DCTFWeb. Se o fechamento não foi feito, os débitos da folha não aparecem e a declaração sairia a menor.</div>
+</section>
+<section>
+<h2>🧾 DEPARTAMENTO FISCAL</h2>
+<h3>Parte 1 — EFD-Reinf</h3>
+<ol><li><strong>Serviços tomados (R-2010)</strong> — retenção previdenciária de 11% sobre cessão de mão de obra e empreitada (limpeza, vigilância, conservação)</li><li><strong>Aquisição de produção rural (R-2055)</strong> — o FUNRURAL sub-rogado. O cálculo vem pronto do Consultor Fiscal (aba 🌾); <strong>não recalcule do outro lado</strong></li><li><strong>Retenções de PJ (R-4020)</strong> — as NFS-e tomadas com retenção federal, também lidas do Consultor Fiscal</li></ol>
+<h3>Parte 2 — MIT e o fechamento da DCTFWeb</h3>
+<ol><li><strong>Apure o MIT</strong> (DCTFWeb → MIT → Apuração) e confira tributo a tributo</li><li><strong>Encerre o MIT</strong> — é ele que leva os débitos próprios (IRPJ, CSLL, PIS, COFINS, IPI) para a DCTFWeb</li><li>Volte à DCTFWeb e clique em <strong>Ver débitos apurados</strong>. Confira que estão lá: - a <strong>folha</strong> (veio do eSocial — Pessoal) - os <strong>aluguéis e dividendos</strong> (vieram do Reinf — Contábil) - os <strong>serviços e produtor rural</strong> (vieram do Reinf — Fiscal) - os <strong>tributos do MIT</strong> (você acabou de encerrar)</li><li><strong>Agora sim: transmita.</strong> O app vai perguntar se algum insumo ainda está pendente</li><li>Gere a <strong>guia definitiva</strong> e siga o rito de envio ao cliente (arquivo no SharePoint → gestor em cópia → baixa da obrigação)</li></ol>
+<div class="quando"><strong>Insumo pendente NÃO bloqueia a transmissão</strong> — mas exige <strong>justificativa escrita</strong>, que fica gravada com o seu nome. É decisão consciente: perder o dia 15 por um insumo que talvez não venha é multa certa; retificadora é barata.</div>
+</section>
+<section>
+<h2>QUANDO O INSUMO CHEGA DEPOIS</h2>
+<p>Acontece: o Contábil manda um aluguel no dia 20, e a DCTFWeb foi transmitida no</p>
+<p>dia 14.</p>
+<ol><li>O app <strong>acende sozinho</strong>: "precisa de retificadora"</li><li>Retificar <strong>é transmitir de novo</strong> — o e-CAC monta a nova declaração com o insumo que chegou depois</li><li>O app exige <strong>motivo</strong> e grava a auditoria <strong>antes × depois</strong></li><li>Transmitir de novo <strong>sem dizer que é retificadora é recusado</strong>. Retificar às escondidas não pode</li></ol>
+<div class="quando">O app <strong>não promete prever</strong> o resultado da retificadora: os débitos são montados pela Receita a partir do eSocial/Reinf/MIT. Se a retificadora sair <strong>sem efeito</strong>, é sinal de que o insumo ainda não chegou na Receita.</div>
+</section>
+<section>
+<h2>O QUE NÃO FAZER — em qualquer departamento</h2>
+<ul><li>❌ <strong>Transmitir para conseguir a guia.</strong> A guia sai com a declaração em andamento</li><li>❌ <strong>Recalcular no Reinf o que o Fiscal já apurou.</strong> Dois números para o mesmo fato é o pior defeito de um arquivo fiscal</li><li>❌ <strong>Preencher campo por cima para "destravar".</strong> Campo em branco acende alerta de propósito</li><li>❌ <strong>Concluir "não tem" a partir de tela vazia.</strong> Vazio pode ser ausência de operação <em>ou</em> falha de captura — o app diz qual é, leia a frase</li><li>❌ <strong>Inventar código de tabela</strong> (<code>tpServico</code>, <code>indAquis</code>, natureza do rendimento). Se o app pede, é porque não dá para deduzir</li></ul>
+</section>
+<section>
+<h2>AINDA NÃO EXISTE NO APP (não procure)</h2>
+<p>Honestidade sobre os limites, para ninguém perder tempo:</p>
+<div class="tabela-rolagem"><table><tr><th>O quê</th><th>Situação</th></tr><tr><td><strong>R-2010</strong> — tela e transmissão</td><td>O cálculo e o gerador estão prontos e conferidos contra um evento aceito; <strong>falta a tela</strong> no Consultor Contábil. Por enquanto, no e-CAC</td></tr><tr><td><strong>PGDAS-D sem movimento</strong></td><td>Bloqueado de propósito — a forma que o SN-Entregar aceita não foi confirmada. Entregue no e-CAC</td></tr><tr><td><strong>Prazo do ISS</strong> fora de São Paulo</td><td>Só a capital está cadastrada. Outros municípios aparecem <strong>sem data</strong>, dizendo o que falta</td></tr></table></div></section></main>
+<footer>
+    Dúvidas técnicas: falar com o Paulo (admin). Este guia é atualizado junto com a ferramenta —
+    versão fonte em <code>docs/guia-colaborador-ordem-do-mes.md</code>.
+</footer>
+</body>
+</html>
