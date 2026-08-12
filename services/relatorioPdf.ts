@@ -179,7 +179,13 @@ export async function gerarRelatorioPdf(p: RelatorioPdfParams): Promise<void> {
             const w = larguras[i] ?? 10;
             const txt = fmtCell(v);
             const maxChars = Math.floor(w / 1.55);
-            const recortado = txt.length > maxChars ? txt.slice(0, maxChars - 1) + '…' : txt;
+            // CORTE HONESTO: o "…" sozinho não diz que sobrou coisa nem quanto —
+            // e num relatório fiscal isso vira conclusão errada (caso LAV,
+            // 12/08: a lista de notas faltantes cortada pela largura da coluna,
+            // sem nada avisando). Quando corta, o texto DIZ que cortou.
+            const recortado = txt.length > maxChars
+                ? txt.slice(0, Math.max(1, maxChars - 8)) + `…(+${txt.length - (maxChars - 8)})`
+                : txt;
             pdf.setFontSize(6.8);
             pdf.text(recortado, p.colunas[i]?.alinhamento === 'direita' ? x + w - 1.5 : x + 1.5, y, {
                 align: p.colunas[i]?.alinhamento === 'direita' ? 'right' : 'left',
