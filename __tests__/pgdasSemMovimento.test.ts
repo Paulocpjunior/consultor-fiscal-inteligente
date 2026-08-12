@@ -153,8 +153,13 @@ describe('a recusa do SERPRO sai traduzida, com a ação', () => {
         const r = interpretarRecusaSemMovimento(bruta);
         expect(r.acao).toMatch(/e-CAC/);
         expect(r.acao).toMatch(/MAED/);
-        // E diz o que destrava — o mesmo pedido que resolveu o R-4020.
-        expect(r.acao).toMatch(/já transmitido/);
+        // E diz o que destrava. ATENÇÃO: NÃO pode pedir "extrato" — declaração
+        // sem movimento não gera extrato (Paulo, 12/08), e pedido impossível
+        // vira pedido ignorado. O caminho é a consulta do próprio app numa
+        // competência já aceita.
+        expect(r.acao).toMatch(/Atividades declaradas/);
+        expect(r.acao).toMatch(/não gera extrato/i);
+        expect(r.acao).not.toMatch(/mande o extrato/i);
     });
 
     test('recusa desconhecida também vira ação, não fica crua', () => {

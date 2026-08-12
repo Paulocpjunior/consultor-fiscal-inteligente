@@ -180,9 +180,18 @@ export function interpretarRecusaSemMovimento(mensagemSerpro) {
             mensagem: 'O SN-Entregar recusou a declaração sem movimento: ele exige atividade com valor '
                 + 'maior que zero, e mês sem faturamento não tem nenhuma. A forma correta da declaração '
                 + 'sem movimento ainda não está confirmada neste app — nada foi transmitido.',
+            // ⚠️ ANTES pedia "o extrato de um PGDAS-D sem movimento". Paulo, 12/08:
+            // **sem movimento NÃO gera extrato** — o app estava mandando o
+            // colaborador buscar um documento que não existe, e pedido impossível
+            // vira pedido ignorado. O que existe é o RECIBO/declaração; e o que
+            // resolve de verdade é a consulta do próprio app numa competência já
+            // aceita, que devolve a estrutura que o SERPRO aceitou.
             acao: 'Entregue ESTA competência no e-CAC (PGDAS-D → Declarar → sem movimento) para não '
-                + 'correr a MAED de R$ 50,00. Para destravar o botão, mande o extrato de um PGDAS-D sem '
-                + 'movimento já transmitido: com um arquivo aceito, a forma certa sai no mesmo dia.',
+                + 'correr a MAED de R$ 50,00. Para destravar o botão: depois de entregar, abra a ficha '
+                + 'do Simples desta empresa e clique em "🔎 Atividades declaradas" NESSA competência — '
+                + 'com a declaração já aceita, a consulta devolve a estrutura que o SERPRO aceitou e a '
+                + 'forma certa sai no mesmo dia. (Sem movimento não gera extrato; o que existe é o '
+                + 'recibo da declaração.)',
         };
     }
     return {
