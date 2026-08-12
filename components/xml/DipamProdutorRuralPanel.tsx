@@ -14,7 +14,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    carregarPainelDipam, varrerDipam, salvarProdutorRural, textoRegistro1400,
+    carregarPainelDipam, varrerDipam, salvarProdutorRural, textoRegistro1400, relerMunicipiosDipam,
     type DipamPainel, type DipamVarreduraLinha,
 } from '../../services/dipamService';
 
@@ -209,7 +209,7 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
 
             {painel?.ok && empresaId && (
                 <div ref={detalheRef} className="scroll-mt-4">
-                    <DetalheEmpresa painel={painel} isAdmin={isAdmin} onCopiar1400={copiar1400} copiado={copiado} onRecarregar={() => abrirEmpresa(empresaId)} />
+                    <DetalheEmpresa painel={painel} isAdmin={isAdmin} onCopiar1400={copiar1400} copiado={copiado} onRecarregar={() => abrirEmpresa(empresaId)} empresaId={empresaId} />
                 </div>
             )}
         </div>
@@ -222,8 +222,34 @@ const DetalheEmpresa: React.FC<{
     copiado: boolean;
     onCopiar1400: () => void;
     onRecarregar: () => void;
-}> = ({ painel, isAdmin, copiado, onCopiar1400, onRecarregar }) => {
+    empresaId: string;
+}> = ({ painel, isAdmin, copiado, onCopiar1400, onRecarregar, empresaId }) => {
     const farol = painel.farol!;
+    const [relendo, setRelendo] = useState(false);
+    const [resultadoReler, setResultadoReler] = useState<string | null>(null);
+
+    // "nota sem código IBGE do município" NÃO é erro de cadastro: o município
+    // está no XML guardado no Storage. Reler a FONTE é recuperação — mandar
+    // digitar centenas de municípios seria pedir trabalho por um dado que já
+    // existe no arquivo.
+    const semMunicipio = (painel.pendencias || []).filter(p => p.codigo === 'municipio-ausente').length;
+    const relerMunicipios = async () => {
+        if (!empresaId || !painel.competencia) return;
+        setRelendo(true); setResultadoReler(null);
+        try {
+            const r: any = await relerMunicipiosDipam(empresaId, painel.competencia);
+            if (r?.ok === false) { setResultadoReler(`Falha: ${r.error}`); return; }
+            setResultadoReler(
+                `${r.preenchidas} nota(s) recuperadas do XML · ${r.jaTinham} já tinham · `
+                + `${r.semXml} sem arquivo guardado.` + (r.acao ? ` ${r.acao}` : ''),
+            );
+            onRecarregar();
+        } catch (e: any) {
+            setResultadoReler(`Falha: ${e?.message || e}`);
+        } finally {
+            setRelendo(false);
+        }
+    };
     return (
         <div className="space-y-3">
             <div className={`rounded-lg border p-3 ${FAROL_BOX[farol.cor]}`}>
@@ -368,6 +394,26 @@ const DetalheEmpresa: React.FC<{
 
             {(painel.pendencias?.length || 0) > 0 && (
                 <Caixa titulo={`Pendências (${painel.pendencias!.length}) — resolva antes de fechar a competência`}>
+                    {/* O município NÃO se digita: ele está no XML. */}
+                    {semMunicipio > 0 && (
+                        <div className="mb-3 rounded-lg border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-900/20 p-3">
+                            <p className="text-xs text-sky-900 dark:text-sky-200">
+                                <strong>{semMunicipio} pendência(s) são "nota sem código IBGE do município"</strong> — e esse
+                                dado está no XML guardado, não no cadastro. Reler o arquivo resolve em massa; digitar
+                                município a município seria trabalho por um dado que já existe.
+                            </p>
+                            <button
+                                onClick={relerMunicipios}
+                                disabled={relendo}
+                                className="mt-2 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-50"
+                            >
+                                {relendo ? 'Relendo os XMLs…' : '♻️ Reler município dos XMLs'}
+                            </button>
+                            {resultadoReler && (
+                                <p className="mt-2 text-[11px] text-sky-900 dark:text-sky-200">{resultadoReler}</p>
+                            )}
+                        </div>
+                    )}
                     <ul className="space-y-2">
                         {painel.pendencias!.map((p, i) => (
                             <li key={`${p.codigo}-${i}`} className="text-xs border-l-2 border-amber-400 pl-2">

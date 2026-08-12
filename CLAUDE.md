@@ -665,10 +665,30 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   nova, e a ressalva PROÍBE recalcular do outro lado** — dois números pro mesmo
   fato é o pior defeito de um arquivo fiscal. `indAquis` vai NULO (tabela
   oficial que não está aqui) mas `seguradoEspecial` viaja, porque é ele que
-  decide o indicador. Produtor PJ vira contagem `dePessoaJuridica` (é R-2050).
+  decide o indicador.
   Os nomes dos campos são os do CÁLCULO (inss/gilrat/senar), NUNCA os do
   leiaute: nome que finge ser do leiaute faz o outro lado escrever no campo
   errado achando que conferiu (lição do `csllOuTotal`).
+  🐛 **DUAS RÉGUAS PRO MESMO FATO — corrigido 12/08 (caso VINCENZO GUERRA)**:
+  Paulo, *"ta puxando aqui os valores de FUNRURAL certinho, mas quando vou CCI
+  ele, fala que não tem"*. A aba 🌾 apurava R$ 308,07 de 4 notas de ANTONIO DIAS
+  DA SILVA (**08.507.490/0001-29**, 14 dígitos) e esta casca respondia "NENHUMA
+  aquisição encontrada", porque a linha era
+  `if (doc.length !== 11) { dePessoaJuridica += 1; continue; }`. O 🌾 honra o
+  cadastro `produtores_rurais` e a IE paulista com "P" — **CNPJ NÃO
+  descaracteriza produtor rural PF** (Com. CAT 45/2008, regra que já estava
+  escrita aqui) — e o R-2055 contava dígitos. **A casca NÃO julga natureza**:
+  nota que entrou no FUNRURAL já teve a sub-rogação decidida lá. O que sobra é
+  NOMEAR a forma: `tipoInscricao` ('cpf'/'cnpj'), `cpfProdutor` **NULO** quando
+  é CNPJ (número de CNPJ em campo chamado "cpf" é o `csllOuTotal` de novo) e
+  `provaDeProdutorPF` com o carimbo da origem (confiança + motivo + IE). Quem
+  recebe bloqueia com a causa na mão; **ninguém deduz o `tpInscProd`**. Doc
+  ilegível fica fora mas NOMEADO em `semInscricao` — nunca contador mudo.
+  🐛 **E nota excluída pelo art. 136 parou de cobrar pendência** (mesmo caso,
+  notas 95-98): elas saíam do total pela dedup e ao mesmo tempo acusavam "CFOP
+  5101 não está na régua de compra de produtor" — 5101 é o CFOP de quem VENDE, e
+  a nota nem é escriturada. Alarme sem ação em nota que já não conta é o que
+  ensina a equipe a ignorar a lista inteira.
   ✅ **A PONTE ESTÁ VIVA** (07/08, testada pela colaboradora): a tela do R-4020
   chamou o app do REINF, que chamou o CFI, e a resposta que voltou foi a
   mensagem de erro do CFI palavra por palavra — round-trip provado.
@@ -1436,6 +1456,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   colaborador: `/guia-dipam-produtor-rural.html` (botão 📗 na aba; fonte dupla
   `public/guia-dipam-produtor-rural.html` + `docs/guia-colaborador-dipam.md`,
   atualizar as DUAS juntas).
+  🐛 **323 PENDÊNCIAS "sem código IBGE do município" — e o dado estava no
+  ARQUIVO** (12/08): a DIPAM saía R$ 0,00 com o FUNRURAL calculado do lado (ele
+  não depende de município). Causa: `preencherEnderecoDestinatario` nasceu pro
+  Exportar SAGE e só varria `direcao == 'saida'` — **compra de produtor é
+  ENTRADA**, então nenhuma foi tocada. Virou
+  `preencherEnderecoParticipantes({direcao})`, com o campo-SENTINELA mudando com
+  a direção (`ufEmit` na entrada, `ufDest` na saída — sentinela errado faria
+  reler os mesmos docs pra sempre) e gravando os DOIS lados (a nota própria de
+  entrada tem o produtor no destinatário). Botão **♻️ Reler município dos XMLs**
+  no bloco de pendências + `POST /api/admin/dipam/reler-municipios`. É a regra
+  de 06/08: **reler a FONTE é RECUPERAÇÃO, não conserto de cadastro** — mandar
+  digitar 323 municípios seria pedir trabalho por dado que já existe. TRAVA:
+  **backfill NÃO APAGA** — campo que o XML não trouxe nunca sobrescreve o que o
+  importer já gravou; só a UF do lado varrido recebe `''` (é o sentinela).
 - Painel Sistema→Banco (#371, dev-only): coleção nova no Firestore = linha no
   `catalogo-banco.js` no MESMO PR (o painel denuncia órfãs). Pendente Paulo:
   definir env `SISTEMA_DEV_EMAILS` no Cloud Run (sugerido p.c.pereira@me.com)

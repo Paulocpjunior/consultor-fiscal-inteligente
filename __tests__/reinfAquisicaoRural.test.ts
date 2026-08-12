@@ -58,15 +58,89 @@ describe('o eixo vira PRODUTOR, e o cálculo não se refaz', () => {
     });
 });
 
-describe('o que fica de fora NÃO some em silêncio', () => {
-    test('produtor PESSOA JURÍDICA vira contagem — é R-2050, outro evento', () => {
+/**
+ * A RÉGUA DE QUEM É PRODUTOR PF NÃO MORA AQUI.
+ *
+ * Caso VINCENZO GUERRA 07/2026 (Paulo, 12/08): *"ta puxando aqui os valores de
+ * FUNRURAL certinho, mas quando vou CCI ele, fala que não tem"*. A aba 🌾
+ * apurava R$ 308,07 de 4 notas de ANTONIO DIAS DA SILVA (08.507.490/0001-29) e
+ * esta casca respondia "NENHUMA aquisição encontrada", porque descartava tudo
+ * que não tivesse 11 dígitos.
+ *
+ * Eram DUAS RÉGUAS PRO MESMO FATO: o 🌾 honra o cadastro do produtor e a IE
+ * paulista com "P" (CNPJ não descaracteriza produtor rural PF — Comunicado CAT
+ * 45/2008), esta casca contava dígitos. Se a nota entrou no FUNRURAL, a
+ * sub-rogação já foi decidida lá.
+ */
+describe('produtor rural PF com CNPJ (caso VINCENZO × ANTONIO DIAS DA SILVA)', () => {
+    const comCnpj = nota({
+        doc: '08507490000129', fornecedor: 'ANTONIO DIAS DA SILVA', ie: 'P4111111111',
+        naturezaConfianca: 'confirmada',
+        naturezaMotivo: 'Confirmado no cadastro como Produtor Rural (Pessoa Física).',
+    });
+
+    test('ele ENTRA no payload — descartar era ignorar a apuração do 🌾', () => {
         const r = montarPayloadR2055({
-            cnpjAdquirente: '44388152000189', competencia: '2026-07',
-            funrural: funruralDe([nota(), nota({ doc: '11222333000181', fornecedor: 'AGRO LTDA' })]),
+            cnpjAdquirente: '63027940000194', competencia: '2026-07', funrural: funruralDe([comCnpj]),
         });
         expect(r.produtores).toHaveLength(1);
-        expect(r.resumo.dePessoaJuridica).toBe(1);
-        expect(r.ressalvas.join(' ')).toMatch(/R-2050/);
+        expect(r.produtores[0].docProdutor).toBe('08507490000129');
+        expect(r.produtores[0].total).toBe(15);
+        // O que NÃO pode voltar: a resposta "não tem aquisição" pra quem tem.
+        expect(r.ressalvas.join(' ')).not.toMatch(/NENHUMA aquisição/);
+    });
+
+    test('CNPJ NUNCA sai num campo chamado "cpf" — é a mentira do csllOuTotal', () => {
+        const r = montarPayloadR2055({
+            cnpjAdquirente: '63027940000194', competencia: '2026-07', funrural: funruralDe([comCnpj]),
+        });
+        expect(r.produtores[0].cpfProdutor).toBeNull();
+        expect(r.produtores[0].tipoInscricao).toBe('cnpj');
+        expect(r.produtores[0].inscricaoAtipica).toBe(true);
+    });
+
+    test('CPF normal segue preenchendo cpfProdutor', () => {
+        const r = montarPayloadR2055({
+            cnpjAdquirente: '63027940000194', competencia: '2026-07', funrural: funruralDe([nota()]),
+        });
+        expect(r.produtores[0].cpfProdutor).toBe('11122233344');
+        expect(r.produtores[0].tipoInscricao).toBe('cpf');
+        expect(r.produtores[0].inscricaoAtipica).toBe(false);
+    });
+
+    test('a PROVA da natureza viaja carimbada com a origem', () => {
+        const r = montarPayloadR2055({
+            cnpjAdquirente: '63027940000194', competencia: '2026-07', funrural: funruralDe([comCnpj]),
+        });
+        expect(r.produtores[0].provaDeProdutorPF.confianca).toBe('confirmada');
+        expect(r.produtores[0].provaDeProdutorPF.motivo).toMatch(/Produtor Rural/);
+        expect(r.produtores[0].ie).toBe('P4111111111');
+    });
+
+    test('a ressalva nomeia o produtor, cita a CAT 45/2008 e PROÍBE descartar', () => {
+        const r = montarPayloadR2055({
+            cnpjAdquirente: '63027940000194', competencia: '2026-07', funrural: funruralDe([comCnpj]),
+        });
+        expect(r.resumo.comCnpj).toBe(1);
+        const txt = r.ressalvas.join(' ');
+        expect(txt).toMatch(/ANTONIO DIAS DA SILVA/);
+        expect(txt).toMatch(/45\/2008/);
+        expect(txt).toMatch(/NÃO descarte/);
+        // O tipo de inscrição do ideProdutor não se deduz.
+        expect(txt).toMatch(/tipoInscricao/);
+    });
+});
+
+describe('o que fica de fora NÃO some em silêncio', () => {
+    test('doc ilegível fica fora, mas NOMEADO — nunca contador mudo', () => {
+        const r = montarPayloadR2055({
+            cnpjAdquirente: '44388152000189', competencia: '2026-07',
+            funrural: funruralDe([nota(), nota({ doc: '123', fornecedor: 'SEM DOC' })]),
+        });
+        expect(r.produtores).toHaveLength(1);
+        expect(r.resumo.semInscricao).toBe(1);
+        expect(r.semInscricao[0].fornecedor).toBe('SEM DOC');
+        expect(r.ressalvas.join(' ')).toMatch(/sem CPF\/CNPJ legível/);
     });
 
     test('zero aquisição NÃO é sucesso — pode ser buraco de captura', () => {

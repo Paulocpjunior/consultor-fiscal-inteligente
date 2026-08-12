@@ -336,6 +336,54 @@ describe('nota própria de ENTRADA (tpNF=0) — o formato real da compra de prod
         });
     });
 
+    /**
+     * Nota excluída pelo art. 136 NÃO gera pendência.
+     *
+     * Caso VINCENZO GUERRA 07/2026: as notas 95-98 saíam do total pela dedup
+     * (bloco âmbar "excluídas") e AO MESMO TEMPO cobravam "CFOP 5101 não está
+     * na régua de compra de produtor" — 5101 é o CFOP normal de quem VENDE, e
+     * a nota nem é escriturada. Alarme sem ação em nota que já não conta é o
+     * que ensina a equipe a ignorar a lista inteira.
+     */
+    it('nota excluída pelo art. 136 NÃO cobra pendência de CFOP (caso VINCENZO 95-98)', () => {
+        const produtorSP = {
+            cnpjCpf: '28585062649', nome: 'ANTONIO DIAS DA SILVA',
+            ie: 'P011223344', uf: 'SP', codMunIBGE: '3548906', municipio: 'SAO JOSE DO RIO PRETO',
+        };
+        // NOTA 1 — a NF-e do produtor, com o CFOP de VENDA dele.
+        const doProdutor = notaEntrada({
+            numero: '95', emitente: produtorSP,
+            itens: [{ cfop: '5101', ncm: '08039000', xProd: 'BANANA', vProd: 8400 }],
+            valorTotal: 8400, infAdic: '',
+        });
+        // NOTA 2 — a nota própria de entrada, que é a escriturada.
+        const propria = notaPropria({
+            numero: '96', destinatario: produtorSP, valorTotal: 8400,
+            itens: [{ cfop: '1102', ncm: '08039000', xProd: 'BANANA' }], infAdic: '',
+        });
+
+        const painel = montarDipamCompetencia({ documentos: [doProdutor, propria], competencia: '2026-06', empresa });
+
+        expect(painel.funrural.excluidasArt136).toHaveLength(1);
+        expect(painel.funrural.excluidasArt136[0].numero).toBe('95');
+        // A pendência da nota excluída não pode sobreviver à exclusão.
+        expect(painel.pendencias.map((p: any) => p.codigo)).not.toContain('cfop-fora-da-regua');
+        expect(JSON.stringify(painel.pendencias)).not.toMatch(/Nota 95/);
+    });
+
+    /**
+     * A PROVA da natureza viaja com a nota do FUNRURAL — é ela que impede o
+     * outro lado (R-2055) de ter régua própria. Caso VINCENZO: o 🌾 apurava e
+     * o R-2055 descartava por contar dígitos do documento.
+     */
+    it('funrural.notas carrega IE e o carimbo da natureza do fornecedor', () => {
+        const painel = montarDipamCompetencia({ documentos: [notaEntrada()], competencia: '2026-06', empresa });
+        const n = painel.funrural.notas[0];
+        expect(n.ie).toBe('0011410720080');
+        expect(n.naturezaConfianca).toBe('media');
+        expect(n.naturezaMotivo).toMatch(/CPF|pessoa física/i);
+    });
+
     it('produtor SEM par (só uma nota da operação) fica INTACTO — sem dedup, sem alarme', () => {
             const painel = montarDipamCompetencia({
                 documentos: [notaEntrada()], // uma nota só → não dobra → não mexe
