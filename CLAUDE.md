@@ -1560,28 +1560,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   CONTINUA FALTANDO só o id numérico (imunidade, isenção e o código do IPI) —
   o extrato é a saída HUMANA. Mas 06/2026 foi **ACEITA e paga**, então é
   exatamente a competência em que o 🔎 Atividades declaradas responde.
-- **O R-2055 ESTAVA SENDO RECUSADO — e o farol honesto pagou no primeiro
-  clique** (12/08, EDUARDO GUERRA): o v3.4.100 do app irmão parou de pintar ✓
-  verde em "Lote processado com sucesso – Possui eventos com ocorrências de
-  erro", e a primeira transmissão depois dele revelou a causa real —
-  **MS0030: `ideEstabAdquir` tem filho inválido `ideProdutor`**. Nada tinha
-  sido declarado; antes o app dizia que sim. HIPÓTESE (declarada como
-  hipótese): o único `evtAqProd` **aceito** de referência tinha **1 produtor**
-  e o lote recusado tinha **8** — ou o grupo que repete é outro, ou a causa é
-  outra. NÃO se corrige o gerador por dedução: o XSD não está aqui (rede do
-  ambiente bloqueia a doc da Receita) e leiaute deduzido já custou caro
-  (MSG_ISN_032, MS0017). A resposta vem por PROVA — v3.4.101 tem o botão
-  **🔬 Testar leiaute (1 produtor)**, que transmite UM produtor em produção
-  restrita; passou ⇒ é a multiplicidade. Em PRODUÇÃO a sonda é RECUSADA no
-  backend (declarar parte dos produtores é entrega incompleta).
+- **R-2055: UM PRODUTOR POR EVENTO — RESOLVIDO POR ELIMINAÇÃO, sem o XSD**
+  (12/08, EDUARDO GUERRA 07/2026). O v3.4.100 parou de pintar ✓ verde em "Lote
+  processado com sucesso – Possui eventos com ocorrências de erro" e a recusa
+  real apareceu; daí três sondas em produção restrita fecharam a questão:
+  **1 produtor → MS1009** (regra de CADASTRO ⇒ o XSD passou) · **2 produtores
+  empilhados em 1 `ideEstabAdquir` → MS0030 em `ideProdutor`** · **2 produtores
+  em 2 `ideEstabAdquir` → MS0030 em `ideEstabAdquir`**. Logo `infoAquisProd`
+  aceita UM `ideEstabAdquir`, que aceita UM `ideProdutor`: **vários produtores =
+  vários EVENTOS no mesmo lote** (`gerarEventosR2055`, cada um com seu `seq` —
+  id repetido é recusa do lote inteiro). Corrobora o R-4010 do mesmo repo ("um
+  beneficiário por evento — ideBenef maxOccurs=1"). ✅ **PROVADO em 12/08: 2
+  produtores → 2× MS1009**, ou seja o XSD aceitou. Empilhar produtor no mesmo
+  evento passou a ser RECUSADO pelo gerador, e o teste que exigia "um
+  ideProdutor por produtor" foi trocado — ele descrevia o leiaute REPROVADO.
+  ⚠️ **MS1009 em produção restrita é ESPERADO e não é defeito**: restrita é
+  ambiente próprio e o R-1000 do contribuinte vive na PRODUÇÃO (conferido no
+  `evtInfoContri` real: `iniValid` 2019-01, tpAmb 1). A sonda só responde sobre
+  ESTRUTURA — quem responde sobre cadastro é a produção.
   LIÇÃO QUE VALE PRA TODO RETORNO DE ÓRGÃO: **a Receita diz ONDE, e o app
-  jogava fora** — o extrator procurava uma tag só (`localizacaoErroAviso`) e o
-  retorno usa outro nome, então a tela mostrou código e descrição sem o
-  elemento. Enquanto o nome não for conhecido, o **retorno CRU vai junto da
-  ocorrência** (bloco recolhido, sem o `<Signature>`): print com a resposta do
-  órgão vale mais que ocorrência que o app não soube nomear. A recusa também
-  passou a entrar na AUDITORIA — sem isso "transmitiu" e "foi recusado" ficam
-  iguais no log e a próxima sessão reconstrói do print de novo.
+  jogava fora** — o extrator procurava `localizacaoErroAviso` e a tag do retorno
+  é **`localErroAviso`** (traz campo E XPath); o tipo é `tpOcorr`. Enquanto o
+  nome não for conhecido, o **retorno CRU vai junto da ocorrência** (bloco
+  recolhido, sem o `<Signature>`): print com a resposta do órgão vale mais que
+  ocorrência que o app não soube nomear. A recusa também entra na AUDITORIA —
+  sem isso "transmitiu" e "foi recusado" ficam iguais no log.
 - **"IOB" DITO PELO PAULO É O APP IRMÃO (a URL `plano-contas-iob`), NUNCA o
   e-Fiscal IOB SAGE** — e a confusão custou um vai-e-volta em produção no
   mesmo dia. O R-2055 tinha destravado o transmitir pelo gateway (#41 de lá);
