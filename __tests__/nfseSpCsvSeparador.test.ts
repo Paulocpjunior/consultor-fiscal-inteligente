@@ -90,9 +90,12 @@ describe('identificarDocumentoDoPortal — o portal exporta mais de um documento
         const d = identificarDocumentoDoPortal('NFTS_66958369_20260701_20260731 (1).csv')!;
         expect(d.tipo).toBe('nfts');
         expect(d.rotulo).toMatch(/TOMADOR/i);
-        // A ação não pode culpar quem exportou: o documento é válido, o
-        // importador é que ainda não o lê.
-        expect(d.acao).toMatch(/ainda não é importado/i);
+        // A ação tem que APONTAR o módulo que existe (card "NFTS São Paulo")…
+        expect(d.acao).toMatch(/NFTS São Paulo/i);
+        // …e dizer a limitação dele, senão o colaborador procura lá uma
+        // importação que não está lá: o módulo faz a IDA (PDF → TXT do lote),
+        // e ler de volta o export das emitidas não existe.
+        expect(d.acao).toMatch(/de VOLTA|já emitidas/i);
     });
 
     it('não confunde NFS-e com NFTS', () => {
