@@ -107,6 +107,58 @@ export async function getRetencaoDctfweb(
  * DCTFWeb e cruza por família. A competência sai da consolidação dos eventos
  * (todos da mesma competência); o CNPJ é o do contribuinte.
  */
+export interface IrrfR4010Resposta {
+    ok: boolean;
+    competencia: string;
+    empresaCnpj: string;
+    reinf: {
+        beneficiarios: Array<{ beneficiario: string; nome: string; bruto: number; irrf: number; pagamentos: number; retificado?: boolean }>;
+        eventosLidos: number;
+        totalIrrf: number;
+        retificados: string[];
+        ignorados: Array<{ codigo?: string | null; motivo: string }>;
+    };
+    dctfweb: {
+        lido: boolean;
+        motivo: string | null;
+        pf: Array<{ codigo: string; extensao: string; descricao: string; valor: number; fonte?: string | null; confianca?: string | null }>;
+        naoClassificado: Array<{ codigo: string; descricao: string; valor: number; motivo: string }>;
+        totais: { pf: number; pj: number; folha: number; naoClassificado: number };
+    };
+    cruzamento: {
+        veredito: string;
+        totalReinf: number;
+        totalDctfweb: number | null;
+        diferenca: number | null;
+        severidade: 'ok' | 'atencao' | 'alta';
+        mensagem: string;
+        acao: string;
+        ressalvas: string[];
+    };
+}
+
+/**
+ * R-4010 × IRRF de pessoa física da DCTFWeb.
+ *
+ * `conjuntoCompleto` é AFIRMAÇÃO de quem clica: sem ela o cruzamento não dá
+ * verde, porque "não achei divergência no que foi subido" ≠ "a competência está
+ * completa".
+ */
+export async function conferirIrrfR4010(p: {
+    xmls: string[]; empresaCnpj: string; anoPA: number; mesPA: number;
+    categoria?: string; conjuntoCompleto?: boolean;
+}): Promise<IrrfR4010Resposta> {
+    const headers = { ...(await authHeader()), 'Content-Type': 'application/json' };
+    const res = await fetch('/api/admin/efd-reinf/irrf-r4010', {
+        method: 'POST', headers, body: JSON.stringify(p),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `IRRF R-4010: ${res.status}`);
+    }
+    return res.json();
+}
+
 export async function conferirReinfDctfweb(
     xmls: string[],
     empresaCnpjOverride?: string,
