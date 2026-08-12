@@ -9,7 +9,7 @@ import { getCnpjsDaCarteira, getEmpresaIdsDaCarteira, podeAcessarCnpj } from './
 import {
     sincronizarEmpresa, sincronizarTodasLucro,
     listarDeclaracoes, transmitirDeclaracao, gerarDarf, gerarDarfsSeparados,
-    listarTrimestraisVencendoEsteMes, listarDebitosTrimestrais,
+    listarTrimestraisVencendoEsteMes, listarDebitosTrimestrais, listarDebitosDeclaracao,
     consultarDeclaracaoCompleta, consultarRecibo,
     encerrarApuracaoMit, consultarStatusEncerramentoMit,
     consultarApuracaoMit, consultarApuracoesAno,
@@ -162,6 +162,19 @@ router.get('/debitos-trimestrais', requireAuth, async (req, res) => {
         const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
         res.json(await listarDebitosTrimestrais({
+            empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA), categoria,
+        }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DÉBITOS APURADOS da declaração — a mesma tabela do e-CAC (tributo, código de
+// receita e valor), que o detalhe do CFI não mostrava. Consulta pura.
+router.get('/debitos', requireAuth, async (req, res) => {
+    try {
+        const { empresaCnpj, anoPA, mesPA, categoria } = req.query;
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+        res.json(await listarDebitosDeclaracao({
             empresaCnpj, anoPA: Number(anoPA), mesPA: Number(mesPA), categoria,
         }));
     } catch (err) { res.status(500).json({ error: err.message }); }
