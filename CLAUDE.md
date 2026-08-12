@@ -684,6 +684,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `provaDeProdutorPF` com o carimbo da origem (confiança + motivo + IE). Quem
   recebe bloqueia com a causa na mão; **ninguém deduz o `tpInscProd`**. Doc
   ilegível fica fora mas NOMEADO em `semInscricao` — nunca contador mudo.
+  ✅ **E COMO SE RESOLVE: o CPF DO TITULAR** (12/08). O `ideProdutor` identifica a
+  PESSOA e a única forma provada contra evento aceito é **tpInscProd=2 (CPF)** —
+  a nota traz o CNPJ do ESTABELECIMENTO rural. Quem sabe o CPF é o CADESP, então
+  ele entra no cadastro do produtor (`produtores_rurais.cpfTitular`, campo novo
+  com bloco próprio na aba 🌾) e o payload passa a declarar por CPF, **carimbado
+  com `origemDoCpf: 'cadastro-do-produtor'`** + ressalva mostrando `CNPJ → CPF`
+  (declarar em nome da pessoa errada não se desfaz). NÃO é contorno: é o cadastro
+  trazendo o que a nota não traz, igual ao `seguradoEspecial` e à opção pela
+  folha — ninguém deduz, alguém digita e fica gravado quem foi. Trava: CPF só
+  existe para produtor inscrito por CNPJ, e produtor já inscrito por CPF não tem
+  "outro" CPF (seria declarar em nome de outra pessoa).
+  📌 **O `indAquis` do caso comum JÁ ESTÁ PROVADO: é `1`** — é o valor do
+  `evtAqProd` ACEITO em produção (EDUARDO GUERRA × DAMIÃO, banana, 06/2026), e o
+  teste do gerador o trava. Compra de produção rural de produtor PF por
+  sub-rogação usa 1; outra natureza continua exigindo a tabela oficial.
   🐛 **"—: vende gênero agropecuário" — pendência sobre NINGUÉM** (12/08, mesmo
   print): sobrou uma nota sem participante nenhum, e ela caía no genérico
   "fornecedor com CNPJ e sem IE de produtor" mandando **consultar o CADESP de

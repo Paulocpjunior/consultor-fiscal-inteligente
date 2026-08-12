@@ -236,6 +236,16 @@ const DetalheEmpresa: React.FC<{
     // Nota que chegou sem participante nenhum: o mesmo ♻️ resolve, porque ele
     // relê emitente E destinatário do XML guardado.
     const semContraparte = (painel.pendencias || []).filter(p => p.codigo === 'contraparte-ausente').length;
+
+    // Produtor inscrito por CNPJ e ainda sem o CPF do titular no cadastro: é o
+    // que o R-2055 precisa e a nota não tem. Um por produtor, não por nota.
+    const produtoresSemCpfTitular = Object.values(
+        (painel.funrural?.notas || []).reduce((acc: Record<string, { doc: string; nome: string }>, n: any) => {
+            const doc = String(n.doc || '').replace(/\D/g, '');
+            if (doc.length === 14 && !n.cpfTitular && !acc[doc]) acc[doc] = { doc, nome: n.fornecedor || '—' };
+            return acc;
+        }, {}),
+    );
     const relerMunicipios = async () => {
         if (!empresaId || !painel.competencia) return;
         setRelendo(true); setResultadoReler(null);
@@ -375,6 +385,26 @@ const DetalheEmpresa: React.FC<{
                                 Os três valores saem separados porque é assim que o lançamento pede (Impostos Retidos →
                                 Seguro Social s/ Produção Rural Sub-rogação). Centavos são desprezados, como na guia.
                             </p>
+                            {/* O R-2055 identifica a PESSOA (tpInscProd=2, CPF), e a nota do
+                                produtor inscrito por CNPJ traz o CNPJ do estabelecimento rural.
+                                O CPF sai do CADESP e mora no cadastro do produtor — sem ele o
+                                EFD-Reinf trava, mesmo com o FUNRURAL apurado aqui. */}
+                            {isAdmin && produtoresSemCpfTitular.length > 0 && (
+                                <div className="mt-3 rounded border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-3">
+                                    <p className="text-[11px] text-indigo-900 dark:text-indigo-200">
+                                        <strong>{produtoresSemCpfTitular.length} produtor(es) inscritos por CNPJ</strong> — o FUNRURAL
+                                        deles já está calculado aqui, mas o <strong>R-2055 identifica a pessoa pelo CPF</strong> (é a única
+                                        forma provada contra evento aceito). Consulte o CPF do titular no{' '}
+                                        <a className="underline" href="https://www.cadesp.fazenda.sp.gov.br/" target="_blank" rel="noreferrer">CADESP</a>{' '}
+                                        e grave aqui — nada é deduzido, e fica registrado quem confirmou.
+                                    </p>
+                                    <div className="mt-2 space-y-2">
+                                        {produtoresSemCpfTitular.map(p => (
+                                            <CpfTitularProdutor key={p.doc} doc={p.doc} nome={p.nome} onSalvo={onRecarregar} />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </>
                     )}
                     {(painel.funrural?.excluidasArt136?.length || 0) > 0 && (
@@ -439,6 +469,56 @@ const DetalheEmpresa: React.FC<{
                     </ul>
                 </Caixa>
             )}
+        </div>
+    );
+};
+
+/**
+ * CPF do titular do produtor inscrito por CNPJ.
+ *
+ * Caso VINCENZO × ANTONIO DIAS DA SILVA (12/08): o FUNRURAL sai certo aqui, e o
+ * R-2055 do Consultor Contábil trava porque o `ideProdutor` identifica a PESSOA
+ * (tpInscProd=2, CPF — a única forma provada contra evento aceito). A nota traz
+ * o CNPJ do estabelecimento rural; o CPF vem do CADESP.
+ *
+ * NÃO é contorno: é o cadastro trazendo o que a nota não traz, como o segurado
+ * especial e a opção pela folha. Ninguém deduz — alguém digita, e fica gravado
+ * quem foi.
+ */
+const CpfTitularProdutor: React.FC<{ doc: string; nome: string; onSalvo: () => void }> = ({ doc, nome, onSalvo }) => {
+    const [cpf, setCpf] = useState('');
+    const [salvando, setSalvando] = useState(false);
+    const [erro, setErro] = useState<string | null>(null);
+
+    const salvar = async () => {
+        const limpo = cpf.replace(/\D/g, '');
+        if (limpo.length !== 11) { setErro('O CPF do titular tem 11 dígitos.'); return; }
+        setSalvando(true); setErro(null);
+        const r = await salvarProdutorRural({ doc, nome, cpfTitular: limpo } as any);
+        setSalvando(false);
+        if (!r.ok) { setErro(r.error || 'Falha ao gravar.'); return; }
+        onSalvo();
+    };
+
+    return (
+        <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-indigo-900 dark:text-indigo-200 font-semibold">{nome}</span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{fmtCnpjCpf(doc)}</span>
+            <input
+                value={cpf}
+                onChange={e => setCpf(e.target.value)}
+                placeholder="CPF do titular"
+                inputMode="numeric"
+                className="px-2 py-1 text-[11px] rounded border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-800 dark:text-slate-100 w-36"
+            />
+            <button
+                onClick={salvar}
+                disabled={salvando}
+                className="px-2 py-1 text-[10px] rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-40"
+            >
+                {salvando ? 'Gravando…' : 'Gravar CPF'}
+            </button>
+            {erro && <span className="text-[10px] text-red-500">{erro}</span>}
         </div>
     );
 };

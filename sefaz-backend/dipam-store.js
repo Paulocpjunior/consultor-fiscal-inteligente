@@ -78,6 +78,31 @@ export async function salvarProdutorRural(doc, dados, usuario) {
         throw err;
     }
 
+    // ── CPF DO TITULAR: o que destrava o R-2055 do produtor inscrito por CNPJ ──
+    //
+    // Caso VINCENZO × ANTONIO DIAS DA SILVA (12/08). O produtor rural PF pode
+    // ter inscrição de CNPJ (o estabelecimento rural) — CNPJ não descaracteriza
+    // PF, Comunicado CAT 45/2008 —, mas o `ideProdutor` do R-2055 identifica a
+    // PESSOA, e a única forma provada contra evento aceito é tpInscProd=2 (CPF).
+    //
+    // Isto NÃO é contorno: é o cadastro trazendo o que a NOTA não traz, igual
+    // ao `seguradoEspecial` e à opção pela folha. E não se deduz nada — alguém
+    // digita olhando o CADESP, e fica gravado quem foi (`confirmadoPor`).
+    const cpfTitular = soDigitos(dados.cpfTitular);
+    if (cpfTitular && cpfTitular.length !== 11) {
+        const err = new Error(`CPF do titular deve ter 11 dígitos (recebido "${dados.cpfTitular}").`);
+        err.code = 'CPF_TITULAR_INVALIDO';
+        throw err;
+    }
+    if (cpfTitular && id.length === 11 && cpfTitular !== id) {
+        // Produtor já inscrito por CPF não tem "outro" CPF. Aceitar aqui faria o
+        // R-2055 declarar em nome de pessoa diferente da que está na nota.
+        const err = new Error('Este produtor já está inscrito por CPF. O "CPF do titular" só existe para '
+            + 'produtor inscrito por CNPJ — e ele não pode divergir do CPF da própria inscrição.');
+        err.code = 'CPF_TITULAR_CONFLITA';
+        throw err;
+    }
+
     const registro = {
         doc: id,
         nome: String(dados.nome || '').trim(),
@@ -91,6 +116,8 @@ export async function salvarProdutorRural(doc, dados, usuario) {
         // LC 224/2025 subiu o geral para 1,63% — e essa condição não está na
         // nota, só no cadastro.
         seguradoEspecial: !!dados.seguradoEspecial,
+        // Só faz sentido no produtor inscrito por CNPJ — ver a validação acima.
+        cpfTitular: id.length === 14 ? (cpfTitular || null) : null,
         observacao: String(dados.observacao || '').trim(),
         confirmadoPor: usuario?.email || usuario?.uid || 'desconhecido',
         confirmadoEm: Date.now(),

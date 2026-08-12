@@ -117,13 +117,25 @@ export function montarPayloadR2055({ cnpjAdquirente, competencia, funrural, prod
         }
 
         const cad = produtores[doc] || {};
+        // O CPF DO TITULAR destrava o produtor inscrito por CNPJ.
+        //
+        // O `ideProdutor` do R-2055 identifica a PESSOA, e a única forma provada
+        // contra evento aceito é tpInscProd=2 (CPF). O produtor rural PF pode
+        // estar inscrito por CNPJ (Com. CAT 45/2008), e a NOTA traz o CNPJ —
+        // quem sabe o CPF é o CADESP, e ele entra no cadastro do produtor.
+        //
+        // Não é dedução: é dado digitado por alguém, e viaja CARIMBADO
+        // (`origemDoCpf`) pra o outro lado saber que ele não veio da nota.
+        const cpfTitular = soDigitos(cad.cpfTitular);
+        const cpfDoCadastro = doc.length === 14 && cpfTitular.length === 11 ? cpfTitular : null;
         const acc = porProdutor.get(doc) || {
             docProdutor: doc,
             // FORMA da inscrição — e o nome do campo não mente: CNPJ nunca sai
             // num campo chamado "cpf". Quem recebe decide o tpInscProd; o app
             // não deduz.
-            tipoInscricao: doc.length === 11 ? 'cpf' : 'cnpj',
-            cpfProdutor: doc.length === 11 ? doc : null,
+            tipoInscricao: doc.length === 11 || cpfDoCadastro ? 'cpf' : 'cnpj',
+            cpfProdutor: doc.length === 11 ? doc : cpfDoCadastro,
+            origemDoCpf: doc.length === 11 ? 'nota' : (cpfDoCadastro ? 'cadastro-do-produtor' : null),
             inscricaoAtipica: doc.length === 14,
             nome: texto(n?.fornecedor) || null,
             uf: texto(n?.uf) || null,
@@ -198,9 +210,20 @@ function ressalvasDoPayload({ produtores, semInscricao, revisarAliquotas }) {
         out.push(`${comCnpj.length} produtor(es) com CNPJ: ${comCnpj.map((p) => `${p.nome} (${p.docProdutor})`).join(', ')}. `
             + 'O FUNRURAL DELES JÁ FOI APURADO pelo CFI (a natureza saiu do cadastro do produtor ou da IE '
             + 'paulista de produtor rural, que começa com "P") — CNPJ não descaracteriza produtor rural PF, '
-            + 'Comunicado CAT 45/2008. O que o app NÃO sabe é qual tipo de inscrição carimbar no `ideProdutor`: '
-            + 'por isso `cpfProdutor` vai NULO e `tipoInscricao` diz "cnpj". Confirme a natureza no CADESP '
-            + 'antes de declarar — mas NÃO descarte: o valor está na guia do cliente.');
+            + 'Comunicado CAT 45/2008. O que falta é o CPF: o `ideProdutor` do R-2055 identifica a PESSOA, e a '
+            + 'única forma provada contra evento aceito é tpInscProd=2 (CPF). COMO RESOLVER: consulte o CPF do '
+            + 'titular no CADESP e grave em "CPF do titular" no cadastro do produtor (aba 🌾) — daí ele passa a '
+            + 'viajar carimbado como `origemDoCpf: cadastro-do-produtor`. NÃO descarte a aquisição: o valor está '
+            + 'na guia do cliente.');
+    }
+    const cpfDoCadastro = produtores.filter((p) => p.origemDoCpf === 'cadastro-do-produtor');
+    if (cpfDoCadastro.length) {
+        // Carimbo obrigatório: quem declara precisa saber que o CPF NÃO veio do
+        // documento — veio de alguém que olhou o CADESP, e está gravado quem foi.
+        out.push(`${cpfDoCadastro.length} produtor(es) declaram com CPF vindo do CADASTRO, não da nota `
+            + `(${cpfDoCadastro.map((p) => `${p.nome}: CNPJ ${p.docProdutor} → CPF ${p.cpfProdutor}`).join('; ')}). `
+            + 'A nota traz o CNPJ do estabelecimento rural; o CPF do titular foi confirmado no CADESP e gravado '
+            + 'no cadastro do produtor. Confira antes de transmitir — declarar em nome da pessoa errada não se desfaz.');
     }
     if (semInscricao?.length) {
         out.push(`${semInscricao.length} aquisição(ões) sem CPF/CNPJ legível do produtor `

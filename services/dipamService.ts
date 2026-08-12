@@ -33,6 +33,12 @@ export interface FunruralNota {
     fornecedor: string;
     doc: string;
     uf: string;
+    ie?: string;
+    /** CPF do titular gravado no cadastro (produtor inscrito por CNPJ). */
+    cpfTitular?: string | null;
+    /** Carimbo da régua que provou a natureza — viaja até o R-2055. */
+    naturezaConfianca?: string | null;
+    naturezaMotivo?: string | null;
     base: number;
     aliquotas: { inss: number; gilrat: number; senar: number };
     inss: number;
@@ -111,6 +117,14 @@ export interface ProdutorRural {
     funrural?: 'sub_rogacao' | 'folha' | 'nao_aplica' | null;
     /** Agricultura familiar: FUNRURAL continua em 1,5% (LC 224/2025). */
     seguradoEspecial?: boolean;
+    /**
+     * CPF do titular quando o produtor está inscrito por CNPJ.
+     *
+     * O `ideProdutor` do R-2055 identifica a PESSOA (tpInscProd=2, CPF — a única
+     * forma provada contra evento aceito), e a nota traz o CNPJ do
+     * estabelecimento rural. Vem do CADESP, digitado; nunca deduzido.
+     */
+    cpfTitular?: string | null;
     observacao?: string;
     confirmadoPor?: string;
     confirmadoEm?: number;

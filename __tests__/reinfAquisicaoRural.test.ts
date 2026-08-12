@@ -126,8 +126,11 @@ describe('produtor rural PF com CNPJ (caso VINCENZO × ANTONIO DIAS DA SILVA)', 
         expect(txt).toMatch(/ANTONIO DIAS DA SILVA/);
         expect(txt).toMatch(/45\/2008/);
         expect(txt).toMatch(/NÃO descarte/);
-        // O tipo de inscrição do ideProdutor não se deduz.
-        expect(txt).toMatch(/tipoInscricao/);
+        // O tipo de inscrição do ideProdutor não se deduz — e a ressalva não
+        // para no diagnóstico: ela diz COMO resolver.
+        expect(txt).toMatch(/tpInscProd=2/);
+        expect(txt).toMatch(/COMO RESOLVER/);
+        expect(txt).toMatch(/CPF do titular/);
     });
 });
 
@@ -212,5 +215,72 @@ describe('nomes de campo não fingem ser do leiaute', () => {
         // Nome que finge ser do leiaute faria o outro lado escrever no campo
         // errado achando que conferiu — é a lição do `csllOuTotal`.
         expect(Object.keys(a)).not.toEqual(expect.arrayContaining(['vlrCPDescPR', 'vlrRatDescPR', 'vlrSenarDesc']));
+    });
+});
+
+/**
+ * O CPF DO TITULAR — o que destrava o produtor inscrito por CNPJ.
+ *
+ * O `ideProdutor` do R-2055 identifica a PESSOA, e a única forma provada contra
+ * evento aceito é tpInscProd=2 (CPF). O produtor rural PF pode estar inscrito
+ * por CNPJ (Com. CAT 45/2008) e a NOTA traz o CNPJ do estabelecimento rural —
+ * quem sabe o CPF é o CADESP, e ele entra no cadastro do produtor.
+ *
+ * Não é dedução nem contorno: é o cadastro trazendo o que a nota não traz,
+ * exatamente como o `seguradoEspecial` e a opção pela folha.
+ */
+describe('CPF do titular vindo do cadastro do produtor', () => {
+    const comCnpj = nota({ doc: '08507490000129', fornecedor: 'ANTONIO DIAS DA SILVA' });
+    const cadastro = { '08507490000129': { cpfTitular: '12345678901' } };
+
+    test('com o CPF cadastrado, o produtor passa a declarar por CPF', () => {
+        const r = montarPayloadR2055({
+            cnpjAdquirente: '63027940000194', competencia: '2026-07',
+            funrural: funruralDe([comCnpj]), produtores: cadastro,
+        });
+        expect(r.produtores[0].cpfProdutor).toBe('12345678901');
+        expect(r.produtores[0].tipoInscricao).toBe('cpf');
+        // O documento da NOTA continua visível — trocar sem dizer seria pior.
+        expect(r.produtores[0].docProdutor).toBe('08507490000129');
+        expect(r.resumo.comCnpj).toBe(0);
+    });
+
+    test('a ORIGEM do CPF viaja carimbada — ele não veio do documento', () => {
+        const r = montarPayloadR2055({
+            cnpjAdquirente: '63027940000194', competencia: '2026-07',
+            funrural: funruralDe([comCnpj]), produtores: cadastro,
+        });
+        expect(r.produtores[0].origemDoCpf).toBe('cadastro-do-produtor');
+        const txt = r.ressalvas.join(' ');
+        expect(txt).toMatch(/CPF vindo do CADASTRO, não da nota/);
+        expect(txt).toMatch(/CNPJ 08507490000129 → CPF 12345678901/);
+        expect(txt).toMatch(/declarar em nome da pessoa errada não se desfaz/);
+    });
+
+    test('CPF que veio da própria nota é carimbado como tal', () => {
+        const r = montarPayloadR2055({
+            cnpjAdquirente: '63027940000194', competencia: '2026-07', funrural: funruralDe([nota()]),
+        });
+        expect(r.produtores[0].origemDoCpf).toBe('nota');
+        expect(r.ressalvas.join(' ')).not.toMatch(/vindo do CADASTRO/);
+    });
+
+    test('sem CPF cadastrado, segue bloqueado — e a ressalva DIZ como resolver', () => {
+        const r = montarPayloadR2055({
+            cnpjAdquirente: '63027940000194', competencia: '2026-07', funrural: funruralDe([comCnpj]),
+        });
+        expect(r.produtores[0].cpfProdutor).toBeNull();
+        expect(r.produtores[0].origemDoCpf).toBeNull();
+        expect(r.ressalvas.join(' ')).toMatch(/COMO RESOLVER/);
+        expect(r.ressalvas.join(' ')).toMatch(/CADESP/);
+    });
+
+    test('CPF cadastrado torto é ignorado — não se declara com documento inválido', () => {
+        const r = montarPayloadR2055({
+            cnpjAdquirente: '63027940000194', competencia: '2026-07',
+            funrural: funruralDe([comCnpj]), produtores: { '08507490000129': { cpfTitular: '123' } },
+        });
+        expect(r.produtores[0].cpfProdutor).toBeNull();
+        expect(r.produtores[0].tipoInscricao).toBe('cnpj');
     });
 });
