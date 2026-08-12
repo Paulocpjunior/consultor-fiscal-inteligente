@@ -168,6 +168,18 @@ export function extrairItens(xml) {
     const cofinsInnerMatch = cofins.match(/<(COFINS\w+)\b[^>]*>([\s\S]*?)<\/\1>/);
     const cofinsInner = cofinsInnerMatch ? cofinsInnerMatch[2] : '';
 
+    // CST de PIS e de COFINS — o campo que decide se a ENTRADA gera crédito no
+    // regime não-cumulativo (Lei 10.637/02 art. 3º e Lei 10.833/03 art. 3º):
+    // 50-56 dão direito, 70-75 não dão, 98/99 são "outras operações".
+    // Estava no XML e o importer só lia valor e alíquota — a MESMA armadilha do
+    // CST do IPI (#563), que fez o de-para jurar por meses que "o CST não é
+    // capturado". Sem ele, a base de crédito do PIS/COFINS só pode ser digitada
+    // à mão, e é por isso que a apuração vive em Excel.
+    // Ausente = null (item sem o bloco), NUNCA '0': campo fiscal não recebe
+    // default, e "sem CST" é diferente de "CST zero".
+    const cstPis = pickTag(pisInner, 'CST') || null;
+    const cstCofins = pickTag(cofinsInner, 'CST') || null;
+
     itens.push({
       nItem,
       cProd: pickTag(prod, 'cProd'),
@@ -200,8 +212,12 @@ export function extrairItens(xml) {
       vBcIpi,
       vPIS: num(pickTag(pisInner, 'vPIS')),
       aliqPIS: num(pickTag(pisInner, 'pPIS')),
+      cstPis,
+      vBcPis: num(pickTag(pisInner, 'vBC')),
       vCOFINS: num(pickTag(cofinsInner, 'vCOFINS')),
       aliqCOFINS: num(pickTag(cofinsInner, 'pCOFINS')),
+      cstCofins,
+      vBcCofins: num(pickTag(cofinsInner, 'vBC')),
       cst,
       orig,
     });
