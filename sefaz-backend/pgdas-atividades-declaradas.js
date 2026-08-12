@@ -112,6 +112,41 @@ export function extrairAtividadesDeclaradas(resposta) {
 }
 
 /**
+ * BRUTO PODADO — pra quando a declaração NÃO TEM atividade nenhuma.
+ *
+ * "Nenhuma atividade" tem DUAS causas opostas e o app não pode confundi-las:
+ * a consulta pode ter devolvido só o recibo (sem detalhamento), OU a declaração
+ * é mesmo SEM MOVIMENTO — e aí ela realmente não tem atividade (o relatório da
+ * Receita imprime "Nenhuma atividade selecionada"; GS ODONTOLOGIA 07/2026,
+ * transmitida e aceita em 11/08/2026).
+ *
+ * O segundo caso é justamente o que precisa ser descoberto: o app tentou
+ * declarar sem movimento com `estabelecimentos: [{cnpj, atividades: []}]` e o
+ * SERPRO recusou com MSG_ISN_023. Devolver "não veio detalhamento" e jogar a
+ * resposta fora desperdiça a única viagem que traz a FORMA aceita.
+ *
+ * Poda porque a resposta do CONSULTIMADECREC14 carrega PDF em base64 — texto
+ * gigante que não diz nada sobre a estrutura e que estouraria a tela e o log.
+ * A poda troca o conteúdo pelo TAMANHO: some o volume, fica o campo (campo
+ * omitido em silêncio faria procurar estrutura que existe).
+ */
+export function podarBrutoDeclaracao(valor, profundidade = 0, limite = 400) {
+    if (profundidade > PROFUNDIDADE_MAX) return '[omitido: profundidade máxima]';
+    const parsed = parseMaybeJson(valor);
+    if (parsed == null) return parsed;
+    if (typeof parsed === 'string') {
+        return parsed.length > limite
+            ? `[omitido: ${parsed.length} caracteres]`
+            : parsed;
+    }
+    if (typeof parsed !== 'object') return parsed;
+    if (Array.isArray(parsed)) return parsed.map((v) => podarBrutoDeclaracao(v, profundidade + 1, limite));
+    const out = {};
+    for (const [k, v] of Object.entries(parsed)) out[k] = podarBrutoDeclaracao(v, profundidade + 1, limite);
+    return out;
+}
+
+/**
  * Ids que o app JÁ sabe montar (pgdasMapper). Um id declarado que não está
  * aqui é justamente o que estamos procurando — a atividade que a empresa usa
  * e o app ainda não mapeia.

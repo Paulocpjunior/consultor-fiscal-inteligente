@@ -77,6 +77,13 @@ export interface AtividadesDeclaradasResposta {
         temNova: boolean;
     };
     detalhamentoIndisponivel: boolean;
+    /**
+     * Resposta CRUA (com os textos longos podados) quando não veio atividade
+     * nenhuma. As duas causas possíveis são opostas — consulta sem detalhamento
+     * × declaração SEM MOVIMENTO, que realmente não tem atividade — e só o bruto
+     * separa uma da outra. É ele que carrega a forma aceita pelo SERPRO.
+     */
+    bruto?: unknown;
 }
 
 /**

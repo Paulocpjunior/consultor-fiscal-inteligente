@@ -11,6 +11,7 @@
 import {
     extrairAtividadesDeclaradas,
     resumirAtividadesDeclaradas,
+    podarBrutoDeclaracao,
 } from '../sefaz-backend/pgdas-atividades-declaradas.js';
 
 describe('extrairAtividadesDeclaradas', () => {
@@ -133,5 +134,36 @@ describe('resumirAtividadesDeclaradas', () => {
 
     it('lista vazia nao quebra', () => {
         expect(resumirAtividadesDeclaradas(null)).toMatchObject({ total: 0, temNova: false });
+    });
+});
+
+/**
+ * SEM MOVIMENTO — a declaração aceita realmente NÃO tem atividade.
+ *
+ * GS ODONTOLOGIA 07/2026, transmitida e aceita em 11/08/2026: o relatório da
+ * Receita imprime "Nenhuma atividade selecionada". Ou seja, "zero atividade"
+ * não é só "consulta sem detalhamento" — pode ser a resposta certa, e é
+ * justamente a forma que o app precisa aprender (o SERPRO recusou a
+ * transmissão do app com MSG_ISN_023). Por isso o bruto tem que sobreviver à
+ * consulta, podado o suficiente pra caber na tela.
+ */
+describe('bruto podado (descoberta do sem movimento)', () => {
+    it('poda texto gigante mas mantém o CAMPO — some o volume, fica a estrutura', () => {
+        const pdf = 'A'.repeat(50000);
+        const podado: any = podarBrutoDeclaracao({ dados: { pdfDeclaracao: pdf, numeroDeclaracao: '65739771202607001' } });
+        expect(podado.dados.numeroDeclaracao).toBe('65739771202607001');
+        expect(podado.dados.pdfDeclaracao).toBe('[omitido: 50000 caracteres]');
+    });
+
+    it('atravessa JSON em string (o SERPRO ora manda objeto, ora string)', () => {
+        const podado: any = podarBrutoDeclaracao({ dados: JSON.stringify({ estabelecimentos: [{ cnpj: '65739771000140', atividades: [] }] }) });
+        expect(podado.dados.estabelecimentos[0].cnpj).toBe('65739771000140');
+        expect(podado.dados.estabelecimentos[0].atividades).toEqual([]);
+    });
+
+    it('preserva números e zeros — valor zerado é a resposta aqui, não ausência', () => {
+        const podado: any = podarBrutoDeclaracao({ receitaPaCompetencia: 0, folhas: null });
+        expect(podado.receitaPaCompetencia).toBe(0);
+        expect(podado.folhas).toBeNull();
     });
 });

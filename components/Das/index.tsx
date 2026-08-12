@@ -3,6 +3,7 @@
  * Dashboard "Central de DAS" — gestao global de DAS Simples Nacional.
  */
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { User, DasEmitido, DasResumo, DasStatusPagamento, SimplesNacionalEmpresa } from '../../types';
 import {
     getResumoDas, listarDas, marcarDasPago, emitirDasAvulso, getDasPdf,
@@ -457,10 +458,19 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 </div>
             )}
 
-            {/* Modal detalhe */}
-            {selecionado && (
+            {/* Modal detalhe.
+                PORTAL PRA <body>, e não é preferência de estilo: um ancestral com
+                `transform`/`will-change` vira containing block de descendentes
+                `position: fixed` (spec CSS — a mesma armadilha já anotada no
+                index.css). Quando isso acontece, o `inset-0` deixa de ser a
+                viewport e passa a ser a caixa do painel: o fundo escuro cobre só
+                um pedaço da tela e o conteúdo de fora (filtro, lista de empresas,
+                coluna Envio) fica POR CIMA do modal — foi o que o Paulo viu em
+                12/08, com o bloco "Envio ao cliente" atrás da tela. No body, o
+                modal não depende de nenhum ancestral. */}
+            {selecionado && createPortal((
                 <div
-                    className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70]"
+                    className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]"
                     onClick={() => setSelecionado(null)}
                 >
                     <div
@@ -616,7 +626,7 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         </div>
                     </div>
                 </div>
-            )}
+            ), document.body)}
 
             {cobrancaDas && (
                 <CobrancaModal

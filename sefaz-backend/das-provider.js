@@ -25,6 +25,7 @@ import {
 import {
     extrairAtividadesDeclaradas,
     resumirAtividadesDeclaradas,
+    podarBrutoDeclaracao,
 } from './pgdas-atividades-declaradas.js';
 import { assertValorMinimoDas } from './das-valor-utils.js';
 import { normalizarRespostaDasSerpro } from './das-response-normalizer.js';
@@ -282,6 +283,10 @@ class SerproProvider {
             // sem receita" — pode ser que a consulta devolva só o recibo, sem o
             // detalhamento. Quem chama mostra o motivo em vez de um zero mudo.
             detalhamentoIndisponivel: atividades.length === 0,
+            // ...e é EXATAMENTE aqui que mora a resposta do "sem movimento":
+            // declaração sem movimento não tem atividade nenhuma de verdade. Sem
+            // o bruto, a viagem que traz a FORMA aceita pelo SERPRO se perde.
+            bruto: atividades.length === 0 ? podarBrutoDeclaracao(result) : undefined,
         };
     }
 
