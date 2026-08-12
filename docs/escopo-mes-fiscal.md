@@ -240,6 +240,25 @@ grounding — `googleSearch` + `groundingChunks` devolvendo as URLs):
 - **Rito de declaração (SERPRO/e-CAC):** payload não se deduz. Estrutura nova só
   entra com **declaração aceita** na mão (foi assim no ISS fixo código 9; é o
   que falta na isenção/imunidade).
+- **Rito da DCTFWeb — a ORDEM DOS FATOS** (Paulo, 12/08/2026). Três fatos que
+  estavam colados num só, e é colá-los que gera retrabalho:
+
+  | fato | quem | quando | fecha a competência? |
+  |---|---|---|---|
+  | **alimentar** | cada depto no seu evento (eSocial · Reinf · MIT) | qualquer ordem | não |
+  | **pagar** (DARF) | quem tem guia vencendo | na data do débito | **não** |
+  | **transmitir** | **o fiscal** | até dia 15 do mês seguinte | **sim, para todos** |
+
+  A guia sai com a declaração **EM ANDAMENTO** (`GERARGUIAANDAMENTO313`): quem
+  tem guia vencendo cedo — IRRF de aluguéis, por exemplo — **não precisa
+  transmitir para pagar**. Transmitir para "conseguir a guia" é o atalho que
+  fecha a competência para os outros dois departamentos e obriga retificadora.
+  Travas: T1 dono fiscal · T2 guia livre / transmitir atrás do semáforo ·
+  T3 insumo pendente exige justificativa escrita e auditada · T4 insumo que
+  chega depois da transmissão ACENDE "precisa de retificadora" · T5 retificar é
+  transmitir de novo, com motivo obrigatório e auditoria antes×depois.
+  O app **não** prevê o "depois" da retificadora: os débitos são montados pela
+  Receita a partir do eSocial/Reinf/MIT.
 - **Rito de migração de cliente:** captura provada + saída apta + Canceladas/
   Faltantes limpo → espelho contra o e-Fiscal (**corroboração**, não gabarito)
   → divergência explicada pelo XML-fonte → carimbo de migrado.

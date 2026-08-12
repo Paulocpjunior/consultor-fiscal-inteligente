@@ -848,6 +848,49 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   poucos. Leitor novo de documento válido usa `docValido`/`docCancelado`;
   reimplementar o filtro é criar a divergência de novo.
 
+- **A DCTFWeb É UMA DECLARAÇÃO DO CNPJ, E TRÊS DEPARTAMENTOS A ALIMENTAM**
+  (Paulo, 12/08: *"cada dpto faz seu envio com geração de guia e vencimentos em
+  datas distintas dentro do mês"*). PAGAR e TRANSMITIR são fatos DIFERENTES: a
+  guia sai com a declaração **EM ANDAMENTO** (`GERARGUIAANDAMENTO313`, já no ar
+  desde sempre — o app troca o serviço sozinho quando a situação é
+  EM_ANDAMENTO), então quem tem guia vencendo cedo **não precisa transmitir pra
+  pagar**. Transmitir pra "conseguir a guia" é o atalho que FECHA a competência
+  para os outros dois departamentos e obriga retificadora — e era invisível.
+  TRAVAS (decisões do Paulo no mesmo dia): **T1** o dono da transmissão é o
+  **FISCAL** (`podeTransmitirDctfweb`; a recusa aponta a GUIA, porque é isso que
+  o outro depto quase sempre quer); **T2** emitir guia não passa por trava
+  nenhuma, só transmitir passa; **T3** insumo pendente NÃO bloqueia — exige
+  **justificativa escrita** (≥15 caracteres) que vai pra `dctfweb_transmissoes`
+  com o nome de quem seguiu (bloqueio puro faria perder o dia 15 por insumo que
+  talvez não venha: multa certa contra retificadora barata; semáforo CAÍDO nunca
+  trava); **T4** `dctfweb-retificadora.js` compara a entrada de cada insumo com
+  a transmissão e acende "precisa de retificadora" — e se RECUSA a acusar sem
+  prova dos dois lados (sem data, mesmo dia sem hora, `sem-movimento` e
+  `indeterminado` NÃO acusam; mandar retificar declaração certa é pior que não
+  avisar); **T5** retificar É transmitir de novo (o e-CAC monta a nova
+  declaração em andamento com o insumo que chegou depois) — o que o app
+  acrescenta é o RITO: motivo obrigatório + auditoria antes×depois. O app **NÃO
+  promete preview do depois**: os débitos são montados pela RECEITA a partir do
+  eSocial/Reinf/MIT. Retificadora **sem efeito** é sinalizada (o insumo pode não
+  ter chegado na Receita). Transmitir de novo SEM dizer que é retificadora é
+  RECUSADO — retificar às escondidas era possível.
+  A transmissão passou a gravar `transmitidoPor`; declaração antiga sem o campo
+  não mente, a ressalva diz que ela não guarda quem transmitiu.
+- **O IRRF DA DCTFWEB TEM TRÊS ORIGENS E O CFI SÓ ENXERGAVA UMA** (12/08): o
+  normalizador conhecia o código 1708 (PJ, R-4020) e mais nada, então as linhas
+  de PESSOA FÍSICA do e-CAC (0588 sem vínculo, 3208 aluguéis a PF) não entravam
+  em conta nenhuma. `irrf-dctfweb-familias.js` separa PF (R-4010) × PJ (R-4020)
+  × folha (eSocial) e — como o de-para código→evento NÃO é oficial — quem manda
+  é a **descrição da própria declaração**; o código só corrobora. Conflito entre
+  os dois, ou código desconhecido, vai pra `nao-classificado`: FORA dos totais e
+  NOMEADO na tela (somar por engano criaria divergência inventada). O cruzamento
+  R-4010 × DCTFWeb (`reinf-irrf-r4010-cruzamento.js`) só fica VERDE se a pessoa
+  afirmar que subiu todos os eventos — cobertura parcial nunca vira
+  conformidade. Retificador SUBSTITUI o original do beneficiário (somar os dois
+  dobraria a retenção — lição do FUNRURAL). O parser aprendeu R-4010/R-4020 pela
+  forma do gerador HOMOLOGADO do app irmão (`evtRetPF > ideEstab > ideBenef >
+  idePgto > infoPgto > vlrIR`) e o arquivo REAL cobrou duas correções: o evento
+  pode ser a RAIZ (sem envelope `<Reinf>`) e o namespace pode estar nos FILHOS.
 - **O MÊS DO COLABORADOR TEM ESCOPO ESCRITO — `docs/escopo-mes-fiscal.md`**
   (Paulo, 11/08: *"criar regras, processos, deixar claro o mês pro colaborador
   com base no tipo da empresa — Simples, Presumido ou Real — e na carteira dele;
