@@ -1477,6 +1477,46 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   devolve a qualificação que o SERPRO aceitou, e o #573 já faz o botão guardar
   o `bruto`. NÃO deduzir o id: MSG_ISN_032 provou que qualificação errada
   derruba a ENTREGA INTEIRA.
+  📄 **EXTRATO REAL DA POLO CULTURAL 06/2026 recebido (12/08) — e ele DESMENTE
+  o que esta linha supunha**. Eu tinha escrito "campos separados POR TRIBUTO";
+  o extrato mostra **UMA linha só, sem valor, listando os tributos**:
+  `Parcela 1: R$ 22.169,56` / `Imunidade tributária de: ICMS, IPI.` — enquanto
+  a isenção da Jaguarexport sai **com valor e um tributo por linha**
+  (`Isenção de ICMS: R$ 63.878,60`). Isso não é detalhe de impressão: **isenção
+  é um VALOR da parcela, imunidade é um ESTADO da parcela** (a receita inteira é
+  imune, não existe "parte imune"), e por isso a imunidade cabe numa lista de
+  tributos sem valor ao lado. Alvo do teste, conferido: receita 22.169,56 ·
+  atividade "Venda de mercadorias industrializadas pelo contribuinte, exceto
+  para o exterior — sem ST/monofásica/antecipação" · IRPJ 97,53 · CSLL 62,06 ·
+  COFINS 204,10 · PIS 44,15 · CPP 664,96 · **ICMS 0,00 · IPI 0,00** · total
+  1.072,80 (DAS 07202618912351835, venc. 20/07/2026, PAGO). Livro é imune por
+  CF art. 150, VI, "d" — daí ICMS **e** IPI juntos, o que faz desta a única
+  fonte que também entrega o `codigoTributo` do IPI.
+  CONTINUA FALTANDO só o id numérico (imunidade, isenção e o código do IPI) —
+  o extrato é a saída HUMANA. Mas 06/2026 foi **ACEITA e paga**, então é
+  exatamente a competência em que o 🔎 Atividades declaradas responde.
+- **O R-2055 ESTAVA SENDO RECUSADO — e o farol honesto pagou no primeiro
+  clique** (12/08, EDUARDO GUERRA): o v3.4.100 do app irmão parou de pintar ✓
+  verde em "Lote processado com sucesso – Possui eventos com ocorrências de
+  erro", e a primeira transmissão depois dele revelou a causa real —
+  **MS0030: `ideEstabAdquir` tem filho inválido `ideProdutor`**. Nada tinha
+  sido declarado; antes o app dizia que sim. HIPÓTESE (declarada como
+  hipótese): o único `evtAqProd` **aceito** de referência tinha **1 produtor**
+  e o lote recusado tinha **8** — ou o grupo que repete é outro, ou a causa é
+  outra. NÃO se corrige o gerador por dedução: o XSD não está aqui (rede do
+  ambiente bloqueia a doc da Receita) e leiaute deduzido já custou caro
+  (MSG_ISN_032, MS0017). A resposta vem por PROVA — v3.4.101 tem o botão
+  **🔬 Testar leiaute (1 produtor)**, que transmite UM produtor em produção
+  restrita; passou ⇒ é a multiplicidade. Em PRODUÇÃO a sonda é RECUSADA no
+  backend (declarar parte dos produtores é entrega incompleta).
+  LIÇÃO QUE VALE PRA TODO RETORNO DE ÓRGÃO: **a Receita diz ONDE, e o app
+  jogava fora** — o extrator procurava uma tag só (`localizacaoErroAviso`) e o
+  retorno usa outro nome, então a tela mostrou código e descrição sem o
+  elemento. Enquanto o nome não for conhecido, o **retorno CRU vai junto da
+  ocorrência** (bloco recolhido, sem o `<Signature>`): print com a resposta do
+  órgão vale mais que ocorrência que o app não soube nomear. A recusa também
+  passou a entrar na AUDITORIA — sem isso "transmitiu" e "foi recusado" ficam
+  iguais no log e a próxima sessão reconstrói do print de novo.
 - **"IOB" DITO PELO PAULO É O APP IRMÃO (a URL `plano-contas-iob`), NUNCA o
   e-Fiscal IOB SAGE** — e a confusão custou um vai-e-volta em produção no
   mesmo dia. O R-2055 tinha destravado o transmitir pelo gateway (#41 de lá);
