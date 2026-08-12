@@ -24,5 +24,14 @@ export function resumirAtividadesDeclaradas(
 export function podarBrutoDeclaracao(
     valor: unknown, profundidade?: number, limite?: number,
 ): unknown;
+export interface LeituraConsultaAtividades {
+    situacao: 'sem-declaracao' | 'sem-atividade-com-mensagem' | 'sem-atividade';
+    mensagemDaReceita: Array<{ codigo: string | null; texto: string }>;
+    titulo: string;
+    explicacao: string;
+    acao: string;
+}
+/** O que a Receita DISSE quando a consulta não trouxe atividade. */
+export function interpretarConsultaAtividades(resposta: unknown): LeituraConsultaAtividades;
 export const IDS_ATIVIDADE_CONHECIDOS: number[];
 export const ROTULO_ATIVIDADE_CONHECIDA: Record<number, string>;

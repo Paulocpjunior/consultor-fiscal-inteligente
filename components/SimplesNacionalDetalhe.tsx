@@ -411,18 +411,42 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                     <div style={{ fontSize: 13 }}>
                         {r.detalhamentoIndisponivel ? (
                             <>
-                                <p style={{ marginBottom: 8 }}>
-                                    A consulta respondeu e <b>não veio atividade nenhuma</b>. Isso tem
-                                    duas causas <b>opostas</b>, e a resposta crua abaixo diz qual é:
-                                </p>
-                                <ul style={{ margin: '0 0 8px 16px' }}>
-                                    <li>a Receita devolveu só o recibo/valores, <b>sem</b> o detalhamento; ou</li>
-                                    <li>
-                                        a declaração é <b>SEM MOVIMENTO</b> — e aí ela realmente não tem
-                                        atividade (o relatório da Receita imprime "Nenhuma atividade
-                                        selecionada").
-                                    </li>
-                                </ul>
+                                {/* A Receita costuma DIZER o motivo. Ler a mensagem
+                                    dela separa "procure outra competência" de
+                                    "confira o detalhamento" — que mandam a pessoa
+                                    para lados opostos (ELS 07/2026, MSG_ISN_005). */}
+                                {r.leitura?.situacao === 'sem-declaracao' ? (
+                                    <>
+                                        <p style={{ marginBottom: 8, color: '#b45309' }}>
+                                            <b>{r.leitura.titulo}</b>
+                                        </p>
+                                        <p style={{ marginBottom: 8 }}>{r.leitura.explicacao}</p>
+                                        <p style={{ marginBottom: 8 }}><b>{r.leitura.acao}</b></p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p style={{ marginBottom: 8 }}>
+                                            A consulta respondeu e <b>não veio atividade nenhuma</b>. Isso tem
+                                            duas causas <b>opostas</b>, e a resposta crua abaixo diz qual é:
+                                        </p>
+                                        <ul style={{ margin: '0 0 8px 16px' }}>
+                                            <li>a Receita devolveu só o recibo/valores, <b>sem</b> o detalhamento; ou</li>
+                                            <li>
+                                                a declaração é <b>SEM MOVIMENTO</b> — e aí ela realmente não tem
+                                                atividade (o relatório da Receita imprime "Nenhuma atividade
+                                                selecionada").
+                                            </li>
+                                        </ul>
+                                    </>
+                                )}
+                                {!!r.leitura?.mensagemDaReceita?.length && (
+                                    <div style={{ margin: '0 0 8px', padding: 6, borderRadius: 6, background: '#EFF6FF', fontSize: 11 }}>
+                                        <b>A Receita respondeu:</b>
+                                        {r.leitura.mensagemDaReceita.map((m, i) => (
+                                            <div key={i}>{m.codigo ? `${m.codigo} — ` : ''}{m.texto}</div>
+                                        ))}
+                                    </div>
+                                )}
                                 {r.bruto != null && (
                                     <div style={{ padding: 6, borderRadius: 6, background: '#FFFBEB', fontSize: 11 }}>
                                         <b>Resposta da Receita</b> (textos longos e PDF omitidos):

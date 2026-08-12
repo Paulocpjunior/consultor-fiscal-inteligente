@@ -26,6 +26,7 @@ import {
     extrairAtividadesDeclaradas,
     resumirAtividadesDeclaradas,
     podarBrutoDeclaracao,
+    interpretarConsultaAtividades,
 } from './pgdas-atividades-declaradas.js';
 import { assertValorMinimoDas } from './das-valor-utils.js';
 import { normalizarRespostaDasSerpro } from './das-response-normalizer.js';
@@ -287,6 +288,10 @@ class SerproProvider {
             // declaração sem movimento não tem atividade nenhuma de verdade. Sem
             // o bruto, a viagem que traz a FORMA aceita pelo SERPRO se perde.
             bruto: atividades.length === 0 ? podarBrutoDeclaracao(result) : undefined,
+            // A Receita costuma DIZER o motivo (MSG_ISN_005 = não há declaração
+            // no período). Deixar a pessoa ler JSON cru quando o próprio
+            // retorno explica é meio farol.
+            leitura: atividades.length === 0 ? interpretarConsultaAtividades(result) : undefined,
         };
     }
 

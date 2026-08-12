@@ -12,6 +12,7 @@ import {
     extrairAtividadesDeclaradas,
     resumirAtividadesDeclaradas,
     podarBrutoDeclaracao,
+    interpretarConsultaAtividades,
 } from '../sefaz-backend/pgdas-atividades-declaradas.js';
 
 describe('extrairAtividadesDeclaradas', () => {
@@ -165,5 +166,59 @@ describe('bruto podado (descoberta do sem movimento)', () => {
         const podado: any = podarBrutoDeclaracao({ receitaPaCompetencia: 0, folhas: null });
         expect(podado.receitaPaCompetencia).toBe(0);
         expect(podado.folhas).toBeNull();
+    });
+});
+
+/**
+ * A RECEITA COSTUMA DIZER O MOTIVO — e o app estava deixando a pessoa ler JSON.
+ *
+ * ELS COMERCIO DE BANANAS 07/2026 (12/08/2026): o bloco cru trouxe uma TERCEIRA
+ * causa que a tela não previa — não existe declaração naquela competência. Ler
+ * a mensagem separa "procure outra competência" de "confira o detalhamento",
+ * que mandam a pessoa para lados opostos.
+ */
+describe('leitura da resposta quando não veio atividade', () => {
+    // Resposta REAL, copiada do print.
+    const semDeclaracao = {
+        status: 200, dados: '',
+        mensagens: [{
+            codigo: '[Aviso-PGDASD-MSG_ISN_005]',
+            texto: 'Não há declaração transmitida para o período informado: 202607.',
+        }],
+    };
+
+    it('reconhece a MSG_ISN_005 e manda escolher outra competência', () => {
+        const l: any = interpretarConsultaAtividades(semDeclaracao);
+        expect(l.situacao).toBe('sem-declaracao');
+        expect(l.titulo).toMatch(/não existe declaração transmitida/i);
+        expect(l.acao).toMatch(/competência que já foi declarada/i);
+    });
+
+    it('e lembra que competência não entregue está VENCENDO', () => {
+        const l: any = interpretarConsultaAtividades(semDeclaracao);
+        expect(l.acao).toMatch(/MAED/);
+    });
+
+    it('reconhece pelo TEXTO mesmo sem o código (o app não depende do formato)', () => {
+        const l: any = interpretarConsultaAtividades({
+            mensagens: [{ texto: 'Não há declaração transmitida para o período informado: 202512.' }],
+        });
+        expect(l.situacao).toBe('sem-declaracao');
+    });
+
+    it('sem mensagem nenhuma, mantém as duas causas opostas — não inventa a terceira', () => {
+        const l: any = interpretarConsultaAtividades({ status: 200, dados: {} });
+        expect(l.situacao).toBe('sem-atividade');
+        expect(l.explicacao).toMatch(/SEM MOVIMENTO/);
+        expect(l.mensagemDaReceita).toEqual([]);
+    });
+
+    // Mensagem desconhecida não vira palpite: sobe como veio.
+    it('mensagem que o app não conhece sobe literal', () => {
+        const l: any = interpretarConsultaAtividades({
+            mensagens: [{ codigo: '[Aviso-PGDASD-MSG_XXX]', texto: 'Alguma coisa nova' }],
+        });
+        expect(l.situacao).toBe('sem-atividade-com-mensagem');
+        expect(l.mensagemDaReceita[0]).toMatchObject({ texto: 'Alguma coisa nova' });
     });
 });
