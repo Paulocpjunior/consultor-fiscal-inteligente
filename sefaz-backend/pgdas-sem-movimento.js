@@ -170,6 +170,40 @@ export function montarDeclaracaoSemMovimento({ cnpj, filiais = [] } = {}) {
 // vale mais que leiaute deduzido.
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * A COMPETÊNCIA JÁ FOI ENTREGUE?
+ *
+ * Paulo, 12/08/2026 (MORDAM): ele entregou 07/2026 no e-CAC — como o app manda
+ * fazer — e o app continuou deixando clicar em "Declarar sem movimento", que
+ * então falhava com MSG_ISN_023. Duas coisas erradas de uma vez: gasta uma
+ * transmissão à toa e devolve UMA MENSAGEM DE ERRO para quem ACERTOU.
+ *
+ * A consulta que já existe responde: quando há declaração no período, o SERPRO
+ * devolve `numeroDeclaracao`; quando não há, devolve MSG_ISN_005.
+ *
+ * ⚠️ CONSULTA CAÍDA NÃO BLOQUEIA. Não saber se já foi entregue não é motivo pra
+ * impedir a entrega — a competência continua vencendo, e a MAED é certa
+ * enquanto a duplicidade é recusada pelo próprio SERPRO. Indeterminado libera,
+ * como no gate de departamento.
+ */
+export function avaliarDeclaracaoJaEntregue(leitura) {
+    const numero = leitura?.numeroDeclaracao || null;
+    const jaEntregue = leitura?.situacao === 'so-pdf' || !!numero;
+    if (!jaEntregue) {
+        return { jaEntregue: false, numeroDeclaracao: null, motivo: null, acao: null };
+    }
+    return {
+        jaEntregue: true,
+        numeroDeclaracao: numero,
+        // NÃO é erro: é a boa notícia. A frase precisa soar como o que é, senão
+        // o colaborador vai procurar problema onde está tudo certo.
+        motivo: `Esta competência JÁ TEM declaração transmitida${numero ? ` (nº ${numero})` : ''} — `
+            + 'não há o que declarar e a MAED não corre.',
+        acao: 'Nada a fazer. Se você entregou no e-CAC, era exatamente isso que precisava ser feito. '
+            + 'Para conferir, o recibo está no PGDAS-D do e-CAC.',
+    };
+}
+
 /** Traduz a recusa do SERPRO em algo que a pessoa consiga atender. */
 export function interpretarRecusaSemMovimento(mensagemSerpro) {
     const txt = String(mensagemSerpro ?? '');
