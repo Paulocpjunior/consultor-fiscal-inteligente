@@ -11,7 +11,7 @@ import { calcularMultaDarf } from './multa-calculator.js';
 import { assertValorMinimoDas } from './das-valor-utils.js';
 import { criarErroDuplicidadeDas, encontrarConflitoDasAvulso } from './das-duplicidade-utils.js';
 import { lerCodigoAtividadeSup } from './pgdas-atividade-config.js';
-import { avaliarSemMovimento, montarDeclaracaoSemMovimento, interpretarRecusaSemMovimento } from './pgdas-sem-movimento.js';
+import { avaliarSemMovimento, montarDeclaracaoSemMovimento, interpretarRecusaSemMovimento, avaliarDeclaracaoJaEntregue } from './pgdas-sem-movimento.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -395,6 +395,32 @@ export async function declararPgdasSemMovimento(req) {
 
     const provider = getDasProvider();
     const mode = getDasMode();
+
+    // JÁ FOI ENTREGUE? Perguntar antes de transmitir evita devolver mensagem de
+    // ERRO para quem ACERTOU — foi o caso da MORDAM 07/2026 (12/08): entregue no
+    // e-CAC, e o app ainda deixava tentar e falhava com MSG_ISN_023.
+    // Consulta caída NÃO bloqueia: não saber se já foi entregue não é motivo pra
+    // impedir a entrega de uma competência que continua vencendo.
+    if (typeof provider.consultarAtividadesDeclaradas === 'function') {
+        try {
+            const consulta = await provider.consultarAtividadesDeclaradas({
+                empresaCnpj, competencia,
+            });
+            const ja = avaliarDeclaracaoJaEntregue(consulta?.leitura);
+            if (ja.jaEntregue) {
+                const err = new Error(`${ja.motivo} ${ja.acao}`);
+                err.httpStatus = 409;
+                err.code = 'SEM_MOVIMENTO_JA_ENTREGUE';
+                err.mensagemUsuario = `${ja.motivo} ${ja.acao}`;
+                err.numeroDeclaracao = ja.numeroDeclaracao;
+                throw err;
+            }
+        } catch (e) {
+            if (e?.code === 'SEM_MOVIMENTO_JA_ENTREGUE') throw e;
+            console.warn('[das/sem-movimento] consulta prévia indisponível, seguindo:', e?.message);
+        }
+    }
+
     const declaracao = montarDeclaracaoSemMovimento({ cnpj: empresaCnpj, filiais });
 
     // O provider decide Original × Retificadora consultando o PA no SERPRO.

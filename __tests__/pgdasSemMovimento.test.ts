@@ -12,7 +12,7 @@
 // captura.
 // ============================================================================
 // @ts-expect-error módulo JS puro sem tipos
-import { avaliarSemMovimento, montarDeclaracaoSemMovimento, interpretarRecusaSemMovimento, MAED_MINIMA } from '../sefaz-backend/pgdas-sem-movimento.js';
+import { avaliarDeclaracaoJaEntregue, avaliarSemMovimento, montarDeclaracaoSemMovimento, interpretarRecusaSemMovimento, MAED_MINIMA } from '../sefaz-backend/pgdas-sem-movimento.js';
 
 const limpo = {
     receitaLancada: 0,
@@ -169,5 +169,34 @@ describe('a recusa do SERPRO sai traduzida, com a ação', () => {
         const r = interpretarRecusaSemMovimento('SERPRO 500: erro interno');
         expect(r.conhecida).toBe(false);
         expect(r.acao).toMatch(/recusa que ninguém traduz/);
+    });
+});
+
+/**
+ * JÁ FOI ENTREGUE? — o app devolvia ERRO pra quem ACERTOU.
+ *
+ * Paulo, 12/08 (MORDAM 07/2026): ele entregou no e-CAC, exatamente como a
+ * mensagem do app manda, e o botão continuou deixando tentar — falhando com
+ * MSG_ISN_023. Gasta transmissão à toa e ainda dá cara de erro pra quem fez
+ * certo.
+ */
+describe('competência que já tem declaração transmitida', () => {
+    it('reconhece pelo numeroDeclaracao e NÃO soa como erro', () => {
+        const r: any = avaliarDeclaracaoJaEntregue({ situacao: 'so-pdf', numeroDeclaracao: '49710197202607001' });
+        expect(r.jaEntregue).toBe(true);
+        expect(r.motivo).toMatch(/JÁ TEM declaração transmitida/);
+        expect(r.motivo).toMatch(/MAED não corre/);
+        expect(r.acao).toMatch(/Nada a fazer/);
+        expect(r.acao).toMatch(/era exatamente isso que precisava ser feito/);
+    });
+
+    it('MSG_ISN_005 (não há declaração) NÃO bloqueia — é o caso normal', () => {
+        const r: any = avaliarDeclaracaoJaEntregue({ situacao: 'sem-declaracao', mensagemDaReceita: [] });
+        expect(r.jaEntregue).toBe(false);
+    });
+
+    it('consulta indisponível não afirma nada', () => {
+        expect(avaliarDeclaracaoJaEntregue(null).jaEntregue).toBe(false);
+        expect(avaliarDeclaracaoJaEntregue(undefined).jaEntregue).toBe(false);
     });
 });
