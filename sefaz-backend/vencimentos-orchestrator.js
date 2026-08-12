@@ -55,21 +55,43 @@ export function diffDiasBrt(dataVencimento, hoje = hojeBrt()) {
     return Math.round((v.getTime() - hoje.getTime()) / (24 * 60 * 60 * 1000));
 }
 
-// Classifica gravidade
+/**
+ * Classifica gravidade — pela régua ÚNICA.
+ *
+ * ⚠️ Este arquivo JÁ importava `classificarUrgencia` (usado no resumo diário) e
+ * mantinha esta função com as fronteiras escritas à mão do lado: a unificação
+ * de 11/08 ligou UM ponto e deixou a cópia viva. Ela inclusive já divergia — o
+ * núcleo distingue a faixa de 7 dias e esta não.
+ *
+ * O VOCABULÁRIO daqui continua daqui (categoria/urgencia/emoji são desta
+ * rotina). O que saiu foi a decisão de ONDE ficam os cortes.
+ *
+ * '7d' cai em 'futura' de propósito: é EXATAMENTE o que esta função fazia antes
+ * (4 a 7 dias eram futura/baixa/⚪). Distinguir agora mudaria o painel e o
+ * alerta sem ninguém ter pedido.
+ */
+const GRAVIDADE_POR_URGENCIA = {
+    atrasada: { categoria: 'atrasada', urgencia: 'critica', emoji: '🔴' },
+    hoje: { categoria: 'vence_hoje', urgencia: 'critica', emoji: '🟠' },
+    amanha: { categoria: 'vence_amanha', urgencia: 'alta', emoji: '🟡' },
+    '3d': { categoria: 'vence_3d', urgencia: 'media', emoji: '🟢' },
+    '7d': { categoria: 'futura', urgencia: 'baixa', emoji: '⚪' },
+    futura: { categoria: 'futura', urgencia: 'baixa', emoji: '⚪' },
+};
+
 function classificar(diasAteVencimento) {
-    if (diasAteVencimento < 0) return { categoria: 'atrasada', urgencia: 'critica', emoji: '🔴' };
-    if (diasAteVencimento === 0) return { categoria: 'vence_hoje', urgencia: 'critica', emoji: '🟠' };
-    if (diasAteVencimento <= 1) return { categoria: 'vence_amanha', urgencia: 'alta', emoji: '🟡' };
-    if (diasAteVencimento <= 3) return { categoria: 'vence_3d', urgencia: 'media', emoji: '🟢' };
-    return { categoria: 'futura', urgencia: 'baixa', emoji: '⚪' };
+    return GRAVIDADE_POR_URGENCIA[classificarUrgencia(diasAteVencimento)]
+        || GRAVIDADE_POR_URGENCIA.futura;
 }
 
 // Decide se manda email/push pra essa tarefa hoje
 function deveAlertar(tarefa, diasAteVencimento) {
     if (!['a_fazer', 'em_andamento'].includes(tarefa.status)) return false;
-    // Alerta TODA tarefa não concluída que está atrasada ou vence em <=7 dias.
+    // Alerta TODA tarefa não concluída que está atrasada ou vence dentro da
+    // janela de 7 dias. A FRONTEIRA vem do núcleo — escrever `<= 7` aqui era a
+    // mesma cópia que já divergiu antes.
     // Idempotência diária (ultimoEmailEm) previne email duplicado.
-    return diasAteVencimento <= 7;
+    return classificarUrgencia(diasAteVencimento) !== 'futura';
 }
 
 function getEmailResponsavel(tarefa, mapaUsuarios) {
@@ -510,7 +532,9 @@ export async function resumoVencimentos({ uid, role } = {}) {
         else if (urg === '3d') resumo.vence3d++;
         else if (urg === '7d') resumo.vence7d++;
         else if (dias <= 30) resumo.vence30d++;
-        if (dias <= 7) {
+        // "Próximas" = tudo dentro da janela do núcleo (até 7 dias, inclusive
+        // atrasadas). A faixa de 30 dias acima é horizonte só desta tela.
+        if (urg !== 'futura') {
             proximas.push({
                 id: t.id,
                 titulo: t.titulo,

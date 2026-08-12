@@ -24,10 +24,16 @@
 import type { DocumentoFiscal } from '../types';
 import { cfopParaEscriturar, type CfopCtx } from './iobSageExportService';
 
-/** Sufixos de COMPRA DE PRODUTO — os únicos onde a natureza decide. */
-const SUFIXOS_COMPRA = ['101', '102', '116', '117', '118', '120', '122'];
-/** Espelho de SUFIXOS_ST_VENDA (cfop-correlacao.js) — venda com ST. */
-const SUFIXOS_ST_VENDA = ['401', '402', '403', '404', '405'];
+/**
+ * As duas famílias vêm do DONO da régua, não de cópia.
+ *
+ * Elas viviam aqui como literais — e a segunda até se declarava "espelho de
+ * SUFIXOS_ST_VENDA (cfop-correlacao.js)". Espelho é a segunda cópia com outro
+ * nome: quando o dono mudar (e ele já mudou uma vez, quando a família ST
+ * deixou de preservar sufixo), esta tela seguiria classificando pelo mapa
+ * velho e explicando a operação errada.
+ */
+import { SUFIXOS_COMPRA_PRODUTO as SUFIXOS_COMPRA, SUFIXOS_ST_VENDA } from '../sefaz-backend/cfop-correlacao.js';
 
 export type MotivoCorrelacao = 'override' | 'natureza' | 'natureza-st' | 'espelho' | 'sem-conversao';
 

@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+// A régua de prazo vive num lugar só — ver `getStatus`.
+import { classificarUrgencia } from '../sefaz-backend/urgencia-vencimento.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -142,12 +144,28 @@ const getDiasParaVencimento = (diaVencimento: number | string): number | null =>
   return Math.ceil((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
 };
 
+/**
+ * A FRONTEIRA DE PRAZO É UMA SÓ — `sefaz-backend/urgencia-vencimento.js`.
+ *
+ * Este arquivo tinha as fronteiras de prazo escritas à mão, que
+ * é a TERCEIRA cópia da mesma régua: ela já tinha sido unificada em 07/08
+ * depois de divergir entre `vencimentosLogic.ts` e o
+ * `vencimentos-orchestrator.js`. Régua copiada não fica igual, fica PARECIDA —
+ * e ninguém desconfia.
+ *
+ * O RÓTULO daqui continua sendo daqui (a tela tem o vocabulário dela); o que
+ * saiu foi a decisão de ONDE ficam os cortes.
+ */
 const getStatus = (dias: number | null): Status => {
   if (dias === null) return 'ok';
-  if (dias < 0) return 'vencido';
-  if (dias <= 3) return 'vencendo';
-  if (dias <= 7) return 'alerta';
-  return 'ok';
+  switch (classificarUrgencia(dias)) {
+    case 'atrasada': return 'vencido';
+    case 'hoje':
+    case 'amanha':
+    case '3d': return 'vencendo';
+    case '7d': return 'alerta';
+    default: return 'ok';
+  }
 };
 
 const REGIME_LABELS: Record<Regime, string> = {
@@ -241,7 +259,8 @@ const FiscalObligationsDashboard: React.FC = () => {
       mensais: porPeriodicidade.mensal.length,
       vencendoHoje: mensais.filter(o => {
         const dias = getDiasParaVencimento(o.diaVencimento as number);
-        return dias !== null && dias <= 3;
+        // Mesma régua do farol: 'vencendo' JÁ é a janela curta.
+        return getStatus(dias) === 'vencendo';
       }).length,
       alertasAtivos: alertas.filter(a => a.ativo).length,
       criticas: comAlerta.length,

@@ -29,3 +29,12 @@ export function resolverNaturezaAtividade(dadosFiscais: unknown): {
     natureza: 'comercio' | 'industria' | 'servicos' | 'misto';
     origem: 'cadastro' | 'indicador' | 'padrao';
 };
+
+/**
+ * As famílias de sufixo que a régua trata de forma especial.
+ *
+ * Exportadas porque a tela de conferência PRECISA delas para explicar o motivo
+ * de cada linha — e copiá-las era a segunda régua. Ver `services/cfopConferencia.ts`.
+ */
+export const SUFIXOS_COMPRA_PRODUTO: string[];
+export const SUFIXOS_ST_VENDA: string[];

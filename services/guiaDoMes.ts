@@ -23,8 +23,7 @@
  *   cinza     sem dado nenhum — que NÃO é verde
  */
 import type { RotinaEmpresa, EtapaRotina } from './rotinaFiscalService';
-// @ts-expect-error — módulo .js puro (sem tipos)
-import { URGENCIA_LABEL, URGENCIA_FAROL } from '../sefaz-backend/urgencia-vencimento.js';
+import { URGENCIA_LABEL, URGENCIA_FAROL, type Urgencia } from '../sefaz-backend/urgencia-vencimento.js';
 
 export type CorGuia = 'vermelho' | 'ambar' | 'verde' | 'cinza';
 
@@ -106,8 +105,8 @@ export function montarLinhaGuia(r: RotinaEmpresa): LinhaGuia {
             obrigacao: String(prazoBruto.obrigacao || '—'),
             dias: Number(prazoBruto.dias),
             urgencia: String(prazoBruto.urgencia),
-            rotulo: URGENCIA_LABEL[prazoBruto.urgencia] || String(prazoBruto.urgencia),
-            cor: (URGENCIA_FAROL[prazoBruto.urgencia] || 'cinza') as CorGuia,
+            rotulo: URGENCIA_LABEL[prazoBruto.urgencia as Urgencia] || String(prazoBruto.urgencia),
+            cor: (URGENCIA_FAROL[prazoBruto.urgencia as Urgencia] || 'cinza') as CorGuia,
         }
         : null;
 
