@@ -12,6 +12,7 @@ import {
     listarDeclaracoes,
     sincronizarEmpresa as apiSincronizar,
     transmitirDeclaracao as apiTransmitir,
+    TransmissaoBloqueada,
     formatPaLabel,
     situacaoLabel,
     situacaoColorClass,
@@ -148,22 +149,81 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
     };
 
-    const handleTransmitir = async (decl: DctfwebDeclaracao) => {
+    /**
+     * Transmitir (ou RETIFICAR) a DCTFWeb.
+     *
+     * Este é o único ato que FECHA a competência para os outros departamentos —
+     * daí as travas: dono fiscal (T1), semáforo (T2), justificativa gravada
+     * quando falta insumo (T3) e motivo na retificadora (T5). Emitir GUIA não
+     * passa por nada disso: o DARF sai com a declaração em andamento.
+     */
+    const handleTransmitir = async (decl: DctfwebDeclaracao, retificar = false) => {
         if (!currentUser) return;
-        if (!confirm(`Transmitir DCTFWeb ${formatPaLabel(decl.anoPA, decl.mesPA)} para ${decl.empresaCnpj}?\n\nCusto SERPRO: ~R$ 0,75`)) return;
+        const rotulo = formatPaLabel(decl.anoPA, decl.mesPA);
+
+        let motivo = '';
+        if (retificar) {
+            motivo = (window.prompt(
+                `RETIFICADORA da DCTFWeb ${rotulo}.\n\n`
+                + 'Por que esta competência precisa ser retificada?\n'
+                + '(ex.: "eSocial fechou dia 18, depois da transmissão dia 12")\n\n'
+                + 'O motivo fica na auditoria com o seu nome.',
+            ) || '').trim();
+            if (!motivo) return;
+        } else if (!confirm(`Transmitir DCTFWeb ${rotulo} para ${decl.empresaCnpj}?\n\nCusto SERPRO: ~R$ 0,75`)) {
+            return;
+        }
+
         setTransmitindo(decl.id);
+        const enviar = async (extra: Record<string, unknown> = {}) => apiTransmitir(currentUser, {
+            empresaId: decl.empresaId || '',
+            empresaCnpj: decl.empresaCnpj,
+            anoPA: decl.anoPA,
+            mesPA: decl.mesPA,
+            categoria: decl.categoria,
+            ...(retificar ? { retificadora: true, motivo } : {}),
+            ...extra,
+        });
+
         try {
-            const r = await apiTransmitir(currentUser, {
-                empresaId: decl.empresaId || '',
-                empresaCnpj: decl.empresaCnpj,
-                anoPA: decl.anoPA,
-                mesPA: decl.mesPA,
-                categoria: decl.categoria,
-            });
-            onShowToast?.(`DCTFWeb transmitida${r.numeroRecibo ? ` (recibo ${r.numeroRecibo})` : ''}.`);
+            let r;
+            try {
+                r = await enviar();
+            } catch (e: any) {
+                // T3 — insumo pendente: a trava vira PERGUNTA com os nomes de
+                // quem falta, e seguir exige justificativa escrita.
+                if (e instanceof TransmissaoBloqueada && e.status === 409 && e.dados?.bloqueado) {
+                    const pendentes = (e.dados.pendentes || []).join(', ') || 'outro departamento';
+                    const just = (window.prompt(
+                        `Falta insumo: ${pendentes}.\n\n`
+                        + 'Transmitir agora fecha a competência a menos e vai exigir retificadora depois.\n'
+                        + 'Se a guia é o que você precisa, ela sai SEM transmitir (Gerar DARF em andamento).\n\n'
+                        + 'Para seguir mesmo assim, escreva por quê (fica na auditoria com o seu nome):',
+                    ) || '').trim();
+                    if (!just) { setTransmitindo(null); return; }
+                    r = await enviar({ confirmarInsumosPendentes: true, justificativa: just });
+                } else {
+                    throw e;
+                }
+            }
+            const cmp = (r as any).comparacao;
+            onShowToast?.(
+                `DCTFWeb ${retificar ? 'RETIFICADA' : 'transmitida'}${r.numeroRecibo ? ` (recibo ${r.numeroRecibo})` : ''}.`
+                // Retificadora que não mudou nada precisa aparecer: o insumo
+                // pode não ter chegado na Receita ainda.
+                + (retificar && cmp?.semEfeito ? ' ⚠️ Nenhum débito mudou — confira se o insumo já chegou na Receita.' : '')
+                + (retificar && cmp && !cmp.semEfeito ? ` Débitos: ${cmp.linhas.length} alteração(ões).` : ''),
+            );
             await carregar();
         } catch (err: any) {
-            onShowToast?.(`Erro ao transmitir: ${err.message}`);
+            if (err instanceof TransmissaoBloqueada && err.status === 403) {
+                // T1 — não é o dono. A recusa carrega o caminho (a guia).
+                onShowToast?.(`${err.message} ${err.dados?.acao || ''}`);
+            } else if (err instanceof TransmissaoBloqueada && err.dados?.jaTransmitida) {
+                onShowToast?.(err.message);
+            } else {
+                onShowToast?.(`Erro ao transmitir: ${err.message}`);
+            }
         } finally {
             setTransmitindo(null);
         }
@@ -334,6 +394,21 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                                 title="Transmitir declaração (R$ 0,75)"
                                             >
                                                 {transmitindo === d.id ? '...' : 'Transmitir'}
+                                            </button>
+                                        )}
+                                        {/* T5 — RETIFICAR. Só aparece no que já
+                                            foi transmitido: retificadora de
+                                            declaração não entregue não existe.
+                                            Exige motivo escrito, e a auditoria
+                                            guarda os débitos antes e depois. */}
+                                        {d.situacao === 'ATIVA' && (
+                                            <button
+                                                onClick={() => handleTransmitir(d, true)}
+                                                disabled={transmitindo === d.id}
+                                                className="text-xs px-2 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50"
+                                                title="Transmitir RETIFICADORA desta competência (exige motivo)"
+                                            >
+                                                {transmitindo === d.id ? '...' : '↻ Retificar'}
                                             </button>
                                         )}
                                         <button

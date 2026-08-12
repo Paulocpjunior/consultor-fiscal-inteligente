@@ -123,16 +123,124 @@ router.post('/sincronizar', requireAuth, express.json(), async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// TRANSMITIR (e RETIFICAR) a DCTFWeb.
+//
+// É o único ato que FECHA a competência para os outros departamentos — por isso
+// tem dono (T1: fiscal), semáforo (T2) e justificativa gravada quando falta
+// insumo (T3). Emitir GUIA não passa por nada disso: o DARF sai com a
+// declaração em andamento, e é justamente confundir os dois que gera a
+// retificadora.
+//
+// `retificadora: true` (T5) é a MESMA transmissão: o e-CAC monta uma nova
+// declaração em andamento com o insumo que chegou depois, e o fluxo (consulta o
+// XML → assina → TRANSDECLARACAO310) a entrega. O que muda é o rito em volta —
+// motivo obrigatório e auditoria com os débitos ANTES e DEPOIS.
 router.post('/transmitir', requireAuth, express.json(), async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, categoria } = req.body || {};
         if (!empresaId || !empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaId+empresaCnpj+anoPA+mesPA' });
         const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
-        res.json(await transmitirDeclaracao({
+
+        const {
+            podeTransmitirDctfweb, checarJustificativa, checarRetificadora, compararDebitos,
+        } = await import('./dctfweb-transmissao-regras.js');
+
+        // T1 — dono da transmissão.
+        const dono = podeTransmitirDctfweb(req.user);
+        if (!dono.pode) return res.status(403).json({ error: dono.motivo, acao: dono.acao, dono: dono.dono });
+
+        const db = admin.apps.length ? admin.firestore() : (admin.initializeApp({ credential: admin.credential.applicationDefault() }), admin.firestore());
+        const cnpj = limparCnpj(empresaCnpj);
+        const competencia = `${anoPA}-${String(mesPA).padStart(2, '0')}`;
+        const docId = `${cnpj}_${anoPA}${String(mesPA).padStart(2, '0')}_${categoria || 'GERAL_MENSAL'}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+        let declaracao = null;
+        try {
+            const snap = await db.collection('dctfweb_declaracoes').doc(docId).get();
+            declaracao = snap.exists ? snap.data() : null;
+        } catch { declaracao = null; }
+
+        const ehRetificadora = req.body?.retificadora === true;
+        if (ehRetificadora) {
+            // T5 — pré-condições.
+            const chk = checarRetificadora({ declaracao, motivo: req.body?.motivo });
+            if (!chk.ok) return res.status(400).json({ error: chk.erro });
+        } else if (declaracao?.transmitidoEm || String(declaracao?.situacao || '').toUpperCase() === 'ATIVA') {
+            // Transmitir de novo SEM dizer que é retificadora seria retificar às
+            // escondidas. O app obriga a nomear o ato.
+            return res.status(409).json({
+                error: 'Esta competência já foi transmitida'
+                    + (declaracao?.transmitidoPor ? ` por ${declaracao.transmitidoPor}` : '')
+                    + (declaracao?.transmitidoEm ? ` em ${declaracao.transmitidoEm}` : '')
+                    + '. Transmitir de novo é RETIFICADORA — use o botão de retificar e escreva o motivo.',
+                jaTransmitida: true,
+            });
+        }
+
+        // T2/T3 — semáforo dos insumos + justificativa gravada.
+        let semaforo = null;
+        try {
+            const { vereditoInsumos } = await import('./dctfweb-insumos.js');
+            const base = await montarSemaforoInsumos(db, { cnpj, competencia, empresaId });
+            semaforo = { ...base, ...vereditoInsumos(base.selos) };
+        } catch (e) {
+            // Semáforo caído NÃO trava — trancar a entrega porque um serviço
+            // piscou seria o dano maior (mesma régua do gate de departamento).
+            console.warn('[dctfweb/transmitir] semáforo indisponível, seguindo:', e.message);
+        }
+        const just = checarJustificativa({
+            veredito: semaforo?.veredito,
+            confirmou: req.body?.confirmarInsumosPendentes === true,
+            justificativa: req.body?.justificativa,
+        });
+        if (!just.ok) {
+            return res.status(409).json({
+                error: just.erro,
+                bloqueado: true,
+                veredito: semaforo?.veredito,
+                frase: semaforo?.frase,
+                selos: semaforo?.selos,
+                pendentes: (semaforo?.selos || []).filter((s) => s.estado === 'pendente').map((s) => s.rotulo),
+            });
+        }
+
+        // ANTES: o que a declaração cobra hoje. Sem isso a retificadora não tem
+        // com o que ser comparada depois.
+        let debitosAntes = [];
+        try {
+            const d = await listarDebitosDeclaracao({ empresaCnpj: cnpj, anoPA, mesPA, categoria });
+            if (d?.lido) debitosAntes = d.debitos;
+        } catch { /* auditoria não pode derrubar a entrega */ }
+
+        const resultado = await transmitirDeclaracao({
             empresaId, empresaCnpj, anoPA, mesPA, categoria,
             transmitidoPor: req.user?.email || req.user?.uid || null,
-        }));
+        });
+
+        let comparacao = null;
+        try {
+            const d = await listarDebitosDeclaracao({ empresaCnpj: cnpj, anoPA, mesPA, categoria });
+            if (d?.lido) comparacao = compararDebitos(debitosAntes, d.debitos);
+        } catch { /* idem */ }
+
+        try {
+            await db.collection('dctfweb_transmissoes').add({
+                em: admin.firestore.FieldValue.serverTimestamp(),
+                por: req.user?.email || req.user?.uid || null,
+                departamentos: (req.user?.departamentos || []).join(',') || null,
+                empresaCnpj: cnpj, competencia, categoria: categoria || 'GERAL_MENSAL',
+                retificadora: ehRetificadora,
+                motivo: ehRetificadora ? String(req.body?.motivo || '').trim() : null,
+                justificativaInsumos: just.justificativa || null,
+                vereditoInsumos: semaforo?.veredito || null,
+                pendentes: (semaforo?.selos || []).filter((s) => s.estado === 'pendente').map((s) => s.rotulo),
+                numeroRecibo: resultado?.numeroRecibo || null,
+                debitosAntes, comparacao,
+            });
+        } catch (e) { console.warn('[dctfweb/transmitir] auditoria falhou:', e.message); }
+
+        res.json({ ...resultado, retificadora: ehRetificadora, comparacao });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

@@ -103,10 +103,26 @@ export async function sincronizarEmpresa(user: User | null, payload: {
     return res.json();
 }
 
+/** Erro de transmissão que a TELA precisa tratar, não só mostrar. */
+export class TransmissaoBloqueada extends Error {
+    /** 403 = não é o dono (T1) · 409 = insumo pendente (T3) ou já transmitida (T5) */
+    constructor(
+        message: string,
+        public readonly status: number,
+        public readonly dados: any,
+    ) { super(message); this.name = 'TransmissaoBloqueada'; }
+}
+
 export async function transmitirDeclaracao(user: User | null, payload: {
     empresaId: string; empresaCnpj: string;
     anoPA: number; mesPA: number; categoria?: DctfwebCategoria;
-}): Promise<DctfwebTransmissaoResult> {
+    /** T5 — retificadora: transmitir DE NOVO a mesma competência. Exige motivo. */
+    retificadora?: boolean;
+    motivo?: string;
+    /** T3 — seguir mesmo com insumo pendente exige justificativa escrita. */
+    confirmarInsumosPendentes?: boolean;
+    justificativa?: string;
+}): Promise<DctfwebTransmissaoResult & { comparacao?: any; retificadora?: boolean }> {
     const res = await fetch(`${BASE}/transmitir`, {
         method: 'POST',
         headers: await authHeaders(user),
@@ -114,6 +130,12 @@ export async function transmitirDeclaracao(user: User | null, payload: {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
+        // 403/409 não são "erro do sistema": são as travas falando. A tela
+        // precisa dos dados (quem é o dono, quais insumos faltam) pra oferecer
+        // o caminho, em vez de só repetir a frase.
+        if (res.status === 403 || res.status === 409) {
+            throw new TransmissaoBloqueada(err.error || 'Transmissão bloqueada', res.status, err);
+        }
         throw new Error(err.error || `transmitirDeclaracao: ${res.status}`);
     }
     return res.json();
