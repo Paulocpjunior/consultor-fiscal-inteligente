@@ -111,6 +111,22 @@ describe('apurarBaseCredito — o indefinido é contado, não escondido', () => 
     it('lista vazia não vira "confiável" — zero item não prova nada', () => {
         expect(apurarBaseCredito([]).confiavel).toBe(false);
     });
+
+    // Paulo (12/08): "todos os impostos já estão nas NFs e XMLs, nada é imputado
+    // na mão" — verdade sobre os IMPOSTOS. Mas energia, aluguel PJ e depreciação
+    // GERAM crédito e não chegam pelo DistDFe. A base derivada é parcial por
+    // construção, e omitir isso acusaria excesso de crédito onde há crédito
+    // legítimo fora do alcance da captura.
+    it('o resultado CARREGA o que a derivação não cobre — nenhuma tela pode omitir', () => {
+        const r = apurarBaseCredito(docs);
+        expect(Array.isArray(r.naoIncluido)).toBe(true);
+        expect(r.naoIncluido.length).toBeGreaterThan(0);
+        const itens = r.naoIncluido.map((x: any) => x.item).join(' | ');
+        expect(itens).toMatch(/Energia/i);
+        expect(itens).toMatch(/Aluguel/i);
+        expect(itens).toMatch(/Deprecia/i);
+        for (const x of r.naoIncluido) expect(x.baseLegal).toBeTruthy();
+    });
 });
 
 describe('compararComBaseUsada — o confronto com a planilha', () => {
@@ -136,7 +152,9 @@ describe('compararComBaseUsada — o confronto com a planilha', () => {
         const apur = apurarBaseCredito([{ itens: [item({ cstPis: '50', vProd: 1000000 })] }]);
         const r = compararComBaseUsada(apur, BASE_PLANILHA);
         expect(r.leitura).toBe('a-maior');
-        expect(r.acao).toMatch(/CRÉDITO INDEVIDO/i);
+        // Mas a ação NÃO pode acusar direto: a diferença pode ser energia,
+        // aluguel ou depreciação, que o documento não traz.
+        expect(r.acao).toMatch(/energia elétrica, aluguel/i);
         expect(r.diferencaCredito).toBeGreaterThan(0);
     });
 

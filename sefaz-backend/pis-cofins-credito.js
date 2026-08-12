@@ -184,8 +184,39 @@ export function apurarBaseCredito(docs = []) {
         porMotivo: Array.from(motivos.values()).sort((a, b) => b.valor - a.valor),
         // Farol honesto: com indefinido no meio, o número NÃO fecha apuração.
         confiavel: acc.totalItens > 0 && acc.baseIndefinida === 0,
+        // A base derivada é PARCIAL por construção — energia, aluguel PJ e
+        // depreciação geram crédito e não chegam como documento capturável.
+        // Viaja no resultado pra nenhuma tela poder omitir.
+        naoIncluido: CREDITOS_FORA_DO_DOCUMENTO,
     };
 }
+
+/**
+ * O QUE ESTA DERIVAÇÃO **NÃO** COBRE — e por que isso tem que sair na tela.
+ *
+ * Paulo (12/08): *"todos os impostos já estão contidos nas NFs e XMLs, nada é
+ * imputado na mão"*. Verdade sobre os IMPOSTOS — e é o que permite o app ser
+ * fonte única da base de mercadorias. Mas a BASE DE CRÉDITO do não-cumulativo
+ * tem itens cujo DOCUMENTO não chega ao CFI: o DistDFe da SEFAZ distribui
+ * NF-e (55), NFC-e (65) e CT-e (57) — não distribui conta de energia, e aluguel
+ * nem documento fiscal eletrônico tem.
+ *
+ * Consequência que MANDA no uso deste módulo: a base derivada sai
+ * SISTEMATICAMENTE MENOR que a base legal correta. Comparar com a apuração do
+ * colaborador sem dizer isso acusaria excesso de crédito onde pode haver
+ * simplesmente crédito legítimo fora do alcance da captura — o erro mais caro
+ * que uma conferência pode cometer.
+ *
+ * Por isso a lista viaja no resultado: quem mostra o número é obrigado a mostrar
+ * o que ele não inclui.
+ */
+export const CREDITOS_FORA_DO_DOCUMENTO = [
+    { item: 'Energia elétrica', baseLegal: 'Lei 10.833/03 art. 3º, IX', porque: 'a conta de energia (NF3e/mod. 66) não vem no DistDFe' },
+    { item: 'Aluguel de prédios/máquinas pagos a PJ', baseLegal: 'Lei 10.833/03 art. 3º, IV e V', porque: 'contrato/recibo — não é documento fiscal eletrônico' },
+    { item: 'Depreciação de bens do ativo imobilizado', baseLegal: 'Lei 10.833/03 art. 3º, VI', porque: 'é apuração contábil, não documento' },
+    { item: 'Arrendamento mercantil pago a PJ', baseLegal: 'Lei 10.833/03 art. 3º, V', porque: 'contrato — não é documento fiscal' },
+    { item: 'Armazenagem e frete na OPERAÇÃO DE VENDA', baseLegal: 'Lei 10.833/03 art. 3º, IX', porque: 'só entra se o CT-e foi capturado; serviço faturado por NFS-e não vem no DistDFe' },
+];
 
 /** Alíquotas do não-cumulativo (Lei 10.637/02 e Lei 10.833/03). */
 export const ALIQ_PIS = 0.0165;
@@ -231,8 +262,10 @@ export function compararComBaseUsada(apuracao, baseUsada) {
                 ? 'A base usada é maior que a comprovada, MAS há entradas sem CST de PIS/COFINS. '
                   + 'Reprocesse os XMLs (o arquivo está no Storage) antes de concluir que houve crédito indevido.'
                 : leitura === 'a-maior'
-                    ? 'A base usada é maior que a que os documentos comprovam — indício de CRÉDITO INDEVIDO. '
-                      + 'Confira item a item pelo motivo listado.'
+                    ? 'A base usada é maior que a que os documentos comprovam. ATENÇÃO ANTES DE CONCLUIR '
+                      + 'crédito indevido: energia elétrica, aluguel de PJ e depreciação GERAM crédito e '
+                      + 'NÃO chegam como documento capturável — a diferença pode ser exatamente isso. '
+                      + 'Confira a lista `naoIncluido` e só então o item a item.'
                     : 'A base usada é MENOR que a comprovada — pode haver crédito não aproveitado.',
     };
 }
