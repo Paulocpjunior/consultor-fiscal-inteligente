@@ -203,4 +203,59 @@ export function extrairDebitosDctfweb(entrada) {
     return { lido: true, motivo: null, debitos };
 }
 
+/**
+ * IDENTIFICAÇÃO da declaração lida — direto do XML, não do que foi pedido.
+ *
+ * Paulo, 12/08/2026: o bloco "Débitos apurados" trouxe um total que não batia
+ * com o e-CAC, e não deu pra saber POR QUÊ porque o bloco não dizia DE QUAL
+ * declaração ele veio. Print sem identificação não é evidência — é número solto.
+ *
+ * O XML do CONSXMLDECLARACAO carrega `<inscContrib>` e `<perApuracao>` (MMAAAA)
+ * no A000. Ler dali prova que a resposta é da pergunta que foi feita; ecoar o
+ * que o app pediu provaria nada.
+ */
+export function identificacaoDeclaracao(entrada) {
+    const texto = (entrada && typeof entrada === 'object' && typeof entrada.xml === 'string')
+        ? entrada.xml : String(entrada || '');
+    const tag = (nome) => {
+        const m = texto.match(new RegExp(`<(?:\\w+:)?${nome}>([\\s\\S]*?)<\\/(?:\\w+:)?${nome}>`, 'i'));
+        return m ? m[1].trim() : null;
+    };
+    const perApuracao = tag('perApuracao');   // MMAAAA
+    const competencia = /^\d{6}$/.test(String(perApuracao || ''))
+        ? `${perApuracao.slice(2)}-${perApuracao.slice(0, 2)}`
+        : null;
+    return {
+        cnpj: (tag('inscContrib') || '').replace(/\D/g, '') || null,
+        perApuracao,
+        competencia,
+        categoriaDCTF: tag('categoriaDCTF'),
+    };
+}
+
+/**
+ * A resposta é da PERGUNTA que foi feita?
+ *
+ * Divergência aqui não é detalhe: significa que os números na tela são de outra
+ * empresa ou de outra competência — e quem confere contra o e-CAC não tem como
+ * desconfiar, porque números batem consigo mesmos.
+ */
+export function conferirIdentificacao(ident, esperado = {}) {
+    const so = (v) => String(v || '').replace(/\D/g, '');
+    const problemas = [];
+    if (ident?.cnpj && so(esperado.cnpj) && ident.cnpj !== so(esperado.cnpj)) {
+        problemas.push(`o XML é do CNPJ ${ident.cnpj}, e foi pedido ${so(esperado.cnpj)}`);
+    }
+    if (ident?.competencia && esperado.competencia && ident.competencia !== esperado.competencia) {
+        problemas.push(`o XML é da competência ${ident.competencia}, e foi pedida ${esperado.competencia}`);
+    }
+    return {
+        confere: problemas.length === 0,
+        // Sem identificação no XML não se afirma nem que confere nem que não:
+        // sai como "não deu pra conferir", que é o que é.
+        conferivel: !!(ident?.cnpj || ident?.competencia),
+        problemas,
+    };
+}
+
 export const _internals = { num, familiaPorReceita, RECEITA_RAIZ_FAMILIA, FAMILIAS };

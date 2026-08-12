@@ -79,3 +79,60 @@ describe('extrairDebitosDctfweb — todos os débitos, não só os da Reinf', ()
         expect(extrairDebitosDctfweb(42)).toMatchObject({ lido: false });
     });
 });
+
+/**
+ * DE QUAL declaração vieram os números?
+ *
+ * Paulo, 12/08/2026: o bloco "Débitos apurados" trouxe total R$ 5.424,34 e o
+ * e-CAC da COMUNIDADE EVANGELICA mostrava R$ 29.494,06 — e não deu pra saber
+ * POR QUÊ, porque o bloco não dizia de qual declaração ele veio.
+ *
+ * Print sem identificação não é evidência: é número solto. E números batem
+ * consigo mesmos, então quem confere não tem como desconfiar.
+ */
+// @ts-expect-error — módulo .js puro
+import { identificacaoDeclaracao, conferirIdentificacao } from '../sefaz-backend/dctfweb-retencao-normalizer.js';
+
+const XML_ID = `<ProcDctf><ConteudoDeclaracao><DctfXml><A000-DadosIdentificadoresContribuinte>
+<inscContrib>03954491000106</inscContrib><perApuracao>072026</perApuracao><categoriaDCTF>40</categoriaDCTF>
+</A000-DadosIdentificadoresContribuinte></DctfXml></ConteudoDeclaracao></ProcDctf>`;
+
+describe('identificação da declaração lida', () => {
+    it('sai do PRÓPRIO XML — ecoar o pedido não provaria nada', () => {
+        expect(identificacaoDeclaracao(XML_ID)).toMatchObject({
+            cnpj: '03954491000106', perApuracao: '072026', competencia: '2026-07', categoriaDCTF: '40',
+        });
+    });
+
+    it('acusa quando a resposta é de OUTRA empresa', () => {
+        const c = conferirIdentificacao(identificacaoDeclaracao(XML_ID), {
+            cnpj: '17706901000104', competencia: '2026-07',
+        });
+        expect(c.confere).toBe(false);
+        expect(c.problemas[0]).toMatch(/CNPJ 03954491000106/);
+    });
+
+    it('acusa quando a resposta é de OUTRA competência', () => {
+        const c = conferirIdentificacao(identificacaoDeclaracao(XML_ID), {
+            cnpj: '03954491000106', competencia: '2026-06',
+        });
+        expect(c.confere).toBe(false);
+        expect(c.problemas[0]).toMatch(/competência 2026-07/);
+    });
+
+    it('bateu dos dois lados, confere', () => {
+        const c = conferirIdentificacao(identificacaoDeclaracao(XML_ID), {
+            cnpj: '03.954.491/0001-06', competencia: '2026-07',
+        });
+        expect(c.confere).toBe(true);
+    });
+
+    // Sem identificação não se afirma nem que confere nem que não.
+    it('XML sem identificação: não conferível, e isso NÃO é "confere"', () => {
+        const c = conferirIdentificacao(identificacaoDeclaracao('<ProcDctf/>'), {
+            cnpj: '03954491000106', competencia: '2026-07',
+        });
+        expect(c.conferivel).toBe(false);
+        expect(c.problemas).toEqual([]);
+    });
+});

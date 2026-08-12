@@ -8,7 +8,10 @@ import {
     getDctfwebProvider, getDctfwebMode,
     pickDadosApuracaoMit, contarDebitosMit, pickIdApuracao, mitPeriodoLabel,
 } from './dctfweb-provider.js';
-import { normalizarRetencaoDctfweb, extrairDebitosDctfweb } from './dctfweb-retencao-normalizer.js';
+import {
+    normalizarRetencaoDctfweb, extrairDebitosDctfweb,
+    identificacaoDeclaracao, conferirIdentificacao,
+} from './dctfweb-retencao-normalizer.js';
 import { getDarfProvider } from './darf-provider.js';
 import { calcularUltimoDiaUtil } from './calendario-obrigacoes.js';
 import { trimestreVencendoEsteMes, calcularVencimentoDarf } from './darf-payload-builder.js';
@@ -405,11 +408,22 @@ export async function listarDebitosTrimestrais({ empresaCnpj, anoPA, mesPA, cate
 export async function listarDebitosDeclaracao({ empresaCnpj, anoPA, mesPA, categoria = 'GERAL_MENSAL' }) {
     const provider = getDctfwebProvider();
     const consulta = await provider.consultarXmlDeclaracao({ empresaCnpj, anoPA, mesPA, categoria });
-    const ext = extrairDebitosDctfweb(consulta?.xml || consulta?._raw || '');
+    const xml = consulta?.xml || consulta?._raw || '';
+    const ext = extrairDebitosDctfweb(xml);
+    // DE QUAL declaração vieram estes números? A resposta sai do PRÓPRIO XML
+    // (inscContrib/perApuracao), não do que foi pedido — ecoar o pedido não
+    // provaria nada. Sem isso, um total que não bate com o e-CAC é um mistério
+    // (caso 12/08: 5.424,34 no CFI contra 29.494,06 no e-CAC).
+    const identificacao = identificacaoDeclaracao(xml);
+    const competencia = `${anoPA}-${String(mesPA).padStart(2, '0')}`;
+    const conferencia = conferirIdentificacao(identificacao, { cnpj: empresaCnpj, competencia });
     if (!ext.lido) {
         // Farol honesto: XML ilegível ou ausente NÃO vira "declaração sem
         // débito" — zero aqui faria alguém concluir que não há o que pagar.
-        return { lido: false, motivo: ext.motivo, debitos: [], total: 0, origem: 'xml-declaracao' };
+        return {
+            lido: false, motivo: ext.motivo, debitos: [], total: 0,
+            origem: 'xml-declaracao', identificacao, conferencia,
+        };
     }
     const r2 = (n) => Math.round(n * 100) / 100;
     return {
@@ -418,6 +432,8 @@ export async function listarDebitosDeclaracao({ empresaCnpj, anoPA, mesPA, categ
         debitos: ext.debitos,
         total: r2(ext.debitos.reduce((s, d) => s + d.valor, 0)),
         origem: 'xml-declaracao',
+        identificacao,
+        conferencia,
     };
 }
 

@@ -458,10 +458,15 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                                         <pre style={{ margin: '3px 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 10, background: '#FEF3C7', padding: 4, borderRadius: 4, maxHeight: 260, overflow: 'auto' }}>
                                             {JSON.stringify(r.bruto, null, 1)}
                                         </pre>
+                                        {/* ⚠️ Esta frase já prometeu duas vezes o que não
+                                            se cumpre. O bruto NÃO destrava o "sem
+                                            movimento": a consulta devolve só PDF. O que
+                                            ele serve é pra diagnosticar a resposta. */}
                                         <span style={{ color: '#92400e' }}>
-                                            Copie este bloco e mande no chat — se for uma declaração sem
-                                            movimento aceita, é ela que destrava o "Declarar sem movimento"
-                                            pelo app (hoje o SERPRO recusa com MSG_ISN_023).
+                                            Este bloco serve pra diagnosticar a resposta da Receita — ele
+                                            NÃO traz a estrutura da declaração (só os PDFs), então não é
+                                            por aqui que sai o código da isenção/imunidade nem a forma do
+                                            "sem movimento". Mande no chat só se algo aqui parecer errado.
                                         </span>
                                     </div>
                                 )}
