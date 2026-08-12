@@ -279,11 +279,19 @@ export function parseCsvNfseSp(input) {
  *
  * O caso que motivou isto (11/08, Paulo): veio um `NFTS_66958369_...csv` e o
  * app respondeu "nenhuma linha reconhecida — confira se é o export de NFS-e".
- * Estava tecnicamente certo e praticamente inútil: quem exportou não tem como
- * saber que NFTS é outro documento. NFTS é a **Nota Fiscal do Tomador de
- * Serviços** — quem emite é o TOMADOR (o cliente), quando o prestador não emite
- * NFS-e paulistana, e é ela que carrega o ISS RETIDO. Ou seja: não é "arquivo
- * errado", é documento que o importador ainda não lê.
+ * Estava tecnicamente certo e praticamente inútil.
+ *
+ * NFTS é a **Nota Fiscal do TOMADOR de Serviços** — quem emite é o cliente,
+ * quando o prestador não emite NFS-e paulistana, e é ela que carrega o ISS
+ * RETIDO. E o CFI **TEM módulo de NFTS** (card "NFTS São Paulo"), só que ele faz
+ * o caminho CONTRÁRIO deste arquivo:
+ *
+ *   módulo NFTS  →  PDFs das notas tomadas  →  TXT V.001 pra EMITIR em lote na PMSP
+ *   este arquivo →  export do portal com as NFTS **JÁ EMITIDAS** (a volta)
+ *
+ * A volta não existe hoje: o app gera o lote e nunca lê de volta o que a PMSP
+ * aceitou. Por isso a mensagem manda pro módulo certo E diz a limitação — sem
+ * isso o colaborador procura no card NFTS uma importação que não está lá.
  *
  * Esta função NÃO tenta ler NFTS (o layout não está aqui, e layout de arquivo
  * fiscal não se deduz — a regra da casa). Ela só NOMEIA o que chegou, pra
@@ -300,9 +308,12 @@ export function identificarDocumentoDoPortal(nomeArquivo) {
         return {
             tipo: 'nfts',
             rotulo: 'NFTS — Nota Fiscal do TOMADOR de Serviços (documento diferente da NFS-e)',
-            acao: 'A NFTS é emitida pelo tomador e carrega o ISS retido; o importador de hoje lê só a '
-                + 'NFS-e (layout V.006). O arquivo NÃO foi descartado por estar errado — este documento '
-                + 'ainda não é importado. Mande o arquivo ao Paulo para o layout ser cadastrado.',
+            acao: 'Esta aba importa NFS-e (layout V.006). A NFTS tem MÓDULO PRÓPRIO no CFI: '
+                + 'card "NFTS São Paulo". Atenção, porém: aquele módulo faz o caminho de IDA — lê os '
+                + 'PDFs das notas tomadas e gera o TXT V.001 pra emitir o lote na PMSP. Ler de VOLTA o '
+                + 'export das NFTS já emitidas (que é este arquivo) ainda não existe em lugar nenhum. '
+                + 'Mande o arquivo ao Paulo pra esse retorno ser construído — é ele que fecha a prova '
+                + 'de que as NFTS foram emitidas e alimenta o ISS retido.',
         };
     }
     if (/(^|[^A-Z])NFS?E/.test(nome)) {
