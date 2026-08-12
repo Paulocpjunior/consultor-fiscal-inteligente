@@ -223,23 +223,34 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             cEnqIpi = getTextContent(ipi, 'cEnq') || undefined;
         }
 
+        // CST de PIS/COFINS: é ele que decide se a ENTRADA gera crédito no
+        // não-cumulativo. Paridade OBRIGATÓRIA com o xml-importer.js do backend
+        // (regra da casa) — ler só num lado é como as leituras divergem.
         let vPIS = 0;
         let aliqPIS = 0;
+        let cstPis: string | undefined;
+        let vBcPis = 0;
         if (pis) {
             const pisInner = pis.children[0];
             if (pisInner) {
                 vPIS = num(getTextContent(pisInner, 'vPIS'));
                 aliqPIS = num(getTextContent(pisInner, 'pPIS'));
+                cstPis = getTextContent(pisInner, 'CST') || undefined;
+                vBcPis = num(getTextContent(pisInner, 'vBC'));
             }
         }
 
         let vCOFINS = 0;
         let aliqCOFINS = 0;
+        let cstCofins: string | undefined;
+        let vBcCofins = 0;
         if (cofins) {
             const cofinsInner = cofins.children[0];
             if (cofinsInner) {
                 vCOFINS = num(getTextContent(cofinsInner, 'vCOFINS'));
                 aliqCOFINS = num(getTextContent(cofinsInner, 'pCOFINS'));
+                cstCofins = getTextContent(cofinsInner, 'CST') || undefined;
+                vBcCofins = num(getTextContent(cofinsInner, 'vBC'));
             }
         }
 
@@ -269,6 +280,10 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             cEnqIpi,
             vBcIpi,
             vPIS,
+            cstPis,
+            vBcPis,
+            cstCofins,
+            vBcCofins,
             aliqPIS,
             vCOFINS,
             aliqCOFINS,

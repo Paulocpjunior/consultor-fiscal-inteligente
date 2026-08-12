@@ -1461,9 +1461,21 @@ export interface DocumentoFiscalItem {
     vPIS: number;
     /** Alíquota do PIS em %. */
     aliqPIS?: number;
+    /**
+     * CST do PIS. É ele que decide se a ENTRADA gera crédito no regime
+     * não-cumulativo (Lei 10.637/02 art. 3º): 50-56 dão direito, 70-75 não,
+     * 98/99 outras operações. Ausente quando o item não traz o bloco — nunca '0'.
+     */
+    cstPis?: string;
+    /** Base de cálculo do PIS no item. */
+    vBcPis?: number;
     vCOFINS: number;
     /** Alíquota do COFINS em %. */
     aliqCOFINS?: number;
+    /** CST do COFINS — mesma régua do PIS (Lei 10.833/03 art. 3º). */
+    cstCofins?: string;
+    /** Base de cálculo do COFINS no item. */
+    vBcCofins?: number;
     cst: string;
     orig: string;
 }
