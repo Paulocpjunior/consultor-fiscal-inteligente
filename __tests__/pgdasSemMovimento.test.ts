@@ -153,13 +153,16 @@ describe('a recusa do SERPRO sai traduzida, com a ação', () => {
         const r = interpretarRecusaSemMovimento(bruta);
         expect(r.acao).toMatch(/e-CAC/);
         expect(r.acao).toMatch(/MAED/);
-        // E diz o que destrava. ATENÇÃO: NÃO pode pedir "extrato" — declaração
-        // sem movimento não gera extrato (Paulo, 12/08), e pedido impossível
-        // vira pedido ignorado. O caminho é a consulta do próprio app numa
-        // competência já aceita.
-        expect(r.acao).toMatch(/Atividades declaradas/);
-        expect(r.acao).toMatch(/não gera extrato/i);
+        // ATENÇÃO — dois pedidos IMPOSSÍVEIS já foram removidos daqui:
+        //   · "mande o extrato": sem movimento não gera extrato;
+        //   · "use o 🔎 Atividades declaradas": a consulta devolve só PDF.
+        // Pedido impossível vira pedido ignorado, e a pendência some de vista.
         expect(r.acao).not.toMatch(/mande o extrato/i);
+        expect(r.acao).not.toMatch(/Atividades declaradas/i);
+        // E a ação diz o que resolve HOJE, sem prometer atalho.
+        expect(r.acao).toMatch(/e-CAC/);
+        expect(r.acao).toMatch(/segue bloqueado/i);
+        expect(r.acao).toMatch(/n[ãa]o se deduz/i);
     });
 
     test('recusa desconhecida também vira ação, não fica crua', () => {
