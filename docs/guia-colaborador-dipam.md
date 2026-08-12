@@ -1,5 +1,8 @@
 # Guia do Colaborador — DIPAM e FUNRURAL (compra de produtor rural)
 
+<!-- guia-id: dipam · guia-revisao: 2026-08-12 -->
+<!-- Mexeu aqui? mexa no par em public/ e suba a revisão nos DOIS. -->
+
 > Fonte do guia servido em `/guia-dipam-produtor-rural.html` (botão 📗 na aba
 > 🌾 DIPAM / Produtor rural). **Atualizar os DOIS juntos** — mesmo padrão do
 > guia da saída mod 55.

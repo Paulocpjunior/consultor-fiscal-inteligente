@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<!-- PAR OBRIGATÓRIO: este guia e a fonte em docs/ se atualizam JUNTOS.
+     `guiaParDuplo` barra o build se as revisões divergirem. -->
+<meta name="guia-id" content="conferencia-entregas">
+<meta name="guia-revisao" content="2026-08-12">
+<title>Guia do Colaborador — Conferir uma entrega nova · SP Assessoria Contábil</title>
+<style>
+    :root {
+        --azul: #0E3BFA; --azul-escuro: #091D8D;
+        --tinta: #1e293b; --cinza: #64748b; --borda: #e2e8f0;
+        --verde: #059669; --vermelho: #dc2626; --ambar: #b45309;
+        --fundo-suave: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; padding: 0; color: var(--tinta); background: var(--fundo-suave);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6; font-size: 16px;
+    }
+    header {
+        background: linear-gradient(135deg, var(--azul-escuro), var(--azul));
+        color: #fff; padding: 28px 20px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 4px; }
+    header .wrap { display: flex; align-items: center; gap: 16px; }
+    header img { height: 52px; background: #fff; border-radius: 10px; padding: 6px; }
+    header h1 { font-size: 1.35rem; margin: 0; line-height: 1.3; }
+    header p { margin: 4px 0 0; font-size: .85rem; opacity: .9; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+    section {
+        background: #fff; border: 1px solid var(--borda); border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 18px;
+    }
+    h2 { font-size: 1.15rem; color: var(--azul-escuro); margin: 0 0 10px; }
+    h3 { font-size: 1rem; margin: 18px 0 6px; }
+    .onde {
+        background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;
+        padding: 10px 14px; font-size: .9rem; margin-bottom: 18px;
+    }
+    .quando {
+        border-left: 4px solid var(--azul); background: var(--fundo-suave);
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .alerta {
+        border-left: 4px solid var(--ambar); background: #fffbeb;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .perigo {
+        border-left: 4px solid var(--vermelho); background: #fef2f2;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--borda); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--fundo-suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--cinza); }
+    .tabela-rolagem { overflow-x: auto; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+    pre {
+        background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 16px;
+        overflow-x: auto; font-size: .85rem; line-height: 1.55;
+    }
+    ul, ol { padding-left: 22px; }
+    li { margin: 4px 0; }
+    .selo { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .selo-verde { background: #ecfdf5; color: var(--verde); }
+    .selo-vermelho { background: #fef2f2; color: var(--vermelho); }
+    .selo-ambar { background: #fffbeb; color: var(--ambar); }
+    footer { text-align: center; font-size: .8rem; color: var(--cinza); padding: 0 20px 40px; }
+    strong { color: var(--azul-escuro); }
+    @media print {
+        body { background: #fff; }
+        section { border: none; padding: 8px 0; break-inside: avoid; }
+        header { background: var(--azul-escuro); -webkit-print-color-adjust: exact; }
+    }
+</style>
+</head>
+<body>
+<header>
+    <div class="wrap">
+        <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
+        <div>
+            <h1>Guia do Colaborador — Conferir uma entrega nova</h1>
+            <p>SP Assessoria Contábil · como testar, o que aceitar e o que reportar</p>
+        </div>
+    </div>
+</header>
+<main>
+<section>
+    <h2>Por que este guia existe</h2>
+    <p>Em 12/08/2026 chegou um print de uma tela com defeito <strong>que já estava
+    corrigido</strong>. O trabalho estava pronto e no repositório; o que tinha falhado era o
+    <em>deploy</em> — e não havia como saber isso olhando a tela.</p>
+    <div class="perigo">
+        <strong>Print sem versão não é evidência, é narrativa.</strong> Este guia é o roteiro de
+        como conferir uma entrega e o que mandar de volta.
+    </div>
+</section>
+
+<section>
+    <h2>Passo 1 — Descubra em que versão você está <span class="selo selo-ambar">30 segundos</span></h2>
+    <div class="onde">
+        Você está vendo o Consultor Fiscal na versão:
+        <strong id="versaoAtual" class="mono">carregando…</strong>
+        <button type="button" onclick="copiarVersao()" style="margin-left:8px;padding:3px 10px;border:1px solid #c7d2fe;border-radius:6px;background:#fff;cursor:pointer;font-size:.8rem">
+            copiar
+        </button>
+        <span id="copiado" style="display:none;color:#059669;font-weight:700;font-size:.8rem"> copiado ✓</span>
+    </div>
+    <ol>
+        <li>Se aparecer o aviso <strong>"Nova versão disponível"</strong> no rodapé do app, clique em
+            <strong>Atualizar agora</strong>. Ele faz o recarregamento forte — F5 comum às vezes não
+            basta (o Safari segura a página antiga).</li>
+        <li>Confira a versão acima e deixe-a no print.</li>
+    </ol>
+    <div class="alerta">
+        Se você pular este passo, tudo abaixo pode dar resultado errado — e o erro não vai ser do
+        app, vai ser da página velha que o navegador guardou.
+    </div>
+
+    <h3>Os apps são separados</h3>
+    <p>Cada módulo tem versão própria e sobe na hora dele. Uma correção no <strong>Fiscal</strong>
+    <em>não</em> aparece no <strong>Contábil</strong>, e vice-versa. Se o teste envolve os dois
+    lados — é o caso do FUNRURAL indo para o EFD-Reinf — anote as <strong>duas</strong> versões,
+    cada uma no rodapé do seu módulo.</p>
+</section>
+
+<section>
+    <h2>Passo 2 — Teste pelo RESULTADO, nunca pelo status</h2>
+    <p>"Salvou" não é prova. "Ficou verde" não é prova. Prova é o <strong>número certo na tela</strong>,
+    ou o documento aceito pelo órgão.</p>
+</section>
+
+<section>
+    <h2>Passo 3 — O que mandar quando não bater</h2>
+    <ol>
+        <li>A <strong>versão</strong> do módulo (Passo 1)</li>
+        <li>O <strong>cliente e a competência</strong> — ex.: <code>1131 VINCENZO GUERRA · 07/2026</code></li>
+        <li>O <strong>print da tela inteira</strong>, não recortado. O que parece irrelevante costuma ser a pista</li>
+        <li>O que você <strong>esperava</strong> e o que <strong>apareceu</strong></li>
+    </ol>
+    <div class="quando">
+        Não é preciso explicar a causa. <strong>A causa é trabalho nosso, não seu.</strong> O print
+        completo com cliente, competência e versão vale mais que qualquer descrição.
+    </div>
+</section>
+
+<section>
+    <h2>Roteiro — entregas de 12/08/2026</h2>
+
+    <h3>1. FUNRURAL de produtor rural com CNPJ</h3>
+    <p>O caso: <strong>VINCENZO GUERRA</strong> comprava de <strong>ANTONIO DIAS DA SILVA</strong>,
+    que é produtor rural pessoa física <em>mas tem CNPJ</em>. O Fiscal calculava certo e o Contábil
+    dizia "nenhuma aquisição encontrada".</p>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>Onde clicar</th><th>O que TEM que aparecer</th></tr>
+        <tr>
+            <td>🧾 Fiscal → Central de XMLs → aba <strong>🌾 DIPAM / Produtor rural</strong> → cliente + competência</td>
+            <td>O FUNRURAL apurado, com o produtor listado</td>
+        </tr>
+        <tr>
+            <td>📊 Contábil → EFD-Reinf → <strong>R-2055</strong> → CNPJ + competência → <strong>Buscar no Consultor Fiscal</strong></td>
+            <td>O produtor <strong>aparece na lista</strong> (antes ele sumia)</td>
+        </tr>
+    </table>
+    </div>
+    <div class="quando">
+        <strong>Critério de aceite:</strong> o produtor aparece nos dois lados <strong>com o mesmo
+        valor</strong>. Se divergirem, pare e reporte — dois números para o mesmo fato é o defeito
+        mais grave que existe num arquivo fiscal.
+    </div>
+    <p><strong>Ele ainda vai ficar "pendente", e isso está certo.</strong> Faltam duas informações
+    que a nota não traz:</p>
+    <ol>
+        <li><strong>CPF do titular.</strong> O R-2055 identifica a <em>pessoa</em>; a nota traz o CNPJ
+        do estabelecimento rural. Consulte no <strong>CADESP</strong> e grave no bloco roxo da aba 🌾.</li>
+        <li><strong>Indicador da aquisição (<code>indAquis</code>).</strong> Para compra de produção
+        rural de produtor PF por sub-rogação — o caso comum — o valor é <strong>1</strong>. Digite no
+        campo <code>INDAQUIS</code>, clique em <strong>💾 Salvar indicadores</strong> e busque de novo.</li>
+    </ol>
+    <div class="alerta">
+        Se a linha ainda disser <strong>"CPF do produtor inválido ou ausente"</strong>, você está numa
+        versão antiga do Contábil. Volte ao Passo 1.
+    </div>
+
+    <h3>2. Município da DIPAM em branco</h3>
+    <p>O caso: centenas de pendências "nota sem código IBGE do município", com a DIPAM saindo
+    R$ 0,00 — e o município estava dentro do XML o tempo todo.</p>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>Onde clicar</th><th>O que TEM que aparecer</th></tr>
+        <tr>
+            <td>🌾 DIPAM → bloco <strong>Pendências</strong> → <strong>♻️ Reler participante e município dos XMLs</strong></td>
+            <td>Uma frase com quantas notas foram recuperadas</td>
+        </tr>
+    </table>
+    </div>
+    <div class="quando">
+        <strong>Critério de aceite:</strong> as pendências de município caem e a DIPAM passa a
+        mostrar valor por município.
+    </div>
+    <div class="perigo">
+        <strong>Não digite município à mão.</strong> Se sobrar pendência depois de reler, é buraco de
+        captura — reporte, não contorne.
+    </div>
+
+    <h3>3. Correlação de CFOP</h3>
+    <p>O caso: a tela mostrava um CFOP e o arquivo gravava outro.</p>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>Onde clicar</th><th>O que TEM que aparecer</th></tr>
+        <tr>
+            <td>Ficha do cliente → <strong>Correlacao CFOP</strong></td>
+            <td>A <strong>Natureza da Atividade</strong> e, se ela estiver em branco, uma frase âmbar
+            dizendo <strong>qual natureza vai valer</strong> e de onde ela veio</td>
+        </tr>
+    </table>
+    </div>
+    <div class="quando">
+        <strong>Critério de aceite:</strong> o "CFOP final" da tela é <strong>o mesmo</strong> que sai
+        no SPED e no Exportar SAGE.
+    </div>
+    <div class="perigo">
+        CFOP de <strong>entrada</strong> terminado em <strong>402, 404 ou 405</strong> não existe.
+        Se aparecer, reporte na hora.
+    </div>
+    <p>Se a lista vier vazia, <strong>leia a frase</strong>: ela agora diz qual dos três casos é
+    (nenhum documento capturado / nenhuma nota de entrada / entradas sem CFOP legível). Só o
+    primeiro e o terceiro são problema.</p>
+
+    <h3>4. Simples Nacional sem movimento</h3>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>O que a mensagem diz</th><th>O que fazer</th></tr>
+        <tr><td>"Conferi antes: a Receita respondeu que <strong>NÃO há</strong> declaração"</td>
+            <td><strong>Entregue no e-CAC</strong> (PGDAS-D → Declarar → sem movimento). A multa de R$ 50,00 está correndo</td></tr>
+        <tr><td>"Esta competência <strong>JÁ TEM</strong> declaração transmitida"</td>
+            <td><strong>Nada a fazer.</strong> Está certo</td></tr>
+        <tr><td>"a <strong>consulta falhou</strong>"</td>
+            <td>Se você já entregou, ignore. Se não, entregue</td></tr>
+    </table>
+    </div>
+    <p>O botão continua bloqueado <strong>de propósito</strong>: a forma que o SN-Entregar aceita para
+    mês sem faturamento ainda não foi confirmada, e declaração aceita com estrutura errada é pior que
+    recusada.</p>
+</section>
+
+<section>
+    <h2>O que NÃO fazer</h2>
+    <ul>
+        <li><strong>Não conserte cadastro para "destravar" a tela.</strong> Campo em branco acende
+        alerta de propósito; preencher por cima esconde o buraco</li>
+        <li><strong>Não use um app como conferência do outro.</strong> Se o Fiscal e o Contábil
+        discordam, isso <em>é</em> o achado — reporte, não escolha um</li>
+        <li><strong>Não conclua "não tem" a partir de tela vazia.</strong> Vazio pode ser ausência de
+        operação <em>ou</em> falha de captura, e o app agora diz qual é. Leia a frase</li>
+    </ul>
+</section>
+</main>
+<footer>
+    Dúvidas técnicas: falar com o Paulo (admin). Este guia é atualizado junto com a ferramenta —
+    versão fonte em <code>docs/guia-colaborador-conferencia-entregas.md</code>.
+</footer>
+
+<script>
+// A versão vem do MESMO /version.json que o app usa pra decidir se há
+// atualização — se ela discordar do rodapé, o navegador está com página velha,
+// que é exatamente o que este guia existe pra evitar.
+(function () {
+    var alvo = document.getElementById('versaoAtual');
+    fetch('/version.json?t=' + Date.now(), { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (v) {
+            alvo.textContent = v && v.version
+                ? (v.version + (v.buildNumber ? ' (build ' + v.buildNumber + ')' : ''))
+                : 'não foi possível ler';
+        })
+        .catch(function () {
+            // Farol honesto: não saber a versão não pode parecer "está tudo certo".
+            alvo.textContent = 'não foi possível ler — reporte isso junto do print';
+        });
+})();
+function copiarVersao() {
+    var t = document.getElementById('versaoAtual').textContent;
+    navigator.clipboard.writeText('Consultor Fiscal ' + t).then(function () {
+        var c = document.getElementById('copiado');
+        c.style.display = 'inline';
+        setTimeout(function () { c.style.display = 'none'; }, 2000);
+    });
+}
+</script>
+
+</body>
+</html>
