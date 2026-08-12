@@ -204,9 +204,52 @@ export function avaliarDeclaracaoJaEntregue(leitura) {
     };
 }
 
-/** Traduz a recusa do SERPRO em algo que a pessoa consiga atender. */
-export function interpretarRecusaSemMovimento(mensagemSerpro) {
+/**
+ * O QUE A CONFERÊNCIA PRÉVIA RESPONDEU — e por que ela precisa aparecer.
+ *
+ * Paulo, 12/08/2026: a trava "já entregue" pegou a MORDAM (*"agora sim"*) e
+ * NÃO pegou a ELS COMERCIO DE BANANAS 07/2026 (*"aqui não foi não"*). Da tela
+ * não dava pra saber por quê, porque a recusa não conta que houve uma
+ * conferência antes: as duas hipóteses — **a Receita disse que não há
+ * declaração** e **eu não consegui perguntar** — chegavam com a MESMA cara.
+ *
+ * São ações OPOSTAS. Se a Receita respondeu "não há", entregar no e-CAC é o
+ * que resolve. Se a consulta caiu e a pessoa já entregou, não há nada a fazer
+ * e a mensagem estaria mandando refazer trabalho pronto.
+ *
+ * (E é a mesma régua do farol honesto: indeterminado não pode ter a aparência
+ * de resposta negativa.)
+ */
+export function resumirConsultaPrevia(consulta) {
+    if (!consulta) {
+        return 'Não dei para conferir antes se esta competência já tinha declaração — a consulta ao '
+            + 'PGDAS-D não está disponível neste ambiente. Se você JÁ entregou no e-CAC, a obrigação '
+            + 'está cumprida e não há nada a fazer.';
+    }
+    if (consulta.ok === false) {
+        return `Tentei conferir antes se esta competência já tinha declaração e a consulta falhou `
+            + `(${consulta.erro || 'motivo não informado'}). Se você JÁ entregou no e-CAC, ignore esta `
+            + 'mensagem: a obrigação está cumprida.';
+    }
+    return 'Conferi antes de tentar: a Receita respondeu que NÃO há declaração transmitida para esta '
+        + 'competência. Se você entregou no e-CAC há poucos minutos, a consulta pode ainda não refletir '
+        + '— confira o recibo no PGDAS-D antes de entregar de novo.';
+}
+
+/**
+ * Traduz a recusa do SERPRO em algo que a pessoa consiga atender.
+ *
+ * @param {string} mensagemSerpro
+ * @param {object|null} [consultaPrevia] resultado da conferência "já entregue":
+ *        `null` = não rodou · `{ok:false, erro}` = caiu · `{ok:true}` = a
+ *        Receita respondeu que não há declaração.
+ */
+export function interpretarRecusaSemMovimento(mensagemSerpro, consultaPrevia = undefined) {
     const txt = String(mensagemSerpro ?? '');
+    // `undefined` = o chamador não passou nada (compatibilidade e testes de
+    // tradução pura). Só quem PASSA o argumento ganha a frase da conferência —
+    // inventá-la sem ter conferido seria afirmar o que não se sabe.
+    const previa = consultaPrevia === undefined ? '' : ` ${resumirConsultaPrevia(consultaPrevia)}`;
     if (/MSG_ISN_023|valor da atividade deve ser maior que zero/i.test(txt)) {
         return {
             conhecida: true,
@@ -232,7 +275,7 @@ export function interpretarRecusaSemMovimento(mensagemSerpro) {
                 + 'O botão do app segue bloqueado: a forma que o SN-Entregar aceita para mês sem '
                 + 'faturamento não é a que o app monta, e ela NÃO sai das consultas disponíveis '
                 + '(o CONSULTIMADECREC14 devolve só os PDFs). Destrava com a especificação do '
-                + 'campo pelo SERPRO — payload de entrega não se deduz.',
+                + 'campo pelo SERPRO — payload de entrega não se deduz.' + previa,
         };
     }
     return {
@@ -240,6 +283,6 @@ export function interpretarRecusaSemMovimento(mensagemSerpro) {
         codigo: null,
         mensagem: `O SERPRO recusou a declaração: ${txt || 'sem detalhe'}`,
         acao: 'Nada foi transmitido. Entregue esta competência no e-CAC e reporte a mensagem — '
-            + 'recusa que ninguém traduz vira recusa que ninguém resolve.',
+            + 'recusa que ninguém traduz vira recusa que ninguém resolve.' + previa,
     };
 }
