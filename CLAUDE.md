@@ -689,6 +689,32 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   5101 não está na régua de compra de produtor" — 5101 é o CFOP de quem VENDE, e
   a nota nem é escriturada. Alarme sem ação em nota que já não conta é o que
   ensina a equipe a ignorar a lista inteira.
+  **R-2010 (retenção previdenciária de serviços tomados) LIGADO 12/08** —
+  `GET /api/admin/reinf/servicos-tomados?cnpj=&competencia=` →
+  `reinf-servicos-tomados.js` (19 testes). Paulo mandou o `evtServTom` REAL de
+  06/2026 **com o recibo de SUCESSO da Receita** (tpEv 2010, CRTom 116201), e o
+  módulo nasceu calibrado contra ele — a régua "arquivo aceito > leiaute
+  deduzido" pela terceira vez (R-4020, E510, agora R-2010).
+  🚨 **O ACHADO QUE MANDA: BASE ≠ BRUTO.** No evento aceito o bruto é 5.755,54 e
+  a base retida é **4.604,43** — a `obs` da própria nota diz por quê: **INSUMOS**
+  (dedução de material/insumo, IN RFB 971 arts. 121-124), e isso **não vem
+  separado na NFS-e**. Declarar base = bruto seria declarar retenção sobre 25% a
+  mais. Então a base se PROVA pela **assinatura de alíquota** (mesma técnica do
+  PIS/COFINS não-cumulativo do R-4020): retido/bruto ≈ **11%** ⇒ base = bruto
+  (provado, `indCPRB`=0); ≈ **3,5%** ⇒ **AMBÍGUO e o app NÃO escolhe** (CPRB
+  desonerado × 11% sobre base muito deduzida são `indCPRB` diferentes); entre 0 e
+  11% ⇒ houve dedução, a base derivada vai **MARCADA** (`baseOrigem`) e derivada
+  não entra em declaração; fora disso ⇒ pendência. Total de base **incompleto sai
+  NULO**, nunca parcial — parcial num campo chamado `vlrTotalBaseRet` seria lido
+  como a base inteira. `tpServico` (tabela 06, 9 díg.) e `indObra` vão NULOS: não
+  estão na nota, e "indObra quase sempre é 0" é o default proibido.
+  Do lado do 📊 Contábil: `reinf/gerar-r2010.js` (12 blocos de asserção)
+  reproduz o arquivo aceito campo a campo, inclusive o id
+  `ID1326027010000002026070811123300001`; **UM PRESTADOR POR EVENTO** (decisão
+  explícita — o arquivo prova UM `idePrestServ`, não a multiplicidade; empilhar
+  foi o que derrubou o R-2055 três vezes com MS0030) e `nfs` repetindo, que é
+  inferência DO PRÓPRIO documento (os campos se chamam **vlrTotal**\*). FALTA a
+  tela e a transmissão de lá.
   ✅ **A PONTE ESTÁ VIVA** (07/08, testada pela colaboradora): a tela do R-4020
   chamou o app do REINF, que chamou o CFI, e a resposta que voltou foi a
   mensagem de erro do CFI palavra por palavra — round-trip provado.
