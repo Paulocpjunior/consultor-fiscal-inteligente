@@ -16,5 +16,13 @@ export function extrairAtividadesDeclaradas(resposta: unknown): AtividadeDeclara
 export function resumirAtividadesDeclaradas(
     atividades: AtividadeDeclarada[] | undefined | null,
 ): ResumoAtividadesDeclaradas;
+/**
+ * Resposta crua com os textos longos trocados pelo TAMANHO — pra quando a
+ * declaração não tem atividade nenhuma (sem movimento) e é a ESTRUTURA que
+ * interessa, não o PDF em base64 que vem junto.
+ */
+export function podarBrutoDeclaracao(
+    valor: unknown, profundidade?: number, limite?: number,
+): unknown;
 export const IDS_ATIVIDADE_CONHECIDOS: number[];
 export const ROTULO_ATIVIDADE_CONHECIDA: Record<number, string>;
