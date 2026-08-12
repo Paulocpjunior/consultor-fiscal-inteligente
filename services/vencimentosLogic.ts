@@ -12,7 +12,6 @@
  * e este arquivo é só a porta TypeScript dela — mantida para não quebrar quem
  * já importa daqui.
  */
-// @ts-expect-error — módulo .js puro (sem tipos)
 import { classificarUrgencia, URGENCIA_LABEL } from '../sefaz-backend/urgencia-vencimento.js';
 
 export type Urg = 'atrasada' | 'hoje' | 'amanha' | '3d' | '7d' | 'futura';

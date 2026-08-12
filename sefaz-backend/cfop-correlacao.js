@@ -37,7 +37,7 @@
  * 116/117 (venda originada de encomenda), 118/120/122 (venda à ordem /
  * por conta e ordem / por outro estabelecimento).
  */
-const SUFIXOS_COMPRA_PRODUTO = ['101', '102', '116', '117', '118', '120', '122'];
+export const SUFIXOS_COMPRA_PRODUTO = ['101', '102', '116', '117', '118', '120', '122'];
 
 export { SUFIXOS_ST_VENDA };
 

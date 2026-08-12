@@ -1,0 +1,219 @@
+// ============================================================================
+// MATA-BURRO: RÉGUA FISCAL MORA NUM LUGAR SÓ.
+//
+// Paulo, 12/08/2026: *"a maioria das situações de hoje são brechas e buracos
+// seus. Não dá p passar por isso mais"*. Ele estava certo, e o que ele pediu foi
+// a trava — não a promessa: *"finalizou uma tarefa, deu certo, passa o laço,
+// carimba com o mata-burro e vai"*.
+//
+// ═══ A CLASSE DE DEFEITO QUE ESTE TESTE MATA ════════════════════════════════
+//
+// Quase todo defeito achado em 12/08 tem a MESMA causa: uma SEGUNDA CÓPIA de
+// uma regra que já existia. Não é falta de conhecimento — a regra estava
+// escrita, às vezes por mim mesmo, às vezes no CLAUDE.md:
+//
+//   · R-2055 descartava produtor por contar dígitos, enquanto o 🌾 honrava o
+//     cadastro (Com. CAT 45/2008 — regra que eu tinha documentado 7 dias antes);
+//   · o modal de CFOP tinha uma "réplica simplificada da lógica do backend" e
+//     exibia 1405, CFOP que não existe, enquanto o arquivo gravava 1403;
+//   · `services/cfopConferencia.ts` tinha os sufixos copiados, e a cópia se
+//     declarava "espelho" — espelho é a segunda cópia com outro nome;
+//   · `FiscalObligationsDashboard.tsx` reescreveu as fronteiras de prazo, que
+//     JÁ tinham sido unificadas em 07/08 por terem divergido antes;
+//   · a versão do app irmão morava em quatro arquivos e o bump escrevia dois —
+//     dois deploys caíram no mesmo dia.
+//
+// Régua copiada não fica igual: fica PARECIDA. E parecida é pior que diferente,
+// porque ninguém desconfia.
+//
+// ═══ COMO ESTE TESTE FUNCIONA, E POR QUE ELE NÃO VIRA RUÍDO ═════════════════
+//
+// Ele varre APENAS código de produção (`components/`, `services/`,
+// `sefaz-backend/`) procurando ASSINATURAS LITERAIS de cada régua fora do
+// arquivo DONO. Três decisões deliberadas:
+//
+//  1. **Assinatura literal, não semântica.** Nada de "parece uma régua": só
+//     acusa quem escreveu o mesmo array/mapa/fronteira. Falso positivo em teste
+//     que bloqueia build vira teste desligado.
+//  2. **Testes ficam FORA da varredura.** Reproduzir a régua num teste é
+//     legítimo — foi assim que a divergência do CFOP foi provada em número
+//     (`cfopCorrelacaoTelaXArquivo.test.ts` guarda a cópia antiga de propósito).
+//  3. **A falha ENSINA.** A mensagem diz o dono, de onde importar e qual caso
+//     real custou — mata-burro que não diz o caminho vira obstáculo.
+//
+// ═══ REGRA PERMANENTE ═══════════════════════════════════════════════════════
+//
+// Núcleo fiscal novo (tabela, fronteira, de-para, família de código) entra em
+// REGUAS_VIGIADAS **no mesmo PR** que o cria. É a mesma regra dos
+// TOTAIS_VIGIADOS da auditoria de saída do SPED.
+// ============================================================================
+import { readdirSync, readFileSync, statSync } from 'fs';
+import { join, relative } from 'path';
+
+const RAIZ = join(__dirname, '..');
+const PASTAS_DE_PRODUCAO = ['components', 'services', 'sefaz-backend'];
+const EXTENSOES = ['.ts', '.tsx', '.js'];
+
+interface Regua {
+    /** Como a régua se chama para quem lê a falha. */
+    nome: string;
+    /** O arquivo que É a régua. Único lugar onde a assinatura pode aparecer. */
+    dono: string;
+    /** Como importar — a falha precisa dizer o caminho, não só o problema. */
+    comoUsar: string;
+    /** O caso real que custou. Sem ele, a trava vira burocracia. */
+    porque: string;
+    /** Trechos literais que só existem em quem reimplementa a régua. */
+    assinaturas: RegExp[];
+    /** Arquivos que podem conter a assinatura por motivo declarado. */
+    permitido?: string[];
+}
+
+const REGUAS_VIGIADAS: Regua[] = [
+    {
+        nome: 'Correlação de CFOP do emitente → destinatário',
+        dono: 'sefaz-backend/cfop-correlacao.js',
+        comoUsar: "import { correlacionarCfop } from '../sefaz-backend/cfop-correlacao.js'",
+        porque: 'O CfopCorrelacaoModal tinha uma réplica e mostrava 1405 — CFOP que NÃO EXISTE — '
+            + 'enquanto o arquivo gravava 1403 (PR #621). Conferência que promete número diferente '
+            + 'do arquivo é pior que não ter tela.',
+        assinaturas: [
+            // O mapa de inversão do primeiro dígito.
+            /['"]5['"]\s*:\s*['"]1['"]\s*,\s*['"]6['"]\s*:\s*['"]2['"]/,
+            // A família de compra de produto.
+            /['"]101['"]\s*,\s*['"]102['"]\s*,\s*['"]116['"]/,
+            // A família de VENDA com ST (a que não tem par na entrada).
+            /['"]401['"]\s*,\s*['"]402['"]\s*,\s*['"]403['"]\s*,\s*['"]404['"]/,
+        ],
+    },
+    {
+        nome: 'Fronteiras de urgência de vencimento',
+        dono: 'sefaz-backend/urgencia-vencimento.js',
+        comoUsar: "import { classificarUrgencia } from '../sefaz-backend/urgencia-vencimento.js'",
+        porque: 'Elas já tinham divergido entre vencimentosLogic.ts e vencimentos-orchestrator.js '
+            + '(a MESMA obrigação com duas datas, FGTS 05/2026: 19/06 na tarefa e 22/06 na tela) e '
+            + 'voltaram a ser copiadas no FiscalObligationsDashboard.tsx.',
+        assinaturas: [
+            // A cadeia de cortes escrita à mão. Só acusa quando os DOIS cortes
+            // aparecem no mesmo arquivo — `<= 7` sozinho é cor de UI.
+            /<=\s*3\b[\s\S]{0,400}?<=\s*7\b/,
+        ],
+        permitido: [
+            // Cores de contagem regressiva da Reforma — outro domínio, sem
+            // relação com prazo de obrigação.
+            'components/ReformaCountdownBanner.tsx',
+            // NÃO é prazo: é a FAIXA DE CNAE do ISS de alguns municípios
+            // (`0-3`, `4-7` decidem o dia do vencimento). Número igual, assunto
+            // diferente — e é por isso que a assinatura é literal e a exceção é
+            // escrita, em vez de a régua ser afrouxada.
+            'sefaz-backend/calendario-obrigacoes.js',
+            // É a régua PRÓPRIA de vencimento de CERTIFICADO A1, com dono
+            // declarado (o CLAUDE.md manda não escrever "≤30 dias" à mão em
+            // outro lugar). Dois domínios com fronteiras parecidas e vidas
+            // independentes: prazo de obrigação muda por lei, validade de
+            // certificado muda por emissão.
+            'sefaz-backend/cert-vencimento-helper.js',
+        ],
+    },
+    {
+        nome: 'Alíquotas do FUNRURAL (vigência da LC 224/2025)',
+        dono: 'sefaz-backend/dipam-produtor-rural.js',
+        comoUsar: "import { aliquotasFunruralVigentes, calcularFunrural } from '../sefaz-backend/dipam-produtor-rural.js'",
+        porque: 'A virada é pela DATA DA VENDA (1,5% até 31/03/2026 e 1,63% depois) e o segurado '
+            + 'especial NÃO subiu. Uma segunda tabela cobraria 0,13 ponto a mais de quem não deve, '
+            + 'e quem paga é o cliente adquirente (sub-rogação).',
+        assinaturas: [
+            /senar\s*:\s*0\.2\b/i,
+            /gilrat\s*:\s*0\.11\b/i,
+        ],
+    },
+    {
+        nome: 'Catálogo de obrigações por regime',
+        dono: 'sefaz-backend/catalogo-obrigacoes.js',
+        comoUsar: "import { obrigacoesDoRegime } from '../sefaz-backend/catalogo-obrigacoes.js'",
+        porque: 'Existiam TRÊS catálogos que não concordavam, e o mês nascia do mais pobre: o cron '
+            + 'do dia 1 não conhecia LUCRO PRESUMIDO, então a obrigação não virava tarefa, não '
+            + 'aparecia em Vencimentos e o farol dizia "mês fechado" com obrigação nunca listada.',
+        assinaturas: [
+            // O par que só existe em quem monta o catálogo do regime.
+            /LUCRO_PRESUMIDO[\s\S]{0,200}?EFD[_-]?CONTRIBUICOES/i,
+        ],
+    },
+];
+
+// ─── Varredura ──────────────────────────────────────────────────────────────
+
+function arquivosDeProducao(): string[] {
+    const out: string[] = [];
+    const anda = (dir: string) => {
+        for (const nome of readdirSync(dir)) {
+            if (nome === 'node_modules' || nome.startsWith('.')) continue;
+            const caminho = join(dir, nome);
+            if (statSync(caminho).isDirectory()) { anda(caminho); continue; }
+            // `.d.ts` é declaração de tipo — não carrega régua.
+            if (nome.endsWith('.d.ts')) continue;
+            if (EXTENSOES.some((e) => nome.endsWith(e))) out.push(caminho);
+        }
+    };
+    for (const pasta of PASTAS_DE_PRODUCAO) anda(join(RAIZ, pasta));
+    return out;
+}
+
+const ARQUIVOS = arquivosDeProducao();
+
+describe('MATA-BURRO: régua fiscal mora num lugar só', () => {
+    it('a varredura enxerga o código de produção (se ela vier vazia, a trava é falsa)', () => {
+        // Trava da trava: um teste que não lê nada passa sempre, e passar
+        // sempre é o mesmo que não existir.
+        expect(ARQUIVOS.length).toBeGreaterThan(100);
+        expect(ARQUIVOS.some((f) => f.endsWith('cfop-correlacao.js'))).toBe(true);
+    });
+
+    it.each(REGUAS_VIGIADAS.map((r) => [r.nome, r] as const))(
+        'nenhuma segunda cópia de: %s',
+        (_nome, regua) => {
+            const donoResolvido = join(RAIZ, regua.dono);
+            expect(ARQUIVOS).toContain(donoResolvido);
+
+            const infratores: string[] = [];
+            for (const arquivo of ARQUIVOS) {
+                if (arquivo === donoResolvido) continue;
+                const rel = relative(RAIZ, arquivo).split('\\').join('/');
+                if (regua.permitido?.includes(rel)) continue;
+                const conteudo = readFileSync(arquivo, 'utf8');
+                for (const assinatura of regua.assinaturas) {
+                    if (assinatura.test(conteudo)) {
+                        infratores.push(`${rel}  (casou com ${assinatura})`);
+                        break;
+                    }
+                }
+            }
+
+            if (infratores.length) {
+                throw new Error(
+                    `\n\n🚧 SEGUNDA CÓPIA DE RÉGUA FISCAL — "${regua.nome}"\n\n`
+                    + `Estes arquivos reimplementam a régua que mora em ${regua.dono}:\n`
+                    + infratores.map((i) => `  · ${i}`).join('\n')
+                    + `\n\nUse a régua, não copie:\n  ${regua.comoUsar}\n\n`
+                    + `POR QUE ISTO É TRAVA: ${regua.porque}\n\n`
+                    + 'Régua copiada não fica igual, fica PARECIDA — e parecida é pior que diferente,\n'
+                    + 'porque ninguém desconfia. Se a cópia for MESMO necessária (um teste que prova\n'
+                    + 'divergência, outro domínio com o mesmo número por coincidência), declare o\n'
+                    + 'arquivo em `permitido` COM o motivo escrito — nunca apague a assinatura.\n',
+                );
+            }
+            expect(infratores).toEqual([]);
+        },
+    );
+
+    it('toda régua vigiada diz o DONO, o COMO USAR e o CASO que a justifica', () => {
+        // Entrada sem "porque" vira burocracia: daqui a seis meses ninguém sabe
+        // o que a trava protege e alguém a afrouxa pra "destravar o build".
+        for (const r of REGUAS_VIGIADAS) {
+            expect(r.dono).toMatch(/\.(js|ts)$/);
+            expect(r.comoUsar).toMatch(/import/);
+            expect(r.porque.length).toBeGreaterThan(60);
+            expect(r.assinaturas.length).toBeGreaterThan(0);
+        }
+    });
+});

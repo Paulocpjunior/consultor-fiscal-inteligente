@@ -5,6 +5,36 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **MATA-BURRO: RÉGUA FISCAL MORA NUM LUGAR SÓ — e agora um teste barra a
+  segunda cópia** (Paulo, 12/08: *"a maioria das situações de hoje são brechas e
+  buracos SEUS. Não dá p passar por isso mais! Eu gasto token e tempo"* → e a
+  ordem: *"finalizou uma tarefa, deu certo, passa o laço, carimba com o
+  mata-burro e vai"*). Ele estava certo, e a causa era UMA só: quase todo
+  defeito daquele dia foi uma **segunda cópia de uma regra que já existia** —
+  não falta de conhecimento, já que a regra estava escrita, às vezes neste
+  arquivo. R-2055 contando dígitos × cadastro do 🌾; réplica de CFOP no modal
+  exibindo `1405` (inexistente) enquanto o arquivo gravava `1403`; `cfopConferencia.ts`
+  com os sufixos copiados (a cópia se declarava "espelho"); fronteiras de prazo
+  reescritas no `FiscalObligationsDashboard` E ainda vivas no
+  `vencimentos-orchestrator` (que JÁ importava o núcleo ao lado, e a cópia já
+  divergia — não tinha a faixa de 7d); versão do app irmão em 4 arquivos com o
+  bump escrevendo 2.
+  **`__tests__/reguaUnica.test.ts`** varre `components/`, `services/` e
+  `sefaz-backend/` atrás das ASSINATURAS LITERAIS de cada régua fora do arquivo
+  DONO. Três decisões: assinatura literal (nunca "parece uma régua" — falso
+  positivo em teste que bloqueia build vira teste desligado); **teste fica FORA
+  da varredura** (reproduzir a régua num teste é legítimo — foi assim que a
+  divergência do CFOP virou número em `cfopCorrelacaoTelaXArquivo.test.ts`); e a
+  falha ENSINA (diz o dono, o import e o caso real que custou).
+  Exceção se declara em `permitido` COM o motivo escrito, nunca apagando a
+  assinatura — hoje há duas, ambas de OUTRO domínio com número parecido: faixa
+  de CNAE do ISS (`calendario-obrigacoes.js`) e validade de certificado A1
+  (`cert-vencimento-helper.js`).
+  **REGRA QUE MANDA: núcleo fiscal novo (tabela, fronteira, de-para, família de
+  código) entra em `REGUAS_VIGIADAS` NO MESMO PR que o cria** — mesma regra dos
+  `TOTAIS_VIGIADOS` da auditoria de saída do SPED. E a trava foi PROVADA contra
+  o código do dia anterior: as 4 cópias casam com as assinaturas.
+
 - **O QUE EXISTIA ANTES DO CFI ERA COLCHA DE RETALHOS — e isso muda o que
   significa "certo"** (Paulo, 11/08, posicionando a realidade): no E-Fiscal
   *"não eram usados todos os campos e funções; cada colaborador agia de uma
