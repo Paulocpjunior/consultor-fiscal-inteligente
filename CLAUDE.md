@@ -1419,9 +1419,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   IPI destacado SEM CST fica FORA com aviso (campo fiscal não recebe default).
   A prova ponta a ponta virou tela: a aba 🪞 **CFI × E-Fiscal compara o E510**
   por CFOP+CST (#568) — é exatamente a conferência que o PVA não dá.
-  **FALTA**: backfill dos XMLs de jun/jul já capturados (o doc guarda xmlHash,
-  não o XML cru ⇒ re-capturar os poucos clientes de IPI) e reproduzir um mês
-  INTEIRO a partir dos XMLs-fonte. RISCO ABERTO no de-para: o e-Fiscal inclui
+  **FALTA**: backfill dos XMLs de jun/jul já capturados e reproduzir um mês
+  INTEIRO a partir dos XMLs-fonte. ⚠️ **CORREÇÃO 12/08**: a linha anterior dizia
+  "o doc guarda xmlHash, não o XML cru ⇒ re-capturar" — ERRADO. O
+  **XML CRU ESTÁ NO CLOUD STORAGE** (`xml-importer` faz `bucket.file(storagePath)
+  .save(xml)` em toda captura, e `storagePath` é gravado no documento). Backfill
+  de campo novo de item (cstIpi, cstPis, cstCofins…) se faz REPROCESSANDO o XML
+  do Storage — sem tocar na SEFAZ, sem pedir arquivo ao cliente. RISCO ABERTO no de-para: o e-Fiscal inclui
   itens sem CST no E510 derivando por operação (1124→05, 1407→49, 5901→55).
 - **COMPRA DE PRODUTOR RURAL TEM DUAS NOTAS DA MESMA ENTRADA — e o FUNRURAL
   estava DOBRANDO** (#567): a NF-e do produtor (nota 1) e a nota própria de
