@@ -16,6 +16,24 @@ function safeDasError(err) {
         return { error: err.serproMessage || err.message || 'SERPRO indisponivel no momento.' };
     }
 
+    // MENSAGEM ESCRITA POR NÓS PRO USUÁRIO PASSA INTEIRA (12/08).
+    //
+    // O sanitizador existe pra esconder VAZAMENTO — token, caminho de arquivo,
+    // payload cru do SERPRO. Ele corta por tamanho (>300) porque mensagem longa
+    // costuma ser stack trace ou dump. Só que o app também produz mensagens
+    // longas DE PROPÓSITO: a recusa da declaração sem movimento, por exemplo,
+    // tem 485 caracteres porque diz o motivo E a ação ("entregue no e-CAC pra
+    // não correr a MAED; mande o extrato pra destravar o botão").
+    //
+    // O que o Paulo viu em 12/08: "Não foi possível declarar: Erro interno
+    // (ref d65adb41)". A orientação inteira foi apagada por ser comprida — e o
+    // colaborador ficou sem saber que precisa entregar no e-CAC. Sanitizador
+    // que engole a AÇÃO é pior que erro nenhum: some a única coisa acionável.
+    //
+    // `mensagemUsuario` é o carimbo de "isto foi redigido para ser lido".
+    // Quem monta o erro é responsável por não pôr segredo aí dentro.
+    if (err?.mensagemUsuario) return { error: String(err.mensagemUsuario) };
+
     const raw = err?.serproMessage || err?.message || 'Falha ao processar DAS';
     const shouldSanitize = raw.length > 300 || RAW_ERROR_PATTERNS.some((pattern) => pattern.test(raw));
     return shouldSanitize ? sanitizeError(err) : { error: raw };
