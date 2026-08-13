@@ -185,6 +185,34 @@ const REGUAS_VIGIADAS: Regua[] = [
             /evtRetPJ['"]?\s*:\s*['"]R-4020/,
         ],
     },
+    {
+        nome: 'Nome do arquivo da guia que vai ao cliente',
+        dono: 'sefaz-backend/nome-arquivo-guia.js',
+        comoUsar: "import { nomeArquivoGuia } from '../sefaz-backend/nome-arquivo-guia.js'",
+        porque: 'O cliente lê este nome acima do ícone do PDF no WhatsApp, e saía '
+            + '`das_63787066000193_2026-07.pdf` — nome de máquina, com o CNPJ na tela de quem recebe, '
+            + 'num arquivo feito para ser reencaminhado. O formato estava escrito em três lugares e a '
+            + 'correção só pegou um: DARF e DARE seguiram com o nome velho porque a trava era uma '
+            + 'LISTA de arquivos escrita à mão.',
+        assinaturas: [
+            // O formato antigo: sigla + `_` + interpolação com CNPJ.
+            /`(?:das|darf|dare)_\$\{[^`]*[Cc]npj/i,
+        ],
+        permitido: [
+            // O DOWNLOAD do colaborador continua com o CNPJ DE PROPÓSITO: os
+            // arquivos caem todos na mesma pasta de Downloads, de dezenas de
+            // empresas, e "DAS 07-2026" repetido oito vezes é o que faz perder
+            // o arquivo. Nome bonito é para quem RECEBE; nome que distingue é
+            // para quem ARQUIVA — a régua separa leitores, não formatos.
+            'components/Das/index.tsx',
+            'components/DCTFWeb/DetalheDeclaracao.tsx',
+            'components/DCTFWeb/TrimestraisDoMesPanel.tsx',
+            // No DARE o download ainda carrega o sufixo `_TESTE` quando o PDF é
+            // de HOMOLOGAÇÃO — guia de teste não é pagável, e o nome no disco é
+            // a última barreira antes de alguém mandar uma ao cliente.
+            'components/LucroPresumidoReal/DareSpModal.tsx',
+        ],
+    },
 ];
 
 // ─── Varredura ──────────────────────────────────────────────────────────────
