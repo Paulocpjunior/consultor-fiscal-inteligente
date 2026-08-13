@@ -11,8 +11,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CogIcon, CloseIcon, UserGroupIcon } from './Icons';
 import {
     listarTemplates, salvarTemplate, desativarTemplate, statusWhatsapp,
-    listarTemplatesDaMeta,
-    WhatsappTemplate, TemplateVariavel, TemplateDaMeta,
+    listarTemplatesDaMeta, statusWebhook,
+    WhatsappTemplate, TemplateVariavel, TemplateDaMeta, WebhookStatus,
 } from '../services/whatsappTemplatesService';
 
 interface Props {
@@ -61,6 +61,9 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
     // Templates APROVADOS na Meta — para escolher em vez de digitar.
     const [daMeta, setDaMeta] = useState<TemplateDaMeta[] | null>(null);
     const [buscandoMeta, setBuscandoMeta] = useState(false);
+    // Webhook (F1 do 💬 Comunicação): status de entrega + mensagens recebidas.
+    const [webhook, setWebhook] = useState<WebhookStatus | null>(null);
+    const [buscandoWebhook, setBuscandoWebhook] = useState(false);
 
     const recarregar = useCallback(async () => {
         setCarregando(true);
@@ -92,6 +95,18 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
         });
         setEditando(true);
         setMsg(null);
+    };
+
+    const buscarWebhook = async () => {
+        setBuscandoWebhook(true);
+        setMsg(null);
+        try {
+            const r = await statusWebhook();
+            if (!r.ok) { setMsg({ texto: r.error || 'Falha ao consultar o webhook.', tipo: 'erro' }); return; }
+            setWebhook(r);
+        } finally {
+            setBuscandoWebhook(false);
+        }
     };
 
     const buscarNaMeta = async () => {
@@ -215,6 +230,102 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                             >
                                 <UserGroupIcon className="w-4 h-4" /> Abrir Gerenciar Usuários
                             </button>
+                        )}
+                    </section>
+
+                    {/* ── 📡 Webhook do WhatsApp (F1 do 💬 Comunicação) ─────────
+                        A rota pública /api/whatsapp/webhook não tem outra tela;
+                        esta seção É a tela dela (rota sem botão não é
+                        funcionalidade). Mostra o farol honesto do canal:
+                        aceito ≠ entregue — aqui aparece o entregue/lido/falhou
+                        COM o motivo (inclusive o 131049, o filtro que hoje faz
+                        o escritório ligar pro cliente sem saber por quê). */}
+                    <section className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">📡 Recebimento (webhook) e status de entrega</h4>
+                            <button
+                                onClick={buscarWebhook}
+                                disabled={buscandoWebhook}
+                                className="text-[11px] px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold disabled:opacity-50 whitespace-nowrap"
+                            >
+                                {buscandoWebhook ? 'Consultando…' : '🔄 Consultar'}
+                            </button>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                            O CFI recebe as mensagens dos clientes e o destino de cada envio (entregue · lido · falhou, com o
+                            motivo) direto da Meta — em paralelo com a plataforma de atendimento atual, que segue intocada.
+                        </p>
+                        {webhook && (
+                            <div className="mt-2 space-y-2">
+                                {!webhook.configurado ? (
+                                    <div className="rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-2 py-1.5 text-[11px] text-amber-800 dark:text-amber-300">
+                                        <p className="font-semibold">Webhook ainda não configurado — falta:</p>
+                                        <ul className="list-disc ml-4 mt-0.5">
+                                            {webhook.faltas.map((f, i) => <li key={i}>{f}</li>)}
+                                        </ul>
+                                        <p className="mt-1">Depois das envs, cadastre no painel da Meta (App → WhatsApp → Configuration → Webhook)
+                                            a URL do app + <code className="font-mono">{webhook.caminhoWebhook}</code> e assine o campo <strong>messages</strong>.</p>
+                                    </div>
+                                ) : (
+                                    <p className="text-[11px]">
+                                        <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold">webhook configurado</span>
+                                        <span className="ml-2 text-slate-500 dark:text-slate-400">
+                                            {webhook.ultimoEventoEm
+                                                ? `último evento recebido em ${new Date(webhook.ultimoEventoEm).toLocaleString('pt-BR')}`
+                                                : 'nenhum evento recebido ainda — confira a assinatura do campo "messages" no painel da Meta'}
+                                        </span>
+                                    </p>
+                                )}
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <div>
+                                        <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Últimos status de entrega</p>
+                                        {webhook.ultimosStatus.length === 0 ? (
+                                            <p className="text-[10px] text-slate-400 mt-0.5">Nenhum status recebido ainda.</p>
+                                        ) : (
+                                            <div className="mt-1 space-y-1">
+                                                {webhook.ultimosStatus.map((s) => (
+                                                    <div key={s.messageId} className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[10px]">
+                                                        <span className={`font-bold ${s.status === 'falhou' ? 'text-red-600 dark:text-red-400' : s.status === 'lido' ? 'text-sky-600 dark:text-sky-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                                            {s.status === 'lido' ? '✓✓ lido' : s.status === 'entregue' ? '✓✓ entregue' : s.status === 'enviado' ? '✓ enviado' : `✗ ${s.status}`}
+                                                        </span>
+                                                        <span className="ml-1 text-slate-500 dark:text-slate-400">
+                                                            {s.numero || 'sem número'}{s.em ? ` · ${new Date(s.em).toLocaleString('pt-BR')}` : ''}
+                                                        </span>
+                                                        {s.erro && (
+                                                            <p className="text-red-600 dark:text-red-400 mt-0.5">
+                                                                {s.erro.codigo ? `(${s.erro.codigo}) ` : ''}{s.erro.acao}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Últimas mensagens recebidas</p>
+                                        {webhook.ultimasMensagens.length === 0 ? (
+                                            <p className="text-[10px] text-slate-400 mt-0.5">Nenhuma mensagem recebida ainda.</p>
+                                        ) : (
+                                            <div className="mt-1 space-y-1">
+                                                {webhook.ultimasMensagens.map((m, i) => (
+                                                    <div key={i} className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[10px]">
+                                                        <span className="font-semibold text-slate-600 dark:text-slate-300">{m.numero || 'sem número'}</span>
+                                                        <span className="ml-1 text-slate-500 dark:text-slate-400">
+                                                            {m.em ? new Date(m.em).toLocaleString('pt-BR') : ''}{m.temMidia ? ' · 📎' : ''}
+                                                        </span>
+                                                        <p className="text-slate-500 dark:text-slate-400 truncate">{m.texto || `(${m.tipo})`}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-slate-400">
+                                    A leitura e a resposta das conversas continuam na plataforma atual — a tela de atendimento
+                                    do CFI é a próxima fase do módulo Comunicação.
+                                </p>
+                            </div>
                         )}
                     </section>
 

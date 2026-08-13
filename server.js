@@ -72,6 +72,7 @@ import reinfRetencoesPjRouter from './sefaz-backend/reinf-retencoes-pj-routes.js
 import reinfGatewayRouter from './sefaz-backend/reinf-gateway-routes.js';
 import cadastroCentralRouter from './sefaz-backend/cadastro-central-routes.js';
 import whatsappRouter from './sefaz-backend/whatsapp-routes.js';
+import whatsappWebhookRouter from './sefaz-backend/whatsapp-webhook-routes.js';
 import minhaAgendaRouter from './sefaz-backend/minha-agenda-routes.js';
 import diagnosticoDocsFiscaisRouter from './sefaz-backend/diagnostico-docs-fiscais-routes.js';
 import simplesSublimiteRouter from './sefaz-backend/simples-sublimite-routes.js';
@@ -223,7 +224,10 @@ app.use(helmet({
         },
     },
 }));
-app.use(express.json({ limit: '20mb' }));
+// rawBody: o webhook do WhatsApp valida a assinatura HMAC sobre os BYTES
+// como chegaram — re-serializar o JSON mudaria a ordem das chaves e a
+// assinatura nunca bateria. O buffer só vive durante a requisição.
+app.use(express.json({ limit: '20mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 // Rate limiting. skip: requisicoes de cron autenticadas (Cloud Scheduler)
 // nunca sao limitadas — senao um pico de crons as 7-8h poderia ser barrado.
@@ -371,6 +375,8 @@ app.use('/api/admin/reinf/gateway', reinfGatewayRouter);
 // NÃO trafega — é chave privada; leva-se a operação, nunca a chave.
 app.use('/api/admin/cadastro', cadastroCentralRouter);
 app.use('/api/admin/whatsapp', whatsappRouter);
+// PÚBLICA (a Meta chama): GET = handshake, POST = eventos assinados (HMAC).
+app.use('/api/whatsapp', whatsappWebhookRouter);
 app.use('/api/admin/minha-agenda', minhaAgendaRouter);
 app.use('/api/admin/diagnostico-docs-fiscais', diagnosticoDocsFiscaisRouter);
 app.use('/api/admin/simples-sublimite', simplesSublimiteRouter);

@@ -152,6 +152,19 @@ MESMO PR que a cria.**
   falhou+motivo) na auditoria existente.
 - Aceite: envio de guia real mostrando "entregue/lido" no painel; mensagem
   de cliente aparecendo em `whatsapp_mensagens`. Ultra Fox intocada.
+- ✅ **CÓDIGO NO AR 13/08**: núcleo `whatsapp-webhook.js` (13 testes) + rota
+  pública `/api/whatsapp/webhook` + painel 📡 na ⚙️ Config Admin. Decisões:
+  evento cru gravado ANTES de processar e falha responde 500 de propósito (a
+  Meta reentrega; tudo idempotente pelo wamid — 200 com gravação perdida
+  seria sumir com mensagem de cliente); status não regride (lido não vira
+  entregue com evento fora de ordem); assinatura usa o `secretsMatch` do
+  cron-secret (régua única). **FALTA (Paulo, ~10 min)**: criar as envs
+  `WHATSAPP_WEBHOOK_VERIFY_TOKEN` (valor inventado) e `WHATSAPP_APP_SECRET`
+  (App da Meta → Configurações → Básico) no Cloud Run, e cadastrar no painel
+  da Meta (App → WhatsApp → Configuration) a Callback URL
+  `<url do app>/api/whatsapp/webhook` + o mesmo verify token, assinando o
+  campo **messages**. O painel 📡 mostra quando o primeiro evento chegar —
+  configuração salva não é webhook funcionando (regra da casa).
 
 **F2 — Inbox** (a tela da seção 3)
 - Aceite: um atendente real resolve uma conversa real de ponta a ponta pelo
