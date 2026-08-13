@@ -114,6 +114,42 @@ const CSTAT_NOTA_CANCELADA = new Set(['101', '151']);
 /** cStat de EVENTO 110111 registrado (135) ou homologado fora de prazo (155). */
 export const CSTAT_EVENTO_CANCELAMENTO = new Set(['135', '155']);
 
+// ── EVENTO NÃO É NOTA ───────────────────────────────────────────────────────
+//
+// Caso 13/08 (Paulo: *"TA ZICADA ESSA EMPRESA"*): a aba 🌾 acusou **435 notas
+// "sem o fornecedor"**, e o ♻️ não recuperava nenhuma — "0 recuperadas, 664 já
+// tinham". Não eram notas: eram EVENTOS DE CANCELAMENTO gravados como
+// documento. A "chave" delas tem 53 dígitos e começa com o tpEvento:
+//
+//   110111 35260729240822000121550010000255036113641904 201
+//   └tpEvento┘ └──────────── chNFe (44) ────────────────┘ └seq┘
+//
+// Elas nunca têm emitente nem destinatário — evento não carrega participante —
+// então caíam eternamente em "o documento não traz o fornecedor", mandando
+// reler um XML que não tem o que reler. 435 alarmes sem ação, na frente da
+// pendência que importava.
+//
+// A régua é literal e não depende de `tipoDoc` (que a captura por e-mail nem
+// sempre grava): **chave de documento fiscal tem 44 dígitos**. Mais que isso é
+// Id de evento. Chave VAZIA continua sendo nota legítima — a NFS-e do portal
+// não tem chave, e isso é a forma do trilho, não buraco.
+const TIPOS_DE_EVENTO = new Set(['eventoNFe', 'eventoNFCe', 'eventoCTe', 'eventoMDFe', 'resEvento']);
+
+export function ehRegistroDeEvento(d) {
+    if (!d) return false;
+    if (TIPOS_DE_EVENTO.has(String(d.tipoDoc || d.tipo || ''))) return true;
+    return String(d.chave || '').replace(/\D/g, '').length > 44;
+}
+
+/** A chNFe de verdade escondida na chave-Id de um registro de evento. */
+export function chaveDaNotaDoEvento(d) {
+    const bruto = String(d?.chave || '').replace(/\D/g, '');
+    if (bruto.length === 44) return bruto;
+    // ID + tpEvento(6) + chNFe(44) + seq — o miolo é sempre a chave.
+    if (bruto.length > 44) return bruto.substring(6, 50).length === 44 ? bruto.substring(6, 50) : null;
+    return null;
+}
+
 export function docCancelado(d) {
     if (!d) return false;
     if (STATUS_CANCELADO.has(String(d.status || '').toLowerCase())) return true;

@@ -77,6 +77,22 @@ export interface DipamPainel {
     };
     notas?: any[];
     pendencias?: DipamPendencia[];
+    /**
+     * O DINHEIRO que está fora do total, por causa. "736 notas fora" não diz se
+     * falta R$ 200 ou R$ 200 mil — e sem isso não há por onde começar.
+     * `funruralPotencial` é o que ENTRARIA se a pendência fosse resolvida:
+     * nunca é somado ao apurado.
+     */
+    foraDoTotal?: Array<{
+        codigo: string;
+        rotulo: string;
+        notas: number;
+        valor: number;
+        fornecedores: number;
+        funruralPotencial: number;
+    }>;
+    /** Documentos da competência que são EVENTOS, não notas (ficam fora). */
+    registrosDeEvento?: number;
     avisos?: string[];
     farol?: { cor: 'ok' | 'atencao' | 'falha' | 'neutro'; resumo: string };
     cadastro?: {

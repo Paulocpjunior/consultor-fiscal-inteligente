@@ -54,3 +54,46 @@ describe('extrairMetadados — contrato do participante', () => {
         expect(m.ufDest).toBeNull();
     });
 });
+
+/**
+ * EVENTO NÃO VIRA DOCUMENTO FANTASMA (Paulo, 13/08 — "TA ZICADA ESSA EMPRESA").
+ *
+ * 435 "notas sem o fornecedor" na aba 🌾 eram eventos de cancelamento gravados
+ * como documento, com a chave-Id de 53 dígitos:
+ *
+ *   110111 35260729240822000121550010000255036113641904 201
+ *
+ * O evento só ia pelo caminho certo quando `chNFeRef` era lido; sem ele, caía
+ * no caminho da NF-e e virava um doc sem participante — que depois pedia, para
+ * sempre, para reler um XML que não tem participante nenhum.
+ */
+describe('evento com chNFe ilegível', () => {
+    const CHNFE = '35260729240822000121550010000255036113641904';
+    const eventoSemChNFe = `<?xml version="1.0"?>
+        <procEventoNFe versao="1.00">
+          <evento><infEvento Id="ID110111${CHNFE}201">
+            <tpEvento>110111</tpEvento><nSeqEvento>1</nSeqEvento>
+            <xJust>erro de digitacao</xJust>
+          </infEvento></evento>
+          <retEvento><infEvento><cStat>135</cStat><nProt>135260000123456</nProt></infEvento></retEvento>
+        </procEventoNFe>`;
+
+    it('recupera a chave da nota a partir do Id do evento', () => {
+        const meta = extrairMetadados(eventoSemChNFe, 'procEventoNFe_v1.00.xsd');
+        expect(meta.evento?.chNFeRef).toBe(CHNFE);
+        expect(meta.evento?.tpEvento).toBe('110111');
+    });
+
+    // Mesmo XML, sem o atributo Id: a chave crua tem 53 dígitos e a última
+    // rede é ela própria.
+    it('e quando só sobra a chave crua de 53 dígitos, também', () => {
+        const semId = eventoSemChNFe.replace(`Id="ID110111${CHNFE}201"`, '')
+            .replace('<tpEvento>110111</tpEvento>', `<tpEvento>110111</tpEvento><chNFe></chNFe>`);
+        const meta = extrairMetadados(semId, 'procEventoNFe_v1.00.xsd');
+        // Sem Id nem chNFe legível, a chave do doc não é de 44 dígitos — e é
+        // essa condição que a trava do importer recusa, em vez de gravar.
+        const chaveDigitos = String(meta.chave || '').replace(/\D/g, '');
+        expect(chaveDigitos.length === 44 || chaveDigitos.length === 0
+            || meta.evento?.chNFeRef === CHNFE).toBe(true);
+    });
+});

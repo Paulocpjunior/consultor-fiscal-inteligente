@@ -9,7 +9,24 @@ export interface MetadadosXml {
     tipoDoc: string | null;
     tipoNormalizado: string | null;
     schema: string | null;
-    evento: unknown;
+    /**
+     * Só para XML de evento. `chNFeRef` é a chave (44 dígitos) da nota que o
+     * evento referencia — é ela que decide se o evento é ANEXADO à nota ou se
+     * o import é recusado. Sem ela o evento virava documento fantasma.
+     */
+    evento: {
+        tpEvento: string | null;
+        nSeqEvento: string | null;
+        dhEvento: string | null;
+        xCorrecao: string | null;
+        xJust: string | null;
+        nProt: string | null;
+        cStat: string | null;
+        xMotivo: string | null;
+        chNFeRef: string | null;
+        tipo: string;
+        descricao: string;
+    } | null;
     numero: string | null;
     serie: string | null;
     natOp: string | null;

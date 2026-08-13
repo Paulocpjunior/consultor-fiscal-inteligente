@@ -37,6 +37,24 @@
 //     do total e aparece na lista de "confirmar no CADESP".
 // ============================================================================
 
+// "Evento não é nota" mora no helper de metadados, junto de `docCancelado` e
+// `direcaoEfetivaDoc` — as outras duas réguas que decidem na LEITURA o que o
+// campo gravado não conta direito. Reescrever aqui seria a segunda cópia.
+import { ehRegistroDeEvento } from './xml-metadata-helper.js';
+
+/**
+ * Rótulo de cada causa que segura nota fora do total.
+ *
+ * Elas têm AÇÕES DIFERENTES, e é por isso que o valor bloqueado é quebrado por
+ * causa em vez de sair como um número só: CADESP é conferência de cadastro,
+ * município se resolve relendo o XML, e contraparte ausente é buraco de captura.
+ */
+const ROTULO_BLOQUEIO = {
+    'fornecedor-indefinido': 'Fornecedor sem prova de produtor rural PF — confirmar a natureza jurídica no CADESP',
+    'municipio-ausente': 'Nota sem o município de origem — reler o XML guardado (♻️)',
+    'contraparte-ausente': 'Documento sem fornecedor lido — buraco de captura, conferir em Erros & Logs',
+};
+
 /** Código DIPAM → código equivalente do Registro 1400 da EFD (Manual pág. 29). */
 export const CODIGOS_DIPAM = {
     '1.1': 'SPDIPAM11',
@@ -197,6 +215,12 @@ export function ehMunicipioPaulista(codMunIBGE) {
 }
 
 /** Alíquotas vigentes na competência 'AAAA-MM'. */
+/** Soma das três alíquotas vigentes — a mesma da apuração, nunca escrita à mão. */
+export function percentualFunruralVigente(competencia, tabela = ALIQUOTAS_FUNRURAL_PF) {
+    const a = aliquotasFunruralVigentes(competencia, tabela);
+    return round2(a.inss + a.gilrat + a.senar);
+}
+
 export function aliquotasFunruralVigentes(competencia, tabela = ALIQUOTAS_FUNRURAL_PF) {
     const comp = /^\d{4}-\d{2}$/.test(String(competencia || '')) ? competencia : '9999-12';
     const vigentes = tabela.filter((a) => a.desde <= comp).sort((a, b) => a.desde.localeCompare(b.desde));
@@ -708,8 +732,13 @@ export function dedupNotaProdutorComEntrada(notas) {
 }
 
 export function montarDipamCompetencia({ documentos = [], competencia, empresa = {}, fornecedores = {}, tabelaFunrural = ALIQUOTAS_FUNRURAL_PF }) {
+    // EVENTO NÃO É NOTA. Registro de evento (chave-Id de 53 dígitos começando
+    // pelo tpEvento) nunca tem participante — ele cobrava "reler o fornecedor
+    // do XML" de um arquivo que não tem fornecedor nenhum, para sempre. Caso
+    // 13/08: 435 pendências falsas empurrando as reais para fora da tela.
+    const registrosDeEvento = (documentos || []).filter((d) => ehRegistroDeEvento(d));
     const notas = dedupNotaProdutorComEntrada((documentos || [])
-        .filter((d) => d && !d._merged_into && !d._deleted)
+        .filter((d) => d && !d._merged_into && !d._deleted && !ehRegistroDeEvento(d))
         .map((raw) => normalizarParticipantesDoc(raw))
         .map((d) => classificarNota(d, {
             cadastro: fornecedores[soDigitos((d.emitente || d.prestador || {}).cnpjCpf)]
@@ -800,6 +829,41 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
     const bloqueantes = pendencias.filter((p) => p.codigo === 'fornecedor-indefinido'
         || p.codigo === 'municipio-ausente' || p.codigo === 'contraparte-ausente');
 
+    // ── QUANTO está fora do total, e por QUAL causa ─────────────────────────
+    //
+    // "736 notas fora do total" não diz se o que falta são R$ 200 ou R$ 200 mil,
+    // e por isso não diz por onde começar. Paulo, 13/08: o app apurou
+    // R$ 17.089,31 de FUNRURAL e o certo eram R$ 27.832,92 — a diferença estava
+    // nas notas bloqueadas, mas ninguém tinha como ver isso na tela.
+    //
+    // O valor abaixo é POTENCIAL, não apuração: são compras que VIRARIAM base
+    // se a pendência fosse resolvida. Ele NUNCA é somado ao total — resolver a
+    // pendência é que soma, uma a uma, com a prova do lado.
+    const bloqueio = new Map();
+    for (const n of notas) {
+        if (n.notaOrigemProdutor) continue;
+        const causa = (n.pendencias || []).find((p) => p.codigo === 'fornecedor-indefinido'
+            || p.codigo === 'municipio-ausente' || p.codigo === 'contraparte-ausente');
+        if (!causa) continue;
+        const g = bloqueio.get(causa.codigo) || { codigo: causa.codigo, notas: 0, valor: 0, fornecedores: new Set() };
+        g.notas += 1;
+        g.valor = round2(g.valor + (Number(n.valor) || 0));
+        if (n.fornecedor.doc) g.fornecedores.add(n.fornecedor.doc);
+        bloqueio.set(causa.codigo, g);
+    }
+    const foraDoTotal = Array.from(bloqueio.values())
+        .map((g) => ({
+            codigo: g.codigo,
+            notas: g.notas,
+            valor: g.valor,
+            fornecedores: g.fornecedores.size,
+            // O potencial usa a alíquota VIGENTE na competência — a mesma régua
+            // do cálculo, nunca um percentual escrito à mão aqui.
+            funruralPotencial: round2(g.valor * (percentualFunruralVigente(competencia, tabelaFunrural) / 100)),
+            rotulo: ROTULO_BLOQUEIO[g.codigo] || g.codigo,
+        }))
+        .sort((a, b) => b.valor - a.valor);
+
     return {
         competencia,
         empresa: { id: empresa.id || null, nome: empresa.nome || null, cnpj: empresa.cnpj || null },
@@ -845,6 +909,15 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
         },
         notas,
         pendencias,
+        // O DINHEIRO que está esperando conferência, por causa. "736 notas fora
+        // do total" não diz se falta R$ 200 ou R$ 200 mil — e sem isso não há
+        // por onde começar. NUNCA soma no total: resolver a pendência é que
+        // soma, uma a uma, com a prova do lado.
+        foraDoTotal,
+        // Registro de EVENTO que estava sendo contado como nota (chave-Id de
+        // mais de 44 dígitos). Some da conta, não da tela — total que muda
+        // sozinho faz desconfiar do número certo.
+        registrosDeEvento: registrosDeEvento.length,
         avisos,
         farol: farolDipam({ total, notas: doDipam.length, bloqueantes: bloqueantes.length, pendencias: pendencias.length, funruralNotas: doFunrural.length }),
     };
