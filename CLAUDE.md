@@ -165,6 +165,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   botões (senão o texto quebra em 3 linhas DENTRO do botão). Provado revertendo
   a correção de propósito. Corrigido no mesmo PR em `components/Das/index.tsx`,
   que tinha o mesmo padrão com 8 botões.
+- **MATA-BURRO: TEXTO DE COMMIT NÃO PODE VIRAR CÓDIGO NO WORKFLOW** (13/08,
+  deploy 470). O `Push image` caiu por INFRAESTRUTURA (gate verde: auditoria,
+  testes e build passaram) — e a trava que existe pra transformar queda em issue
+  **caiu junto**. A mensagem do commit era interpolada com `${{ }}` dentro do
+  heredoc, e aquele squash tinha crases e parênteses (`ehDocumentoDeServico`,
+  `useState(...)`): o bash leu tudo como substituição de comando, dezenas de
+  "command not found", exit 1. **O deploy falhou e ninguém foi avisado** — o
+  cenário exato de 12/08 que originou a trava. `${{ }}` é substituído pelo
+  Actions ANTES de o bash existir, então texto de terceiro vira CÓDIGO (era
+  também vetor de injeção, não só bug de aspas). REGRA: dado de fora entra por
+  **`env:`** e o corpo vai por **`--body-file`**; só a 1ª linha da mensagem, que
+  corpo de squash é muro de texto. Teste conta as ocorrências: exatamente UMA,
+  a do `env:`.
 - **MATA-BURRO: DEPLOY QUE FALHA VIRA ISSUE** (13/08, nos DOIS repos). Em 12/08
   dois deploys do app irmão caíram seguidos e ninguém viu: o trabalho ficou
   mesclado na main e FORA DO AR, e a descoberta veio de um print de tela
