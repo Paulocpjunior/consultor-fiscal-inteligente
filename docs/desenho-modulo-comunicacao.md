@@ -162,7 +162,43 @@ MESMO PR que a cria.**
 - Bot de primeira linha ("1 Fiscal · 2 Contábil · …") roteando pra fila;
   relatórios de atendimento (volume, tempo de resposta, por fila/atendente).
 
-## 10. Decisões em aberto (Paulo)
+**F4 — Voz (Calling API da Meta) — DESENHADA, NÃO HABILITADA**
+- Decisão de 13/08: NÃO habilitar agora. Habilitar acende o botão de ligar no
+  WhatsApp do cliente, e chamada que toca no vazio é pior que botão ausente.
+  Enquanto desabilitada, o cliente nem vê a opção — nenhuma expectativa.
+- Modelo Meta (conferido 13/08): receber ligação do cliente é GRÁTIS; fazer
+  ligação paga por minuto (pulsos de 6s). Beta no Brasil desde Q2/2026.
+- **Hipótese que muda o custo da fase**: a Calling API fala SIP, e a telefonia
+  do escritório é o **HitPhone dentro do Teams**. Se o HitPhone aceitar tronco
+  SIP externo, a ligação de WhatsApp toca onde a equipe JÁ atende telefone —
+  a F4 vira integração, não construção de softphone. VERIFICAR com o
+  fornecedor antes de desenhar tela: "aceitam tronco SIP de terceiros?".
+- O IVR da chamada usa as MESMAS filas por departamento do inbox (régua
+  única); gravação só com opt-in; o registro da ligação entra na thread.
+
+## 10. A teia externa — CFI dentro do Teams
+
+O escritório VIVE no Teams (telefonia HitPhone inclusa). Colocar o CFI lá
+dentro é ferramenta na mão de quem já está com o Teams aberto o dia todo.
+
+- **Nível 1 — aba de canal**: qualquer dono de canal adiciona uma aba
+  "Website" com a URL do CFI. Zero código NOSSO de app, mas EXIGE o ajuste de
+  frame (abaixo).
+- **Nível 2 — app do tenant**: manifest no Developer Portal da Microsoft
+  (nome, logo SP, static tabs) publicado em "Apps da organização"; o admin
+  fixa na barra lateral de todo mundo por política. Os 5 módulos podem ser 5
+  abas do mesmo app. É a forma "app de verdade" — instalável, com identidade.
+- **Requisito técnico (os dois níveis)**: hoje o `server.js` RECUSA ser
+  embutido (helmet padrão = `frame-ancestors 'self'` — correto contra
+  clickjacking). O ajuste é liberar SÓ os domínios do Teams
+  (`teams.microsoft.com`, `*.cloud.microsoft`, `*.office.com`) no
+  `frameAncestors` — mais ninguém. Um teste trava a lista.
+- **Login funciona embutido**: o CFI autentica por e-mail/senha do Firebase
+  (`signInWithEmailAndPassword`), sem popup de terceiro — o caso que quebra
+  dentro de iframe não existe aqui. SSO com a conta Microsoft do tenant é
+  melhoria futura, não pré-requisito.
+
+## 11. Decisões em aberto (Paulo)
 
 1. **Retenção de conversas**: guardar para sempre ou expurgo após N anos?
 2. **Recepção**: quem enxerga a fila Recepção — todos os atendentes (proposta)
