@@ -656,7 +656,7 @@ export const calcularResumoEmpresa = (
                     itensCalculo.push({ cnae: cnaeCode, anexo: anexoCode as SimplesNacionalAnexo,
                         valor: item.valor, issRetido: item.issRetido, icmsSt: item.icmsSt,
                         isSup: item.isSup, isMonofasico: item.isMonofasico,
-                        isImune: item.isImune, isExterior: item.isExterior });
+                        isImune: item.isImune, isIsento: !!item.isIsento, isExterior: item.isExterior });
                 } else if (typeof value === 'number') {
                     itensCalculo.push({ cnae: cnaeCode, anexo: anexoCode as SimplesNacionalAnexo,
                         valor: value, issRetido: false, icmsSt: false, isSup: false,
@@ -711,6 +711,17 @@ export const calcularResumoEmpresa = (
             if (item.isImune) {
                 if (reparticao.ICMS) percentualReducao += reparticao.ICMS;
                 if (reparticao.IPI)  percentualReducao += reparticao.IPI;
+            } else if (item.isIsento) {
+                // ISENÇÃO ≠ IMUNIDADE, e a diferença aparece no que sai do DAS:
+                // a imunidade tira ICMS **e** IPI; a isenção tira **só o ICMS**.
+                // Extrato real da JAGUAREXPORT 07/2026 (receita 63.878,60,
+                // "Isenção de ICMS"): ICMS 0,00 e o resto cobrado normalmente —
+                // IRPJ 335,49 · CSLL 213,49 · COFINS 777,12 · PIS 168,35 ·
+                // CPP 2.561,92 · total 4.056,37.
+                //
+                // O formulário do e-CAC corrobora: o `<select>` do IPI (1008)
+                // não tem "Isenção/Redução", ele para no 3.
+                if (reparticao.ICMS) percentualReducao += reparticao.ICMS;
             } else if (item.isExterior) {
                 (['PIS','COFINS','ISS','ICMS','IPI'] as const).forEach(t => {
                     const v = reparticao[t];
@@ -742,7 +753,7 @@ export const calcularResumoEmpresa = (
             anexoOriginal, faturamento: item.valor,
             aliquotaNominal: faixa?.aliquota ?? 0, aliquotaEfetiva: aliq_final,
             valorDas: valorDasItem, issRetido: item.issRetido, icmsSt: item.icmsSt,
-            isMonofasico: item.isMonofasico, isImune: item.isImune, isExterior: item.isExterior
+            isMonofasico: item.isMonofasico, isImune: item.isImune, isIsento: !!item.isIsento, isExterior: item.isExterior
         });
     });
 

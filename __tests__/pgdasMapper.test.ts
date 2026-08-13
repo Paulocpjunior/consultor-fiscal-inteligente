@@ -726,3 +726,63 @@ describe('imunidade viaja na declaração — caso POLO CULTURAL 06/2026', () =>
         expect(quals).toContainEqual({ codigoTributo: 1008, id: 1 });
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ISENÇÃO ≠ IMUNIDADE — caso JAGUAREXPORT 07/2026.
+//
+// Extrato real: receita 63.878,60 · "Parcela 1: R$ 63.878,60" · "Isenção de
+// ICMS: R$ 63.878,60" · coluna ICMS = 0,00, e o resto cobrado normalmente
+// (IRPJ 335,49 · CSLL 213,49 · COFINS 777,12 · PIS 168,35 · CPP 2.561,92 ·
+// total 4.056,37).
+//
+// Compare com a POLO CULTURAL: "Imunidade tributária de: ICMS, IPI." — SEM
+// valor, porque a imunidade é um ESTADO da parcela inteira; a isenção é um
+// VALOR dela. Naturezas diferentes, efeitos diferentes no DAS.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('isenção de ICMS viaja na declaração — caso JAGUAREXPORT 07/2026', () => {
+    const payloadIsento = (over: any = {}) => mapPgdasPayload({
+        empresa: { ...baseEmpresa, anexo: 'I' },
+        resumo: baseResumo,
+        mesApuracao: new Date(2026, 6, 1),
+        faturamentoPorCnae: {
+            'principal::0::4632001::I': { ...emptyState, valor: '63.878,60', isIsento: true, ...over },
+        },
+        filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
+    });
+
+    it('emite Isenção/Redução (id 4) SÓ para ICMS — o IPI não tem esse campo', () => {
+        const receita = payloadIsento().declaracao.estabelecimentos[0].atividades[0].receitasAtividade[0];
+        expect(receita.valor).toBe(63878.60);
+        expect(receita.qualificacoesTributarias).toEqual([{ codigoTributo: 1007, id: 4 }]);
+    });
+
+    it('NÃO emite imunidade junto — são naturezas diferentes', () => {
+        const quals = payloadIsento().declaracao.estabelecimentos[0].atividades[0]
+            .receitasAtividade[0].qualificacoesTributarias || [];
+        expect(quals.some((q) => q.id === 1)).toBe(false);
+        expect(quals.some((q) => q.codigoTributo === 1008)).toBe(false);
+    });
+
+    // A rede de baixo do excludente da tela: se as duas chegarem marcadas, a
+    // IMUNIDADE vence e a isenção NÃO viaja junto. Mandar as duas no mesmo
+    // tributo é a forma do MSG_ISN_032 — derruba a ENTREGA INTEIRA.
+    it('marcadas as DUAS, só a imunidade viaja (nunca as duas no mesmo tributo)', () => {
+        const quals = payloadIsento({ isImune: true }).declaracao.estabelecimentos[0]
+            .atividades[0].receitasAtividade[0].qualificacoesTributarias || [];
+        expect(quals).toEqual([
+            { codigoTributo: 1007, id: 1 },
+            { codigoTributo: 1008, id: 1 },
+        ]);
+        expect(quals.some((q) => q.id === 4)).toBe(false);
+    });
+
+    it('o aviso diz que o IPI NÃO sai, e manda conferir o extrato', () => {
+        const avisos = avisosDoPayload({
+            'principal::0::4632001::I': { ...emptyState, valor: '63.878,60', isIsento: true },
+        } as any);
+        expect(avisos[0]).toContain('ISENTA');
+        expect(avisos[0]).toContain('1007');
+        expect(avisos[0]).toMatch(/IPI NÃO|IPI não/);
+        expect(avisos[0]).toMatch(/extrato/);
+    });
+});
