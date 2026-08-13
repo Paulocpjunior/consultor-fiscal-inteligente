@@ -54,6 +54,7 @@ const ROTULO_BLOQUEIO = {
     'fornecedor-sociedade': 'Fornecedor é sociedade pela razão social (LTDA/S.A./EIRELI) — confirmar como pessoa jurídica, 1 clique',
     'cadastro-contraditorio': 'Cadastrado como produtor rural PF, mas a razão social é de sociedade — CORRIGIR o cadastro (estava somando FUNRURAL indevido)',
     'funrural-sem-producao-rural': 'Compra de pessoa física que NÃO é produção rural — sem sub-rogação (Lei 8.212/91 art. 25)',
+    'funrural-documento-de-servico': 'Nota de SERVIÇO, não de mercadoria — serviço de pessoa física não gera FUNRURAL (é R-2010)',
     'municipio-ausente': 'Nota sem o município de origem — reler o XML guardado (♻️)',
     'contraparte-ausente': 'Documento sem fornecedor lido — buraco de captura, conferir em Erros & Logs',
 };
@@ -221,6 +222,39 @@ const trunc2 = (n) => Math.trunc((Number(n) + 1e-9) * 100) / 100;
 export function ehIeProdutorRuralSP(ie) {
     const s = String(ie ?? '').trim().toUpperCase();
     return /^P\D*\d/.test(s);
+}
+
+/**
+ * DOCUMENTO DE SERVIÇO (NFS-e, CT-e) — nunca é aquisição de produção rural.
+ *
+ * Paulo, 13/08, apontando os que sobraram no FUNRURAL depois das outras travas:
+ * *"ainda esses"* — COSME QUEIROZ (BA), RONALDO SOARES (MG), NUNO MONTEIRO (MG),
+ * EWERTON RENE, e antes deles o tabelionato ALEXANDRE ARCARO 2º TP.
+ *
+ * O painel já denunciava sozinho: **DIPAM R$ 729 mil contra uma base de FUNRURAL
+ * de R$ 1,89 milhão**. A DIPAM exige CFOP de compra e por isso descarta esses
+ * documentos; o FUNRURAL não exigia nada além de o fornecedor ser pessoa física.
+ *
+ * Documento de serviço não tem CFOP nem NCM — então a prova NEGATIVA de "não é
+ * produção rural" (itens lidos e nenhum agro) não alcança ele: passa batido por
+ * ausência. A prova aqui é POSITIVA e definitiva: serviço é serviço. A Lei
+ * 8.212/91 art. 25 incide sobre a comercialização da PRODUÇÃO RURAL, que é
+ * mercadoria e circula em NF-e / nota de produtor — nunca em nota de serviço.
+ *
+ * Reconhecido pelo que o documento É, não pelo `modelo`: `modeloDoDoc` cai em
+ * '55' quando o campo não foi gravado, e a NFS-e não tem chave de 44 dígitos —
+ * confiar nele faria justamente a NFS-e passar como NF-e.
+ */
+export function ehDocumentoDeServico(d) {
+    const tipo = String(d?.tipoDoc || d?.tipo || '').toLowerCase().replace(/[^a-z]/g, '');
+    if (tipo.includes('nfse') || tipo.includes('servico') || tipo.includes('cte')) return true;
+    const modelo = soDigitos(d?.modelo);
+    if (['57', '67'].includes(modelo)) return true;              // CT-e e CT-e OS
+    // Blocos que só existem em nota de serviço (é como o próprio app já
+    // normaliza prestador/tomador da NFS-e).
+    if (d?.prestador || d?.tomador) return true;
+    if (d?.codigoServicoMunicipal || d?.itemLc116 || d?.discriminacao) return true;
+    return false;
 }
 
 /** NCM de gênero agropecuário/hortifrutigranjeiro? */
@@ -798,6 +832,19 @@ function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevol
         }
         return fora('Fornecedor não é produtor rural pessoa física — quem recolhe é o próprio emitente.');
     }
+    // Documento de SERVIÇO nunca é aquisição de produção rural — e ele não tem
+    // CFOP nem NCM, então a prova negativa abaixo não o alcança.
+    if (ehDocumentoDeServico(doc)) {
+        pendencias.push(pendencia(
+            'funrural-documento-de-servico',
+            `${base.fornecedor.nome}, documento ${base.numero}: é nota de SERVIÇO, não de mercadoria.`,
+            'A sub-rogação é sobre a comercialização da produção rural (Lei 8.212/91 art. 25), que circula em '
+            + 'NF-e ou nota de produtor. Serviço prestado por pessoa física não gera FUNRURAL — se houver '
+            + 'retenção previdenciária, ela é do R-2010, outro evento.',
+        ));
+        return fora('Documento de serviço — a sub-rogação é sobre a aquisição de produção rural, que é mercadoria.');
+    }
+
     // ── A SUB-ROGAÇÃO É SOBRE A AQUISIÇÃO DE PRODUÇÃO RURAL ────────────────
     //
     // Paulo, 13/08: *"esses dois também têm que sair"* — EMILIO CAMPIGOTTO

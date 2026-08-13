@@ -1032,6 +1032,50 @@ describe('foraDoTotal — o dinheiro que espera conferência', () => {
             expect(painel.dipam.total).toBe(0);
         });
 
+        // ═══════════════════════════════════════════════════════════════════
+        // NOTA DE SERVIÇO NUNCA É AQUISIÇÃO DE PRODUÇÃO RURAL.
+        //
+        // Paulo, 13/08: *"ainda esses"* — COSME QUEIROZ (BA), RONALDO SOARES
+        // (MG), NUNO MONTEIRO (MG), EWERTON RENE, e antes o tabelionato
+        // ALEXANDRE ARCARO 2º TP. O painel já denunciava sozinho: DIPAM
+        // R$ 729 mil contra base de FUNRURAL de R$ 1,89 MILHÃO — a DIPAM exige
+        // CFOP de compra e descartava esses documentos; o FUNRURAL não exigia
+        // nada além de o fornecedor ser pessoa física.
+        //
+        // A prova negativa (itens lidos e nenhum agro) NÃO alcança nota de
+        // serviço: ela não tem NCM nem CFOP, então passava por AUSÊNCIA. Aqui a
+        // prova é POSITIVA: serviço é serviço.
+        // ═══════════════════════════════════════════════════════════════════
+        it('NFS-e de pessoa física NÃO gera FUNRURAL — nem sem itens', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [{
+                    chave: 'nfse-39971326', numero: '39971326', competencia: '2026-07',
+                    direcao: 'entrada', status: 'autorizado', tipoDoc: 'nfse', valorTotal: 15750,
+                    prestador: { cnpjCpf: '01309992533', nome: 'COSME QUEIROZ DE SANTANA', uf: 'BA' },
+                    itens: [],
+                }],
+                competencia: '2026-07', empresa,
+            });
+            expect(painel.funrural.total).toBe(0);
+            const p = painel.pendencias.find((x: any) => x.codigo === 'funrural-documento-de-servico');
+            expect(p).toBeTruthy();
+            expect(p.acao).toMatch(/R-2010/);
+        });
+
+        it('CT-e (frete) também não gera', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [dePF({ modelo: '57', itens: [] })], competencia: '2026-07', empresa,
+            });
+            expect(painel.funrural.total).toBe(0);
+        });
+
+        it('NF-e de mercadoria segue gerando — a trava é sobre SERVIÇO, não sobre tudo', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [dePF()], competencia: '2026-07', empresa,
+            });
+            expect(painel.funrural.total).toBeGreaterThan(0);
+        });
+
         it('nota SEM itens capturados não é bloqueada — ausência não é prova', () => {
             // Bloquear no escuro tiraria FUNRURAL legítimo de nota cujo detalhe
             // não foi capturado.
