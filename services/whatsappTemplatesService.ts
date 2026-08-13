@@ -61,3 +61,26 @@ export const salvarTemplate = (t: Partial<WhatsappTemplate>) =>
 /** Desativa (soft — ativo:false; o envio nunca escolhe template inativo). */
 export const desativarTemplate = (id: string) =>
     req<{}>(`/api/admin/whatsapp/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+/** Um template APROVADO na Meta, como ele é lá (não como foi digitado aqui). */
+export interface TemplateDaMeta {
+    nome: string;
+    idioma: string;
+    status: string;
+    categoria: string;
+    temDocumento: boolean;
+    formatoCabecalho: string;
+    /** Contagem de {{n}} no corpo — é ela que tem de bater com o schema. */
+    variaveis: number;
+    corpo: string;
+}
+
+/**
+ * Lista os templates aprovados direto na Meta, para ESCOLHER em vez de digitar.
+ * Nome de template aprovado não é opinião — e digitar o que dá pra escolher foi
+ * o que custou três recusas seguidas em 13/08 (`_impostos` × `_imposto` ×
+ * `_guia_imposto`).
+ */
+export const listarTemplatesDaMeta = () =>
+    req<{ templates: TemplateDaMeta[]; acao?: string; faltas?: string[] }>(
+        '/api/admin/whatsapp/templates-meta');

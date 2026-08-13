@@ -11,7 +11,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CogIcon, CloseIcon, UserGroupIcon } from './Icons';
 import {
     listarTemplates, salvarTemplate, desativarTemplate, statusWhatsapp,
-    WhatsappTemplate, TemplateVariavel,
+    listarTemplatesDaMeta,
+    WhatsappTemplate, TemplateVariavel, TemplateDaMeta,
 } from '../services/whatsappTemplatesService';
 
 interface Props {
@@ -57,6 +58,9 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
     // contagem de hooks muda entre um render e outro e o React derruba a tela
     // inteira com o erro #310. Foi o que aconteceu em 13/08.
     const [idAnterior, setIdAnterior] = useState<string | null>(null);
+    // Templates APROVADOS na Meta — para escolher em vez de digitar.
+    const [daMeta, setDaMeta] = useState<TemplateDaMeta[] | null>(null);
+    const [buscandoMeta, setBuscandoMeta] = useState(false);
 
     const recarregar = useCallback(async () => {
         setCarregando(true);
@@ -88,6 +92,47 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
         });
         setEditando(true);
         setMsg(null);
+    };
+
+    const buscarNaMeta = async () => {
+        setBuscandoMeta(true);
+        setMsg(null);
+        try {
+            const r = await listarTemplatesDaMeta();
+            if (!r.ok) {
+                setMsg({ texto: `${r.error}${r.acao ? ` — ${r.acao}` : ''}`, tipo: 'erro' });
+                return;
+            }
+            setDaMeta(r.templates || []);
+        } finally {
+            setBuscandoMeta(false);
+        }
+    };
+
+    /**
+     * Preenche o formulário com o que a META diz — nome, idioma, cabeçalho e a
+     * CONTAGEM de variáveis. Os três primeiros eram digitação livre e o último
+     * era contado a olho; errar qualquer um recusa o envio (132000/132012).
+     *
+     * Os RÓTULOS das variáveis continuam sendo escritos por quem cadastra: a
+     * Meta sabe que existem 3, não sabe que a 1ª é o imposto. Elas nascem
+     * VAZIAS de propósito — chave em branco é recusada na gravação, então
+     * ninguém transmite com "variável 1" sem significado.
+     */
+    const usarDaMeta = (t: TemplateDaMeta) => {
+        setForm((f) => ({
+            ...f,
+            nome: t.nome,
+            idioma: t.idioma,
+            temDocumento: t.temDocumento,
+            variaveis: Array.from({ length: t.variaveis }, (_, i) => f.variaveis[i] || { chave: '', rotulo: '' }),
+        }));
+        setMsg({
+            texto: `"${t.nome}" carregado da Meta: ${t.variaveis} variável(is), cabeçalho `
+                + `${t.formatoCabecalho}${t.temDocumento ? ' (leva o PDF)' : ' — NÃO leva anexo'}. `
+                + 'Dê o significado de cada variável antes de salvar.',
+            tipo: 'ok',
+        });
     };
 
     const addVar = () => setForm((f) => ({ ...f, variaveis: [...f.variaveis, { chave: '', rotulo: '' }] }));
@@ -221,6 +266,64 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ── ESCOLHER na Meta, em vez de DIGITAR ───────────────
+                            Nome de template aprovado não é opinião: a Meta tem a
+                            lista. Digitar o que dá pra escolher custou TRÊS
+                            recusas seguidas em 13/08 (`_impostos` × `_imposto` ×
+                            `_guia_imposto`) — e cada uma só aparece na hora do
+                            envio, na frente do cliente. */}
+                        <div className="mt-4 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 p-3">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <p className="text-[11px] text-sky-900 dark:text-sky-200">
+                                    <strong>Não digite o nome do template.</strong> Traga a lista da Meta e escolha —
+                                    o nome, o idioma, o cabeçalho e a quantidade de variáveis vêm de lá.
+                                </p>
+                                <button
+                                    onClick={buscarNaMeta}
+                                    disabled={buscandoMeta}
+                                    className="text-[11px] px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold disabled:opacity-50 whitespace-nowrap"
+                                >
+                                    {buscandoMeta ? 'Buscando…' : '🔄 Templates aprovados na Meta'}
+                                </button>
+                            </div>
+                            {daMeta && daMeta.length === 0 && (
+                                <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">
+                                    A Meta não devolveu nenhum template nesta conta. Confira no Gerenciador do WhatsApp
+                                    se há algum APROVADO.
+                                </p>
+                            )}
+                            {daMeta && daMeta.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                    {daMeta.map((t) => {
+                                        const aprovado = t.status === 'APPROVED';
+                                        return (
+                                            <div key={`${t.nome}|${t.idioma}`} className="flex items-center justify-between gap-2 rounded bg-white dark:bg-slate-800 px-2 py-1">
+                                                <div className="min-w-0">
+                                                    <p className="text-[11px] font-mono font-bold text-slate-700 dark:text-slate-200 break-all">
+                                                        {t.nome} <span className="font-sans font-normal text-slate-400">({t.idioma})</span>
+                                                    </p>
+                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                        {t.status} · {t.categoria} · {t.variaveis} variável(is) ·{' '}
+                                                        {t.temDocumento
+                                                            ? <span className="text-emerald-600 dark:text-emerald-400">📎 leva o PDF</span>
+                                                            : <span className="text-amber-600 dark:text-amber-400">cabeçalho {t.formatoCabecalho} — NÃO leva anexo</span>}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={() => usarDaMeta(t)}
+                                                    disabled={!aprovado}
+                                                    title={aprovado ? 'Preencher o formulário com este template' : 'Só template APROVADO pode ser usado no envio'}
+                                                    className="text-[10px] px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 font-semibold disabled:opacity-40 whitespace-nowrap"
+                                                >
+                                                    usar este
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>

@@ -26,7 +26,7 @@ import {
     validarTemplate, resolverTemplate, montarVariaveisPorSchema,
     DEPARTAMENTOS_WHATSAPP,
 } from './whatsapp-templates.js';
-import { enviarTemplateWhatsapp, configWhatsapp } from './whatsapp-cloud.js';
+import { enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados } from './whatsapp-cloud.js';
 
 const router = Router();
 const COLECAO = 'whatsapp_templates';
@@ -61,6 +61,25 @@ router.get('/templates', autorizar, async (req, res) => {
         return res.json({ ok: true, departamentos: [...DEPARTAMENTOS_WHATSAPP], templates });
     } catch (e) {
         console.error('[whatsapp/templates GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ─── Templates APROVADOS na Meta (para ESCOLHER, não digitar) ───────────────
+//
+// Nome de template aprovado não é opinião: a Meta tem a lista. Digitar o que dá
+// pra escolher é criar erro que não precisava existir — foram TRÊS recusas
+// seguidas em 13/08 por causa de um `guia_` a mais ou a menos.
+//
+// A resposta traz também o formato do cabeçalho e a CONTAGEM de variáveis do
+// corpo, que eram preenchidos a dedo e recusam o envio quando erram.
+router.get('/templates-meta', requireAdmin, async (_req, res) => {
+    try {
+        const r = await listarTemplatesAprovados();
+        if (!r.ok) return res.status(502).json({ ok: false, error: r.erro, acao: r.acao, faltas: r.faltas });
+        return res.json({ ok: true, templates: r.templates });
+    } catch (e) {
+        console.error('[whatsapp/templates-meta]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
