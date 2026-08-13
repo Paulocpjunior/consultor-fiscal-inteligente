@@ -48,8 +48,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   emitida é RECUSADA (duas guias da mesma cota = cobrança em dobro); falha ao
   gravar a agenda não derruba a emissão que já aconteceu, mas é DITA na tela
   (agenda perdida em silêncio é pior que não ter agenda). O mínimo de R$ 1.000
-  por quota e a divisão em centavos saíram do orquestrador pro núcleo — eram
+  por cota e a divisão em centavos saíram do orquestrador pro núcleo — eram
   cópia lá dentro.
+  📅 **A COTA SAI NO DIA 1º DO MÊS DELA, NÃO NO DIA DO VENCIMENTO** (Paulo, no
+  mesmo dia: *"não posso enviar na data para o cliente"*). O comportamento
+  sempre foi esse — quem mentia era a FRASE, que dizia "geradas na data delas" e
+  fazia parecer que a guia só nasceria no vencimento, sem tempo de mandar. Quem
+  vence em 31/08 pode ser gerado e enviado em 01/08: **um mês inteiro de folga**.
+  Régua que a tela agora diz junto do número. E a grafia é **COTA** em tudo que
+  aparece (a lei escreve "quota"; quem lê a tela é o colaborador) — teste varre
+  o painel e barra a mistura das duas grafias.
+  ⚠️ **LISTA VAZIA NÃO É RESPOSTA**: o estado vazio dizia "ninguém escolheu
+  parcelar", afirmação FALSA por construção — a agenda nasceu em 13/08 e tudo o
+  que foi parcelado antes saiu de uma vez pelo caminho antigo, sem passar por
+  ela. Agora ele diz o que NÃO sabe e manda conferir no e-CAC as cotas 2/3
+  emitidas antes (essas podem ter saído a menor).
 - **MATA-BURRO: TRABALHO QUE *PARECE* ENTREGUE — as duas formas, no mesmo dia**
   (13/08). Não é preguiça nem falta de teste: nos dois casos o teste estava
   VERDE e o PR dizia "feito".

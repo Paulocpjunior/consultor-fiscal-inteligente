@@ -349,7 +349,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
         if (!user) return;
         const infoQuotas = quotasTrimestrais > 1
             ? `\n\nIRPJ/CSLL trimestrais em ${quotasTrimestrais} quotas — quota 1 no vencimento normal; `
-              + 'quotas 2/3 no último dia útil dos meses seguintes, com juros SELIC+1% calculados pelo SICALC.'
+              + 'cotas 2/3 no último dia útil dos meses seguintes, com juros SELIC+1% calculados pelo SICALC.'
             : '';
         if (!confirm(
             `Emitir guias separadas por vencimento para ${declaracao.empresaCnpj} ref ${formatPaLabel(declaracao.anoPA, declaracao.mesPA)}?\n\n`
@@ -740,9 +740,9 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                     onChange={(e) => setQuotasTrimestrais(Number(e.target.value) as 1 | 2 | 3)}
                                                     className="border dark:border-slate-600 rounded px-2 py-1 text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100"
                                                 >
-                                                    <option value={1}>Quota única</option>
-                                                    <option value={2}>2 quotas</option>
-                                                    <option value={3}>3 quotas</option>
+                                                    <option value={1}>Cota única</option>
+                                                    <option value={2}>2 cotas</option>
+                                                    <option value={3}>3 cotas</option>
                                                 </select>
                                             </label>
                                             <button
@@ -754,12 +754,14 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                             </button>
                                             {quotasTrimestrais > 1 && (
                                                 <p className="w-full text-xs text-slate-500 dark:text-slate-400">
-                                                    Quotas valem só para IRPJ/CSLL trimestrais acima de R$ 2.000 (mínimo
-                                                    R$ 1.000 por quota — Lei 9.430). PIS/COFINS não têm quota.
-                                                    {' '}<strong>Sai só a quota deste mês</strong>: o acréscimo da 2ª e da 3ª
+                                                    Cotas valem só para IRPJ/CSLL trimestrais acima de R$ 2.000 (mínimo
+                                                    R$ 1.000 por cota — Lei 9.430). PIS/COFINS não têm cota.
+                                                    {' '}<strong>Sai só a cota deste mês</strong>: o acréscimo da 2ª e da 3ª
                                                     é a SELIC acumulada até o mês anterior ao pagamento + 1%, que ainda não
                                                     foi publicada — emitir hoje sairia a menor. Elas ficam agendadas em
-                                                    <strong> 🧮 Cotas do mês</strong> e são geradas na data delas.
+                                                    <strong> 🧮 Cotas do mês</strong> e podem ser geradas já no
+                                                    <strong> dia 1º do mês do vencimento</strong> — o mês inteiro de folga
+                                                    para conferir e mandar ao cliente antes de vencer.
                                                 </p>
                                             )}
                                         </div>
@@ -767,17 +769,18 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                     {darfsSeparados?.agendadas && darfsSeparados.agendadas.length > 0 && (
                                         <div className="border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 rounded p-3">
                                             <p className="text-xs font-semibold text-sky-900 dark:text-sky-200">
-                                                🧮 {darfsSeparados.agendadas.length} quota(s) ficaram agendadas — não são guias ainda
+                                                🧮 {darfsSeparados.agendadas.length} cota(s) ficaram agendadas — não são guias ainda
                                             </p>
                                             {darfsSeparados.agendadas.map((a, i) => (
                                                 <p key={i} className="text-[11px] text-sky-900 dark:text-sky-200 mt-1">
-                                                    Quota {a.cota}/{a.totalCotas} · {a.codigo}-{a.extensao} · principal
+                                                    Cota {a.cota}/{a.totalCotas} · {a.codigo}-{a.extensao} · principal
                                                     {' '}R$ {Number(a.valorPrincipal || 0).toFixed(2)} · vence {a.vencimento}
                                                 </p>
                                             ))}
                                             <p className="text-[11px] text-sky-800 dark:text-sky-300 mt-2">
-                                                Elas aparecem na aba <strong>🧮 Cotas do mês</strong> no mês do vencimento, e é lá
-                                                que a guia nasce com o acréscimo certo. Nada foi enviado ao cliente.
+                                                Elas aparecem na aba <strong>🧮 Cotas do mês</strong> a partir do dia 1º do mês do
+                                                vencimento, e é lá que a guia nasce com o acréscimo certo — com o mês inteiro para
+                                                enviar ao cliente. Nada foi enviado ao cliente agora.
                                                 {darfsSeparados.agendaGravada && darfsSeparados.agendaGravada.startsWith('falhou') && (
                                                     <span className="block text-red-700 dark:text-red-400 mt-1">
                                                         ⚠ A agenda NÃO foi gravada ({darfsSeparados.agendaGravada}) — anote o vencimento
@@ -831,7 +834,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                                 <span className="text-slate-700 dark:text-slate-200">{g.descricao || 'DARF'}</span>
                                                                 {g.cota != null && (
                                                                     <span className="ml-2 text-xs px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 rounded">
-                                                                        quota {g.cota}/{g.totalCotas}
+                                                                        cota {g.cota}/{g.totalCotas}
                                                                     </span>
                                                                 )}
                                                                 <span className="ml-2 font-semibold">

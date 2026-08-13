@@ -94,7 +94,7 @@ describe('limites legais (Lei 9.430 art. 5º §1º)', () => {
     it('nenhuma quota abaixo de R$ 1.000 — cai para quota única COM aviso', () => {
         const p = planejarQuotas({ valor: 2500, anoPA: 2026, mesPA: 6, quotas: 3, hoje: '2026-07-15' });
         expect(p.quotasEfetivas).toBe(1);
-        expect(p.aviso).toMatch(/mínimo R\$ 1\.000,00 por quota/);
+        expect(p.aviso).toMatch(/mínimo R\$ 1\.000,00 por cota/);
         // Nunca falha em silêncio: sai UMA guia, e a tela sabe dizer por quê.
         expect(p.agora).toHaveLength(1);
         expect(p.agora[0].valorPrincipal).toBe(2500);
@@ -121,11 +121,23 @@ describe('limites legais (Lei 9.430 art. 5º §1º)', () => {
 });
 
 describe('o que a tela diz depois de emitir', () => {
-    it('a frase traz a PRÓXIMA quota e a data — uma guia só parece emissão incompleta', () => {
+    it('a frase traz a PRÓXIMA cota e A PARTIR DE QUANDO ela pode sair', () => {
+        // Paulo, 13/08: *"não posso enviar na data para o cliente"* — a frase
+        // dizia "geradas na data delas" e fazia parecer que a guia só nasce no
+        // DIA do vencimento. Ela nasce no dia 1º do mês dele: um mês de folga
+        // para conferir e mandar. O comportamento sempre foi esse; a frase é
+        // que mentia, e frase que assusta à toa faz a equipe evitar o recurso.
         const frase = resumoDoPlano(planejarQuotas({ valor: 9000, anoPA: 2026, mesPA: 6, quotas: 3, hoje: '2026-07-15' }))!;
-        expect(frase).toMatch(/Quota 1 de 3 emitida/);
-        expect(frase).toMatch(/2026-08/);
+        expect(frase).toMatch(/Cota 1 de 3 emitida/);
+        expect(frase).toMatch(/a partir de 01\/08\/2026/);
+        expect(frase).toMatch(/vence em 31\/08/);
+        expect(frase).toMatch(/mês inteiro para enviar ao cliente/);
         expect(frase).toMatch(/Cotas do mês/);
+    });
+
+    it('e a cota REALMENTE sai no dia 1º do mês dela (não é só texto)', () => {
+        const p = planejarQuotas({ valor: 9000, anoPA: 2026, mesPA: 6, quotas: 3, hoje: '2026-08-01' });
+        expect(p.agora.map((l: any) => l.cota)).toContain(2);
     });
 });
 
@@ -181,7 +193,20 @@ describe('o caminho inteiro existe', () => {
         expect(painel).toMatch(/emitirQuotaAgendada/);
     });
 
-    it('a tela não some com a quota atrasada', () => {
+    it('a TELA fala "cota", a grafia da casa (Paulo, 13/08)', () => {
+        // Lei 9.430 escreve "quota"; o escritório escreve COTA, e a tela é
+        // lida pelo colaborador. Misturar as duas grafias na mesma tela foi o
+        // que o Paulo marcou no print. Identificador de código pode continuar
+        // `quotas` — o que a régua vigia é o TEXTO QUE APARECE.
+        const textoVisivel = painel
+            .split('\n')
+            .filter((l: string) => !l.trim().startsWith('*') && !l.trim().startsWith('//') && !l.trim().startsWith('/*'))
+            .join('\n')
+            .replace(/QuotasDoMesPanel|listarQuotasAgendadas|emitirQuotaAgendada|DctfwebQuotaAgendada|setQuotas|quotas\b/g, '');
+        expect(textoVisivel).not.toMatch(/[Qq]uota/);
+    });
+
+    it('a tela não some com a cota atrasada', () => {
         expect(painel).toMatch(/atrasada/);
         expect(painel).toMatch(/gerando multa/);
     });
