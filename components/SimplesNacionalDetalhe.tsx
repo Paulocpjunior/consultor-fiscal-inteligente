@@ -9,7 +9,7 @@ import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
 import CfopCorrelacaoModal from './CfopCorrelacaoModal';
 import { useConfirm, usePrompt } from './dialog/DialogProvider';
 import {
-    emitirDasRegular, declararSemMovimento, getAtividadesDeclaradas,
+    emitirDasRegular, declararSemMovimento, sondarFormaSemMovimento, getAtividadesDeclaradas,
     getCodigoAtividadeIssFixo, salvarCodigoAtividadeIssFixo,
 } from '../services/dasService';
 import {
@@ -604,6 +604,41 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     // O botão só aparece com a apuração ZERADA — e mesmo aí a confirmação diz,
     // com todas as letras, que o app prova que NÃO CAPTUROU nada, não que a
     // empresa não faturou. Quem afirma é a pessoa, e fica registrado quem foi.
+    // SONDA da forma do "sem movimento" — admin-only.
+    //
+    // O botão de declarar está bloqueado porque a forma que o SN-Entregar
+    // aceita não foi confirmada, e payload de entrega não se adivinha. A sonda
+    // PERGUNTA ao SERPRO usando o modo VALIDAÇÃO (o mesmo de onde já vem a
+    // MSG_ISN_023 hoje): nada é transmitido em nenhum desfecho.
+    const [sondando, setSondando] = useState(false);
+    const handleSondarSemMovimento = async () => {
+        if (!empresa?.cnpj) return;
+        // Mesma derivação dos outros handlers: a competência é o mês em
+        // apuração na tela, não um campo à parte.
+        const competencia = `${mesApuracao.getFullYear()}-${String(mesApuracao.getMonth() + 1).padStart(2, '0')}`;
+        if (!window.confirm(
+            'Perguntar ao SERPRO qual forma de declaração sem movimento ele aceita?\n\n'
+            + 'Isto usa o modo VALIDAÇÃO — NADA é transmitido, em nenhum resultado. '
+            + 'Gasta algumas chamadas pagas do SERPRO.',
+        )) return;
+        setSondando(true);
+        try {
+            const r = await sondarFormaSemMovimento(currentUser ?? null, {
+                empresaCnpj: empresa.cnpj, competencia,
+            });
+            const detalhe = (r.candidatos || [])
+                .map(c => `• ${c.nome}: ${c.situacao}${c.codigo ? ` (${c.codigo})` : ''}`)
+                .join('\n');
+            // O veredito vem inteiro: quando nenhuma forma passa, são as
+            // RECUSAS nomeadas que servem pra abrir o chamado no SERPRO.
+            onShowToast(`${r.veredito.resumo}\n\n${detalhe}`);
+        } catch (e: any) {
+            onShowToast(e?.message || 'Falha ao sondar.');
+        } finally {
+            setSondando(false);
+        }
+    };
+
     const handleDeclararSemMovimento = async () => {
         // Mesma derivação do handleEmitirDasRegular: a competência é o mês em
         // apuração na tela, não um campo à parte.
@@ -984,6 +1019,19 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                             title="Transmitir o PGDAS-D de um mês sem faturamento. Não gera guia — mês sem movimento não tem o que pagar, mas a declaração vence igual."
                         >
                             {declarandoSemMov ? '⏳ Declarando...' : '📄 Declarar sem movimento'}
+                        </button>
+                    )}
+                    {/* A sonda fica ao lado do botão bloqueado, que é onde a
+                        pergunta nasce. Admin-only: gasta chamada paga e serve
+                        pra DESTRAVAR, não pra operar o mês. */}
+                    {resumo.das_mensal === 0 && currentUser?.role === 'admin' && (
+                        <button
+                            onClick={handleSondarSemMovimento}
+                            disabled={sondando}
+                            className="btn-press flex items-center gap-2 px-4 py-2 bg-violet-600 text-white font-bold rounded-lg hover:bg-violet-700 disabled:opacity-50"
+                            title="Pergunta ao SERPRO qual forma de declaração sem movimento ele aceita, usando o modo VALIDAÇÃO. NADA é transmitido em nenhum resultado."
+                        >
+                            {sondando ? '⏳ Perguntando ao SERPRO...' : '🔬 Sondar forma (não transmite)'}
                         </button>
                     )}
                     <button

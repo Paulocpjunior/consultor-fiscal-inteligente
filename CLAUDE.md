@@ -5,6 +5,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **MATA-BURRO: DEPLOY QUE FALHA VIRA ISSUE** (13/08, nos DOIS repos). Em 12/08
+  dois deploys do app irmão caíram seguidos e ninguém viu: o trabalho ficou
+  mesclado na main e FORA DO AR, e a descoberta veio de um print de tela
+  desatualizada — depois de tempo gasto caçando um defeito já corrigido. A causa
+  não é "esquecemos de olhar": **run vermelho num painel que ninguém abre não é
+  aviso**. `if: failure()` no fim do `deploy-app.yml` abre (ou COMENTA, uma por
+  incidente) issue com o commit, o link do run e o que fazer — inclusive a
+  lição: *"enquanto isto estiver aberto, não confie em print de tela"*. No CCI a
+  issue ainda aponta o caso conhecido do cache-buster (rodar `bump-version.sh`,
+  não editar à mão). `__tests__/deployAvisaQuandoFalha.test.ts` impede a trava
+  de ser esvaziada num refactor de workflow — ele NÃO prova que o GitHub abre a
+  issue (só o próximo deploy quebrado prova).
+  🔬 **SONDA DO "SEM MOVIMENTO" LIGADA** (mesmo dia): o `TRANSDECLARACAO11` tem
+  modo VALIDAÇÃO (`indicadorTransmissao: false`) — é dele que a MSG_ISN_023 já
+  vinha, e por isso a mensagem sempre pôde dizer "nada foi transmitido". Ou
+  seja, existe oráculo GRÁTIS: `POST /api/admin/das/sondar-sem-movimento`
+  (requireAdmin) pergunta ao SERPRO qual forma ele aceita, com 6 candidatos que
+  levam a HIPÓTESE escrita. Perguntar é PROVA, não dedução — mesma técnica das
+  sondas do R-2055. TRAVA: `assertSondaNaoTransmite` roda sobre o MESMO objeto
+  que sai (gancho `antesDeEnviar` no provider, não sobre cópia) e violação PARA
+  a sonda inteira em vez de virar "candidato recusado". Duas formas aceitas NÃO
+  viram escolha silenciosa; nenhuma aceita mantém o bloqueio, mas com as recusas
+  NOMEADAS para abrir o chamado. Botão 🔬 admin-only ao lado do bloqueado.
 - **MATA-BURRO: GUIA DO COLABORADOR ANDA EM PAR** (12/08). A regra "atualizar as
   DUAS juntas" (página em `public/` + fonte em `docs/`) estava escrita TRÊS
   vezes neste arquivo e nunca teve trava: dava pra corrigir o HTML e deixar o

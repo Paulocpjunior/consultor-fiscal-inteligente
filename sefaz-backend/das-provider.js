@@ -295,13 +295,18 @@ class SerproProvider {
         };
     }
 
-    async validarDeclaracaoPgdas({ cnpjLimpo, pa, declaracao }) {
+    async validarDeclaracaoPgdas({ cnpjLimpo, pa, declaracao, antesDeEnviar }) {
         const dadosValidacao = montarDadosDeclaracaoPgdas({
             cnpjLimpo,
             pa,
             transmitir: false,
             declaracao,
         });
+
+        // Gancho de trava para quem PRECISA garantir que não entrega — hoje a
+        // sonda do "sem movimento". Ele roda sobre o MESMO objeto que vai ao
+        // SERPRO: conferir uma cópia provaria só que a cópia estava certa.
+        if (typeof antesDeEnviar === 'function') antesDeEnviar(dadosValidacao);
 
         return invokeIntegraContador({
             idSistema: 'PGDASD',

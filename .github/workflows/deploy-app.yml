@@ -24,6 +24,18 @@ on:
       - '.github/workflows/deploy-proxy.yml'
   workflow_dispatch:
 
+# MATA-BURRO: DEPLOY QUE FALHA NÃO PODE PASSAR BATIDO.
+#
+# Em 12/08/2026 dois deploys do app irmão falharam seguidos e ninguém viu: o
+# trabalho ficou mesclado na main e FORA DO AR, e a descoberta veio de um print
+# de tela desatualizada — depois de tempo gasto procurando um defeito que já
+# estava corrigido.
+#
+# Run vermelho num painel que ninguém abre não é aviso. Issue é.
+permissions:
+  contents: read
+  issues: write
+
 concurrency:
   group: deploy-app-principal
   cancel-in-progress: false
@@ -245,3 +257,48 @@ jobs:
           echo ""
           echo "── /version.json ──"
           curl -sSf "${{ env.PROD_URL }}/version.json" || echo "(version.json indisponível)"
+
+      # ── A trava ───────────────────────────────────────────────────────────
+      # `if: failure()` cobre QUALQUER passo acima — build, testes, auditoria,
+      # health check, roteamento. O que importa não é onde quebrou: é que a
+      # main tem código que não está no ar.
+      - name: Deploy falhou — abrir/atualizar issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITULO="🚨 Deploy do app principal FALHOU — a main não está no ar"
+          CORPO=$(cat <<-CORPO_ISSUE
+          O deploy da \`main\` falhou. **O que está mesclado NÃO está publicado** —
+          quem testar agora vai ver a versão anterior, e um print dessa tela
+          parece defeito de código.
+
+          | | |
+          | --- | --- |
+          | Commit | \`${{ github.sha }}\` |
+          | Mensagem | ${{ github.event.head_commit.message }} |
+          | Run | ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+
+          **O que fazer**
+          1. Abrir o run e ver QUAL passo caiu (o log diz).
+          2. Se for o gate (lint/testes/auditoria): corrigir e mesclar de novo.
+          3. Se for infraestrutura (runner, cota, Cloud Run): reexecutar o run.
+             Se persistir, existe a saída de emergência — \`scripts/deploy-manual.sh\`,
+             que faz o mesmo caminho pelo Cloud Build, com health check antes de
+             rotear. Ela NÃO roda o gate: só use depois do gate verde na máquina.
+
+          **Enquanto isto estiver aberto, não confie em print de tela** — confira a
+          versão primeiro (rodapé do app, ou \`/guia-conferencia-entregas.html\`).
+
+          _Esta issue é fechada à mão quando o deploy voltar a passar._
+          CORPO_ISSUE
+          )
+          EXISTE=$(gh issue list --search "$TITULO in:title" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTE" ]; then
+            # Falhar de novo COMENTA em vez de abrir outra: uma issue por
+            # incidente. Enxurrada de issues iguais vira ruído que se ignora —
+            # que é exatamente o efeito que esta trava existe pra evitar.
+            gh issue comment "$EXISTE" --body "$CORPO"
+          else
+            gh issue create --title "$TITULO" --body "$CORPO"
+          fi

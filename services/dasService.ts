@@ -188,6 +188,35 @@ export async function declararSemMovimento(user: User | null, payload: {
     return res.json();
 }
 
+/**
+ * SONDA da forma do "sem movimento" — pergunta ao SERPRO, sem entregar nada.
+ *
+ * Usa o modo VALIDAÇÃO do TRANSDECLARACAO11 (`indicadorTransmissao: false`),
+ * que é de onde já vem a MSG_ISN_023 hoje. Nenhum candidato transmite, em
+ * nenhum desfecho — e o núcleo recusa rodar se alguém mexer nisso.
+ *
+ * Admin-only: gasta chamada paga do SERPRO e serve pra DESTRAVAR o bloqueio,
+ * não pra operar o mês.
+ */
+export async function sondarFormaSemMovimento(user: User | null, payload: {
+    empresaCnpj: string; competencia: string; filiais?: string[];
+}): Promise<{
+    ok: boolean; nadaFoiTransmitido: boolean;
+    candidatos: Array<{ nome: string; hipotese: string; situacao: string; codigo: string | null; mensagem: string }>;
+    veredito: { destravou: boolean; forma: string | null; resumo: string };
+}> {
+    const res = await fetch(`${BASE}/sondar-sem-movimento`, {
+        method: 'POST',
+        headers: await authHeaders(user),
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `sondarFormaSemMovimento: ${res.status}`);
+    }
+    return res.json();
+}
+
 export async function emitirDasAvulso(user: User | null, payload: {
     empresaId: string; empresaCnpj: string; empresaNome: string;
     competencia: string; valor: number; descricao?: string;

@@ -5,14 +5,13 @@
 // ============================================================================
 
 import express from 'express';
-import { requireAuth, requireEmissao } from './require-admin.js';
+import { requireAuth, requireEmissao, requireAdmin } from './require-admin.js';
 import admin from 'firebase-admin';
 import { ultimasCompetencias as ultimasCompetenciasHelper } from './competencias-helper.js';
 import {
     emitirDasRegular, emitirDasAvulso, declararPgdasSemMovimento,
     listarDas, getResumoDas, getDasPdf, marcarPago,
-    processarCronDas,
-} from './das-orchestrator.js';
+    processarCronDas, sondarFormaSemMovimento } from './das-orchestrator.js';
 import { getDasMode, getDasProvider } from './das-provider.js';
 import { errorPayload } from './das-error-payload.js';
 import { podeAcessarEmpresaId, podeAcessarCnpj } from './carteira-auth.js';
@@ -170,6 +169,22 @@ router.post('/declarar-sem-movimento', requireEmissao, express.json(), async (re
         res.json(await declararPgdasSemMovimento({
             ...req.body,
             confirmadoPor: req.user?.email || req.user?.uid || null,
+        }));
+    } catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
+});
+
+// SONDA da forma do "sem movimento" — pergunta ao SERPRO qual estrutura ele
+// aceita usando o modo VALIDAÇÃO do TRANSDECLARACAO11 (indicadorTransmissao
+// false). NADA é transmitido em nenhum desfecho, e o núcleo recusa rodar se
+// alguém mexer nisso.
+//
+// requireAdmin (e não requireEmissao): a sonda gasta chamada paga do SERPRO e
+// serve pra DESTRAVAR um bloqueio, não pra operar o mês.
+router.post('/sondar-sem-movimento', requireAdmin, express.json(), async (req, res) => {
+    try {
+        res.json(await sondarFormaSemMovimento({
+            ...req.body,
+            rodadoPor: req.user?.email || req.user?.uid || null,
         }));
     } catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
