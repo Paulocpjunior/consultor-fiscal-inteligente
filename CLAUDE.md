@@ -5,6 +5,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **MATA-BURRO: TRABALHO QUE *PARECE* ENTREGUE — as duas formas, no mesmo dia**
+  (13/08). Não é preguiça nem falta de teste: nos dois casos o teste estava
+  VERDE e o PR dizia "feito".
+  **(1) TRAVA ESCRITA COMO LISTA só cobre o que EU LEMBREI.** Troquei o nome do
+  anexo da guia (o cliente via `das_63787066000193_2026-07.pdf`, com o CNPJ cru
+  na tela dele) e o teste conferia **dois arquivos enumerados à mão**. O DARF
+  (4 botões de envio) e o DARE (3 chamadas) continuaram mandando o nome velho —
+  o PR afirmava "os dois canais que chegam ao cliente" e era mentira, sem
+  ninguém perceber. Refeito como **VARREDURA pelo comportamento**: percorre
+  linha a linha quem manda ao cliente atrás de nome montado com CNPJ, e só
+  aceita quando a linha é de DOWNLOAD (no disco do colaborador o CNPJ AJUDA —
+  dezenas de empresas na mesma pasta; a régua distingue LEITOR, não formato).
+  Foi a varredura que achou a TERCEIRA ocorrência do DARE, num `pdfFileName`
+  condicional. **REGRA: régua que vale "em todo lugar que faz X" se trava
+  varrendo o X, nunca listando arquivo** — lista envelhece no primeiro arquivo
+  novo, e envelhece EM SILÊNCIO, que é o pior jeito.
+  **(2) ROTA SEM BOTÃO NÃO É FUNCIONALIDADE — é código morto com cara de
+  entrega.** O rito de fechamento da EFD-Reinf (conferir → arquivar → avisar)
+  subiu de manhã com 23 testes e ZERO caminho na interface; ninguém no
+  escritório conseguiria usá-lo. Mesma família do E510 "pronto" que ninguém
+  gerava e do bloco que só o PVA prova. **REGRA: rota nova nasce com o botão
+  que a chama NO MESMO PR** — e se o botão não cabe ainda, o PR diz isso em vez
+  de deixar a fila achar que fechou.
 - **MATA-BURRO: FILEIRA DE BOTÕES QUEBRA LINHA** (Paulo, 13/08: *"caralho meu!
   terceira vez erro de layout"*). Ele estava certo, e as três foram a MESMA
   causa que eu não olhei: o cabeçalho do detalhe do Simples tem **12 botões num
