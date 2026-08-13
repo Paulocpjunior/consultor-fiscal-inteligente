@@ -29,6 +29,8 @@ export function configWhatsapp(env = process.env) {
         phoneNumberId: String(env.WHATSAPP_PHONE_NUMBER_ID || '').trim(),
         template: String(env.WHATSAPP_TEMPLATE_GUIA || '').trim(),
         idioma: String(env.WHATSAPP_TEMPLATE_IDIOMA || 'pt_BR').trim(),
+        // Opcional: sem ela a WABA é derivada do phoneNumberId.
+        wabaId: String(env.WHATSAPP_WABA_ID || '').trim(),
     };
 }
 
@@ -115,6 +117,87 @@ export function interpretarRespostaWhatsapp(status, corpo) {
     else if (code === 131026) acao = 'Número não tem WhatsApp ou não pode receber — confira o número do cliente no cadastro.';
     else if (code === 100 && /param/i.test(detalhe)) acao = 'Parâmetro inválido no payload — confira template e variáveis.';
     return { ok: false, messageId: null, code, erro: detalhe, acao };
+}
+
+/**
+ * ═══ LISTAR OS TEMPLATES APROVADOS NA META ══════════════════════════════════
+ *
+ * Paulo errou o nome do template TRÊS vezes seguidas (13/08) — não por
+ * desatenção: `sp_assessoria_contabil_impostos` × `..._imposto` ×
+ * `..._guia_imposto` são quase iguais, e o campo era digitação livre. Cada
+ * tentativa custou um envio recusado pela Meta e uma volta no chat.
+ *
+ * Nome de template aprovado NÃO é opinião: a Meta tem a lista. Digitar o que
+ * dá pra ESCOLHER é criar erro que não precisava existir — e é a mesma régua do
+ * seletor de empresa (achar cliente em `<select>` de 400 é rolar a lista).
+ *
+ * De quebra, a resposta traz os COMPONENTES: se há cabeçalho de DOCUMENTO e
+ * quantas variáveis o corpo tem. Os dois eram preenchidos a dedo, e errar
+ * qualquer um recusa o envio (132000/132012).
+ *
+ * A WABA é DERIVADA do phoneNumberId — assim não nasce mais uma env pra
+ * alguém preencher errado.
+ */
+export async function listarTemplatesAprovados(deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const doFetch = deps.fetchImpl || fetch;
+    if (!cfg.token || !cfg.phoneNumberId) {
+        return { ok: false, erro: 'Canal do WhatsApp não configurado.', faltas: faltasDaConfig(cfg) };
+    }
+
+    const auth = { Authorization: `Bearer ${cfg.token}` };
+    let wabaId = String(cfg.wabaId || '').trim();
+    if (!wabaId) {
+        const r = await doFetch(
+            `${GRAPH_BASE}/${cfg.phoneNumberId}?fields=whatsapp_business_account`,
+            { headers: auth },
+        );
+        const c = await r.json().catch(() => ({}));
+        wabaId = c?.whatsapp_business_account?.id || '';
+        if (!wabaId) {
+            return {
+                ok: false,
+                erro: `Não foi possível descobrir a conta (WABA) a partir do número: ${c?.error?.message || `HTTP ${r.status}`}`,
+                acao: 'O token precisa ter permissão de leitura da conta do WhatsApp Business.',
+            };
+        }
+    }
+
+    const resp = await doFetch(
+        `${GRAPH_BASE}/${wabaId}/message_templates?limit=200&fields=name,language,status,category,components`,
+        { headers: auth },
+    );
+    const corpo = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+        return { ok: false, erro: corpo?.error?.message || `HTTP ${resp.status}` };
+    }
+    return { ok: true, wabaId, templates: (corpo.data || []).map(lerTemplateDaMeta) };
+}
+
+/**
+ * Traduz UM template da Meta para o que o cadastro precisa saber.
+ *
+ * `variaveis` é a CONTAGEM lida do corpo ({{1}}, {{2}}…), não um palpite: é ela
+ * que tem de bater com o schema, senão a Meta recusa o envio.
+ */
+export function lerTemplateDaMeta(t) {
+    const componentes = Array.isArray(t?.components) ? t.components : [];
+    const header = componentes.find((c) => String(c?.type).toUpperCase() === 'HEADER');
+    const body = componentes.find((c) => String(c?.type).toUpperCase() === 'BODY');
+    const texto = String(body?.text || '');
+    const posicoes = new Set((texto.match(/\{\{\s*(\d+)\s*\}\}/g) || [])
+        .map((m) => m.replace(/\D/g, '')));
+    return {
+        nome: t?.name || null,
+        idioma: t?.language || null,
+        status: String(t?.status || '').toUpperCase(),
+        categoria: String(t?.category || '').toUpperCase(),
+        // Só cabeçalho de DOCUMENTO carrega o PDF da guia.
+        temDocumento: String(header?.format || '').toUpperCase() === 'DOCUMENT',
+        formatoCabecalho: String(header?.format || '').toUpperCase() || 'NENHUM',
+        variaveis: posicoes.size,
+        corpo: texto,
+    };
 }
 
 /**

@@ -8,6 +8,7 @@ import {
     validarTemplate, resolverTemplate, montarVariaveisPorSchema, idDoTemplate,
     DEPARTAMENTOS_WHATSAPP,
 } from '../sefaz-backend/whatsapp-templates.js';
+import { lerTemplateDaMeta } from '../sefaz-backend/whatsapp-cloud.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -267,5 +268,107 @@ describe('renomear template não deixa rastro ativo', () => {
         ] as any, { departamento: 'fiscal' });
         expect(r.ok).toBe(false);
         expect(r.opcoes.sort()).toEqual(['antigo', 'novo']);
+    });
+});
+
+/**
+ * MATA-BURRO: NOME DE TEMPLATE APROVADO SE ESCOLHE, NÃO SE DIGITA.
+ *
+ * 13/08, TRÊS recusas seguidas no mesmo campo, todas de digitação:
+ *   sp_assessoria_contabil_impostos  (o antigo, sem variáveis)
+ *   sp_assessoria_contabil_imposto   (faltou o `guia_`)
+ *   sp_assessoria_contabil_guia_imposto  ← o certo
+ *
+ * E cada uma só aparece NA HORA DO ENVIO, na frente do cliente. A Meta tem a
+ * lista; digitar o que dá pra escolher é criar erro que não precisava existir —
+ * mesma régua do seletor de empresa (achar cliente em `<select>` de 400 é rolar
+ * a lista).
+ *
+ * De quebra vêm o formato do CABEÇALHO e a CONTAGEM de variáveis, que eram
+ * preenchidos a dedo e recusam o envio quando erram (132000/132012).
+ */
+describe('templates lidos da Meta', () => {
+    const doMeta = (over: any = {}) => lerTemplateDaMeta({
+        name: 'sp_assessoria_contabil_guia_imposto',
+        language: 'pt_BR', status: 'APPROVED', category: 'UTILITY',
+        components: [
+            { type: 'HEADER', format: 'DOCUMENT' },
+            { type: 'BODY', text: 'segue em anexo a guia de {{1}}, referente a {{2}}, com vencimento em {{3}}.' },
+            { type: 'FOOTER', text: 'SP Assessoria Contábil' },
+        ],
+        ...over,
+    });
+
+    test('lê nome, idioma, status, categoria e cabeçalho de documento', () => {
+        expect(doMeta()).toMatchObject({
+            nome: 'sp_assessoria_contabil_guia_imposto',
+            idioma: 'pt_BR',
+            status: 'APPROVED',
+            categoria: 'UTILITY',
+            temDocumento: true,
+            formatoCabecalho: 'DOCUMENT',
+            variaveis: 3,
+        });
+    });
+
+    test('cabeçalho de TEXTO não leva anexo — era o template antigo', () => {
+        const t = doMeta({
+            name: 'sp_assessoria_contabil_impostos',
+            components: [
+                { type: 'HEADER', format: 'TEXT', text: 'Prezado Cliente' },
+                { type: 'BODY', text: 'Segue em anexo a Referida Guia de Impostos' },
+            ],
+        });
+        expect(t.temDocumento).toBe(false);
+        expect(t.formatoCabecalho).toBe('TEXT');
+        expect(t.variaveis).toBe(0);   // o antigo não tinha variável nenhuma
+    });
+
+    test('sem cabeçalho nenhum, formato é NENHUM (não "undefined")', () => {
+        const t = doMeta({ components: [{ type: 'BODY', text: 'oi {{1}}' }] });
+        expect(t.formatoCabecalho).toBe('NENHUM');
+        expect(t.temDocumento).toBe(false);
+    });
+
+    // A contagem é de POSIÇÕES DISTINTAS: {{1}} repetido é UMA variável, e
+    // contar duas faria a Meta recusar por número de parâmetros.
+    test('conta posições distintas, não ocorrências', () => {
+        const t = doMeta({ components: [{ type: 'BODY', text: '{{1}} e de novo {{1}}, mais {{2}}' }] });
+        expect(t.variaveis).toBe(2);
+    });
+
+    test('componentes ausentes não quebram a leitura', () => {
+        expect(lerTemplateDaMeta({}).variaveis).toBe(0);
+        expect(lerTemplateDaMeta(null as any).nome).toBeNull();
+    });
+});
+
+describe('a tela escolhe da Meta em vez de pedir digitação', () => {
+    const tela = readFileSync(join(__dirname, '..', 'components/ConfigAdminModal.tsx'), 'utf8');
+    const rota = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+
+    test('existe a rota e ela é admin — a lista vem da conta da casa', () => {
+        expect(rota).toMatch(/router\.get\('\/templates-meta', requireAdmin/);
+    });
+
+    test('a tela busca, lista e preenche o formulário com o escolhido', () => {
+        expect(tela).toMatch(/listarTemplatesDaMeta/);
+        expect(tela).toMatch(/Não digite o nome do template/);
+        expect(tela).toMatch(/usarDaMeta\(t\)/);
+    });
+
+    test('template NÃO aprovado não pode ser escolhido', () => {
+        expect(tela).toMatch(/disabled=\{!aprovado\}/);
+    });
+
+    test('a tela DIZ quando o template não leva anexo', () => {
+        expect(tela).toMatch(/NÃO leva anexo/);
+    });
+
+    // A Meta sabe QUANTAS variáveis existem; não sabe o que cada uma SIGNIFICA.
+    // Elas nascem vazias e a gravação recusa chave em branco.
+    test('os rótulos continuam sendo escritos por quem cadastra', () => {
+        expect(tela).toMatch(/\{ chave: '', rotulo: '' \}/);
+        expect(tela).toMatch(/significado de cada variável/);
     });
 });
