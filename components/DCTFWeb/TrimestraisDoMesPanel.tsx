@@ -144,7 +144,7 @@ const LinhaEmpresa: React.FC<{
                             <span>
                                 <span className="font-mono text-xs text-slate-500 dark:text-slate-400 mr-2">{g.codigo}-{g.extensao}</span>
                                 {g.descricao}
-                                {g.cota != null && <span className="ml-2 text-xs px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 rounded">quota {g.cota}/{g.totalCotas}</span>}
+                                {g.cota != null && <span className="ml-2 text-xs px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 rounded">cota {g.cota}/{g.totalCotas}</span>}
                                 <span className="ml-2 font-semibold">R$ {g.valor.toFixed(2)}</span>
                                 <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">vence {fmtBr(g.vencimento)}</span>
                             </span>

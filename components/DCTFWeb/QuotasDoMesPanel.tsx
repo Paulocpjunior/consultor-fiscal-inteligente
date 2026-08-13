@@ -6,7 +6,7 @@
  *
  * ═══ POR QUE ESTA TELA PRECISA EXISTIR ══════════════════════════════════════
  *
- * Até hoje, escolher "3 quotas" emitia as TRÊS no mesmo clique. Duas coisas
+ * Até hoje, escolher "3 cotas" emitia as TRÊS no mesmo clique. Duas coisas
  * quebravam de uma vez:
  *
  *   1. a quota 3 saía A MENOR — o acréscimo dela é SELIC acumulada até o mês
@@ -60,7 +60,7 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
             setQuotas(r.quotas || []);
             setAtrasadas(r.atrasadas || 0);
         } catch (e: any) {
-            setErro(e.message || 'Falha ao ler as quotas agendadas.');
+            setErro(e.message || 'Falha ao ler as cotas agendadas.');
         }
         setCarregando(false);
     }, [currentUser]);
@@ -71,7 +71,7 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
         if (!q.id) return;
         // Imposto sai UMA A UMA, com confirmação — a RFB não desfaz emissão.
         if (!window.confirm(
-            `Gerar a guia da quota ${q.cota}/${q.totalCotas} de ${fmtCnpj(q.empresaCnpj)}?\n\n`
+            `Gerar a guia da cota ${q.cota}/${q.totalCotas} de ${fmtCnpj(q.empresaCnpj)}?\n\n`
             + `Código ${q.codigo}-${q.extensao} · principal ${brl(q.valorPrincipal)} · vence ${fmtData(q.vencimento)}.\n\n`
             + 'Ação real no SERPRO. O acréscimo (SELIC + 1%) é calculado agora, na data de hoje.',
         )) return;
@@ -80,9 +80,9 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
             const r = await emitirQuotaAgendada(currentUser, q.id);
             setEmitidas((p) => ({ ...p, [q.id!]: r as Emitida }));
             setQuotas((p) => p.filter((x) => x.id !== q.id));
-            onShowToast?.(`Quota ${q.cota}/${q.totalCotas} gerada — ${brl(r.valor)}`);
+            onShowToast?.(`Cota ${q.cota}/${q.totalCotas} gerada — ${brl(r.valor)}`);
         } catch (e: any) {
-            setErro(e.message || 'Falha ao gerar a quota.');
+            setErro(e.message || 'Falha ao gerar a cota.');
         }
         setEmitindo(null);
     };
@@ -91,10 +91,11 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
         <div className="space-y-3 animate-fade-in">
             <div className="rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 p-3">
                 <p className="text-xs text-sky-900 dark:text-sky-200">
-                    <strong>A quota se gera no mês dela, não antes.</strong> O acréscimo da 2ª e da 3ª é a SELIC
-                    acumulada até o mês anterior ao pagamento mais 1% (Lei 9.430 art. 5º §3º) — e essa SELIC ainda não
-                    foi publicada quando a 1ª sai. Guia emitida adiantada sai <strong>a menor</strong>, o cliente paga e
-                    fica com débito residual.
+                    <strong>A cota se gera no mês dela — a partir do dia 1º, não no dia do vencimento.</strong> Quem
+                    vence no fim de agosto pode ser gerado e enviado ao cliente já no primeiro dia útil de agosto: é o
+                    mês inteiro de folga. O que não dá é gerar ANTES do mês, porque o acréscimo da 2ª e da 3ª é a SELIC
+                    acumulada até o mês anterior ao pagamento mais 1% (Lei 9.430 art. 5º §3º) e essa SELIC ainda não foi
+                    publicada — a guia sairia <strong>a menor</strong>, o cliente pagaria e ficaria com débito residual.
                 </p>
             </div>
 
@@ -105,18 +106,38 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
             )}
 
             {carregando ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">Lendo as quotas agendadas…</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Lendo as cotas agendadas…</p>
             ) : quotas.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Nenhuma quota a gerar neste mês. Isso só quer dizer que ninguém escolheu parcelar um trimestral
-                    cuja quota caia agora — <strong>não</strong> quer dizer que o trimestre está pago.
-                </p>
+                /* LISTA VAZIA NÃO É RESPOSTA — ela precisa dizer o que NÃO sabe.
+                   A primeira versão desta frase afirmava "ninguém escolheu
+                   parcelar", e isso é falso por construção: a agenda nasceu em
+                   13/08, e tudo que foi parcelado ANTES saiu de uma vez pelo
+                   caminho antigo, sem passar por aqui. Vazio dizendo "ninguém
+                   escolheu" mandaria a pessoa parar de procurar justamente as
+                   cotas que estão soltas. */
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        Nenhuma cota agendada para este mês.
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Isso quer dizer <strong>só uma coisa</strong>: nenhuma emissão em 2 ou 3 cotas passou por esta
+                        agenda com vencimento até agora. <strong>Não</strong> quer dizer que o trimestre está pago, nem
+                        que ninguém parcelou.
+                    </p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                        ⚠️ A agenda começou a existir em <strong>13/08/2026</strong>. Trimestral parcelado antes disso
+                        teve as <strong>três guias emitidas no mesmo dia</strong> pelo caminho antigo — elas não
+                        aparecem aqui, e as cotas 2 e 3 daquelas podem ter saído <strong>a menor</strong> (a SELIC do
+                        período ainda não existia). Se houve parcelamento nos últimos três meses, confira o valor
+                        daquelas guias no e-CAC antes de o cliente pagar.
+                    </p>
+                </div>
             ) : (
                 <>
                     {atrasadas > 0 && (
                         <div className="rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 p-2">
                             <p className="text-xs text-red-800 dark:text-red-200">
-                                <strong>{atrasadas} quota(s) com o mês já vencido.</strong> Elas continuam na lista de
+                                <strong>{atrasadas} cota(s) com o mês já vencido.</strong> Elas continuam na lista de
                                 propósito: some no dia 1º seria o app calando justamente sobre o que está gerando multa.
                             </p>
                         </div>
@@ -127,7 +148,7 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 <tr className="text-left">
                                     <th className="p-2">Empresa</th>
                                     <th className="p-2">Tributo</th>
-                                    <th className="p-2">Quota</th>
+                                    <th className="p-2">Cota</th>
                                     <th className="p-2">Principal</th>
                                     <th className="p-2">Vence</th>
                                     <th className="p-2"></th>
@@ -172,7 +193,7 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     {Object.values(emitidas).map((g) => (
                         <div key={g.id} className="text-[11px] text-slate-700 dark:text-slate-200">
                             <span className="font-semibold">
-                                {fmtCnpj(g.empresaCnpj)} · {g.codigo}-{g.extensao} · quota {g.cota}/{g.totalCotas}
+                                {fmtCnpj(g.empresaCnpj)} · {g.codigo}-{g.extensao} · cota {g.cota}/{g.totalCotas}
                             </span>
                             {' — '}principal {brl(g.valorPrincipal)}
                             {g.juros ? ` + juros ${brl(g.juros)}` : ''}
@@ -182,7 +203,7 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 <span className="ml-2 inline-flex gap-2">
                                     <button onClick={() => openPdfFromBase64(g.pdfBase64)} className="underline">abrir</button>
                                     <button
-                                        onClick={() => downloadPdfFromBase64(g.pdfBase64, `darf_${g.codigo}${g.extensao}_quota${g.cota}_${String(g.empresaCnpj || '').replace(/\D/g, '')}_${g.anoPA}${String(g.mesPA).padStart(2, '0')}.pdf`)}
+                                        onClick={() => downloadPdfFromBase64(g.pdfBase64, `darf_${g.codigo}${g.extensao}_cota${g.cota}_${String(g.empresaCnpj || '').replace(/\D/g, '')}_${g.anoPA}${String(g.mesPA).padStart(2, '0')}.pdf`)}
                                         className="underline"
                                     >
                                         baixar

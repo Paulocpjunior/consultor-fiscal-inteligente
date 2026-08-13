@@ -227,7 +227,9 @@ describe('gerarDarfsSeparados — quotas trimestrais (Lei 9.430 art. 5º)', () =
         const irpj = r.guias.filter((g: any) => g.codigo === '2089');
         expect(irpj).toHaveLength(1);
         expect(irpj[0].cota).toBeNull();
-        expect(irpj[0].aviso).toMatch(/quota única/i);
+        // A grafia da tela é "cota" (Paulo, 13/08) — a lei escreve "quota", o
+        // escritório escreve cota, e quem lê o aviso é o colaborador.
+        expect(irpj[0].aviso).toMatch(/cota única/i);
     });
 
     it('quota única (default) mantém o comportamento anterior', async () => {

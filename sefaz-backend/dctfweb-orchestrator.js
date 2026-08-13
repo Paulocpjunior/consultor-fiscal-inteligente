@@ -256,7 +256,7 @@ export async function emitirQuotaAgendada({ id }) {
     if (!snap.exists) throw new Error(`Quota agendada ${id} não encontrada.`);
     const q = snap.data();
     if (q.status !== 'agendada') {
-        throw new Error(`Esta quota já está "${q.status}" — emitir de novo geraria uma segunda guia da mesma cota.`);
+        throw new Error(`Esta cota já está "${q.status}" — emitir de novo geraria uma segunda guia da mesma cota.`);
     }
     const competencia = `${q.anoPA}-${String(q.mesPA).padStart(2, '0')}`;
     const r = await getDarfProvider().gerarDarf({
@@ -267,7 +267,7 @@ export async function emitirQuotaAgendada({ id }) {
         codigoReceitaExtensao: q.extensao,
         cota: q.cota,
         vencimento: q.vencimento,
-        observacao: `DCTFWeb ${String(q.mesPA).padStart(2, '0')}/${q.anoPA} quota ${q.cota}/${q.totalCotas}`.slice(0, 50),
+        observacao: `DCTFWeb ${String(q.mesPA).padStart(2, '0')}/${q.anoPA} cota ${q.cota}/${q.totalCotas}`.slice(0, 50),
     });
     await snap.ref.set({
         status: 'emitida',

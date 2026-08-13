@@ -97,11 +97,11 @@ export function planejarQuotas({ valor, anoPA, mesPA, quotas = 1, hoje, aceitaQu
     let efetivas = 1;
     let aviso = null;
     if (pedidas > 1 && !aceitaQuota) {
-        aviso = 'Esta receita não é IRPJ/CSLL trimestral — quota só existe para o trimestral (Lei 9.430 art. 5º). '
-            + 'Emitida em quota única.';
+        aviso = 'Esta receita não é IRPJ/CSLL trimestral — cota só existe para o trimestral (Lei 9.430 art. 5º). '
+            + 'Emitida em cota única.';
     } else if (pedidas > 1 && total / pedidas < QUOTA_VALOR_MINIMO) {
-        aviso = `Valor não comporta ${pedidas} quotas (mínimo R$ 1.000,00 por quota, Lei 9.430 art. 5º §1º) — `
-            + 'emitido em quota única.';
+        aviso = `Valor não comporta ${pedidas} cotas (mínimo R$ 1.000,00 por cota, Lei 9.430 art. 5º §1º) — `
+            + 'emitido em cota única.';
     } else if (pedidas > 1) {
         efetivas = pedidas;
     }
@@ -124,7 +124,7 @@ export function planejarQuotas({ valor, anoPA, mesPA, quotas = 1, hoje, aceitaQu
                 emitirAgora: false,
                 // A causa vai JUNTO — "não emitiu" sem motivo faz a pessoa
                 // procurar defeito onde há regra.
-                motivo: `A quota ${cota} vence em ${vencimento} e o acréscimo dela (SELIC acumulada até o mês `
+                motivo: `A cota ${cota} vence em ${vencimento} e o acréscimo dela (SELIC acumulada até o mês `
                     + 'anterior ao pagamento + 1%, Lei 9.430 art. 5º §3º) ainda não existe hoje. Emitir agora sai '
                     + 'A MENOR, e guia a menor não avisa: o cliente paga e fica com débito residual.',
             };
@@ -132,7 +132,7 @@ export function planejarQuotas({ valor, anoPA, mesPA, quotas = 1, hoje, aceitaQu
         return {
             cota, totalCotas: efetivas, valorPrincipal: v, vencimento, emitirAgora: true,
             motivo: mesDaCota < mesDeHoje
-                ? `Quota ${cota} vencida em ${vencimento} — o SICALC calcula os acréscimos até a data do pagamento.`
+                ? `Cota ${cota} vencida em ${vencimento} — o SICALC calcula os acréscimos até a data do pagamento.`
                 : null,
         };
     });
@@ -154,9 +154,11 @@ export function planejarQuotas({ valor, anoPA, mesPA, quotas = 1, hoje, aceitaQu
 export function resumoDoPlano(plano) {
     if (!plano || plano.quotasEfetivas <= 1) return null;
     const faltam = plano.depois || [];
-    if (!faltam.length) return `Todas as ${plano.quotasEfetivas} quotas já podiam ser emitidas neste mês.`;
+    if (!faltam.length) return `Todas as ${plano.quotasEfetivas} cotas já podiam ser emitidas neste mês.`;
     const proxima = faltam[0];
-    return `Quota ${plano.agora.length ? plano.agora[plano.agora.length - 1].cota : 0} de ${plano.quotasEfetivas} emitida. `
-        + `A próxima (${proxima.cota}) é gerada em ${String(proxima.vencimento).slice(0, 7)}, no mês do vencimento — `
-        + 'o juro dela depende da SELIC que ainda não foi publicada. Ela fica agendada e aparece em "Cotas do mês".';
+    return `Cota ${plano.agora.length ? plano.agora[plano.agora.length - 1].cota : 0} de ${plano.quotasEfetivas} emitida. `
+        + `A próxima (${proxima.cota}) pode ser gerada a partir de 01/${String(proxima.vencimento).slice(5, 7)}/`
+        + `${String(proxima.vencimento).slice(0, 4)} — vence em ${String(proxima.vencimento).slice(8, 10)}/`
+        + `${String(proxima.vencimento).slice(5, 7)}, então há o mês inteiro para enviar ao cliente. Antes disso o `
+        + 'juro dela ainda não existe. Ela fica agendada e aparece em "Cotas do mês".';
 }
