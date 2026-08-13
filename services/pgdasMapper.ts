@@ -25,6 +25,7 @@ interface CnaeInputState {
     isSup: boolean;
     isMonofasico: boolean;
     isImune: boolean;
+    isIsento?: boolean;
     isExterior: boolean;
 }
 
@@ -413,7 +414,7 @@ const TRIBUTOS_DA_IMUNIDADE = [CODIGO_TRIBUTO.ICMS, CODIGO_TRIBUTO.IPI];
 const TRIBUTOS_DA_ISENCAO = [CODIGO_TRIBUTO.ICMS];
 
 function montarReceitaAtividade(
-    state: Pick<CnaeInputState, 'issRetido' | 'icmsSt' | 'isMonofasico' | 'isImune'>,
+    state: Pick<CnaeInputState, 'issRetido' | 'icmsSt' | 'isMonofasico' | 'isImune' | 'isIsento'>,
     valor: number,
     idAtividade: number,
 ): ReceitaAtividade {
@@ -436,6 +437,17 @@ function montarReceitaAtividade(
     if (state.isImune) {
         for (const codigoTributo of TRIBUTOS_DA_IMUNIDADE) {
             qualificacoesTributarias.push({ codigoTributo, id: QUALIFICACAO.IMUNIDADE });
+        }
+    } else if (state.isIsento) {
+        // EXCLUDENTE com a imunidade, e o `else` é a trava: a mesma parcela não
+        // pode ser imune E isenta do mesmo tributo — são naturezas diferentes, e
+        // mandar as duas é a forma do MSG_ISN_032 (qualificação em dobro derruba
+        // a ENTREGA INTEIRA, não só a linha). A tela também impede marcar as
+        // duas; aqui é a rede de baixo.
+        //
+        // Só ICMS: o `<select>` do IPI (1008) não tem "Isenção/Redução".
+        for (const codigoTributo of TRIBUTOS_DA_ISENCAO) {
+            qualificacoesTributarias.push({ codigoTributo, id: QUALIFICACAO.ISENCAO_REDUCAO });
         }
     }
     if (state.issRetido
@@ -632,6 +644,14 @@ export function avisosDoPayload(faturamentoPorCnae: Record<string, CnaeInputStat
             + 'ICMS e IPI (códigos 1007 e 1008, qualificação 1). Confira no extrato se saiu '
             + '"Imunidade tributária de: ICMS, IPI" — o valor do DAS é o mesmo com e sem a '
             + 'qualificação, então só o extrato denuncia se ela não pegou.',
+        );
+    }
+    if (comValor.some((s) => s.isIsento)) {
+        avisos.push(
+            'Há receita marcada como ISENTA de ICMS: a declaração vai com a qualificação '
+            + 'Isenção/Redução (código 1007, qualificação 4) e o ICMS sai do DAS — o IPI NÃO, '
+            + 'porque isenção de IPI não existe neste campo. Confira no extrato se saiu '
+            + '"Isenção de ICMS: R$ ..." com o valor da parcela.',
         );
     }
     return avisos;

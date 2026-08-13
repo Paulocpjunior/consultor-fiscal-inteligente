@@ -816,3 +816,55 @@ describe('simplesNacionalService', () => {
         });
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ISENÇÃO ≠ IMUNIDADE NO CÁLCULO — e a diferença é o IPI.
+//
+// Imunidade (POLO CULTURAL, CF art. 150 VI "d"): tira ICMS **e** IPI.
+// Isenção de ICMS (JAGUAREXPORT, lei estadual): tira **só o ICMS**.
+//
+// O formulário do e-CAC corrobora: o `<select>` do IPI (código 1008) não tem
+// "Isenção/Redução" — ele para em "Lançamento de Ofício". E o extrato da
+// JAGUAREXPORT 07/2026 confirma: ICMS 0,00 e o resto cobrado normalmente
+// (IRPJ 335,49 · CSLL 213,49 · COFINS 777,12 · PIS 168,35 · CPP 2.561,92).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('isenção de ICMS no cálculo do DAS', () => {
+    const MES = new Date(2025, 5, 1);
+    const itemBase = {
+        cnae: '4632001', anexo: 'II' as SimplesNacionalAnexo, valor: 20000,
+        issRetido: false, icmsSt: false, isSup: false,
+        isMonofasico: false, isImune: false, isExterior: false,
+    };
+    const empresaII = () => criarEmpresa({
+        anexo: 'II',
+        faturamentoManual: buildFaturamento12Meses(MES, 20000),
+    });
+
+    const das = (over: any) => calcularResumoEmpresa(
+        empresaII(), [], MES, { itensCalculo: [{ ...itemBase, ...over }] },
+    ).das_mensal;
+
+    it('isenção deduz a repartição de ICMS da faixa', () => {
+        const semNada = das({});
+        const isento = das({ isIsento: true });
+        const icms = REPARTICAO_IMPOSTOS['II'][0].ICMS ?? 0;
+        expect(icms).toBeGreaterThan(0);
+        expect(isento).toBeCloseTo(semNada * (1 - icms / 100), 4);
+    });
+
+    it('e NÃO deduz o IPI — é aí que ela difere da imunidade', () => {
+        const isento = das({ isIsento: true });
+        const imune = das({ isImune: true });
+        const ipi = REPARTICAO_IMPOSTOS['II'][0].IPI ?? 0;
+        expect(ipi).toBeGreaterThan(0);          // Anexo II tem IPI na repartição
+        expect(imune).toBeLessThan(isento);      // imunidade tira mais
+        const semNada = das({});
+        expect(imune).toBeCloseTo(
+            semNada * (1 - ((REPARTICAO_IMPOSTOS['II'][0].ICMS ?? 0) + ipi) / 100), 4,
+        );
+    });
+
+    it('sem a marcação, nada é deduzido', () => {
+        expect(das({ isIsento: false })).toBeCloseTo(das({}), 6);
+    });
+});

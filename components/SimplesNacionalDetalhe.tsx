@@ -40,6 +40,7 @@ interface CnaeInputState {
     isSup: boolean;
     isMonofasico: boolean;
     isImune: boolean;
+    isIsento?: boolean;
     isExterior: boolean;
 }
 
@@ -177,6 +178,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                     isSup: item.isSup || false,
                     isMonofasico: item.isMonofasico || false,
                     isImune: item.isImune || false,
+                    isIsento: item.isIsento || false,
                     isExterior: item.isExterior || false
                 };
             }
@@ -253,6 +255,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                 isSup: state.isSup,
                 isMonofasico: state.isMonofasico,
                 isImune: state.isImune,
+                isIsento: !!state.isIsento,
                 isExterior: state.isExterior
             });
         });
@@ -345,10 +348,18 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     };
 
     const handleOptionToggle = (key: string, field: keyof CnaeInputState) => {
-        setFaturamentoPorCnae((prev) => ({
-            ...prev,
-            [key]: { ...prev[key], [field]: !prev[key][field] }
-        }));
+        setFaturamentoPorCnae((prev) => {
+            const atual = prev[key];
+            const proximo: any = { ...atual, [field]: !atual[field] };
+            // IMUNIDADE e ISENÇÃO são EXCLUDENTES, e não é preciosismo: são
+            // naturezas diferentes (a imunidade é constitucional e alcança a
+            // receita inteira; a isenção é lei ordinária e vale por parcela),
+            // e mandar as duas qualificações no mesmo tributo é a forma do
+            // MSG_ISN_032 — derruba a ENTREGA INTEIRA, não só a linha.
+            if (field === 'isImune' && proximo.isImune) proximo.isIsento = false;
+            if (field === 'isIsento' && proximo.isIsento) proximo.isImune = false;
+            return { ...prev, [key]: proximo };
+        });
     };
 
     const cnaesDisponiveis = [
@@ -836,6 +847,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                     isSup: state.isSup,
                     isMonofasico: state.isMonofasico,
                     isImune: state.isImune,
+                isIsento: !!state.isIsento,
                     isExterior: state.isExterior
                 };
             });
@@ -1334,9 +1346,27 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                                                 </>
                                             )}
                                             
-                                            <label className={`cursor-pointer px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center gap-2 select-none ${state.isImune ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-600'}`}>
+                                            <label
+                                                title="Imunidade constitucional (CF art. 150) — alcança a receita INTEIRA e tira ICMS e IPI do DAS. No extrato sai como 'Imunidade tributária de: ICMS, IPI.'"
+                                                className={`cursor-pointer px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center gap-2 select-none ${state.isImune ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-600'}`}>
                                                 <input type="checkbox" checked={state.isImune} onChange={() => handleOptionToggle(key, 'isImune')} className="hidden" />
                                                 Imunidade
+                                            </label>
+
+                                            {/* ISENÇÃO ≠ IMUNIDADE. Os extratos do PGDAS-D
+                                                dizem a diferença na cara: "Imunidade tributária
+                                                de: ICMS, IPI." (sem valor, a parcela inteira) ×
+                                                "Isenção de ICMS: R$ 63.878,60" (com valor). E o
+                                                que sai do DAS é diferente: imunidade tira ICMS
+                                                E IPI, isenção tira SÓ o ICMS — o próprio
+                                                formulário do e-CAC prova, o seletor do IPI não
+                                                tem "Isenção/Redução". Marcar uma pela outra é
+                                                declarar natureza errada. */}
+                                            <label
+                                                title="Isenção de ICMS (lei estadual) — tira SÓ o ICMS do DAS; o IPI continua, porque isenção de IPI não existe neste campo. No extrato sai como 'Isenção de ICMS: R$ ...'. Excludente com Imunidade."
+                                                className={`cursor-pointer px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center gap-2 select-none ${state.isIsento ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-600'}`}>
+                                                <input type="checkbox" checked={!!state.isIsento} onChange={() => handleOptionToggle(key, 'isIsento')} className="hidden" />
+                                                Isenção de ICMS
                                             </label>
                                         </div>
                                     </div>

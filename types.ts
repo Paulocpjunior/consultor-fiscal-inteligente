@@ -312,6 +312,15 @@ export interface DetalhamentoAnexo {
     icmsSt: boolean;
     isMonofasico: boolean;
     isImune: boolean;
+    /**
+     * ISENÇÃO de ICMS (LC 123 art. 18 §20-A / lei estadual). NÃO é o mesmo que
+     * imunidade: a imunidade é um ESTADO da parcela (a receita inteira é imune,
+     * CF art. 150) e a isenção é um VALOR dela — os extratos do PGDAS-D dizem
+     * isso na cara ("Imunidade tributária de: ICMS, IPI." × "Isenção de ICMS:
+     * R$ 63.878,60"). Declarar uma como a outra é declarar natureza errada.
+     * Opcional: registro antigo sem o campo é "não isento", não "desconhecido".
+     */
+    isIsento?: boolean;
     isExterior: boolean;
 }
 
@@ -400,6 +409,15 @@ export interface SimplesItemCalculo {
     isSup: boolean;
     isMonofasico: boolean;
     isImune: boolean;
+    /**
+     * ISENÇÃO de ICMS (LC 123 art. 18 §20-A / lei estadual). NÃO é o mesmo que
+     * imunidade: a imunidade é um ESTADO da parcela (a receita inteira é imune,
+     * CF art. 150) e a isenção é um VALOR dela — os extratos do PGDAS-D dizem
+     * isso na cara ("Imunidade tributária de: ICMS, IPI." × "Isenção de ICMS:
+     * R$ 63.878,60"). Declarar uma como a outra é declarar natureza errada.
+     * Opcional: registro antigo sem o campo é "não isento", não "desconhecido".
+     */
+    isIsento?: boolean;
     isExterior: boolean;
 }
 
@@ -410,6 +428,15 @@ export interface SimplesDetalheItem {
     isSup: boolean;
     isMonofasico: boolean;
     isImune: boolean;
+    /**
+     * ISENÇÃO de ICMS (LC 123 art. 18 §20-A / lei estadual). NÃO é o mesmo que
+     * imunidade: a imunidade é um ESTADO da parcela (a receita inteira é imune,
+     * CF art. 150) e a isenção é um VALOR dela — os extratos do PGDAS-D dizem
+     * isso na cara ("Imunidade tributária de: ICMS, IPI." × "Isenção de ICMS:
+     * R$ 63.878,60"). Declarar uma como a outra é declarar natureza errada.
+     * Opcional: registro antigo sem o campo é "não isento", não "desconhecido".
+     */
+    isIsento?: boolean;
     isExterior: boolean;
 }
 
