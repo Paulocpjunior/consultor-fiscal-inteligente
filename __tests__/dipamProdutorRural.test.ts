@@ -814,3 +814,81 @@ describe('foraDoTotal — o dinheiro que espera conferência', () => {
         expect(painel.foraDoTotal).toEqual([]);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A FILA DE CONFERÊNCIA É ORDENADA POR DINHEIRO (Paulo, 13/08).
+//
+// A tabela de "quanto está fora do total" mostrou 293 fornecedores a conferir
+// no CADESP, R$ 8,5 milhões em compras — enquanto o mês inteiro faltava
+// R$ 10,7 mil de FUNRURAL. Ou seja: quase todos são PJ de verdade (LTDA), e um
+// ou dois são o que importa.
+//
+// Conferir 293 no CADESP em ordem qualquer é trabalho impossível; ordenado por
+// valor, o primeiro costuma fechar o mês. Sem a ordem, a lista vira aquilo que
+// a equipe aprende a ignorar.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('pendências ordenadas por valor', () => {
+    const empresa = { id: 'z', nome: 'ZICADA HORTIFRUTI', cnpj: '29240822000121' };
+    let seq = 0;
+    const pj = (nome: string, doc: string, valor: number) => ({
+        chave: String(++seq).padStart(44, '3'),
+        numero: String(seq), competencia: '2026-07', direcao: 'entrada', status: 'autorizado',
+        valorTotal: valor,
+        emitente: { cnpjCpf: doc, nome, uf: 'SP', codMunIBGE: '3550308' },
+        itens: [{ cfop: '1102', ncm: '08039000', xProd: 'BANANA', vProd: valor }],
+    });
+
+    it('o fornecedor mais caro vem PRIMEIRO, com o valor e o potencial na linha', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [
+                pj('PEQUENO LTDA', '11222333000181', 1000),
+                pj('GRANDE LTDA', '11444777000161', 659000),
+                pj('MEDIO LTDA', '11222333000262', 5000),
+            ],
+            competencia: '2026-07', empresa,
+        });
+        const fila = painel.pendencias.filter((p: any) => p.codigo === 'fornecedor-indefinido');
+        expect(fila.map((p: any) => p.fornecedor)).toEqual(['GRANDE LTDA', 'MEDIO LTDA', 'PEQUENO LTDA']);
+        expect(fila[0].valor).toBe(659000);
+        // 1,63% vigente em 07/2026 — mesma régua da apuração.
+        expect(fila[0].funruralPotencial).toBe(10741.7);
+    });
+
+    it('fornecedor repetido continua UMA conferência, mas SOMANDO as notas', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [
+                pj('GRANDE LTDA', '11444777000161', 400000),
+                pj('GRANDE LTDA', '11444777000161', 259000),
+                pj('PEQUENO LTDA', '11222333000181', 1000),
+            ],
+            competencia: '2026-07', empresa,
+        });
+        const fila = painel.pendencias.filter((p: any) => p.codigo === 'fornecedor-indefinido');
+        expect(fila).toHaveLength(2);                       // uma linha por fornecedor
+        expect(fila[0].fornecedor).toBe('GRANDE LTDA');
+        expect(fila[0].valor).toBe(659000);                 // as duas notas somadas
+        expect(fila[0].notas).toBe(2);
+    });
+
+    it('confirmar como Pessoa Jurídica TIRA da fila — senão o trabalho nunca acaba', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [pj('GRANDE LTDA', '11444777000161', 659000)],
+            competencia: '2026-07', empresa,
+            fornecedores: { '11444777000161': { doc: '11444777000161', natureza: 'pessoa_juridica' } },
+        });
+        expect(painel.pendencias.filter((p: any) => p.codigo === 'fornecedor-indefinido')).toHaveLength(0);
+        expect(painel.foraDoTotal).toEqual([]);
+        expect(painel.funrural.total).toBe(0);              // PJ não gera sub-rogação
+    });
+
+    it('confirmar como Produtor Rural PF traz o valor PRA DENTRO da apuração', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [pj('SITIO DO SEU ZE', '11444777000161', 659000)],
+            competencia: '2026-07', empresa,
+            fornecedores: { '11444777000161': { doc: '11444777000161', natureza: 'produtor_rural_pf' } },
+        });
+        expect(painel.pendencias.filter((p: any) => p.codigo === 'fornecedor-indefinido')).toHaveLength(0);
+        expect(painel.funrural.base).toBe(659000);
+        expect(painel.funrural.total).toBeGreaterThan(0);
+    });
+});
