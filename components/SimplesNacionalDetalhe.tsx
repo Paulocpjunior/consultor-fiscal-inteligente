@@ -18,6 +18,7 @@ import {
 import EmitirNfseModal from './NfseNacional/EmitirModal';
 import PrevisaoDasModal from './Das/PrevisaoModal';
 import PgdasConferirModal from './Pgdas/ConferirModal';
+import { montarChamadoSerpro } from '../services/chamadoSerpro';
 
 interface SimplesNacionalDetalheProps {
     empresa: SimplesNacionalEmpresa;
@@ -643,17 +644,26 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
         }
     };
 
-    const copiarResultadoSonda = () => {
-        if (!resultadoSonda) return;
-        const txt = [
-            `SONDA PGDAS-D sem movimento — ${empresa?.nome} (${empresa?.cnpj})`,
-            resultadoSonda.veredito?.resumo || '',
-            '',
-            ...(resultadoSonda.candidatos || []).map((c: any) =>
-                `[${c.situacao}] ${c.nome} — ${c.codigo || 'sem código'}\n  hipótese: ${c.hipotese}\n  SERPRO: ${c.mensagem}`),
-        ].join('\n');
-        navigator.clipboard?.writeText(txt);
-        onShowToast('Resultado copiado — cole no chamado do SERPRO.');
+    // O botão copiava um DESPEJO (veredito + candidatos), e despejo não é
+    // chamado: faltava a identificação, faltava dizer que NADA foi transmitido
+    // (sem isso o atendente responde sobre entrega) e faltava a PERGUNTA.
+    // Montar isso na mão é pedir que quem abre o chamado saiba que o
+    // TRANSDECLARACAO11 tem dois modos — ele não tem por que saber.
+    const chamado = useMemo(() => (resultadoSonda ? montarChamadoSerpro({
+        razaoSocial: empresa?.nome,
+        cnpj: empresa?.cnpj,
+        competencia: resultadoSonda.competencia,
+        rodadoEm: new Date().toLocaleString('pt-BR'),
+        resultado: resultadoSonda,
+    }) : null), [resultadoSonda, empresa?.nome, empresa?.cnpj]);
+
+    const copiarChamadoSerpro = () => {
+        if (!chamado?.podeAbrir) {
+            onShowToast(chamado?.motivoDoBloqueio || 'Sem evidência para abrir chamado.');
+            return;
+        }
+        navigator.clipboard?.writeText(`Assunto: ${chamado.assunto}\n\n${chamado.corpo}`);
+        onShowToast('Chamado montado e copiado — cole no portal do SERPRO.');
     };
 
     const handleDeclararSemMovimento = async () => {
@@ -1095,10 +1105,13 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                         </h4>
                         <div className="flex gap-2">
                             <button
-                                onClick={copiarResultadoSonda}
-                                className="text-[11px] px-3 py-1 rounded-md bg-white dark:bg-slate-800 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-semibold"
+                                onClick={copiarChamadoSerpro}
+                                title={chamado?.podeAbrir ? chamado.assunto : (chamado?.motivoDoBloqueio || '')}
+                                className={`text-[11px] px-3 py-1 rounded-md border font-semibold ${chamado?.podeAbrir
+                                    ? 'bg-white dark:bg-slate-800 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300'
+                                    : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-400 cursor-not-allowed'}`}
                             >
-                                📋 Copiar para o chamado
+                                📋 Copiar chamado do SERPRO
                             </button>
                             <button
                                 onClick={() => setResultadoSonda(null)}
@@ -1124,6 +1137,26 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                             o próximo passo é o SERPRO explicar o código {resultadoSonda.veredito?.codigoUnico}.
                         </p>
                     )}
+
+                    {/* O chamado já vem PRONTO. Deixar a pergunta à vista é o
+                        que evita que ela seja reescrita na mão como "não
+                        consigo declarar sem movimento" — pergunta genérica
+                        volta com resposta genérica. */}
+                    {chamado?.podeAbrir ? (
+                        <details className="mt-3 rounded-lg bg-white dark:bg-slate-800 border border-violet-200 dark:border-slate-700 p-2">
+                            <summary className="text-[11px] font-bold text-violet-800 dark:text-violet-300 cursor-pointer">
+                                📨 Chamado pronto — ver antes de copiar
+                            </summary>
+                            <p className="mt-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400">Assunto</p>
+                            <p className="text-[11px] text-slate-700 dark:text-slate-200 break-words">{chamado.assunto}</p>
+                            <p className="mt-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400">Corpo</p>
+                            <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-slate-600 dark:text-slate-300">{chamado.corpo}</pre>
+                        </details>
+                    ) : chamado ? (
+                        <p className="mt-3 text-[11px] text-slate-600 dark:text-slate-400">
+                            Sem chamado a abrir: {chamado.motivoDoBloqueio}
+                        </p>
+                    ) : null}
 
                     <div className="mt-3 space-y-2">
                         {(resultadoSonda.candidatos || []).map((c: any) => (
