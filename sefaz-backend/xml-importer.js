@@ -1062,13 +1062,39 @@ export async function preencherEnderecoDestinatario(opts = {}) {
  * não conserto de cadastro. Mandar o colaborador digitar o município de 323
  * produtores seria pedir trabalho por um dado que já está no arquivo.
  *
- * O campo-sentinela muda com a direção: na saída o participante é o
- * destinatário (`ufDest`), na entrada é o emitente (`ufEmit`). Usar o sentinela
- * errado faria o backfill reler os mesmos documentos pra sempre.
+ * ═══ O SENTINELA ERA O CAMPO ERRADO — corrigido 13/08 ══════════════════════
+ *
+ * Ele olhava a UF do lado varrido: UF presente ⇒ "já tinha" ⇒ não relê. Só que
+ * a UF é gravada pelo importer em TODA nota, enquanto o que falta na aba 🌾 é o
+ * MUNICÍPIO e o FORNECEDOR. Resultado real (print do Paulo, 13/08): o botão
+ * examinou 692 documentos, disse **"0 recuperadas · 664 já tinham"** e o painel
+ * seguiu acusando 427 notas sem fornecedor e 14 sem município. Duas leituras do
+ * mesmo dado discordando — e a promessa da tela ("reler resolve em massa") era
+ * falsa exatamente para quem precisava dela.
+ *
+ * O sentinela agora é um CARIMBO de releitura (`participantesRelidos`), não um
+ * campo de dado: o documento é relido uma vez por versão do extrator, e o que
+ * decide não é "tem UF?" e sim "já passei por aqui?". Isso também dá o caminho
+ * para reprocessar tudo quando o extrator aprender a ler mais: sobe a versão.
+ *
+ * ═══ E ELE NÃO GRAVAVA O DOCUMENTO DO PARTICIPANTE ══════════════════════════
+ *
+ * O extrator devolve CNPJ/CPF de emitente e destinatário desde sempre, mas o
+ * patch só escrevia nome, município e IE. As 427 "nota sem o fornecedor" são
+ * justamente notas sem `cnpjEmit` — nenhuma releitura ia resolvê-las.
  */
+/**
+ * Versão do extrator de participantes. Documento relido nesta versão não volta
+ * à fila; subir o número reprocessa a base quando o extrator aprender a ler
+ * mais. É o que substitui o sentinela por campo de dado.
+ */
+export const VERSAO_RELEITURA_PARTICIPANTES = 2;
+
 export async function preencherEnderecoParticipantes({ limit = 200, empresaId = null, competencia = null, direcao = 'saida' } = {}) {
   const db = fa().firestore();
   let examinadas = 0, preenchidas = 0, semXml = 0, jaTinham = 0;
+  // Contagem POR CAUSA — "0 recuperadas" sem dizer o quê não responde nada.
+  let ganharamMunicipio = 0, ganharamFornecedor = 0, semDadoNoXml = 0;
   try {
     // ARMADILHA DO FIRESTORE: `where('ufDest', '==', null)` NÃO devolve os
     // documentos em que o campo simplesmente NÃO EXISTE — e é esse o caso de
@@ -1084,10 +1110,10 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
     const bucket = storage.bucket(STORAGE_BUCKET);
     for (const docSnap of snap.docs) {
       const d = docSnap.data() || {};
-      // Já preenchido (inclusive com '' = "o XML não tinha") — não relê.
-      // O sentinela é o do lado que INTERESSA naquela direção.
-      const sentinela = direcao === 'entrada' ? d.ufEmit : d.ufDest;
-      if (sentinela !== undefined && sentinela !== null) { jaTinham++; continue; }
+      // Já relido NESTA versão do extrator — não volta à fila. O que decide é
+      // "já passei por aqui?", nunca "tem UF?": a UF vem em toda nota e fazia
+      // o backfill pular justamente as que faltavam município e fornecedor.
+      if (Number(d.participantesRelidos || 0) >= VERSAO_RELEITURA_PARTICIPANTES) { jaTinham++; continue; }
       examinadas++;
       if (!d.storagePath) { semXml++; continue; }
       try {
@@ -1102,18 +1128,38 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
         // dado ausente. Só a UF do lado varrido recebe '' quando o XML não tem:
         // ela é o SENTINELA (sem ela o mesmo doc voltaria pra fila pra sempre).
         const patch = {};
-        const por = (campo, valor) => { if (valor) patch[campo] = valor; };
-        por('xNomeDest', p.destinatario.nome);
-        por('codMunDest', p.destinatario.codMunIBGE);
-        por('ieDest', p.destinatario.ie);
+        // Preenche só o que está VAZIO. O que o importer já gravou não é
+        // sobrescrito nem apagado: este backfill recupera ausência, não corrige
+        // divergência — divergência entre fonte e cadastro é ALERTA, e alerta
+        // não se resolve por escrita silenciosa.
+        const por = (campo, valor) => {
+          const atual = d[campo];
+          if (valor && (atual === undefined || atual === null || atual === '')) patch[campo] = valor;
+        };
+        // A IDENTIDADE do participante vem junto: sem `cnpjEmit` a nota cai em
+        // "fornecedor indefinido" para sempre, e era o buraco das 427.
+        por('cnpjEmit', p.emitente.cnpj);
         por('xNomeEmit', p.emitente.nome);
         por('codMunEmit', p.emitente.codMunIBGE);
         por('ieEmit', p.emitente.ie);
-        por(direcao === 'entrada' ? 'ufDest' : 'ufEmit', direcao === 'entrada' ? p.destinatario.uf : p.emitente.uf);
-        patch[direcao === 'entrada' ? 'ufEmit' : 'ufDest'] = (direcao === 'entrada' ? p.emitente.uf : p.destinatario.uf) || '';
+        por('cnpjDest', p.destinatario.cnpj);
+        por('xNomeDest', p.destinatario.nome);
+        por('codMunDest', p.destinatario.codMunIBGE);
+        por('ieDest', p.destinatario.ie);
+        por('ufEmit', p.emitente.uf);
+        por('ufDest', p.destinatario.uf);
+        patch.participantesRelidos = VERSAO_RELEITURA_PARTICIPANTES;
+        patch.participantesRelidosEm = new Date().toISOString();
+
+        const ladoQueInteressa = direcao === 'entrada' ? 'Emit' : 'Dest';
+        if (patch[`codMun${ladoQueInteressa}`]) ganharamMunicipio++;
+        if (patch[`cnpj${ladoQueInteressa}`] || patch[`xNome${ladoQueInteressa}`]) ganharamFornecedor++;
+        // Relido e o XML REALMENTE não tinha — resposta diferente de "já
+        // tinha", e é ela que manda procurar o dado no cadastro do produtor.
+        const recuperouAlgo = Object.keys(patch).length > 2;
+        if (!recuperouAlgo) semDadoNoXml++;
         await docSnap.ref.update(patch);
-        const preencheu = direcao === 'entrada' ? p.emitente.uf : p.destinatario.uf;
-        if (preencheu) preenchidas++;
+        if (recuperouAlgo) preenchidas++;
       } catch (e) {
         console.warn(`[preencherEnderecoDestinatario] falha em ${docSnap.id}:`, e.message);
         semXml++;
@@ -1121,9 +1167,9 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
     }
   } catch (e) {
     console.warn('[preencherEnderecoDestinatario] query falhou:', e.message);
-    return { examinadas, preenchidas, semXml, jaTinham, erro: e.message };
+    return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, semDadoNoXml, erro: e.message };
   }
-  return { examinadas, preenchidas, semXml, jaTinham };
+  return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, semDadoNoXml };
 }
 
 export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor }) {

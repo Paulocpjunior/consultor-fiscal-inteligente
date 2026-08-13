@@ -297,17 +297,38 @@ router.post('/reler-municipios', requireAdmin, async (req, res) => {
         if (!acesso.ok) return res.status(acesso.status).json({ ok: false, error: acesso.error });
 
         const { preencherEnderecoParticipantes } = await import('./xml-importer.js');
+        // AS DUAS DIREÇÕES. A compra de produtor é entrada, mas a NOTA PRÓPRIA
+        // de entrada (tpNF=0, RICMS/SP art. 136) ainda pode estar gravada como
+        // 'saida' no banco — o backfill de direção conserta aos poucos, e a aba
+        // 🌾 lê pela direção EFETIVA. Varrer só 'entrada' deixaria justamente
+        // essas de fora, que é o mesmo defeito de varrer só 'saida' (12/08).
         const entrada = await preencherEnderecoParticipantes({ empresaId, competencia, direcao: 'entrada' });
-        return res.json({
-            ok: true,
-            ...entrada,
-            // Farol honesto: doc sem arquivo guardado NÃO é doc corrigido, e
-            // insistir nele não adianta — o problema ali é de captura.
-            acao: entrada.semXml
-                ? `${entrada.semXml} documento(s) não têm o XML guardado — nesses o município só entra pelo `
-                  + 'cadastro do produtor. Os demais foram relidos da fonte.'
-                : null,
-        });
+        const saida = await preencherEnderecoParticipantes({ empresaId, competencia, direcao: 'saida' });
+        const soma = (campo) => (Number(entrada[campo]) || 0) + (Number(saida[campo]) || 0);
+        const total = {
+            examinadas: soma('examinadas'), preenchidas: soma('preenchidas'),
+            semXml: soma('semXml'), jaTinham: soma('jaTinham'),
+            ganharamMunicipio: soma('ganharamMunicipio'),
+            ganharamFornecedor: soma('ganharamFornecedor'),
+            semDadoNoXml: soma('semDadoNoXml'),
+        };
+
+        // A AÇÃO SEGUE A CAUSA. "0 recuperadas" sozinho não responde nada — e
+        // era pior que isso: o texto antigo dizia "já tinham" para documentos
+        // que o backfill nem tinha aberto (o sentinela olhava a UF).
+        const partes = [];
+        if (total.semXml) {
+            partes.push(`${total.semXml} documento(s) não têm o XML guardado — nesses o município e o fornecedor `
+                + 'só entram pelo cadastro do produtor.');
+        }
+        if (total.semDadoNoXml) {
+            partes.push(`${total.semDadoNoXml} foram relidos e o XML REALMENTE não traz o dado — aí não é releitura `
+                + 'que resolve, é o cadastro do produtor (ou conferir a nota na origem).');
+        }
+        if (total.jaTinham && !total.preenchidas && !total.semXml && !total.semDadoNoXml) {
+            partes.push('Nada mudou porque todos já haviam sido relidos nesta versão do leitor.');
+        }
+        return res.json({ ok: true, ...total, acao: partes.join(' ') || null });
     } catch (e) {
         console.error('[dipam/reler-municipios]', e);
         return res.status(500).json({ ok: false, error: `Falha ao reler os XMLs: ${e.message}` });
