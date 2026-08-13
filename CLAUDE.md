@@ -802,6 +802,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Sem totalizador colado ⇒ `nao-conferido`, nunca verde por omissão; código que
   a Receita totalizou e o app não conhece fica FORA e NOMEADO (somar por engano
   inventaria divergência). Código novo entra aqui **com o recibo do lado**.
+  🧾 **O RITO DO FECHAMENTO GANHOU TELA — e a lição é a falta dela** (13/08):
+  a rota do rito (conferir → arquivar em `.../RECIBOS` no SharePoint → avisar o
+  gestor da caixa de quem transmitiu) subiu de manhã e ficou **SEM BOTÃO**.
+  **Rota que nenhuma tela chama não é funcionalidade — é código morto que dá a
+  impressão de entregue**, e é a mesma família do E510 "pronto" que ninguém
+  gerava. Agora é a sub-aba **🧾 Fechamento EFD-Reinf** no card DCTFWeb, com
+  `GET /fechamento-competencia/preparar`: a lista de eventos sai da auditoria
+  do gateway (`reinf_gateway_lotes`), não da digitação — lista digitada ESQUECE
+  evento, que é o jeito de dar o mês por fechado com um R-2055 faltando. TRÊS
+  TRAVAS: (1) toda linha nasce **sem recibo** (o gateway guarda PROTOCOLO, que
+  é lote recebido, nunca recibo, que é evento processado — preencher por
+  dedução transformaria "transmitiu" em "entregou"); (2) os códigos de receita
+  descem do BACKEND pro front (`codigosFunrural`), senão a tela seria a segunda
+  cópia da tabela; (3) valor em branco no totalizador **não vira zero**. O
+  de-para `elemento → código` (`evtAqProd`→R-2055) nasceu em
+  `reinf-recibo-entrega.js` e entrou na `REGUAS_VIGIADAS`: o gateway fala
+  `evtAqProd`, a pessoa e o e-CAC falam `R-2055`, e nomear errado num papel que
+  serve de PROVA é pior que não nomear.
   📌 **O `indAquis` do caso comum JÁ ESTÁ PROVADO: é `1`** — é o valor do
   `evtAqProd` ACEITO em produção (EDUARDO GUERRA × DAMIÃO, banana, 06/2026), e o
   teste do gerador o trava. Compra de produção rural de produtor PF por

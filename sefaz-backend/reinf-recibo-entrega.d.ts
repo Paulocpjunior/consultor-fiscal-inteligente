@@ -1,5 +1,9 @@
 export function competenciaHumana(comp: string): string;
 
+/** Elemento do XML → código do evento. Desconhecido devolve null, nunca palpite. */
+export const CODIGO_DO_EVENTO: Record<string, string>;
+export function codigoDoEvento(elemento: string | null | undefined): string | null;
+
 export interface SituacaoEntrega {
     situacao: 'entregue' | 'recusado' | 'sem-recibo';
     detalhe: string;
