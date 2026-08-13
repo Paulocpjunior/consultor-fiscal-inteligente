@@ -22,3 +22,10 @@ export function salvarProdutorRural(
 export function carregarProdutoresRurais(docs?: string[]): Promise<Map<string, any>>;
 export function lerCondicaoRural(empresa: unknown): Record<string, unknown>;
 export function documentosDaContraparte(notas?: unknown[]): string[];
+
+/**
+ * Recusa marcar como Produtor Rural (PF) um CNPJ cuja razão social carrega tipo
+ * societário (LTDA/S.A./EIRELI) — sociedade é pessoa jurídica e não há
+ * sub-rogação. Lança com `code: 'NATUREZA_CONTRADITORIA'`.
+ */
+export function assertNaturezaCoerente(id: string, dados?: { nome?: string; natureza?: string }): void;

@@ -850,6 +850,132 @@ describe('foraDoTotal — o dinheiro que espera conferência', () => {
         expect(painel.pendencias.filter((x: any) => x.codigo === 'fornecedor-sociedade')).toHaveLength(0);
     });
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // A RÉGUA DA RAZÃO SOCIAL NÃO PODE TIRAR NINGUÉM DO TOTAL.
+    //
+    // Paulo, 13/08, olhando o FUNRURAL da NOVA ERA depois da varredura:
+    // *"diminuiu"*. A pergunta que isso levanta é se a régua nova comeu alguém
+    // que estava na conta — e a resposta tem que ser DEMONSTRÁVEL, não
+    // argumentada: quem tem prova de produtor PF (IE "P" ou CPF) é decidido
+    // ANTES de a razão social ser olhada, então o nome nunca alcança quem já
+    // contava. Se alguém reordenar essas verificações um dia, este teste cai.
+    // ═══════════════════════════════════════════════════════════════════════
+    it('IE de produtor "P" VENCE a razão social — continua no total mesmo com LTDA no nome', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro({
+                emitente: {
+                    cnpjCpf: '11222333000181', nome: 'FAZENDA BOA VISTA LTDA',
+                    ie: 'P011222333110', uf: 'SP', codMunIBGE: '3550308',
+                },
+            })],
+            competencia: '2026-07', empresa,
+        });
+        expect(painel.funrural.total).toBeGreaterThan(0);
+        expect(painel.pendencias.some((x: any) => x.codigo === 'fornecedor-sociedade')).toBe(false);
+    });
+
+    it('CPF no documento também vence a razão social', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro({
+                emitente: { cnpjCpf: '12345678909', nome: 'JOSE DA SILVA LTDA', uf: 'SP', codMunIBGE: '3550308' },
+            })],
+            competencia: '2026-07', empresa,
+        });
+        expect(painel.funrural.total).toBeGreaterThan(0);
+    });
+
+    // ⚠️ ESTE TESTE JÁ AFIRMOU O CONTRÁRIO, E ESTAVA ERRADO.
+    //
+    // Escrito às 17h de 13/08 como "cadastro confirmado VENCE tudo — inclusive
+    // o nome", apoiado na regra de 06/08 (confirmação humana é a palavra
+    // final). Uma hora depois o Paulo mostrou o efeito disso no FUNRURAL real:
+    // BELA VISTA … LTDA somando sub-rogação porque alguém clicou no primeiro
+    // botão da fila.
+    //
+    // A regra de 06/08 continua valendo para o que é OPINIÃO (esta PJ é
+    // produtor? o CADESP responde). Ela não vale para o que é IMPOSSÍVEL:
+    // sociedade é pessoa jurídica (CC art. 44), e a sub-rogação (Lei 8.212/91
+    // art. 30, IV) só alcança produtor rural PESSOA FÍSICA. Confirmação humana
+    // não transforma PJ em PF.
+    it('cadastro confirmado NÃO vence a razão social de sociedade — é marcação impossível', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro()],   // DEL MONTE FRESH PRODUCE BRASIL LTDA
+            competencia: '2026-07', empresa,
+            fornecedores: { '11222333000181': { doc: '11222333000181', natureza: 'produtor_rural_pf', codMunIBGE: '3550308' } },
+        });
+        expect(painel.funrural.total).toBe(0);
+        expect(painel.pendencias.some((x: any) => x.codigo === 'cadastro-contraditorio')).toBe(true);
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // MATA-BURRO: LTDA CONFIRMADA COMO PRODUTOR RURAL PF NÃO GERA FUNRURAL.
+    //
+    // Paulo, 13/08, apontando o detalhe do FUNRURAL: *"o erro está aqui (…)
+    // tem que tirar esses caras"* — BELA VISTA COMERCIO DE FRUTAS E VERDURAS
+    // **LTDA** somando sub-rogação nota a nota.
+    //
+    // Como entrou: a fila de pendências oferece três botões e o PRIMEIRO é
+    // "Produtor Rural (PF)". Limpando centenas de linhas, o clique fácil faz a
+    // pendência sumir E ADICIONA imposto que não existe.
+    //
+    // Aqui a confirmação humana NÃO vence — única exceção da regra, porque não
+    // é opinião contra opinião: sociedade é pessoa jurídica (CC art. 44) e a
+    // sub-rogação (Lei 8.212/91 art. 30, IV) só alcança produtor rural PESSOA
+    // FÍSICA. Recusar não inventa nada; só deixa de declarar contribuição sobre
+    // quem não a deve.
+    // ═══════════════════════════════════════════════════════════════════════
+    it('cadastro dizendo produtor rural PF + razão social LTDA = NÃO calcula FUNRURAL', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro({
+                emitente: {
+                    cnpjCpf: '47120213000110', nome: 'BELA VISTA COMERCIO DE FRUTAS E VERDURAS LTDA',
+                    uf: 'ES', codMunIBGE: '3205309',
+                },
+            })],
+            competencia: '2026-07', empresa,
+            fornecedores: {
+                '47120213000110': {
+                    doc: '47120213000110', natureza: 'produtor_rural_pf',
+                    nome: 'BELA VISTA COMERCIO DE FRUTAS E VERDURAS LTDA',
+                },
+            },
+        });
+        expect(painel.funrural.total).toBe(0);
+        const p = painel.pendencias.find((x: any) => x.codigo === 'cadastro-contraditorio');
+        expect(p).toBeTruthy();
+        expect(p.mensagem).toMatch(/confirmado como Produtor Rural \(PF\) no cadastro/);
+        expect(p.acao).toMatch(/Corrija o cadastro/);
+    });
+
+    it('e a nota NÃO some: o valor bloqueado aparece com a causa', () => {
+        // Total que muda sozinho faz desconfiar do número certo — quem some da
+        // conta tem que aparecer na tela.
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro({
+                emitente: { cnpjCpf: '47120213000110', nome: 'BELA VISTA FRUTAS LTDA', uf: 'ES', codMunIBGE: '3205309' },
+            })],
+            competencia: '2026-07', empresa,
+            fornecedores: { '47120213000110': { doc: '47120213000110', natureza: 'produtor_rural_pf', nome: 'BELA VISTA FRUTAS LTDA' } },
+        });
+        const linha = painel.foraDoTotal.find((f: any) => f.codigo === 'cadastro-contraditorio');
+        expect(linha).toBeTruthy();
+        expect(linha.valor).toBe(100000);
+        expect(linha.rotulo).toMatch(/CORRIGIR o cadastro/);
+    });
+
+    it('produtor PF de verdade (CPF) confirmado no cadastro segue calculando', () => {
+        // A exceção é ESTREITA: só o par CNPJ + tipo societário. Pessoa física
+        // confirmada continua valendo, senão a trava comeria o caso normal.
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro({
+                emitente: { cnpjCpf: '12345678909', nome: 'JOAO DA SILVA', uf: 'SP', codMunIBGE: '3550308' },
+            })],
+            competencia: '2026-07', empresa,
+            fornecedores: { '12345678909': { doc: '12345678909', natureza: 'produtor_rural_pf', codMunIBGE: '3550308' } },
+        });
+        expect(painel.funrural.total).toBeGreaterThan(0);
+    });
+
     it('sem bloqueio, a lista vem vazia — não inventa alarme', () => {
         const painel = montarDipamCompetencia({
             documentos: [notaEntrada()], competencia: '2026-06', empresa,

@@ -13,6 +13,7 @@
 import admin from 'firebase-admin';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 import { validarCpf, formatarCpf } from './documento-dv.js';
+import { tipoSocietarioNoNome } from './dipam-produtor-rural.js';
 
 function getDb() {
     if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -110,6 +111,28 @@ export function montarRegistroProdutor(id, dados = {}, usuario = null) {
 }
 
 /** Grava/atualiza o cadastro de um produtor (upsert com auditoria de quem). */
+/**
+ * A natureza marcada bate com o que a razão social diz? Pura, para ser testada
+ * sem Firestore — e chamada na porta da gravação.
+ *
+ * Lança com `code: 'NATUREZA_CONTRADITORIA'` quando alguém tenta marcar como
+ * Produtor Rural (PF) um CNPJ cuja razão social carrega tipo societário.
+ */
+export function assertNaturezaCoerente(id, dados = {}) {
+    if (dados.natureza !== 'produtor_rural_pf') return;
+    if (String(id || '').length !== 14) return;
+    const tipo = tipoSocietarioNoNome(dados.nome);
+    if (!tipo) return;
+    const err = new Error(
+        `"${String(dados.nome || '').trim()}" tem ${tipo} na razão social — sociedade é pessoa jurídica `
+        + '(CC art. 44) e não pode ser Produtor Rural (PF). Marque como "Pessoa Jurídica": sem produtor PF '
+        + 'não há sub-rogação, quem recolhe é o próprio emitente. Se o nome estiver errado no cadastro, '
+        + 'corrija o nome antes.',
+    );
+    err.code = 'NATUREZA_CONTRADITORIA';
+    throw err;
+}
+
 export async function salvarProdutorRural(doc, dados, usuario) {
     const id = soDigitos(doc);
     if (id.length !== 11 && id.length !== 14) {
@@ -127,6 +150,22 @@ export async function salvarProdutorRural(doc, dados, usuario) {
         err.code = 'FUNRURAL_INVALIDO';
         throw err;
     }
+    // ── MATA-BURRO: LTDA NÃO PODE SER MARCADA COMO PRODUTOR RURAL PF ────────
+    //
+    // Paulo, 13/08, apontando o FUNRURAL da varredura: *"tem que tirar esses
+    // caras"* — BELA VISTA COMERCIO DE FRUTAS E VERDURAS LTDA somando
+    // sub-rogação nota a nota, porque alguém a confirmou como Produtor Rural
+    // (PF) para limpar a pendência. A fila tem três botões e o PRIMEIRO é
+    // justamente esse: limpando 293 linhas, o clique fácil ADICIONA imposto que
+    // não existe.
+    //
+    // Sociedade é pessoa jurídica (CC art. 44) e a sub-rogação do art. 30, IV da
+    // Lei 8.212/91 só alcança produtor rural PESSOA FÍSICA. Não é opinião
+    // discutível: é marcação impossível, e por isso vira RECUSA na porta em vez
+    // de alerta que se lê depois. A mensagem oferece a saída certa (Pessoa
+    // Jurídica) — trava sem caminho é trava que a equipe contorna.
+    assertNaturezaCoerente(id, dados);
+
     const codMun = soDigitos(dados.codMunIBGE);
     if (codMun && codMun.length !== 7) {
         const err = new Error(`Código IBGE do município deve ter 7 dígitos (recebido "${dados.codMunIBGE}").`);
