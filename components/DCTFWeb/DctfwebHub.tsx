@@ -20,13 +20,14 @@ const ConferirReinfDctfweb = lazy(() => import('../EfdReinf/ConferirReinfDctfweb
 const CoberturaDctfwebPanel = lazy(() => import('./CoberturaDctfwebPanel'));
 const TrimestraisDoMesPanel = lazy(() => import('./TrimestraisDoMesPanel'));
 const IpiVarreduraPanel = lazy(() => import('./IpiVarreduraPanel'));
+const FechamentoReinfPanel = lazy(() => import('../EfdReinf/FechamentoReinfPanel'));
 
 interface Props {
     currentUser: User;
     onShowToast?: (msg: string) => void;
 }
 
-type SubTab = 'painel' | 'trimestrais' | 'cobertura' | 'ipi' | 'reinf';
+type SubTab = 'painel' | 'trimestrais' | 'cobertura' | 'ipi' | 'reinf' | 'fechamento';
 
 const SUBTABS: Array<{ id: SubTab; label: string }> = [
     { id: 'painel', label: '📊 Painel DCTFWeb' },
@@ -34,6 +35,7 @@ const SUBTABS: Array<{ id: SubTab; label: string }> = [
     { id: 'cobertura', label: '🛡️ Cobertura' },
     { id: 'ipi', label: '🏭 Varredura IPI' },
     { id: 'reinf', label: '🔀 EFD-Reinf × DCTFWeb' },
+    { id: 'fechamento', label: '🧾 Fechamento EFD-Reinf' },
 ];
 
 const DctfwebHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
@@ -83,6 +85,7 @@ const DctfwebHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     {sub === 'cobertura' && <CoberturaDctfwebPanel onShowToast={onShowToast} />}
                     {sub === 'ipi' && <IpiVarreduraPanel onShowToast={onShowToast} />}
                     {sub === 'reinf' && <ConferirReinfDctfweb onShowToast={onShowToast} />}
+                    {sub === 'fechamento' && <FechamentoReinfPanel onShowToast={onShowToast} />}
                 </Suspense>
             </ErrorBoundary>
         </div>

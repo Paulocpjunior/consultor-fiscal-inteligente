@@ -171,6 +171,20 @@ const REGUAS_VIGIADAS: Regua[] = [
             /['"]1213-06['"]/,
         ],
     },
+    {
+        nome: 'De-para elemento do XML → código do evento da EFD-Reinf',
+        dono: 'sefaz-backend/reinf-recibo-entrega.js',
+        comoUsar: "import { codigoDoEvento } from '../sefaz-backend/reinf-recibo-entrega.js'",
+        porque: 'O gateway guarda o ELEMENTO (evtAqProd); a pessoa, o e-CAC e o extrato do fechamento '
+            + 'falam em CÓDIGO (R-2055). Uma segunda tabela faria o mesmo evento aparecer com dois '
+            + 'nomes em telas diferentes, num papel que serve de PROVA DE ENTREGA — e nomear errado '
+            + 'ali é pior que não nomear.',
+        assinaturas: [
+            /evtAqProd['"]?\s*:\s*['"]R-2055/,
+            /evtServTom['"]?\s*:\s*['"]R-2010/,
+            /evtRetPJ['"]?\s*:\s*['"]R-4020/,
+        ],
+    },
 ];
 
 // ─── Varredura ──────────────────────────────────────────────────────────────

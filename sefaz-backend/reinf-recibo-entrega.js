@@ -37,6 +37,49 @@ const texto = (v) => String(v ?? '').trim();
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const fmtBRL = (v) => `R$ ${r2(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+/**
+ * DE-PARA elemento do XML → código do evento.
+ *
+ * O gateway guarda o ELEMENTO (`evtAqProd`), porque é ele que o assinador acha
+ * pelo id; a pessoa, o e-CAC e o extrato falam em CÓDIGO (`R-2055`). Sem este
+ * de-para o extrato do fechamento sairia dizendo "evtAqProd entregue" para
+ * quem passou o mês inteiro procurando o R-2055 — e nomear errado, num papel
+ * que serve de prova, é pior que não nomear.
+ *
+ * Os pares vêm dos eventos REAIS que este projeto já transmitiu ou leu:
+ * evtAqProd (R-2055 aceito em produção restrita, VINCENZO 07/2026), evtServTom
+ * (R-2010 aceito, 06/2026), evtRetPJ (R-4020 homologado no app irmão),
+ * evtRetPF (R-4010), evtInfoContri (R-1000) e evtFech* (R-2099).
+ *
+ * Elemento desconhecido NÃO vira palpite: sai `null` e o extrato mostra o
+ * elemento cru. Inventar um código faz alguém dar por entregue um evento que
+ * não é o que ele pensa.
+ */
+export const CODIGO_DO_EVENTO = {
+    evtInfoContri: 'R-1000',
+    evtTabProcesso: 'R-1070',
+    evtServTom: 'R-2010',
+    evtServPr: 'R-2020',
+    evtAssDespRec: 'R-2030',
+    evtAssDespRep: 'R-2040',
+    evtComProd: 'R-2050',
+    evtAqProd: 'R-2055',
+    evtFech: 'R-2099',
+    evtFechaEvPer: 'R-2099',
+    evtRetPF: 'R-4010',
+    evtRetPJ: 'R-4020',
+    evtBenefFin: 'R-4040',
+    evtRetRec: 'R-4080',
+    evtFechaEvPerRet: 'R-4099',
+};
+
+/** Código do evento a partir do elemento — ou o elemento cru, nunca um chute. */
+export function codigoDoEvento(elemento) {
+    const e = texto(elemento);
+    if (!e) return null;
+    return CODIGO_DO_EVENTO[e] || null;
+}
+
 /** Competência 'AAAA-MM' → 'MM/AAAA' (é como o e-CAC mostra). */
 export function competenciaHumana(comp) {
     const m = /^(\d{4})-(\d{2})$/.exec(texto(comp));

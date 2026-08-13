@@ -40,8 +40,8 @@ import { montarPayloadR2055 } from './reinf-aquisicao-rural.js';
 import { montarPayloadR2010 } from './reinf-servicos-tomados.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
-import { conferirTotalizadorR2099 } from './reinf-aquisicao-rural.js';
-import { montarExtratoEntregas, montarEmailFechamento } from './reinf-recibo-entrega.js';
+import { conferirTotalizadorR2099, CODIGOS_RECEITA_FUNRURAL } from './reinf-aquisicao-rural.js';
+import { montarExtratoEntregas, montarEmailFechamento, codigoDoEvento } from './reinf-recibo-entrega.js';
 import { enviarEmail } from './graph-provider.js';
 import { escolherRemetente } from './graph-remetente.js';
 import { GESTOR_EMAIL } from './envio-imposto.js';
@@ -316,6 +316,107 @@ router.get('/aquisicao-rural', autorizar, async (req, res) => {
         });
     } catch (e) {
         console.error('[reinf-aquisicao-rural]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ============================================================================
+// GET /api/admin/reinf/fechamento-competencia/preparar?cnpj=&competencia=
+//
+// O QUE O APP JÁ SABE NÃO SE REDIGITA.
+//
+// O fechamento pede duas coisas de fora — os RECIBOS de cada evento e o
+// TOTALIZADOR do R-2099 — porque as duas só existem depois que a Receita
+// processa. Mas QUAIS eventos foram transmitidos, em que lote e em que
+// ambiente, disso o CFI é testemunha: desde que `REINF_TRANSMISSOR=gateway`
+// (09/08), toda transmissão do módulo Contábil passa por aqui e fica em
+// `reinf_gateway_lotes`.
+//
+// Pedir que a pessoa digite a lista de eventos seria pedir de novo o que já
+// está gravado — e lista digitada à mão ESQUECE evento, que é exatamente o
+// jeito de dar o mês por fechado com um R-2055 faltando.
+//
+// ═══ SEM RECIBO NÃO NASCE VERDE ═════════════════════════════════════════════
+//
+// A auditoria do gateway guarda PROTOCOLO (lote recebido), nunca recibo (evento
+// processado) — entre um e outro cabe uma recusa. Então tudo o que sai daqui
+// nasce `sem-recibo`, e é a pessoa que cola o recibo do e-CAC. Preencher
+// recibo por dedução seria transformar "transmitiu" em "entregou", que é a
+// única coisa que este extrato existe para não deixar acontecer.
+// ============================================================================
+router.get('/fechamento-competencia/preparar', requireAdmin, async (req, res) => {
+    try {
+        const cnpj = soDigitos(req.query.cnpj);
+        const competencia = String(req.query.competencia || '').trim();
+        if (cnpj.length !== 14) return res.status(400).json({ ok: false, error: 'Informe o CNPJ do declarante (14 dígitos).' });
+        if (!COMPETENCIA.test(competencia)) return res.status(400).json({ ok: false, error: 'Informe a competência no formato AAAA-MM.' });
+
+        const db = getDb();
+        const empresa = await acharEmpresa(db, cnpj);
+        if (!empresa) return res.status(404).json({ ok: false, error: `O CNPJ ${cnpj} não está cadastrado no CFI.` });
+
+        // O APURADO é a MESMA `montarDipamCompetencia` da aba 🌾. Ele vem junto
+        // para a tela mostrar contra o que o totalizador será conferido — sem
+        // isso a pessoa digita o totalizador às cegas.
+        const documentos = await carregarDocumentos(db, { empresaId: empresa.empresaId, cnpj, competencia });
+        const fornecedores = await carregarProdutoresRurais(documentosDaContraparte(documentos));
+        const painel = montarDipamCompetencia({
+            documentos, competencia, empresa: lerCondicaoRural(empresa._doc), fornecedores,
+        });
+
+        // Consulta por igualdade de CNPJ é segura AQUI (e só aqui): `declarante`
+        // é gravado pelo próprio gateway já normalizado em dígitos. A regra da
+        // casa — nunca consultar Firestore por igualdade de CNPJ — vale para o
+        // CADASTRO, que tem duas formas porque veio de fontes diferentes.
+        const snap = await db.collection('reinf_gateway_lotes').where('declarante', '==', cnpj).get();
+        const entregas = [];
+        let semCompetencia = 0;
+        for (const doc of snap.docs) {
+            const l = doc.data() || {};
+            const comps = Array.isArray(l.competencias) ? l.competencias : [];
+            if (!comps.length) { semCompetencia += 1; continue; }
+            if (!comps.includes(competencia)) continue;
+
+            // O elemento é guardado por LOTE (conjunto), não por evento. Com um
+            // elemento só, todo evento do lote é ele; com mais de um, o app NÃO
+            // adivinha qual id é qual — diz que não sabe.
+            const elementos = Array.isArray(l.elementos) ? l.elementos : [];
+            const unico = elementos.length === 1 ? elementos[0] : null;
+            for (const id of (Array.isArray(l.eventos) ? l.eventos : [])) {
+                entregas.push({
+                    evento: unico ? (codigoDoEvento(unico) || unico) : `Evento ${String(id).slice(-5)}`,
+                    tipo: id,
+                    protocolo: l.protocolo || null,
+                    recibo: null,
+                    transmitidoEm: l.em?.toDate ? l.em.toDate().toISOString().slice(0, 10) : null,
+                    tpAmb: l.tpAmb || null,
+                    elementoIncerto: !unico,
+                });
+            }
+        }
+
+        return res.json({
+            ok: true,
+            empresa: { empresaId: empresa.empresaId, nome: empresa.nome, cnpj },
+            competencia,
+            apurado: painel.funrural,
+            entregas,
+            // Lote sem competência NÃO some: é R-1000/tabela (que não tem
+            // perApur) ou lote antigo, e sumir sem dizer faria alguém procurar
+            // um evento que está gravado.
+            lotesSemCompetencia: semCompetencia,
+            // Os códigos de receita saem DAQUI para a tela não escrever a
+            // tabela outra vez. Ela veio do RECIBO do R-2099 aceito (VINCENZO
+            // 07/2026) e mora em `reinf-aquisicao-rural.js`; uma segunda cópia
+            // no frontend mandaria a contribuição para o código de outro
+            // tributo, e o erro só apareceria na cobrança.
+            codigosFunrural: CODIGOS_RECEITA_FUNRURAL,
+            // O SharePoint é a prova que fica — se não há onde arquivar, a tela
+            // precisa dizer ANTES, não depois de montar o extrato.
+            temPastaSharePoint: Boolean(empresa._doc?.sharePointConfig?.grupo && empresa._doc?.sharePointConfig?.empresaPasta),
+        });
+    } catch (e) {
+        console.error('[reinf/fechamento/preparar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
