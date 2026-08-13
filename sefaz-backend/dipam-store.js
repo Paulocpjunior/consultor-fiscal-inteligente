@@ -54,6 +54,61 @@ export async function carregarProdutoresRurais(docsCpfCnpj = []) {
     return mapa;
 }
 
+/**
+ * Monta o que VAI SER GRAVADO — só os campos que o chamador informou.
+ *
+ * ═══ O BUG QUE ISTO MATA (Paulo, 13/08) ═════════════════════════════════════
+ *
+ * *"Mesmo eu informando o CPF aqui, quando eu gravo ele some, parece que não
+ * salva."* — e o CPF salvava. O que sumia era o CADASTRO INTEIRO.
+ *
+ * O registro era montado do ZERO a cada gravação, com valor de fábrica em todo
+ * campo (`natureza: dados.natureza || null`, `ie: String(dados.ie || '')`,
+ * `seguradoEspecial: !!dados.seguradoEspecial`…). O `{ merge: true }` do
+ * Firestore não protege nada disso: merge preserva campo AUSENTE do objeto, e
+ * ali nenhum campo estava ausente — todos iam, com null ou string vazia.
+ *
+ * O bloco do CPF manda só `{ doc, nome, cpfTitular }`. Resultado: gravar o CPF
+ * apagava **natureza, IE, UF, município, regime de FUNRURAL, segurado especial
+ * e observação**. E como a natureza era a ÚNICA prova de que o ANTONIO DIAS DA
+ * SILVA é produtor rural PF (o CNPJ dele não tem IE com "P" à vista), ele caía
+ * fora da apuração — o CPF ficava gravado num cadastro que não valia mais nada,
+ * e a tela voltava pedindo tudo de novo. Parecia "não salvou"; era "apagou".
+ *
+ * ═══ A RÉGUA ═══════════════════════════════════════════════════════════════
+ *
+ * **Presença no payload é o sinal.** Campo que veio (mesmo vazio) é intenção
+ * declarada e sobrescreve — inclusive para APAGAR, que é a lição do CCM-SP.
+ * Campo que NÃO veio é preservado. Gravação parcial nunca destrói o que ela não
+ * mencionou.
+ */
+export function montarRegistroProdutor(id, dados = {}, usuario = null) {
+    const veio = (k) => Object.prototype.hasOwnProperty.call(dados, k);
+    const registro = {
+        doc: id,
+        confirmadoPor: usuario?.email || usuario?.uid || 'desconhecido',
+        confirmadoEm: Date.now(),
+    };
+
+    if (veio('nome')) registro.nome = String(dados.nome || '').trim();
+    if (veio('ie')) registro.ie = String(dados.ie || '').trim().toUpperCase();
+    if (veio('uf')) registro.uf = String(dados.uf || '').trim().toUpperCase();
+    if (veio('codMunIBGE')) registro.codMunIBGE = soDigitos(dados.codMunIBGE);
+    if (veio('municipio')) registro.municipio = String(dados.municipio || '').trim();
+    if (veio('natureza')) registro.natureza = dados.natureza || null;
+    if (veio('funrural')) registro.funrural = dados.funrural || null;
+    // Segurado especial (agricultura familiar) ficou em 1,5% quando a
+    // LC 224/2025 subiu o geral para 1,63% — e essa condição não está na nota,
+    // só no cadastro. Por isso ela NÃO pode ser zerada por gravação alheia.
+    if (veio('seguradoEspecial')) registro.seguradoEspecial = !!dados.seguradoEspecial;
+    if (veio('observacao')) registro.observacao = String(dados.observacao || '').trim();
+    if (veio('cpfTitular')) {
+        // Só faz sentido no produtor inscrito por CNPJ — ver a validação acima.
+        registro.cpfTitular = id.length === 14 ? (soDigitos(dados.cpfTitular) || null) : null;
+    }
+    return registro;
+}
+
 /** Grava/atualiza o cadastro de um produtor (upsert com auditoria de quem). */
 export async function salvarProdutorRural(doc, dados, usuario) {
     const id = soDigitos(doc);
@@ -114,27 +169,14 @@ export async function salvarProdutorRural(doc, dados, usuario) {
         throw err;
     }
 
-    const registro = {
-        doc: id,
-        nome: String(dados.nome || '').trim(),
-        ie: String(dados.ie || '').trim().toUpperCase(),
-        uf: String(dados.uf || '').trim().toUpperCase(),
-        codMunIBGE: codMun,
-        municipio: String(dados.municipio || '').trim(),
-        natureza: dados.natureza || null,
-        funrural: dados.funrural || null,
-        // Segurado especial (agricultura familiar) ficou em 1,5% quando a
-        // LC 224/2025 subiu o geral para 1,63% — e essa condição não está na
-        // nota, só no cadastro.
-        seguradoEspecial: !!dados.seguradoEspecial,
-        // Só faz sentido no produtor inscrito por CNPJ — ver a validação acima.
-        cpfTitular: id.length === 14 ? (cpfTitular || null) : null,
-        observacao: String(dados.observacao || '').trim(),
-        confirmadoPor: usuario?.email || usuario?.uid || 'desconhecido',
-        confirmadoEm: Date.now(),
-    };
-    await getDb().collection(COLECAO_PRODUTORES).doc(id).set(registro, { merge: true });
-    return registro;
+    const registro = montarRegistroProdutor(id, dados, usuario);
+    const ref = getDb().collection(COLECAO_PRODUTORES).doc(id);
+    await ref.set(registro, { merge: true });
+    // Devolve o cadastro COMO FICOU, não o pedaço que foi enviado: a tela que
+    // gravou só o CPF precisa saber que a natureza continua lá — foi confundir
+    // "o que mandei" com "o que existe" que fez o defeito passar despercebido.
+    const depois = await ref.get();
+    return { ...(depois.data() || registro), doc: id };
 }
 
 /**

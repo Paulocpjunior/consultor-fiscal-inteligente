@@ -247,6 +247,19 @@ const DetalheEmpresa: React.FC<{
             return acc;
         }, {}),
     );
+    // O CPF já gravado precisa APARECER. Sem isso, gravar e ver o campo sumir é
+    // indistinguível de não ter salvado — foi exatamente a leitura do Paulo em
+    // 13/08 ("parece que não salva"), e naquele caso ele estava certo: a
+    // gravação parcial apagava o cadastro. Corrigido o defeito, fica a prova.
+    const produtoresComCpfTitular = Object.values(
+        (painel.funrural?.notas || []).reduce((acc: Record<string, { doc: string; nome: string; cpf: string }>, n: any) => {
+            const doc = String(n.doc || '').replace(/\D/g, '');
+            if (doc.length === 14 && n.cpfTitular && !acc[doc]) {
+                acc[doc] = { doc, nome: n.fornecedor || '—', cpf: String(n.cpfTitular) };
+            }
+            return acc;
+        }, {}),
+    );
     const relerMunicipios = async () => {
         if (!empresaId || !painel.competencia) return;
         setRelendo(true); setResultadoReler(null);
@@ -404,6 +417,19 @@ const DetalheEmpresa: React.FC<{
                                             <CpfTitularProdutor key={p.doc} doc={p.doc} nome={p.nome} onSalvo={onRecarregar} />
                                         ))}
                                     </div>
+                                </div>
+                            )}
+                            {produtoresComCpfTitular.length > 0 && (
+                                <div className="mt-3 rounded border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-2">
+                                    <p className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
+                                        ✓ CPF do titular já gravado — o R-2055 declara por CPF (tpInscProd=2)
+                                    </p>
+                                    {produtoresComCpfTitular.map(p => (
+                                        <p key={p.doc} className="text-[11px] text-emerald-900 dark:text-emerald-200">
+                                            {p.nome} · <span className="font-mono">{fmtCnpjCpf(p.doc)}</span>
+                                            {' → '}<span className="font-mono font-bold">{formatarCpf(p.cpf)}</span>
+                                        </p>
+                                    ))}
                                 </div>
                             )}
                         </>
