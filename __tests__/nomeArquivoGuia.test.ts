@@ -49,7 +49,12 @@ describe('nomeArquivoGuia', () => {
 });
 
 describe('MATA-BURRO: o nome do anexo mora num lugar só', () => {
-    const CLIENTES = ['sefaz-backend/envio-imposto-routes.js', 'components/Das/CobrancaModal.tsx'];
+    const CLIENTES = [
+        'sefaz-backend/envio-imposto-routes.js',        // anexo do e-mail + documento do WhatsApp
+        'components/Das/CobrancaModal.tsx',             // DAS
+        'components/DCTFWeb/DetalheDeclaracao.tsx',     // DARF
+        'components/LucroPresumidoReal/DareSpModal.tsx', // DARE
+    ];
 
     it('quem manda ao cliente importa o núcleo', () => {
         for (const arquivo of CLIENTES) {
@@ -57,12 +62,33 @@ describe('MATA-BURRO: o nome do anexo mora num lugar só', () => {
         }
     });
 
+    /**
+     * A VARREDURA, e por que ela existe.
+     *
+     * A primeira volta desta trava listava dois arquivos e dava a coisa por
+     * feita — e o DARF e o DARE continuaram saindo com `darf_<CNPJ>_202607.pdf`
+     * para o cliente. Lista escrita à mão cobre o que a pessoa lembrou.
+     *
+     * Agora quem manda a chamada é o VERBO: toda chamada de envio ao cliente
+     * (`enviarGuiaPeloServidor`, `enviarGuiaPorWhatsapp`, `enviarPorEmailDoColaborador`,
+     * `pdfFileName:`) tem que carregar um nome que veio do núcleo — nunca um
+     * template com CNPJ.
+     */
     it('nenhum caminho de ENVIO remonta o nome com o CNPJ', () => {
-        // A assinatura literal do formato antigo: tipo + CNPJ + competência.
-        const ANTIGO = /\$\{String\(tipo\)\.toLowerCase\(\)\}_\$\{String\(empresaCnpj\)/;
-        const ANTIGO_TSX = /`das_\$\{String\(dasInfo\.empresaCnpj/;
-        expect(ler('sefaz-backend/envio-imposto-routes.js')).not.toMatch(ANTIGO);
-        expect(ler('components/Das/CobrancaModal.tsx')).not.toMatch(ANTIGO_TSX);
+        // Nome de arquivo montado com CNPJ, em qualquer forma.
+        const NOME_COM_CNPJ = /`[a-z]+_[^`]*\$\{[^`]*[Cc]npj[^`]*\.pdf`|pdfFileName: `[^`]*[Cc]npj/;
+        // …que é LEGÍTIMO só quando o destino é o disco do colaborador.
+        const EH_DOWNLOAD = /download/i;
+
+        const infratores: string[] = [];
+        for (const arquivo of CLIENTES) {
+            ler(arquivo).split('\n').forEach((linha, i) => {
+                if (NOME_COM_CNPJ.test(linha) && !EH_DOWNLOAD.test(linha)) {
+                    infratores.push(`${arquivo}:${i + 1} → ${linha.trim().slice(0, 80)}`);
+                }
+            });
+        }
+        expect(infratores).toEqual([]);
     });
 
     // O DOWNLOAD do colaborador é OUTRA coisa, e continua com o CNPJ de

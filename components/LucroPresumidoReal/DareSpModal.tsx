@@ -14,6 +14,7 @@ import {
     type DarePayload, type AmbienteDare, type CodigoDareIcms,
 } from '../../services/dareSpService';
 import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
+import { nomeArquivoGuia } from '../../sefaz-backend/nome-arquivo-guia.js';
 
 interface Props {
     cnpj: string;
@@ -190,7 +191,7 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                 assunto: `DARE-SP ICMS ${competencia.split('-').reverse().join('/')} - ${razaoSocial}`,
                 mensagem: `${textoConferencia(preview)}\n\nO DARE segue anexo. Por gentileza, confirme o pagamento após a regularização.\n\nAtenciosamente,\nSP Assessoria Contábil`,
                 pdfBase64: pdfValido,
-                pdfFileName: `dare_${cnpj.replace(/\D/g, '')}_${competencia}.pdf`,
+                pdfFileName: nomeArquivoGuia({ tipo: 'DARE', competencia }),
                 valor: preview.valor,
                 vencimento: preview.vencimento,
             });
@@ -234,7 +235,7 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                 competencia,
                 paraWhatsapp: contato.whatsapp,
                 pdfBase64: pdfValido,
-                pdfFileName: `dare_${cnpj.replace(/\D/g, '')}_${competencia}.pdf`,
+                pdfFileName: nomeArquivoGuia({ tipo: 'DARE', competencia }),
                 valor: preview.valor,
                 vencimento: preview.vencimento,
             });
@@ -274,9 +275,7 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
                 tipo: 'DARE',
                 competencia,
                 pdfBase64: pdfValido,
-                pdfFileName: pdfValido
-                    ? `dare_${cnpj.replace(/\D/g, '')}_${competencia}.pdf`
-                    : undefined,
+                pdfFileName: pdfValido ? nomeArquivoGuia({ tipo: 'DARE', competencia }) : undefined,
                 para: contato.email,
                 assunto: `DARE-SP ICMS ${competencia.split('-').reverse().join('/')} - ${razaoSocial}`,
                 corpo: `${textoConferencia(preview)}\n\nO DARE segue anexo. Por gentileza, confirme o pagamento após a regularização.\n\nAtenciosamente,\nSP Assessoria Contábil`,
