@@ -14,7 +14,9 @@
  * é produtor rural PF, ele saía da apuração — o CPF ficava num cadastro que já
  * não valia nada.
  */
-import { montarRegistroProdutor } from '../sefaz-backend/dipam-store.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { montarRegistroProdutor, assertNaturezaCoerente } from '../sefaz-backend/dipam-store.js';
 
 const CNPJ = '08507490000129';
 const USUARIO = { email: 'eunice@spassessoriacontabil.com.br' };
@@ -77,5 +79,44 @@ describe('gravação parcial do produtor rural', () => {
 
         const anonimo: any = montarRegistroProdutor(CNPJ, {}, null);
         expect(anonimo.confirmadoPor).toBe('desconhecido');
+    });
+});
+
+// ============================================================================
+// MATA-BURRO NA PORTA: não dá para MARCAR uma LTDA como Produtor Rural (PF).
+//
+// Paulo, 13/08: *"tem que tirar esses caras"*. O estrago não foi de cálculo —
+// foi de cadastro: a fila de pendências oferece três botões e o PRIMEIRO é
+// "Produtor Rural (PF)". Limpando centenas de linhas, o clique fácil faz a
+// pendência sumir E passa a somar FUNRURAL sobre pessoa jurídica.
+//
+// Barrar na LEITURA (que é o que o painel faz) conserta o número; barrar na
+// GRAVAÇÃO impede o estado errado de existir. As duas coisas, porque o cadastro
+// errado também viaja para o R-2055 do EFD-Reinf.
+// ============================================================================
+describe('MATA-BURRO: LTDA não pode ser gravada como produtor rural PF', () => {
+    const marcar = (nome: string, natureza: string, doc = '47120213000110') =>
+        () => assertNaturezaCoerente(doc, { nome, natureza });
+
+    it('recusa LTDA marcada como produtor rural PF, e diz a saída certa', () => {
+        expect(marcar('BELA VISTA COMERCIO DE FRUTAS E VERDURAS LTDA', 'produtor_rural_pf'))
+            .toThrow(/LTDA na razão social/);
+        expect(marcar('BELA VISTA COMERCIO DE FRUTAS E VERDURAS LTDA', 'produtor_rural_pf'))
+            .toThrow(/Pessoa Jurídica/);
+    });
+
+    it('a MESMA empresa passa como pessoa jurídica — a trava tem caminho', () => {
+        // Trava sem saída é trava que a equipe contorna.
+        expect(marcar('BELA VISTA COMERCIO DE FRUTAS E VERDURAS LTDA', 'pessoa_juridica')).not.toThrow();
+    });
+
+    it('pessoa física com CPF segue podendo ser produtor rural PF', () => {
+        // A exceção é ESTREITA: só o par CNPJ + tipo societário no nome.
+        expect(marcar('JOAO DA SILVA', 'produtor_rural_pf', '12345678909')).not.toThrow();
+    });
+
+    it('a trava está na PORTA da gravação, não só no teste', () => {
+        const fonte = readFileSync(join(__dirname, '..', 'sefaz-backend/dipam-store.js'), 'utf8');
+        expect(fonte).toMatch(/assertNaturezaCoerente\(id, dados\);/);
     });
 });

@@ -19,6 +19,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   com CNPJ pode ser justamente o caso do Comunicado CAT 45/2008; (3) a porta é a
   MESMA do `indefinido` — só entra quem vende gênero agropecuário, senão toda
   autopeças LTDA viraria pendência (um teste de 31/07 pegou isso na hora).
+  🚨 **E A CONFIRMAÇÃO HUMANA NÃO VENCE AQUI — única exceção da regra de 06/08**
+  (Paulo, no detalhe do FUNRURAL: *"o erro está aqui, tem que tirar esses
+  caras"*). BELA VISTA COMERCIO DE FRUTAS E VERDURAS **LTDA** estava somando
+  sub-rogação nota a nota porque alguém a confirmou como "Produtor Rural (PF)"
+  — a fila oferece TRÊS BOTÕES e o PRIMEIRO é justamente esse, então limpando
+  centenas de linhas o clique fácil faz a pendência sumir E ADICIONA imposto que
+  não existe. Confirmação humana vence quando é OPINIÃO ("esta PJ é produtor? o
+  CADESP responde"); não vence o IMPOSSÍVEL: sociedade é PJ (CC art. 44) e a
+  sub-rogação (Lei 8.212/91 art. 30, IV) só alcança produtor rural PESSOA
+  FÍSICA. Duas travas: confiança `cadastro-contraditorio` **não calcula
+  FUNRURAL** e vira pendência com o valor nomeado (total que muda sozinho faz
+  desconfiar do número certo), e `assertNaturezaCoerente` **RECUSA na gravação**
+  — com a saída escrita na mensagem ("marque como Pessoa Jurídica"), porque
+  trava sem caminho é trava que a equipe contorna. ⚠️ Um teste MEU de 17h dizia
+  o contrário ("cadastro vence inclusive o nome") e foi trocado: premissa
+  plausível derrubada por caso real.
 - **MATA-BURRO: SENTINELA DE BACKFILL NÃO PODE SER CAMPO DE DADO** (13/08,
   print do Paulo na aba 🌾 da NOVA ERA). O botão ♻️ *"Reler participante e
   município dos XMLs"* examinou 692 documentos e respondeu **"0 recuperadas ·

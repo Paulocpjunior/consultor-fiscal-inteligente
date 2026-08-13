@@ -52,6 +52,7 @@ import { ehRegistroDeEvento } from './xml-metadata-helper.js';
 const ROTULO_BLOQUEIO = {
     'fornecedor-indefinido': 'Fornecedor sem prova de produtor rural PF — confirmar a natureza jurídica no CADESP',
     'fornecedor-sociedade': 'Fornecedor é sociedade pela razão social (LTDA/S.A./EIRELI) — confirmar como pessoa jurídica, 1 clique',
+    'cadastro-contraditorio': 'Cadastrado como produtor rural PF, mas a razão social é de sociedade — CORRIGIR o cadastro (estava somando FUNRURAL indevido)',
     'municipio-ausente': 'Nota sem o município de origem — reler o XML guardado (♻️)',
     'contraparte-ausente': 'Documento sem fornecedor lido — buraco de captura, conferir em Erros & Logs',
 };
@@ -367,6 +368,39 @@ export function identificarNaturezaFornecedor(participante, cadastro = null) {
         // Confirmação humana vence tudo — inclusive o "não é produtor".
         const ehProdutor = cadastro.natureza === 'produtor_rural_pf';
         sinais.push('cadastro-confirmado');
+
+        // ── COMBINAÇÃO IMPOSSÍVEL: LTDA CONFIRMADA COMO PRODUTOR RURAL PF ──
+        //
+        // Paulo, 13/08, apontando o FUNRURAL: *"tem que tirar esses caras"* —
+        // BELA VISTA COMERCIO DE FRUTAS E VERDURAS **LTDA** somando sub-rogação
+        // nota a nota. LTDA é sociedade, sociedade é pessoa jurídica (CC art.
+        // 44), e pessoa jurídica NÃO é produtor rural pessoa física: a
+        // sub-rogação do art. 30, IV da Lei 8.212/91 não alcança essa compra —
+        // quem recolhe é o próprio emitente.
+        //
+        // Como isso aconteceu: a fila de pendências oferece três botões e o
+        // PRIMEIRO é "Produtor Rural (PF)". Limpando 293 linhas, clicar no
+        // primeiro faz a pendência sumir — e ADICIONA imposto que não existe.
+        //
+        // Aqui a confirmação humana NÃO vence, e é a única exceção da regra:
+        // ela não vence porque não é opinião contra opinião, é uma marcação
+        // legalmente impossível. Recusar não inventa nada — só deixa de
+        // declarar contribuição sobre quem não a deve. E o motivo vai junto,
+        // para o cadastro ser corrigido em vez de o número ser discutido.
+        if (ehProdutor && sinais.includes('cadastro-confirmado')) {
+            const tipoSocietario = tipoSocietarioNoNome(p.nome || p.razaoSocial || cadastro.nome);
+            if (tipoSocietario && doc.length === 14) {
+                return {
+                    ehProdutorRuralPF: false,
+                    confianca: 'cadastro-contraditorio',
+                    sinais: [...sinais, 'cadastro-x-razao-social'],
+                    motivo: `O cadastro marca este fornecedor como Produtor Rural (PF), mas a razão social diz `
+                        + `${tipoSocietario} — sociedade é pessoa jurídica (CC art. 44) e não pode ser produtor `
+                        + 'rural PF. Enquanto isso não for corrigido, a sub-rogação NÃO é calculada: declarar '
+                        + 'FUNRURAL sobre pessoa jurídica é imposto que não existe.',
+                };
+            }
+        }
         return {
             ehProdutorRuralPF: ehProdutor,
             confianca: 'confirmada',
@@ -590,6 +624,20 @@ function avaliarDipam({ base, cfopPrincipal, cfops, doc, empresa, ehDevolucaoSai
         return fora('Nota sem fornecedor — fora do total até o participante ser lido do XML.');
     }
 
+    // Cadastro contraditório: NÃO some da tela. Ele mudou um número (tirou
+    // FUNRURAL que estava sendo somado), e total que muda sozinho sem dizer por
+    // quê faz desconfiar do número certo.
+    if (base.natureza.confianca === 'cadastro-contraditorio') {
+        pendencias.push(pendencia(
+            'cadastro-contraditorio',
+            `${base.fornecedor.nome}: está confirmado como Produtor Rural (PF) no cadastro, mas a razão social diz `
+            + 'que é sociedade — pessoa jurídica não pode ser produtor rural PF.',
+            'Corrija o cadastro do produtor para "Pessoa Jurídica". Enquanto estiver assim, o FUNRURAL deste '
+            + 'fornecedor NÃO é calculado — declarar sub-rogação sobre PJ é recolher imposto que não existe.',
+        ));
+        return fora('Cadastro contraditório: marcado como produtor rural PF, mas a razão social é de sociedade.');
+    }
+
     // A razão social já respondeu: é sociedade ⇒ pessoa jurídica. Continua FORA
     // do total (a confirmação é humana), mas a ação deixa de ser "consulte o
     // CADESP" — vira "confirme o que o nome já diz", que é um clique.
@@ -724,6 +772,9 @@ function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevol
         }
         if (base.natureza.confianca === 'sugerida-pj') {
             return fora('A razão social indica sociedade (pessoa jurídica) — sem sub-rogação, mas confirme no cadastro.');
+        }
+        if (base.natureza.confianca === 'cadastro-contraditorio') {
+            return fora(base.natureza.motivo);
         }
         return fora('Fornecedor não é produtor rural pessoa física — quem recolhe é o próprio emitente.');
     }
@@ -894,6 +945,7 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
             // linhas iguais e a fila voltaria a ser muro de texto.
             const porFornecedor = p.codigo === 'fornecedor-indefinido'
                 || p.codigo === 'fornecedor-sociedade'
+                || p.codigo === 'cadastro-contraditorio'
                 || p.codigo === 'municipio-ausente';
             const chaveDedup = `${p.codigo}|${n.fornecedor.doc}`;
             if (porFornecedor) {
@@ -950,7 +1002,7 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
 
     const total = round2(municipiosDeclaraveis.reduce((s, m) => s + m.valor, 0));
     const bloqueantes = pendencias.filter((p) => p.codigo === 'fornecedor-indefinido'
-        || p.codigo === 'fornecedor-sociedade'
+        || p.codigo === 'fornecedor-sociedade' || p.codigo === 'cadastro-contraditorio'
         || p.codigo === 'municipio-ausente' || p.codigo === 'contraparte-ausente');
 
     // ── QUANTO está fora do total, e por QUAL causa ─────────────────────────
@@ -967,7 +1019,7 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
     for (const n of notas) {
         if (n.notaOrigemProdutor) continue;
         const causa = (n.pendencias || []).find((p) => p.codigo === 'fornecedor-indefinido'
-            || p.codigo === 'fornecedor-sociedade'
+            || p.codigo === 'fornecedor-sociedade' || p.codigo === 'cadastro-contraditorio'
             || p.codigo === 'municipio-ausente' || p.codigo === 'contraparte-ausente');
         if (!causa) continue;
         const g = bloqueio.get(causa.codigo) || { codigo: causa.codigo, notas: 0, valor: 0, fornecedores: new Set() };
