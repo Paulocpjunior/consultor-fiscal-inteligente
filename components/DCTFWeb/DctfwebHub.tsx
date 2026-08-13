@@ -21,17 +21,19 @@ const CoberturaDctfwebPanel = lazy(() => import('./CoberturaDctfwebPanel'));
 const TrimestraisDoMesPanel = lazy(() => import('./TrimestraisDoMesPanel'));
 const IpiVarreduraPanel = lazy(() => import('./IpiVarreduraPanel'));
 const FechamentoReinfPanel = lazy(() => import('../EfdReinf/FechamentoReinfPanel'));
+const QuotasDoMesPanel = lazy(() => import('./QuotasDoMesPanel'));
 
 interface Props {
     currentUser: User;
     onShowToast?: (msg: string) => void;
 }
 
-type SubTab = 'painel' | 'trimestrais' | 'cobertura' | 'ipi' | 'reinf' | 'fechamento';
+type SubTab = 'painel' | 'trimestrais' | 'quotas' | 'cobertura' | 'ipi' | 'reinf' | 'fechamento';
 
 const SUBTABS: Array<{ id: SubTab; label: string }> = [
     { id: 'painel', label: '📊 Painel DCTFWeb' },
     { id: 'trimestrais', label: '📅 Trimestrais do mês' },
+    { id: 'quotas', label: '🧮 Cotas do mês' },
     { id: 'cobertura', label: '🛡️ Cobertura' },
     { id: 'ipi', label: '🏭 Varredura IPI' },
     { id: 'reinf', label: '🔀 EFD-Reinf × DCTFWeb' },
@@ -82,6 +84,7 @@ const DctfwebHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <Suspense fallback={<LoadingSpinner />}>
                     {sub === 'painel' && <DCTFWebDashboard currentUser={currentUser} onShowToast={onShowToast} />}
                     {sub === 'trimestrais' && <TrimestraisDoMesPanel currentUser={currentUser} onShowToast={onShowToast} />}
+                    {sub === 'quotas' && <QuotasDoMesPanel currentUser={currentUser} onShowToast={onShowToast} />}
                     {sub === 'cobertura' && <CoberturaDctfwebPanel onShowToast={onShowToast} />}
                     {sub === 'ipi' && <IpiVarreduraPanel onShowToast={onShowToast} />}
                     {sub === 'reinf' && <ConferirReinfDctfweb onShowToast={onShowToast} />}

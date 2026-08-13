@@ -5,6 +5,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **MATA-BURRO: QUOTA DO TRIMESTRAL NÃO SE EMITE ANTES DO MÊS DELA** (Paulo,
+  13/08: *"as cotas devem ser enviadas todos os meses pois sofrem atualização da
+  SELIC"*). Ele apontou o defeito com uma frase: escolher "3 quotas" emitia **as
+  três no mesmo clique, hoje**. Pela Lei 9.430/96 art. 5º §3º o acréscimo é
+  *SELIC acumulada do 1º dia do 2º mês subsequente ao trimestre até o último dia
+  do mês ANTERIOR ao pagamento, + 1% no mês do pagamento* — então a quota 3
+  depende da SELIC do 2º mês, **que só é divulgada no começo do 3º**. Gerada
+  junto com a quota 1, ela sai **A MENOR**, e guia a menor NÃO AVISA: o cliente
+  paga, fica com débito residual e a diferença aparece depois com multa. E as
+  guias 2 e 3 ficavam na mão de quem clicou, para vencer dali a um e dois meses,
+  sem nada no app cobrando o envio.
+  Régua em `sefaz-backend/darf-quotas.js` (puro, 21 testes) — **cada quota se
+  emite no MÊS DO VENCIMENTO dela**, uniforme e sem exceção sutil (a quota 2 é
+  1% fixo e daria pra emitir antes; régua com exceção é régua que ninguém lembra
+  na hora). O que espera vai pra `darf_quotas_agenda` e volta na aba **🧮 Cotas
+  do mês** (DCTFWeb), onde a guia nasce com o SICALC calculando na data de hoje.
+  DECISÕES QUE MANDAM: **atrasada NÃO some** da lista quando o mês vira (é ela
+  que está gerando multa); id estável, então reemitir sobrescreve e quota já
+  emitida é RECUSADA (duas guias da mesma cota = cobrança em dobro); falha ao
+  gravar a agenda não derruba a emissão que já aconteceu, mas é DITA na tela
+  (agenda perdida em silêncio é pior que não ter agenda). O mínimo de R$ 1.000
+  por quota e a divisão em centavos saíram do orquestrador pro núcleo — eram
+  cópia lá dentro.
 - **MATA-BURRO: TRABALHO QUE *PARECE* ENTREGUE — as duas formas, no mesmo dia**
   (13/08). Não é preguiça nem falta de teste: nos dois casos o teste estava
   VERDE e o PR dizia "feito".

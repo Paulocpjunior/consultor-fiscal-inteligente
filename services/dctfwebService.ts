@@ -23,6 +23,7 @@ import type {
     DctfwebDarfsSeparadosResult, DctfwebTrimestraisMesResult, DctfwebDebitosTrimestraisResult,
     DctfwebCategoria, DctfwebMitApuracao, DctfwebMitEncerramentoResult,
     DctfwebMitHistorico,
+    DctfwebQuotaAgendada, DctfwebQuotasAgendadasResult,
 } from '../types';
 
 import { getAuth } from 'firebase/auth';
@@ -232,6 +233,33 @@ export async function listarDebitosDeclaracao(user: User | null, params: {
  * com o SEU vencimento (PIS/COFINS dia 25 antecipado × IRPJ/CSLL trimestrais
  * no último dia útil do mês seguinte ao trimestre).
  */
+/**
+ * As quotas do trimestral que ainda não foram geradas — as do mês e as
+ * ATRASADAS (quota que ninguém emitiu não some quando o mês vira; é ela que
+ * está gerando multa).
+ */
+export async function listarQuotasAgendadas(user: User | null, mesRef?: string): Promise<DctfwebQuotasAgendadasResult> {
+    const qs = mesRef ? `?mesRef=${encodeURIComponent(mesRef)}` : '';
+    const res = await fetch(`${BASE}/quotas-agendadas${qs}`, { headers: await authHeaders(user) });
+    if (!res.ok) throw new Error(`listarQuotasAgendadas: ${res.status}`);
+    return res.json();
+}
+
+/** Gera a guia de UMA quota agendada, agora — com o acréscimo do mês corrente. */
+export async function emitirQuotaAgendada(user: User | null, id: string): Promise<DctfwebQuotaAgendada & {
+    valor: number; juros: number; multa: number; numeroDocumento: string; codigoBarras: string; pdfBase64: string;
+    mensagens?: Array<{ codigo?: string; texto?: string }>;
+}> {
+    const res = await fetch(`${BASE}/quotas-agendadas/emitir`, {
+        method: 'POST',
+        headers: await authHeaders(user),
+        body: JSON.stringify({ id }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || `emitirQuotaAgendada: ${res.status}`);
+    return j;
+}
+
 export async function gerarDarfsSeparados(user: User | null, payload: {
     empresaCnpj: string; anoPA: number; mesPA: number; categoria?: DctfwebCategoria;
     /** IRPJ/CSLL trimestrais em 1 (única), 2 ou 3 quotas (Lei 9.430 art. 5º). */
