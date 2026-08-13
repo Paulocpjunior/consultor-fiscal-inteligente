@@ -110,6 +110,46 @@ describe('o veredito não elege vencedor por eliminação', () => {
         expect(v.resumo).toMatch(/A sonda NÃO escolhe/);
     });
 
+    /**
+     * O ACHADO DA PRIMEIRA RODADA REAL (ELS 07/2026, 13/08).
+     *
+     * As 6 formas voltaram com o MESMO código (MSG_ISN_036). Isso não é
+     * "nenhuma serve": estruturas diferentes não falham pelo mesmo motivo se o
+     * motivo fosse a estrutura. A recusa acontece ANTES de o SN-Entregar olhar
+     * o conteúdo — e dizer isso muda o próximo passo de "testar outra forma"
+     * para "levar o código ao SERPRO".
+     */
+    it('TODAS com o mesmo código ⇒ a estrutura nem foi avaliada', () => {
+        const v = vereditoDaSonda([
+            recusa('atual', 'MSG_ISN_036'),
+            recusa('sem-estabelecimentos', 'MSG_ISN_036'),
+            recusa('flag-semMovimento', 'MSG_ISN_036'),
+        ]);
+        expect(v.destravou).toBe(false);
+        expect(v.aEstruturaFoiAvaliada).toBe(false);
+        expect(v.codigoUnico).toBe('MSG_ISN_036');
+        expect(v.resumo).toMatch(/MESMO código/);
+        expect(v.resumo).toMatch(/ACHADO, não um beco/);
+        expect(v.resumo).toMatch(/Pare de procurar estrutura/);
+    });
+
+    it('códigos DIFERENTES ⇒ o conteúdo chegou a ser avaliado', () => {
+        const v = vereditoDaSonda([
+            recusa('atual', 'MSG_ISN_023'),
+            recusa('sem-estabelecimentos', 'MSG_ISN_018'),
+        ]);
+        expect(v.aEstruturaFoiAvaliada).toBe(true);
+        expect(v.codigoUnico).toBeNull();
+        expect(v.resumo).toMatch(/chegou a avaliar o conteúdo/);
+    });
+
+    it('um candidato só não vira conclusão sobre a estrutura', () => {
+        // Com uma amostra, "todas deram o mesmo código" é trivialmente
+        // verdadeiro e não prova nada.
+        const v = vereditoDaSonda([recusa('atual', 'MSG_ISN_036')]);
+        expect(v.aEstruturaFoiAvaliada).toBe(true);
+    });
+
     it('nenhuma aceita: segue bloqueado, mas com as recusas nomeadas', () => {
         const v = vereditoDaSonda([recusa('atual', 'MSG_ISN_023'), recusa('sem-estabelecimentos', 'MSG_ISN_018')]);
         expect(v.destravou).toBe(false);
@@ -190,5 +230,40 @@ describe('a sonda está ligada de ponta a ponta', () => {
         // Falha de auditoria não derruba a sonda: perder o registro é ruim,
         // perder a resposta do SERPRO que já foi paga é pior.
         expect(orquestrador).toMatch(/auditoria não gravada/);
+    });
+});
+
+/**
+ * O RESULTADO É EVIDÊNCIA — precisa caber na tela e poder ser copiado.
+ *
+ * A primeira rodada real saiu num toast que mostrava `nome: situação (código)`
+ * e escondia a MENSAGEM do SERPRO — justo o que permite abrir o chamado. Código
+ * sozinho não diz nada a ninguém.
+ */
+describe('o resultado da sonda vai para um painel, não para um toast', () => {
+    const tela = readFileSync(join(__dirname, '..', 'components/SimplesNacionalDetalhe.tsx'), 'utf8');
+
+    it('há painel de resultado, e ele mostra a MENSAGEM inteira do SERPRO', () => {
+        expect(tela).toMatch(/setResultadoSonda\(r\)/);
+        expect(tela).toMatch(/\{c\.mensagem\}/);
+        expect(tela).toMatch(/hipótese|c\.hipotese/);
+    });
+
+    it('dá para copiar para o chamado — com hipótese e mensagem por candidato', () => {
+        expect(tela).toMatch(/copiarResultadoSonda/);
+        expect(tela).toMatch(/Copiar para o chamado/);
+        expect(tela).toMatch(/SERPRO: \$\{c\.mensagem\}/);
+    });
+
+    it('quando a estrutura não foi avaliada, a tela DIZ para parar de testar formas', () => {
+        expect(tela).toMatch(/aEstruturaFoiAvaliada === false/);
+        expect(tela).toMatch(/A estrutura NÃO foi avaliada/);
+        expect(tela).toMatch(/Não adianta testar outra forma/);
+    });
+
+    it('o toast não é mais o canal do resultado', () => {
+        // O toast segue existindo para a FALHA da chamada — o que saiu foi o
+        // resultado da sonda, que não cabe nele.
+        expect(tela).not.toMatch(/onShowToast\(`\$\{r\.veredito\.resumo\}/);
     });
 });

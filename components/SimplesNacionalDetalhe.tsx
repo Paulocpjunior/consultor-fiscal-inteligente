@@ -611,6 +611,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     // PERGUNTA ao SERPRO usando o modo VALIDAÇÃO (o mesmo de onde já vem a
     // MSG_ISN_023 hoje): nada é transmitido em nenhum desfecho.
     const [sondando, setSondando] = useState(false);
+    const [resultadoSonda, setResultadoSonda] = useState<any>(null);
     const handleSondarSemMovimento = async () => {
         if (!empresa?.cnpj) return;
         // Mesma derivação dos outros handlers: a competência é o mês em
@@ -626,17 +627,33 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
             const r = await sondarFormaSemMovimento(currentUser ?? null, {
                 empresaCnpj: empresa.cnpj, competencia,
             });
-            const detalhe = (r.candidatos || [])
-                .map(c => `• ${c.nome}: ${c.situacao}${c.codigo ? ` (${c.codigo})` : ''}`)
-                .join('\n');
-            // O veredito vem inteiro: quando nenhuma forma passa, são as
-            // RECUSAS nomeadas que servem pra abrir o chamado no SERPRO.
-            onShowToast(`${r.veredito.resumo}\n\n${detalhe}`);
+            // O resultado vai para um PAINEL, não para um toast.
+            //
+            // A primeira rodada real (ELS 07/2026) devolveu as 6 formas com o
+            // MESMO código, e o toast mostrou só `nome: situação (código)` —
+            // cortado, sem a MENSAGEM do SERPRO. Justo a mensagem é o que
+            // permite abrir o chamado; o código sozinho não diz nada a
+            // ninguém. Resultado de sonda é EVIDÊNCIA: tem que caber na tela
+            // inteira e poder ser copiado.
+            setResultadoSonda(r);
         } catch (e: any) {
             onShowToast(e?.message || 'Falha ao sondar.');
         } finally {
             setSondando(false);
         }
+    };
+
+    const copiarResultadoSonda = () => {
+        if (!resultadoSonda) return;
+        const txt = [
+            `SONDA PGDAS-D sem movimento — ${empresa?.nome} (${empresa?.cnpj})`,
+            resultadoSonda.veredito?.resumo || '',
+            '',
+            ...(resultadoSonda.candidatos || []).map((c: any) =>
+                `[${c.situacao}] ${c.nome} — ${c.codigo || 'sem código'}\n  hipótese: ${c.hipotese}\n  SERPRO: ${c.mensagem}`),
+        ].join('\n');
+        navigator.clipboard?.writeText(txt);
+        onShowToast('Resultado copiado — cole no chamado do SERPRO.');
     };
 
     const handleDeclararSemMovimento = async () => {
@@ -1061,6 +1078,71 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                         <input type="file" accept=".xml,.pdf,.xls,.xlsx" className="hidden" onChange={handleFileUpload} />
                     </label>
                 </div>
+
+                {/* RESULTADO DA SONDA — painel, não toast.
+                    Resultado de sonda é EVIDÊNCIA: precisa da mensagem inteira
+                    do SERPRO (é ela que abre o chamado; o código sozinho não
+                    diz nada) e precisa poder ser copiado. */}
+                {resultadoSonda && (
+                    <div className="mt-4 rounded-xl border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 p-4">
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <h4 className="text-sm font-bold text-violet-900 dark:text-violet-200">
+                                🔬 Sonda da forma "sem movimento" — nada foi transmitido
+                            </h4>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={copiarResultadoSonda}
+                                    className="text-[11px] px-3 py-1 rounded-md bg-white dark:bg-slate-800 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-semibold"
+                                >
+                                    📋 Copiar para o chamado
+                                </button>
+                                <button
+                                    onClick={() => setResultadoSonda(null)}
+                                    className="text-[11px] px-2 py-1 rounded-md text-slate-500 hover:bg-white/60 dark:hover:bg-slate-800"
+                                >
+                                    fechar
+                                </button>
+                            </div>
+                        </div>
+
+                        <p className={`mt-2 text-xs leading-relaxed ${resultadoSonda.veredito?.destravou
+                            ? 'text-emerald-800 dark:text-emerald-300 font-semibold'
+                            : 'text-violet-900 dark:text-violet-200'}`}>
+                            {resultadoSonda.veredito?.resumo}
+                        </p>
+
+                        {/* Quando TODAS caem no mesmo código, a conclusão é que
+                            a estrutura nem foi avaliada — e continuar caçando
+                            forma seria o caminho errado. */}
+                        {resultadoSonda.veredito?.aEstruturaFoiAvaliada === false && (
+                            <p className="mt-2 text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                                ⚠ A estrutura NÃO foi avaliada pelo SN-Entregar. Não adianta testar outra forma:
+                                o próximo passo é o SERPRO explicar o código {resultadoSonda.veredito?.codigoUnico}.
+                            </p>
+                        )}
+
+                        <div className="mt-3 space-y-2">
+                            {(resultadoSonda.candidatos || []).map((c: any) => (
+                                <div key={c.nome} className="rounded-lg bg-white dark:bg-slate-800 border border-violet-200 dark:border-slate-700 p-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                            c.situacao === 'aceita' ? 'bg-emerald-100 text-emerald-700'
+                                                : c.situacao === 'indeterminado' ? 'bg-slate-200 text-slate-600'
+                                                    : 'bg-red-100 text-red-700'}`}>
+                                            {c.situacao}
+                                        </span>
+                                        <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">{c.nome}</span>
+                                        {c.codigo && <span className="text-[10px] font-mono text-red-600 dark:text-red-400">{c.codigo}</span>}
+                                    </div>
+                                    <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400 italic">{c.hipotese}</p>
+                                    {/* A MENSAGEM INTEIRA do SERPRO — era ela que
+                                        o toast escondia, e é ela que resolve. */}
+                                    <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-300 break-words">{c.mensagem}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
