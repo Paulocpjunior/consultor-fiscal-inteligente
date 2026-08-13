@@ -361,26 +361,87 @@ function montarFolhasSalario(
 const ATIVIDADES_COM_ISS_RETIDO_NO_ID = new Set([12, 15, 18]);
 const ATIVIDADES_EXTERIOR = new Set([3, 6, 29, 30, 31]);
 
+/**
+ * ═══ QUALIFICAÇÃO TRIBUTÁRIA — os números vieram do FORMULÁRIO, não de chute ══
+ *
+ * Paulo colou o `outerHTML` do `<select>` da coluna de cada tributo na tela de
+ * Receitas do PGDAS-D no e-CAC (13/08/2026, POLO CULTURAL). É a MESMA fonte que
+ * destravou o código 9 do ISS fixo — e a única que existe: o
+ * `CONSULTIMADECREC14` devolve só PDFs, e o extrato é a saída humana ("Imunidade
+ * tributária de: ICMS, IPI."), sem id nenhum.
+ *
+ *   <select data-cod-tributo="1007">        ← ICMS
+ *     <option value="1">Imunidade</option>
+ *     <option value="2">Exigibilidade Suspensa</option>
+ *     <option value="3">Lançamento de Ofício</option>
+ *     <option value="4">Isenção/Redução</option>
+ *     <option value="6">Isenção/Redução Cesta Básica</option>
+ *
+ *   <select data-cod-tributo="1008">        ← IPI (código que faltava)
+ *     <option value="1">Imunidade</option>
+ *     <option value="2">Exigibilidade Suspensa</option>
+ *     <option value="3">Lançamento de Ofício</option>
+ *
+ * REPARE QUE O IPI NÃO TEM "Isenção/Redução" — a lista dele para em 3. Não é
+ * omissão do print: é o formulário dizendo que isenção de IPI não existe neste
+ * campo. Por isso a marcação de isenção NUNCA emite qualificação de IPI.
+ *
+ * Os ids convivem com os que já eram conhecidos (8 = ST, 9 = monofásico,
+ * 11 = ISS retido) sem colidir — é um espaço de numeração só.
+ */
+export const CODIGO_TRIBUTO = {
+    PIS: 1004,
+    COFINS: 1005,
+    ICMS: 1007,
+    IPI: 1008,
+    ISS: 1010,
+} as const;
+
+export const QUALIFICACAO = {
+    IMUNIDADE: 1,
+    EXIGIBILIDADE_SUSPENSA: 2,
+    LANCAMENTO_DE_OFICIO: 3,
+    ISENCAO_REDUCAO: 4,
+    ISENCAO_REDUCAO_CESTA_BASICA: 6,
+    ST: 8,
+    MONOFASICO: 9,
+    ISS_RETIDO: 11,
+} as const;
+
+/** Tributos que aceitam cada qualificação, conforme o `<select>` do e-CAC. */
+const TRIBUTOS_DA_IMUNIDADE = [CODIGO_TRIBUTO.ICMS, CODIGO_TRIBUTO.IPI];
+const TRIBUTOS_DA_ISENCAO = [CODIGO_TRIBUTO.ICMS];
+
 function montarReceitaAtividade(
-    state: Pick<CnaeInputState, 'issRetido' | 'icmsSt' | 'isMonofasico'>,
+    state: Pick<CnaeInputState, 'issRetido' | 'icmsSt' | 'isMonofasico' | 'isImune'>,
     valor: number,
     idAtividade: number,
 ): ReceitaAtividade {
     const qualificacoesTributarias: ReceitaAtividade['qualificacoesTributarias'] = [];
 
     if (state.icmsSt) {
-        qualificacoesTributarias.push({ codigoTributo: 1007, id: 8 });
+        qualificacoesTributarias.push({ codigoTributo: CODIGO_TRIBUTO.ICMS, id: QUALIFICACAO.ST });
     }
     if (state.isMonofasico) {
         qualificacoesTributarias.push(
-            { codigoTributo: 1004, id: 9 },
-            { codigoTributo: 1005, id: 9 },
+            { codigoTributo: CODIGO_TRIBUTO.PIS, id: QUALIFICACAO.MONOFASICO },
+            { codigoTributo: CODIGO_TRIBUTO.COFINS, id: QUALIFICACAO.MONOFASICO },
         );
+    }
+    // IMUNIDADE — o app já tirava ICMS e IPI do CÁLCULO (repartição da faixa);
+    // faltava a declaração DIZER o porquê. Sem a qualificação, quem gera o DAS
+    // é a Receita e ela recalcula COM os dois — o DAS voltava maior que o
+    // previsto e ninguém sabia por quê (caso POLO CULTURAL, 06/2026: ICMS 0,00
+    // e IPI 0,00 no extrato, "Imunidade tributária de: ICMS, IPI").
+    if (state.isImune) {
+        for (const codigoTributo of TRIBUTOS_DA_IMUNIDADE) {
+            qualificacoesTributarias.push({ codigoTributo, id: QUALIFICACAO.IMUNIDADE });
+        }
     }
     if (state.issRetido
         && !ATIVIDADES_COM_ISS_RETIDO_NO_ID.has(idAtividade)
         && !ATIVIDADES_EXTERIOR.has(idAtividade)) {
-        qualificacoesTributarias.push({ codigoTributo: 1010, id: 11 });
+        qualificacoesTributarias.push({ codigoTributo: CODIGO_TRIBUTO.ISS, id: QUALIFICACAO.ISS_RETIDO });
     }
 
     const receita: ReceitaAtividade = { valor };
@@ -562,9 +623,15 @@ export function avisosDoPayload(faturamentoPorCnae: Record<string, CnaeInputStat
 
 
     if (comValor.some((s) => s.isImune)) {
+        // A qualificação PASSOU A VIAJAR (13/08) — os ids vieram do formulário
+        // do e-CAC, não de dedução. O aviso continua, com outro papel: esta é a
+        // PRIMEIRA vez que a imunidade sai na declaração, e imunidade declarada
+        // errada é imposto a menos. A conferência do extrato é o que prova.
         avisos.push(
-            'Há receita marcada como IMUNE: o app tira ICMS/IPI do DAS, mas a declaração '
-            + 'ainda não envia a qualificação de imunidade — confira o DAS calculado pela Receita.',
+            'Há receita marcada como IMUNE: a declaração vai com a qualificação de imunidade de '
+            + 'ICMS e IPI (códigos 1007 e 1008, qualificação 1). Confira no extrato se saiu '
+            + '"Imunidade tributária de: ICMS, IPI" — o valor do DAS é o mesmo com e sem a '
+            + 'qualificação, então só o extrato denuncia se ela não pegou.',
         );
     }
     return avisos;

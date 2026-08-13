@@ -505,11 +505,19 @@ describe('avisosDoPayload — o que reduz o DAS aqui mas ainda nao viaja na decl
         } as any)).toEqual([]);
     });
 
-    it('receita IMUNE tambem avisa', () => {
+    it('receita IMUNE tambem avisa — e agora manda CONFERIR O EXTRATO', () => {
         const avisos = avisosDoPayload({
             'principal::0::4711302::I': { ...emptyState, valor: '10.000,00', isImune: true },
         } as any);
         expect(avisos[0]).toContain('IMUNE');
+        // O aviso mudou de papel: antes dizia que a qualificacao NAO viajava.
+        // Agora ela viaja, e o que sobra e a conferencia — o DAS e o MESMO com
+        // e sem a qualificacao, entao so o extrato denuncia se ela nao pegou.
+        // E a mesma armadilha do ISS fixo (SUP), que passou meses despercebida.
+        expect(avisos[0]).toContain('1007');
+        expect(avisos[0]).toContain('1008');
+        expect(avisos[0]).toMatch(/extrato/);
+        expect(avisos[0]).not.toMatch(/ainda não envia|ainda nao envia/);
     });
 
     it('marcacao SEM valor nao vira aviso (linha zerada nao declara nada)', () => {
@@ -633,5 +641,88 @@ describe('bloqueiosDoPayload — o app se RECUSA a declarar natureza que nao sab
         expect(bloqueiosDoPayload({
             'principal::0::9602501::III': { ...emptyState, valor: '10.000,00' },
         } as any)).toEqual([]);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// QUALIFICAÇÃO TRIBUTÁRIA — os ids vieram do FORMULÁRIO do e-CAC (13/08/2026).
+//
+// Paulo colou o `outerHTML` do `<select>` da coluna de cada tributo na tela de
+// Receitas do PGDAS-D. É a MESMA fonte que destravou o código 9 do ISS fixo, e
+// a única que existe: o CONSULTIMADECREC14 devolve só PDFs, e o extrato é a
+// saída humana ("Imunidade tributária de: ICMS, IPI.") — sem id nenhum.
+//
+//   data-cod-tributo="1007" (ICMS): 1 Imunidade · 2 Exigibilidade Suspensa ·
+//                                   3 Lançamento de Ofício · 4 Isenção/Redução ·
+//                                   6 Isenção/Redução Cesta Básica
+//   data-cod-tributo="1008" (IPI):  1 · 2 · 3   ← PARA no 3
+//
+// O IPI não tem "Isenção/Redução". Não é omissão do print: é o formulário
+// dizendo que isso não existe no campo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('imunidade viaja na declaração — caso POLO CULTURAL 06/2026', () => {
+    // Extrato real: receita 22.169,56 · "Venda de mercadorias industrializadas
+    // pelo contribuinte, exceto para o exterior" · ICMS 0,00 · IPI 0,00 ·
+    // "Imunidade tributária de: ICMS, IPI." (livro — CF art. 150, VI, "d").
+    const payloadImune = () => mapPgdasPayload({
+        empresa: { ...baseEmpresa, anexo: 'II' },
+        resumo: baseResumo,
+        mesApuracao: new Date(2026, 5, 1),
+        faturamentoPorCnae: {
+            'principal::0::5811500::II': { ...emptyState, valor: '22.169,56', isImune: true },
+        },
+        filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
+    });
+
+    it('emite a qualificação de imunidade para ICMS (1007) E IPI (1008)', () => {
+        const receita = payloadImune().declaracao.estabelecimentos[0].atividades[0].receitasAtividade[0];
+        expect(receita.valor).toBe(22169.56);
+        expect(receita.qualificacoesTributarias).toEqual([
+            { codigoTributo: 1007, id: 1 },
+            { codigoTributo: 1008, id: 1 },
+        ]);
+    });
+
+    it('a imunidade NÃO inventa qualificação de PIS/COFINS/ISS', () => {
+        const quals = payloadImune().declaracao.estabelecimentos[0].atividades[0]
+            .receitasAtividade[0].qualificacoesTributarias || [];
+        const tributos = quals.map((q) => q.codigoTributo);
+        expect(tributos).not.toContain(1004);
+        expect(tributos).not.toContain(1005);
+        expect(tributos).not.toContain(1010);
+    });
+
+    it('receita SEM a marcação continua sem qualificação nenhuma', () => {
+        const payload = mapPgdasPayload({
+            empresa: { ...baseEmpresa, anexo: 'II' },
+            resumo: baseResumo,
+            mesApuracao: new Date(2026, 5, 1),
+            faturamentoPorCnae: {
+                'principal::0::5811500::II': { ...emptyState, valor: '22.169,56' },
+            },
+            filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
+        });
+        expect(payload.declaracao.estabelecimentos[0].atividades[0]
+            .receitasAtividade[0].qualificacoesTributarias).toBeUndefined();
+    });
+
+    // Imunidade + ST na mesma receita: as duas viajam, sem uma apagar a outra.
+    it('convive com as qualificações que já existiam (ST, monofásico)', () => {
+        const payload = mapPgdasPayload({
+            empresa: { ...baseEmpresa, anexo: 'I' },
+            resumo: baseResumo,
+            mesApuracao: new Date(2026, 5, 1),
+            faturamentoPorCnae: {
+                'principal::0::4711302::I': {
+                    ...emptyState, valor: '10.000,00', isImune: true, icmsSt: true,
+                },
+            },
+            filialComercio: 0, filialIndustria: 0, filialServico: 0, icmsVendas: 0,
+        });
+        const quals = payload.declaracao.estabelecimentos[0].atividades[0]
+            .receitasAtividade[0].qualificacoesTributarias || [];
+        expect(quals).toContainEqual({ codigoTributo: 1007, id: 8 });   // ST
+        expect(quals).toContainEqual({ codigoTributo: 1007, id: 1 });   // imunidade
+        expect(quals).toContainEqual({ codigoTributo: 1008, id: 1 });
     });
 });

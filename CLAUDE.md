@@ -1732,6 +1732,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   devolve a qualificação que o SERPRO aceitou, e o #573 já faz o botão guardar
   o `bruto`. NÃO deduzir o id: MSG_ISN_032 provou que qualificação errada
   derruba a ENTREGA INTEIRA.
+  ✅ **RESOLVIDO 13/08 — os ids vieram do FORMULÁRIO, como o código 9 do ISS
+  fixo.** Paulo colou o `outerHTML` do `<select>` da coluna de cada tributo na
+  tela de Receitas do PGDAS-D no e-CAC (POLO CULTURAL). O que ele entrega:
+  **`data-cod-tributo` 1007 = ICMS · 1008 = IPI**, e as qualificações
+  **1 = Imunidade · 2 = Exigibilidade Suspensa · 3 = Lançamento de Ofício ·
+  4 = Isenção/Redução · 6 = Isenção/Redução Cesta Básica**. Os ids convivem com
+  os já conhecidos (8 ST, 9 monofásico, 11 ISS retido) — é um espaço de
+  numeração só. **O IPI PARA NO 3**: o `<select>` dele não tem
+  "Isenção/Redução", e isso não é omissão do print — é o formulário dizendo que
+  esse campo não existe pro IPI, então isenção NUNCA emite qualificação de IPI.
+  `CODIGO_TRIBUTO` + `QUALIFICACAO` no pgdasMapper, com o HTML de origem no
+  comentário. A imunidade agora VIAJA na declaração (antes o app só tirava
+  ICMS/IPI do cálculo, e a Receita recalculava COM os dois — o DAS voltava maior
+  que o previsto e ninguém sabia por quê). ⚠️ **A CONFERÊNCIA É OBRIGATÓRIA em
+  caso novo**: o DAS é o MESMO com e sem a qualificação, então gerar a guia não
+  prova nada — só o extrato denuncia ("Imunidade tributária de: ICMS, IPI."). É
+  literalmente a armadilha do ISS fixo (SUP), que passou meses despercebida pela
+  mesma razão. PENDENTE: a marcação de ISENÇÃO por tributo (id 4) ainda não tem
+  campo na tela — o caso Jaguarexport segue esperando isso, não o número.
   ❌ **O 🔎 NÃO DEVOLVE O ID — premissa minha derrubada por resposta real
   (12/08)**: eu supunha que o `CONSULTIMADECREC14` trouxesse a declaração
   ESTRUTURADA, e o botão foi construído nessa aposta. A resposta de uma
