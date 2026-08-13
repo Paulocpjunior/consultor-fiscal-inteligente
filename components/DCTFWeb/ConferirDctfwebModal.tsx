@@ -260,8 +260,8 @@ const ConferirDctfwebModal: React.FC<Props> = ({ empresaCnpj, empresaNome, empre
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-auto my-auto" onClick={e => e.stopPropagation()}>
                 <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
                     <div>
                         <h3 className="font-bold text-slate-800 dark:text-slate-100">Conferência DCTFWeb × Apuração</h3>

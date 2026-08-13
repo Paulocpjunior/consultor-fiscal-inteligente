@@ -180,7 +180,7 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         modal = (
             <div
-                className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[200] animate-fade-in"
+                className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[200] animate-fade-in overflow-y-auto"
                 role="alertdialog"
                 aria-modal="true"
                 aria-labelledby="dialog-title"
@@ -188,7 +188,7 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 onClick={onCancel}
             >
                 <div
-                    className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md flex flex-col"
+                    className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md flex flex-col my-auto"
                     onClick={e => e.stopPropagation()}
                 >
                     <div className="p-5 flex items-start gap-3">

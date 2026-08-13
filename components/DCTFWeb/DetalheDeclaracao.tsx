@@ -5,6 +5,7 @@
  * PDFs sao lazy (so busca quando tab abrir) pra economizar custo SERPRO.
  */
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type {
     User, DctfwebDeclaracao, DctfwebDarfResult, DctfwebPdfResult,
     DctfwebDarfsSeparadosResult,
@@ -408,8 +409,33 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-auto">
+        // ── MODAL ALTO NÃO PODE ESCONDER O FIM DE SI MESMO ──────────────────
+        //
+        // Paulo, 13/08: os botões do fim (Gerar DARF, guias por vencimento)
+        // sumiam. Três causas possíveis, e a correção fecha as três:
+        //
+        //  1. `items-center` com filho MAIS ALTO que o container faz o excesso
+        //     transbordar para CIMA E PARA BAIXO — e o pedaço de cima fica
+        //     INALCANÇÁVEL, porque não existe scroll negativo. É o bug clássico
+        //     de flexbox centralizado. `items-start` + `overflow-y-auto` no
+        //     OVERLAY resolve: o card cresce e a página rola até o fim dele.
+        //  2. `100vh` no Safari conta a barra de endereço; `dvh` conta a área
+        //     realmente visível.
+        //  3. Qualquer ancestral com `transform`/`will-change` vira containing
+        //     block de `position: fixed` (spec CSS) — e o modal deixa de se
+        //     ancorar na viewport. O PORTAL para o body imuniza contra isso, e
+        //     é a única defesa que não depende de auditar a árvore inteira toda
+        //     vez que alguém acrescenta uma animação.
+        //
+        // Além disso o corpo agora é FLEX COLUMN: cabeçalho fixo, conteúdo
+        // rolando. Antes o cabeçalho rolava junto e sumia.
+        createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[92dvh] my-auto flex flex-col overflow-hidden">
+                {/* UM corpo rolante. Manter o cabeçalho fixo aqui não serviria:
+                    ele carrega insumos, cards e débitos — comeria a altura toda
+                    do modal e sobraria uma fresta pro conteúdo. */}
+                <div className="flex-1 min-h-0 overflow-y-auto">
                 <div className="p-6 border-b">
                     <div className="flex items-start justify-between">
                         <div>
@@ -839,8 +865,11 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                         </div>
                     )}
                 </div>
+                </div>
             </div>
-        </div>
+        </div>,
+        document.body,
+        )
     );
 };
 

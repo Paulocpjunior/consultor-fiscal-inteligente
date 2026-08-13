@@ -131,11 +131,11 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
                 position:fixed e jogavam o modal pra fora da tela (top ~8700). */}
             {certModalFor && createPortal(
                 <div
-                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                    className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto"
                     onClick={() => setCertModalFor(null)}
                 >
                     <div
-                        className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+                        className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-auto"
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">

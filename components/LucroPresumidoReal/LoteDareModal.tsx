@@ -117,8 +117,8 @@ const LoteDareModal: React.FC<Props> = ({ empresas, onClose }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onClose}>
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[80] overflow-y-auto" onClick={onClose}>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto my-auto" onClick={e => e.stopPropagation()}>
                 <div className="flex items-start justify-between">
                     <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">🧾 Lote DARE-SP (ICMS declarado em massa)</h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>

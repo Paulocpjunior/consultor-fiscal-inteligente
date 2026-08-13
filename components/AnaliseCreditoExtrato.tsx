@@ -1054,11 +1054,11 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
       {/* Modal de confirmacao de exclusao de fornecedor (HIBRIDO: local OR persistido) */}
       {confirmandoExclusao && (
         <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80] animate-fade-in"
+          className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[80] animate-fade-in overflow-y-auto"
           onClick={() => !salvandoExclusaoPersistida && setConfirmandoExclusao(null)}
         >
           <div
-            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6"
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 my-auto"
             onClick={e => e.stopPropagation()}
           >
             <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-2">
@@ -1146,11 +1146,11 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
       {/* Modal de confirmacao de exclusao de UMA NF (HIBRIDO local/persistido) */}
       {confirmandoExclusaoNf && (
         <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80] animate-fade-in"
+          className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[80] animate-fade-in overflow-y-auto"
           onClick={() => !salvandoExclusaoNfPersistida && setConfirmandoExclusaoNf(null)}
         >
           <div
-            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6"
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 my-auto"
             onClick={e => e.stopPropagation()}
           >
             <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-2">

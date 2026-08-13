@@ -124,8 +124,8 @@ const AlertaPopup: React.FC<Props> = ({ currentUser, onIrParaCaixaPostal, onIrPa
     const naoLidasPorFonte: Partial<Record<CaixaPostalFonte, number>> = resumo?.naoLidasPorFonte || {};
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80] animate-fade-in">
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[80] animate-fade-in overflow-y-auto">
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6 my-auto">
                 <div className="flex items-start gap-4 mb-4">
                     <div className="text-4xl">&#9888;&#65039;</div>
                     <div className="flex-1">

@@ -208,8 +208,8 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
 
             {/* Modal detalhe */}
             {selecionada && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70]" onClick={() => setSelecionada(null)}>
-                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[70] overflow-y-auto" onClick={() => setSelecionada(null)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col my-auto" onClick={e => e.stopPropagation()}>
                         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
                             <div className="flex items-center justify-between mb-2">
                                 <span className={`px-2 py-0.5 rounded text-xs font-bold ${statusBadgeClass(selecionada.status)}`}>

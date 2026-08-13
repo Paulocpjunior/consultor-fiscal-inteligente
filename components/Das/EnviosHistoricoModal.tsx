@@ -62,9 +62,9 @@ const EnviosHistoricoModal: React.FC<Props> = ({ currentUser, empresas, cnpjInic
     // enviar"). No body, o modal não depende de ancestral nenhum.
 
     return createPortal((
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[80] overflow-y-auto" onClick={onClose}>
             <div
-                className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+                className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col my-auto"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="p-5 border-b border-slate-200 dark:border-slate-700">

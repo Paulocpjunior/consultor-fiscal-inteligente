@@ -319,8 +319,8 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
     // enviar"). No body, o modal não depende de ancestral nenhum.
 
     return createPortal((
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onClose}>
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[80] overflow-y-auto" onClick={onClose}>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col my-auto" onClick={e => e.stopPropagation()}>
                 <div className="p-5 border-b border-slate-200 dark:border-slate-700">
                     <h3 className="text-lg font-bold">Enviar DAS ao cliente — {dasInfo.empresaNome}</h3>
                     <p className="text-xs text-slate-500 mt-1">
