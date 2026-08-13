@@ -12,6 +12,8 @@ import {
     situacaoDaEntrega, montarExtratoEntregas, montarEmailFechamento,
     nomeArquivoExtrato, competenciaHumana,
 } from '../sefaz-backend/reinf-recibo-entrega.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const EMPRESA = { nome: 'VINCENZO GUERRA', cnpj: '63027940000194' };
 const entregue = (over: any = {}) => ({
@@ -163,5 +165,61 @@ describe('competenciaHumana', () => {
     it('AAAA-MM vira MM/AAAA (é como o e-CAC mostra)', () => {
         expect(competenciaHumana('2026-07')).toBe('07/2026');
         expect(competenciaHumana('')).toBe('—');
+    });
+});
+
+/**
+ * A ROTA — o que ela promete tem que existir, e na ORDEM certa.
+ *
+ * Rito das guias (#293) aplicado ao fechamento: arquiva, depois avisa. Avisar
+ * antes de arquivar produziria "extrato enviado" com o arquivo em lugar nenhum
+ * — e é justamente o e-mail que faz a pessoa parar de procurar.
+ */
+describe('rota do fechamento da competência', () => {
+    const rota = readFileSync(join(__dirname, '..', 'sefaz-backend/reinf-retencoes-pj-routes.js'), 'utf8');
+
+    it('existe e é admin — fechamento não é leitura', () => {
+        expect(rota).toMatch(/router\.post\('\/fechamento-competencia', requireAdmin/);
+    });
+
+    it('o APURADO sai da régua da casa, nunca do corpo da requisição', () => {
+        // montarDipamCompetencia é a MESMA função da aba 🌾. Aceitar o apurado
+        // por parâmetro criaria dois números pro mesmo fato.
+        const posPainel = rota.indexOf('const painel = montarDipamCompetencia({\n            documentos, competencia');
+        const posConferencia = rota.indexOf('conferirTotalizadorR2099({');
+        expect(posPainel).toBeGreaterThan(-1);
+        expect(posConferencia).toBeGreaterThan(posPainel);
+        expect(rota).toMatch(/apurado: painel\.funrural/);
+        expect(rota).not.toMatch(/apurado: req\.body/);
+    });
+
+    it('ARQUIVA antes de AVISAR', () => {
+        const posUpload = rota.indexOf('await uploadRecibo(');
+        const posEmail = rota.indexOf('await enviarEmail({');
+        expect(posUpload).toBeGreaterThan(-1);
+        expect(posEmail).toBeGreaterThan(posUpload);
+    });
+
+    it('remetente é a caixa de quem clicou e o gestor vai em CÓPIA OCULTA', () => {
+        expect(rota).toMatch(/escolherRemetente\(\{/);
+        expect(rota).toMatch(/bcc: \[GESTOR_EMAIL\]/);
+        // O cliente NÃO entra: é comunicação interna.
+        expect(rota).toMatch(/para: \[escolha\.remetente\]/);
+    });
+
+    it('falha de e-mail não apaga o arquivamento — cada etapa tem seu status', () => {
+        expect(rota).toMatch(/resultado\.email = \{ status: 'erro'/);
+        expect(rota).toMatch(/resultado\.sharePoint = \{ status: 'erro'/);
+    });
+
+    it('a auditoria guarda recibos e situação, NUNCA o conteúdo dos eventos', () => {
+        expect(rota).toMatch(/collection\('reinf_fechamentos'\)/);
+        expect(rota).toMatch(/recibos: extrato\.linhas\.map/);
+        expect(rota).not.toMatch(/reinf_fechamentos[\s\S]{0,600}eventoXml|conteudo:/);
+    });
+
+    it('RECIBOS é pasta irmã de IMPOSTOS — guia e prova de entrega não se misturam', () => {
+        expect(rota).toMatch(/DEPARTAMENTO FISCAL[\s\S]{0,80}RECIBOS/);
+        expect(rota).toMatch(/sem sharePointConfig/);
     });
 });
