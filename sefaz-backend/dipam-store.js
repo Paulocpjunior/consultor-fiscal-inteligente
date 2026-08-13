@@ -12,6 +12,7 @@
 
 import admin from 'firebase-admin';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
+import { validarCpf, formatarCpf } from './documento-dv.js';
 
 function getDb() {
     if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -91,6 +92,16 @@ export async function salvarProdutorRural(doc, dados, usuario) {
     const cpfTitular = soDigitos(dados.cpfTitular);
     if (cpfTitular && cpfTitular.length !== 11) {
         const err = new Error(`CPF do titular deve ter 11 dígitos (recebido "${dados.cpfTitular}").`);
+        err.code = 'CPF_TITULAR_INVALIDO';
+        throw err;
+    }
+    // O DV é a ÚNICA rede que existe antes da declaração. Conferir só o
+    // comprimento aceitaria dígito trocado ou transposto — e o R-2055 sairia
+    // no `ideProdutor` de outra pessoa, sem nada depois para perceber.
+    if (cpfTitular && !validarCpf(cpfTitular)) {
+        const err = new Error(`CPF do titular inválido: ${formatarCpf(cpfTitular)} não passa no `
+            + 'dígito verificador. Confira o número no CADESP — o R-2055 declara a AQUISIÇÃO em nome '
+            + 'desta pessoa, e entrega ao Reinf não se desfaz.');
         err.code = 'CPF_TITULAR_INVALIDO';
         throw err;
     }

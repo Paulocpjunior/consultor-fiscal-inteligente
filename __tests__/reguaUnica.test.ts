@@ -139,6 +139,23 @@ const REGUAS_VIGIADAS: Regua[] = [
             /LUCRO_PRESUMIDO[\s\S]{0,200}?EFD[_-]?CONTRIBUICOES/i,
         ],
     },
+    {
+        nome: 'Dígito verificador de CPF/CNPJ',
+        dono: 'sefaz-backend/documento-dv.js',
+        comoUsar: "import { validarCpf, validarCnpj } from '../sefaz-backend/documento-dv.js'",
+        porque: 'A régua vivia SÓ no frontend (services/validadorDocumento.ts), então o backend — '
+            + 'que é quem grava no banco e monta o evento — conferia apenas o COMPRIMENTO. No '
+            + '`cpfTitular` do produtor rural isso significa o R-2055 declarar a aquisição em nome '
+            + 'de OUTRA PESSOA por um dígito trocado, e entrega ao Reinf não se desfaz.',
+        assinaturas: [
+            // Os pesos do módulo 11 escritos à mão. Só existem em quem
+            // reimplementa o cálculo.
+            /\[\s*10\s*,\s*9\s*,\s*8\s*,\s*7\s*,\s*6\s*,\s*5\s*,\s*4\s*,\s*3\s*,\s*2\s*\]/,
+            /\[\s*5\s*,\s*4\s*,\s*3\s*,\s*2\s*,\s*9\s*,\s*8\s*,\s*7\s*,\s*6\s*,\s*5\s*,\s*4\s*,\s*3\s*,\s*2\s*\]/,
+            // O corte do módulo 11 (resto < 2 ⇒ DV 0) junto de "resto".
+            /resto\s*<\s*2\s*\?\s*0\s*:\s*11\s*-\s*resto/,
+        ],
+    },
 ];
 
 // ─── Varredura ──────────────────────────────────────────────────────────────
