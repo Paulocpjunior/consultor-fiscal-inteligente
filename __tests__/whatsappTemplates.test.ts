@@ -161,3 +161,53 @@ describe('o envio de guia usa o cadastro de templates', () => {
         expect(rota).toMatch(/Config Admin → Templates/);
     });
 });
+
+/**
+ * MATA-BURRO: A CHAVE DA VARIÁVEL CASA SEM DEPENDER DE CAIXA NEM DE ACENTO.
+ *
+ * Caso real 13/08: o template foi cadastrado com "Imposto", "Competencia" e
+ * "Vencimento" — maiúscula inicial, como quem preenche um formulário escreve —
+ * e o envio manda `imposto`/`competencia`/`vencimento`. O casamento era EXATO,
+ * então as três "faltavam" e o WhatsApp recusava sobre um cadastro CERTO.
+ *
+ * Exigir a grafia exata é exigir julgamento de quem preenche a tela, e a
+ * qualificação da equipe é restrição de projeto: quem se ajusta é o código.
+ */
+describe('chave de variável tolerante a grafia', () => {
+    const comChaves = (...chaves: string[]) => ({ variaveis: chaves.map(chave => ({ chave })) });
+
+    test('maiúscula inicial no cadastro casa com minúscula no envio', () => {
+        const r = montarVariaveisPorSchema(
+            comChaves('Imposto', 'Competencia', 'Vencimento'),
+            { imposto: 'DAS', competencia: '07/2026', vencimento: '20/08/2026' },
+        );
+        expect(r.ok).toBe(true);
+        expect(r.variaveis).toEqual(['DAS', '07/2026', '20/08/2026']);
+    });
+
+    test('acento no cadastro não quebra o casamento', () => {
+        const r = montarVariaveisPorSchema(comChaves('Competência'), { competencia: '07/2026' });
+        expect(r.ok).toBe(true);
+        expect(r.variaveis).toEqual(['07/2026']);
+    });
+
+    test('underscore e caixa alta também casam', () => {
+        const r = montarVariaveisPorSchema(comChaves('DATA_VENCIMENTO'), { dataVencimento: '20/08/2026' });
+        expect(r.ok).toBe(true);
+    });
+
+    // O que NÃO se normaliza é o SIGNIFICADO: chave desconhecida continua
+    // faltando, e o nome que aparece é o que foi CADASTRADO (é o que a pessoa
+    // procura na tela).
+    test('chave de outro significado continua faltando, com o nome do cadastro', () => {
+        const r = montarVariaveisPorSchema(comChaves('Protocolo'), { imposto: 'DAS' });
+        expect(r.ok).toBe(false);
+        expect(r.faltando).toEqual(['Protocolo']);
+    });
+
+    test('valor em branco continua faltando — meio preenchido é pior', () => {
+        const r = montarVariaveisPorSchema(comChaves('Imposto'), { imposto: '   ' });
+        expect(r.ok).toBe(false);
+        expect(r.faltando).toEqual(['Imposto']);
+    });
+});
