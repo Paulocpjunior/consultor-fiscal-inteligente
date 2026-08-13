@@ -5,8 +5,10 @@
 // MUNICÍPIO; o R-2055 é declarado por PRODUTOR), mas o CÁLCULO não se refaz.
 // Dois números diferentes pro mesmo fato é o pior defeito de um arquivo fiscal.
 // ============================================================================
-// @ts-expect-error módulo JS puro sem tipos
-import { montarPayloadR2055, normalizarAquisicao } from '../sefaz-backend/reinf-aquisicao-rural.js';
+import {
+    montarPayloadR2055, normalizarAquisicao,
+    CODIGOS_RECEITA_FUNRURAL, conferirTotalizadorR2099,
+} from '../sefaz-backend/reinf-aquisicao-rural.js';
 
 /** Bloco `funrural` como sai de montarDipamCompetencia. */
 const funruralDe = (notas: any[]) => ({ notas, revisarAliquotas: false });
@@ -282,5 +284,90 @@ describe('CPF do titular vindo do cadastro do produtor', () => {
         });
         expect(r.produtores[0].cpfProdutor).toBeNull();
         expect(r.produtores[0].tipoInscricao).toBe('cnpj');
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROVADO EM PRODUÇÃO — VINCENZO GUERRA, PA 07/2026, 13/08/2026 10:47:37.
+//
+// O R-2055 foi transmitido e o R-2099 fechou o período (MS7001, recibo
+// 11774083-10-2099-2607-11774083). O "Totalizador das contribuições sociais
+// incidentes sobre a aquisição de produção rural" devolveu, por código:
+//
+//   1656-01 → R$ 249,48   ·   1646-03 → R$ 20,79   ·   1213-06 → R$ 37,80
+//
+// A aba 🌾 tinha apurado sobre base de R$ 18.900,00 (LC 224/2025):
+//   INSS 1,32% = 249,48 · GILRAT 0,11% = 20,79 · SENAR 0,20% = 37,80
+//
+// As três alíquotas são diferentes entre si, então o casamento é ÚNICO: o
+// de-para código→componente fica provado por recibo, não por dedução. E o
+// total (R$ 308,07) bater nos dois caminhos é CORROBORAÇÃO — a Receita e o
+// CFI chegaram no mesmo número por vias independentes.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('conferência contra o totalizador do R-2099', () => {
+    const APURADO = { inss: 249.48, gilrat: 20.79, senar: 37.80 };
+    const TOTALIZADOR_REAL = [
+        { codigoReceita: '1213-06', valor: 37.80 },
+        { codigoReceita: '1646-03', valor: 20.79 },
+        { codigoReceita: '1656-01', valor: 249.48 },
+    ];
+
+    it('o de-para dos códigos de receita é o do recibo aceito', () => {
+        expect(CODIGOS_RECEITA_FUNRURAL).toEqual({
+            inss: '1656-01', gilrat: '1646-03', senar: '1213-06',
+        });
+    });
+
+    it('bate componente a componente com o caso real', () => {
+        const c = conferirTotalizadorR2099({ apurado: APURADO, totalizador: TOTALIZADOR_REAL });
+        expect(c.situacao).toBe('confere');
+        expect(c.linhas).toHaveLength(3);
+        for (const l of c.linhas) expect(l.confere).toBe(true);
+        expect(c.codigosDesconhecidos).toEqual([]);
+        expect(c.resumo).toMatch(/308,07|308\.07/);
+        expect(c.resumo).toMatch(/caminhos independentes/);
+    });
+
+    // ─── AS TRAVAS ──────────────────────────────────────────────────────────
+    it('SEM totalizador não existe "conferido" — sucesso não é conferência', () => {
+        const c = conferirTotalizadorR2099({ apurado: APURADO, totalizador: [] });
+        expect(c.situacao).toBe('nao-conferido');
+        expect(c.resumo).toMatch(/prova que o XML foi aceito, não que a Receita entendeu/);
+        expect(c.resumo).toMatch(/contra o totalizador que a guia é paga/);
+    });
+
+    it('divergência de UM centavo é divergência — o FUNRURAL já vem sem centavo', () => {
+        const c = conferirTotalizadorR2099({
+            apurado: APURADO,
+            totalizador: [...TOTALIZADOR_REAL.slice(0, 2), { codigoReceita: '1656-01', valor: 249.47 }],
+        });
+        expect(c.situacao).toBe('divergente');
+        const inss = c.linhas.find((l: any) => l.componente === 'inss');
+        expect(inss!.confere).toBe(false);
+        expect(inss!.diferenca).toBe(-0.01);
+    });
+
+    it('código que a Receita não totalizou é AUSENTE, nunca "bateu em zero"', () => {
+        const c = conferirTotalizadorR2099({
+            apurado: APURADO,
+            totalizador: TOTALIZADOR_REAL.filter(t => t.codigoReceita !== '1213-06'),
+        });
+        expect(c.situacao).toBe('divergente');
+        const senar = c.linhas.find((l: any) => l.componente === 'senar');
+        expect(senar!.totalizado).toBeNull();
+        expect(senar!.confere).toBe(false);
+        expect(c.resumo).toMatch(/Ausente não é zero/);
+    });
+
+    it('código desconhecido fica FORA da conta e NOMEADO — somar inventaria divergência', () => {
+        const c = conferirTotalizadorR2099({
+            apurado: APURADO,
+            totalizador: [...TOTALIZADOR_REAL, { codigoReceita: '9999-99', valor: 500 }],
+        });
+        expect(c.situacao).toBe('divergente');
+        expect(c.codigosDesconhecidos).toEqual([{ codigoReceita: '9999-99', valor: 500 }]);
+        expect(c.resumo).toMatch(/este app\s+não conhece|não conhece/);
+        // As três linhas conhecidas continuam batendo — o desconhecido não as contamina.
+        for (const l of c.linhas) expect(l.confere).toBe(true);
     });
 });

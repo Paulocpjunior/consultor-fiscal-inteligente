@@ -156,6 +156,21 @@ const REGUAS_VIGIADAS: Regua[] = [
             /resto\s*<\s*2\s*\?\s*0\s*:\s*11\s*-\s*resto/,
         ],
     },
+    {
+        nome: 'Códigos de receita do FUNRURAL (R-2055 / totalizador do R-2099)',
+        dono: 'sefaz-backend/reinf-aquisicao-rural.js',
+        comoUsar: "import { CODIGOS_RECEITA_FUNRURAL, conferirTotalizadorR2099 } from "
+            + "'../sefaz-backend/reinf-aquisicao-rural.js'",
+        porque: 'O de-para não veio de dedução: veio do RECIBO do R-2099 aceito (VINCENZO 07/2026, '
+            + 'MS7001) — 1656-01 INSS, 1646-03 GILRAT, 1213-06 SENAR, batendo componente a componente '
+            + 'com a apuração da aba 🌾. Uma segunda tabela mandaria a contribuição para o código de '
+            + 'outro tributo, e o erro só apareceria na cobrança.',
+        assinaturas: [
+            /['"]1656-01['"]/,
+            /['"]1646-03['"]/,
+            /['"]1213-06['"]/,
+        ],
+    },
 ];
 
 // ─── Varredura ──────────────────────────────────────────────────────────────
