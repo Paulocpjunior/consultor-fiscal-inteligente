@@ -266,9 +266,16 @@ const DetalheEmpresa: React.FC<{
         try {
             const r: any = await relerMunicipiosDipam(empresaId, painel.competencia);
             if (r?.ok === false) { setResultadoReler(`Falha: ${r.error}`); return; }
+            // O resultado diz O QUE foi recuperado, por causa. O texto antigo
+            // ("N já tinham") mentia: ele contava documentos que o backfill nem
+            // chegou a abrir, porque o sentinela olhava a UF — que existe em
+            // toda nota — em vez do dado que falta.
             setResultadoReler(
-                `${r.preenchidas} nota(s) recuperadas do XML · ${r.jaTinham} já tinham · `
-                + `${r.semXml} sem arquivo guardado.` + (r.acao ? ` ${r.acao}` : ''),
+                `${r.preenchidas} nota(s) recuperadas do XML`
+                + (r.ganharamFornecedor ? ` · ${r.ganharamFornecedor} ganharam o fornecedor` : '')
+                + (r.ganharamMunicipio ? ` · ${r.ganharamMunicipio} ganharam o município` : '')
+                + ` · ${r.jaTinham} já relidas antes · ${r.semXml} sem arquivo guardado.`
+                + (r.acao ? ` ${r.acao}` : ''),
             );
             onRecarregar();
         } catch (e: any) {

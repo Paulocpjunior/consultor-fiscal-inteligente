@@ -5,6 +5,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **MATA-BURRO: SENTINELA DE BACKFILL NÃO PODE SER CAMPO DE DADO** (13/08,
+  print do Paulo na aba 🌾 da NOVA ERA). O botão ♻️ *"Reler participante e
+  município dos XMLs"* examinou 692 documentos e respondeu **"0 recuperadas ·
+  664 já tinham · 28 sem arquivo"** — enquanto o MESMO painel, logo abaixo,
+  acusava **427 notas sem fornecedor e 14 sem município**. Duas leituras do
+  mesmo dado discordando, a armadilha que mais mordeu este projeto.
+  DUAS CAUSAS: (1) o sentinela era a **UF** (`ufEmit`), e a UF é gravada em TODA
+  nota pelo importer — ele pulava justamente as que precisavam dele e chamava
+  isso de "já tinham". Virou **carimbo de versão** (`participantesRelidos` +
+  `VERSAO_RELEITURA_PARTICIPANTES`): sentinela responde *"já passei por aqui?"*,
+  nunca *"tem algum campo preenchido?"* — e subir a versão reprocessa a base
+  quando o extrator aprender a ler mais. (2) o patch **não gravava o CNPJ/CPF do
+  participante**, embora o extrator devolva desde sempre: "nota sem fornecedor"
+  é nota sem `cnpjEmit`, então nenhuma releitura ia resolver, por mais vezes que
+  a pessoa clicasse. A varredura passou a cobrir **as duas direções** (nota
+  própria de entrada pode estar gravada como 'saida' até o backfill de direção
+  passar) e o backfill **só preenche o que está VAZIO** — sobrescrever com o XML
+  seria "corrigir" divergência por escrita silenciosa, e divergência entre fonte
+  e cadastro é ALERTA (06/08). O resultado agora responde POR CAUSA: *relido e o
+  XML realmente não tem o dado* manda ao cadastro do produtor; *sem arquivo
+  guardado* é buraco de captura; *já relidas antes* é o clique que não faz nada
+  — três ações diferentes que o texto antigo fundia numa mentira só.
 - **MATA-BURRO: QUOTA DO TRIMESTRAL NÃO SE EMITE ANTES DO MÊS DELA** (Paulo,
   13/08: *"as cotas devem ser enviadas todos os meses pois sofrem atualização da
   SELIC"*). Ele apontou o defeito com uma frase: escolher "3 quotas" emitia **as
