@@ -266,39 +266,57 @@ jobs:
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ═══ POR QUE ISTO VEM POR `env` E NÃO POR `${{ }}` NO MEIO DO SCRIPT ═
+          #
+          # 13/08: o deploy 470 caiu no `Push image` (infraestrutura) e ESTA
+          # trava — a que existe para transformar a queda em issue — caiu junto.
+          # A mensagem do commit era interpolada DENTRO do heredoc, e a mensagem
+          # daquele squash tinha crases e parênteses (`ehDocumentoDeServico`,
+          # `useState(...)`). O bash leu tudo como substituição de comando:
+          # dezenas de "command not found" e exit 1.
+          #
+          # Resultado: o deploy falhou E NINGUÉM FOI AVISADO — exatamente o
+          # cenário de 12/08 que originou esta trava (trabalho mesclado, fora do
+          # ar, descoberto por print de tela desatualizada).
+          #
+          # `${{ }}` é substituído pelo Actions ANTES do bash existir: qualquer
+          # texto de terceiro vira CÓDIGO. Por `env:` o valor chega como
+          # variável de ambiente de verdade e nunca é parseado — é a mesma razão
+          # pela qual isto também era um vetor de injeção, não só um bug.
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           TITULO="🚨 Deploy do app principal FALHOU — a main não está no ar"
-          CORPO=$(cat <<-CORPO_ISSUE
-          O deploy da \`main\` falhou. **O que está mesclado NÃO está publicado** —
-          quem testar agora vai ver a versão anterior, e um print dessa tela
-          parece defeito de código.
-
-          | | |
-          | --- | --- |
-          | Commit | \`${{ github.sha }}\` |
-          | Mensagem | ${{ github.event.head_commit.message }} |
-          | Run | ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} |
-
-          **O que fazer**
-          1. Abrir o run e ver QUAL passo caiu (o log diz).
-          2. Se for o gate (lint/testes/auditoria): corrigir e mesclar de novo.
-          3. Se for infraestrutura (runner, cota, Cloud Run): reexecutar o run.
-             Se persistir, existe a saída de emergência — \`scripts/deploy-manual.sh\`,
-             que faz o mesmo caminho pelo Cloud Build, com health check antes de
-             rotear. Ela NÃO roda o gate: só use depois do gate verde na máquina.
-
-          **Enquanto isto estiver aberto, não confie em print de tela** — confira a
-          versão primeiro (rodapé do app, ou \`/guia-conferencia-entregas.html\`).
-
-          _Esta issue é fechada à mão quando o deploy voltar a passar._
-          CORPO_ISSUE
-          )
+          # Só a PRIMEIRA linha da mensagem: o corpo de um squash é a soma de
+          # todos os commits, e um muro de texto na issue esconde a ação.
+          RESUMO=$(printf '%s' "$COMMIT_MSG" | head -n 1)
+          {
+            printf 'O deploy da `main` falhou. **O que está mesclado NÃO está publicado** —\n'
+            printf 'quem testar agora vai ver a versão anterior, e um print dessa tela\n'
+            printf 'parece defeito de código.\n\n'
+            printf '| | |\n| --- | --- |\n'
+            printf '| Commit | `%s` |\n' "$COMMIT_SHA"
+            printf '| Mensagem | %s |\n' "$RESUMO"
+            printf '| Run | %s |\n\n' "$RUN_URL"
+            printf '**O que fazer**\n'
+            printf '1. Abrir o run e ver QUAL passo caiu (o log diz).\n'
+            printf '2. Se for o gate (lint/testes/auditoria): corrigir e mesclar de novo.\n'
+            printf '3. Se for infraestrutura (runner, cota, push da imagem, Cloud Run):\n'
+            printf '   reexecutar o run. Se persistir, existe a saída de emergência —\n'
+            printf '   `scripts/deploy-manual.sh`, que faz o mesmo caminho pelo Cloud Build,\n'
+            printf '   com health check antes de rotear. Ela NÃO roda o gate: só use depois\n'
+            printf '   do gate verde na máquina.\n\n'
+            printf '**Enquanto isto estiver aberto, não confie em print de tela** — confira a\n'
+            printf 'versão primeiro (rodapé do app, ou `/guia-conferencia-entregas.html`).\n\n'
+            printf '_Esta issue é fechada à mão quando o deploy voltar a passar._\n'
+          } > /tmp/corpo-issue.md
           EXISTE=$(gh issue list --search "$TITULO in:title" --state open --json number --jq '.[0].number // empty')
           if [ -n "$EXISTE" ]; then
             # Falhar de novo COMENTA em vez de abrir outra: uma issue por
             # incidente. Enxurrada de issues iguais vira ruído que se ignora —
             # que é exatamente o efeito que esta trava existe pra evitar.
-            gh issue comment "$EXISTE" --body "$CORPO"
+            gh issue comment "$EXISTE" --body-file /tmp/corpo-issue.md
           else
-            gh issue create --title "$TITULO" --body "$CORPO"
+            gh issue create --title "$TITULO" --body-file /tmp/corpo-issue.md
           fi

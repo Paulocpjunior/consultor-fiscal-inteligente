@@ -61,3 +61,52 @@ describe('o workflow de deploy avisa quando falha', () => {
         expect(posAviso).toBeGreaterThan(posHealth);
     });
 });
+
+// ============================================================================
+// MATA-BURRO: TEXTO DE COMMIT NÃO PODE VIRAR CÓDIGO NO WORKFLOW.
+//
+// 13/08, deploy 470: o `Push image` caiu (infraestrutura) e ESTA trava — a que
+// existe para transformar a queda em issue — CAIU JUNTO. A mensagem do commit
+// era interpolada com `${{ }}` dentro do heredoc, e a mensagem daquele squash
+// tinha crases e parênteses (`ehDocumentoDeServico`, `useState(...)`). O bash
+// leu tudo como substituição de comando: dezenas de "command not found" e
+// exit 1.
+//
+// Resultado: **o deploy falhou e ninguém foi avisado** — exatamente o cenário
+// de 12/08 que originou a trava (trabalho mesclado, fora do ar, descoberto por
+// print de tela desatualizada).
+//
+// `${{ }}` é substituído pelo Actions ANTES de o bash existir: qualquer texto
+// de terceiro vira CÓDIGO. Por `env:` o valor chega como variável de ambiente
+// de verdade e nunca é parseado — por isso isto também era vetor de injeção, e
+// não só um bug de aspas.
+// ============================================================================
+describe('MATA-BURRO: dado de fora entra por env, nunca por ${{ }} no script', () => {
+    const wf = readFileSync(join(__dirname, '..', '.github/workflows/deploy-app.yml'), 'utf8');
+
+    /** As linhas de `run:` — é só dentro delas que a interpolação vira código. */
+    const dentroDeRun = wf
+        .split('\n')
+        .filter((l) => !l.trim().startsWith('#'))
+        .join('\n');
+
+    it('a mensagem do commit NÃO é interpolada no corpo do script', () => {
+        // Ela pode aparecer em `env:` (e é assim que deve ser) — o que não pode
+        // é `${{ github.event.head_commit.message }}` no meio do shell.
+        const emEnv = /COMMIT_MSG:\s*\$\{\{\s*github\.event\.head_commit\.message\s*\}\}/.test(wf);
+        expect(emEnv).toBe(true);
+
+        const usos = dentroDeRun.match(/\$\{\{\s*github\.event\.head_commit\.message\s*\}\}/g) || [];
+        // Exatamente UM: o do `env:`. Qualquer outro está dentro do `run:`.
+        expect(usos).toHaveLength(1);
+    });
+
+    it('o corpo da issue vai por ARQUIVO — texto grande não vira argumento', () => {
+        expect(wf).toMatch(/--body-file/);
+        expect(wf).not.toMatch(/gh issue create[^\n]*--body "\$CORPO"/);
+    });
+
+    it('só a PRIMEIRA linha da mensagem entra — squash é um muro de texto', () => {
+        expect(wf).toMatch(/head -n 1/);
+    });
+});
