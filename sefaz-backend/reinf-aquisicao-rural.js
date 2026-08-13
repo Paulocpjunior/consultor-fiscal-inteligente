@@ -62,6 +62,142 @@ const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 const texto = (v) => String(v ?? '').trim();
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+// ═══ CÓDIGOS DE RECEITA DO FUNRURAL — PROVADOS CONTRA RECIBO ════════════════
+//
+// 13/08/2026, VINCENZO GUERRA, PA 07/2026. O R-2055 foi transmitido, o R-2099
+// fechou o período (MS7001, recibo 11774083-10-2099-2607-11774083) e o
+// "Totalizador das contribuições sociais incidentes sobre a aquisição de
+// produção rural" do e-CAC devolveu, por CÓDIGO DE RECEITA:
+//
+//   1656-01 → R$ 249,48     1646-03 → R$ 20,79     1213-06 → R$ 37,80
+//
+// A aba 🌾 tinha apurado, sobre base de R$ 18.900,00 (LC 224/2025):
+//
+//   INSS 1,32% = 249,48     GILRAT 0,11% = 20,79   SENAR 0,20% = 37,80
+//
+// Os três batem componente a componente, e o total (R$ 308,07) é o mesmo. Isso
+// faz DUAS coisas de uma vez:
+//
+//  1. **Prova o de-para.** As três alíquotas são diferentes entre si, então o
+//     casamento é único — não há como confundir qual código é qual. Este
+//     de-para não estava escrito em lugar nenhum do projeto, e agora ele vem
+//     de um recibo, não de dedução (a régua da casa: arquivo aceito vale mais
+//     que leiaute deduzido).
+//  2. **Corrobora a apuração.** Dois caminhos independentes — o cálculo do CFI
+//     e a totalização da Receita — no mesmo número. Isso é corroboração, não
+//     "passei no teste".
+//
+// CUIDADO: código de receita é da tabela da RFB e pode ganhar variação por
+// natureza de aquisição. O que está provado é o caso COMUM (sub-rogação sobre
+// aquisição de produtor rural PF). Código novo entra aqui com o recibo do lado.
+export const CODIGOS_RECEITA_FUNRURAL = {
+    inss: '1656-01',
+    gilrat: '1646-03',
+    senar: '1213-06',
+};
+
+/** Rótulo de cada componente para a tela — o código sozinho não diz nada. */
+const ROTULO_COMPONENTE = {
+    inss: 'Contribuição previdenciária (INSS)',
+    gilrat: 'GILRAT/RAT',
+    senar: 'SENAR',
+};
+
+/**
+ * Confere o que o CFI apurou contra o TOTALIZADOR do R-2099.
+ *
+ * ═══ POR QUE ISTO É O ORÁCULO FINAL ═════════════════════════════════════════
+ *
+ * "MS7001 — evento recebido com sucesso" prova só que o XML foi ACEITO. Já o
+ * totalizador do fechamento é a Receita dizendo **quanto ela entendeu** — e é
+ * contra ele que a guia vai ser paga. Um evento pode ser aceito declarando
+ * menos do que foi retido (foi exatamente o risco escrito no R-2010), e
+ * "sucesso" não denuncia isso.
+ *
+ * Conferir aqui é o mesmo rito do espelho 🪞 do SPED: dois caminhos
+ * independentes no mesmo número, um deles fora do app.
+ *
+ * TRAVAS:
+ *  · **Sem totalizador não existe "conferido".** Não colou o retorno ⇒
+ *    `situacao: 'nao-conferido'`, nunca verde por omissão.
+ *  · **Código que a Receita totalizou e o app não conhece NÃO é ignorado** —
+ *    vira `codigosDesconhecidos`, porque pode ser outra natureza de aquisição
+ *    e somar por engano criaria divergência inventada (mesma regra do
+ *    `nao-classificado` do IRRF).
+ *  · Centavo: a comparação é exata. O FUNRURAL despreza centavos POR NOTA
+ *    (IN RFB 971) antes de somar, então o total já sai redondo dos dois lados
+ *    — divergência de R$ 0,01 aqui é divergência de verdade, não arredondamento.
+ *
+ * @param {object} p
+ * @param {object} p.apurado      { inss, gilrat, senar } — o bloco `funrural` da aba 🌾
+ * @param {Array}  p.totalizador  [{ codigoReceita, valor }] lido do R-2099
+ */
+export function conferirTotalizadorR2099({ apurado, totalizador } = {}) {
+    if (!Array.isArray(totalizador) || !totalizador.length) {
+        return {
+            situacao: 'nao-conferido',
+            linhas: [],
+            codigosDesconhecidos: [],
+            resumo: 'Sem o totalizador do R-2099 não há conferência. "Evento recebido com sucesso" prova que o '
+                + 'XML foi aceito, não que a Receita entendeu os mesmos valores — e é contra o totalizador que a '
+                + 'guia é paga. Cole o retorno do fechamento (ou baixe o XML do recibo/totalizador) para conferir.',
+        };
+    }
+
+    const porCodigo = new Map();
+    for (const t of totalizador) {
+        const cod = texto(t?.codigoReceita).replace(/\s/g, '');
+        if (!cod) continue;
+        porCodigo.set(cod, r2((porCodigo.get(cod) || 0) + (Number(t?.valor) || 0)));
+    }
+
+    const linhas = Object.keys(CODIGOS_RECEITA_FUNRURAL).map((componente) => {
+        const codigo = CODIGOS_RECEITA_FUNRURAL[componente];
+        const noApp = r2(apurado?.[componente]);
+        const naReceita = porCodigo.has(codigo) ? porCodigo.get(codigo) : null;
+        porCodigo.delete(codigo);
+        return {
+            componente,
+            rotulo: ROTULO_COMPONENTE[componente],
+            codigoReceita: codigo,
+            apurado: noApp,
+            totalizado: naReceita,
+            // Ausente ≠ zero: código que a Receita não totalizou com valor
+            // apurado do lado de cá é divergência, não "bateu em zero".
+            confere: naReceita !== null && naReceita === noApp,
+            diferenca: naReceita === null ? null : r2(naReceita - noApp),
+        };
+    });
+
+    const codigosDesconhecidos = Array.from(porCodigo.entries())
+        .map(([codigoReceita, valor]) => ({ codigoReceita, valor }));
+
+    const divergentes = linhas.filter((l) => !l.confere);
+    const situacao = divergentes.length || codigosDesconhecidos.length ? 'divergente' : 'confere';
+
+    const partes = [];
+    if (situacao === 'confere') {
+        const total = r2(linhas.reduce((s, l) => s + l.apurado, 0));
+        partes.push(`✓ O totalizador do R-2099 bate com a apuração da aba 🌾 nos três componentes `
+            + `(total R$ ${total.toFixed(2)}). Dois caminhos independentes no mesmo número.`);
+    }
+    for (const l of divergentes) {
+        partes.push(l.totalizado === null
+            ? `${l.rotulo} (${l.codigoReceita}): o app apurou R$ ${l.apurado.toFixed(2)} e a Receita NÃO totalizou `
+              + 'este código. Ausente não é zero — ou o evento não levou este componente, ou a natureza da '
+              + 'aquisição usa outro código.'
+            : `${l.rotulo} (${l.codigoReceita}): app R$ ${l.apurado.toFixed(2)} × Receita `
+              + `R$ ${l.totalizado.toFixed(2)} (diferença R$ ${l.diferenca.toFixed(2)}).`);
+    }
+    for (const d of codigosDesconhecidos) {
+        partes.push(`A Receita totalizou R$ ${r2(d.valor).toFixed(2)} no código ${d.codigoReceita}, que este app `
+            + 'não conhece. Ele fica FORA da conferência de propósito: somar por engano criaria uma divergência '
+            + 'inventada. Se for aquisição rural de outra natureza, cadastre o código com o recibo do lado.');
+    }
+
+    return { situacao, linhas, codigosDesconhecidos, resumo: partes.join(' ') };
+}
+
 /**
  * Uma nota de FUNRURAL da aba 🌾 → uma aquisição.
  *

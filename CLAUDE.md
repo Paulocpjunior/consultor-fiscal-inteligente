@@ -784,6 +784,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   folha — ninguém deduz, alguém digita e fica gravado quem foi. Trava: CPF só
   existe para produtor inscrito por CNPJ, e produtor já inscrito por CPF não tem
   "outro" CPF (seria declarar em nome de outra pessoa).
+  ✅ **CICLO FECHADO EM PRODUÇÃO (13/08, VINCENZO GUERRA 07/2026)**: R-2055
+  transmitido, **R-2099 fechado** (MS7001, recibo 11774083-10-2099-2607-…), e o
+  "Totalizador das contribuições sociais sobre aquisição de produção rural"
+  devolveu **1656-01 = 249,48 · 1646-03 = 20,79 · 1213-06 = 37,80**. A aba 🌾
+  tinha apurado, sobre base 18.900,00 (LC 224/2025), INSS 1,32% = 249,48 ·
+  GILRAT 0,11% = 20,79 · SENAR 0,20% = 37,80 — **total 308,07 nos dois lados**.
+  Isso entrega DUAS coisas: (1) o **de-para código de receita → componente**,
+  que não estava escrito em lugar nenhum e agora vem de RECIBO (as três
+  alíquotas diferem entre si, então o casamento é único — não é dedução);
+  (2) **corroboração** da apuração por dois caminhos independentes, um deles
+  fora do app. `CODIGOS_RECEITA_FUNRURAL` + `conferirTotalizadorR2099` em
+  `reinf-aquisicao-rural.js`, na `REGUAS_VIGIADAS`. **TRAVA QUE MANDA: "MS7001
+  evento recebido com sucesso" NÃO é conferência** — prova que o XML foi
+  ACEITO, não que a Receita entendeu os mesmos valores, e é contra o
+  TOTALIZADOR que a guia é paga (um evento pode ser aceito declarando a menor).
+  Sem totalizador colado ⇒ `nao-conferido`, nunca verde por omissão; código que
+  a Receita totalizou e o app não conhece fica FORA e NOMEADO (somar por engano
+  inventaria divergência). Código novo entra aqui **com o recibo do lado**.
   📌 **O `indAquis` do caso comum JÁ ESTÁ PROVADO: é `1`** — é o valor do
   `evtAqProd` ACEITO em produção (EDUARDO GUERRA × DAMIÃO, banana, 06/2026), e o
   teste do gerador o trava. Compra de produção rural de produtor PF por
