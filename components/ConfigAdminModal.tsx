@@ -48,6 +48,15 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
     const [editando, setEditando] = useState(false);
     const [msg, setMsg] = useState<{ texto: string; tipo: 'ok' | 'erro' } | null>(null);
     const [salvando, setSalvando] = useState(false);
+    // O id do doc é `departamento__nome`, então renomear CRIA outro template.
+    // Guardar o id de origem é o que permite ao backend desativar o antigo em
+    // vez de deixar dois ativos (que fariam o envio recusar por ambiguidade).
+    //
+    // FICA AQUI, junto dos outros hooks e ANTES do `if (!isOpen) return null`.
+    // Declarado depois do early return, ele só roda com o modal ABERTO — a
+    // contagem de hooks muda entre um render e outro e o React derruba a tela
+    // inteira com o erro #310. Foi o que aconteceu em 13/08.
+    const [idAnterior, setIdAnterior] = useState<string | null>(null);
 
     const recarregar = useCallback(async () => {
         setCarregando(true);
@@ -66,11 +75,6 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
     if (!isOpen) return null;
 
     const limparForm = () => { setForm({ ...FORM_VAZIO }); setEditando(false); setIdAnterior(null); };
-
-    // O id do doc é `departamento__nome`, então renomear CRIA outro template.
-    // Guardar o id de origem é o que permite ao backend desativar o antigo em
-    // vez de deixar dois ativos (que fariam o envio recusar por ambiguidade).
-    const [idAnterior, setIdAnterior] = useState<string | null>(null);
 
     const editar = (t: WhatsappTemplate) => {
         setIdAnterior(t.id || null);
