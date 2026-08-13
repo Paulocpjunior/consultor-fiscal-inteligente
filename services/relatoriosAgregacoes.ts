@@ -424,6 +424,62 @@ export function formatarFaixas(nums: number[]): string {
     return faixas.join(', ');
 }
 
+/**
+ * A CAUSA DOMINANTE do buraco de numeração — porque a lista de números, sozinha,
+ * é alarme sem ação.
+ *
+ * Caso LAV COMÉRCIO DE AUTOPEÇAS (Eunice, 12/08): o relatório acusou **759
+ * números faltantes** e ela perguntou pela sequência completa, para conferir uma
+ * a uma. Mas 759 buracos contra 137 notas capturadas não é uma lista para
+ * conferir — é o trilho de captura da SAÍDA que não está trazendo as notas
+ * (Rej. 641: a SEFAZ não entrega ao emitente). Nesse cenário a ação é a
+ * Cobertura de Saída, e caçar 759 números seria trabalho jogado fora.
+ *
+ * Três leituras, com ações OPOSTAS:
+ *  · `captura-incompleta` — faltam mais números do que existem notas ⇒ o
+ *    problema é o cofre/autXML, não a numeração;
+ *  · `buraco-pontual` — poucos buracos num talão majoritariamente capturado ⇒
+ *    aí sim vale conferir número a número (inutilização ou nota perdida);
+ *  · `continua` — nada faltando.
+ */
+export type CausaFaltantes = 'captura-incompleta' | 'buraco-pontual' | 'continua';
+
+export interface LeituraFaltantes {
+    causa: CausaFaltantes;
+    faltantes: number;
+    capturadas: number;
+    /** O que fazer — sempre uma frase, nunca uma contagem solta. */
+    acao: string;
+}
+
+export function lerFaltantes(linhas: LinhaSerieNumeracao[]): LeituraFaltantes {
+    const faltantes = linhas.reduce((s, l) => s + l.faltantesTotal, 0);
+    const capturadas = linhas.reduce((s, l) => s + (l.ultimo - l.primeiro + 1 - l.faltantesTotal), 0);
+
+    if (!faltantes) {
+        return {
+            causa: 'continua', faltantes, capturadas,
+            acao: 'A numeração está contínua no recorte — nada a conferir.',
+        };
+    }
+    if (faltantes > capturadas) {
+        return {
+            causa: 'captura-incompleta', faltantes, capturadas,
+            acao: `Faltam MAIS números (${faltantes}) do que as notas capturadas (${capturadas}). Isto não é `
+                + 'uma lista para conferir uma a uma: é o trilho de captura da SAÍDA que não está trazendo as '
+                + 'notas — a SEFAZ não entrega ao emitente (Rej. 641), elas vêm pelo cofre de e-mail ou por '
+                + 'autXML. Resolva em Captura → Cobertura de Saída; enquanto isso, a numeração não pode ser '
+                + 'conferida.',
+        };
+    }
+    return {
+        causa: 'buraco-pontual', faltantes, capturadas,
+        acao: `${faltantes} buraco(s) num talão majoritariamente capturado (${capturadas} notas). Aqui vale `
+            + 'conferir número a número: cada um é inutilização na SEFAZ (não gera XML) ou nota emitida que '
+            + 'não chegou.',
+    };
+}
+
 // ─── Resumo por participante (fornecedor/cliente) ───────────────────────────
 
 export interface LinhaParticipante {

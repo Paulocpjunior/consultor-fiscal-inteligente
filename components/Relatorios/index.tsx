@@ -25,8 +25,9 @@ import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 import {
     resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, diagnosticoRetencoes, resumoPorUf, servicosPorCodigo,
     nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante, resumoPorAliquota, resumoPorProduto,
-    contraparteDoc, docValido,
+    contraparteDoc, docValido, lerFaltantes,
 } from '../../services/relatoriosAgregacoes';
+import { reconferirCancelamento } from '../../services/reconferirCancelamentoService';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
 import { carregarFaturamento, carregarFaturamentoMensal, type FaturamentoResp } from '../../services/relatoriosService';
@@ -617,6 +618,25 @@ const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tru
     const semSaidaCapturada = linhas.length === 0 && docs.length > 0;
     const totalFaltantes = linhas.reduce((s, l) => s + l.faltantesTotal, 0);
     const totalCanceladas = linhas.reduce((s, l) => s + l.canceladas.length, 0);
+    // Lista de números sozinha é alarme sem ação — caso LAV (759 faltantes
+    // contra 137 capturadas: era captura, não numeração).
+    const leitura = useMemo(() => lerFaltantes(linhas), [linhas]);
+
+    // "0 cancelada(s)" NÃO é a SEFAZ dizendo que não houve cancelamento — é o
+    // app dizendo que nunca soube de nenhum. Para a saída o evento não chega
+    // (Rej. 641 + cofre traz só o XML autorizado), então aqui se PERGUNTA.
+    const [reconf, setReconf] = useState<any>(null);
+    const [reconferindo, setReconferindo] = useState(false);
+    const reconferir = async (simular: boolean) => {
+        setReconferindo(true);
+        try {
+            setReconf(await reconferirCancelamento({ cnpj: empresa.cnpj, competencia, simular }));
+        } catch (e: any) {
+            setReconf({ error: e?.message || 'Falha ao consultar a SEFAZ.' });
+        } finally {
+            setReconferindo(false);
+        }
+    };
 
     const pdf = () => rodar(() => gerarRelatorioPdf({
         titulo: `NF Saídas — Canceladas/Faltantes — ${fmtComp(competencia)}`,
@@ -669,6 +689,87 @@ const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tru
             </div>
             {!linhas.length && !semSaidaCapturada && (
                 <p className="text-xs text-slate-500">Sem documentos no recorte — escolha empresa e competência.</p>
+            )}
+
+            {/* A CAUSA junto do número. 759 faltantes contra 137 capturadas não
+                é lista para conferir uma a uma — é captura da saída faltando, e
+                a ação é outra (caso LAV, Eunice 12/08). */}
+            {leitura.causa !== 'continua' && (
+                <div className={`rounded-lg border p-2 text-xs ${leitura.causa === 'captura-incompleta'
+                    ? 'border-red-300 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'
+                    : 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'}`}>
+                    <p className="font-bold">
+                        {leitura.causa === 'captura-incompleta'
+                            ? '🚩 Isto é buraco de CAPTURA, não de numeração'
+                            : '⚠ Buraco pontual na numeração'}
+                    </p>
+                    <p className="mt-1">{leitura.acao}</p>
+                </div>
+            )}
+
+            {/* "0 cancelada(s)" pode ser o app nunca ter sabido do cancelamento.
+                Para a saída o evento não chega sozinho — então se PERGUNTA. */}
+            {linhas.length > 0 && (
+                <div className="rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 p-2 space-y-2">
+                    <p className="text-xs text-sky-900 dark:text-sky-200">
+                        <strong>"{totalCanceladas} cancelada(s)" é o que o app SABE, não o que a SEFAZ diz.</strong> O
+                        cancelamento da saída chega por evento, e a SEFAZ não entrega ao emitente (Rej. 641) — o cofre
+                        traz o XML autorizado, não o cancelamento do dia seguinte. Cancelada que não chegou continua
+                        contando no faturamento.
+                    </p>
+                    <div className="flex gap-2 flex-wrap">
+                        <button
+                            onClick={() => reconferir(true)}
+                            disabled={reconferindo}
+                            className="text-[11px] px-3 py-1 rounded-md bg-white dark:bg-slate-800 border border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300 font-semibold disabled:opacity-50"
+                        >
+                            {reconferindo ? '⏳…' : '🔎 Quantas seriam consultadas?'}
+                        </button>
+                        <button
+                            onClick={() => {
+                                const n = reconf?.selecao?.aConsultar;
+                                if (!window.confirm(
+                                    `Perguntar à SEFAZ, nota a nota, se foram canceladas?\n\n`
+                                    + `${n != null ? `${n} consulta(s)` : 'Cada nota é uma consulta'} com o certificado `
+                                    + 'do próprio cliente. Nada é transmitido — só leitura.\n\n'
+                                    + 'Nota que a SEFAZ confirmar cancelada SAI do faturamento.',
+                                )) return;
+                                reconferir(false);
+                            }}
+                            disabled={reconferindo}
+                            className="text-[11px] px-3 py-1 rounded-md bg-sky-600 hover:bg-sky-700 text-white font-semibold disabled:opacity-50"
+                        >
+                            {reconferindo ? '⏳ Perguntando à SEFAZ…' : '📡 Reconferir na SEFAZ'}
+                        </button>
+                    </div>
+
+                    {reconf?.error && <p className="text-[11px] text-red-600 dark:text-red-400">{reconf.error}</p>}
+                    {reconf?.ok && (
+                        <div className="text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
+                            <p className="font-semibold">
+                                {reconf.simulado
+                                    ? `${reconf.selecao?.aConsultar} de ${reconf.selecao?.total} nota(s) de saída seriam consultadas`
+                                    : `${reconf.resumo?.consultadas} consultada(s) · ${reconf.resumo?.canceladas} cancelada(s) · `
+                                      + `${reconf.resumo?.indeterminadas} indeterminada(s)`}
+                                {reconf.selecao?.jaCanceladas ? ` · ${reconf.selecao.jaCanceladas} já constavam canceladas` : ''}
+                            </p>
+                            {(reconf.resumo?.avisos || []).map((a: string, i: number) => (
+                                <p key={i} className="text-amber-700 dark:text-amber-400">{a}</p>
+                            ))}
+                            {(reconf.resultados || []).filter((r: any) => r.situacao !== 'nao-cancelada').map((r: any) => (
+                                <p key={r.id} className="font-mono">
+                                    <span className={r.situacao === 'cancelada' ? 'text-red-600 font-bold' : 'text-slate-500'}>
+                                        [{r.situacao}]
+                                    </span>{' '}
+                                    nº {r.numero ?? '—'} — {r.motivo}
+                                </p>
+                            ))}
+                            {!reconf.simulado && (
+                                <p className="text-slate-500">Recarregue o relatório para ver os totais já sem as canceladas.</p>
+                            )}
+                        </div>
+                    )}
+                </div>
             )}
             {semSaidaCapturada && (
                 <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-2 text-xs text-amber-800 dark:text-amber-300">
