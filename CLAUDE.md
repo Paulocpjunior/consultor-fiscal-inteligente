@@ -5,6 +5,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **MATA-BURRO: FILEIRA DE BOTÕES QUEBRA LINHA** (Paulo, 13/08: *"caralho meu!
+  terceira vez erro de layout"*). Ele estava certo, e as três foram a MESMA
+  causa que eu não olhei: o cabeçalho do detalhe do Simples tem **12 botões num
+  `flex gap-2` sem `flex-wrap`** — a fileira transborda a viewport, empurra o
+  cabeçalho e o nome da empresa desce numa coluna de uma palavra por linha. Eu
+  vinha somando botão ali (🔎 Atividades, 📄 Sem movimento, 🔬 Sondar) sem olhar
+  o conjunto, cada um "só mais um". `__tests__/cabecalhoNaoTransborda.test.ts`
+  varre `components/` e acusa `className="flex gap-N"` com **≥5 `btn-press` na
+  janela seguinte** — a contagem evita o falso positivo de fileira de 2-3
+  botões, que cabe em qualquer tela (teste que grita sem motivo é teste
+  desligado). `flex-wrap`, `grid` ou `overflow-x-auto` resolvem; o que não vale
+  é não declarar o que acontece quando não cabe. Também trava `min-w-0` na
+  coluna do nome (sem ele o flex item não encolhe) e `whitespace-nowrap` nos
+  botões (senão o texto quebra em 3 linhas DENTRO do botão). Provado revertendo
+  a correção de propósito. Corrigido no mesmo PR em `components/Das/index.tsx`,
+  que tinha o mesmo padrão com 8 botões.
 - **MATA-BURRO: DEPLOY QUE FALHA VIRA ISSUE** (13/08, nos DOIS repos). Em 12/08
   dois deploys do app irmão caíram seguidos e ninguém viu: o trabalho ficou
   mesclado na main e FORA DO AR, e a descoberta veio de um print de tela
