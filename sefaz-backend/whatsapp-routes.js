@@ -76,7 +76,45 @@ router.post('/templates', requireAdmin, async (req, res) => {
             atualizadoEm: new Date().toISOString(),
             atualizadoPor: req.user?.email || null,
         }, { merge: true });
-        return res.json({ ok: true, template: v.template });
+
+        // ── RENOMEAR NÃO PODE DEIXAR RASTRO ATIVO ───────────────────────────
+        //
+        // O id do doc é `departamento__nome`, então trocar o nome CRIA outro
+        // template em vez de renomear. Era por isso que a tela travava o campo
+        // — e a trava virou beco sem saída: o template aprovado mudou de nome
+        // (13/08) e não havia como corrigir o cadastro.
+        //
+        // Destravar sozinho seria pior: dois templates ATIVOS no mesmo
+        // departamento fazem `resolverTemplate` recusar por ambiguidade, e o
+        // envio quebraria de um jeito novo. Então quem renomeia desativa o
+        // antigo aqui, e a resposta DIZ que isso aconteceu — cadastro que muda
+        // sozinho sem avisar é o que faz ninguém confiar na tela.
+        let substituiu = null;
+        const anterior = String(req.body?.idAnterior || '').trim();
+        if (anterior && anterior !== v.template.id) {
+            try {
+                const ref = db.collection(COLECAO).doc(anterior);
+                const snap = await ref.get();
+                if (snap.exists) {
+                    await ref.set({
+                        ativo: false,
+                        desativadoEm: new Date().toISOString(),
+                        desativadoPor: req.user?.email || null,
+                        desativadoMotivo: `Substituído por "${v.template.nome}" (renomeado no cadastro).`,
+                    }, { merge: true });
+                    substituiu = { id: anterior, nome: snap.data()?.nome || null };
+                }
+            } catch (e) {
+                // Falhar aqui deixaria DOIS ativos — melhor recusar do que
+                // entregar um cadastro ambíguo que só quebra no envio.
+                return res.status(500).json({
+                    ok: false,
+                    error: `O template novo foi salvo, mas não foi possível desativar o anterior (${anterior}): ${e.message}. `
+                        + 'Desative-o na lista antes de enviar — dois templates ativos no mesmo departamento fazem o envio recusar por ambiguidade.',
+                });
+            }
+        }
+        return res.json({ ok: true, template: v.template, substituiu });
     } catch (e) {
         console.error('[whatsapp/templates POST]', e);
         return res.status(500).json({ ok: false, error: e.message });

@@ -65,9 +65,15 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
 
     if (!isOpen) return null;
 
-    const limparForm = () => { setForm({ ...FORM_VAZIO }); setEditando(false); };
+    const limparForm = () => { setForm({ ...FORM_VAZIO }); setEditando(false); setIdAnterior(null); };
+
+    // O id do doc é `departamento__nome`, então renomear CRIA outro template.
+    // Guardar o id de origem é o que permite ao backend desativar o antigo em
+    // vez de deixar dois ativos (que fariam o envio recusar por ambiguidade).
+    const [idAnterior, setIdAnterior] = useState<string | null>(null);
 
     const editar = (t: WhatsappTemplate) => {
+        setIdAnterior(t.id || null);
         setForm({
             departamento: t.departamento,
             nome: t.nome,
@@ -89,13 +95,20 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
         setSalvando(true);
         setMsg(null);
         try {
-            const r = await salvarTemplate(form);
+            const r = await salvarTemplate({ ...form, ...(idAnterior ? { idAnterior } : {}) } as any);
             if (!r.ok) {
                 const det = (r as any).detalhes as string[] | undefined;
                 setMsg({ texto: `${r.error}${det?.length ? `: ${det.join('; ')}` : ''}`, tipo: 'erro' });
                 return;
             }
-            setMsg({ texto: `Template "${r.template.nome}" salvo.`, tipo: 'ok' });
+            const sub = (r as any).substituiu;
+            setMsg({
+                texto: sub
+                    ? `Template "${r.template.nome}" salvo. O anterior ("${sub.nome || sub.id}") foi DESATIVADO — `
+                      + 'dois ativos no mesmo departamento fariam o envio recusar por ambiguidade.'
+                    : `Template "${r.template.nome}" salvo.`,
+                tipo: 'ok',
+            });
             limparForm();
             await recarregar();
         } finally {
@@ -216,16 +229,29 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                     <button onClick={limparForm} className="ml-2 text-[10px] text-slate-400 underline">cancelar edição</button>
                                 )}
                             </p>
+                            {/* O nome e o departamento eram TRAVADOS na edição
+                                (o id do doc é `departamento__nome`, então mudar
+                                um deles cria outro template). A trava virou
+                                beco sem saída quando o template aprovado mudou
+                                de nome. Agora dá pra corrigir — e o backend
+                                desativa o anterior, senão dois ativos no mesmo
+                                departamento fazem o envio recusar. */}
+                            {editando && (
+                                <p className="mb-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 text-[10px] text-amber-800 dark:text-amber-300">
+                                    Mudar o <strong>nome</strong> ou o <strong>departamento</strong> troca o vínculo: o app passa a usar
+                                    o template novo e <strong>desativa o anterior</strong> (ele continua na Meta; só sai do uso aqui).
+                                </p>
+                            )}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <label className="text-[11px] text-slate-500">
                                     Departamento
-                                    <select value={form.departamento} disabled={editando} onChange={(e) => setForm((f) => ({ ...f, departamento: e.target.value }))} className={inp}>
+                                    <select value={form.departamento} onChange={(e) => setForm((f) => ({ ...f, departamento: e.target.value }))} className={inp}>
                                         {DEPARTAMENTOS.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
                                     </select>
                                 </label>
                                 <label className="text-[11px] text-slate-500">
                                     Nome do template (Meta: minúsculas, dígitos e _)
-                                    <input value={form.nome} disabled={editando} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} placeholder="guia_das_mensal" className={`${inp} font-mono`} />
+                                    <input value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} placeholder="guia_das_mensal" className={`${inp} font-mono`} />
                                 </label>
                                 <label className="text-[11px] text-slate-500">
                                     Idioma
