@@ -13,6 +13,14 @@ export interface DipamPendencia {
     numero?: string;
     fornecedor?: string;
     doc?: string;
+    /**
+     * O que esta pendência segura, em dinheiro — e a lista já vem ORDENADA por
+     * ele. 293 conferências de CADESP em ordem qualquer é impossível de atacar;
+     * por valor, a primeira costuma resolver o mês.
+     */
+    valor?: number;
+    notas?: number;
+    funruralPotencial?: number;
 }
 
 export interface DipamMunicipio {

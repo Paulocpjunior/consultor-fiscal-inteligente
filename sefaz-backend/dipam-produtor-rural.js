@@ -789,7 +789,7 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
     // Pendência de FORNECEDOR é por fornecedor, não por nota: confirmar o
     // CADESP uma vez resolve as 40 notas dele. Repetir viraria muro de texto.
     const pendencias = [];
-    const fornecedorJaListado = new Set();
+    const fornecedorJaListado = new Map();
     for (const n of notas) {
         // Nota excluída pelo art. 136 (NF-e do produtor, documento de origem)
         // não gera pendência: ela não é escriturada, então não há o que
@@ -802,12 +802,40 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
             const porFornecedor = p.codigo === 'fornecedor-indefinido' || p.codigo === 'municipio-ausente';
             const chaveDedup = `${p.codigo}|${n.fornecedor.doc}`;
             if (porFornecedor) {
-                if (fornecedorJaListado.has(chaveDedup)) continue;
-                fornecedorJaListado.add(chaveDedup);
+                // Fornecedor repetido só ACUMULA o valor: 40 notas do mesmo
+                // fornecedor continuam sendo UMA conferência de CADESP, mas o
+                // que decide a ordem da fila é a soma delas.
+                const jaTem = fornecedorJaListado.get(chaveDedup);
+                if (jaTem) {
+                    jaTem.valor = round2(jaTem.valor + (Number(n.valor) || 0));
+                    jaTem.notas += 1;
+                    continue;
+                }
             }
-            pendencias.push({ ...p, chave: n.chave, numero: n.numero, fornecedor: n.fornecedor.nome, doc: n.fornecedor.doc });
+            const item = {
+                ...p, chave: n.chave, numero: n.numero,
+                fornecedor: n.fornecedor.nome, doc: n.fornecedor.doc,
+                // O DINHEIRO em cada linha. 293 conferências de CADESP em ordem
+                // qualquer é impossível de atacar; ordenadas por valor, a
+                // primeira costuma resolver o mês (caso 13/08: o mês inteiro
+                // faltava R$ 10,7 mil e a lista tinha R$ 8,5 milhões de
+                // compras espalhados em 293 fornecedores).
+                valor: round2(n.valor),
+                notas: 1,
+            };
+            if (porFornecedor) fornecedorJaListado.set(chaveDedup, item);
+            pendencias.push(item);
         }
     }
+    // Alíquota vigente uma vez só — o potencial de cada linha usa a MESMA
+    // régua da apuração.
+    const pctFunrural = percentualFunruralVigente(competencia, tabelaFunrural);
+    for (const p of pendencias) {
+        if (p.valor != null) p.funruralPotencial = round2(p.valor * (pctFunrural / 100));
+    }
+    // Fila ordenada por DINHEIRO. Pendência sem valor (saldo de município) vai
+    // pro fim: ela não compete com o que segura a apuração.
+    pendencias.sort((a, b) => (Number(b.valor) || -1) - (Number(a.valor) || -1));
     for (const m of municipiosZerados) {
         pendencias.push(pendencia(
             'municipio-saldo-nao-positivo',

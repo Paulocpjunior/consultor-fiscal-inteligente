@@ -540,6 +540,18 @@ const DetalheEmpresa: React.FC<{
                     <ul className="space-y-2">
                         {painel.pendencias!.map((p, i) => (
                             <li key={`${p.codigo}-${i}`} className="text-xs border-l-2 border-amber-400 pl-2">
+                                {/* O DINHEIRO na própria linha, e a lista já vem
+                                    ordenada por ele. 293 conferências de CADESP
+                                    em ordem qualquer é impossível de atacar;
+                                    ordenadas por valor, a primeira costuma
+                                    resolver o mês. */}
+                                {p.valor != null && (
+                                    <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
+                                        {fmtBRL(p.valor)} em compras
+                                        {p.notas && p.notas > 1 ? ` · ${p.notas} notas` : ''}
+                                        {p.funruralPotencial ? ` · FUNRURAL ${fmtBRL(p.funruralPotencial)}` : ''}
+                                    </p>
+                                )}
                                 <p className="text-slate-700 dark:text-slate-200 font-semibold">{p.mensagem}</p>
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400">→ {p.acao}</p>
                                 {p.doc && p.codigo === 'fornecedor-indefinido' && isAdmin && (
