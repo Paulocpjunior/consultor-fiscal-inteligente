@@ -8,6 +8,8 @@ import {
     validarTemplate, resolverTemplate, montarVariaveisPorSchema, idDoTemplate,
     DEPARTAMENTOS_WHATSAPP,
 } from '../sefaz-backend/whatsapp-templates.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 describe('validarTemplate', () => {
     const bom = {
@@ -79,4 +81,37 @@ describe('resolverTemplate', () => {
 
 test('os 5 departamentos = os 5 apps', () => {
     expect([...DEPARTAMENTOS_WHATSAPP].sort()).toEqual(['contabil', 'dp-folha', 'financeiro', 'fiscal', 'legalizacao']);
+});
+
+/**
+ * MATA-BURRO: TEMPLATE SEM CABEÇALHO DE DOCUMENTO NÃO LEVA A GUIA.
+ *
+ * O template aprovado pela Meta em 13/08 (`sp_assessoria_contabil_impostos`)
+ * diz "Segue em anexo a Referida Guia de Impostos". Se ele não tiver um
+ * cabeçalho do tipo DOCUMENTO, o PDF era descartado em silêncio na rota
+ * (`pdfBase64: template.temDocumento ? ... : null`): a mensagem saía com a
+ * promessa do anexo, a Meta devolvia messageId e o app registrava PROVA DE
+ * ENVIO. Farol verde sobre entrega que não aconteceu — e o cliente do outro
+ * lado esperando uma guia que nunca chegou.
+ */
+describe('a rota recusa PDF em template sem documento', () => {
+    const rota = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+
+    test('as DUAS direções são checadas, não só a que já existia', () => {
+        expect(rota).toMatch(/template\.temDocumento && !p\.pdfBase64/);
+        expect(rota).toMatch(/!template\.temDocumento && p\.pdfBase64/);
+    });
+
+    test('a recusa DIZ como resolver e o que fazer enquanto isso', () => {
+        expect(rota).toMatch(/cabeçalho do tipo DOCUMENTO/);
+        expect(rota).toMatch(/Config Admin/);
+        expect(rota).toMatch(/mande a guia por e-mail/);
+    });
+
+    test('a recusa vem ANTES do envio — descartar o PDF depois é o defeito', () => {
+        const posGuarda = rota.indexOf('!template.temDocumento && p.pdfBase64');
+        const posEnvio = rota.indexOf('await enviarTemplateWhatsapp(');
+        expect(posGuarda).toBeGreaterThan(-1);
+        expect(posEnvio).toBeGreaterThan(posGuarda);
+    });
 });
