@@ -29,6 +29,17 @@ const RE_NOME_TEMPLATE = /^[a-z0-9_]{1,512}$/;   // regra da Meta: minúsculas, 
 const RE_IDIOMA = /^[a-z]{2}(_[A-Z]{2})?$/;      // pt_BR, en, es_ES…
 const RE_CHAVE_VAR = /^[a-zA-Z][a-zA-Z0-9_]{0,39}$/;
 
+/**
+ * Chave de variável normalizada: minúscula, sem acento e sem separadores.
+ * "Competência", "competencia" e "COMPETENCIA" são a mesma variável.
+ */
+export function normalizarChave(v) {
+    return String(v ?? '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+}
+
 /** id determinístico: departamento + nome (um template por par). */
 export function idDoTemplate(departamento, nome) {
     return `${String(departamento || '').trim().toLowerCase()}__${String(nome || '').trim().toLowerCase()}`;
@@ -94,10 +105,26 @@ export function validarTemplate(entrada) {
  */
 export function montarVariaveisPorSchema(template, valoresNomeados) {
     const valores = valoresNomeados && typeof valoresNomeados === 'object' ? valoresNomeados : {};
+    // ── A CHAVE CASA SEM DEPENDER DE CAIXA NEM DE ACENTO ────────────────────
+    //
+    // Caso 13/08: o template foi cadastrado com "Imposto", "Competencia" e
+    // "Vencimento" (maiúscula inicial, como quem preenche um formulário
+    // escreve), e o envio manda `imposto`/`competencia`/`vencimento`. O
+    // casamento era EXATO, então as três "faltavam" e o WhatsApp recusava —
+    // sobre um cadastro que está CERTO.
+    //
+    // Exigir a grafia exata é exigir julgamento de quem preenche a tela, e a
+    // qualificação da equipe é restrição de projeto. Quem tem que se ajustar é
+    // o código: "Competência", "competencia" e "COMPETENCIA" são a mesma coisa.
+    // O que NÃO se normaliza é o SIGNIFICADO — chave desconhecida continua
+    // faltando, com o nome como foi cadastrado.
+    const mapa = new Map();
+    for (const k of Object.keys(valores)) mapa.set(normalizarChave(k), valores[k]);
+
     const faltando = [];
     const variaveis = [];
     for (const def of (template.variaveis || [])) {
-        const bruto = valores[def.chave];
+        const bruto = mapa.get(normalizarChave(def.chave));
         if (bruto === undefined || bruto === null || String(bruto).trim() === '') {
             faltando.push(def.chave);
             variaveis.push('');
