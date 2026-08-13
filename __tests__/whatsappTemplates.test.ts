@@ -115,3 +115,49 @@ describe('a rota recusa PDF em template sem documento', () => {
         expect(posEnvio).toBeGreaterThan(posGuarda);
     });
 });
+
+/**
+ * MATA-BURRO: O TEMPLATE DA GUIA VEM DO CADASTRO, NÃO DE UMA LISTA NO CÓDIGO.
+ *
+ * O envio de guia por WhatsApp (DAS/DARF) mandava QUATRO variáveis posicionais
+ * fixas no código — `[cliente, tipo, competência, vencimento]` — enquanto o
+ * cadastro por departamento, com schema NOMEADO, era usado só pelos apps
+ * irmãos. Duas fontes para o mesmo fato.
+ *
+ * O template aprovado pela Meta em 13/08 tem TRÊS variáveis. Mandar quatro faz
+ * a Meta recusar com 132000/132012 ("número de parâmetros não bate") — e o
+ * colaborador lê isso como "o WhatsApp não funciona".
+ */
+describe('o envio de guia usa o cadastro de templates', () => {
+    const rota = readFileSync(join(__dirname, '..', 'sefaz-backend/envio-imposto-routes.js'), 'utf8');
+
+    it('resolve pelo cadastro do departamento fiscal, sem lista posicional no código', () => {
+        expect(rota).toMatch(/resolverTemplate\(cadastro, \{ departamento: 'fiscal' \}\)/);
+        expect(rota).toMatch(/montarVariaveisPorSchema\(template, \{/);
+        // A lista fixa de 4 posições morreu.
+        expect(rota).not.toMatch(/variaveis: \[empresaNome/);
+        expect(rota).not.toMatch(/enviarGuiaWhatsapp\(/);
+    });
+
+    it('as chaves conhecidas cobrem o template aprovado (imposto/competencia/vencimento)', () => {
+        // O bloco de variáveis nomeadas — `competencia` entra como shorthand.
+        const bloco = rota.slice(rota.indexOf('montarVariaveisPorSchema(template, {'));
+        for (const chave of ['cliente', 'imposto', 'competencia', 'vencimento']) {
+            expect(bloco.slice(0, 500)).toContain(chave);
+        }
+    });
+
+    it('variável do schema que este envio não tem RECUSA, nomeando qual falta', () => {
+        expect(rota).toMatch(/pede variáveis que este envio não tem/);
+        expect(rota).toMatch(/faltando: mv\.faltando/);
+    });
+
+    it('template sem cabeçalho de documento também é barrado aqui', () => {
+        expect(rota).toMatch(/pdfLimpo && !template\.temDocumento/);
+        expect(rota).toMatch(/não seria anexada/);
+    });
+
+    it('sem template cadastrado, a recusa manda pro Config Admin', () => {
+        expect(rota).toMatch(/Config Admin → Templates/);
+    });
+});

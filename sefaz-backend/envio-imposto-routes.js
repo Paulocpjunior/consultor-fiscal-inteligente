@@ -19,7 +19,8 @@ import { enviarEmail } from './graph-provider.js';
 import { montarEmailGuia, anexoLogo } from './email-layout.js';
 import { parseDestinatarios } from './email-destinatarios-helper.js';
 import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './graph-remetente.js';
-import { enviarGuiaWhatsapp, configWhatsapp, faltasDaConfig } from './whatsapp-cloud.js';
+import { enviarTemplateWhatsapp, configWhatsapp, faltasDaConfig } from './whatsapp-cloud.js';
+import { resolverTemplate, montarVariaveisPorSchema } from './whatsapp-templates.js';
 
 const router = Router();
 
@@ -33,6 +34,16 @@ function limparPdf(v) {
 function fa() {
     if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
     return admin;
+}
+
+/**
+ * Templates aprovados do departamento FISCAL — a mesma coleção que a rota
+ * genérica e o ⚙️ Config Admin usam. Ler daqui é o que garante UM cadastro.
+ */
+async function lerTemplatesDoFiscal() {
+    const snap = await fa().firestore().collection('whatsapp_templates')
+        .where('departamento', '==', 'fiscal').get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 router.post('/registrar', requireAuth, async (req, res) => {
@@ -201,12 +212,67 @@ router.post('/enviar-whatsapp', requireAuth, async (req, res) => {
         const pdfLimpo = limparPdf(pdfBase64);
         const nomeArquivo = pdfFileName || `${String(tipo).toLowerCase()}_${String(empresaCnpj).replace(/\D/g, '')}_${competencia}.pdf`;
 
-        // Variáveis na ordem do template envio_guia_imposto:
-        // {{1}} cliente · {{2}} tipo da guia · {{3}} competência · {{4}} vencimento
-        const envio = await enviarGuiaWhatsapp({
+        // ── O TEMPLATE VEM DO CADASTRO, NÃO DE UMA LISTA AQUI ───────────────
+        //
+        // Este fluxo mandava QUATRO variáveis posicionais fixas no código
+        // (`[cliente, tipo, competência, vencimento]`), enquanto o cadastro por
+        // departamento — que existe desde 10/08, com schema NOMEADO — era usado
+        // só pelos apps irmãos. Duas fontes para o mesmo fato.
+        //
+        // O template aprovado pela Meta em 13/08 tem TRÊS variáveis
+        // ({{1}} imposto · {{2}} competência · {{3}} vencimento). Mandar quatro
+        // faria a Meta recusar com 132000/132012 ("número de parâmetros não
+        // bate") — e o colaborador leria isso como "o WhatsApp não funciona".
+        //
+        // Agora o SCHEMA decide quantas e em que ordem: variável que o template
+        // não pede é ignorada, variável que ele pede e não temos RECUSA o envio
+        // nomeando qual falta. Trocar de template deixa de exigir deploy.
+        const cadastro = await lerTemplatesDoFiscal();
+        const resol = resolverTemplate(cadastro, { departamento: 'fiscal' });
+        if (!resol.ok) {
+            return res.status(400).json({
+                ok: false,
+                error: resol.erro,
+                acao: 'Cadastre o template aprovado do departamento Fiscal em ⚙️ Config Admin → Templates '
+                    + '(nome exato da Meta, idioma, 📎 documento e o significado de cada variável).',
+                opcoes: resol.opcoes,
+            });
+        }
+        const template = resol.template;
+        // Mesma guarda da rota genérica: template sem cabeçalho de DOCUMENTO
+        // não carrega o PDF, e mandar assim é prometer anexo que não vai.
+        if (pdfLimpo && !template.temDocumento) {
+            return res.status(400).json({
+                ok: false,
+                error: `O template "${template.nome}" não tem cabeçalho de documento — a guia não seria anexada.`,
+                acao: 'Adicione um cabeçalho do tipo DOCUMENTO no Gerenciador do WhatsApp e marque '
+                    + '"📎 tem documento" em ⚙️ Config Admin. Enquanto isso, mande a guia por e-mail.',
+            });
+        }
+        const mv = montarVariaveisPorSchema(template, {
+            cliente: empresaNome || 'cliente',
+            imposto: String(tipo).toUpperCase(),
+            // `tipo` é o nome que o fluxo antigo usava — fica como sinônimo pra
+            // template já cadastrado com essa chave não quebrar.
+            tipo: String(tipo).toUpperCase(),
+            competencia,
+            vencimento: vencimento || 'no documento',
+        });
+        if (!mv.ok) {
+            return res.status(400).json({
+                ok: false,
+                error: `O template "${template.nome}" pede variáveis que este envio não tem: ${mv.faltando.join(', ')}.`,
+                acao: 'Confira o cadastro em ⚙️ Config Admin — as chaves conhecidas aqui são cliente, imposto, '
+                    + 'competencia e vencimento.',
+                faltando: mv.faltando,
+            });
+        }
+        const envio = await enviarTemplateWhatsapp({
             para: paraWhatsapp,
-            variaveis: [empresaNome || 'cliente', String(tipo).toUpperCase(), competencia, vencimento || 'no documento'],
-            pdfBase64: pdfLimpo || null,
+            template: template.nome,
+            idioma: template.idioma,
+            variaveis: mv.variaveis,
+            pdfBase64: template.temDocumento ? (pdfLimpo || null) : null,
             nomeArquivo,
         });
         if (!envio.ok) {
