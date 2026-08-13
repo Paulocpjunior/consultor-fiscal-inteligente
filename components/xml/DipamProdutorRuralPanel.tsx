@@ -18,6 +18,9 @@ import {
     type DipamPainel, type DipamVarreduraLinha,
 } from '../../services/dipamService';
 import { validarCpf, formatarCpf } from '../../services/validadorDocumento';
+import EmpresaSearchSelect from './EmpresaSearchSelect';
+import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
+import { getAuth } from 'firebase/auth';
 
 const fmtBRL = (v: number | undefined) =>
     (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -58,6 +61,30 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
     const [painel, setPainel] = useState<DipamPainel | null>(null);
     const [carregandoPainel, setCarregandoPainel] = useState(false);
     const [copiado, setCopiado] = useState(false);
+    // IR DIRETO A UM CLIENTE (Paulo, 13/08 — "vamos p nova era").
+    //
+    // Até aqui só havia UM caminho: varrer a carteira inteira e esperar as ~400
+    // empresas para então clicar numa linha. Quando a pergunta já tem nome
+    // ("como está a NOVA ERA?"), essa varredura é espera pura — e é a espera
+    // que faz a pessoa desistir de conferir.
+    //
+    // Seletor é o MESMO da casa (busca por Cod.Cliente, nome ou CNPJ), com o
+    // ⚡ Ativar obrigatório: escolher na lista não carrega nada, o clique é que
+    // dispara — a regra de 05/08, porque aqui escolher DISPARA leitura.
+    const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
+    const [empresaEscolhida, setEmpresaEscolhida] = useState('');
+
+    useEffect(() => {
+        let vivo = true;
+        (async () => {
+            try {
+                const u = getAuth().currentUser;
+                const lista = await getEmpresasDisponiveis(u ? ({ id: u.uid, email: u.email } as any) : null);
+                if (vivo) setEmpresas(lista);
+            } catch { /* sem lista o seletor some, a varredura continua valendo */ }
+        })();
+        return () => { vivo = false; };
+    }, []);
 
     const rodarVarredura = useCallback(async () => {
         setCarregandoVarredura(true);
@@ -133,6 +160,20 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
                     >
                         {carregandoVarredura ? 'Varrendo…' : '🔎 Quem tem DIPAM neste mês'}
                     </button>
+                    {empresas.length > 0 && (
+                        <div className="min-w-[260px]">
+                            <label className="text-[10px] uppercase font-medium block mb-1 text-slate-500">
+                                …ou vá direto a um cliente
+                            </label>
+                            <EmpresaSearchSelect
+                                empresas={empresas}
+                                value={empresaEscolhida}
+                                onChange={setEmpresaEscolhida}
+                                onAtivar={(id) => { setVarredura(null); abrirEmpresa(id); }}
+                                placeholder="Cod.Cliente, nome ou CNPJ"
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
 
