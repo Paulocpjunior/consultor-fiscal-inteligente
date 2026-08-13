@@ -21,6 +21,7 @@ import { parseDestinatarios } from './email-destinatarios-helper.js';
 import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './graph-remetente.js';
 import { enviarTemplateWhatsapp, configWhatsapp, faltasDaConfig } from './whatsapp-cloud.js';
 import { resolverTemplate, montarVariaveisPorSchema } from './whatsapp-templates.js';
+import { nomeArquivoGuia } from './nome-arquivo-guia.js';
 
 const router = Router();
 
@@ -128,7 +129,7 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
         });
         const anexos = [
             ...(pdfLimpo ? [{
-                name: pdfFileName || `${String(tipo).toLowerCase()}_${String(empresaCnpj).replace(/\D/g, '')}_${competencia}.pdf`,
+                name: pdfFileName || nomeArquivoGuia({ tipo, competencia }),
                 contentType: 'application/pdf',
                 contentBytes: pdfLimpo,
             }] : []),
@@ -210,7 +211,7 @@ router.post('/enviar-whatsapp', requireAuth, async (req, res) => {
         if (!acesso.ok) return res.status(acesso.status).json({ ok: false, error: acesso.error });
 
         const pdfLimpo = limparPdf(pdfBase64);
-        const nomeArquivo = pdfFileName || `${String(tipo).toLowerCase()}_${String(empresaCnpj).replace(/\D/g, '')}_${competencia}.pdf`;
+        const nomeArquivo = pdfFileName || nomeArquivoGuia({ tipo, competencia });
 
         // ── O TEMPLATE VEM DO CADASTRO, NÃO DE UMA LISTA AQUI ───────────────
         //

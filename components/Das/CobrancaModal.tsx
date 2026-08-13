@@ -10,6 +10,7 @@ import { getAuth } from 'firebase/auth';
 import type { User } from '../../types';
 import { getCobrancaIa, formatBRL, formatBarras, enviarDasCliente } from '../../services/dasService';
 import { enviarPorEmailDoColaborador, registrarEnvioImposto, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
+import { nomeArquivoGuia } from '../../sefaz-backend/nome-arquivo-guia.js';
 
 interface DasInfo {
     id?: string;
@@ -50,7 +51,10 @@ const CobrancaModal: React.FC<Props> = ({ dasInfo, currentUser, onClose, onShowT
 
     const assinante = currentUser?.name || currentUser?.email?.split('@')[0] || 'Equipe SP Contábil';
     const temPdf = !!(dasInfo.pdfBase64 || dasInfo.pdfUrl);
-    const pdfFileName = `das_${String(dasInfo.empresaCnpj || '').replace(/\D/g, '')}_${dasInfo.competencia || 'competencia'}.pdf`;
+    // O cliente vê este nome em cima do ícone do PDF, no WhatsApp e no e-mail.
+    // A régua mora em `sefaz-backend/nome-arquivo-guia.js` — aqui era a terceira
+    // cópia do mesmo formato, e ela ainda punha o CNPJ cru na tela do cliente.
+    const pdfFileName = nomeArquivoGuia({ tipo: 'DAS', competencia: dasInfo.competencia });
 
     // Busca contato da empresa (email + telefone) ao abrir
     useEffect(() => {
