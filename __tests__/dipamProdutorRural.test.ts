@@ -976,6 +976,72 @@ describe('foraDoTotal — o dinheiro que espera conferência', () => {
         expect(painel.funrural.total).toBeGreaterThan(0);
     });
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // A SUB-ROGAÇÃO É SOBRE A AQUISIÇÃO DE PRODUÇÃO RURAL — não sobre "comprar
+    // de uma pessoa física".
+    //
+    // Paulo, 13/08: *"esses dois também têm que sair"* — EMILIO CAMPIGOTTO
+    // (CPF, SC) e ALEXANDRE AUGUSTO ARCARO **2º TP** (um tabelionato) somando
+    // FUNRURAL. Não era erro de cadastro: bastava o fornecedor ser PF.
+    //
+    // Lei 8.212/91 art. 25 incide sobre a comercialização da PRODUÇÃO RURAL, e
+    // o art. 30, IV sub-roga o adquirente DELA. Comprar um caminhão usado, uma
+    // custa de cartório ou um serviço de uma pessoa física não gera nada.
+    // ═══════════════════════════════════════════════════════════════════════
+    describe('FUNRURAL exige produção rural', () => {
+        const dePF = (over: any = {}) => ({
+            chave: '35260729240822000121550010000255036113641907',
+            numero: '77', competencia: '2026-07', direcao: 'entrada', status: 'autorizado',
+            valorTotal: 41850,
+            emitente: { cnpjCpf: '06603394987', nome: 'EMILIO CAMPIGOTTO', uf: 'SC', codMunIBGE: '4204202' },
+            itens: [{ cfop: '2102', ncm: '08039000', xProd: 'BANANA', vProd: 41850 }],
+            ...over,
+        });
+
+        it('compra de PF sem NENHUM item agropecuário NÃO gera sub-rogação', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [dePF({ itens: [{ cfop: '2102', ncm: '87042390', xProd: 'CAMINHAO USADO', vProd: 41850 }] })],
+                competencia: '2026-07', empresa,
+            });
+            expect(painel.funrural.total).toBe(0);
+            const p = painel.pendencias.find((x: any) => x.codigo === 'funrural-sem-producao-rural');
+            expect(p).toBeTruthy();
+            expect(p.acao).toMatch(/PRODUÇÃO RURAL/);
+        });
+
+        it('CFOP de entrada que não é compra (uso e consumo) também não gera', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [dePF({ itens: [{ cfop: '2551', ncm: '08039000', xProd: 'BANANA', vProd: 41850 }] })],
+                competencia: '2026-07', empresa,
+            });
+            expect(painel.funrural.total).toBe(0);
+            expect(painel.pendencias.some((x: any) => x.codigo === 'funrural-cfop-fora-da-regua')).toBe(true);
+        });
+
+        // ⚠️ O ERRO QUE ESTA REGRA QUASE CAUSOU: a primeira versão reusou
+        // `CFOPS_COMPRA`, que é a régua da DIPAM — obrigação PAULISTA, só 1xxx.
+        // Isso matava TODA compra interestadual de produtor, que é erro na
+        // direção mais cara: deixar de recolher. O gêmeo 2xxx é DERIVADO da
+        // mesma tabela, nunca uma segunda lista.
+        it('compra INTERESTADUAL de produtor (2102) continua gerando — FUNRURAL é federal', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [dePF()], competencia: '2026-07', empresa,
+            });
+            expect(painel.funrural.total).toBeGreaterThan(0);
+            // E não gera DIPAM: o produtor é de SC (a DIPAM só rateia SP).
+            expect(painel.dipam.total).toBe(0);
+        });
+
+        it('nota SEM itens capturados não é bloqueada — ausência não é prova', () => {
+            // Bloquear no escuro tiraria FUNRURAL legítimo de nota cujo detalhe
+            // não foi capturado.
+            const painel = montarDipamCompetencia({
+                documentos: [dePF({ itens: [] })], competencia: '2026-07', empresa,
+            });
+            expect(painel.funrural.total).toBeGreaterThan(0);
+        });
+    });
+
     it('sem bloqueio, a lista vem vazia — não inventa alarme', () => {
         const painel = montarDipamCompetencia({
             documentos: [notaEntrada()], competencia: '2026-06', empresa,

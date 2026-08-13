@@ -35,6 +35,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   trava sem caminho é trava que a equipe contorna. ⚠️ Um teste MEU de 17h dizia
   o contrário ("cadastro vence inclusive o nome") e foi trocado: premissa
   plausível derrubada por caso real.
+  🚨 **E O BURACO MAIOR ERA OUTRO: FUNRURAL NÃO CONFERIA SE A COMPRA É DE
+  PRODUÇÃO RURAL** (Paulo, mesma varredura: *"esses dois também têm que sair"* —
+  EMILIO CAMPIGOTTO, CPF de SC, e ALEXANDRE AUGUSTO ARCARO **2º TP**, um
+  tabelionato). Nenhum dos dois é erro de cadastro: **bastava o fornecedor ser
+  pessoa física** para a contribuição ser calculada. A Lei 8.212/91 art. 25
+  incide sobre a comercialização da **PRODUÇÃO RURAL** e o art. 30, IV sub-roga o
+  adquirente DELA — comprar um caminhão usado, uma custa de cartório ou um
+  serviço de uma PF não gera nada. A prova é NEGATIVA e por isso segura: só
+  bloqueia quando o documento DIZ que não é produção rural (itens lidos e nenhum
+  agropecuário, ou CFOP **de entrada** que não é de compra). Nota sem itens
+  capturados NÃO é bloqueada — ausência não é prova, e bloquear no escuro tira
+  FUNRURAL legítimo.
+  ⚠️ **DUAS ARMADILHAS QUE ESSA REGRA PISOU NA HORA** (as duas pegas por teste):
+  (1) reusei `CFOPS_COMPRA`, que é a régua da **DIPAM** — obrigação PAULISTA, só
+  1xxx. Isso matava toda compra INTERESTADUAL de produtor, erro na direção mais
+  cara (deixar de recolher); o gêmeo 2xxx virou `ehCfopCompraProducao`,
+  **DERIVADO** da mesma tabela em vez de uma segunda lista. (2) o CFOP só pode
+  julgar o lado da ENTRADA: CFOP de saída (5101) numa nota de entrada é a NF-e do
+  próprio produtor, que sai pela dedup do art. 136 e **não pode cobrar
+  pendência** — era exatamente o alarme apagado em 12/08.
 - **MATA-BURRO: SENTINELA DE BACKFILL NÃO PODE SER CAMPO DE DADO** (13/08,
   print do Paulo na aba 🌾 da NOVA ERA). O botão ♻️ *"Reler participante e
   município dos XMLs"* examinou 692 documentos e respondeu **"0 recuperadas ·
