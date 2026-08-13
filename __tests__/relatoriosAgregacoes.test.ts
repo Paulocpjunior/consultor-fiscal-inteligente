@@ -5,7 +5,7 @@
  */
 import {
     resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, resumoPorUf,
-    nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante,
+    nfCanceladasFaltantes, formatarFaixas, lerFaltantes, resumoPorParticipante,
     resumoPorAliquota, resumoPorProduto, servicosPorCodigo,
 } from '../services/relatoriosAgregacoes';
 
@@ -192,6 +192,50 @@ describe('nfCanceladasFaltantes', () => {
         expect(formatarFaixas([3, 4, 5, 9, 11, 12])).toBe('3–5, 9, 11–12');
         expect(formatarFaixas([7])).toBe('7');
         expect(formatarFaixas([])).toBe('');
+    });
+
+    /**
+     * Caso LAV COMÉRCIO DE AUTOPEÇAS (Eunice, 12/08): 759 faltantes, e a
+     * pergunta foi pela sequência completa — para conferir uma a uma. Com mais
+     * buracos do que notas, a lista não é o produto: a captura da saída é que
+     * não está trazendo as notas, e a ação é outra.
+     */
+    describe('lerFaltantes — a causa junto do número', () => {
+        const serie = (over: any) => ({
+            modelo: '55', serie: '1', primeiro: 1, ultimo: 100, autorizadas: 0,
+            canceladas: [], faltantes: [], faltantesTotal: 0, ...over,
+        });
+
+        it('mais buracos que notas ⇒ é CAPTURA, e manda para a Cobertura de Saída', () => {
+            const r = lerFaltantes([serie({ primeiro: 1, ultimo: 1000, faltantesTotal: 900 })] as any);
+            expect(r.causa).toBe('captura-incompleta');
+            expect(r.faltantes).toBe(900);
+            expect(r.capturadas).toBe(100);
+            expect(r.acao).toMatch(/Cobertura de Saída/);
+            expect(r.acao).toMatch(/não é uma lista para conferir uma a uma|não é\s*\n?\s*uma lista/);
+            expect(r.acao).toMatch(/641/);
+        });
+
+        it('poucos buracos num talão capturado ⇒ AÍ SIM se confere número a número', () => {
+            const r = lerFaltantes([serie({ primeiro: 1, ultimo: 100, faltantesTotal: 3 })] as any);
+            expect(r.causa).toBe('buraco-pontual');
+            expect(r.acao).toMatch(/número a número/);
+            expect(r.acao).toMatch(/inutilização/);
+        });
+
+        it('sem buraco não inventa alarme', () => {
+            expect(lerFaltantes([serie({})] as any).causa).toBe('continua');
+            expect(lerFaltantes([]).causa).toBe('continua');
+        });
+
+        it('soma as séries antes de decidir — a causa é da EMPRESA, não da série', () => {
+            const r = lerFaltantes([
+                serie({ serie: '1', primeiro: 1, ultimo: 500, faltantesTotal: 480 }),
+                serie({ serie: '3', primeiro: 900, ultimo: 985, faltantesTotal: 1 }),
+            ] as any);
+            expect(r.causa).toBe('captura-incompleta');
+            expect(r.faltantes).toBe(481);
+        });
     });
 });
 

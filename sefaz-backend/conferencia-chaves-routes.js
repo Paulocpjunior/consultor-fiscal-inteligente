@@ -19,10 +19,15 @@ import { importarXmlSefaz } from './xml-importer.js';
 import { loadCertEmpresa, loadCertEmpresaPorCnpjBase } from './cert-storage.js';
 import { carregarFlagsEmpresa } from './empresa-flags.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
+import {
+    selecionarParaReconferir, lerRespostaCancelamento, resumirReconferencia,
+} from './reconferir-cancelamento.js';
+import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 const router = express.Router();
 const MAX_CHAVES_CONFERIR = 2000;
 const MAX_CHAVES_IMPORTAR = 60;   // por chamada — consulta por chave é cara
+const MAX_RECONFERIR = 60;        // idem: cada nota é uma chamada com o A1 do cliente
 const PACING_MS = 1500;           // anti-656 (mesmo webservice DistDFe)
 
 function fa() {
@@ -178,6 +183,146 @@ router.post('/conferencia-chaves-importar', requireAuth, express.json({ limit: '
         });
     } catch (e) {
         console.error('[conferencia-chaves-importar]', e);
+        return res.status(500).json({ error: 'Falha interna: ' + (e.message || 'desconhecida') });
+    }
+});
+
+// ============================================================================
+// POST /api/admin/sefaz/reconferir-cancelamento
+//
+// "A nota foi cancelada?" — perguntado à SEFAZ, nota a nota.
+//
+// Caso Eunice / LANCHONETE JO BRAS (11/08): cancelada contando no faturamento.
+// A régua de leitura do CFI está certa; o cancelamento é que nunca chegou —
+// a SEFAZ não entrega ao emitente (Rej. 641), a saída vem pelo cofre de e-mail,
+// e o cliente manda o XML autorizado, não o evento do dia seguinte.
+//
+// Aqui NÃO se deduz nada: pergunta-se. E quem responde é o documento que a
+// SEFAZ devolve (`reconferir-cancelamento.js` lê; este arquivo só faz I/O).
+//
+// `simular: true` responde só o RECORTE (quantas seriam consultadas) sem gastar
+// uma chamada — é o que o painel mostra antes de o colaborador confirmar.
+// ============================================================================
+router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req, res) => {
+    try {
+        const cnpjEmpresa = String(req.body?.cnpj || '').replace(/\D/g, '');
+        const competencia = String(req.body?.competencia || '').trim();
+        const simular = req.body?.simular === true;
+        if (cnpjEmpresa.length !== 14) {
+            return res.status(400).json({ error: 'cnpj (14 dígitos) é obrigatório — a empresa EMITENTE das notas.' });
+        }
+        if (!/^\d{4}-\d{2}$/.test(competencia)) {
+            return res.status(400).json({ error: 'competencia é obrigatória no formato AAAA-MM.' });
+        }
+        // Mesma trava da importação por chave: esta rota carrega o A1 da
+        // empresa e consulta a SEFAZ em nome dela.
+        const acesso = await podeAcessarCnpj(req.user, cnpjEmpresa);
+        if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.error });
+
+        const db = fa().firestore();
+        const emp = await acharEmpresaPorCnpj(db, cnpjEmpresa);
+        if (!emp) return res.status(404).json({ error: `Empresa ${cnpjEmpresa} não encontrada no cadastro.` });
+
+        const snap = await db.collection('documentos_fiscais')
+            .where('empresaId', '==', emp.empresaId)
+            .where('competencia', '==', competencia)
+            // eventos/cStat entram no select porque é neles que o cancelamento
+            // pode estar — sem eles, docCancelado erra para MAIS consultas.
+            .select('chave', 'numero', 'direcao', 'tpNF', 'status', 'cStat', 'eventos', 'valorTotal')
+            .get();
+        const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+
+        const selecao = selecionarParaReconferir(docs, {
+            jaCancelado: docCancelado,
+            direcaoEfetiva: direcaoEfetivaDoc,
+            limite: MAX_RECONFERIR,
+        });
+
+        if (simular) {
+            return res.json({
+                ok: true, simulado: true, cnpj: cnpjEmpresa, competencia,
+                selecao: { ...selecao, aConsultar: selecao.aConsultar.length },
+                resumo: resumirReconferencia({ selecao, resultados: [] }),
+            });
+        }
+        if (!selecao.aConsultar.length) {
+            return res.json({
+                ok: true, cnpj: cnpjEmpresa, competencia,
+                selecao: { ...selecao, aConsultar: 0 }, resultados: [],
+                resumo: resumirReconferencia({ selecao, resultados: [] }),
+            });
+        }
+
+        const { uf } = await carregarFlagsEmpresa(emp.empresaId, cnpjEmpresa);
+        if (!uf) return res.status(400).json({ error: 'UF não cadastrada para a empresa — preencha em Completar cadastro.' });
+
+        // O cert é o da PRÓPRIA empresa (ou da raiz): a consulta é feita em
+        // nome dela, e o do escritório não autoriza outra raiz.
+        let cert = null;
+        try { cert = await loadCertEmpresa(emp.empresaId); } catch { /* tenta raiz */ }
+        if (!cert) {
+            try { cert = await loadCertEmpresaPorCnpjBase(cnpjEmpresa, emp.empresaId); } catch { /* sem cert */ }
+        }
+        if (!cert) {
+            return res.status(400).json({
+                error: 'Empresa sem certificado A1 próprio ou da mesma raiz — a consulta por chave exige o '
+                    + 'certificado do emitente. Sem ele não dá para perguntar à SEFAZ, e sem perguntar não dá '
+                    + 'para afirmar que as notas estão válidas.',
+            });
+        }
+
+        const resultados = [];
+        let abortou656 = false;
+        for (const alvo of selecao.aConsultar) {
+            let leitura;
+            try {
+                const r = await consultaNFePorChave({
+                    chave: alvo.chave, cnpjInteressado: cnpjEmpresa, uf, certOverride: cert,
+                });
+                if (r.rateLimited) { abortou656 = true; break; }
+                leitura = lerRespostaCancelamento(r);
+            } catch (e) {
+                leitura = lerRespostaCancelamento({ erro: e.message });
+            }
+
+            if (leitura.situacao === 'cancelada') {
+                // Grava o EVENTO, não o status: assim `docCancelado` decide na
+                // leitura como em todo o resto do app, e o backfill do cron não
+                // encontra um status órfão sem prova ao lado.
+                try {
+                    await db.collection('documentos_fiscais').doc(alvo.id).set({
+                        status: 'cancelado',
+                        eventos: fa().firestore.FieldValue.arrayUnion({
+                            ...leitura.evento,
+                            origem: 'reconferencia-sefaz',
+                            reconferidoPor: req.user.email || req.user.uid,
+                            reconferidoEm: Date.now(),
+                        }),
+                    }, { merge: true });
+                } catch (e) {
+                    leitura = { situacao: 'indeterminado', motivo: `A SEFAZ disse CANCELADA, mas a gravação falhou: ${e.message}` };
+                }
+            }
+            resultados.push({ ...alvo, ...leitura });
+            await sleep(PACING_MS);
+        }
+
+        const resumo = resumirReconferencia({ selecao, resultados });
+        if (abortou656) {
+            resumo.avisos.unshift('A SEFAZ pediu pausa (cStat 656) e a rodada parou aqui. O que não foi '
+                + 'consultado continua como estava — aguarde ~1h e rode de novo.');
+        }
+        console.log(`[reconferir-cancelamento] ${cnpjEmpresa} ${competencia}: `
+            + `${resumo.consultadas} consultadas, ${resumo.canceladas} canceladas, `
+            + `${resumo.indeterminadas} indeterminadas (por ${req.user.email})`);
+
+        return res.json({
+            ok: true, cnpj: cnpjEmpresa, competencia,
+            selecao: { ...selecao, aConsultar: selecao.aConsultar.length },
+            resultados, resumo, abortou656,
+        });
+    } catch (e) {
+        console.error('[reconferir-cancelamento]', e);
         return res.status(500).json({ error: 'Falha interna: ' + (e.message || 'desconhecida') });
     }
 });

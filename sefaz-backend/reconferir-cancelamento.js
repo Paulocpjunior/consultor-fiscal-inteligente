@@ -1,0 +1,232 @@
+// ============================================================================
+// reconferir-cancelamento.js  (PURO — sem Express, sem Firebase, sem rede)
+// ----------------------------------------------------------------------------
+// PERGUNTAR À SEFAZ SE A NOTA FOI CANCELADA — porque para a SAÍDA não há
+// nenhum outro jeito de saber.
+//
+// ═══ O CASO (Eunice, 11/08 — LANCHONETE JO BRAS) ════════════════════════════
+//
+// *"quando lançamos uma nota cancelada aqui no consultor, como é feito o
+// reconhecimento dessa nota? Porque no e-Fiscal as notas são reconhecidas como
+// canceladas, mas no consultor está contabilizando para o faturamento."*
+//
+// A leitura do CFI está certa e é única (`docCancelado`): status, cStat 101/151
+// da própria nota, ou evento 110111 com cStat 135/155. O problema é ANTERIOR —
+// o cancelamento NUNCA CHEGOU.
+//
+// É estrutural, não descuido: a SEFAZ **não entrega ao emitente** os documentos
+// que ele mesmo emitiu (Rejeição 641), então a saída entra pelo COFRE DE E-MAIL.
+// E o cofre traz o que o cliente manda — que é o XML AUTORIZADO. Ninguém manda,
+// por e-mail, o evento de cancelamento do dia seguinte. Resultado: a nota entra
+// 'autorizado' e fica assim para sempre, contando no faturamento.
+//
+// O painel da empresa dizendo "0 cancelada(s)" não é a SEFAZ dizendo que não há
+// cancelamento — é o app dizendo que nunca soube de nenhum. São coisas
+// diferentes, e é essa diferença que o colaborador não tem como ver.
+//
+// ═══ A SOLUÇÃO É PERGUNTAR, NÃO DEDUZIR ════════════════════════════════════
+//
+// Mesma técnica da sonda do PGDAS-D e das sondas do R-2055: existe um oráculo
+// GRÁTIS (a consulta por chave já implementada, `consultaNFePorChave`), e ele
+// devolve os EVENTOS junto do documento. Perguntar é PROVA.
+//
+// ═══ AS TRAVAS ══════════════════════════════════════════════════════════════
+//
+// 1. **FALHA DE CONSULTA NUNCA VIRA "não cancelada".** Rede caída, certificado
+//    recusado, cStat inesperado ⇒ `indeterminado`, e o doc fica COMO ESTÁ. O
+//    oposto (concluir que está válida porque a pergunta falhou) transformaria
+//    uma falha de infraestrutura em faturamento a maior — exatamente o defeito
+//    que este módulo existe para matar.
+// 2. **NÃO EXISTE "DESCANCELAR".** A reconferência só sabe ACRESCENTAR o
+//    cancelamento. Se o app tem a nota como cancelada e a SEFAZ não mostra o
+//    evento, isso é DIVERGÊNCIA para a tela — nunca reversão automática: a
+//    consulta pode ter respondido por outro ambiente/UF, e desfazer um
+//    cancelamento reintroduz receita que já foi (corretamente) excluída.
+// 3. **A CONTA DA CONSULTA APARECE ANTES.** Cada nota é uma chamada à SEFAZ com
+//    o certificado do cliente. O painel diz quantas serão consultadas antes de
+//    começar — varredura silenciosa de 700 notas é o tipo de coisa que derruba
+//    o acesso da empresa por excesso (cStat 656).
+// ============================================================================
+
+/** Chave de NF-e/NFC-e: 44 dígitos, nada além disso serve para consultar. */
+const chaveValida = (v) => /^\d{44}$/.test(String(v || '').replace(/\D/g, ''));
+
+/** cStat de EVENTO 110111 aceito: registrado (135) ou fora de prazo (155). */
+const CSTAT_EVENTO_OK = new Set(['135', '155']);
+/** cStat da PRÓPRIA nota que já significa cancelamento (legado pré-evento). */
+const CSTAT_NOTA_CANCELADA = new Set(['101', '151']);
+
+/**
+ * Decide QUEM vale a pena consultar, e nomeia quem ficou de fora.
+ *
+ * Só saída da própria empresa (é a que não recebe evento) e só o que ainda não
+ * se sabe cancelado — reconsultar o que já está cancelado gasta chamada para
+ * confirmar o que já se sabe.
+ *
+ * @param {Array} docs      documentos da competência, já filtrados por empresa
+ * @param {object} opts
+ * @param {(d:any)=>boolean} opts.jaCancelado   régua da casa (docCancelado)
+ * @param {(d:any)=>string}  opts.direcaoEfetiva régua da casa
+ * @param {number} [opts.limite]  teto de chamadas nesta rodada
+ */
+export function selecionarParaReconferir(docs, { jaCancelado, direcaoEfetiva, limite = 200 } = {}) {
+    const aConsultar = [];
+    let jaCanceladas = 0;
+    let semChave = 0;
+    let naoSaida = 0;
+
+    for (const d of docs || []) {
+        if (direcaoEfetiva(d) !== 'saida') { naoSaida += 1; continue; }
+        if (jaCancelado(d)) { jaCanceladas += 1; continue; }
+        const chave = String(d?.chave || '').replace(/\D/g, '');
+        if (!chaveValida(chave)) { semChave += 1; continue; }
+        aConsultar.push({ id: d.id, chave, numero: d.numero ?? null, valorTotal: Number(d.valorTotal) || 0 });
+    }
+
+    // Ordem por número: a conferência humana acompanha o talão, e um recorte
+    // cortado no meio de uma sequência é mais fácil de retomar.
+    aConsultar.sort((a, b) => (Number(a.numero) || 0) - (Number(b.numero) || 0));
+
+    const cortadas = Math.max(0, aConsultar.length - limite);
+    return {
+        aConsultar: aConsultar.slice(0, limite),
+        total: aConsultar.length,
+        // Truncamento NUNCA é silencioso: lista cortada sem dizer o quanto é
+        // lida como "conferi tudo".
+        cortadas,
+        jaCanceladas,
+        // Sem chave de 44 dígitos não há o que consultar. A NFS-e do portal é o
+        // caso normal disso (não tem chave); NF-e sem chave é buraco de captura.
+        semChave,
+        naoSaida,
+    };
+}
+
+/**
+ * Lê a resposta da SEFAZ para UMA chave.
+ *
+ * Devolve sempre uma das três: 'cancelada', 'nao-cancelada' ou 'indeterminado'.
+ * Nunca inventa a terceira a partir do silêncio.
+ */
+export function lerRespostaCancelamento(resp) {
+    if (!resp || resp.erro) {
+        return {
+            situacao: 'indeterminado',
+            motivo: `Não foi possível perguntar à SEFAZ${resp?.erro ? `: ${resp.erro}` : '.'} `
+                + 'A nota fica como está — falha de consulta não prova que a nota é válida.',
+        };
+    }
+
+    const cStat = String(resp.cStat || '');
+    const xmls = Array.isArray(resp.xmls) ? resp.xmls : [];
+
+    // cStat 137 = "nenhum documento localizado". Isso NÃO é "não cancelada":
+    // costuma ser certificado sem autorização para consultar em nome daquele
+    // CNPJ, ou UF errada. Concluir "válida" aqui manteria a receita a maior.
+    if (!xmls.length) {
+        return {
+            situacao: 'indeterminado',
+            cStat,
+            motivo: `A SEFAZ não devolveu documento para esta chave (cStat ${cStat || '—'}`
+                + `${resp.xMotivo ? ` — ${resp.xMotivo}` : ''}). Não dá para concluir nada sobre `
+                + 'cancelamento: pode ser certificado sem autorização para este CNPJ ou UF diferente.',
+        };
+    }
+
+    for (const x of xmls) {
+        const xml = String(x?.xml || '');
+        if (!xml) continue;
+
+        // Evento de cancelamento registrado.
+        if (/<tpEvento>\s*110111\s*<\/tpEvento>/.test(xml)) {
+            const cStatEvento = (xml.match(/<cStat>\s*(\d+)\s*<\/cStat>/) || [])[1] || '';
+            if (CSTAT_EVENTO_OK.has(cStatEvento)) {
+                const dh = (xml.match(/<dhRegEvento>\s*([^<]+)\s*<\/dhRegEvento>/) || [])[1]
+                    || (xml.match(/<dhEvento>\s*([^<]+)\s*<\/dhEvento>/) || [])[1] || null;
+                const nProt = (xml.match(/<nProt>\s*(\d+)\s*<\/nProt>/) || [])[1] || null;
+                const just = (xml.match(/<xJust>\s*([^<]*)\s*<\/xJust>/) || [])[1] || null;
+                return {
+                    situacao: 'cancelada',
+                    cStat: cStatEvento,
+                    evento: { tpEvento: '110111', tipo: 'cancelamento', cStat: cStatEvento, dhEvento: dh, nProt, xJust: just },
+                    motivo: cStatEvento === '155'
+                        ? 'Cancelamento homologado FORA DE PRAZO (cStat 155) — cancelamento igual, e era '
+                          + 'justamente este que o importer antigo deixava passar.'
+                        : 'Cancelamento registrado na SEFAZ (cStat 135).',
+                };
+            }
+        }
+    }
+
+    // A própria nota já veio com cStat de cancelamento (formato legado).
+    for (const x of xmls) {
+        const xml = String(x?.xml || '');
+        const m = xml.match(/<cStat>\s*(\d+)\s*<\/cStat>/);
+        if (m && CSTAT_NOTA_CANCELADA.has(m[1]) && /<infNFe|<NFe/.test(xml)) {
+            return {
+                situacao: 'cancelada',
+                cStat: m[1],
+                evento: { tpEvento: '110111', tipo: 'cancelamento', cStat: '135', dhEvento: null, nProt: null, xJust: null },
+                motivo: `Protocolo da própria nota com cStat ${m[1]} — cancelamento no formato legado `
+                    + '(anterior ao evento 110111).',
+            };
+        }
+    }
+
+    return {
+        situacao: 'nao-cancelada',
+        cStat,
+        motivo: 'A SEFAZ devolveu o documento e nenhum evento de cancelamento. A nota vale.',
+    };
+}
+
+/**
+ * Resumo da rodada, com a CAUSA junto do número.
+ *
+ * Contagem sem leitura é meio farol: "12 consultadas" não diz se o mês mudou.
+ */
+export function resumirReconferencia({ selecao, resultados }) {
+    const r = resultados || [];
+    const canceladas = r.filter((x) => x.situacao === 'cancelada');
+    const indeterminadas = r.filter((x) => x.situacao === 'indeterminado');
+    const valorRemovido = canceladas.reduce((t, x) => t + (Number(x.valorTotal) || 0), 0);
+
+    const avisos = [];
+    if (canceladas.length) {
+        avisos.push(
+            `${canceladas.length} nota(s) estavam canceladas na SEFAZ e contavam como faturamento aqui — `
+            + `R$ ${valorRemovido.toFixed(2)} saem da apuração. Se a competência já teve guia emitida, `
+            + 'o valor mudou: confira antes de concluir o mês.',
+        );
+    }
+    if (indeterminadas.length) {
+        avisos.push(
+            `${indeterminadas.length} nota(s) ficaram INDETERMINADAS — a SEFAZ não respondeu ou não `
+            + 'localizou o documento. Elas continuam como estavam, e isso NÃO quer dizer que estão '
+            + 'válidas. Repita a reconferência; se persistir, o certificado pode não autorizar consulta '
+            + 'em nome deste CNPJ.',
+        );
+    }
+    if (selecao?.cortadas) {
+        avisos.push(
+            `A rodada parou em ${selecao.aConsultar.length} de ${selecao.total} notas. Rode de novo para `
+            + 'continuar — cada consulta é uma chamada à SEFAZ com o certificado do cliente, e varrer '
+            + 'centenas de uma vez arrisca o bloqueio por excesso (cStat 656).',
+        );
+    }
+    if (!r.length && !selecao?.total) {
+        avisos.push(
+            'Nenhuma nota de saída para reconferir nesta competência. Se a empresa emitiu no mês, o '
+            + 'problema é de CAPTURA (cofre/autXML), não de cancelamento — veja a Cobertura de Saída.',
+        );
+    }
+
+    return {
+        consultadas: r.length,
+        canceladas: canceladas.length,
+        naoCanceladas: r.filter((x) => x.situacao === 'nao-cancelada').length,
+        indeterminadas: indeterminadas.length,
+        valorRemovido: Math.round(valorRemovido * 100) / 100,
+        avisos,
+    };
+}
