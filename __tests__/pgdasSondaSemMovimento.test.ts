@@ -267,3 +267,31 @@ describe('o resultado da sonda vai para um painel, não para um toast', () => {
         expect(tela).not.toMatch(/onShowToast\(`\$\{r\.veredito\.resumo\}/);
     });
 });
+
+/**
+ * O PAINEL FICA FORA DO CABEÇALHO.
+ *
+ * Primeira versão (13/08) inseriu o painel DENTRO do
+ * `flex md:flex-row justify-between` do cabeçalho — ele virou um flex item ao
+ * lado da fileira de botões e apareceu espremido numa coluna de ~180px, com o
+ * texto ilegível. O conteúdo estava certo; o lugar, não.
+ */
+describe('o painel da sonda ocupa a largura da tela', () => {
+    const tela = readFileSync(join(__dirname, '..', 'components/SimplesNacionalDetalhe.tsx'), 'utf8');
+
+    it('vem DEPOIS do cabeçalho, não dentro dele', () => {
+        // O último elemento do cabeçalho é o input de importar. Se o painel
+        // aparecer antes dele, voltou pra dentro do flex.
+        const posImport = tela.indexOf('Importar NFe/PGDAS');
+        const posPainel = tela.indexOf('RESULTADO DA SONDA');
+        expect(posImport).toBeGreaterThan(-1);
+        expect(posPainel).toBeGreaterThan(posImport);
+    });
+
+    it('e o cabeçalho fecha antes do painel abrir', () => {
+        const trecho = tela.slice(tela.indexOf('Importar NFe/PGDAS'), tela.indexOf('RESULTADO DA SONDA'));
+        // Duas tags de fechamento entre o último botão e o painel: a do label
+        // e a do próprio cabeçalho.
+        expect(trecho).toMatch(/<\/label>[\s\S]*<\/div>[\s\S]*<\/div>/);
+    });
+});
