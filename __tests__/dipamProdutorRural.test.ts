@@ -850,6 +850,51 @@ describe('foraDoTotal — o dinheiro que espera conferência', () => {
         expect(painel.pendencias.filter((x: any) => x.codigo === 'fornecedor-sociedade')).toHaveLength(0);
     });
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // A RÉGUA DA RAZÃO SOCIAL NÃO PODE TIRAR NINGUÉM DO TOTAL.
+    //
+    // Paulo, 13/08, olhando o FUNRURAL da NOVA ERA depois da varredura:
+    // *"diminuiu"*. A pergunta que isso levanta é se a régua nova comeu alguém
+    // que estava na conta — e a resposta tem que ser DEMONSTRÁVEL, não
+    // argumentada: quem tem prova de produtor PF (IE "P" ou CPF) é decidido
+    // ANTES de a razão social ser olhada, então o nome nunca alcança quem já
+    // contava. Se alguém reordenar essas verificações um dia, este teste cai.
+    // ═══════════════════════════════════════════════════════════════════════
+    it('IE de produtor "P" VENCE a razão social — continua no total mesmo com LTDA no nome', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro({
+                emitente: {
+                    cnpjCpf: '11222333000181', nome: 'FAZENDA BOA VISTA LTDA',
+                    ie: 'P011222333110', uf: 'SP', codMunIBGE: '3550308',
+                },
+            })],
+            competencia: '2026-07', empresa,
+        });
+        expect(painel.funrural.total).toBeGreaterThan(0);
+        expect(painel.pendencias.some((x: any) => x.codigo === 'fornecedor-sociedade')).toBe(false);
+    });
+
+    it('CPF no documento também vence a razão social', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro({
+                emitente: { cnpjCpf: '12345678909', nome: 'JOSE DA SILVA LTDA', uf: 'SP', codMunIBGE: '3550308' },
+            })],
+            competencia: '2026-07', empresa,
+        });
+        expect(painel.funrural.total).toBeGreaterThan(0);
+    });
+
+    it('cadastro confirmado como produtor VENCE tudo — inclusive o nome', () => {
+        // Confirmação humana é a palavra final (regra de 06/08). Se o CADESP
+        // disse que é produtor, o "LTDA" no nome não desfaz isso.
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro()],
+            competencia: '2026-07', empresa,
+            fornecedores: { '11222333000181': { doc: '11222333000181', natureza: 'produtor_rural_pf', codMunIBGE: '3550308' } },
+        });
+        expect(painel.funrural.total).toBeGreaterThan(0);
+    });
+
     it('sem bloqueio, a lista vem vazia — não inventa alarme', () => {
         const painel = montarDipamCompetencia({
             documentos: [notaEntrada()], competencia: '2026-06', empresa,
