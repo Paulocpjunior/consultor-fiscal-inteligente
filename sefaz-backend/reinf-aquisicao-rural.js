@@ -61,6 +61,11 @@
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 const texto = (v) => String(v ?? '').trim();
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+// Dinheiro em pt-BR: este resumo é lido por gente, e vai por e-mail ao gestor
+// no fechamento da competência. "R$ 308.07" num papel de conferência fiscal
+// obriga quem lê a decidir se o ponto é decimal ou milhar — e num número de
+// contribuição essa dúvida é cara.
+const fmtBRL = (n) => r2(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // ═══ CÓDIGOS DE RECEITA DO FUNRURAL — PROVADOS CONTRA RECIBO ════════════════
 //
@@ -179,18 +184,18 @@ export function conferirTotalizadorR2099({ apurado, totalizador } = {}) {
     if (situacao === 'confere') {
         const total = r2(linhas.reduce((s, l) => s + l.apurado, 0));
         partes.push(`✓ O totalizador do R-2099 bate com a apuração da aba 🌾 nos três componentes `
-            + `(total R$ ${total.toFixed(2)}). Dois caminhos independentes no mesmo número.`);
+            + `(total R$ ${fmtBRL(total)}). Dois caminhos independentes no mesmo número.`);
     }
     for (const l of divergentes) {
         partes.push(l.totalizado === null
-            ? `${l.rotulo} (${l.codigoReceita}): o app apurou R$ ${l.apurado.toFixed(2)} e a Receita NÃO totalizou `
+            ? `${l.rotulo} (${l.codigoReceita}): o app apurou R$ ${fmtBRL(l.apurado)} e a Receita NÃO totalizou `
               + 'este código. Ausente não é zero — ou o evento não levou este componente, ou a natureza da '
               + 'aquisição usa outro código.'
-            : `${l.rotulo} (${l.codigoReceita}): app R$ ${l.apurado.toFixed(2)} × Receita `
-              + `R$ ${l.totalizado.toFixed(2)} (diferença R$ ${l.diferenca.toFixed(2)}).`);
+            : `${l.rotulo} (${l.codigoReceita}): app R$ ${fmtBRL(l.apurado)} × Receita `
+              + `R$ ${fmtBRL(l.totalizado)} (diferença R$ ${fmtBRL(l.diferenca)}).`);
     }
     for (const d of codigosDesconhecidos) {
-        partes.push(`A Receita totalizou R$ ${r2(d.valor).toFixed(2)} no código ${d.codigoReceita}, que este app `
+        partes.push(`A Receita totalizou R$ ${fmtBRL(d.valor)} no código ${d.codigoReceita}, que este app `
             + 'não conhece. Ele fica FORA da conferência de propósito: somar por engano criaria uma divergência '
             + 'inventada. Se for aquisição rural de outra natureza, cadastre o código com o recibo do lado.');
     }

@@ -324,7 +324,9 @@ describe('conferência contra o totalizador do R-2099', () => {
         expect(c.linhas).toHaveLength(3);
         for (const l of c.linhas) expect(l.confere).toBe(true);
         expect(c.codigosDesconhecidos).toEqual([]);
-        expect(c.resumo).toMatch(/308,07|308\.07/);
+        // Dinheiro em pt-BR: este resumo vai por e-mail ao gestor no fechamento, e
+        // "R$ 308.07" obriga quem lê a decidir se o ponto é decimal ou milhar.
+        expect(c.resumo).toContain('308,07');
         expect(c.resumo).toMatch(/caminhos independentes/);
     });
 
