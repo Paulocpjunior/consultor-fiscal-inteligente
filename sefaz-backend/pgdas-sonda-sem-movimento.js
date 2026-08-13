@@ -211,12 +211,44 @@ export function vereditoDaSonda(resultados = []) {
                 + 'nenhuma — repita a sonda.',
         };
     }
+    // ═══ O ACHADO QUE A PRIMEIRA RODADA REAL PRODUZIU (13/08, ELS 07/2026) ═══
+    //
+    // As 6 formas voltaram com o MESMO código (MSG_ISN_036) — e isso não é
+    // "nenhuma serve": é PROVA de que a recusa NÃO OLHA a estrutura.
+    //
+    // Seis payloads diferentes (com estabelecimento, sem, com flag, sem o campo
+    // atividades) não podem falhar pelo mesmo motivo se o motivo fosse a forma.
+    // A recusa acontece ANTES — no cadastro, no período ou na procuração.
+    //
+    // Sem dizer isso, a sonda mandaria continuar caçando estrutura, que é
+    // exatamente o caminho errado. Mesmo padrão do farol honesto: a causa
+    // dominante vale mais que a contagem.
+    const recusadas = resultados.filter((r) => r.situacao === 'recusada');
+    const mesmoCodigo = codigos.length === 1 && recusadas.length === resultados.length && resultados.length > 1;
+    if (mesmoCodigo) {
+        return {
+            destravou: false,
+            forma: null,
+            aEstruturaFoiAvaliada: false,
+            codigoUnico: codigos[0],
+            resumo: `As ${resultados.length} formas foram recusadas com o MESMO código (${codigos[0]}). `
+                + 'Isso é um ACHADO, não um beco: estruturas diferentes não falham pelo mesmo motivo se o '
+                + 'motivo fosse a estrutura. A recusa acontece ANTES de o SN-Entregar olhar o conteúdo — '
+                + 'é condição da empresa/competência (cadastro, período, procuração ou opção pelo Simples), '
+                + 'não a forma do payload. Pare de procurar estrutura: leve ESTE código ao SERPRO, com a '
+                + 'mensagem inteira que está ao lado de cada candidato.',
+        };
+    }
+
     return {
         destravou: false,
         forma: null,
+        aEstruturaFoiAvaliada: true,
+        codigoUnico: null,
         resumo: `Nenhuma das ${resultados.length} formas foi aceita`
             + (codigos.length ? ` (códigos: ${codigos.join(', ')})` : '')
-            + '. O botão segue bloqueado, e o caminho continua sendo a especificação do campo pelo '
-            + 'SERPRO — mas agora com as recusas nomeadas para abrir o chamado.',
+            + '. Códigos DIFERENTES entre as formas indicam que o SN-Entregar chegou a avaliar o conteúdo — '
+            + 'o caminho continua sendo a especificação do campo pelo SERPRO, agora com as recusas nomeadas '
+            + 'para abrir o chamado.',
     };
 }
