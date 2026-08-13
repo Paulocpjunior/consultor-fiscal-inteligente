@@ -454,6 +454,60 @@ const DetalheEmpresa: React.FC<{
 
             {(painel.pendencias?.length || 0) > 0 && (
                 <Caixa titulo={`Pendências (${painel.pendencias!.length}) — resolva antes de fechar a competência`}>
+                    {/* O DINHEIRO parado, por causa. "736 notas fora do total"
+                        não diz se falta R$ 200 ou R$ 200 mil — e sem isso não
+                        há por onde começar. Paulo, 13/08: o app apurou
+                        R$ 17.089,31 e o certo eram R$ 27.832,92; a diferença
+                        estava aqui, invisível. O potencial NUNCA soma no total:
+                        resolver a pendência é que soma, com a prova do lado. */}
+                    {(painel.foraDoTotal?.length || 0) > 0 && (
+                        <div className="mb-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3">
+                            <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                                💰 O que está esperando conferência — e quanto vale
+                            </p>
+                            <table className="mt-2 w-full text-[11px]">
+                                <thead className="text-amber-800 dark:text-amber-400">
+                                    <tr>
+                                        <th className="text-left font-semibold">Causa</th>
+                                        <th className="text-right font-semibold">Notas</th>
+                                        <th className="text-right font-semibold">Compras</th>
+                                        <th className="text-right font-semibold">FUNRURAL que entraria</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {painel.foraDoTotal!.map(f => (
+                                        <tr key={f.codigo} className="border-t border-amber-200 dark:border-amber-800">
+                                            <td className="py-1 pr-2 text-amber-900 dark:text-amber-200">
+                                                {f.rotulo}
+                                                {f.fornecedores > 0 && f.codigo === 'fornecedor-indefinido' && (
+                                                    <span className="text-amber-700 dark:text-amber-400">
+                                                        {' '}· {f.fornecedores} fornecedor(es) a confirmar
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="text-right font-mono">{f.notas}</td>
+                                            <td className="text-right font-mono">{fmtBRL(f.valor)}</td>
+                                            <td className="text-right font-mono font-bold">{fmtBRL(f.funruralPotencial)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <p className="mt-2 text-[10px] text-amber-800 dark:text-amber-400">
+                                Esse FUNRURAL é <strong>potencial</strong>, não apurado: é o que entraria se a pendência
+                                fosse resolvida. Ele nunca é somado sozinho — cada nota entra quando a prova chega.
+                            </p>
+                        </div>
+                    )}
+                    {/* Registro de EVENTO que estava contando como nota. Some da
+                        conta, não da tela: total que muda sozinho faz desconfiar
+                        do número certo. */}
+                    {(painel.registrosDeEvento || 0) > 0 && (
+                        <p className="mb-3 text-[11px] text-slate-500 dark:text-slate-400">
+                            {painel.registrosDeEvento} documento(s) da competência são <strong>eventos</strong> (cancelamento,
+                            carta de correção), não notas — eles não têm fornecedor porque evento não carrega participante.
+                            Ficaram fora da conta e não geram pendência.
+                        </p>
+                    )}
                     {/* O município NÃO se digita: ele está no XML. E o mesmo
                         botão recupera o FORNECEDOR quando a nota chegou sem
                         participante — caso VINCENZO 07/2026, em que a pendência

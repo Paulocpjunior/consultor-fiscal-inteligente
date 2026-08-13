@@ -348,6 +348,12 @@ export function extrairMetadados(xml, schema) {
         if (limpo.length >= 50) chNFeRef = limpo.substring(6, 50);
       }
     }
+    // Última rede: a própria `chave` já é o Id do evento (tpEvento + chNFe +
+    // seq) quando nada mais foi lido. Sem isto o evento CAI no caminho da NF-e
+    // e vira um documento_fiscal fantasma, com 53 dígitos no campo chave e sem
+    // participante nenhum — foi assim que 435 eventos apareceram como "notas
+    // sem o fornecedor" na aba 🌾 (13/08).
+    if (!chNFeRef && chave && chave.length > 44) chNFeRef = chave.substring(6, 50);
     const classif = tpEvento ? classificarEvento(tpEvento) : { tipo: 'desconhecido', descricao: 'Evento sem tpEvento' };
     // chNFeRef é SEMPRE 44 dígitos. Se pickTag retornou lixo grande
     // (XML com múltiplos eventos, envelope mal formado, etc), extrai apenas
@@ -631,6 +637,23 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
       console.warn('[xml-importer] falha auditoria evento:', e.message);
     }
     return result;
+  }
+
+  // ── TRAVA: documento fiscal tem chave de 44 dígitos ─────────────────
+  //
+  // Chegando aqui com mais que isso, o XML é um EVENTO cujo chNFe não foi lido
+  // (envelope torto, captura por e-mail sem schema). Gravar assim cria um
+  // documento fantasma: 53 dígitos no campo chave, sem emitente, sem
+  // destinatário e sem valor — que depois aparece como "nota sem o fornecedor"
+  // em toda varredura, mandando reler um XML que não tem participante nenhum.
+  // Recusar deixa o caso VISÍVEL em Erros & Logs, que é onde ele se resolve.
+  if (meta.chave.length > 44) {
+    return {
+      status: 'erro',
+      motivo: `Chave com ${meta.chave.length} dígitos — isto é Id de EVENTO (tpEvento + chave + sequência), `
+        + 'não um documento fiscal. O evento não pôde ser anexado porque a chave da nota referenciada não '
+        + `foi lida do XML (schema: ${schema || 'desconhecido'}).`,
+    };
   }
 
   // ── NFE / RESNFE: caminho original ──────────────────────────────────

@@ -709,3 +709,108 @@ describe('nota que chegou sem participante', () => {
         expect(n.funrural.motivo).not.toMatch(/não é produtor rural/);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MATA-BURRO: EVENTO NÃO É NOTA (Paulo, 13/08 — "TA ZICADA ESSA EMPRESA")
+//
+// A aba 🌾 acusou 435 notas "sem o fornecedor" e o ♻️ não recuperava nenhuma
+// ("0 recuperadas · 664 já tinham"). Não eram notas: eram EVENTOS DE
+// CANCELAMENTO gravados como documento, com a chave-Id de 53 dígitos:
+//
+//   110111 35260729240822000121550010000255036113641904 201
+//
+// Evento não carrega participante, então elas caíam para sempre em "o
+// documento não traz o fornecedor", mandando reler um XML que não tem o que
+// reler — 435 alarmes sem ação na frente das pendências que importavam.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('registro de evento não entra como nota', () => {
+    const empresa = { id: 'z', nome: 'ZICADA HORTIFRUTI', cnpj: '29240822000121' };
+    const CHAVE_ID_EVENTO = '11011135260729240822000121550010000255036113641904201';
+
+    const eventoComoDoc = {
+        chave: CHAVE_ID_EVENTO,
+        competencia: '2026-07',
+        direcao: 'entrada',
+        status: 'autorizado',
+        valorTotal: 0,
+        itens: [],
+    };
+
+    it('não vira nota, não vira pendência e é CONTADO na resposta', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [eventoComoDoc], competencia: '2026-07', empresa,
+        });
+        expect(painel.notas).toHaveLength(0);
+        expect(painel.pendencias).toHaveLength(0);
+        // Some da conta, NÃO da tela — total que muda sozinho faz desconfiar
+        // do número certo.
+        expect(painel.registrosDeEvento).toBe(1);
+    });
+
+    it('a nota de verdade ao lado continua contando', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [eventoComoDoc, notaEntrada()], competencia: '2026-06', empresa,
+        });
+        expect(painel.notas).toHaveLength(1);
+        expect(painel.registrosDeEvento).toBe(1);
+    });
+
+    it('chave VAZIA continua sendo nota — a NFS-e do portal não tem chave', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [{ ...notaEntrada(), chave: '' }], competencia: '2026-06', empresa,
+        });
+        expect(painel.notas).toHaveLength(1);
+        expect(painel.registrosDeEvento).toBe(0);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// QUANTO está fora do total — Paulo apurou R$ 17.089,31 e o certo eram
+// R$ 27.832,92. A diferença estava nas notas bloqueadas, e a tela dizia só
+// "736 notas fora do total": não dá pra saber se falta R$ 200 ou R$ 200 mil.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('foraDoTotal — o dinheiro que espera conferência', () => {
+    const empresa = { id: 'z', nome: 'ZICADA HORTIFRUTI', cnpj: '29240822000121' };
+
+    /** PJ vendendo gênero agropecuário: fica fora até confirmar no CADESP. */
+    const pjAgro = (over: any = {}) => ({
+        chave: '35260729240822000121550010000255036113641904',
+        numero: '25503', competencia: '2026-07', direcao: 'entrada', status: 'autorizado',
+        valorTotal: 100000,
+        emitente: { cnpjCpf: '11222333000181', nome: 'DEL MONTE FRESH PRODUCE BRASIL LTDA', uf: 'SP', codMunIBGE: '3550308' },
+        itens: [{ cfop: '1102', ncm: '08039000', xProd: 'BANANA', vProd: 100000 }],
+        ...over,
+    });
+
+    it('soma por CAUSA, com o FUNRURAL que entraria se fosse resolvida', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro(), pjAgro({ chave: '35260729240822000121550010000255036113641905', numero: '25504' })],
+            competencia: '2026-07', empresa,
+        });
+        const linha = painel.foraDoTotal.find((f: any) => f.codigo === 'fornecedor-indefinido');
+        expect(linha).toBeTruthy();
+        expect(linha.notas).toBe(2);
+        expect(linha.valor).toBe(200000);
+        expect(linha.fornecedores).toBe(1);           // um CADESP resolve as duas
+        // 1,63% vigente em 07/2026 (LC 224/2025) — a alíquota vem da MESMA
+        // régua da apuração, nunca escrita à mão.
+        expect(linha.funruralPotencial).toBe(3260);
+        expect(linha.rotulo).toMatch(/CADESP/);
+    });
+
+    it('o potencial NUNCA entra no total apurado', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro()], competencia: '2026-07', empresa,
+        });
+        expect(painel.funrural.total).toBe(0);
+        expect(painel.dipam.total).toBe(0);
+        expect(painel.foraDoTotal[0].funruralPotencial).toBeGreaterThan(0);
+    });
+
+    it('sem bloqueio, a lista vem vazia — não inventa alarme', () => {
+        const painel = montarDipamCompetencia({
+            documentos: [notaEntrada()], competencia: '2026-06', empresa,
+        });
+        expect(painel.foraDoTotal).toEqual([]);
+    });
+});
