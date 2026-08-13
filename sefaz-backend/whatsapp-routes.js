@@ -118,6 +118,28 @@ router.post('/enviar', autorizar, async (req, res) => {
         if (template.temDocumento && !p.pdfBase64) {
             return res.status(400).json({ ok: false, error: `O template "${template.nome}" tem cabeçalho de documento — envie o pdfBase64.` });
         }
+        // O CAMINHO INVERSO ERA MUDO, e era o pior dos dois.
+        //
+        // Com `temDocumento: false`, o PDF era DESCARTADO em silêncio logo
+        // abaixo (`pdfBase64: template.temDocumento ? ... : null`): a mensagem
+        // saía dizendo "segue em anexo a guia", sem anexo nenhum, a Meta
+        // devolvia messageId e o app registrava PROVA DE ENVIO. O cliente
+        // recebe uma promessa de anexo que não existe, e ninguém no escritório
+        // fica sabendo — é farol verde sobre entrega que não aconteceu.
+        //
+        // Template do WhatsApp só carrega arquivo se tiver CABEÇALHO DE
+        // DOCUMENTO aprovado pela Meta; isso não se contorna do lado de cá.
+        if (!template.temDocumento && p.pdfBase64) {
+            return res.status(400).json({
+                ok: false,
+                error: `O template "${template.nome}" NÃO tem cabeçalho de documento, então ele não pode levar `
+                    + 'o PDF da guia — a mensagem sairia prometendo um anexo que não vai junto, e o envio seria '
+                    + 'registrado como bem-sucedido.',
+                acao: 'No Gerenciador do WhatsApp, edite o modelo e adicione um cabeçalho do tipo DOCUMENTO (ou '
+                    + 'crie um modelo novo com ele). Depois marque "📎 tem documento" no cadastro do template em '
+                    + '⚙️ Config Admin. Enquanto isso, mande a guia por e-mail — lá o anexo é comprovado.',
+            });
+        }
 
         const envio = await enviarTemplateWhatsapp({
             para: p.para,
