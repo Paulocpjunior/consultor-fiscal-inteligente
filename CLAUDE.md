@@ -5,6 +5,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **A RAZÃO SOCIAL JÁ RESPONDE: LTDA/S.A./EIRELI É PESSOA JURÍDICA** (13/08,
+  fila da NOVA ERA). Metade das pendências de *"consulte o CADESP"* era de
+  fornecedor cujo nome DIZ o que ele é — MIXTER … LTDA, PONTUAL COMERCIAL
+  AGRICOLA LTDA, FRUTAS DA TERRA HORTIFRUTI LTDA. Sociedade é pessoa jurídica
+  (CC art. 44) e produtor rural PF não se organiza como sociedade, então mandar
+  consultar o CADESP de uma LTDA é gastar o tempo da equipe pra descobrir o que
+  está escrito na tela. `tipoSocietarioNoNome` + confiança `sugerida-pj` +
+  pendência `fornecedor-sociedade`: a ação vira **um clique de confirmação**.
+  TRÊS TRAVAS: (1) é SUGESTÃO carimbada com a origem, nunca decisão — o valor
+  continua FORA do total até alguém confirmar (regra de 06/08); (2) **"ME"/"EPP"
+  ficam de fora** porque são PORTE, não tipo societário, e empresário individual
+  com CNPJ pode ser justamente o caso do Comunicado CAT 45/2008; (3) a porta é a
+  MESMA do `indefinido` — só entra quem vende gênero agropecuário, senão toda
+  autopeças LTDA viraria pendência (um teste de 31/07 pegou isso na hora).
 - **MATA-BURRO: SENTINELA DE BACKFILL NÃO PODE SER CAMPO DE DADO** (13/08,
   print do Paulo na aba 🌾 da NOVA ERA). O botão ♻️ *"Reler participante e
   município dos XMLs"* examinou 692 documentos e respondeu **"0 recuperadas ·
@@ -61,8 +75,11 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **LISTA VAZIA NÃO É RESPOSTA**: o estado vazio dizia "ninguém escolheu
   parcelar", afirmação FALSA por construção — a agenda nasceu em 13/08 e tudo o
   que foi parcelado antes saiu de uma vez pelo caminho antigo, sem passar por
-  ela. Agora ele diz o que NÃO sabe e manda conferir no e-CAC as cotas 2/3
-  emitidas antes (essas podem ter saído a menor).
+  ela. Agora ele diz o que NÃO sabe. **Paulo cortou a auditoria do passado**
+  (*"só a partir da próxima cota"*): a régua vale daqui pra frente, e a tela NÃO
+  manda ninguém varrer o e-CAC atrás das cotas velhas — aviso que pede varredura
+  de histórico sem dizer EM QUEM é alarme sem alvo, e alarme sem alvo é o que faz
+  a equipe parar de ler os avisos que importam.
 - **MATA-BURRO: TRABALHO QUE *PARECE* ENTREGUE — as duas formas, no mesmo dia**
   (13/08). Não é preguiça nem falta de teste: nos dois casos o teste estava
   VERDE e o PR dizia "feito".

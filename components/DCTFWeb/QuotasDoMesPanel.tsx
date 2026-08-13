@@ -124,12 +124,15 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         agenda com vencimento até agora. <strong>Não</strong> quer dizer que o trimestre está pago, nem
                         que ninguém parcelou.
                     </p>
-                    <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                        ⚠️ A agenda começou a existir em <strong>13/08/2026</strong>. Trimestral parcelado antes disso
-                        teve as <strong>três guias emitidas no mesmo dia</strong> pelo caminho antigo — elas não
-                        aparecem aqui, e as cotas 2 e 3 daquelas podem ter saído <strong>a menor</strong> (a SELIC do
-                        período ainda não existia). Se houve parcelamento nos últimos três meses, confira o valor
-                        daquelas guias no e-CAC antes de o cliente pagar.
+                    {/* DECISÃO DO PAULO, 13/08: *"só a partir da próxima cota"*.
+                        A agenda vale daqui pra frente — parcelamento feito pelo
+                        caminho antigo fica como está, e a tela NÃO manda ninguém
+                        auditar o passado. Aviso que pede varredura de histórico
+                        sem dizer em quem é alarme sem alvo, e alarme sem alvo é
+                        o que faz a equipe parar de ler os avisos que importam. */}
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        A agenda vale <strong>da próxima cota em diante</strong>: toda emissão em 2 ou 3 cotas feita
+                        daqui pra frente deixa as seguintes marcadas aqui, cada uma no mês dela.
                     </p>
                 </div>
             ) : (

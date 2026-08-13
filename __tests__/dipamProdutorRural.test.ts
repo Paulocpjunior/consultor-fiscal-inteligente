@@ -787,15 +787,18 @@ describe('foraDoTotal — o dinheiro que espera conferência', () => {
             documentos: [pjAgro(), pjAgro({ chave: '35260729240822000121550010000255036113641905', numero: '25504' })],
             competencia: '2026-07', empresa,
         });
-        const linha = painel.foraDoTotal.find((f: any) => f.codigo === 'fornecedor-indefinido');
+        // O fornecedor do caso real é "DEL MONTE FRESH PRODUCE BRASIL **LTDA**",
+        // então a causa é a razão social, não a falta de CADESP: a régua de
+        // 13/08 lê o tipo societário no próprio nome.
+        const linha = painel.foraDoTotal.find((f: any) => f.codigo === 'fornecedor-sociedade');
         expect(linha).toBeTruthy();
         expect(linha.notas).toBe(2);
         expect(linha.valor).toBe(200000);
-        expect(linha.fornecedores).toBe(1);           // um CADESP resolve as duas
+        expect(linha.fornecedores).toBe(1);           // uma confirmação resolve as duas
         // 1,63% vigente em 07/2026 (LC 224/2025) — a alíquota vem da MESMA
         // régua da apuração, nunca escrita à mão.
         expect(linha.funruralPotencial).toBe(3260);
-        expect(linha.rotulo).toMatch(/CADESP/);
+        expect(linha.rotulo).toMatch(/1 clique/);
     });
 
     it('o potencial NUNCA entra no total apurado', () => {
@@ -805,6 +808,46 @@ describe('foraDoTotal — o dinheiro que espera conferência', () => {
         expect(painel.funrural.total).toBe(0);
         expect(painel.dipam.total).toBe(0);
         expect(painel.foraDoTotal[0].funruralPotencial).toBeGreaterThan(0);
+    });
+
+    it('LTDA no nome NÃO manda ao CADESP — manda confirmar o que já está escrito', () => {
+        // Paulo, 13/08, olhando a fila da NOVA ERA: metade das linhas de
+        // "consulte o CADESP" era de fornecedor cujo nome já diz LTDA. Consultar
+        // o CADESP de uma LTDA é gastar o tempo da equipe para descobrir o que
+        // está na tela.
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro()], competencia: '2026-07', empresa,
+        });
+        const p = painel.pendencias.find((x: any) => x.codigo === 'fornecedor-sociedade');
+        expect(p).toBeTruthy();
+        expect(p.mensagem).toMatch(/razão social diz que é sociedade/);
+        expect(p.acao).toMatch(/Não precisa de CADESP/);
+        // A SUGESTÃO vai carimbada com a origem — e é sugestão, não decisão:
+        // o fornecedor continua FORA do total até alguém confirmar.
+        expect(p.sugestao).toEqual({ natureza: 'pessoa_juridica', origem: 'razão social ("LTDA")' });
+        expect(painel.funrural.total).toBe(0);
+    });
+
+    it('"ME" e "EPP" NÃO viram sugestão — são PORTE, não tipo societário', () => {
+        // Empresário individual com CNPJ pode ser justamente o caso do
+        // Comunicado CAT 45/2008 (CNPJ não descaracteriza produtor rural PF).
+        // Sugerir PJ ali seria repetir o erro que a régua existe para evitar.
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro({ emitente: { cnpjCpf: '11222333000181', nome: 'G. A LACERDA DA SILVA HORTIFRUTTI - ME', uf: 'SP', codMunIBGE: '3550308' } })],
+            competencia: '2026-07', empresa,
+        });
+        expect(painel.pendencias.some((x: any) => x.codigo === 'fornecedor-sociedade')).toBe(false);
+        expect(painel.pendencias.some((x: any) => x.codigo === 'fornecedor-indefinido')).toBe(true);
+    });
+
+    it('LTDA que NÃO vende gênero agropecuário não entra na lista', () => {
+        // A autopeças, a gráfica e o posto são LTDA e nunca entrariam na DIPAM.
+        // Pendência sobre eles é ruído, e ruído faz ninguém ler a lista.
+        const painel = montarDipamCompetencia({
+            documentos: [pjAgro({ itens: [{ cfop: '1102', ncm: '87089900', xProd: 'PECA', vProd: 100000 }] })],
+            competencia: '2026-07', empresa,
+        });
+        expect(painel.pendencias.filter((x: any) => x.codigo === 'fornecedor-sociedade')).toHaveLength(0);
     });
 
     it('sem bloqueio, a lista vem vazia — não inventa alarme', () => {
@@ -841,14 +884,14 @@ describe('pendências ordenadas por valor', () => {
     it('o fornecedor mais caro vem PRIMEIRO, com o valor e o potencial na linha', () => {
         const painel = montarDipamCompetencia({
             documentos: [
-                pj('PEQUENO LTDA', '11222333000181', 1000),
-                pj('GRANDE LTDA', '11444777000161', 659000),
-                pj('MEDIO LTDA', '11222333000262', 5000),
+                pj('PEQUENO COMERCIO DE FRUTAS', '11222333000181', 1000),
+                pj('GRANDE COMERCIO DE FRUTAS', '11444777000161', 659000),
+                pj('MEDIO COMERCIO DE FRUTAS', '11222333000262', 5000),
             ],
             competencia: '2026-07', empresa,
         });
         const fila = painel.pendencias.filter((p: any) => p.codigo === 'fornecedor-indefinido');
-        expect(fila.map((p: any) => p.fornecedor)).toEqual(['GRANDE LTDA', 'MEDIO LTDA', 'PEQUENO LTDA']);
+        expect(fila.map((p: any) => p.fornecedor)).toEqual(['GRANDE COMERCIO DE FRUTAS', 'MEDIO COMERCIO DE FRUTAS', 'PEQUENO COMERCIO DE FRUTAS']);
         expect(fila[0].valor).toBe(659000);
         // 1,63% vigente em 07/2026 — mesma régua da apuração.
         expect(fila[0].funruralPotencial).toBe(10741.7);
@@ -857,22 +900,22 @@ describe('pendências ordenadas por valor', () => {
     it('fornecedor repetido continua UMA conferência, mas SOMANDO as notas', () => {
         const painel = montarDipamCompetencia({
             documentos: [
-                pj('GRANDE LTDA', '11444777000161', 400000),
-                pj('GRANDE LTDA', '11444777000161', 259000),
-                pj('PEQUENO LTDA', '11222333000181', 1000),
+                pj('GRANDE COMERCIO DE FRUTAS', '11444777000161', 400000),
+                pj('GRANDE COMERCIO DE FRUTAS', '11444777000161', 259000),
+                pj('PEQUENO COMERCIO DE FRUTAS', '11222333000181', 1000),
             ],
             competencia: '2026-07', empresa,
         });
         const fila = painel.pendencias.filter((p: any) => p.codigo === 'fornecedor-indefinido');
         expect(fila).toHaveLength(2);                       // uma linha por fornecedor
-        expect(fila[0].fornecedor).toBe('GRANDE LTDA');
+        expect(fila[0].fornecedor).toBe('GRANDE COMERCIO DE FRUTAS');
         expect(fila[0].valor).toBe(659000);                 // as duas notas somadas
         expect(fila[0].notas).toBe(2);
     });
 
     it('confirmar como Pessoa Jurídica TIRA da fila — senão o trabalho nunca acaba', () => {
         const painel = montarDipamCompetencia({
-            documentos: [pj('GRANDE LTDA', '11444777000161', 659000)],
+            documentos: [pj('GRANDE COMERCIO DE FRUTAS', '11444777000161', 659000)],
             competencia: '2026-07', empresa,
             fornecedores: { '11444777000161': { doc: '11444777000161', natureza: 'pessoa_juridica' } },
         });
