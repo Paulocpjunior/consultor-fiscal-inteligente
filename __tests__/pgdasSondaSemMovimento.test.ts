@@ -249,10 +249,18 @@ describe('o resultado da sonda vai para um painel, não para um toast', () => {
         expect(tela).toMatch(/hipótese|c\.hipotese/);
     });
 
-    it('dá para copiar para o chamado — com hipótese e mensagem por candidato', () => {
-        expect(tela).toMatch(/copiarResultadoSonda/);
-        expect(tela).toMatch(/Copiar para o chamado/);
-        expect(tela).toMatch(/SERPRO: \$\{c\.mensagem\}/);
+    // O botão copiava um DESPEJO (veredito + candidatos). Despejo não é
+    // chamado: sem identificação, sem "nada foi transmitido" e sem PERGUNTA, o
+    // atendente responde sobre entrega. Quem monta o chamado é o módulo, com
+    // teste próprio (chamadoSerpro.test.ts) — a tela só chama.
+    it('o botão copia um CHAMADO montado, não o despejo do resultado', () => {
+        expect(tela).toMatch(/montarChamadoSerpro/);
+        expect(tela).toMatch(/Copiar chamado do SERPRO/);
+        expect(tela).not.toMatch(/copiarResultadoSonda/);
+        // E o chamado fica visível ANTES de copiar — pergunta reescrita na mão
+        // vira "não consigo declarar sem movimento", que volta genérica.
+        expect(tela).toMatch(/Chamado pronto — ver antes de copiar/);
+        expect(tela).toMatch(/chamado\.motivoDoBloqueio/);
     });
 
     it('quando a estrutura não foi avaliada, a tela DIZ para parar de testar formas', () => {
