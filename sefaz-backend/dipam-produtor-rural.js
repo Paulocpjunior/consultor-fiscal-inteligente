@@ -53,6 +53,7 @@ const ROTULO_BLOQUEIO = {
     'fornecedor-indefinido': 'Fornecedor sem prova de produtor rural PF — confirmar a natureza jurídica no CADESP',
     'fornecedor-sociedade': 'Fornecedor é sociedade pela razão social (LTDA/S.A./EIRELI) — confirmar como pessoa jurídica, 1 clique',
     'cadastro-contraditorio': 'Cadastrado como produtor rural PF, mas a razão social é de sociedade — CORRIGIR o cadastro (estava somando FUNRURAL indevido)',
+    'funrural-sem-producao-rural': 'Compra de pessoa física que NÃO é produção rural — sem sub-rogação (Lei 8.212/91 art. 25)',
     'municipio-ausente': 'Nota sem o município de origem — reler o XML guardado (♻️)',
     'contraparte-ausente': 'Documento sem fornecedor lido — buraco de captura, conferir em Erros & Logs',
 };
@@ -82,6 +83,25 @@ export const CFOPS_COMPRA = new Set([
     '1401', '1403',   // compra com ST
     '1910',           // entrada de bonificação/doação/brinde
 ]);
+
+/**
+ * CFOP de COMPRA para efeito de FUNRURAL — inclui o gêmeo INTERESTADUAL.
+ *
+ * `CFOPS_COMPRA` é a régua da DIPAM, que é obrigação PAULISTA: por isso ela só
+ * tem os 1xxx (entrada interna). O FUNRURAL é FEDERAL e alcança produtor de
+ * QUALQUER estado — o caso MG do print de 31/07 gera FUNRURAL e não gera DIPAM.
+ *
+ * Reusar a lista da DIPAM aqui mataria toda compra interestadual de produtor
+ * (CFOP 2102 e irmãos), que é erro na direção mais cara: deixar de recolher.
+ * Em vez de uma SEGUNDA lista — que divergiria da primeira no primeiro CFOP
+ * novo —, o gêmeo é DERIVADO: 2102 vale se 1102 vale.
+ */
+export function ehCfopCompraProducao(cfop) {
+    const d = soDigitos(cfop);
+    if (d.length !== 4) return false;
+    if (d[0] !== '1' && d[0] !== '2') return false;
+    return CFOPS_COMPRA.has(`1${d.slice(1)}`);
+}
 
 /** Saídas de DEVOLUÇÃO de compra — deduzem do município (Manual, pág. 12). */
 export const CFOPS_DEVOLUCAO = new Set([
@@ -587,7 +607,7 @@ export function classificarNota(doc, opts = {}) {
     }
 
     // ─── FUNRURAL (federal: vale para produtor de QUALQUER estado) ───────────
-    const funrural = avaliarFunrural({ base, doc: d, cadastro, empresa, tabelaFunrural, ehDevolucaoSaida });
+    const funrural = avaliarFunrural({ base, doc: d, cadastro, empresa, tabelaFunrural, ehDevolucaoSaida, cfopPrincipal });
 
     // ─── DIPAM (paulista: só produtor de SP) ────────────────────────────────
     const dipam = avaliarDipam({ base, cfopPrincipal, cfops, doc: d, empresa, ehDevolucaoSaida });
@@ -750,7 +770,7 @@ function avaliarDipam({ base, cfopPrincipal, cfops, doc, empresa, ehDevolucaoSai
     };
 }
 
-function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevolucaoSaida }) {
+function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevolucaoSaida, cfopPrincipal }) {
     const pendencias = [];
     const fora = (motivo) => ({ aplica: false, motivo, pendencias });
 
@@ -778,6 +798,53 @@ function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevol
         }
         return fora('Fornecedor não é produtor rural pessoa física — quem recolhe é o próprio emitente.');
     }
+    // ── A SUB-ROGAÇÃO É SOBRE A AQUISIÇÃO DE PRODUÇÃO RURAL ────────────────
+    //
+    // Paulo, 13/08: *"esses dois também têm que sair"* — EMILIO CAMPIGOTTO
+    // (CPF, SC) e ALEXANDRE AUGUSTO ARCARO **2º TP** (um tabelionato) somando
+    // FUNRURAL. Nenhum dos dois é erro de cadastro: bastava o fornecedor ser
+    // pessoa física para a contribuição ser calculada.
+    //
+    // E isso não é o que a lei diz. A Lei 8.212/91 art. 25 incide sobre a
+    // receita bruta da **comercialização da PRODUÇÃO RURAL** do produtor PF, e
+    // o art. 30, IV sub-roga o adquirente **dessa produção**. Comprar qualquer
+    // coisa de uma pessoa física — um caminhão usado, uma custa de cartório,
+    // um serviço — não gera sub-rogação nenhuma.
+    //
+    // Aqui a prova é NEGATIVA e por isso é segura: só bloqueia quando o
+    // documento DIZ que não é produção rural (itens lidos e nenhum agropecuário,
+    // ou CFOP que não é de compra). Nota sem itens capturados não é bloqueada —
+    // ausência não é prova, e bloquear no escuro tiraria FUNRURAL legítimo.
+    const itensFunrural = doc.itens || [];
+    const temAgro = itensFunrural.some((i) => ehNcmAgropecuario(i.ncm || i.NCM));
+    if (itensFunrural.length > 0 && !temAgro) {
+        pendencias.push(pendencia(
+            'funrural-sem-producao-rural',
+            `${base.fornecedor.nome}, nota ${base.numero}: nenhum item é gênero agropecuário `
+            + `(${itensFunrural.map((i) => soDigitos(i.ncm || i.NCM)).filter(Boolean).join(', ') || 'sem NCM'}).`,
+            'A sub-rogação é sobre a aquisição de PRODUÇÃO RURAL (Lei 8.212/91 art. 25 e art. 30, IV) — comprar '
+            + 'outra coisa de uma pessoa física não gera FUNRURAL. Se o produto for rural e o NCM estiver errado '
+            + 'na nota, confira na origem.',
+        ));
+        return fora('Nenhum item de gênero agropecuário — a sub-rogação é sobre a aquisição de produção rural.');
+    }
+    // O CFOP só julga o LADO DA ENTRADA (1xxx/2xxx). CFOP de saída numa nota de
+    // entrada é a NF-e do próprio produtor (5101 é o CFOP de quem VENDE) — ela
+    // é o documento de origem do art. 136, sai pela dedup e NÃO pode cobrar
+    // pendência: essa foi a lição de 12/08 (caso VINCENZO, notas 95-98), e
+    // alarme em nota que já não conta ensina a equipe a ignorar a lista.
+    const ehEntradaPelaCfop = cfopPrincipal && (cfopPrincipal[0] === '1' || cfopPrincipal[0] === '2');
+    if (!ehDevolucaoSaida && ehEntradaPelaCfop
+        && !ehCfopCompraProducao(cfopPrincipal) && !CFOPS_NAO_LANCAR[cfopPrincipal]) {
+        pendencias.push(pendencia(
+            'funrural-cfop-fora-da-regua',
+            `${base.fornecedor.nome}, nota ${base.numero}: CFOP ${cfopPrincipal} não é de compra/aquisição.`,
+            'Só a aquisição de produção rural gera sub-rogação (Lei 8.212/91 art. 25 e art. 30, IV). '
+            + 'Classifique a operação antes de lançar.',
+        ));
+        return fora(`CFOP ${cfopPrincipal} não é de compra de produção rural.`);
+    }
+
     // Opção do produtor por recolher sobre a FOLHA (Lei 13.606/2018): não há
     // sub-rogação. Só o cadastro sabe disso — a nota não diz.
     if (cadastro?.funrural === 'folha') {
