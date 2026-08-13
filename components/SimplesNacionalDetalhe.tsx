@@ -978,31 +978,34 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
         <div className="animate-fade-in pb-10">
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                     <button onClick={onBack} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 transition-colors">
                         <ArrowLeftIcon className="w-5 h-5" />
                     </button>
                     <div>
-                        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{empresa.nome}</h2>
+                        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 break-words">{empresa.nome}</h2>
                         <p className="text-sm text-slate-500 dark:text-slate-400 font-mono">{empresa.cnpj} • Anexo {empresa.anexo}</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={onShowClienteView} className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-100 text-sky-700 font-bold rounded-lg hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-300 dark:hover:bg-sky-900/50">
+                {/* flex-wrap NÃO é enfeite: são 12 botões. Sem ele a fileira
+                    transborda a viewport, empurra o cabeçalho e o nome da
+                    empresa desce em coluna de uma letra por linha. */}
+                <div className="flex flex-wrap gap-2 md:justify-end">
+                    <button onClick={onShowClienteView} className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-sky-100 text-sky-700 font-bold rounded-lg hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-300 dark:hover:bg-sky-900/50">
                         <EyeIcon className="w-5 h-5" />
                         Visão Cliente
                     </button>
-                    <button onClick={() => setIsDadosFiscaisModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Dados fiscais para SPED, DCTFWeb e outras obrigacoes">
+                    <button onClick={() => setIsDadosFiscaisModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Dados fiscais para SPED, DCTFWeb e outras obrigacoes">
                         <BuildingIcon className="w-5 h-5" />
                         Dados Fiscais
                     </button>
-                    <button onClick={() => setIsCfopCorrelacaoModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Correlacao automatica/manual de CFOPs no SPED Fiscal">
+                    <button onClick={() => setIsCfopCorrelacaoModalOpen(true)} className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-amber-100 text-amber-700 font-bold rounded-lg hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" title="Correlacao automatica/manual de CFOPs no SPED Fiscal">
                         🔄 Correlacao CFOP
                     </button>
                     <button
                         onClick={handleVerAtividadesDeclaradas}
                         disabled={consultandoAtividades}
-                        className="btn-press flex items-center gap-2 px-4 py-2 bg-violet-100 text-violet-700 font-bold rounded-lg hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
+                        className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-violet-100 text-violet-700 font-bold rounded-lg hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
                         title="Mostra os códigos de atividade que a Receita já aceitou nas declarações desta empresa (consulta, não declara nada)"
                     >
                         {consultandoAtividades ? '⏳ Consultando...' : '🔎 Atividades declaradas'}
@@ -1010,7 +1013,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                     {currentUser?.role === 'admin' && (
                         <button
                             onClick={handleCadastrarCodigoSup}
-                            className="btn-press flex items-center gap-2 px-4 py-2 bg-violet-100 text-violet-700 font-bold rounded-lg hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
+                            className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-violet-100 text-violet-700 font-bold rounded-lg hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
                             title="Cadastrar o código da atividade ISS fixo (SUP) lido no e-CAC — destrava a emissão do DAS dessas receitas"
                         >
                             ⚙️ Código ISS fixo
@@ -1019,7 +1022,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                     <button
                         onClick={handleEmitirDasRegular}
                         disabled={emitindoDas}
-                        className="btn-press flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                        className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50"
                         title="Emitir DAS Regular do mes em apuracao"
                     >
                         {emitindoDas ? '⏳ Emitindo...' : '📤 Emitir DAS'}
@@ -1032,7 +1035,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                         <button
                             onClick={handleDeclararSemMovimento}
                             disabled={declarandoSemMov}
-                            className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-600 text-white font-bold rounded-lg hover:bg-slate-700 disabled:opacity-50"
+                            className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-slate-600 text-white font-bold rounded-lg hover:bg-slate-700 disabled:opacity-50"
                             title="Transmitir o PGDAS-D de um mês sem faturamento. Não gera guia — mês sem movimento não tem o que pagar, mas a declaração vence igual."
                         >
                             {declarandoSemMov ? '⏳ Declarando...' : '📄 Declarar sem movimento'}
@@ -1045,7 +1048,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                         <button
                             onClick={handleSondarSemMovimento}
                             disabled={sondando}
-                            className="btn-press flex items-center gap-2 px-4 py-2 bg-violet-600 text-white font-bold rounded-lg hover:bg-violet-700 disabled:opacity-50"
+                            className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-violet-600 text-white font-bold rounded-lg hover:bg-violet-700 disabled:opacity-50"
                             title="Pergunta ao SERPRO qual forma de declaração sem movimento ele aceita, usando o modo VALIDAÇÃO. NADA é transmitido em nenhum resultado."
                         >
                             {sondando ? '⏳ Perguntando ao SERPRO...' : '🔬 Sondar forma (não transmite)'}
@@ -1053,26 +1056,26 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                     )}
                     <button
                         onClick={() => setIsEmitirNfseOpen(true)}
-                        className="btn-press flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700"
+                        className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700"
                         title="Emitir NFS-e Nacional (CGSN 189/2026)"
                     >
                         📑 Emitir NFSe
                     </button>
                     <button
                         onClick={() => setIsPrevisaoOpen(true)}
-                        className="btn-press flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 font-bold rounded-lg hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:hover:bg-purple-900/50"
+                        className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-purple-100 text-purple-700 font-bold rounded-lg hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:hover:bg-purple-900/50"
                         title="Previsão DAS dos próximos 3 meses (estatística + IA)"
                     >
                         📈 Prever DAS
                     </button>
                     <button
                         onClick={() => setIsConferirPgdasOpen(true)}
-                        className="btn-press flex items-center gap-2 px-4 py-2 bg-cyan-100 text-cyan-700 font-bold rounded-lg hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300 dark:hover:bg-cyan-900/50"
+                        className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-cyan-100 text-cyan-700 font-bold rounded-lg hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300 dark:hover:bg-cyan-900/50"
                         title="Conferir PGDAS-D vs nossa apuração (IA detecta divergências)"
                     >
                         🔍 Conferir PGDAS
                     </button>
-                    <label className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 cursor-pointer">
+                    <label className="btn-press flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 cursor-pointer">
                         <DownloadIcon className="w-5 h-5" />
                         Importar NFe/PGDAS
                         <input type="file" accept=".xml,.pdf,.xls,.xlsx" className="hidden" onChange={handleFileUpload} />
