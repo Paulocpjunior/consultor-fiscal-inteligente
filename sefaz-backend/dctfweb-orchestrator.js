@@ -22,8 +22,11 @@ import {
 } from './mit-debitos-builder.js';
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs } from './firestore-paginate.js';
+import { planejarQuotas, resumoDoPlano, RECEITAS_TRIMESTRAIS_QUOTA, QUOTA_VALOR_MINIMO } from './darf-quotas.js';
 
 const COLLECTION = 'dctfweb_declaracoes';
+// Quotas do trimestral que ainda NÃO podem ser geradas — ver darf-quotas.js.
+const COLLECTION_QUOTAS = 'darf_quotas_agenda';
 const COLLECTION_MIT = 'dctfweb_mit_apuracoes';
 
 function fa() {
@@ -178,29 +181,115 @@ const RECEITAS_GUIA_SEPARADA = new Set([
     // pago no desembaraço) — esses seguem no DARF unificado.
     '5123', '0668', '1097',                   // IPI demais produtos/bebidas/automóveis
 ]);
-const RECEITAS_TRIMESTRAIS_QUOTA = new Set(['2089', '0220', '2372', '6012']);
 const DARF_VALOR_MINIMO = 10;       // R$ — DARF inferior a R$10 não pode ser emitido (RFB)
-// Quotas do IRPJ/CSLL trimestral (Lei 9.430 art. 5º): até 3 quotas mensais,
-// nenhuma inferior a R$ 1.000 — logo só para débito acima de R$ 2.000.
-const QUOTA_VALOR_MINIMO = 1000;
 
-// Divide o débito em N quotas "iguais" em centavos — a 1ª quota absorve a
-// diferença de arredondamento (prática RFB).
-function dividirEmQuotas(valor, n) {
-    const totalCent = Math.round(valor * 100);
-    const base = Math.floor(totalCent / n);
-    const primeira = totalCent - base * (n - 1);
-    return Array.from({ length: n }, (_, i) => (i === 0 ? primeira : base) / 100);
+// A régua das quotas (mínimo por quota, divisão em centavos, vencimento e —
+// principalmente — QUANDO cada quota pode ser gerada) mora em `darf-quotas.js`.
+// Ela vivia aqui dentro e emitia as três de uma vez, hoje: a quota 3 saía com o
+// juro que o SICALC conseguia calcular no dia, sem a SELIC que ainda nem tinha
+// sido publicada, ou seja A MENOR (Paulo, 13/08).
+
+/** Id estável da quota agendada — refazer a emissão SOBRESCREVE, não duplica. */
+export function idQuotaAgendada({ empresaCnpj, anoPA, mesPA, codigo, extensao, cota }) {
+    const cnpj = String(empresaCnpj || '').replace(/\D/g, '');
+    return `${cnpj}_${anoPA}${String(mesPA).padStart(2, '0')}_${codigo}${extensao || ''}_c${cota}`;
 }
 
-// Vencimento da quota i (1..3) de um trimestre: último dia útil do i-ésimo
-// mês após o fim do trimestre (quota 1 = vencimento normal do tributo).
-function vencimentoQuotaTrimestral(anoPA, mesPA, cota) {
-    const trimestre = Math.floor((Number(mesPA) - 1) / 3) + 1;
-    let mes = trimestre * 3 + Number(cota);
-    let ano = Number(anoPA);
-    while (mes > 12) { mes -= 12; ano += 1; }
-    return calcularUltimoDiaUtil(ano, mes);
+/** Guarda as quotas que ainda não podem ser geradas. */
+export async function registrarQuotasAgendadas({ empresaCnpj, anoPA, mesPA, categoria, agendadas = [] }) {
+    if (!agendadas.length) return 0;
+    const db = fa().firestore();
+    const lote = db.batch();
+    for (const a of agendadas) {
+        const id = idQuotaAgendada({ empresaCnpj, anoPA, mesPA, codigo: a.codigo, extensao: a.extensao, cota: a.cota });
+        lote.set(db.collection(COLLECTION_QUOTAS).doc(id), {
+            empresaCnpj: String(empresaCnpj || '').replace(/\D/g, ''),
+            anoPA: Number(anoPA), mesPA: Number(mesPA), categoria: categoria || 'GERAL_MENSAL',
+            codigo: a.codigo, extensao: a.extensao, descricao: a.descricao || null,
+            cota: a.cota, totalCotas: a.totalCotas,
+            valorPrincipal: a.valorPrincipal,
+            vencimento: a.vencimento,
+            // `mesRef` é AAAA-MM do vencimento: é por ele que o painel do mês
+            // pergunta "o que tenho para gerar agora?".
+            mesRef: String(a.vencimento).slice(0, 7),
+            status: 'agendada',
+            atualizadoEm: new Date().toISOString(),
+        }, { merge: true });
+    }
+    await lote.commit();
+    return agendadas.length;
+}
+
+/**
+ * As quotas a gerar até o fim de um mês. ATRASADA ENTRA — quota de mês passado
+ * que ninguém emitiu não pode sumir da lista quando o mês vira; é justamente
+ * ela que está gerando multa.
+ */
+export async function listarQuotasAgendadas({ mesRef, cnpjsPermitidos = null } = {}) {
+    const db = fa().firestore();
+    const ref = String(mesRef || new Date().toISOString().slice(0, 7));
+    const docs = await fetchAllDocs(db.collection(COLLECTION_QUOTAS).where('status', '==', 'agendada'));
+    const permitidos = cnpjsPermitidos ? new Set(cnpjsPermitidos.map((c) => String(c).replace(/\D/g, ''))) : null;
+    const linhas = docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((q) => String(q.mesRef || '') <= ref)
+        .filter((q) => !permitidos || permitidos.has(q.empresaCnpj))
+        .sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
+    const hojeRef = new Date().toISOString().slice(0, 7);
+    return {
+        mesRef: ref,
+        quotas: linhas.map((q) => ({ ...q, atrasada: String(q.mesRef || '') < hojeRef })),
+        total: linhas.length,
+        atrasadas: linhas.filter((q) => String(q.mesRef || '') < hojeRef).length,
+    };
+}
+
+/**
+ * Gera a guia de UMA quota agendada — agora, com o SICALC calculando o
+ * acréscimo do mês corrente. É esta chamada, e não a emissão original, que
+ * produz o valor certo da quota 2/3.
+ */
+export async function emitirQuotaAgendada({ id }) {
+    assertEmissaoLiberada('DCTFWEB');
+    const db = fa().firestore();
+    const snap = await db.collection(COLLECTION_QUOTAS).doc(String(id)).get();
+    if (!snap.exists) throw new Error(`Quota agendada ${id} não encontrada.`);
+    const q = snap.data();
+    if (q.status !== 'agendada') {
+        throw new Error(`Esta quota já está "${q.status}" — emitir de novo geraria uma segunda guia da mesma cota.`);
+    }
+    const competencia = `${q.anoPA}-${String(q.mesPA).padStart(2, '0')}`;
+    const r = await getDarfProvider().gerarDarf({
+        empresaCnpj: q.empresaCnpj,
+        competencia,
+        valor: q.valorPrincipal,
+        codigoReceita: q.codigo,
+        codigoReceitaExtensao: q.extensao,
+        cota: q.cota,
+        vencimento: q.vencimento,
+        observacao: `DCTFWeb ${String(q.mesPA).padStart(2, '0')}/${q.anoPA} quota ${q.cota}/${q.totalCotas}`.slice(0, 50),
+    });
+    await snap.ref.set({
+        status: 'emitida',
+        emitidaEm: new Date().toISOString(),
+        numeroDocumento: r.numeroDocumento || '',
+        valorEmitido: r.valor,
+        juros: r.juros || 0,
+        multa: r.multa || 0,
+    }, { merge: true });
+    return {
+        id: String(id),
+        empresaCnpj: q.empresaCnpj, competencia,
+        codigo: q.codigo, extensao: q.extensao, descricao: q.descricao,
+        cota: q.cota, totalCotas: q.totalCotas,
+        valorPrincipal: q.valorPrincipal,
+        valor: r.valor, juros: r.juros || 0, multa: r.multa || 0,
+        vencimento: r.vencimento || q.vencimento,
+        numeroDocumento: r.numeroDocumento || '',
+        codigoBarras: r.codigoBarras || '',
+        pdfBase64: r.pdfBase64 || '',
+        mensagens: r.mensagens || [],
+    };
 }
 
 export async function gerarDarfsSeparados({
@@ -212,6 +301,9 @@ export async function gerarDarfsSeparados({
     // (ex.: painel "Trimestrais do mês" passa ['2089','0220','2372','6012']
     // para NÃO emitir PIS/COFINS junto). Vazio/ausente = emite todos.
     apenasCodigos = null,
+    // A data é PARÂMETRO — é ela que decide qual quota já pode ser gerada, e
+    // orquestrador que lê o relógio por dentro não se testa.
+    hojeIso = null,
 } = {}) {
     assertEmissaoLiberada('DCTFWEB');
     const provider = getDctfwebProvider();
@@ -238,7 +330,9 @@ export async function gerarDarfsSeparados({
     const darfProvider = getDarfProvider();
     const guias = [];
     const naoEmitidos = [];
-    const nQuotas = Math.min(3, Math.max(1, Number(quotasTrimestrais) || 1));
+    const agendadas = [];
+    const planoResumos = [];
+    const hoje = hojeIso || new Date().toISOString().slice(0, 10);
 
     for (const deb of debitosAlvo) {
         if (!RECEITAS_GUIA_SEPARADA.has(deb.codigo)) {
@@ -250,46 +344,49 @@ export async function gerarDarfsSeparados({
             continue;
         }
 
-        // Quotas só para trimestrais e quando o valor comporta (Lei 9.430:
-        // nenhuma quota < R$ 1.000). Se não comportar, cai pra quota única
-        // com aviso — nunca falha silenciosamente.
-        let quotasDoDebito = 1;
-        let avisoQuota = null;
-        if (nQuotas > 1 && RECEITAS_TRIMESTRAIS_QUOTA.has(deb.codigo)) {
-            if (deb.valor / nQuotas >= QUOTA_VALOR_MINIMO) {
-                quotasDoDebito = nQuotas;
-            } else {
-                avisoQuota = `Valor não comporta ${nQuotas} quotas (mínimo R$ 1.000,00 por quota) — emitido em quota única.`;
-            }
-        }
+        // O PLANO decide o que sai hoje e o que espera o mês dela. A quota 2/3
+        // NÃO é gerada antecipadamente: o acréscimo depende da SELIC acumulada
+        // até o mês anterior ao pagamento, que ainda não foi publicada — a guia
+        // sairia a menor, o cliente pagaria e ficaria com débito residual.
+        const plano = planejarQuotas({
+            valor: deb.valor, anoPA, mesPA, quotas: quotasTrimestrais, hoje,
+            aceitaQuota: RECEITAS_TRIMESTRAIS_QUOTA.has(deb.codigo),
+        });
 
-        const valores = dividirEmQuotas(deb.valor, quotasDoDebito);
-        for (let cota = 1; cota <= quotasDoDebito; cota++) {
-            const emQuotas = quotasDoDebito > 1;
+        for (const linha of plano.linhas) {
+            const emQuotas = plano.quotasEfetivas > 1;
+            if (!linha.emitirAgora) {
+                // Agendada NÃO é guia: ela não tem número, não tem código de
+                // barras e não pode ser mandada ao cliente. Aparece separada
+                // justamente para ninguém confundir com uma guia pronta.
+                agendadas.push({
+                    codigo: deb.codigo, extensao: deb.extensao, descricao: deb.descricao,
+                    cota: linha.cota, totalCotas: linha.totalCotas,
+                    valorPrincipal: linha.valorPrincipal,
+                    vencimento: linha.vencimento,
+                    motivo: linha.motivo,
+                });
+                continue;
+            }
             // observacao: o SICALC limita a 50 caracteres (EntradaIncorreta-
             // SICALC "tamanho deve ser entre 0 e 50" — caso real 08/07/2026).
             const r = await darfProvider.gerarDarf({
                 empresaCnpj,
                 competencia,
-                valor: valores[cota - 1],
+                valor: linha.valorPrincipal,
                 codigoReceita: deb.codigo,
                 codigoReceitaExtensao: deb.extensao,
-                ...(emQuotas ? {
-                    cota,
-                    // quota i vence no último dia útil do i-ésimo mês após o
-                    // trimestre; o SICALC calcula SELIC+1% das quotas 2/3.
-                    vencimento: vencimentoQuotaTrimestral(anoPA, mesPA, cota),
-                } : {}),
+                ...(emQuotas ? { cota: linha.cota, vencimento: linha.vencimento } : {}),
                 observacao: `DCTFWeb ${String(mesPA).padStart(2, '0')}/${anoPA} ${deb.descricao}`.slice(0, 50),
             });
             guias.push({
                 codigo: deb.codigo,
                 extensao: deb.extensao,
                 descricao: deb.descricao,
-                cota: emQuotas ? cota : null,
-                totalCotas: emQuotas ? quotasDoDebito : null,
-                aviso: avisoQuota,
-                valorPrincipal: valores[cota - 1],
+                cota: emQuotas ? linha.cota : null,
+                totalCotas: emQuotas ? plano.quotasEfetivas : null,
+                aviso: plano.aviso,
+                valorPrincipal: linha.valorPrincipal,
                 valor: r.valor,
                 multa: r.multa || 0,
                 juros: r.juros || 0,
@@ -300,6 +397,7 @@ export async function gerarDarfsSeparados({
                 mensagens: r.mensagens || [],
             });
         }
+        if (plano.depois.length) planoResumos.push(resumoDoPlano(plano));
     }
 
     // Agrupa por vencimento — é assim que a UI apresenta (uma seção por data).
@@ -323,7 +421,29 @@ export async function gerarDarfsSeparados({
         };
     });
 
-    return { competencia, categoria, guias, grupos, resumoPorVencimento, naoEmitidos };
+    // A agenda é o que faz a quota VOLTAR no mês dela. Sem ela, "3 quotas"
+    // viraria uma guia hoje e duas que ninguém mais lembra — multa certa.
+    // Falha ao gravar NÃO derruba a emissão que já aconteceu (a guia existe no
+    // SERPRO), mas é DITA na resposta: agenda perdida em silêncio é pior que
+    // não ter agenda, porque a tela diria que está tudo combinado.
+    let agendaGravada = agendadas.length ? 'gravada' : 'nao-ha';
+    if (agendadas.length) {
+        try {
+            await registrarQuotasAgendadas({ empresaCnpj, anoPA, mesPA, categoria, agendadas });
+        } catch (e) {
+            agendaGravada = `falhou: ${e.message}`;
+        }
+    }
+
+    return {
+        competencia, categoria, guias, grupos, resumoPorVencimento, naoEmitidos,
+        agendaGravada,
+        // As quotas que NÃO saem hoje. Elas viajam na resposta para a tela
+        // dizer o que vem depois — silêncio aqui faria "3 quotas" com uma guia
+        // só parecer emissão incompleta (ou pior: emissão completa).
+        agendadas,
+        avisoQuotas: planoResumos.filter(Boolean)[0] || null,
+    };
 }
 
 // Painel "Trimestrais vencendo este mês": lista as declarações TRANSMITIDAS

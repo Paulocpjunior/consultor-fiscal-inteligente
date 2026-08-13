@@ -10,6 +10,7 @@ import {
     sincronizarEmpresa, sincronizarTodasLucro,
     listarDeclaracoes, transmitirDeclaracao, gerarDarf, gerarDarfsSeparados,
     listarTrimestraisVencendoEsteMes, listarDebitosTrimestrais, listarDebitosDeclaracao,
+    listarQuotasAgendadas, emitirQuotaAgendada,
     consultarDeclaracaoCompleta, consultarRecibo,
     encerrarApuracaoMit, consultarStatusEncerramentoMit,
     consultarApuracaoMit, consultarApuracoesAno,
@@ -304,6 +305,43 @@ router.post('/gerar-darfs-separados', requireAuth, express.json(), async (req, r
             empresaCnpj, anoPA, mesPA, categoria, quotasTrimestrais,
             apenasCodigos: Array.isArray(apenasCodigos) ? apenasCodigos : null,
         }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── QUOTAS DO TRIMESTRAL QUE AINDA NÃO PODEM SER GERADAS ───────────────────
+//
+// Paulo, 13/08: *"as cotas devem ser enviadas todos os meses pois sofrem
+// atualização da SELIC"*. A quota 2/3 não é gerada junto com a 1: o acréscimo
+// dela depende da SELIC acumulada até o mês anterior ao pagamento, que ainda
+// não existe — a guia sairia A MENOR. Ela fica agendada e volta aqui, no mês
+// dela, para ser gerada com o número certo.
+//
+// ATRASADA ENTRA na lista (mesRef <= mês pedido): quota que ninguém emitiu não
+// pode sumir quando o mês vira — é justamente ela que está gerando multa.
+router.get('/quotas-agendadas', requireAuth, async (req, res) => {
+    try {
+        const cnpjs = await cnpjsPermitidosParaListagem(req.user);
+        if (cnpjs && cnpjs.size === 0) return res.json({ mesRef: null, quotas: [], total: 0, atrasadas: 0 });
+        res.json(await listarQuotasAgendadas({
+            mesRef: req.query.mesRef,
+            cnpjsPermitidos: cnpjs ? [...cnpjs] : null,
+        }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Gera a guia de UMA quota agendada. Uma a uma, por ação explícita — a regra
+// da casa desde 28/07: imposto não sai em lote, e a SEFAZ/RFB não desfaz
+// emissão.
+router.post('/quotas-agendadas/emitir', requireAuth, express.json(), async (req, res) => {
+    try {
+        const id = String(req.body?.id || '');
+        if (!id) return res.status(400).json({ error: 'Informe o id da quota agendada.' });
+        // O id carrega o CNPJ (idQuotaAgendada) — a checagem de carteira é
+        // feita sobre ele, não sobre o que o cliente mandar no corpo.
+        const cnpj = id.split('_')[0];
+        const carteira = await podeAcessarCnpj(req.user, cnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+        res.json(await emitirQuotaAgendada({ id }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

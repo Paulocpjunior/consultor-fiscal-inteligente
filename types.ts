@@ -1868,6 +1868,40 @@ export interface DctfwebDarfsSeparadosResult {
         codigo: string; extensao: string; descricao: string;
         valor: number; motivo: string;
     }>;
+    /**
+     * Quotas que NÃO saem hoje: o acréscimo delas depende da SELIC acumulada
+     * até o mês anterior ao pagamento, que ainda não foi publicada — emitir
+     * agora sairia a menor. Ficam agendadas e voltam no mês do vencimento.
+     */
+    agendadas?: DctfwebQuotaAgendada[];
+    agendaGravada?: string;
+    avisoQuotas?: string | null;
+}
+
+export interface DctfwebQuotaAgendada {
+    id?: string;
+    empresaCnpj?: string;
+    anoPA?: number;
+    mesPA?: number;
+    codigo: string;
+    extensao: string;
+    descricao?: string | null;
+    cota: number;
+    totalCotas: number;
+    valorPrincipal: number;
+    vencimento: string;
+    /** AAAA-MM do vencimento — é por ele que o painel do mês pergunta. */
+    mesRef?: string;
+    status?: 'agendada' | 'emitida' | 'cancelada';
+    atrasada?: boolean;
+    motivo?: string | null;
+}
+
+export interface DctfwebQuotasAgendadasResult {
+    mesRef: string | null;
+    quotas: DctfwebQuotaAgendada[];
+    total: number;
+    atrasadas: number;
 }
 
 export type DctfwebMitStatus =

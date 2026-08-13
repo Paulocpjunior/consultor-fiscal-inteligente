@@ -207,6 +207,11 @@ const REGUAS_VIGIADAS: Regua[] = [
             'components/Das/index.tsx',
             'components/DCTFWeb/DetalheDeclaracao.tsx',
             'components/DCTFWeb/TrimestraisDoMesPanel.tsx',
+            // Idem no painel das cotas: o arquivo baixado ali é uma quota
+            // ENTRE várias, de empresas diferentes, no mesmo mês — sem o CNPJ
+            // e o número da cota no nome, três guias viram três arquivos
+            // indistinguíveis na pasta.
+            'components/DCTFWeb/QuotasDoMesPanel.tsx',
             // No DARE o download ainda carrega o sufixo `_TESTE` quando o PDF é
             // de HOMOLOGAÇÃO — guia de teste não é pagável, e o nome no disco é
             // a última barreira antes de alguém mandar uma ao cliente.

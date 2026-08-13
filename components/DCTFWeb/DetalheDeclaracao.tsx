@@ -755,10 +755,36 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                             {quotasTrimestrais > 1 && (
                                                 <p className="w-full text-xs text-slate-500 dark:text-slate-400">
                                                     Quotas valem só para IRPJ/CSLL trimestrais acima de R$ 2.000 (mínimo
-                                                    R$ 1.000 por quota — Lei 9.430). Quotas 2 e 3 saem com juros SELIC+1%
-                                                    calculados pelo SICALC. PIS/COFINS não têm quota.
+                                                    R$ 1.000 por quota — Lei 9.430). PIS/COFINS não têm quota.
+                                                    {' '}<strong>Sai só a quota deste mês</strong>: o acréscimo da 2ª e da 3ª
+                                                    é a SELIC acumulada até o mês anterior ao pagamento + 1%, que ainda não
+                                                    foi publicada — emitir hoje sairia a menor. Elas ficam agendadas em
+                                                    <strong> 🧮 Cotas do mês</strong> e são geradas na data delas.
                                                 </p>
                                             )}
+                                        </div>
+                                    )}
+                                    {darfsSeparados?.agendadas && darfsSeparados.agendadas.length > 0 && (
+                                        <div className="border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 rounded p-3">
+                                            <p className="text-xs font-semibold text-sky-900 dark:text-sky-200">
+                                                🧮 {darfsSeparados.agendadas.length} quota(s) ficaram agendadas — não são guias ainda
+                                            </p>
+                                            {darfsSeparados.agendadas.map((a, i) => (
+                                                <p key={i} className="text-[11px] text-sky-900 dark:text-sky-200 mt-1">
+                                                    Quota {a.cota}/{a.totalCotas} · {a.codigo}-{a.extensao} · principal
+                                                    {' '}R$ {Number(a.valorPrincipal || 0).toFixed(2)} · vence {a.vencimento}
+                                                </p>
+                                            ))}
+                                            <p className="text-[11px] text-sky-800 dark:text-sky-300 mt-2">
+                                                Elas aparecem na aba <strong>🧮 Cotas do mês</strong> no mês do vencimento, e é lá
+                                                que a guia nasce com o acréscimo certo. Nada foi enviado ao cliente.
+                                                {darfsSeparados.agendaGravada && darfsSeparados.agendaGravada.startsWith('falhou') && (
+                                                    <span className="block text-red-700 dark:text-red-400 mt-1">
+                                                        ⚠ A agenda NÃO foi gravada ({darfsSeparados.agendaGravada}) — anote o vencimento
+                                                        acima e avise, senão estas quotas não voltam sozinhas.
+                                                    </span>
+                                                )}
+                                            </p>
                                         </div>
                                     )}
                                     {darfsSeparados && Object.entries(darfsSeparados.grupos)
