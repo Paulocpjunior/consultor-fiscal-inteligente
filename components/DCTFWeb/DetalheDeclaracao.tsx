@@ -28,6 +28,7 @@ import {
 import { getAuth } from 'firebase/auth';
 import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 import InsumosDepartamentos from './InsumosDepartamentos';
+import { nomeArquivoGuia } from '../../sefaz-backend/nome-arquivo-guia.js';
 
 interface Props {
     declaracao: DctfwebDeclaracao;
@@ -87,6 +88,13 @@ const PdfPreview: React.FC<{
 
 const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }) => {
     const [tab, setTab] = useState<Tab>('declaracao');
+    // O nome que o CLIENTE vê acima do ícone do PDF (e-mail e WhatsApp). A
+    // régua mora em `sefaz-backend/nome-arquivo-guia.js` — aqui saía
+    // `darf_<CNPJ>_202607.pdf`, nome de máquina com o CNPJ na cara de quem
+    // recebe. O botão "Baixar" segue com o CNPJ de propósito: ali os arquivos
+    // caem na mesma pasta de Downloads, de dezenas de empresas.
+    const nomeGuiaDarf = nomeArquivoGuia({ tipo: 'DARF', competencia: `${declaracao.anoPA}-${String(declaracao.mesPA).padStart(2, '0')}` });
+
     const [pdfDeclaracao, setPdfDeclaracao] = useState<DctfwebPdfResult | null>(null);
     const [pdfRecibo, setPdfRecibo] = useState<DctfwebPdfResult | null>(null);
     const [darfResult, setDarfResult] = useState<DctfwebDarfResult | null>(null);
@@ -673,7 +681,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                 Baixar PDF DARF
                                             </button>
                                             <button
-                                                onClick={() => enviarDarfPeloServidor(darfResult.pdfBase64!, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
+                                                onClick={() => enviarDarfPeloServidor(darfResult.pdfBase64!, nomeGuiaDarf)}
                                                 disabled={enviandoDarf}
                                                 title="O SISTEMA envia o e-mail com o DARF anexado, pela SUA caixa, com o gestor em cópia oculta. A cópia fica nos seus Itens Enviados — é a prova de que saiu."
                                                 className="text-sm px-3 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
@@ -681,7 +689,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                 {enviandoDarf ? '⏳…' : '📤 Enviar pelo sistema'}
                                             </button>
                                             <button
-                                                onClick={() => enviarDarfPorWhatsapp(darfResult.pdfBase64!, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
+                                                onClick={() => enviarDarfPorWhatsapp(darfResult.pdfBase64!, nomeGuiaDarf)}
                                                 disabled={enviandoDarf}
                                                 title="O SISTEMA envia pelo WhatsApp OFICIAL do escritório (template aprovado, PDF anexo) — a Meta devolve o comprovante. Mesmo rito: SharePoint + baixa + gestor avisado."
                                                 className="text-sm px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
@@ -689,7 +697,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                 {enviandoDarf ? '⏳…' : '📱 WhatsApp (sistema)'}
                                             </button>
                                             <button
-                                                onClick={() => enviarDarfAoCliente(darfResult.pdfBase64!, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`)}
+                                                onClick={() => enviarDarfAoCliente(darfResult.pdfBase64!, nomeGuiaDarf)}
                                                 disabled={enviandoDarf}
                                                 title={`Abre a composição no Outlook do NAVEGADOR com o cliente no Para e ${GESTOR_EMAIL} em cópia; arquiva o PDF na pasta IMPOSTOS do cliente no SharePoint e dá baixa na obrigação DCTFWeb do mês.`}
                                                 className="text-sm px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
@@ -697,7 +705,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                 {enviandoDarf ? '⏳…' : '✉ Enviar ao cliente (Outlook Web)'}
                                             </button>
                                             <button
-                                                onClick={() => enviarDarfAoCliente(darfResult.pdfBase64!, `darf_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`, 'app-instalado')}
+                                                onClick={() => enviarDarfAoCliente(darfResult.pdfBase64!, nomeGuiaDarf, 'app-instalado')}
                                                 disabled={enviandoDarf}
                                                 title="Só funciona com um programa de e-mail INSTALADO neste computador. Quem usa o Outlook no navegador deve escolher a outra opção."
                                                 className="text-xs px-3 py-1 rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50"
