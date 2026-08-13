@@ -211,3 +211,61 @@ describe('chave de variável tolerante a grafia', () => {
         expect(r.faltando).toEqual(['Imposto']);
     });
 });
+
+/**
+ * MATA-BURRO: TRAVA QUE NÃO TEM SAÍDA É PIOR QUE O ERRO QUE ELA EVITA.
+ *
+ * Paulo, 13/08: *"cada hora uma surpresa! agora você bloqueou EDITAR template"*.
+ * Ele estava certo — nome e departamento eram `disabled` na edição, porque o id
+ * do doc é `departamento__nome` e mudá-los CRIA outro template em vez de
+ * renomear.
+ *
+ * A intenção era evitar órfão. O efeito foi um beco sem saída: o template
+ * aprovado mudou de nome no mesmo dia e não havia como corrigir o cadastro.
+ *
+ * Destravar sozinho seria pior — dois templates ATIVOS no mesmo departamento
+ * fazem `resolverTemplate` recusar por ambiguidade, e o envio quebraria de um
+ * jeito novo. Por isso o backend desativa o anterior E DIZ que fez isso.
+ */
+describe('renomear template não deixa rastro ativo', () => {
+    const tela = readFileSync(join(__dirname, '..', 'components/ConfigAdminModal.tsx'), 'utf8');
+    const rota = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+
+    test('os campos não ficam mais travados na edição', () => {
+        expect(tela).not.toMatch(/disabled=\{editando\}/);
+    });
+
+    test('a tela manda o id de origem — sem ele o backend não sabe o que desativar', () => {
+        expect(tela).toMatch(/setIdAnterior\(t\.id/);
+        expect(tela).toMatch(/idAnterior \? \{ idAnterior \}/);
+        // E limpar o formulário zera, senão o próximo cadastro desativaria um
+        // template que não tem nada a ver.
+        expect(tela).toMatch(/setEditando\(false\); setIdAnterior\(null\)/);
+    });
+
+    test('o backend desativa o anterior quando o id muda', () => {
+        expect(rota).toMatch(/anterior !== v\.template\.id/);
+        expect(rota).toMatch(/ativo: false/);
+        expect(rota).toMatch(/desativadoMotivo/);
+    });
+
+    test('falhar ao desativar RECUSA — cadastro ambíguo só quebra no envio', () => {
+        expect(rota).toMatch(/não foi possível desativar o anterior/);
+        expect(rota).toMatch(/recusar por ambiguidade/);
+    });
+
+    test('a resposta conta o que aconteceu, e a tela mostra', () => {
+        expect(rota).toMatch(/substituiu/);
+        expect(tela).toMatch(/foi DESATIVADO/);
+    });
+
+    /** A ambiguidade que tudo isso evita — é ela que quebraria o envio. */
+    test('dois ativos no mesmo departamento recusam nomeando as opções', () => {
+        const r = resolverTemplate([
+            { departamento: 'fiscal', nome: 'antigo', ativo: true },
+            { departamento: 'fiscal', nome: 'novo', ativo: true },
+        ] as any, { departamento: 'fiscal' });
+        expect(r.ok).toBe(false);
+        expect(r.opcoes.sort()).toEqual(['antigo', 'novo']);
+    });
+});
