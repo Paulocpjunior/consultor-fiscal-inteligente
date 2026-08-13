@@ -12,6 +12,7 @@ import { assertValorMinimoDas } from './das-valor-utils.js';
 import { criarErroDuplicidadeDas, encontrarConflitoDasAvulso } from './das-duplicidade-utils.js';
 import { lerCodigoAtividadeSup } from './pgdas-atividade-config.js';
 import { avaliarSemMovimento, montarDeclaracaoSemMovimento, interpretarRecusaSemMovimento, avaliarDeclaracaoJaEntregue } from './pgdas-sem-movimento.js';
+import { candidatosSemMovimento, assertSondaNaoTransmite, lerResultadoCandidato, vereditoDaSonda } from './pgdas-sonda-sem-movimento.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -367,6 +368,84 @@ export async function marcarPago(docId, dataPagamento) {
 // AQUI NÃO SE GERA DAS de propósito: não há o que pagar, e emitir guia de
 // valor zero criaria cobrança que não existe.
 // ────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+// SONDA DO "SEM MOVIMENTO" — perguntar ao SERPRO qual forma ele aceita, SEM
+// entregar nada.
+//
+// A regra da casa continua de pé: payload de entrega não se adivinha, porque
+// entrega ao PGDAS-D não se desfaz. O que esta rota usa é o modo
+// `indicadorTransmissao: false` do TRANSDECLARACAO11 — ele VALIDA e não
+// entrega. É dele que vem a MSG_ISN_023 que a ELS COMERCIO DE BANANAS recebe,
+// e é por isso que a mensagem sempre pôde dizer "nada foi transmitido".
+//
+// Ou seja: existe um oráculo que responde "esta forma serve?" sem custo fiscal.
+// Perguntar a ele é PROVA, não dedução — mesma técnica das sondas do R-2055 em
+// produção restrita.
+//
+// TRAVA: cada candidato passa por `assertSondaNaoTransmite` antes de sair. Uma
+// sonda que entregasse por engano seria pior que o bloqueio que ela resolve.
+// ────────────────────────────────────────────────────────────────────────────
+export async function sondarFormaSemMovimento(req) {
+    const { empresaCnpj, competencia, filiais = [] } = req || {};
+    if (!empresaCnpj || !competencia) {
+        const err = new Error('Campos obrigatórios: empresaCnpj, competencia');
+        err.httpStatus = 400;
+        throw err;
+    }
+
+    const provider = getDasProvider();
+    if (typeof provider.validarDeclaracaoPgdas !== 'function') {
+        const err = new Error('A sonda precisa do provider SERPRO (modo real). No modo mock não há a quem '
+            + 'perguntar — e inventar a resposta seria o oposto do que ela existe pra fazer.');
+        err.httpStatus = 409;
+        err.code = 'SONDA_SEM_PROVIDER';
+        throw err;
+    }
+
+    const cnpjLimpo = String(empresaCnpj).replace(/\D/g, '');
+    const pa = Number(String(competencia).replace(/\D/g, '').slice(0, 6));
+    const candidatos = candidatosSemMovimento({ cnpj: cnpjLimpo, filiais });
+
+    const resultados = [];
+    for (const c of candidatos) {
+        try {
+            // A trava roda sobre o MESMO objeto que vai ao SERPRO — conferir
+            // uma cópia provaria só que a cópia estava certa.
+            const resposta = await provider.validarDeclaracaoPgdas({
+                cnpjLimpo, pa, declaracao: c.declaracao,
+                antesDeEnviar: assertSondaNaoTransmite,
+            });
+            resultados.push(lerResultadoCandidato({ nome: c.nome, hipotese: c.hipotese, resposta }));
+        } catch (e) {
+            if (e?.code === 'SONDA_NAO_TRANSMITE') throw e;   // trava violada: PARA tudo
+            resultados.push(lerResultadoCandidato({ nome: c.nome, hipotese: c.hipotese, erro: e }));
+        }
+    }
+
+    const veredito = vereditoDaSonda(resultados);
+
+    // Auditoria: a sonda gasta chamada paga do SERPRO e produz CONHECIMENTO —
+    // o resultado precisa sobreviver à sessão que a rodou.
+    try {
+        await fa().firestore().collection('pgdas_sonda_sem_movimento').add({
+            empresaCnpj: cnpjLimpo, competencia, rodadoEm: Date.now(),
+            rodadoPor: req?.rodadoPor || null,
+            resultados, veredito,
+        });
+    } catch (e) {
+        console.warn('[das/sonda] auditoria não gravada:', e?.message);
+    }
+
+    return {
+        ok: true,
+        competencia,
+        // Sempre verdade, em qualquer desfecho: nenhum candidato transmite.
+        nadaFoiTransmitido: true,
+        candidatos: resultados,
+        veredito,
+    };
+}
+
 export async function declararPgdasSemMovimento(req) {
     assertEmissaoLiberada('DAS');
     const {

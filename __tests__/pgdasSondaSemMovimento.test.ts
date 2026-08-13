@@ -123,3 +123,72 @@ describe('o veredito não elege vencedor por eliminação', () => {
         expect(v.resumo).toMatch(/NÃO recusa forma nenhuma/);
     });
 });
+
+/**
+ * A SONDA LIGADA — o cabeamento, não só o núcleo.
+ *
+ * Núcleo testado que ninguém chama não protege nada: era exatamente esta a
+ * situação até 13/08 (o módulo existia, sem rota e sem botão).
+ */
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+const raiz = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8');
+
+describe('a sonda está ligada de ponta a ponta', () => {
+    const orquestrador = raiz('sefaz-backend/das-orchestrator.js');
+    const rotas = raiz('sefaz-backend/das-routes.js');
+    const provider = raiz('sefaz-backend/das-provider.js');
+    const service = raiz('services/dasService.ts');
+    const tela = raiz('components/SimplesNacionalDetalhe.tsx');
+
+    it('o orquestrador usa os quatro pedaços do núcleo', () => {
+        for (const fn of ['candidatosSemMovimento', 'assertSondaNaoTransmite', 'lerResultadoCandidato', 'vereditoDaSonda']) {
+            expect(orquestrador).toContain(fn);
+        }
+    });
+
+    it('A TRAVA vai junto do envio — não sobre uma cópia', () => {
+        // O guard é passado ao provider e roda sobre o MESMO objeto que sai
+        // para o SERPRO. Conferir uma cópia provaria só que a cópia estava boa.
+        expect(orquestrador).toMatch(/antesDeEnviar:\s*assertSondaNaoTransmite/);
+        expect(provider).toMatch(/if \(typeof antesDeEnviar === 'function'\) antesDeEnviar\(dadosValidacao\)/);
+        // E o modo é sempre VALIDAÇÃO.
+        expect(provider).toMatch(/transmitir:\s*false/);
+    });
+
+    it('a trava violada PARA a sonda inteira — não vira "candidato recusado"', () => {
+        // Se `SONDA_NAO_TRANSMITE` fosse tratado como resposta do SERPRO, uma
+        // sonda que passasse a transmitir seguiria rodando os candidatos.
+        expect(orquestrador).toMatch(/if \(e\?\.code === 'SONDA_NAO_TRANSMITE'\) throw e/);
+    });
+
+    it('a rota é admin-only e existe', () => {
+        expect(rotas).toMatch(/router\.post\('\/sondar-sem-movimento', requireAdmin/);
+        expect(rotas).toContain('sondarFormaSemMovimento');
+    });
+
+    it('modo mock RECUSA — não há a quem perguntar, e inventar seria o oposto', () => {
+        expect(orquestrador).toMatch(/SONDA_SEM_PROVIDER/);
+        expect(orquestrador).toMatch(/inventar a resposta seria o oposto/);
+    });
+
+    it('a resposta afirma, em qualquer desfecho, que nada foi transmitido', () => {
+        expect(orquestrador).toMatch(/nadaFoiTransmitido:\s*true/);
+    });
+
+    it('o botão existe, é admin-only e avisa que não transmite', () => {
+        expect(service).toContain('export async function sondarFormaSemMovimento');
+        expect(tela).toContain('handleSondarSemMovimento');
+        expect(tela).toMatch(/currentUser\?\.role === 'admin' && \(\s*<button\s*\n\s*onClick=\{handleSondarSemMovimento\}/);
+        expect(tela).toMatch(/Sondar forma \(não transmite\)/);
+        expect(tela).toMatch(/NADA é transmitido/);
+    });
+
+    it('a auditoria guarda o resultado — a sonda produz CONHECIMENTO', () => {
+        expect(orquestrador).toContain('pgdas_sonda_sem_movimento');
+        // Falha de auditoria não derruba a sonda: perder o registro é ruim,
+        // perder a resposta do SERPRO que já foi paga é pior.
+        expect(orquestrador).toMatch(/auditoria não gravada/);
+    });
+});
