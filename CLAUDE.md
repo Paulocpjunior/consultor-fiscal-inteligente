@@ -843,6 +843,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `reinf-recibo-entrega.js` e entrou na `REGUAS_VIGIADAS`: o gateway fala
   `evtAqProd`, a pessoa e o e-CAC falam `R-2055`, e nomear errado num papel que
   serve de PROVA é pior que não nomear.
+  ✅ **RITO PROVADO NA TELA no mesmo dia — VINCENZO 07/2026** (Paulo: *"VINCENZO
+  FOI !!!!!"*). Primeira competência fechada pelo painel: R-2055 transmitido,
+  R-2099 fechado, totalizador conferido, recibo arquivado, extrato enviado.
+  A trava que ficou é a **COMPOSIÇÃO**, não os núcleos: `conferirTotalizadorR2099`
+  alimentando `montarExtratoEntregas` é o que roda em produção, e era só ela que
+  ninguém testava — cada módulo passava fazendo exatamente o que o próprio teste
+  mandava (a família do IPI no E200 e do Bloco H zerado). O que decide se alguém
+  pode PARAR DE OLHAR a competência é o FAROL, e o farol nasce da junção. O teste
+  ponta a ponta usa os números do RECIBO (base 18.900,00 ⇒ 249,48 · 20,79 ·
+  37,80 = 308,07) e cobre **as três formas de não ser verde**: totalizador
+  batendo NÃO salva evento sem recibo; sem totalizador é âmbar, nunca verde; um
+  CENTAVO a menos derruba e DIZ em qual código. No caminho, o resumo da
+  conferência passou a formatar dinheiro em pt-BR — ele vai por e-mail ao gestor,
+  e "R$ 308.07" obriga quem lê a decidir se o ponto é decimal ou milhar.
   📌 **O `indAquis` do caso comum JÁ ESTÁ PROVADO: é `1`** — é o valor do
   `evtAqProd` ACEITO em produção (EDUARDO GUERRA × DAMIÃO, banana, 06/2026), e o
   teste do gerador o trava. Compra de produção rural de produtor PF por

@@ -12,6 +12,7 @@ import {
     situacaoDaEntrega, montarExtratoEntregas, montarEmailFechamento,
     nomeArquivoExtrato, competenciaHumana, codigoDoEvento, CODIGO_DO_EVENTO,
 } from '../sefaz-backend/reinf-recibo-entrega.js';
+import { conferirTotalizadorR2099 } from '../sefaz-backend/reinf-aquisicao-rural.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -322,5 +323,106 @@ describe('a tela do fechamento existe e não tem régua própria', () => {
         // Ausente ≠ zero: linha sem número tem que acusar "a Receita não
         // totalizou este código", não "bateu em zero".
         expect(painel).toMatch(/String\(t\.valor\)\.trim\(\) !== ''/);
+    });
+});
+
+// ============================================================================
+// O CASO REAL — VINCENZO GUERRA 07/2026, fechado pelo Paulo em 13/08.
+//
+// *"VINCENZO FOI !!!!!"* — o rito rodou na tela pela primeira vez: R-2055
+// transmitido, R-2099 fechado, totalizador conferido contra a apuração da aba
+// 🌾, recibo arquivado e extrato enviado.
+//
+// ═══ POR QUE ESTE TESTE, SE OS DOIS NÚCLEOS JÁ TÊM OS SEUS ═════════════════
+//
+// Porque o que roda em produção é a COMPOSIÇÃO — `conferirTotalizadorR2099`
+// alimentando `montarExtratoEntregas` —, e era só ela que ninguém testava: cada
+// módulo passava fazendo exatamente o que o próprio teste mandava (a família de
+// defeito do IPI no E200 e do Bloco H zerado). O que decide se alguém pode
+// parar de olhar a competência é o FAROL, e o farol nasce da junção.
+//
+// Os números vêm do RECIBO, não de dedução: base 18.900,00 (LC 224/2025) ⇒
+// INSS 1,32% = 249,48 · GILRAT 0,11% = 20,79 · SENAR 0,20% = 37,80 = 308,07,
+// casando com 1656-01 / 1646-03 / 1213-06 do totalizador da Receita. As três
+// alíquotas diferem entre si, então o casamento é ÚNICO.
+// ============================================================================
+describe('ponta a ponta: o caso que fechou (VINCENZO 07/2026)', () => {
+    const APURADO = { base: 18900, inss: 249.48, gilrat: 20.79, senar: 37.80, total: 308.07 };
+    const TOTALIZADOR = [
+        { codigoReceita: '1656-01', valor: 249.48 },
+        { codigoReceita: '1646-03', valor: 20.79 },
+        { codigoReceita: '1213-06', valor: 37.80 },
+    ];
+    const R2055 = {
+        evento: 'R-2055', tipo: 'ID1630279400001942026070811123300001',
+        protocolo: '2.202608.33245995', recibo: '11774083-10-2055-2607-11774082',
+    };
+    const montar = (over: any = {}) => montarExtratoEntregas({
+        competencia: '2026-07',
+        empresa: EMPRESA,
+        entregas: over.entregas || [R2055],
+        conferencia: conferirTotalizadorR2099({
+            apurado: APURADO,
+            totalizador: 'totalizador' in over ? over.totalizador : TOTALIZADOR,
+        }),
+        fechamento: { recibo: '11774083-10-2099-2607-11774083', processadoEm: '2026-08-13' },
+    });
+
+    it('com tudo no lugar, o farol fecha VERDE', () => {
+        const e = montar();
+        expect(e.farol.cor).toBe('ok');
+        expect(e.resumo).toMatchObject({ total: 1, entregues: 1, recusados: 0, semRecibo: 0 });
+        expect(e.conferencia?.situacao).toBe('confere');
+        expect(e.conferencia?.resumo).toContain('R$ 308,07');
+    });
+
+    it('e o de-para casa componente a componente com o recibo', () => {
+        const linhas = montar().conferencia!.linhas;
+        const por = Object.fromEntries(linhas.map((l: any) => [l.componente, l]));
+        expect(por.inss).toMatchObject({ codigoReceita: '1656-01', apurado: 249.48, confere: true });
+        expect(por.gilrat).toMatchObject({ codigoReceita: '1646-03', apurado: 20.79, confere: true });
+        expect(por.senar).toMatchObject({ codigoReceita: '1213-06', apurado: 37.80, confere: true });
+    });
+
+    // ── AS TRÊS FORMAS DE NÃO SER VERDE ────────────────────────────────────
+    // Verde é o estado que faz a pessoa PARAR DE OLHAR. Cada uma destas já
+    // aconteceu de verdade em algum trilho deste projeto.
+
+    it('totalizador batendo NÃO salva evento sem recibo (transmitido ≠ entregue)', () => {
+        const e = montar({ entregas: [{ ...R2055, recibo: null }] });
+        expect(e.farol.cor).toBe('falha');
+        expect(e.resumo.semRecibo).toBe(1);
+    });
+
+    it('sem totalizador NÃO é verde, é âmbar — "MS7001" não é conferência', () => {
+        const e = montar({ totalizador: [] });
+        expect(e.farol.cor).toBe('atencao');
+        expect(e.conferencia?.situacao).toBe('nao-conferido');
+    });
+
+    it('um centavo a menos derruba o verde E diz onde (a guia é paga pelo totalizador)', () => {
+        const e = montar({ totalizador: [
+            { codigoReceita: '1656-01', valor: 249.47 },
+            { codigoReceita: '1646-03', valor: 20.79 },
+            { codigoReceita: '1213-06', valor: 37.80 },
+        ] });
+        expect(e.farol.cor).toBe('falha');
+        expect(e.conferencia?.resumo).toContain('1656-01');
+        expect(e.conferencia?.linhas.find((l: any) => l.componente === 'inss')?.diferenca).toBeCloseTo(-0.01, 2);
+    });
+
+    it('evento RECUSADO vence tudo — protocolo não apaga ocorrência', () => {
+        const e = montar({ entregas: [{ ...R2055, ocorrencias: [{ codigo: 'MS0030', descricao: 'ideProdutor' }] }] });
+        expect(e.farol.cor).toBe('falha');
+        expect(e.resumo.recusados).toBe(1);
+    });
+
+    it('o e-mail do fechamento leva o farol no assunto e o recibo do R-2099', () => {
+        const { assunto, corpo } = montarEmailFechamento(montar());
+        expect(assunto).toContain('✅');
+        expect(assunto).toContain('07/2026');
+        expect(corpo).toContain('11774083-10-2099-2607-11774083');
+        // O conteúdo do evento é declaração do cliente — nunca viaja por e-mail.
+        expect(corpo).toContain('conteúdo dos eventos não é enviado');
     });
 });
