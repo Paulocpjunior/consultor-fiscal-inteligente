@@ -40,6 +40,45 @@ import { montarPayloadR2055 } from './reinf-aquisicao-rural.js';
 import { montarPayloadR2010 } from './reinf-servicos-tomados.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
+import { conferirTotalizadorR2099 } from './reinf-aquisicao-rural.js';
+import { montarExtratoEntregas, montarEmailFechamento } from './reinf-recibo-entrega.js';
+import { enviarEmail } from './graph-provider.js';
+import { escolherRemetente } from './graph-remetente.js';
+import { GESTOR_EMAIL } from './envio-imposto.js';
+import express from 'express';
+
+const PROXY_URL = process.env.SHAREPOINT_PROXY_URL
+    || 'https://consultor-fiscal-proxy-631239634290.us-west1.run.app';
+const PROXY_TOKEN = process.env.SHAREPOINT_PROXY_TOKEN || process.env.PROXY_SHARED_TOKEN || '';
+
+/**
+ * Pasta dos recibos da REINF — irmã de IMPOSTOS na MESMA árvore do sync.
+ *
+ * IMPOSTOS guarda a GUIA (o que o cliente paga); RECIBOS guarda a PROVA DE
+ * ENTREGA da obrigação acessória. São artefatos diferentes, com públicos
+ * diferentes — misturar faz alguém mandar recibo de entrega no lugar da guia.
+ */
+export function pastaRecibosReinf(grupo, empresaPasta, competencia) {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(competencia || ''));
+    if (!grupo || !empresaPasta || !m) return null;
+    return `Empresas/${grupo}/DEPARTAMENTO FISCAL/${m[1]}/${m[2]}-${m[1]}/${empresaPasta}/RECIBOS`;
+}
+
+async function uploadRecibo(folderPath, filename, contentBase64, mimeType) {
+    const resp = await fetch(`${PROXY_URL}/api/sharepoint/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(PROXY_TOKEN ? { Authorization: `Bearer ${PROXY_TOKEN}` } : {}) },
+        body: JSON.stringify({ folderPath, filename, contentBase64: String(contentBase64).replace(/^data:[^;]+;base64,/, ''), mimeType }),
+    });
+    if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Proxy upload ${resp.status}`);
+    }
+    return resp.json();
+}
+
+const escapeHtml = (s) => String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const router = Router();
 
@@ -277,6 +316,148 @@ router.get('/aquisicao-rural', autorizar, async (req, res) => {
         });
     } catch (e) {
         console.error('[reinf-aquisicao-rural]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ============================================================================
+// POST /api/admin/reinf/fechamento-competencia
+//
+// O RITO DO FECHAMENTO DA EFD-REINF — o que acontece depois do R-2099.
+//
+// Paulo, 13/08, com o recibo do R-2099 da VINCENZO na mão: *"vc pode mandar por
+// email somente o que foi enviado e seu status, salvar pode salvar no
+// sharepoint"*. Dispara no FECHAMENTO (é quando o mês fecha de verdade), sai da
+// caixa de quem transmitiu com o gestor em cópia — mesmo rito das guias (#293).
+//
+// ═══ A CONFERÊNCIA NÃO É OPCIONAL, E O NÚMERO NÃO VEM DE FORA ═══════════════
+//
+// O totalizador chega do e-CAC (ou do gateway), mas o APURADO é lido AQUI, da
+// mesma `montarDipamCompetencia` que a aba 🌾 usa. Aceitar o apurado por
+// parâmetro abriria a porta pro pior defeito de um arquivo fiscal: dois números
+// pro mesmo fato, e quem confere escolhendo qual mandar.
+//
+// ═══ ORDEM DELIBERADA: ARQUIVA, DEPOIS AVISA ════════════════════════════════
+//
+// O SharePoint é a prova que fica; o e-mail é o aviso. Avisar antes de arquivar
+// produziria "extrato enviado" com o arquivo em lugar nenhum — e é justamente o
+// e-mail que faz a pessoa parar de procurar.
+//
+// Falha no e-mail NÃO derruba o arquivamento (nem o contrário): cada etapa
+// devolve seu próprio status, como no rito das guias.
+// ============================================================================
+router.post('/fechamento-competencia', requireAdmin, express.json({ limit: '12mb' }), async (req, res) => {
+    try {
+        const cnpj = soDigitos(req.body?.cnpj);
+        const competencia = String(req.body?.competencia || '').trim();
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ do declarante (14 dígitos).' });
+        }
+        if (!COMPETENCIA.test(competencia)) {
+            return res.status(400).json({ ok: false, error: 'Informe a competência no formato AAAA-MM.' });
+        }
+
+        const db = getDb();
+        const empresa = await acharEmpresa(db, cnpj);
+        if (!empresa) {
+            return res.status(404).json({ ok: false, error: `O CNPJ ${cnpj} não está cadastrado no CFI.` });
+        }
+
+        // O APURADO sai da régua da casa, nunca do corpo da requisição.
+        const documentos = await carregarDocumentos(db, { empresaId: empresa.empresaId, cnpj, competencia });
+        const fornecedores = await carregarProdutoresRurais(documentosDaContraparte(documentos));
+        const painel = montarDipamCompetencia({
+            documentos, competencia, empresa: lerCondicaoRural(empresa._doc), fornecedores,
+        });
+        const conferencia = conferirTotalizadorR2099({
+            apurado: painel.funrural,
+            totalizador: Array.isArray(req.body?.totalizador) ? req.body.totalizador : [],
+        });
+
+        const extrato = montarExtratoEntregas({
+            competencia,
+            empresa: { nome: empresa.nome, cnpj },
+            entregas: Array.isArray(req.body?.entregas) ? req.body.entregas : [],
+            fechamento: req.body?.fechamento || null,
+            conferencia,
+        });
+
+        const resultado = { sharePoint: { status: 'sem-arquivo' }, email: { status: 'nao-enviado' } };
+
+        // 1. ARQUIVA. Os arquivos vêm de quem fechou (XML do recibo/totalizador
+        //    e o relatório em PDF, que o próprio e-CAC oferece para baixar).
+        const arquivos = (Array.isArray(req.body?.arquivos) ? req.body.arquivos : [])
+            .filter((a) => a && a.nome && a.base64);
+        if (arquivos.length) {
+            const cfg = empresa._doc?.sharePointConfig;
+            const pasta = cfg ? pastaRecibosReinf(cfg.grupo, cfg.empresaPasta, competencia) : null;
+            if (!pasta) {
+                resultado.sharePoint = {
+                    status: 'sem-config',
+                    motivo: 'Empresa sem sharePointConfig (grupo + pasta) — preencha na Central de XMLs → '
+                        + 'Integrações → SharePoint. O extrato foi montado, mas não há onde arquivar.',
+                };
+            } else {
+                const arquivados = [];
+                for (const a of arquivos) {
+                    try {
+                        await uploadRecibo(pasta, String(a.nome), String(a.base64), a.mime || 'application/octet-stream');
+                        arquivados.push(a.nome);
+                    } catch (e) {
+                        resultado.sharePoint = { status: 'erro', motivo: e.message, pasta, arquivados };
+                    }
+                }
+                if (resultado.sharePoint.status !== 'erro') {
+                    resultado.sharePoint = { status: 'arquivado', pasta, arquivados };
+                }
+            }
+        }
+
+        // 2. AVISA. Remetente = caixa de quem clicou; gestor em CÓPIA OCULTA
+        //    (o cliente não entra nesta mensagem — é comunicação interna).
+        const { assunto, corpo } = montarEmailFechamento(extrato);
+        const escolha = escolherRemetente({
+            emailColaborador: req.user?.email,
+            padrao: process.env.GRAPH_REMETENTE,
+            dominios: (process.env.GRAPH_DOMINIOS_REMETENTE || '').split(',').map((d) => d.trim()).filter(Boolean),
+        });
+        try {
+            await enviarEmail({
+                remetente: escolha.remetente,
+                para: [escolha.remetente],
+                bcc: [GESTOR_EMAIL],
+                assunto,
+                corpoHtml: `<pre style="font-family:inherit;white-space:pre-wrap">${escapeHtml(corpo)}</pre>`,
+            });
+            resultado.email = { status: 'enviado', remetente: escolha.remetente, fonteRemetente: escolha.fonte, gestorEmCopia: GESTOR_EMAIL };
+        } catch (e) {
+            // O extrato continua valendo: ele está na resposta e (se houve
+            // arquivo) no SharePoint. Falha de e-mail não apaga a entrega.
+            resultado.email = { status: 'erro', motivo: e.message };
+        }
+
+        // 3. AUDITA — sem o conteúdo dos eventos, como no gateway.
+        try {
+            await db.collection('reinf_fechamentos').add({
+                em: admin.firestore.FieldValue.serverTimestamp(),
+                por: req.user?.email || null,
+                cnpj, competencia,
+                empresaId: empresa.empresaId,
+                farol: extrato.farol.cor,
+                resumo: extrato.resumo,
+                reciboFechamento: extrato.fechamento?.recibo || null,
+                recibos: extrato.linhas.map((l) => ({ evento: l.evento, recibo: l.recibo, situacao: l.situacao })),
+                conferencia: conferencia.situacao,
+                sharePoint: resultado.sharePoint.status,
+                email: resultado.email.status,
+            });
+        } catch (e) {
+            console.warn('[reinf/fechamento] auditoria não gravada:', e.message);
+        }
+
+        return res.json({ ok: true, extrato, ...resultado });
+    } catch (e) {
+        console.error('[reinf/fechamento-competencia]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
