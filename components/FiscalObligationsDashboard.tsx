@@ -510,8 +510,8 @@ const FiscalObligationsDashboard: React.FC = () => {
 
       {/* Modal Alerta */}
       {showAlertaModal && obrigacaoSelecionada && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6 my-auto">
             <h3 className="font-black text-slate-800 dark:text-white text-lg mb-1">🔔 Configurar Alerta</h3>
             <p className="text-sm text-slate-500 mb-5">
               Alerta para: <span className="font-bold text-sky-600">{obrigacaoSelecionada.sigla}</span>

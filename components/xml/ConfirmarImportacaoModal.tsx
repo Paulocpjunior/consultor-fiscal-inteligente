@@ -32,8 +32,8 @@ const ConfirmarImportacaoModal: React.FC<Props> = ({
     const alerta = validacao.bloquear || validacao.incompativeis > 0;
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onCancelar}>
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[80] overflow-y-auto" onClick={onCancelar}>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg my-auto" onClick={(e) => e.stopPropagation()}>
                 <div className={`p-4 rounded-t-xl border-b ${alerta
                     ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700'
                     : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'}`}>

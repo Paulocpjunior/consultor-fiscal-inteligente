@@ -174,12 +174,12 @@ const SefazSyncButton: React.FC<Props> = ({ empresa, currentUser, onSyncComplete
 
             {showSettings && createPortal(
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                    className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-y-auto"
                     onClick={() => !savingToggle && setShowSettings(false)}
                 >
                     <div
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-xl"
+                        className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-xl my-auto"
                     >
                         <h3 className="text-base font-semibold text-white mb-1">Captura automática SEFAZ</h3>
                         <p className="text-xs text-slate-400 mb-4">

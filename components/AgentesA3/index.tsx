@@ -303,8 +303,8 @@ const AgentesA3: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
             {/* Modal: nova key */}
             {novaModalAberta && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white dark:bg-gray-900 rounded-xl p-6 max-w-md w-full">
+                <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 overflow-y-auto">
+                    <div className="bg-white dark:bg-gray-900 rounded-xl p-6 max-w-md w-full my-auto">
                         <h3 className="text-lg font-semibold mb-4">Nova API key</h3>
                         <div className="mb-3">
                             <label className="block text-sm font-medium mb-1">Colaborador</label>
@@ -352,8 +352,8 @@ const AgentesA3: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
             {/* Modal: key crua (UMA VEZ) */}
             {keyCrua && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-                    <div className="bg-white dark:bg-gray-900 rounded-xl p-6 max-w-2xl w-full">
+                <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-y-auto">
+                    <div className="bg-white dark:bg-gray-900 rounded-xl p-6 max-w-2xl w-full my-auto">
                         <h3 className="text-lg font-semibold mb-2 text-amber-700">
                             Key gerada para {keyCrua.ownerEmail}
                         </h3>

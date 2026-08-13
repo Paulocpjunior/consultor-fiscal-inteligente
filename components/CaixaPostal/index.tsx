@@ -282,11 +282,11 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
             {/* Modal de detalhe */}
             {selecionada && (
                 <div
-                    className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70]"
+                    className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[70] overflow-y-auto"
                     onClick={() => setSelecionada(null)}
                 >
                     <div
-                        className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
+                        className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col my-auto"
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="p-6 border-b border-slate-200 dark:border-slate-700">

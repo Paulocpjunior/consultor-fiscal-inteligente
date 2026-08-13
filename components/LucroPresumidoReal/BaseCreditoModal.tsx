@@ -65,7 +65,7 @@ export const BaseCreditoModal: React.FC<Props> = ({ empresaId, empresaNome, comp
 
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 overflow-y-auto">
-            <div className="w-full max-w-3xl rounded-xl bg-white dark:bg-slate-800 shadow-xl my-8">
+            <div className="w-full max-w-3xl rounded-xl bg-white dark:bg-slate-800 shadow-xl my-8 my-auto">
                 <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-700 p-5">
                     <div>
                         <h3 className="font-bold text-slate-800 dark:text-slate-100">

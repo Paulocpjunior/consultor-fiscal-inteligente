@@ -191,11 +191,11 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
 
     return (
         <div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70] animate-fade-in"
+            className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[70] animate-fade-in overflow-y-auto"
             onClick={onClose}
         >
             <div
-                className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col"
+                className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col my-auto"
                 onClick={e => e.stopPropagation()}
             >
                 {/* Header */}

@@ -118,11 +118,11 @@ const DarfModal: React.FC<Props> = ({ currentUser, empresas, onClose, onEmitido,
 
     return (
         <div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70]"
+            className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[70] overflow-y-auto"
             onClick={onClose}
         >
             <div
-                className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto my-auto"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="p-6 border-b border-slate-200 dark:border-slate-700">

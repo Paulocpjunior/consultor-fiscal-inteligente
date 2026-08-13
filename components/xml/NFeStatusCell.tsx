@@ -89,12 +89,12 @@ const NFeStatusCell: React.FC<Props> = ({ doc }) => {
 
             {openModal && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                    className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-y-auto"
                     onClick={(e) => { e.stopPropagation(); setOpenModal(false); }}
                 >
                     <div
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl max-h-[80vh] overflow-hidden flex flex-col"
+                        className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl max-h-[80vh] overflow-hidden flex flex-col my-auto"
                     >
                         <div className="flex items-start justify-between mb-1">
                             <h3 className="text-base font-semibold text-white">Eventos da NF-e</h3>

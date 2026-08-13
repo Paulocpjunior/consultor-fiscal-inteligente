@@ -383,8 +383,8 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onClose}>
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[80] overflow-y-auto" onClick={onClose}>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg p-5 space-y-4 my-auto" onClick={e => e.stopPropagation()}>
                 <div className="flex items-start justify-between">
                     <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">🧾 DARE-SP (ICMS) — preview e emissão</h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>

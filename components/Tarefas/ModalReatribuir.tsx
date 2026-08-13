@@ -15,8 +15,8 @@ interface Props {
 }
 
 const ModalReatribuir: React.FC<Props> = ({ tarefa, colaboradores, onFechar, onAtribuir }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onFechar}>
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-y-auto" onClick={onFechar}>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full my-auto" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h3 className="font-semibold text-gray-800 dark:text-gray-100">Reatribuir tarefa</h3>
                 <button onClick={onFechar} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>

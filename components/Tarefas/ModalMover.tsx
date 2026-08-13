@@ -16,8 +16,8 @@ interface Props {
 }
 
 const ModalMover: React.FC<Props> = ({ tarefa, onFechar, onMover }) => (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]" onClick={onFechar}>
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[80] overflow-y-auto" onClick={onFechar}>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full p-5 my-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-base font-bold text-gray-800 dark:text-gray-100 mb-1">Mover tarefa</h3>
             <div className="text-xs text-gray-500 dark:text-gray-400 mb-3 truncate" title={tarefa.titulo}>
                 {tarefa.titulo}

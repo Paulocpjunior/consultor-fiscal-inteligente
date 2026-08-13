@@ -540,8 +540,8 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
 
              {/* Modal de Validação CNAE */}
              {cnaeAnalysis && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100] animate-fade-in" onClick={() => setCnaeAnalysis(null)}>
-                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[100] animate-fade-in overflow-y-auto" onClick={() => setCnaeAnalysis(null)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col my-auto" onClick={e => e.stopPropagation()}>
                         <div className="bg-sky-50 dark:bg-sky-900/30 p-4 rounded-t-xl flex justify-between items-center border-b border-sky-100 dark:border-sky-800">
                             <h3 className="text-sky-800 dark:text-sky-200 font-bold text-lg flex items-center gap-2">
                                 <ShieldIcon className="w-6 h-6" />

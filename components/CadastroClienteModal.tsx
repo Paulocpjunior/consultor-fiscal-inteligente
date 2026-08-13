@@ -128,9 +128,9 @@ const CadastroClienteModal: React.FC<Props> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-y-auto" onClick={onClose}>
             <div
-                className="bg-white dark:bg-slate-800 rounded-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto p-5 space-y-4"
+                className="bg-white dark:bg-slate-800 rounded-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto p-5 space-y-4 my-auto"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-start justify-between gap-3">

@@ -185,13 +185,13 @@ const AnomaliasView: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {/* Modal detalhe da empresa - a11y: dialog + Esc para fechar */}
             {empresaAberta && (
                 <div
-                    className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]"
+                    className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[80] overflow-y-auto"
                     onClick={() => { setEmpresaAberta(null); setAnomaliaAtiva(null); setAnalise(null); }}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="anomalias-modal-titulo"
                 >
-                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col my-auto" onClick={e => e.stopPropagation()}>
                         <div className="p-5 border-b border-slate-200 dark:border-slate-700">
                             <h3 id="anomalias-modal-titulo" className="text-lg font-bold">🔍 {empresaAberta.empresaNome}</h3>
                             <p className="text-xs text-slate-500 mt-1">

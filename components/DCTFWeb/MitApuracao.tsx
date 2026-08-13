@@ -138,8 +138,8 @@ const MitApuracao: React.FC<Props> = ({ declaracao, user, onClose, onShowToast }
     const loadingRefresh = loadingApur || loadingHist;
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-auto my-auto">
                 <div className="p-6 border-b">
                     <div className="flex items-start justify-between">
                         <div>
