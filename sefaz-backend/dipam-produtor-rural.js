@@ -51,6 +51,7 @@ import { ehRegistroDeEvento } from './xml-metadata-helper.js';
  */
 const ROTULO_BLOQUEIO = {
     'fornecedor-indefinido': 'Fornecedor sem prova de produtor rural PF — confirmar a natureza jurídica no CADESP',
+    'fornecedor-sociedade': 'Fornecedor é sociedade pela razão social (LTDA/S.A./EIRELI) — confirmar como pessoa jurídica, 1 clique',
     'municipio-ausente': 'Nota sem o município de origem — reler o XML guardado (♻️)',
     'contraparte-ausente': 'Documento sem fornecedor lido — buraco de captura, conferir em Erros & Logs',
 };
@@ -310,6 +311,52 @@ export function calcularFunrural(base, competencia, tabela = ALIQUOTAS_FUNRURAL_
  * @param {object} participante emitente do documento
  * @param {object} [cadastro]   ficha do fornecedor em `produtores_rurais`
  */
+/**
+ * TIPO SOCIETÁRIO ESCRITO NA PRÓPRIA RAZÃO SOCIAL.
+ *
+ * Paulo, 13/08, olhando a fila da NOVA ERA: metade das pendências de "consulte
+ * o CADESP" é de fornecedor cujo nome **já diz o que ele é** — MIXTER ATACADO E
+ * VAREJO DE GENEROS ALIMENTICIOS **LTDA**, PONTUAL COMERCIAL AGRICOLA **LTDA**,
+ * FRUTAS DA TERRA HORTIFRUTI **LTDA**. Mandar consultar o CADESP de uma LTDA é
+ * gastar o tempo da equipe para descobrir o que está escrito na tela.
+ *
+ * LTDA, S/A e EIRELI são tipos de **sociedade**, e sociedade é PESSOA JURÍDICA
+ * por definição (CC art. 44 e 45): produtor rural pessoa física não se organiza
+ * como sociedade. Sem produtor PF não há sub-rogação — quem recolhe é o próprio
+ * emitente (Lei 8.212/91 art. 30, IV).
+ *
+ * ═══ O QUE ESTA FUNÇÃO NÃO FAZ ══════════════════════════════════════════════
+ *
+ * Ela NÃO decide. Devolve uma SUGESTÃO carimbada com a origem, e a confirmação
+ * continua sendo humana — é a regra de 06/08 ("sugerir conhecimento fiscal
+ * carimbado com a origem; sugestão nunca sobrescreve o que a pessoa digitou").
+ * Nenhum valor muda por causa dela: o fornecedor já ficava fora do total como
+ * "indefinido". O que muda é o TRABALHO — de "consulte o CADESP" para
+ * "confirme o que o nome já diz".
+ *
+ * ═══ POR QUE "ME" E "EPP" FICAM DE FORA ═════════════════════════════════════
+ *
+ * Porque são PORTE, não tipo societário — e empresário individual com CNPJ pode
+ * ser justamente o caso do Comunicado CAT 45/2008 (CNPJ não descaracteriza
+ * produtor rural PF). Sugerir PJ ali seria repetir o erro que a régua inteira
+ * existe para evitar, só que com mais confiança.
+ */
+const TIPOS_SOCIETARIOS = [
+    { re: /\bLTDA\.?\b/i, rotulo: 'LTDA' },
+    { re: /\bLIMITADA\b/i, rotulo: 'LIMITADA' },
+    { re: /\bEIRELI\b/i, rotulo: 'EIRELI' },
+    { re: /\bS\/A\b|\bS\.A\.?\b|\bSOCIEDADE\s+AN[OÔ]NIMA\b/i, rotulo: 'S/A' },
+];
+
+export function tipoSocietarioNoNome(nome) {
+    const n = String(nome || '').trim();
+    if (!n) return null;
+    for (const t of TIPOS_SOCIETARIOS) {
+        if (t.re.test(n)) return t.rotulo;
+    }
+    return null;
+}
+
 export function identificarNaturezaFornecedor(participante, cadastro = null) {
     const p = participante || {};
     const doc = soDigitos(p.cnpjCpf || p.cnpj || p.cpf);
@@ -370,6 +417,22 @@ export function identificarNaturezaFornecedor(participante, cadastro = null) {
             motivo: 'Emitente com CPF — pessoa física. Confirme a natureza jurídica no CADESP.',
         };
     }
+    // O nome do fornecedor já responde? Então a pergunta não é para o CADESP.
+    const tipoSocietario = tipoSocietarioNoNome(p.nome || p.razaoSocial);
+    if (tipoSocietario && sinais.includes('cnpj')) {
+        return {
+            ehProdutorRuralPF: false,
+            // NÃO é 'confirmada': confirmação é ato humano, e é ele que tira o
+            // fornecedor da fila. Isto é sugestão com origem carimbada.
+            confianca: 'sugerida-pj',
+            sinais: [...sinais, 'razao-social-sociedade'],
+            sugestao: { natureza: 'pessoa_juridica', origem: `razão social ("${tipoSocietario}")` },
+            motivo: `A razão social diz ${tipoSocietario} — sociedade é pessoa jurídica (CC art. 44), e produtor `
+                + 'rural pessoa física não se organiza como sociedade. Sem produtor PF não há sub-rogação: quem '
+                + 'recolhe é o próprio emitente.',
+        };
+    }
+
     return {
         ehProdutorRuralPF: false,
         confianca: 'indefinida',
@@ -527,6 +590,30 @@ function avaliarDipam({ base, cfopPrincipal, cfops, doc, empresa, ehDevolucaoSai
         return fora('Nota sem fornecedor — fora do total até o participante ser lido do XML.');
     }
 
+    // A razão social já respondeu: é sociedade ⇒ pessoa jurídica. Continua FORA
+    // do total (a confirmação é humana), mas a ação deixa de ser "consulte o
+    // CADESP" — vira "confirme o que o nome já diz", que é um clique.
+    //
+    // MESMA PORTA DO 'indefinida': só quem VENDE GÊNERO AGROPECUÁRIO entra na
+    // lista. A primeira versão desta linha pendurava TODA LTDA — a autopeças, a
+    // gráfica, o posto —, e um teste de 31/07 pegou: pendência sobre fornecedor
+    // que nunca entraria na DIPAM é ruído, e ruído faz ninguém ler a lista.
+    if (base.natureza.confianca === 'sugerida-pj') {
+        if (!(doc.itens || []).some((i) => ehNcmAgropecuario(i.ncm || i.NCM))) {
+            return fora('Fornecedor é sociedade (pessoa jurídica) e não vende gênero agropecuário — fora da DIPAM.');
+        }
+        pendencias.push({
+            ...pendencia(
+                'fornecedor-sociedade',
+                `${base.fornecedor.nome}: a razão social diz que é sociedade — logo, pessoa jurídica.`,
+                'Não precisa de CADESP: confirme "Pessoa Jurídica" no cadastro do produtor e ele sai da lista. '
+                + 'Sem produtor rural PF não há sub-rogação — quem recolhe é o próprio emitente.',
+            ),
+            sugestao: base.natureza.sugestao || null,
+        });
+        return fora('Fornecedor é sociedade (pessoa jurídica) pela razão social — fora do total até confirmar.');
+    }
+
     if (base.natureza.confianca === 'indefinida') {
         // CUIDADO: "indefinida" é TODO fornecedor com CNPJ e sem IE de produtor
         // — ou seja, a maioria absoluta das compras de qualquer empresa. Virar
@@ -634,6 +721,9 @@ function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevol
         }
         if (base.natureza.confianca === 'indefinida') {
             return fora('Natureza do fornecedor indefinida — não calcula sub-rogação até confirmar.');
+        }
+        if (base.natureza.confianca === 'sugerida-pj') {
+            return fora('A razão social indica sociedade (pessoa jurídica) — sem sub-rogação, mas confirme no cadastro.');
         }
         return fora('Fornecedor não é produtor rural pessoa física — quem recolhe é o próprio emitente.');
     }
@@ -799,7 +889,12 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
         // nota que já não conta ensina a equipe a ignorar a lista inteira.
         if (n.notaOrigemProdutor) continue;
         for (const p of n.pendencias) {
-            const porFornecedor = p.codigo === 'fornecedor-indefinido' || p.codigo === 'municipio-ausente';
+            // Dedup POR FORNECEDOR. 'fornecedor-sociedade' entra aqui junto
+            // com os outros dois: sem isso, uma LTDA com 40 notas viraria 40
+            // linhas iguais e a fila voltaria a ser muro de texto.
+            const porFornecedor = p.codigo === 'fornecedor-indefinido'
+                || p.codigo === 'fornecedor-sociedade'
+                || p.codigo === 'municipio-ausente';
             const chaveDedup = `${p.codigo}|${n.fornecedor.doc}`;
             if (porFornecedor) {
                 // Fornecedor repetido só ACUMULA o valor: 40 notas do mesmo
@@ -855,6 +950,7 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
 
     const total = round2(municipiosDeclaraveis.reduce((s, m) => s + m.valor, 0));
     const bloqueantes = pendencias.filter((p) => p.codigo === 'fornecedor-indefinido'
+        || p.codigo === 'fornecedor-sociedade'
         || p.codigo === 'municipio-ausente' || p.codigo === 'contraparte-ausente');
 
     // ── QUANTO está fora do total, e por QUAL causa ─────────────────────────
@@ -871,6 +967,7 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
     for (const n of notas) {
         if (n.notaOrigemProdutor) continue;
         const causa = (n.pendencias || []).find((p) => p.codigo === 'fornecedor-indefinido'
+            || p.codigo === 'fornecedor-sociedade'
             || p.codigo === 'municipio-ausente' || p.codigo === 'contraparte-ausente');
         if (!causa) continue;
         const g = bloqueio.get(causa.codigo) || { codigo: causa.codigo, notas: 0, valor: 0, fornecedores: new Set() };
