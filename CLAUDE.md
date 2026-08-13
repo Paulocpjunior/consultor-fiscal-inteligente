@@ -47,6 +47,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   agropecuário, ou CFOP **de entrada** que não é de compra). Nota sem itens
   capturados NÃO é bloqueada — ausência não é prova, e bloquear no escuro tira
   FUNRURAL legítimo.
+  🚨 **E FALTAVA A PROVA POSITIVA: NOTA DE SERVIÇO NUNCA É PRODUÇÃO RURAL**
+  (Paulo, ainda na mesma fila: *"ainda esses"*). A prova negativa não alcança
+  NFS-e/CT-e — eles não têm NCM nem CFOP, então passavam por AUSÊNCIA. O próprio
+  painel já denunciava: **DIPAM R$ 729 mil contra base de FUNRURAL de R$ 1,89
+  MILHÃO**, porque a DIPAM exige CFOP de compra e descartava esses documentos.
+  `ehDocumentoDeServico` reconhece pelo que o documento É (tipo nfse/cte, modelo
+  57/67, blocos prestador/tomador, código de serviço municipal) — **nunca pelo
+  `modeloDoDoc`, que cai em '55' quando o campo não foi gravado** e faria
+  justamente a NFS-e passar por NF-e. Serviço prestado por PF com retenção é
+  R-2010, outro evento.
   ⚠️ **DUAS ARMADILHAS QUE ESSA REGRA PISOU NA HORA** (as duas pegas por teste):
   (1) reusei `CFOPS_COMPRA`, que é a régua da **DIPAM** — obrigação PAULISTA, só
   1xxx. Isso matava toda compra INTERESTADUAL de produtor, erro na direção mais
