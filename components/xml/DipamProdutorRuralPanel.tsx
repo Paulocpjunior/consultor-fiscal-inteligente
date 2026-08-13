@@ -17,6 +17,7 @@ import {
     carregarPainelDipam, varrerDipam, salvarProdutorRural, textoRegistro1400, relerMunicipiosDipam,
     type DipamPainel, type DipamVarreduraLinha,
 } from '../../services/dipamService';
+import { validarCpf, formatarCpf } from '../../services/validadorDocumento';
 
 const fmtBRL = (v: number | undefined) =>
     (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -493,6 +494,13 @@ const CpfTitularProdutor: React.FC<{ doc: string; nome: string; onSalvo: () => v
     const salvar = async () => {
         const limpo = cpf.replace(/\D/g, '');
         if (limpo.length !== 11) { setErro('O CPF do titular tem 11 dígitos.'); return; }
+        // O backend também recusa (a trava que vale é a de lá), mas dizer aqui
+        // evita a ida e volta e mostra o número formatado, que é como ele está
+        // no CADESP — é olhando assim que se acha o dígito trocado.
+        if (!validarCpf(limpo)) {
+            setErro(`${formatarCpf(limpo)} não passa no dígito verificador. Confira no CADESP.`);
+            return;
+        }
         setSalvando(true); setErro(null);
         const r = await salvarProdutorRural({ doc, nome, cpfTitular: limpo } as any);
         setSalvando(false);
