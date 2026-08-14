@@ -9,7 +9,7 @@ import crypto from 'crypto';
 import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 import { classificarTipoDoc } from './xml-tipo-doc.js';
-import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml, docCancelado, CSTAT_EVENTO_CANCELAMENTO } from './xml-metadata-helper.js';
+import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml, docCancelado, decidirDirecaoPorTpNF, CSTAT_EVENTO_CANCELAMENTO } from './xml-metadata-helper.js';
 import { decidirDonoPorParticipantes } from './atribuicao-participantes.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
@@ -277,16 +277,6 @@ function statusFromCStat(xml) {
  * ("CFOP inválido para nota de saída") e a DIPAM não as via (31/07, caso
  * EDUARDO GUERRA).
  */
-function decidirDirecao(cnpjEmit, cnpjDest, empresaCnpj, tpNF) {
-  const norm = c => String(c || '').replace(/\D/g, '');
-  const emi = norm(cnpjEmit);
-  const dest = norm(cnpjDest);
-  const emp = norm(empresaCnpj);
-  if (!emp) return 'desconhecida';
-  if (emi === emp) return String(tpNF ?? '') === '0' ? 'entrada' : 'saida';
-  if (dest === emp) return 'entrada';
-  return 'desconhecida';
-}
 
 export function extrairMetadados(xml, schema) {
   // Chave: cada modelo de DFe tem seu container raiz.
@@ -682,7 +672,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     const donoNovo = empresaId || null;
     if (donoNovo && existingData && existingData.empresaId !== donoNovo) {
       const cnpjLimpo = empresaCnpj?.replace(/\D/g, '') || null;
-      const direcaoNova = decidirDirecao(existingData.cnpjEmit || meta.cnpjEmit, existingData.cnpjDest || meta.cnpjDest, cnpjLimpo, existingData.tpNF ?? meta.tpNF);
+      const direcaoNova = decidirDirecaoPorTpNF(existingData.cnpjEmit || meta.cnpjEmit, existingData.cnpjDest || meta.cnpjDest, cnpjLimpo, existingData.tpNF ?? meta.tpNF);
       try {
         await docRef.update({
           empresaId: donoNovo,
@@ -719,7 +709,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   // 23/05 — extrai itens/totais/direcao/status para docData completo
   const itens = extrairItens(xml);
   const totais = extrairTotais(xml);
-  let direcao = decidirDirecao(meta.cnpjEmit, meta.cnpjDest, empresaCnpj, meta.tpNF);
+  let direcao = decidirDirecaoPorTpNF(meta.cnpjEmit, meta.cnpjDest, empresaCnpj, meta.tpNF);
   const status = statusFromCStat(xml);
   const temItens = itens.length > 0;
 

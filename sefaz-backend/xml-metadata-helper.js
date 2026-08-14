@@ -1,3 +1,41 @@
+/**
+ * Direção do documento: entrada ou saída, do ponto de vista da EMPRESA-CLIENTE.
+ *
+ * ═══ O tpNF DECIDE QUANDO A EMPRESA É A EMITENTE ════════════════════════════
+ *
+ * Compra de produtor rural PF é **NOTA PRÓPRIA DE ENTRADA** (RICMS/SP art. 136,
+ * I, "a"): o produtor não emite NF-e, então o adquirente emite a nota da própria
+ * entrada, com `tpNF=0`. Ela tem `emit = empresa` e mesmo assim é ENTRADA de
+ * mercadoria.
+ *
+ * Sem olhar o tpNF, essas notas viram "saída" — e a partir daí:
+ *   · o Exportar SAGE recusa o CFOP 1xxx/2xxx ("CFOP inválido para nota de saída")
+ *   · a DIPAM/FUNRURAL não as vê, porque só olha ENTRADAS
+ *   · e a dedup do art. 136 não acha a nota própria que cobre a NF-e do
+ *     produtor, então quem entra na conta é a NF-e DELE — que é justamente a
+ *     que não se escritura
+ *
+ * ⚠️ **ESTA RÉGUA MORA AQUI, NUM LUGAR SÓ.** Ela nasceu em 31/07 (caso EDUARDO
+ * GUERRA) dentro do `xml-importer.js`, e o caminho de importação MANUAL do
+ * frontend ficou com uma segunda cópia que nunca recebeu a correção — decidindo
+ * `emit === empresa ⇒ saída` e nada mais. Em 14/08 isso reapareceu na NOVA ERA:
+ * 12 notas próprias de entrada gravadas como saída, o FUNRURAL contando a NF-e
+ * do produtor no lugar da nota da empresa (Paulo: *"o CFI está levando a nota
+ * dele e não está considerando a da NOVA ERA"*). Régua fiscal com duas cópias
+ * diverge — e diverge em silêncio.
+ */
+export function decidirDirecaoPorTpNF(cnpjEmit, cnpjDest, empresaCnpj, tpNF) {
+    const norm = (c) => String(c || '').replace(/\D/g, '');
+    const emi = norm(cnpjEmit);
+    const dest = norm(cnpjDest);
+    const emp = norm(empresaCnpj);
+    if (!emp) return 'desconhecida';
+    // tpNF só é lido do lado da EMISSÃO — é lá que ele muda a resposta.
+    if (emi === emp) return String(tpNF ?? '') === '0' ? 'entrada' : 'saida';
+    if (dest === emp) return 'entrada';
+    return 'desconhecida';
+}
+
 export function competenciaFromDhEmi(value) {
     const raw = String(value || '').trim();
     const iso = raw.match(/^(\d{4})-(\d{2})/);

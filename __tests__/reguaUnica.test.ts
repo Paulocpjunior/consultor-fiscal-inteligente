@@ -71,6 +71,22 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'Direção do documento (o tpNF decide quando a empresa é a emitente)',
+        dono: 'sefaz-backend/xml-metadata-helper.js',
+        comoUsar: "import { decidirDirecaoPorTpNF } from 'sefaz-backend/xml-metadata-helper.js'",
+        porque: 'A régua nasceu em 31/07 no xml-importer (caso EDUARDO GUERRA) e o import MANUAL do '
+            + 'frontend ficou com uma SEGUNDA CÓPIA — `emit === empresa ⇒ saída`, sem olhar o tpNF. Em '
+            + '14/08 isso derrubou a NOVA ERA: 12 notas próprias de ENTRADA (art. 136) gravadas como '
+            + 'saída ⇒ a DIPAM/FUNRURAL não as via ⇒ a dedup não achava a nota que cobre a NF-e do '
+            + 'produtor ⇒ o FUNRURAL contou a nota DELE. Paulo: "o CFI está levando a nota dele e não '
+            + 'está considerando a da NOVA ERA".',
+        assinaturas: [
+            // Quem decide direção sem o tpNF está reimplementando a régua.
+            /emit\s*===\s*emp\s*\)\s*return\s*\{\s*ok:\s*true,\s*direcao:\s*'saida'/,
+            /function decidirDirecao\s*\(/,
+        ],
+    },
+    {
         nome: 'Correlação de CFOP do emitente → destinatário',
         dono: 'sefaz-backend/cfop-correlacao.js',
         comoUsar: "import { correlacionarCfop } from '../sefaz-backend/cfop-correlacao.js'",
