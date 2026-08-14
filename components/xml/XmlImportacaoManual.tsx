@@ -33,6 +33,16 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
     const [dragOver, setDragOver] = useState(false);
     const [loading, setLoading] = useState(false);
     const [results, setResults] = useState<ProcessedItem[]>([]);
+    // ── SUBSTITUIR O QUE JÁ ESTÁ NO BANCO ───────────────────────────────────
+    //
+    // Paulo, 14/08: *"o sistema não reconhece que estes XMLs já foram
+    // excluídos, e impede que eu importe novamente"*. O caso real é mais
+    // simples que a lápide: o documento que está no banco está ERRADO, e
+    // "já está aqui" não é resposta quando o que está aqui é o problema.
+    //
+    // Nasce DESLIGADO e é decisão de cada importação: ligado por padrão,
+    // reimportar por engano sobrescreveria documento certo sem ninguém pedir.
+    const [substituir, setSubstituir] = useState(false);
     const [loadingEmpresas, setLoadingEmpresas] = useState(true);
     // Arquivos escolhidos aguardando confirmação de que são da empresa certa.
     const [pendentes, setPendentes] = useState<File[] | null>(null);
@@ -97,9 +107,19 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                     empresa: { id: empresaSelecionada.id, nome: empresaSelecionada.nome, cnpj: empresaSelecionada.cnpj },
                     user: currentUser,
                     origem: 'manual',
+                    substituir,
                 });
                 if (res.status === 'ok') {
-                    out.push({ fileName: file.name, status: 'ok', mensagem: `NF ${res.documento.numero} importada (${res.documento.direcao}).` });
+                    out.push({
+                        fileName: file.name,
+                        status: 'ok',
+                        // Substituir é reescrita de dado fiscal: a tela DIZ que
+                        // reescreveu, senão fica igual a uma importação nova e
+                        // ninguém sabe o que mudou.
+                        mensagem: res.substituiu
+                            ? `NF ${res.documento.numero} SUBSTITUÍDA pelo conteúdo deste arquivo (${res.documento.direcao}).`
+                            : `NF ${res.documento.numero} importada (${res.documento.direcao}).`,
+                    });
                     onImported?.(res.documento);
                 } else {
                     // "Já importado (chave …)" é VERDADE e não serve para
@@ -211,6 +231,29 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                     </>
                 )}
             </div>
+
+            {/* ↻ SUBSTITUIR — fora da zona de arrastar, senão o clique no
+                checkbox abriria o seletor de arquivos. Nasce DESLIGADO. */}
+            {!!empresaSelecionada && (
+                <label className="flex items-start gap-2 px-1 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        checked={substituir}
+                        onChange={e => setSubstituir(e.target.checked)}
+                        className="mt-0.5"
+                    />
+                    <span className="text-xs">
+                        <span className="font-bold text-slate-700 dark:text-slate-300">
+                            ↻ Substituir os que já estão no banco
+                        </span>
+                        <span className="block text-slate-500 dark:text-slate-400">
+                            Use quando o documento gravado está ERRADO e este arquivo é o certo — o conteúdo é
+                            reescrito a partir dele, e a linha do resultado diz &quot;SUBSTITUÍDA&quot;. Nota
+                            gravada em OUTRA empresa continua recusada: reimportar não muda a dona.
+                        </span>
+                    </span>
+                </label>
+            )}
 
             {results.length > 0 && (
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">

@@ -342,11 +342,25 @@ export interface ImportXmlInput {
     empresa: { id: string; nome: string; cnpj: string };
     user: User;
     origem?: XmlOrigem;
+    /**
+     * SUBSTITUIR o que já está no banco pelo conteúdo deste arquivo.
+     *
+     * Existe porque "já está aqui" não é resposta quando o que está aqui está
+     * ERRADO — e era o caso do Paulo, 14/08: o documento no banco veio torto e
+     * a única saída seria reimportar, que o app recusava. Ficar repetindo o
+     * clique nunca ia mudar isso.
+     *
+     * É opt-in EXPLÍCITO na tela, nunca padrão: reimportar por engano em cima
+     * de um documento certo sobrescreveria dado fiscal sem ninguém pedir.
+     */
+    substituir?: boolean;
 }
 
 export interface ImportXmlSuccess {
     status: 'ok';
     documento: DocumentoFiscal;
+    /** true quando REESCREVEU um documento que já existia (opt-in na tela). */
+    substituiu?: boolean;
 }
 
 export interface ImportXmlSkipped {
@@ -383,7 +397,7 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
         throw new Error('Firebase Storage não está configurado. Configure VITE_FIREBASE_STORAGE_BUCKET.');
     }
 
-    const { file, empresa, user, origem = 'manual' } = input;
+    const { file, empresa, user, origem = 'manual', substituir = false } = input;
     const fileName = file.name;
     let chave = '';
 
@@ -424,7 +438,13 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             existing && existing.exists() ? (existing.data() as DocumentoExistente) : null,
             empresa,
         );
-        if (existing && existing.exists() && !leitura.permiteReincluir) {
+        // SUBSTITUIÇÃO: só quando alguém PEDIU, e só na MESMA empresa.
+        //
+        // Sobrescrever documento de outra empresa seria mover a nota de dona
+        // por importação — sem ninguém decidir isso, e sem deixar rastro na
+        // empresa que a perdeu. Essa continua recusada, com a causa na tela.
+        const podeSubstituir = substituir && leitura.situacao !== 'em-outra-empresa';
+        if (existing && existing.exists() && !leitura.permiteReincluir && !podeSubstituir) {
             await registrarCaptura({
                 chave,
                 empresaId: empresa.id,
@@ -467,7 +487,13 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             // — e o dia em que alguém trocar por `{ merge: true }` o documento
             // volta invisível, sem nada apontando para cá.
             const paraGravar: Record<string, unknown> = { ...sanitize(documento) };
-            if (leitura.permiteReincluir) {
+            if (podeSubstituir && !leitura.permiteReincluir) {
+                // O rastro fica NO documento: substituição é reescrita de dado
+                // fiscal, e sem quem/quando ninguém reconstrói o que mudou.
+                paraGravar._substituidoEm = new Date().toISOString();
+                paraGravar._substituidoPorEmail = user.email || null;
+            }
+            if (leitura.permiteReincluir || podeSubstituir) {
                 // TODAS as lápides saem — não só a de exclusão. Limpar uma e
                 // deixar a outra devolve o documento ao mesmo estado de antes:
                 // invisível no app e bloqueando a reentrada.
@@ -494,7 +520,7 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             documentoId: docId,
         });
 
-        return { status: 'ok', documento };
+        return { status: 'ok', documento, substituiu: podeSubstituir && !leitura.permiteReincluir };
     } catch (err: any) {
         await registrarErro({
             fileName,
