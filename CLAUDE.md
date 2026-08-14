@@ -75,6 +75,57 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   julgar o lado da ENTRADA: CFOP de saída (5101) numa nota de entrada é a NF-e do
   próprio produtor, que sai pela dedup do art. 136 e **não pode cobrar
   pendência** — era exatamente o alarme apagado em 12/08.
+- **MATA-BURRO: BOTÃO QUE TIRA COISA DO TOTAL NASCE COM O BOTÃO QUE DESFAZ**
+  (14/08). O ✕ *"tirar do FUNRURAL"* subiu em 13/08 e no dia seguinte o Paulo
+  clicou por engano: **o produtor sumiu da tela junto com o único botão que
+  desfaria**. Pior, o texto do confirm PROMETIA *"dá pra reverter no cadastro"* —
+  caminho que não existia, porque o produtor só aparece na lista quando tem nota
+  somando FUNRURAL. Promessa que a tela não cumpre é pior que não prometer.
+  Eu tinha escrito a régua um dia antes, na dedup do art. 136 — **"total que
+  muda sozinho faz desconfiar do número certo: some da CONTA, não da TELA"** — e
+  não apliquei ao meu próprio botão. Agora a saída por decisão vai carimbada
+  (`funrural.decisao`) e volta em `tiradosPorDecisao`, agrupada por PRODUTOR
+  (que é o eixo em que a decisão foi gravada), com **quanto voltaria ao total**
+  do lado do ↩ — reverter imposto sem o número é decidir no escuro. O ↩ grava
+  `funrural: ''` (LIMPA, devolvendo à régua automática); marcar `'sub_rogacao'`
+  AFIRMARIA que ele é produtor rural PF, e desfazer um clique não verificou
+  nada. A opção pela FOLHA aparece no mesmo bloco **sem** botão: é declaração do
+  produtor (Lei 13.606/2018), não engano de clique.
+- **MATA-BURRO: "JÁ EXISTE" NÃO É RESPOSTA — E EU GASTEI O DIA DO PAULO
+  PERGUNTANDO O QUE O APP DEVERIA DIZER** (14/08, urgente, vencendo segunda).
+  Ele arrastou 12 XMLs e levou `Já importado (chave 3526…)` doze vezes. A frase
+  era VERDADE e não servia para nada: não dizia em qual empresa, quando, por
+  qual trilho, nem se o documento estava visível. **A única saída que sobra para
+  quem lê uma frase dessas é repetir o clique** — e foi o que ele fez, várias
+  vezes, enquanto eu perguntava "onde você excluiu?" em vez de fazer a mensagem
+  responder sozinha. Alarme sem ação gasta o tempo de quem lê, e desta vez gastou
+  em cima de prazo.
+  `services/importDuplicadoMotivo.ts` separa o que tem ação OPOSTA: **está aqui**
+  (nada a fazer, e a linha avisa que sumir da APURAÇÃO é outro problema — regime,
+  pendência, art. 136 — que o XML não toca) · **está em OUTRA empresa** (o caro:
+  a nota existe, a apuração da certa fica a menor, e reimportar NÃO move a nota
+  de dona ⇒ vermelho e contagem própria no toast, senão passa batida no meio de
+  12 âmbares) · **está com lápide** (invisível no app E travando a reentrada ⇒
+  aqui reimportar é a ação CERTA, e o nome dela é REINCLUSÃO).
+  🚨 **E A PRIMEIRA VERSÃO DESSA CORREÇÃO ERROU PELA MESMA CAUSA DE SEMPRE:
+  cobri UMA lápide** (`_deleted`) porque foi a que eu lembrei — e `_merged_into`
+  esconde o documento igual. Paulo teve que apontar o mesmo problema DUAS vezes.
+  A pergunta certa não é *"tem `_deleted`?"*, é **"este documento aparece no
+  app?"**, respondida com a MESMA régua da listagem (`ocultoDoApp`, que devolve a
+  CAUSA — mesclado avisa do risco de ressuscitar duplicata, excluído não).
+  ✂️ **E O CASO REAL ERA MAIS SIMPLES QUE TUDO ISSO: o documento gravado estava
+  ERRADO.** Não havia lápide nenhuma — a leitura honesta virou SONDA e provou:
+  se houvesse, o app teria dito "estava excluído, reincluído agora". Faltava
+  **↻ Substituir os que já estão no banco** (opt-in por importação, nasce
+  DESLIGADO — ligado por padrão sobrescreveria documento certo; **nunca**
+  substitui documento de OUTRA empresa, que seria mover a nota de dona por
+  importação sem ninguém decidir e sem rastro na que a perdeu; grava
+  `_substituidoEm`/`_substituidoPorEmail`, porque reescrita de dado fiscal sem
+  quem/quando não se reconstrói; e a linha diz **"SUBSTITUÍDA"**, não
+  "importada"). ✅ Provado em produção: 12 ok.
+  **REGRA QUE FICA: recusa de gravação DIZ o estado do que já está lá e oferece
+  a saída.** "Já existe", "duplicado", "já importado" sem estado e sem ação é
+  beco — e beco na mão de quem está com prazo vira meia hora perdida.
 - **MATA-BURRO: SENTINELA DE BACKFILL NÃO PODE SER CAMPO DE DADO** (13/08,
   print do Paulo na aba 🌾 da NOVA ERA). O botão ♻️ *"Reler participante e
   município dos XMLs"* examinou 692 documentos e respondeu **"0 recuperadas ·
@@ -1053,8 +1104,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `ID1326027010000002026070811123300001`; **UM PRESTADOR POR EVENTO** (decisão
   explícita — o arquivo prova UM `idePrestServ`, não a multiplicidade; empilhar
   foi o que derrubou o R-2055 três vezes com MS0030) e `nfs` repetindo, que é
-  inferência DO PRÓPRIO documento (os campos se chamam **vlrTotal**\*). FALTA a
-  tela e a transmissão de lá.
+  inferência DO PRÓPRIO documento (os campos se chamam **vlrTotal**\*).
+  ✅ **CICLO FECHADO 14/08 (v3.4.109 de lá)**: tela, cadastro por prestador
+  (`reinf_servicos_tomados_prestadores`), gerador e transmissão pelo gateway.
+  Ao fechar apareceram TRÊS defeitos que nenhum teste pegava, e os três são a
+  mesma família — **"o primeiro decide pelos outros"**, que não derruba nada:
+  produz evento **ACEITO declarando outra coisa**, o pior desfecho, porque não
+  volta recusa avisando. (1) `indObra` do primeiro prestador ia em TODOS os
+  eventos (um `estab` só, repetido evento a evento) — limpeza mensal (0) e
+  empreitada total (2) no mesmo mês ⇒ o segundo saía com a natureza do primeiro;
+  (2) `indCPRB` saía de `notas[0]`, e ele é UM por evento enquanto o evento reúne
+  o mês inteiro ⇒ agora só vale com CONSENSO, divergência é pendência nomeada;
+  (3) **o assinador LOCAL achava o evento por LISTA DE NOMES**
+  (`evtInfoContri|evtRetPF|evtFech`) e não conhecia `evtServTom`, `evtAqProd` nem
+  `evtRetPJ` — só passou batido porque a produção transmite pelo gateway do CFI,
+  que já tinha generalizado. Agora acha pelo **id** (`<evt*` + `ID`+34 díg.).
+  **REGRA QUE FICA: campo ÚNICO por evento alimentado por uma LISTA não se
+  resolve com `[0]`** — ou todos concordam, ou o campo é do ITEM, ou é pendência.
   ✅ **A PONTE ESTÁ VIVA** (07/08, testada pela colaboradora): a tela do R-4020
   chamou o app do REINF, que chamou o CFI, e a resposta que voltou foi a
   mensagem de erro do CFI palavra por palavra — round-trip provado.
