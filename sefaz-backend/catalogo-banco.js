@@ -107,6 +107,17 @@ export const CATALOGO_BANCO = [
     { colecao: 'nfp_compliance_cache', grupo: 'Catálogos', funcionalidade: 'Cache de compliance NFP' },
     { colecao: 'items', grupo: 'Catálogos', funcionalidade: '⚠ Nome genérico — verificar origem e renomear ou aposentar' },
 
+    // ── 💬 Comunicação (WhatsApp) ──────────────────────────────────────────
+    // Desenho em docs/desenho-modulo-comunicacao.md. Rules: default deny
+    // (só o backend escreve). As duas primeiras existiam SEM linha aqui —
+    // registradas na F1 junto com as do webhook.
+    { colecao: 'whatsapp_templates', grupo: 'Comunicação', funcionalidade: 'Cadastro de templates da Meta por departamento (⚙️ Config Admin) — o de-para nome × variáveis nomeadas' },
+    { colecao: 'whatsapp_envios', grupo: 'Comunicação', funcionalidade: 'Auditoria de envio por template (destino, template, messageId, quem, projeto) + status de entrega vindo do webhook — nunca o conteúdo do documento' },
+    { colecao: 'whatsapp_contatos', grupo: 'Comunicação', funcionalidade: 'Contatos do WhatsApp: 1 doc por número E.164, vínculo com empresa (nullable = pendência) e origem carimbada (ultrafox-import/cadastro/espontaneo)' },
+    { colecao: 'whatsapp_conversas', grupo: 'Comunicação', funcionalidade: 'Estado da conversa por número: fila, atribuição, janela de 24h, última mensagem, não lidas (inbox da F2)' },
+    { colecao: 'whatsapp_mensagens', grupo: 'Comunicação', funcionalidade: 'Mensagens recebidas e status de entrega dos envios (entregue/lido/falhou+motivo) — id = wamid da Meta (idempotência)' },
+    { colecao: 'whatsapp_webhook_eventos', grupo: 'Comunicação', funcionalidade: 'Payload CRU de cada evento do webhook (aprender a forma real — padrão Jotform Sign); id = hash do corpo' },
+
     // ── Sistema / observabilidade ──────────────────────────────────────────
     { colecao: 'cron_health_alerta_state', grupo: 'Sistema', funcionalidade: 'Anti-spam do alerta de saúde dos crons' },
     { colecao: 'sistema_banco_snapshots', grupo: 'Sistema', funcionalidade: 'Snapshots diários deste painel (tendência de crescimento)' },

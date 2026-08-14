@@ -84,3 +84,34 @@ export interface TemplateDaMeta {
 export const listarTemplatesDaMeta = () =>
     req<{ templates: TemplateDaMeta[]; acao?: string; faltas?: string[] }>(
         '/api/admin/whatsapp/templates-meta');
+
+// ─── Webhook (F1 do 💬 Comunicação) ─────────────────────────────────────────
+
+export interface WebhookStatusEntrega {
+    messageId: string;
+    numero: string | null;
+    status: string | null;   // enviado · entregue · lido · falhou
+    em: string | null;
+    erro: { codigo: number | null; detalhe: string | null; acao: string } | null;
+}
+
+export interface WebhookMensagemRecebida {
+    numero: string | null;
+    tipo: string | null;
+    texto: string | null;
+    temMidia: boolean;
+    em: string | null;
+}
+
+export interface WebhookStatus {
+    configurado: boolean;
+    faltas: string[];
+    caminhoWebhook: string;
+    ultimoEventoEm: string | null;
+    ultimosStatus: WebhookStatusEntrega[];
+    ultimasMensagens: WebhookMensagemRecebida[];
+}
+
+/** Painel do webhook: config, últimos status de entrega e mensagens recebidas. */
+export const statusWebhook = () =>
+    req<WebhookStatus>('/api/admin/whatsapp/webhook-status');

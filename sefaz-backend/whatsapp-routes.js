@@ -27,6 +27,7 @@ import {
     DEPARTAMENTOS_WHATSAPP,
 } from './whatsapp-templates.js';
 import { enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados } from './whatsapp-cloud.js';
+import { configWebhook, faltasDaConfigWebhook } from './whatsapp-webhook.js';
 
 const router = Router();
 const COLECAO = 'whatsapp_templates';
@@ -235,6 +236,61 @@ router.post('/enviar', autorizar, async (req, res) => {
 router.get('/status', autorizar, (_req, res) => {
     const cfg = configWhatsapp();
     return res.json({ ok: true, pronto: Boolean(cfg.token && cfg.phoneNumberId) });
+});
+
+// ─── Painel do WEBHOOK (F1 do 💬 Comunicação) — admin ───────────────────────
+// A rota pública /api/whatsapp/webhook não tem tela própria; ESTA é a tela
+// dela (rota sem botão não é funcionalidade). Mostra: config (faltas
+// nomeadas), últimos status de entrega e últimas mensagens recebidas.
+router.get('/webhook-status', requireAdmin, async (_req, res) => {
+    try {
+        const cfg = configWebhook();
+        const faltas = faltasDaConfigWebhook(cfg);
+        const db = getDb();
+
+        // Queries de campo único (sem índice composto): statusEm só existe em
+        // doc com status; recebidoEm só em mensagem recebida — o orderBy do
+        // Firestore já exclui quem não tem o campo.
+        const [statusSnap, msgSnap, evSnap] = await Promise.all([
+            db.collection('whatsapp_mensagens').orderBy('statusEm', 'desc').limit(10).get(),
+            db.collection('whatsapp_mensagens').orderBy('recebidoEm', 'desc').limit(10).get(),
+            db.collection('whatsapp_webhook_eventos').orderBy('recebidoEm', 'desc').limit(1).get(),
+        ]);
+
+        const ultimosStatus = statusSnap.docs.map((d) => {
+            const x = d.data();
+            return {
+                messageId: d.id, numero: x.conversaId || null,
+                status: x.statusEntrega || null, em: x.statusEm || null,
+                erro: x.erroEntrega || null,
+            };
+        });
+        const ultimasMensagens = msgSnap.docs
+            .filter((d) => d.data().direcao === 'entrada')
+            .map((d) => {
+                const x = d.data();
+                return {
+                    numero: x.conversaId || null, tipo: x.tipo || null,
+                    texto: x.texto ? String(x.texto).slice(0, 160) : null,
+                    temMidia: Boolean(x.midia), em: x.timestamp || x.recebidoEm || null,
+                };
+            });
+        const ultimoEventoEm = evSnap.empty ? null : (evSnap.docs[0].data().recebidoEm || null);
+
+        return res.json({
+            ok: true,
+            configurado: faltas.length === 0,
+            faltas,
+            // O caminho que o Paulo cola no painel da Meta (campo Callback URL).
+            caminhoWebhook: '/api/whatsapp/webhook',
+            ultimoEventoEm,
+            ultimosStatus,
+            ultimasMensagens,
+        });
+    } catch (e) {
+        console.error('[whatsapp/webhook-status]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
 });
 
 export default router;
