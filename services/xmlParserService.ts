@@ -79,6 +79,8 @@ export function competenciaFromIso(iso: string): string {
 // sistematicamente em devolucoes, transferencias e remessas.
 
 import { classificarPorCfop } from './cfopClassifier';
+// Régua ÚNICA de direção (tpNF decide quando a empresa é a emitente).
+import { decidirDirecaoPorTpNF } from '../sefaz-backend/xml-metadata-helper.js';
 export { classificarPorCfop };
 
 // ─── Tipos internos do parser ───────────────────────────────────────────────
@@ -90,6 +92,15 @@ export interface ParsedXml {
     serie: string;
     numero: string;
     natOp: string;
+    /**
+     * 0 = ENTRADA · 1 = SAÍDA (tag <tpNF> do <ide>).
+     *
+     * Decisivo quando a empresa é a EMITENTE: nota própria de entrada
+     * (RICMS/SP art. 136 — compra de produtor rural PF) tem emit=empresa e
+     * mesmo assim é ENTRADA. Sem este campo, o import manual gravava essas
+     * notas como saída e a DIPAM/FUNRURAL não as via.
+     */
+    tpNF?: string | null;
     dhEmi: string;
     status: XmlStatusDocumento;
     emitente: DocumentoFiscalParticipante;
@@ -368,6 +379,7 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         serie: getTextContent(ide, 'serie'),
         numero: getTextContent(ide, 'nNF'),
         natOp: getTextContent(ide, 'natOp'),
+        tpNF: getTextContent(ide, 'tpNF') || null,
         dhEmi: getTextContent(ide, 'dhEmi') || getTextContent(ide, 'dEmi'),
         status,
         emitente,
@@ -768,8 +780,13 @@ export function matchCompanyAndDirection(
     const emit = onlyDigits(parsed.emitente.cnpjCpf);
     const dest = onlyDigits(parsed.destinatario.cnpjCpf);
 
-    if (emit === emp) return { ok: true, direcao: 'saida' };
-    if (dest === emp) return { ok: true, direcao: 'entrada' };
+    // A RÉGUA MORA NUM LUGAR SÓ (`xml-metadata-helper`). Esta função tinha uma
+    // SEGUNDA CÓPIA — `emit === empresa ⇒ saída`, sem olhar o tpNF — e ela
+    // nunca recebeu a correção de 31/07 (caso EDUARDO GUERRA). Em 14/08 isso
+    // reapareceu na NOVA ERA: 12 notas próprias de ENTRADA gravadas como saída,
+    // e o FUNRURAL contando a NF-e do produtor no lugar da nota da empresa.
+    const direcao = decidirDirecaoPorTpNF(emit, dest, emp, parsed.tpNF) as XmlDirecao;
+    if (direcao !== 'desconhecida') return { ok: true, direcao };
 
     return {
         ok: false,
@@ -816,6 +833,10 @@ export function buildDocumentoFiscal(input: {
         serie: parsed.serie,
         numero: parsed.numero,
         natOp: parsed.natOp,
+        // GRAVA o tpNF: sem ele o backfill `corrigirDirecaoEntradaPropria` não
+        // tem como reconhecer a nota própria de entrada e consertar o que já
+        // está no banco. Campo que só existe em memória não conserta histórico.
+        tpNF: parsed.tpNF ?? null,
         dhEmi: parsed.dhEmi,
         competencia: competenciaFromIso(parsed.dhEmi),
         direcao: input.direcao,

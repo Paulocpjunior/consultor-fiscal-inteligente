@@ -38,3 +38,18 @@ export const CSTAT_EVENTO_CANCELAMENTO: Set<string>;
  */
 export function extrairAutXml(xml: string): string[];
 export function autorizadoNoXml(xml: string, cnpjEscritorio: string): boolean;
+
+/**
+ * Direção do documento pela ótica da EMPRESA-CLIENTE.
+ *
+ * `tpNF` decide quando a empresa é a EMITENTE: nota própria de ENTRADA
+ * (tpNF=0, RICMS/SP art. 136 — compra de produtor rural PF) tem emit=empresa e
+ * mesmo assim é entrada. Régua ÚNICA: o import da SEFAZ e o import manual do
+ * frontend leem daqui.
+ */
+export function decidirDirecaoPorTpNF(
+    cnpjEmit: unknown,
+    cnpjDest: unknown,
+    empresaCnpj: unknown,
+    tpNF: unknown,
+): 'entrada' | 'saida' | 'desconhecida';

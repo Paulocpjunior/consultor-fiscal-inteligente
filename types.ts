@@ -1569,6 +1569,15 @@ export interface DocumentoFiscal {
     numero: string;
     /** Natureza da operação. */
     natOp: string;
+    /**
+     * 0 = ENTRADA · 1 = SAÍDA (<tpNF> do <ide>).
+     *
+     * Decisivo quando a empresa é a EMITENTE — nota própria de entrada
+     * (RICMS/SP art. 136) tem emit=empresa e é ENTRADA. Gravado para que o
+     * backfill `corrigirDirecaoEntradaPropria` consiga reconhecer e consertar
+     * o que já está no banco.
+     */
+    tpNF?: string | null;
     /** Data/hora de emissão (ISO). */
     dhEmi: string;
     /** Competência calculada a partir da emissão (YYYY-MM). */
