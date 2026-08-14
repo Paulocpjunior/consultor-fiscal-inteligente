@@ -20,6 +20,11 @@ import {
 import { validarCpf, formatarCpf } from '../../services/validadorDocumento';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
+import {
+    montarFilaFornecedores, resumirFila, textoDaFila, linhasDoPdf, totaisDoPdf,
+    observacoesDoPdf, LIMITE_WHATSAPP,
+} from '../../services/dipamFilaExport';
+import { gerarRelatorioPdf } from '../../services/relatorioPdf';
 import { getAuth } from 'firebase/auth';
 
 const fmtBRL = (v: number | undefined) =>
@@ -251,7 +256,7 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
 
             {painel?.ok && empresaId && (
                 <div ref={detalheRef} className="scroll-mt-4">
-                    <DetalheEmpresa painel={painel} isAdmin={isAdmin} onCopiar1400={copiar1400} copiado={copiado} onRecarregar={() => abrirEmpresa(empresaId)} empresaId={empresaId} />
+                    <DetalheEmpresa painel={painel} isAdmin={isAdmin} onCopiar1400={copiar1400} copiado={copiado} onRecarregar={() => abrirEmpresa(empresaId)} empresaId={empresaId} nomeEmpresa={empresas.find(e => e.id === empresaId)?.nome || ''} />
                 </div>
             )}
         </div>
@@ -265,9 +270,67 @@ const DetalheEmpresa: React.FC<{
     onCopiar1400: () => void;
     onRecarregar: () => void;
     empresaId: string;
-}> = ({ painel, isAdmin, copiado, onCopiar1400, onRecarregar, empresaId }) => {
+    nomeEmpresa: string;
+}> = ({ painel, isAdmin, copiado, onCopiar1400, onRecarregar, empresaId, nomeEmpresa }) => {
     const farol = painel.farol!;
     const [relendo, setRelendo] = useState(false);
+
+    // ── A FILA SAI DO APP ───────────────────────────────────────────────────
+    //
+    // Paulo, 14/08: *"mais fácil me mandar os fornecedores e os erros igual o
+    // Antonio, de manhã eu corro atrás"*. O trabalho dele não é na tela — é no
+    // CADESP e no telefone. A fila precisa caber num WhatsApp ou num papel.
+    //
+    // NENHUMA CONTA NOVA: tudo sai do mesmo payload que a tela mostra. Export
+    // com conta própria diverge da tela sozinho (lição do card 4).
+    const [filaCopiada, setFilaCopiada] = useState(false);
+    const [gerandoPdf, setGerandoPdf] = useState(false);
+    const fila = montarFilaFornecedores(painel.pendencias);
+
+    const copiarFila = async () => {
+        try {
+            await navigator.clipboard.writeText(textoDaFila({
+                empresa: nomeEmpresa || empresaId,
+                competencia: painel.competencia || '',
+                fila,
+            }));
+            setFilaCopiada(true);
+            setTimeout(() => setFilaCopiada(false), 2500);
+        } catch {
+            // Clipboard bloqueado é caso REAL (permissão do navegador). Dizer o
+            // que fazer é melhor que um botão que não responde.
+            alert('O navegador bloqueou a cópia. Use o "📄 PDF da fila" — ele traz a lista inteira.');
+        }
+    };
+
+    const baixarFilaPdf = async () => {
+        setGerandoPdf(true);
+        try {
+            const r = resumirFila(fila);
+            await gerarRelatorioPdf({
+                titulo: 'DIPAM / FUNRURAL — fila de pendências',
+                subtitulo: `${nomeEmpresa || empresaId} · competência ${painel.competencia || ''} · `
+                    + `${r.fornecedores} fornecedor(es), ${r.notas} nota(s)`,
+                colunas: [
+                    { titulo: 'Fornecedor', largura: 62 },
+                    { titulo: 'CPF/CNPJ', largura: 34 },
+                    { titulo: 'Notas', largura: 14, alinhamento: 'direita' },
+                    { titulo: 'Valor', largura: 26, alinhamento: 'direita' },
+                    { titulo: 'FUNRURAL', largura: 26, alinhamento: 'direita' },
+                    { titulo: 'O que falta', largura: 105 },
+                ],
+                linhas: linhasDoPdf(fila),
+                totais: totaisDoPdf(fila),
+                observacoes: observacoesDoPdf(painel),
+                orientacao: 'landscape',
+                fileName: `fila-dipam-funrural-${painel.competencia || 'competencia'}.pdf`,
+            });
+        } catch (e: any) {
+            alert(`Não foi possível gerar o PDF: ${e?.message || e}`);
+        } finally {
+            setGerandoPdf(false);
+        }
+    };
     const [resultadoReler, setResultadoReler] = useState<string | null>(null);
 
     // "nota sem código IBGE do município" NÃO é erro de cadastro: o município
@@ -618,7 +681,19 @@ const DetalheEmpresa: React.FC<{
             </div>
 
             {(painel.pendencias?.length || 0) > 0 && (
-                <Caixa titulo={`Pendências (${painel.pendencias!.length}) — resolva antes de fechar a competência`}>
+                <Caixa
+                    titulo={`Pendências (${painel.pendencias!.length}) — resolva antes de fechar a competência`}
+                    extra={(
+                        <div className="flex flex-wrap gap-1">
+                            <button onClick={copiarFila} className="btn-press text-[11px] px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 whitespace-nowrap">
+                                {filaCopiada ? '✓ copiado' : '📋 copiar a fila'}
+                            </button>
+                            <button onClick={baixarFilaPdf} disabled={gerandoPdf} className="btn-press text-[11px] px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 whitespace-nowrap disabled:opacity-50">
+                                {gerandoPdf ? '⏳…' : '📄 PDF da fila'}
+                            </button>
+                        </div>
+                    )}
+                >
                     {/* O DINHEIRO parado, por causa. "736 notas fora do total"
                         não diz se falta R$ 200 ou R$ 200 mil — e sem isso não
                         há por onde começar. Paulo, 13/08: o app apurou
