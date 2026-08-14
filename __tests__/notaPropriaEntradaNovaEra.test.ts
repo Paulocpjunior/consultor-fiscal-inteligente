@@ -115,74 +115,116 @@ describe('a consequência: a dedup do art. 136 escolhia a nota ERRADA', () => {
 });
 
 // ============================================================================
-// A CORREÇÃO SUBIU E O NÚMERO NÃO MUDOU — "vamos ter que voltar … Não subiu"
+// "A CORREÇÃO SUBIU E O NÚMERO NÃO MUDOU" — e a explicação NÃO era a que eu dei.
 //
-// Paulo, 14/08, com os deploys 488-490 JÁ VERDES: sete notas ainda somando
-// FUNRURAL (255273 JOSE D. KOKI · 255585/256341/256445/257257/258043 NUNO
-// MONTEIRO · 256121 COSME QUEIROZ), R$ 23.806,35 no total.
+// Paulo, 14/08, com os deploys 488-490 já verdes: *"vamos ter que voltar … Não
+// subiu"*. Eu concluí que faltava alcançar documentos gravados sem `tpNF` e
+// acrescentei uma prova pelo CFOP. Errado nos dois níveis:
 //
-// A correção do tpNF valia só para o documento SEGUINTE. As notas que
-// quebraram já estavam gravadas — e gravadas SEM o campo, porque o import
-// manual nunca o guardou. No Firestore, `where('tpNF','==','0')` não devolve
-// documento que não TEM `tpNF`: o backfill passava exatamente ao largo delas.
+//   · a causa real era outra — os produtores estavam FORA por DECISÃO gravada
+//     (o ✕ do cadastro), então a régua automática nem rodava neles;
+//   · e as notas SEMPRE tiveram `tpNF` (a própria tela provou, mostrando a
+//     prova `tpNF` e não `cfop-de-entrada`).
 //
-// A prova que alcança o passado está no próprio documento gravado: nota
-// emitida PELA EMPRESA com CFOP de ENTRADA é a nota do art. 136.
+// A prova pelo CFOP foi revertida: ela lia `itens`, que três dos quatro
+// consumidores de `direcaoEfetivaDoc` não projetam — e o MESMO documento
+// passou a sair `entrada` na base de crédito de PIS/COFINS e `saida` no
+// faturamento. Os testes abaixo travam as duas coisas.
 // ============================================================================
-describe('a nota que JÁ ESTÁ no banco — sem tpNF, como o import manual gravou', () => {
-    /** O documento como ele está hoje: emit = NOVA ERA, direcao 'saida', SEM tpNF. */
-    const comoEstaNoBanco = (over: Record<string, unknown> = {}) => ({
+describe('a direção NÃO se deduz do CFOP — e o motivo é medido, não opinião', () => {
+    // Em 14/08 eu pus aqui uma segunda prova ("emitida pela empresa + CFOP de
+    // entrada"). Ela criava DUAS LEITURAS DO MESMO DADO, porque três dos quatro
+    // consumidores de `direcaoEfetivaDoc` leem o documento com `.select()` de
+    // projeção — e nenhuma projeção traz `itens` (é justamente o campo pesado
+    // que elas evitam). Medido: o MESMO doc saía `entrada` na base de crédito
+    // de PIS/COFINS e `saida` no faturamento.
+    const comoEstaNoBanco = {
         direcao: 'saida',
         empresaCnpj: NOVA_ERA,
         cnpjEmit: NOVA_ERA,
-        itens: [{ cfop: '1101' }, { cfop: '1101' }],
-        ...over,
+        itens: [{ cfop: '1102' }],
+    };
+
+    it('CFOP de entrada em nota da empresa NÃO vira entrada sozinho', () => {
+        expect(ehNotaPropriaDeEntrada(comoEstaNoBanco, NOVA_ERA).sim).toBe(false);
+        expect(direcaoEfetivaDoc(comoEstaNoBanco)).toBe('saida');
     });
 
-    it('o CFOP de ENTRADA prova a nota própria — sem tpNF nenhum', () => {
-        const r = ehNotaPropriaDeEntrada(comoEstaNoBanco(), NOVA_ERA);
-        expect(r.sim).toBe(true);
-        expect(r.prova).toBe('cfop-de-entrada');
-    });
-
-    it('e a direção efetiva vira ENTRADA na leitura, sem esperar backfill', () => {
-        expect(direcaoEfetivaDoc(comoEstaNoBanco())).toBe('entrada');
-    });
-
-    it('CFOP interestadual (2xxx) vale igual — produtor de outro estado', () => {
-        // Restringir a 1xxx repetiria o erro de 13/08 (reusar a régua PAULISTA
-        // da DIPAM), que mata a compra interestadual — o lado caro de errar.
-        expect(ehNotaPropriaDeEntrada(comoEstaNoBanco({ itens: [{ cfop: '2101' }] }), NOVA_ERA).sim).toBe(true);
-    });
-
-    // ─── as três travas ─────────────────────────────────────────────────────
-
-    it('TRAVA 1 — tpNF="1" VENCE o CFOP: o documento disse que é saída', () => {
-        const r = ehNotaPropriaDeEntrada(comoEstaNoBanco({ tpNF: '1' }), NOVA_ERA);
-        expect(r.sim).toBe(false);
-    });
-
-    it('TRAVA 2 — sem CFOP capturado não decide: ausência não é prova', () => {
-        expect(ehNotaPropriaDeEntrada(comoEstaNoBanco({ itens: [] }), NOVA_ERA).sim).toBe(false);
-        expect(ehNotaPropriaDeEntrada(comoEstaNoBanco({ itens: null }), NOVA_ERA).sim).toBe(false);
-    });
-
-    it('TRAVA 3 — CFOP misto não decide: documento ambíguo não vira sozinho', () => {
-        const misto = comoEstaNoBanco({ itens: [{ cfop: '1101' }, { cfop: '5102' }] });
-        expect(ehNotaPropriaDeEntrada(misto, NOVA_ERA).sim).toBe(false);
-    });
-
-    it('venda de verdade (CFOP 5xxx) continua saída — a prova não inverteu nada', () => {
-        const venda = comoEstaNoBanco({ itens: [{ cfop: '5102' }] });
-        expect(ehNotaPropriaDeEntrada(venda, NOVA_ERA).sim).toBe(false);
-        expect(direcaoEfetivaDoc(venda)).toBe('saida');
+    it('com o tpNF gravado, vira — e a prova é nomeada', () => {
+        const r = ehNotaPropriaDeEntrada({ ...comoEstaNoBanco, tpNF: '0' }, NOVA_ERA);
+        expect(r).toEqual({ sim: true, prova: 'tpNF' });
     });
 
     it('nota de TERCEIRO não vira nota própria nossa', () => {
-        // tpNF=0 de outro emitente é a nota de entrada DELE. Sem o laço com a
-        // empresa, a contraparte sairia do lado errado.
+        // tpNF=0 de outro emitente é a nota de entrada DELE.
         const deTerceiro = { direcao: 'entrada', empresaCnpj: NOVA_ERA, cnpjEmit: '11222333000181', tpNF: '0' };
         expect(ehNotaPropriaDeEntrada(deTerceiro, NOVA_ERA).sim).toBe(false);
+    });
+});
+
+// ============================================================================
+// A TRAVA QUE FICA: régua de LEITURA só pode usar campo que TODO chamador traz.
+//
+// `direcaoEfetivaDoc` é lida em quatro lugares, e três consultam com `.select()`
+// — faturamento, Livro e conferência de chaves. Nenhuma dessas projeções traz
+// `itens` (é justamente o campo pesado que elas evitam) nem `cnpjEmit`.
+//
+// Quando acrescentei a prova pelo CFOP, a régua passou a olhar `itens`: medido,
+// o MESMO documento saía `entrada` na base de crédito de PIS/COFINS (que lê o
+// doc inteiro) e `saida` no faturamento (projetado). Duas leituras do mesmo
+// dado discordando é a armadilha que mais mordeu este projeto.
+//
+// A trava é o CONTRATO, e por isso não tem falso positivo: a resposta pode
+// depender de `direcao` e `tpNF`, e de mais nada. Campo novo na régua faz este
+// teste cair na hora — que é o momento certo de perguntar se TODAS as projeções
+// o trazem.
+// ============================================================================
+describe('a direção EFETIVA depende só de `direcao` e `tpNF`', () => {
+    const CAMPOS_PERMITIDOS = ['direcao', 'tpNF'];
+
+    const casos: Array<[string, Record<string, unknown>]> = [
+        ['nota própria de entrada', {
+            direcao: 'saida', tpNF: '0', status: 'autorizado', valorTotal: 100,
+            empresaCnpj: NOVA_ERA, cnpjEmit: NOVA_ERA, itens: [{ cfop: '1102' }],
+        }],
+        ['venda comum', {
+            direcao: 'saida', tpNF: '1', status: 'autorizado', valorTotal: 100,
+            empresaCnpj: NOVA_ERA, cnpjEmit: NOVA_ERA, itens: [{ cfop: '5102' }],
+        }],
+        ['compra de fornecedor', {
+            direcao: 'entrada', tpNF: '1', status: 'autorizado', valorTotal: 100,
+            empresaCnpj: NOVA_ERA, cnpjEmit: '11222333000181', itens: [{ cfop: '1102' }],
+        }],
+        ['sem tpNF gravado', {
+            direcao: 'saida', status: 'autorizado', valorTotal: 100,
+            empresaCnpj: NOVA_ERA, cnpjEmit: NOVA_ERA, itens: [{ cfop: '1102' }],
+        }],
+    ];
+
+    it.each(casos)('%s: o documento REDUZIDO responde igual ao inteiro', (_nome, completo) => {
+        const reduzido: Record<string, unknown> = {};
+        for (const c of CAMPOS_PERMITIDOS) if (c in completo) reduzido[c] = completo[c];
+        expect(direcaoEfetivaDoc(reduzido)).toBe(direcaoEfetivaDoc(completo));
+    });
+
+    it('e as projeções que alimentam a régua trazem os dois campos', () => {
+        // Varredura: `.select()` que traz `direcao` num arquivo que decide
+        // direção pela régua tem que trazer `tpNF` junto — senão a régua recebe
+        // um campo que pode mentir e não recebe o que o desmente.
+        const ROTAS = [
+            'sefaz-backend/relatorios-routes.js',
+            'sefaz-backend/pis-cofins-credito-routes.js',
+        ];
+        for (const rota of ROTAS) {
+            const fonte = readFileSync(join(__dirname, '..', rota), 'utf8');
+            const re = /\.select\(([^)]*)\)/g;
+            let m: RegExpExecArray | null;
+            while ((m = re.exec(fonte)) !== null) {
+                const campos = m[1];
+                if (!campos.includes("'direcao'")) continue;
+                expect(`${rota}: ${campos}`).toContain("'tpNF'");
+            }
+        }
     });
 });
 
@@ -195,10 +237,10 @@ describe('ponta a ponta: a nota do banco chega no FUNRURAL do lado certo', () =>
         numero: '255585',
         dhEmi: '2026-07-10',
         competencia: '2026-07',
-        direcao: 'saida',            // ← como está gravado hoje
+        direcao: 'saida',            // ← como o campo está gravado
+        tpNF: '0',                   // ← e é o tpNF que desmente o campo
         empresaCnpj: NOVA_ERA,
         cnpjEmit: NOVA_ERA,
-        // SEM tpNF de propósito: é o estado real do banco.
         emitente: { cnpjCpf: NOVA_ERA, nome: 'NOVA ERA' },
         destinatario: { cnpjCpf: NUNO, nome: 'NUNO MONTEIRO', uf: 'SP', ie: 'P4111111111' },
         itens: [{ cfop: '1101', ncm: '08039000' }],

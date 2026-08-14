@@ -53,8 +53,8 @@ export interface FunruralNota {
      * e é por isso que a régua do art. 136 não dava para conferir na tela.
      */
     notaPropria?: boolean;
-    /** Como se soube: 'tpNF' (o documento diz) ou 'cfop-de-entrada'. */
-    provaDirecao?: 'tpNF' | 'cfop-de-entrada' | null;
+    /** Como se soube — hoje só `tpNF`, que é o documento dizendo. */
+    provaDirecao?: 'tpNF' | null;
     /** A direção como está GRAVADA — é ela que manda no Livro e no SPED. */
     direcaoGravada?: string | null;
     cfops?: string[];
