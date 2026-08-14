@@ -101,6 +101,34 @@ export const CODIGOS_RECEITA_FUNRURAL = {
     senar: '1213-06',
 };
 
+/**
+ * O código de receita **sem a máscara** — é assim que o XML do recibo escreve.
+ *
+ * ═══ O CASO QUE ISTO CORRIGE ════════════════════════════════════════════════
+ *
+ * O de-para nasceu do RECIBO LIDO POR HUMANO (13/08, VINCENZO), onde a Receita
+ * mostra `1656-01`. O XML do mesmo recibo, que chegou em 14/08, escreve o
+ * MESMO código **sem hífen**:
+ *
+ *     <RAquis><CRAquis>165601</CRAquis><vlrCRAquis>249,48</vlrCRAquis></RAquis>
+ *     <RAquis><CRAquis>164603</CRAquis><vlrCRAquis>20,79</vlrCRAquis></RAquis>
+ *     <RAquis><CRAquis>121306</CRAquis><vlrCRAquis>37,80</vlrCRAquis></RAquis>
+ *
+ * A comparação só tirava ESPAÇOS. Colando o XML de verdade — que é o caminho
+ * que a tela oferece —, os três códigos cairiam em `codigosDesconhecidos` e a
+ * conferência sairia **divergente**: o app diria que a Receita não totalizou
+ * nada e que totalizou três códigos que ele não conhece, TUDO ao mesmo tempo,
+ * com os valores certos dos dois lados.
+ *
+ * É o pior tipo de alarme falso — o que aparece justamente quando está tudo
+ * certo, e ensina a equipe a ignorar a conferência que existe para pegar o erro
+ * de verdade.
+ *
+ * Comparar por DÍGITOS resolve os dois formatos de uma vez, e não afrouxa nada:
+ * o código é numérico, a máscara é enfeite de tela.
+ */
+const soCodigo = (v) => texto(v).replace(/\D/g, '');
+
 /** Rótulo de cada componente para a tela — o código sozinho não diz nada. */
 const ROTULO_COMPONENTE = {
     inss: 'Contribuição previdenciária (INSS)',
@@ -149,18 +177,26 @@ export function conferirTotalizadorR2099({ apurado, totalizador } = {}) {
         };
     }
 
+    // Chave por DÍGITOS: o recibo humano escreve `1656-01` e o XML escreve
+    // `165601`. Os dois são o mesmo código — comparar a máscara faria o
+    // caminho que a tela recomenda (colar o XML) sair divergente com tudo certo.
     const porCodigo = new Map();
+    const rotuloOriginal = new Map();
     for (const t of totalizador) {
-        const cod = texto(t?.codigoReceita).replace(/\s/g, '');
+        const cod = soCodigo(t?.codigoReceita);
         if (!cod) continue;
         porCodigo.set(cod, r2((porCodigo.get(cod) || 0) + (Number(t?.valor) || 0)));
+        // Guarda como a Receita ESCREVEU, para o código desconhecido aparecer
+        // na tela do jeito que a pessoa vai procurar no e-CAC.
+        if (!rotuloOriginal.has(cod)) rotuloOriginal.set(cod, texto(t?.codigoReceita).trim() || cod);
     }
 
     const linhas = Object.keys(CODIGOS_RECEITA_FUNRURAL).map((componente) => {
         const codigo = CODIGOS_RECEITA_FUNRURAL[componente];
+        const chave = soCodigo(codigo);
         const noApp = r2(apurado?.[componente]);
-        const naReceita = porCodigo.has(codigo) ? porCodigo.get(codigo) : null;
-        porCodigo.delete(codigo);
+        const naReceita = porCodigo.has(chave) ? porCodigo.get(chave) : null;
+        porCodigo.delete(chave);
         return {
             componente,
             rotulo: ROTULO_COMPONENTE[componente],
@@ -175,7 +211,7 @@ export function conferirTotalizadorR2099({ apurado, totalizador } = {}) {
     });
 
     const codigosDesconhecidos = Array.from(porCodigo.entries())
-        .map(([codigoReceita, valor]) => ({ codigoReceita, valor }));
+        .map(([chave, valor]) => ({ codigoReceita: rotuloOriginal.get(chave) || chave, valor }));
 
     const divergentes = linhas.filter((l) => !l.confere);
     const situacao = divergentes.length || codigosDesconhecidos.length ? 'divergente' : 'confere';
