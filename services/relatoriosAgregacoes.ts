@@ -14,6 +14,8 @@ import { alocarTributacaoIcms } from './iobSageExportService';
 // o que fez "emissão própria 0" em 198 clientes (05/08) e o que fazia este
 // relatório dizer "nenhuma nota emitida" com 436 documentos no recorte.
 import { cnpjEmitente, modeloDoDoc } from '../sefaz-backend/participante-doc-helper.js';
+// Régua ÚNICA de correlação de CFOP — a mesma do Exportar SAGE e do modal.
+import { correlacionarCfop } from '../sefaz-backend/cfop-correlacao.js';
 // Cancelamento EFETIVO — o status gravado pode mentir (evento 155 não virava o
 // status; merge stub→nota ressuscitava a cancelada). docCancelado decide na
 // LEITURA olhando também eventos[]/cStat — bug 11/08, MV LIDER 639: cancelada
@@ -49,6 +51,12 @@ export function contraparteDoc(d: DocumentoFiscal): any {
 
 // ─── Resumo por CFOP ────────────────────────────────────────────────────────
 
+/** O que a correlação de entrada precisa saber sobre a empresa. */
+export interface CtxCorrelacao {
+    naturezaAtividade?: string;
+    cfopOverrides?: Record<string, string>;
+}
+
 export interface LinhaCfop {
     cfop: string;
     direcao: 'entrada' | 'saida';
@@ -65,14 +73,27 @@ export interface LinhaCfop {
 /**
  * Agrega por CFOP com o contábil da nota RATEADO entre os CFOPs dela na
  * proporção do valor dos itens (mesma regra do E201 do Exportar SAGE).
+ *
+ * ⚠️ **O CFOP DA ENTRADA NÃO É O DO XML.** Numa compra, o documento é do
+ * FORNECEDOR e traz o CFOP de SAÍDA dele (5102, 6102…); quem escritura a
+ * entrada lança 1102/2102. Paulo, 14/08: *"tudo que o cliente compra vira CFOP
+ * de entrada de acordo com a correlação necessária"*.
+ *
+ * Por isso `ctx` é **OBRIGATÓRIO**, e não opcional com default: parâmetro que
+ * dá para esquecer volta a agrupar pelo CFOP do fornecedor em silêncio, e o
+ * número fica plausível — o pior jeito de errar. Assim o `tsc` obriga cada
+ * chamador a dizer de onde vem a natureza da atividade.
  */
-export function resumoPorCfop(docs: DocumentoFiscal[]): LinhaCfop[] {
+export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): LinhaCfop[] {
     const mapa = new Map<string, LinhaCfop>();
     for (const d of docs) {
         if (!docValido(d) || !(d.itens || []).length) continue;
         const porCfop = new Map<string, typeof d.itens>();
         for (const it of d.itens) {
-            const cfop = String(it.cfop || '0000').replace(/\D/g, '') || '0000';
+            const cru = String(it.cfop || '0000').replace(/\D/g, '') || '0000';
+            // Na saída `correlacionarCfop` devolve o próprio CFOP; a nota
+            // própria de entrada (art. 136) já nasce 1xxx e passa intacta.
+            const cfop = String(correlacionarCfop(cru, d.direcao as any, ctx) || cru);
             if (!porCfop.has(cfop)) porCfop.set(cfop, []);
             porCfop.get(cfop)!.push(it);
         }
@@ -584,8 +605,15 @@ export interface LinhaProduto {
     valor: number;
 }
 
-/** Agregado por produto (NCM + descrição), com quantidade quando a unidade é única. */
-export function resumoPorProduto(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaProduto[] {
+/**
+ * Agregado por produto (NCM + descrição), com quantidade quando a unidade é única.
+ *
+ * `ctx` é obrigatório pelo mesmo motivo do `resumoPorCfop`: a coluna CFOP das
+ * ENTRADAS mostra o correlacionado. Sem isto, esta aba exibiria `5102` para a
+ * mesma nota em que o Livro exibe `1102` — duas telas discordando sobre o
+ * mesmo documento, que é o defeito que este projeto mais paga caro.
+ */
+export function resumoPorProduto(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida', ctx: CtxCorrelacao): LinhaProduto[] {
     const mapa = new Map<string, LinhaProduto & { _unidades: Set<string>; _cfops: Set<string>; _notas: Set<string> }>();
     for (const d of docs) {
         const tipoDoc = (d as any).tipoDoc || d.tipo;
@@ -602,7 +630,10 @@ export function resumoPorProduto(docs: DocumentoFiscal[], direcao: 'entrada' | '
             linha.qtd = r2(linha.qtd + (it.qCom || 0));
             linha.valor = r2(linha.valor + (it.vProd || 0) - (it.vDesc || 0));
             if (it.uCom) linha._unidades.add(String(it.uCom).trim().toUpperCase());
-            if (it.cfop) linha._cfops.add(String(it.cfop).replace(/\D/g, ''));
+            if (it.cfop) {
+                const cru = String(it.cfop).replace(/\D/g, '');
+                linha._cfops.add(String(correlacionarCfop(cru, direcao, ctx) || cru));
+            }
             linha._notas.add(d.id || d.chave);
             mapa.set(k, linha);
         }
