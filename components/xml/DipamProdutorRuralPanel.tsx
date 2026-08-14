@@ -301,6 +301,40 @@ const DetalheEmpresa: React.FC<{
             return acc;
         }, {}),
     );
+    // ── TIRAR UM FORNECEDOR DA SUB-ROGAÇÃO ──────────────────────────────────
+    //
+    // Paulo, 13/08, olhando o detalhe: *"achamos a diferença, tira esses do
+    // FUNRURAL e já era"*. O campo que faz isso JÁ EXISTIA no cadastro do
+    // produtor (`funrural: 'nao_aplica'` — o núcleo lê desde sempre); o que não
+    // existia era o botão ONDE o problema aparece. Rota sem botão de novo, só
+    // que do lado do cadastro.
+    //
+    // NÃO é uma lista de nomes no código: lista envelhece, e ninguém lembra
+    // POR QUE aquele fornecedor estava lá. É decisão humana, gravada no
+    // cadastro com quem confirmou — e reversível na mesma tela.
+    const [tirando, setTirando] = useState<string | null>(null);
+    const tirarDoFunrural = async (doc: string, nome: string) => {
+        const d = String(doc || '').replace(/\D/g, '');
+        if (!d) return;
+        if (!window.confirm(
+            `Tirar ${nome} da sub-rogação do FUNRURAL?\n\n`
+            + 'As notas dele saem do total desta e das próximas competências, e a decisão fica gravada no '
+            + 'cadastro do produtor com o seu nome. Dá pra reverter no cadastro.\n\n'
+            + 'Use quando a compra não for de produção rural (frete, serviço, bem usado) ou quando o '
+            + 'fornecedor não for produtor rural pessoa física.',
+        )) return;
+        setTirando(d);
+        try {
+            const r: any = await salvarProdutorRural({ doc: d, nome, funrural: 'nao_aplica' } as any);
+            if (r?.ok === false) { alert(`Falha: ${r.error}`); return; }
+            await onRecarregar();
+        } catch (e: any) {
+            alert(`Falha ao gravar: ${e?.message || e}`);
+        } finally {
+            setTirando(null);
+        }
+    };
+
     const relerMunicipios = async () => {
         if (!empresaId || !painel.competencia) return;
         setRelendo(true); setResultadoReler(null);
@@ -431,6 +465,16 @@ const DetalheEmpresa: React.FC<{
                                                         <span className="block text-[10px] text-red-500">
                                                             ⚠ a nota declara {fmtBRL(n.divergencia.declarado)} — diferença de {fmtBRL(n.divergencia.diferenca)}
                                                         </span>
+                                                    )}
+                                                    {isAdmin && (
+                                                        <button
+                                                            onClick={() => tirarDoFunrural(n.doc, n.fornecedor)}
+                                                            disabled={tirando === String(n.doc || '').replace(/\D/g, '')}
+                                                            title="Grava no cadastro do produtor que não há sub-rogação — vale para esta e para as próximas competências, e é reversível."
+                                                            className="btn-press mt-0.5 text-[10px] px-1.5 py-0.5 rounded border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 whitespace-nowrap"
+                                                        >
+                                                            {tirando === String(n.doc || '').replace(/\D/g, '') ? '⏳…' : '✕ tirar do FUNRURAL'}
+                                                        </button>
                                                     )}
                                                 </td>
                                                 <td className="text-right px-2 font-mono">{fmtBRL(n.base)}</td>

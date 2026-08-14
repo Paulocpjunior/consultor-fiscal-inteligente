@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 /**
  * DIPAM 1.1 + FUNRURAL por sub-rogação — compra de produtor rural.
  *
@@ -1083,6 +1085,54 @@ describe('foraDoTotal — o dinheiro que espera conferência', () => {
                 documentos: [dePF({ itens: [] })], competencia: '2026-07', empresa,
             });
             expect(painel.funrural.total).toBeGreaterThan(0);
+        });
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // TIRAR UM FORNECEDOR DA SUB-ROGAÇÃO — decisão humana, gravada.
+    //
+    // Paulo, 13/08: *"achamos a diferença, tira esses do FUNRURAL e já era"*.
+    // O campo já existia no cadastro (`funrural: 'nao_aplica'`); o que faltava
+    // era o BOTÃO onde o problema aparece — rota sem botão de novo, do lado do
+    // cadastro.
+    //
+    // Não vira lista de nomes no código: lista envelhece, e daqui a três meses
+    // ninguém lembra POR QUE aquele fornecedor estava lá.
+    // ═══════════════════════════════════════════════════════════════════════
+    describe('tirar da sub-rogação pelo cadastro', () => {
+        it('marcado como "não aplica", o fornecedor sai do FUNRURAL', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [pjAgro({
+                    emitente: { cnpjCpf: '06603394987', nome: 'EMILIO CAMPIGOTTO', uf: 'SC', codMunIBGE: '4204202' },
+                })],
+                competencia: '2026-07', empresa,
+                fornecedores: { '06603394987': { doc: '06603394987', funrural: 'nao_aplica' } },
+            });
+            expect(painel.funrural.total).toBe(0);
+        });
+
+        it('e isso NÃO afirma que ele é pessoa jurídica', () => {
+            // A decisão é sobre a SUB-ROGAÇÃO daquela relação, não sobre quem o
+            // fornecedor é. Marcar natureza aqui seria afirmar à Receita uma
+            // coisa que ninguém verificou.
+            const painel = montarDipamCompetencia({
+                documentos: [pjAgro({
+                    emitente: { cnpjCpf: '06603394987', nome: 'EMILIO CAMPIGOTTO', uf: 'SP', codMunIBGE: '3550308' },
+                })],
+                competencia: '2026-07', empresa,
+                fornecedores: { '06603394987': { doc: '06603394987', funrural: 'nao_aplica', codMunIBGE: '3550308' } },
+            });
+            // Continua sendo produtor rural PF para a DIPAM (que é outra
+            // obrigação, e não depende da sub-rogação).
+            expect(painel.dipam.total).toBeGreaterThan(0);
+        });
+
+        it('a TELA tem o botão — e ele grava o regime, não a natureza', () => {
+            const painel = readFileSync(join(__dirname, '..', 'components/xml/DipamProdutorRuralPanel.tsx'), 'utf8');
+            expect(painel).toMatch(/tirar do FUNRURAL/);
+            expect(painel).toMatch(/funrural: 'nao_aplica'/);
+            // Confirmação obrigatória: sai dinheiro do total.
+            expect(painel).toMatch(/window\.confirm/);
         });
     });
 

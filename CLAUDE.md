@@ -57,6 +57,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `modeloDoDoc`, que cai em '55' quando o campo não foi gravado** e faria
   justamente a NFS-e passar por NF-e. Serviço prestado por PF com retenção é
   R-2010, outro evento.
+  ✂️ **E O QUE SOBRA SE TIRA COM UM CLIQUE, NÃO COM UMA LISTA NO CÓDIGO**
+  (Paulo: *"achamos a diferença, tira esses do FUNRURAL e já era"*). O campo já
+  existia — `produtores_rurais.funrural = 'nao_aplica'`, lido pelo núcleo desde
+  sempre; faltava o BOTÃO na linha do FUNRURAL (rota sem botão outra vez, do
+  lado do cadastro). **✕ tirar do FUNRURAL** (admin) grava o REGIME, nunca a
+  natureza: dizer "é pessoa jurídica" seria afirmar sobre quem o fornecedor É,
+  coisa que ninguém verificou — e ele continua valendo para a DIPAM, que é outra
+  obrigação. Lista de nomes no código envelhece e daqui a três meses ninguém
+  lembra POR QUE aquele fornecedor estava lá; decisão gravada no cadastro tem
+  dono, data e volta atrás.
   ⚠️ **DUAS ARMADILHAS QUE ESSA REGRA PISOU NA HORA** (as duas pegas por teste):
   (1) reusei `CFOPS_COMPRA`, que é a régua da **DIPAM** — obrigação PAULISTA, só
   1xxx. Isso matava toda compra INTERESTADUAL de produtor, erro na direção mais
