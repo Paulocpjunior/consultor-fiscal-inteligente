@@ -185,6 +185,15 @@ describe('substituir reescreve o documento — mas só quando alguém PEDE', () 
         expect(servico).toMatch(/_substituidoPorEmail/);
     });
 
+    it('o TOAST separa substituída de importada — "N ok" desfazia a distinção', () => {
+        // A linha da lista já dizia "SUBSTITUÍDA"; o toast juntava tudo em
+        // "11 ok" e quem lê só ele não sabia que reescreveu 11 documentos
+        // fiscais. Reescrever não é o mesmo evento que criar.
+        expect(painel).toMatch(/SUBSTITUÍDA\(s\)/);
+        expect(painel).toMatch(/x\.status === 'ok' && x\.substituiu/);
+        expect(painel).not.toMatch(/\$\{ok\} ok,/);
+    });
+
     it('e a TELA diz que SUBSTITUIU, não "importada"', () => {
         // Igual a uma importação nova, ninguém saberia que dado foi reescrito.
         expect(painel).toMatch(/SUBSTITUÍDA pelo conteúdo deste arquivo/);
