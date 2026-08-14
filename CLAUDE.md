@@ -1038,6 +1038,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   NULO**, nunca parcial — parcial num campo chamado `vlrTotalBaseRet` seria lido
   como a base inteira. `tpServico` (tabela 06, 9 díg.) e `indObra` vão NULOS: não
   estão na nota, e "indObra quase sempre é 0" é o default proibido.
+  🧰 **A TELA DO R-2010 ENTROU NO CFI (14/08)** — sub-aba **🧰 R-2010 serviços
+  tomados** no card DCTFWeb. O núcleo e a rota existiam desde 12/08 e ninguém no
+  escritório conseguia VER o que seria declarado (mesma família do fechamento
+  sem botão). A tela CONFERE e não decide: alíquota, base e retenção vêm do
+  backend, e um teste barra a tela de refazer a conta. Base **não provada**
+  aparece como TEXTO, nunca número — parcial num campo de base seria lido como a
+  base inteira. O que ficou de fora é contado na cara (`sem retenção` e
+  `prestador PF`, que é eSocial), e lista vazia diz que **não prova ausência de
+  retenção**. As ressalvas vêm do backend: repeti-las na tela faria as duas
+  divergirem.
   Do lado do 📊 Contábil: `reinf/gerar-r2010.js` (12 blocos de asserção)
   reproduz o arquivo aceito campo a campo, inclusive o id
   `ID1326027010000002026070811123300001`; **UM PRESTADOR POR EVENTO** (decisão
