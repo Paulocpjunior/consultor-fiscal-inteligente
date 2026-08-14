@@ -30,6 +30,107 @@ const saveLocalEmpresas = (empresas: LucroPresumidoEmpresa[]) => {
     localStorage.setItem(STORAGE_KEY_LUCRO_EMPRESAS, JSON.stringify(empresas));
 };
 
+// ─── LISTA LEVE (cadastro, SEM a ficha financeira) ───────────────────────────
+//
+// Paulo, 14/08: *"não carregamos nenhuma informação do banco de dados até que o
+// colaborador ative a empresa, ganhamos tempo e agilidade"*.
+//
+// A `fichaFinanceira[]` é EMBUTIDA no documento da empresa (um registro de ~46
+// campos por mês), e o SDK do navegador não projeta campos: `getDocs` traz o
+// documento inteiro, sempre. Por isso a lista leve vem do BACKEND, que tem
+// `.select()`.
+//
+// ⚠️ O TIPO É OUTRO DE PROPÓSITO. `LucroEmpresaResumo` **não é** um
+// `LucroPresumidoEmpresa` — ele não tem `fichaFinanceira`. Se fosse o mesmo
+// tipo, dava para espalhar um resumo num `updateEmpresa` e **apagar a ficha
+// financeira inteira** de um cliente, em silêncio e sem volta. Sendo tipos
+// distintos, quem tentar isso não compila: o `tsc` é a trava, e trava que o
+// compilador aplica não depende de ninguém lembrar.
+
+export interface LucroEmpresaResumo {
+    id: string;
+    nome: string | null;
+    cnpj: string | null;
+    uf: string | null;
+    regimePadrao: 'Presumido' | 'Real' | null;
+    codCliente: string | null;
+    /**
+     * CONTAGEM de fichas — nunca o array.
+     *
+     * O selo de duplicata da lista diz "0 fichas — excluir este" × "N ficha(s)
+     * — manter", e é com ele que alguém decide QUAL CADASTRO APAGAR. Um zero
+     * que na verdade significasse "não carreguei" mandaria excluir o cadastro
+     * bom. Por isso o backend lê o array e devolve o número.
+     */
+    fichas: number;
+    capturarSefaz: boolean;
+}
+
+export interface LucroResumoResposta {
+    empresas: LucroEmpresaResumo[];
+    total: number;
+    ocultas: { excluidas: number; fundidas: number };
+    /** Motivo de a lista ter vindo pelo caminho antigo (pesado), quando veio. */
+    degradado?: string;
+}
+
+/**
+ * Lista para ESCOLHER a empresa. O documento completo só é buscado no ⚡ Ativar.
+ *
+ * Se a rota falhar, cai no caminho antigo (documento inteiro) e DIZ que caiu:
+ * mais lento porém funcionando é melhor que lista vazia, que seria lida como
+ * "não há empresas no Lucro" — mentira que manda procurar cadastro perdido.
+ */
+export const getEmpresasResumo = async (currentUser?: User | null): Promise<LucroResumoResposta> => {
+    if (!currentUser) return { empresas: [], total: 0, ocultas: { excluidas: 0, fundidas: 0 } };
+    try {
+        const u = auth?.currentUser;
+        if (!u) throw new Error('sem sessão');
+        const token = await u.getIdToken();
+        const res = await fetch('/api/admin/lucro/empresas-resumo', {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        return { empresas: data.empresas || [], total: data.total || 0, ocultas: data.ocultas || { excluidas: 0, fundidas: 0 } };
+    } catch (e: any) {
+        console.warn('[Lucro] resumo indisponível, caindo no caminho completo:', e?.message);
+        const completas = await getEmpresas(currentUser);
+        return {
+            empresas: completas.map((e) => ({
+                id: e.id,
+                nome: (e as any).nome || (e as any).razaoSocial || null,
+                cnpj: String((e as any).cnpj || '').replace(/\D/g, '') || null,
+                uf: String((e as any).uf || '').toUpperCase() || null,
+                regimePadrao: (e as any).regimePadrao || null,
+                codCliente: String((e as any).codCliente ?? (e as any).dadosFiscais?.codCliente ?? '') || null,
+                fichas: ((e as any).fichaFinanceira || []).length,
+                capturarSefaz: (e as any).capturarSefaz !== false,
+            })),
+            total: completas.length,
+            ocultas: { excluidas: 0, fundidas: 0 },
+            degradado: 'A lista veio pelo caminho antigo (mais lento). A ficha financeira de todas as empresas foi baixada junto.',
+        };
+    }
+};
+
+/**
+ * O documento COMPLETO de uma empresa — é o que o ⚡ Ativar busca.
+ *
+ * Uma leitura por id, sob demanda. É aqui que a ficha financeira chega, e só
+ * da empresa que a pessoa abriu.
+ */
+export const getEmpresaCompleta = async (id: string): Promise<LucroPresumidoEmpresa | null> => {
+    if (!isFirebaseConfigured || !db || !auth?.currentUser) {
+        return getLocalEmpresas().find((e) => e.id === id) || null;
+    }
+    const snap = await getDoc(doc(db, 'lucro_empresas', id));
+    if (!snap.exists()) return null;
+    const d = snap.data() as any;
+    if (d._deleted || d._merged_into) return null;
+    return { id: snap.id, ...d } as LucroPresumidoEmpresa;
+};
+
 // --- CRUD ---
 
 export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresumidoEmpresa[]> => {

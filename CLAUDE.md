@@ -75,6 +75,38 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   julgar o lado da ENTRADA: CFOP de saída (5101) numa nota de entrada é a NF-e do
   próprio produtor, que sai pela dedup do art. 136 e **não pode cobrar
   pendência** — era exatamente o alarme apagado em 12/08.
+- **MATA-BURRO: DOIS DOCUMENTOS COM AÇÕES OPOSTAS NÃO PODEM TER A MESMA CARA NA
+  TELA** (14/08, NOVA ERA 07/2026 — o dia inteiro saiu daqui). A linha do
+  FUNRURAL mostrava `nº 255273 · JOSE D. KOKI`. Paulo leu *"o CFI está levando a
+  nota DELE e não está considerando a da NOVA ERA"* — leitura RAZOÁVEL e
+  ERRADA: 255273 é a nota **da NOVA ERA** (nota própria de entrada, art. 136),
+  e o nome do produtor aparece nela porque **na nota própria o produtor É o
+  fornecedor**. A NF-e do KOKI é a **nº 98**, e estava certinha no bloco das 80
+  excluídas. **O sistema estava certo o tempo todo.** O que mentia era a tela:
+  a nota que SE ESCRITURA e a que NÃO se escritura saíam idênticas, e nenhuma
+  das duas dizia qual era qual.
+  O PREJUÍZO FOI REAL E EM TRÊS CAMADAS: (1) Paulo clicou **✕ tirar do
+  FUNRURAL** em SEIS produtores para limpar a lista — tirando justamente as
+  notas próprias que DEVEM gerar sub-rogação; (2) eu diagnostiquei a causa
+  errada e gastei DOIS deploys (487-491) numa segunda cópia da régua de direção
+  que era defeito real mas **não era este caso** — as notas vinham do importer
+  principal, que já tinha a régua desde 31/07; (3) o número do ↩ prometia o
+  DOBRO, porque a dedup do art. 136 exigia `funrural.aplica` e não rodava em
+  quem saiu pelo ✕ (NUNO: 11 notas/R$ 309.645,94/"voltaria R$ 5.047,23", com
+  cada compra contada duas vezes). Corrigido: `entraNoPar` inclui quem está
+  fora por DECISÃO, e a exclusão **só derruba o que estava de pé** — em quem
+  saiu pelo ✕ o motivo continua sendo a decisão, senão o caminho de volta (que
+  é o cadastro) sumiria da vista.
+  **A REGRA QUE FICA — e ela é mais forte que "causa junto do número": quando
+  duas linhas da mesma lista pedem AÇÕES OPOSTAS, a linha tem que dizer QUAL
+  DELAS ELA É.** Aqui virou 🟢 `nota própria de entrada (art. 136)` × 🟡 `NF-e
+  do produtor — sem nota própria que a cubra`, com o CFOP e a PROVA da direção
+  (`tpNF` × `cfop-de-entrada`) do lado. Foi essa linha que resolveu o caso em
+  UM print, depois de dois dias — e é a mesma família do "Já importado" sem
+  estado e do "sem movimento" sem causa. ⚠️ **CORRELATO QUE CUSTOU CARO: eu
+  DEDUZI a causa em vez de instrumentar a tela.** Tinha o print, tinha o total,
+  não tinha o dado — e saí consertando por hipótese. Instrumentar primeiro
+  custaria um deploy; deduzir custou dois e uma decisão errada do dono.
 - **MATA-BURRO: BOTÃO QUE TIRA COISA DO TOTAL NASCE COM O BOTÃO QUE DESFAZ**
   (14/08). O ✕ *"tirar do FUNRURAL"* subiu em 13/08 e no dia seguinte o Paulo
   clicou por engano: **o produtor sumiu da tela junto com o único botão que

@@ -25,7 +25,12 @@ interface LucroPresumidoRealDashboardProps {
 
 const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = ({ currentUser, externalSelectedId, onAddToHistory }) => {
     const confirm = useConfirm();
-    const [empresas, setEmpresas] = useState<LucroPresumidoEmpresa[]>([]);
+    const [empresas, setEmpresas] = useState<lucroPresumidoService.LucroEmpresaResumo[]>([]);
+    // Documento COMPLETO por empresa — chega no ⚡ Ativar, não na entrada da
+    // tela. Mesmo desenho da carga sob demanda do Simples (App.tsx).
+    const [carregadas, setCarregadas] = useState<Record<string, LucroPresumidoEmpresa>>({});
+    const [abrindo, setAbrindo] = useState<string | null>(null);
+    const [avisoLista, setAvisoLista] = useState<string | null>(null);
     const [selectedEmpresaId, setSelectedEmpresaId] = useState<string | null>(null);
     const [selectedFichaId, setSelectedFichaId] = useState<string | null>(null);
     const [view, setView] = useState<'list' | 'details' | 'report' | 'new_company' | 'new_ficha'>('list');
@@ -124,7 +129,10 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const [issAliquota, setIssAliquota] = useState(5);
     const [pagarCotas, setPagarCotas] = useState(false);
 
-    const selectedEmpresa = useMemo(() => empresas.find(e => e.id === selectedEmpresaId), [empresas, selectedEmpresaId]);
+    const selectedEmpresa = useMemo(
+        () => (selectedEmpresaId ? carregadas[selectedEmpresaId] : undefined),
+        [carregadas, selectedEmpresaId],
+    );
 
     // CÁLCULO DE RETENÇÕES DE MESES ANTERIORES NO TRIMESTRE
     const retencoesAcumuladas = useMemo(
@@ -415,13 +423,49 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const loadEmpresas = async () => {
         setLoading(true);
         try {
-            const data = await lucroPresumidoService.getEmpresas(currentUser);
-            setEmpresas(data);
+            const r = await lucroPresumidoService.getEmpresasResumo(currentUser);
+            setEmpresas(r.empresas);
+            setAvisoLista(r.degradado || null);
         } catch (error) {
             console.error(error);
         } finally {
             setLoading(false);
         }
+    };
+
+    /**
+     * ⚡ ATIVAR — é aqui que o banco é lido pela primeira vez para esta empresa.
+     *
+     * Paulo, 14/08: *"Ativar Empresa é o primeiro passo do colaborador … não
+     * carregamos nenhuma informação do banco de dados até que o colaborador
+     * ative a empresa, ganhamos tempo e agilidade"*. A ficha financeira mora
+     * DENTRO do documento da empresa (um registro de ~46 campos por mês), então
+     * abrir a tela buscando todas era baixar todo mês de todo cliente.
+     *
+     * Empresa já aberta nesta sessão não é buscada de novo — e falha aqui NÃO
+     * entra no detalhe com a empresa pela metade: tela de apuração com ficha
+     * faltando é o tipo de coisa que vira lançamento errado.
+     */
+    const abrirEmpresa = async (id: string) => {
+        if (carregadas[id]) { setSelectedEmpresaId(id); setView('details'); return; }
+        setAbrindo(id);
+        try {
+            const completa = await lucroPresumidoService.getEmpresaCompleta(id);
+            if (!completa) { showToast('Não foi possível abrir esta empresa — ela pode ter sido excluída. Atualize a lista.'); return; }
+            setCarregadas(prev => ({ ...prev, [id]: completa }));
+            setSelectedEmpresaId(id);
+            setView('details');
+        } catch (e: any) {
+            showToast(`Falha ao carregar a empresa: ${e?.message || 'erro desconhecido'}. Tente de novo.`);
+        } finally {
+            setAbrindo(null);
+        }
+    };
+
+    /** Relê o documento inteiro depois de gravar — é ele que alimenta a apuração. */
+    const recarregarAberta = async (id: string) => {
+        const completa = await lucroPresumidoService.getEmpresaCompleta(id);
+        if (completa) setCarregadas(prev => ({ ...prev, [id]: completa }));
     };
 
     const handleCnpjVerification = async () => {
@@ -470,7 +514,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const handleDeleteCompany = async (id: string) => {
         const empresa = empresas.find(e => e.id === id);
         const ok = await confirm({
-            title: empresa ? `Excluir "${empresa.nome}"?` : 'Excluir empresa?',
+            title: empresa ? `Excluir "${empresa.nome || 'esta empresa'}"?` : 'Excluir empresa?',
             message: 'Esta ação não pode ser desfeita.',
             variant: 'danger',
             confirmLabel: 'Excluir',
@@ -750,8 +794,9 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                         dadosFiscais: { ...selectedEmpresa.dadosFiscais, ccmSp },
                         nfseSpAutorizadoEm: nfseSpAutorizadoEm || undefined,
                     });
-                    const atualizadas = await lucroPresumidoService.getEmpresas(currentUser);
-                    setEmpresas(atualizadas);
+                    const r = await lucroPresumidoService.getEmpresasResumo(currentUser);
+                    setEmpresas(r.empresas);
+                    await recarregarAberta(selectedEmpresa.id);
                 }}
                 onShowToast={showToast}
             />
@@ -767,13 +812,13 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                     empresas={empresas}
                     currentUser={currentUser}
                     onNovaEmpresa={() => setView('new_company')}
-                    onAbrir={(id) => { setSelectedEmpresaId(id); setView('details'); }}
+                    onAbrir={abrirEmpresa}
                     onExcluir={handleDeleteCompany}
                     onMesclado={async () => {
                         // Pós-mesclagem: refetch da nuvem — o perdedor (lápide
                         // _merged_into) some e o vencedor volta com as fichas novas.
-                        const atualizadas = await lucroPresumidoService.getEmpresas(currentUser);
-                        setEmpresas(atualizadas);
+                        const r = await lucroPresumidoService.getEmpresasResumo(currentUser);
+                        setEmpresas(r.empresas);
                     }}
                 />
             )}
@@ -823,8 +868,9 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                             ...(dados.dataAbertura !== undefined ? { dataAbertura: dados.dataAbertura } : {}),
                         } as any);
                         // Refresh lista pra refletir mudanca
-                        const empresasAtualizadas = await lucroPresumidoService.getEmpresas(currentUser);
-                        setEmpresas(empresasAtualizadas);
+                        const r = await lucroPresumidoService.getEmpresasResumo(currentUser);
+                        setEmpresas(r.empresas);
+                        await recarregarAberta(selectedEmpresa.id);
                     }}
                 />
 
@@ -838,8 +884,9 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                     valoresAtuais={selectedEmpresa.dadosFiscais}
                     onSave={async (dados) => {
                         await lucroPresumidoService.updateEmpresa(selectedEmpresa.id, { dadosFiscais: dados });
-                        const empresasAtualizadas = await lucroPresumidoService.getEmpresas(currentUser);
-                        setEmpresas(empresasAtualizadas);
+                        const r = await lucroPresumidoService.getEmpresasResumo(currentUser);
+                        setEmpresas(r.empresas);
+                        await recarregarAberta(selectedEmpresa.id);
                     }}
                 />
                 </>
