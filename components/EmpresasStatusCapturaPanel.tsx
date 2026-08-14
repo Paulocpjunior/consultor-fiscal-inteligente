@@ -639,7 +639,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                             <th className="px-2 py-2 text-center">NFSe Nacional</th>
                             <th className="px-2 py-2 text-center">Capturas</th>
                             <th className="px-2 py-2 text-left" title="Só o que impede a CAPTURA. A conferência do cadastro completo fica em &quot;Completar cadastro&quot;.">Bloqueios de captura</th>
-                            <th className="px-2 py-2 text-center">Ações</th>
+                            <th className="px-2 py-2 text-center sticky right-0 z-10 bg-slate-100 dark:bg-slate-700">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -807,7 +807,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                         equipe, e quem enxerga a pendência tem de poder
                                         corrigi-la (27/07). As ações de captura e as
                                         destrutivas seguem admin-only. */}
-                                    <td className="px-2 py-1.5 text-center align-top">
+                                    <td className="px-2 py-1.5 text-center align-top sticky right-0 z-10 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700">
                                         <div className="flex flex-col gap-1 items-stretch">
                                             {isAdmin && (
                                                 <>
