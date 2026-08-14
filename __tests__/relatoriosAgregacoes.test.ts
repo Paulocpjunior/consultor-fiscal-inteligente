@@ -30,13 +30,78 @@ const nfse = (over: any = {}) => ({
     ...over,
 });
 
+/** Contexto da correlação — comércio é o caso comum da carteira. */
+const CTX = { naturezaAtividade: 'comercio' };
+
+// ============================================================================
+// O CFOP DA ENTRADA É O CORRELACIONADO, NÃO O DO FORNECEDOR.
+//
+// Paulo, 14/08, apontando o Livro de Entradas: *"o relatório é com base nos
+// CFOPs de saída dos fornecedores dos nossos clientes, ou seja tudo que o
+// cliente compra vira CFOP de entrada de acordo com a correlação necessária"*.
+//
+// O XML de uma compra é do FORNECEDOR e traz o CFOP de SAÍDA dele. Quem
+// escritura a entrada lança 1102/2102. A régua já existia (`correlacionarCfop`,
+// usada pelo Exportar SAGE e pelo modal) — faltava nos relatórios, que era o
+// TERCEIRO lugar a precisar dela.
+// ============================================================================
+describe('correlação do CFOP nas ENTRADAS', () => {
+    const compra = (cfop: string, over: Record<string, unknown> = {}) => nfe({
+        direcao: 'entrada',
+        itens: [{ cfop, vProd: 1000, vICMS: 180, vBC: 1000, cst: '00' }],
+        valorTotal: 1000, totais: { vNF: 1000 },
+        ...over,
+    });
+
+    it('compra interna: o 5102 do fornecedor vira 1102 no livro', () => {
+        const r = resumoPorCfop([compra('5102')] as any, CTX);
+        expect(r.map(l => l.cfop)).toEqual(['1102']);
+    });
+
+    it('compra INTERESTADUAL: 6102 vira 2102 — o estado do fornecedor não se perde', () => {
+        const r = resumoPorCfop([compra('6102')] as any, CTX);
+        expect(r.map(l => l.cfop)).toEqual(['2102']);
+    });
+
+    it('indústria compra para INDUSTRIALIZAR: o sufixo muda para 101', () => {
+        // É por isso que a natureza da atividade tem de viajar junto — e por
+        // isso a tela e o PDF dizem qual foi usada e de onde ela veio.
+        const r = resumoPorCfop([compra('5102')] as any, { naturezaAtividade: 'industria' });
+        expect(r.map(l => l.cfop)).toEqual(['1101']);
+    });
+
+    it('SAÍDA não é correlacionada — o CFOP já é o da empresa', () => {
+        const r = resumoPorCfop([nfe({
+            direcao: 'saida',
+            itens: [{ cfop: '5102', vProd: 300, vICMS: 54, vBC: 300, cst: '00' }],
+            valorTotal: 300, totais: { vNF: 300 },
+        })] as any, CTX);
+        expect(r.map(l => l.cfop)).toEqual(['5102']);
+    });
+
+    it('nota própria de entrada (art. 136) já nasce 1xxx e passa INTACTA', () => {
+        // Compra de produtor rural: a nota é emitida pelo próprio cliente, com
+        // CFOP de entrada. Correlacionar de novo seria mexer no que já está certo.
+        const r = resumoPorCfop([compra('1102')] as any, CTX);
+        expect(r.map(l => l.cfop)).toEqual(['1102']);
+    });
+
+    it('override manual do cadastro VENCE a correlação automática', () => {
+        const r = resumoPorCfop([compra('5102')] as any, {
+            naturezaAtividade: 'comercio',
+            cfopOverrides: { '5102': '1556' },
+        });
+        expect(r.map(l => l.cfop)).toEqual(['1556']);
+    });
+});
+
 describe('resumoPorCfop', () => {
     it('agrupa por direção+CFOP com as colunas da alocação', () => {
         const r = resumoPorCfop([
             nfe(),
             nfe({ id: 'y', numero: '2', itens: [{ cfop: '1102', vProd: 500, vICMS: 90, vBC: 500, cst: '00' }], valorTotal: 500, totais: { vNF: 500 } }),
             nfe({ id: 'z', numero: '3', direcao: 'saida', itens: [{ cfop: '5102', vProd: 300, vICMS: 54, vBC: 300, cst: '00' }], valorTotal: 300, totais: { vNF: 300 } }),
-        ] as any);
+        ] as any, CTX);
         expect(r).toHaveLength(2);
         const e1102 = r.find(l => l.cfop === '1102')!;
         expect(e1102.notas).toBe(2);
@@ -54,13 +119,13 @@ describe('resumoPorCfop', () => {
                 { cfop: '1102', vProd: 600, vICMS: 108, vBC: 600, cst: '00' },
                 { cfop: '1403', vProd: 400, vICMS: 0, cst: '60' },
             ],
-        })] as any);
+        })] as any, CTX);
         const soma = r.reduce((s, l) => s + l.contabil, 0);
         expect(soma).toBeCloseTo(1000.01, 2);
     });
 
     it('cancelada fica fora', () => {
-        expect(resumoPorCfop([nfe({ status: 'cancelado' })] as any)).toHaveLength(0);
+        expect(resumoPorCfop([nfe({ status: 'cancelado' })] as any, CTX)).toHaveLength(0);
     });
 });
 
@@ -289,7 +354,7 @@ describe('resumoPorProduto', () => {
             nfe({ itens: [{ cfop: '1102', ncm: '08039000', xProd: 'Banana', vProd: 600, qCom: 10, uCom: 'KG', vICMS: 0, cst: '41' }] }),
             nfe({ id: 'b', itens: [{ cfop: '1403', ncm: '08039000', xProd: 'banana ', vProd: 400, qCom: 5, uCom: 'kg', vICMS: 0, cst: '60' }] }),
             nfe({ id: 'c', itens: [{ cfop: '1102', ncm: '10063021', xProd: 'Arroz', vProd: 100, qCom: 2, uCom: 'SC', vICMS: 0, cst: '41' }] }),
-        ] as any, 'entrada');
+        ] as any, 'entrada', CTX);
         expect(r).toHaveLength(2);
         expect(r[0]).toMatchObject({ produto: 'BANANA', ncm: '08039000', qtd: 15, notas: 2, unidade: 'KG', valor: 1000, cfops: '1102 1403' });
     });

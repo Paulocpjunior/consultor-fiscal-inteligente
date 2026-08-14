@@ -20,6 +20,8 @@
 import React, { useMemo, useState } from 'react';
 import type { User, DocumentoFiscal, LucroPresumidoEmpresa } from '../../types';
 import { listDocumentos, getEmpresasDisponiveis, getIdentificacaoEmpresa, type EmpresaXmlOption } from '../../services/xmlFiscalService';
+// Régua ÚNICA de correlação — a mesma do Exportar SAGE e do modal de CFOP.
+import { correlacionarCfop, resolverNaturezaAtividade } from '../../sefaz-backend/cfop-correlacao.js';
 import { alocarTributacaoIcms } from '../../services/iobSageExportService';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 import {
@@ -125,6 +127,10 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // Identificação obrigatória dos relatórios (responsável legal + contador,
     // Paulo 01/08) — buscada junto com o recorte, do cadastro da empresa.
     const [identificacao, setIdentificacao] = useState<IdentificacaoPdf>({});
+    // O cadastro fiscal INTEIRO, não só o bloco do PDF: é dele que saem a
+    // natureza da atividade e os overrides de CFOP, que a correlação de entrada
+    // precisa (`correlacionarCfop`).
+    const [cadastroFiscal, setCadastroFiscal] = useState<any>(null);
 
     React.useEffect(() => {
         let alive = true;
@@ -160,6 +166,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 getIdentificacaoEmpresa(alvo),
             ]);
             setIdentificacao(montarIdentificacao(dadosFiscais));
+            setCadastroFiscal(dadosFiscais || null);
             setTruncado(!!meta.truncado);
             const cnpj = alvo.cnpj.replace(/\D/g, '');
             setDocs(todos
@@ -257,10 +264,10 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
             )}
 
             {aba === 'livro' && docsRecorte && empresa && (
-                <AbaLivro docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
+                <AbaLivro docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} />
             )}
             {aba === 'cfop' && docsRecorte && empresa && (
-                <AbaCfop docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
+                <AbaCfop docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} />
             )}
             {aba === 'impostos-resumo' && docsRecorte && empresa && (
                 <AbaImpostosResumo docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} />
@@ -275,7 +282,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <AbaAliquota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
             {aba === 'produto' && docsRecorte && empresa && (
-                <AbaProduto docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
+                <AbaProduto docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} />
             )}
             {aba === 'participante' && docsRecorte && empresa && (
                 <AbaParticipante docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
@@ -328,7 +335,16 @@ interface AbaDocsProps {
     truncado?: boolean;
     /** Bloco obrigatório do PDF (responsável legal + contador do cadastro). */
     identificacao?: IdentificacaoPdf;
+    /** `dadosFiscais` da empresa — natureza da atividade + overrides de CFOP. */
+    cadastroFiscal?: any;
 }
+
+/** De onde veio a natureza da atividade — o papel tem que dizer. */
+const ORIGEM_NATUREZA: Record<string, string> = {
+    cadastro: 'declarada no cadastro',
+    indicador: 'derivada do indicador de atividade',
+    padrao: 'PADRÃO (comércio) — não declarada no cadastro, confira',
+};
 
 const obsTruncado = (truncado?: boolean) => truncado
     ? ['ATENÇÃO: a leitura da competência atingiu o limite — os números podem estar INCOMPLETOS.']
@@ -336,7 +352,7 @@ const obsTruncado = (truncado?: boolean) => truncado
 
 // ─── 1. Livro de Entradas/Saídas ────────────────────────────────────────────
 
-const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
+const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao, cadastroFiscal }) => {
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
     const { gerando, rodar } = usePdf();
 
@@ -345,6 +361,14 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
     // 18.900,00) — mesma duplicidade que dobrou o FUNRURAL em 11/08, e a mesma
     // régua do RICMS/SP art. 136, I, "a" (RC 33068/2025). Só nas ENTRADAS: na
     // saída não existe nota própria de entrada.
+    // Natureza EFETIVA + de ONDE ela veio. O sufixo da compra depende dela
+    // (comércio 102 · indústria 101 · serviços 556), então o papel tem que
+    // dizer qual foi usada — número sem a régua do lado não se confere.
+    const natureza = useMemo(
+        () => resolverNaturezaAtividade(cadastroFiscal || {}) as { natureza: string; origem: string },
+        [cadastroFiscal],
+    );
+
     const { linhas, excluidas } = useMemo(() => {
         const filtrados = docs.filter(d => d.direcao === direcao && docValido(d)
             && ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo));
@@ -352,11 +376,33 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             const contabil = d.totais?.vNF || d.valorTotal || 0;
             const a = alocarTributacaoIcms(d.itens || [], contabil);
             const parte: any = contraparteDoc(d);
+            // O CFOP DO LIVRO DE ENTRADAS É O DA ENTRADA — não o do fornecedor.
+            //
+            // Paulo, 14/08: *"o relatório é com base nos CFOPs de saída dos
+            // fornecedores dos nossos clientes; tudo que o cliente compra vira
+            // CFOP de entrada de acordo com a correlação necessária"*. O XML de
+            // uma compra traz o CFOP de quem VENDEU (5102, 6102…), porque a
+            // nota é do fornecedor. Quem escritura a entrada lança 1102/2102.
+            //
+            // A régua é a MESMA do Exportar SAGE e do modal de correlação
+            // (`correlacionarCfop`) — importada, nunca copiada: a réplica que o
+            // modal tinha chegou a exibir `1405`, CFOP que não existe (PR #621).
+            // Na saída ela devolve o CFOP original, e nota própria de entrada
+            // (art. 136), que já nasce 1xxx, passa intacta.
+            const cfopsEscriturados = Array.from(new Set(
+                (d.itens || [])
+                    .map((i: any) => String(i.cfop || '').replace(/\D/g, ''))
+                    .filter(Boolean)
+                    .map((c: string) => String(correlacionarCfop(c, direcao, {
+                        naturezaAtividade: natureza.natureza,
+                        cfopOverrides: cadastroFiscal?.cfopOverrides,
+                    }) || c)),
+            ));
             return {
                 data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
                 numero: d.numero || '—',
                 participante: parte?.nome || '—',
-                cfops: Array.from(new Set((d.itens || []).map((i: any) => i.cfop).filter(Boolean))).join(' ') || '—',
+                cfops: cfopsEscriturados.join(' ') || '—',
                 contabil, ...a,
             };
         };
@@ -368,7 +414,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                 || String(x.numero).localeCompare(String(y.numero))),
             excluidas: r.excluidas,
         };
-    }, [docs, direcao]);
+    }, [docs, direcao, natureza, cadastroFiscal]);
 
     const tot = useMemo(() => linhas.reduce((t: any, l: any) => ({
         contabil: t.contabil + l.contabil, base: t.base + l.base, icms: t.icms + l.icms,
@@ -394,6 +440,11 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
         identificacao,
         observacoes: [
             'Base/Isentas/Outras alocadas pela tributação de cada item (CST do XML), fechando no valor contábil — mesma régua do Exportar SAGE.',
+            ...(direcao === 'entrada' ? [
+                'CFOP: o XML da compra traz o CFOP do FORNECEDOR (saída). Aqui está o CFOP DE ENTRADA correlacionado — '
+                + `natureza da atividade "${natureza.natureza}" (${ORIGEM_NATUREZA[natureza.origem] || natureza.origem}). `
+                + 'Mesma régua do Exportar SAGE.',
+            ] : []),
             // Total que muda sozinho faz desconfiar do número certo: o que saiu
             // do livro sai NOMEADO no papel, não só na tela.
             ...(excluidas.length ? [
@@ -419,6 +470,17 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                     {linhas.length} nota(s) · contábil {fmtBRL(tot.contabil)} · base {fmtBRL(tot.base)} · isentas {fmtBRL(tot.isentos)} · outras {fmtBRL(tot.outras)}
                 </span>
             </div>
+            {/* A régua VAI JUNTO DO NÚMERO: o sufixo da compra muda com a
+                natureza (comércio 102 · indústria 101 · serviços 556), então
+                quem confere precisa ver qual foi usada — e se ela foi
+                DECLARADA ou apenas assumida. */}
+            {direcao === 'entrada' && (
+                <p className={`mt-2 text-[11px] ${natureza.origem === 'padrao' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500'}`}>
+                    CFOP correlacionado do fornecedor para a <strong>entrada</strong> — natureza da atividade{' '}
+                    <strong>{natureza.natureza}</strong> ({ORIGEM_NATUREZA[natureza.origem] || natureza.origem}).
+                    {natureza.origem === 'padrao' && ' Declare a atividade no cadastro para o sufixo sair certo.'}
+                </p>
+            )}
             {!!excluidas.length && (
                 <div className="mt-3 rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-300">
                     <strong>{excluidas.length} NF-e de produtor rural fora do livro</strong> — documento de ORIGEM.
@@ -437,9 +499,19 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
 
 // ─── 2. Resumo por CFOP ─────────────────────────────────────────────────────
 
-const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
+const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao, cadastroFiscal }) => {
     const { gerando, rodar } = usePdf();
-    const linhas = useMemo(() => resumoPorCfop(docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo))), [docs]);
+    const natureza = useMemo(
+        () => resolverNaturezaAtividade(cadastroFiscal || {}) as { natureza: string; origem: string },
+        [cadastroFiscal],
+    );
+    const linhas = useMemo(
+        () => resumoPorCfop(
+            docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo)),
+            { naturezaAtividade: natureza.natureza, cfopOverrides: cadastroFiscal?.cfopOverrides },
+        ),
+        [docs, natureza, cadastroFiscal],
+    );
 
     const pdf = () => rodar(() => gerarRelatorioPdf({
         titulo: `Resumo por CFOP — ${fmtComp(competencia)}`,
@@ -459,6 +531,8 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
         identificacao,
         observacoes: [
             'Contábil da nota rateado entre os CFOPs dela na proporção do valor dos itens (mesma regra do E201 do Exportar SAGE).',
+            'Nas ENTRADAS o CFOP é o CORRELACIONADO (o XML da compra traz o do fornecedor) — natureza da atividade '
+            + `"${natureza.natureza}" (${ORIGEM_NATUREZA[natureza.origem] || natureza.origem}).`,
             ...obsTruncado(truncado),
         ],
         fileName: `resumo-cfop-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
@@ -889,10 +963,20 @@ const AbaAliquota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunc
 
 const LIMITE_TELA = 50;
 
-const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
+const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao, cadastroFiscal }) => {
     const { gerando, rodar } = usePdf();
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
-    const linhas = useMemo(() => resumoPorProduto(docs, direcao), [docs, direcao]);
+    const natureza = useMemo(
+        () => resolverNaturezaAtividade(cadastroFiscal || {}) as { natureza: string; origem: string },
+        [cadastroFiscal],
+    );
+    const linhas = useMemo(
+        () => resumoPorProduto(docs, direcao, {
+            naturezaAtividade: natureza.natureza,
+            cfopOverrides: cadastroFiscal?.cfopOverrides,
+        }),
+        [docs, direcao, natureza, cadastroFiscal],
+    );
 
     const pdf = () => rodar(() => gerarRelatorioPdf({
         titulo: `Lançamento por produto — ${direcao === 'entrada' ? 'entradas' : 'saídas'} — ${fmtComp(competencia)}`,
