@@ -667,7 +667,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                             <td className={`px-3 py-2 text-right whitespace-nowrap font-semibold ${cat.creditavel ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500 line-through'}`}>
                               R$ {brl(cat.creditavel ? cat.somaBaseCalculo : 0)}
                             </td>
-                            <td className="px-3 py-2 text-center">
+                            <td className="px-3 py-2 text-center sticky right-0 z-10 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700">
                               {cat.categoria === 'SEM_CATEGORIA' ? (
                                 <span className="text-[10px] text-gray-400 italic">não gera crédito</span>
                               ) : (
@@ -706,7 +706,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                                         <th className="px-2 py-1 text-right font-medium">Alíq.</th>
                                         <th className="px-2 py-1 text-right font-medium">Valor ISS</th>
                                         <th className="px-2 py-1 text-right font-medium">Iss Retido</th>
-                                        <th className="px-2 py-1 text-center font-medium">Ações</th>
+                                        <th className="px-2 py-1 text-center font-medium sticky right-0 z-10 bg-gray-50 dark:bg-gray-800">Ações</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -724,7 +724,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                                           <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400">{nf.aliquota ? nf.aliquota.toFixed(2) : '—'}</td>
                                           <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(nf.valorIss)}</td>
                                           <td className="px-2 py-1 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap">R$ {brl(nf.issRetido)}</td>
-                                          <td className="px-2 py-1 text-center">
+                                          <td className="px-2 py-1 text-center sticky right-0 z-10 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700">
                                             <button
                                               type="button"
                                               onClick={() => setConfirmandoExclusaoNf({
@@ -918,7 +918,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
                     <th className="px-3 py-2 text-right font-medium">Valor das NFs</th>
                     <th className="px-3 py-2 text-right font-medium">Base de Cálculo</th>
                     <th className="px-3 py-2 text-right font-medium">ISS Retido</th>
-                    <th className="px-3 py-2 text-center font-medium">Ações</th>
+                    <th className="px-3 py-2 text-center font-medium sticky right-0 z-10 bg-gray-50 dark:bg-gray-800">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">

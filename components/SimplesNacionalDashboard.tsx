@@ -148,7 +148,7 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                     <th scope="col" className="px-6 py-3 text-center">Aliq. Efetiva</th>
                                     <th scope="col" className="px-6 py-3 text-right bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300">DAS (Mês Atual)</th>
                                     <th scope="col" className="px-6 py-3 text-right">DAS Est. 12m</th>
-                                    <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                                    <th scope="col" className="px-6 py-3 text-center sticky right-0 z-10 bg-slate-50 dark:bg-slate-700">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -160,7 +160,20 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                                     {prefixoCodCliente(e)}
                                                 </span>
                                             )}
-                                            {e.nome}
+                                            {/* ABRIR A EMPRESA pelo NOME.
+                                                Paulo, 14/08: *"cadê a opção p ATIVAR EMPRESA"* — ele
+                                                buscou 1200, achou a linha e não tinha como entrar.
+                                                A coluna "Ações" existia, mas fica DEPOIS de 7 colunas,
+                                                fora da tela, dentro de um overflow-x que não avisa que
+                                                existe mais coisa à direita. Ação principal escondida
+                                                atrás de rolagem horizontal é ação que não existe. */}
+                                            <button
+                                                onClick={() => onSelectEmpresa(e.id, 'detalhe')}
+                                                className="text-left hover:underline text-sky-700 dark:text-sky-300"
+                                                title="Abrir o painel desta empresa"
+                                            >
+                                                {e.nome}
+                                            </button>
                                             {cnpjsDuplicados.has(String(e.cnpj || '').replace(/\D/g, '')) && (() => {
                                                 // Responde "qual excluir?" com dado: quem tem 0 lançamentos
                                                 // (faturamento/histórico) é o cadastro-lixo; quem tem dados é
@@ -251,7 +264,7 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                             {e.resumo.das_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </td>
                                         <td className="px-6 py-4 text-right font-mono">{e.resumo.das.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                        <td className="px-6 py-4 text-center space-x-2 whitespace-nowrap">
+                                        <td className="px-6 py-4 text-center space-x-2 whitespace-nowrap sticky right-0 z-10 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700">
                                             <button onClick={() => onSelectEmpresa(e.id, 'detalhe')} className="font-medium text-sky-600 dark:text-sky-400 hover:underline">
                                                 Painel
                                             </button>
