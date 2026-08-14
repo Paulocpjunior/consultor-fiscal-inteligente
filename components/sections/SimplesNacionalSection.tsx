@@ -33,6 +33,13 @@ interface Props {
     simplesNotas: Record<string, SimplesNacionalNota[]>;
     selectedEmpresa: SimplesNacionalEmpresa | undefined;
     setSelectedSimplesEmpresaId: (id: string | null) => void;
+    /**
+     * Dispara a leitura das notas DAQUELA empresa.
+     *
+     * Ativar a empresa é o primeiro passo do colaborador — e é ele que autoriza
+     * o banco a falar. Antes disso o app carrega só o CADASTRO, que é leve.
+     */
+    onAtivarEmpresa: (id: string) => void | Promise<void>;
     simplesEmpresaToEdit: SimplesNacionalEmpresa | null;
     setSimplesEmpresaToEdit: (e: SimplesNacionalEmpresa | null) => void;
     currentUser: User | null;
@@ -48,7 +55,7 @@ const SimplesNacionalSection: React.FC<Props> = ({
     simplesView, setSimplesView,
     simplesEmpresas, setSimplesEmpresas,
     simplesNotas,
-    selectedEmpresa, setSelectedSimplesEmpresaId,
+    selectedEmpresa, setSelectedSimplesEmpresaId, onAtivarEmpresa,
     simplesEmpresaToEdit, setSimplesEmpresaToEdit,
     currentUser, setToastMessage,
     onSaveSimplesEmpresa, onImportNotas, onUpdateFolha12,
@@ -63,7 +70,14 @@ const SimplesNacionalSection: React.FC<Props> = ({
                     <SimplesNacionalDashboard
                         empresas={simplesEmpresas}
                         notas={simplesNotas}
-                        onSelectEmpresa={(id, view) => { setSelectedSimplesEmpresaId(id); setSimplesView(view); }}
+                        onSelectEmpresa={(id, view) => {
+                            // A ATIVAÇÃO vem antes da navegação: a tela de
+                            // destino já encontra as notas a caminho, em vez de
+                            // abrir vazia e preencher depois.
+                            void onAtivarEmpresa(id);
+                            setSelectedSimplesEmpresaId(id);
+                            setSimplesView(view);
+                        }}
                         onAddNew={() => { setSimplesEmpresaToEdit(null); setSimplesView('nova'); }}
                         onEdit={(empresa) => { setSimplesEmpresaToEdit(empresa); setSimplesView('nova'); }}
                         onDelete={async (empresa) => {

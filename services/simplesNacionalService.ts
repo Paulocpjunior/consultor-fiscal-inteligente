@@ -298,6 +298,49 @@ export const deleteEmpresa = async (id: string): Promise<void> => {
 };
 
 // ─── NOTAS ────────────────────────────────────────────────────────────────────
+/**
+ * As notas de UMA empresa — o carregamento que a ativação dispara.
+ *
+ * ═══ POR QUE ISSO EXISTE ════════════════════════════════════════════════════
+ *
+ * Paulo, 14/08: *"Ativar Empresa é o primeiro passo do colaborador (…) além
+ * disso não carregamos nenhuma informação do banco de dados até que o
+ * colaborador ative a empresa, ganhamos tempo e agilidade"*.
+ *
+ * Até aqui o login chamava `getAllNotas`, que faz `fetchAllDocs('simples_notas')`
+ * — **todas as notas de TODAS as empresas da casa**, antes de alguém escolher
+ * qualquer coisa. O colaborador que ia mexer em UMA empresa pagava a espera de
+ * ~400. A ativação é o que diz de qual empresa é o trabalho, e é ela que deve
+ * disparar a leitura.
+ *
+ * A consulta é por `empresaId` no servidor — trazer tudo e filtrar no cliente
+ * seria pagar o mesmo preço com outro nome.
+ */
+export const getNotasDaEmpresa = async (
+    empresaId: string,
+    _user?: User | null
+): Promise<SimplesNacionalNota[]> => {
+    const id = String(empresaId || '').trim();
+    if (!id) return [];
+    const porId = new Map<string, SimplesNacionalNota>();
+
+    // Local primeiro: nota ainda não sincronizada não pode sumir da tela.
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY_NOTAS);
+        const localMap = stored ? JSON.parse(stored) : {};
+        (localMap[id] || []).forEach((n: SimplesNacionalNota) => porId.set(n.id, n));
+    } catch { /* localStorage corrompido não derruba a leitura da nuvem */ }
+
+    if (isFirebaseConfigured && db && auth?.currentUser) {
+        try {
+            const snaps = await fetchAllDocs('simples_notas', [where('empresaId', '==', id)]);
+            // A nuvem SOBREPÕE o local — é a mesma ordem do getAllNotas.
+            snaps.forEach(d => porId.set(d.id, { id: d.id, ...d.data() } as SimplesNacionalNota));
+        } catch { /* silent: fica o que veio do local */ }
+    }
+    return [...porId.values()];
+};
+
 export const getAllNotas = async (
     user?: User | null
 ): Promise<Record<string, SimplesNacionalNota[]>> => {

@@ -151,18 +151,50 @@ const App: React.FC = () => {
     // Lucro Presumido/Real State (ID para navegação via histórico)
     const [selectedLucroEmpresaId, setSelectedLucroEmpresaId] = useState<string | null>(null);
 
+    /**
+     * ═══ ATIVAR EMPRESA É O PRIMEIRO PASSO — e antes dele o banco fica quieto ══
+     *
+     * Paulo, 14/08: *"Ativar Empresa é o primeiro passo do colaborador, é isso
+     * que define o que ele pode ou não fazer e em qual empresa; além disso não
+     * carregamos nenhuma informação do banco de dados até que o colaborador
+     * ative a empresa, ganhamos tempo e agilidade"*.
+     *
+     * O que este carregamento fazia: `getAllNotas` = `fetchAllDocs('simples_notas')`,
+     * **todas as notas de TODAS as empresas da casa**, em toda entrada no
+     * painel. Quem ia mexer em UMA empresa pagava a espera de ~400 — e o
+     * cadastro das empresas, que é o que a busca precisa, é leve.
+     *
+     * Agora entra só o CADASTRO. As notas de cada empresa chegam quando ela é
+     * ATIVADA (`carregarNotasDaEmpresa`), que é o momento em que se sabe de qual
+     * empresa é o trabalho.
+     */
     const loadSimplesData = async (user?: User | null) => {
         const targetUser = user || currentUser;
         if (!targetUser) return;
         try {
-            const empresas = await simplesService.getEmpresas(targetUser);
-            const notas = await simplesService.getAllNotas(targetUser);
-            setSimplesEmpresas(empresas);
-            setSimplesNotas(notas);
+            setSimplesEmpresas(await simplesService.getEmpresas(targetUser));
         } catch (e) {
             console.error("Erro ao carregar dados do Simples", e);
         }
     };
+
+    /**
+     * As notas de UMA empresa, na ativação.
+     *
+     * Guarda por empresa: reativar a mesma não repete a leitura. `force` existe
+     * para depois de importar/alterar, quando o que está em memória ficou velho.
+     */
+    const carregarNotasDaEmpresa = useCallback(async (empresaId: string, force = false) => {
+        const id = String(empresaId || '').trim();
+        if (!id) return;
+        if (!force && simplesNotas[id]) return;
+        try {
+            const notas = await simplesService.getNotasDaEmpresa(id, currentUser);
+            setSimplesNotas(prev => ({ ...prev, [id]: notas }));
+        } catch (e) {
+            console.error("Erro ao carregar as notas da empresa", e);
+        }
+    }, [currentUser, simplesNotas]);
 
     // ✅ ALTERADO: usa subscribeAuthState em vez de onAuthStateChanged manual.
     // O listener dispara imediatamente com o usuário atual (ou null),
@@ -543,10 +575,10 @@ const App: React.FC = () => {
         try {
             const result = await simplesService.parseAndSaveNotas(empresaId, file);
             if (currentUser) {
-                const empresas = await simplesService.getEmpresas(currentUser);
-                const notas = await simplesService.getAllNotas(currentUser);
-                setSimplesEmpresas(empresas);
-                setSimplesNotas(notas);
+                // Só o cadastro e as notas DESTA empresa: importar numa empresa
+                // não é motivo para reler o banco inteiro.
+                setSimplesEmpresas(await simplesService.getEmpresas(currentUser));
+                await carregarNotasDaEmpresa(empresaId, true);
             }
             if (result.faturamentoManual) {
                 setSimplesEmpresas(prev => prev.map(e =>
@@ -933,6 +965,7 @@ const App: React.FC = () => {
                                 simplesNotas={simplesNotas}
                                 selectedEmpresa={selectedEmpresa}
                                 setSelectedSimplesEmpresaId={setSelectedSimplesEmpresaId}
+                                onAtivarEmpresa={carregarNotasDaEmpresa}
                                 simplesEmpresaToEdit={simplesEmpresaToEdit}
                                 setSimplesEmpresaToEdit={setSimplesEmpresaToEdit}
                                 currentUser={currentUser}
