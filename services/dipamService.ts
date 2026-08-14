@@ -82,6 +82,27 @@ export interface DipamPainel {
             valor: number;
             motivo: string;
         }>;
+        /**
+         * Produtores tirados da sub-rogação por DECISÃO gravada no cadastro.
+         *
+         * Some da CONTA, não da TELA: um clique errado no ✕ fazia o produtor
+         * desaparecer junto com o botão que o desfaria, e quem errava ia
+         * procurar o lever errado (reimportar o XML não desfaz nada — a nota
+         * nunca saiu do banco). `funruralPotencial` é o que VOLTA ao total se a
+         * decisão for desfeita: reverter imposto sem o número do lado é decidir
+         * no escuro.
+         */
+        tiradosPorDecisao?: Array<{
+            doc: string | null;
+            fornecedor: string | null;
+            decisao: 'nao_aplica' | 'folha';
+            rotulo: string;
+            /** Só o ✕ se desfaz na linha; a opção pela FOLHA é do cadastro. */
+            reversivelNaLinha: boolean;
+            notas: number;
+            valor: number;
+            funruralPotencial: number;
+        }>;
     };
     notas?: any[];
     pendencias?: DipamPendencia[];
@@ -138,7 +159,13 @@ export interface ProdutorRural {
     codMunIBGE?: string;
     municipio?: string;
     natureza?: 'produtor_rural_pf' | 'pessoa_juridica' | 'cooperativa' | null;
-    funrural?: 'sub_rogacao' | 'folha' | 'nao_aplica' | null;
+    /**
+     * Regime do FUNRURAL. **'' LIMPA o campo** e devolve o produtor à régua
+     * automática — é assim que o ↩ desfaz o ✕. Marcar 'sub_rogacao' seria
+     * AFIRMAR que ele é produtor rural PF, coisa que desfazer um clique não
+     * verificou.
+     */
+    funrural?: 'sub_rogacao' | 'folha' | 'nao_aplica' | '' | null;
     /** Agricultura familiar: FUNRURAL continua em 1,5% (LC 224/2025). */
     seguradoEspecial?: boolean;
     /**
