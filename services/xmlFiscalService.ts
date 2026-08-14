@@ -468,7 +468,11 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             // volta invisível, sem nada apontando para cá.
             const paraGravar: Record<string, unknown> = { ...sanitize(documento) };
             if (leitura.permiteReincluir) {
+                // TODAS as lápides saem — não só a de exclusão. Limpar uma e
+                // deixar a outra devolve o documento ao mesmo estado de antes:
+                // invisível no app e bloqueando a reentrada.
                 paraGravar._deleted = false;
+                paraGravar._merged_into = null;
                 paraGravar._reincluidoEm = new Date().toISOString();
                 paraGravar._reincluidoPorEmail = user.email || null;
             }

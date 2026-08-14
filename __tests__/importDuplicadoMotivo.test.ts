@@ -20,7 +20,7 @@
 // ============================================================================
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { lerDuplicado } from '../services/importDuplicadoMotivo';
+import { lerDuplicado, ocultoDoApp } from '../services/importDuplicadoMotivo';
 
 const EMPRESA = { id: 'emp-1', nome: 'NOVA ERA', cnpj: '29.240.822/0001-21' };
 
@@ -107,6 +107,43 @@ describe('a LÁPIDE é a única que libera a reinclusão', () => {
         // está morto. Bloquear aqui deixaria a nota inalcançável para sempre.
         const r = lerDuplicado(doc({ _deleted: true, empresaId: 'emp-9' }), EMPRESA);
         expect(r.permiteReincluir).toBe(true);
+    });
+});
+
+describe('TODA lápide libera — não só a de exclusão', () => {
+    // A primeira versão desta correção olhou SÓ o `_deleted`. Quem tinha
+    // excluído pelo outro caminho continuou preso no mesmo lugar, e Paulo teve
+    // que apontar o mesmo problema duas vezes (14/08). Conferir lápide por
+    // lápide é a trava-escrita-como-LISTA de novo: a pergunta certa é "este
+    // documento aparece no app?", com a MESMA régua da listagem.
+    it('ocultoDoApp responde por CAUSA, e as causas têm nomes diferentes', () => {
+        expect(ocultoDoApp({ _deleted: true })).toBe('excluido');
+        expect(ocultoDoApp({ _merged_into: 'outro-id' })).toBe('mesclado');
+        expect(ocultoDoApp({})).toBeNull();
+        expect(ocultoDoApp(null)).toBeNull();
+    });
+
+    it('documento MESCLADO também reentra — ele está tão invisível quanto', () => {
+        const r = lerDuplicado(doc({ _merged_into: 'doc-vencedor' }), EMPRESA);
+        expect(r.situacao).toBe('excluido-pode-reincluir');
+        expect(r.permiteReincluir).toBe(true);
+        expect(r.mensagem).toMatch(/MESCLADO no documento doc-vencedor/);
+    });
+
+    it('e a frase do mesclado AVISA do risco que a do excluído não tem', () => {
+        // Mesclado foi juntado a OUTRO documento: reincluir pode ressuscitar
+        // uma duplicata de verdade. Omitir isso seria trocar um problema por
+        // outro sem dizer.
+        const r = lerDuplicado(doc({ _merged_into: 'doc-vencedor' }), EMPRESA);
+        expect(r.mensagem).toMatch(/duplicidade/);
+    });
+
+    it('a reinclusão limpa TODAS as lápides, não só a que disparou', () => {
+        // Limpar uma e deixar a outra devolve o documento ao mesmo estado:
+        // invisível no app e bloqueando a reentrada.
+        const servico = readFileSync(join(__dirname, '..', 'services/xmlFiscalService.ts'), 'utf8');
+        expect(servico).toMatch(/_deleted = false/);
+        expect(servico).toMatch(/_merged_into = null/);
     });
 });
 
