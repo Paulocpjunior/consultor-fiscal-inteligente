@@ -19,9 +19,30 @@ export interface XmlParticipantesNfe {
 export function competenciaFromDhEmi(value: unknown): string | null;
 export function extrairParticipantesNfe(xml: string): XmlParticipantesNfe;
 
-export function direcaoEfetivaDoc(
-    d: { direcao?: string | null; tpNF?: string | number | null } | null | undefined,
-): string | undefined;
+export interface DocParaDirecao {
+    direcao?: string | null;
+    tpNF?: string | number | null;
+    cnpjEmit?: string | null;
+    empresaCnpj?: string | null;
+    emitente?: { cnpj?: string | null; cnpjCpf?: string | null } | null;
+    itens?: Array<{ cfop?: string | null } | null | undefined> | null;
+}
+
+export function direcaoEfetivaDoc(d: DocParaDirecao | null | undefined): string | undefined;
+
+/** CFOP de ENTRADA: 1xxx (interna), 2xxx (interestadual), 3xxx (exterior). */
+export function ehCfopDeEntrada(cfop: unknown): boolean;
+
+/**
+ * A nota é NOTA PRÓPRIA DE ENTRADA (art. 136, I, "a" do RICMS/SP)? Devolve a
+ * PROVA junto: `tpNF` (o documento diz) ou `cfop-de-entrada` (nota emitida pela
+ * empresa com CFOP de entrada — é a prova que alcança o que foi gravado antes
+ * de o import manual passar a guardar o tpNF).
+ */
+export function ehNotaPropriaDeEntrada(
+    d: DocParaDirecao | null | undefined,
+    empresaCnpj?: string | null,
+): { sim: boolean; prova: 'tpNF' | 'cfop-de-entrada' | null };
 
 /**
  * Cancelamento EFETIVO do documento — mesma lição da direção: o status gravado

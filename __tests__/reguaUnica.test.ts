@@ -87,6 +87,24 @@ const REGUAS_VIGIADAS: Regua[] = [
         ],
     },
     {
+        nome: 'Nota própria de ENTRADA (art. 136) — tpNF quando existe, CFOP quando não existe',
+        dono: 'sefaz-backend/xml-metadata-helper.js',
+        comoUsar: "import { ehNotaPropriaDeEntrada } from './xml-metadata-helper.js'",
+        porque: 'A correção do tpNF (14/08) subiu verde nos deploys 488-490 e o número do Paulo NÃO '
+            + 'MUDOU — "vamos ter que voltar … Não subiu". O campo só passou a ser gravado dali pra '
+            + 'frente, e no Firestore where(tpNF,==,0) não devolve documento que não TEM o campo: o '
+            + 'backfill passava ao largo justamente das notas quebradas. A segunda prova (nota emitida '
+            + 'pela empresa com CFOP de ENTRADA) alcança o que já está gravado, e ela vem com TRÊS '
+            + 'travas — campo presente vence, sem CFOP não decide, CFOP misto não decide. Cópia dessa '
+            + 'leitura em outro painel volta a divergir em silêncio, que foi o defeito original.',
+        assinaturas: [
+            // Testar o primeiro dígito do CFOP para achar entrada é a régua.
+            /\[\s*'1'\s*,\s*'2'\s*,\s*'3'\s*\]\s*\.includes\s*\(/,
+            // O par "campo ausente ⇒ olha o CFOP" reescrito fora do dono.
+            /tpNF\s*\?\?\s*''\s*\)\s*===\s*'0'[\s\S]{0,200}cfop/i,
+        ],
+    },
+    {
         nome: 'Correlação de CFOP do emitente → destinatário',
         dono: 'sefaz-backend/cfop-correlacao.js',
         comoUsar: "import { correlacionarCfop } from '../sefaz-backend/cfop-correlacao.js'",

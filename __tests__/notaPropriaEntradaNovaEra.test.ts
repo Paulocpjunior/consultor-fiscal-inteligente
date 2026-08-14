@@ -29,7 +29,12 @@
 // nunca recebeu a correção. Régua fiscal com duas cópias diverge — e diverge em
 // silêncio, porque nada quebra: a nota entra, só entra do lado errado.
 // ============================================================================
-import { decidirDirecaoPorTpNF } from '../sefaz-backend/xml-metadata-helper.js';
+import {
+    decidirDirecaoPorTpNF,
+    direcaoEfetivaDoc,
+    ehNotaPropriaDeEntrada,
+} from '../sefaz-backend/xml-metadata-helper.js';
+import { classificarNota } from '../sefaz-backend/dipam-produtor-rural.js';
 import { dedupNotaProdutorComEntrada } from '../sefaz-backend/dipam-produtor-rural.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -103,6 +108,132 @@ describe('a consequência: a dedup do art. 136 escolhia a nota ERRADA', () => {
         const r = dedupNotaProdutorComEntrada([nota({ numero: '900', notaPropria: false })]);
         expect(r[0].funrural.aplica).toBe(true);
         expect(r[0].notaOrigemProdutor).toBeUndefined();
+    });
+});
+
+// ============================================================================
+// A CORREÇÃO SUBIU E O NÚMERO NÃO MUDOU — "vamos ter que voltar … Não subiu"
+//
+// Paulo, 14/08, com os deploys 488-490 JÁ VERDES: sete notas ainda somando
+// FUNRURAL (255273 JOSE D. KOKI · 255585/256341/256445/257257/258043 NUNO
+// MONTEIRO · 256121 COSME QUEIROZ), R$ 23.806,35 no total.
+//
+// A correção do tpNF valia só para o documento SEGUINTE. As notas que
+// quebraram já estavam gravadas — e gravadas SEM o campo, porque o import
+// manual nunca o guardou. No Firestore, `where('tpNF','==','0')` não devolve
+// documento que não TEM `tpNF`: o backfill passava exatamente ao largo delas.
+//
+// A prova que alcança o passado está no próprio documento gravado: nota
+// emitida PELA EMPRESA com CFOP de ENTRADA é a nota do art. 136.
+// ============================================================================
+describe('a nota que JÁ ESTÁ no banco — sem tpNF, como o import manual gravou', () => {
+    /** O documento como ele está hoje: emit = NOVA ERA, direcao 'saida', SEM tpNF. */
+    const comoEstaNoBanco = (over: Record<string, unknown> = {}) => ({
+        direcao: 'saida',
+        empresaCnpj: NOVA_ERA,
+        cnpjEmit: NOVA_ERA,
+        itens: [{ cfop: '1101' }, { cfop: '1101' }],
+        ...over,
+    });
+
+    it('o CFOP de ENTRADA prova a nota própria — sem tpNF nenhum', () => {
+        const r = ehNotaPropriaDeEntrada(comoEstaNoBanco(), NOVA_ERA);
+        expect(r.sim).toBe(true);
+        expect(r.prova).toBe('cfop-de-entrada');
+    });
+
+    it('e a direção efetiva vira ENTRADA na leitura, sem esperar backfill', () => {
+        expect(direcaoEfetivaDoc(comoEstaNoBanco())).toBe('entrada');
+    });
+
+    it('CFOP interestadual (2xxx) vale igual — produtor de outro estado', () => {
+        // Restringir a 1xxx repetiria o erro de 13/08 (reusar a régua PAULISTA
+        // da DIPAM), que mata a compra interestadual — o lado caro de errar.
+        expect(ehNotaPropriaDeEntrada(comoEstaNoBanco({ itens: [{ cfop: '2101' }] }), NOVA_ERA).sim).toBe(true);
+    });
+
+    // ─── as três travas ─────────────────────────────────────────────────────
+
+    it('TRAVA 1 — tpNF="1" VENCE o CFOP: o documento disse que é saída', () => {
+        const r = ehNotaPropriaDeEntrada(comoEstaNoBanco({ tpNF: '1' }), NOVA_ERA);
+        expect(r.sim).toBe(false);
+    });
+
+    it('TRAVA 2 — sem CFOP capturado não decide: ausência não é prova', () => {
+        expect(ehNotaPropriaDeEntrada(comoEstaNoBanco({ itens: [] }), NOVA_ERA).sim).toBe(false);
+        expect(ehNotaPropriaDeEntrada(comoEstaNoBanco({ itens: null }), NOVA_ERA).sim).toBe(false);
+    });
+
+    it('TRAVA 3 — CFOP misto não decide: documento ambíguo não vira sozinho', () => {
+        const misto = comoEstaNoBanco({ itens: [{ cfop: '1101' }, { cfop: '5102' }] });
+        expect(ehNotaPropriaDeEntrada(misto, NOVA_ERA).sim).toBe(false);
+    });
+
+    it('venda de verdade (CFOP 5xxx) continua saída — a prova não inverteu nada', () => {
+        const venda = comoEstaNoBanco({ itens: [{ cfop: '5102' }] });
+        expect(ehNotaPropriaDeEntrada(venda, NOVA_ERA).sim).toBe(false);
+        expect(direcaoEfetivaDoc(venda)).toBe('saida');
+    });
+
+    it('nota de TERCEIRO não vira nota própria nossa', () => {
+        // tpNF=0 de outro emitente é a nota de entrada DELE. Sem o laço com a
+        // empresa, a contraparte sairia do lado errado.
+        const deTerceiro = { direcao: 'entrada', empresaCnpj: NOVA_ERA, cnpjEmit: '11222333000181', tpNF: '0' };
+        expect(ehNotaPropriaDeEntrada(deTerceiro, NOVA_ERA).sim).toBe(false);
+    });
+});
+
+describe('ponta a ponta: a nota do banco chega no FUNRURAL do lado certo', () => {
+    // É a composição que roda em produção — e era só ela que ninguém testava.
+    // Cada peça passava fazendo o que o próprio teste mandava (a família do
+    // IPI no E200 e do Bloco H zerado).
+    const notaDaNovaEra = {
+        chave: '3'.repeat(44),
+        numero: '255585',
+        dhEmi: '2026-07-10',
+        competencia: '2026-07',
+        direcao: 'saida',            // ← como está gravado hoje
+        empresaCnpj: NOVA_ERA,
+        cnpjEmit: NOVA_ERA,
+        // SEM tpNF de propósito: é o estado real do banco.
+        emitente: { cnpjCpf: NOVA_ERA, nome: 'NOVA ERA' },
+        destinatario: { cnpjCpf: NUNO, nome: 'NUNO MONTEIRO', uf: 'SP', ie: 'P4111111111' },
+        itens: [{ cfop: '1101', ncm: '08039000' }],
+        totais: { vNF: 10000 },
+    };
+
+    it('classificarNota devolve ENTRADA, notaPropria e o PRODUTOR como contraparte', () => {
+        const n = classificarNota(notaDaNovaEra, { empresa: { cnpj: NOVA_ERA } });
+        expect(n.direcao).toBe('entrada');
+        expect(n.notaPropria).toBe(true);
+        // A contraparte é o DESTINATÁRIO — na nota própria o produtor está lá.
+        expect(n.fornecedor.doc).toBe(NUNO);
+    });
+
+    it('e com ela na lista, a NF-e do produtor SAI do FUNRURAL (art. 136)', () => {
+        const daEmpresa = classificarNota(notaDaNovaEra, { empresa: { cnpj: NOVA_ERA } });
+        const doProdutor = classificarNota({
+            chave: '4'.repeat(44),
+            numero: '900',
+            dhEmi: '2026-07-10',
+            competencia: '2026-07',
+            direcao: 'entrada',
+            empresaCnpj: NOVA_ERA,
+            cnpjEmit: NUNO,
+            emitente: { cnpjCpf: NUNO, nome: 'NUNO MONTEIRO', uf: 'SP', ie: 'P4111111111' },
+            destinatario: { cnpjCpf: NOVA_ERA, nome: 'NOVA ERA' },
+            itens: [{ cfop: '1101', ncm: '08039000' }],
+            totais: { vNF: 10000 },
+        }, { empresa: { cnpj: NOVA_ERA } });
+
+        // Guarda: se o FUNRURAL não aplicasse nas duas, a dedup abaixo não
+        // provaria nada — passaria verde por não ter o que deduplicar.
+        expect(daEmpresa.funrural.aplica).toBe(true);
+        expect(doProdutor.funrural.aplica).toBe(true);
+
+        const r = dedupNotaProdutorComEntrada([daEmpresa, doProdutor]);
+        expect(r.find((n: any) => n.numero === '900').funrural.aplica).toBe(false);
+        expect(r.find((n: any) => n.numero === '255585').funrural.aplica).toBe(true);
     });
 });
 
