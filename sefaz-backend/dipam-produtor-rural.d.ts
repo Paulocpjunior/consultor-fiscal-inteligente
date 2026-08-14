@@ -65,3 +65,33 @@ export function farolDipam(p: { total: number; notas: number; bloqueantes: numbe
     { cor: 'ok' | 'atencao' | 'falha' | 'neutro'; resumo: string };
 export function montarRegistro1400(municipios?: Array<{ codMunIBGE: string; valor: number; registro1400?: string }>):
     Array<{ registro: string; codItemIpm: string; mun: string; valor: number; linha: string }>;
+
+/**
+ * Dedup do art. 136: a compra de produtor rural tem DUAS notas da mesma
+ * entrada (a NF-e do produtor e a nota própria de entrada do adquirente), e só
+ * a segunda se escritura — RICMS/SP art. 136, I, "a"; RC 33068/2025.
+ *
+ * A NF-e do produtor só sai quando EXISTE a nota de entrada que a cobre:
+ * produtor sem par fica intacto, porque a dedup desfaz duplicidade, não impõe
+ * processo.
+ */
+export function dedupNotaProdutorComEntrada(notas: any[]): any[];
+
+/**
+ * Produtores tirados da sub-rogação por DECISÃO gravada no cadastro, com o
+ * quanto voltaria ao total se ela for desfeita.
+ */
+export function agruparTiradosPorDecisao(
+    notas: any[],
+    competencia: string,
+    tabelaFunrural?: AliquotasFunrural[],
+): Array<{
+    doc: string | null;
+    fornecedor: string | null;
+    decisao: 'nao_aplica' | 'folha';
+    rotulo: string;
+    reversivelNaLinha: boolean;
+    notas: number;
+    valor: number;
+    funruralPotencial: number;
+}>;
