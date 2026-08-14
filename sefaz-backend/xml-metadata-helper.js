@@ -139,6 +139,9 @@ export function direcaoEfetivaDoc(d) {
  *
  * O primeiro dígito do CFOP é a DIREÇÃO da operação, por definição da tabela
  * CONFAZ. Não é dedução nossa: é o que o código significa.
+ *
+ * ⚠️ **NÃO USE ISTO PARA DECIDIR A DIREÇÃO DE UM DOCUMENTO GRAVADO** — leia o
+ * aviso em `ehNotaPropriaDeEntrada`. A régua da direção é o `tpNF`.
  */
 export function ehCfopDeEntrada(cfop) {
     const c = String(cfop || '').replace(/\D/g, '');
@@ -146,76 +149,55 @@ export function ehCfopDeEntrada(cfop) {
 }
 
 /**
- * A nota é NOTA PRÓPRIA DE ENTRADA? — e QUAL é a prova disso.
+ * A nota é NOTA PRÓPRIA DE ENTRADA (art. 136, I, "a" do RICMS/SP)? — e QUAL é
+ * a prova disso.
  *
- * ═══ POR QUE PRECISOU DE UMA SEGUNDA PROVA ══════════════════════════════════
+ * A régua é o **`tpNF`**, e só ele. É o próprio documento dizendo de que lado
+ * está: `tpNF=0` numa nota emitida pela empresa é a nota que o adquirente
+ * emite da própria entrada (compra de produtor rural PF, retorno etc.).
  *
- * A régua do tpNF (acima) conserta o que entra DAQUI PRA FRENTE. Ela não
- * alcança o que já está gravado: o import manual do frontend nunca gravou o
- * campo, então nas notas antigas `tpNF` **não existe** — e no Firestore um
- * filtro de igualdade NÃO devolve documento que não tem o campo. Ou seja, o
- * backfill `corrigirDirecaoEntradaPropria` (`where('tpNF','==','0')`) passa
- * exatamente ao largo das notas que quebraram.
+ * ═══ POR QUE NÃO SE DECIDE ISTO PELO CFOP — lição de 14/08 ══════════════════
  *
- * Foi o que o Paulo viu em 14/08, DEPOIS de a correção subir (deploys 488-490
- * verdes): *"vamos ter que voltar … Não subiu"* — sete notas de JOSE D. KOKI,
- * NUNO MONTEIRO e COSME QUEIROZ ainda somando FUNRURAL. A correção tinha
- * subido; ela é que não tinha como enxergar o passado. **Correção que só vale
- * para o documento seguinte não é correção para quem já está com o mês na
- * mão** — e reimportar 870 notas à mão não é resposta.
+ * Em 14/08 eu acrescentei aqui uma segunda prova: "nota emitida pela empresa
+ * com CFOP de ENTRADA também é nota própria". A intenção era alcançar
+ * documentos gravados antes de o import manual passar a guardar o `tpNF`.
+ * Estava ERRADO por duas razões, e as duas só apareceram na revisão:
  *
- * ═══ A SEGUNDA PROVA É O CFOP, E ELA ESTÁ NO DOCUMENTO GRAVADO ══════════════
+ *  1. **O problema não existia.** As notas do caso real (NOVA ERA 07/2026)
+ *     vieram pelo importer principal e SEMPRE tiveram `tpNF` — a própria tela
+ *     provou, mostrando a prova `tpNF` e não `cfop-de-entrada`. Eu tinha
+ *     diagnosticado por dedução, sem o dado na mão.
  *
- * Nota emitida PELA PRÓPRIA EMPRESA carregando CFOP de ENTRADA (1xxx/2xxx/3xxx)
- * é, por definição, a nota que o adquirente emite da própria entrada — o art.
- * 136, I, "a" do RICMS/SP. Não se deduz nada: quem diz a direção da operação é
- * o primeiro dígito do CFOP, e ele já está gravado em `itens[].cfop` desde
- * sempre, nos DOIS importers.
+ *  2. **E ela criava DUAS LEITURAS DO MESMO DADO.** Três dos quatro
+ *     consumidores desta função leem o documento com `.select()` de projeção
+ *     — relatórios de faturamento, Livro, conferência de chaves — e nenhuma
+ *     dessas projeções traz `itens`/`cnpjEmit` (`itens` é justamente o campo
+ *     pesado que elas evitam). Resultado medido: o MESMO documento saía
+ *     `entrada` na base de crédito de PIS/COFINS (que lê o doc inteiro) e
+ *     `saida` no faturamento. Duas leituras do mesmo dado discordando é a
+ *     armadilha que mais mordeu este projeto.
  *
- * ⚠️ TRÊS TRAVAS, e cada uma cobre um jeito de errar:
+ * Régua que muda de resposta conforme o SELECT do chamador não é régua. Se um
+ * dia aparecer documento sem `tpNF`, o certo é gravar o campo (backfill a
+ * partir do XML no Storage, que é a FONTE), nunca deduzir a direção na leitura.
  *
- *  1. **O campo, quando existe, VENCE — inclusive para negar.** `tpNF='1'` é o
- *     documento dizendo que é saída; nenhuma leitura de CFOP passa por cima
- *     disso. A prova do CFOP só entra quando o campo está AUSENTE.
- *  2. **Sem CFOP capturado, não decide.** Ausência não é prova (a mesma régua
- *     do FUNRURAL de nota sem itens): melhor deixar como está do que virar a
- *     direção de uma nota no escuro.
- *  3. **CFOP misto não decide.** Se a nota tem 1102 e 5102 juntos, alguma coisa
- *     está torta nela — e virar a direção de um documento ambíguo é escolher
- *     sozinho, que é o que esta casa não faz.
- *
- * Devolve a PROVA junto, não só o sim/não: quem grava precisa escrever no
- * carimbo POR QUE virou, senão daqui a três meses ninguém sabe se aquela nota
- * mudou de lado por leitura do documento ou por palpite de alguém.
- *
- * @returns {{ sim: boolean, prova: 'tpNF'|'cfop-de-entrada'|null }}
+ * @returns {{ sim: boolean, prova: 'tpNF'|null }}
  */
 export function ehNotaPropriaDeEntrada(d, empresaCnpj) {
     const nao = { sim: false, prova: null };
     if (!d) return nao;
+    if (String(d.tpNF ?? '').trim() !== '0') return nao;
 
     const norm = (c) => String(c || '').replace(/\D/g, '');
     const emp = norm(empresaCnpj || d.empresaCnpj);
     const emi = norm(d.cnpjEmit || d.emitente?.cnpjCpf || d.emitente?.cnpj);
-    // A nota própria de entrada é emitida PELA EMPRESA. Sem esse laço, o tpNF=0
-    // de um TERCEIRO (que emitiu a nota de entrada DELE) viraria "nossa" nota
-    // própria — e a contraparte sairia do lado errado.
+    // A nota própria de entrada é emitida PELA EMPRESA. Sem esse laço, o
+    // `tpNF=0` de um TERCEIRO (que emitiu a nota de entrada DELE) viraria
+    // "nossa" nota própria — e a contraparte sairia do lado errado.
     const daEmpresa = d.direcao === 'saida' || (!!emp && !!emi && emi === emp);
     if (!daEmpresa) return nao;
 
-    // 1) O documento DIZ. Campo presente decide, nos dois sentidos.
-    const tp = String(d.tpNF ?? '').trim();
-    if (tp === '0') return { sim: true, prova: 'tpNF' };
-    if (tp !== '') return nao;
-
-    // 2) Campo ausente (import antigo): sobra a prova do CFOP.
-    if (!emp || !emi || emi !== emp) return nao;
-    const cfops = (Array.isArray(d.itens) ? d.itens : [])
-        .map((i) => norm(i?.cfop))
-        .filter((c) => c.length === 4);
-    if (!cfops.length) return nao;                       // trava 2
-    if (!cfops.every(ehCfopDeEntrada)) return nao;       // trava 3
-    return { sim: true, prova: 'cfop-de-entrada' };
+    return { sim: true, prova: 'tpNF' };
 }
 
 // ── Cancelamento EFETIVO — mesma lição da direção: o campo gravado pode mentir ──

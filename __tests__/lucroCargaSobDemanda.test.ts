@@ -159,3 +159,41 @@ describe('o resumo não pode ser gravado de volta', () => {
         expect(servico).toMatch(/caminho antigo/i);
     });
 });
+
+// ============================================================================
+// A REGRESSÃO QUE A LISTA LEVE CRIA — e que quase passou.
+//
+// Recarregar a lista deixou de recarregar a EMPRESA ABERTA: são coisas
+// diferentes agora (`empresas` é o resumo, `carregadas[id]` é o documento).
+// Depois de gravar uma ficha, o código chamava só `loadEmpresas()` e ia para a
+// tela do relatório — que lê `selectedEmpresa.fichaFinanceira`. A ficha
+// recém-gravada não estava lá, e o relatório abria EM BRANCO: o colaborador
+// salvava o mês e via nada.
+//
+// Achado na revisão, não por teste — por isso este teste existe.
+// ============================================================================
+describe('gravar ficha atualiza a empresa ABERTA, não só a lista', () => {
+    // Tira comentários antes de varrer: a PRIMEIRA versão deste teste mirou no
+    // comentário que eu mesmo escrevi explicando o conserto (ele cita
+    // `setView('report')`), e a janela fechou antes do código. É a terceira vez
+    // hoje que uma varredura minha lê a prosa em vez do código — o remédio já
+    // estava no repo, em `cargaSobDemanda.test.ts`.
+    const semComentarios = (f: string) => f
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+    const dash = semComentarios(readFileSync(join(RAIZ, 'components/LucroPresumidoRealDashboard.tsx'), 'utf8'));
+
+    it('depois de `addFichaFinanceira`, o documento volta para `carregadas`', () => {
+        const i = dash.indexOf('addFichaFinanceira(selectedEmpresa.id, tempFicha)');
+        expect(i).toBeGreaterThan(-1);
+        // A janela cobre o trecho entre gravar e trocar de tela.
+        const janela = dash.slice(i, dash.indexOf("setView('report')", i));
+        expect(janela).toMatch(/setCarregadas\(/);
+    });
+
+    it('excluir tira a empresa do cache — senão o ⚡ Ativar serviria a excluída', () => {
+        const i = dash.indexOf('deleteEmpresa(id)');
+        expect(i).toBeGreaterThan(-1);
+        expect(dash.slice(i, i + 400)).toMatch(/setCarregadas\(/);
+    });
+});

@@ -522,6 +522,9 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         if (!ok) return;
         try {
             await lucroPresumidoService.deleteEmpresa(id);
+            // Tira do cache das carregadas também — senão o documento excluído
+            // continuaria vivo em memória e o ⚡ Ativar o serviria do cache.
+            setCarregadas(prev => { const { [id]: _fora, ...resto } = prev; return resto; });
             loadEmpresas();
             if (selectedEmpresaId === id) { setSelectedEmpresaId(null); setView('list'); }
         } catch (err: any) {
@@ -663,7 +666,14 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             }
 
             await loadEmpresas();
-            
+            // A lista é LEVE: ela não traz a ficha, então recarregá-la NÃO
+            // atualiza a empresa aberta. Sem isto, a ficha recém-gravada não
+            // existia em `selectedEmpresa` e o `setView('report')` abaixo caía
+            // numa tela EM BRANCO — o colaborador salvava o mês e via nada.
+            // `addFichaFinanceira` já devolve a empresa inteira: aproveita, em
+            // vez de gastar outra leitura.
+            if (savedFicha) setCarregadas(prev => ({ ...prev, [selectedEmpresa.id]: savedFicha }));
+
             if (savedFicha) {
                 const novaFicha = savedFicha.fichaFinanceira.find(f => f.mesReferencia === fichaMes);
                 if (novaFicha) {

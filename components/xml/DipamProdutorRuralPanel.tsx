@@ -567,7 +567,6 @@ const DetalheEmpresa: React.FC<{
                                                         {n.notaPropria ? (
                                                             <span className="text-emerald-600 dark:text-emerald-400">
                                                                 nota própria de entrada (art. 136)
-                                                                {n.provaDirecao === 'cfop-de-entrada' && ' · direção pelo CFOP'}
                                                             </span>
                                                         ) : (
                                                             <span className="text-amber-600 dark:text-amber-400">

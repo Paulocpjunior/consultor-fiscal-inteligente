@@ -34,15 +34,13 @@ export function direcaoEfetivaDoc(d: DocParaDirecao | null | undefined): string 
 export function ehCfopDeEntrada(cfop: unknown): boolean;
 
 /**
- * A nota é NOTA PRÓPRIA DE ENTRADA (art. 136, I, "a" do RICMS/SP)? Devolve a
- * PROVA junto: `tpNF` (o documento diz) ou `cfop-de-entrada` (nota emitida pela
- * empresa com CFOP de entrada — é a prova que alcança o que foi gravado antes
- * de o import manual passar a guardar o tpNF).
+ * A nota é NOTA PRÓPRIA DE ENTRADA (art. 136, I, "a" do RICMS/SP)? A régua é o
+ * `tpNF`, e só ele — ver o aviso no módulo sobre por que o CFOP NÃO decide isto.
  */
 export function ehNotaPropriaDeEntrada(
     d: DocParaDirecao | null | undefined,
     empresaCnpj?: string | null,
-): { sim: boolean; prova: 'tpNF' | 'cfop-de-entrada' | null };
+): { sim: boolean; prova: 'tpNF' | null };
 
 /**
  * Cancelamento EFETIVO do documento — mesma lição da direção: o status gravado
