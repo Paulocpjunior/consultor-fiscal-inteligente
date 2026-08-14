@@ -27,11 +27,18 @@
 import { Router } from 'express';
 import admin from 'firebase-admin';
 import { createHash } from 'crypto';
+import { Storage } from '@google-cloud/storage';
 import {
     configWebhook, faltasDaConfigWebhook, responderVerificacao,
     assinaturaValida, extrairEventos, traduzirStatusEntrega,
     interpretarErroEntrega, janela24hAte, resumoParaConversa,
+    caminhoStorageMidia,
 } from './whatsapp-webhook.js';
+import { configWhatsapp, GRAPH_BASE } from './whatsapp-cloud.js';
+
+const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
+const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
+const storage = new Storage();
 
 const router = Router();
 
@@ -85,6 +92,49 @@ async function gravarMensagemRecebida(db, msg) {
         naoLidas: admin.firestore.FieldValue.increment(1),
         atualizadoEm: agora,
     }, { merge: true });
+}
+
+/**
+ * Baixa a mídia recebida pro NOSSO Storage — já na F1, de propósito: a Meta
+ * guarda a mídia por tempo LIMITADO, então esperar a F2 perderia anexo de
+ * cliente (comprovante de pagamento é o caso típico). Mesmo desenho do XML
+ * cru: binário no bucket, `storagePath` no documento.
+ *
+ * BEST-EFFORT: falha aqui NÃO derruba o webhook (a mensagem já está gravada;
+ * responder 500 por causa do anexo faria a Meta reentregar tudo). Falha fica
+ * NOMEADA no doc (`downloadErro`) — nunca pendência muda.
+ */
+async function baixarMidiaRecebida(db, msg) {
+    const ref = db.collection('whatsapp_mensagens').doc(msg.metaMessageId);
+    try {
+        const cfg = configWhatsapp();
+        if (!cfg.token) throw new Error('canal sem token (WHATSAPP_CLOUD_TOKEN) — o download usa a mesma credencial do envio');
+        const auth = { Authorization: `Bearer ${cfg.token}` };
+
+        // 1) O media id vira uma URL temporária (expira em minutos)…
+        const meta = await fetch(`${GRAPH_BASE}/${msg.midia.metaMediaId}`, { headers: auth });
+        const corpo = await meta.json().catch(() => ({}));
+        if (!meta.ok || !corpo.url) throw new Error(corpo?.error?.message || `HTTP ${meta.status} ao resolver o media id`);
+
+        // 2) …que só entrega o binário com o MESMO token.
+        const bin = await fetch(corpo.url, { headers: auth });
+        if (!bin.ok) throw new Error(`HTTP ${bin.status} ao baixar o binário`);
+        const buf = Buffer.from(await bin.arrayBuffer());
+
+        const caminho = caminhoStorageMidia(msg);
+        await storage.bucket(STORAGE_BUCKET).file(caminho).save(buf, {
+            contentType: msg.midia.mime || corpo.mime_type || 'application/octet-stream',
+            resumable: false,
+        });
+        await ref.set({
+            midia: { ...msg.midia, storagePath: caminho, tamanhoBytes: buf.length, baixadoEm: new Date().toISOString() },
+        }, { merge: true });
+    } catch (e) {
+        console.warn(`[whatsapp/webhook] mídia ${msg.metaMessageId} não baixada:`, e.message);
+        try {
+            await ref.set({ midia: { ...msg.midia, downloadErro: e.message } }, { merge: true });
+        } catch { /* o doc pode nem existir se a gravação falhou antes */ }
+    }
 }
 
 /** Grava UM status de entrega na mensagem e na auditoria de envio. */
@@ -161,6 +211,15 @@ router.post('/webhook', async (req, res) => {
         }
         for (const msg of ev.mensagens) await gravarMensagemRecebida(db, msg);
         for (const st of ev.statuses) await gravarStatus(db, st);
+
+        // Mídia DEPOIS da resposta (setImmediate, padrão da casa): a Meta quer
+        // o 200 rápido, e o anexo é best-effort — a mensagem já está gravada.
+        const comMidia = ev.mensagens.filter((m) => m.midia?.metaMediaId);
+        if (comMidia.length) {
+            setImmediate(async () => {
+                for (const m of comMidia) await baixarMidiaRecebida(db, m);
+            });
+        }
 
         return res.status(200).json({ ok: true, mensagens: ev.mensagens.length, statuses: ev.statuses.length });
     } catch (e) {

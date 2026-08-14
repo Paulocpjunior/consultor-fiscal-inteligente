@@ -205,9 +205,20 @@ app.use(cors({
 // e impacto de XSS via CSS e bem menor que via script. Tailwind CDN removido
 // (build-time desde o switch pra @tailwindcss/postcss; nao usamos mais a CDN).
 app.use(helmet({
+    // O frame-ancestors abaixo substitui o X-Frame-Options (que só conhece
+    // SAMEORIGIN/DENY e não permite lista de domínios). Navegador que entende
+    // CSP ignora o XFO quando frame-ancestors existe; manter os dois com
+    // regras DIFERENTES seria mandar duas respostas pra mesma pergunta.
+    xFrameOptions: false,
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
+            // O CFI dentro do Teams (docs/desenho-modulo-comunicacao.md §10):
+            // embutir SÓ nos domínios da Microsoft onde o Teams renderiza abas
+            // (desktop, web e a casca nova *.cloud.microsoft). Somar domínio
+            // aqui é decisão de segurança — o teste teamsFrameAncestors trava
+            // a lista pra ela não crescer num refactor sem ninguém olhar.
+            frameAncestors: ["'self'", 'https://teams.microsoft.com', 'https://*.cloud.microsoft', 'https://*.office.com'],
             scriptSrc: ["'self'", "https://apis.google.com", "https://www.gstatic.com", "https://cdnjs.cloudflare.com"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],

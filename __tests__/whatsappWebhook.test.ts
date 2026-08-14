@@ -7,6 +7,7 @@ import {
     configWebhook, faltasDaConfigWebhook, responderVerificacao,
     assinaturaValida, extrairEventos, traduzirStatusEntrega,
     interpretarErroEntrega, janela24hAte, resumoParaConversa,
+    caminhoStorageMidia,
 } from '../sefaz-backend/whatsapp-webhook.js';
 
 const CFG = { verifyToken: 'meu-token-de-verificacao', appSecret: 'segredo-do-app' };
@@ -162,6 +163,17 @@ describe('janela de 24h e resumo da conversa', () => {
         expect(janela24hAte('2026-08-13T14:00:00.000Z')).toBe('2026-08-14T14:00:00.000Z');
         expect(janela24hAte('torto')).toBeNull();
     });
+    it('caminho da mídia no Storage: wamid saneado + nome original (dois "comprovante.pdf" não colidem)', () => {
+        const r = extrairEventos(PAYLOAD);
+        const doc = r.mensagens[1]; // wamid.ENTRADA2= com comprovante.pdf
+        expect(caminhoStorageMidia(doc)).toBe('whatsapp/5511964440000/wamid_ENTRADA2__comprovante.pdf');
+        // Áudio não manda nome de arquivo — a extensão sai do mime.
+        expect(caminhoStorageMidia({
+            metaMessageId: 'wamid.A=', de: '5511', tipo: 'audio', texto: null,
+            midia: { metaMediaId: 'm1', mime: 'audio/ogg; codecs=opus', nomeArquivo: null, sha256: null },
+        } as any)).toBe('whatsapp/5511/wamid_A_.ogg');
+    });
+
     it('resumo usa o texto; sem texto, nomeia a mídia', () => {
         const r = extrairEventos(PAYLOAD);
         expect(resumoParaConversa(r.mensagens[0])).toBe('Recebi a guia, obrigado!');
