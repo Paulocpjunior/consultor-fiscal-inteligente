@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ============================================================================
-# scripts/setup-dominio-claude.sh — claude.spassessoriacontabil.com.br → CFI
+# scripts/setup-dominio-app.sh — app.spassessoriacontabil.com.br → CFI
 # ----------------------------------------------------------------------------
-# Mapeia o subdomínio ao serviço Cloud Run do CFI (Paulo, 13/08: "uma URL que
-# identifique o Claude, no nosso domínio"). IDEMPOTENTE: rodar de novo só
+# Mapeia o subdomínio ao serviço Cloud Run do CFI (Paulo, 13/08: URL própria no
+# domínio da casa — SEM nome de ferramenta: o app é da SP). IDEMPOTENTE: rodar de novo só
 # confere e mostra o estado — mesmo padrão do setup-cloud-schedulers.sh.
 #
 # O QUE ESTE SCRIPT FAZ:
@@ -21,7 +21,7 @@ set -euo pipefail
 PROJECT="${PROJECT:-consultorfiscalapp}"
 REGION="${REGION:-us-west1}"
 SERVICE="${SERVICE:-consultor-fiscal-inteligente}"
-DOMINIO="${DOMINIO:-claude.spassessoriacontabil.com.br}"
+DOMINIO="${DOMINIO:-app.spassessoriacontabil.com.br}"
 DOMINIO_RAIZ="spassessoriacontabil.com.br"
 
 echo "── Domínio ${DOMINIO} → ${SERVICE} (${PROJECT}/${REGION}) ──"
@@ -55,7 +55,7 @@ gcloud beta run domain-mappings describe --domain "${DOMINIO}" \
     --project "${PROJECT}" --region "${REGION}" \
     --format='table(status.resourceRecords[].name, status.resourceRecords[].type, status.resourceRecords[].rrdata)'
 echo ""
-echo "Na prática: CNAME  claude  →  ghs.googlehosted.com."
+echo "Na prática: CNAME  app  →  ghs.googlehosted.com."
 echo ""
 echo "── Depois do DNS propagar (15 min a algumas horas) ──"
 echo "1. O certificado TLS é emitido SOZINHO pelo Google — nada a fazer."
