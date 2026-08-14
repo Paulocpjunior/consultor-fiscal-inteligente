@@ -341,42 +341,20 @@ export const getNotasDaEmpresa = async (
     return [...porId.values()];
 };
 
-export const getAllNotas = async (
-    user?: User | null
-): Promise<Record<string, SimplesNacionalNota[]>> => {
-    const isMaster = user?.role === 'admin' ||
-        user?.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
-    let cloudNotas: SimplesNacionalNota[] = [];
-
-    // ── Cloud-first ──
-    if (isFirebaseConfigured && db && auth?.currentUser) {
-        try {
-            const uid = auth.currentUser.uid;
-            // Admin: busca tudo. Colaborador: busca tudo (rules permitem) e
-            // filtra no cliente. Ve nota se foi criada por ele OU se eh de
-            // empresa atribuida a ele via carteira (mesmo bug das empresas
-            // que arrumamos no PR #120 -- antes filtrava so por createdBy).
-            const snaps = await fetchAllDocs('simples_notas', []);
-            cloudNotas = snaps.map(d =>
-                ({ id: d.id, ...d.data() } as SimplesNacionalNota));
-            // VISIBILIDADE ABERTA: todos veem todas as notas. Decisao temporaria.
-        } catch { /* silent */ }
-    }
-
-    // Merge com local (para dados ainda não sincronizados)
-    const stored = localStorage.getItem(STORAGE_KEY_NOTAS);
-    const localMap = stored ? JSON.parse(stored) : {};
-    const noteMap = new Map<string, SimplesNacionalNota>();
-    Object.values(localMap).forEach((arr: any) => arr.forEach((n: any) => noteMap.set(n.id, n)));
-    cloudNotas.forEach(n => noteMap.set(n.id, n)); // cloud sobrepõe local
-
-    const result: Record<string, SimplesNacionalNota[]> = {};
-    noteMap.forEach(note => {
-        const arr = result[note.empresaId] || (result[note.empresaId] = []);
-        arr.push(note);
-    });
-    return result;
-};
+/**
+ * ⚠️ **`getAllNotas` FOI REMOVIDA (14/08).**
+ *
+ * Ela fazia `fetchAllDocs('simples_notas', [where('empresaId', '==', id)])` — todas as notas de TODAS as
+ * empresas da casa — e era chamada na ENTRADA do Painel Simples. Depois que a
+ * carga passou a ser por empresa (`getNotasDaEmpresa`, disparada pela
+ * ATIVAÇÃO), ela ficou sem nenhum chamador.
+ *
+ * Não ficou como "por via das dúvidas": função exportada que lê uma coleção
+ * inteira, parada e sem dono, é a que a próxima pessoa acha primeiro quando
+ * precisa de notas — e aí o problema volta inteiro, sem ninguém perceber que
+ * voltou. Quem precisar do conjunto agora tem de dizer POR QUE, e a régua da
+ * casa está em `__tests__/cargaSobDemanda.test.ts`.
+ */
 
 // ─── PARSER XML ───────────────────────────────────────────────────────────────
 const parseXmlNfe = (xmlContent: string): any[] => {
