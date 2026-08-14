@@ -21,6 +21,8 @@ interface ProcessedItem {
     fileName: string;
     status: 'ok' | 'duplicado' | 'erro';
     mensagem: string;
+    /** true quando REESCREVEU um documento que já existia. */
+    substituiu?: boolean;
     /** O que fazer. Fica numa 2ª linha porque a ação é o que resolve. */
     acao?: string | null;
     /** Vermelho: alguém precisa agir (nota gravada em OUTRA empresa). */
@@ -116,6 +118,7 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                         // Substituir é reescrita de dado fiscal: a tela DIZ que
                         // reescreveu, senão fica igual a uma importação nova e
                         // ninguém sabe o que mudou.
+                        substituiu: res.substituiu,
                         mensagem: res.substituiu
                             ? `NF ${res.documento.numero} SUBSTITUÍDA pelo conteúdo deste arquivo (${res.documento.direcao}).`
                             : `NF ${res.documento.numero} importada (${res.documento.direcao}).`,
@@ -150,8 +153,18 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
         // está aqui (nada a fazer) e nota gravada em OUTRA empresa (que não se
         // resolve reimportando). Contar junto esconde a que custa dinheiro.
         const outraEmpresa = out.filter(x => x.exigeAcao).length;
+        // SUBSTITUIR não é o mesmo evento que IMPORTAR: um cria documento, o
+        // outro REESCREVE dado fiscal que já existia. A linha da lista já
+        // dizia "SUBSTITUÍDA"; o toast juntava tudo em "N ok" e desfazia a
+        // separação — quem lê só o toast não sabe que reescreveu nada.
+        const subs = out.filter(x => x.status === 'ok' && x.substituiu).length;
+        const novos = ok - subs;
+        const parteOk = [
+            novos ? `${novos} importada(s)` : '',
+            subs ? `${subs} SUBSTITUÍDA(s)` : '',
+        ].filter(Boolean).join(' · ') || '0 ok';
         onShowToast?.(
-            `Importação concluída — ${ok} ok, ${dup} já estava(m) no banco, ${err} erro(s).`
+            `Importação concluída — ${parteOk}, ${dup} já estava(m) no banco, ${err} erro(s).`
             + (outraEmpresa ? ` ⚠ ${outraEmpresa} está(ão) em OUTRA empresa — veja a lista abaixo.` : ''),
         );
     };
