@@ -33,6 +33,7 @@ import {
     XmlParseError,
 } from './xmlParserService';
 import { uploadXml, deleteXml } from './xmlStorageService';
+import { lerDuplicado, type LeituraDuplicado, type DocumentoExistente } from './importDuplicadoMotivo';
 import { applyDocumentosFilters, getCompetenciaDocumento } from './xmlDocumentosFilter';
 import {
     podeVerDocumentoPorCarteira,
@@ -352,6 +353,12 @@ export interface ImportXmlSkipped {
     status: 'duplicado';
     existingId: string;
     chave: string;
+    /**
+     * POR QUE não entrou — com onde, quando e por qual trilho o documento já
+     * está no banco. "Já importado" sozinho é um beco: a pessoa repete o
+     * clique e a resposta nunca muda (Paulo, 14/08, com 12 arquivos na tela).
+     */
+    leitura: LeituraDuplicado;
 }
 
 export type ImportXmlResult = ImportXmlSuccess | ImportXmlSkipped;
@@ -408,7 +415,16 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             // permission-denied: doc nao existe OU pertence a outro usuario.
             // Continua como se fosse novo.
         }
-        if (existing && existing.exists()) {
+        // O QUE JÁ ESTAVA LÁ decide o que acontece agora — e as situações têm
+        // ações OPOSTAS: em outra empresa não se resolve reimportando, e com
+        // lápide de exclusão reimportar é justamente a ação certa (o documento
+        // está invisível na lista E bloqueando a reentrada, o pior dos dois
+        // mundos). Chamar tudo de "duplicado" era o que fechava o beco.
+        const leitura = lerDuplicado(
+            existing && existing.exists() ? (existing.data() as DocumentoExistente) : null,
+            empresa,
+        );
+        if (existing && existing.exists() && !leitura.permiteReincluir) {
             await registrarCaptura({
                 chave,
                 empresaId: empresa.id,
@@ -417,10 +433,12 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
                 fileName,
                 tamanhoBytes: file.size,
                 user,
-                mensagem: 'Documento já importado anteriormente.',
+                // A auditoria guarda a MESMA frase que a pessoa leu na tela —
+                // log que diz menos que a tela não serve para reconstruir o caso.
+                mensagem: leitura.mensagem,
                 documentoId: docId,
             });
-            return { status: 'duplicado', existingId: docId, chave };
+            return { status: 'duplicado', existingId: docId, chave, leitura };
         }
 
         const upload = await uploadXml(empresa.id, chave, xmlText, fileName);
@@ -443,7 +461,18 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
         });
 
         try {
-            await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, docId), sanitize(documento));
+            // REINCLUSÃO: a lápide precisa sair explicitamente. `setDoc` sem
+            // merge já sobrescreve o documento inteiro, mas deixar isso
+            // implícito é confiar num detalhe do SDK para desfazer uma exclusão
+            // — e o dia em que alguém trocar por `{ merge: true }` o documento
+            // volta invisível, sem nada apontando para cá.
+            const paraGravar: Record<string, unknown> = { ...sanitize(documento) };
+            if (leitura.permiteReincluir) {
+                paraGravar._deleted = false;
+                paraGravar._reincluidoEm = new Date().toISOString();
+                paraGravar._reincluidoPorEmail = user.email || null;
+            }
+            await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, docId), paraGravar);
         } catch (err) {
             // Rollback do storage se o Firestore falhar para não deixar lixo.
             await deleteXml(upload.storagePath).catch(() => {});

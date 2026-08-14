@@ -21,6 +21,10 @@ interface ProcessedItem {
     fileName: string;
     status: 'ok' | 'duplicado' | 'erro';
     mensagem: string;
+    /** O que fazer. Fica numa 2ª linha porque a ação é o que resolve. */
+    acao?: string | null;
+    /** Vermelho: alguém precisa agir (nota gravada em OUTRA empresa). */
+    exigeAcao?: boolean;
 }
 
 const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImported }) => {
@@ -98,7 +102,17 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                     out.push({ fileName: file.name, status: 'ok', mensagem: `NF ${res.documento.numero} importada (${res.documento.direcao}).` });
                     onImported?.(res.documento);
                 } else {
-                    out.push({ fileName: file.name, status: 'duplicado', mensagem: `Já importado (chave ${res.chave}).` });
+                    // "Já importado (chave …)" é VERDADE e não serve para
+                    // nada: não diz em qual empresa, quando, nem por qual
+                    // trilho — e a saída que sobra é repetir o clique, que
+                    // nunca muda de resposta (Paulo, 14/08, 12 arquivos).
+                    out.push({
+                        fileName: file.name,
+                        status: 'duplicado',
+                        mensagem: res.leitura.mensagem,
+                        acao: res.leitura.acao,
+                        exigeAcao: res.leitura.exigeAcao,
+                    });
                 }
             } catch (err: any) {
                 let msg = err?.message || 'Falha desconhecida.';
@@ -112,7 +126,14 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
         const ok = out.filter(x => x.status === 'ok').length;
         const dup = out.filter(x => x.status === 'duplicado').length;
         const err = out.filter(x => x.status === 'erro').length;
-        onShowToast?.(`Importação concluída — ${ok} ok, ${dup} duplicado(s), ${err} erro(s).`);
+        // "12 duplicado(s)" trata como iguais duas coisas opostas: nota que já
+        // está aqui (nada a fazer) e nota gravada em OUTRA empresa (que não se
+        // resolve reimportando). Contar junto esconde a que custa dinheiro.
+        const outraEmpresa = out.filter(x => x.exigeAcao).length;
+        onShowToast?.(
+            `Importação concluída — ${ok} ok, ${dup} já estava(m) no banco, ${err} erro(s).`
+            + (outraEmpresa ? ` ⚠ ${outraEmpresa} está(ão) em OUTRA empresa — veja a lista abaixo.` : ''),
+        );
     };
 
     const handleDrop = (e: React.DragEvent) => {
@@ -199,14 +220,24 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                     </div>
                     <div className="divide-y divide-slate-100 dark:divide-slate-700 max-h-[260px] overflow-y-auto">
                         {results.map((r, i) => (
-                            <div key={i} className="px-4 py-2 flex items-center gap-2 text-xs">
-                                <span className={`w-2 h-2 rounded-full ${
-                                    r.status === 'ok' ? 'bg-emerald-500'
-                                    : r.status === 'duplicado' ? 'bg-amber-500'
-                                    : 'bg-red-500'
-                                }`} />
-                                <span className="font-mono truncate flex-1 text-slate-600 dark:text-slate-400">{r.fileName}</span>
-                                <span className="text-slate-500 dark:text-slate-400 truncate flex-[2]">{r.mensagem}</span>
+                            <div key={i} className="px-4 py-2 text-xs">
+                                <div className="flex items-center gap-2">
+                                    <span className={`w-2 h-2 rounded-full shrink-0 ${
+                                        r.status === 'ok' ? 'bg-emerald-500'
+                                        // Vermelho quando alguém precisa AGIR — nota gravada em
+                                        // outra empresa não se resolve reimportando, e âmbar
+                                        // igual ao resto faria ela passar batida no meio de 12.
+                                        : r.status === 'duplicado' ? (r.exigeAcao ? 'bg-red-500' : 'bg-amber-500')
+                                        : 'bg-red-500'
+                                    }`} />
+                                    <span className="font-mono truncate flex-1 min-w-0 text-slate-600 dark:text-slate-400">{r.fileName}</span>
+                                    <span className={`flex-[2] min-w-0 ${r.exigeAcao
+                                        ? 'text-red-600 dark:text-red-400 font-semibold'
+                                        : 'text-slate-500 dark:text-slate-400'}`}>{r.mensagem}</span>
+                                </div>
+                                {r.acao && (
+                                    <p className="mt-0.5 ml-4 text-[11px] text-slate-500 dark:text-slate-400">→ {r.acao}</p>
+                                )}
                             </div>
                         ))}
                     </div>
