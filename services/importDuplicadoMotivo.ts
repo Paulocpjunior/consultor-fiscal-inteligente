@@ -66,6 +66,30 @@ export interface LeituraDuplicado {
 const texto = (v: unknown): string => String(v ?? '').trim();
 const soDigitos = (v: unknown): string => texto(v).replace(/\D/g, '');
 
+/**
+ * O documento está ESCONDIDO do app?
+ *
+ * ═══ A RÉGUA DA IMPORTAÇÃO TEM QUE SER A MESMA DA LISTAGEM ══════════════════
+ *
+ * Existe mais de uma lápide, e TODAS tiram o documento da vista: todo
+ * enumerador do app filtra `_merged_into` **e** `_deleted`. A primeira versão
+ * desta correção olhou só o `_deleted` — então quem excluiu pelo outro caminho
+ * continuou preso exatamente no mesmo lugar: o documento invisível no app E
+ * bloqueando a reentrada (Paulo, 14/08, na segunda vez que teve que apontar o
+ * mesmo problema).
+ *
+ * Conferir lápide por lápide é a trava-escrita-como-LISTA de novo. A pergunta
+ * certa é uma só — **este documento aparece no app?** — e ela se responde com a
+ * MESMA função que a listagem usa. Lápide nova entra aqui, e os dois lados
+ * mudam juntos.
+ */
+export function ocultoDoApp(d: DocumentoExistente | null | undefined): 'excluido' | 'mesclado' | null {
+    if (!d) return null;
+    if (d._deleted) return 'excluido';
+    if (texto(d._merged_into)) return 'mesclado';
+    return null;
+}
+
 /** Nome do trilho como a equipe fala dele, não como a coleção grava. */
 const TRILHO: Record<string, string> = {
     sefaz: 'captura na SEFAZ',
@@ -108,16 +132,26 @@ export function lerDuplicado(
     const dono = texto(d.empresaNome) || texto(d.empresaCnpj) || 'empresa não registrada no documento';
     const carimbo = `${quando(d.importadoEm)} · ${porQual(d.origem)}`;
 
-    // A LÁPIDE VEM PRIMEIRO: documento excluído está invisível na lista de XMLs
-    // (todo enumerador filtra `_deleted`) e ao mesmo tempo bloqueia a
-    // reimportação. Chamar isso de "duplicado" é o que fecha o beco — aqui
-    // reimportar é a ação CERTA, e o nome dela é reinclusão.
-    if (d._deleted) {
+    // A LÁPIDE VEM PRIMEIRO: documento escondido está invisível na lista de
+    // XMLs e ao mesmo tempo bloqueia a reimportação — o pior dos dois mundos.
+    // Chamar isso de "duplicado" é o que fecha o beco: aqui reimportar é a ação
+    // CERTA, e o nome dela é reinclusão.
+    //
+    // Vale para QUALQUER lápide, não só a de exclusão — é a régua da listagem
+    // que decide, não uma lista de campos escrita aqui.
+    const oculto = ocultoDoApp(d);
+    if (oculto) {
         return {
             situacao: 'excluido-pode-reincluir',
             permiteReincluir: true,
             exigeAcao: false,
-            mensagem: `Estava EXCLUÍDO (${dono}, ${carimbo}) — reincluído agora a partir deste arquivo.`,
+            mensagem: oculto === 'mesclado'
+                // Mesclado tem um detalhe que muda a leitura: ele foi juntado a
+                // OUTRO documento, então reincluir pode ressuscitar uma
+                // duplicata de verdade. A frase diz isso em vez de omitir.
+                ? `Estava fora do app — MESCLADO no documento ${texto(d._merged_into)} (${dono}, ${carimbo}). `
+                  + 'Reincluído agora a partir deste arquivo; confira se não passou a existir em duplicidade.'
+                : `Estava EXCLUÍDO (${dono}, ${carimbo}) — reincluído agora a partir deste arquivo.`,
             acao: null,
         };
     }
