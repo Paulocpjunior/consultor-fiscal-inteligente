@@ -34,8 +34,11 @@ import {
     direcaoEfetivaDoc,
     ehNotaPropriaDeEntrada,
 } from '../sefaz-backend/xml-metadata-helper.js';
-import { classificarNota } from '../sefaz-backend/dipam-produtor-rural.js';
-import { dedupNotaProdutorComEntrada } from '../sefaz-backend/dipam-produtor-rural.js';
+import {
+    classificarNota,
+    dedupNotaProdutorComEntrada,
+    agruparTiradosPorDecisao,
+} from '../sefaz-backend/dipam-produtor-rural.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -254,5 +257,76 @@ describe('o import manual grava o que o conserto do histórico precisa', () => {
     it('e usa a régua ÚNICA, não uma cópia', () => {
         expect(parser).toMatch(/decidirDirecaoPorTpNF/);
         expect(parser).not.toMatch(/if \(emit === emp\) return \{ ok: true, direcao: 'saida' \}/);
+    });
+});
+
+// ============================================================================
+// O NÚMERO DO ↩ PROMETIA O DOBRO — e é o número em que alguém decide.
+//
+// Paulo, 14/08, mandando o bloco "✕ 7 produtor(es) FORA do FUNRURAL por decisão
+// gravada" da NOVA ERA 07/2026: NUNO MONTEIRO com **11 notas · R$ 309.645,94 ·
+// voltaria R$ 5.047,23**.
+//
+// A base contava as DUAS notas da mesma compra. A dedup do art. 136 nunca
+// tinha rodado nesse grupo: ela exigia `funrural.aplica`, e quem saiu pelo ✕
+// tem `aplica: false` — exatamente o grupo cujo número aparece ao lado de um
+// botão de reverter imposto.
+//
+// "Reverter imposto sem o número do lado é decidir no escuro" (regra do
+// proprio botao, 14/08). Numero INFLADO é pior que numero nenhum: ele nao
+// levanta suspeita — a pessoa clica confiando.
+// ============================================================================
+describe('o "voltaria ao total" nao pode contar a mesma compra duas vezes', () => {
+    const par = (over: Record<string, unknown> = {}) => ({
+        chave: 'k', numero: '1', dhEmi: '2026-07-10', valor: 10000,
+        fornecedor: { doc: NUNO, nome: 'NUNO MONTEIRO' },
+        competencia: '2026-07',
+        notaPropria: false,
+        direcao: 'entrada',
+        dipam: { aplica: false },
+        // Fora do FUNRURAL por DECISAO gravada — é o estado do ✕.
+        funrural: { aplica: false, decisao: 'nao_aplica' },
+        ...over,
+    });
+
+    it('a NF-e do produtor é marcada como documento de origem mesmo com o FUNRURAL desligado por decisão', () => {
+        const r = dedupNotaProdutorComEntrada([
+            par({ numero: '255585', notaPropria: true }),
+            par({ numero: '900' }),
+        ]);
+        expect(r.find((n: any) => n.numero === '900').notaOrigemProdutor).toBe(true);
+        expect(r.find((n: any) => n.numero === '255585').notaOrigemProdutor).toBeUndefined();
+    });
+
+    it('e o motivo da saída continua sendo a DECISÃO, não o art. 136', () => {
+        // Trocar o motivo faria a tela mandar a pessoa procurar o caminho de
+        // volta no lugar errado: o ✕ se desfaz no cadastro do produtor.
+        const r = dedupNotaProdutorComEntrada([
+            par({ numero: '255585', notaPropria: true }),
+            par({ numero: '900' }),
+        ]);
+        const doProdutor = r.find((n: any) => n.numero === '900');
+        expect(doProdutor.funrural.decisao).toBe('nao_aplica');
+        expect(doProdutor.funrural.aplica).toBe(false);
+    });
+
+    it('o total que VOLTARIA passa a ser o da nota escriturada — não a soma das duas', () => {
+        const r = dedupNotaProdutorComEntrada([
+            par({ numero: '255585', notaPropria: true }),
+            par({ numero: '900' }),
+        ]);
+        const paraOBloco = r.filter((n: any) => !n.notaOrigemProdutor && n.funrural?.decisao);
+        const g = agruparTiradosPorDecisao(paraOBloco, '2026-07');
+        expect(g).toHaveLength(1);
+        expect(g[0].notas).toBe(1);          // era 2
+        expect(g[0].valor).toBe(10000);      // era 20000
+        // 1,63% da LC 224/2025 sobre a base certa.
+        expect(g[0].funruralPotencial).toBeCloseTo(163, 2);
+    });
+
+    it('produtor SEM nota própria continua inteiro — a dedup desfaz duplicidade, não impõe processo', () => {
+        const r = dedupNotaProdutorComEntrada([par({ numero: '900' }), par({ numero: '901' })]);
+        const g = agruparTiradosPorDecisao(r.filter((n: any) => !n.notaOrigemProdutor && n.funrural?.decisao), '2026-07');
+        expect(g[0].notas).toBe(2);
     });
 });

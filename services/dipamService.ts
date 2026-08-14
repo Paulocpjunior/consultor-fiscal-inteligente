@@ -47,6 +47,17 @@ export interface FunruralNota {
     /** Carimbo da régua que provou a natureza — viaja até o R-2055. */
     naturezaConfianca?: string | null;
     naturezaMotivo?: string | null;
+    /**
+     * QUAL documento está somando: a nota própria de entrada (art. 136 — a que
+     * se escritura) ou a NF-e do produtor. A linha mostrava as duas idênticas,
+     * e é por isso que a régua do art. 136 não dava para conferir na tela.
+     */
+    notaPropria?: boolean;
+    /** Como se soube: 'tpNF' (o documento diz) ou 'cfop-de-entrada'. */
+    provaDirecao?: 'tpNF' | 'cfop-de-entrada' | null;
+    /** A direção como está GRAVADA — é ela que manda no Livro e no SPED. */
+    direcaoGravada?: string | null;
+    cfops?: string[];
     base: number;
     aliquotas: { inss: number; gilrat: number; senar: number };
     inss: number;

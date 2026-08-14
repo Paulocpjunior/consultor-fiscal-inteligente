@@ -558,6 +558,24 @@ const DetalheEmpresa: React.FC<{
                                                     <span className="block text-[10px] text-slate-400">
                                                         {fmtCnpjCpf(n.doc)} · {n.uf || '—'} · {n.aliquotas.inss}% / {n.aliquotas.gilrat}% / {n.aliquotas.senar}%
                                                     </span>
+                                                    {/* QUAL documento está somando. A nota própria de entrada
+                                                        (art. 136) e a NF-e do produtor apareciam IDÊNTICAS aqui —
+                                                        e é justamente uma que se escritura e a outra que não. Sem
+                                                        isto na linha, nem quem escreveu a régua consegue conferir
+                                                        a tela: a causa tem que vir junto do número. */}
+                                                    <span className="block text-[10px]">
+                                                        {n.notaPropria ? (
+                                                            <span className="text-emerald-600 dark:text-emerald-400">
+                                                                nota própria de entrada (art. 136)
+                                                                {n.provaDirecao === 'cfop-de-entrada' && ' · direção pelo CFOP'}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-amber-600 dark:text-amber-400">
+                                                                NF-e do produtor — sem nota própria que a cubra nesta competência
+                                                            </span>
+                                                        )}
+                                                        {n.cfops?.length ? <span className="text-slate-400"> · CFOP {n.cfops.join(', ')}</span> : null}
+                                                    </span>
                                                     {n.divergencia && (
                                                         <span className="block text-[10px] text-red-500">
                                                             ⚠ a nota declara {fmtBRL(n.divergencia.declarado)} — diferença de {fmtBRL(n.divergencia.diferenca)}
