@@ -160,6 +160,37 @@ describe('cancelada continua fora dos totais — e a tela diz por quê', () => {
     });
 });
 
+// ═══ ↻ SUBSTITUIR: quando o que ESTÁ no banco é o problema ═════════════════
+//
+// "Já está aqui" não é resposta quando o documento gravado está ERRADO. Era o
+// caso do Paulo, 14/08 — e repetir o clique nunca ia mudar isso.
+describe('substituir reescreve o documento — mas só quando alguém PEDE', () => {
+    const RAIZ = join(__dirname, '..');
+    const servico = readFileSync(join(RAIZ, 'services/xmlFiscalService.ts'), 'utf8');
+    const painel = readFileSync(join(RAIZ, 'components/xml/XmlImportacaoManual.tsx'), 'utf8');
+
+    it('nasce DESLIGADO — ligado por padrão sobrescreveria documento certo', () => {
+        expect(painel).toMatch(/useState\(false\);?[\s\S]{0,40}$|const \[substituir, setSubstituir\] = useState\(false\)/m);
+        expect(painel).toMatch(/Substituir os que já estão no banco/);
+    });
+
+    it('NUNCA substitui documento de OUTRA empresa', () => {
+        // Sobrescrever ali moveria a nota de dona por importação — sem ninguém
+        // decidir isso, e sem rastro na empresa que a perdeu.
+        expect(servico).toMatch(/substituir && leitura\.situacao !== 'em-outra-empresa'/);
+    });
+
+    it('deixa rastro NO documento — reescrita de dado fiscal sem quem/quando não se reconstrói', () => {
+        expect(servico).toMatch(/_substituidoEm/);
+        expect(servico).toMatch(/_substituidoPorEmail/);
+    });
+
+    it('e a TELA diz que SUBSTITUIU, não "importada"', () => {
+        // Igual a uma importação nova, ninguém saberia que dado foi reescrito.
+        expect(painel).toMatch(/SUBSTITUÍDA pelo conteúdo deste arquivo/);
+    });
+});
+
 describe('a TELA usa a leitura, e não volta a inventar frase própria', () => {
     const RAIZ = join(__dirname, '..');
     const painel = readFileSync(join(RAIZ, 'components/xml/XmlImportacaoManual.tsx'), 'utf8');
