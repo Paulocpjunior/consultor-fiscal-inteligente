@@ -39,14 +39,35 @@ export interface ConferenciaBase {
     acao: string | null;
 }
 
+/**
+ * A nota como o backend entrega — e os nomes são os DELE.
+ *
+ * Esta interface é o contrato que o app irmão consome para montar o `nfs` do
+ * evento (`serie` → `numDocto` → `dtEmissaoNF` → `vlrBruto` → `obs`). Ela
+ * nasceu com `dataEmissao`, campo que o payload NUNCA teve — o backend manda
+ * `dtEmissao`. Tipo que descreve um campo inexistente não falha na hora: ele
+ * espera alguém escrever `n.dataEmissao` num campo de declaração e mandar
+ * `undefined` para a Receita. Campo novo no payload entra AQUI no mesmo PR.
+ */
 export interface NotaR2010 {
     numero?: string | null;
+    serie?: string | null;
+    /** 'AAAA-MM-DD…' — vira `dtEmissaoNF` no evento. */
+    dtEmissao?: string | null;
     chave?: string | null;
-    dataEmissao?: string | null;
+    competencia?: string | null;
     vlrBruto: number;
     inssRetido: number;
     baseRetencao: number | null;
-    baseOrigem: string | null;
+    baseOrigem: 'bruto-sem-deducao' | 'derivada-da-retencao' | null;
+    /** 0 quando a alíquota PROVA (11%); null quando o app se recusa a escolher. */
+    indCPRB: number | null;
+    /** O prestador descreve o serviço aqui — é daqui que sai o tpServico. */
+    discriminacao?: string | null;
+    codigoServicoMunicipal?: string | null;
+    /** NULOS de propósito: não estão na nota, são cadastrados por prestador. */
+    tpServico: null;
+    indObra: null;
     conferencia: ConferenciaBase;
 }
 

@@ -21,7 +21,9 @@
 // ============================================================================
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { conferirBaseRetencaoInss, ALIQUOTA_ART31, ALIQUOTA_CPRB } from '../sefaz-backend/reinf-servicos-tomados.js';
+import {
+    conferirBaseRetencaoInss, normalizarServicoTomado, ALIQUOTA_ART31, ALIQUOTA_CPRB,
+} from '../sefaz-backend/reinf-servicos-tomados.js';
 
 const RAIZ = join(__dirname, '..');
 const ler = (p: string) => readFileSync(join(RAIZ, p), 'utf8');
@@ -93,5 +95,43 @@ describe('a tela existe, está montada e não tem régua própria', () => {
 
     it('lista vazia não é prova de ausência de retenção', () => {
         expect(painel).toMatch(/não prova/);
+    });
+});
+
+// ═══ O TIPO É CONTRATO COM O APP IRMÃO — e ele estava mentindo ══════════════
+//
+// `NotaR2010` é a forma que o Consultor Contábil consome para montar o `nfs` do
+// evtServTom. Ela nascera com `dataEmissao`, campo que este payload NUNCA teve
+// (o backend manda `dtEmissao`), e faltavam `serie`, `discriminacao` e
+// `indCPRB` — os três que o outro lado de fato lê.
+//
+// Tipo que descreve campo inexistente não falha na hora: ele espera alguém
+// escrever `n.dataEmissao` e mandar `undefined` para dentro de uma declaração.
+// A trava é VARREDURA, não lista: percorre o que a interface declara e cobra do
+// payload real. Campo novo entra nos dois lados sozinho.
+describe('a interface declara só campos que o payload REALMENTE tem', () => {
+    const nota = normalizarServicoTomado({ numero: '1', valorServicos: 1000, valorInss: 110 });
+
+    const declarados = (() => {
+        const bloco = servico.match(/export interface NotaR2010 \{([\s\S]*?)\n\}/);
+        if (!bloco) throw new Error('interface NotaR2010 não encontrada');
+        return [...bloco[1].matchAll(/^\s{4}(\w+)\??:/gm)].map((m) => m[1]);
+    })();
+
+    it('a varredura acha os campos (senão ela passaria vazia e não provaria nada)', () => {
+        expect(declarados.length).toBeGreaterThan(8);
+        expect(declarados).toContain('dtEmissao');
+        expect(declarados).not.toContain('dataEmissao');
+    });
+
+    it.each(['numero', 'serie', 'dtEmissao', 'vlrBruto', 'inssRetido', 'baseRetencao',
+        'baseOrigem', 'indCPRB', 'discriminacao', 'conferencia'])(
+        'o payload tem o campo declarado "%s"', (campo) => {
+            expect(Object.keys(nota)).toContain(campo);
+        });
+
+    it('todo campo declarado existe no payload — nenhum sobra descrevendo nada', () => {
+        const chaves = new Set(Object.keys(nota));
+        expect(declarados.filter((c) => !chaves.has(c))).toEqual([]);
     });
 });
