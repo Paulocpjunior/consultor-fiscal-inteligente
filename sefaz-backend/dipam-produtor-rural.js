@@ -806,7 +806,7 @@ function avaliarDipam({ base, cfopPrincipal, cfops, doc, empresa, ehDevolucaoSai
 
 function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevolucaoSaida, cfopPrincipal }) {
     const pendencias = [];
-    const fora = (motivo) => ({ aplica: false, motivo, pendencias });
+    const fora = (motivo, decisao = null) => ({ aplica: false, motivo, decisao, pendencias });
 
     if (ehDevolucaoSaida) return fora('Devolução — o ajuste do FUNRURAL segue a nota de compra original.');
     if (empresa.funruralSubRogacao === 'nao_aplica') {
@@ -894,11 +894,30 @@ function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevol
 
     // Opção do produtor por recolher sobre a FOLHA (Lei 13.606/2018): não há
     // sub-rogação. Só o cadastro sabe disso — a nota não diz.
+    // ── DECISÃO HUMANA GRAVADA: some da CONTA, não da TELA ──────────────────
+    //
+    // Estas duas saídas não são régua fiscal lida do documento — são escolha de
+    // alguém, registrada no cadastro do produtor. E escolha errada acontece: o
+    // ✕ da fila é um clique, e o produtor sumia da tela junto com o botão que
+    // desfaria. Sem caminho de volta na tela, a pessoa vai procurar o lever
+    // errado (Paulo, 14/08, tentou REIMPORTAR o XML, que não desfaz nada
+    // porque a nota nunca saiu do banco).
+    //
+    // É a mesma regra que eu já tinha escrito para a dedup do art. 136 e não
+    // apliquei aqui: **total que muda sozinho faz desconfiar do número certo**.
+    // Por isso a saída vai CARIMBADA (`decisao`), volta nomeada no payload e
+    // ganha o botão de reverter na própria linha.
     if (cadastro?.funrural === 'folha') {
-        return fora('Produtor optou por recolher sobre a folha de salários — sem sub-rogação (registrado no cadastro).');
+        return fora(
+            'Produtor optou por recolher sobre a folha de salários — sem sub-rogação (registrado no cadastro).',
+            'folha',
+        );
     }
     if (cadastro?.funrural === 'nao_aplica') {
-        return fora('Sub-rogação marcada como não aplicável no cadastro do produtor.');
+        return fora(
+            'Tirado da sub-rogação por decisão gravada no cadastro do produtor.',
+            'nao_aplica',
+        );
     }
 
     const calc = calcularFunrural(base.valor, base.competencia, tabelaDoProdutor(cadastro, tabelaFunrural));
@@ -984,6 +1003,51 @@ export function dedupNotaProdutorComEntrada(notas) {
             funrural: { ...n.funrural, aplica: false, motivo },
         };
     });
+}
+
+/** Rótulo de cada decisão — e ela DIZ se tem volta, porque as duas não são iguais. */
+const ROTULO_DECISAO = {
+    nao_aplica: 'Tirado do FUNRURAL por decisão gravada no cadastro do produtor.',
+    folha: 'Produtor optou por recolher sobre a FOLHA de salários (Lei 13.606/2018) — não há sub-rogação.',
+};
+
+/**
+ * Os produtores tirados da sub-rogação por DECISÃO, com o que voltaria ao total.
+ *
+ * Agrupa por produtor porque é nele que a decisão foi gravada — desfazer nota a
+ * nota não existe, e oferecer isso na tela prometeria um controle que o cadastro
+ * não tem.
+ */
+export function agruparTiradosPorDecisao(notas, competencia, tabelaFunrural = ALIQUOTAS_FUNRURAL_PF) {
+    const porProdutor = new Map();
+    for (const n of notas || []) {
+        const doc = soDigitos(n.fornecedor?.doc);
+        const chaveGrupo = `${doc || 'sem-doc'}|${n.funrural.decisao}`;
+        const g = porProdutor.get(chaveGrupo) || {
+            doc: doc || null,
+            fornecedor: n.fornecedor?.nome || null,
+            decisao: n.funrural.decisao,
+            rotulo: ROTULO_DECISAO[n.funrural.decisao] || n.funrural.motivo,
+            // Só o ✕ se desfaz por aqui. A opção pela FOLHA é declaração do
+            // produtor, não engano de clique: reverter fica no cadastro dele,
+            // onde a decisão foi tomada.
+            reversivelNaLinha: n.funrural.decisao === 'nao_aplica',
+            notas: 0,
+            valor: 0,
+        };
+        g.notas += 1;
+        g.valor = round2(g.valor + (Number(n.valor) || 0));
+        porProdutor.set(chaveGrupo, g);
+    }
+    return [...porProdutor.values()]
+        .map((g) => ({
+            ...g,
+            // O que voltaria ao total se a decisão fosse desfeita. Alíquota
+            // VIGENTE na competência, pela mesma régua do cálculo — percentual
+            // escrito à mão aqui seria a segunda cópia.
+            funruralPotencial: round2(g.valor * (percentualFunruralVigente(competencia, tabelaFunrural) / 100)),
+        }))
+        .sort((a, b) => b.valor - a.valor);
 }
 
 export function montarDipamCompetencia({ documentos = [], competencia, empresa = {}, fornecedores = {}, tabelaFunrural = ALIQUOTAS_FUNRURAL_PF }) {
@@ -1197,6 +1261,21 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
                 fornecedor: n.fornecedor.nome, doc: n.fornecedor.doc, valor: n.valor,
                 motivo: n.funrural.motivo || 'Documento de origem — a escriturada é a nota de entrada própria (art. 136/RC 33068).',
             })),
+            // ── TIRADOS POR DECISÃO HUMANA ──────────────────────────────────
+            //
+            // Agrupado por PRODUTOR, que é o eixo da decisão (o ✕ marca o
+            // cadastro do produtor, não a nota). Some da CONTA, não da TELA —
+            // e é aqui que mora o caminho de volta: sem ele, um clique errado
+            // fazia o produtor desaparecer junto com o botão que o desfaria, e
+            // a pessoa ia procurar o lever errado.
+            //
+            // O valor que VOLTARIA ao total vai junto: "reverter" sem número
+            // do lado é decidir no escuro sobre imposto.
+            tiradosPorDecisao: agruparTiradosPorDecisao(
+                notas.filter((n) => !n.notaOrigemProdutor && n.funrural?.decisao),
+                competencia,
+                tabelaFunrural,
+            ),
         },
         notas,
         pendencias,

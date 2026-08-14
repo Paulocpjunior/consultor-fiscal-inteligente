@@ -1134,6 +1134,93 @@ describe('foraDoTotal — o dinheiro que espera conferência', () => {
             // Confirmação obrigatória: sai dinheiro do total.
             expect(painel).toMatch(/window\.confirm/);
         });
+
+        // ═══ SOME DA CONTA, NÃO DA TELA — e tem volta ══════════════════════
+        //
+        // Paulo, 14/08: clicou no ✕ por engano e o produtor sumiu da lista
+        // JUNTO com o botão que o desfaria. Sem caminho de volta na tela ele
+        // foi tentar REIMPORTAR o .xml — que não desfaz nada, porque a nota
+        // nunca saiu do banco (a importação respondeu "já importado", e estava
+        // certa).
+        //
+        // É a MESMA régua que eu já tinha escrito para a dedup do art. 136 —
+        // "total que muda sozinho faz desconfiar do número certo" — e que não
+        // apliquei ao meu próprio botão.
+        it('o produtor tirado CONTINUA na tela, nomeado e fora do total', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [pjAgro({
+                    emitente: { cnpjCpf: '06603394987', nome: 'EMILIO CAMPIGOTTO', uf: 'SP', codMunIBGE: '3550308' },
+                })],
+                competencia: '2026-07', empresa,
+                fornecedores: { '06603394987': { doc: '06603394987', funrural: 'nao_aplica' } },
+            });
+            expect(painel.funrural.total).toBe(0);
+            expect(painel.funrural.tiradosPorDecisao).toHaveLength(1);
+            const t = painel.funrural.tiradosPorDecisao[0];
+            expect(t.doc).toBe('06603394987');
+            expect(t.fornecedor).toBe('EMILIO CAMPIGOTTO');
+            expect(t.decisao).toBe('nao_aplica');
+            expect(t.notas).toBe(1);
+            expect(t.valor).toBeGreaterThan(0);
+        });
+
+        it('e diz QUANTO volta ao total se a decisão for desfeita', () => {
+            // Reverter imposto sem o número do lado é decidir no escuro. O
+            // potencial usa a alíquota VIGENTE na competência (LC 224/2025 ⇒
+            // 1,63% a partir de 04/2026), pela mesma régua do cálculo.
+            const painel = montarDipamCompetencia({
+                documentos: [pjAgro({
+                    emitente: { cnpjCpf: '06603394987', nome: 'EMILIO CAMPIGOTTO', uf: 'SP', codMunIBGE: '3550308' },
+                })],
+                competencia: '2026-07', empresa,
+                fornecedores: { '06603394987': { doc: '06603394987', funrural: 'nao_aplica' } },
+            });
+            const t = painel.funrural.tiradosPorDecisao[0];
+            expect(t.funruralPotencial).toBeCloseTo(t.valor * 0.0163, 2);
+        });
+
+        it('a opção pela FOLHA também aparece — mas NÃO se desfaz na linha', () => {
+            // Ela é declaração do produtor (Lei 13.606/2018), não engano de
+            // clique: oferecer "desfazer" ali trataria as duas como iguais.
+            const painel = montarDipamCompetencia({
+                documentos: [pjAgro({
+                    emitente: { cnpjCpf: '06603394987', nome: 'EMILIO CAMPIGOTTO', uf: 'SP', codMunIBGE: '3550308' },
+                })],
+                competencia: '2026-07', empresa,
+                fornecedores: { '06603394987': { doc: '06603394987', funrural: 'folha' } },
+            });
+            const t = painel.funrural.tiradosPorDecisao[0];
+            expect(t.decisao).toBe('folha');
+            expect(t.reversivelNaLinha).toBe(false);
+            expect(painel.funrural.tiradosPorDecisao[0].rotulo).toMatch(/FOLHA/);
+        });
+
+        it('sem decisão nenhuma, o bloco vem VAZIO — não inventa alarme', () => {
+            const painel = montarDipamCompetencia({
+                documentos: [pjAgro({
+                    emitente: { cnpjCpf: '06603394987', nome: 'EMILIO CAMPIGOTTO', uf: 'SP', codMunIBGE: '3550308' },
+                })],
+                competencia: '2026-07', empresa,
+                fornecedores: { '06603394987': { doc: '06603394987', natureza: 'produtor_rural_pf' } },
+            });
+            expect(painel.funrural.tiradosPorDecisao).toHaveLength(0);
+            expect(painel.funrural.total).toBeGreaterThan(0);
+        });
+
+        it('a TELA tem o caminho de volta, e ele LIMPA o campo (não afirma natureza)', () => {
+            const painel = readFileSync(join(__dirname, '..', 'components/xml/DipamProdutorRuralPanel.tsx'), 'utf8');
+            expect(painel).toMatch(/voltar ao FUNRURAL/);
+            expect(painel).toMatch(/tiradosPorDecisao/);
+            // Limpar devolve à régua automática. Gravar 'sub_rogacao' AFIRMARIA
+            // que ele é produtor rural PF — coisa que desfazer um clique não
+            // verificou.
+            expect(painel).toMatch(/funrural: ''/);
+            expect(painel).not.toMatch(/funrural: 'sub_rogacao'/);
+            // E a promessa antiga ("dá pra reverter no cadastro") não pode
+            // voltar: o caminho agora é NOMEADO, porque promessa que a tela não
+            // cumpre é pior que não prometer.
+            expect(painel).not.toMatch(/Dá pra reverter no cadastro/);
+        });
     });
 
     it('sem bloqueio, a lista vem vazia — não inventa alarme', () => {

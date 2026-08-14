@@ -319,13 +319,47 @@ const DetalheEmpresa: React.FC<{
         if (!window.confirm(
             `Tirar ${nome} da sub-rogação do FUNRURAL?\n\n`
             + 'As notas dele saem do total desta e das próximas competências, e a decisão fica gravada no '
-            + 'cadastro do produtor com o seu nome. Dá pra reverter no cadastro.\n\n'
+            + 'cadastro do produtor com o seu nome.\n\n'
+            // A frase antiga dizia "dá pra reverter no cadastro" e o caminho
+            // NÃO existia na tela: o produtor sumia da lista junto com o botão.
+            // Promessa que a tela não cumpre é pior que não prometer.
+            + 'Se errar, ele aparece logo abaixo em "FORA do FUNRURAL por decisão gravada", com o botão '
+            + '↩ voltar ao FUNRURAL.\n\n'
             + 'Use quando a compra não for de produção rural (frete, serviço, bem usado) ou quando o '
             + 'fornecedor não for produtor rural pessoa física.',
         )) return;
         setTirando(d);
         try {
             const r: any = await salvarProdutorRural({ doc: d, nome, funrural: 'nao_aplica' } as any);
+            if (r?.ok === false) { alert(`Falha: ${r.error}`); return; }
+            await onRecarregar();
+        } catch (e: any) {
+            alert(`Falha ao gravar: ${e?.message || e}`);
+        } finally {
+            setTirando(null);
+        }
+    };
+
+    /**
+     * DESFAZ o ✕ — grava `funrural: ''`, que devolve o produtor à régua
+     * automática (o store limpa o campo; não é marcar "sub_rogação", que seria
+     * AFIRMAR o que ninguém verificou).
+     *
+     * O valor que volta ao total vai no aviso: reverter imposto sem o número do
+     * lado é decidir no escuro.
+     */
+    const voltarAoFunrural = async (doc: string, nome: string, volta: number) => {
+        const d = String(doc || '').replace(/\D/g, '');
+        if (!d) return;
+        if (!window.confirm(
+            `Voltar ${nome} para a sub-rogação do FUNRURAL?\n\n`
+            + `As notas dele voltam a somar — cerca de ${fmtBRL(volta)} nesta competência — e nas próximas.\n\n`
+            + 'O cadastro volta à régua automática: quem decide passa a ser a natureza do fornecedor e o '
+            + 'tipo da compra, não uma marcação manual.',
+        )) return;
+        setTirando(d);
+        try {
+            const r: any = await salvarProdutorRural({ doc: d, nome, funrural: '' } as any);
             if (r?.ok === false) { alert(`Falha: ${r.error}`); return; }
             await onRecarregar();
         } catch (e: any) {
@@ -537,6 +571,45 @@ const DetalheEmpresa: React.FC<{
                             {painel.funrural!.excluidasArt136!.map(n => (
                                 <div key={n.chave} className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                                     nº {n.numero} · {n.fornecedor} · {fmtCnpjCpf(n.doc)} · {fmtBRL(Math.abs(n.valor || 0))}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {/* ── TIRADOS POR DECISÃO: some da CONTA, não da TELA ─────
+                        Paulo, 14/08: clicou no ✕ e o produtor sumiu junto com o
+                        botão que desfaria — então ele foi tentar REIMPORTAR o
+                        XML, que não desfaz nada (a nota nunca saiu do banco).
+                        Sem caminho de volta na tela, a pessoa procura o lever
+                        errado. É a MESMA régua que já valia para o art. 136 e
+                        que eu não apliquei ao meu próprio botão. */}
+                    {(painel.funrural?.tiradosPorDecisao?.length || 0) > 0 && (
+                        <div className="mt-3 rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/40 p-2">
+                            <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                                ✕ {painel.funrural!.tiradosPorDecisao!.length} produtor(es) FORA do FUNRURAL por decisão gravada
+                            </p>
+                            <p className="text-[10px] text-slate-600 dark:text-slate-400 mb-1">
+                                Não é régua do documento — é escolha de alguém, no cadastro do produtor. Fica aqui para
+                                não sumir da tela, com o que voltaria ao total se for desfeita.
+                            </p>
+                            {painel.funrural!.tiradosPorDecisao!.map(t => (
+                                <div key={`${t.doc}-${t.decisao}`} className="flex flex-wrap items-center gap-2 py-1 border-t border-slate-200 dark:border-slate-700 first:border-t-0">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-[11px] text-slate-700 dark:text-slate-300 truncate">{t.fornecedor || '—'}</p>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                                            {fmtCnpjCpf(t.doc || '')} · {t.notas} nota(s) · {fmtBRL(t.valor)}
+                                            {' · '}voltaria {fmtBRL(t.funruralPotencial)} de FUNRURAL
+                                        </p>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400">{t.rotulo}</p>
+                                    </div>
+                                    {isAdmin && t.reversivelNaLinha && (
+                                        <button
+                                            onClick={() => voltarAoFunrural(t.doc || '', t.fornecedor || '', t.funruralPotencial)}
+                                            disabled={tirando === String(t.doc || '')}
+                                            className="btn-press text-[10px] px-2 py-1 rounded border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 whitespace-nowrap disabled:opacity-50"
+                                            title="Desfaz o ✕ — as notas dele voltam a somar no FUNRURAL desta e das próximas competências.">
+                                            {tirando === String(t.doc || '') ? '⏳…' : '↩ voltar ao FUNRURAL'}
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
