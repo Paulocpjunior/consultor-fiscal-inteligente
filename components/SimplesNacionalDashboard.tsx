@@ -4,6 +4,8 @@ import { SimplesNacionalEmpresa, SimplesNacionalNota, User } from '../types';
 import * as simplesService from '../services/simplesNacionalService';
 import { PlusIcon, InfoIcon, ShieldIcon, PencilIcon, TrashIcon } from './Icons';
 import { previewMesclagem, executarMesclagem, descreverResumo } from '../services/empresasMergeService';
+import EmpresaSearchSelect from './xml/EmpresaSearchSelect';
+import { paraEmpresaOption } from '../services/empresaOption';
 import SimplesBaseVarreduraModal from './SimplesBaseVarreduraModal';
 import { empresaBateBusca, prefixoCodCliente } from '../services/buscaEmpresa';
 
@@ -59,9 +61,24 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
         return empresas.map(empresa => {
             // Pass { fullHistory: false } to align "mensal" data with RBT12 period (last 12 months)
             const resumo = simplesService.calcularResumoEmpresa(empresa, notas[empresa.id] || [], new Date(), { fullHistory: false });
-            return { ...empresa, resumo };
+            // ═══ ATIVOU? ═══════════════════════════════════════════════════
+            //
+            // As notas só chegam quando a empresa é ATIVADA (Paulo, 14/08: o
+            // banco fica quieto até lá). Sem elas, RBT12/alíquota/DAS sairiam
+            // 0,00 — e zero é uma RESPOSTA, não um "ainda não li". Faturamento
+            // zerado numa empresa que fatura é a mentira mais cara que esta
+            // tela poderia contar, porque ninguém desconfia de um número.
+            return { ...empresa, resumo, ativada: Object.prototype.hasOwnProperty.call(notas, empresa.id) };
         });
     }, [empresas, notas]);
+
+    /** Célula de número que ainda não pode ser calculada. */
+    const AGUARDA = (
+        <span
+            className="text-slate-400 dark:text-slate-500"
+            title="Ative a empresa para o app ler as notas dela e calcular. Zero aqui seria mentira: o app ainda não leu nada."
+        >—</span>
+    );
 
     const isAdminView = currentUser?.role === 'admin' || currentUser?.email === 'junior@spassessoriacontabil.com.br';
 
@@ -77,6 +94,14 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
     }, [empresas]);
 
     const [busca, setBusca] = useState('');
+    // Empresa PENDENTE de ativação: escolher não carrega, o ⚡ é que commita.
+    const [escolhida, setEscolhida] = useState('');
+    const opcoesEmpresas = useMemo(
+        () => empresas.map(e => paraEmpresaOption({
+            id: e.id, nome: e.nome, cnpj: e.cnpj, dadosFiscais: (e as any).dadosFiscais,
+        }, 'simples')),
+        [empresas],
+    );
     // Conferência das bases (RBT12) — varre a carteira atrás de detalhamento
     // por CNAE acima do total lançado, que inflava a faixa e o DAS.
     const [varreduraAberta, setVarreduraAberta] = useState(false);
@@ -123,13 +148,42 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                 </div>
             </div>
             
+            {/* ═══ ATIVAR EMPRESA — O PRIMEIRO PASSO ═══════════════════════
+                Paulo, 14/08: *"Ativar Empresa é o primeiro passo do
+                colaborador, é isso que define o que ele pode ou não fazer e em
+                qual empresa; além disso não carregamos nenhuma informação do
+                banco de dados até que o colaborador ative a empresa"*.
+
+                É o MESMO seletor das telas de XML (busca por Cod.Cliente, nome
+                ou CNPJ), com o ⚡ Ativar obrigatório: escolher na lista não
+                carrega nada, o clique é que dispara — porque aqui escolher
+                DISPARA leitura, que é a régua de 05/08. */}
+            {empresas.length > 0 && (
+                <div className="rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 p-3">
+                    <p className="text-xs font-bold text-sky-900 dark:text-sky-200 mb-1">
+                        ⚡ Ative a empresa para começar
+                    </p>
+                    <p className="text-[11px] text-sky-800 dark:text-sky-300 mb-2">
+                        Até ativar, o app carrega só o cadastro — as notas e os cálculos daquela empresa
+                        chegam no clique. É o que deixa a tela rápida com a carteira inteira.
+                    </p>
+                    <EmpresaSearchSelect
+                        empresas={opcoesEmpresas}
+                        value={escolhida}
+                        onChange={setEscolhida}
+                        onAtivar={(id: string) => { if (id) onSelectEmpresa(id, 'detalhe'); }}
+                        placeholder="Buscar por código, nome ou CNPJ…"
+                    />
+                </div>
+            )}
+
             {empresas.length > 0 && (
                 <div className="relative">
                     <input
                         type="text"
                         value={busca}
                         onChange={(ev) => setBusca(ev.target.value)}
-                        placeholder="Buscar por código, nome ou CNPJ..."
+                        placeholder="Filtrar a lista abaixo (código, nome ou CNPJ)…"
                         className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     />
                 </div>
@@ -230,7 +284,7 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                             )}
                                         </td>
                                         <td className="px-6 py-4 text-right font-mono">
-                                            {e.resumo.rbt12.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            {!e.ativada ? AGUARDA : e.resumo.rbt12.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             {/* Badges em ordem de gravidade — so a mais grave aparece. */}
                                             {e.resumo.alertas_faturamento?.excesso_maior_20_pct.atingido ? (
                                                 <div className="flex items-center justify-end gap-1 mt-1 text-red-700 dark:text-red-400 text-xs font-bold" title="Excesso > 20% do limite federal (R$ 5,76M) — desenquadramento RETROATIVO (LC 123 art. 30 §1º II)">
@@ -259,11 +313,11 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                                 </div>
                                             ) : null}
                                         </td>
-                                        <td className="px-6 py-4 text-center font-mono">{e.resumo.aliq_eff.toFixed(2)}%</td>
+                                        <td className="px-6 py-4 text-center font-mono">{e.ativada ? `${e.resumo.aliq_eff.toFixed(2)}%` : AGUARDA}</td>
                                         <td className="px-6 py-4 text-right font-mono font-bold bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300">
-                                            {e.resumo.das_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            {e.ativada ? e.resumo.das_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : AGUARDA}
                                         </td>
-                                        <td className="px-6 py-4 text-right font-mono">{e.resumo.das.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                        <td className="px-6 py-4 text-right font-mono">{e.ativada ? e.resumo.das.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : AGUARDA}</td>
                                         <td className="px-6 py-4 text-center space-x-2 whitespace-nowrap sticky right-0 z-10 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700">
                                             <button onClick={() => onSelectEmpresa(e.id, 'detalhe')} className="font-medium text-sky-600 dark:text-sky-400 hover:underline">
                                                 Painel
