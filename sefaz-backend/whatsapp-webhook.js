@@ -199,6 +199,27 @@ export function interpretarErroEntrega(codigo, detalhe = '') {
     return detalhe ? `Falha na entrega: ${detalhe}` : 'Falha na entrega — confira o número e tente novamente.';
 }
 
+// Extensão por mime quando o WhatsApp não manda nome de arquivo (áudio e
+// figurinha nunca mandam; imagem quase nunca).
+const EXT_POR_MIME = {
+    'application/pdf': '.pdf', 'image/jpeg': '.jpg', 'image/png': '.png',
+    'image/webp': '.webp', 'audio/ogg': '.ogg', 'audio/mpeg': '.mp3',
+    'audio/mp4': '.m4a', 'audio/amr': '.amr', 'video/mp4': '.mp4', 'video/3gpp': '.3gp',
+};
+
+/**
+ * Caminho da mídia no Cloud Storage — mesmo desenho do XML cru: binário no
+ * bucket, `storagePath` no documento. O wamid entra saneado (ele carrega
+ * '=' e '.') e o nome original do arquivo fica DEPOIS do wamid, então dois
+ * clientes mandando "comprovante.pdf" nunca colidem.
+ */
+export function caminhoStorageMidia(msg) {
+    const wamid = String(msg.metaMessageId || '').replace(/[^A-Za-z0-9_-]/g, '_');
+    const nome = String(msg.midia?.nomeArquivo || '').replace(/[^A-Za-z0-9._-]/g, '_');
+    const ext = nome ? '' : (EXT_POR_MIME[String(msg.midia?.mime || '').split(';')[0]] || '.bin');
+    return `whatsapp/${msg.de}/${wamid}${nome ? `_${nome}` : ext}`;
+}
+
 /** Resumo curto de uma mensagem pra "última mensagem" da conversa. */
 export function resumoParaConversa(msg) {
     if (msg.texto) return String(msg.texto).slice(0, 140);
