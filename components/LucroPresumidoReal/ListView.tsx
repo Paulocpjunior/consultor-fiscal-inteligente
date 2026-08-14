@@ -10,7 +10,8 @@
  * fechamento trimestral sem rolar a lista inteira.
  */
 import React, { useMemo, useState } from 'react';
-import type { LucroPresumidoEmpresa, User } from '../../types';
+import type { User } from '../../types';
+import type * as lucroPresumidoService from '../../services/lucroPresumidoService';
 import { PlusIcon, TrashIcon } from '../Icons';
 import { empresaBateBusca, prefixoCodCliente } from '../../services/buscaEmpresa';
 import LoteDareModal from './LoteDareModal';
@@ -25,7 +26,15 @@ const fmtCnpj = (c?: string): string => {
 };
 
 export interface ListViewProps {
-    empresas: LucroPresumidoEmpresa[];
+    /**
+     * Lista LEVE — cadastro + CONTAGEM de fichas, sem a ficha financeira.
+     *
+     * O tipo é outro de propósito: `LucroPresumidoEmpresa` traz a
+     * `fichaFinanceira[]` inteira, e era ela que fazia a tela baixar todos os
+     * meses de todos os clientes na entrada. Se os dois tipos fossem um só,
+     * voltaria sem ninguém perceber.
+     */
+    empresas: lucroPresumidoService.LucroEmpresaResumo[];
     currentUser: User | null;
     onNovaEmpresa: () => void;
     onAbrir: (empresaId: string) => void;
@@ -43,7 +52,7 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
     // não resolve esse caso): o cadastro clicado é o VENCEDOR; o gêmeo entra
     // como perdedor. Preview obrigatório → confirmação → executar; o perdedor
     // vira lápide _merged_into (não é apagado).
-    const mesclarDuplicata = async (vencedor: LucroPresumidoEmpresa) => {
+    const mesclarDuplicata = async (vencedor: lucroPresumidoService.LucroEmpresaResumo) => {
         const cnpjN = String(vencedor.cnpj || '').replace(/\D/g, '');
         const gemeo = empresas.find(e => e.id !== vencedor.id && String(e.cnpj || '').replace(/\D/g, '') === cnpjN);
         if (!gemeo) { alert('Gêmeo não encontrado na lista.'); return; }
@@ -52,8 +61,8 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
             const p = await previewMesclagem('lucro', vencedor.id, gemeo.id);
             if (!p.ok) { alert(`Preview falhou: ${p.error}`); return; }
             const msg = `MESCLAR duplicatas de ${vencedor.nome}?\n\n`
-                + `MANTIDO: "${vencedor.nome}" (${(vencedor.fichaFinanceira || []).length} ficha(s))\n`
-                + `MESCLADO E ARQUIVADO: o gêmeo com ${(gemeo.fichaFinanceira || []).length} ficha(s)\n\n`
+                + `MANTIDO: "${vencedor.nome}" (${vencedor.fichas} ficha(s))\n`
+                + `MESCLADO E ARQUIVADO: o gêmeo com ${gemeo.fichas} ficha(s)\n\n`
                 + `${descreverResumo(p.resumo, p.conflitos)}\n\n`
                 + 'O gêmeo sai de todas as listas (lápide de mesclagem) — nada é apagado.';
             if (!confirm(msg)) return;
@@ -111,7 +120,7 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                 </div>
             </div>
 
-            {loteDareAberto && <LoteDareModal empresas={empresas} onClose={() => setLoteDareAberto(false)} />}
+            {loteDareAberto && <LoteDareModal currentUser={currentUser} onClose={() => setLoteDareAberto(false)} />}
 
             {empresas.length > 0 && (
                 <div className="relative">
@@ -150,10 +159,10 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                                         // cadastro-lixo; quem tem fichas é o verdadeiro. Duas com
                                         // fichas = mesclagem (admin): o clicado é mantido e o gêmeo
                                         // entra com os meses que faltam + lápide _merged_into.
-                                        const nFichas = (emp.fichaFinanceira || []).length;
+                                        const nFichas = emp.fichas;
                                         const cnpjN = String(emp.cnpj || '').replace(/\D/g, '');
                                         const gemeo = empresas.find(e => e.id !== emp.id && String(e.cnpj || '').replace(/\D/g, '') === cnpjN);
-                                        const ambasComFichas = nFichas > 0 && (gemeo?.fichaFinanceira || []).length > 0;
+                                        const ambasComFichas = nFichas > 0 && (gemeo?.fichas || 0) > 0;
                                         return (
                                             <>
                                                 <span
@@ -182,7 +191,7 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                                         );
                                     })()}
                                 </td>
-                                <td className="px-6 py-4 font-mono">{fmtCnpj(emp.cnpj)}</td>
+                                <td className="px-6 py-4 font-mono">{fmtCnpj(emp.cnpj || '')}</td>
                                 <td className="px-6 py-4">
                                     <span className={`px-2 py-1 rounded-full text-xs font-bold ${emp.regimePadrao === 'Real' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
                                         {emp.regimePadrao || 'Presumido'}

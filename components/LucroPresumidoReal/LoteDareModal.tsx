@@ -9,12 +9,19 @@
  * no portal (humano resolve o reCAPTCHA) → portal devolve ZIP com os DAREs.
  * O app NUNCA calcula multa/juros estadual: flag "1" manda o portal calcular.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getAuth } from 'firebase/auth';
-import type { LucroPresumidoEmpresa } from '../../types';
+import type { LucroPresumidoEmpresa, User } from '../../types';
+import * as lucroPresumidoService from '../../services/lucroPresumidoService';
 
 interface Props {
-    empresas: LucroPresumidoEmpresa[];
+    /**
+     * O lote varre a ficha da competência em TODAS as empresas, então aqui a
+     * ficha financeira é necessária mesmo — e por isso o modal a carrega
+     * SOZINHO, ao abrir, em vez de a lista da tela carregar tudo o tempo todo
+     * só porque este botão existe. Carga sob demanda: quem não clica não paga.
+     */
+    currentUser: User | null;
     onClose: () => void;
 }
 
@@ -39,7 +46,19 @@ const competenciaAnterior = (): string => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-const LoteDareModal: React.FC<Props> = ({ empresas, onClose }) => {
+const LoteDareModal: React.FC<Props> = ({ currentUser, onClose }) => {
+    const [empresas, setEmpresas] = useState<LucroPresumidoEmpresa[] | null>(null);
+    const [erroCarga, setErroCarga] = useState<string | null>(null);
+
+    useEffect(() => {
+        let vivo = true;
+        lucroPresumidoService.getEmpresas(currentUser)
+            .then(e => { if (vivo) setEmpresas(e); })
+            // Lista vazia aqui seria lida como "ninguém tem DARE nesta
+            // competência" — conclusão errada sobre imposto a recolher.
+            .catch(e => { if (vivo) setErroCarga(e?.message || 'falha ao carregar as empresas'); });
+        return () => { vivo = false; };
+    }, [currentUser]);
     const [competencia, setCompetencia] = useState(competenciaAnterior());
     const [vencimento, setVencimento] = useState('');
     const [itens, setItens] = useState<ItemLote[] | null>(null);
@@ -51,7 +70,7 @@ const LoteDareModal: React.FC<Props> = ({ empresas, onClose }) => {
     const varrer = () => {
         setErro(null); setTexto(null);
         const achados: ItemLote[] = [];
-        for (const emp of empresas) {
+        for (const emp of (empresas || [])) {
             const cnpj = String(emp.cnpj || '').replace(/\D/g, '');
             if (cnpj.length !== 14) continue;
             const ficha = (emp.fichaFinanceira || []).find(f => f.mesReferencia === competencia);
@@ -135,10 +154,24 @@ const LoteDareModal: React.FC<Props> = ({ empresas, onClose }) => {
                         <input type="date" value={vencimento} onChange={e => { setVencimento(e.target.value); setTexto(null); }}
                             className="mt-1 block p-2 rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm" />
                     </label>
-                    <button onClick={varrer} className="px-4 py-2 text-sm font-bold rounded-lg bg-sky-600 hover:bg-sky-700 text-white">
-                        🔎 Varrer fichas
+                    {/* Varrer antes das fichas chegarem devolveria ZERO — e zero
+                        aqui se lê como "ninguém tem DARE nesta competência", que é
+                        conclusão errada sobre imposto a recolher. */}
+                    <button
+                        onClick={varrer}
+                        disabled={empresas === null || !!erroCarga}
+                        className="px-4 py-2 text-sm font-bold rounded-lg bg-sky-600 hover:bg-sky-700 text-white disabled:opacity-50"
+                    >
+                        {empresas === null && !erroCarga ? '⏳ carregando fichas…' : '🔎 Varrer fichas'}
                     </button>
                 </div>
+
+                {erroCarga && (
+                    <div className="text-xs text-red-700 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-2">
+                        Não foi possível carregar as fichas ({erroCarga}). <strong>A varredura está bloqueada de propósito</strong> —
+                        com a carga incompleta ela diria que ninguém tem DARE, e isso é o contrário de estar em dia. Feche e abra de novo.
+                    </div>
+                )}
 
                 {erro && <div className="text-xs text-red-700 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-2">{erro}</div>}
 
