@@ -40,7 +40,7 @@
 // "Evento não é nota" mora no helper de metadados, junto de `docCancelado` e
 // `direcaoEfetivaDoc` — as outras duas réguas que decidem na LEITURA o que o
 // campo gravado não conta direito. Reescrever aqui seria a segunda cópia.
-import { ehRegistroDeEvento } from './xml-metadata-helper.js';
+import { ehRegistroDeEvento, ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
 
 /**
  * Rótulo de cada causa que segura nota fora do total.
@@ -589,9 +589,20 @@ export function classificarNota(doc, opts = {}) {
     // gravava direcao='saida' (só olhava o CNPJ do emitente) e a compra sumia
     // da DIPAM — por isso a direção efetiva é decidida AQUI, pelo tpNF, sem
     // confiar no campo gravado.
-    const notaPropriaEntrada = String(d.tpNF ?? '') === '0'
-        && (d.direcao === 'saida'
-            || (empresa.cnpj && soDigitos(emitente.cnpjCpf || emitente.cnpj) === soDigitos(empresa.cnpj)));
+    //
+    // ⚠️ E o tpNF pode NÃO ESTAR GRAVADO: o import manual do frontend nunca
+    // gravou o campo até 14/08, então nas notas antigas a prova é o CFOP de
+    // ENTRADA numa nota emitida pela própria empresa. A régua das duas provas
+    // mora em `ehNotaPropriaDeEntrada` — aqui só se lê o veredito.
+    const provaNotaPropria = ehNotaPropriaDeEntrada(
+        {
+            ...d,
+            cnpjEmit: emitente.cnpjCpf || emitente.cnpj || d.cnpjEmit,
+            empresaCnpj: d.empresaCnpj || empresa.cnpj,
+        },
+        empresa.cnpj,
+    );
+    const notaPropriaEntrada = provaNotaPropria.sim;
     const direcao = notaPropriaEntrada ? 'entrada' : d.direcao;
     // Na devolução quem emite é a nossa empresa: o produtor está do outro lado.
     const ehDevolucaoSaida = direcao === 'saida';
