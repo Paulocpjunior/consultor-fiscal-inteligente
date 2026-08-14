@@ -52,5 +52,6 @@ export function traduzirStatusEntrega(status: string): string;
 export function interpretarErroEntrega(codigo: number | null | undefined, detalhe?: string): string;
 export function janela24hAte(timestampIso: string | null | undefined): string | null;
 export function resumoParaConversa(msg: Pick<MensagemRecebida, 'tipo' | 'texto' | 'midia'>): string;
+export function caminhoStorageMidia(msg: Pick<MensagemRecebida, 'metaMessageId' | 'de' | 'midia'>): string;
 
 export const _internals: Record<string, unknown>;

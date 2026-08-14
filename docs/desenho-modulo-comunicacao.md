@@ -165,6 +165,13 @@ MESMO PR que a cria.**
   `<url do app>/api/whatsapp/webhook` + o mesmo verify token, assinando o
   campo **messages**. O painel 📡 mostra quando o primeiro evento chegar —
   configuração salva não é webhook funcionando (regra da casa).
+- ✅ **F1.5 no mesmo dia — mídia recebida baixa pro NOSSO Storage**: a Meta
+  guarda a mídia por tempo limitado; esperar a F2 perderia anexo de cliente
+  (comprovante de pagamento é o caso típico). Download em `setImmediate`
+  DEPOIS do 200 (a Meta quer resposta rápida) e best-effort: falha fica
+  NOMEADA no doc (`downloadErro`), nunca derruba o webhook nem vira
+  pendência muda. Caminho `whatsapp/{numero}/{wamid}_{arquivo}` — o wamid
+  na frente impede colisão de dois clientes mandando "comprovante.pdf".
 
 **F2 — Inbox** (a tela da seção 3)
 - Aceite: um atendente real resolve uma conversa real de ponta a ponta pelo
@@ -201,11 +208,14 @@ dentro é ferramenta na mão de quem já está com o Teams aberto o dia todo.
   (nome, logo SP, static tabs) publicado em "Apps da organização"; o admin
   fixa na barra lateral de todo mundo por política. Os 5 módulos podem ser 5
   abas do mesmo app. É a forma "app de verdade" — instalável, com identidade.
-- **Requisito técnico (os dois níveis)**: hoje o `server.js` RECUSA ser
-  embutido (helmet padrão = `frame-ancestors 'self'` — correto contra
-  clickjacking). O ajuste é liberar SÓ os domínios do Teams
-  (`teams.microsoft.com`, `*.cloud.microsoft`, `*.office.com`) no
-  `frameAncestors` — mais ninguém. Um teste trava a lista.
+- **Requisito técnico (os dois níveis)**: ✅ **FEITO 13/08** — o `server.js`
+  libera o embutimento SÓ pros domínios do Teams (`teams.microsoft.com`,
+  `*.cloud.microsoft`, `*.office.com`) via `frameAncestors`, com o
+  `X-Frame-Options` do helmet desligado (dois cabeçalhos com regras
+  diferentes = navegador antigo obedece o errado e a aba abre em branco).
+  `__tests__/teamsFrameAncestors.test.ts` trava a lista NOS DOIS sentidos.
+  A aba de canal já pode ser criada; o app do tenant (manifest) fica pra
+  quando o Paulo quiser dar esse passo.
 - **Login funciona embutido**: o CFI autentica por e-mail/senha do Firebase
   (`signInWithEmailAndPassword`), sem popup de terceiro — o caso que quebra
   dentro de iframe não existe aqui. SSO com a conta Microsoft do tenant é

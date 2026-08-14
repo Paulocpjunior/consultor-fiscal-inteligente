@@ -20,7 +20,9 @@
 // - Recusa da Meta sai TRADUZIDA com a ação (padrão interpretarCstat).
 // ============================================================================
 
-const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
+// Exportada: o webhook baixa mídia recebida pela MESMA base (segunda cópia
+// da URL divergiria de versão em silêncio).
+export const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
 
 /** Lê a configuração do canal a partir do ambiente. */
 export function configWhatsapp(env = process.env) {
