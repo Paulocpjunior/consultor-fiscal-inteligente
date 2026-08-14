@@ -13,7 +13,8 @@
 // É essa diferença que este módulo existe para não deixar passar: declarar
 // base = bruto seria declarar retenção sobre 25% a mais de base.
 // ============================================================================
-// @ts-expect-error módulo JS puro sem tipos
+// O módulo ganhou `.d.ts` em 14/08, quando a tela do R-2010 passou a importá-lo
+// do TypeScript — por isso o `@ts-expect-error` saiu daqui.
 import { conferirBaseRetencaoInss, montarPayloadR2010, normalizarServicoTomado, ALIQUOTA_ART31, ALIQUOTA_CPRB } from '../sefaz-backend/reinf-servicos-tomados.js';
 
 const notaTomada = (over: any = {}) => ({
