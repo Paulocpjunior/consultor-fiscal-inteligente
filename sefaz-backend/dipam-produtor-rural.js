@@ -627,6 +627,16 @@ export function classificarNota(doc, opts = {}) {
         // se escritura (RC 33068/2025) — a dedup lá embaixo remove a do produtor
         // quando há a de entrada, pra não dobrar a FUNRURAL.
         notaPropria: notaPropriaEntrada,
+        // COMO se soube que é nota própria — 'tpNF' (o documento diz) ou
+        // 'cfop-de-entrada' (a prova que alcança o que foi gravado antes de o
+        // import manual guardar o campo). Vai até a TELA: o painel mostrava a
+        // nota própria e a NF-e do produtor com a MESMA cara, e é por isso que
+        // ninguém — nem quem escreveu a régua — conseguia ler na tela qual
+        // documento estava somando. Total sem a causa do lado não se confere.
+        provaDirecao: notaPropriaEntrada ? provaNotaPropria.prova : null,
+        // A direção como está GRAVADA, para a tela poder denunciar a diferença
+        // entre o banco e a leitura (é ela que manda no Livro e no SPED).
+        direcaoGravada: d.direcao || null,
         cfops,
         valor,
         fornecedor: {
@@ -992,15 +1002,36 @@ function chaveProdutorComp(n) {
  */
 export function dedupNotaProdutorComEntrada(notas) {
     const lista = Array.isArray(notas) ? notas : [];
+
+    // ── QUEM ENTRA NO PAREAMENTO ────────────────────────────────────────────
+    //
+    // Antes era só `funrural.aplica`, e isso deixava de fora justamente quem
+    // está fora do FUNRURAL **por DECISÃO** (o ✕ do cadastro do produtor). O
+    // efeito só aparecia no lugar mais caro: o bloco "tirados por decisão"
+    // promete, ao lado do ↩, **quanto voltaria ao total** — e somava as DUAS
+    // notas da mesma compra, porque a dedup nunca tinha rodado nelas. Caso
+    // real 14/08 (NOVA ERA 07/2026): NUNO MONTEIRO apareceu com 11 notas e
+    // R$ 309.645,94, prometendo devolver R$ 5.047,23 — sobre uma base que
+    // conta cada compra duas vezes.
+    //
+    // Número que só existe para alguém decidir tem que valer no momento da
+    // decisão. "Reverter imposto sem o número do lado é decidir no escuro" —
+    // e número inflado é pior que número nenhum, porque não levanta suspeita.
+    //
+    // O art. 136 é sobre QUAL DOCUMENTO SE ESCRITURA. Isso não depende de o
+    // FUNRURAL estar ligado: a NF-e do produtor continua sendo documento de
+    // origem mesmo quando alguém decidiu que ali não há sub-rogação.
+    const entraNoPar = (n) => !!n.funrural?.aplica || !!n.funrural?.decisao;
+
     const orcamento = new Map(); // produtor×comp -> quantas notas de entrada há
     for (const n of lista) {
-        if (n.notaPropria && n.funrural?.aplica) {
+        if (n.notaPropria && entraNoPar(n)) {
             const k = chaveProdutorComp(n);
             orcamento.set(k, (orcamento.get(k) || 0) + 1);
         }
     }
     return lista.map((n) => {
-        const ehNotaDoProdutor = !n.notaPropria && n.direcao === 'entrada' && n.funrural?.aplica;
+        const ehNotaDoProdutor = !n.notaPropria && n.direcao === 'entrada' && entraNoPar(n);
         if (!ehNotaDoProdutor) return n;
         const k = chaveProdutorComp(n);
         if ((orcamento.get(k) || 0) <= 0) return n; // sem par → não dobra → intacta
@@ -1010,8 +1041,12 @@ export function dedupNotaProdutorComEntrada(notas) {
         return {
             ...n,
             notaOrigemProdutor: true,
-            dipam: { ...n.dipam, aplica: false, motivo },
-            funrural: { ...n.funrural, aplica: false, motivo },
+            // Só DERRUBA o que estava de pé. Em quem já está fora por decisão,
+            // o motivo da saída continua sendo a DECISÃO — sobrescrever aqui
+            // faria a tela dizer "art. 136" para quem alguém tirou no ✕, e o
+            // caminho de volta (que é do cadastro) sumiria da vista.
+            dipam: n.dipam?.aplica ? { ...n.dipam, aplica: false, motivo } : n.dipam,
+            funrural: n.funrural?.aplica ? { ...n.funrural, aplica: false, motivo } : n.funrural,
         };
     });
 }
@@ -1255,6 +1290,14 @@ export function montarDipamCompetencia({ documentos = [], competencia, empresa =
                 // por contar dígitos). Aqui vai o carimbo da origem.
                 naturezaConfianca: n.natureza?.confianca || null,
                 naturezaMotivo: n.natureza?.motivo || null,
+                // QUAL documento está somando — a nota própria de entrada (a
+                // que se escritura, art. 136) ou a NF-e do produtor. A tela
+                // mostrava as duas com a MESMA cara, e por isso ninguém
+                // conseguia conferir na tela se a régua do art. 136 pegou.
+                notaPropria: !!n.notaPropria,
+                provaDirecao: n.provaDirecao || null,
+                direcaoGravada: n.direcaoGravada || null,
+                cfops: n.cfops || [],
                 base: n.funrural.base,
                 aliquotas: n.funrural.aliquotas,
                 inss: n.funrural.inss, gilrat: n.funrural.gilrat, senar: n.funrural.senar,
