@@ -312,6 +312,58 @@ describe('conferência contra o totalizador do R-2099', () => {
         { codigoReceita: '1656-01', valor: 249.48 },
     ];
 
+    // ═══ O XML DO RECIBO ESCREVE O CÓDIGO SEM HÍFEN ════════════════════════
+    //
+    // O de-para nasceu do recibo lido por HUMANO (13/08), onde a Receita mostra
+    // `1656-01`. O XML do MESMO recibo (14/08, VINCENZO) escreve sem máscara:
+    //
+    //   <RAquis><CRAquis>165601</CRAquis><vlrCRAquis>249,48</vlrCRAquis></RAquis>
+    //
+    // A comparação só tirava ESPAÇOS. Colando o XML — que é o caminho que a
+    // própria tela recomenda — os três cairiam em "código desconhecido" e a
+    // conferência sairia DIVERGENTE com tudo certo dos dois lados. É o pior
+    // tipo de alarme falso: o que aparece quando está tudo certo, e ensina a
+    // equipe a ignorar a conferência que existe para pegar o erro de verdade.
+    const TOTALIZADOR_DO_XML = [
+        { codigoReceita: '121306', valor: 37.80 },
+        { codigoReceita: '164603', valor: 20.79 },
+        { codigoReceita: '165601', valor: 249.48 },
+    ];
+
+    it('o código do XML (sem hífen) é o MESMO do recibo (com hífen)', () => {
+        const c = conferirTotalizadorR2099({ apurado: APURADO, totalizador: TOTALIZADOR_DO_XML });
+        expect(c.situacao).toBe('confere');
+        expect(c.codigosDesconhecidos).toEqual([]);
+        for (const l of c.linhas) expect(l.confere).toBe(true);
+        expect(c.resumo).toContain('308,07');
+    });
+
+    it('e a divergência de verdade continua sendo pega no formato do XML', () => {
+        // Generalizar a chave não pode afrouxar a conferência: um centavo a
+        // menos ainda derruba, e ainda diz em QUAL código.
+        const c = conferirTotalizadorR2099({
+            apurado: APURADO,
+            totalizador: [
+                { codigoReceita: '121306', valor: 37.80 },
+                { codigoReceita: '164603', valor: 20.79 },
+                { codigoReceita: '165601', valor: 249.47 },
+            ],
+        });
+        expect(c.situacao).toBe('divergente');
+        expect(c.resumo).toMatch(/1656-01/);
+    });
+
+    it('código realmente desconhecido aparece como a RECEITA escreveu', () => {
+        // Quem lê vai procurar esse número no e-CAC — reescrever a máscara
+        // faria a pessoa procurar um código que a tela dela não mostra.
+        const c = conferirTotalizadorR2099({
+            apurado: APURADO,
+            totalizador: [...TOTALIZADOR_DO_XML, { codigoReceita: '999999', valor: 10 }],
+        });
+        expect(c.situacao).toBe('divergente');
+        expect(c.codigosDesconhecidos).toEqual([{ codigoReceita: '999999', valor: 10 }]);
+    });
+
     it('o de-para dos códigos de receita é o do recibo aceito', () => {
         expect(CODIGOS_RECEITA_FUNRURAL).toEqual({
             inss: '1656-01', gilrat: '1646-03', senar: '1213-06',

@@ -1012,6 +1012,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   que não estava escrito em lugar nenhum e agora vem de RECIBO (as três
   alíquotas diferem entre si, então o casamento é único — não é dedução);
   (2) **corroboração** da apuração por dois caminhos independentes, um deles
+  ⚠️ **O XML DO RECIBO ESCREVE O CÓDIGO SEM HÍFEN** (14/08, quando o Paulo mandou
+  o arquivo): o de-para nasceu do recibo lido por HUMANO (`1656-01`) e o XML do
+  MESMO recibo traz `<CRAquis>165601</CRAquis>`. A comparação só tirava ESPAÇOS
+  — colando o XML, que é o caminho que a própria tela recomenda, os três códigos
+  cairiam em "desconhecido" e a conferência sairia DIVERGENTE com tudo certo dos
+  dois lados. É o pior tipo de alarme falso: o que aparece justamente quando
+  está tudo certo, e ensina a equipe a ignorar a conferência que existe pra
+  pegar o erro de verdade. Agora a chave é por DÍGITOS (a máscara é enfeite de
+  tela), e o código desconhecido volta escrito como a RECEITA escreveu — é esse
+  número que a pessoa vai procurar no e-CAC.
+  ✅ **E O R-2099 GANHOU LEIAUTE PROVADO no mesmo arquivo** (evento do VINCENZO,
+  07/2026, tpAmb=1, recibo 11774083-10-2099-2607-11774083). Ele derrubou DUAS
+  deduções minhas do gerador que estava no app irmão: o **namespace é
+  `evtFechamento`**, não o nome do elemento (`evtFechaEvPer`) — os dois NÃO
+  batem, ao contrário do R-2055 —, e **`evtAquis` é o ÚLTIMO** dos sete grupos,
+  depois do `evtCPRB`, e não antes. `infoFech` é `sequence` do XSD: trocar dois
+  irmãos de lugar derruba o evento. Era exatamente por isso que produção estava
+  fechada lá — a trava pagou o que prometia.
   fora do app. `CODIGOS_RECEITA_FUNRURAL` + `conferirTotalizadorR2099` em
   `reinf-aquisicao-rural.js`, na `REGUAS_VIGIADAS`. **TRAVA QUE MANDA: "MS7001
   evento recebido com sucesso" NÃO é conferência** — prova que o XML foi
