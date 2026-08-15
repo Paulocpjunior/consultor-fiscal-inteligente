@@ -56,3 +56,23 @@ export function municipiosSemCalendario(
     /** Cliente sem município cadastrado — a ação é OUTRA. */
     clientesSemMunicipio: number;
 };
+
+/** Escopo canônico do cadastro: 'IBGE:3550308' ou 'UF:PR'. */
+export function escopoDoPrazo(p: { codMunIBGE?: string; uf?: string }): string;
+export function escopoDoCliente(p: { esfera?: string; uf?: string; codMunIBGE?: string }): string;
+
+/** Prazo ESTADUAL do estado DO CLIENTE — o caminho que o alerta de UF cobrava. */
+export function resolverPrazoEstadual(
+    cadastros: any[],
+    p: { uf?: string; obrigacao: string; competencia: string },
+): {
+    achou: boolean;
+    prazo: null | {
+        uf: string; obrigacao: string; diaVencimento: number; mesesApos: number;
+        ajusteDiaNaoUtil: 'antecipa' | 'prorroga'; baseLegal: string;
+        vigenciaInicio: string | null; vigenciaFim: string | null;
+        cadastradoPorEmail: string | null;
+    };
+    motivo: string;
+    situacao: 'cadastrado' | 'uf-sem-cadastro' | 'uf-ausente' | 'fora-de-vigencia';
+};

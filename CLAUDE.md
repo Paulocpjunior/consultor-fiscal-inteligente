@@ -110,6 +110,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
   lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
   que faz alguém ler "0 pendentes" como resposta da carteira.
+- **DENUNCIAR SEM DAR SAÍDA É MEIA CORREÇÃO — a esfera ESTADUAL virou cadastro**
+  (15/08, fim do dia). De manhã o app passou a acusar que o prazo do SPED
+  (`UF:SP`, CAT 147/2009) era entregue a cliente de qualquer estado, e eu deixei
+  a correção como "decisão do Paulo". Estava pela metade: quem é do Paraná via o
+  alerta e **não tinha onde cadastrar a data do Paraná**. O mecanismo era meu; o
+  dado é dele.
+  O núcleo do calendário municipal ganhou a esfera ESTADUAL — mesma régua de
+  VIGÊNCIA e mesma recusa sem BASE LEGAL, variando só o ESCOPO
+  (`IBGE:3550308` × `UF:PR`). Cadastrado o prazo do estado do cliente, a
+  obrigação sai com a data DELE e **deixa de aparecer como "prazo de outra
+  UF"**; sem cadastro, o alerta continua e agora diz **ONDE cadastrar**.
+  ⚠️ **O ID MUNICIPAL NÃO MUDOU** (só os dígitos do IBGE): mudar a fórmula
+  orfanaria o que já estiver cadastrado. Estadual nasce com o prefixo `UF:`.
+  ✂️ E a conversão `MM/AAAA → AAAA-MM` — que mordeu TRÊS vezes no dia, uma delas
+  em silêncio — virou `competenciaIsoDe`, num lugar só, com teste contando as
+  ocorrências para a segunda cópia não nascer.
 - **🚨 PARE DE CORRIGIR INSTÂNCIA — TRAVE A CLASSE** (Paulo, 15/08: *"a cada
   rodada você descobre um erro seu, essa semana foi demais! resolva seus
   gaps"*). Ele estava certo e o padrão era meu. Em vez de esperar a próxima

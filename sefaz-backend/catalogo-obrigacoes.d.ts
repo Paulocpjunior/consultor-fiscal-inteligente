@@ -125,3 +125,6 @@ export function obrigacoesDoCliente(
     regimeReconhecido: boolean;
     regimeInformado: string;
 };
+
+/** 'MM/AAAA' → 'AAAA-MM'. A conversão mora num lugar só (mordeu 3× em 15/08). */
+export function competenciaIsoDe(competencia: string): string;

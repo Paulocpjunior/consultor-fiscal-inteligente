@@ -40,6 +40,8 @@ interface MunicipioFaltando {
 }
 
 const FORM_VAZIO = {
+    esfera: 'municipal' as 'municipal' | 'estadual',
+    uf: '',
     codMunIBGE: '', municipioNome: '', obrigacao: 'ISS',
     diaVencimento: '', mesesApos: '1', baseLegal: '',
     vigenciaInicio: '', vigenciaFim: '',
@@ -101,7 +103,7 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
             });
             const j = await r.json().catch(() => ({}));
             if (!r.ok) { setErros(j.erros || [j.error || `HTTP ${r.status}`]); return; }
-            onShowToast?.(`Calendário de ${form.obrigacao} cadastrado para ${form.municipioNome || form.codMunIBGE}.`);
+            onShowToast?.(`Prazo de ${form.obrigacao} cadastrado para ${form.esfera === 'estadual' ? form.uf : (form.municipioNome || form.codMunIBGE)}.`);
             setForm({ ...FORM_VAZIO });
             await carregar();
         } catch (e: any) {
@@ -115,7 +117,7 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
     return (
         <div className="space-y-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-2">
-                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">🏛️ Calendário municipal (ISS)</h3>
+                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">🏛️ Calendário de prazos (municipal e estadual)</h3>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-3xl">
                     Não existe “dia do ISS” nacional — <strong>cada prefeitura tem o seu</strong>. Enquanto a cidade não
                     estiver cadastrada aqui, o ISS aparece na Rotina como <strong>pendência nomeada</strong>, nunca com
@@ -274,18 +276,49 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
 
             {/* ── CADASTRO ───────────────────────────────────────────────────── */}
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
-                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">➕ Cadastrar calendário</h4>
+                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">➕ Cadastrar prazo</h4>
+                {/* ESFERA: municipal (ISS, por cidade) ou ESTADUAL (SPED, por UF).
+                    A estadual existe porque de manhã o app passou a denunciar que
+                    o prazo do SPED de SP ia para todo estado — e denunciar sem dar
+                    saída é meia correção. */}
+                <div className="flex gap-2">
+                    {([['municipal', '🏛️ Municipal (ISS)'], ['estadual', '🗺️ Estadual (SPED)']] as const).map(([id, txt]) => (
+                        <button key={id} onClick={() => setForm({ ...form, esfera: id, obrigacao: id === 'estadual' ? 'SPED' : 'ISS' })}
+                            className={`btn-press px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap ${form.esfera === id
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                            {txt}
+                        </button>
+                    ))}
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div>
-                        <label className={rotulo}>Código IBGE (7 dígitos)</label>
-                        <input value={form.codMunIBGE} onChange={(e) => setForm({ ...form, codMunIBGE: e.target.value })}
-                            className={`${campo} font-mono`} placeholder="3550308" />
-                    </div>
-                    <div>
-                        <label className={rotulo}>Município</label>
-                        <input value={form.municipioNome} onChange={(e) => setForm({ ...form, municipioNome: e.target.value })}
-                            className={campo} placeholder="São Paulo" />
-                    </div>
+                    {form.esfera === 'estadual' ? (
+                        <>
+                            <div>
+                                <label className={rotulo}>UF (2 letras)</label>
+                                <input value={form.uf} onChange={(e) => setForm({ ...form, uf: e.target.value.toUpperCase() })}
+                                    className={`${campo} font-mono`} maxLength={2} placeholder="PR" />
+                            </div>
+                            <div>
+                                <label className={rotulo}>Obrigação</label>
+                                <input value={form.obrigacao} onChange={(e) => setForm({ ...form, obrigacao: e.target.value.toUpperCase() })}
+                                    className={campo} placeholder="SPED" />
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div>
+                                <label className={rotulo}>Código IBGE (7 dígitos)</label>
+                                <input value={form.codMunIBGE} onChange={(e) => setForm({ ...form, codMunIBGE: e.target.value })}
+                                    className={`${campo} font-mono`} placeholder="3550308" />
+                            </div>
+                            <div>
+                                <label className={rotulo}>Município</label>
+                                <input value={form.municipioNome} onChange={(e) => setForm({ ...form, municipioNome: e.target.value })}
+                                    className={campo} placeholder="São Paulo" />
+                            </div>
+                        </>
+                    )}
                     <div>
                         <label className={rotulo}>Dia do vencimento</label>
                         <input value={form.diaVencimento} onChange={(e) => setForm({ ...form, diaVencimento: e.target.value })}
@@ -334,7 +367,11 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                     <div className="space-y-1">
                         {dados.cadastros.map((c: Cadastro) => (
                             <p key={c.id} className={`text-[11px] ${c.ativo === false ? 'opacity-50 line-through' : 'text-slate-600 dark:text-slate-300'}`}>
-                                <strong>{c.municipioNome || c.codMunIBGE}</strong> · {c.obrigacao} · dia {c.diaVencimento}
+                                <strong>{c.municipioNome || (c as any).uf || c.codMunIBGE}</strong>
+                                <span className="ml-1 px-1 rounded bg-slate-200 dark:bg-slate-700 text-[10px] uppercase">
+                                    {(c as any).esfera || 'municipal'}
+                                </span>
+                                {' · '}{c.obrigacao} · dia {c.diaVencimento}
                                 {c.mesesApos !== 1 && ` (+${c.mesesApos} mês/meses)`}
                                 {' · '}<span className="opacity-80">{c.baseLegal}</span>
                                 {c.vigenciaInicio && ` · de ${c.vigenciaInicio}`}{c.vigenciaFim && ` até ${c.vigenciaFim}`}
