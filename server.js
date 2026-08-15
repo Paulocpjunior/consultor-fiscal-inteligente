@@ -92,6 +92,10 @@ import { parseDestinatarios } from './sefaz-backend/email-destinatarios-helper.j
 import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './sefaz-backend/graph-remetente.js';
 import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sanitize-error.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
+import {
+    resolverModelosGemini, versaoAtendeAlvo,
+    FAMILIA_ALVO_GEMINI, ALIAS_PRO, ALIAS_FLASH,
+} from './sefaz-backend/gemini-modelo.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 /**
@@ -403,20 +407,74 @@ app.use('/api/admin/empresas-perfil', empresasPerfilRouter);
 app.use('/api/internal/cron', healthAlertaCronRouter);
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// Modelos centralizados em env vars — trocar de versao = atualizar o secret no
-// Cloud Run, sem mexer em codigo. Default: gemini-flash-latest (alias oficial
-// do Google que SEMPRE aponta pra ultima versao GA do Flash). Pra pinar uma
-// versao especifica (ex: se uma release nova quebrar prompts), defina o env
-// GEMINI_MODEL_PRO/FLASH com o ID exato (ex: gemini-3.5-flash).
-// PRO precisa apontar pro alias do Pro — com os dois em flash-latest o
-// roteador virava enfeite: anexo/prompt longo/parecer caía no modelo barato.
-const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-pro-latest';
-const GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || 'gemini-flash-latest';
+// ─── QUAL GEMINI O APP USA ──────────────────────────────────────────────────
+// Paulo, 15/08: *"o Gemini teve sua versao atualizada para 3.7, nos devemos
+// nos atualizar tambem"* — e, na sequencia: *"pedi para voce atualizar p a
+// versao 3.7"*. A ordem e PINAR na familia alvo.
+//
+// O ID NAO E ESCRITO A MAO AQUI, de proposito: nome cravado que a conta nao
+// tem derruba a IA do escritorio inteiro, e derruba CALADO no deploy. Quem
+// resolve e `sefaz-backend/gemini-modelo.js`, escolhendo dentro do que a
+// PROPRIA API listou — perguntar e prova, deduzir e aposta (a licao do
+// payload do PGDAS-D e do codigo 9 do ISS fixo).
+//
+// Precedencia: env do Cloud Run (pino humano) > familia alvo listada pela API
+// > alias -latest. Enquanto a 3.7 nao aparecer para a conta, o app segue no
+// alias FUNCIONANDO e a tela diz que o alvo nao foi encontrado.
+let GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || ALIAS_PRO;
+let GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || ALIAS_FLASH;
+let geminiResolucao = {
+    familiaAlvo: FAMILIA_ALVO_GEMINI,
+    pro: { modelo: GEMINI_MODEL_PRO, origem: 'inicial', motivo: 'Ainda nao perguntei a conta quais modelos existem.' },
+    flash: { modelo: GEMINI_MODEL_FLASH, origem: 'inicial', motivo: 'Ainda nao perguntei a conta quais modelos existem.' },
+    alvoEncontrado: false,
+    resolvidoEm: null,
+};
+// Os routers montados leem DAQUI (`req.app.get('geminiModelos')()`) em vez de
+// terem a propria constante — segunda copia da regua e o defeito que mais
+// mordeu este projeto, e aqui ela ja tinha mordido: a rota de parecer juridico
+// nascera com o PRO apontando para o alias do FLASH.
+app.set('geminiModelos', () => ({ pro: GEMINI_MODEL_PRO, flash: GEMINI_MODEL_FLASH }));
+
+// Pergunta a conta quais modelos existem e re-pina. Falha NAO derruba nada:
+// sem a lista o resolvedor devolve os aliases e diz que nao conferiu.
+async function resolverGeminiDaConta() {
+    let modelos = null;
+    let erroDaLista = null;
+    if (ai) {
+        try {
+            const pager = await ai.models.list();
+            const acc = [];
+            for await (const mdl of pager) {
+                acc.push(mdl);
+                if (acc.length >= 500) break; // trava de sanidade, nunca alcancada
+            }
+            modelos = acc;
+        } catch (e) {
+            erroDaLista = e?.message || 'falha ao listar modelos';
+        }
+    } else {
+        erroDaLista = 'GEMINI_API_KEY ausente';
+    }
+    const r = resolverModelosGemini({
+        modelos,
+        envPro: process.env.GEMINI_MODEL_PRO,
+        envFlash: process.env.GEMINI_MODEL_FLASH,
+    });
+    GEMINI_MODEL_PRO = r.pro.modelo;
+    GEMINI_MODEL_FLASH = r.flash.modelo;
+    geminiResolucao = { ...r, erroDaLista, resolvidoEm: new Date().toISOString() };
+    console.log(`[gemini] alvo ${r.familiaAlvo} · PRO=${GEMINI_MODEL_PRO} (${r.pro.origem}) · FLASH=${GEMINI_MODEL_FLASH} (${r.flash.origem})`);
+    return geminiResolucao;
+}
+
 let ai = null;
 if (GEMINI_API_KEY) {
     ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
     app.set('ai', ai);
     console.log('Gemini API configurada');
+    // Fire-and-forget: o boot nao espera a Google responder.
+    resolverGeminiDaConta().catch(e => console.warn('[gemini] resolucao inicial falhou:', e?.message));
 } else {
     console.warn('GEMINI_API_KEY nao configurada');
 }
@@ -2220,36 +2278,47 @@ app.get('/api/admin/calendario/:ano/:mes', requireAuthOrColab, async (req, res) 
 });
 
 // ─── Dashboard CEO — endpoint de KPIs + insights IA ─────────────────────────
-// ─── QUAL GEMINI ESTÁ RESPONDENDO DE VERDADE ────────────────────────────────
+// ─── QUAL GEMINI ESTÁ RESPONDENDO DE VERDADE — e REPINAR na 3.7 ─────────────
 //
-// Paulo, 15/08: *"o Gemini teve sua versão atualizada para 3.7, nós devemos
-// nos atualizar também"*. O app usa os aliases oficiais `gemini-pro-latest`/
-// `gemini-flash-latest`, que a GOOGLE promove sozinha — em tese já estamos na
-// versão nova sem deploy. Mas "em tese" não é resposta nesta casa: a API
-// devolve `modelVersion` em cada resposta, então esta rota PERGUNTA aos dois
-// aliases qual versão concreta está atendendo a conta. Validação por
-// RESULTADO, não por status — e se o alias estiver atrasado, o caminho está
-// na resposta: pinar GEMINI_MODEL_PRO/FLASH com o ID exato no Cloud Run.
+// Paulo, 15/08: *"pedi para você atualizar p a versão 3.7"*.
+//
+// Esta rota faz DUAS coisas, e a ordem importa: primeiro PERGUNTA à conta
+// quais modelos existem e re-pina na família alvo (sem deploy — no dia em que
+// a Google liberar a 3.7 para a conta paga do Paulo, um clique aqui muda o
+// modelo do app); depois SONDA os modelos escolhidos para saber a versão
+// CONCRETA que atendeu (`modelVersion`).
+//
+// A sonda é o que separa "pedimos 3.7" de "estamos no 3.7" — validação por
+// RESULTADO, não por status. Sonda que falha devolve `null`, nunca `false`:
+// afirmar "não estamos no 3.7" porque a rede piscou faria alguém pinar à mão
+// um modelo que já estava certo.
 app.get('/api/admin/gemini/versao', requireAdmin, async (req, res) => {
     if (!ai) return res.status(503).json({ ok: false, error: 'Gemini não configurado (GEMINI_API_KEY ausente).' });
-    const sondar = async (alias) => {
+    const resolucao = await resolverGeminiDaConta();
+    const sondar = async (modelo) => {
         try {
-            const r = await ai.models.generateContent({ model: alias, contents: 'responda apenas: ok' });
+            const r = await ai.models.generateContent({ model: modelo, contents: 'responda apenas: ok' });
+            const modelVersion = r?.modelVersion || null;
             return {
-                alias,
-                // A versão CONCRETA que atendeu — é ela que responde "estamos no 3.7?".
-                modelVersion: r?.modelVersion || null,
+                modelo, modelVersion,
                 respondeu: !!(r?.text ?? '').trim(),
+                // null = a sonda não respondeu; não é "está atrasado".
+                naFamiliaAlvo: versaoAtendeAlvo(modelVersion, resolucao.familiaAlvo),
             };
         } catch (e) {
-            return { alias, modelVersion: null, respondeu: false, erro: e?.message || 'falha' };
+            return { modelo, modelVersion: null, respondeu: false, naFamiliaAlvo: null, erro: e?.message || 'falha' };
         }
     };
     const [pro, flash] = await Promise.all([sondar(GEMINI_MODEL_PRO), sondar(GEMINI_MODEL_FLASH)]);
     return res.json({
         ok: true,
+        familiaAlvo: resolucao.familiaAlvo,
+        alvoEncontrado: resolucao.alvoEncontrado,
+        resolucao: { pro: resolucao.pro, flash: resolucao.flash, erroDaLista: resolucao.erroDaLista },
         pro, flash,
-        comoTrocar: 'Para pinar/atualizar: env GEMINI_MODEL_PRO / GEMINI_MODEL_FLASH no Cloud Run com o ID exato. Sem env, os aliases -latest seguem a promoção automática do Google.',
+        comoTrocar: `O app pina sozinho na família ${resolucao.familiaAlvo} assim que ela aparecer para esta conta — `
+            + 'basta reabrir este painel. Para forçar outro modelo, env GEMINI_MODEL_PRO / GEMINI_MODEL_FLASH no Cloud Run '
+            + '(o pino à mão vence a regra automática).',
         consultadoEm: new Date().toISOString(),
     });
 });

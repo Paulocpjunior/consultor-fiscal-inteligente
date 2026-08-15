@@ -15,8 +15,17 @@
  * Data da última revisão do comunicado (o mesmo "atualizado em" impresso no
  * topo de public/novidades-cfi.html). MUDOU A PÁGINA → MUDA AQUI, no mesmo PR;
  * senão a equipe fica sem o aviso de que há coisa nova.
+ *
+ * 🚨 E ISSO ACONTECEU (Paulo, 15/08: *"o botão novidade do CFI você não está
+ * inserindo o detalhe em vermelho que sinaliza que algo foi feito"*). A regra
+ * do par estava escrita bem aqui e não tinha TRAVA: entregamos onze dias de
+ * mudança — Ativar Empresa, nota digitada, farol de lastro — com o selo
+ * apagado, então a equipe não tinha como saber que havia o que ler. É a mesma
+ * família do guia órfão e do "0/388" repetido: par que envelhece EM SILÊNCIO.
+ * Agora `__tests__/novidadesService.test.ts` compara esta constante com o
+ * "atualizado em" da página e derruba o build quando as duas divergem.
  */
-export const NOVIDADES_VERSAO = '2026-08-04';
+export const NOVIDADES_VERSAO = '2026-08-15';
 
 export const NOVIDADES_URL = '/novidades-cfi.html';
 
