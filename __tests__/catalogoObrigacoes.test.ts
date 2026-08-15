@@ -26,6 +26,9 @@ const semRegime = { colecao: 'lucro_empresas' };
 
 const codigos = (rs: any[]) => rs.map((r) => r.obrigacao).sort();
 
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 describe('resolverRegime — regime nunca se adivinha', () => {
     it('a coleção do Simples JÁ é o regime', () => {
         expect(resolverRegime(simples)).toEqual({ regime: 'SIMPLES', motivo: null });
@@ -262,5 +265,74 @@ describe('toda entrada do catálogo é completa — campo fiscal não recebe def
                 expect(['ativa', 'proposta']).toContain(r.status);
             }
         }
+    });
+});
+
+// ═══ A TRAVA T1 DO ESCOPO — escrita desde 11/08, aplicada só em 15/08 ═══════
+//
+// `mesDoCliente` devolve `coberturaIncompleta` com o comentário dizendo "a
+// etapa 4 não pode dar verde nesse caso". A flag existia e NINGUÉM lia: regra
+// escrita sem trava é regra que envelhece em silêncio — a mesma família do
+// selo das Novidades apagado por onze dias.
+describe('🚨 o catálogo admitir que não cobre o cliente TRAVA a etapa 4', () => {
+    const { montarRotinaFiscal } = require('../sefaz-backend/rotina-fiscal.js');
+    const { mesDoCliente } = require('../sefaz-backend/catalogo-obrigacoes.js');
+
+    const rodar = (cobertura: any) => montarRotinaFiscal({
+        empresa: { id: 'e1', nome: 'X', cnpj: '11222333000181' },
+        competencia: '2026-06',
+        documentos: [{ direcao: 'entrada' }, { direcao: 'saida' }],
+        // Tudo entregue: sem a trava, esta etapa fecharia VERDE.
+        tarefas: [{ obrigacao: 'DAS', status: 'concluida' }],
+        cobertura,
+    }).etapas.find((e: any) => e.id === 'obrigacoes');
+
+    it('sem a flag, a etapa fecha normalmente', () => {
+        expect(rodar(null).status).toBe('concluida');
+    });
+
+    it('o SIMPLES não é travado à toa — optante não recolhe ISS próprio', () => {
+        // Alarme onde não há nada a fazer é o que ensina a ignorar o farol:
+        // o ISS do optante já está dentro do DAS (LC 123 art. 13).
+        const cob = mesDoCliente({ colecao: 'simples_empresas' }, '06/2026');
+        expect(cob.coberturaIncompleta).toBe(false);
+        expect(rodar(cob).status).toBe('concluida');
+    });
+
+    it('obrigação PROPOSTA impede o verde e DIZ de qual se trata', () => {
+        // Lucro Presumido COM regime definido: isola a causa "proposta".
+        // (O Simples NÃO entra aqui, e está certo: optante não recolhe ISS
+        //  próprio — ele vai no DAS, LC 123 art. 13.)
+        const cob = mesDoCliente({ colecao: 'lucro_empresas', regimePadrao: 'presumido' }, '06/2026');
+        expect(cob.regime).toBe('LUCRO_PRESUMIDO');
+        expect(cob.coberturaIncompleta).toBe(true); // ISS (município) e INSS patronal (folha)
+        const e = rodar(cob);
+        expect(e.status).toBe('atencao');
+        expect(e.resumo).toMatch(/catálogo NÃO cobre/);
+        expect(e.acao).toMatch(/NÃO viram tarefa automática/);
+    });
+
+    it('regime INDEFINIDO trava e manda ao lugar onde se resolve', () => {
+        // Lucro sem `regimePadrao`: recebe só o comum aos dois regimes.
+        const cob = mesDoCliente({ colecao: 'lucro_empresas' }, '06/2026');
+        const e = rodar(cob);
+        expect(e.status).toBe('atencao');
+        expect(e.regimeIndefinido).toBe(true);
+        // As DUAS causas aparecem, porque têm AÇÕES diferentes.
+        expect(e.acao).toMatch(/Regime padrão/);
+        expect(e.acao).toMatch(/NÃO viram tarefa automática/);
+    });
+
+    it('a rota entrega a cobertura e o checklist — função sem tela é código morto', () => {
+        const rota = readFileSync(join(__dirname, '..', 'sefaz-backend/rotina-fiscal-routes.js'), 'utf8');
+        expect(rota).toMatch(/cobertura: coberturaDoCliente/);
+        // 🚨 A Rotina fala 'AAAA-MM' e o catálogo fala 'MM/AAAA'. Passar direto
+        // explodia — defeito meu, pego por este teste antes de subir. E a falha
+        // não pode derrubar o painel da carteira inteira.
+        expect(rota).toMatch(/\$\{mes\}\/\$\{ano\}/);
+        expect(rota).toMatch(/catch \(err\)/);
+        expect(rota).toMatch(/catalogoPendencias: pendenciasDeConfirmacao\(\)/);
+        const tela = readFileSync(join(__dirname, '..', 'components/RotinaFiscalPainel.tsx'), 'utf8');
+        expect(tela).toMatch(/catalogoPendencias/);
     });
 });

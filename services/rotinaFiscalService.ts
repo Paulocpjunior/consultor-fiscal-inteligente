@@ -88,6 +88,23 @@ export interface PainelRotina {
         avisos: string[];
     } | null;
     issSaudeCaptura?: { farol: string; motivo?: string; acao?: string; zeroConfiavel: boolean } | null;
+    /**
+     * O que o próprio CATÁLOGO admite não saber — obrigação cujo prazo/regra
+     * ninguém confirmou, e obrigação `proposta` que depende de informação que o
+     * app não tem (o ISS depende do calendário do MUNICÍPIO; o INSS patronal,
+     * da folha). Sem isto o painel diria "N obrigações" sem dizer que M ficaram
+     * FORA da conta — e é justamente aí que nasce o "mês fechado" com obrigação
+     * nunca listada.
+     */
+    catalogoPendencias?: Array<{
+        obrigacao: string;
+        label: string;
+        esfera: string;
+        abrangencia: string;
+        status: string;
+        dependeDe: string | null;
+        motivo: string;
+    }>;
     rotinas?: RotinaEmpresa[];
     lidos?: { documentos: number; tarefas: number; envios: number };
     geradoEm?: string;
