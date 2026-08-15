@@ -37,7 +37,9 @@ function coberturaDoCliente(e, competencia) {
     const [ano, mes] = String(competencia || '').split('-');
     if (!ano || !mes) return null;
     try {
-        return mesDoCliente({ colecao: e.colecao, regimePadrao: e.regimePadrao }, `${mes}/${ano}`);
+        // A UF vai junto: é ela que decide se o prazo ESTADUAL cadastrado
+        // (hoje só o de SP) vale para este cliente.
+        return mesDoCliente({ colecao: e.colecao, regimePadrao: e.regimePadrao, uf: e.uf }, `${mes}/${ano}`);
     } catch (err) {
         console.warn(`[rotina] cobertura do catálogo falhou (${e.nome}):`, err.message);
         return null;
@@ -94,6 +96,7 @@ async function carregarEmpresas(db) {
                 // vira INDEFINIDO, e adivinhar regime é adivinhar imposto).
                 colecao: col,
                 regimePadrao: d.regimePadrao || d.dadosFiscais?.regimePadrao || '',
+                uf: d.dadosFiscais?.uf || d.uf || '',
                 capturaAtiva: d.capturarSefaz !== false,
                 // ISS de SP capital: município, CCM e SUP decidem se há guia do
                 // município no mês (e se a captura da NFS-e sequer roda).

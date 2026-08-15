@@ -313,6 +313,19 @@ export function montarRotinaFiscal({
         // do "sem movimento" sem causa.
         const resumos = [];
         const acoes = [];
+        // PRAZO DE OUTRA UF é a causa mais perigosa das três: a data ESTÁ na
+        // tela, parece certa, e é de outro estado. Vem primeiro.
+        const outraUf = cobertura.prazoDeOutraUf || [];
+        const semUf = cobertura.prazoSemUfDoCliente || [];
+        if (outraUf.length) {
+            resumos.push(`${outraUf.length} obrigação(ões) com prazo cadastrado de OUTRA UF: `
+                + outraUf.map((r) => `${r.label || r.obrigacao} (${r.abrangencia})`).join(', '));
+            acoes.push('A data que aparece é a de SP — confira na SEFAZ do estado do cliente antes de entregar.');
+        }
+        if (semUf.length) {
+            resumos.push('a UF do cliente não está cadastrada, então o prazo estadual não é confiável');
+            acoes.push('Preencha a UF nos Dados Fiscais — é ela que decide qual calendário estadual vale.');
+        }
         if (indefinido) {
             resumos.push('regime INDEFINIDO — o catálogo entregou só o que é comum aos dois regimes do Lucro');
             acoes.push('Defina o Regime padrão (Presumido ou Real) na ficha do cliente no card Lucro.');
@@ -325,6 +338,7 @@ export function montarRotinaFiscal({
         eObrigacoes.coberturaIncompleta = true;
         eObrigacoes.regimeIndefinido = indefinido;
         eObrigacoes.propostas = props;
+        eObrigacoes.prazoDeOutraUf = outraUf.map((r) => r.label || r.obrigacao);
     }
 
     // DIPAM: a compra de produtor rural entra na GIA e no Registro 1400 da EFD

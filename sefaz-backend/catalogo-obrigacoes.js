@@ -360,6 +360,36 @@ export function obrigacoesAplicaveis(regime, competencia, opts = {}) {
 }
 
 /**
+ * A entrada vale para este cliente? Responde pela ABRANGÊNCIA.
+ *
+ * 🚨 O CAMPO EXISTIA DESDE 11/08 E NUNCA FOI APLICADO. O comentário no topo
+ * deste arquivo já dizia *"o app prefere dizer 'não sei o prazo deste
+ * município' a carimbar o de SP"* — e era exatamente o contrário que
+ * acontecia: o prazo do SPED (`UF:SP`, CAT 147/2009) era entregue a TODO
+ * cliente do Lucro, morasse ele onde morasse. Prazo errado entregue com
+ * confiança é o erro mais caro que este app pode cometer, porque quem lê não
+ * tem como desconfiar.
+ *
+ * @returns {'aplica'|'fora-de-abrangencia'|'uf-desconhecida'}
+ */
+export function alcanceDaObrigacao(regra, { uf } = {}) {
+    const abr = String(regra?.abrangencia || 'BR').trim();
+    if (abr === 'BR' || !abr) return 'aplica';
+    if (abr.startsWith('UF:')) {
+        const alvo = abr.slice(3).toUpperCase();
+        const daEmpresa = String(uf || '').trim().toUpperCase();
+        // SEM UF NÃO SE AFIRMA NADA. Assumir "é de SP" seria carimbar o prazo
+        // paulista em quem talvez não seja — e assumir "não é" faria a
+        // obrigação sumir de quem tem ela. Ausência é ausência.
+        if (!daEmpresa) return 'uf-desconhecida';
+        return daEmpresa === alvo ? 'aplica' : 'fora-de-abrangencia';
+    }
+    // 'IBGE:?' e afins: o município ainda não tem prazo cadastrado. Já cai em
+    // `status: 'proposta'` e é tratado como pendência nomeada.
+    return 'aplica';
+}
+
+/**
  * O MÊS DE UM CLIENTE — a resposta que o colaborador precisa.
  *
  * Devolve o que gerar, o que está esperando confirmação e o que NÃO dá pra
@@ -371,7 +401,47 @@ export function mesDoCliente(empresa, competencia) {
     const todas = obrigacoesAplicaveis(regime, competencia, { incluirPropostas: true });
     const propostas = todas.filter((r) => r.status !== 'ativa');
 
+    // ── ABRANGÊNCIA: o prazo é DAQUELE cliente? ─────────────────────────────
+    // O catálogo só tem o prazo ESTADUAL de SP. Para cliente de outra UF a
+    // obrigação existe e o PRAZO não — e isso precisa ser dito, não coberto.
+    const uf = String(empresa?.uf || '').trim().toUpperCase();
+    const prazoDeOutraUf = [];
+    const prazoSemUfDoCliente = [];
+    for (const r of ativas) {
+        const alcance = alcanceDaObrigacao(r, { uf });
+        if (alcance === 'fora-de-abrangencia') {
+            prazoDeOutraUf.push({
+                ...r,
+                motivoAbrangencia: `O prazo cadastrado é o de ${r.abrangencia.replace('UF:', '')} `
+                    + `(${r.baseLegal}) e este cliente é de ${uf}. A obrigação existe; o PRAZO do estado dele não está no app.`,
+            });
+        } else if (alcance === 'uf-desconhecida') {
+            prazoSemUfDoCliente.push({
+                ...r,
+                motivoAbrangencia: 'A UF do cliente não está cadastrada, então não dá para afirmar '
+                    + `se o prazo de ${r.abrangencia.replace('UF:', '')} vale para ele.`,
+            });
+        }
+    }
+
     const alertas = [];
+    if (prazoDeOutraUf.length) {
+        alertas.push({
+            tipo: 'prazo-de-outra-uf',
+            texto: `${prazoDeOutraUf.length} obrigação(ões) ESTADUAL(is) com prazo cadastrado de outra UF: `
+                + prazoDeOutraUf.map((r) => `${r.label} (${r.abrangencia})`).join(', ')
+                + `. Este cliente é de ${uf}.`,
+            acao: 'Confira o prazo na SEFAZ do estado do cliente antes de entregar — a data que aparece aqui é a de SP.',
+        });
+    }
+    if (prazoSemUfDoCliente.length) {
+        alertas.push({
+            tipo: 'uf-do-cliente-ausente',
+            texto: `A UF do cliente não está cadastrada, então ${prazoSemUfDoCliente.length} `
+                + 'obrigação(ões) estadual(is) ficam sem prazo confiável.',
+            acao: 'Preencha a UF nos Dados Fiscais do cliente — é ela que decide qual calendário estadual vale.',
+        });
+    }
     if (regime === 'INDEFINIDO') {
         alertas.push({
             tipo: 'regime-indefinido',
@@ -394,10 +464,14 @@ export function mesDoCliente(empresa, competencia) {
         competencia,
         obrigacoes: ativas.map((r) => ({ ...r, vencimento: calcularVencimento(competencia, r) })),
         propostas,
+        /** Obrigações cujo prazo cadastrado é de OUTRA UF (ou indeterminado). */
+        prazoDeOutraUf,
+        prazoSemUfDoCliente,
         alertas,
         /** true quando o catálogo NÃO cobre o cliente — a etapa 4 não pode dar
          *  verde nesse caso (trava T1 do escopo). */
-        coberturaIncompleta: regime === 'INDEFINIDO' || propostas.length > 0,
+        coberturaIncompleta: regime === 'INDEFINIDO' || propostas.length > 0
+            || prazoDeOutraUf.length > 0 || prazoSemUfDoCliente.length > 0,
     };
 }
 
