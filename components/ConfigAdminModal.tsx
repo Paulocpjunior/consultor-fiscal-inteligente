@@ -254,13 +254,28 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                             <div className="mt-2 text-[11px] space-y-1">
                                 {geminiVersao.ok ? (
                                     <>
-                                        <p className={geminiVersao.alvoEncontrado
+                                        {/* O VEREDITO VEM DA SONDA, não da listagem.
+                                            O painel dizia "a família não aparece
+                                            para esta conta" com as duas sondas
+                                            devolvendo gemini-3.7-flash logo
+                                            abaixo — duas leituras do mesmo fato
+                                            discordando na mesma tela. */}
+                                        <p className={geminiVersao.veredito?.cor === 'ok'
                                             ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
-                                            : 'text-amber-700 dark:text-amber-400 font-semibold'}>
-                                            {geminiVersao.alvoEncontrado
-                                                ? `✓ Pinado na família ${geminiVersao.familiaAlvo}.`
-                                                : `⚠ A família ${geminiVersao.familiaAlvo} ainda não aparece para esta conta — o app segue no alias.`}
+                                            : geminiVersao.veredito?.cor === 'neutro'
+                                                ? 'text-slate-500 dark:text-slate-400 font-semibold'
+                                                : 'text-amber-700 dark:text-amber-400 font-semibold'}>
+                                            {geminiVersao.veredito?.cor === 'ok' ? '✓ ' : geminiVersao.veredito?.cor === 'neutro' ? '· ' : '⚠ '}
+                                            {geminiVersao.veredito?.texto}
                                         </p>
+                                        {/* 🚨 Roteador sem efeito: os dois modelos
+                                            iguais fazem anexo, prompt longo e
+                                            parecer jurídico caírem no barato. */}
+                                        {geminiVersao.roteador?.colidiu && (
+                                            <p className="text-red-700 dark:text-red-400 font-semibold">
+                                                ✕ {geminiVersao.roteador.aviso}
+                                            </p>
+                                        )}
                                         {[geminiVersao.pro, geminiVersao.flash].map((m: any, i: number) => {
                                             const orig = (i === 0 ? geminiVersao.resolucao?.pro : geminiVersao.resolucao?.flash);
                                             return (

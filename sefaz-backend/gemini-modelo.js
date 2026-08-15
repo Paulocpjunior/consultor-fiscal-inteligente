@@ -175,3 +175,89 @@ export function versaoAtendeAlvo(modelVersion, familia = FAMILIA_ALVO_GEMINI) {
     const escapada = String(familia).replace(/\./g, '\\.');
     return new RegExp(`(^|-)${escapada}(?=[-.]|$)`).test(v) || new RegExp(`^gemini-${escapada}(?=[-.]|$)`, 'i').test(v);
 }
+
+// ============================================================================
+// O QUE O PAINEL DEVE DIZER — e o print de produção provou que ele dizia errado.
+// ----------------------------------------------------------------------------
+// Paulo abriu o ⚙️ Config Admin e a tela mostrou, LADO A LADO:
+//
+//   ⚠ A família 3.7 ainda não aparece para esta conta — o app segue no alias.
+//   ✓ gemini-flash-latest → gemini-3.7-flash · na família alvo
+//   ✓ gemini-flash-latest → gemini-3.7-flash · na família alvo
+//
+// Ou seja: o cabeçalho dizia que NÃO estamos na 3.7 enquanto as duas sondas
+// mostravam a conta sendo atendida POR ELA. Duas leituras do mesmo fato
+// discordando na mesma tela — a armadilha que este projeto mais pagou, e eu
+// acabei de reproduzi-la.
+//
+// A CAUSA: `alvoEncontrado` respondia sobre a LISTAGEM (o modelo aparece em
+// `models.list`?), e o cabeçalho lia isso como se fosse a resposta de "estamos
+// no 3.7?". São perguntas diferentes: a listagem é STATUS, a sonda é RESULTADO
+// — e nesta casa **quem responde é o resultado**.
+// ============================================================================
+
+/**
+ * "Estamos na família alvo?" — respondido pela SONDA, com a listagem só como
+ * informação de apoio.
+ *
+ * @param {Array<{modelVersion: string|null, naFamiliaAlvo: boolean|null}>} sondas
+ * @param {boolean} listada  a família apareceu em `models.list`
+ */
+export function vereditoDaFamilia(sondas, listada, familia = FAMILIA_ALVO_GEMINI) {
+    const responderam = (sondas || []).filter((s) => s && s.modelVersion);
+
+    // Sonda que não respondeu NÃO vira "não estamos" — é a mesma régua do
+    // `versaoAtendeAlvo` devolvendo null: rede que piscou não é veredito.
+    if (responderam.length === 0) {
+        return {
+            situacao: 'indeterminado', cor: 'neutro',
+            texto: `Nenhuma sonda respondeu — não dá para afirmar em que família a conta está.`,
+        };
+    }
+
+    const naFamilia = responderam.filter((s) => s.naFamiliaAlvo === true);
+    if (naFamilia.length === responderam.length) {
+        return {
+            situacao: 'atendida', cor: 'ok',
+            texto: `Estamos na família ${familia}: quem respondeu foi `
+                + `${[...new Set(responderam.map((s) => s.modelVersion))].join(' e ')}.`
+                + (listada ? '' : ' (A família não aparece na listagem da conta, mas o alias está sendo servido por ela — '
+                    + 'quem responde é o resultado, não a listagem.)'),
+        };
+    }
+    if (naFamilia.length === 0) {
+        return {
+            situacao: 'fora', cor: 'atencao',
+            texto: `A conta está sendo atendida por ${[...new Set(responderam.map((s) => s.modelVersion))].join(', ')}, `
+                + `fora da família ${familia}.`,
+        };
+    }
+    return {
+        situacao: 'parcial', cor: 'atencao',
+        texto: `Só parte das chamadas está na família ${familia}: `
+            + responderam.map((s) => `${s.modelo || '?'} → ${s.modelVersion}`).join(' · ') + '.',
+    };
+}
+
+/**
+ * 🚨 O ROTEADOR Pro×Flash está fazendo alguma coisa?
+ *
+ * O print de produção mostrou **`gemini-flash-latest` nas DUAS linhas**: o env
+ * `GEMINI_MODEL_PRO` do Cloud Run está apontando para o alias do FLASH. Com os
+ * dois iguais, o roteador vira ENFEITE — anexo, prompt longo e parecer jurídico
+ * (o caso mais analítico do app) caem no modelo barato, e nada na tela dizia
+ * isso. O código já trazia esse risco escrito num comentário desde sempre; o
+ * que faltava era o app CONFERIR.
+ */
+export function conferirRoteador({ pro, flash }) {
+    const p = normalizarNomeModelo(pro?.modelo || pro);
+    const f = normalizarNomeModelo(flash?.modelo || flash);
+    if (!p || !f) return { ok: true, colidiu: false, aviso: null };
+    if (p !== f) return { ok: true, colidiu: false, aviso: null };
+    return {
+        ok: false, colidiu: true,
+        aviso: `PRO e FLASH apontam para o MESMO modelo (${p}) — o roteador Pro×Flash está sem efeito. `
+            + 'Anexo, prompt longo e parecer jurídico caem no modelo barato. '
+            + 'Corrija o env GEMINI_MODEL_PRO no Cloud Run (ou remova os dois envs para o app resolver sozinho).',
+    };
+}

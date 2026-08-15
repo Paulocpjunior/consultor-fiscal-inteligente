@@ -263,6 +263,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   com o **"atualizado em" da própria página** e a exigir que o texto da revisão
   exista (versão nova sem texto novo é selo mentiroso — acende prometendo
   leitura que não está lá). É a mesma família do guia órfão de 12/08.
+- **🚨 O PRINT DO PAINEL DE GEMINI DERRUBOU O PRÓPRIO PAINEL — e revelou um
+  defeito EM PRODUÇÃO** (15/08, print do Paulo). A tela mostrou, LADO A LADO:
+  *"⚠ A família 3.7 ainda não aparece para esta conta"* e, duas linhas abaixo,
+  **`gemini-flash-latest → gemini-3.7-flash · na família alvo`** DUAS VEZES.
+  **DOIS ACHADOS, e os dois valem mais que a feature:**
+  (1) **DUAS LEITURAS DO MESMO FATO DISCORDANDO NA MESMA TELA** — eu reproduzi,
+  no meu próprio painel, a armadilha que este projeto mais pagou. A causa:
+  `alvoEncontrado` responde sobre a **LISTAGEM** (`models.list` traz a família?)
+  e o cabeçalho lia isso como resposta de *"estamos no 3.7?"*. São perguntas
+  diferentes — listagem é STATUS, sonda é RESULTADO, e **nesta casa quem
+  responde é o resultado**. `vereditoDaFamilia` decide pela SONDA e EXPLICA a
+  aparente contradição em vez de escondê-la; sonda que não respondeu vira
+  `indeterminado`, nunca "não estamos".
+  ✅ **A RESPOSTA REAL É: ESTAMOS NO 3.7.** O alias já é servido pela família.
+  (2) 🔴 **O ROTEADOR Pro×Flash ESTÁ SEM EFEITO EM PRODUÇÃO**: as duas linhas
+  mostram `gemini-flash-latest`, ou seja **`GEMINI_MODEL_PRO` no Cloud Run está
+  apontando para o alias do FLASH**. Anexo, prompt longo e **parecer jurídico**
+  — o caso mais analítico do app — caem no modelo barato. O risco estava escrito
+  num comentário do `server.js` desde sempre e **nada CONFERIA**; agora
+  `conferirRoteador` acusa em vermelho e diz qual env corrigir. **AÇÃO DO
+  PAULO**: corrigir `GEMINI_MODEL_PRO` no Cloud Run (ou remover os dois envs e
+  deixar o app resolver sozinho).
 - **O GEMINI SE PINA PERGUNTANDO, NUNCA CRAVANDO O ID** (Paulo, 15/08: *"nosso
   motor de busca é o Gemini, usando minha conta paga; ele teve sua versão
   atualizada para 3.7, nós devemos nos atualizar também"* → e, quando respondi

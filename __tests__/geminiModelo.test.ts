@@ -143,3 +143,99 @@ describe('o servidor usa o resolvedor — não uma constante escrita à mão', (
         expect(arquivos).toEqual([]);
     });
 });
+
+// ═══ O PRINT DE PRODUÇÃO (15/08) DERRUBOU O PRÓPRIO PAINEL ══════════════════
+//
+// Paulo abriu o ⚙️ Config Admin e a tela mostrou, LADO A LADO:
+//   ⚠ A família 3.7 ainda não aparece para esta conta — o app segue no alias.
+//   ✓ gemini-flash-latest → gemini-3.7-flash · na família alvo
+//   ✓ gemini-flash-latest → gemini-3.7-flash · na família alvo
+//
+// O cabeçalho dizia que NÃO estamos na 3.7 enquanto as duas sondas mostravam a
+// conta sendo atendida POR ELA. Eu reproduzi, no meu próprio painel, a
+// armadilha que este projeto mais pagou.
+describe('🚨 quem responde "estamos no 3.7?" é a SONDA, não a listagem', () => {
+    const { vereditoDaFamilia, conferirRoteador } = require('../sefaz-backend/gemini-modelo.js');
+
+    it('o caso REAL do print: fora da listagem, mas ATENDIDA pela família', () => {
+        const v = vereditoDaFamilia(
+            [{ modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.7-flash', naFamiliaAlvo: true },
+             { modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.7-flash', naFamiliaAlvo: true }],
+            false, // a listagem NÃO trouxe a família
+        );
+        expect(v.situacao).toBe('atendida');
+        expect(v.cor).toBe('ok');
+        expect(v.texto).toMatch(/Estamos na família 3\.7/);
+        // E explica a aparente contradição em vez de escondê-la.
+        expect(v.texto).toMatch(/quem responde é o resultado, não a listagem/);
+    });
+
+    it('atendida E listada: sem a ressalva, que aí não há o que explicar', () => {
+        const v = vereditoDaFamilia([{ modelVersion: 'gemini-3.7-pro', naFamiliaAlvo: true }], true);
+        expect(v.situacao).toBe('atendida');
+        expect(v.texto).not.toMatch(/listagem/);
+    });
+
+    it('versão fora da família é ÂMBAR e diz quem respondeu', () => {
+        const v = vereditoDaFamilia([{ modelVersion: 'gemini-2.5-flash', naFamiliaAlvo: false }], false);
+        expect(v.situacao).toBe('fora');
+        expect(v.texto).toMatch(/gemini-2\.5-flash/);
+    });
+
+    it('🚨 sonda que não respondeu NÃO vira "não estamos"', () => {
+        // Rede que piscou não é veredito — mesma régua do versaoAtendeAlvo.
+        const v = vereditoDaFamilia([{ modelVersion: null, naFamiliaAlvo: null }], false);
+        expect(v.situacao).toBe('indeterminado');
+        expect(v.cor).toBe('neutro');
+    });
+
+    it('metade dentro, metade fora ⇒ PARCIAL, não verde', () => {
+        const v = vereditoDaFamilia([
+            { modelo: 'a', modelVersion: 'gemini-3.7-pro', naFamiliaAlvo: true },
+            { modelo: 'b', modelVersion: 'gemini-2.5-flash', naFamiliaAlvo: false },
+        ], false);
+        expect(v.situacao).toBe('parcial');
+        expect(v.cor).toBe('atencao');
+    });
+});
+
+describe('🚨 o roteador Pro×Flash vira ENFEITE quando os dois são iguais', () => {
+    const { conferirRoteador } = require('../sefaz-backend/gemini-modelo.js');
+
+    it('o caso REAL do print: GEMINI_MODEL_PRO apontando pro alias do FLASH', () => {
+        // Com os dois iguais, anexo, prompt longo e parecer jurídico — o caso
+        // mais analítico do app — caem no modelo barato, e nada dizia isso.
+        const r = conferirRoteador({ pro: { modelo: 'gemini-flash-latest' }, flash: { modelo: 'gemini-flash-latest' } });
+        expect(r.colidiu).toBe(true);
+        expect(r.aviso).toMatch(/roteador Pro×Flash está sem efeito/);
+        expect(r.aviso).toMatch(/parecer jurídico caem no modelo barato/);
+        // E diz ONDE se corrige.
+        expect(r.aviso).toMatch(/GEMINI_MODEL_PRO no Cloud Run/);
+    });
+
+    it('modelos diferentes não acusam nada', () => {
+        expect(conferirRoteador({ pro: { modelo: 'gemini-pro-latest' }, flash: { modelo: 'gemini-flash-latest' } }).colidiu)
+            .toBe(false);
+    });
+
+    it('sem modelo dos dois lados não inventa acusação', () => {
+        expect(conferirRoteador({ pro: null, flash: null }).colidiu).toBe(false);
+    });
+});
+
+describe('a rota e a tela levam o veredito da sonda', () => {
+    const { readFileSync: rf } = require('fs');
+    const { join: jn } = require('path');
+    it('a rota devolve veredito + roteador, e separa a LISTAGEM do resultado', () => {
+        const s = rf(jn(__dirname, '..', 'server.js'), 'utf8');
+        expect(s).toMatch(/vereditoDaFamilia\(\[pro, flash\]/);
+        expect(s).toMatch(/conferirRoteador\(/);
+        expect(s).toMatch(/listadaNaConta/);
+    });
+    it('o painel lê o veredito, não a flag da listagem', () => {
+        const s = rf(jn(__dirname, '..', 'components/ConfigAdminModal.tsx'), 'utf8');
+        expect(s).toMatch(/geminiVersao\.veredito\?\.texto/);
+        expect(s).toMatch(/geminiVersao\.roteador\?\.colidiu/);
+        expect(s).not.toMatch(/geminiVersao\.alvoEncontrado/);
+    });
+});
