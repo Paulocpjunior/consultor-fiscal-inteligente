@@ -8,6 +8,7 @@
 
 import admin from 'firebase-admin';
 import { createHash } from 'crypto';
+import { patchSubstituiuDigitada } from '../nfse-identidade.js';
 
 function getDb() {
     if (!admin.apps.length) admin.initializeApp();
@@ -149,8 +150,9 @@ export async function importarNfsesAbrasf(nfses, contexto) {
             const snap = await ref.get();
             if (snap.exists) {
                 // Merge: preserva campos do dono original (cron capturou, depois
-                // user editou tag, etc) e atualiza so o que mudou.
-                await ref.set(doc, { merge: true });
+                // user editou tag, etc) e atualiza so o que mudou — MENOS o
+                // carimbo de digitada, que o documento de verdade nao herda.
+                await ref.set({ ...doc, ...patchSubstituiuDigitada(snap.data()) }, { merge: true });
                 atualizadas++;
             } else {
                 await ref.set(doc);

@@ -11,6 +11,7 @@
 
 import { DOMParser } from '@xmldom/xmldom';
 import { validarXmlSeguro } from './xml-seguranca.js';
+import { idDocumentoNfseSp, patchSubstituiuDigitada } from './nfse-identidade.js';
 
 const text = (parent, tag) => parent.getElementsByTagName(tag)[0]?.textContent?.trim() || '';
 const num = (parent, tag) => {
@@ -109,7 +110,7 @@ export async function salvarNfseSpRecebida(db, nfeXmlString, empresaCtx) {
         );
     }
 
-    const docId = `nfsesp-${cnpjT || 'sem-tomador'}-${cnpjP || 'sem-prestador'}-${parsed.numero}`;
+    const docId = idDocumentoNfseSp({ prestadorCnpj: cnpjP, tomadorCnpj: cnpjT, numero: parsed.numero });
 
     const ref = db.collection('documentos_fiscais').doc(docId);
     const snap = await ref.get();
@@ -177,7 +178,8 @@ export async function salvarNfseSpRecebida(db, nfeXmlString, empresaCtx) {
         if (docData[k] === undefined) delete docData[k];
     }
 
-    await ref.set(docData, { merge: true });
+    // Idem CSV: doc real nao herda o carimbo de digitada.
+    await ref.set({ ...docData, ...patchSubstituiuDigitada(snap.data()) }, { merge: true });
 
     return {
         id: docId,

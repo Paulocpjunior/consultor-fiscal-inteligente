@@ -16,7 +16,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../../services/firebaseConfig';
 import {
     validarNotaDigitada, montarNotaDigitada, idNotaDigitada, podeGravarSobre,
-    type ItemDigitado,
+    type ItemDigitado, type ServicoDigitado,
 } from '../../services/notaDigitada';
 import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../EmpresaAtivaFixa';
@@ -32,6 +32,11 @@ const itemVazio = (): ItemDigitado => ({ cfop: '', vProd: null });
 
 const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImported }) => {
     const { empresa } = useEmpresaAtiva();
+    // DUAS ESPÉCIES porque são dois documentos: serviço não tem CFOP nem NCM,
+    // e forçar tudo num formulário só faria a pessoa inventar um CFOP para
+    // conseguir salvar — CFOP inventado entra no livro.
+    const [especie, setEspecie] = useState<'mercadoria' | 'servico'>('mercadoria');
+    const [servico, setServico] = useState<ServicoDigitado>({ discriminacao: '' });
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
     const [numero, setNumero] = useState('');
     const [serie, setSerie] = useState('1');
@@ -61,6 +66,7 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
     const salvar = async () => {
         setErros([]); setSalva(null);
         const input = {
+            especie, servico,
             empresaId: empresa.id,
             empresaCnpj: empresa.cnpj,
             empresaNome: empresa.nome,
@@ -91,6 +97,7 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             onImported?.();
             setNumero(''); setChave(''); setValorTotal(''); setItens([itemVazio()]);
             setParticipanteNome(''); setParticipanteDoc(''); setParticipanteUf('');
+            setServico({ discriminacao: '' });
         } catch (e: any) {
             setErros([`Falha ao gravar: ${e?.message || 'erro desconhecido'}.`]);
         } finally {
@@ -114,12 +121,23 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
 
             <EmpresaAtivaFixa rotulo="Lançando na empresa" semTrocar />
 
+            <div className="flex gap-2">
+                {(['mercadoria', 'servico'] as const).map(e => (
+                    <button key={e} onClick={() => setEspecie(e)}
+                        className={`btn-press px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap ${especie === e
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                        {e === 'mercadoria' ? '📦 Mercadoria (NF-e)' : '🧰 Serviço (NFS-e)'}
+                    </button>
+                ))}
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
                     <label className={rotulo}>Direção</label>
                     <select value={direcao} onChange={e => setDirecao(e.target.value as any)} className={campo}>
-                        <option value="entrada">Entrada (compra)</option>
-                        <option value="saida">Saída (venda)</option>
+                        <option value="entrada">{especie === 'servico' ? 'Entrada (serviço tomado)' : 'Entrada (compra)'}</option>
+                        <option value="saida">{especie === 'servico' ? 'Saída (serviço prestado)' : 'Saída (venda)'}</option>
                     </select>
                 </div>
                 <div>
@@ -136,15 +154,29 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                 </div>
             </div>
 
-            <div>
-                <label className={rotulo}>Chave de acesso (44 dígitos — opcional, mas recomendada)</label>
-                <input value={chave} onChange={e => setChave(e.target.value)} className={`${campo} font-mono`}
-                    placeholder="com a chave, o XML capturado depois cai NO MESMO documento" />
-            </div>
+            {especie === 'mercadoria' ? (
+                <div>
+                    <label className={rotulo}>Chave de acesso (44 dígitos — opcional, mas recomendada)</label>
+                    <input value={chave} onChange={e => setChave(e.target.value)} className={`${campo} font-mono`}
+                        placeholder="com a chave, o XML capturado depois cai NO MESMO documento" />
+                </div>
+            ) : (
+                // A NFS-e do portal NÃO tem chave de 44 dígitos, e isso é
+                // NATUREZA, não falha (07/08). Ela se identifica por
+                // prestador + tomador + número — os mesmos três campos que os
+                // importadores usam, então a nota capturada depois substitui
+                // esta sozinha.
+                <p className="text-[11px] px-3 py-2 rounded-lg bg-sky-50 dark:bg-sky-900/20 text-sky-800 dark:text-sky-300">
+                    NFS-e não tem chave de 44 dígitos — ela se identifica por <strong>prestador + tomador + número</strong>.
+                    Se a captura trouxer esta mesma nota depois, ela <strong>substitui</strong> este lançamento em vez de duplicar.
+                </p>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                    <label className={rotulo}>{direcao === 'entrada' ? 'Fornecedor' : 'Cliente (destinatário)'}</label>
+                    <label className={rotulo}>{especie === 'servico'
+                        ? (direcao === 'entrada' ? 'Prestador do serviço' : 'Tomador (cliente)')
+                        : (direcao === 'entrada' ? 'Fornecedor' : 'Cliente (destinatário)')}</label>
                     <input value={participanteNome} onChange={e => setParticipanteNome(e.target.value)} className={campo} />
                 </div>
                 <div>
@@ -157,6 +189,49 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                 </div>
             </div>
 
+            {especie === 'servico' ? (
+                <div className="space-y-3">
+                    <div>
+                        <label className={rotulo}>Discriminação do serviço</label>
+                        <input value={servico.discriminacao}
+                            onChange={e => setServico(s2 => ({ ...s2, discriminacao: e.target.value }))}
+                            className={campo} placeholder="o que foi prestado — é isto que aparece nos livros" />
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div>
+                            <label className={rotulo}>Código de serviço (município)</label>
+                            <input value={servico.codigoServico || ''}
+                                onChange={e => setServico(s2 => ({ ...s2, codigoServico: e.target.value }))}
+                                className={campo} placeholder="ex.: 07498" />
+                        </div>
+                        <div>
+                            <label className={rotulo}>Alíquota ISS (%)</label>
+                            <input value={servico.aliquota ?? ''}
+                                onChange={e => setServico(s2 => ({ ...s2, aliquota: e.target.value === '' ? null : num(e.target.value) }))}
+                                className={campo} placeholder="vazio ≠ zero" />
+                        </div>
+                        <div>
+                            <label className={rotulo}>ISS devido (R$)</label>
+                            <input value={servico.valorIss ?? ''}
+                                onChange={e => setServico(s2 => ({ ...s2, valorIss: e.target.value === '' ? null : num(e.target.value) }))}
+                                className={campo} placeholder="vazio ≠ zero" />
+                        </div>
+                        <label className="flex items-center gap-2 text-xs mt-5">
+                            <input type="checkbox" checked={!!servico.issRetido}
+                                onChange={e => setServico(s2 => ({ ...s2, issRetido: e.target.checked }))} />
+                            ISS retido pelo tomador
+                        </label>
+                    </div>
+                    {/* AUSENTE ≠ ZERO, e aqui vale dobrado: zero digitado por
+                        comodidade fabricaria pendência falsa de "inconsistente"
+                        no painel 🏛️ ISS. Vazio tem causa própria e outra ação. */}
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                        ⚠ Não sabe a alíquota ou o ISS? <strong>Deixe vazio.</strong> Vazio é lido como
+                        “falta conferir”; zero é lido como “a nota diz que não há ISS” — são coisas
+                        diferentes e levam a ações diferentes.
+                    </p>
+                </div>
+            ) : (
             <div>
                 <div className="flex items-center justify-between mb-1">
                     <label className={rotulo}>Itens (CFOP da ESCRITURAÇÃO: {direcao === 'entrada' ? '1xxx/2xxx/3xxx' : '5xxx/6xxx/7xxx'})</label>
@@ -182,10 +257,11 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                     ))}
                 </div>
             </div>
+            )}
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
                 <div>
-                    <label className={rotulo}>Valor total da nota</label>
+                    <label className={rotulo}>{especie === 'servico' ? 'Valor dos serviços' : 'Valor total da nota'}</label>
                     <input value={valorTotal} onChange={e => setValorTotal(e.target.value)} className={campo} placeholder="0,00" />
                 </div>
                 <button onClick={salvar} disabled={salvando}

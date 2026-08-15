@@ -105,6 +105,16 @@
     <div class="alerta">⚠️ Na <strong>entrada</strong> lance o CFOP da <strong>escrituração</strong>
     (1xxx/2xxx), não o CFOP da nota do fornecedor. Se você digitar 5102, o app recusa e já diz que
     ele <em>vira 1102</em>.</div>
+    <p><span class="passo">Serve para os dois tipos de nota:</span> escolha <strong>📦 Mercadoria (NF-e)</strong>
+    ou <strong>🧰 Serviço (NFS-e)</strong> no topo do formulário. Na de serviço não se pede CFOP (nota de
+    serviço não tem) — pede-se a <strong>discriminação</strong>, o código do município e o ISS. É o caminho
+    para o cliente cujo município ainda não manda a nota ao sistema nacional.</p>
+    <div class="alerta">⚠️ <strong>Não sabe a alíquota ou o ISS? Deixe vazio.</strong> Vazio é lido como
+    “falta conferir”; zero é lido como “a nota diz que não há ISS”. São coisas diferentes e levam a ações
+    diferentes — por isso o app nunca preenche zero por você.</div>
+    <div class="ganho">💡 A NFS-e não tem chave de 44 dígitos, e isso é normal: ela se identifica por
+    <strong>prestador + tomador + número</strong>. Se a captura trouxer a mesma nota depois,
+    ela <strong>substitui</strong> o seu lançamento — não duplica.</div>
 
     <h3>3. 🚦 Farol “ficha × documentos”: imposto digitado sem nota por trás</h3>
     <p>Se a ficha tem imposto apurado e a competência está <strong>sem nenhum documento</strong> no

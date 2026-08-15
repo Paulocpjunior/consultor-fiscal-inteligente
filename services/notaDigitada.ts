@@ -34,8 +34,26 @@
  *    saída, 5xxx/6xxx/7xxx. Digitar o CFOP do fornecedor numa entrada é o
  *    erro clássico, e a validação barra com a explicação em vez de aceitar e
  *    deixar o livro sair torto.
+ *
+ * ═══ DUAS ESPÉCIES, PORQUE SÃO DOIS DOCUMENTOS DIFERENTES ═══════════════════
+ *
+ * A primeira versão desta porta só abria para MERCADORIA — exigia CFOP, que a
+ * NFS-e não tem. Ou seja: a porta não servia justamente para os ~157 clientes
+ * de serviço puro, nem para o caso que mais precisa dela (município que ainda
+ * não transcreve ao ADN, como Jundiaí, onde a cobertura É a digitação).
+ *
+ * Serviço NÃO é mercadoria com outro rótulo: não tem CFOP nem NCM, tem código
+ * de serviço municipal, ISS com alíquota e retenção, e prestador/tomador no
+ * lugar de emitente/destinatário. Forçar tudo num formulário só faria a pessoa
+ * inventar um CFOP para conseguir salvar — e CFOP inventado entra no livro.
+ *
+ * ⚠️ O ISS **não tem default**, e aqui isso vale dobrado: `iss-zerado-causa`
+ * distingue "alíquota AUSENTE" (buraco, pede conferência) de "zerado com a nota
+ * dizendo que tributa" (inconsistente). Gravar 0 por comodidade fabricaria uma
+ * pendência falsa de inconsistência em toda nota lançada à mão.
  */
 import type { DocumentoFiscal } from '../types';
+import { idDocumentoNfseSp } from '../sefaz-backend/nfse-identidade.js';
 
 export interface ItemDigitado {
     cfop: string;
@@ -49,7 +67,24 @@ export interface ItemDigitado {
     vIPI?: number;
 }
 
+/** O que a pessoa digita quando a nota é de SERVIÇO (NFS-e). */
+export interface ServicoDigitado {
+    /** Discriminação do serviço — é ela que aparece nos relatórios. */
+    discriminacao: string;
+    /** Código de serviço do MUNICÍPIO (não é o item da LC 116). */
+    codigoServico?: string;
+    /** Alíquota do ISS em %. AUSENTE ≠ ZERO — deixe vazio se não souber. */
+    aliquota?: number | null;
+    /** ISS devido em R$. AUSENTE ≠ ZERO. */
+    valorIss?: number | null;
+    /** O tomador reteve o ISS? */
+    issRetido?: boolean;
+}
+
 export interface NotaDigitadaInput {
+    /** 'mercadoria' = NF-e (CFOP, itens) · 'servico' = NFS-e (ISS, sem CFOP). */
+    especie?: 'mercadoria' | 'servico';
+    servico?: ServicoDigitado;
     empresaId: string;
     empresaCnpj: string;
     empresaNome: string;
@@ -65,9 +100,14 @@ export interface NotaDigitadaInput {
     participanteDoc?: string;
     participanteUf?: string;
     valorTotal: number | null;
+    /** Só na espécie mercadoria — serviço não tem itens com CFOP. */
     itens: ItemDigitado[];
     digitadaPorEmail: string;
 }
+
+/** Espécie efetiva — o padrão é mercadoria (como a porta nasceu). */
+export const especieDe = (i: { especie?: string }): 'mercadoria' | 'servico' =>
+    i.especie === 'servico' ? 'servico' : 'mercadoria';
 
 const soDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 
@@ -93,6 +133,19 @@ export function validarNotaDigitada(i: NotaDigitadaInput): string[] {
             ? 'Informe o FORNECEDOR — sem ele a nota cai em "fornecedor indefinido" na DIPAM e nos relatórios.'
             : 'Informe o CLIENTE (destinatário).');
     }
+    if (especieDe(i) === 'servico') {
+        // SERVIÇO não tem CFOP nem itens: o que identifica a operação é a
+        // discriminação e o código do município.
+        if (!String(i.servico?.discriminacao || '').trim()) {
+            erros.push('Descreva o serviço prestado — é a discriminação que aparece nos livros e nos relatórios.');
+        }
+        const al = i.servico?.aliquota;
+        if (al !== null && al !== undefined && !(Number(al) >= 0 && Number(al) <= 100)) {
+            erros.push('Alíquota do ISS deve ficar entre 0 e 100%. Se não souber, deixe VAZIO — vazio é diferente de zero.');
+        }
+        return erros;
+    }
+
     if (!Array.isArray(i.itens) || !i.itens.length) {
         erros.push('Lance ao menos um item com CFOP e valor — é do item que saem livro, DIPAM e SPED.');
     }
@@ -119,6 +172,17 @@ export function validarNotaDigitada(i: NotaDigitadaInput): string[] {
  * futuro cair NO MESMO documento e fazer o upgrade.
  */
 export function idNotaDigitada(i: NotaDigitadaInput): string {
+    if (especieDe(i) === 'servico') {
+        // 🚨 A MESMA IDENTIDADE QUE OS IMPORTADORES DE NFS-e USAM. É isto que
+        // faz a nota capturada depois cair NO MESMO documento e substituir a
+        // digitada. Fórmula própria aqui criaria um SEGUNDO documento, e o
+        // mesmo serviço entraria duas vezes no livro, no ISS e no faturamento.
+        const empresaCnpj = soDigitos(i.empresaCnpj);
+        const partDoc = soDigitos(i.participanteDoc);
+        const prestador = i.direcao === 'saida' ? empresaCnpj : partDoc;
+        const tomador = i.direcao === 'saida' ? partDoc : empresaCnpj;
+        return idDocumentoNfseSp({ prestadorCnpj: prestador, tomadorCnpj: tomador, numero: i.numero });
+    }
     const chave = soDigitos(i.chave);
     if (chave.length === 44) return chave;
     const comp = String(i.dhEmi || '').slice(0, 7);
@@ -127,6 +191,7 @@ export function idNotaDigitada(i: NotaDigitadaInput): string {
 
 /** Monta o documento na MESMA forma que o importer grava. */
 export function montarNotaDigitada(i: NotaDigitadaInput): DocumentoFiscal {
+    if (especieDe(i) === 'servico') return montarNfseDigitada(i);
     const chave = soDigitos(i.chave);
     const empresaCnpj = soDigitos(i.empresaCnpj);
     const partDoc = soDigitos(i.participanteDoc);
@@ -182,6 +247,79 @@ export function montarNotaDigitada(i: NotaDigitadaInput): DocumentoFiscal {
             vICMS: it.vICMS !== undefined ? Number(it.vICMS) : undefined,
             vIPI: it.vIPI !== undefined ? Number(it.vIPI) : undefined,
         })),
+        origem: 'digitada',
+        digitadaPorEmail: i.digitadaPorEmail,
+        digitadaEm: new Date().toISOString(),
+        importadoPorEmail: i.digitadaPorEmail,
+    } as unknown as DocumentoFiscal;
+}
+
+/**
+ * NFS-e digitada — nos MESMOS campos que `nfse-sp-csv-importer` grava.
+ *
+ * Nada de nomes novos: é essa igualdade que faz o painel 🏛️ ISS, o relatório
+ * de Retenções, o R-2010/R-4020 e os livros enxergarem a nota sem uma linha de
+ * código nova. Campo com nome próprio aqui viraria um segundo mundo que nenhum
+ * relatório soma — o defeito da colcha, que é o que o CFI existe para acabar.
+ */
+function montarNfseDigitada(i: NotaDigitadaInput): DocumentoFiscal {
+    const empresaCnpj = soDigitos(i.empresaCnpj);
+    const partDoc = soDigitos(i.participanteDoc);
+    const competencia = String(i.dhEmi).slice(0, 7);
+    const ehPrestador = i.direcao === 'saida';
+    const prestadorCnpj = ehPrestador ? empresaCnpj : partDoc;
+    const prestadorNome = ehPrestador ? i.empresaNome : i.participanteNome;
+    const tomadorCnpj = ehPrestador ? partDoc : empresaCnpj;
+    const tomadorNome = ehPrestador ? i.participanteNome : i.empresaNome;
+    const sv = i.servico || ({} as ServicoDigitado);
+
+    // AUSENTE ≠ ZERO. Alíquota/ISS que a pessoa não soube dizer ficam
+    // UNDEFINED, e o `iss-zerado-causa` os lê como "alíquota ausente" (que pede
+    // conferência) em vez de "a nota diz que tributa e veio zero" (que é
+    // inconsistência inventada). Zero só entra quando zero É a resposta.
+    const num = (v: unknown) => (v === null || v === undefined || v === '' ? undefined : Number(v));
+
+    return {
+        id: idNotaDigitada(i),
+        chave: null,
+        xmlHash: '',
+        // `ehDocumentoDeServico` reconhece por AQUI — e é isso que impede a
+        // nota de serviço de um prestador PF de virar FUNRURAL (15/08).
+        tipo: 'NFSe',
+        tipoDoc: 'NFSe',
+        modelo: '99',
+        serie: String(i.serie || '1').trim(),
+        numero: String(i.numero).trim(),
+        natOp: sv.codigoServico ? `Cód. serviço ${sv.codigoServico}` : 'Serviço NFS-e',
+        dhEmi: i.dhEmi,
+        competencia,
+        direcao: i.direcao,
+        status: 'autorizado',
+        empresaId: i.empresaId,
+        empresaCnpj,
+        empresaNome: i.empresaNome,
+
+        prestadorCnpj, prestadorNome,
+        tomadorCnpj, tomadorNome,
+        // Compat com o schema NF-e (o dashboard e metade dos leitores usam).
+        cnpjEmit: prestadorCnpj,
+        xNomeEmit: prestadorNome,
+        cnpjDest: tomadorCnpj,
+        xNomeDest: tomadorNome,
+        emitente: { cnpjCpf: prestadorCnpj, nome: prestadorNome, uf: '' },
+        destinatario: { cnpjCpf: tomadorCnpj, nome: tomadorNome, uf: '' },
+
+        valorTotal: Number(i.valorTotal),
+        valorServicos: Number(i.valorTotal),
+        valorIss: num(sv.valorIss),
+        issDevido: num(sv.valorIss),
+        issRetido: !!sv.issRetido,
+        aliquotaServicos: num(sv.aliquota),
+        codigoServico: sv.codigoServico || undefined,
+        descricao: sv.discriminacao,
+        discriminacaoServicos: sv.discriminacao,
+        totais: { vNF: Number(i.valorTotal), vServ: Number(i.valorTotal), vISS: num(sv.valorIss) },
+
         origem: 'digitada',
         digitadaPorEmail: i.digitadaPorEmail,
         digitadaEm: new Date().toISOString(),

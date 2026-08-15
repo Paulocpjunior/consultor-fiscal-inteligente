@@ -95,3 +95,11 @@ export function agruparTiradosPorDecisao(
     valor: number;
     funruralPotencial: number;
 }>;
+
+/**
+ * O documento É de serviço? Reconhece pelo que ele É (tipo nfse/cte, modelo
+ * 57/67, blocos prestador/tomador, código de serviço municipal) — NUNCA pelo
+ * `modeloDoDoc`, que cai em '55' quando o campo não foi gravado e faria a
+ * NFS-e passar por NF-e. Serviço nunca é produção rural (FUNRURAL).
+ */
+export function ehDocumentoDeServico(d: any): boolean;
