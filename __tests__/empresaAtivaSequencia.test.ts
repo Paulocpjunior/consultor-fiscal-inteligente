@@ -364,3 +364,43 @@ describe('Cotas e Trimestrais: a VISÃO também é da ativa — fechando a incon
         expect(painel).toMatch(/não tem declaração transmitida/);
     });
 });
+
+describe('🚨 Painel DCTFWeb: a aba onde o recorte vale MAIS, porque ela transmite', () => {
+    // Paulo, 15/08, com o print desta aba: *"essas são as ABAS?"* — a lista
+    // vinha com "Todas as empresas" e **Transmitir** / **↻ Retificar** por
+    // linha. Era a última tela do módulo por cliente sem recorte, e a de
+    // consequência mais cara: transmitir DCTFWeb da empresa errada FECHA a
+    // competência para o DP e o Contábil e obriga retificadora.
+    const painel = semComentarios(readFileSync(join(RAIZ, 'components/DCTFWeb/index.tsx'), 'utf8'));
+
+    it('a lista é recortada pela ativa e o resto vai CONTADO', () => {
+        expect(painel).toMatch(/useEmpresaAtiva\(\)/);
+        expect(painel).toMatch(/declaracoes\.filter\(d => normalizarCnpjDctfweb\(d\.empresaCnpj\) === cnpjAtiva\)/);
+        expect(painel).toMatch(/foraDaAtiva/);
+        // A tabela renderiza o RECORTE, não a lista crua — era isso que o
+        // print mostrava, e é o que o desatento clicaria.
+        expect(painel).toMatch(/\{linhas\.map\(d => \(/);
+        expect(painel).not.toMatch(/\{declaracoes\.map\(d => \(/);
+    });
+
+    it('os KPIs seguem o MESMO recorte da lista', () => {
+        // Cabeçalho contando a carteira sobre uma lista de um cliente é a
+        // leitura dupla que este projeto mais pagou.
+        expect(painel).toMatch(/resumoDaTela/);
+        expect(painel).toMatch(/cnpjAtiva \? resumoDaTela\.totalDeclaracoes/);
+    });
+
+    it('o seletor interno saiu — e o de sincronizar junto, porque sincronizar é AÇÃO', () => {
+        expect(painel).toMatch(/<EmpresaAtivaFixa/);
+        expect(painel).not.toMatch(/Todas as empresas/);
+        expect(painel).not.toMatch(/Selecione a empresa/);
+    });
+
+    it('🚨 a busca NÃO filtra no servidor — senão "fora desta tela" seria sempre 0', () => {
+        // Recorte no servidor daria a mesma lista e destruiria a contagem
+        // honesta do que ficou de fora: esconder sem dizer é o que faz alguém
+        // ler "0 pendentes" como resposta da carteira.
+        expect(painel).not.toMatch(/empresaCnpj: empresaCnpjFiltro/);
+        expect(painel).not.toMatch(/empresaCnpj: cnpjAtiva/);
+    });
+});

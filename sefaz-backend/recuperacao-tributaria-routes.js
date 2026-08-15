@@ -2,13 +2,18 @@ import { Router } from 'express';
 import { requireAdmin, requireAuth } from './require-admin.js';
 import { podeAcessarEmpresaId } from './carteira-auth.js';
 import { getCatalogoTeses, analisarEmpresa, analisarTodas } from './recuperacao-tributaria-orchestrator.js';
+import { ALIAS_PRO } from './gemini-modelo.js';
 
 const router = Router();
 
-// Modelo centralizado: alias gemini-flash-latest segue sempre a versao mais
-// recente do Flash (Google atualiza automaticamente). Pra pinar uma versao,
-// setar GEMINI_MODEL_PRO no Cloud Run.
-const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || 'gemini-flash-latest';
+// O MODELO VEM DO SERVIDOR, que resolve a familia alvo perguntando a conta
+// (gemini-modelo.js). Esta rota tinha a SEGUNDA COPIA da regua — e a copia ja
+// tinha divergido: o `GEMINI_MODEL_PRO` daqui caia no alias do FLASH, entao o
+// parecer juridico, que e o caso mais analitico do app, saia no modelo barato.
+function modeloPro(req) {
+    const modelos = req.app.get('geminiModelos');
+    return (typeof modelos === 'function' ? modelos().pro : null) || ALIAS_PRO;
+}
 
 // GET /status — modo atual
 router.get('/status', (_req, res) => {
@@ -78,14 +83,15 @@ Em portugues brasileiro, em 4 paragrafos:
 
 Use **negrito** nos pontos-chave. Seja tecnicamente preciso.`;
 
+        const modelo = modeloPro(req);
         const response = await ai.models.generateContent({
-            model: GEMINI_MODEL_PRO,
+            model: modelo,
             contents: prompt,
         });
 
         res.json({
             analise: response.text ?? '',
-            modelo: GEMINI_MODEL_PRO,
+            modelo,
             geradoEm: new Date().toISOString(),
         });
     } catch (err) {

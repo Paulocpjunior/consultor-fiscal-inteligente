@@ -1,0 +1,177 @@
+// ============================================================================
+// sefaz-backend/gemini-modelo.js  (ESM, puro)
+// ----------------------------------------------------------------------------
+// QUAL GEMINI O APP USA — resolvido PERGUNTANDO, nunca chutando o ID.
+//
+// Paulo, 15/08: *"nosso motor de busca é o Gemini, usando minha conta paga; o
+// Gemini teve sua versão atualizada para 3.7, nós devemos nos atualizar
+// também"* — e, quando eu respondi com a explicação dos aliases: *"o que você
+// quer dizer? pedi para você atualizar p a versão 3.7"*. A ordem é PINAR.
+//
+// ═══ POR QUE ISTO É UM MÓDULO E NÃO DUAS CONSTANTES ═════════════════════════
+//
+// Escrever `'gemini-3.7-pro'` na mão é apostar a produção num ID que eu nunca
+// vi responder: se o nome real for outro (sufixo de data, `-preview`, ou a
+// família ainda não liberada para ESTA conta), a IA do app inteiro cai — e cai
+// no deploy, calada, porque nada aqui prova que o nome existe. É o mesmo erro
+// do payload do PGDAS-D deduzido: **perguntar é PROVA, deduzir é aposta**.
+//
+// Então o desenho é o do ISS fixo código 9 e do R-2055: a FONTE responde. A
+// API do Gemini lista os modelos da conta; este módulo escolhe, dentro do que
+// ELA devolveu, o melhor da família alvo. Se o 3.7 estiver lá, o app fica
+// PINADO nele (sem deploy quando a Google publicar). Se não estiver, o app
+// continua no alias — funcionando — e a tela DIZ que o alvo não foi encontrado,
+// em vez de quebrar ou de mentir que atualizou.
+//
+// TRÊS TRAVAS QUE OS TESTES PROTEGEM:
+//  (1) `-lite` NÃO entra na vaga do Flash. É outro degrau de preço/qualidade, e
+//      o roteador Pro×Flash manda prompt de verdade para o Flash.
+//  (2) a família casa com FRONTEIRA (`3.7` não pega `3.70` nem `13.7`).
+//  (3) lista vazia/falha ⇒ ALIAS, nunca ID inventado — e o motivo vai escrito.
+// ============================================================================
+
+/** A família que o Paulo mandou usar. Mudar aqui = mudar o alvo do app. */
+export const FAMILIA_ALVO_GEMINI = '3.7';
+
+/** Aliases oficiais do Google — a rede de baixo, que sempre responde. */
+export const ALIAS_PRO = 'gemini-pro-latest';
+export const ALIAS_FLASH = 'gemini-flash-latest';
+
+/** `models/gemini-3.7-pro` → `gemini-3.7-pro`. */
+export function normalizarNomeModelo(nome) {
+    return String(nome || '').trim().replace(/^models\//, '');
+}
+
+/** Sufixos que marcam modelo NÃO estável — servem, mas perdem para o GA. */
+const INSTAVEL = /(preview|exp|experimental|thinking|tuning)/i;
+
+/**
+ * O modelo suporta gerar conteúdo? Entrada de embedding/imagem casaria com o
+ * nome da família e viraria "Pro" — resposta que nunca chega.
+ * Ausência do campo NÃO reprova (nem toda listagem traz): ausente ≠ não.
+ */
+function geraConteudo(m) {
+    const acoes = m?.supportedActions || m?.supportedGenerationMethods;
+    if (!Array.isArray(acoes) || acoes.length === 0) return true;
+    return acoes.some(a => String(a).toLowerCase() === 'generatecontent');
+}
+
+/**
+ * Escolhe o melhor modelo da família+tipo dentro do que a API devolveu.
+ *
+ * @param {Array<object|string>} modelos  lista da API (objetos ou nomes crus)
+ * @param {{familia: string, tipo: 'pro'|'flash'}} alvo
+ * @returns {{modelo: string|null, candidatos: string[], motivo: string}}
+ */
+export function escolherModeloDaFamilia(modelos, { familia, tipo }) {
+    const lista = Array.isArray(modelos) ? modelos : [];
+    // FRONTEIRA na família: sem ela, '3.7' casaria com 'gemini-3.70-pro' e com
+    // 'gemini-13.7-pro'. Nome parecido é o defeito que ninguém desconfia.
+    const escapada = String(familia || '').replace(/\./g, '\\.');
+    const daFamilia = new RegExp(`^gemini-${escapada}(?=[-.]|$)`, 'i');
+
+    const candidatos = lista
+        .map(m => (typeof m === 'string' ? { name: m } : (m || {})))
+        .filter(geraConteudo)
+        .map(m => normalizarNomeModelo(m.name))
+        .filter(nome => !!nome && daFamilia.test(nome))
+        .filter(nome => {
+            const n = nome.toLowerCase();
+            if (tipo === 'flash') {
+                // `-lite` é OUTRO degrau: mais barato e mais fraco. O roteador
+                // manda ao Flash prompt de trabalho, então cair no lite seria
+                // rebaixar o app em silêncio.
+                return n.includes('flash') && !n.includes('lite');
+            }
+            // Na vaga do Pro, qualquer coisa que diga "flash" está fora.
+            return n.includes('pro') && !n.includes('flash');
+        });
+
+    if (candidatos.length === 0) {
+        return {
+            modelo: null, candidatos: [],
+            motivo: `A conta não lista nenhum modelo ${tipo.toUpperCase()} da família ${familia}.`,
+        };
+    }
+
+    const ordenados = [...candidatos].sort((a, b) => {
+        const ia = INSTAVEL.test(a) ? 1 : 0;
+        const ib = INSTAVEL.test(b) ? 1 : 0;
+        if (ia !== ib) return ia - ib;               // estável primeiro
+        if (a.length !== b.length) return a.length - b.length; // nome base antes de datado
+        return b.localeCompare(a);                   // empate: sufixo maior (mais novo)
+    });
+
+    return {
+        modelo: ordenados[0], candidatos: ordenados,
+        motivo: `Pinado em ${ordenados[0]} — a própria API listou este modelo para a conta.`,
+    };
+}
+
+/**
+ * Resolve os DOIS modelos do app (Pro e Flash).
+ *
+ * Precedência: env explícito > família alvo listada pela API > alias.
+ * O env vence porque é o operador pinando à mão (hotfix, release quebrada) —
+ * decisão humana não é sobrescrita por regra automática.
+ *
+ * @param {object} p
+ * @param {Array|null} p.modelos  lista da API; null/[] = não foi possível perguntar
+ * @param {string} [p.envPro] @param {string} [p.envFlash]
+ * @param {string} [p.familia]
+ * @returns {{familiaAlvo: string, pro: object, flash: object, alvoEncontrado: boolean}}
+ */
+export function resolverModelosGemini({ modelos, envPro, envFlash, familia = FAMILIA_ALVO_GEMINI } = {}) {
+    const perguntou = Array.isArray(modelos) && modelos.length > 0;
+
+    const resolverUm = (tipo, env, alias) => {
+        if (env && String(env).trim()) {
+            return {
+                modelo: String(env).trim(), origem: 'env',
+                motivo: `Pinado à mão no Cloud Run (GEMINI_MODEL_${tipo.toUpperCase()}) — o env vence a regra automática.`,
+            };
+        }
+        if (!perguntou) {
+            // NÃO inventa o ID da família. Sem a lista, o alvo é indeterminado
+            // — e indeterminado aqui LIBERA no alias (a IA do escritório não
+            // pode cair porque a listagem piscou), dizendo que não conferiu.
+            return {
+                modelo: alias, origem: 'alias-sem-lista',
+                motivo: `Não foi possível listar os modelos da conta — seguindo no alias ${alias}. `
+                    + `O alvo ${familia} não foi conferido nesta consulta.`,
+            };
+        }
+        const achado = escolherModeloDaFamilia(modelos, { familia, tipo });
+        if (achado.modelo) {
+            return { modelo: achado.modelo, origem: 'familia-alvo', motivo: achado.motivo, candidatos: achado.candidatos };
+        }
+        return {
+            modelo: alias, origem: 'alias-fallback',
+            motivo: `${achado.motivo} Seguindo no alias ${alias}, que a Google promove sozinha. `
+                + `Quando a família ${familia} aparecer para esta conta, o app pina nela sem deploy.`,
+        };
+    };
+
+    const pro = resolverUm('pro', envPro, ALIAS_PRO);
+    const flash = resolverUm('flash', envFlash, ALIAS_FLASH);
+
+    return {
+        familiaAlvo: familia,
+        pro, flash,
+        alvoEncontrado: pro.origem === 'familia-alvo' && flash.origem === 'familia-alvo',
+    };
+}
+
+/**
+ * A versão CONCRETA que respondeu (campo `modelVersion`) é da família alvo?
+ *
+ * É esta função que responde *"estamos no 3.7?"* — e ela responde pelo que a
+ * API DEVOLVEU, não pelo nome que o app pediu. Alias apontando para o 3.7 já
+ * é estar no 3.7; nome pinado que a API atende com outra versão, não é.
+ */
+export function versaoAtendeAlvo(modelVersion, familia = FAMILIA_ALVO_GEMINI) {
+    const v = normalizarNomeModelo(modelVersion);
+    if (!v) return null; // sem resposta não se afirma nada — nem sim, nem não
+    const escapada = String(familia).replace(/\./g, '\\.');
+    return new RegExp(`(^|-)${escapada}(?=[-.]|$)`).test(v) || new RegExp(`^gemini-${escapada}(?=[-.]|$)`, 'i').test(v);
+}

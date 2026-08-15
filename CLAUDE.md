@@ -99,9 +99,54 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   já tínhamos falado" (é a regra de 28/07, guia UMA A UMA). Seletor interno de painel
   por-cliente SAIU (`EmpresaAtivaFixa` no lugar); ficam com seletor: filtro de
   carteira, config de admin e drill-down de tela de carteira (nascendo na
-  ativa). PENDENTE DE DECISÃO DO PAULO: aplicar a mesma guarda nas abas que
-  EMITEM por linha (Cotas do mês, Trimestrais) — muda o fluxo de emissão em
-  série da equipe, não fiz sem confirmar.
+  ativa). ✅ **RESOLVIDO NO MESMO DIA** (Paulo: *"ninguém emite nada em série,
+  já tínhamos falado sobre"* — é a regra de 28/07): Cotas do mês e Trimestrais
+  ganharam a guarda E o recorte. E a ÚLTIMA aba do módulo caiu com o print
+  *"essas são as ABAS?"*: o **Painel DCTFWeb** listava a carteira inteira com
+  **Transmitir** e **↻ Retificar** por linha — a tela de consequência mais cara
+  do app, porque transmitir DCTFWeb da empresa errada FECHA a competência para
+  o DP e o Contábil e obriga retificadora. Recortado, com seletor interno fora
+  (o de sincronizar junto: sincronizar é AÇÃO) e KPIs no MESMO recorte da lista.
+  ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
+  lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
+  que faz alguém ler "0 pendentes" como resposta da carteira.
+- **MATA-BURRO: COMUNICADO ENTREGUE COM O SELO APAGADO — o par que envelhece em
+  SILÊNCIO** (Paulo, 15/08: *"o botão novidade do CFI você não está inserindo o
+  detalhe em vermelho que sinaliza que algo foi feito"*). Ele estava certo e a
+  causa é velha conhecida: a regra *"mudou a página → muda `NOVIDADES_VERSAO`,
+  no mesmo PR"* estava escrita DENTRO do próprio arquivo e **não tinha trava**.
+  Resultado: onze dias de entrega — Ativar Empresa, nota digitada, farol de
+  lastro, correlação de CFOP nos relatórios — com o selo escuro, então a equipe
+  não tinha como saber que havia o que ler. Entregar sem avisar é quase não
+  entregar. `__tests__/novidadesService.test.ts` passou a comparar a constante
+  com o **"atualizado em" da própria página** e a exigir que o texto da revisão
+  exista (versão nova sem texto novo é selo mentiroso — acende prometendo
+  leitura que não está lá). É a mesma família do guia órfão de 12/08.
+- **O GEMINI SE PINA PERGUNTANDO, NUNCA CRAVANDO O ID** (Paulo, 15/08: *"nosso
+  motor de busca é o Gemini, usando minha conta paga; ele teve sua versão
+  atualizada para 3.7, nós devemos nos atualizar também"* → e, quando respondi
+  com a explicação dos aliases: *"o que você quer dizer? pedi para você
+  atualizar p a versão 3.7"*). A ordem é PINAR — mas escrever `'gemini-3.7-pro'`
+  à mão é apostar a produção num nome que ninguém viu responder: se o ID real
+  tiver sufixo, for `-preview`, ou a família ainda não estiver liberada para a
+  conta, a IA do escritório inteiro cai — e cai CALADA, no deploy.
+  `sefaz-backend/gemini-modelo.js` faz o que o código 9 do ISS fixo e o R-2055
+  ensinaram: **a FONTE responde**. O servidor lista os modelos da conta e
+  escolhe o melhor da `FAMILIA_ALVO_GEMINI` ('3.7'); precedência **env do Cloud
+  Run (pino humano) > família alvo listada > alias `-latest`**. Se a 3.7 não
+  estiver lá, o app segue no alias FUNCIONANDO e o painel ⚙️ Config Admin diz
+  que o alvo não foi encontrado — e pina sozinho, sem deploy, no dia em que a
+  Google publicar (basta reabrir o painel). TRÊS TRAVAS testadas: `-lite` NÃO
+  ocupa a vaga do Flash (outro degrau de preço, e o roteador manda prompt de
+  trabalho ao Flash); a família casa com FRONTEIRA ('3.7' não pega '3.70' nem
+  '13.7'); e sonda que falha devolve **null, nunca false** — afirmar "não
+  estamos no 3.7" porque a rede piscou faria alguém pinar à mão um modelo que já
+  estava certo. 🐛 **E a varredura achou a SEGUNDA CÓPIA da régua, já
+  divergida**: `recuperacao-tributaria-routes.js` tinha o próprio
+  `GEMINI_MODEL_PRO` caindo no **alias do FLASH** — o parecer jurídico, que é o
+  caso mais analítico do app, saía no modelo barato. Os routers agora leem do
+  servidor (`req.app.get('geminiModelos')`), e um teste barra tanto ID cravado
+  quanto env lido fora do módulo dono.
 - **MATA-BURRO: DOIS DOCUMENTOS COM AÇÕES OPOSTAS NÃO PODEM TER A MESMA CARA NA
   TELA** (14/08, NOVA ERA 07/2026 — o dia inteiro saiu daqui). A linha do
   FUNRURAL mostrava `nº 255273 · JOSE D. KOKI`. Paulo leu *"o CFI está levando a

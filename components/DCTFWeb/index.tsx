@@ -16,12 +16,12 @@ import {
     formatPaLabel,
     situacaoLabel,
     situacaoColorClass,
-    listarEmpresasDctfweb,
-    type DctfwebEmpresaOption,
 } from '../../services/dctfwebService';
 import DetalheDeclaracao from './DetalheDeclaracao';
 import MitApuracao from './MitApuracao';
-import { buildDctfwebEmpresaOptions, normalizarCnpjDctfweb } from './dctfwebEmpresaOptions';
+import { normalizarCnpjDctfweb } from './dctfwebEmpresaOptions';
+import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
+import EmpresaAtivaFixa from '../EmpresaAtivaFixa';
 
 interface Props {
     currentUser: User | null;
@@ -29,6 +29,7 @@ interface Props {
 }
 
 const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
+    const { empresa: empresaAtivaSessao } = useEmpresaAtiva();
     const [resumo, setResumo] = useState<DctfwebResumo | null>(null);
     const [declaracoes, setDeclaracoes] = useState<DctfwebDeclaracao[]>([]);
     const [loading, setLoading] = useState(false);
@@ -39,7 +40,6 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [anoFiltro, setAnoFiltro] = useState<number>(hoje.getFullYear());
     const [mesFiltro, setMesFiltro] = useState<number | ''>('');
     const [situacaoFiltro, setSituacaoFiltro] = useState<'' | 'EM_ANDAMENTO' | 'ATIVA'>('');
-    const [empresaCnpjFiltro, setEmpresaCnpjFiltro] = useState('');
 
     // modais
     const [detalheAberto, setDetalheAberto] = useState<DctfwebDeclaracao | null>(null);
@@ -49,42 +49,45 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [syncingEmpresa, setSyncingEmpresa] = useState<string | null>(null);
     const [transmitindo, setTransmitindo] = useState<string | null>(null);
 
-    // Empresas Lucro Presumido/Real disponiveis para sincronizacao DCTFWeb.
-    const [empresas, setEmpresas] = useState<DctfwebEmpresaOption[]>([]);
-    const [empresasErro, setEmpresasErro] = useState<string | null>(null);
-    const [empresaNovaSyncId, setEmpresaNovaSyncId] = useState<string>('');
+    // A LISTA DE EMPRESAS SAIU DAQUI junto com o seletor: sem escolha para
+    // fazer, carregar ~400 cadastros só alimentava o dropdown que Paulo mandou
+    // tirar. Quem diz em quem se trabalha é a empresa ativa.
 
-    useEffect(() => {
-        let ativo = true;
-        if (!currentUser) {
-            setEmpresas([]);
-            setEmpresasErro(null);
-            return;
-        }
-        listarEmpresasDctfweb(currentUser)
-            .then(list => {
-                if (!ativo) return;
-                setEmpresas(list || []);
-                setEmpresasErro(null);
-            })
-            .catch((err: any) => {
-                if (!ativo) return;
-                setEmpresas([]);
-                setEmpresasErro(err?.message || 'Falha ao carregar empresas');
-            });
-        return () => { ativo = false; };
-    }, [currentUser]);
-
-    const empresasDctfwebOptions = useMemo(
-        () => buildDctfwebEmpresaOptions(empresas, declaracoes),
-        [empresas, declaracoes],
+    // ─── ATÉ A VISÃO É DA EMPRESA ATIVA ────────────────────────────────────
+    //
+    // Paulo, 15/08, apontando o print desta aba: *"essas são as ABAS?"* —
+    // depois de ter repetido três vezes que dentro de módulo por cliente a
+    // tela responde pelo cliente ativo. Aqui era o caso mais caro do app: a
+    // lista trazia a carteira inteira com **Transmitir** e **↻ Retificar** por
+    // linha, e transmitir DCTFWeb da empresa errada não se desfaz — fecha a
+    // competência para os outros dois departamentos e obriga retificadora.
+    //
+    // O que fica de fora vai CONTADO (some da tela, nunca da conta) e os KPIs
+    // seguem o MESMO recorte da lista: número de um recorte com lista de outro
+    // é a leitura dupla que já mordeu este projeto várias vezes.
+    const cnpjAtiva = empresaAtivaSessao ? normalizarCnpjDctfweb(empresaAtivaSessao.cnpj) : '';
+    const linhas = useMemo(
+        () => (cnpjAtiva
+            ? declaracoes.filter(d => normalizarCnpjDctfweb(d.empresaCnpj) === cnpjAtiva)
+            : declaracoes),
+        [declaracoes, cnpjAtiva],
     );
+    const foraDaAtiva = declaracoes.length - linhas.length;
+    const resumoDaTela = useMemo(() => ({
+        totalDeclaracoes: linhas.length,
+        pendentes: linhas.filter(d => d.situacao === 'EM_ANDAMENTO').length,
+        transmitidas: linhas.filter(d => d.situacao === 'ATIVA').length,
+    }), [linhas]);
 
     // sincroniza uma empresa escolhida no dropdown, usando ano/mes dos filtros
     const handleSincronizarNova = async () => {
         if (!currentUser) return;
-        const emp = empresasDctfwebOptions.find(e => e.id === empresaNovaSyncId || normalizarCnpjDctfweb(e.cnpj) === empresaNovaSyncId);
-        if (!emp) { onShowToast?.('Selecione uma empresa.'); return; }
+        // AÇÃO É SEMPRE NA ATIVA. O dropdown daqui era o segundo caminho para
+        // escolher empresa dentro de um módulo por cliente — e sincronizar
+        // puxa dado do SERPRO em nome de um CNPJ.
+        const alvo = empresaAtivaSessao;
+        if (!alvo) { onShowToast?.('Ative uma empresa no topo (⇄) para sincronizar.'); return; }
+        const emp = { id: alvo.id, nome: alvo.nome, cnpj: alvo.cnpj };
         if (!mesFiltro) { onShowToast?.('Selecione o mes nos filtros para sincronizar.'); return; }
         const cnpjLimpo = normalizarCnpjDctfweb(emp.cnpj);
         setSyncingEmpresa(cnpjLimpo);
@@ -111,8 +114,10 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         try {
             const [r, lista] = await Promise.all([
                 getResumo(currentUser),
+                // Sem `empresaCnpj`: a lista vem da carteira e o recorte é
+                // feito em memória — é o que permite CONTAR o que ficou fora.
+                // Filtrando no servidor, "fora desta tela" seria sempre 0.
                 listarDeclaracoes(currentUser, {
-                    empresaCnpj: empresaCnpjFiltro || undefined,
                     situacao: situacaoFiltro || undefined,
                     anoPA: anoFiltro || undefined,
                     mesPA: mesFiltro || undefined,
@@ -125,7 +130,7 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         } finally {
             setLoading(false);
         }
-    }, [currentUser, anoFiltro, mesFiltro, situacaoFiltro, empresaCnpjFiltro]);
+    }, [currentUser, anoFiltro, mesFiltro, situacaoFiltro]);
 
     useEffect(() => { carregar(); }, [carregar]);
 
@@ -250,24 +255,39 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 )}
             </div>
 
-            {/* KPIs */}
-            {resumo && (
+            {/* KPIs — do MESMO recorte da lista abaixo, nunca da carteira. */}
+            {(resumo || cnpjAtiva) && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-4">
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Total declarações</p>
-                        <p className="text-2xl font-semibold text-slate-800 dark:text-slate-100 mt-1">{resumo.totalDeclaracoes}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {cnpjAtiva ? 'Declarações desta empresa' : 'Total declarações'}
+                        </p>
+                        <p className="text-2xl font-semibold text-slate-800 dark:text-slate-100 mt-1">
+                            {cnpjAtiva ? resumoDaTela.totalDeclaracoes : resumo!.totalDeclaracoes}
+                        </p>
                     </div>
                     <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4">
                         <p className="text-xs text-amber-700 dark:text-amber-300">Pendentes</p>
-                        <p className="text-2xl font-semibold text-amber-800 dark:text-amber-300 mt-1">{resumo.pendentes}</p>
+                        <p className="text-2xl font-semibold text-amber-800 dark:text-amber-300 mt-1">
+                            {cnpjAtiva ? resumoDaTela.pendentes : resumo!.pendentes}
+                        </p>
                     </div>
                     <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg p-4">
                         <p className="text-xs text-emerald-700 dark:text-emerald-300">Transmitidas</p>
-                        <p className="text-2xl font-semibold text-emerald-800 dark:text-emerald-300 mt-1">{resumo.transmitidas}</p>
+                        <p className="text-2xl font-semibold text-emerald-800 dark:text-emerald-300 mt-1">
+                            {cnpjAtiva ? resumoDaTela.transmitidas : resumo!.transmitidas}
+                        </p>
                     </div>
                     <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-4">
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Empresas c/ pendência</p>
-                        <p className="text-2xl font-semibold text-slate-800 dark:text-slate-100 mt-1">{resumo.empresasComPendente}</p>
+                        {/* Com a tela recortada, "empresas com pendência" seria
+                            sempre 0 ou 1 — número que não informa. No lugar dele
+                            vai o que fica FORA, que é a informação honesta. */}
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {cnpjAtiva ? 'Fora desta tela (outras empresas)' : 'Empresas c/ pendência'}
+                        </p>
+                        <p className="text-2xl font-semibold text-slate-800 dark:text-slate-100 mt-1">
+                            {cnpjAtiva ? foraDaAtiva : resumo!.empresasComPendente}
+                        </p>
                     </div>
                 </div>
             )}
@@ -311,20 +331,13 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         <option value="ATIVA">Transmitida</option>
                     </select>
                 </div>
+                {/* O SELETOR INTERNO SAIU (Paulo: *"tira os seletores
+                    internos"*). Ele oferecia "Todas as empresas" numa tela com
+                    Transmitir por linha — dois caminhos para a mesma escolha,
+                    e o mais perigoso era o padrão. Trocar de empresa é no ⇄ do
+                    topo, que é o mesmo gesto em todo o app. */}
                 <div className="flex-1 min-w-[220px]">
-                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Empresa</label>
-                    <select
-                        value={empresaCnpjFiltro}
-                        onChange={e => setEmpresaCnpjFiltro(e.target.value)}
-                        className="w-full border dark:border-slate-600 rounded px-2 py-1 text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100"
-                    >
-                        <option value="">Todas as empresas</option>
-                        {empresasDctfwebOptions.map(emp => (
-                            <option key={emp.id} value={normalizarCnpjDctfweb(emp.cnpj)}>
-                                {emp.nome}
-                            </option>
-                        ))}
-                    </select>
+                    <EmpresaAtivaFixa rotulo="Declarações da empresa" />
                 </div>
                 <button
                     onClick={carregar}
@@ -355,12 +368,15 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         </tr>
                     </thead>
                     <tbody className="divide-y">
-                        {declaracoes.length === 0 && !loading && (
+                        {linhas.length === 0 && !loading && (
                             <tr><td colSpan={6} className="text-center text-slate-500 dark:text-slate-400 py-6">
-                                Nenhuma declaração encontrada. Use "Sincronizar todas Lucro" no menu lateral ou ajuste filtros.
+                                {empresaAtivaSessao
+                                    ? <>Nenhuma declaração de <strong>{empresaAtivaSessao.nome}</strong> nestes filtros.
+                                        Sincronize a empresa no bloco abaixo ou amplie o Ano/Mês.</>
+                                    : <>Nenhuma declaração encontrada. Use "Sincronizar todas Lucro" no menu lateral ou ajuste filtros.</>}
                             </td></tr>
                         )}
-                        {declaracoes.map(d => (
+                        {linhas.map(d => (
                             <tr key={d.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/40">
                                 <td className="px-4 py-2 font-mono text-xs">{d.empresaCnpj}</td>
                                 <td className="px-4 py-2">{formatPaLabel(d.anoPA, d.mesPA)}</td>
@@ -436,6 +452,15 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 </table>
             </div>
 
+            {foraDaAtiva > 0 && (
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-3">
+                    {foraDaAtiva} declaração(ões) de outras empresas da carteira ficam fora desta tela — ela responde
+                    pela <strong>empresa ativa</strong>, porque aqui se <strong>transmite</strong> e transmitir na
+                    empresa errada não se desfaz. Para vê-las, troque a empresa no topo (⇄) ou use a Rotina do Mês,
+                    que é a visão da carteira.
+                </p>
+            )}
+
             {/* Sincronizar DCTFWeb de uma empresa nova (acao esporadica — fica ao fim,
                 fora do fluxo principal de visualizar/transmitir declaracoes). */}
             <details className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg">
@@ -444,35 +469,15 @@ const DCTFWebDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 </summary>
                 <div className="p-4 flex flex-wrap gap-3 items-end border-t">
                     <div className="flex-1 min-w-[260px]">
-                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
-                            Empresa
-                        </label>
-                        <select
-                            value={empresaNovaSyncId}
-                            onChange={e => setEmpresaNovaSyncId(e.target.value)}
-                            className="w-full border dark:border-slate-600 rounded px-2 py-1 text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100"
-                        >
-                            <option value="">Selecione a empresa...</option>
-                            {empresasDctfwebOptions.map(emp => (
-                                <option key={emp.id} value={emp.id}>{emp.nome}</option>
-                            ))}
-                            {empresasDctfwebOptions.length === 0 && (
-                                <option value="" disabled>Nenhuma empresa de Lucro disponivel</option>
-                            )}
-                        </select>
+                        <EmpresaAtivaFixa rotulo="Sincronizar a empresa" semTrocar />
                     </div>
                     <button
                         onClick={handleSincronizarNova}
-                        disabled={!empresaNovaSyncId || !!syncingEmpresa || empresasDctfwebOptions.length === 0}
+                        disabled={!empresaAtivaSessao || !!syncingEmpresa}
                         className="px-4 py-1.5 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700 disabled:opacity-50"
                     >
                         {syncingEmpresa ? 'Sincronizando...' : 'Sincronizar DCTFWeb'}
                     </button>
-                    {empresasErro && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400 w-full">
-                            Cadastro completo indisponivel; exibindo empresas ja sincronizadas.
-                        </p>
-                    )}
                     <p className="text-xs text-slate-400 dark:text-slate-500 w-full">
                         Usa o Ano e o Mes selecionados nos filtros acima.
                     </p>

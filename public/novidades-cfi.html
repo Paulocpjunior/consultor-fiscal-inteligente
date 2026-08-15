@@ -68,11 +68,79 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 04/08/2026 · leitura de 5 minutos</p>
+            <p>Departamento Fiscal · atualizado em 15/08/2026 · leitura de 5 minutos</p>
         </div>
     </div>
 </header>
 <main>
+
+<section>
+    <h2>🆕 O que mudou agora (15/08) — leia esta parte primeiro</h2>
+
+    <h3>1. 🎯 O mês começa em ATIVAR EMPRESA</h3>
+    <p>Depois do login o CFI pede para você <strong>ativar a empresa</strong> em que vai trabalhar.
+    A empresa ativa fica num <strong>chip no topo</strong> da tela, sempre visível, com o botão
+    <strong>⇄ Trocar</strong>. Não é enfeite: é ela que define o que você vê e o que você pode fazer.</p>
+    <div class="ganho">💡 <strong>O que você ganha:</strong> dentro de um módulo por cliente
+    (Varredura de IPI, Cotas do mês, Trimestrais, NFTS…) <strong>a lista também é só da empresa
+    ativa</strong>. Acabou o risco de fazer o lançamento certo na empresa errada porque a tela
+    trouxe outro cliente na linha de baixo.</div>
+    <div class="onde">📍 <strong>Só quero consultar tabela:</strong> na tela de ativação existe o
+    botão <strong>📖 Entrar só para consultas</strong> — visões de carteira e consultas de tabela
+    abrem sem ativar ninguém. Se dali você clicar num cliente, o app pede a ativação <em>na hora</em>
+    e leva você ao destino que você tinha escolhido.</div>
+    <div class="alerta">⚠️ Quando um cliente ficar de fora do recorte, o app <strong>conta</strong> quantos
+    ficaram (“outras N empresas têm IPI — troque no ⇄ ou use a Rotina do Mês”). Número sem lista, e
+    lista sem número, é o que faz a gente ler errado.</div>
+
+    <h3>2. ✍️ Lançar nota sem XML — a terceira porta</h3>
+    <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → aba <strong>Importar</strong> →
+    <strong>✍️ Lançar nota sem XML</strong></div>
+    <p>Importação automática, importação manual e <strong>lançamento à mão</strong> têm a mesma
+    finalidade: abastecer o sistema. A nota digitada entra em <strong>documentos fiscais</strong>, no
+    mesmo trilho dos XMLs — conta em livros, DIPAM, SPED, relatórios e guias.</p>
+    <div class="ganho">💡 <strong>Se você souber a chave de 44 dígitos, informe.</strong> Quando o XML
+    for capturado depois, ele <strong>substitui</strong> o seu lançamento no mesmo documento — nada
+    duplica, e o XML sempre vence a digitação.</div>
+    <div class="alerta">⚠️ Na <strong>entrada</strong> lance o CFOP da <strong>escrituração</strong>
+    (1xxx/2xxx), não o CFOP da nota do fornecedor. Se você digitar 5102, o app recusa e já diz que
+    ele <em>vira 1102</em>.</div>
+
+    <h3>3. 🚦 Farol “ficha × documentos”: imposto digitado sem nota por trás</h3>
+    <p>Se a ficha tem imposto apurado e a competência está <strong>sem nenhum documento</strong> no
+    banco, a linha acende <strong>vermelho</strong> dizendo “apuração sem lastro” e aponta as três
+    saídas: destravar a captura, importar os XMLs, ou lançar a nota à mão.</p>
+    <div class="alerta">⚠️ <strong>Verde aqui é existência, não conferência de valor.</strong> Quem
+    confere o valor do IPI é o E510 (aba 🪞 CFI × E-Fiscal). Está escrito na própria frase do farol.</div>
+
+    <h3>4. 📊 Relatório de entrada agora mostra o CFOP da escrituração</h3>
+    <p>Tudo o que o cliente compra chega com o <strong>CFOP de saída do fornecedor</strong>. Os
+    relatórios de entrada passaram a exibir o CFOP <strong>correlacionado</strong> (o 5102 do
+    fornecedor aparece como 1102/1101/1556, conforme a atividade), com a <strong>origem</strong> da
+    natureza ao lado — cadastro, indicador da nota ou padrão.</p>
+
+    <h3>5. 🌾 FUNRURAL: a linha agora diz QUAL nota ela é</h3>
+    <p>Na compra de produtor rural existem <strong>duas notas da mesma entrada</strong>. A linha do
+    FUNRURAL passou a dizer qual está na sua frente: 🟢 <strong>nota própria de entrada (art. 136)</strong> —
+    é a que se escritura — ou 🟡 <strong>NF-e do produtor sem nota própria que a cubra</strong>.</p>
+    <div class="alerta">⚠️ O botão <strong>✕ tirar do FUNRURAL</strong> tira da <em>conta</em>, não da
+    <em>tela</em>: o produtor volta num bloco próprio, com o <strong>↩ desfazer</strong> e com
+    <strong>quanto voltaria ao total</strong> do lado. Reverter imposto sem ver o número é decidir no escuro.</div>
+
+    <h3>6. 🧮 Cotas do trimestral: uma por mês, e sai no dia 1º</h3>
+    <p>Cada cota é emitida <strong>no mês do vencimento dela</strong>, porque a SELIC do período só
+    existe depois — cota gerada adiantada sai <strong>a menor</strong> e deixa débito no cliente. Ela
+    fica na aba <strong>🧮 Cotas do mês</strong> (card DCTFWeb).</p>
+    <div class="ganho">💡 A cota nasce no <strong>dia 1º do mês dela</strong>, não no dia do vencimento:
+    quem vence em 31/08 pode ser gerado e enviado em 01/08. Um mês inteiro de folga.</div>
+
+    <h3>7. 📥 “Já importado” virou uma frase que resolve</h3>
+    <p>Arrastar um XML que já existe não devolve mais só “já importado”. Agora o app diz <strong>o
+    estado</strong> — está aqui, está em <strong>outra empresa</strong> (vermelho: a apuração da certa
+    fica a menor) ou estava <strong>excluído</strong> — e oferece a saída. Quando o documento gravado
+    estiver errado, marque <strong>↻ Substituir os que já estão no banco</strong> antes de soltar os
+    arquivos; a linha sai escrita como <strong>SUBSTITUÍDA</strong>, com quem e quando.</p>
+</section>
 
 <section>
     <h2>Resumo em uma frase</h2>

@@ -237,28 +237,42 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                             🤖 Motor de IA (Gemini)
                         </h4>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                            O app usa os aliases <code>gemini-pro-latest</code> / <code>gemini-flash-latest</code>, que o
-                            Google promove sozinho para a versão mais nova da conta — atualização de versão
-                            <strong> não exige deploy</strong>. Esta sonda pergunta à API qual versão <strong>concreta</strong> está
-                            respondendo agora.
+                            O app é <strong>pinado na família {geminiVersao?.familiaAlvo || '3.7'}</strong>. O ID não é escrito à
+                            mão no código: o servidor <strong>pergunta à conta</strong> quais modelos existem e escolhe o melhor
+                            da família — se ela ainda não estiver liberada, o app segue no alias funcionando e diz isso aqui.
+                            Depois a sonda pergunta qual versão <strong>concreta</strong> respondeu.
                         </p>
                         <button
                             onClick={sondarGemini}
                             disabled={sondandoGemini}
                             className="mt-2 inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-900/30 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-semibold hover:bg-violet-100 dark:hover:bg-violet-900/50 disabled:opacity-50"
                         >
-                            {sondandoGemini ? '⏳ perguntando à API…' : '🔎 Qual versão está respondendo?'}
+                            {sondandoGemini ? '⏳ perguntando à API…' : '🔎 Repinar e conferir a versão'}
                         </button>
                         {geminiVersao && (
                             <div className="mt-2 text-[11px] space-y-1">
                                 {geminiVersao.ok ? (
                                     <>
-                                        {[geminiVersao.pro, geminiVersao.flash].map((m: any) => (
-                                            <p key={m.alias} className={m.respondeu ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
-                                                {m.respondeu ? '✓' : '✕'} <code>{m.alias}</code> →{' '}
-                                                <strong>{m.modelVersion || m.erro || 'sem versão na resposta'}</strong>
-                                            </p>
-                                        ))}
+                                        <p className={geminiVersao.alvoEncontrado
+                                            ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
+                                            : 'text-amber-700 dark:text-amber-400 font-semibold'}>
+                                            {geminiVersao.alvoEncontrado
+                                                ? `✓ Pinado na família ${geminiVersao.familiaAlvo}.`
+                                                : `⚠ A família ${geminiVersao.familiaAlvo} ainda não aparece para esta conta — o app segue no alias.`}
+                                        </p>
+                                        {[geminiVersao.pro, geminiVersao.flash].map((m: any, i: number) => {
+                                            const orig = (i === 0 ? geminiVersao.resolucao?.pro : geminiVersao.resolucao?.flash);
+                                            return (
+                                                <p key={m.modelo} className={m.respondeu ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+                                                    {m.respondeu ? '✓' : '✕'} <code>{m.modelo}</code> →{' '}
+                                                    <strong>{m.modelVersion || m.erro || 'sem versão na resposta'}</strong>
+                                                    {/* null = a sonda não respondeu. Não é "está atrasado". */}
+                                                    {m.naFamiliaAlvo === true && ' · na família alvo'}
+                                                    {m.naFamiliaAlvo === false && ` · fora da família ${geminiVersao.familiaAlvo}`}
+                                                    {orig?.motivo && <span className="block text-slate-500 dark:text-slate-400">{orig.motivo}</span>}
+                                                </p>
+                                            );
+                                        })}
                                         <p className="text-slate-500 dark:text-slate-400">{geminiVersao.comoTrocar}</p>
                                     </>
                                 ) : (
