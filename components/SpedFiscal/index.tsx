@@ -14,6 +14,8 @@
 import React, { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import type { User } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
+import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
+import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import { auth } from '../../services/firebaseConfig';
 import { formatCnpjCpf } from '../../services/xmlParserService';
 
@@ -61,7 +63,10 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [spedTab, setSpedTab] = useState<SpedTab>('gerar');
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
     const [loadingEmpresas, setLoadingEmpresas] = useState(true);
-    const [empresaId, setEmpresaId] = useState<string>('');
+    // A EMPRESA É A ATIVA DA SESSÃO (Paulo, 15/08 — "tira os seletores
+    // internos"): módulo por-cliente não pergunta de novo em qual cliente
+    // está. O cartão fixo diz, e a troca é uma só, no topo.
+    const empresaId = useEmpresaAtivaId();
     const [competencia, setCompetencia] = useState<string>(getCompetenciaAtual());
     const [escopo, setEscopo] = useState<Escopo>('mensal');
     const [gerando, setGerando] = useState(false);
@@ -78,7 +83,6 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             if (alive) {
                 setEmpresas(list);
                 setLoadingEmpresas(false);
-                if (list.length > 0 && !empresaId) setEmpresaId(list[0].id);
             }
         });
         return () => { alive = false; };
@@ -620,22 +624,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 ) : empresas.length === 0 ? (
                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nenhuma empresa cadastrada.</p>
                 ) : (
-                    <select
-                        value={empresaId}
-                        onChange={e => { setEmpresaId(e.target.value); setMensagem(null); }}
-                        className="w-full p-3 text-sm rounded-lg outline-none"
-                        style={{
-                            background: 'var(--bg-card)',
-                            border: '1px solid var(--border-default)',
-                            color: 'var(--text-primary)',
-                        }}
-                    >
-                        {empresas.map(e => (
-                            <option key={e.id} value={e.id}>
-                                {e.nome} — {formatCnpjCpf(e.cnpj)} ({e.fonte})
-                            </option>
-                        ))}
-                    </select>
+                    <EmpresaAtivaFixa rotulo="Empresa" />
                 )}
 
                 {isSimples && (
@@ -789,22 +778,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 ) : empresas.length === 0 ? (
                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nenhuma empresa cadastrada.</p>
                 ) : (
-                    <select
-                        value={empresaId}
-                        onChange={e => { setEmpresaId(e.target.value); setMensagemContrib(null); }}
-                        className="w-full p-3 text-sm rounded-lg outline-none"
-                        style={{
-                            background: 'var(--bg-card)',
-                            border: '1px solid var(--border-default)',
-                            color: 'var(--text-primary)',
-                        }}
-                    >
-                        {empresas.map(e => (
-                            <option key={e.id} value={e.id}>
-                                {e.nome} — {formatCnpjCpf(e.cnpj)} ({e.fonte})
-                            </option>
-                        ))}
-                    </select>
+                    <EmpresaAtivaFixa rotulo="Empresa" />
                 )}
 
                 {isSimples && (

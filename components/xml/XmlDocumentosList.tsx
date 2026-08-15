@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { localizarDocumento, type DocLocalizado } from '../../services/saeNfceService';
 import { getView } from '../../services/xmlDocumentoView';
 import type { User, DocumentoFiscal } from '../../types';
+import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
 import {
     listDocumentos,
     applyDocumentosFilters,
@@ -57,7 +58,13 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
     const [allDocs, setAllDocs] = useState<DocumentoFiscal[]>([]);
     const [catalogoEmpresas, setCatalogoEmpresas] = useState<EmpresaXmlOption[]>([]);
     const [loading, setLoading] = useState(true);
-    const [filters, setFilters] = useState<ListDocumentosFilters>({});
+    // NASCE na empresa ATIVA (15/08) — a lista abria em "todas" e a pessoa
+    // tinha que escolher o cliente que JÁ tinha ativado. Limpar o filtro para
+    // buscar uma chave na base inteira continua a um clique.
+    const { empresa: empresaAtivaSessao } = useEmpresaAtiva();
+    const [filters, setFilters] = useState<ListDocumentosFilters>(
+        () => (empresaAtivaSessao?.cnpj ? { empresaCnpj: empresaAtivaSessao.cnpj } : {}),
+    );
     const [busca, setBusca] = useState('');
     // Quando a busca por nº/chave não acha NADA com os filtros atuais, o app
     // não pode dar de ombros: a nota pode estar em OUTRA empresa (importação

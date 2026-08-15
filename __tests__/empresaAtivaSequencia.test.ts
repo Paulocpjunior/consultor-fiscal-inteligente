@@ -287,3 +287,35 @@ describe('EMITIR guia exige que a empresa da linha seja a ATIVA', () => {
         expect(fonte).toMatch(/ativar p\/ emitir/);
     });
 });
+
+describe('os painéis por-cliente que RESTAVAM não perguntam mais a empresa', () => {
+    // Segunda leva (15/08, "pode continuar na sua sequência"): SPED Fiscal
+    // tinha DOIS selects crus e — pior — abria na PRIMEIRA empresa da lista em
+    // ordem alfabética (`setEmpresaId(list[0].id)`): o módulo nascia apontando
+    // para um cliente qualquer, que é o "primeiro decide" de sempre.
+    it.each([
+        'components/SpedFiscal/index.tsx',
+        'components/SpedFiscal/ConciliarFaturamento.tsx',
+        'components/SpedFiscal/CruzarComCapturadas.tsx',
+    ])('%s: empresa vem da sessão, sem auto-seleção da primeira', (arquivo) => {
+        const fonte = semComentarios(readFileSync(join(RAIZ, arquivo), 'utf8'));
+        expect(fonte).toMatch(/useEmpresaAtivaId\(\)/);
+        expect(fonte).not.toMatch(/setEmpresaId\(list\[0\]\.id\)/);
+        expect(fonte).not.toMatch(/<select[\s\S]{0,200}value=\{empresaId\}/);
+    });
+
+    it('Dashboard e lista de XMLs NASCEM na ativa — abrir largado era pedir de novo', () => {
+        const dash = semComentarios(readFileSync(join(RAIZ, 'components/xml/XmlDashboard.tsx'), 'utf8'));
+        expect(dash).toMatch(/useState\(empresaAtivaId \|\| ''\)/);
+        const lista = semComentarios(readFileSync(join(RAIZ, 'components/xml/XmlDocumentosList.tsx'), 'utf8'));
+        expect(lista).toMatch(/empresaCnpj: empresaAtivaSessao\.cnpj/);
+    });
+
+    it('mas o Exportar SAGE MANTÉM o seletor — "vazio = todas" é filtro de lote, não pergunta', () => {
+        // Eu migrei e reverti: o seletor de lá exporta a carteira em lote pela
+        // ponte. Tirar o "todas" quebraria o fluxo — filtro de carteira fica.
+        const sage = readFileSync(join(RAIZ, 'components/xml/XmlExportarIobSage.tsx'), 'utf8');
+        expect(sage).toMatch(/EmpresaSearchSelect/);
+        expect(sage).toMatch(/vazio = todas/i);
+    });
+});
