@@ -85,7 +85,29 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
     };
     useEffect(() => { carregar(false); /* eslint-disable-next-line */ }, [competencia]);
 
-    const linhas = useMemo(() => data?.linhas || [], [data]);
+    // ─── ATÉ A VISÃO É DA EMPRESA ATIVA — decisão do Paulo, reafirmada ──────
+    //
+    // Eu tinha deixado a lista da carteira inteira e travado só a AÇÃO; ele
+    // repetiu com o print: *"mesmo problema: empresa ativa EXPERTE, e você
+    // traz FASTWELD"*. Dentro de um módulo por cliente, a tela responde pelo
+    // cliente ativo — ponto. O que fica das outras é a CONTAGEM (some da
+    // tela, nunca da conta): esconder sem dizer faria "0 com IPI" parecer
+    // resposta da carteira, e ela é só da ativa.
+    const todas = useMemo(() => data?.linhas || [], [data]);
+    const linhas = useMemo(
+        () => (empresaAtivaSessao ? todas.filter(l => l.empresaId === empresaAtivaSessao.id) : todas),
+        [todas, empresaAtivaSessao],
+    );
+    const foraDaAtiva = todas.length - linhas.length;
+    // Os KPIs seguem o MESMO recorte da lista — número de um recorte com
+    // lista de outro foi a leitura dupla que já mordeu este projeto.
+    const resumoDaTela = useMemo(() => ({
+        comIpi: linhas.filter(l => l.ipiApurado > 0).length,
+        ipiTotalApurado: linhas.reduce((s2, l) => s2 + (l.ipiApurado || 0), 0),
+        pronta: linhas.filter(l => l.status === 'pronta').length,
+        precisaLancamento: linhas.filter(l => l.status === 'precisa_lancamento').length,
+        ipiTotalEmRisco: linhas.filter(l => l.status === 'precisa_lancamento').reduce((s2, l) => s2 + (l.ipiApurado || 0), 0),
+    }), [linhas]);
     const card: React.CSSProperties = { background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' };
 
     return (
@@ -100,11 +122,11 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
                 </p>
                 {data && (
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
-                        <Kpi label="Com IPI na competência" value={String(data.resumo.comIpi)} />
-                        <Kpi label="IPI total apurado" value={brl(data.resumo.ipiTotalApurado)} />
-                        <Kpi label="Prontas" value={String(data.resumo.pronta)} accent={data.resumo.pronta > 0 ? 'success' : undefined} />
-                        <Kpi label="Precisam e-CAC 1x" value={String(data.resumo.precisaLancamento)} accent={data.resumo.precisaLancamento > 0 ? 'danger' : 'success'} />
-                        <Kpi label="IPI em risco" value={brl(data.resumo.ipiTotalEmRisco)} accent={data.resumo.ipiTotalEmRisco > 0 ? 'danger' : 'success'} />
+                        <Kpi label="Com IPI na competência" value={String(resumoDaTela.comIpi)} />
+                        <Kpi label="IPI total apurado" value={brl(resumoDaTela.ipiTotalApurado)} />
+                        <Kpi label="Prontas" value={String(resumoDaTela.pronta)} accent={resumoDaTela.pronta > 0 ? 'success' : undefined} />
+                        <Kpi label="Precisam e-CAC 1x" value={String(resumoDaTela.precisaLancamento)} accent={resumoDaTela.precisaLancamento > 0 ? 'danger' : 'success'} />
+                        <Kpi label="IPI em risco" value={brl(resumoDaTela.ipiTotalEmRisco)} accent={resumoDaTela.ipiTotalEmRisco > 0 ? 'danger' : 'success'} />
                     </div>
                 )}
             </div>
@@ -143,10 +165,22 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
             )}
             {loading && <div className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Carregando…</div>}
 
+            {/* O estado vazio responde pela ATIVA — "nenhuma empresa" quando a
+                tela só olha uma seria mentira de recorte. E o que ficou fora
+                vai CONTADO: some da tela, nunca da conta. */}
             {!loading && data && linhas.length === 0 && (
                 <div className="p-6 text-center text-sm rounded-xl" style={card}>
-                    Nenhuma empresa Lucro com IPI apurado em {competencia}. 🎉
+                    {empresaAtivaSessao
+                        ? <><strong>{empresaAtivaSessao.nome}</strong> não tem IPI apurado em {competencia}. 🎉</>
+                        : <>Nenhuma empresa Lucro com IPI apurado em {competencia}. 🎉</>}
                 </div>
+            )}
+            {!loading && data && foraDaAtiva > 0 && (
+                <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
+                    {foraDaAtiva} outra(s) empresa(s) da carteira têm IPI em {competencia} e ficam fora desta tela —
+                    ela responde pela <strong>empresa ativa</strong>. Para vê-las, troque a empresa no topo
+                    (⇄) ou use a Rotina do Mês, que é a visão da carteira.
+                </p>
             )}
 
             {!loading && linhas.length > 0 && (

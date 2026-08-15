@@ -88,10 +88,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `DISPENSAM_EMPRESA_ATIVA` (consultas de tabela + visões de carteira) existia
   e o portão barrava TUDO; virou o botão "📖 Entrar só para consultas", e card
   de cliente clicado no modo consulta pede ativação NA HORA guardando o
-  destino; (3) **lista de triagem com botão que ESCREVE em linha de outra
-  empresa** (EXPERTE ativa, ♻️ na linha da FASTWELD): a visão continua da
-  carteira toda, mas a AÇÃO só existe na linha da ativa — nas outras vira
-  "⚡ Ativar X para agir aqui", pelo caminho único. Seletor interno de painel
+  destino; (3) **lista de triagem trazendo OUTRA empresa dentro de módulo
+  por-cliente** (EXPERTE ativa, FASTWELD na Varredura IPI): eu travei só a
+  AÇÃO e mantive a visão da carteira — ele REPETIU com print ("mesmo
+  problema") e a decisão é dele: **dentro de módulo por cliente, até a VISÃO
+  é da ativa**. Lista e KPIs filtram pela ativa NO MESMO recorte (número de um
+  recorte com lista de outro é a leitura dupla de sempre); o que fica de fora
+  vai CONTADO ("N outras empresas têm IPI — troque no ⇄ ou use a Rotina");
+  emissão (Cotas/Trimestrais) tem a mesma guarda — e "ninguém emite em série,
+  já tínhamos falado" (é a regra de 28/07, guia UMA A UMA). Seletor interno de painel
   por-cliente SAIU (`EmpresaAtivaFixa` no lugar); ficam com seletor: filtro de
   carteira, config de admin e drill-down de tela de carteira (nascendo na
   ativa). PENDENTE DE DECISÃO DO PAULO: aplicar a mesma guarda nas abas que

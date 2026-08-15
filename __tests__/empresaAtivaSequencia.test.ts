@@ -256,10 +256,18 @@ describe('lista de carteira não deixa AGIR em linha de outra empresa', () => {
         expect(painel).toMatch(/✓ ativa/);
     });
 
-    it('a varredura continua vendo a carteira toda — a trava é na AÇÃO, não na visão', () => {
-        // Filtrar a lista pela ativa mataria a triagem (que industria está
-        // pronta pro MIT?) — trocaria um erro por outro.
-        expect(painel).not.toMatch(/linhas\.filter\([^)]*empresaAtivaSessao/);
+    it('ATÉ A VISÃO é da empresa ativa — decisão do Paulo, reafirmada com print', () => {
+        // Meu teste anterior afirmava o CONTRÁRIO ("a trava é na ação, não na
+        // visão") — era a minha leitura, e o dono a derrubou repetindo o caso:
+        // "empresa ativa EXPERTE, e você traz FASTWELD". Dentro de módulo por
+        // cliente, a lista filtra pela ativa; o que fica das outras é a
+        // CONTAGEM, para o recorte não passar por resposta da carteira.
+        expect(painel).toMatch(/todas\.filter\(l => l\.empresaId === empresaAtivaSessao\.id\)/);
+        expect(painel).toMatch(/foraDaAtiva/);
+        // E os KPIs seguem o MESMO recorte da lista — número de um recorte com
+        // lista de outro é a leitura dupla que este projeto mais pagou.
+        expect(painel).toMatch(/resumoDaTela/);
+        expect(painel).not.toMatch(/data\.resumo\.comIpi/);
     });
 });
 
