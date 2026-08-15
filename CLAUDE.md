@@ -110,6 +110,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
   lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
   que faz alguém ler "0 pendentes" como resposta da carteira.
+- **🚨 MATA-BURRO: LIGUEI O CADASTRO NO ALERTA E ESQUECI DE LIGAR NA ENTREGA**
+  (15/08, defeito MEU, achado horas depois de subir). O calendário municipal
+  alimentava a COBERTURA da Rotina (o âmbar) e **não** alimentava o cron que
+  CRIA a tarefa — que continuava chamando `obrigacoesAplicaveis(regime, comp)`,
+  a lista genérica, que não conhece município nem UF.
+  O efeito seria PERVERSO e só apareceria depois: ao cadastrar a cidade, o aviso
+  *"o ISS não vira tarefa automática"* **SUMIRIA** e a tarefa continuaria não
+  existindo. **Trocar o alerta pelo silêncio é pior que não ter cadastrado** —
+  o mês fecharia sem o ISS, sem ninguém avisando, e a pessoa que cadastrou teria
+  toda razão de achar que resolveu.
+  O cron passou a usar `mesDoCliente` (que resolve o município e conhece a UF);
+  federais e estaduais saem idênticos, o que muda é o municipal APARECER quando
+  a cidade tem calendário. `tarefasMunicipais` vai contado no log — entrega nova
+  que não aparece no log é entrega que ninguém sabe que aconteceu.
+  **REGRA QUE FICA: cadastro que APAGA um alerta tem que ENTREGAR o que o
+  alerta cobrava — no mesmo PR.** Alerta que some sem a entrega é a pior
+  combinação possível: parece progresso e é regressão.
+  ⚠️ E a terceira chance do descasamento `MM/AAAA` × `AAAA-MM` estava aqui — o
+  cron fala MM/AAAA, igual ao catálogo. **Conferido, não suposto**, e travado
+  por teste.
 - **A CONSULTA MENSAL DE PRAZO ENTROU — proposta COM FONTE, nunca escrita
   direta** (15/08, fechando o desenho do Paulo de 11/08). Com o calendário
   municipal virando cadastro, a pergunta seguinte é quem preenche ~N cidades à
