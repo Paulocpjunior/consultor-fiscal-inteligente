@@ -211,7 +211,24 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
                                             </div>
                                         </td>
                                         <td className="px-4 py-2" style={{ color: 'var(--text-secondary)' }}>{l.regime}</td>
-                                        <td className="px-4 py-2 text-right font-mono font-semibold" style={{ color: 'var(--text-primary)' }}>{brl(l.ipiApurado)}</td>
+                                        <td className="px-4 py-2 text-right font-mono font-semibold" style={{ color: 'var(--text-primary)' }}>
+                                            {brl(l.ipiApurado)}
+                                            {/* FICHA × DOCUMENTOS: o número acima é DIGITADO. Este
+                                                farol diz se existe documento por trás — foi a
+                                                pergunta do caso EXPERTE ("geramos o imposto; como
+                                                não houve captura?"), que ninguém tinha como ver. */}
+                                            {l.lastro && l.lastro.situacao !== 'sem-ipi' && (
+                                                <div className={`text-[10px] font-normal text-left mt-0.5 ${
+                                                    l.lastro.cor === 'falha' ? 'text-red-600 dark:text-red-400'
+                                                    : l.lastro.cor === 'ok' ? 'text-emerald-600 dark:text-emerald-400'
+                                                    : 'text-slate-400'
+                                                }`}>
+                                                    {l.lastro.cor === 'falha' ? '✕ ' : l.lastro.cor === 'ok' ? '✓ ' : '· '}
+                                                    {l.lastro.mensagem}
+                                                    {l.lastro.acao && <span className="block">{l.lastro.acao}</span>}
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-2">
                                             <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${cor.badge}`}>{cor.label}</span>
                                         </td>

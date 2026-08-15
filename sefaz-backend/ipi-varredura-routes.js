@@ -24,6 +24,7 @@ import {
 import { getDctfwebProvider, pickIdApuracao, mitPeriodoLabel } from './dctfweb-provider.js';
 import { extrairModeloDebitosMit } from './mit-debitos-builder.js';
 import { relerItensFiscais } from './xml-importer.js';
+import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 
 const router = express.Router();
 
@@ -97,6 +98,30 @@ router.get('/ipi-varredura', requireAdmin, async (req, res) => {
                 modeloPeriodo: null,
                 erroConsulta: null,
             });
+        }
+
+        // ─── FAROL FICHA × DOCUMENTOS (15/08, caso EXPERTE) ─────────────────
+        //
+        // IPI digitado na ficha sem documento no banco era INVISÍVEL — ficha e
+        // escrituração são trilhos independentes e nada cruzava os dois. A
+        // contagem roda só para quem tem IPI (indústrias, poucas), via
+        // agregação count() — não baixa documento nenhum. Falha de contagem
+        // vira null, NUNCA zero: zero falso acenderia "sem lastro" com o banco
+        // cheio, o alarme falso que ensina a ignorar o farol.
+        for (const l of linhas) {
+            if (l.ipiApurado <= 0) { l.documentosNaCompetencia = null; l.lastro = conferirFichaContraDocumentos({ ipiFicha: 0, documentos: null }); continue; }
+            let docs = null;
+            try {
+                const agg = await db.collection('documentos_fiscais')
+                    .where('empresaId', '==', l.empresaId)
+                    .where('competencia', '==', competencia)
+                    .count().get();
+                docs = agg.data().count;
+            } catch (e) {
+                console.warn(`[ipi-varredura] contagem de docs falhou (${l.nome}):`, e.message);
+            }
+            l.documentosNaCompetencia = docs;
+            l.lastro = conferirFichaContraDocumentos({ ipiFicha: l.ipiApurado, documentos: docs });
         }
 
         // Fase MIT — só para quem tem IPI (indústrias; poucas empresas).
