@@ -241,6 +241,41 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara }) => {
                         </div>
                     )}
 
+                    {/* O QUE O CATÁLOGO ADMITE NÃO SABER.
+                        Esta lista existia pronta e testada desde 11/08 e
+                        NENHUMA tela chamava — função sem botão é código morto
+                        com cara de entrega. Ela fica AQUI, junto do funil, e
+                        não numa aba de admin: é o número desta tela que ela
+                        qualifica. Sem ela o painel diz "N obrigações" sem dizer
+                        que M ficaram fora da conta, e é assim que nasce o "mês
+                        fechado" com obrigação que nunca foi listada. */}
+                    {!!dados.catalogoPendencias?.length && (
+                        <details className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl">
+                            <summary className="px-3 py-2 text-xs font-bold text-amber-800 dark:text-amber-300 cursor-pointer">
+                                ⚠ {dados.catalogoPendencias.length} obrigação(ões) do catálogo ainda não confirmadas —
+                                o que este painel NÃO garante
+                            </summary>
+                            <div className="px-3 pb-3 space-y-1.5">
+                                <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                                    Prazo de obrigação é definido por órgão, e o catálogo só carimba o que foi conferido.
+                                    O que está aqui <strong>não vira tarefa automática</strong> — logo não aparece em
+                                    Vencimentos nem na trilha abaixo. Entregue por fora e não dê o mês por fechado
+                                    pela lista.
+                                </p>
+                                {dados.catalogoPendencias.map((p2) => (
+                                    <div key={p2.obrigacao} className="text-[11px] text-slate-700 dark:text-slate-300">
+                                        <strong>{p2.label}</strong>
+                                        <span className="ml-1 px-1 rounded bg-slate-200 dark:bg-slate-700 text-[10px] uppercase">
+                                            {p2.esfera}
+                                        </span>
+                                        <span className="ml-1 font-mono text-[10px] text-slate-500">{p2.abrangencia}</span>
+                                        <span className="block text-slate-500 dark:text-slate-400">{p2.motivo}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </details>
+                    )}
+
                     <input
                         value={busca}
                         onChange={(e) => setBusca(e.target.value)}

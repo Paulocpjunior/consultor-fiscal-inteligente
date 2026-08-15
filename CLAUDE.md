@@ -110,6 +110,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
   lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
   que faz alguém ler "0 pendentes" como resposta da carteira.
+- **MATA-BURRO: FUNÇÃO PRONTA, TESTADA E SEM NENHUMA TELA — a trava T1 do escopo
+  passou 4 dias escrita e NÃO APLICADA** (15/08). `mesDoCliente` devolve
+  `coberturaIncompleta` desde 11/08, com o comentário no próprio código dizendo
+  *"a etapa 4 não pode dar verde nesse caso (trava T1 do escopo)"* — e NINGUÉM
+  lia a flag. `pendenciasDeConfirmacao()` idem: 9 obrigações que o catálogo
+  admite não conferir, testadas, e ZERO chamadas fora do teste.
+  A cadeia do defeito é a que o próprio escopo descreve: obrigação não vira
+  tarefa ⇒ não aparece em Vencimentos ⇒ não aparece no Guia do mês ⇒ **o farol
+  diz "mês fechado" com obrigação que nunca foi listada**. Hoje isso valia para
+  o **ISS** (prazo é do MUNICÍPIO, e carimbar o de SP seria inventar prazo — são
+  157 empresas de serviço puro) e para o **INSS patronal** (depende da folha,
+  que mora no módulo de DP). Agora a etapa 4 fica ÂMBAR nomeando o que ficou de
+  fora, e o checklist aparece NA ROTINA (junto do número que ele qualifica), não
+  numa aba de admin que ninguém abre.
+  DUAS CAUSAS, DUAS AÇÕES: regime INDEFINIDO se resolve na FICHA; obrigação
+  `proposta` se entrega POR FORA — fundir numa frase só repetiria o erro do
+  "sem movimento" sem causa, então as duas aparecem quando as duas valem.
+  ⚠️ **O SIMPLES NÃO É TRAVADO À TOA**: optante não recolhe ISS próprio (LC 123
+  art. 13, já está no DAS), então `coberturaIncompleta` é false lá — alarme onde
+  não há nada a fazer é o que ensina a ignorar o farol.
+  🐛 **E o teste pegou um defeito MEU na hora**: a Rotina fala `'AAAA-MM'` e o
+  catálogo fala `'MM/AAAA'` — passar direto EXPLODIA. A conversão ficou na
+  FRONTEIRA (mudar o formato do catálogo quebraria o cron que cria o mês
+  inteiro) e a falha **não derruba o painel**: a Rotina responde pela carteira
+  toda, e um throw apagaria a tela de todo mundo por um cadastro torto.
+  **REGRA QUE FICA: flag/checklist que o núcleo produz nasce com o LEITOR no
+  mesmo PR** — é a mesma família do E510 "pronto" que ninguém gerava, da rota do
+  fechamento sem botão (13/08) e do selo das Novidades apagado.
 - **MATA-BURRO: NÚMERO DIGITADO SEM DOCUMENTO POR TRÁS — e a ROTINA pintava de
   VERDE** (15/08, caso EXPERTE 06/2026 — Paulo: *"antes de fazer qualquer
   captura, repare que a empresa teve IPI, geramos o imposto e relatório: como

@@ -120,13 +120,15 @@ export function acharApuracaoDaCompetencia(empresa, competencia) {
  * @param {object}  [p.dipam]        { produtores, indefinidos } — compras de
  *   produtor rural detectadas no mês. Entra na etapa de OBRIGAÇÕES porque é lá
  *   que a DIPAM é entregue (ficha da GIA + Registro 1400 da EFD).
+ * @param {object} [p.cobertura]   `gerarObrigacoesDoRegime(regime, competencia)` —
+ *   o próprio catálogo dizendo se cobre este cliente (trava T1 do escopo).
  * @param {object} [p.iss]         ISS de SP capital daquela empresa, vindo do
  *   MESMO núcleo do painel 🏛️ ISS SP (montarPainelIssCarteira). Ver
  *   `aplicarIssNaRotina` logo abaixo.
  */
 export function montarRotinaFiscal({
     empresa, competencia, documentos = [], apuracao = null, tarefas = [], envios = [], capturaAtiva = true,
-    dipam = null, iss = null, agoraMs = Date.now(),
+    dipam = null, iss = null, cobertura = null, agoraMs = Date.now(),
 }) {
     const docs = documentos || [];
     const entradas = docs.filter((d) => d.direcao === 'entrada').length;
@@ -280,6 +282,49 @@ export function montarRotinaFiscal({
     } else {
         eObrigacoes = etapa('obrigacoes', 'concluida', `${tarefas.length} obrigação(ões) entregue(s).`, null,
             { concluidas, total: tarefas.length, abertas: [], prazo: null, atrasadas: 0, semData: 0 });
+    }
+
+    // 🚨 TRAVA T1 DO ESCOPO: O CATÁLOGO ADMITE QUE NÃO COBRE ESTE CLIENTE.
+    //
+    // `gerarObrigacoesDoRegime` já devolve `coberturaIncompleta` desde 11/08,
+    // com o comentário dizendo "a etapa 4 não pode dar verde nesse caso" — e
+    // NINGUÉM lia a flag. A trava estava escrita e não aplicada: regra escrita
+    // sem trava é regra que envelhece em silêncio, igual ao selo das Novidades.
+    //
+    // O que ela cobre são os dois casos em que o app SABE que está incompleto:
+    //  · regime INDEFINIDO — `lucro_empresas` sem `regimePadrao`, que recebe só
+    //    o comum aos dois regimes (adivinhar regime é adivinhar imposto);
+    //  · obrigação PROPOSTA — existe, mas depende de informação que o app não
+    //    tem. Hoje: o ISS (calendário do MUNICÍPIO, e não existe "dia do ISS"
+    //    nacional — carimbar o de SP seria inventar prazo) e o INSS patronal
+    //    (depende da folha). São 157 empresas de serviço puro na carteira.
+    //
+    // Sem isto, a cadeia era: obrigação não vira tarefa ⇒ não aparece em
+    // Vencimentos ⇒ não aparece no Guia do mês ⇒ o farol diz "mês fechado" com
+    // obrigação que nunca foi listada. Âmbar, porque o que falta não é entrega:
+    // é o app admitindo que não sabe o prazo — e quem entrega é a pessoa.
+    if (cobertura?.coberturaIncompleta) {
+        const props = (cobertura.propostas || [])
+            .map((r) => `${r.label || r.obrigacao}${r.dependeDe ? ` (depende de ${r.dependeDe})` : ''}`);
+        const indefinido = cobertura.regime === 'INDEFINIDO';
+        // As DUAS causas podem valer ao mesmo tempo, e elas têm ações
+        // DIFERENTES — regime indefinido se resolve na ficha, obrigação
+        // proposta se entrega por fora. Fundir numa frase só repetiria o erro
+        // do "sem movimento" sem causa.
+        const resumos = [];
+        const acoes = [];
+        if (indefinido) {
+            resumos.push('regime INDEFINIDO — o catálogo entregou só o que é comum aos dois regimes do Lucro');
+            acoes.push('Defina o Regime padrão (Presumido ou Real) na ficha do cliente no card Lucro.');
+        }
+        if (props.length) {
+            resumos.push(`o catálogo NÃO cobre ${props.length} obrigação(ões) deste regime: ${props.join(', ')}`);
+            acoes.push('Estas NÃO viram tarefa automática: confira e entregue por fora, e não dê o mês por fechado por causa da lista.');
+        }
+        eObrigacoes = piorar(eObrigacoes, resumos.join(' · '), acoes.join(' '));
+        eObrigacoes.coberturaIncompleta = true;
+        eObrigacoes.regimeIndefinido = indefinido;
+        eObrigacoes.propostas = props;
     }
 
     // DIPAM: a compra de produtor rural entra na GIA e no Registro 1400 da EFD

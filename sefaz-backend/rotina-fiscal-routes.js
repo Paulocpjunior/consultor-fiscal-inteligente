@@ -18,6 +18,31 @@ import { requireAuth } from './require-admin.js';
 import { getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { montarRotinaFiscal, resumirFunil, acharApuracaoDaCompetencia } from './rotina-fiscal.js';
+import { mesDoCliente, pendenciasDeConfirmacao } from './catalogo-obrigacoes.js';
+
+/**
+ * Cobertura do catálogo para UM cliente.
+ *
+ * ⚠️ DOIS FORMATOS DE COMPETÊNCIA NO MESMO APP: a Rotina fala 'AAAA-MM' e o
+ * catálogo fala 'MM/AAAA'. Passar direto explodia — foi um defeito meu, pego
+ * pelo teste antes de subir. A conversão fica AQUI, na fronteira, e não dentro
+ * do catálogo: mudar o formato dele quebraria o cron das tarefas, que é quem
+ * cria o mês inteiro.
+ *
+ * E a falha NÃO derruba o painel: a Rotina responde pela carteira toda, então
+ * um throw apagaria a tela de todo mundo por causa de um cadastro torto. Sem
+ * cobertura, a etapa 4 só perde a trava — que é o comportamento de antes.
+ */
+function coberturaDoCliente(e, competencia) {
+    const [ano, mes] = String(competencia || '').split('-');
+    if (!ano || !mes) return null;
+    try {
+        return mesDoCliente({ colecao: e.colecao, regimePadrao: e.regimePadrao }, `${mes}/${ano}`);
+    } catch (err) {
+        console.warn(`[rotina] cobertura do catálogo falhou (${e.nome}):`, err.message);
+        return null;
+    }
+}
 import { identificarNaturezaFornecedor } from './dipam-produtor-rural.js';
 import { montarPainelIssCarteira, acumularIssPorEmpresa } from './iss-carteira.js';
 import { saudeNfseSp, empresaComFalhaNaCaptura } from './nfse-sp-saude.js';
@@ -64,6 +89,11 @@ async function carregarEmpresas(db) {
                 cnpj,
                 nome: d.razaoSocial || d.nome || d.fantasia || '—',
                 regime,
+                // Para o catálogo dizer se COBRE este cliente: ele resolve o
+                // regime fiscal pela coleção + regimePadrao (Lucro sem o campo
+                // vira INDEFINIDO, e adivinhar regime é adivinhar imposto).
+                colecao: col,
+                regimePadrao: d.regimePadrao || d.dadosFiscais?.regimePadrao || '',
                 capturaAtiva: d.capturarSefaz !== false,
                 // ISS de SP capital: município, CCM e SUP decidem se há guia do
                 // município no mês (e se a captura da NFS-e sequer roda).
@@ -260,6 +290,10 @@ router.get('/painel', requireAuth, async (req, res) => {
         const issCarteira = await montarIssDaCarteira(db, empresas, documentos, porCnpjToId, competencia);
 
         const rotinas = empresas.map((e) => montarRotinaFiscal({
+            // TRAVA T1 DO ESCOPO: o catálogo diz se cobre este cliente. A flag
+            // existia desde 11/08 e nenhuma tela lia — obrigação que não vira
+            // tarefa não aparecia em lugar nenhum, e o mês fechava assim mesmo.
+            cobertura: coberturaDoCliente(e, competencia),
             iss: issCarteira.mapa.get(e.id) || null,
             dipam: contarProdutoresRurais(docsPorEmpresa.get(e.id) || []),
             empresa: { id: e.id, nome: e.nome, cnpj: e.cnpj, regime: e.regime },
@@ -290,6 +324,12 @@ router.get('/painel', requireAuth, async (req, res) => {
             // mostrar um card zerado como se fosse resposta.
             iss: issCarteira.resumo,
             issSaudeCaptura: issCarteira.saude,
+            // O QUE O PRÓPRIO CATÁLOGO ADMITE NÃO SABER. Existia desde 11/08
+            // (`pendenciasDeConfirmacao`), testado, e NENHUMA tela chamava —
+            // função pronta sem botão é código morto com cara de entrega.
+            // Mora aqui, junto do número que ela explica: sem isso o painel
+            // diz "N obrigações" sem dizer que M ficaram FORA da conta.
+            catalogoPendencias: pendenciasDeConfirmacao(),
             rotinas,
             lidos: { documentos: documentos.length, tarefas: tarefas.length, envios: envios.length },
             geradoEm: new Date().toISOString(),
