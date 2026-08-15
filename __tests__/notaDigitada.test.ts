@@ -20,6 +20,8 @@ import {
 import { decidirGravacaoNFe } from '../sefaz-backend/xml-importer.js';
 import { procedenciaDoDocumento } from '../services/documentoProcedencia';
 import { classificarNota } from '../sefaz-backend/dipam-produtor-rural.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const CHAVE = '3'.repeat(44);
 const base = (over: Partial<NotaDigitadaInput> = {}): NotaDigitadaInput => ({
@@ -156,5 +158,144 @@ describe('a procedência DIZ o que a nota é', () => {
         expect(p.explicacao).toMatch(/lançada à mão/);
         expect(p.explicacao).toMatch(/colab@spassessoriacontabil\.com\.br/);
         expect(p.explicacao).toMatch(/SUBSTITUI/);
+    });
+});
+
+// ═══ A SEGUNDA ESPÉCIE: SERVIÇO ═════════════════════════════════════════════
+//
+// A porta nasceu só para MERCADORIA — exigia CFOP, que a NFS-e não tem. Ou
+// seja: não servia justamente para os ~157 clientes de serviço puro, nem para
+// o caso que mais precisa dela (município que ainda não transcreve ao ADN,
+// como Jundiaí, onde a cobertura É a digitação).
+import { especieDe } from '../services/notaDigitada';
+import { ehDocumentoDeServico } from '../sefaz-backend/dipam-produtor-rural.js';
+import { idDocumentoNfseSp, patchSubstituiuDigitada } from '../sefaz-backend/nfse-identidade.js';
+
+const servico = (over: any = {}): NotaDigitadaInput => ({
+    ...base(),
+    especie: 'servico',
+    direcao: 'saida',
+    itens: [],
+    participanteNome: 'CONDOMINIO MONTE CARLO',
+    participanteDoc: '11.222.333/0001-81',
+    servico: { discriminacao: 'Manutenção mensal de elevadores', codigoServico: '07498', aliquota: 5, valorIss: 75 },
+    ...over,
+});
+
+describe('serviço não é mercadoria com outro rótulo', () => {
+    it('passa SEM CFOP e sem itens — exigir CFOP fazia a pessoa inventar um', () => {
+        expect(especieDe(servico())).toBe('servico');
+        expect(validarNotaDigitada(servico())).toEqual([]);
+    });
+
+    it('sem discriminação é recusa — é ela que aparece no livro', () => {
+        expect(validarNotaDigitada(servico({ servico: { discriminacao: '' } })).join(' '))
+            .toMatch(/Descreva o serviço/);
+    });
+
+    it('alíquota fora de 0–100 é recusada DIZENDO que vazio ≠ zero', () => {
+        const e = validarNotaDigitada(servico({ servico: { discriminacao: 'x', aliquota: 150 } }));
+        expect(e.join(' ')).toMatch(/deixe VAZIO — vazio é diferente de zero/);
+    });
+
+    it('grava nos MESMOS campos do importer de NFS-e — sem nomes próprios', () => {
+        const d: any = montarNotaDigitada(servico());
+        expect(d.tipo).toBe('NFSe');
+        expect(d.modelo).toBe('99');
+        expect(d.prestadorCnpj).toBe('29240822000121'); // a empresa presta
+        expect(d.tomadorCnpj).toBe('11222333000181');
+        expect(d.cnpjEmit).toBe(d.prestadorCnpj);       // compat NF-e
+        expect(d.valorServicos).toBe(1500);
+        expect(d.discriminacaoServicos).toMatch(/elevadores/);
+        expect(d.totais.vISS).toBe(75);
+    });
+
+    it('🚨 o app RECONHECE a digitada como documento de serviço', () => {
+        // Sem isto, uma nota de serviço de prestador PF geraria FUNRURAL —
+        // exatamente o buraco fechado hoje de manhã (Lei 8.212/91 art. 25 só
+        // alcança a comercialização da PRODUÇÃO RURAL).
+        expect(ehDocumentoDeServico(montarNotaDigitada(servico()))).toBe(true);
+        expect(ehDocumentoDeServico(montarNotaDigitada(base()))).toBe(false);
+    });
+
+    it('🚨 ISS/alíquota que a pessoa não soube ficam AUSENTES, nunca zero', () => {
+        // Zero fabricaria uma pendência FALSA de "inconsistente" (a nota diz
+        // que tributa e veio zero). Ausente é outra causa, com outra ação.
+        const d: any = montarNotaDigitada(servico({ servico: { discriminacao: 'x' } }));
+        expect(d.valorIss).toBeUndefined();
+        expect(d.aliquotaServicos).toBeUndefined();
+        expect(d.issRetido).toBe(false);
+    });
+
+    it('na ENTRADA a empresa é a tomadora — prestador é a contraparte', () => {
+        const d: any = montarNotaDigitada(servico({ direcao: 'entrada' }));
+        expect(d.tomadorCnpj).toBe('29240822000121');
+        expect(d.prestadorCnpj).toBe('11222333000181');
+    });
+});
+
+describe('🚨 a identidade é a MESMA dos importadores — senão a nota entra DUAS vezes', () => {
+    it('o id da digitada é o id que o portal usaria para a mesma nota', () => {
+        const d: any = montarNotaDigitada(servico({ numero: '375235' }));
+        expect(d.id).toBe(idDocumentoNfseSp({
+            prestadorCnpj: '29240822000121', tomadorCnpj: '11222333000181', numero: '375235',
+        }));
+        // É isto que faz a captura substituir a digitada em vez de criar um
+        // segundo documento — a duplicidade que o art. 136 causou no FUNRURAL.
+        expect(d.id).toMatch(/^nfsesp-11222333000181-29240822000121-375235$/);
+    });
+
+    it('nenhum importador escreve a fórmula do id à mão', () => {
+        const arquivos = [
+            'sefaz-backend/nfse-sp-csv-importer.js',
+            'sefaz-backend/nfse-sp-importer.js',
+        ];
+        for (const f of arquivos) {
+            const fonte = readFileSync(join(__dirname, '..', f), 'utf8');
+            expect(fonte).toMatch(/idDocumentoNfseSp/);
+            expect(fonte).not.toMatch(/`nfsesp-\$\{/);
+        }
+    });
+
+    it('o documento de verdade NÃO herda o carimbo de digitada', () => {
+        // `merge: true` não remove campo que o novo objeto não traz: sem este
+        // patch a nota capturada ficaria com os dados reais E `origem:
+        // digitada` grudado, mentindo sobre a própria procedência.
+        const p = patchSubstituiuDigitada({ origem: 'digitada', digitadaPorEmail: 'colab@x.com' }, '2026-08-15T12:00:00Z');
+        expect(p.origem).toBeNull();
+        expect(p.digitadaPorEmail).toBeNull();
+        // O rastro não some: fica quem lançou e quando foi substituída.
+        expect(p.substituiuDigitadaDe).toBe('colab@x.com');
+        expect(p.substituiuDigitadaEm).toBe('2026-08-15T12:00:00Z');
+    });
+
+    it('sobre documento que NÃO era digitada, o patch não mexe em nada', () => {
+        expect(patchSubstituiuDigitada({ origem: 'csv-portal-sp' })).toEqual({});
+        expect(patchSubstituiuDigitada(null)).toEqual({});
+    });
+
+    it('os três importadores limpam o carimbo ao mesclar', () => {
+        for (const f of ['sefaz-backend/nfse-sp-csv-importer.js', 'sefaz-backend/nfse-sp-importer.js', 'sefaz-backend/abrasf/importer.js']) {
+            expect(readFileSync(join(__dirname, '..', f), 'utf8')).toMatch(/patchSubstituiuDigitada/);
+        }
+    });
+});
+
+describe('a tela abre a porta de serviço — rota sem botão não é funcionalidade', () => {
+    const form = readFileSync(join(__dirname, '..', 'components/xml/NotaDigitadaForm.tsx'), 'utf8');
+
+    it('tem o seletor das duas espécies', () => {
+        expect(form).toMatch(/Mercadoria \(NF-e\)/);
+        expect(form).toMatch(/Serviço \(NFS-e\)/);
+    });
+
+    it('o bloco de CFOP não aparece na espécie serviço', () => {
+        // Campo de CFOP numa NFS-e faria a pessoa inventar um para salvar.
+        expect(form).toMatch(/especie === 'servico' \? \(/);
+    });
+
+    it('a tela DIZ que vazio ≠ zero no ISS, onde a régua morde', () => {
+        expect(form).toMatch(/vazio ≠ zero/);
+        expect(form).toMatch(/Deixe vazio/);
     });
 });

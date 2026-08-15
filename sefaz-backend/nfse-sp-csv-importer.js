@@ -8,6 +8,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { idDocumentoNfseSp, patchSubstituiuDigitada } from './nfse-identidade.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -31,7 +32,7 @@ export async function salvarNotaCsv(nota, ctx = {}) {
     const numero = String(nota.numero || '').trim();
     if (!numero) throw new Error('Nota sem número');
 
-    const docId = `nfsesp-${cnpjT || 'sem-tomador'}-${cnpjP || 'sem-prestador'}-${numero}`;
+    const docId = idDocumentoNfseSp({ prestadorCnpj: cnpjP, tomadorCnpj: cnpjT, numero });
     const ref = db.collection('documentos_fiscais').doc(docId);
     const snap = await ref.get();
     const existia = snap.exists;
@@ -155,7 +156,9 @@ export async function salvarNotaCsv(nota, ctx = {}) {
         docData.createdBy = ctx.importadoPor || 'admin';
     }
 
-    await ref.set(docData, { merge: true });
+    // O documento de verdade chegou: o carimbo de digitada SAI (merge nao
+    // remove campo sozinho, e doc real marcado 'digitada' mente na procedencia).
+    await ref.set({ ...docData, ...patchSubstituiuDigitada(snap.data()) }, { merge: true });
 
     return {
         status: existia ? 'atualizada' : 'criada',
