@@ -24,6 +24,7 @@
  * aparecendo depois que o mês vira — é justamente ela que está gerando multa.
  * Sumir no dia 1º seria o farol mentindo no pior momento.
  */
+import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
 import React, { useCallback, useEffect, useState } from 'react';
 import type { User, DctfwebQuotaAgendada } from '../../types';
 import { listarQuotasAgendadas, emitirQuotaAgendada, downloadPdfFromBase64, openPdfFromBase64 } from '../../services/dctfwebService';
@@ -46,6 +47,13 @@ type Emitida = DctfwebQuotaAgendada & {
 };
 
 const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
+    // VER a carteira é livre; EMITIR exige que a empresa da linha seja a ATIVA
+    // (Paulo, 15/08 — caso EXPERTE×FASTWELD na Varredura IPI; e ninguém emite
+    // em série: guia sai UMA A UMA com preview, regra de 28/07). A linha de
+    // outra empresa não ganha botão de emissão: ganha o caminho de ativar.
+    const { empresa: empresaAtivaSessao, trocar: trocarEmpresaSessao } = useEmpresaAtiva();
+    const ehDaAtiva = (cnpj: string | undefined) =>
+        !!empresaAtivaSessao && String(cnpj || '').replace(/\D/g, '') === empresaAtivaSessao.cnpj;
     const [quotas, setQuotas] = useState<DctfwebQuotaAgendada[]>([]);
     const [atrasadas, setAtrasadas] = useState(0);
     const [carregando, setCarregando] = useState(true);
@@ -174,13 +182,23 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                             {fmtData(q.vencimento)}
                                         </td>
                                         <td className="p-2">
-                                            <button
-                                                onClick={() => emitir(q)}
-                                                disabled={emitindo === q.id}
-                                                className="btn-press text-[11px] px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50 whitespace-nowrap"
-                                            >
-                                                {emitindo === q.id ? '⏳…' : 'Gerar guia'}
-                                            </button>
+                                            {ehDaAtiva(q.empresaCnpj) ? (
+                                                <button
+                                                    onClick={() => emitir(q)}
+                                                    disabled={emitindo === q.id}
+                                                    className="btn-press text-[11px] px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50 whitespace-nowrap"
+                                                >
+                                                    {emitindo === q.id ? '⏳…' : 'Gerar guia'}
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={trocarEmpresaSessao}
+                                                    title="Esta cota é de OUTRA empresa — não da ativa. Emitir guia é ação no cliente: ative-o primeiro (a troca vale para a sessão e aparece no topo)."
+                                                    className="btn-press text-[11px] px-2 py-1 rounded border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 whitespace-nowrap"
+                                                >
+                                                    ⚡ ativar p/ emitir
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
