@@ -26,6 +26,8 @@
  * do e-CAC. Transmitido ≠ entregue: entre um e outro cabe uma recusa.
  */
 import React, { useMemo, useState } from 'react';
+import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
+import EmpresaAtivaFixa from '../EmpresaAtivaFixa';
 import {
     prepararFechamentoReinf, fecharCompetenciaReinf,
     type PrepararFechamento, type EntregaReinf, type RespostaFechamento,
@@ -57,7 +59,15 @@ const lerBase64 = (f: File) => new Promise<string>((ok, falhou) => {
 });
 
 const FechamentoReinfPanel: React.FC<Props> = ({ onShowToast }) => {
-    const [cnpj, setCnpj] = useState('');
+    // ─── O CNPJ NÃO SE DIGITA MAIS ──────────────────────────────────────────
+    //
+    // Este painel nasceu em 13/08 com um campo de CNPJ EM BRANCO — pior que um
+    // seletor: dar a competência por FECHADA arquiva recibo no SharePoint do
+    // cliente e manda extrato ao gestor, e um dígito errado fecha a competência
+    // de OUTRA empresa no registro. Agora ele responde pela empresa ativa, que
+    // é o mesmo gesto do resto do app (Paulo, 15/08).
+    const { empresa: empresaAtiva } = useEmpresaAtiva();
+    const cnpj = empresaAtiva?.cnpj || '';
     const [competencia, setCompetencia] = useState(competenciaPadrao());
     const [carregando, setCarregando] = useState(false);
     const [fechando, setFechando] = useState(false);
@@ -74,7 +84,10 @@ const FechamentoReinfPanel: React.FC<Props> = ({ onShowToast }) => {
 
     const preparar = async () => {
         setErro(null); setResposta(null);
-        if (cnpj14.length !== 14) { setErro('Informe o CNPJ do declarante (14 dígitos).'); return; }
+        if (cnpj14.length !== 14) {
+            setErro('Ative a empresa declarante no topo (⇄) — o fechamento é dela, e o CNPJ vem da ativação.');
+            return;
+        }
         setCarregando(true);
         try {
             const r = await prepararFechamentoReinf(cnpj14, competencia);
@@ -143,14 +156,8 @@ const FechamentoReinfPanel: React.FC<Props> = ({ onShowToast }) => {
                     <strong> RECIBOS</strong> do cliente no SharePoint e manda o extrato ao gestor — da caixa de quem
                     transmitiu. <strong>Transmitido não é entregue</strong>: evento sem recibo nunca aparece como entregue.
                 </p>
+                <EmpresaAtivaFixa rotulo="Declarante" className="mb-3" />
                 <div className="flex flex-wrap items-end gap-2">
-                    <label className="text-[11px] font-semibold">
-                        CNPJ do declarante
-                        <input
-                            value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00"
-                            className="block mt-1 px-2 py-1.5 text-xs rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 w-52"
-                        />
-                    </label>
                     <label className="text-[11px] font-semibold">
                         Competência
                         <input

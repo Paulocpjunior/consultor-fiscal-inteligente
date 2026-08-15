@@ -1669,6 +1669,37 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
    Importar (Manual&Cofre·PDF·CSV) | Empresas | Integrações (SharePoint·SAGE)
    | Relatórios&Logs | Config.
 
+## 🙋 FILA DO PAULO — só ele resolve (15/08, "5 pontos meu")
+
+Não são trabalho de código: são LEITURA ou CLIQUE na produção, que este
+ambiente não alcança (a rede do container não chega no Cloud Run). Enquanto
+estiverem abertos, **não tratar o número da tela como fechado** — vale a regra
+de 12/08: print sem versão não é evidência, e pendência aberta não vira fato.
+Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
+
+1. **NOVA ERA — os seis produtores tirados do FUNRURAL por engano** (14/08). Ele
+   clicou ✕ para limpar a lista quando a tela ainda não dizia qual nota era
+   qual; as excluídas eram justamente as notas PRÓPRIAS de entrada, que DEVEM
+   gerar sub-rogação. O ↩ agora mostra **quanto volta ao total** antes do
+   clique, e o bloco 🟢/🟡 diz qual documento é qual. Enquanto não reverter, o
+   FUNRURAL da NOVA ERA está **a menor** — e a causa é decisão gravada, não
+   defeito: o app está certo e continua obedecendo.
+2. **EXPERTE — captura bloqueada** (15/08). Zero documento no banco em QUALQUER
+   competência, com IPI apurado na ficha. O farol de lastro agora acende (na
+   varredura e na Rotina), mas quem diz o bloqueio é o **📊 Status por Empresa**
+   — certificado, procuração ou município sem trilho. É esta empresa que segura
+   a prova final do E510.
+3. **🏁 Fila de migração — a leitura de "quem pode migrar hoje"**. A tela junta
+   as três provas (prova de captura, aptidão da saída, blocos do perfil) e
+   ordena por esforço. É ela que decide o ritmo da migração agora que o
+   histórico saiu do caminho crítico (decisão de 05/08).
+4. **Bloco K — olhar o número da varredura**. A 🚦 Migração já DETECTA produção
+   pelos CFOPs desde 06/08. **Zero empresa ⇒ o bloco é descartável como o SAT
+   foi**; uma que seja ⇒ vira alvo nomeado. Não dá para decidir sem a leitura, e
+   deduzir "deve ter alguém" seria inventar trabalho.
+5. **JOAO EVANGELISTA — cadastro duplicado**. Mesma família do WALDESA (24/07):
+   excluir é SOFT-DELETE e a lápide precisa aguentar F5 + outro navegador.
+
 ## Pendências operacionais (23/07/2026)
 
 - **DARE-SP — mapa dos trilhos (fechado 24/07 com prints reais do portal)**:
