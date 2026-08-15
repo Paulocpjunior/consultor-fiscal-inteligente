@@ -23,6 +23,7 @@ import {
 } from './ipi-varredura.js';
 import { getDctfwebProvider, pickIdApuracao, mitPeriodoLabel } from './dctfweb-provider.js';
 import { extrairModeloDebitosMit } from './mit-debitos-builder.js';
+import { relerItensFiscais } from './xml-importer.js';
 
 const router = express.Router();
 
@@ -143,6 +144,32 @@ router.get('/ipi-varredura', requireAdmin, async (req, res) => {
     } catch (e) {
         console.error('[ipi-varredura]', e);
         return res.status(500).json({ error: 'Falha interna: ' + (e.message || 'desconhecida') });
+    }
+});
+
+
+// ─── RELEITURA DE CAMPOS DE ITEM (CST do IPI e do PIS/COFINS) ───────────────
+//
+// O extrator aprendeu `cstIpi` em 11/08 e `cstPis`/`cstCofins` em 12/08. O que
+// foi capturado ANTES ficou sem eles — e sem `cstIpi` o **E510 não sai**, que é
+// o último bloco travando indústria com IPI no de-para.
+//
+// O XML cru está no Cloud Storage (toda captura grava `storagePath`), então a
+// recuperação é da FONTE: nada de pedir arquivo ao cliente ou consultar a SEFAZ.
+//
+// requireAdmin porque ESCREVE em documento fiscal — a varredura só lê.
+router.post('/reler-itens-fiscais', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const empresaId = String(req.body?.empresaId || '').trim();
+        const competencia = normalizarCompetencia(req.body?.competencia);
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'Escolha a empresa.' });
+        if (!competencia) return res.status(400).json({ ok: false, error: 'Informe a competência (AAAA-MM).' });
+
+        const r = await relerItensFiscais({ empresaId, competencia, limit: 5000 });
+        return res.json({ ok: true, competencia, ...r });
+    } catch (e) {
+        console.error('[ipi-varredura/reler-itens-fiscais]', e);
+        return res.status(500).json({ ok: false, error: e?.message || 'Falha ao reler os itens.' });
     }
 });
 

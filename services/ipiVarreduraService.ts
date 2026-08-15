@@ -64,3 +64,45 @@ export async function getIpiVarredura(
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
 }
+
+/**
+ * Resultado da releitura de campos de item a partir do XML no Storage.
+ *
+ * Cada contador é uma CAUSA com ação diferente — "0 recuperadas" sem dizer o
+ * quê foi exatamente o alarme sem ação de 13/08.
+ */
+export interface RelerItensResposta {
+    ok: boolean;
+    competencia: string;
+    examinadas: number;
+    /** Documentos que ganharam campo novo. */
+    atualizadas: number;
+    /** Sem o XML guardado — buraco de captura, não de leitura. */
+    semXml: number;
+    /** Já passaram por esta versão do extrator: clicar de novo não faz nada. */
+    jaRelidas: number;
+    semItens: number;
+    /** Itens não pareáveis: ficam INTACTAS e nomeadas, para conferência humana. */
+    naoPareadas: number;
+    /** Relidas e o XML realmente não tinha o campo — não adianta reclicar. */
+    semDadoNoXml: number;
+    porCampo: Record<string, number>;
+    naoPareadasDetalhe: Array<{ chave: string; numero: string | null; motivo: string }>;
+    error?: string;
+}
+
+/** Relê do XML-fonte os campos de item que o extrator aprendeu depois. */
+export async function relerItensFiscais(
+    empresaId: string,
+    competencia: string,
+): Promise<RelerItensResposta> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/reler-itens-fiscais', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresaId, competencia }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+}
