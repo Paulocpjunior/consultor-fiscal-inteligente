@@ -29,9 +29,16 @@ interface Props {
     onAtivar: (e: EmpresaAtiva) => void;
     /** Só existe quando já há uma ativa: dá para voltar sem trocar. */
     onCancelar?: () => void;
+    /**
+     * Entrar SEM ativar, só para as consultas de tabela (CFOP, NCM, serviço,
+     * Reforma). Elas não têm cliente — exigir empresa aqui seria trava sem
+     * motivo, e o Paulo pegou a incongruência na hora: a tela dizia que
+     * consulta não precisa de empresa, mas o portão barrava tudo.
+     */
+    onSoConsultas?: () => void;
 }
 
-const AtivarEmpresaScreen: React.FC<Props> = ({ currentUser, atual, onAtivar, onCancelar }) => {
+const AtivarEmpresaScreen: React.FC<Props> = ({ currentUser, atual, onAtivar, onCancelar, onSoConsultas }) => {
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[] | null>(null);
     const [escolhida, setEscolhida] = useState('');
     const [erro, setErro] = useState<string | null>(null);
@@ -139,10 +146,29 @@ const AtivarEmpresaScreen: React.FC<Props> = ({ currentUser, atual, onAtivar, on
                     )}
                 </div>
 
-                <p className="text-center text-[11px] mt-4" style={{ color: 'var(--text-muted)' }}>
-                    Consultas de tabela (CFOP, NCM, código de serviço) e as visões da carteira não dependem
-                    de empresa ativa — o resto do app, sim.
-                </p>
+                {/* A exceção tem PORTA, não só frase: dizer "consulta não
+                    precisa" e trancar tudo atrás do Ativar era incongruente. */}
+                {onSoConsultas && !atual && (
+                    <div className="text-center mt-4">
+                        <button
+                            onClick={onSoConsultas}
+                            className="btn-press text-xs px-4 py-2 rounded-lg"
+                            style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
+                        >
+                            📖 Entrar só para consultas (CFOP, NCM, serviço, Reforma) →
+                        </button>
+                        <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
+                            Sem empresa ativa você consulta tabelas e vê as visões da carteira.
+                            Para trabalhar num cliente, o app pede a ativação na hora.
+                        </p>
+                    </div>
+                )}
+                {(!onSoConsultas || atual) && (
+                    <p className="text-center text-[11px] mt-4" style={{ color: 'var(--text-muted)' }}>
+                        Consultas de tabela (CFOP, NCM, código de serviço) e as visões da carteira não dependem
+                        de empresa ativa — o resto do app, sim.
+                    </p>
+                )}
             </div>
         </div>
     );

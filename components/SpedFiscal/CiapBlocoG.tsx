@@ -16,7 +16,8 @@ import {
     carregarCiap, salvarCiap, avancarParcelas, type BemCiap, type CiapDoc,
 } from '../../services/spedCiapService';
 import { apurarCiap, TIPOS_MOVIMENTACAO } from '../../sefaz-backend/sped-bloco-g.js';
-import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
+import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
+import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 
 interface Props {
     currentUser: User | null;
@@ -34,7 +35,12 @@ const BEM_VAZIO: BemCiap = {
 };
 
 const CiapBlocoG: React.FC<Props> = ({ empresas, onShowToast }) => {
-    const [empresaId, setEmpresaId] = useState('');
+    // A EMPRESA É A ATIVA DA SESSÃO — este painel não pergunta de novo.
+    //
+    // Paulo, 15/08: *"tira os seletores internos"*. Dava para ativar a empresa
+    // A no cabeçalho e escolher a B aqui dentro, sem a tela denunciar nada:
+    // dois lugares decidindo em qual CLIENTE o trabalho ia cair.
+    const empresaId = useEmpresaAtivaId();
     const [dados, setDados] = useState<CiapDoc | null>(null);
     const [loading, setLoading] = useState(false);
     const [salvando, setSalvando] = useState(false);
@@ -92,12 +98,7 @@ const CiapBlocoG: React.FC<Props> = ({ empresas, onShowToast }) => {
                     na proporção das <b>saídas tributadas + exportação</b> sobre o total das saídas do mês.
                     Cadastre os bens com a parcela em que cada um está — o arquivo já sai com o Bloco G preenchido.
                 </p>
-                <EmpresaSearchSelect
-                    empresas={empresas}
-                    value={empresaId}
-                    onChange={setEmpresaId}
-                    placeholder="Empresa (Lucro Real/Presumido)"
-                />
+                <EmpresaAtivaFixa />
             </div>
 
             {loading && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Lendo o CIAP…</p>}

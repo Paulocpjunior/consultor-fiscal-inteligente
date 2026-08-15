@@ -19,6 +19,7 @@ import {
 } from '../../services/dipamService';
 import { validarCpf, formatarCpf } from '../../services/validadorDocumento';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
+import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import {
     montarFilaFornecedores, resumirFila, textoDaFila, linhasDoPdf, totaisDoPdf,
@@ -77,7 +78,12 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
     // ⚡ Ativar obrigatório: escolher na lista não carrega nada, o clique é que
     // dispara — a regra de 05/08, porque aqui escolher DISPARA leitura.
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
-    const [empresaEscolhida, setEmpresaEscolhida] = useState('');
+    // NASCE NA EMPRESA ATIVA (Paulo, 15/08 — a sequência é login → ativar).
+    // O seletor continua existindo porque esta tela também serve à CARTEIRA
+    // (varredura / "vá direto a um cliente", pedido de 13/08) — mas o padrão é
+    // a empresa da sessão, não uma pergunta em branco.
+    const empresaAtivaId = useEmpresaAtivaId();
+    const [empresaEscolhida, setEmpresaEscolhida] = useState(empresaAtivaId || '');
 
     useEffect(() => {
         let vivo = true;

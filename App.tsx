@@ -38,6 +38,7 @@ import {
     rotuloEmpresaAtiva, fmtCnpjAtiva, type EmpresaAtiva,
 } from './services/empresaAtiva';
 import AtivarEmpresaScreen from './components/AtivarEmpresaScreen';
+import { EmpresaAtivaProvider } from './services/empresaAtivaContext';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
 // ✅ REMOVIDO: import { onAuthStateChanged } from 'firebase/auth';
 // Ambos encapsulados em authService.subscribeAuthState
@@ -163,6 +164,10 @@ const App: React.FC = () => {
     // exatamente o que ele apontou como errado.
     const [empresaAtiva, setEmpresaAtiva] = useState<EmpresaAtiva | null>(null);
     const [trocandoEmpresa, setTrocandoEmpresa] = useState(false);
+    // Entrou SEM ativar, só para consultas de tabela. A incongruência que o
+    // Paulo pegou: a tela dizia "consulta não precisa de empresa" e o portão
+    // barrava tudo. A exceção precisa de PORTA, não só de frase.
+    const [soConsultas, setSoConsultas] = useState(false);
 
     /**
      * ═══ ATIVAR EMPRESA É O PRIMEIRO PASSO — e antes dele o banco fica quieto ══
@@ -710,14 +715,21 @@ const App: React.FC = () => {
     // login → ATIVAR EMPRESA → módulos. Sem empresa ativa a tela não é o menu:
     // é a ativação. Não adianta deixar entrar e responder vazio depois — isso
     // é justamente o que fazia cada módulo perguntar "qual empresa?" de novo.
-    if (!empresaAtiva || trocandoEmpresa) {
+    if (trocandoEmpresa || (!empresaAtiva && !soConsultas)) {
         return (
             <>
                 <AtivarEmpresaScreen
                     currentUser={currentUser}
                     atual={empresaAtiva}
                     onAtivar={ativarEmpresa}
-                    onCancelar={empresaAtiva ? () => setTrocandoEmpresa(false) : undefined}
+                    // Cancelar volta: para a empresa que já estava ativa, ou
+                    // para o modo consulta de onde a pessoa veio.
+                    onCancelar={(empresaAtiva || soConsultas) ? () => setTrocandoEmpresa(false) : undefined}
+                    onSoConsultas={() => {
+                        setSoConsultas(true);
+                        setTrocandoEmpresa(false);
+                        setSearchType(SearchType.CFOP);
+                    }}
                 />
                 <UpdateBanner />
             </>
@@ -749,6 +761,13 @@ const App: React.FC = () => {
         // conjunto: ele responde sobre o todo, e prendê-lo a um cliente seria
         // trocar um erro por outro. `exigeEmpresaAtiva` é quem separa os dois.
         const daEmpresaAtiva = exigeEmpresaAtiva(type);
+        // No modo consulta, card que trabalha SOBRE um cliente pede a ativação
+        // na hora do clique — o destino fica guardado e abre depois de ativar.
+        if (daEmpresaAtiva && !empresaAtiva) {
+            setSearchType(type);
+            setTrocandoEmpresa(true);
+            return;
+        }
         if (type === SearchType.SIMPLES_NACIONAL) {
             setSimplesView('dashboard');
             setSimplesEmpresaToEdit(null);
@@ -788,6 +807,7 @@ const App: React.FC = () => {
     };
 
     return (
+      <EmpresaAtivaProvider empresa={empresaAtiva} onTrocar={() => setTrocandoEmpresa(true)} onAtivar={ativarEmpresa}>
         <div className="min-h-screen transition-colors bg-slate-50 dark:bg-[var(--bg-page)]" style={{fontFamily:"'DM Sans',sans-serif"}}>
             <div className="container mx-auto px-4 max-w-screen-2xl">
                 <Header
@@ -815,19 +835,29 @@ const App: React.FC = () => {
                     <span className="text-sm font-bold min-w-0 truncate" style={{ color: 'var(--text-primary)' }}>
                         {rotuloEmpresaAtiva(empresaAtiva)}
                     </span>
-                    <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
-                        {fmtCnpjAtiva(empresaAtiva.cnpj)}
-                    </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded"
-                          style={{ background: 'var(--bg-page)', color: 'var(--text-muted)' }}>
-                        {empresaAtiva.fonte === 'simples' ? 'Simples Nacional' : 'Lucro Presumido/Real'}
-                    </span>
+                    {empresaAtiva && (
+                        <>
+                            <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                                {fmtCnpjAtiva(empresaAtiva.cnpj)}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded"
+                                  style={{ background: 'var(--bg-page)', color: 'var(--text-muted)' }}>
+                                {empresaAtiva.fonte === 'simples' ? 'Simples Nacional' : 'Lucro Presumido/Real'}
+                            </span>
+                        </>
+                    )}
+                    {!empresaAtiva && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded"
+                              style={{ background: 'var(--bg-page)', color: 'var(--text-muted)' }}>
+                            modo consulta — só tabelas e visões da carteira
+                        </span>
+                    )}
                     <button
                         onClick={() => setTrocandoEmpresa(true)}
                         className="btn-press ml-auto text-[11px] px-2.5 py-1 rounded-lg whitespace-nowrap"
                         style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
                     >
-                        ⇄ Trocar empresa
+                        {empresaAtiva ? '⇄ Trocar empresa' : '⚡ Ativar empresa'}
                     </button>
                 </div>
 
@@ -1467,6 +1497,7 @@ const App: React.FC = () => {
             {/* Aviso global de nova versão / hard refresh */}
             <UpdateBanner />
         </div>
+      </EmpresaAtivaProvider>
     );
 };
 

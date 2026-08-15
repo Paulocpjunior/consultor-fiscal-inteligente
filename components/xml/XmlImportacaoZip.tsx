@@ -4,7 +4,8 @@ import type { User } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { formatCnpjCpf } from '../../services/xmlParserService';
 import { importarXmlsLote, repararNotasSemDono, localizarDocumento, type ReparoSemDonoResultado, type DocLocalizado } from '../../services/saeNfceService';
-import EmpresaSearchSelect from './EmpresaSearchSelect';
+import { useEmpresaAtivaId, useEmpresaAtiva } from '../../services/empresaAtivaContext';
+import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import ConfirmarImportacaoModal from './ConfirmarImportacaoModal';
 import { resumirLoteXmls, validarLoteParaEmpresa, type ValidacaoLote } from '../../services/xmlLoteValidacao';
 
@@ -58,7 +59,16 @@ function decodificarXml(bytes: Uint8Array): string {
  */
 const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImported }) => {
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
-    const [empresaId, setEmpresaId] = useState('');
+    // A EMPRESA É A ATIVA DA SESSÃO — este painel não pergunta de novo.
+    //
+    // Paulo, 15/08: *"tira os seletores internos"*. Dava para ativar a empresa
+    // A no cabeçalho e escolher a B aqui dentro, sem a tela denunciar nada:
+    // dois lugares decidindo em qual CLIENTE o trabalho ia cair.
+    const empresaId = useEmpresaAtivaId();
+    // Trocar aqui troca a SESSÃO: o modal de validação oferece a troca quando
+    // o lote é de outro cliente, e mandar ao trocador global perderia os
+    // arquivos pendentes.
+    const { ativar: ativarEmpresaSessao } = useEmpresaAtiva();
     const [dragOver, setDragOver] = useState(false);
     const [processando, setProcessando] = useState(false);
     const [progresso, setProgresso] = useState('');
@@ -279,7 +289,7 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
 
             <div>
                 <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Empresa</label>
-                <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId} />
+                <EmpresaAtivaFixa />
                 {empresa ? (
                     <p className="text-[11px] text-slate-400 mt-1">
                         Só entram XMLs em que a raiz do CNPJ {formatCnpjCpf(empresa.cnpj)} apareça como emitente ou destinatário.
@@ -470,8 +480,14 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                 arquivos={pendente?.nomes || []}
                 onCancelar={() => { setPendente(null); setValidacao(null); }}
                 onTrocarEmpresa={(id) => {
-                    setEmpresaId(id);
                     const nova = empresas.find(e => e.id === id);
+                    if (nova) {
+                        ativarEmpresaSessao({
+                            id: nova.id, nome: nova.nome,
+                            cnpj: String(nova.cnpj || '').replace(/\D/g, ''),
+                            fonte: nova.fonte, codCliente: nova.codCliente, uf: nova.uf,
+                        });
+                    }
                     // Revalida contra a empresa nova sem obrigar a arrastar de novo.
                     if (nova && pendente) setValidacao(validarLoteParaEmpresa(resumirLoteXmls(pendente.xmls), nova.cnpj, empresas));
                 }}

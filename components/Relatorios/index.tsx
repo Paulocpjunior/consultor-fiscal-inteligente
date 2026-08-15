@@ -20,6 +20,7 @@
 import React, { useMemo, useState } from 'react';
 import type { User, DocumentoFiscal, LucroPresumidoEmpresa } from '../../types';
 import { listDocumentos, getEmpresasDisponiveis, getIdentificacaoEmpresa, type EmpresaXmlOption } from '../../services/xmlFiscalService';
+import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 // Régua ÚNICA de correlação — a mesma do Exportar SAGE e do modal de CFOP.
 import { correlacionarCfop, resolverNaturezaAtividade } from '../../sefaz-backend/cfop-correlacao.js';
 import { alocarTributacaoIcms } from '../../services/iobSageExportService';
@@ -118,7 +119,12 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [aba, setAba] = useState<AbaId>('livro');
     const [competencia, setCompetencia] = useState(competenciaAtual());
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
-    const [empresaId, setEmpresaId] = useState('');
+    // NASCE NA EMPRESA ATIVA (Paulo, 15/08 — a sequência é login → ativar).
+    // O seletor continua existindo porque esta tela também serve à CARTEIRA
+    // (varredura / "vá direto a um cliente", pedido de 13/08) — mas o padrão é
+    // a empresa da sessão, não uma pergunta em branco.
+    const empresaAtivaId = useEmpresaAtivaId();
+    const [empresaId, setEmpresaId] = useState(empresaAtivaId || '');
     // Recorte compartilhado: buscado UMA vez, serve todas as abas de movimento.
     const [docs, setDocs] = useState<DocumentoFiscal[] | null>(null);
     const [recorteKey, setRecorteKey] = useState('');
