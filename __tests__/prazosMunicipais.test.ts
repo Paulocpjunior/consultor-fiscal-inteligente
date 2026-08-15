@@ -247,3 +247,51 @@ describe('a rota e a TELA existem — o erro que eu cometi 3× hoje não se repe
         expect(rota).toMatch(/calendários municipais indisponíveis/);
     });
 });
+
+// ═══ 🚨 O DEFEITO QUE EU CRIEI HOJE, E QUE SÓ APARECERIA DEPOIS ═════════════
+//
+// Liguei o cadastro do calendário à COBERTURA da Rotina (o âmbar) e esqueci de
+// ligá-lo a QUEM CRIA A TAREFA. O efeito seria perverso: ao cadastrar a cidade,
+// o aviso "o ISS não vira tarefa automática" SUMIRIA e a tarefa continuaria não
+// existindo. Trocar o alerta pelo silêncio é pior que não ter cadastrado — o
+// mês fecharia sem o ISS e sem ninguém avisando.
+describe('cadastrar o calendário TEM que gerar a tarefa', () => {
+    const { mesDoCliente } = require('../sefaz-backend/catalogo-obrigacoes.js');
+    const RAIZ = join(__dirname, '..');
+
+    it('a obrigação municipal entra na lista que o cron percorre, COM vencimento', () => {
+        const mes = mesDoCliente({
+            colecao: 'lucro_empresas', regimePadrao: 'presumido', uf: 'SP',
+            codMunIBGE: SP, prazosMunicipais: [cad()],
+        }, '06/2026');
+        const iss = mes.obrigacoes.find((r: any) => r.obrigacao === 'ISS');
+        expect(iss).toBeTruthy();
+        expect(iss.esfera).toBe('municipal');
+        expect(iss.vencimento).toBeInstanceOf(Date);
+    });
+
+    it('o cron usa mesDoCliente — não a lista genérica do regime', () => {
+        const cron = readFileSync(join(RAIZ, 'sefaz-backend/tarefas-orchestrator.js'), 'utf8');
+        const semComentarios = cron.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        expect(semComentarios).toMatch(/const mes = mesDoCliente\(/);
+        expect(semComentarios).toMatch(/const regras = mes\.obrigacoes/);
+        // A chamada genérica não pode voltar por "simplificação": ela não
+        // conhece município nem UF.
+        expect(semComentarios).not.toMatch(/const regras = obrigacoesAplicaveis\(/);
+    });
+
+    it('o cron carrega os calendários e falha NÃO derruba o mês', () => {
+        const cron = readFileSync(join(RAIZ, 'sefaz-backend/tarefas-orchestrator.js'), 'utf8');
+        expect(cron).toMatch(/carregarPrazosMunicipais/);
+        expect(cron).toMatch(/Calendários municipais indisponíveis/);
+        // E conta o que é novidade, senão ninguém sabe que passou a gerar.
+        expect(cron).toMatch(/tarefasMunicipais/);
+    });
+
+    it('🚨 e o cron fala o MESMO formato de competência do catálogo', () => {
+        // A terceira chance do descasamento MM/AAAA × AAAA-MM morder. Aqui os
+        // dois falam MM/AAAA — conferido, não suposto.
+        const cron = readFileSync(join(RAIZ, 'sefaz-backend/tarefas-orchestrator.js'), 'utf8');
+        expect(cron).toMatch(/return `\$\{mes\}\/\$\{ano\}`/);
+    });
+});

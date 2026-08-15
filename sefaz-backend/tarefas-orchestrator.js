@@ -26,7 +26,8 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
-import { resolverRegime, obrigacoesAplicaveis, calcularVencimento, assertCompetencia } from './catalogo-obrigacoes.js';
+import { resolverRegime, obrigacoesAplicaveis, calcularVencimento, assertCompetencia, mesDoCliente } from './catalogo-obrigacoes.js';
+import { carregarPrazosMunicipais } from './prazos-municipais-routes.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -125,8 +126,29 @@ export async function executarCronMensal(competencia, opts = {}) {
         // nomeado, porque o mes dele saiu incompleto de proposito.
         empresasSemRegime: [],
         porRegime: {},
+        // Obrigação MUNICIPAL que virou tarefa porque o calendário da cidade
+        // está cadastrado. Contada à parte porque é a novidade: antes o ISS
+        // nunca virava tarefa em município nenhum.
+        tarefasMunicipais: 0,
         erros: [],
     };
+
+    // ── CALENDÁRIOS MUNICIPAIS ──────────────────────────────────────────────
+    //
+    // 🚨 SEM ISTO, CADASTRAR O CALENDÁRIO NÃO ENTREGAVA NADA. Eu liguei o
+    // cadastro à COBERTURA da Rotina (o âmbar) e esqueci de ligá-lo a QUEM CRIA
+    // A TAREFA — então, ao cadastrar a cidade, o aviso "o ISS não vira tarefa
+    // automática" SUMIA e a tarefa continuava não existindo. Trocar o alerta
+    // pelo silêncio é pior que não ter cadastrado: o mês fecharia sem o ISS e
+    // sem ninguém avisando.
+    let prazosMunicipais = [];
+    try {
+        prazosMunicipais = await carregarPrazosMunicipais(db);
+    } catch (e) {
+        // Falha aqui NÃO derruba o mês: sem calendário o ISS volta a ser
+        // pendência nomeada na Rotina, que é o estado de antes.
+        log.erros.push(`Calendários municipais indisponíveis: ${e.message}`);
+    }
 
     for (const colecao of COLECOES) {
         let snap;
@@ -164,14 +186,27 @@ export async function executarCronMensal(competencia, opts = {}) {
                 }
                 log.porRegime[regime] = (log.porRegime[regime] || 0) + 1;
 
-                const regras = obrigacoesAplicaveis(regime, comp);
+                // `mesDoCliente` no lugar de `obrigacoesAplicaveis`: é ele que
+                // resolve o calendário MUNICIPAL do cliente (e conhece a UF).
+                // A lista de federais/estaduais sai idêntica — o que muda é o
+                // municipal aparecer quando a cidade tem calendário.
+                const mes = mesDoCliente({
+                    colecao,
+                    regimePadrao: emp.regimePadrao,
+                    uf: emp.dadosFiscais?.uf || emp.uf || '',
+                    codMunIBGE: String(emp.dadosFiscais?.codMunIBGE || emp.codMunIBGE || '').trim(),
+                    prazosMunicipais,
+                }, comp);
+                const regras = mes.obrigacoes;
                 for (const regra of regras) {
                     const r = await criarTarefaSeFalta(db, {
                         empresaId, empresaCnpj, empresaNome, regra,
                         competencia: comp, titular,
                     });
-                    if (r.criada) log.tarefasCriadas++;
-                    else if (r.jaExistia) log.tarefasJaExistiam++;
+                    if (r.criada) {
+                        log.tarefasCriadas++;
+                        if (regra.esfera === 'municipal') log.tarefasMunicipais++;
+                    } else if (r.jaExistia) log.tarefasJaExistiam++;
                 }
                 log.empresasProcessadas++;
             } catch (e) {
