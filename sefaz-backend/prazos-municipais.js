@@ -229,10 +229,26 @@ export function municipiosSemCalendario(clientes, cadastros, { obrigacao = 'ISS'
         // Mais clientes primeiro: cadastrar aquele calendário rende mais.
         .sort((a, b) => b.total - a.total || String(a.codMunIBGE).localeCompare(String(b.codMunIBGE)));
 
+    // COBERTURA ACUMULADA — a informação que decide ONDE PARAR.
+    //
+    // Uma lista de 57 cidades ordenada por volume ainda não diz quantas valem
+    // a pena: o dono precisa saber que as 3 primeiras já cobrem 78% dos
+    // clientes. Sem isso, ou ele cadastra 57 (trabalho que não rende) ou
+    // cadastra 1 e acha que resolveu.
+    const totalClientes = lista.reduce((s, m) => s + m.total, 0);
+    let acumulado = 0;
+    for (const m of lista) {
+        acumulado += m.total;
+        m.acumulado = acumulado;
+        m.coberturaAcumuladaPct = totalClientes > 0 ? Math.round((acumulado / totalClientes) * 100) : 0;
+    }
+
     return {
         municipios: lista,
         totalMunicipios: lista.length,
-        totalClientes: lista.reduce((s, m) => s + m.total, 0),
+        totalClientes,
+        /** Quantas cidades bastam para cobrir 80% dos clientes pendentes. */
+        cidadesPara80: lista.findIndex((m) => m.coberturaAcumuladaPct >= 80) + 1 || lista.length,
         /** Cliente sem município cadastrado — a ação é OUTRA (é no cadastro). */
         clientesSemMunicipio: semMunicipio,
     };

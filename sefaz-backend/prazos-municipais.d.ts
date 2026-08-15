@@ -45,9 +45,14 @@ export function municipiosSemCalendario(
     municipios: Array<{
         codMunIBGE: string; municipioNome: string | null; situacao: string;
         total: number; clientes: Array<{ id: string | null; nome: string; cnpj: string }>;
+        /** Clientes cobertos até esta linha, na ordem da fila. */
+        acumulado: number;
+        coberturaAcumuladaPct: number;
     }>;
     totalMunicipios: number;
     totalClientes: number;
+    /** Quantas cidades bastam para cobrir 80% dos clientes pendentes. */
+    cidadesPara80: number;
     /** Cliente sem município cadastrado — a ação é OUTRA. */
     clientesSemMunicipio: number;
 };

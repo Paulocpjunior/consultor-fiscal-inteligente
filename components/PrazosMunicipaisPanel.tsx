@@ -34,6 +34,8 @@ interface MunicipioFaltando {
     codMunIBGE: string;
     municipioNome: string | null;
     total: number;
+    /** % dos clientes pendentes cobertos até esta linha, na ordem da fila. */
+    coberturaAcumuladaPct?: number;
     clientes: Array<{ id: string | null; nome: string; cnpj: string }>;
 }
 
@@ -144,6 +146,14 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                         <p className="text-xs text-slate-600 dark:text-slate-300">
                             <strong>{dados.totalMunicipios}</strong> cidade(s) sem calendário, cobrindo{' '}
                             <strong>{dados.totalClientes}</strong> cliente(s).
+                            {/* ONDE PARAR. Uma lista de 57 cidades ordenada por
+                                volume ainda não diz quantas valem a pena: sem
+                                isto, ou se cadastra 57 (trabalho que não rende)
+                                ou se cadastra 1 e acha que resolveu. */}
+                            {dados.cidadesPara80 > 0 && dados.totalMunicipios > 1 && (
+                                <> As <strong>{dados.cidadesPara80} primeira(s)</strong> já cobrem{' '}
+                                <strong>80%</strong> dos clientes pendentes.</>
+                            )}
                             {dados.clientesSemMunicipio > 0 && (
                                 <> · <strong>{dados.clientesSemMunicipio}</strong> cliente(s) <strong>sem município
                                 cadastrado</strong> — esses não entram na fila: a ação é preencher o município nos
@@ -156,7 +166,11 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                                     className="flex items-center justify-between gap-2 text-[11px] p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                                     <span className="text-amber-800 dark:text-amber-300">
                                         <strong>{m.municipioNome || `IBGE ${m.codMunIBGE}`}</strong>
-                                        {' · '}{m.total} cliente(s): {m.clientes.slice(0, 3).map((c) => c.nome).join(', ')}
+                                        {' · '}{m.total} cliente(s)
+                                        {typeof m.coberturaAcumuladaPct === 'number' && (
+                                            <span className="opacity-70"> · acumulado {m.coberturaAcumuladaPct}%</span>
+                                        )}
+                                        {': '}{m.clientes.slice(0, 3).map((c) => c.nome).join(', ')}
                                         {m.clientes.length > 3 && ` +${m.clientes.length - 3}`}
                                     </span>
                                     <span className="flex gap-1 whitespace-nowrap">

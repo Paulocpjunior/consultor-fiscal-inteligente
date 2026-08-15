@@ -12,7 +12,6 @@
  * foram criadas vs ja existiam.
  */
 import { criarTarefaAutomatica } from './tarefasService';
-import { obrigacoesAplicaveis } from './calendarioFiscal';
 import { getEmpresasParaPerfilCliente } from './xmlFiscalService';
 import { obrigacoesDoCliente } from '../sefaz-backend/catalogo-obrigacoes.js';
 import { carregarCalendariosMunicipais } from './prazosMunicipaisService';
