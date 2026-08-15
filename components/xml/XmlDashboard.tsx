@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { User, DocumentoFiscal } from '../../types';
 import { listDocumentos, summarize, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
+import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import { formatCurrency, formatCnpjCpf } from '../../services/xmlParserService';
 
 interface Props {
@@ -29,7 +30,11 @@ const XmlDashboard: React.FC<Props> = ({ currentUser, refreshKey }) => {
     const [fDirecao, setFDirecao] = useState('');
     const [fCompetencia, setFCompetencia] = useState('');
     const [fStatus, setFStatus] = useState('');
-    const [fEmpresa, setFEmpresa] = useState('');
+    // NASCE na empresa ATIVA (15/08): dentro de módulo por-cliente, a visão
+    // padrão é do cliente da sessão. "Todas" continua a um clique — dashboard
+    // é monitoração, e ver a carteira é livre; o que não pode é ABRIR largado.
+    const empresaAtivaId = useEmpresaAtivaId();
+    const [fEmpresa, setFEmpresa] = useState(empresaAtivaId || '');
 
     useEffect(() => {
         let alive = true;

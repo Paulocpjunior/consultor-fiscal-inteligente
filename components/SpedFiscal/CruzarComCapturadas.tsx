@@ -10,6 +10,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { User } from '../../types';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
+import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
+import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import { auth } from '../../services/firebaseConfig';
 import { formatCnpjCpf } from '../../services/xmlParserService';
 import { parseSped, cruzarComCapturadas, type CruzamentoCapturados, type NfeCapturada } from '../../services/spedFiscalExcelEditor';
@@ -37,7 +39,10 @@ function getCompetenciaAtual() {
 
 const CruzarComCapturadas: React.FC<Props> = ({ currentUser }) => {
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
-    const [empresaId, setEmpresaId] = useState('');
+    // A EMPRESA É A ATIVA DA SESSÃO (Paulo, 15/08 — "tira os seletores
+    // internos"): módulo por-cliente não pergunta de novo em qual cliente
+    // está. O cartão fixo diz, e a troca é uma só, no topo.
+    const empresaId = useEmpresaAtivaId();
     const [competencia, setCompetencia] = useState(getCompetenciaAtual());
     const [arqSped, setArqSped] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
@@ -50,7 +55,6 @@ const CruzarComCapturadas: React.FC<Props> = ({ currentUser }) => {
         if (!currentUser) return;
         getEmpresasDisponiveis(currentUser).then(list => {
             setEmpresas(list);
-            if (list.length && !empresaId) setEmpresaId(list[0].id);
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);
@@ -106,13 +110,7 @@ const CruzarComCapturadas: React.FC<Props> = ({ currentUser }) => {
             {/* Empresa + competência */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 rounded-xl" style={card}>
-                    <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>Empresa</label>
-                    <select value={empresaId} onChange={e => setEmpresaId(e.target.value)}
-                        className="w-full p-2.5 text-sm rounded-lg outline-none"
-                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
-                        {!empresas.length && <option value="">Carregando…</option>}
-                        {empresas.map(e => <option key={e.id} value={e.id}>{e.nome} — {formatCnpjCpf(e.cnpj)} ({e.fonte})</option>)}
-                    </select>
+                    <EmpresaAtivaFixa rotulo="Empresa" />
                 </div>
                 <div className="p-4 rounded-xl" style={card}>
                     <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>Competência</label>
