@@ -15,7 +15,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { User } from '../../types';
 import type { EmpresaXmlOption } from '../../services/xmlFiscalService';
-import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
+import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
+import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 
 interface Props {
     currentUser: User | null;
@@ -52,7 +53,12 @@ const fmtBRL = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { style: 
 const ultimoDiaDoAno = () => `${new Date().getFullYear() - (new Date().getMonth() < 1 ? 1 : 0)}-12-31`;
 
 const InventarioBlocoH: React.FC<Props> = ({ empresas, onShowToast }) => {
-    const [empresaId, setEmpresaId] = useState('');
+    // A EMPRESA É A ATIVA DA SESSÃO — este painel não pergunta de novo.
+    //
+    // Paulo, 15/08: *"tira os seletores internos"*. Dava para ativar a empresa
+    // A no cabeçalho e escolher a B aqui dentro, sem a tela denunciar nada:
+    // dois lugares decidindo em qual CLIENTE o trabalho ia cair.
+    const empresaId = useEmpresaAtivaId();
     const [data, setData] = useState(ultimoDiaDoAno());
     const [motInv, setMotInv] = useState('01');
     const [itens, setItens] = useState<ItemInventario[]>([]);
@@ -142,8 +148,7 @@ const InventarioBlocoH: React.FC<Props> = ({ empresas, onShowToast }) => {
                 <div className="flex flex-wrap gap-3 items-end mt-3">
                     <div className="min-w-[260px] flex-1">
                         <label className="text-[10px] uppercase font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>Empresa</label>
-                        <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId}
-                            onAtivar={id => void carregar(id)} />
+                        <EmpresaAtivaFixa />
                     </div>
                     <div>
                         <label className="text-[10px] uppercase font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>Data do inventário</label>

@@ -124,13 +124,28 @@ describe('o App para na ativação antes de mostrar os módulos', () => {
     const app = semComentarios(readFileSync(join(RAIZ, 'App.tsx'), 'utf8'));
 
     it('sem empresa ativa, a tela é a de ATIVAR — não o menu', () => {
-        expect(app).toMatch(/if \(!empresaAtiva \|\| trocandoEmpresa\) \{/);
+        expect(app).toMatch(/if \(trocandoEmpresa \|\| \(!empresaAtiva && !soConsultas\)\) \{/);
         expect(app).toMatch(/<AtivarEmpresaScreen/);
+    });
+
+    it('mas a EXCEÇÃO tem porta: dá para entrar só para consultas', () => {
+        // A incongruência que o Paulo pegou na hora: a tela dizia "consulta
+        // não precisa de empresa" e o portão barrava TUDO. Frase sem porta.
+        expect(app).toMatch(/onSoConsultas=\{/);
+        expect(app).toMatch(/setSoConsultas\(true\)/);
+    });
+
+    it('no modo consulta, card que exige empresa pede a ativação NA HORA do clique', () => {
+        const i = app.indexOf('const selecionarTipo');
+        const bloco = app.slice(i, app.indexOf('};', i));
+        // Guarda o destino e abre o trocador — depois de ativar, cai no card.
+        expect(bloco).toMatch(/if \(daEmpresaAtiva && !empresaAtiva\)/);
+        expect(bloco).toMatch(/setTrocandoEmpresa\(true\)/);
     });
 
     it('e esse portão vem DEPOIS do login — a ordem é login → ativar', () => {
         const posLogin = app.indexOf('if (!currentUser)');
-        const posAtivar = app.indexOf('if (!empresaAtiva');
+        const posAtivar = app.indexOf('if (trocandoEmpresa || (!empresaAtiva');
         expect(posLogin).toBeGreaterThan(-1);
         expect(posAtivar).toBeGreaterThan(posLogin);
     });
@@ -180,5 +195,43 @@ describe('🚨 entrar no módulo NÃO volta para a lista de empresas', () => {
         const i = app.indexOf('const selecionarTipo');
         const bloco = app.slice(i, app.indexOf('};', i));
         expect(bloco).toMatch(/exigeEmpresaAtiva\(type\)/);
+    });
+});
+
+// ─── A SEGUNDA METADE: os seletores internos saíram ─────────────────────────
+
+describe('painel que trabalha SOBRE um cliente não tem mais seletor próprio', () => {
+    // Paulo, 15/08: *"faz a segunda metade, tira os seletores internos"*.
+    // Dava para ativar a empresa A no cabeçalho e escolher a B dentro do
+    // módulo — dois lugares decidindo em qual CLIENTE o trabalho ia cair.
+    const MIGRADOS = [
+        'components/xml/XmlImportacaoManual.tsx',
+        'components/xml/XmlImportacaoZip.tsx',
+        'components/xml/NfsePdfImportacao.tsx',
+        'components/SpedFiscal/AjustesE111.tsx',
+        'components/SpedFiscal/CiapBlocoG.tsx',
+        'components/SpedFiscal/InventarioBlocoH.tsx',
+    ];
+
+    it.each(MIGRADOS)('%s usa a empresa da SESSÃO', (arquivo) => {
+        const fonte = semComentarios(readFileSync(join(RAIZ, arquivo), 'utf8'));
+        expect(fonte).toMatch(/useEmpresaAtivaId\(\)/);
+        expect(fonte).not.toMatch(/<EmpresaSearchSelect/);
+        // E DIZ qual empresa é, no lugar onde o seletor ficava.
+        expect(fonte).toMatch(/<EmpresaAtivaFixa/);
+    });
+
+    it('tela de CARTEIRA continua com o seletor — escolher lá é RECORTAR, não trocar de cliente', () => {
+        // Tirar o filtro do DAS/Tarefas prenderia a visão do conjunto a um
+        // cliente — trocaria um erro por outro.
+        for (const f of ['components/Das/index.tsx', 'components/Tarefas.tsx']) {
+            const fonte = semComentarios(readFileSync(join(RAIZ, f), 'utf8'));
+            expect(fonte).toMatch(/<EmpresaSearchSelect/);
+        }
+    });
+
+    it('o drill-down da DIPAM nasce na empresa ativa — sem perder o "vá direto" de 13/08', () => {
+        const fonte = semComentarios(readFileSync(join(RAIZ, 'components/xml/DipamProdutorRuralPanel.tsx'), 'utf8'));
+        expect(fonte).toMatch(/useState\(empresaAtivaId \|\| ''\)/);
     });
 });

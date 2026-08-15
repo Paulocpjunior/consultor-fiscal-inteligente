@@ -14,7 +14,8 @@ import { carregarAjustes, salvarAjustes } from '../../services/spedAjustesServic
 import {
     validarCodigoAjuste, TIPOS_AJUSTE, type AjusteApuracao,
 } from '../../sefaz-backend/sped-ajustes-apuracao.js';
-import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
+import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
+import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 
 interface Props {
     currentUser: User | null;
@@ -29,7 +30,12 @@ const competenciaAtual = () => {
 };
 
 const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
-    const [empresaId, setEmpresaId] = useState('');
+    // A EMPRESA É A ATIVA DA SESSÃO — este painel não pergunta de novo.
+    //
+    // Paulo, 15/08: *"tira os seletores internos"*. Dava para ativar a empresa
+    // A no cabeçalho e escolher a B aqui dentro, sem a tela denunciar nada:
+    // dois lugares decidindo em qual CLIENTE o trabalho ia cair.
+    const empresaId = useEmpresaAtivaId();
     const [competencia, setCompetencia] = useState(competenciaAtual());
     const [ajustes, setAjustes] = useState<AjusteApuracao[]>([]);
     const [carregado, setCarregado] = useState('');
@@ -102,7 +108,7 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                 <div className="flex flex-wrap items-end gap-3">
                     <div className="min-w-[280px] flex-1">
                         <label className="text-[10px] uppercase font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>Empresa</label>
-                        <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId} />
+                        <EmpresaAtivaFixa />
                     </div>
                     <div>
                         <label className="text-[10px] uppercase font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>Competência</label>

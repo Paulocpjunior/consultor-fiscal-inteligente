@@ -18,6 +18,7 @@ import { listDocumentos, getEmpresasDisponiveis, getDadosFiscaisEmpresa, type Em
 import { apurarIssSp, empresaEhSpCapital, type ApuracaoIssSp } from '../../services/issSpApuracao';
 import { enviarGuiaPeloServidor, mensagemEnvioServidor } from '../../services/envioImpostoService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
+import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 
 interface SaudeCaptura {
     farol: 'ok' | 'atencao' | 'quebrado';
@@ -61,7 +62,12 @@ async function carregarSaude(cnpj: string): Promise<SaudeCaptura> {
 
 const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string) => void }> = ({ currentUser, onShowToast }) => {
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
-    const [empresaId, setEmpresaId] = useState('');
+    // NASCE NA EMPRESA ATIVA (Paulo, 15/08 — a sequência é login → ativar).
+    // O seletor continua existindo porque esta tela também serve à CARTEIRA
+    // (varredura / "vá direto a um cliente", pedido de 13/08) — mas o padrão é
+    // a empresa da sessão, não uma pergunta em branco.
+    const empresaAtivaId = useEmpresaAtivaId();
+    const [empresaId, setEmpresaId] = useState(empresaAtivaId || '');
     const [competencia, setCompetencia] = useState(compAtual());
     const [carregando, setCarregando] = useState(false);
     const [apuracao, setApuracao] = useState<ApuracaoIssSp | null>(null);

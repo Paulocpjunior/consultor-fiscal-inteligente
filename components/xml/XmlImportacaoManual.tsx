@@ -7,7 +7,8 @@ import {
     type EmpresaXmlOption,
 } from '../../services/xmlFiscalService';
 import { XmlParseError, formatCnpjCpf } from '../../services/xmlParserService';
-import EmpresaSearchSelect from './EmpresaSearchSelect';
+import { useEmpresaAtivaId, useEmpresaAtiva } from '../../services/empresaAtivaContext';
+import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import ConfirmarImportacaoModal from './ConfirmarImportacaoModal';
 import { resumirLoteXmls, validarLoteParaEmpresa, type ValidacaoLote } from '../../services/xmlLoteValidacao';
 
@@ -31,7 +32,16 @@ interface ProcessedItem {
 
 const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImported }) => {
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
-    const [empresaId, setEmpresaId] = useState<string>('');
+    // A EMPRESA É A ATIVA DA SESSÃO — este painel não pergunta de novo.
+    //
+    // Paulo, 15/08: *"tira os seletores internos"*. Dava para ativar a empresa
+    // A no cabeçalho e escolher a B aqui dentro, sem a tela denunciar nada:
+    // dois lugares decidindo em qual CLIENTE o trabalho ia cair.
+    const empresaId = useEmpresaAtivaId();
+    // Trocar aqui troca a SESSÃO: o modal de validação oferece a troca quando
+    // o lote é de outro cliente, e mandar ao trocador global perderia os
+    // arquivos pendentes.
+    const { ativar: ativarEmpresaSessao } = useEmpresaAtiva();
     const [dragOver, setDragOver] = useState(false);
     const [loading, setLoading] = useState(false);
     const [results, setResults] = useState<ProcessedItem[]>([]);
@@ -188,7 +198,7 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                         Nenhuma empresa cadastrada disponível para o seu perfil. Cadastre uma no Simples Nacional ou Lucro Presumido/Real antes de importar XMLs.
                     </p>
                 ) : (
-                    <EmpresaSearchSelect empresas={empresas} value={empresaId} onChange={setEmpresaId} />
+                    <EmpresaAtivaFixa />
                 )}
                 {empresaSelecionada ? (
                     <p className="text-[11px] text-slate-500 mt-2">
@@ -310,8 +320,14 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                 arquivos={(pendentes || []).map(f => f.name)}
                 onCancelar={() => { setPendentes(null); setValidacao(null); }}
                 onTrocarEmpresa={async (id) => {
-                    setEmpresaId(id);
                     const nova = empresas.find(e => e.id === id);
+                    if (nova) {
+                        ativarEmpresaSessao({
+                            id: nova.id, nome: nova.nome,
+                            cnpj: String(nova.cnpj || '').replace(/\D/g, ''),
+                            fonte: nova.fonte, codCliente: nova.codCliente, uf: nova.uf,
+                        });
+                    }
                     if (nova && pendentes) {
                         const textos = await Promise.all(pendentes.map(f => f.text()));
                         setValidacao(validarLoteParaEmpresa(resumirLoteXmls(textos), nova.cnpj, empresas));

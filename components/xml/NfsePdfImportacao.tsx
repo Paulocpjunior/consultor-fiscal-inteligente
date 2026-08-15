@@ -4,7 +4,8 @@ import { ref as storageRef, uploadBytes, getDownloadURL, getStorage } from 'fire
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../services/firebaseConfig';
 import { getEmpresasDisponiveis } from '../../services/xmlFiscalService';
-import EmpresaSearchSelect from './EmpresaSearchSelect';
+import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
+import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import { parseNfsePdf, matchNfseEmpresa, NfsePdfParseError } from '../../services/nfsePdfParserService';
 import type { NfsePdfParsed } from '../../services/nfsePdfParserService';
 import type { User } from '../../types';
@@ -30,7 +31,12 @@ const fmtBRL = (v: number): string =>
 
 const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImported }) => {
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
-    const [empresaId, setEmpresaId] = useState<string>('');
+    // A EMPRESA É A ATIVA DA SESSÃO — este painel não pergunta de novo.
+    //
+    // Paulo, 15/08: *"tira os seletores internos"*. Dava para ativar a empresa
+    // A no cabeçalho e escolher a B aqui dentro, sem a tela denunciar nada:
+    // dois lugares decidindo em qual CLIENTE o trabalho ia cair.
+    const empresaId = useEmpresaAtivaId();
     const [file, setFile] = useState<File | null>(null);
     const [parsed, setParsed] = useState<NfsePdfParsed | null>(null);
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
@@ -231,11 +237,7 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                         Nenhuma empresa disponivel. Cadastre uma em Simples Nacional ou Lucro Presumido/Real antes.
                     </p>
                 ) : (
-                    <EmpresaSearchSelect
-                        empresas={empresas}
-                        value={empresaId}
-                        onChange={id => { setEmpresaId(id); handleCancel(); }}
-                    />
+                    <EmpresaAtivaFixa />
                 )}
                 {empresaSelecionada && (
                     <p className="text-[11px] text-slate-400 mt-1">
