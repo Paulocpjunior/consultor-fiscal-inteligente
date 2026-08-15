@@ -262,3 +262,20 @@ describe('lista de carteira não deixa AGIR em linha de outra empresa', () => {
         expect(painel).not.toMatch(/linhas\.filter\([^)]*empresaAtivaSessao/);
     });
 });
+
+describe('EMITIR guia exige que a empresa da linha seja a ATIVA', () => {
+    // Paulo, 15/08: *"ninguém emite nada em série, já tínhamos falado sobre"*
+    // — é a regra de 28/07 (guia sai UMA A UMA, com preview). A guarda não
+    // muda fluxo nenhum: só impede o desatento de emitir no cliente errado.
+    it.each([
+        'components/DCTFWeb/QuotasDoMesPanel.tsx',
+        'components/DCTFWeb/TrimestraisDoMesPanel.tsx',
+    ])('%s: o botão de emissão é condicionado à ativa', (arquivo) => {
+        const fonte = semComentarios(readFileSync(join(RAIZ, arquivo), 'utf8'));
+        expect(fonte).toMatch(/useEmpresaAtiva\(\)/);
+        expect(fonte).toMatch(/ehDaAtiva/);
+        // E o caminho da linha errada é o trocador ÚNICO da sessão.
+        expect(fonte).toMatch(/trocarEmpresaSessao/);
+        expect(fonte).toMatch(/ativar p\/ emitir/);
+    });
+});

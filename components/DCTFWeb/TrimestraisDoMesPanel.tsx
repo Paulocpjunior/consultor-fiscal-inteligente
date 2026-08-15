@@ -7,6 +7,7 @@
  * débitos trimestrais de cada empresa são carregados sob demanda (1 chamada
  * SERPRO), e a emissão das guias é sempre por ação explícita do usuário.
  */
+import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
 import React, { useEffect, useState } from 'react';
 import type {
     User, DctfwebTrimestraisMesResult, DctfwebTrimestralCandidata,
@@ -39,6 +40,11 @@ const LinhaEmpresa: React.FC<{
     cand: DctfwebTrimestralCandidata;
     onShowToast?: (m: string) => void;
 }> = ({ user, cand, onShowToast }) => {
+    // EMITIR exige que a empresa da linha seja a ATIVA (mesma regra das cotas).
+    // Buscar os débitos continua livre: consulta é triagem, emissão é ação.
+    const { empresa: empresaAtivaSessao, trocar: trocarEmpresaSessao } = useEmpresaAtiva();
+    const ehDaAtiva = !!empresaAtivaSessao
+        && String(cand.empresaCnpj || '').replace(/\D/g, '') === empresaAtivaSessao.cnpj;
     const [debitos, setDebitos] = useState<DctfwebDebitosTrimestraisResult | null>(null);
     const [emitido, setEmitido] = useState<DctfwebDarfsSeparadosResult | null>(null);
     const [quotas, setQuotas] = useState<1 | 2 | 3>(1);
@@ -120,10 +126,18 @@ const LinhaEmpresa: React.FC<{
                                     <option value={3}>3</option>
                                 </select>
                             </label>
-                            <button onClick={emitir} disabled={loading}
-                                className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">
-                                {loading ? 'Emitindo…' : 'Emitir guias'}
-                            </button>
+                            {ehDaAtiva ? (
+                                <button onClick={emitir} disabled={loading}
+                                    className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">
+                                    {loading ? 'Emitindo…' : 'Emitir guias'}
+                                </button>
+                            ) : (
+                                <button onClick={trocarEmpresaSessao}
+                                    title="Este trimestre é de OUTRA empresa — não da ativa. Emitir é ação no cliente: ative-o primeiro (a troca vale para a sessão e aparece no topo)."
+                                    className="text-xs px-3 py-1.5 rounded border border-amber-400 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20">
+                                    ⚡ ativar p/ emitir
+                                </button>
+                            )}
                             <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                                 Quotas só ≥ R$ 2.000 (mín. R$ 1.000/quota)
                             </span>
