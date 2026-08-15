@@ -1233,6 +1233,8 @@ export type XmlOrigem =
     | 'sharepoint'
     | 'email'
     | 'api'
+    /** Nota lançada à mão, SEM XML — o retrato até o documento chegar. */
+    | 'digitada'
     | 'outro';
 
 export type XmlStatusDocumento =

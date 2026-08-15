@@ -45,6 +45,15 @@ export function procedenciaDoDocumento(d: any): ProcedenciaDoc {
 
     if (temXml && temChave) return { temXml, temChave, explicacao: null };
 
+    // NOTA DIGITADA: sem XML porque foi lançada à mão — natureza, não buraco.
+    // A frase diz QUEM lançou e o que acontece quando o XML chegar: ele vence.
+    if (!temXml && origem === 'digitada') {
+        const quem = ehTexto(d?.digitadaPorEmail) ? ` por ${d.digitadaPorEmail}` : '';
+        return {
+            temXml, temChave,
+            explicacao: `Nota lançada à mão${quem} — sem XML por origem. Se o XML for capturado ou importado depois, ele SUBSTITUI este lançamento (o documento vence o retrato).`,
+        };
+    }
     if (ehNfse && !temXml) {
         return {
             temXml, temChave,

@@ -3,6 +3,7 @@ import type { User, DocumentoFiscal } from '../../types';
 import { isFirebaseConfigured, isFirebaseStorageConfigured } from '../../services/firebaseConfig';
 import XmlDashboard from './XmlDashboard';
 import XmlImportacaoManual from './XmlImportacaoManual';
+const NotaDigitadaForm = React.lazy(() => import('./NotaDigitadaForm'));
 import NfsePdfImportacao from './NfsePdfImportacao';
 import XmlDocumentosList from './XmlDocumentosList';
 import XmlDocumentoDetalhe from './XmlDocumentoDetalhe';
@@ -318,6 +319,16 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                             onShowToast={onShowToast}
                             onImported={() => setRefreshKey(k => k + 1)}
                         />
+                        {/* A TERCEIRA porta (15/08): nota sem XML, lançada à mão.
+                            Mesmo trilho — grava em documentos_fiscais e todo
+                            leitor existente a enxerga. XML vence digitação. */}
+                        <Suspense fallback={null}>
+                            <NotaDigitadaForm
+                                currentUser={currentUser}
+                                onShowToast={onShowToast}
+                                onImported={() => setRefreshKey(k => k + 1)}
+                            />
+                        </Suspense>
                         {/* Massa (ZIP): trilho da NF-e mod 55 de saída — o lote do
                             portal SEFAZ (baixado no escritório com o cert do cliente)
                             entra aqui e completa os resumos pendentes. */}
