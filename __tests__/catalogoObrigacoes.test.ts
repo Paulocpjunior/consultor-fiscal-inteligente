@@ -336,3 +336,71 @@ describe('🚨 o catálogo admitir que não cobre o cliente TRAVA a etapa 4', ()
         expect(tela).toMatch(/catalogoPendencias/);
     });
 });
+
+// ═══ ABRANGÊNCIA: o campo existia e NUNCA era aplicado ══════════════════════
+//
+// O comentário no topo do catálogo já dizia *"o app prefere dizer 'não sei o
+// prazo deste município' a carimbar o de SP"* — e era o contrário que
+// acontecia: o prazo do SPED (UF:SP, CAT 147/2009) ia para TODO cliente do
+// Lucro, morasse ele onde morasse. Prazo errado entregue com confiança é o erro
+// mais caro deste app, porque quem lê não tem como desconfiar.
+describe('🚨 prazo ESTADUAL só vale para a UF dele', () => {
+    const { mesDoCliente, alcanceDaObrigacao } = require('../sefaz-backend/catalogo-obrigacoes.js');
+    const lucro = (uf?: string) =>
+        mesDoCliente({ colecao: 'lucro_empresas', regimePadrao: 'presumido', uf }, '06/2026');
+
+    it('cliente de SP recebe o prazo de SP normalmente', () => {
+        const m = lucro('SP');
+        expect(m.prazoDeOutraUf).toHaveLength(0);
+        expect(m.prazoSemUfDoCliente).toHaveLength(0);
+    });
+
+    it('cliente do PARANÁ é AVISADO de que a data na tela é a de SP', () => {
+        const m = lucro('PR');
+        expect(m.prazoDeOutraUf.length).toBeGreaterThan(0);
+        expect(m.prazoDeOutraUf[0].abrangencia).toBe('UF:SP');
+        expect(m.coberturaIncompleta).toBe(true);
+        const a = m.alertas.find((x: any) => x.tipo === 'prazo-de-outra-uf');
+        expect(a.texto).toMatch(/este cliente é de PR/i);
+        expect(a.acao).toMatch(/SEFAZ do estado do cliente/);
+    });
+
+    it('🚨 sem UF cadastrada NÃO se afirma nada — nem "é de SP", nem "não é"', () => {
+        // Assumir SP carimbaria o prazo paulista em quem talvez não seja;
+        // assumir o contrário faria a obrigação sumir de quem tem ela.
+        expect(alcanceDaObrigacao({ abrangencia: 'UF:SP' }, {})).toBe('uf-desconhecida');
+        const m = lucro('');
+        expect(m.prazoSemUfDoCliente.length).toBeGreaterThan(0);
+        expect(m.coberturaIncompleta).toBe(true);
+        expect(m.alertas.find((x: any) => x.tipo === 'uf-do-cliente-ausente').acao)
+            .toMatch(/Preencha a UF/);
+    });
+
+    it('obrigação FEDERAL não é afetada por UF nenhuma', () => {
+        expect(alcanceDaObrigacao({ abrangencia: 'BR' }, { uf: 'PR' })).toBe('aplica');
+        expect(alcanceDaObrigacao({}, { uf: 'PR' })).toBe('aplica');
+    });
+
+    it('a Rotina põe o prazo de outra UF na FRENTE — é a causa mais perigosa', () => {
+        // A data ESTÁ na tela e parece certa. As outras causas (regime
+        // indefinido, obrigação proposta) o colaborador percebe; esta não.
+        const { montarRotinaFiscal } = require('../sefaz-backend/rotina-fiscal.js');
+        const e = montarRotinaFiscal({
+            empresa: { id: 'e1', nome: 'X', cnpj: '11222333000181' },
+            competencia: '2026-06',
+            documentos: [{ direcao: 'entrada' }, { direcao: 'saida' }],
+            tarefas: [{ obrigacao: 'DCTFWeb', status: 'concluida' }],
+            cobertura: lucro('PR'),
+        }).etapas.find((x: any) => x.id === 'obrigacoes');
+        expect(e.status).toBe('atencao');
+        expect(e.resumo).toMatch(/prazo cadastrado de OUTRA UF/);
+        expect(e.acao).toMatch(/a de SP/);
+        expect(e.prazoDeOutraUf.length).toBeGreaterThan(0);
+    });
+
+    it('a rota manda a UF do cliente — sem ela a régua não roda', () => {
+        const rota = readFileSync(join(__dirname, '..', 'sefaz-backend/rotina-fiscal-routes.js'), 'utf8');
+        expect(rota).toMatch(/uf: e\.uf/);
+        expect(rota).toMatch(/uf: d\.dadosFiscais\?\.uf \|\| d\.uf/);
+    });
+});

@@ -94,3 +94,13 @@ export function porEsfera(
 ): Record<Esfera, ObrigacaoCatalogo[]>;
 
 export function pendenciasDeConfirmacao(): PendenciaConfirmacao[];
+
+/**
+ * A entrada vale para este cliente, pela ABRANGÊNCIA?
+ * `uf-desconhecida` quando o cliente não tem UF cadastrada — sem UF não se
+ * afirma nem que o prazo de SP vale, nem que não vale.
+ */
+export function alcanceDaObrigacao(
+    regra: { abrangencia?: string },
+    ctx?: { uf?: string },
+): 'aplica' | 'fora-de-abrangencia' | 'uf-desconhecida';

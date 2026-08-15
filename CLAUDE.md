@@ -110,6 +110,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
   lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
   que faz alguém ler "0 pendentes" como resposta da carteira.
+- **MATA-BURRO: CAMPO QUE EXISTE E NUNCA É APLICADO — o prazo de SP entregue ao
+  Brasil inteiro** (15/08). O `abrangencia` ('BR' · 'UF:SP' · 'IBGE:?') está no
+  catálogo desde 11/08, e o comentário no topo do próprio arquivo dizia *"o app
+  prefere dizer 'não sei o prazo deste município' a carimbar o de SP"* — era
+  exatamente o CONTRÁRIO que acontecia: o prazo do **SPED** (`UF:SP`, CAT
+  147/2009) ia para TODO cliente do Lucro, morasse ele onde morasse. **Prazo
+  errado entregue com confiança é o erro mais caro que este app comete**, porque
+  quem lê não tem como desconfiar — a data está lá, formatada, parecendo certa.
+  `alcanceDaObrigacao` + a UF do cliente na `mesDoCliente`: cliente de outra UF
+  vira ALERTA nomeado ("a data que aparece é a de SP — confira na SEFAZ do
+  estado dele"), entra em `coberturaIncompleta` e a Rotina põe essa causa **na
+  FRENTE** das outras duas, porque regime indefinido e obrigação proposta o
+  colaborador percebe, e prazo de outro estado não.
+  ⚠️ **SEM UF CADASTRADA NÃO SE AFIRMA NADA**: assumir "é de SP" carimbaria o
+  prazo paulista em quem talvez não seja, e assumir o contrário faria a obrigação
+  SUMIR de quem tem ela. Vira `uf-desconhecida` e manda preencher a UF.
+  ✂️ **E NÃO MEXI NO QUE O CRON GERA**: a tarefa continua nascendo (some da
+  tela é pior que nascer com ressalva) e a data continua a mesma — o app DENUNCIA
+  em vez de contornar, que é a regra de 06/08. Cadastrar prazo estadual de
+  verdade é decisão do Paulo, obrigação por obrigação, com a base legal do lado.
 - **MATA-BURRO: FUNÇÃO PRONTA, TESTADA E SEM NENHUMA TELA — a trava T1 do escopo
   passou 4 dias escrita e NÃO APLICADA** (15/08). `mesDoCliente` devolve
   `coberturaIncompleta` desde 11/08, com o comentário no próprio código dizendo
