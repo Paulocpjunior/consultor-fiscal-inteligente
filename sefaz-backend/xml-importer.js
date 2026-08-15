@@ -11,6 +11,7 @@ import { Storage } from '@google-cloud/storage';
 import { classificarTipoDoc } from './xml-tipo-doc.js';
 import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml, docCancelado, decidirDirecaoPorTpNF, CSTAT_EVENTO_CANCELAMENTO } from './xml-metadata-helper.js';
 import { decidirDonoPorParticipantes } from './atribuicao-participantes.js';
+import { mesclarItensRelidos, CAMPOS_RECUPERAVEIS } from './backfill-itens-fiscais.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 // CNPJ do escritório — é ele que o cliente põe no autXML da nota dele.
@@ -1160,6 +1161,94 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
     return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, semDadoNoXml, erro: e.message };
   }
   return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, semDadoNoXml };
+}
+
+/**
+ * Versão do extrator de ITENS. Subir este número recoloca a base inteira na
+ * fila — é o que se faz quando o extrator aprende a ler mais um campo.
+ *
+ * SENTINELA É CARIMBO DE VERSÃO, NUNCA CAMPO DE DADO (lição de 13/08, NOVA
+ * ERA): o backfill anterior usava a UF como sentinela e pulava exatamente as
+ * notas que precisavam dele, respondendo "0 recuperadas · 664 já tinham"
+ * enquanto o painel do lado acusava 427 sem fornecedor.
+ */
+export const VERSAO_RELEITURA_ITENS = 1;
+
+/**
+ * BACKFILL — campos de ITEM que o extrator aprendeu depois (`cstIpi`,
+ * `cEnqIpi`, `vBcIpi`, `cstPis`, `cstCofins`), relidos do XML no Cloud Storage.
+ *
+ * Destrava dois consumidores nomeados no de-para:
+ *   · **E510** (consolidação de IPI por CFOP + CST) — o último 🔴 do IPI;
+ *   · base de crédito de PIS/COFINS, que hoje devolve `indefinido` com o motivo
+ *     "nota capturada sem o CST — reprocessar o XML".
+ *
+ * RECUPERAÇÃO DA FONTE, não conserto de cadastro: o XML cru é o documento, e
+ * ele já está guardado. Não se pede arquivo ao cliente nem se consulta a SEFAZ.
+ *
+ * O pareamento (que é onde mora o risco de gravar o CST no item errado) e a
+ * regra de "só preenche vazio" vivem no núcleo puro `backfill-itens-fiscais.js`.
+ */
+export async function relerItensFiscais({ limit = 200, empresaId = null, competencia = null } = {}) {
+  const db = fa().firestore();
+  let examinadas = 0, atualizadas = 0, semXml = 0, jaRelidas = 0, semItens = 0, naoPareadas = 0, semDadoNoXml = 0;
+  const porCampo = {};
+  const naoPareadasDetalhe = [];
+  try {
+    // Seleção por empresa/competência (é sempre sob demanda, por um cliente).
+    // O filtro do carimbo é EM MEMÓRIA: no Firestore, igualdade não devolve
+    // documento que NÃO TEM o campo — e é justamente esse o caso de tudo que
+    // foi capturado antes desta versão.
+    let q = db.collection('documentos_fiscais');
+    if (empresaId) q = q.where('empresaId', '==', String(empresaId));
+    if (competencia) q = q.where('competencia', '==', String(competencia));
+    const snap = await q.limit(Math.max(limit, 1)).get();
+
+    const bucket = storage.bucket(STORAGE_BUCKET);
+    for (const docSnap of snap.docs) {
+      const d = docSnap.data() || {};
+      if (Number(d.itensRelidos || 0) >= VERSAO_RELEITURA_ITENS) { jaRelidas++; continue; }
+      examinadas++;
+      if (!Array.isArray(d.itens) || !d.itens.length) { semItens++; continue; }
+      if (!d.storagePath) { semXml++; continue; }
+      try {
+        const [buf] = await bucket.file(d.storagePath).download();
+        const doXml = extrairItens(buf.toString('utf8'));
+        const r = mesclarItensRelidos(d.itens, doXml, CAMPOS_RECUPERAVEIS);
+
+        // NÃO PAREOU: a nota fica INTACTA e NOMEADA. Gravar por índice quando
+        // as contagens divergem escreveria o CST de um produto em outro, e o
+        // arquivo sairia ACEITO declarando outra coisa — não volta recusa.
+        // Também NÃO carimba: ela tem de voltar à fila quando alguém olhar.
+        if (r.motivo) {
+          naoPareadas++;
+          if (naoPareadasDetalhe.length < 20) {
+            naoPareadasDetalhe.push({ chave: d.chave || docSnap.id, numero: d.numero || null, motivo: r.motivo });
+          }
+          continue;
+        }
+
+        const patch = { itensRelidos: VERSAO_RELEITURA_ITENS, itensRelidosEm: new Date().toISOString() };
+        if (r.alterados > 0) {
+          patch.itens = r.itens;
+          for (const [campo, n] of Object.entries(r.campos)) porCampo[campo] = (porCampo[campo] || 0) + n;
+        } else {
+          // Relida e o XML REALMENTE não tinha o campo — resposta DIFERENTE de
+          // "já relida", e é ela que diz que não adianta clicar de novo.
+          semDadoNoXml++;
+        }
+        await docSnap.ref.update(patch);
+        if (r.alterados > 0) atualizadas++;
+      } catch (e) {
+        console.warn(`[relerItensFiscais] falha em ${docSnap.id}:`, e.message);
+        semXml++;
+      }
+    }
+  } catch (e) {
+    console.warn('[relerItensFiscais] query falhou:', e.message);
+    return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe, erro: e.message };
+  }
+  return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe };
 }
 
 export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor }) {

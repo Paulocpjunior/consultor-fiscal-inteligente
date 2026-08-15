@@ -56,3 +56,28 @@ export function corrigirDirecaoEntradaPropria(p?: { limit?: number }): Promise<{
 export function preencherEnderecoDestinatario(p?: {
     limit?: number; empresaId?: string | null; competencia?: string | null;
 }): Promise<{ examinadas: number; preenchidas: number; semXml: number; jaTinham: number; erro?: string }>;
+
+/** Versão do extrator de ITENS — subir recoloca a base na fila do backfill. */
+export const VERSAO_RELEITURA_ITENS: number;
+
+/**
+ * BACKFILL — campos de item que o extrator aprendeu depois (`cstIpi`,
+ * `cEnqIpi`, `vBcIpi`, `cstPis`, `cstCofins`), relidos do XML no Storage.
+ * Cada contador do retorno é uma CAUSA com ação própria.
+ */
+export function relerItensFiscais(p?: {
+    limit?: number;
+    empresaId?: string | null;
+    competencia?: string | null;
+}): Promise<{
+    examinadas: number;
+    atualizadas: number;
+    semXml: number;
+    jaRelidas: number;
+    semItens: number;
+    naoPareadas: number;
+    semDadoNoXml: number;
+    porCampo: Record<string, number>;
+    naoPareadasDetalhe: Array<{ chave: string; numero: string | null; motivo: string }>;
+    erro?: string;
+}>;

@@ -7,8 +7,8 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    getIpiVarredura,
-    type IpiVarreduraResposta, type IpiVarreduraLinha,
+    getIpiVarredura, relerItensFiscais,
+    type IpiVarreduraResposta, type IpiVarreduraLinha, type RelerItensResposta,
 } from '../../services/ipiVarreduraService';
 
 interface Props { onShowToast?: (msg: string) => void; }
@@ -36,6 +36,27 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
     const [loading, setLoading] = useState(false);
     const [consultandoMit, setConsultandoMit] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
+    // ♻️ RELER CST DOS ITENS — o E510 não sai sem `cstIpi`, e o extrator só
+    // passou a lê-lo em 11/08. O XML cru está no Storage, então o campo se
+    // RECUPERA da fonte; ninguém digita e não se pede arquivo ao cliente.
+    const [relendo, setRelendo] = useState<string | null>(null);
+    const [relido, setRelido] = useState<Record<string, RelerItensResposta>>({});
+
+    const relerCst = async (l: IpiVarreduraLinha) => {
+        setRelendo(l.empresaId);
+        try {
+            const r = await relerItensFiscais(l.empresaId, competencia);
+            setRelido(prev => ({ ...prev, [l.empresaId]: r }));
+            const ganhos = Object.entries(r.porCampo).map(([c, n]) => `${c}: ${n}`).join(' · ');
+            onShowToast?.(r.atualizadas
+                ? `${l.nome}: ${r.atualizadas} nota(s) recuperada(s) — ${ganhos}.`
+                : `${l.nome}: nada a recuperar (${r.jaRelidas} já relidas · ${r.semDadoNoXml} sem o dado no XML · ${r.semXml} sem arquivo).`);
+        } catch (e: any) {
+            onShowToast?.(`Falha ao reler ${l.nome}: ${e?.message || 'erro desconhecido'}`);
+        } finally {
+            setRelendo(null);
+        }
+    };
 
     const carregar = async (consultarMit: boolean) => {
         consultarMit ? setConsultandoMit(true) : setLoading(true);
@@ -148,7 +169,25 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
                                         <td className="px-4 py-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
                                             {l.modeloPeriodo || (l.temModeloIpi === false ? '—' : '?')}
                                         </td>
-                                        <td className="px-4 py-2 text-xs max-w-md" style={{ color: 'var(--text-secondary)' }}>{l.acao}</td>
+                                        <td className="px-4 py-2 text-xs max-w-md" style={{ color: 'var(--text-secondary)' }}>
+                                            {l.acao}
+                                            {/* O E510 depende do CST do IPI por item, e nota
+                                                capturada antes de 11/08 não tem o campo. Aqui
+                                                ele volta do XML-fonte. */}
+                                            <div className="mt-1">
+                                                <button
+                                                    onClick={() => relerCst(l)}
+                                                    disabled={relendo !== null}
+                                                    title="Relê o XML guardado e preenche os CST de IPI/PIS/COFINS que faltam nos itens. Não sobrescreve o que já está gravado."
+                                                    className="btn-press text-[10px] px-1.5 py-0.5 rounded border border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/20 disabled:opacity-50 whitespace-nowrap"
+                                                >
+                                                    {relendo === l.empresaId ? '⏳ relendo…' : '♻️ Reler CST dos itens'}
+                                                </button>
+                                                {relido[l.empresaId] && (
+                                                    <RelerResultado r={relido[l.empresaId]} />
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 );
                             })}
@@ -159,6 +198,41 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
         </div>
     );
 };
+
+/**
+ * O resultado responde POR CAUSA — três números com ações OPOSTAS.
+ *
+ * "0 recuperadas" sozinho foi o alarme sem ação de 13/08: não dizia se o clique
+ * já tinha sido dado, se o XML não tem o dado, ou se o arquivo nem foi guardado.
+ */
+const RelerResultado: React.FC<{ r: RelerItensResposta }> = ({ r }) => (
+    <div className="mt-1 text-[10px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+        {r.atualizadas > 0 && (
+            <div className="text-emerald-600 dark:text-emerald-400">
+                ✓ {r.atualizadas} nota(s) recuperada(s) — {Object.entries(r.porCampo).map(([c, n]) => `${c} ${n}`).join(' · ')}
+            </div>
+        )}
+        {r.jaRelidas > 0 && <div>{r.jaRelidas} já relidas nesta versão — clicar de novo não muda nada.</div>}
+        {r.semDadoNoXml > 0 && <div>{r.semDadoNoXml} relidas e o XML realmente não traz o campo.</div>}
+        {r.semXml > 0 && (
+            <div className="text-amber-600 dark:text-amber-400">
+                {r.semXml} sem o XML guardado — é buraco de CAPTURA, não de leitura.
+            </div>
+        )}
+        {r.naoPareadas > 0 && (
+            <div className="text-amber-600 dark:text-amber-400">
+                {r.naoPareadas} com itens que não pareiam com o XML — ficaram INTACTAS de propósito
+                (gravar por posição escreveria o CST de um produto em outro).
+                {r.naoPareadasDetalhe.slice(0, 3).map(d => (
+                    <div key={d.chave}>· nº {d.numero || '—'}: {d.motivo}</div>
+                ))}
+            </div>
+        )}
+        {!r.atualizadas && !r.jaRelidas && !r.semDadoNoXml && !r.semXml && !r.naoPareadas && (
+            <div>Nenhum documento com itens nesta competência.</div>
+        )}
+    </div>
+);
 
 const Kpi: React.FC<{ label: string; value: string; accent?: 'danger' | 'success' | 'warning' }> = ({ label, value, accent }) => (
     <div className="p-3 rounded-lg" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
