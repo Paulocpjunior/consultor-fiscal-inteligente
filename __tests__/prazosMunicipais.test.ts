@@ -295,3 +295,57 @@ describe('cadastrar o calendário TEM que gerar a tarefa', () => {
         expect(cron).toMatch(/return `\$\{mes\}\/\$\{ano\}`/);
     });
 });
+
+// ═══ A TRAVA DA CLASSE — porque o defeito voltou em OUTRO caminho ═══════════
+//
+// Consertei o cron e algumas horas depois a varredura achou o MESMO defeito no
+// auto-gerar da tela de Tarefas: ele chamava `obrigacoesAplicaveis`, a lista
+// genérica, que não conhece município nem UF. Corrigir instância por instância
+// não fecha a classe — a trava varre QUEM CRIA TAREFA.
+describe('🚨 todo caminho que CRIA tarefa usa o núcleo por cliente', () => {
+    const RAIZ = join(__dirname, '..');
+    const semComentarios = (s: string) =>
+        s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    it('nenhum criador de tarefa chama a lista genérica do regime', () => {
+        const criadores = [
+            'sefaz-backend/tarefas-orchestrator.js',   // cron do dia 1
+            'services/tarefasAutoGerar.ts',            // auto-gerar da tela
+        ];
+        for (const f of criadores) {
+            const fonte = semComentarios(readFileSync(join(RAIZ, f), 'utf8'));
+            expect(fonte).toMatch(/mesDoCliente\(|obrigacoesDoCliente\(/);
+            // A genérica não conhece município nem UF: usá-la aqui é o defeito.
+            expect(fonte).not.toMatch(/=\s*obrigacoesAplicaveis\(/);
+        }
+    });
+
+    it('🚨 os DOIS vocabulários de regime batem — LUCRO_REAL_* não some calado', () => {
+        // `CATALOGO['LUCRO_REAL_INDUSTRIA']` é undefined e a lista saía VAZIA
+        // em silêncio: o auto-gerar criava ZERO obrigação para todo cliente do
+        // Lucro Real, e a estatística dizia "0 criadas" como se não houvesse
+        // o que criar.
+        const { normalizarRegimeCatalogo, obrigacoesDoCliente } = require('../sefaz-backend/catalogo-obrigacoes.js');
+        expect(normalizarRegimeCatalogo('LUCRO_REAL_INDUSTRIA')).toEqual({ regime: 'LUCRO_REAL', reconhecido: true });
+        expect(normalizarRegimeCatalogo('LUCRO_REAL_SERVICOS').regime).toBe('LUCRO_REAL');
+        expect(normalizarRegimeCatalogo('SIMPLES').regime).toBe('SIMPLES');
+
+        const mes = obrigacoesDoCliente('LUCRO_REAL_COMERCIO', '06/2026', { uf: 'SP' });
+        expect(mes.obrigacoes.length).toBeGreaterThan(0);
+        expect(mes.regimeReconhecido).toBe(true);
+    });
+
+    it('regime que o catálogo NÃO conhece vem nomeado, nunca lista vazia calada', () => {
+        const { obrigacoesDoCliente } = require('../sefaz-backend/catalogo-obrigacoes.js');
+        const mes = obrigacoesDoCliente('REGIME_QUE_NAO_EXISTE', '06/2026', {});
+        expect(mes.regimeReconhecido).toBe(false);
+        // E quem chama CONTA isso: "0 criadas" sem causa passa por "nada a fazer".
+        const auto = readFileSync(join(RAIZ, 'services/tarefasAutoGerar.ts'), 'utf8');
+        expect(auto).toMatch(/regimesNaoReconhecidos/);
+    });
+
+    it('o auto-gerar da tela carrega os calendários, igual ao cron', () => {
+        const auto = readFileSync(join(RAIZ, 'services/tarefasAutoGerar.ts'), 'utf8');
+        expect(auto).toMatch(/carregarCalendariosMunicipais/);
+    });
+});
