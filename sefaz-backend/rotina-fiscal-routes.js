@@ -19,6 +19,7 @@ import { getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { montarRotinaFiscal, resumirFunil, acharApuracaoDaCompetencia } from './rotina-fiscal.js';
 import { mesDoCliente, pendenciasDeConfirmacao } from './catalogo-obrigacoes.js';
+import { carregarPrazosMunicipais } from './prazos-municipais-routes.js';
 
 /**
  * Cobertura do catálogo para UM cliente.
@@ -33,13 +34,18 @@ import { mesDoCliente, pendenciasDeConfirmacao } from './catalogo-obrigacoes.js'
  * um throw apagaria a tela de todo mundo por causa de um cadastro torto. Sem
  * cobertura, a etapa 4 só perde a trava — que é o comportamento de antes.
  */
-function coberturaDoCliente(e, competencia) {
+function coberturaDoCliente(e, competencia, prazosMunicipais = []) {
     const [ano, mes] = String(competencia || '').split('-');
     if (!ano || !mes) return null;
     try {
         // A UF vai junto: é ela que decide se o prazo ESTADUAL cadastrado
         // (hoje só o de SP) vale para este cliente.
-        return mesDoCliente({ colecao: e.colecao, regimePadrao: e.regimePadrao, uf: e.uf }, `${mes}/${ano}`);
+        return mesDoCliente({
+            colecao: e.colecao, regimePadrao: e.regimePadrao, uf: e.uf,
+            // Município + calendários: é o que transforma o ISS de pendência
+            // nomeada em obrigação com data — para quem tem o calendário.
+            codMunIBGE: e.codMunIBGE, prazosMunicipais,
+        }, `${mes}/${ano}`);
     } catch (err) {
         console.warn(`[rotina] cobertura do catálogo falhou (${e.nome}):`, err.message);
         return null;
@@ -291,12 +297,18 @@ router.get('/painel', requireAuth, async (req, res) => {
         // puro — as que NÃO fecham o mês no DAS. Reimplementar a conta aqui
         // faria os dois painéis divergirem, então os dois leem o mesmo núcleo.
         const issCarteira = await montarIssDaCarteira(db, empresas, documentos, porCnpjToId, competencia);
+        // Calendários municipais (coleção pequena: 1 doc por cidade × vigência).
+        // Falha aqui NÃO derruba o painel — sem eles o ISS volta a ser
+        // pendência nomeada, que é o estado de antes.
+        let prazosMunicipais = [];
+        try { prazosMunicipais = await carregarPrazosMunicipais(db); }
+        catch (e) { console.warn('[rotina] calendários municipais indisponíveis:', e.message); }
 
         const rotinas = empresas.map((e) => montarRotinaFiscal({
             // TRAVA T1 DO ESCOPO: o catálogo diz se cobre este cliente. A flag
             // existia desde 11/08 e nenhuma tela lia — obrigação que não vira
             // tarefa não aparecia em lugar nenhum, e o mês fechava assim mesmo.
-            cobertura: coberturaDoCliente(e, competencia),
+            cobertura: coberturaDoCliente(e, competencia, prazosMunicipais),
             iss: issCarteira.mapa.get(e.id) || null,
             dipam: contarProdutoresRurais(docsPorEmpresa.get(e.id) || []),
             empresa: { id: e.id, nome: e.nome, cnpj: e.cnpj, regime: e.regime },

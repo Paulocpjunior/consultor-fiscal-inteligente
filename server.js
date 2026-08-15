@@ -92,6 +92,7 @@ import { parseDestinatarios } from './sefaz-backend/email-destinatarios-helper.j
 import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './sefaz-backend/graph-remetente.js';
 import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sanitize-error.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
+import prazosMunicipaisRouter from './sefaz-backend/prazos-municipais-routes.js';
 import {
     resolverModelosGemini, versaoAtendeAlvo,
     FAMILIA_ALVO_GEMINI, ALIAS_PRO, ALIAS_FLASH,
@@ -402,6 +403,7 @@ app.use('/api/admin/cert-monitor', certMonitorRouter);
 app.use('/api/admin/diagnostico-config', diagnosticoConfigRouter);
 app.use('/api/admin/health-consolidado', healthConsolidadoRouter);
 app.use('/api/admin/empresas-perfil', empresasPerfilRouter);
+app.use('/api/admin/prazos-municipais', prazosMunicipaisRouter);
 // O cron e chamado pelo Cloud Scheduler com header X-Cron-Secret — fica fora
 // do prefixo /api/admin pra preservar o padrao dos outros crons.
 app.use('/api/internal/cron', healthAlertaCronRouter);

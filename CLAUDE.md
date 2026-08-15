@@ -110,6 +110,33 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
   lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
   que faz alguém ler "0 pendentes" como resposta da carteira.
+- **O CALENDÁRIO MUNICIPAL VIROU CADASTRO — o buraco maior do mês fechado**
+  (15/08). Depois de aplicar a `abrangencia` estadual, sobrou o municipal, que
+  era buraco INTEIRO: o ISS nascia `proposta` porque **não existe "dia do ISS"
+  nacional** e carimbar o de SP seria inventar prazo — então ele nunca virava
+  tarefa, e são ~157 empresas de serviço puro, as que NÃO fecham o mês no DAS.
+  `prazos-municipais.js` (24 testes) + coleção `prazos_municipais` + painel
+  **🏛️ Calendário municipal** no ⚙️ Config Admin. Cadastrado o calendário da
+  CIDADE, o ISS deixa de ser pendência e vira obrigação **com vencimento** —
+  para os clientes DAQUELA cidade, nunca para os outros.
+  RÉGUAS COPIADAS DO IVA-ST, e pelas mesmas razões: **vigência resolve pela
+  COMPETÊNCIA, nunca "o mais recente"** (competência velha sai com a regra que
+  valia nela; o erro contrário só aparece na fiscalização) e **cadastro sem
+  BASE LEGAL é RECUSADO** (prazo órfão não se confere depois — daqui a três
+  meses ninguém lembra de onde veio aquele dia 15). Desativar **não apaga**: o
+  calendário antigo continua explicando as competências que ele datou.
+  DECISÕES: a fila é **POR MUNICÍPIO** (cadastrar uma cidade resolve todos os
+  clientes dela — por cliente seriam 157 linhas dizendo a mesma coisa),
+  ordenada por quantos clientes rende; **optante do Simples fica FORA** (LC 123
+  art. 13 — o ISS dele já está no DAS, e cobrar calendário por causa dele
+  inflaria a fila com trabalho que não muda guia); e cliente **sem município
+  cadastrado** é contado à parte, porque a ação é OUTRA (é no cadastro dele).
+  🐛 **O DESCASAMENTO DE FORMATO MORDEU PELA SEGUNDA VEZ NO MESMO DIA**: este
+  catálogo fala `'MM/AAAA'` e o resto do app fala `'AAAA-MM'`. Na Rotina ele ao
+  menos EXPLODIA; aqui o efeito era **silencioso** — a vigência nunca casava e
+  o ISS continuava pendente como se ninguém tivesse cadastrado nada. Convertido
+  na fronteira (mudar o formato do catálogo quebraria o cron do mês inteiro) e
+  travado por teste, inclusive no limite do ano.
 - **MATA-BURRO: CAMPO QUE EXISTE E NUNCA É APLICADO — o prazo de SP entregue ao
   Brasil inteiro** (15/08). O `abrangencia` ('BR' · 'UF:SP' · 'IBGE:?') está no
   catálogo desde 11/08, e o comentário no topo do próprio arquivo dizia *"o app
