@@ -1,0 +1,207 @@
+/**
+ * NotaDigitadaForm — a TERCEIRA porta de entrada de documento.
+ *
+ * Paulo, 15/08: *"importação de XML — automática ou manual — tem a mesma
+ * finalidade: abastecer o sistema de lançamentos. Até mesmo o lançamento de
+ * uma nota de forma manual, devemos poder fazer."*
+ *
+ * Grava em `documentos_fiscais`, na MESMA forma do importer — todo leitor que
+ * já existe (livros, DIPAM, SPED, relatórios) enxerga a nota sem código novo.
+ * A régua que manda: **XML vence digitação** — se o XML da mesma chave chegar
+ * depois, ele substitui o lançamento; e uma digitada nunca sobrescreve um
+ * documento que tem XML.
+ */
+import React, { useState } from 'react';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db, isFirebaseConfigured } from '../../services/firebaseConfig';
+import {
+    validarNotaDigitada, montarNotaDigitada, idNotaDigitada, podeGravarSobre,
+    type ItemDigitado,
+} from '../../services/notaDigitada';
+import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
+import EmpresaAtivaFixa from '../EmpresaAtivaFixa';
+import type { User } from '../../types';
+
+interface Props {
+    currentUser: User;
+    onShowToast?: (msg: string) => void;
+    onImported?: () => void;
+}
+
+const itemVazio = (): ItemDigitado => ({ cfop: '', vProd: null });
+
+const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImported }) => {
+    const { empresa } = useEmpresaAtiva();
+    const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
+    const [numero, setNumero] = useState('');
+    const [serie, setSerie] = useState('1');
+    const [dhEmi, setDhEmi] = useState('');
+    const [chave, setChave] = useState('');
+    const [participanteNome, setParticipanteNome] = useState('');
+    const [participanteDoc, setParticipanteDoc] = useState('');
+    const [participanteUf, setParticipanteUf] = useState('');
+    const [valorTotal, setValorTotal] = useState('');
+    const [itens, setItens] = useState<ItemDigitado[]>([itemVazio()]);
+    const [erros, setErros] = useState<string[]>([]);
+    const [salvando, setSalvando] = useState(false);
+    const [salva, setSalva] = useState<string | null>(null);
+
+    if (!empresa) return <EmpresaAtivaFixa rotulo="Lançar nota" />;
+
+    const setItem = (idx: number, patch: Partial<ItemDigitado>) =>
+        setItens(prev => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+
+    const num = (v: string): number | null => {
+        const t = String(v || '').replace(/\./g, '').replace(',', '.').trim();
+        if (!t) return null;
+        const n = parseFloat(t);
+        return isNaN(n) ? null : n;
+    };
+
+    const salvar = async () => {
+        setErros([]); setSalva(null);
+        const input = {
+            empresaId: empresa.id,
+            empresaCnpj: empresa.cnpj,
+            empresaNome: empresa.nome,
+            direcao, numero, serie, dhEmi, chave,
+            participanteNome, participanteDoc, participanteUf,
+            valorTotal: num(valorTotal),
+            itens: itens.map(it => ({ ...it, vProd: typeof it.vProd === 'number' ? it.vProd : num(String(it.vProd ?? '')) })),
+            digitadaPorEmail: currentUser.email || '',
+        };
+        const v = validarNotaDigitada(input as any);
+        if (v.length) { setErros(v); return; }
+        if (!isFirebaseConfigured || !db) { setErros(['Sem conexão com o banco.']); return; }
+        setSalvando(true);
+        try {
+            const id = idNotaDigitada(input as any);
+            const ref = doc(db, 'documentos_fiscais', id);
+            const atual = await getDoc(ref);
+            // XML VENCE DIGITAÇÃO: digitada não sobrescreve doc com XML — e a
+            // recusa DIZ o estado e a saída, nunca só "já existe".
+            const pode = podeGravarSobre(atual.exists() ? (atual.data() as any) : null);
+            if (!pode.ok) { setErros([pode.motivo!]); return; }
+            const regravando = atual.exists();
+            await setDoc(ref, JSON.parse(JSON.stringify(montarNotaDigitada(input as any))));
+            setSalva(regravando
+                ? `Nota nº ${numero} REGRAVADA (corrigiu a digitação anterior).`
+                : `Nota nº ${numero} lançada. Ela já conta em livros, DIPAM e relatórios — e se o XML chegar depois, ele assume o lugar.`);
+            onShowToast?.(`Nota nº ${numero} ${regravando ? 'regravada' : 'lançada'} para ${empresa.nome}.`);
+            onImported?.();
+            setNumero(''); setChave(''); setValorTotal(''); setItens([itemVazio()]);
+            setParticipanteNome(''); setParticipanteDoc(''); setParticipanteUf('');
+        } catch (e: any) {
+            setErros([`Falha ao gravar: ${e?.message || 'erro desconhecido'}.`]);
+        } finally {
+            setSalvando(false);
+        }
+    };
+
+    const campo = 'w-full p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600';
+    const rotulo = 'text-[10px] uppercase font-bold block mb-1 text-slate-500 dark:text-slate-400';
+
+    return (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+            <div>
+                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">✍️ Lançar nota sem XML</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    Mesmo trilho da importação: a nota entra em <strong>documentos fiscais</strong> e conta em livros,
+                    DIPAM, SPED e relatórios. Fica carimbada como <strong>digitada</strong> com o seu nome — e se o XML
+                    for capturado depois (informe a chave, se tiver), <strong>ele substitui o lançamento</strong>.
+                </p>
+            </div>
+
+            <EmpresaAtivaFixa rotulo="Lançando na empresa" semTrocar />
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                    <label className={rotulo}>Direção</label>
+                    <select value={direcao} onChange={e => setDirecao(e.target.value as any)} className={campo}>
+                        <option value="entrada">Entrada (compra)</option>
+                        <option value="saida">Saída (venda)</option>
+                    </select>
+                </div>
+                <div>
+                    <label className={rotulo}>Número da nota</label>
+                    <input value={numero} onChange={e => setNumero(e.target.value)} className={campo} placeholder="ex.: 4512" />
+                </div>
+                <div>
+                    <label className={rotulo}>Série</label>
+                    <input value={serie} onChange={e => setSerie(e.target.value)} className={campo} />
+                </div>
+                <div>
+                    <label className={rotulo}>Data de emissão</label>
+                    <input type="date" value={dhEmi} onChange={e => setDhEmi(e.target.value)} className={campo} />
+                </div>
+            </div>
+
+            <div>
+                <label className={rotulo}>Chave de acesso (44 dígitos — opcional, mas recomendada)</label>
+                <input value={chave} onChange={e => setChave(e.target.value)} className={`${campo} font-mono`}
+                    placeholder="com a chave, o XML capturado depois cai NO MESMO documento" />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                    <label className={rotulo}>{direcao === 'entrada' ? 'Fornecedor' : 'Cliente (destinatário)'}</label>
+                    <input value={participanteNome} onChange={e => setParticipanteNome(e.target.value)} className={campo} />
+                </div>
+                <div>
+                    <label className={rotulo}>CNPJ/CPF</label>
+                    <input value={participanteDoc} onChange={e => setParticipanteDoc(e.target.value)} className={`${campo} font-mono`} />
+                </div>
+                <div>
+                    <label className={rotulo}>UF</label>
+                    <input value={participanteUf} onChange={e => setParticipanteUf(e.target.value)} className={campo} maxLength={2} placeholder="SP" />
+                </div>
+            </div>
+
+            <div>
+                <div className="flex items-center justify-between mb-1">
+                    <label className={rotulo}>Itens (CFOP da ESCRITURAÇÃO: {direcao === 'entrada' ? '1xxx/2xxx/3xxx' : '5xxx/6xxx/7xxx'})</label>
+                    <button onClick={() => setItens(p => [...p, itemVazio()])}
+                        className="text-[11px] px-2 py-0.5 rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300">
+                        + item
+                    </button>
+                </div>
+                <div className="space-y-2">
+                    {itens.map((it, idx) => (
+                        <div key={idx} className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                            <input value={it.cfop} onChange={e => setItem(idx, { cfop: e.target.value })} className={campo} placeholder="CFOP" />
+                            <input value={it.ncm || ''} onChange={e => setItem(idx, { ncm: e.target.value })} className={campo} placeholder="NCM (opcional)" />
+                            <input value={it.xProd || ''} onChange={e => setItem(idx, { xProd: e.target.value })} className={`${campo} md:col-span-2`} placeholder="Descrição" />
+                            <input value={it.vProd === null || it.vProd === undefined ? '' : String(it.vProd)}
+                                onChange={e => setItem(idx, { vProd: e.target.value === '' ? null : (parseFloat(e.target.value.replace(',', '.')) || 0) })}
+                                className={campo} placeholder="Valor" />
+                            {itens.length > 1 && (
+                                <button onClick={() => setItens(p => p.filter((_, i) => i !== idx))}
+                                    className="text-xs text-red-500">remover</button>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                <div>
+                    <label className={rotulo}>Valor total da nota</label>
+                    <input value={valorTotal} onChange={e => setValorTotal(e.target.value)} className={campo} placeholder="0,00" />
+                </div>
+                <button onClick={salvar} disabled={salvando}
+                    className="btn-press px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50">
+                    {salvando ? '⏳ gravando…' : '✍️ Lançar nota'}
+                </button>
+            </div>
+
+            {erros.length > 0 && (
+                <ul className="text-xs text-red-600 dark:text-red-400 space-y-1 list-disc ml-4">
+                    {erros.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+            )}
+            {salva && <p className="text-xs text-emerald-700 dark:text-emerald-400">✓ {salva}</p>}
+        </div>
+    );
+};
+
+export default NotaDigitadaForm;

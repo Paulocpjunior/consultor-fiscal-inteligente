@@ -59,9 +59,16 @@ export function decidirGravacaoNFe({ existingData, tipoDoc, schema, chave }) {
   // 30 das 36 notas do ZIP estavam assim e o importer as chamava de
   // "duplicadas", recusando-se a completá-las com o XML inteiro em mãos.
   const exIncompleto = exists && (!exData.competencia || !exData.dhEmi || exData.valorTotal == null);
+  // NOTA DIGITADA: lançada à mão, sem XML (15/08 — "importação automática ou
+  // manual tem a mesma finalidade"). Ela é o RETRATO que a pessoa fez do
+  // documento; o XML é o documento. Quando o XML chega, ele SUBSTITUI — sem
+  // isto, a digitada de hoje travaria como "duplicado" o XML verdadeiro de
+  // amanhã, a mesma família da lápide que travava a reimportação (14/08).
+  // Resumo não rebaixa digitada: resumo tem MENOS que o lançamento completo.
+  const exDigitada = exists && exData.origem === 'digitada';
   // Upgrade = a base tem menos do que está chegando. Nunca o contrário: o
   // `!incomingResumo` impede que um resumo rebaixe uma nota completa.
-  const upgrade = exists && (exResumo || exIncompleto) && !incomingResumo;
+  const upgrade = exists && (exResumo || exIncompleto || exDigitada) && !incomingResumo;
   return {
     exists,
     upgrade,
