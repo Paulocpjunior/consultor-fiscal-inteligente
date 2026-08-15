@@ -116,6 +116,20 @@ export function vereditoDoCnpj(linha, agoraMs) {
             acao: 'Rode a captura para trazer o que entrou depois disso.',
         };
     }
+    // 🚨 CONFERIR RESUMO CUSTA VARRER OS DOCUMENTOS, e a varredura da CARTEIRA
+    // não faz isso (seriam ~390 leituras). Quando o chamador não conferiu, ele
+    // manda `null` — e o veredito DIZ que não conferiu, em vez de devolver
+    // "em dia" por omissão. Verde por coisa que ninguém olhou é o pior farol.
+    if (docs.resumosSemCompleta === null || docs.resumosSemCompleta === undefined) {
+        return {
+            farol: 'ok', codigo: 'cursor-em-dia',
+            motivo: `Lemos tudo que a SEFAZ tem para este CNPJ (NSU ${ult} de ${max}).`,
+            acao: null,
+            // O que ESTE veredito não olhou. A conferência de resumo sem
+            // completa é a etapa de VALIDAÇÃO da Rotina, não a de captura.
+            naoConferido: 'resumo sem a NF-e completa',
+        };
+    }
     if (docs.resumosSemCompleta > 0) {
         return {
             farol: 'atencao', codigo: 'resumos-sem-completa',
@@ -232,5 +246,128 @@ export function montarProvaCaptura({ cnpjAlvo, empresas = [], states = {}, docs 
         ],
         janelaDistDfeDias: JANELA_DISTDFE_DIAS,
         docsAntesDoCorte,
+    };
+}
+
+// ============================================================================
+// A CARTEIRA INTEIRA — "como estão as capturas?" numa resposta só.
+// ----------------------------------------------------------------------------
+// Paulo, 15/08: *"me atualize sobre as capturas de XML, como estão?"*
+//
+// A Prova de captura responde por UM CNPJ, e responde bem — mas para saber como
+// está a CARTEIRA era preciso abrir a tela ~390 vezes. Ou seja: a pergunta mais
+// natural do dono não tinha resposta no app, e a única saída era estimar de
+// memória — que é o vício do "0/388" carimbado neste projeto.
+//
+// NENHUMA CONTA NOVA: cada CNPJ passa pelo MESMO `vereditoDoCnpj` da tela
+// individual. Painel com conta própria diverge sozinho (lição do card 4).
+//
+// O agrupamento é POR VEREDITO, não por empresa, porque veredito é o que tem
+// AÇÃO: "12 travadas no NSU" e "3 com certificado bloqueado" se resolvem de
+// jeitos diferentes, e uma lista de 390 nomes não diz por onde começar.
+// ============================================================================
+
+/** Ordem de gravidade — quem exige ação primeiro aparece primeiro. */
+const PESO_CODIGO = {
+    'incompleta-na-fonte': 0,   // a SEFAZ DIZ que falta documento
+    'travada': 1,
+    'bloqueada': 2,
+    'nunca-sincronizou': 3,
+    'captura-desligada': 4,
+    'nao-cadastrado': 5,
+    'sem-cursor': 6,
+    'cursor-em-dia-mas-parada': 7,
+    'resumos-sem-completa': 8,
+    'cursor-em-dia': 9,
+    'em-dia-na-fonte': 10,
+};
+
+/**
+ * @param {object} p
+ * @param {Array}  p.empresas  cadastros [{cnpj, id, nome, regime, capturarSefaz, motivosBloqueio}]
+ * @param {object} p.states    sefaz_state por CNPJ
+ * @param {number} [p.limitePorGrupo] quantos nomes listar por grupo (o resto vai CONTADO)
+ */
+export function montarProvaCarteira({ empresas = [], states = {}, agoraMs = Date.now(), limitePorGrupo = 25 }) {
+    const porCnpj = new Map();
+    for (const e of empresas) {
+        const c = soDigitos(e.cnpj);
+        if (c.length !== 14) continue;
+        porCnpj.set(c, { cnpj: c, cadastro: e, state: null, docs: { total: 0, resumosSemCompleta: null } });
+    }
+    // CNPJ com cursor e SEM cadastro não some: é justamente o caso que faz o
+    // total não bater, e sumir dele é o que faz alguém achar que está tudo lá.
+    for (const [c, st] of Object.entries(states)) {
+        const n = soDigitos(c);
+        if (n.length !== 14) continue;
+        if (!porCnpj.has(n)) porCnpj.set(n, { cnpj: n, cadastro: null, state: st, docs: { total: 0, resumosSemCompleta: null } });
+        else porCnpj.get(n).state = st;
+    }
+
+    const linhas = [...porCnpj.values()].map((l) => ({
+        cnpj: l.cnpj,
+        nome: l.cadastro?.nome || '—',
+        regime: l.cadastro?.regime || null,
+        matriz: l.cnpj.slice(8, 12) === '0001',
+        // O NÚMERO QUE FALTA vai junto: "incompleta" sem quantos documentos a
+        // SEFAZ ainda tem não diz se é 1 nota ou 500.
+        pendenciaNSU: l.state?.pendenciaNSU != null
+            ? Math.max(0, Number(l.state.pendenciaNSU) || 0)
+            : (num(l.state?.maxNSU) != null && num(l.state?.ultNSU) != null
+                ? Math.max(0, num(l.state.maxNSU) - num(l.state.ultNSU)) : null),
+        veredito: vereditoDoCnpj(l, agoraMs),
+    }));
+
+    const grupos = new Map();
+    for (const l of linhas) {
+        const cod = l.veredito.codigo;
+        if (!grupos.has(cod)) {
+            grupos.set(cod, {
+                codigo: cod, farol: l.veredito.farol,
+                motivo: l.veredito.motivo, acao: l.veredito.acao,
+                empresas: [], total: 0, documentosPendentes: 0,
+            });
+        }
+        const g = grupos.get(cod);
+        g.total++;
+        g.documentosPendentes += Number(l.pendenciaNSU) || 0;
+        g.empresas.push({ cnpj: l.cnpj, nome: l.nome, regime: l.regime, matriz: l.matriz, pendenciaNSU: l.pendenciaNSU });
+    }
+
+    const ordenados = [...grupos.values()]
+        .sort((a, b) => (PESO_CODIGO[a.codigo] ?? 99) - (PESO_CODIGO[b.codigo] ?? 99))
+        .map((g) => ({
+            ...g,
+            // LISTA CORTADA SEMPRE DIZ QUANTOS FICARAM (regra de 30/07): o
+            // `slice` mudo é o que faz o painel contradizer o próprio número.
+            empresas: g.empresas
+                .sort((a, b) => (Number(b.pendenciaNSU) || 0) - (Number(a.pendenciaNSU) || 0)
+                    || String(a.nome).localeCompare(String(b.nome), 'pt-BR'))
+                .slice(0, limitePorGrupo),
+            mostrando: Math.min(limitePorGrupo, g.total),
+            truncado: g.total > limitePorGrupo,
+        }));
+
+    const emDia = linhas.filter((l) => l.veredito.farol === 'ok').length;
+    const comFalha = linhas.filter((l) => l.veredito.farol === 'falha').length;
+    const comAtencao = linhas.filter((l) => l.veredito.farol === 'atencao').length;
+    const documentosPendentes = linhas.reduce((s, l) => s + (Number(l.pendenciaNSU) || 0), 0);
+
+    return {
+        total: linhas.length,
+        emDia, comFalha, comAtencao,
+        /** Documentos que a SEFAZ tem e o app ainda não leu, somados. */
+        documentosPendentes,
+        // ALL-FAILED NUNCA É VERDE (regra do farol honesto). E carteira sem
+        // ninguém em dia, com gente em falha, é vermelho — não âmbar.
+        farol: linhas.length === 0 ? 'neutro'
+            : comFalha > 0 ? (emDia === 0 ? 'falha' : 'atencao')
+                : comAtencao > 0 ? 'atencao' : 'ok',
+        grupos: ordenados,
+        // O QUE ESTA VARREDURA NÃO OLHOU — dizer o escopo é o que impede
+        // alguém de ler "em dia" como "nada a fazer neste cliente".
+        escopo: 'Confere o CURSOR do DistDFe (entrada). NÃO confere: resumo sem a NF-e completa '
+            + '(é a etapa de Validação da Rotina) nem a SAÍDA mod 55, que não vem pela SEFAZ '
+            + '(Rejeição 641) e se prova no painel ✅ O cliente fez certo?.',
     };
 }
