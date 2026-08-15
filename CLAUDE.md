@@ -75,6 +75,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   julgar o lado da ENTRADA: CFOP de saída (5101) numa nota de entrada é a NF-e do
   próprio produtor, que sai pela dedup do art. 136 e **não pode cobrar
   pendência** — era exatamente o alarme apagado em 12/08.
+- **A SEQUÊNCIA DO APP É LOGIN → ATIVAR EMPRESA → MÓDULOS — e VER a carteira é
+  livre, AGIR num cliente exige que ele seja o ATIVO** (Paulo, 15/08, três
+  mensagens no mesmo dia). Eu tinha lido *"não carregamos nada até ativar"*
+  como carga preguiçosa e implementei DUAS vezes (Simples #676, Lucro #684) —
+  a frase é sobre ESCOPO DA SESSÃO. O que existe agora: portão pós-login
+  (`AtivarEmpresaScreen`), `services/empresaAtiva.ts` + contexto, chip
+  permanente no topo com ⇄ Trocar, módulos abrindo NA ativa, trocar limpa o
+  carregado, logout limpa a ativação (F5 não). TRÊS CORREÇÕES DELE NO MESMO
+  DIA, todas por print: (1) o card do Lucro voltava à lista de ~400
+  (`setSelectedLucroEmpresaId(null)`); (2) **exceção sem porta** — a lista
+  `DISPENSAM_EMPRESA_ATIVA` (consultas de tabela + visões de carteira) existia
+  e o portão barrava TUDO; virou o botão "📖 Entrar só para consultas", e card
+  de cliente clicado no modo consulta pede ativação NA HORA guardando o
+  destino; (3) **lista de triagem com botão que ESCREVE em linha de outra
+  empresa** (EXPERTE ativa, ♻️ na linha da FASTWELD): a visão continua da
+  carteira toda, mas a AÇÃO só existe na linha da ativa — nas outras vira
+  "⚡ Ativar X para agir aqui", pelo caminho único. Seletor interno de painel
+  por-cliente SAIU (`EmpresaAtivaFixa` no lugar); ficam com seletor: filtro de
+  carteira, config de admin e drill-down de tela de carteira (nascendo na
+  ativa). PENDENTE DE DECISÃO DO PAULO: aplicar a mesma guarda nas abas que
+  EMITEM por linha (Cotas do mês, Trimestrais) — muda o fluxo de emissão em
+  série da equipe, não fiz sem confirmar.
 - **MATA-BURRO: DOIS DOCUMENTOS COM AÇÕES OPOSTAS NÃO PODEM TER A MESMA CARA NA
   TELA** (14/08, NOVA ERA 07/2026 — o dia inteiro saiu daqui). A linha do
   FUNRURAL mostrava `nº 255273 · JOSE D. KOKI`. Paulo leu *"o CFI está levando a
