@@ -110,6 +110,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
   lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
   que faz alguém ler "0 pendentes" como resposta da carteira.
+- **A CONSULTA MENSAL DE PRAZO ENTROU — proposta COM FONTE, nunca escrita
+  direta** (15/08, fechando o desenho do Paulo de 11/08). Com o calendário
+  municipal virando cadastro, a pergunta seguinte é quem preenche ~N cidades à
+  mão. `prazo-municipal-consulta.js` (12 testes) + `POST
+  /prazos-municipais/consultar` pergunta ao Gemini **com grounding** e devolve
+  PROPOSTA — **o handler não escreve NADA**, e um teste recorta o handler e
+  prova que não há `.set`/`.update` nele. Quem grava é o cadastro, com base
+  legal e o nome de quem confirmou.
+  TRÊS RECUSAS QUE FAZEM ISSO SER ÚTIL: (1) **proposta SEM FONTE é chute** e
+  derruba a resposta INTEIRA — modelo sem busca inventa prazo com a mesma
+  confiança com que acerta, e aqui o custo do chute é multa; (2) **fonte não
+  oficial vai MARCADA, não escondida** (o modelo cita o que acha; quem decide é
+  quem lê) — `.gov.br`/`.leg.br`/`.jus.br` valem, e a régua casa por FRONTEIRA
+  de domínio, senão `gov.br.exemplo.com` passaria; (3) **dia ilegível NÃO vira
+  default** — campo de prazo não recebe chute nem zero. E o que o humano
+  confirma é a **DIFERENÇA** contra o cadastro, não o número solto: divergiu,
+  a tela manda cadastrar **VIGÊNCIA NOVA** em vez de editar a antiga (editar
+  reescreveria a competência que já saiu com a regra velha).
 - **O CALENDÁRIO MUNICIPAL VIROU CADASTRO — o buraco maior do mês fechado**
   (15/08). Depois de aplicar a `abrangencia` estadual, sobrou o municipal, que
   era buraco INTEIRO: o ISS nascia `proposta` porque **não existe "dia do ISS"

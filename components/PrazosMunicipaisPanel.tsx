@@ -49,6 +49,10 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
     const [form, setForm] = useState({ ...FORM_VAZIO });
     const [erros, setErros] = useState<string[]>([]);
     const [salvando, setSalvando] = useState(false);
+    // 🔎 CONSULTA COM FONTE (Paulo, 11/08): o app PROPÕE e o humano confirma.
+    // Nada aqui grava — data de pagamento não muda sozinha.
+    const [consultando, setConsultando] = useState<string | null>(null);
+    const [proposta, setProposta] = useState<any>(null);
 
     const token = async () => {
         const u = getAuth().currentUser;
@@ -66,6 +70,20 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
         } finally { setCarregando(false); }
     };
     useEffect(() => { carregar(); }, []);
+
+    const consultar = async (m: { codMunIBGE: string; municipioNome: string | null }) => {
+        setConsultando(m.codMunIBGE); setProposta(null);
+        try {
+            const r = await fetch('/api/admin/prazos-municipais/consultar', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${await token()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ codMunIBGE: m.codMunIBGE, municipioNome: m.municipioNome, obrigacao: 'ISS' }),
+            });
+            setProposta({ ...(await r.json()), municipio: m });
+        } catch (e: any) {
+            setProposta({ ok: false, motivo: e?.message || 'falha na consulta', municipio: m });
+        } finally { setConsultando(null); }
+    };
 
     const salvar = async () => {
         setErros([]); setSalvando(true);
@@ -141,13 +159,22 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                                         {' · '}{m.total} cliente(s): {m.clientes.slice(0, 3).map((c) => c.nome).join(', ')}
                                         {m.clientes.length > 3 && ` +${m.clientes.length - 3}`}
                                     </span>
-                                    <button
-                                        onClick={() => setForm((f) => ({
-                                            ...f, codMunIBGE: m.codMunIBGE, municipioNome: m.municipioNome || '',
-                                        }))}
-                                        className="btn-press px-2 py-0.5 rounded border border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-300 whitespace-nowrap">
-                                        cadastrar
-                                    </button>
+                                    <span className="flex gap-1 whitespace-nowrap">
+                                        <button
+                                            onClick={() => consultar(m)}
+                                            disabled={consultando !== null}
+                                            title="Pergunta ao Gemini com busca e devolve uma PROPOSTA com as fontes. Não grava nada."
+                                            className="btn-press px-2 py-0.5 rounded border border-violet-400 dark:border-violet-600 text-violet-800 dark:text-violet-300 disabled:opacity-50">
+                                            {consultando === m.codMunIBGE ? '⏳' : '🔎 consultar'}
+                                        </button>
+                                        <button
+                                            onClick={() => setForm((f) => ({
+                                                ...f, codMunIBGE: m.codMunIBGE, municipioNome: m.municipioNome || '',
+                                            }))}
+                                            className="btn-press px-2 py-0.5 rounded border border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-300">
+                                            cadastrar
+                                        </button>
+                                    </span>
                                 </div>
                             ))}
                             {dados.totalMunicipios === 0 && (
@@ -160,6 +187,76 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                     </>
                 )}
             </div>
+
+            {/* ── PROPOSTA DA CONSULTA ───────────────────────────────────────
+                O que o humano confirma é a DIFERENÇA e a FONTE, nunca o número
+                solto. Proposta sem fonte é recusada no backend: modelo sem
+                busca inventa prazo com a mesma confiança com que acerta. */}
+            {proposta && (
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-violet-300 dark:border-violet-700 p-4 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-sm font-bold text-violet-800 dark:text-violet-300">
+                            🔎 Proposta para {proposta.municipio?.municipioNome || proposta.municipio?.codMunIBGE}
+                        </h4>
+                        <button onClick={() => setProposta(null)} className="text-xs text-slate-400">fechar</button>
+                    </div>
+
+                    {!proposta.ok ? (
+                        <p className="text-xs text-red-600 dark:text-red-400">{proposta.motivo || proposta.error}</p>
+                    ) : (
+                        <>
+                            <p className="text-xs text-slate-700 dark:text-slate-200">
+                                Vence no dia <strong>{proposta.proposta.diaVencimento}</strong>
+                                {proposta.proposta.mesesApos === 0
+                                    ? ' do PRÓPRIO mês da competência'
+                                    : ` do mês seguinte à competência`}
+                                {proposta.proposta.baseLegal && <> · <strong>{proposta.proposta.baseLegal}</strong></>}
+                            </p>
+                            {proposta.diferenca && (
+                                <p className={`text-[11px] ${proposta.diferenca.mudou ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                                    {proposta.diferenca.mudou
+                                        ? `Diferente do cadastrado: ${proposta.diferenca.campos.join(' · ')}. `
+                                        : 'Bate com o que já está cadastrado. '}
+                                    {proposta.diferenca.acao}
+                                </p>
+                            )}
+                            {(proposta.avisos || []).map((a: string, i: number) => (
+                                <p key={i} className="text-[11px] text-amber-700 dark:text-amber-400">⚠ {a}</p>
+                            ))}
+                            <button
+                                onClick={() => setForm((f) => ({
+                                    ...f,
+                                    codMunIBGE: proposta.municipio.codMunIBGE,
+                                    municipioNome: proposta.municipio.municipioNome || '',
+                                    diaVencimento: String(proposta.proposta.diaVencimento),
+                                    mesesApos: String(proposta.proposta.mesesApos),
+                                    baseLegal: proposta.proposta.baseLegal || '',
+                                }))}
+                                className="btn-press text-[11px] px-3 py-1 rounded-lg bg-violet-600 text-white whitespace-nowrap">
+                                ↓ levar para o formulário
+                            </button>
+                        </>
+                    )}
+
+                    {/* AS FONTES aparecem sempre, inclusive na recusa: são elas
+                        o caminho quando a proposta não se sustenta. */}
+                    {!!proposta.fontes?.length && (
+                        <div className="pt-1 border-t border-slate-200 dark:border-slate-700">
+                            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 mb-1">Fontes citadas</p>
+                            {proposta.fontes.map((f: any, i: number) => (
+                                <p key={i} className="text-[11px]">
+                                    <a href={f.uri} target="_blank" rel="noreferrer"
+                                        className="text-blue-600 dark:text-blue-400 underline break-all">{f.title}</a>
+                                    {f.oficial
+                                        ? <span className="ml-1 text-emerald-600 dark:text-emerald-400">oficial</span>
+                                        : <span className="ml-1 text-amber-600 dark:text-amber-400">não oficial</span>}
+                                </p>
+                            ))}
+                        </div>
+                    )}
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">{proposta.aviso}</p>
+                </div>
+            )}
 
             {/* ── CADASTRO ───────────────────────────────────────────────────── */}
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
