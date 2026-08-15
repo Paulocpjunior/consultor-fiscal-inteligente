@@ -361,6 +361,51 @@ export function obrigacoesAplicaveis(regime, competencia, opts = {}) {
 }
 
 /**
+ * Normaliza o regime para as CHAVES do catálogo.
+ *
+ * 🚨 O app tem DOIS vocabulários de regime e eles não batem. O perfil do
+ * cliente usa `LUCRO_REAL_INDUSTRIA` / `LUCRO_REAL_SERVICOS` /
+ * `LUCRO_REAL_COMERCIO`; o catálogo tem `LUCRO_REAL`. `CATALOGO[regime]` com
+ * uma dessas chaves é `undefined`, e `obrigacoesAplicaveis` devolvia **lista
+ * vazia em SILÊNCIO** — ou seja, o caminho de auto-gerar tarefas da tela de
+ * Tarefas criava ZERO obrigação para todo cliente do Lucro Real, e as
+ * estatísticas mostravam "0 criadas" como se não houvesse o que criar.
+ *
+ * @returns {{regime: string, reconhecido: boolean}}
+ */
+export function normalizarRegimeCatalogo(regime) {
+    const r = String(regime || '').trim().toUpperCase();
+    if (!r) return { regime: 'INDEFINIDO', reconhecido: false };
+    if (CATALOGO[r]) return { regime: r, reconhecido: true };
+    // A sub-especialização do Lucro Real (indústria/serviços/comércio) muda a
+    // ANÁLISE de crédito, não as obrigações do mês.
+    if (r.startsWith('LUCRO_REAL')) return { regime: 'LUCRO_REAL', reconhecido: true };
+    if (r.startsWith('LUCRO_PRESUMIDO')) return { regime: 'LUCRO_PRESUMIDO', reconhecido: true };
+    if (r.startsWith('SIMPLES')) return { regime: 'SIMPLES', reconhecido: true };
+    // Desconhecido NÃO vira lista vazia calada: quem chama precisa poder
+    // contar e nomear o que ficou de fora.
+    return { regime: 'INDEFINIDO', reconhecido: false };
+}
+
+/**
+ * As obrigações de UM cliente, já com o calendário MUNICIPAL resolvido.
+ *
+ * É o núcleo compartilhado entre `mesDoCliente` (usado pelo cron e pela
+ * Rotina) e os caminhos que já sabem o regime. Sem isto, cada caminho
+ * reimplementaria a resolução municipal — e um deles ficaria para trás, que é
+ * exatamente o que aconteceu com o cron.
+ */
+export function obrigacoesDoCliente(regime, competencia, { uf = '', codMunIBGE = '', prazosMunicipais = [] } = {}) {
+    const { regime: chave, reconhecido } = normalizarRegimeCatalogo(regime);
+    const mes = mesDoCliente({
+        colecao: chave === 'SIMPLES' ? 'simples_empresas' : 'lucro_empresas',
+        regimePadrao: chave === 'LUCRO_PRESUMIDO' ? 'presumido' : (chave === 'LUCRO_REAL' ? 'real' : ''),
+        uf, codMunIBGE, prazosMunicipais,
+    }, competencia);
+    return { ...mes, regimeReconhecido: reconhecido, regimeInformado: regime };
+}
+
+/**
  * A entrada vale para este cliente? Responde pela ABRANGÊNCIA.
  *
  * 🚨 O CAMPO EXISTIA DESDE 11/08 E NUNCA FOI APLICADO. O comentário no topo

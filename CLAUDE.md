@@ -110,6 +110,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
   lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
   que faz alguém ler "0 pendentes" como resposta da carteira.
+- **🚨 PARE DE CORRIGIR INSTÂNCIA — TRAVE A CLASSE** (Paulo, 15/08: *"a cada
+  rodada você descobre um erro seu, essa semana foi demais! resolva seus
+  gaps"*). Ele estava certo e o padrão era meu. Em vez de esperar a próxima
+  rodada, varri as TRÊS classes que apareceram no dia — formato de competência,
+  "liguei um lado e não o outro", e status lido como resultado.
+  A varredura achou o MESMO defeito do cron em OUTRO caminho:
+  `services/tarefasAutoGerar.ts` (o auto-gerar da tela de Tarefas, que roda
+  quando o colaborador troca a competência) chamava `obrigacoesAplicaveis`, a
+  lista genérica — sem município, sem UF.
+  🐛 **E ALI MORAVA UM DEFEITO MAIOR, PRÉ-EXISTENTE E MUDO**: o app tem DOIS
+  vocabulários de regime. O perfil do cliente diz `LUCRO_REAL_INDUSTRIA` /
+  `_SERVICOS` / `_COMERCIO`; o catálogo tem `LUCRO_REAL`. `CATALOGO[regime]`
+  dava `undefined` e a lista saía **VAZIA EM SILÊNCIO** — esse caminho criava
+  **ZERO obrigação para todo cliente do Lucro Real**, e a estatística mostrava
+  "0 criadas" como se não houvesse o que criar. `normalizarRegimeCatalogo` +
+  `obrigacoesDoCliente` (núcleo único) resolvem, e regime desconhecido vem
+  NOMEADO em `regimesNaoReconhecidos`.
+  **A TRAVA É POR COMPORTAMENTO, não por arquivo**: o teste varre QUEM CRIA
+  TAREFA e exige o núcleo por cliente, barrando a volta da lista genérica.
+  Corrigir instância por instância não fecha a classe — foi por isso que o
+  mesmo defeito nasceu duas vezes no mesmo dia.
 - **🚨 MATA-BURRO: LIGUEI O CADASTRO NO ALERTA E ESQUECI DE LIGAR NA ENTREGA**
   (15/08, defeito MEU, achado horas depois de subir). O calendário municipal
   alimentava a COBERTURA da Rotina (o âmbar) e **não** alimentava o cron que

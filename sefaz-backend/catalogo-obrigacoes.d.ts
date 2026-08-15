@@ -104,3 +104,24 @@ export function alcanceDaObrigacao(
     regra: { abrangencia?: string },
     ctx?: { uf?: string },
 ): 'aplica' | 'fora-de-abrangencia' | 'uf-desconhecida';
+
+/** Normaliza o regime para as CHAVES do catálogo (LUCRO_REAL_* → LUCRO_REAL). */
+export function normalizarRegimeCatalogo(regime: string): { regime: string; reconhecido: boolean };
+
+/**
+ * Obrigações de UM cliente, com o calendário MUNICIPAL já resolvido.
+ * Núcleo compartilhado — cada caminho que reimplementasse isto ficaria para trás.
+ */
+export function obrigacoesDoCliente(
+    regime: string,
+    competencia: string,
+    ctx?: { uf?: string; codMunIBGE?: string; prazosMunicipais?: any[] },
+): {
+    regime: string;
+    obrigacoes: any[];
+    propostas: any[];
+    alertas: any[];
+    coberturaIncompleta: boolean;
+    regimeReconhecido: boolean;
+    regimeInformado: string;
+};

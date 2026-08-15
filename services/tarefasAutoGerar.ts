@@ -14,6 +14,8 @@
 import { criarTarefaAutomatica } from './tarefasService';
 import { obrigacoesAplicaveis } from './calendarioFiscal';
 import { getEmpresasParaPerfilCliente } from './xmlFiscalService';
+import { obrigacoesDoCliente } from '../sefaz-backend/catalogo-obrigacoes.js';
+import { carregarCalendariosMunicipais } from './prazosMunicipaisService';
 import type { User } from '../types';
 
 export interface AutoGerarStats {
@@ -22,6 +24,8 @@ export interface AutoGerarStats {
     criadas: number;
     jaExistiam: number;
     erros: number;
+    /** Regime que o catálogo não conhece — nomeado, nunca silencioso. */
+    regimesNaoReconhecidos: string[];
 }
 
 /**
@@ -40,11 +44,18 @@ export async function autoGerarTarefasParaCompetencia(
         criadas: 0,
         jaExistiam: 0,
         erros: 0,
+        // Regime que o catálogo não conhece NÃO some: vem nomeado, senão "0
+        // criadas" passa por "nada a fazer".
+        regimesNaoReconhecidos: [],
     };
 
     if (!user || !competencia.match(/^\d{2}\/\d{4}$/)) return stats;
 
     const empresas = await getEmpresasParaPerfilCliente(user);
+    // Calendários municipais: sem eles o ISS não vira tarefa por ESTE caminho
+    // — o mesmo defeito que o cron tinha. Falha aqui não derruba a geração: o
+    // ISS volta a ser pendência nomeada na Rotina, que é o estado de antes.
+    const prazosMunicipais = await carregarCalendariosMunicipais();
 
     // Limita concorrencia pra nao saturar Firestore -- ~6 em paralelo.
     const CONCURRENCY = 6;
@@ -52,7 +63,17 @@ export async function autoGerarTarefasParaCompetencia(
 
     for (const emp of empresas) {
         stats.empresasProcessadas++;
-        const obrigacoes = obrigacoesAplicaveis(emp.regimeSugerido, competencia);
+        // 🚨 DOIS VOCABULÁRIOS DE REGIME: aqui vem `LUCRO_REAL_INDUSTRIA` e o
+        // catálogo tem `LUCRO_REAL`. `obrigacoesAplicaveis` devolvia lista
+        // VAZIA em silêncio — este caminho criava ZERO obrigação para todo
+        // cliente do Lucro Real, e a estatística mostrava "0 criadas" como se
+        // não houvesse o que criar. `obrigacoesDoCliente` normaliza e ainda
+        // resolve o calendário municipal.
+        const mes = obrigacoesDoCliente(emp.regimeSugerido, competencia, {
+            uf: emp.uf || '', codMunIBGE: emp.codMunIBGE || '', prazosMunicipais,
+        });
+        if (!mes.regimeReconhecido) stats.regimesNaoReconhecidos.push(emp.nome);
+        const obrigacoes = mes.obrigacoes;
         for (const regra of obrigacoes) {
             stats.obrigacoesAvaliadas++;
             tarefas.push(async () => {
