@@ -94,7 +94,7 @@ import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sa
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
 import prazosMunicipaisRouter from './sefaz-backend/prazos-municipais-routes.js';
 import {
-    resolverModelosGemini, versaoAtendeAlvo,
+    resolverModelosGemini, versaoAtendeAlvo, vereditoDaFamilia, conferirRoteador,
     FAMILIA_ALVO_GEMINI, ALIAS_PRO, ALIAS_FLASH,
 } from './sefaz-backend/gemini-modelo.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -2312,10 +2312,20 @@ app.get('/api/admin/gemini/versao', requireAdmin, async (req, res) => {
         }
     };
     const [pro, flash] = await Promise.all([sondar(GEMINI_MODEL_PRO), sondar(GEMINI_MODEL_FLASH)]);
+    // 🚨 QUEM RESPONDE "estamos no 3.7?" É A SONDA, NÃO A LISTAGEM. O painel
+    // mostrava "a família não aparece para esta conta" com as duas sondas
+    // devolvendo gemini-3.7-flash logo abaixo — duas leituras do mesmo fato
+    // discordando na mesma tela.
+    const veredito = vereditoDaFamilia([pro, flash], resolucao.alvoEncontrado, resolucao.familiaAlvo);
+    // E o roteador Pro×Flash vira ENFEITE quando os dois apontam pro mesmo
+    // modelo — foi o que o print de produção mostrou.
+    const roteador = conferirRoteador({ pro: { modelo: GEMINI_MODEL_PRO }, flash: { modelo: GEMINI_MODEL_FLASH } });
     return res.json({
         ok: true,
         familiaAlvo: resolucao.familiaAlvo,
-        alvoEncontrado: resolucao.alvoEncontrado,
+        veredito, roteador,
+        /** Sobre a LISTAGEM (`models.list`), não sobre a versão que atendeu. */
+        listadaNaConta: resolucao.alvoEncontrado,
         resolucao: { pro: resolucao.pro, flash: resolucao.flash, erroDaLista: resolucao.erroDaLista },
         pro, flash,
         comoTrocar: `O app pina sozinho na família ${resolucao.familiaAlvo} assim que ela aparecer para esta conta — `

@@ -39,3 +39,16 @@ export function versaoAtendeAlvo(
     modelVersion: string | null | undefined,
     familia?: string,
 ): boolean | null;
+
+/** "Estamos na família alvo?" — respondido pela SONDA, não pela listagem. */
+export function vereditoDaFamilia(
+    sondas: Array<{ modelo?: string; modelVersion: string | null; naFamiliaAlvo: boolean | null }>,
+    listada: boolean,
+    familia?: string,
+): { situacao: 'atendida' | 'fora' | 'parcial' | 'indeterminado'; cor: 'ok' | 'atencao' | 'neutro'; texto: string };
+
+/** PRO e FLASH apontando pro mesmo modelo = roteador sem efeito. */
+export function conferirRoteador(p: {
+    pro?: { modelo?: string } | string | null;
+    flash?: { modelo?: string } | string | null;
+}): { ok: boolean; colidiu: boolean; aviso: string | null };
