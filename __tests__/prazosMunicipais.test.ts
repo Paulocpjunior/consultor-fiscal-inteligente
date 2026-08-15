@@ -373,3 +373,100 @@ describe('a fila diz ONDE PARAR, não só a ordem', () => {
         expect(tela).toMatch(/coberturaAcumuladaPct/);
     });
 });
+
+// ═══ A ESFERA ESTADUAL — fechando o alarme que eu abri de manhã ═════════════
+//
+// De manhã o app passou a DENUNCIAR que o prazo do SPED (UF:SP) era entregue a
+// cliente de qualquer estado. Denunciar sem dar saída é meia correção: quem era
+// do Paraná via o alerta e não tinha onde cadastrar a data do Paraná.
+describe('prazo ESTADUAL cadastrável — o alerta ganhou caminho', () => {
+    const { mesDoCliente } = require('../sefaz-backend/catalogo-obrigacoes.js');
+    const { resolverPrazoEstadual, escopoDoPrazo, idPrazoMunicipal: idPrazo,
+            validarPrazoMunicipal: validar } = require('../sefaz-backend/prazos-municipais.js');
+
+    const cadPR = (over: any = {}) => ({
+        esfera: 'estadual', uf: 'PR', obrigacao: 'SPED',
+        diaVencimento: 15, mesesApos: 1, baseLegal: 'NPF 001/2019 SEFA-PR',
+        vigenciaInicio: '2020-01-01', ...over,
+    });
+
+    it('o escopo distingue município de estado', () => {
+        expect(escopoDoPrazo({ codMunIBGE: SP })).toBe('IBGE:3550308');
+        expect(escopoDoPrazo({ uf: 'pr' })).toBe('UF:PR');
+        expect(escopoDoPrazo({})).toBe('');
+    });
+
+    it('cadastro estadual SEM UF é recusado dizendo o que falta', () => {
+        expect(validar(cadPR({ uf: '' })).erros.join(' ')).toMatch(/Informe a UF/);
+        // E a base legal continua obrigatória nas duas esferas.
+        expect(validar(cadPR({ baseLegal: '' })).erros.join(' ')).toMatch(/base legal/i);
+    });
+
+    it('🚨 cliente do PR com prazo do PR cadastrado SAI do alerta e ganha a data certa', () => {
+        const m = mesDoCliente({
+            colecao: 'lucro_empresas', regimePadrao: 'presumido', uf: 'PR',
+            prazosMunicipais: [cadPR()],
+        }, '06/2026');
+        const sped = m.obrigacoes.find((r: any) => r.obrigacao === 'SPED');
+        expect(sped.abrangencia).toBe('UF:PR');
+        expect(sped.baseLegal).toMatch(/SEFA-PR/);
+        // Deixou de ser "prazo de outra UF".
+        expect(m.prazoDeOutraUf.some((r: any) => r.obrigacao === 'SPED')).toBe(false);
+        expect(m.estaduaisResolvidas.length).toBeGreaterThan(0);
+    });
+
+    it('sem o cadastro do estado dele, o alerta continua — e agora diz ONDE cadastrar', () => {
+        const m = mesDoCliente({ colecao: 'lucro_empresas', regimePadrao: 'presumido', uf: 'PR' }, '06/2026');
+        const alvo = m.prazoDeOutraUf.find((r: any) => r.obrigacao === 'SPED');
+        expect(alvo).toBeTruthy();
+        expect(alvo.motivoAbrangencia).toMatch(/esfera estadual, UF PR/);
+    });
+
+    it('o calendário de UM estado não vale para outro', () => {
+        const m = mesDoCliente({
+            colecao: 'lucro_empresas', regimePadrao: 'presumido', uf: 'SC',
+            prazosMunicipais: [cadPR()],
+        }, '06/2026');
+        expect(m.prazoDeOutraUf.some((r: any) => r.obrigacao === 'SPED')).toBe(true);
+        expect(resolverPrazoEstadual([cadPR()], { uf: 'SC', obrigacao: 'SPED', competencia: '2026-06' }).situacao)
+            .toBe('uf-sem-cadastro');
+    });
+
+    it('vigência vale igual na esfera estadual', () => {
+        const r = resolverPrazoEstadual(
+            [cadPR({ vigenciaInicio: '2027-01-01' })],
+            { uf: 'PR', obrigacao: 'SPED', competencia: '2026-06' });
+        expect(r.achou).toBe(false);
+        expect(r.situacao).toBe('fora-de-vigencia');
+    });
+
+    it('🚨 o id MUNICIPAL não mudou — mudar orfanaria o que já está cadastrado', () => {
+        expect(idPrazo({ codMunIBGE: SP, obrigacao: 'ISS', vigenciaInicio: '2020-01-01' }))
+            .toBe('3550308_ISS_2020-01-01');
+        expect(idPrazo(cadPR())).toBe('UF:PR_SPED_2020-01-01');
+    });
+
+    it('a conversão de competência mora num lugar só', () => {
+        const { competenciaIsoDe } = require('../sefaz-backend/catalogo-obrigacoes.js');
+        expect(competenciaIsoDe('06/2026')).toBe('2026-06');
+        expect(competenciaIsoDe('12/2026')).toBe('2026-12');
+        const fonte = readFileSync(join(__dirname, '..', 'sefaz-backend/catalogo-obrigacoes.js'), 'utf8');
+        // Uma definição, nenhuma cópia — o descasamento mordeu 3× hoje.
+        expect((fonte.match(/String\(mes\)\.padStart\(2, '0'\)/g) || []).length).toBeLessThanOrEqual(1);
+    });
+});
+
+describe('a esfera estadual tem TELA e ROTA — não repito o código morto', () => {
+    const RAIZ = join(__dirname, '..');
+    it('a tela oferece as duas esferas e pede UF na estadual', () => {
+        const tela = readFileSync(join(RAIZ, 'components/PrazosMunicipaisPanel.tsx'), 'utf8');
+        expect(tela).toMatch(/Estadual \(SPED\)/);
+        expect(tela).toMatch(/form\.esfera === 'estadual'/);
+        expect(tela).toMatch(/UF \(2 letras\)/);
+    });
+    it('a rota grava a esfera e a UF', () => {
+        const rota = readFileSync(join(RAIZ, 'sefaz-backend/prazos-municipais-routes.js'), 'utf8');
+        expect(rota).toMatch(/esfera: String\(p\.esfera/);
+        expect(rota).toMatch(/uf: String\(p\.uf/);
+    });
+});

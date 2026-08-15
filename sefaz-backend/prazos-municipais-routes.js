@@ -93,7 +93,11 @@ router.post('/', requireAdmin, express.json(), async (req, res) => {
         // Quem cadastrou e quando: prazo sem dono não se audita, e é ele que
         // decide se um pagamento atrasou.
         const doc = {
-            codMunIBGE: soDigitos(p.codMunIBGE),
+            // Esfera MUNICIPAL guarda o IBGE; ESTADUAL guarda a UF. A
+            // validação já recusou cadastro sem nenhum dos dois.
+            esfera: String(p.esfera || '') === 'estadual' ? 'estadual' : 'municipal',
+            codMunIBGE: soDigitos(p.codMunIBGE) || null,
+            uf: String(p.uf || '').trim().toUpperCase() || null,
             municipioNome: String(p.municipioNome || '').trim() || null,
             obrigacao: String(p.obrigacao).trim().toUpperCase(),
             diaVencimento: Number(p.diaVencimento),

@@ -36,6 +36,38 @@
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 const ehData = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 
+// ═══ GENERALIZAÇÃO PARA A ESFERA ESTADUAL (15/08) ═══════════════════════════
+//
+// De manhã o app passou a DENUNCIAR que o prazo do SPED (`UF:SP`, CAT
+// 147/2009) era entregue a cliente de qualquer estado. Denunciar sem dar saída
+// é meia correção: quem é do Paraná via o alerta e não tinha onde cadastrar o
+// prazo do Paraná.
+//
+// O calendário municipal já resolvia isso para a esfera municipal, com
+// vigência e base legal. A esfera ESTADUAL tem a MESMA necessidade e a mesma
+// régua — então é o mesmo núcleo, com o ESCOPO variando: 'IBGE:3550308' para
+// município, 'UF:PR' para estado. Duas cópias da resolução por vigência seria
+// o defeito que este projeto mais paga.
+
+/** Escopo canônico de um cadastro: 'IBGE:3550308' ou 'UF:PR'. */
+export function escopoDoPrazo(p) {
+    const mun = soDigitos(p?.codMunIBGE);
+    if (mun.length === 7) return `IBGE:${mun}`;
+    const uf = String(p?.uf || '').trim().toUpperCase();
+    if (uf.length === 2) return `UF:${uf}`;
+    return '';
+}
+
+/** Escopo do CLIENTE para uma obrigação, pela abrangência dela. */
+export function escopoDoCliente({ esfera, uf, codMunIBGE }) {
+    if (esfera === 'estadual') {
+        const u = String(uf || '').trim().toUpperCase();
+        return u.length === 2 ? `UF:${u}` : '';
+    }
+    const m = soDigitos(codMunIBGE);
+    return m.length === 7 ? `IBGE:${m}` : '';
+}
+
 /** Código IBGE de município tem 7 dígitos. */
 export function ehCodigoIbgeMunicipio(v) {
     return soDigitos(v).length === 7;
@@ -49,8 +81,12 @@ export function ehCodigoIbgeMunicipio(v) {
 export function validarPrazoMunicipal(p) {
     const erros = [];
 
-    if (!ehCodigoIbgeMunicipio(p?.codMunIBGE)) {
-        erros.push('Informe o código IBGE do município (7 dígitos) — é ele que casa com o cadastro do cliente.');
+    // MUNICIPAL pede IBGE; ESTADUAL pede UF. Um dos dois, nunca nenhum —
+    // cadastro sem escopo não casa com cliente nenhum e vira lixo silencioso.
+    if (!escopoDoPrazo(p)) {
+        erros.push(String(p?.esfera || '') === 'estadual'
+            ? 'Informe a UF (2 letras) — é ela que casa com o cadastro do cliente.'
+            : 'Informe o código IBGE do município (7 dígitos) — é ele que casa com o cadastro do cliente.');
     }
     if (!String(p?.obrigacao || '').trim()) {
         erros.push('Informe a obrigação (ex.: ISS).');
@@ -135,7 +171,7 @@ export function resolverPrazoMunicipal(cadastros, { codMunIBGE, obrigacao, compe
     }
 
     const doMunicipio = (cadastros || []).filter((c) =>
-        soDigitos(c?.codMunIBGE) === mun
+        escopoDoPrazo(c) === `IBGE:${mun}`
         && String(c?.obrigacao || '').trim().toUpperCase() === obr
         && c?.ativo !== false);
 
@@ -188,10 +224,75 @@ export function resolverPrazoMunicipal(cadastros, { codMunIBGE, obrigacao, compe
     };
 }
 
-/** Id determinístico: 1 doc por município × obrigação × início de vigência. */
+/** Id determinístico: 1 doc por escopo × obrigação × início de vigência. */
 export function idPrazoMunicipal(p) {
     const ini = String(p?.vigenciaInicio || 'sem-inicio').slice(0, 10);
-    return `${soDigitos(p?.codMunIBGE)}_${String(p?.obrigacao || '').trim().toUpperCase()}_${ini}`;
+    const escopo = escopoDoPrazo(p);
+    // Municipal mantém o id HISTÓRICO (só os dígitos do IBGE): mudar a fórmula
+    // orfanaria o que já estiver cadastrado. Estadual nasce com o prefixo.
+    const chave = escopo.startsWith('IBGE:') ? escopo.slice(5) : escopo;
+    return `${chave}_${String(p?.obrigacao || '').trim().toUpperCase()}_${ini}`;
+}
+
+/**
+ * Resolve o prazo de uma obrigação de QUALQUER esfera cadastrável.
+ *
+ * O municipal continua com a porta própria (`resolverPrazoMunicipal`) porque
+ * as causas de ausência dele são específicas — "cliente sem município" manda
+ * ao cadastro do cliente, não ao calendário.
+ */
+export function resolverPrazoEstadual(cadastros, { uf, obrigacao, competencia }) {
+    const escopo = escopoDoCliente({ esfera: 'estadual', uf });
+    const obr = String(obrigacao || '').trim().toUpperCase();
+
+    if (!escopo) {
+        return {
+            achou: false, prazo: null, situacao: 'uf-ausente',
+            motivo: 'A UF do cliente não está cadastrada, então não há calendário estadual a consultar. '
+                + 'Preencha a UF nos Dados Fiscais.',
+        };
+    }
+
+    const daUf = (cadastros || []).filter((c) =>
+        escopoDoPrazo(c) === escopo
+        && String(c?.obrigacao || '').trim().toUpperCase() === obr
+        && c?.ativo !== false);
+
+    if (daUf.length === 0) {
+        return {
+            achou: false, prazo: null, situacao: 'uf-sem-cadastro',
+            motivo: `O prazo de ${obr} de ${escopo.slice(3)} ainda não está cadastrado no CFI. `
+                + 'O app NÃO usa o prazo de outro estado — cada SEFAZ tem o seu.',
+        };
+    }
+
+    const vigentes = daUf.filter((c) => vigenteNaCompetencia(c, competencia));
+    if (vigentes.length === 0) {
+        return {
+            achou: false, prazo: null, situacao: 'fora-de-vigencia',
+            motivo: `Há prazo de ${obr} cadastrado para ${escopo.slice(3)}, mas nenhum vigente em ${competencia}.`,
+        };
+    }
+
+    const escolhido = [...vigentes].sort((a, b) =>
+        String(b.vigenciaInicio || '').localeCompare(String(a.vigenciaInicio || '')))[0];
+
+    return {
+        achou: true,
+        prazo: {
+            uf: escopo.slice(3),
+            obrigacao: obr,
+            diaVencimento: Number(escolhido.diaVencimento),
+            mesesApos: Number.isFinite(Number(escolhido.mesesApos)) ? Number(escolhido.mesesApos) : 1,
+            ajusteDiaNaoUtil: escolhido.ajusteDiaNaoUtil || 'antecipa',
+            baseLegal: escolhido.baseLegal,
+            vigenciaInicio: escolhido.vigenciaInicio || null,
+            vigenciaFim: escolhido.vigenciaFim || null,
+            cadastradoPorEmail: escolhido.cadastradoPorEmail || null,
+        },
+        situacao: 'cadastrado',
+        motivo: `Prazo de ${obr} de ${escopo.slice(3)} — ${escolhido.baseLegal}.`,
+    };
 }
 
 /**

@@ -75,7 +75,7 @@
 // ============================================================================
 
 import { ehDiaUtil } from './feriados-nacionais.js';
-import { resolverPrazoMunicipal } from './prazos-municipais.js';
+import { resolverPrazoMunicipal, resolverPrazoEstadual } from './prazos-municipais.js';
 
 /** Regimes que o mês entende. INDEFINIDO é um estado real, não um erro. */
 export const REGIMES = ['SIMPLES', 'LUCRO_PRESUMIDO', 'LUCRO_REAL', 'INDEFINIDO'];
@@ -373,6 +373,19 @@ export function obrigacoesAplicaveis(regime, competencia, opts = {}) {
  *
  * @returns {{regime: string, reconhecido: boolean}}
  */
+/**
+ * 'MM/AAAA' (formato deste catálogo) → 'AAAA-MM' (formato do resto do app).
+ *
+ * ⚠️ Este descasamento mordeu TRÊS vezes em 15/08 — uma delas em silêncio, com
+ * a vigência nunca casando e o ISS continuando pendente como se ninguém
+ * tivesse cadastrado nada. A conversão mora AQUI, num lugar só: mudar o
+ * formato do catálogo quebraria o cron que cria o mês inteiro.
+ */
+export function competenciaIsoDe(competencia) {
+    const { mes, ano } = partesDaCompetencia(competencia);
+    return `${ano}-${String(mes).padStart(2, '0')}`;
+}
+
 export function normalizarRegimeCatalogo(regime) {
     const r = String(regime || '').trim().toUpperCase();
     if (!r) return { regime: 'INDEFINIDO', reconhecido: false };
@@ -451,15 +464,37 @@ export function mesDoCliente(empresa, competencia) {
     // O catálogo só tem o prazo ESTADUAL de SP. Para cliente de outra UF a
     // obrigação existe e o PRAZO não — e isso precisa ser dito, não coberto.
     const uf = String(empresa?.uf || '').trim().toUpperCase();
+    const prazosCadastrados = empresa?.prazosMunicipais || [];
     const prazoDeOutraUf = [];
     const prazoSemUfDoCliente = [];
+    // Obrigação estadual que ganhou o prazo do estado DO CLIENTE. Antes o
+    // alerta da manhã não tinha saída: quem era do Paraná via "a data é a de
+    // SP" e não tinha onde cadastrar a do Paraná. Denunciar sem dar caminho é
+    // meia correção.
+    const estaduaisResolvidas = new Map();
     for (const r of ativas) {
         const alcance = alcanceDaObrigacao(r, { uf });
         if (alcance === 'fora-de-abrangencia') {
+            const doEstado = resolverPrazoEstadual(prazosCadastrados, {
+                uf, obrigacao: r.obrigacao, competencia: competenciaIsoDe(competencia),
+            });
+            if (doEstado.achou) {
+                estaduaisResolvidas.set(r.obrigacao, {
+                    ...r,
+                    diaVencimento: doEstado.prazo.diaVencimento,
+                    mesesApos: doEstado.prazo.mesesApos,
+                    ajusteDiaNaoUtil: doEstado.prazo.ajusteDiaNaoUtil,
+                    abrangencia: `UF:${uf}`,
+                    baseLegal: doEstado.prazo.baseLegal,
+                    prazoEstadual: doEstado.prazo,
+                });
+                continue; // resolvido: não é mais "prazo de outra UF"
+            }
             prazoDeOutraUf.push({
                 ...r,
                 motivoAbrangencia: `O prazo cadastrado é o de ${r.abrangencia.replace('UF:', '')} `
-                    + `(${r.baseLegal}) e este cliente é de ${uf}. A obrigação existe; o PRAZO do estado dele não está no app.`,
+                    + `(${r.baseLegal}) e este cliente é de ${uf}. A obrigação existe; o PRAZO do estado dele não está no app. `
+                    + `Cadastre em ⚙️ Config Admin → Calendário de prazos (esfera estadual, UF ${uf}).`,
             });
         } else if (alcance === 'uf-desconhecida') {
             prazoSemUfDoCliente.push({
@@ -483,8 +518,7 @@ export function mesDoCliente(empresa, competencia) {
     // É a SEGUNDA vez que este mesmo descasamento morde hoje (a primeira foi a
     // cobertura na Rotina, e ali ele ao menos explodia). Convertido na
     // fronteira: mudar o formato do catálogo quebraria o cron do mês inteiro.
-    const { mes: mesN, ano: anoN } = partesDaCompetencia(competencia);
-    const competenciaIso = `${anoN}-${String(mesN).padStart(2, '0')}`;
+    const competenciaIso = competenciaIsoDe(competencia);
     const municipaisResolvidas = [];
     for (const r of propostas) {
         if (r.esfera !== 'municipal') continue;
@@ -549,8 +583,10 @@ export function mesDoCliente(empresa, competencia) {
         regime,
         regimeLabel: REGIME_LABEL[regime],
         competencia,
-        obrigacoes: [...ativas, ...municipaisResolvidas]
+        obrigacoes: [...ativas.map((r) => estaduaisResolvidas.get(r.obrigacao) || r), ...municipaisResolvidas]
             .map((r) => ({ ...r, vencimento: calcularVencimento(competencia, r) })),
+        /** Estaduais que ganharam o prazo do estado do cliente. */
+        estaduaisResolvidas: [...estaduaisResolvidas.values()],
         propostas: propostasPendentes,
         /** Municipais que o cadastro do município resolveu — deixaram de ser pendência. */
         municipaisResolvidas,
