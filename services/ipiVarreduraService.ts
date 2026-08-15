@@ -24,6 +24,18 @@ export interface IpiVarreduraLinha {
     titulo: string;
     acao: string;
     prioridade: number;
+    /** Docs da competência no banco. null = contagem FALHOU (não é zero). */
+    documentosNaCompetencia?: number | null;
+    /**
+     * Farol ficha × documentos (caso EXPERTE 15/08): imposto digitado precisa
+     * de documento por trás. Confere EXISTÊNCIA — o valor é do E510.
+     */
+    lastro?: {
+        situacao: 'sem-ipi' | 'sem-documento' | 'com-lastro' | 'contagem-indisponivel';
+        cor: 'ok' | 'atencao' | 'falha' | 'neutro';
+        mensagem: string;
+        acao: string | null;
+    };
 }
 
 export interface IpiVarreduraResumo {
