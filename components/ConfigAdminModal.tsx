@@ -42,6 +42,24 @@ const FORM_VAZIO = {
 };
 
 const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => {
+    // 🔎 Qual Gemini está respondendo DE VERDADE. Os aliases -latest se
+    // atualizam sozinhos na conta do Google; esta sonda pergunta a versão
+    // CONCRETA (modelVersion da resposta) — validação por resultado.
+    const [geminiVersao, setGeminiVersao] = useState<any>(null);
+    const [sondandoGemini, setSondandoGemini] = useState(false);
+    const sondarGemini = async () => {
+        setSondandoGemini(true);
+        try {
+            const { getAuth } = await import('firebase/auth');
+            const u = getAuth().currentUser;
+            const token = await u?.getIdToken();
+            const r = await fetch('/api/admin/gemini/versao', { headers: { Authorization: `Bearer ${token}` } });
+            setGeminiVersao(await r.json());
+        } catch (e: any) {
+            setGeminiVersao({ ok: false, error: e?.message || 'falha na sonda' });
+        } finally { setSondandoGemini(false); }
+    };
+
     const [carregando, setCarregando] = useState(false);
     const [templates, setTemplates] = useState<WhatsappTemplate[]>([]);
     const [canalPronto, setCanalPronto] = useState<boolean | null>(null);
@@ -212,6 +230,43 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                             {msg.texto}
                         </p>
                     )}
+
+                    {/* ── 🤖 Motor de IA (Gemini) — versão REAL, não suposta ───── */}
+                    <section className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                        <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                            🤖 Motor de IA (Gemini)
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                            O app usa os aliases <code>gemini-pro-latest</code> / <code>gemini-flash-latest</code>, que o
+                            Google promove sozinho para a versão mais nova da conta — atualização de versão
+                            <strong> não exige deploy</strong>. Esta sonda pergunta à API qual versão <strong>concreta</strong> está
+                            respondendo agora.
+                        </p>
+                        <button
+                            onClick={sondarGemini}
+                            disabled={sondandoGemini}
+                            className="mt-2 inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-900/30 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-semibold hover:bg-violet-100 dark:hover:bg-violet-900/50 disabled:opacity-50"
+                        >
+                            {sondandoGemini ? '⏳ perguntando à API…' : '🔎 Qual versão está respondendo?'}
+                        </button>
+                        {geminiVersao && (
+                            <div className="mt-2 text-[11px] space-y-1">
+                                {geminiVersao.ok ? (
+                                    <>
+                                        {[geminiVersao.pro, geminiVersao.flash].map((m: any) => (
+                                            <p key={m.alias} className={m.respondeu ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+                                                {m.respondeu ? '✓' : '✕'} <code>{m.alias}</code> →{' '}
+                                                <strong>{m.modelVersion || m.erro || 'sem versão na resposta'}</strong>
+                                            </p>
+                                        ))}
+                                        <p className="text-slate-500 dark:text-slate-400">{geminiVersao.comoTrocar}</p>
+                                    </>
+                                ) : (
+                                    <p className="text-red-600 dark:text-red-400">{geminiVersao.error}</p>
+                                )}
+                            </div>
+                        )}
+                    </section>
 
                     {/* ── Horários dos colaboradores (atalho) ─────────────────── */}
                     <section className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">

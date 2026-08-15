@@ -2220,6 +2220,40 @@ app.get('/api/admin/calendario/:ano/:mes', requireAuthOrColab, async (req, res) 
 });
 
 // ─── Dashboard CEO — endpoint de KPIs + insights IA ─────────────────────────
+// ─── QUAL GEMINI ESTÁ RESPONDENDO DE VERDADE ────────────────────────────────
+//
+// Paulo, 15/08: *"o Gemini teve sua versão atualizada para 3.7, nós devemos
+// nos atualizar também"*. O app usa os aliases oficiais `gemini-pro-latest`/
+// `gemini-flash-latest`, que a GOOGLE promove sozinha — em tese já estamos na
+// versão nova sem deploy. Mas "em tese" não é resposta nesta casa: a API
+// devolve `modelVersion` em cada resposta, então esta rota PERGUNTA aos dois
+// aliases qual versão concreta está atendendo a conta. Validação por
+// RESULTADO, não por status — e se o alias estiver atrasado, o caminho está
+// na resposta: pinar GEMINI_MODEL_PRO/FLASH com o ID exato no Cloud Run.
+app.get('/api/admin/gemini/versao', requireAdmin, async (req, res) => {
+    if (!ai) return res.status(503).json({ ok: false, error: 'Gemini não configurado (GEMINI_API_KEY ausente).' });
+    const sondar = async (alias) => {
+        try {
+            const r = await ai.models.generateContent({ model: alias, contents: 'responda apenas: ok' });
+            return {
+                alias,
+                // A versão CONCRETA que atendeu — é ela que responde "estamos no 3.7?".
+                modelVersion: r?.modelVersion || null,
+                respondeu: !!(r?.text ?? '').trim(),
+            };
+        } catch (e) {
+            return { alias, modelVersion: null, respondeu: false, erro: e?.message || 'falha' };
+        }
+    };
+    const [pro, flash] = await Promise.all([sondar(GEMINI_MODEL_PRO), sondar(GEMINI_MODEL_FLASH)]);
+    return res.json({
+        ok: true,
+        pro, flash,
+        comoTrocar: 'Para pinar/atualizar: env GEMINI_MODEL_PRO / GEMINI_MODEL_FLASH no Cloud Run com o ID exato. Sem env, os aliases -latest seguem a promoção automática do Google.',
+        consultadoEm: new Date().toISOString(),
+    });
+});
+
 app.get('/api/admin/dashboard-ceo/kpis', requireAdmin, async (req, res) => {
     try {
         const admin = (await import('firebase-admin')).default;
