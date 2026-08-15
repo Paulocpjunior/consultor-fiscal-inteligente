@@ -344,3 +344,23 @@ describe('terceira leva: classificar pelo RÓTULO antes de mexer', () => {
         expect(rel).not.toMatch(/lucroPresumidoService\.getEmpresas\(currentUser\)/);
     });
 });
+
+describe('Cotas e Trimestrais: a VISÃO também é da ativa — fechando a inconsistência', () => {
+    // Eu apliquei a regra reafirmada ("até a visão é da ativa") na Varredura
+    // IPI e deixei as DUAS abas vizinhas mostrando a carteira toda. Mesma
+    // regra, mesmo módulo, telas diferentes = a leitura dupla de sempre.
+    it('Cotas do mês: lista recortada pela ativa, e cota ATRASADA de fora GRITA na contagem', () => {
+        const painel = semComentarios(readFileSync(join(RAIZ, 'components/DCTFWeb/QuotasDoMesPanel.tsx'), 'utf8'));
+        expect(painel).toMatch(/cotasDaTela/);
+        expect(painel).toMatch(/atrasadasFora/);
+        // Multa correndo em outra empresa não pode sumir em silêncio.
+        expect(painel).toMatch(/ATRASADAS, gerando multa/);
+    });
+
+    it('Trimestrais do mês: recorte pela ativa com o resto contado, e vazio nomeando a ativa', () => {
+        const painel = semComentarios(readFileSync(join(RAIZ, 'components/DCTFWeb/TrimestraisDoMesPanel.tsx'), 'utf8'));
+        expect(painel).toMatch(/empresaAtivaPainel/);
+        expect(painel).toMatch(/foraDaAtiva/);
+        expect(painel).toMatch(/não tem declaração transmitida/);
+    });
+});

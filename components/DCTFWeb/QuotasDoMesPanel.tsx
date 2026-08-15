@@ -56,6 +56,14 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
         !!empresaAtivaSessao && String(cnpj || '').replace(/\D/g, '') === empresaAtivaSessao.cnpj;
     const [quotas, setQuotas] = useState<DctfwebQuotaAgendada[]>([]);
     const [atrasadas, setAtrasadas] = useState(0);
+    // ATÉ A VISÃO é da ativa (regra reafirmada na Varredura IPI): dentro de
+    // módulo por-cliente a lista responde pelo cliente da sessão. O que fica
+    // de fora vai CONTADO — e cota ATRASADA de outra empresa GRITA na
+    // contagem, porque some-em-silêncio sobre multa correndo é o pior calar.
+    const cotasDaTela = empresaAtivaSessao ? quotas.filter(q => ehDaAtiva(q.empresaCnpj)) : quotas;
+    const foraDaAtiva = quotas.length - cotasDaTela.length;
+    const atrasadasFora = empresaAtivaSessao ? quotas.filter(q => !ehDaAtiva(q.empresaCnpj) && q.atrasada).length : 0;
+
     const [carregando, setCarregando] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
     const [emitindo, setEmitindo] = useState<string | null>(null);
@@ -153,6 +161,13 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             </p>
                         </div>
                     )}
+                    {foraDaAtiva > 0 && (
+                        <p className={`text-[11px] ${atrasadasFora > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : ''}`}
+                           style={atrasadasFora > 0 ? undefined : { color: 'var(--text-muted)' }}>
+                            {foraDaAtiva} cota(s) de outras empresas ficam fora desta tela — ela responde pela empresa ativa.
+                            {atrasadasFora > 0 && <> Dessas, <strong>{atrasadasFora} estão ATRASADAS, gerando multa</strong> — troque a empresa no topo (⇄) para emiti-las.</>}
+                        </p>
+                    )}
                     <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
                         <table className="w-full text-xs">
                             <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400">
@@ -166,7 +181,7 @@ const QuotasDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {quotas.map((q) => (
+                                {cotasDaTela.map((q) => (
                                     <tr key={q.id} className="border-t border-slate-100 dark:border-slate-700">
                                         <td className="p-2 font-mono text-slate-700 dark:text-slate-200">{fmtCnpj(q.empresaCnpj)}</td>
                                         <td className="p-2">
