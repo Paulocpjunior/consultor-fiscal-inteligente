@@ -235,3 +235,30 @@ describe('painel que trabalha SOBRE um cliente não tem mais seletor próprio', 
         expect(fonte).toMatch(/useState\(empresaAtivaId \|\| ''\)/);
     });
 });
+
+// ─── VER a carteira é livre; AGIR num cliente exige que ele seja o ATIVO ────
+
+describe('lista de carteira não deixa AGIR em linha de outra empresa', () => {
+    // Paulo, 15/08, com a EXPERTE ativa e a FASTWELD listada logo abaixo na
+    // Varredura IPI: *"pensa cmg, se um colaborador desatento faz algo na
+    // empresa errada"*. A triagem continua mostrando a carteira toda — o que
+    // muda é que o botão que ESCREVE só existe na linha da empresa ativa; nas
+    // outras ele vira o convite de ativação, pelo caminho único da sessão.
+    const painel = semComentarios(readFileSync(join(RAIZ, 'components/DCTFWeb/IpiVarreduraPanel.tsx'), 'utf8'));
+
+    it('o ♻️ (que escreve em documento fiscal) só aparece na linha da empresa ATIVA', () => {
+        expect(painel).toMatch(/empresaAtivaSessao\?\.id === l\.empresaId \? \(/);
+        // E o caminho da linha errada é ATIVAR — não um clique que age direto.
+        expect(painel).toMatch(/ativarEmpresaSessao\(\{/);
+    });
+
+    it('a linha da ativa é MARCADA — a tela diz qual é, não deixa deduzir', () => {
+        expect(painel).toMatch(/✓ ativa/);
+    });
+
+    it('a varredura continua vendo a carteira toda — a trava é na AÇÃO, não na visão', () => {
+        // Filtrar a lista pela ativa mataria a triagem (que industria está
+        // pronta pro MIT?) — trocaria um erro por outro.
+        expect(painel).not.toMatch(/linhas\.filter\([^)]*empresaAtivaSessao/);
+    });
+});

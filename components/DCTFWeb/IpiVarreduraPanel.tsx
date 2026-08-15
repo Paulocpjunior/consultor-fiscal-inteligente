@@ -10,6 +10,7 @@ import {
     getIpiVarredura, relerItensFiscais,
     type IpiVarreduraResposta, type IpiVarreduraLinha, type RelerItensResposta,
 } from '../../services/ipiVarreduraService';
+import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
 
 interface Props { onShowToast?: (msg: string) => void; }
 
@@ -31,6 +32,15 @@ const CORES: Record<string, { badge: string; label: string }> = {
 };
 
 const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
+    // ─── VER a carteira é livre; AGIR num cliente exige que ele seja o ATIVO ─
+    //
+    // Paulo, 15/08, com a EXPERTE ativa e a FASTWELD listada logo abaixo:
+    // *"agora pensa cmg, se um colaborador desatento faz algo na empresa
+    // errada"*. A varredura é TRIAGEM da carteira e continua mostrando todo
+    // mundo — mas o ♻️ ESCREVE em documento fiscal, e escrever no cliente
+    // errado é silencioso. Ação em linha de outra empresa só depois de
+    // ATIVÁ-LA, pelo mesmo caminho único de troca da sessão.
+    const { empresa: empresaAtivaSessao, ativar: ativarEmpresaSessao } = useEmpresaAtiva();
     const [competencia, setCompetencia] = useState(competenciaDefault());
     const [data, setData] = useState<IpiVarreduraResposta | null>(null);
     const [loading, setLoading] = useState(false);
@@ -159,7 +169,12 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
                                     <tr key={l.cnpj} className="border-t" style={{ borderColor: 'var(--border-subtle)' }}>
                                         <td className="px-4 py-2">
                                             <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{l.nome}</div>
-                                            <div className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{fmtCnpj(l.cnpj)}</div>
+                                            <div className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                                                {fmtCnpj(l.cnpj)}
+                                                {empresaAtivaSessao?.id === l.empresaId && (
+                                                    <span className="ml-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">✓ ativa</span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-2" style={{ color: 'var(--text-secondary)' }}>{l.regime}</td>
                                         <td className="px-4 py-2 text-right font-mono font-semibold" style={{ color: 'var(--text-primary)' }}>{brl(l.ipiApurado)}</td>
@@ -175,14 +190,33 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
                                                 capturada antes de 11/08 não tem o campo. Aqui
                                                 ele volta do XML-fonte. */}
                                             <div className="mt-1">
-                                                <button
-                                                    onClick={() => relerCst(l)}
-                                                    disabled={relendo !== null}
-                                                    title="Relê o XML guardado e preenche os CST de IPI/PIS/COFINS que faltam nos itens. Não sobrescreve o que já está gravado."
-                                                    className="btn-press text-[10px] px-1.5 py-0.5 rounded border border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/20 disabled:opacity-50 whitespace-nowrap"
-                                                >
-                                                    {relendo === l.empresaId ? '⏳ relendo…' : '♻️ Reler CST dos itens'}
-                                                </button>
+                                                {/* AGIR exige que a empresa da linha seja a ATIVA. O ♻️
+                                                    escreve em documento fiscal — na linha de outra empresa
+                                                    ele vira o convite de ativação, pelo caminho único da
+                                                    sessão. Um desatento não roda nada no cliente errado:
+                                                    o primeiro clique só TROCA, visível no topo. */}
+                                                {empresaAtivaSessao?.id === l.empresaId ? (
+                                                    <button
+                                                        onClick={() => relerCst(l)}
+                                                        disabled={relendo !== null}
+                                                        title="Relê o XML guardado e preenche os CST de IPI/PIS/COFINS que faltam nos itens. Não sobrescreve o que já está gravado."
+                                                        className="btn-press text-[10px] px-1.5 py-0.5 rounded border border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/20 disabled:opacity-50 whitespace-nowrap"
+                                                    >
+                                                        {relendo === l.empresaId ? '⏳ relendo…' : '♻️ Reler CST dos itens'}
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => ativarEmpresaSessao({
+                                                            id: l.empresaId, nome: l.nome,
+                                                            cnpj: String(l.cnpj || '').replace(/\D/g, ''),
+                                                            fonte: 'lucro',
+                                                        })}
+                                                        title={`Esta linha é da ${l.nome} — não da empresa ativa. Para agir nela, primeiro ative-a: a troca vale para a sessão inteira e aparece no topo.`}
+                                                        className="btn-press text-[10px] px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 whitespace-nowrap"
+                                                    >
+                                                        ⚡ Ativar {l.nome.split(' ')[0]} para agir aqui
+                                                    </button>
+                                                )}
                                                 {relido[l.empresaId] && (
                                                     <RelerResultado r={relido[l.empresaId]} />
                                                 )}
