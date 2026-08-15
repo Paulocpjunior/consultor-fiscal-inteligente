@@ -33,6 +33,11 @@ import { runInitialSync } from './services/cloudSyncService';
 import { requestNotificationPermission } from './services/notificacoesService';
 import { safeStorage } from './services/safeStorage';
 import { resolverModuloDeepLink } from './services/moduloDeepLink';
+import {
+    lerEmpresaAtiva, gravarEmpresaAtiva, limparEmpresaAtiva, exigeEmpresaAtiva,
+    rotuloEmpresaAtiva, fmtCnpjAtiva, type EmpresaAtiva,
+} from './services/empresaAtiva';
+import AtivarEmpresaScreen from './components/AtivarEmpresaScreen';
 // ✅ REMOVIDO: import { auth, isFirebaseConfigured } from './services/firebaseConfig';
 // ✅ REMOVIDO: import { onAuthStateChanged } from 'firebase/auth';
 // Ambos encapsulados em authService.subscribeAuthState
@@ -150,6 +155,14 @@ const App: React.FC = () => {
 
     // Lucro Presumido/Real State (ID para navegação via histórico)
     const [selectedLucroEmpresaId, setSelectedLucroEmpresaId] = useState<string | null>(null);
+    // ─── EMPRESA ATIVA — o escopo da sessão, não um filtro de tela ──────────
+    //
+    // Paulo, 15/08: *"login colaborador → ATIVAR EMPRESA. Ativar empresa é o
+    // que determina o que a pessoa vai ou não fazer."* Ela mora AQUI, no topo,
+    // porque é da sessão inteira — cada painel com o seu seletor foi
+    // exatamente o que ele apontou como errado.
+    const [empresaAtiva, setEmpresaAtiva] = useState<EmpresaAtiva | null>(null);
+    const [trocandoEmpresa, setTrocandoEmpresa] = useState(false);
 
     /**
      * ═══ ATIVAR EMPRESA É O PRIMEIRO PASSO — e antes dele o banco fica quieto ══
@@ -247,10 +260,39 @@ const App: React.FC = () => {
     };
 
     const handleLogout = () => {
+        // SAIR LIMPA A ATIVAÇÃO: a sequência começa no login (Paulo, 15/08 —
+        // "o começo de tudo é com a sequência: login → ATIVAR EMPRESA").
+        limparEmpresaAtiva(currentUser?.id);
+        setEmpresaAtiva(null);
         authService.logout();
         setCurrentUser(null);
         setSimplesEmpresas([]);
     };
+
+    /**
+     * ATIVAR = TROCAR DE CLIENTE, e por isso LIMPA o que estava carregado.
+     *
+     * Dado de um cliente aparecendo na tela de outro é o pior erro possível
+     * neste app — e é silencioso. Trocar zera a seleção dos painéis e volta
+     * ao menu, em vez de deixar a tela anterior com os números do cliente que
+     * acabou de sair de cena.
+     */
+    const ativarEmpresa = (e: EmpresaAtiva) => {
+        if (currentUser?.id) gravarEmpresaAtiva(currentUser.id, e);
+        setEmpresaAtiva(e);
+        setTrocandoEmpresa(false);
+        setSelectedSimplesEmpresaId(e.fonte === 'simples' ? e.id : null);
+        setSelectedLucroEmpresaId(e.fonte === 'lucro' ? e.id : null);
+        setResult(null);
+        setError(null);
+    };
+
+    // Recarregar a página NÃO desativa: punir o F5 não protege ninguém. Quem
+    // desativa é o LOGOUT, que é onde a sequência recomeça.
+    useEffect(() => {
+        if (!currentUser?.id) { setEmpresaAtiva(null); return; }
+        setEmpresaAtiva(lerEmpresaAtiva(currentUser.id));
+    }, [currentUser?.id]);
 
     const handleSelectHistoryItem = (item: HistoryItem) => {
         if (item.type === SearchType.SIMPLES_NACIONAL && item.entityId) {
@@ -663,6 +705,25 @@ const App: React.FC = () => {
         );
     }
 
+    // ─── O PORTÃO DA SEQUÊNCIA ──────────────────────────────────────────────
+    //
+    // login → ATIVAR EMPRESA → módulos. Sem empresa ativa a tela não é o menu:
+    // é a ativação. Não adianta deixar entrar e responder vazio depois — isso
+    // é justamente o que fazia cada módulo perguntar "qual empresa?" de novo.
+    if (!empresaAtiva || trocandoEmpresa) {
+        return (
+            <>
+                <AtivarEmpresaScreen
+                    currentUser={currentUser}
+                    atual={empresaAtiva}
+                    onAtivar={ativarEmpresa}
+                    onCancelar={empresaAtiva ? () => setTrocandoEmpresa(false) : undefined}
+                />
+                <UpdateBanner />
+            </>
+        );
+    }
+
     const selectedEmpresa = simplesEmpresas.find(e => e.id === selectedSimplesEmpresaId);
 
     // Seleção de card do menu — reseta estado de busca e trata casos especiais
@@ -676,13 +737,30 @@ const App: React.FC = () => {
         setError(null);
         setValidationErrors({});
         setUserNotes('');
+        // MÓDULO QUE TRABALHA SOBRE UM CLIENTE ABRE NA EMPRESA ATIVA.
+        //
+        // Era aqui que a sequência se perdia: entrar no card do Lucro fazia
+        // `setSelectedLucroEmpresaId(null)` e devolvia a LISTA de ~400
+        // empresas — como se a ativação não tivesse acontecido. Paulo, 15/08:
+        // *"já começou errado ... ativar empresa é o que determina o que a
+        // pessoa vai ou não fazer"*.
+        //
+        // Módulo de CARTEIRA (Rotina, Vencimentos, Dashboard) segue vendo o
+        // conjunto: ele responde sobre o todo, e prendê-lo a um cliente seria
+        // trocar um erro por outro. `exigeEmpresaAtiva` é quem separa os dois.
+        const daEmpresaAtiva = exigeEmpresaAtiva(type);
         if (type === SearchType.SIMPLES_NACIONAL) {
             setSimplesView('dashboard');
             setSimplesEmpresaToEdit(null);
             loadSimplesData(currentUser);
+            setSelectedSimplesEmpresaId(
+                daEmpresaAtiva && empresaAtiva?.fonte === 'simples' ? empresaAtiva.id : null,
+            );
         }
         if (type === SearchType.LUCRO_PRESUMIDO_REAL) {
-            setSelectedLucroEmpresaId(null);
+            setSelectedLucroEmpresaId(
+                daEmpresaAtiva && empresaAtiva?.fonte === 'lucro' ? empresaAtiva.id : null,
+            );
         }
     };
 
@@ -723,6 +801,35 @@ const App: React.FC = () => {
                     onShowUsers={currentUser.role === 'admin' ? () => setIsUsersModalOpen(true) : undefined}
                     onShowConfigAdmin={currentUser.role === 'admin' ? () => setIsConfigAdminOpen(true) : undefined}
                 />
+
+                {/* ─── EM QUEM VOCÊ ESTÁ MEXENDO ─────────────────────────────
+                    O escopo da sessão fica VISÍVEL o tempo todo. Sem isto, a
+                    empresa ativa seria um estado invisível — e estado invisível
+                    que decide onde o lançamento cai é como se lança no cliente
+                    errado sem ninguém desconfiar. */}
+                <div className="flex items-center gap-2 flex-wrap mb-3 px-3 py-2 rounded-lg"
+                     style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+                    <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: 'var(--text-muted)' }}>
+                        Empresa ativa
+                    </span>
+                    <span className="text-sm font-bold min-w-0 truncate" style={{ color: 'var(--text-primary)' }}>
+                        {rotuloEmpresaAtiva(empresaAtiva)}
+                    </span>
+                    <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                        {fmtCnpjAtiva(empresaAtiva.cnpj)}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded"
+                          style={{ background: 'var(--bg-page)', color: 'var(--text-muted)' }}>
+                        {empresaAtiva.fonte === 'simples' ? 'Simples Nacional' : 'Lucro Presumido/Real'}
+                    </span>
+                    <button
+                        onClick={() => setTrocandoEmpresa(true)}
+                        className="btn-press ml-auto text-[11px] px-2.5 py-1 rounded-lg whitespace-nowrap"
+                        style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
+                    >
+                        ⇄ Trocar empresa
+                    </button>
+                </div>
 
                 <div className="flex flex-col md:flex-row gap-6">
                     <main className="flex-grow min-w-0">
