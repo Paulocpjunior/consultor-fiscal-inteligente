@@ -179,6 +179,7 @@ const LinhaEmpresa: React.FC<{
 };
 
 const TrimestraisDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
+    const { empresa: empresaAtivaPainel } = useEmpresaAtiva();
     const [data, setData] = useState<DctfwebTrimestraisMesResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
@@ -206,7 +207,12 @@ const TrimestraisDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) =>
         );
     }
 
-    const candidatas = data.candidatas || [];
+    const todas = data.candidatas || [];
+    // ATÉ A VISÃO é da ativa — mesma regra da Varredura IPI e das Cotas.
+    const candidatas = empresaAtivaPainel
+        ? todas.filter(c => String(c.empresaCnpj || '').replace(/\D/g, '') === empresaAtivaPainel.cnpj)
+        : todas;
+    const foraDaAtiva = todas.length - candidatas.length;
     return (
         <div className="space-y-4">
             <div className="p-4 rounded-lg" style={{ background: 'var(--bg-card)' }}>
@@ -221,12 +227,16 @@ const TrimestraisDoMesPanel: React.FC<Props> = ({ currentUser, onShowToast }) =>
 
             {candidatas.length === 0 ? (
                 <p className="text-sm p-4" style={{ color: 'var(--text-muted)' }}>
-                    Nenhuma declaração transmitida da competência {String(data.competenciaMes).padStart(2, '0')}/{data.competenciaAno} na sua carteira.
-                    Transmita a DCTFWeb dessas empresas primeiro.
+                    {empresaAtivaPainel
+                        ? <><strong>{empresaAtivaPainel.nome}</strong> não tem declaração transmitida em {String(data.competenciaMes).padStart(2, '0')}/{data.competenciaAno}.{foraDaAtiva > 0 && <> {foraDaAtiva} outra(s) empresa(s) têm — troque no ⇄ para vê-las.</>}</>
+                        : <>Nenhuma declaração transmitida da competência {String(data.competenciaMes).padStart(2, '0')}/{data.competenciaAno} na sua carteira. Transmita a DCTFWeb dessas empresas primeiro.</>}
                 </p>
             ) : (
                 <div className="space-y-2">
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{candidatas.length} empresa(s) com declaração transmitida:</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {candidatas.length} empresa(s) com declaração transmitida
+                        {foraDaAtiva > 0 && <> · {foraDaAtiva} outra(s) fora desta tela — ela responde pela empresa ativa (troque no ⇄)</>}:
+                    </p>
                     {candidatas.map((c) => (
                         <LinhaEmpresa key={`${c.empresaCnpj}_${c.anoPA}${c.mesPA}`} user={currentUser} cand={c} onShowToast={onShowToast} />
                     ))}
