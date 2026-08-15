@@ -349,3 +349,27 @@ describe('🚨 todo caminho que CRIA tarefa usa o núcleo por cliente', () => {
         expect(auto).toMatch(/carregarCalendariosMunicipais/);
     });
 });
+
+describe('a fila diz ONDE PARAR, não só a ordem', () => {
+    it('cobertura acumulada e quantas cidades bastam para 80%', () => {
+        // Uma lista de 57 cidades ordenada por volume ainda não diz quantas
+        // valem a pena: sem isto, ou se cadastra 57 (trabalho que não rende)
+        // ou se cadastra 1 e acha que resolveu.
+        const clientes = [
+            ...Array.from({ length: 8 }, (_, i) => ({ id: `a${i}`, nome: `A${i}`, cnpj: '1', codMunIBGE: SP, regime: 'lucro' })),
+            { id: 'b', nome: 'B', cnpj: '2', codMunIBGE: JUNDIAI, regime: 'lucro' },
+            { id: 'c', nome: 'C', cnpj: '3', codMunIBGE: '3509502', regime: 'lucro' },
+        ];
+        const r = municipiosSemCalendario(clientes, [], { competencia: '2026-07' });
+        expect(r.municipios[0].total).toBe(8);
+        expect(r.municipios[0].coberturaAcumuladaPct).toBe(80);
+        // Uma cidade só já resolve 80% — é isso que decide o esforço.
+        expect(r.cidadesPara80).toBe(1);
+    });
+
+    it('a tela mostra o acumulado e onde parar', () => {
+        const tela = readFileSync(join(__dirname, '..', 'components/PrazosMunicipaisPanel.tsx'), 'utf8');
+        expect(tela).toMatch(/cidadesPara80/);
+        expect(tela).toMatch(/coberturaAcumuladaPct/);
+    });
+});
