@@ -75,6 +75,7 @@
 // ============================================================================
 
 import { ehDiaUtil } from './feriados-nacionais.js';
+import { resolverPrazoMunicipal } from './prazos-municipais.js';
 
 /** Regimes que o mês entende. INDEFINIDO é um estado real, não um erro. */
 export const REGIMES = ['SIMPLES', 'LUCRO_PRESUMIDO', 'LUCRO_REAL', 'INDEFINIDO'];
@@ -424,6 +425,47 @@ export function mesDoCliente(empresa, competencia) {
         }
     }
 
+    // ── CALENDÁRIO MUNICIPAL: o ISS deixa de ser pendência PARA QUEM TEM ────
+    //
+    // A entrada do ISS nasce `proposta` porque não existe "dia do ISS"
+    // nacional. Quando o calendário do MUNICÍPIO daquele cliente está
+    // cadastrado (com vigência e base legal), ela vira obrigação de verdade,
+    // com data — para AQUELE cliente, nunca para os outros.
+    const prazosMunicipais = empresa?.prazosMunicipais || [];
+    // ⚠️ ESTE CATÁLOGO FALA 'MM/AAAA' e o resto do app fala 'AAAA-MM'. Passar
+    // direto faz a vigência NUNCA casar — e o efeito é silencioso: o ISS
+    // simplesmente continua pendente, como se ninguém tivesse cadastrado nada.
+    // É a SEGUNDA vez que este mesmo descasamento morde hoje (a primeira foi a
+    // cobertura na Rotina, e ali ele ao menos explodia). Convertido na
+    // fronteira: mudar o formato do catálogo quebraria o cron do mês inteiro.
+    const { mes: mesN, ano: anoN } = partesDaCompetencia(competencia);
+    const competenciaIso = `${anoN}-${String(mesN).padStart(2, '0')}`;
+    const municipaisResolvidas = [];
+    for (const r of propostas) {
+        if (r.esfera !== 'municipal') continue;
+        const achado = resolverPrazoMunicipal(prazosMunicipais, {
+            codMunIBGE: empresa?.codMunIBGE, obrigacao: r.obrigacao, competencia: competenciaIso,
+        });
+        if (!achado.achou) continue;
+        municipaisResolvidas.push({
+            ...r,
+            status: 'ativa',
+            diaVencimento: achado.prazo.diaVencimento,
+            mesesApos: achado.prazo.mesesApos,
+            ajusteDiaNaoUtil: achado.prazo.ajusteDiaNaoUtil,
+            abrangencia: `IBGE:${achado.prazo.codMunIBGE}`,
+            // A base legal do MUNICÍPIO substitui o "a cadastrar" genérico —
+            // é ela que a pessoa confere se o prazo for questionado.
+            baseLegal: achado.prazo.baseLegal,
+            dependeDe: null,
+            revisar: false,
+            prazoMunicipal: achado.prazo,
+        });
+    }
+    const resolvidasPorCodigo = new Set(municipaisResolvidas.map((r) => r.obrigacao));
+    // O que continua pendente é só o que NÃO foi resolvido pelo cadastro.
+    const propostasPendentes = propostas.filter((r) => !resolvidasPorCodigo.has(r.obrigacao));
+
     const alertas = [];
     if (prazoDeOutraUf.length) {
         alertas.push({
@@ -449,11 +491,11 @@ export function mesDoCliente(empresa, competencia) {
             acao: 'Defina o Regime padrão (Presumido ou Real) na ficha do cliente no card Lucro.',
         });
     }
-    if (propostas.length) {
+    if (propostasPendentes.length) {
         alertas.push({
             tipo: 'obrigacoes-a-confirmar',
-            texto: `${propostas.length} obrigação(ões) do regime dependem de informação que este app não tem: `
-                + propostas.map((r) => `${r.label} (depende de ${r.dependeDe})`).join(', ') + '.',
+            texto: `${propostasPendentes.length} obrigação(ões) do regime dependem de informação que este app não tem: `
+                + propostasPendentes.map((r) => `${r.label} (depende de ${r.dependeDe})`).join(', ') + '.',
             acao: 'Confirmar caso a caso — enquanto isso elas NÃO viram tarefa automática.',
         });
     }
@@ -462,15 +504,18 @@ export function mesDoCliente(empresa, competencia) {
         regime,
         regimeLabel: REGIME_LABEL[regime],
         competencia,
-        obrigacoes: ativas.map((r) => ({ ...r, vencimento: calcularVencimento(competencia, r) })),
-        propostas,
+        obrigacoes: [...ativas, ...municipaisResolvidas]
+            .map((r) => ({ ...r, vencimento: calcularVencimento(competencia, r) })),
+        propostas: propostasPendentes,
+        /** Municipais que o cadastro do município resolveu — deixaram de ser pendência. */
+        municipaisResolvidas,
         /** Obrigações cujo prazo cadastrado é de OUTRA UF (ou indeterminado). */
         prazoDeOutraUf,
         prazoSemUfDoCliente,
         alertas,
         /** true quando o catálogo NÃO cobre o cliente — a etapa 4 não pode dar
          *  verde nesse caso (trava T1 do escopo). */
-        coberturaIncompleta: regime === 'INDEFINIDO' || propostas.length > 0
+        coberturaIncompleta: regime === 'INDEFINIDO' || propostasPendentes.length > 0
             || prazoDeOutraUf.length > 0 || prazoSemUfDoCliente.length > 0,
     };
 }

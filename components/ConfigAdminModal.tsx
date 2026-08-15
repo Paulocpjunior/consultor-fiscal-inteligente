@@ -14,6 +14,7 @@ import {
     listarTemplatesDaMeta, statusWebhook,
     WhatsappTemplate, TemplateVariavel, TemplateDaMeta, WebhookStatus,
 } from '../services/whatsappTemplatesService';
+import PrazosMunicipaisPanel from './PrazosMunicipaisPanel';
 
 interface Props {
     isOpen: boolean;
@@ -280,6 +281,15 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                 )}
                             </div>
                         )}
+                    </section>
+
+                    {/* ── 🏛️ Calendário municipal (ISS) ─────────────────────────
+                        Mora aqui porque é CONFIG que vale para a casa inteira:
+                        cadastrar a cidade resolve todos os clientes dela. A
+                        pendência continua aparecendo na Rotina, onde o
+                        colaborador trabalha — aqui é onde se RESOLVE. */}
+                    <section className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                        <PrazosMunicipaisPanel onShowToast={(m) => setMsg({ texto: m, tipo: 'ok' })} />
                     </section>
 
                     {/* ── Horários dos colaboradores (atalho) ─────────────────── */}
