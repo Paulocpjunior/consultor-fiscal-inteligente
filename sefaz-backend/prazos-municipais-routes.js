@@ -16,7 +16,11 @@ import { requireAuth, requireAdmin } from './require-admin.js';
 import express from 'express';
 import {
     validarPrazoMunicipal, idPrazoMunicipal, municipiosSemCalendario,
+    resolverPrazoMunicipal,
 } from './prazos-municipais.js';
+import {
+    montarPromptPrazoMunicipal, interpretarPropostaPrazo,
+} from './prazo-municipal-consulta.js';
 
 const router = Router();
 const COL = 'prazos_municipais';
@@ -106,6 +110,64 @@ router.post('/', requireAdmin, express.json(), async (req, res) => {
         return res.json({ ok: true, id, prazo: doc });
     } catch (e) {
         console.error('[prazos-municipais/post]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ============================================================================
+// POST /consultar — a CONSULTA MENSAL desenhada pelo Paulo (11/08).
+//
+// "Proposta COM FONTE, nunca escrita direta: o app mostra a DIFERENÇA contra o
+// catálogo e humano confirma — data de pagamento não muda sozinha (multa de um
+// lado, 'atrasada' falsa do outro), e modelo com busca reduz o chute mas pode
+// citar blog no lugar do ato."
+//
+// 🚨 ESTE HANDLER NÃO ESCREVE NADA. Ele consulta, recusa o que não se sustenta
+// e devolve a proposta com as fontes. Quem grava é o POST de cadastro, que
+// exige base legal e guarda quem confirmou.
+// ============================================================================
+router.post('/consultar', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const ai = req.app.get('ai');
+        if (!ai) return res.status(503).json({ ok: false, error: 'IA indisponível (GEMINI_API_KEY ausente).' });
+
+        const { codMunIBGE, municipioNome, uf, obrigacao = 'ISS' } = req.body || {};
+        if (String(codMunIBGE || '').replace(/\D/g, '').length !== 7) {
+            return res.status(400).json({ ok: false, error: 'Informe o código IBGE do município (7 dígitos).' });
+        }
+
+        const db = getDb();
+        const cadastros = await carregarPrazosMunicipais(db);
+        const competencia = new Date().toISOString().slice(0, 7);
+        const atual = resolverPrazoMunicipal(cadastros, { codMunIBGE, obrigacao, competencia });
+
+        const modelos = req.app.get('geminiModelos');
+        const modelo = (typeof modelos === 'function' ? modelos().pro : null) || undefined;
+        const r = await ai.models.generateContent({
+            model: modelo,
+            contents: montarPromptPrazoMunicipal({ municipioNome, uf, codMunIBGE, obrigacao }),
+            // GROUNDING LIGADO: é ele que transforma "o modelo acha" em "o
+            // modelo leu isto aqui". Sem as fontes a proposta é recusada.
+            config: { tools: [{ googleSearch: {} }], temperature: 0 },
+        });
+
+        const chunks = r?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const fontes = chunks.filter((c) => c?.web?.uri).map((c) => ({ uri: c.web.uri, title: c.web.title }));
+
+        const resultado = interpretarPropostaPrazo({
+            texto: r?.text ?? '',
+            fontes,
+            cadastroAtual: atual.achou ? atual.prazo : null,
+        });
+        return res.json({
+            ...resultado,
+            modelo: modelo || null,
+            // Dito na resposta e repetido na tela: consulta NÃO é cadastro.
+            aviso: 'Isto é uma PROPOSTA. Nada foi gravado — confira nas fontes e cadastre você mesmo, '
+                + 'com a base legal. Prazo que muda sozinho é multa de um lado ou "atrasada" falsa do outro.',
+        });
+    } catch (e) {
+        console.error('[prazos-municipais/consultar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
