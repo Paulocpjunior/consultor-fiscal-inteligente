@@ -30,6 +30,7 @@ import {
     type GiaStAnexoTransferencia, type GiaStArquivoGuia,
 } from '../../services/giaStExportService';
 import { downloadBlob } from '../../services/iobSageExportService';
+import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
 
 interface Props {
     currentUser: User;
@@ -176,6 +177,12 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [parsing, setParsing] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
     const [relatorio, setRelatorio] = useState<GiaStRelatorioParsed | null>(null);
+    // Aqui a empresa NÃO vem da ativa: vem do PDF, porque o documento é a fonte.
+    // A ativa serve só para DENUNCIAR o PDF do cliente errado.
+    const { empresa: empresaAtiva } = useEmpresaAtiva();
+    const divergeDaAtiva = !!empresaAtiva && !!relatorio
+        && String(relatorio.empresaCnpj || '').replace(/\D/g, '')
+        !== String(empresaAtiva.cnpj || '').replace(/\D/g, '');
     const [forms, setForms] = useState<Record<string, FormGuia>>({});
     const [salvas, setSalvas] = useState<GiaStGuia[]>([]);
     const [salvando, setSalvando] = useState<string | null>(null);
@@ -346,6 +353,19 @@ const GiaStPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
             {relatorio && (
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                    {/* A EMPRESA VEM DO PDF, e é assim que tem que ser: o documento
+                        é a fonte e digitação não vence documento. Mas subir o
+                        relatório do cliente ERRADO gravaria a GIA-ST em nome de
+                        outra empresa, então a divergência com a ativa ACENDE —
+                        é a regra de 06/08 (fonte × cadastro discordando é ALERTA,
+                        nunca escolha silenciosa). O app NÃO troca nada sozinho. */}
+                    {divergeDaAtiva && (
+                        <div className="mb-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-2.5 text-[11px] text-amber-800 dark:text-amber-200">
+                            ⚠ O relatório é de <strong>{relatorio.empresaNome}</strong> ({fmtCnpj(relatorio.empresaCnpj)}),
+                            mas a empresa ativa é <strong>{empresaAtiva!.nome}</strong>. Confira se subiu o PDF certo —
+                            salvar aqui grava a GIA-ST em nome da empresa <strong>do relatório</strong>, não da ativa.
+                        </div>
+                    )}
                     <div className="flex flex-wrap gap-x-8 gap-y-1 text-xs">
                         <span><strong>Empresa:</strong> {relatorio.empresaNome}</span>
                         <span><strong>CNPJ:</strong> {fmtCnpj(relatorio.empresaCnpj)}</span>

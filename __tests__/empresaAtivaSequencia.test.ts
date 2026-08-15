@@ -404,3 +404,33 @@ describe('🚨 Painel DCTFWeb: a aba onde o recorte vale MAIS, porque ela transm
         expect(painel).not.toMatch(/empresaCnpj: cnpjAtiva/);
     });
 });
+
+describe('varredura final: o que sobrou depois das três levas', () => {
+    // Paulo repetiu TRÊS vezes ("empresa ativa EXPERTE, e você traz FASTWELD").
+    // Depois de fechar os módulos que ele apontou, varri o resto atrás de tela
+    // por-cliente sem escopo — e achei duas, uma delas minha, de dois dias atrás.
+
+    it('🚨 Fechamento EFD-Reinf não pede mais o CNPJ DIGITADO', () => {
+        // Pior que um seletor: o campo nascia EM BRANCO. Dar a competência por
+        // fechada arquiva recibo no SharePoint do cliente e manda extrato ao
+        // gestor — um dígito errado fecha a competência de OUTRA empresa no
+        // registro, e o registro é justamente o que serve de prova depois.
+        const fonte = semComentarios(readFileSync(join(RAIZ, 'components/EfdReinf/FechamentoReinfPanel.tsx'), 'utf8'));
+        expect(fonte).toMatch(/useEmpresaAtiva\(\)/);
+        expect(fonte).toMatch(/<EmpresaAtivaFixa/);
+        expect(fonte).not.toMatch(/onChange=\{\(e\) => setCnpj/);
+    });
+
+    it('GIA-ST mantém a empresa do PDF — e ACUSA quando ela diverge da ativa', () => {
+        // Contraste deliberado: aqui a empresa vem do DOCUMENTO, que é a fonte,
+        // e digitação não vence documento. Trocar pela ativa seria reescrever o
+        // relatório. O que a ativa faz é DENUNCIAR o PDF do cliente errado —
+        // regra de 06/08: fonte × cadastro discordando é ALERTA, nunca escolha
+        // silenciosa. E o app não troca nada sozinho.
+        const fonte = semComentarios(readFileSync(join(RAIZ, 'components/GiaSt/GiaStPanel.tsx'), 'utf8'));
+        expect(fonte).toMatch(/divergeDaAtiva/);
+        expect(fonte).toMatch(/relatorio\.empresaCnpj/);
+        // O que NÃO pode: a ativa sobrescrevendo o que o PDF disse.
+        expect(fonte).not.toMatch(/setRelatorio\([^)]*empresaAtiva/);
+    });
+});
