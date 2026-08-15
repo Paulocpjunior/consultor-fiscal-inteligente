@@ -9,7 +9,10 @@
  * filial são cadastros e cursores diferentes.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { provarCaptura, type ProvaCaptura, type LinhaProva } from '../../services/provaCapturaService';
+import {
+    provarCaptura, provarCapturaDaCarteira,
+    type ProvaCaptura, type LinhaProva, type ProvaCarteira,
+} from '../../services/provaCapturaService';
 
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 const fmtData = (ms?: number | null) => (ms ? new Date(ms).toLocaleString('pt-BR') : '—');
@@ -61,6 +64,105 @@ const LinhaCnpj: React.FC<{ l: LinhaProva }> = ({ l }) => {
     );
 };
 
+/**
+ * A CARTEIRA INTEIRA — "como estão as capturas?" (Paulo, 15/08).
+ *
+ * Agrupada POR VEREDITO, não por empresa: veredito é o que tem AÇÃO. "12
+ * travadas no NSU" e "3 com certificado bloqueado" se resolvem de jeitos
+ * diferentes, e uma lista de 390 nomes não diz por onde começar.
+ */
+const VisaoCarteira: React.FC = () => {
+    const [dados, setDados] = useState<ProvaCarteira | null>(null);
+    const [carregando, setCarregando] = useState(false);
+    const [aberto, setAberto] = useState<string | null>(null);
+
+    const rodar = async () => {
+        setCarregando(true);
+        try { setDados(await provarCapturaDaCarteira()); } finally { setCarregando(false); }
+    };
+    useEffect(() => { rodar(); }, []);
+
+    return (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-3 bg-white dark:bg-slate-800">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    📡 Como está a captura da carteira
+                </h3>
+                <button onClick={rodar} disabled={carregando}
+                    className="btn-press text-[11px] px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 disabled:opacity-50 whitespace-nowrap">
+                    {carregando ? '⏳ conferindo…' : '↻ Atualizar'}
+                </button>
+            </div>
+
+            {dados?.error && <p className="text-xs text-red-600 dark:text-red-400">{dados.error}</p>}
+
+            {dados?.ok && (
+                <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <Kpi rotulo="Empresas conferidas" valor={String(dados.total ?? 0)} />
+                        <Kpi rotulo="Cursor em dia" valor={String(dados.emDia ?? 0)} cor="ok" />
+                        <Kpi rotulo="Exigem ação" valor={String(dados.comFalha ?? 0)} cor={(dados.comFalha ?? 0) > 0 ? 'falha' : 'ok'} />
+                        {/* O NÚMERO QUE DIMENSIONA: "incompleta" sozinho não diz
+                            se é 1 nota ou 500. */}
+                        <Kpi rotulo="Documentos que a SEFAZ tem e não lemos"
+                            valor={String(dados.documentosPendentes ?? 0)}
+                            cor={(dados.documentosPendentes ?? 0) > 0 ? 'falha' : 'ok'} />
+                    </div>
+
+                    {(dados.grupos || []).map((g) => (
+                        <div key={g.codigo} className={`rounded-lg border p-2.5 ${FAROL_BOX[g.farol]}`}>
+                            <button onClick={() => setAberto(aberto === g.codigo ? null : g.codigo)}
+                                className="w-full text-left">
+                                <p className="text-xs font-bold">
+                                    {FAROL_ICONE[g.farol]} {g.total} empresa(s) · {g.codigo}
+                                    {g.documentosPendentes > 0 && ` · ${g.documentosPendentes} documento(s) faltando`}
+                                </p>
+                                <p className="text-[11px] opacity-90">{g.motivo}</p>
+                                {g.acao && <p className="text-[11px] mt-0.5">→ {g.acao}</p>}
+                            </button>
+                            {aberto === g.codigo && (
+                                <div className="mt-2 space-y-0.5">
+                                    {g.empresas.map((e) => (
+                                        <p key={e.cnpj} className="text-[11px] opacity-90">
+                                            {fmtCnpj(e.cnpj)} · {e.nome}
+                                            {!e.matriz && ' (filial)'}
+                                            {!!e.pendenciaNSU && ` · faltam ${e.pendenciaNSU}`}
+                                        </p>
+                                    ))}
+                                    {/* LISTA CORTADA SEMPRE DIZ QUANTOS FICARAM. */}
+                                    {g.truncado && (
+                                        <p className="text-[11px] font-semibold">
+                                            mostrando {g.mostrando} de {g.total} — as demais estão no mesmo estado.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+
+                    {/* O RECORTE E O ESCOPO VÃO DITOS: recorte que não se declara
+                        faz alguém ler o número de uma carteira como o do
+                        escritório, e escopo omitido faz "em dia" parecer
+                        "nada a fazer neste cliente". */}
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                        Recorte: <strong>{dados.recorte}</strong>. {dados.escopo}
+                    </p>
+                </>
+            )}
+        </div>
+    );
+};
+
+const Kpi: React.FC<{ rotulo: string; valor: string; cor?: 'ok' | 'falha' }> = ({ rotulo, valor, cor }) => (
+    <div className="p-2 rounded-lg border border-slate-200 dark:border-slate-700">
+        <p className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{rotulo}</p>
+        <p className={`text-lg font-bold ${cor === 'falha' ? 'text-red-600 dark:text-red-400'
+            : cor === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-100'}`}>
+            {valor}
+        </p>
+    </div>
+);
+
 const ProvaCapturaPanel: React.FC<{ cnpjInicial?: string }> = ({ cnpjInicial = '' }) => {
     const [cnpj, setCnpj] = useState(cnpjInicial);
     const [dados, setDados] = useState<ProvaCaptura | null>(null);
@@ -87,6 +189,11 @@ const ProvaCapturaPanel: React.FC<{ cnpjInicial?: string }> = ({ cnpjInicial = '
 
     return (
         <div className="space-y-3">
+            {/* A VISÃO DO CONJUNTO VEM PRIMEIRO: a pergunta "como estão as
+                capturas?" é a que se faz antes de escolher um CNPJ. A prova
+                individual continua logo abaixo, para o caso já escolhido. */}
+            <VisaoCarteira />
+
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-2">
                 <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">🔎 Prova de captura (contra a SEFAZ)</h3>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-3xl">

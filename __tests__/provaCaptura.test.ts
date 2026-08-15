@@ -226,3 +226,120 @@ describe('contagem por CNPJ', () => {
         expect(ehResumo({ chave: chaveCte, temItens: false, schema: 'procCTe' })).toBe(false);
     });
 });
+
+// ═══ A CARTEIRA INTEIRA — "como estão as capturas?" ═════════════════════════
+//
+// Paulo, 15/08. A prova por CNPJ respondia bem e a do CONJUNTO não existia:
+// para saber como está a carteira era abrir a tela ~390 vezes, ou estimar de
+// memória — que é o vício do "0/388" carimbado neste projeto.
+describe('prova de captura da CARTEIRA', () => {
+    const { montarProvaCarteira } = require('../sefaz-backend/prova-captura.js');
+    const AGORA = Date.parse('2026-08-15T12:00:00Z');
+    const emp = (cnpj: string, nome: string, over: any = {}) =>
+        ({ id: cnpj, cnpj, nome, regime: 'lucro', capturarSefaz: true, motivosBloqueio: [], ...over });
+    const st = (over: any = {}) =>
+        ({ ultNSU: 100, maxNSU: 100, pendenciaNSU: 0, ultimaSyncMs: AGORA - 3600e3, ...over });
+
+    it('agrupa POR VEREDITO e põe o pior primeiro — lista de 390 nomes não diz por onde começar', () => {
+        const r = montarProvaCarteira({
+            agoraMs: AGORA,
+            empresas: [emp('11111111000101', 'A'), emp('22222222000102', 'B'), emp('33333333000103', 'C')],
+            states: {
+                '11111111000101': st(),
+                '22222222000102': st({ ultNSU: 10, maxNSU: 510, pendenciaNSU: 500 }),
+                '33333333000103': st({ nsuTravado: 77 }),
+            },
+        });
+        expect(r.total).toBe(3);
+        // Incompleta na fonte é a mais grave: a SEFAZ está DIZENDO que falta.
+        expect(r.grupos[0].codigo).toBe('incompleta-na-fonte');
+        expect(r.grupos[1].codigo).toBe('travada');
+        expect(r.emDia).toBe(1);
+        expect(r.comFalha).toBe(2);
+    });
+
+    it('🚨 diz QUANTOS documentos a SEFAZ ainda tem — "incompleta" sozinho não dimensiona', () => {
+        const r = montarProvaCarteira({
+            agoraMs: AGORA,
+            empresas: [emp('22222222000102', 'B'), emp('44444444000104', 'D')],
+            states: {
+                '22222222000102': st({ ultNSU: 10, maxNSU: 510, pendenciaNSU: 500 }),
+                '44444444000104': st({ ultNSU: 5, maxNSU: 8, pendenciaNSU: 3 }),
+            },
+        });
+        expect(r.documentosPendentes).toBe(503);
+        // Dentro do grupo, quem tem mais documento faltando aparece antes.
+        expect(r.grupos[0].empresas[0].nome).toBe('B');
+        expect(r.grupos[0].documentosPendentes).toBe(503);
+    });
+
+    it('🚨 cursor em dia NÃO afirma sobre resumo — verde por coisa não olhada é o pior farol', () => {
+        const r = montarProvaCarteira({
+            agoraMs: AGORA,
+            empresas: [emp('11111111000101', 'A')],
+            states: { '11111111000101': st() },
+        });
+        expect(r.grupos[0].codigo).toBe('cursor-em-dia');
+        expect(r.escopo).toMatch(/NÃO confere/);
+        expect(r.escopo).toMatch(/Rejeição 641/); // a SAÍDA também está fora
+    });
+
+    it('CNPJ com cursor e SEM cadastro não some — é ele que faz o total não bater', () => {
+        const r = montarProvaCarteira({
+            agoraMs: AGORA, empresas: [], states: { '99999999000199': st() },
+        });
+        expect(r.total).toBe(1);
+        expect(r.grupos[0].codigo).toBe('nao-cadastrado');
+    });
+
+    it('lista cortada DIZ quantos ficaram — slice mudo faz o painel contradizer o próprio número', () => {
+        const empresas = Array.from({ length: 30 }, (_, i) =>
+            emp(String(i).padStart(8, '0') + '000101', `E${i}`));
+        const states = Object.fromEntries(empresas.map((e) => [e.cnpj, st({ pendenciaNSU: 1, maxNSU: 101 })]));
+        const r = montarProvaCarteira({ agoraMs: AGORA, empresas, states, limitePorGrupo: 25 });
+        expect(r.grupos[0].total).toBe(30);
+        expect(r.grupos[0].empresas).toHaveLength(25);
+        expect(r.grupos[0].truncado).toBe(true);
+    });
+
+    it('all-failed NUNCA é verde, e carteira vazia não é ok', () => {
+        const r = montarProvaCarteira({
+            agoraMs: AGORA,
+            empresas: [emp('11111111000101', 'A', { capturarSefaz: false })],
+            states: {},
+        });
+        expect(r.farol).toBe('falha');
+        expect(montarProvaCarteira({ agoraMs: AGORA, empresas: [], states: {} }).farol).toBe('neutro');
+    });
+});
+
+describe('a visão da carteira tem TELA — função sem botão é código morto', () => {
+    const { readFileSync } = require('fs');
+    const { join } = require('path');
+    const RAIZ = join(__dirname, '..');
+
+    it('a rota existe e respeita o escopo da carteira do colaborador', () => {
+        const rota = readFileSync(join(RAIZ, 'sefaz-backend/prova-captura-routes.js'), 'utf8');
+        expect(rota).toMatch(/prova-captura-carteira/);
+        expect(rota).toMatch(/getCnpjsDaCarteira/);
+        // Cursor de CNPJ fora da carteira não pode aparecer — seria pendência
+        // de cliente que não é dele.
+        expect(rota).toMatch(/permitidos && !permitidos\.has\(c\)/);
+    });
+
+    it('a régua de BLOQUEIO é a mesma das duas telas — sem segunda cópia', () => {
+        const rota = readFileSync(join(RAIZ, 'sefaz-backend/prova-captura-routes.js'), 'utf8');
+        expect(rota).toMatch(/async function anotarBloqueios/);
+        // Uma definição, dois chamadores (o CNPJ único e a carteira).
+        expect((rota.match(/anotarBloqueios\(/g) || []).length).toBe(3);
+    });
+
+    it('o painel mostra a visão da carteira ANTES do CNPJ único', () => {
+        const tela = readFileSync(join(RAIZ, 'components/xml/ProvaCapturaPanel.tsx'), 'utf8');
+        expect(tela).toMatch(/<VisaoCarteira \/>/);
+        expect(tela).toMatch(/provarCapturaDaCarteira/);
+        // Recorte e escopo DITOS na tela.
+        expect(tela).toMatch(/dados\.recorte/);
+        expect(tela).toMatch(/dados\.escopo/);
+    });
+});

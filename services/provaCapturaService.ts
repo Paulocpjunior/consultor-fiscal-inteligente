@@ -50,3 +50,51 @@ export async function provarCaptura(cnpj: string): Promise<ProvaCaptura> {
     if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
     return data;
 }
+
+// ─── A CARTEIRA INTEIRA ────────────────────────────────────────────────────
+// "Como estão as capturas?" (Paulo, 15/08). A prova por CNPJ respondia bem; a
+// do CONJUNTO não existia, e a única saída era abrir a tela ~390 vezes.
+
+export interface GrupoProvaCarteira {
+    codigo: string;
+    farol: 'ok' | 'atencao' | 'falha';
+    motivo: string;
+    acao: string | null;
+    total: number;
+    /** Documentos que a SEFAZ tem e o app não leu, somados no grupo. */
+    documentosPendentes: number;
+    empresas: Array<{
+        cnpj: string; nome: string; regime: string | null;
+        matriz: boolean; pendenciaNSU: number | null;
+    }>;
+    mostrando: number;
+    truncado: boolean;
+}
+
+export interface ProvaCarteira {
+    ok: boolean;
+    error?: string;
+    total?: number;
+    emDia?: number;
+    comFalha?: number;
+    comAtencao?: number;
+    documentosPendentes?: number;
+    farol?: 'ok' | 'atencao' | 'falha' | 'neutro';
+    grupos?: GrupoProvaCarteira[];
+    /** O que a varredura NÃO olhou — recorte que não se declara engana. */
+    escopo?: string;
+    recorte?: string;
+    geradoEm?: string;
+}
+
+export async function provarCapturaDaCarteira(): Promise<ProvaCarteira> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/sefaz/prova-captura-carteira', {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return data;
+}
