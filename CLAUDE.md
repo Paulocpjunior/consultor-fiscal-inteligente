@@ -110,6 +110,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
   lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
   que faz alguém ler "0 pendentes" como resposta da carteira.
+- **MATA-BURRO: NÚMERO DIGITADO SEM DOCUMENTO POR TRÁS — e a ROTINA pintava de
+  VERDE** (15/08, caso EXPERTE 06/2026 — Paulo: *"antes de fazer qualquer
+  captura, repare que a empresa teve IPI, geramos o imposto e relatório: como
+  não houve captura de XML?"*). A ficha e a escrituração são trilhos
+  INDEPENDENTES e ninguém cruzava os dois: R$ 7.352,90 de IPI apurado,
+  relatório emitido, **ZERO documento no banco**, e nada acendia. É o retrato
+  da colcha que o CFI existe para substituir.
+  O farol nasceu na 🏭 Varredura de IPI, mas a doença **nunca foi do IPI** — a
+  prova saiu da própria **Rotina do Mês**, que é o guia do colaborador: a etapa
+  de APURAÇÃO fechava `concluida` só por EXISTIR ficha, com a etapa de CAPTURA
+  logo acima dizendo *"nenhuma nota capturada"*. **Duas leituras do mesmo mês
+  discordando na mesma tela**, e a de baixo é a que vira "mês fechado".
+  `ficha-x-documentos.js` virou régua ÚNICA (`valorApurado` + `rotulo`, chamada
+  pela varredura E pela rotina — a segunda cópia seria o defeito de sempre).
+  QUATRO DECISÕES: (1) **âmbar, não vermelho** — o número pode estar certo (a
+  ficha é digitada de propósito e há cliente que ainda não migrou a
+  escrituração); o que não pode é passar por CONCLUÍDO sem ninguém ver, e âmbar
+  já impede o "mês fechado"; (2) no **Simples o número é a RECEITA** (o
+  `totalImpostos` fica null porque o DAS ainda não foi calculado) — olhar só o
+  imposto deixaria a maior parte da carteira sem farol; (3) **ficha ZERADA com
+  banco vazio NÃO acende** — isso é "sem movimento", outro assunto com trilho
+  próprio, e alarme sem ação é o que ensina a ignorar o farol; (4) contagem que
+  FALHA vira `null`, nunca zero — "sem lastro" com o banco cheio é o alarme
+  falso que aparece justamente quando está tudo certo. ⚠️ E o farol diz na
+  frase que **verde é EXISTÊNCIA, não valor**: quem confere valor é o E510 (🪞).
+  🐛 Um defeito meu pego pelo próprio teste: `Number(null)` é 0 e
+  `Number.isFinite(0)` é true, então o ramo "tem imposto" engolia o Simples
+  inteiro e ele nunca acenderia.
 - **MATA-BURRO: COMUNICADO ENTREGUE COM O SELO APAGADO — o par que envelhece em
   SILÊNCIO** (Paulo, 15/08: *"o botão novidade do CFI você não está inserindo o
   detalhe em vermelho que sinaliza que algo foi feito"*). Ele estava certo e a
