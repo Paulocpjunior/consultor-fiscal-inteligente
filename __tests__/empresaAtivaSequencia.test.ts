@@ -319,3 +319,28 @@ describe('os painéis por-cliente que RESTAVAM não perguntam mais a empresa', (
         expect(sage).toMatch(/vazio = todas/i);
     });
 });
+
+describe('terceira leva: classificar pelo RÓTULO antes de mexer', () => {
+    it('NFTS nasce na ativa e MANTÉM o seletor — o rótulo diz "opcional"', () => {
+        // Dá para lançar NFTS só com o CCM, sem escolher empresa. Tirar o
+        // seletor quebraria esse caminho; o que muda é o PADRÃO: o cliente da
+        // sessão, não uma pergunta em branco.
+        const nfts = readFileSync(join(RAIZ, 'components/Nfts/index.tsx'), 'utf8');
+        expect(nfts).toMatch(/useState\(empresaAtivaId \|\| ''\)/);
+        expect(nfts).toMatch(/EmpresaSearchSelect/);
+    });
+
+    it('AgentesA3 mantém o seletor — vínculo de configuração é de ADMIN, não trabalho num cliente', () => {
+        const a3 = readFileSync(join(RAIZ, 'components/AgentesA3/index.tsx'), 'utf8');
+        expect(a3).toMatch(/EmpresaSearchSelect/);
+    });
+
+    it('Relatórios do Lucro usam a lista LEVE + documento sob demanda', () => {
+        // Era o caminho pesado dito no PR #684: baixar a ficha de TODAS as
+        // empresas para escolher UMA. Agora resumo na lista, completa por id.
+        const rel = semComentarios(readFileSync(join(RAIZ, 'components/Relatorios/index.tsx'), 'utf8'));
+        expect(rel).toMatch(/getEmpresasResumo/);
+        expect(rel).toMatch(/getEmpresaCompleta\(empresaId\)/);
+        expect(rel).not.toMatch(/lucroPresumidoService\.getEmpresas\(currentUser\)/);
+    });
+});

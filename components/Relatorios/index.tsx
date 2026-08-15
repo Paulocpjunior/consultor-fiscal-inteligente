@@ -104,7 +104,7 @@ const opcoesLucro = (lista: any[]): EmpresaXmlOption[] => (lista || []).map((e) 
     nome: e.nome,
     cnpj: e.cnpj,
     fonte: 'lucro',
-    codCliente: e.dadosFiscais?.codCliente,
+    codCliente: e.codCliente ?? e.dadosFiscais?.codCliente,
 } as EmpresaXmlOption));
 
 const fmtBRL = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -1533,7 +1533,7 @@ const AbaDipam: React.FC<{ competencia: string }> = ({ competencia }) => {
 // ─── 11. Ficha Financeira (Lucro) ───────────────────────────────────────────
 
 const AbaFicha: React.FC<{ currentUser: User }> = ({ currentUser }) => {
-    const [empresas, setEmpresas] = useState<LucroPresumidoEmpresa[]>([]);
+    const [empresas, setEmpresas] = useState<lucroPresumidoService.LucroEmpresaResumo[]>([]);
     const [empresaId, setEmpresaId] = useState('');
     const [loading, setLoading] = useState(false);
     const { gerando, rodar } = usePdf();
@@ -1541,13 +1541,25 @@ const AbaFicha: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     React.useEffect(() => {
         let alive = true;
         setLoading(true);
-        lucroPresumidoService.getEmpresas(currentUser)
-            .then(l => { if (alive) setEmpresas(l); })
+        // Lista LEVE (só cadastro): baixar a ficha de TODAS as empresas para
+        // escolher UMA era o caminho pesado dito no PR #684. A ficha vem no
+        // efeito abaixo, da empresa escolhida, uma leitura por id.
+        lucroPresumidoService.getEmpresasResumo(currentUser)
+            .then(r => { if (alive) setEmpresas(r.empresas); })
             .finally(() => { if (alive) setLoading(false); });
         return () => { alive = false; };
     }, [currentUser]);
 
-    const empresa = empresas.find(e => e.id === empresaId) || null;
+    const [empresaCompleta, setEmpresaCompleta] = useState<LucroPresumidoEmpresa | null>(null);
+    React.useEffect(() => {
+        let alive = true;
+        if (!empresaId) { setEmpresaCompleta(null); return; }
+        lucroPresumidoService.getEmpresaCompleta(empresaId)
+            .then(e => { if (alive) setEmpresaCompleta(e); });
+        return () => { alive = false; };
+    }, [empresaId]);
+
+    const empresa = empresaCompleta;
     const fichas = useMemo(
         () => (empresa?.fichaFinanceira || []).slice().sort((a, b) => a.mesReferencia.localeCompare(b.mesReferencia)),
         [empresa],
@@ -1804,7 +1816,7 @@ const AbaDeclaracao: React.FC<{
 // que a ReportView do módulo Lucro (com as retenções acumuladas do trimestre).
 const AbaTrimestre: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const { gerando, rodar } = usePdf();
-    const [empresas, setEmpresas] = useState<any[]>([]);
+    const [empresas, setEmpresas] = useState<lucroPresumidoService.LucroEmpresaResumo[]>([]);
     const [empresaId, setEmpresaId] = useState('');
     const [chaveTri, setChaveTri] = useState('');
     const [loading, setLoading] = useState(false);
@@ -1812,13 +1824,25 @@ const AbaTrimestre: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     React.useEffect(() => {
         let alive = true;
         setLoading(true);
-        lucroPresumidoService.getEmpresas(currentUser)
-            .then(l => { if (alive) setEmpresas(l); })
+        // Lista LEVE (só cadastro): baixar a ficha de TODAS as empresas para
+        // escolher UMA era o caminho pesado dito no PR #684. A ficha vem no
+        // efeito abaixo, da empresa escolhida, uma leitura por id.
+        lucroPresumidoService.getEmpresasResumo(currentUser)
+            .then(r => { if (alive) setEmpresas(r.empresas); })
             .finally(() => { if (alive) setLoading(false); });
         return () => { alive = false; };
     }, [currentUser]);
 
-    const empresa = empresas.find(e => e.id === empresaId) || null;
+    const [empresaCompleta, setEmpresaCompleta] = useState<LucroPresumidoEmpresa | null>(null);
+    React.useEffect(() => {
+        let alive = true;
+        if (!empresaId) { setEmpresaCompleta(null); return; }
+        lucroPresumidoService.getEmpresaCompleta(empresaId)
+            .then(e => { if (alive) setEmpresaCompleta(e); });
+        return () => { alive = false; };
+    }, [empresaId]);
+
+    const empresa = empresaCompleta;
     const fichas = useMemo(() => empresa?.fichaFinanceira || [], [empresa]);
     const trimestres = useMemo(() => trimestresDisponiveis(fichas), [fichas]);
 

@@ -27,6 +27,7 @@ import {
 import { fetchCnpjFromBrasilAPI } from '../../services/externalApiService';
 import { CATALOGO_POR_CODIGO } from '../../services/nftsCatalogoSp';
 import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
+import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import { paraEmpresaOptions } from '../../services/empresaOption';
 import CruzamentoNftsPanel from './CruzamentoNftsPanel';
 
@@ -103,7 +104,11 @@ const inputStyle: React.CSSProperties = {
 const NftsSp: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [empresas, setEmpresas] = useState<EmpresaPerfilOption[]>([]);
     const [empresasLoading, setEmpresasLoading] = useState(true);
-    const [empresaId, setEmpresaId] = useState('');
+    // NASCE na empresa ATIVA (15/08). O seletor FICA porque o rótulo diz
+    // "opcional" — dá para lançar NFTS só com o CCM, sem escolher empresa —
+    // mas o padrão é o cliente da sessão, não uma pergunta em branco.
+    const empresaAtivaId = useEmpresaAtivaId();
+    const [empresaId, setEmpresaId] = useState(empresaAtivaId || '');
     const [ccm, setCcm] = useState('');
     const [cnpjTomador, setCnpjTomador] = useState('');
     const [usarGemini, setUsarGemini] = useState(true);
