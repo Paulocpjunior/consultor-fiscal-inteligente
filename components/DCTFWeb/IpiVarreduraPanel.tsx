@@ -60,7 +60,7 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
             const ganhos = Object.entries(r.porCampo).map(([c, n]) => `${c}: ${n}`).join(' · ');
             onShowToast?.(r.atualizadas
                 ? `${l.nome}: ${r.atualizadas} nota(s) recuperada(s) — ${ganhos}.`
-                : `${l.nome}: nada a recuperar (${r.jaRelidas} já relidas · ${r.semDadoNoXml} sem o dado no XML · ${r.semXml} sem arquivo).`);
+                : `${l.nome}: nada a recuperar — veja a causa na linha.`);
         } catch (e: any) {
             onShowToast?.(`Falha ao reler ${l.nome}: ${e?.message || 'erro desconhecido'}`);
         } finally {
@@ -273,34 +273,58 @@ const IpiVarreduraPanel: React.FC<Props> = ({ onShowToast }) => {
  * "0 recuperadas" sozinho foi o alarme sem ação de 13/08: não dizia se o clique
  * já tinha sido dado, se o XML não tem o dado, ou se o arquivo nem foi guardado.
  */
-const RelerResultado: React.FC<{ r: RelerItensResposta }> = ({ r }) => (
-    <div className="mt-1 text-[10px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-        {r.atualizadas > 0 && (
-            <div className="text-emerald-600 dark:text-emerald-400">
-                ✓ {r.atualizadas} nota(s) recuperada(s) — {Object.entries(r.porCampo).map(([c, n]) => `${c} ${n}`).join(' · ')}
-            </div>
-        )}
-        {r.jaRelidas > 0 && <div>{r.jaRelidas} já relidas nesta versão — clicar de novo não muda nada.</div>}
-        {r.semDadoNoXml > 0 && <div>{r.semDadoNoXml} relidas e o XML realmente não traz o campo.</div>}
-        {r.semXml > 0 && (
-            <div className="text-amber-600 dark:text-amber-400">
-                {r.semXml} sem o XML guardado — é buraco de CAPTURA, não de leitura.
-            </div>
-        )}
-        {r.naoPareadas > 0 && (
-            <div className="text-amber-600 dark:text-amber-400">
-                {r.naoPareadas} com itens que não pareiam com o XML — ficaram INTACTAS de propósito
-                (gravar por posição escreveria o CST de um produto em outro).
-                {r.naoPareadasDetalhe.slice(0, 3).map(d => (
-                    <div key={d.chave}>· nº {d.numero || '—'}: {d.motivo}</div>
-                ))}
-            </div>
-        )}
-        {!r.atualizadas && !r.jaRelidas && !r.semDadoNoXml && !r.semXml && !r.naoPareadas && (
-            <div>Nenhum documento com itens nesta competência.</div>
-        )}
-    </div>
-);
+const RelerResultado: React.FC<{ r: RelerItensResposta }> = ({ r }) => {
+    // O backend conta SETE causas e a primeira versão desta tela mostrava
+    // cinco — as duas que faltavam (examinadas e sem itens) eram exatamente as
+    // do caso EXPERTE 06/2026: "nada a recuperar (0 · 0 · 0)" sem dizer POR
+    // QUÊ. Zero sem causa manda a pessoa clicar de novo, que era o alarme sem
+    // ação de sempre. Cada zero desta tela agora tem um porquê e uma ação.
+    const nadaEncontrado = !r.examinadas && !r.jaRelidas;
+    return (
+        <div className="mt-1 text-[10px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+            {r.atualizadas > 0 && (
+                <div className="text-emerald-600 dark:text-emerald-400">
+                    ✓ {r.atualizadas} nota(s) recuperada(s) — {Object.entries(r.porCampo).map(([c, n]) => `${c} ${n}`).join(' · ')}
+                </div>
+            )}
+            {nadaEncontrado ? (
+                <div className="text-amber-600 dark:text-amber-400">
+                    NENHUM documento desta empresa foi encontrado nesta competência — nem para examinar.
+                    Isso não é "sem CST": é captura/atribuição. Confira na Central de Documentos Fiscais
+                    se as notas da competência estão lá e em NOME desta empresa; se não estiverem,
+                    o caminho é a 🔎 Prova de captura.
+                </div>
+            ) : (
+                <>
+                    <div>{r.examinadas} documento(s) examinados nesta competência.</div>
+                    {r.semItens > 0 && (
+                        <div className="text-amber-600 dark:text-amber-400">
+                            {r.semItens} sem ITENS gravados — resumo sem a NF-e completa (manifestação pendente)
+                            ou documento sem itens por natureza (NFS-e). Sem itens não há CST a recuperar:
+                            confira a manifestação/captura, não este botão.
+                        </div>
+                    )}
+                    {r.jaRelidas > 0 && <div>{r.jaRelidas} já relidas nesta versão — clicar de novo não muda nada.</div>}
+                    {r.semDadoNoXml > 0 && <div>{r.semDadoNoXml} relidas e o XML realmente não traz o campo.</div>}
+                    {r.semXml > 0 && (
+                        <div className="text-amber-600 dark:text-amber-400">
+                            {r.semXml} sem o XML guardado — é buraco de CAPTURA, não de leitura.
+                        </div>
+                    )}
+                    {r.naoPareadas > 0 && (
+                        <div className="text-amber-600 dark:text-amber-400">
+                            {r.naoPareadas} com itens que não pareiam com o XML — ficaram INTACTAS de propósito
+                            (gravar por posição escreveria o CST de um produto em outro).
+                            {r.naoPareadasDetalhe.slice(0, 3).map(d => (
+                                <div key={d.chave}>· nº {d.numero || '—'}: {d.motivo}</div>
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    );
+};
 
 const Kpi: React.FC<{ label: string; value: string; accent?: 'danger' | 'success' | 'warning' }> = ({ label, value, accent }) => (
     <div className="p-3 rounded-lg" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>

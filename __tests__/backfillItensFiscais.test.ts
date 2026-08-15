@@ -120,3 +120,22 @@ describe('a lista de campos é curta de propósito', () => {
         expect(r.itens[0].vProd).toBe(100);
     });
 });
+
+// ─── A TELA MOSTRA TODAS as causas que o backend conta ──────────────────────
+
+describe('nenhuma causa do backfill fica muda na tela', () => {
+    // Caso real (EXPERTE 06/2026, 15/08): o toast disse "nada a recuperar
+    // (0 · 0 · 0)" escondendo a causa verdadeira — o backend contava
+    // `examinadas` e `semItens` e a tela não mostrava nenhum dos dois. Zero
+    // sem causa manda a pessoa clicar de novo: alarme sem ação.
+    it('o painel exibe examinadas e semItens — os dois que ficaram mudos', () => {
+        const { readFileSync } = require('fs');
+        const { join } = require('path');
+        const painel = readFileSync(join(__dirname, '..', 'components/DCTFWeb/IpiVarreduraPanel.tsx'), 'utf8');
+        expect(painel).toMatch(/r\.examinadas/);
+        expect(painel).toMatch(/r\.semItens/);
+        // E o caso "nenhum documento encontrado" aponta a AÇÃO certa — captura
+        // e atribuição, não este botão.
+        expect(painel).toMatch(/Prova de captura/);
+    });
+});
