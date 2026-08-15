@@ -21,6 +21,7 @@
 
 import { classificarUrgencia, diasAteVencimento, urgenciaDominante, URGENCIA_LABEL } from './urgencia-vencimento.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
+import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
@@ -184,12 +185,50 @@ export function montarRotinaFiscal({
     }
 
     // ── 3. APURAÇÃO ─────────────────────────────────────────────────────────
-    const eApuracao = apuracao
+    let eApuracao = apuracao
         ? etapa('apuracao', 'concluida',
             `Apuração registrada${apuracao.totalImpostos != null ? ` · ${fmtBRL(apuracao.totalImpostos)}` : ''}.`,
             null, { totalImpostos: apuracao.totalImpostos ?? null, fonte: apuracao.fonte || null })
         : etapa('apuracao', 'pendente', 'Sem apuração para esta competência.',
             'Abra a ficha do cliente (Simples ou Lucro) e feche o cálculo do mês.');
+
+    // 🚨 APURAÇÃO COM VALOR E ZERO DOCUMENTO É NÚMERO SEM LASTRO.
+    //
+    // Isto fechava VERDE só por existir ficha — com a etapa de CAPTURA logo
+    // acima dizendo "nenhuma nota capturada". Duas leituras do MESMO mês
+    // discordando na MESMA tela, e a de baixo era a que virava "mês fechado".
+    // É o caso EXPERTE 06/2026 generalizado: a ficha e a escrituração são
+    // trilhos independentes, e ninguém cruzava os dois (Paulo: *"a empresa teve
+    // IPI, geramos o imposto e relatório: como não houve captura de XML?"*).
+    //
+    // ÂMBAR, não vermelho: o número pode estar certíssimo — a ficha é digitada
+    // de propósito e há cliente cuja escrituração ainda não migrou. O que não
+    // pode é passar por CONCLUÍDO sem ninguém ver. E âmbar já impede o "mês
+    // fechado", que é o que decide se alguém pode parar de olhar.
+    //
+    // A régua é a MESMA do farol da Varredura de IPI (ficha-x-documentos.js):
+    // valor zerado não fala (é "sem movimento", outro assunto, outra ação) e
+    // contagem indisponível não vira zero.
+    if (apuracao) {
+        // No Lucro o número da ficha é o IMPOSTO; no Simples o que a pessoa
+        // lança é a RECEITA (o `totalImpostos` fica null porque o DAS ainda
+        // não foi calculado). Os dois são "número digitado que precisa de
+        // documento por trás" — usar só o imposto deixaria justamente o
+        // Simples, que é a maior parte da carteira, sem farol nenhum.
+        // `Number(null)` é 0 e `isFinite(0)` é true — sem o `!= null` o Simples
+        // (que grava totalImpostos null) cairia no ramo do imposto e nunca
+        // acenderia. Pego pelo teste do próprio caso.
+        const temImposto = apuracao.totalImpostos != null && Number.isFinite(Number(apuracao.totalImpostos));
+        const lastro = conferirFichaContraDocumentos({
+            valorApurado: temImposto ? apuracao.totalImpostos : apuracao.receita,
+            documentos: docs.length,
+            rotulo: temImposto ? 'Imposto apurado' : 'Receita lançada',
+        });
+        if (lastro.situacao === 'sem-documento') {
+            eApuracao = piorar(eApuracao, lastro.mensagem, lastro.acao);
+        }
+        eApuracao.lastro = lastro;
+    }
 
     // ── 4. OBRIGAÇÕES ───────────────────────────────────────────────────────
     const concluidas = tarefas.filter((t) => t.status === 'concluida').length;

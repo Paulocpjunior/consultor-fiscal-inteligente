@@ -109,7 +109,7 @@ router.get('/ipi-varredura', requireAdmin, async (req, res) => {
         // vira null, NUNCA zero: zero falso acenderia "sem lastro" com o banco
         // cheio, o alarme falso que ensina a ignorar o farol.
         for (const l of linhas) {
-            if (l.ipiApurado <= 0) { l.documentosNaCompetencia = null; l.lastro = conferirFichaContraDocumentos({ ipiFicha: 0, documentos: null }); continue; }
+            if (l.ipiApurado <= 0) { l.documentosNaCompetencia = null; l.lastro = conferirFichaContraDocumentos({ valorApurado: 0, documentos: null }); continue; }
             let docs = null;
             try {
                 const agg = await db.collection('documentos_fiscais')
@@ -121,7 +121,7 @@ router.get('/ipi-varredura', requireAdmin, async (req, res) => {
                 console.warn(`[ipi-varredura] contagem de docs falhou (${l.nome}):`, e.message);
             }
             l.documentosNaCompetencia = docs;
-            l.lastro = conferirFichaContraDocumentos({ ipiFicha: l.ipiApurado, documentos: docs });
+            l.lastro = conferirFichaContraDocumentos({ valorApurado: l.ipiApurado, documentos: docs });
         }
 
         // Fase MIT — só para quem tem IPI (indústrias; poucas empresas).
