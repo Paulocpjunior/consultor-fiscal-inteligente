@@ -97,6 +97,19 @@ const App: React.FC = () => {
     const confirm = useConfirm();
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
         if (typeof window !== 'undefined') {
+            // SP CONNECT ABRE CLARO POR PADRÃO (Paulo, 16/08 — 3ª vez): a
+            // identidade do app de atendimento é a do mockup aprovado, tema
+            // claro. Memória de tema PRÓPRIA ('spconnect-theme') — o escuro do
+            // CFI não contamina o Connect, nem o contrário.
+            if (MODO_SP_CONNECT) {
+                const proprio = safeStorage.getItem('spconnect-theme');
+                if (proprio === 'dark') {
+                    document.documentElement.classList.add('dark');
+                    return 'dark';
+                }
+                document.documentElement.classList.remove('dark');
+                return 'light';
+            }
             const stored = safeStorage.getItem('theme');
             const preferDark = stored == null && window.matchMedia('(prefers-color-scheme: dark)').matches;
             if (stored === 'dark' || preferDark) {
@@ -245,12 +258,15 @@ const App: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        // No /connect a memória de tema é própria — o Connect claro não pode
+        // reescrever a preferência escura do CFI (e vice-versa).
+        const chave = MODO_SP_CONNECT ? 'spconnect-theme' : 'theme';
         if (theme === 'dark') {
             document.documentElement.classList.add('dark');
-            safeStorage.setItem('theme', 'dark');
+            safeStorage.setItem(chave, 'dark');
         } else {
             document.documentElement.classList.remove('dark');
-            safeStorage.setItem('theme', 'light');
+            safeStorage.setItem(chave, 'light');
         }
     }, [theme]);
 
