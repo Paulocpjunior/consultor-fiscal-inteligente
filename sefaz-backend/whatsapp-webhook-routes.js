@@ -37,6 +37,7 @@ import {
 import { configWhatsapp, GRAPH_BASE, enviarTextoLivre } from './whatsapp-cloud.js';
 import { resolverConfig, decidirAutomacao, gerarProtocolo, interpretarNota } from './whatsapp-atendimento.js';
 import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado } from './whatsapp-canais.js';
+import { notificarMensagem } from './whatsapp-push-envio.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -367,6 +368,15 @@ router.post('/webhook', async (req, res) => {
                     // da pesquisa, ela não pode virar gatilho de triagem.
                     const foiNota = await capturarAvaliacao(db, msg);
                     if (!foiNota) await rodarBot(db, msg);
+                    // 🔔 Push no celular (a régua de QUEM recebe é a mesma
+                    // fila do inbox). Best-effort: a mensagem já está salva.
+                    try {
+                        const conversa = (await db.collection('whatsapp_conversas').doc(msg.de).get()).data() || {};
+                        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+                        await notificarMensagem({ msg, conversa, config: resolverConfig(cfgDoc.data()) });
+                    } catch (e) {
+                        console.warn('[whatsapp/push] falhou (webhook intacto):', e.message);
+                    }
                 }
             });
         }

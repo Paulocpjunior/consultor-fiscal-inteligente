@@ -30,6 +30,7 @@ import {
     avisosDeNovasMensagens, tituloComContador, estadoDaPermissao, textoDaPermissao,
 } from '../../services/notificacaoConnect';
 import { destravarSom, somDestravado, tocarAviso } from '../../services/somAviso';
+import { pushConfigurado, registrarDispositivo } from '../../services/pushConnect';
 import {
     ConversaResumo, MensagemInbox, FilaAtendimento, ConfigAtendimento,
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
@@ -628,13 +629,26 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         };
     }, []);
 
+    // 📱 Push no celular (app FECHADO): só depois da permissão concedida —
+    // pedir permissão dentro da função técnica esconderia o gesto do usuário.
+    const [push, setPush] = useState<{ ligado: boolean; msg: string | null; acao?: string }>({ ligado: false, msg: null });
+    const ligarPush = async () => {
+        const r = await registrarDispositivo();
+        if (r.pronto) setPush({ ligado: true, msg: `📱 Push ligado neste aparelho (${r.dispositivos} registrado(s)).` });
+        else setPush({ ligado: false, msg: r.motivo, acao: r.acao });
+    };
+
     const pedirPermissaoAviso = async () => {
         if (!('Notification' in window)) { setPermissaoAviso('sem-suporte'); return; }
         setSomOk(await destravarSom());        // o clique daqui também destrava o som
         try {
             await Notification.requestPermission();
         } finally {
-            setPermissaoAviso(estadoDaPermissao());
+            const novo = estadoDaPermissao();
+            setPermissaoAviso(novo);
+            // Permissão concedida ⇒ já registra o celular pro push, senão o
+            // aviso só valeria com o app aberto (e a promessa era o celular).
+            if (novo === 'concedida' && pushConfigurado().ok) await ligarPush();
         }
     };
 
@@ -1267,6 +1281,17 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         className="mt-1 text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
                                         🔔 Ligar avisos
                                     </button>
+                                )}
+                                {permissaoAviso === 'concedida' && !push.ligado && pushConfigurado().ok && (
+                                    <button onClick={ligarPush}
+                                        className="mt-1 text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
+                                        📱 Avisar também no celular
+                                    </button>
+                                )}
+                                {push.msg && (
+                                    <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+                                        {push.msg}{push.acao ? ` ${push.acao}` : ''}
+                                    </p>
                                 )}
                             </div>
                         )}

@@ -35,6 +35,8 @@ import {
 import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-midia.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarCatalogoCanais, credenciaisDoCanal, validarCanal } from './whatsapp-canais.js';
+import { registrarToken } from './whatsapp-push.js';
+import { COLECAO_TOKENS } from './whatsapp-push-envio.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
     resolverConfig, papelValido, podeEncerrar,
@@ -1147,6 +1149,52 @@ router.get('/clientes-busca', requireAuth, async (req, res) => {
             if (clientes.length >= 10) break;
         }
         return res.json({ ok: true, clientes });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ─── 🔔 PUSH: token do celular e preferências de aviso ──────────────────────
+// O token é POR USUÁRIO (um doc por uid), e cada pessoa pode ter vários
+// celulares. Quem recebe o quê é decidido no envio, pela MESMA régua de fila
+// do inbox — registrar token não dá acesso a nada.
+
+router.post('/push/token', requireAuth, async (req, res) => {
+    try {
+        const uid = req.user?.uid;
+        if (!uid) return res.status(401).json({ ok: false, error: 'sessão inválida' });
+        const ref = getDb().collection(COLECAO_TOKENS).doc(uid);
+        const atual = (await ref.get()).data() || {};
+        const r = registrarToken(atual.tokens || [], req.body?.token);
+        if (!r.ok) return res.status(400).json({ ok: false, error: r.erro });
+        await ref.set({
+            email: req.user?.email || null,
+            tokens: r.tokens,
+            atualizadoEm: new Date().toISOString(),
+        }, { merge: true });
+        return res.json({ ok: true, dispositivos: r.tokens.length });
+    } catch (e) {
+        console.error('[whatsapp/push/token]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.get('/push/prefs', requireAuth, async (req, res) => {
+    try {
+        const d = (await getDb().collection(COLECAO_TOKENS).doc(req.user?.uid || '_').get()).data() || {};
+        return res.json({ ok: true, prefs: d.prefs || {}, dispositivos: (d.tokens || []).length });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+router.post('/push/prefs', requireAuth, async (req, res) => {
+    try {
+        const uid = req.user?.uid;
+        if (!uid) return res.status(401).json({ ok: false, error: 'sessão inválida' });
+        const p = req.body?.prefs || {};
+        const prefs = {};
+        for (const k of ['som', 'popup', 'push', 'pushForaDoExpediente']) {
+            if (typeof p[k] === 'boolean') prefs[k] = p[k];
+        }
+        await getDb().collection(COLECAO_TOKENS).doc(uid).set({ prefs }, { merge: true });
+        return res.json({ ok: true, prefs });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 });
 
