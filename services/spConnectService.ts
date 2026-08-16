@@ -148,6 +148,24 @@ export const buscarClientes = (q: string) =>
     req<{ clientes: { id: string; nome: string; cnpj: string; origem: string }[] }>(
         `/api/admin/whatsapp/clientes-busca?q=${encodeURIComponent(q)}`);
 
+// ─── 📞 Canais (2º número / 2ª WABA) ────────────────────────────────────────
+
+export interface CanalWhatsapp {
+    id: string; rotulo: string; numeroExibicao: string | null;
+    phoneNumberId: string | null; wabaId: string | null; envToken: string | null;
+    origem: 'env' | 'cadastro'; ativo?: boolean; pronto: boolean; faltas?: string[];
+}
+
+export const listarCanais = () =>
+    req<{ canais: CanalWhatsapp[]; multiCanal: boolean; padraoId: string; conflitos: { id: string; motivo: string }[] }>(
+        '/api/admin/whatsapp/canais');
+
+/** Cadastra o 2º número. `envToken` é o NOME da variável do Cloud Run. */
+export const salvarCanal = (p: {
+    id: string; rotulo: string; phoneNumberId: string; envToken: string;
+    numeroExibicao?: string; wabaId?: string; ativo?: boolean;
+}) => post<{ id: string; canais: CanalWhatsapp[] }>('/api/admin/whatsapp/canais', p);
+
 // ─── Atendentes ↔ filas (admin) ─────────────────────────────────────────────
 
 export interface Atendente {

@@ -38,6 +38,8 @@ export interface ConversaResumo {
     atribuidoA: string | null;
     /** Fila de ORIGEM da última transferência — selo "↪ veio de X" até assumirem. */
     transferidaDe?: string | null;
+    /** Por qual NÚMERO do escritório a conversa entrou (2º número em diante). */
+    canalId?: string | null;
     situacao: string;
     janela24hAte: string | null;
     ultimaMensagem: { resumo: string; direcao: string; em: string } | null;

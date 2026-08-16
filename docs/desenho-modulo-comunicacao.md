@@ -165,6 +165,28 @@ ANTES do bot no webhook (a nota não pode virar gatilho de triagem) e é
 independente do `botAtivo`. Painel **📊** no cabeçalho do inbox: admin e
 gestor veem todas; colaborador vê as próprias — o recorte é do backend.
 
+### 5.4 Segundo número / segunda WABA — o app APTO (16/08)
+
+Paulo pediu o app "apto para inclusão de segundo número e/ou segunda API".
+`whatsapp-canais.js` (13 testes) faz isso SEM cadastro obrigatório:
+
+- **O número de hoje continua vindo do ENV e é o canal `principal`.** Com um
+  número só, nada muda: `multiCanal` é false e a tela não mostra seletor
+  (seletor com uma opção é clique a mais por nada).
+- **A ENTRADA roteia pelo `phone_number_id` do próprio payload** — a Meta diz
+  em qual número a mensagem caiu. É FONTE, não dedução.
+- **Número desconhecido NÃO cai no padrão**: fica com `canalId: null` e
+  NOMEADO no log. Jogar no padrão misturaria conversas de dois números na
+  mesma caixa — o defeito que ninguém desconfia.
+- **Mensagem antiga sem carimbo é do padrão, e isso é FATO** (até o 2º
+  número existir, só havia um) — não é suposição.
+- 🔒 **O TOKEN do canal novo nunca entra no banco**: o cadastro guarda o
+  NOME da variável do Cloud Run (`envToken`); o valor vive lá, como o de
+  hoje. O cadastro RECUSA se alguém colar o token no lugar do nome. É a
+  régua do cofre de certificados — leva-se a operação, nunca a chave.
+- Cadastro na aba **📞 Números** da ⚙️ do Connect; `pronto` de cada canal
+  responde pela credencial REAL (a env no Cloud Run), não só pelo cadastro.
+
 ### 5.3 Cliente 360 na coluna e PWA (16/08)
 
 - **Coluna do cliente viva**: com o contato VINCULADO, a terceira coluna

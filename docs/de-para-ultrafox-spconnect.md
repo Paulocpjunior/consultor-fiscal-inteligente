@@ -99,7 +99,8 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | API oficial da Meta | ✔ **[Paulo]** | ✔ (WABA própria, cartão do Paulo na Meta) | ✅ |
 | App de celular / tablet | ✔ app próprio **[Paulo]** | **PWA** — instala na tela inicial pelo navegador | 🟡 **cobre o uso, não é loja**: sem push, o app instalado ainda depende de abrir (ver §3) |
 | Rodar dentro do Teams | ✕ | app do tenant pronto (`teams-app/`, zip em `/sp-connect-teams.zip`) | 🆕 |
-| Vários números / vários canais (Instagram, etc.) | **[?]** | 1 número | 🟡 depende do §7 |
+| Vários NÚMEROS de WhatsApp | **[?]** | **apto desde 16/08**: catálogo de canais (o de hoje segue vindo do env e é o padrão), entrada roteada pelo `phone_number_id` da Meta e cadastro na ⚙️ — o token do 2º número vive no Cloud Run, nunca no banco. Falta só o número existir | ✅ apto |
+| Outros canais (Instagram, Facebook, site) | **[?]** | só WhatsApp | 🟡 depende do §7.7 |
 | Custo | mensalidade da plataforma **[Paulo]** | só o custo de conversa da Meta | 🆕 é o ganho econômico da troca |
 
 ## 6. Operação e administração

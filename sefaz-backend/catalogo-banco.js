@@ -118,6 +118,7 @@ export const CATALOGO_BANCO = [
     { colecao: 'whatsapp_mensagens', grupo: 'Comunicação', funcionalidade: 'Mensagens recebidas e status de entrega dos envios (entregue/lido/falhou+motivo) — id = wamid da Meta (idempotência)' },
     { colecao: 'whatsapp_webhook_eventos', grupo: 'Comunicação', funcionalidade: 'Payload CRU de cada evento do webhook (aprender a forma real — padrão Jotform Sign); id = hash do corpo' },
     { colecao: 'whatsapp_config', grupo: 'Comunicação', funcionalidade: 'Config do atendimento (doc "atendimento"): bot de triagem (nasce DESLIGADO), horário de funcionamento, mensagens automáticas e menu → fila (⚙️ do SP Connect, só admin grava)' },
+    { colecao: 'whatsapp_canais', grupo: 'Comunicação', funcionalidade: 'Canais do WhatsApp (2º número / 2ª WABA): rótulo, phoneNumberId e o NOME da variável do Cloud Run que guarda o token — o VALOR do token nunca entra no banco' },
     { colecao: 'whatsapp_avaliacoes', grupo: 'Comunicação', funcionalidade: 'Notas 1-5 da pesquisa de satisfação pós-encerramento (número, nota, atendente, fila, protocolo) — admin/gestor veem todas, colaborador as próprias' },
 
     { colecao: 'auditoria_permissoes', grupo: 'Sistema', funcionalidade: 'Trilha de mudança de PODER (role, departamentos, filas, papel do atendimento): quem mudou, de quê para quê e quando — lida pelo relatório 🔐 de auditoria do dono' },

@@ -34,6 +34,7 @@ import {
 } from './whatsapp-cloud.js';
 import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-midia.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
+import { montarCatalogoCanais, credenciaisDoCanal, validarCanal } from './whatsapp-canais.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
     resolverConfig, papelValido, podeEncerrar,
@@ -404,6 +405,7 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 protocolo: x.protocolo || null,
                 atribuidoA: x.atribuidoA || null,
                 transferidaDe: x.transferidaDe || null,   // selo "↪ veio de X" até alguém assumir
+                canalId: x.canalId || null,               // por qual número do escritório entrou
                 situacao: x.status || 'aberta',
                 janela24hAte: x.janela24hAte || null,
                 ultimaMensagem: x.ultimaMensagem || null,
@@ -1146,6 +1148,75 @@ router.get('/clientes-busca', requireAuth, async (req, res) => {
         }
         return res.json({ ok: true, clientes });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ─── 📞 CANAIS (2º número / 2ª WABA) ────────────────────────────────────────
+// Hoje o escritório tem UM número, que vem do ENV e é o canal PADRÃO. Estas
+// rotas deixam o app APTO a um segundo sem refazer nada — e sem cadastro
+// obrigatório enquanto ele não existir.
+//
+// ⚠️ O TOKEN do canal novo NUNCA entra aqui: o cadastro guarda o NOME da
+// variável do Cloud Run; o valor vive lá, como o do canal de hoje. É a mesma
+// régua do cofre de certificados — leva-se a operação, nunca a chave.
+
+async function lerCanais(db) {
+    let cadastrados = [];
+    try {
+        const snap = await db.collection('whatsapp_canais').get();
+        cadastrados = snap.docs.map((d) => ({ id: d.id, dados: d.data() }));
+    } catch (e) {
+        console.warn('[whatsapp/canais] catálogo não lido:', e.message);
+    }
+    return montarCatalogoCanais({ cadastrados });
+}
+
+router.get('/canais', requireAuth, async (_req, res) => {
+    try {
+        const catalogo = await lerCanais(getDb());
+        // `pronto` de cada canal responde pela CREDENCIAL de verdade (a env
+        // no Cloud Run), não só pelo cadastro — cadastro completo com env
+        // faltando é o "parece configurado e não envia" que se quer evitar.
+        const canais = catalogo.canais.map((c) => {
+            const cred = credenciaisDoCanal(c, process.env);
+            const { envToken, ...semSegredo } = c;
+            return { ...semSegredo, envToken, pronto: cred.pronto, faltas: cred.faltas };
+        });
+        return res.json({ ...catalogo, ok: true, canais });
+    } catch (e) {
+        console.error('[whatsapp/canais]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/canais', requireAdmin, async (req, res) => {
+    try {
+        const v = validarCanal(req.body || {});
+        if (!v.ok) return res.status(400).json({ ok: false, error: v.erros.join(' · '), erros: v.erros });
+        const db = getDb();
+        const catalogo = await lerCanais(db);
+        const pnid = String(req.body.phoneNumberId).trim();
+        const jaUsado = catalogo.canais.find((c) => c.phoneNumberId === pnid && c.id !== v.id);
+        if (jaUsado) {
+            return res.status(409).json({
+                ok: false,
+                error: `O número ${pnid} já é o canal "${jaUsado.rotulo}". Dois canais no mesmo número roteariam as mensagens ao acaso.`,
+            });
+        }
+        await db.collection('whatsapp_canais').doc(v.id).set({
+            rotulo: String(req.body.rotulo).trim(),
+            numeroExibicao: String(req.body.numeroExibicao || '').trim() || null,
+            phoneNumberId: pnid,
+            wabaId: String(req.body.wabaId || '').trim() || null,
+            envToken: v.envToken,        // o NOME da variável, nunca o valor
+            ativo: req.body.ativo !== false,
+            atualizadoEm: new Date().toISOString(),
+            atualizadoPor: req.user?.email || null,
+        }, { merge: true });
+        return res.json({ ok: true, id: v.id, ...(await lerCanais(db)) });
+    } catch (e) {
+        console.error('[whatsapp/canais POST]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
 });
 
 // ─── ATENDENTES ↔ FILAS (a atribuição que a visibilidade lê) ────────────────
