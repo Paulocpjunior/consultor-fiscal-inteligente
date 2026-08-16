@@ -737,6 +737,10 @@ const App: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                             <span className="hidden sm:block text-[11px] text-slate-400 truncate max-w-[220px]">{currentUser.email}</span>
+                            <button onClick={() => setTheme((t) => t === 'light' ? 'dark' : 'light')} title="Tema claro/escuro"
+                                className="text-[13px] px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700">
+                                {theme === 'light' ? '🌙' : '☀️'}
+                            </button>
                             <button onClick={handleLogout} className="text-[11px] px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Sair</button>
                         </div>
                     </header>

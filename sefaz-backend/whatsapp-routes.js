@@ -88,7 +88,7 @@ router.get('/templates', autorizarLeitura, async (req, res) => {
 //
 // A resposta traz também o formato do cabeçalho e a CONTAGEM de variáveis do
 // corpo, que eram preenchidos a dedo e recusam o envio quando erram.
-router.get('/templates-meta', requireAdmin, async (_req, res) => {
+router.get('/templates-meta', autorizarLeitura, async (_req, res) => {
     try {
         const r = await listarTemplatesAprovados();
         if (!r.ok) return res.status(502).json({ ok: false, error: r.erro, acao: r.acao, faltas: r.faltas });
@@ -423,25 +423,42 @@ router.post('/conversas/iniciar', requireAuth, async (req, res) => {
         }
         if (!p.para) return res.status(400).json({ ok: false, error: 'Informe o número do WhatsApp do destinatário.' });
 
-        const cadastro = await lerCadastro(departamento);
-        const resol = resolverTemplate(cadastro, { departamento, templateNome: p.template });
-        if (!resol.ok) return res.status(400).json({ ok: false, error: resol.erro, opcoes: resol.opcoes });
-        const template = resol.template;
-        if (template.temDocumento) {
-            return res.status(400).json({
-                ok: false,
-                error: `O template "${template.nome}" tem cabeçalho de DOCUMENTO — ele serve pra enviar guia, e guia sai pelas telas de guia (com o PDF e o rito completo).`,
-                acao: 'Escolha um template de conversa (sem documento) ou cadastre um na ⚙️ Config Admin.',
-            });
-        }
-        const mv = montarVariaveisPorSchema(template, p.variaveis);
-        if (!mv.ok) {
-            return res.status(400).json({ ok: false, error: `Faltam variáveis do template "${template.nome}": ${mv.faltando.join(', ')}`, faltando: mv.faltando });
+        // DUAS portas: template do CADASTRO (variáveis nomeadas) OU template
+        // APROVADO direto da Meta (o atendente vê o corpo e preenche {{1}},
+        // {{2}}… posicionais) — linkar na ⚙️ vira opção, não pré-requisito.
+        let nomeTemplate; let idiomaTemplate; let variaveisPosicionais;
+        if (p.templateDireto?.nome) {
+            nomeTemplate = String(p.templateDireto.nome).trim();
+            idiomaTemplate = String(p.templateDireto.idioma || 'pt_BR').trim();
+            variaveisPosicionais = (Array.isArray(p.variaveisPosicionais) ? p.variaveisPosicionais : [])
+                .map((v) => String(v ?? '').trim());
+            if (variaveisPosicionais.some((v) => !v)) {
+                return res.status(400).json({ ok: false, error: 'Preencha todas as variáveis do template — a Meta recusa envio meio preenchido.' });
+            }
+        } else {
+            const cadastro = await lerCadastro(departamento);
+            const resol = resolverTemplate(cadastro, { departamento, templateNome: p.template });
+            if (!resol.ok) return res.status(400).json({ ok: false, error: resol.erro, opcoes: resol.opcoes });
+            const template = resol.template;
+            if (template.temDocumento) {
+                return res.status(400).json({
+                    ok: false,
+                    error: `O template "${template.nome}" tem cabeçalho de DOCUMENTO — ele serve pra enviar guia, e guia sai pelas telas de guia (com o PDF e o rito completo).`,
+                    acao: 'Escolha um template de conversa (sem documento).',
+                });
+            }
+            const mv = montarVariaveisPorSchema(template, p.variaveis);
+            if (!mv.ok) {
+                return res.status(400).json({ ok: false, error: `Faltam variáveis do template "${template.nome}": ${mv.faltando.join(', ')}`, faltando: mv.faltando });
+            }
+            nomeTemplate = template.nome;
+            idiomaTemplate = template.idioma;
+            variaveisPosicionais = mv.variaveis;
         }
 
         const envio = await enviarTemplateWhatsapp({
-            para: p.para, template: template.nome, idioma: template.idioma,
-            variaveis: mv.variaveis, pdfBase64: null, nomeArquivo: null,
+            para: p.para, template: nomeTemplate, idioma: idiomaTemplate,
+            variaveis: variaveisPosicionais, pdfBase64: null, nomeArquivo: null,
         });
         if (!envio.ok) {
             const status = envio.configuracaoIncompleta ? 503 : envio.indeterminado ? 502 : 422;

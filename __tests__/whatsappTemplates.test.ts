@@ -347,8 +347,11 @@ describe('a tela escolhe da Meta em vez de pedir digitação', () => {
     const tela = readFileSync(join(__dirname, '..', 'components/ConfigAdminModal.tsx'), 'utf8');
     const rota = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
 
-    test('existe a rota e ela é admin — a lista vem da conta da casa', () => {
-        expect(rota).toMatch(/router\.get\('\/templates-meta', requireAdmin/);
+    test('existe a rota e a LEITURA é de usuário logado — o atendente escolhe template no SP Connect (16/08); GRAVAR continua admin', () => {
+        expect(rota).toMatch(/router\.get\('\/templates-meta', autorizarLeitura/);
+        // A regra que não mudou: cadastrar/editar/desativar template é admin.
+        expect(rota).toMatch(/router\.post\('\/templates', requireAdmin/);
+        expect(rota).toMatch(/router\.delete\('\/templates\/:id', requireAdmin/);
     });
 
     test('a tela busca, lista e preenche o formulário com o escolhido', () => {
