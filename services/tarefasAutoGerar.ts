@@ -82,6 +82,12 @@ export async function autoGerarTarefasParaCompetencia(
                     empresaNome: emp.nome,
                     regra,
                     competencia,
+                    // Sem isto o modal do ISS abriria sem saber a cidade.
+                    municipio: {
+                        codMunIBGE: emp.codMunIBGE || '',
+                        municipioNome: (emp as any).municipio || null,
+                        uf: emp.uf || null,
+                    },
                 });
                 if (!r.ok) stats.erros++;
                 else if (r.jaExistia) stats.jaExistiam++;

@@ -63,7 +63,7 @@ async function getTitularDaEmpresa(db, empresaId) {
  * Cria UMA tarefa automatica. Idempotente.
  */
 async function criarTarefaSeFalta(db, params) {
-    const { empresaId, empresaCnpj, empresaNome, regra, competencia, titular } = params;
+    const { empresaId, empresaCnpj, empresaNome, regra, competencia, titular, municipio } = params;
     // dedup
     const dup = await db.collection('tarefas')
         .where('empresaId', '==', empresaId)
@@ -73,6 +73,8 @@ async function criarTarefaSeFalta(db, params) {
     if (!dup.empty) {
         return { criada: false, jaExistia: true, id: dup.docs[0].id };
     }
+    // Sem calendário da cidade NÃO HÁ DATA — e ela não se inventa. A tarefa
+    // nasce sem vencimento e o colaborador informa no fluxo (16/08).
     const vencimento = calcularVencimento(competencia, regra);
     const ref = await db.collection('tarefas').add({
         titulo: `${regra.label} ${competencia}`,
@@ -82,7 +84,15 @@ async function criarTarefaSeFalta(db, params) {
         empresaNome: empresaNome || '',
         obrigacao: regra.obrigacao,
         competencia,
-        vencimento: admin.firestore.Timestamp.fromDate(vencimento),
+        vencimento: vencimento ? admin.firestore.Timestamp.fromDate(vencimento) : null,
+        /** true = a data é pedida na hora de trabalhar a obrigação. */
+        vencimentoAInformar: !vencimento,
+        // O MUNICÍPIO VIAJA COM A TAREFA: é ele que o modal precisa para saber
+        // de qual cidade é o calendário. Sem isto o botão abriria e a gravação
+        // falharia — meia ligação, o defeito que este dia inteiro combateu.
+        codMunIBGE: municipio?.codMunIBGE || null,
+        municipioNome: municipio?.municipioNome || null,
+        uf: municipio?.uf || null,
         status: 'a_fazer',
         responsavel: titular?.uid ?? null,
         responsavelNome: titular?.nome ?? null,
@@ -202,6 +212,11 @@ export async function executarCronMensal(competencia, opts = {}) {
                     const r = await criarTarefaSeFalta(db, {
                         empresaId, empresaCnpj, empresaNome, regra,
                         competencia: comp, titular,
+                        municipio: {
+                            codMunIBGE: String(emp.dadosFiscais?.codMunIBGE || emp.codMunIBGE || '').trim(),
+                            municipioNome: emp.dadosFiscais?.municipio || emp.municipio || null,
+                            uf: emp.dadosFiscais?.uf || emp.uf || null,
+                        },
                     });
                     if (r.criada) {
                         log.tarefasCriadas++;

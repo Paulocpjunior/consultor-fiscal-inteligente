@@ -240,6 +240,8 @@ export async function criarTarefaAutomatica(params: {
     empresaNome: string;
     regra: RegraObrigacao;
     competencia: string;
+    /** Município do cliente — o modal de vencimento do ISS precisa dele. */
+    municipio?: { codMunIBGE?: string; municipioNome?: string | null; uf?: string | null };
 }): Promise<{ ok: boolean; id?: string; jaExistia?: boolean; error?: string }> {
     if (!isFirebaseConfigured) return { ok: false, error: 'Firebase nao configurado' };
 
@@ -272,7 +274,14 @@ export async function criarTarefaAutomatica(params: {
             empresaNome: params.empresaNome,
             obrigacao: params.regra.obrigacao,
             competencia: params.competencia,
-            vencimento: Timestamp.fromDate(vencimento),
+            // Sem calendário da cidade não há data — e ela não se inventa.
+            // `Timestamp.fromDate(null)` explodiria; data chutada seria pior.
+            vencimento: vencimento ? Timestamp.fromDate(vencimento) : null,
+            vencimentoAInformar: !vencimento,
+            // O município viaja com a tarefa: é dele que o modal precisa.
+            codMunIBGE: params.municipio?.codMunIBGE || null,
+            municipioNome: params.municipio?.municipioNome || null,
+            uf: params.municipio?.uf || null,
             status: 'a_fazer' as StatusTarefa,
             responsavel: titular?.uid ?? null,
             responsavelNome: titular?.nome ?? null,

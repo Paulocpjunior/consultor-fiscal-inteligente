@@ -576,3 +576,50 @@ describe('o modal existe e NÃO sugere dia por conta própria', () => {
         expect(r).toMatch(/Já existe calendário CONFIRMADO/);
     });
 });
+
+// ═══ AS PONTAS SOLTAS DO PR ANTERIOR — achadas por mim, antes do Paulo ══════
+describe('🚨 sem calendário, a tarefa nasce SEM data — nunca com uma errada', () => {
+    const { calcularVencimento } = require('../sefaz-backend/catalogo-obrigacoes.js');
+    const RAIZ = join(__dirname, '..');
+
+    it('🚨 dia ausente NÃO vira data — e o defeito era pior que explodir', () => {
+        // Antes desta guarda, `calcularVencimento` devolvia uma data VÁLIDA E
+        // ERRADA: 29/05/2026 para a competência 06/2026 — no PASSADO. A tarefa
+        // de ISS nasceria já ATRASADA, vermelha, para todo cliente de cidade
+        // sem calendário. Data inválida ao menos explode; data errada, não.
+        expect(calcularVencimento('06/2026', { diaVencimento: null, mesesApos: 1 })).toBeNull();
+    });
+
+    it('todas as formas de "sem dia" caem no mesmo lugar', () => {
+        // ⚠️ `Number(null)` é 0 e `isInteger(0)` é TRUE: a primeira versão da
+        // guarda passou batido por causa disso. Terceira vez que este mesmo
+        // `Number(null)` morde hoje.
+        for (const dia of [null, undefined, '', 0, 32, -1, 1.5]) {
+            expect(calcularVencimento('06/2026', { diaVencimento: dia, mesesApos: 1 })).toBeNull();
+        }
+    });
+
+    it('a guarda NÃO alcança "último dia útil" — regra sem dia fixo segue calculando', () => {
+        // Pôr a guarda antes deste ramo zerou três prazos trimestrais; os
+        // testes que já existiam pegaram na hora.
+        const d = calcularVencimento('03/2026', { ultimoDiaUtilDoMes: true, mesesApos: 1 });
+        expect(d).toBeInstanceOf(Date);
+    });
+
+    it('os DOIS criadores gravam vencimento nulo em vez de Timestamp inválido', () => {
+        for (const f of ['sefaz-backend/tarefas-orchestrator.js', 'services/tarefasService.ts']) {
+            const fonte = readFileSync(join(RAIZ, f), 'utf8');
+            expect(fonte).toMatch(/vencimento \?[^:]*:\s*null/);
+            expect(fonte).toMatch(/vencimentoAInformar/);
+        }
+    });
+
+    it('🚨 o MUNICÍPIO viaja com a tarefa — senão o modal abre e não grava', () => {
+        // Meia ligação de novo: o botão apareceria, o modal abriria sem cidade
+        // e a gravação falharia. É a classe que este dia inteiro combateu.
+        for (const f of ['sefaz-backend/tarefas-orchestrator.js', 'services/tarefasService.ts']) {
+            expect(readFileSync(join(RAIZ, f), 'utf8')).toMatch(/codMunIBGE: /);
+        }
+        expect(readFileSync(join(RAIZ, 'services/tarefasAutoGerar.ts'), 'utf8')).toMatch(/municipio: \{/);
+    });
+});
