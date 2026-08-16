@@ -1,0 +1,19 @@
+{
+    "name": "SP Connect — Atendimento WhatsApp",
+    "short_name": "SP Connect",
+    "description": "Atendimento WhatsApp da SP Assessoria Contábil (API oficial da Meta): conversas por fila de departamento, janela de 24h e histórico por cliente.",
+    "id": "/connect",
+    "start_url": "/connect",
+    "scope": "/connect",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "background_color": "#f8fafc",
+    "theme_color": "#0e3bfa",
+    "lang": "pt-BR",
+    "categories": ["business", "productivity"],
+    "icons": [
+        { "src": "/connect-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+        { "src": "/connect-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+        { "src": "/connect-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    ]
+}

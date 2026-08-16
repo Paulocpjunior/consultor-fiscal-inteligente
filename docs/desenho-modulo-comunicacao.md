@@ -165,6 +165,28 @@ ANTES do bot no webhook (a nota não pode virar gatilho de triagem) e é
 independente do `botAtivo`. Painel **📊** no cabeçalho do inbox: admin e
 gestor veem todas; colaborador vê as próprias — o recorte é do backend.
 
+### 5.3 Cliente 360 na coluna e PWA (16/08)
+
+- **Coluna do cliente viva**: com o contato VINCULADO, a terceira coluna
+  mostra a empresa (nome/CNPJ/regime do cadastro central), o **responsável
+  da carteira** e as **últimas guias enviadas** pelo rito #293
+  (`impostos_enviados`). **NENHUMA conta nova** — a rota só LÊ o que outras
+  telas já produzem (mesma regra dos Relatórios: relatório nunca tem conta
+  própria). Lista sem envio DIZ que não prova ausência de guia, e lista
+  cortada diz "mostrando X de N" (farol honesto vale pra contagem).
+- **PWA**: `public/connect.webmanifest` (`start_url`/`scope` = `/connect`,
+  standalone, tema azul SP) + ícones 192/512 gerados por
+  `scripts/gerar-icones-pwa.py`. O manifest é injetado pelo App **só no modo
+  /connect** — declarar no `index.html` faria o CFI se instalar como "SP
+  Connect", que é o mesmo erro de identidade do card removido em 14/08.
+  ⚠️ `.webmanifest` entra na regra de **no-store** do `server.js` junto com o
+  HTML: sem hash no nome, "immutable 1 ano" prenderia o manifest velho no
+  celular de quem já instalou. `__tests__/spConnectPwa.test.ts` trava as
+  três coisas — e a trava do cache foi **provada revertendo a regra** (a 1ª
+  versão dela passava com a regra desfeita, porque casava a palavra
+  `.webmanifest` da linha de Content-Type logo abaixo em vez da CONDIÇÃO do
+  `if`: sentinela tem que responder a pergunta certa).
+
 ## 6. Regras de horário e auto-resposta
 
 - A régua é `horario-acesso.js` — o expediente do ATENDIMENTO é o expediente

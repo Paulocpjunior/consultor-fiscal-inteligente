@@ -267,6 +267,35 @@ const App: React.FC = () => {
         }
     }, []);
 
+    // PWA do SP Connect: manifest + ícone de tela inicial injetados SÓ no
+    // /connect (a Ultra Fox também é app de celular/tablet; sem isto o
+    // colaborador só teria o navegador). O index.html é UM para os dois
+    // apps — pôr o manifest lá faria o CFI se instalar como "SP Connect".
+    useEffect(() => {
+        if (!MODO_SP_CONNECT || typeof document === 'undefined') return;
+        const criados: HTMLElement[] = [];
+        const por = (rel: string, href: string, extra?: Record<string, string>) => {
+            if (document.querySelector(`link[rel="${rel}"]`)) return;
+            const el = document.createElement('link');
+            el.rel = rel;
+            el.href = href;
+            Object.entries(extra || {}).forEach(([k, v]) => el.setAttribute(k, v));
+            document.head.appendChild(el);
+            criados.push(el);
+        };
+        por('manifest', '/connect.webmanifest');
+        por('apple-touch-icon', '/connect-icon-192.png', { sizes: '192x192' });
+        if (!document.querySelector('meta[name="theme-color"]')) {
+            const m = document.createElement('meta');
+            m.name = 'theme-color';
+            m.content = '#0e3bfa';
+            document.head.appendChild(m);
+            criados.push(m);
+        }
+        document.title = 'SP Connect — Atendimento WhatsApp';
+        return () => { criados.forEach((el) => el.remove()); };
+    }, []);
+
     useEffect(() => {
         // No /connect a memória de tema é própria — o Connect claro não pode
         // reescrever a preferência escura do CFI (e vice-versa).
