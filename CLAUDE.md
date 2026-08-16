@@ -110,6 +110,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
   lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
   que faz alguém ler "0 pendentes" como resposta da carteira.
+- **🐛 DATA ERRADA É PIOR QUE DATA QUE EXPLODE** (16/08, ponta solta do meu
+  próprio PR, achada antes do Paulo). Com o ISS passando a circular sem dia,
+  `calcularVencimento` devolvia uma data **VÁLIDA E ERRADA**: 29/05/2026 para a
+  competência 06/2026 — no PASSADO. A tarefa nasceria já **ATRASADA**, vermelha
+  na Rotina, para todo cliente de cidade sem calendário. E passaria calada:
+  data inválida ao menos explode; data errada, não.
+  ⚠️ **E A PRIMEIRA VERSÃO DA GUARDA NÃO PEGOU**: `Number(null)` é 0 e
+  `Number.isInteger(0)` é **true**. É a TERCEIRA vez que este mesmo
+  `Number(null)` morde num só dia (farol de lastro, regime do catálogo, agora
+  aqui). O `== null` vem primeiro, sempre.
+  ⚠️ **E a guarda no lugar errado zerou três prazos trimestrais**: obrigação de
+  "último dia útil do mês" não tem `diaVencimento` — os testes que já existiam
+  pegaram na hora.
+  ✂️ Duas pontas mais: os DOIS criadores de tarefa gravavam
+  `Timestamp.fromDate(null)`, e o **município não viajava com a tarefa** — o
+  botão do modal apareceria e a gravação falharia. Meia ligação de novo, e desta
+  vez eu achei antes de subir para ele.
 - **🚨 O CALENDÁRIO SE PREENCHE PELO USO, NÃO POR FILA DE ADMIN** (Paulo,
   16/08: *"eu não vou fazer nada manual, você deve — como nos demais impostos —
   se atualizar automaticamente; no caso de ISS de outra cidade deve abrir o

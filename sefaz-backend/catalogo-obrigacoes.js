@@ -317,6 +317,26 @@ export function competenciaFechaAno(competencia) {
  * @returns {Date} 00:00 local
  */
 export function calcularVencimento(competencia, regra) {
+    // 🚨 SEM DIA NÃO HÁ DATA — e ela NÃO se inventa.
+    //
+    // Desde 16/08 a obrigação municipal sem calendário circula com
+    // `diaVencimento: null` (a data é pedida no fluxo). Sem esta guarda, o
+    // cálculo devolvia uma data VÁLIDA E ERRADA: para a competência 06/2026
+    // saía 29/05/2026 — no PASSADO. A tarefa nasceria já ATRASADA, vermelha na
+    // Rotina, para todo cliente de cidade sem calendário. E passaria calada,
+    // porque data inválida ao menos explodiria; data errada, não.
+    // ⚠️ A guarda vale só para regra que depende de DIA FIXO. Obrigação de
+    // "último dia útil do mês" não tem `diaVencimento` e continua calculando —
+    // pôr a guarda antes dela zerou três prazos trimestrais, e os testes que já
+    // existiam pegaram na hora.
+    if (!regra?.ultimoDiaUtilDoMes) {
+        // `Number(null)` é 0 e `isInteger(0)` é TRUE — este mesmo `Number(null)`
+        // já me pegou duas vezes hoje. O `== null` vem PRIMEIRO, e é ele que faz
+        // a guarda existir. String vazia também vira 0.
+        const dia = Number(regra?.diaVencimento);
+        if (regra?.diaVencimento == null || regra?.diaVencimento === ''
+            || !Number.isInteger(dia) || dia < 1 || dia > 31) return null;
+    }
     const { mes, ano } = partesDaCompetencia(competencia);
     const desloc = mes - 1 + Number(regra.mesesApos || 0);
     const anoAlvo = ano + Math.floor(desloc / 12);
