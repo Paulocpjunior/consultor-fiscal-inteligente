@@ -57,8 +57,29 @@ export function vereditoDaFamilia(
     familia?: string,
 ): { situacao: 'atendida' | 'fora' | 'parcial' | 'indeterminado'; cor: 'ok' | 'atencao' | 'neutro'; texto: string };
 
-/** PRO e FLASH apontando pro mesmo modelo = roteador sem efeito. */
+/**
+ * PRO e FLASH apontando pro mesmo modelo = roteador sem efeito.
+ * NÃO é alarme desde 16/08 (decisão do Paulo: seguir no Flash) — é informação.
+ */
 export function conferirRoteador(p: {
     pro?: { modelo?: string } | string | null;
     flash?: { modelo?: string } | string | null;
-}): { ok: boolean; colidiu: boolean; aviso: string | null };
+}): { ok: boolean; colidiu: boolean; cor: 'ok' | 'neutro'; aviso: string | null };
+
+export function linhaDoModelo(nome: unknown): 'flash' | 'pro' | null;
+
+/** A condição do Paulo virou régua: *"desde que seja a última versão"*. */
+export function conferirAtualizacao(
+    sondas: Array<{ modelo?: string; modelVersion: string | null }>,
+    modelos: unknown[] | null,
+    familia?: string,
+): {
+    situacao: 'atual' | 'atrasado' | 'indeterminado';
+    cor: 'ok' | 'erro' | 'neutro';
+    texto: string;
+    linhas: Array<{
+        linha: 'flash' | 'pro';
+        situacao: 'atual' | 'atrasado' | 'indeterminado';
+        atual: string; maisNovo: string | null;
+    }>;
+};

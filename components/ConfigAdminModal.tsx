@@ -268,12 +268,31 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                             {geminiVersao.veredito?.cor === 'ok' ? '✓ ' : geminiVersao.veredito?.cor === 'neutro' ? '· ' : '⚠ '}
                                             {geminiVersao.veredito?.texto}
                                         </p>
-                                        {/* 🚨 Roteador sem efeito: os dois modelos
-                                            iguais fazem anexo, prompt longo e
-                                            parecer jurídico caírem no barato. */}
+                                        {/* 🚨 O ALARME É "FICAMOS PARA TRÁS", NÃO
+                                            "os dois são iguais".
+                                            Paulo, 16/08: *"não vejo problema em
+                                            continuar no Flash desde que seja a
+                                            última versão"*. Vermelho aqui é só
+                                            para o que acontece SOZINHO — a conta
+                                            passar a listar algo mais novo. */}
+                                        {geminiVersao.atualizacao && (
+                                            <p className={geminiVersao.atualizacao.cor === 'ok'
+                                                ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
+                                                : geminiVersao.atualizacao.cor === 'erro'
+                                                    ? 'text-red-700 dark:text-red-400 font-semibold'
+                                                    : 'text-slate-500 dark:text-slate-400'}>
+                                                {geminiVersao.atualizacao.cor === 'ok' ? '✓ '
+                                                    : geminiVersao.atualizacao.cor === 'erro' ? '✕ ' : '· '}
+                                                {geminiVersao.atualizacao.texto}
+                                            </p>
+                                        )}
+                                        {/* Roteador sem efeito é INFORMAÇÃO, não
+                                            alarme: pintar de vermelho a escolha
+                                            do dono é o alarme sem ação que ensina
+                                            a ignorar os que importam. */}
                                         {geminiVersao.roteador?.colidiu && (
-                                            <p className="text-red-700 dark:text-red-400 font-semibold">
-                                                ✕ {geminiVersao.roteador.aviso}
+                                            <p className="text-slate-500 dark:text-slate-400">
+                                                · {geminiVersao.roteador.aviso}
                                             </p>
                                         )}
                                         {[geminiVersao.pro, geminiVersao.flash].map((m: any, i: number) => {

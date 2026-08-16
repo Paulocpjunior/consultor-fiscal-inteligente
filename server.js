@@ -94,7 +94,7 @@ import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sa
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
 import prazosMunicipaisRouter from './sefaz-backend/prazos-municipais-routes.js';
 import {
-    resolverModelosGemini, versaoAtendeAlvo, vereditoDaFamilia, conferirRoteador,
+    resolverModelosGemini, versaoAtendeAlvo, vereditoDaFamilia, conferirRoteador, conferirAtualizacao,
     FAMILIA_ALVO_GEMINI, ALIAS_PRO, ALIAS_FLASH,
 } from './sefaz-backend/gemini-modelo.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -465,7 +465,20 @@ async function resolverGeminiDaConta() {
     });
     GEMINI_MODEL_PRO = r.pro.modelo;
     GEMINI_MODEL_FLASH = r.flash.modelo;
-    geminiResolucao = { ...r, erroDaLista, resolvidoEm: new Date().toISOString() };
+    // Guarda SÓ os nomes: e o painel precisa deles para responder "estamos na
+    // ultima versao?" (a condicao que o Paulo pos em 16/08). Sem a lista, o
+    // conferirAtualizacao devolve indeterminado — nunca "atrasado".
+    // Leva o `supportedActions` junto: guardar so o nome faria um modelo que NAO
+    // gera conteudo passar pelo filtro do escolherModeloDaFamilia (la a ausencia
+    // do campo nao reprova, e aqui a ausencia seria criada por mim).
+    const nomesModelos = Array.isArray(modelos)
+        ? modelos
+            .map((m) => (typeof m === 'string'
+                ? { name: m }
+                : { name: m?.name, supportedActions: m?.supportedActions || m?.supportedGenerationMethods }))
+            .filter((m) => !!m.name)
+        : null;
+    geminiResolucao = { ...r, erroDaLista, modelos: nomesModelos, resolvidoEm: new Date().toISOString() };
     console.log(`[gemini] alvo ${r.familiaAlvo} · PRO=${GEMINI_MODEL_PRO} (${r.pro.origem}) · FLASH=${GEMINI_MODEL_FLASH} (${r.flash.origem})`);
     return geminiResolucao;
 }
@@ -2320,10 +2333,15 @@ app.get('/api/admin/gemini/versao', requireAdmin, async (req, res) => {
     // E o roteador Pro×Flash vira ENFEITE quando os dois apontam pro mesmo
     // modelo — foi o que o print de produção mostrou.
     const roteador = conferirRoteador({ pro: { modelo: GEMINI_MODEL_PRO }, flash: { modelo: GEMINI_MODEL_FLASH } });
+    // 🚨 A REGUA QUE MANDA DESDE 16/08 e a CONDICAO DO PAULO: "sem problema
+    // continuar no Flash desde que seja a ultima versao". Colisao Pro×Flash e
+    // escolha dele (informacao); ficar para tras da conta e que e alarme, e
+    // acontece SOZINHO no dia em que a Google publica a versao seguinte.
+    const atualizacao = conferirAtualizacao([pro, flash], resolucao.modelos, resolucao.familiaAlvo);
     return res.json({
         ok: true,
         familiaAlvo: resolucao.familiaAlvo,
-        veredito, roteador,
+        veredito, roteador, atualizacao,
         /** Sobre a LISTAGEM (`models.list`), não sobre a versão que atendeu. */
         listadaNaConta: resolucao.alvoEncontrado,
         resolucao: { pro: resolucao.pro, flash: resolucao.flash, erroDaLista: resolucao.erroDaLista },
