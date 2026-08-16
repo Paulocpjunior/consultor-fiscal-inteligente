@@ -77,6 +77,7 @@ const DctfwebHub = lazy(() => import('./components/DCTFWeb/DctfwebHub'));
 const DiagnosticoHub = lazy(() => import('./components/Diagnostico/DiagnosticoHub'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const RelatoriosHub = lazy(() => import('./components/Relatorios'));
+const SpConnect = lazy(() => import('./components/SpConnect'));
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
 const NfseNacionalHub = lazy(() => import('./components/NfseNacional/NfseNacionalHub'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
@@ -1312,6 +1313,14 @@ const App: React.FC = () => {
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
+                            </Suspense>
+                            </ErrorBoundary>
+                        )}
+
+                        {searchType === SearchType.SP_CONNECT && (
+                            <ErrorBoundary modulo="SP Connect">
+                            <Suspense fallback={<LoadingSpinner />}>
+                                <SpConnect currentUser={currentUser} />
                             </Suspense>
                             </ErrorBoundary>
                         )}

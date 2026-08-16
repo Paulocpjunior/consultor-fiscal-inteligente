@@ -20,7 +20,7 @@
 
 import { Router } from 'express';
 import admin from 'firebase-admin';
-import { requireAdmin } from './require-admin.js';
+import { requireAdmin, requireAuth } from './require-admin.js';
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import {
     validarTemplate, resolverTemplate, montarVariaveisPorSchema,
@@ -289,6 +289,98 @@ router.get('/webhook-status', requireAdmin, async (_req, res) => {
         });
     } catch (e) {
         console.error('[whatsapp/webhook-status]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ═══ SP CONNECT — F2, PR 1: LEITURA das conversas ═══════════════════════════
+//
+// Todo colaborador autenticado lê (requireAuth): na F2 inicial NENHUMA
+// conversa tem fila (triagem manual ainda não roda), então tudo é Recepção —
+// e Recepção é visível a todos (decisão de 14/08). Quando a atribuição de
+// fila nascer, o filtro por departamento entra AQUI, no backend (o front
+// nunca é o filtro de dados — regra da Carteira).
+
+// Uma leitura, todas as conversas + o contato de cada uma (getAll em lote —
+// nada de N consultas).
+router.get('/conversas', requireAuth, async (_req, res) => {
+    try {
+        const db = getDb();
+        const snap = await db.collection('whatsapp_conversas')
+            .orderBy('atualizadoEm', 'desc').limit(100).get();
+        const numeros = snap.docs.map((d) => d.id);
+        const contatos = new Map();
+        if (numeros.length) {
+            const refs = numeros.map((n) => db.collection('whatsapp_contatos').doc(n));
+            (await db.getAll(...refs)).forEach((c) => { if (c.exists) contatos.set(c.id, c.data()); });
+        }
+        const conversas = snap.docs.map((d) => {
+            const x = d.data();
+            const c = contatos.get(d.id) || {};
+            return {
+                numero: d.id,
+                nome: c.nomePerfil || null,
+                empresaId: c.empresaId || null,   // null = pendência "vincular ao cliente"
+                origemContato: c.origem || null,
+                fila: x.fila || null,             // null = Recepção
+                atribuidoA: x.atribuidoA || null,
+                situacao: x.status || 'aberta',
+                janela24hAte: x.janela24hAte || null,
+                ultimaMensagem: x.ultimaMensagem || null,
+                naoLidas: x.naoLidas || 0,
+                atualizadoEm: x.atualizadoEm || null,
+            };
+        });
+        return res.json({ ok: true, conversas });
+    } catch (e) {
+        console.error('[whatsapp/conversas]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Mensagens de UMA conversa. Filtro simples + ordenação em memória de
+// propósito: where(conversaId)+orderBy(timestamp) exigiria índice composto,
+// e 500 docs de mensagem são leves — índice entra se o volume provar precisar.
+router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
+    try {
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const snap = await getDb().collection('whatsapp_mensagens')
+            .where('conversaId', '==', numero).limit(500).get();
+        const mensagens = snap.docs.map((d) => {
+            const x = d.data();
+            return {
+                id: d.id,
+                direcao: x.direcao || null,
+                tipo: x.tipo || null,
+                texto: x.texto ?? null,
+                midia: x.midia ? {
+                    nomeArquivo: x.midia.nomeArquivo || null,
+                    mime: x.midia.mime || null,
+                    baixada: Boolean(x.midia.storagePath),
+                } : null,
+                timestamp: x.timestamp || x.recebidoEm || null,
+                statusEntrega: x.statusEntrega || null,
+                erroEntrega: x.erroEntrega || null,
+            };
+        }).sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
+        return res.json({ ok: true, mensagens });
+    } catch (e) {
+        console.error('[whatsapp/mensagens]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Abrir a conversa zera o contador de não lidas — sem isso o selo mente
+// pra sempre. É a ÚNICA escrita do PR 1 (responder é o PR 2).
+router.post('/conversas/:numero/lida', requireAuth, async (req, res) => {
+    try {
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        await getDb().collection('whatsapp_conversas').doc(numero)
+            .set({ naoLidas: 0 }, { merge: true });
+        return res.json({ ok: true });
+    } catch (e) {
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
